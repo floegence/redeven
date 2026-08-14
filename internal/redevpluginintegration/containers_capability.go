@@ -13,9 +13,7 @@ import (
 	"github.com/floegence/redeven/internal/capabilities/containers"
 	redevpluginartifacts "github.com/floegence/redeven/spec/redevplugin"
 	"github.com/floegence/redevplugin/pkg/capability"
-	"github.com/floegence/redevplugin/pkg/capabilitycontract"
 	"github.com/floegence/redevplugin/pkg/observability"
-	"github.com/floegence/redevplugin/pkg/version"
 )
 
 const (
@@ -55,18 +53,9 @@ func newContainersCapabilityRegistry(adapter *containers.Adapter, diagnostics ob
 	if err := adapter.Validate(); err != nil {
 		return nil, nil, err
 	}
-	bundle, trustedKey, err := redevpluginartifacts.ContainersCapabilityBundle()
+	contract, err := redevpluginartifacts.ContainersCapabilityContract()
 	if err != nil {
-		return nil, nil, fmt.Errorf("load containers capability artifacts: %w", err)
-	}
-	verified, err := capabilitycontract.Verify(capabilitycontract.VerifyRequest{
-		Bundle:                    bundle,
-		ExpectedPin:               bundle.Pin,
-		TrustedKey:                trustedKey,
-		CurrentReDevPluginVersion: version.CurrentCompatibilityVersion(),
-	})
-	if err != nil {
-		return nil, nil, fmt.Errorf("verify containers capability artifacts: %w", err)
+		return nil, nil, fmt.Errorf("load containers capability contract: %w", err)
 	}
 	bridge := &containersCapabilityAdapter{
 		containers:      adapter,
@@ -76,7 +65,7 @@ func newContainersCapabilityRegistry(adapter *containers.Adapter, diagnostics ob
 	}
 	registry := capability.NewRegistry()
 	if err := registry.Register(capability.Registration{
-		Contract:        verified,
+		Contract:        contract,
 		TargetProjector: bridge,
 		Adapter:         bridge,
 	}); err != nil {
@@ -228,15 +217,15 @@ func (a *containersCapabilityAdapter) Invoke(ctx context.Context, req capability
 	}
 }
 
-func (a *containersCapabilityAdapter) CancelOperation(_ context.Context, req capability.OperationCancellation) error {
-	if a == nil || strings.TrimSpace(req.OperationID) == "" || strings.TrimSpace(req.Execution.TargetMethod) == "" {
-		return errors.New("container operation cancellation is invalid")
+func (a *containersCapabilityAdapter) CancelExecution(_ context.Context, req capability.ExecutionCancellation) error {
+	if a == nil || strings.TrimSpace(req.ExecutionID) == "" || strings.TrimSpace(req.Execution.TargetMethod) == "" {
+		return errors.New("container execution cancellation is invalid")
 	}
 	a.tasksMu.Lock()
-	task, ok := a.tasks[req.OperationID]
+	task, ok := a.tasks[req.ExecutionID]
 	if !ok || task.method != req.Execution.TargetMethod {
 		a.tasksMu.Unlock()
-		return errors.New("container operation is not active")
+		return errors.New("container execution is not active")
 	}
 	a.tasksMu.Unlock()
 	task.cancel(errContainerTaskCanceled)
@@ -344,7 +333,7 @@ func (a *containersCapabilityAdapter) startPreflight(ctx context.Context, bindin
 }
 
 func (a *containersCapabilityAdapter) startOperation(ctx context.Context, req capability.Invocation) (capability.Result, error) {
-	sink := req.Execution.Operation
+	sink := req.Execution.Events
 	if sink == nil || strings.TrimSpace(sink.ID()) == "" {
 		return capability.Result{}, errors.New("containers operation sink is required")
 	}
@@ -463,18 +452,18 @@ func acceptedWithEndpoint(value map[string]any, endpointID containers.EndpointID
 }
 
 func (a *containersCapabilityAdapter) startLogStream(ctx context.Context, req capability.Invocation) (capability.Result, error) {
-	if req.Execution.Operation == nil || req.Execution.Stream == nil || strings.TrimSpace(req.Execution.Operation.ID()) == "" || strings.TrimSpace(req.Execution.Stream.ID()) == "" {
-		return capability.Result{}, errors.New("containers log stream sinks are required")
+	if req.Execution.Events == nil || strings.TrimSpace(req.Execution.Events.ID()) == "" {
+		return capability.Result{}, errors.New("containers log execution sink is required")
 	}
 	var input logArguments
 	if err := decodeCapabilityArguments(req.Arguments, &input); err != nil {
 		return capability.Result{}, err
 	}
-	taskCtx, err := a.registerTask(ctx, req.Execution.Operation.ID(), req.Execution.TargetMethod)
+	taskCtx, err := a.registerTask(ctx, req.Execution.Events.ID(), req.Execution.TargetMethod)
 	if err != nil {
 		return capability.Result{}, err
 	}
-	go a.runLogTask(taskCtx, req.Execution.ExecutionBinding, req.Execution.Operation, req.Execution.Stream, input)
+	go a.runLogTask(taskCtx, req.Execution.ExecutionBinding, req.Execution.Events, input)
 	data := map[string]any{
 		"engine":       string(input.Engine),
 		"container_id": input.ContainerID,
@@ -485,8 +474,8 @@ func (a *containersCapabilityAdapter) startLogStream(ctx context.Context, req ca
 }
 
 func (a *containersCapabilityAdapter) startStatsStream(ctx context.Context, req capability.Invocation) (capability.Result, error) {
-	if req.Execution.Operation == nil || req.Execution.Stream == nil || strings.TrimSpace(req.Execution.Operation.ID()) == "" || strings.TrimSpace(req.Execution.Stream.ID()) == "" {
-		return capability.Result{}, errors.New("containers stats stream sinks are required")
+	if req.Execution.Events == nil || strings.TrimSpace(req.Execution.Events.ID()) == "" {
+		return capability.Result{}, errors.New("containers stats execution sink is required")
 	}
 	var input statsWatchArguments
 	if err := decodeCapabilityArguments(req.Arguments, &input); err != nil {
@@ -498,11 +487,11 @@ func (a *containersCapabilityAdapter) startStatsStream(ctx context.Context, req 
 	if input.IntervalMS < 1_000 || input.IntervalMS > 30_000 {
 		return capability.Result{}, errors.New("stats interval_ms must be between 1000 and 30000")
 	}
-	taskCtx, err := a.registerTask(ctx, req.Execution.Operation.ID(), req.Execution.TargetMethod)
+	taskCtx, err := a.registerTask(ctx, req.Execution.Events.ID(), req.Execution.TargetMethod)
 	if err != nil {
 		return capability.Result{}, err
 	}
-	go a.runStatsTask(taskCtx, req.Execution.ExecutionBinding, req.Execution.Operation, req.Execution.Stream, input)
+	go a.runStatsTask(taskCtx, req.Execution.ExecutionBinding, req.Execution.Events, input)
 	data := map[string]any{
 		"engine": string(input.Engine), "container_id": input.ContainerID, "subscribed": true,
 	}
@@ -545,7 +534,7 @@ func (a *containersCapabilityAdapter) unregisterTask(operationID string) {
 	a.tasksWG.Done()
 }
 
-func (a *containersCapabilityAdapter) runOperationTask(ctx context.Context, binding capability.ExecutionBinding, sink capability.OperationSink, run func(context.Context) error) {
+func (a *containersCapabilityAdapter) runOperationTask(ctx context.Context, binding capability.ExecutionBinding, sink capability.ExecutionSink, run func(context.Context) error) {
 	defer a.unregisterTask(sink.ID())
 	if err := sink.ReportProgress(ctx, capability.OperationProgress{Revision: 1, Phase: "running"}); err != nil {
 		terminalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), a.terminalTimeout)
@@ -571,8 +560,8 @@ func (a *containersCapabilityAdapter) runOperationTask(ctx context.Context, bind
 	a.recordTerminalResult(binding, sink.Fail(terminalCtx, capability.ExecutionFailureAdapterFailed, containerBusinessErrorForBinding(binding, err)))
 }
 
-func (a *containersCapabilityAdapter) runLogTask(ctx context.Context, binding capability.ExecutionBinding, operation capability.OperationSink, stream capability.StreamSink, input logArguments) {
-	defer a.unregisterTask(operation.ID())
+func (a *containersCapabilityAdapter) runLogTask(ctx context.Context, binding capability.ExecutionBinding, sink capability.ExecutionSink, input logArguments) {
+	defer a.unregisterTask(sink.ID())
 	run := func(taskCtx context.Context) error {
 		request := containers.LogsTailRequest{
 			Engine: input.Engine, EndpointID: input.EndpointID, ContainerID: input.ContainerID, TailLines: input.TailLines,
@@ -583,7 +572,7 @@ func (a *containersCapabilityAdapter) runLogTask(ctx context.Context, binding ca
 			if line.TimestampUnixMs > 0 {
 				event["timestamp_unix_ms"] = line.TimestampUnixMs
 			}
-			return stream.Append(taskCtx, event)
+			return sink.Append(taskCtx, event)
 		}
 		bound, err := a.bindEndpoint(taskCtx, input.Engine, input.EndpointID)
 		if err != nil {
@@ -609,18 +598,18 @@ func (a *containersCapabilityAdapter) runLogTask(ctx context.Context, binding ca
 	terminalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), a.terminalTimeout)
 	defer cancel()
 	if err == nil {
-		a.recordTerminalResult(binding, stream.Close(terminalCtx))
+		a.recordTerminalResult(binding, sink.Close(terminalCtx))
 		return
 	}
-	if containerTaskWasCanceled(ctx, operation.CancelRequested()) {
-		a.recordTerminalResult(binding, operation.Cancel(terminalCtx, containerTaskCanceledReason))
+	if containerTaskWasCanceled(ctx, sink.CancelRequested()) {
+		a.recordTerminalResult(binding, sink.Cancel(terminalCtx, containerTaskCanceledReason))
 		return
 	}
-	a.recordTerminalResult(binding, stream.Fail(terminalCtx, capability.ExecutionFailureAdapterFailed, containerBusinessErrorForBinding(binding, err)))
+	a.recordTerminalResult(binding, sink.Fail(terminalCtx, capability.ExecutionFailureAdapterFailed, containerBusinessErrorForBinding(binding, err)))
 }
 
-func (a *containersCapabilityAdapter) runStatsTask(ctx context.Context, binding capability.ExecutionBinding, operation capability.OperationSink, stream capability.StreamSink, input statsWatchArguments) {
-	defer a.unregisterTask(operation.ID())
+func (a *containersCapabilityAdapter) runStatsTask(ctx context.Context, binding capability.ExecutionBinding, sink capability.ExecutionSink, input statsWatchArguments) {
+	defer a.unregisterTask(sink.ID())
 	run := func(taskCtx context.Context) error {
 		bound, err := a.bindEndpoint(taskCtx, input.Engine, input.EndpointID)
 		if err != nil {
@@ -637,7 +626,7 @@ func (a *containersCapabilityAdapter) runStatsTask(ctx context.Context, binding 
 			if err != nil {
 				return err
 			}
-			if err := stream.Append(taskCtx, projected); err != nil {
+			if err := sink.Append(taskCtx, projected); err != nil {
 				return err
 			}
 			select {
@@ -651,14 +640,14 @@ func (a *containersCapabilityAdapter) runStatsTask(ctx context.Context, binding 
 	terminalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), a.terminalTimeout)
 	defer cancel()
 	if err == nil {
-		a.recordTerminalResult(binding, stream.Close(terminalCtx))
+		a.recordTerminalResult(binding, sink.Close(terminalCtx))
 		return
 	}
-	if containerTaskWasCanceled(ctx, operation.CancelRequested()) {
-		a.recordTerminalResult(binding, operation.Cancel(terminalCtx, containerTaskCanceledReason))
+	if containerTaskWasCanceled(ctx, sink.CancelRequested()) {
+		a.recordTerminalResult(binding, sink.Cancel(terminalCtx, containerTaskCanceledReason))
 		return
 	}
-	a.recordTerminalResult(binding, stream.Fail(terminalCtx, capability.ExecutionFailureAdapterFailed, containerBusinessErrorForBinding(binding, err)))
+	a.recordTerminalResult(binding, sink.Fail(terminalCtx, capability.ExecutionFailureAdapterFailed, containerBusinessErrorForBinding(binding, err)))
 }
 
 func (a *containersCapabilityAdapter) recordTerminalResult(binding capability.ExecutionBinding, err error) {
@@ -687,8 +676,7 @@ func (a *containersCapabilityAdapter) recordTerminalResult(binding capability.Ex
 		SessionChannelIDHash: binding.SessionChannelIDHash,
 		CorrelationID:        binding.AuditCorrelationID,
 		Details: observability.DiagnosticDetails{
-			OperationID: binding.OperationID,
-			StreamID:    binding.StreamID,
+			ExecutionID: binding.ExecutionID,
 			Method:      binding.TargetMethod,
 			FailureCode: string(capability.ExecutionFailurePlatformFailed),
 		},

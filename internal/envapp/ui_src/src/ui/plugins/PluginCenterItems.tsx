@@ -4,7 +4,7 @@ import { CheckCircle, Download, MoreHorizontal, Play, RefreshIcon } from '@floeg
 import { Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 
 import { useI18n } from '../i18n';
-import type { PluginCenterTab, PluginInstallOperationProjection, PluginInventoryItem, PluginPendingCommandType, PluginRuntimeRecoveryPresentation } from './pluginTypes';
+import type { PluginCenterTab, PluginInstallExecutionProjection, PluginInventoryItem, PluginPendingCommandType, PluginRuntimeRecoveryPresentation } from './pluginTypes';
 import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_PRESS_MOTION_CLASS, pluginPendingCommandLabel, presentPlugin } from './pluginPresentation';
 import { PluginIcon, PluginStatusBadge, PluginTrustBadge } from './PluginPresentationPrimitives';
 import { resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
@@ -20,7 +20,7 @@ export function PluginCenterItem(props: {
   onRetryRuntimeRecovery?: () => Promise<unknown> | unknown;
   managementDisabled: boolean;
   commandPendingType?: PluginPendingCommandType;
-  installOperation?: PluginInstallOperationProjection;
+  installOperation?: PluginInstallExecutionProjection;
   entranceDelayMs?: number;
   onOpenDetails: (target: HTMLButtonElement) => void;
   onInstall: () => void;

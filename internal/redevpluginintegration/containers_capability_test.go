@@ -15,22 +15,21 @@ import (
 	"github.com/floegence/redevplugin/pkg/capability"
 	"github.com/floegence/redevplugin/pkg/capabilitycontract"
 	"github.com/floegence/redevplugin/pkg/observability"
-	"github.com/floegence/redevplugin/pkg/version"
 )
 
 const capabilityTestEndpointID containers.EndpointID = "endpoint_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
-func TestContainersCapabilityRegistryUsesVerifiedSignedArtifacts(t *testing.T) {
+func TestContainersCapabilityRegistryUsesHostOwnedKnownContract(t *testing.T) {
 	registry, bridge, err := newContainersCapabilityRegistry(mustContainersAdapter(t, &capabilityEngineClient{}), nil)
 	if err != nil {
 		t.Fatalf("newContainersCapabilityRegistry() error = %v", err)
 	}
 	t.Cleanup(func() { _ = bridge.Close() })
-	bundle, _, err := redevpluginartifacts.ContainersCapabilityBundle()
+	contract, err := redevpluginartifacts.ContainersCapabilityContract()
 	if err != nil {
 		t.Fatal(err)
 	}
-	registration, err := registry.Resolve(bundle.Pin)
+	registration, err := registry.Resolve(contract.Pin)
 	if err != nil {
 		t.Fatalf("Resolve() error = %v", err)
 	}
@@ -250,7 +249,7 @@ func TestContainersCapabilityOperationUsesHostOwnedSink(t *testing.T) {
 	result, err := adapter.Invoke(context.Background(), capability.Invocation{
 		Execution: capability.ExecutionContext{
 			ExecutionBinding: capability.ExecutionBinding{CapabilityVersion: containersCapabilityV4Version, TargetMethod: string(containers.MethodStart)},
-			Operation:        sink,
+			Events:           sink,
 		},
 		Arguments: map[string]any{"engine": "docker", "endpoint_id": capabilityTestEndpointID, "container_id": "container_1"},
 	})
@@ -304,7 +303,7 @@ func TestContainersV3ResourceProjectionAndOperationMatchCandidateContract(t *tes
 	result, err := adapter.Invoke(context.Background(), capability.Invocation{
 		Execution: capability.ExecutionContext{
 			ExecutionBinding: capability.ExecutionBinding{TargetMethod: string(containers.MethodPause)},
-			Operation:        sink,
+			Events:           sink,
 		},
 		Arguments: map[string]any{"engine": "docker", "container_id": "container_1"},
 	})
@@ -330,7 +329,7 @@ func TestContainersCapabilityCancellationStopsBusinessOperation(t *testing.T) {
 	_, err := adapter.Invoke(context.Background(), capability.Invocation{
 		Execution: capability.ExecutionContext{
 			ExecutionBinding: capability.ExecutionBinding{TargetMethod: string(containers.MethodRemove)},
-			Operation:        sink,
+			Events:           sink,
 		},
 		Arguments: map[string]any{"engine": "docker", "container_id": "container_1", "force": true},
 	})
@@ -342,8 +341,8 @@ func TestContainersCapabilityCancellationStopsBusinessOperation(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("business operation did not start")
 	}
-	if err := adapter.CancelOperation(context.Background(), capability.OperationCancellation{
-		OperationID: "operation_cancel",
+	if err := adapter.CancelExecution(context.Background(), capability.ExecutionCancellation{
+		ExecutionID: "operation_cancel",
 		Execution: capability.ExecutionContext{ExecutionBinding: capability.ExecutionBinding{
 			TargetMethod: string(containers.MethodRemove),
 		}},
@@ -362,13 +361,11 @@ func TestContainersCapabilitySubscriptionAppendsDirectlyToHostStream(t *testing.
 			Lines: []containers.LogLine{{TimestampUnixMs: 1704067200000, Message: "ready"}},
 		},
 	})
-	operation := newTestOperationSink("operation_logs")
-	stream := newTestStreamSink("stream_logs")
+	sink := newTestOperationSink("execution_logs")
 	result, err := adapter.Invoke(context.Background(), capability.Invocation{
 		Execution: capability.ExecutionContext{
 			ExecutionBinding: capability.ExecutionBinding{CapabilityVersion: containersCapabilityV4Version, TargetMethod: string(containers.MethodLogsTail)},
-			Operation:        operation,
-			Stream:           stream,
+			Events:           sink,
 		},
 		Arguments: map[string]any{"engine": "docker", "endpoint_id": capabilityTestEndpointID, "container_id": "container_1", "tail_lines": 50},
 	})
@@ -377,12 +374,12 @@ func TestContainersCapabilitySubscriptionAppendsDirectlyToHostStream(t *testing.
 	}
 	validateContainersCapabilityResponse(t, string(containers.MethodLogsTail), result.Data)
 	select {
-	case event := <-stream.events:
+	case event := <-sink.events:
 		validateContainersCapabilityEvent(t, string(containers.MethodLogsTail), event)
 	case <-time.After(time.Second):
 		t.Fatal("stream event was not appended")
 	}
-	if terminal := waitTerminal(t, stream.terminal); terminal != "closed" {
+	if terminal := waitTerminal(t, sink.terminal); terminal != "closed" {
 		t.Fatalf("stream terminal = %q", terminal)
 	}
 }
@@ -397,9 +394,9 @@ func TestContainersCapabilityReportsTerminalSinkFailure(t *testing.T) {
 		Execution: capability.ExecutionContext{
 			ExecutionBinding: capability.ExecutionBinding{
 				TargetMethod: "containers.start", PluginID: "com.redeven.official.containers",
-				PluginInstanceID: "plugin_1", OperationID: sink.ID(), AuditCorrelationID: "audit_1",
+				PluginInstanceID: "plugin_1", ExecutionID: sink.ID(), AuditCorrelationID: "audit_1",
 			},
-			Operation: sink,
+			Events: sink,
 		},
 		Arguments: map[string]any{"engine": "docker", "container_id": "container_1"},
 	})
@@ -432,7 +429,7 @@ func TestContainersCapabilityCloseCancelsAndWaitsForTasks(t *testing.T) {
 	_, err := adapter.Invoke(context.Background(), capability.Invocation{
 		Execution: capability.ExecutionContext{
 			ExecutionBinding: capability.ExecutionBinding{TargetMethod: string(containers.MethodStart)},
-			Operation:        sink,
+			Events:           sink,
 		},
 		Arguments: map[string]any{"engine": "docker", "container_id": "container_1"},
 	})
@@ -468,7 +465,7 @@ func TestContainersCapabilityTerminalizationDeadlineBoundsClose(t *testing.T) {
 	_, err := adapter.Invoke(context.Background(), capability.Invocation{
 		Execution: capability.ExecutionContext{
 			ExecutionBinding: capability.ExecutionBinding{TargetMethod: string(containers.MethodStart)},
-			Operation:        sink,
+			Events:           sink,
 		},
 		Arguments: map[string]any{"engine": "docker", "container_id": "container_1"},
 	})
@@ -541,20 +538,13 @@ func validateContainersCapabilityEvent(t *testing.T, method string, value any) {
 	t.Fatalf("signed contract method %q not found", method)
 }
 
-func verifiedContainersContract(t *testing.T) capabilitycontract.VerifiedContract {
+func verifiedContainersContract(t *testing.T) capabilitycontract.KnownContract {
 	t.Helper()
-	bundle, key, err := redevpluginartifacts.ContainersCapabilityBundle()
+	contract, err := redevpluginartifacts.ContainersCapabilityContract()
 	if err != nil {
 		t.Fatal(err)
 	}
-	verified, err := capabilitycontract.Verify(capabilitycontract.VerifyRequest{
-		Bundle: bundle, ExpectedPin: bundle.Pin, TrustedKey: key,
-		CurrentReDevPluginVersion: version.CurrentCompatibilityVersion(),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return verified
+	return contract
 }
 
 func validateContainersV3CandidateResponse(t *testing.T, method string, value any) {
@@ -759,19 +749,33 @@ type testOperationSink struct {
 	id              string
 	terminal        chan string
 	progress        chan capability.OperationProgress
+	events          chan any
 	cancelRequested chan struct{}
 	completeErr     error
 	complete        func(context.Context) error
 }
 
 func newTestOperationSink(id string) *testOperationSink {
-	return &testOperationSink{id: id, terminal: make(chan string, 1), progress: make(chan capability.OperationProgress, 4), cancelRequested: make(chan struct{})}
+	return &testOperationSink{
+		id: id, terminal: make(chan string, 1), progress: make(chan capability.OperationProgress, 4),
+		events: make(chan any, 4), cancelRequested: make(chan struct{}),
+	}
 }
 
 func (s *testOperationSink) ID() string { return s.id }
 
 func (s *testOperationSink) ReportProgress(_ context.Context, progress capability.OperationProgress) error {
 	s.progress <- progress
+	return nil
+}
+
+func (s *testOperationSink) Append(_ context.Context, event any) error {
+	s.events <- event
+	return nil
+}
+
+func (s *testOperationSink) Close(context.Context) error {
+	s.terminal <- "closed"
 	return nil
 }
 
@@ -797,33 +801,6 @@ func (s *testOperationSink) Fail(context.Context, capability.ExecutionFailureCod
 }
 
 func (s *testOperationSink) CancelRequested() <-chan struct{} { return s.cancelRequested }
-
-type testStreamSink struct {
-	id       string
-	events   chan any
-	terminal chan string
-}
-
-func newTestStreamSink(id string) *testStreamSink {
-	return &testStreamSink{id: id, events: make(chan any, 4), terminal: make(chan string, 1)}
-}
-
-func (s *testStreamSink) ID() string { return s.id }
-
-func (s *testStreamSink) Append(_ context.Context, event any) error {
-	s.events <- event
-	return nil
-}
-
-func (s *testStreamSink) Close(context.Context) error {
-	s.terminal <- "closed"
-	return nil
-}
-
-func (s *testStreamSink) Fail(context.Context, capability.ExecutionFailureCode, error) error {
-	s.terminal <- "failed"
-	return nil
-}
 
 func waitTerminal(t *testing.T, terminal <-chan string) string {
 	t.Helper()

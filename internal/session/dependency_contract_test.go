@@ -1741,6 +1741,9 @@ func assertOnlyCurrentFlowersecGoImports(t *testing.T, root string) {
 			continue
 		}
 		path := filepath.Join(root, filepath.FromSlash(rel))
+		if _, statErr := os.Stat(path); errors.Is(statErr, os.ErrNotExist) {
+			continue
+		}
 		parsed, parseErr := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
 		if parseErr != nil {
 			t.Fatalf("parse imports from %s: %v", rel, parseErr)

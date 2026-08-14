@@ -8,18 +8,15 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"path"
 	"strings"
 
 	"github.com/floegence/redevplugin/pkg/capabilitycontract"
 )
 
-const containersCapabilityRoot = "official-containers-capability-v4/bundle"
-
 // artifactFS contains only public verification material. Private signing keys
 // and plugin release payloads are never part of the repository or product binary.
 //
-//go:embed official-release-trust-v1.public.json official-containers-capability-v4/bundle/** official-containers-capability-v4/host-capability.public.json
+//go:embed official-release-trust-v1.public.json official-package-signing-key.public.json known-containers-capability-v4.contract.json
 var artifactFS embed.FS
 
 type signingPublicKey struct {
@@ -41,10 +38,6 @@ type officialReleaseTrustAnchorsFile struct {
 	SchemaVersion string       `json:"schema_version"`
 	SourceID      string       `json:"source_id"`
 	Root          publicKeyPin `json:"root"`
-	SigningLedger struct {
-		LogID string `json:"log_id"`
-		publicKeyPin
-	} `json:"signing_ledger"`
 }
 
 type ReleaseTrustPublicKey struct {
@@ -54,10 +47,8 @@ type ReleaseTrustPublicKey struct {
 }
 
 type OfficialReleaseTrustAnchors struct {
-	SourceID         string
-	Root             ReleaseTrustPublicKey
-	SigningLedgerLog string
-	SigningLedger    ReleaseTrustPublicKey
+	SourceID string
+	Root     ReleaseTrustPublicKey
 }
 
 func OfficialReleaseTrustAnchorSet() (OfficialReleaseTrustAnchors, error) {
@@ -65,23 +56,16 @@ func OfficialReleaseTrustAnchorSet() (OfficialReleaseTrustAnchors, error) {
 	if err := readStrictJSON("official-release-trust-v1.public.json", &value); err != nil {
 		return OfficialReleaseTrustAnchors{}, err
 	}
-	if value.SchemaVersion != "redeven.official_release_trust_anchors.v1" ||
-		value.SourceID != "redeven_official" || value.SigningLedger.LogID != "redeven_official_signing_log" {
+	if value.SchemaVersion != "redeven.official_release_trust_anchors.v1" || value.SourceID != "redeven_official" {
 		return OfficialReleaseTrustAnchors{}, errors.New("official release trust anchor identity is invalid")
 	}
 	root, err := decodePublicKeyPin(value.Root)
 	if err != nil {
 		return OfficialReleaseTrustAnchors{}, err
 	}
-	ledger, err := decodePublicKeyPin(value.SigningLedger.publicKeyPin)
-	if err != nil {
-		return OfficialReleaseTrustAnchors{}, err
-	}
 	return OfficialReleaseTrustAnchors{
-		SourceID:         value.SourceID,
-		Root:             root,
-		SigningLedgerLog: value.SigningLedger.LogID,
-		SigningLedger:    ledger,
+		SourceID: value.SourceID,
+		Root:     root,
 	}, nil
 }
 
@@ -89,7 +73,7 @@ func OfficialReleaseTrustAnchorSet() (OfficialReleaseTrustAnchors, error) {
 // The returned bytes are independent so callers cannot mutate the embedded pin.
 func OfficialSigningPublicKey() (ReleaseTrustPublicKey, error) {
 	key, err := readSigningPublicKey(
-		"official-containers-capability-v4/host-capability.public.json",
+		"official-package-signing-key.public.json",
 		"redeven_official_signing_2026",
 	)
 	if err != nil {
@@ -98,45 +82,15 @@ func OfficialSigningPublicKey() (ReleaseTrustPublicKey, error) {
 	return clonePublicKey(key), nil
 }
 
-func ContainersCapabilityBundle() (capabilitycontract.Bundle, capabilitycontract.TrustedKey, error) {
-	var pin capabilitycontract.Pin
-	if err := readStrictJSON(containersCapabilityRoot+"/host-capability.pin.json", &pin); err != nil {
-		return capabilitycontract.Bundle{}, capabilitycontract.TrustedKey{}, err
+func ContainersCapabilityContract() (capabilitycontract.KnownContract, error) {
+	var contract capabilitycontract.Contract
+	if err := readStrictJSON(
+		"known-containers-capability-v4.contract.json",
+		&contract,
+	); err != nil {
+		return capabilitycontract.KnownContract{}, err
 	}
-	if err := capabilitycontract.ValidatePin(pin); err != nil {
-		return capabilitycontract.Bundle{}, capabilitycontract.TrustedKey{}, err
-	}
-	refs := []string{
-		pin.ArtifactRef,
-		pin.ManifestRef,
-		pin.SignatureRef,
-		pin.CompatibilityRef,
-		pin.GeneratedClientRef,
-		pin.NoticesRef,
-	}
-	files := make(map[string][]byte, len(refs))
-	for _, ref := range refs {
-		content, err := artifactFS.ReadFile(path.Join(containersCapabilityRoot, ref))
-		if err != nil {
-			return capabilitycontract.Bundle{}, capabilitycontract.TrustedKey{}, err
-		}
-		files[ref] = append([]byte(nil), content...)
-	}
-
-	public, err := readSigningPublicKey("official-containers-capability-v4/host-capability.public.json", pin.SignatureKeyID)
-	if err != nil {
-		return capabilitycontract.Bundle{}, capabilitycontract.TrustedKey{}, err
-	}
-	if public.PublisherID != pin.PublisherID {
-		return capabilitycontract.Bundle{}, capabilitycontract.TrustedKey{}, errors.New("official capability publisher identity is invalid")
-	}
-	return capabilitycontract.Bundle{Pin: pin, Files: files}, capabilitycontract.TrustedKey{
-		PublisherID:     pin.PublisherID,
-		KeyID:           pin.SignatureKeyID,
-		PublicKey:       append(ed25519.PublicKey(nil), public.PublicKey...),
-		PolicyEpoch:     pin.SignaturePolicyEpoch,
-		RevocationEpoch: pin.SignatureRevocationEpoch,
-	}, nil
+	return capabilitycontract.NewKnownContract(contract)
 }
 
 func readSigningPublicKey(name, expectedKeyID string) (ReleaseTrustPublicKey, error) {

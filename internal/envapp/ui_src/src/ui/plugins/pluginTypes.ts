@@ -250,26 +250,20 @@ export type PluginInventoryProjection = {
 export type PluginInstallObservation =
   | 'starting'
   | 'watching'
-  | 'activating'
-  | 'activation_failed'
   | 'reconnecting'
   | 'failed'
   | 'refreshing'
   | 'refresh_failed';
 
-export type PluginInstallOperationProjection = Readonly<{
+export type PluginInstallExecutionProjection = Readonly<{
   pluginID: string;
   pluginInstanceID: string;
-  requestID: string;
   observation: PluginInstallObservation;
-  operation?: PluginReleaseInstallOperation;
+  execution?: PluginExecution;
+  events: readonly PluginEvent[];
   startFailure?: Readonly<{
     code: PluginPlatformErrorCode;
     retryable: boolean;
-  }>;
-  activationFailure?: Readonly<{
-    message: string;
-    retryable: true;
   }>;
 }>;
 
@@ -370,6 +364,7 @@ export type PluginPendingCommandType = PluginLifecycleCommand['type'];
 export type ReDevPluginRecord = Omit<PluginRecord, 'presentation' | 'presentation_sha256'> & {
   presentation?: PluginRecord['presentation'];
   presentation_sha256?: string;
+  action_state?: PluginCatalogRecord['action_state'];
 };
 
 export type ReDevPluginCatalogResult = PluginCatalogResult;
@@ -378,7 +373,7 @@ export type ExternalPluginInspection = Omit<PluginExternalPackageInspection, 'pr
   presentation?: PluginExternalPackageInspection['presentation'];
   presentation_sha256?: string;
 };
-export type ExternalPluginCommitResult = Omit<Extract<PluginExternalPackageCommitResult, { status: 'committed' }>, 'plugin'> & {
+export type ExternalPluginCommitResult = Omit<PluginInstalledExternalPackage, 'plugin'> & {
   plugin: ReDevPluginRecord;
 };
 export type PluginExternalPackageSignatureAssessment = ExternalPluginInspection['signature_assessment'];
@@ -388,22 +383,22 @@ export type PluginExternalPackageUpdateEligibility = ExternalPluginInspection['u
 export type PluginExternalPackageSecuritySummary = ExternalPluginInspection['security_summary'];
 import type {
   PluginCatalogResult,
-  PluginExternalPackageCommitResult,
+  PluginCatalogRecord,
   PluginExternalPackageInspection,
+  PluginInstalledExternalPackage,
+  PluginExecution,
+  PluginEvent,
   PluginPermissionGrant,
   PluginPlatformErrorCode,
   PluginRecord,
-  PluginReleaseInstallOperation,
   PluginReleaseRef,
-  PluginRuntimeRefreshResult,
+  PluginRecoveryResult,
   PluginSecurityPolicy,
   PluginUploadedExternalPackageIntent,
 } from '@floegence/redevplugin-ui';
 
-type PluginRuntimeRefreshFailure = Extract<PluginRuntimeRefreshResult['results'][number], { status: 'failed' }>;
-
-export type PluginRuntimeRecoveryReason = PluginRuntimeRefreshFailure['error']['reason'];
-export type PluginRuntimeRecoveryAction = PluginRuntimeRefreshFailure['error']['action'];
+export type PluginRuntimeRecoveryReason = NonNullable<PluginRecoveryResult['reason']>;
+export type PluginRuntimeRecoveryAction = NonNullable<PluginRecoveryResult['action']>;
 export type PluginRuntimeRecoveryPresentation = Readonly<
   | { state: 'recovering'; error?: undefined; reason?: undefined; action?: undefined }
   | { state: 'ready'; error?: undefined; reason?: undefined; action?: undefined }

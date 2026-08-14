@@ -13,10 +13,10 @@ Activity opens Shell-root windows; Workbench opens `redeven.plugin` widgets. The
 Activity Bar Launcher provides stable categories, keyboard navigation, search,
 and exact inventory routing, while Plugin Center presents trust, lifecycle,
 access, and launch state. External installs require explicit source review and
-commit; fresh installs start disabled with zero grants. Updates require a
+Host install confirmation; fresh installs start disabled with zero grants. Updates require a
 side-effect-free, target-bound review and retain Host-managed state and grants
 without adding any. Redeven owns navigation, review, placement, and filters;
-ReDevPlugin owns admission, sandbox and bridge lifecycle, confirmations, streams,
+ReDevPlugin owns admission, sandbox and bridge lifecycle, confirmations, Events,
 and revocation. Failed exact-surface close remains retryable without wider
 authority.
 
@@ -120,40 +120,20 @@ keep the inventory master and selected detail side by side.
 
 ## Session recovery
 
-After a direct-session handshake, the Shell starts recovery on the explicit
-authenticated plugin-session-ready transition; it does not insert a fixed
-stability timer. The handshake credential can precede the server-side scope
-needed by that mutation. ReDevPlugin `v0.7.27` normally reconstructs activation after Host
-restart or process-local lease expiry from sealed local registry and
-release-trust evidence without remote artifact downloads; Redeven retains a
-bounded 90-second outer timeout as a fail-closed guard rather than a normal
-recovery budget.
-
-Plugin Center remains interactive while enabled plugins recover. Recovery is
-projected by exact `plugin_instance_id` plus installed package/manifest/entries
-identity: a recovering plugin remains closed,
-ready plugins remain openable, and a failed plugin alone shows its stable typed
-reason with an explicit idempotent Retry action. Retry returns that plugin to
-recovering and shares the Host single-flight operation; it never reloads the
-page, opens a surface early, or grants fallback authorization. A disconnect,
-replaced client, or Shell disposal aborts the pending wait and refresh. Results
-from that superseded client generation are discarded instead of being projected
-as a user-visible plugin failure. The released Host gives each plugin a
-15-second recovery deadline, reports deadline exhaustion as `recovery_timeout`,
-and lets a healthy new-session follower take over after an old canceled leader
-without inheriting the ended context. Only
-one recovery may be active for a connected client. An instance installed or
-enabled after the connected client's initial recovery remains closed until a
-subsequent Host refresh covers its exact id. If it appeared while the initial
-refresh was in flight, the Shell schedules at most one catch-up for that exact
-uncovered-instance set; an empty result cannot create an implicit retry loop.
-A typed failure remains sticky for the connected client, including while the
-inventory projection catches up; only the explicit Retry action clears that
-instance's failure marker.
+After a direct-session handshake, the Shell requests the idempotent Host
+`recoverEnabled` snapshot on the explicit authenticated plugin-session-ready
+transition; it does not insert a stability timer. Plugin Center remains
+interactive while enabled plugins recover and may present each Host-projected
+result with an explicit Retry action. The Host owns recovery identity,
+single-flight, timeout, package binding, and retry semantics. Env App stores no
+failed-instance or catch-up owner and never turns recovery presentation into a
+second open gate. Cards, details, launchers, and placement commands consume the
+Host `action_state`; they do not derive `can_open` from trust, policy, grants, or
+recovery flags.
 
 ## Official installation progress
 
-Official installation uses the released durable install operation instead of a
+Official installation uses the released durable Execution instead of a
 page-bound pending flag. Only the target plugin card and inspector show its
 queued, trust verification, release inspection, download, package verification,
 commit, reconciliation, success, or failure state. A byte progress bar is shown
@@ -162,7 +142,7 @@ indeterminate. Search, filters, scrolling, detail reading, panel close, and
 unrelated surface launch stay available while installation continues.
 
 The Shell retains the original request identity and reattaches to the same Host
-operation after Plugin Center reopens, transport reconnects, or a start response
+Execution after Plugin Center reopens, transport reconnects, or a start response
 is lost. Closing the panel never cancels installation. Terminal failures use
 stable error code, phase, and retryability to select complete locale-owned copy;
 raw backend messages are not primary UI. A retry creates a new request only when
@@ -178,14 +158,14 @@ Plugin Center's Updates card and inspector expose one primary `Review update`
 action. Opening it creates an exact update intent and never submits a mutation,
 refreshes inventory, changes tabs, or replaces the current selection. Activity
 and Workbench remain overflow actions while an update is available. The dedicated
-update dialog owns source-required, loading-review, review, committing,
+update dialog owns source-required, loading-review, review, installing,
 reconciling, and complete states. Its fixed footer always exposes an explicit,
 single-line target action such as `Update to vX`, `Install new build`, or
 `Replace current build`; low-height and narrow layouts scroll only the body.
 
 The immutable update candidate binds the exact plugin instance, management
 revision, current and target versions, package, manifest, and entries hashes.
-Before commit, Redeven rechecks the current inventory revision and inspection
+Before install, Redeven rechecks the current inventory revision and inspection
 expiry. A changed target is stale and requires a fresh review; it is never
 silently substituted. Version upgrades, same-version external replacements,
 exact-package no-ops, and downgrades are projected centrally rather than inferred
@@ -197,12 +177,14 @@ official-plugin release notes or synthesize publisher notes from manifests,
 source history, plugin identity, or host locale catalogs. Missing publisher notes
 remain visibly absent.
 
-Commit starts only from the review footer. Development builds and external
+Install starts only from the review footer. Development builds and external
 replacements require a concise adjacent risk acknowledgement; ordinary verified
-version upgrades need no redundant checkbox. Commit prevents close and duplicate
-submission. A typed not-committed result returns to the same review, while an
-unknown result enters query-only reconciliation and never resubmits. Successful
-commit remains in a complete dialog until the user chooses Activity, permissions,
+version upgrades need no redundant checkbox. Install prevents close and duplicate
+submission. The Host rebinds the exact owner/session and revalidates the exact
+bytes and expected hash before its atomic control-database transaction. An unknown
+transport outcome retires stale UI authority and requires inventory refresh; it
+does not create receipt/query state or resubmit the mutation. Successful install
+remains in a complete dialog until the user chooses Activity, permissions,
 or Done. Inventory refresh failure is reported separately from mutation failure.
 Closing completion preserves the Updates tab, clears obsolete exact selection,
 and shows an `All plugins are up to date` success state when no updates remain.
@@ -273,29 +255,24 @@ evidence. First install confirmation states the disabled, zero-grant result.
 Update or reinstall confirmation states that the Host retains enabled state and
 existing grants and adds no grants automatically.
 
-Invalid, revoked, or policy-blocked assessment disables commit. Absent,
+Invalid, revoked, or policy-blocked assessment disables install. Absent,
 unknown-signer, and temporarily unavailable signatures show a prominent risk
-state but may be explicitly confirmed. Commit is unavailable until confirmation,
-and the dialog cannot close while commit is in flight. Response-loss query uses
-the exact inspection and commit identity. After an unknown or in-progress result,
-the dialog cannot close or return to source; retry remains query-only across
-bounded reconciliation timeouts until terminal.
-An in-progress update retires its visible slots while reconciliation is pending.
-A failed terminal result keeps the installed revision eligible to reopen; a
-timeout, abort, or otherwise unresolved in-progress outcome fences that revision
-until inventory proves a newer runnable target.
-After an install commit, the plugin is visibly disabled with zero grants. After
-an update or reinstall, completion reads `plugin.enable_state` from the Host
-receipt, retains existing grants, and claims only that no new grants were added.
+state but may be explicitly confirmed. Install is unavailable until confirmation,
+and the dialog cannot close while the Host mutation is in flight. An update closes
+its visible slots before install; failure to close blocks the mutation. Unknown
+outcome retires the stale management revision until authoritative inventory is
+reloaded, so queued stale opens cannot pass.
+After a fresh install, the plugin is visibly disabled with zero grants. After
+an update or reinstall, completion reads the authoritative inventory record,
+retains existing grants, and claims only that no new grants were added.
 Manual updates remain the default unless verified evidence allows automatic
 updates. Equal SemVer never proves latest: equal package hashes offer exact-package
 reinstall, different hashes warn that content differs, and missing prior hash
 states that equality cannot be determined. Every case remains bound to the
 exact update intent and inspection digest. The completion action enters
 the exact installed detail for permission review and manual enablement. A refresh
-failure after a terminal commit exposes only an inventory refresh recovery and
-never a second commit action. Unknown outcomes offer only same-inspection
-reconciliation and explicitly prohibit starting another installation.
+failure after a terminal install exposes only an inventory refresh recovery and
+never a second install action.
 
 ## Permissions and policy
 
@@ -398,11 +375,11 @@ or call business adapters directly.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginUpdateProjection.ts:1` - Classifies update targets and fences revision, inspection expiry, and package identity.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginCatalog.ts:1` - Projects verified market releases and manifest-owned presentation without plugin-specific author copy.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterItems.tsx:1` - Presents the compact Discover, Installed, and Updates card directory without owning selection or mutations.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginPresentation.ts:1` - Combines trust, policy, authorization, lifecycle, and launch readiness into one primary action.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:1` - Consumes Host `action_state`, RecoverySnapshot, Execution, and Event DTOs.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/plugin-motion.css:1` - Defines the scoped subtle entrance and disclosure motion with a reduced-motion override.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginManagement.browser.test.tsx:1` - Verifies responsive plugin geometry, real motion timing, and reduced-motion operability.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/externalPluginSecurityProjection.ts:1` - Projects security declarations, update deltas, and operation impact without UI state.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/ExternalPluginInstallDialog.tsx:1` - Implements source, review, explicit confirmation, commit, and terminal result UX.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/ExternalPluginInstallDialog.tsx:1` - Implements source, review, explicit confirmation, Host install, and terminal result UX.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginInventoryProjection.ts:1` - Isolates official and external identity, trust, provenance, grants, and requirements.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/ActivityPluginSurfaceWindow.tsx:1` - Owns Activity floating chrome, mobile modality, focus, and close.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginPlatform.ts:1` - Opens and retires only released SDK slots.

@@ -26,7 +26,7 @@ const sourceCommit = '1'.repeat(40);
 const productCommit = '2'.repeat(40);
 const contractSetSHA256 = '3'.repeat(64);
 const packageSet = {
-  schema_version: 'redevplugin.platform_package_set.v1',
+  schema_version: 'redevplugin.platform_package_set.v3',
   platform_version: version,
   go_module: { module: 'github.com/floegence/redevplugin', version: `v${version}` },
   npm_packages: [
@@ -34,19 +34,15 @@ const packageSet = {
     { name: '@floegence/redevplugin-ui', version },
   ],
   rust_crates: [
-    { name: 'redevplugin-contracts', version, role: 'contracts' },
-    { name: 'redevplugin-ipc', version, role: 'ipc' },
-    { name: 'redevplugin-wasm-abi', version, role: 'wasm_abi' },
-    { name: 'redevplugin-target-classifier', version, role: 'target_classifier' },
-    { name: 'redevplugin-worker-sdk', version, role: 'worker_sdk' },
     { name: 'redevplugin-runtime', version, role: 'runtime' },
+    { name: 'redevplugin-worker-sdk', version, role: 'worker_sdk' },
   ],
   contract_registry_version: 'contract-registry-v2',
   contract_set_sha256: contractSetSHA256,
 };
 const integrity = `sha512-${Buffer.alloc(64, 7).toString('base64')}`;
 const publication = {
-  schema_version: 'redevplugin.platform_package_publication.v1',
+  schema_version: 'redevplugin.platform_package_publication.v2',
   platform_version: version,
   source_commit: sourceCommit,
   workflow: {
@@ -85,13 +81,13 @@ test('strict JSON rejects duplicate fields and trailing data', () => {
   assert.throws(() => parseStrictJSON('{"a":"\\x"}'), /invalid escape/u);
 });
 
-test('package set is a closed two-npm six-crate contract', () => {
+test('package set is a closed two-npm two-crate contract', () => {
   assert.deepEqual(validatePackageSet(packageSet), packageSet);
   for (const mutate of [
     (value) => { value.extra = true; },
     (value) => { value.platform_version = '01.2.3'; },
     (value) => { value.npm_packages.reverse(); },
-    (value) => { value.rust_crates[5].name = 'runtime-copy'; },
+    (value) => { value.rust_crates[0].name = 'runtime-copy'; },
     (value) => { value.rust_crates.pop(); },
     (value) => { value.contract_set_sha256 = 'x'; },
   ]) {
@@ -119,7 +115,7 @@ test('publication binds workflow, source, integrity, and all package coordinates
 
 test('runtime provenance requires the exact crates.io package graph rooted at the runtime crate', () => {
   const source = 'registry+https://github.com/rust-lang/crates.io-index';
-  const runtimeNames = new Set(['redevplugin-ipc', 'redevplugin-runtime', 'redevplugin-wasm-abi']);
+  const runtimeNames = new Set(['redevplugin-runtime']);
   const packages = packageSet.rust_crates.filter(({ name }) => runtimeNames.has(name)).map((coordinate) => ({
     id: `${source}#${coordinate.name}@${coordinate.version}`,
     name: coordinate.name,
@@ -127,13 +123,20 @@ test('runtime provenance requires the exact crates.io package graph rooted at th
     source,
     license: 'Apache-2.0',
   }));
-  const runtime = packages.at(-1);
+  const runtime = packages[0];
   runtime.source = null;
+  packages.push({
+    id: `${source}#serde@1.0.0`,
+    name: 'serde',
+    version: '1.0.0',
+    source,
+    license: 'MIT OR Apache-2.0',
+  });
   const metadata = { packages, resolve: { root: runtime.id }, workspace_members: [runtime.id] };
   const root = mkdtempSync(path.join(tmpdir(), 'redeven-redevplugin-provenance-'));
   try {
     const runtimePath = path.join(root, 'redevplugin-runtime');
-    const publicationPath = path.join(root, 'platform-package-publication-v1.json');
+    const publicationPath = path.join(root, 'platform-package-publication-v2.json');
     writeFileSync(runtimePath, 'runtime\n');
     writeFileSync(publicationPath, `${JSON.stringify(publication)}\n`);
     const verification = createPublicationVerification(publication, packageSet, `v${version}`, publicationPath);
@@ -145,20 +148,19 @@ test('runtime provenance requires the exact crates.io package graph rooted at th
       publicationVerification: verification, packageSet, product, target: 'linux/amd64',
       runtimePath, metadata,
     });
-    assert.equal(provenance.resolved_registry_packages.filter(({ name }) => name.startsWith('redevplugin-')).length, 3);
+    assert.equal(provenance.resolved_registry_packages.filter(({ name }) => name.startsWith('redevplugin-')).length, 1);
     assert.equal(provenance.resolved_registry_packages.at(-1).source, source);
     const missing = clone(metadata);
     missing.packages.splice(0, 1);
     assert.throws(() => createRuntimeProvenance({
       publicationVerification: verification, packageSet, product, target: 'linux/amd64',
       runtimePath, metadata: missing,
-    }), /runtime crate set mismatch/u);
+    }), /runtime crate/u);
     const extra = clone(metadata);
-    const classifier = packageSet.rust_crates.find(({ name }) => name === 'redevplugin-target-classifier');
     extra.packages.push({
-      id: `${source}#${classifier.name}@${classifier.version}`,
-      name: classifier.name,
-      version: classifier.version,
+      id: `${source}#redevplugin-ipc@${version}`,
+      name: 'redevplugin-ipc',
+      version,
       source,
       license: 'Apache-2.0',
     });
@@ -167,7 +169,7 @@ test('runtime provenance requires the exact crates.io package graph rooted at th
       runtimePath, metadata: extra,
     }), /runtime crate set mismatch/u);
     const local = clone(metadata);
-    local.packages[0].source = null;
+    local.packages[1].source = null;
     assert.throws(() => createRuntimeProvenance({
       publicationVerification: verification, packageSet, product, target: 'linux/amd64',
       runtimePath, metadata: local,
@@ -180,7 +182,7 @@ test('runtime provenance requires the exact crates.io package graph rooted at th
 test('runtime evidence binds every product-built file and rejects tampering', () => {
   const root = mkdtempSync(path.join(tmpdir(), 'redeven-redevplugin-contract-'));
   try {
-    const publicationPath = path.join(root, 'platform-package-publication-v1.json');
+    const publicationPath = path.join(root, 'platform-package-publication-v2.json');
     writeFileSync(publicationPath, `${JSON.stringify(publication)}\n`);
     const verification = createPublicationVerification(publication, packageSet, `v${version}`, publicationPath);
     const runtime = path.join(root, 'redevplugin-runtime');

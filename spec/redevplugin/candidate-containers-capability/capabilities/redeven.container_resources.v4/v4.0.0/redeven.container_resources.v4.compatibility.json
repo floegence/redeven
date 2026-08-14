@@ -1,8 +1,0 @@
-{
-  "schema_version": "redevplugin.host_capability_compatibility.v1",
-  "contract_id": "redeven.container_resources.v4",
-  "contract_version": "4.0.0",
-  "capability_id": "redeven.capability.container_resources",
-  "capability_version": "3.0.0",
-  "min_redevplugin_version": "0.6.20"
-}

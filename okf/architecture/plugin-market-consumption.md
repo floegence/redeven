@@ -12,7 +12,7 @@ one validated snapshot during startup, and serves that snapshot only to the
 trusted Env App origin. The market identifies a candidate GitHub Release; it
 does not host plugin packages, preserve version history, grant trust, or install
 anything. Redeven downloads the exact GitHub assets declared by the snapshot and
-passes the complete signed release transport to released ReDevPlugin `0.7.27`.
+passes the complete signed release transport to released ReDevPlugin `1.1.1`.
 An invalid current response fails closed. A valid last-known-good snapshot may
 keep discovery available as stale data, but it cannot authorize an automatic
 update.
@@ -73,8 +73,8 @@ different icon bytes.
 The snapshot contains at most one current release for each plugin and channel.
 It carries compact manifest-derived presentation locales, availability state, compatibility,
 immutable GitHub repository/release/tag/commit/asset identity, SHA-256 values,
-signer identity, signed publisher release reference, root and signing-ledger
-pins, and the complete locator-to-asset transport projection. Redeven does not
+signer identity, signed publisher release reference, Ed25519 root pin, and the
+complete locator-to-asset transport projection. Redeven does not
 persist or expose a market version-history model.
 
 Plugin Center projects current entries from the frozen snapshot; names,
@@ -91,20 +91,20 @@ release, Redeven converts the already validated snapshot into the exact
 `PluginReleaseRef` and released remote-transport asset set. ReDevPlugin downloads
 those HTTPS GitHub Release assets with its bounded transport, verifies every
 locator, size, digest, root delegation, source policy, revocation document,
-signing-ledger proof, signed release metadata, package signature, package hashes,
+signed release metadata, package signature, package hashes,
 publisher, plugin, version, channel, and host capability requirement, and only
 then changes registry state.
 
-Official installation is a durable ReDevPlugin operation. Redeven submits the
+Official installation is a durable ReDevPlugin Execution. Redeven submits the
 snapshot-derived release reference once with an idempotent request identity and
-observes the released operation; it does not treat the market response, browser
+observes ordered Events; it does not treat the market response, browser
 connection, or an Env App pending flag as installation authority. A failed or
-disconnected observer may reattach to the same operation without selecting new
+disconnected observer may reattach to the same Execution without selecting new
 assets or replaying the mutation.
 
 Market `latest`, signer labels, compatibility text, and listing status are not
-installation authorization. Redeven pins the official root and signing-ledger
-public keys in the product, rejects a snapshot whose advertised anchors differ,
+installation authorization. Redeven pins the official Ed25519 root public key in
+the product, rejects a snapshot whose advertised anchor differs,
 and delegates package-signing verification to ReDevPlugin. The browser cannot
 replace GitHub URLs, hashes, or trust documents. Installation and update still
 require the normal product review and ReDevPlugin lifecycle rules; installation
@@ -117,7 +117,7 @@ does not grant permissions or enable runtime access.
 - Redeven owns startup refresh, last-known-good caching, trusted-origin
   projection, product presentation, and product-pinned official anchors.
 - ReDevPlugin owns remote download, cryptographic verification, durable install
-  operations and progress, update, rollback, revocation, registry state,
+  Executions and Events, update, rollback, revocation, registry state,
   permissions, and runtime lifecycle.
 - Market or cache failure must not remove installed plugins or prevent Redeven
   startup, and must not become permission to install unverified content.

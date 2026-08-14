@@ -46,6 +46,12 @@ function installedRecord(overrides: Partial<ReDevPluginRecord> = {}): ReDevPlugi
       },
     },
     enable_state: 'enabled',
+    action_state: {
+      can_open: true,
+      can_enable: false,
+      can_disable: true,
+      can_uninstall: true,
+    },
     policy_revision: 3,
     management_revision: 7,
     revoke_epoch: 0,
@@ -91,7 +97,7 @@ function installedRecord(overrides: Partial<ReDevPluginRecord> = {}): ReDevPlugi
   };
 }
 
-describe('v0.7.1 plugin inventory projection', () => {
+describe('v1.1.1 plugin inventory projection', () => {
   it('keeps Plugin Center as the first panel tile', () => {
     const projection = projectPluginInventory({
       officialCatalog: [officialContainers],
@@ -150,7 +156,7 @@ describe('v0.7.1 plugin inventory projection', () => {
     const item = projection.items[0];
     expect(item?.defaultLaunchTarget).toBeUndefined();
     expect(buildPluginPanelModel(projection).tiles).toHaveLength(1);
-    expect(buildPluginCenterModel(projection).items[0]?.defaultLaunchTarget).toBeUndefined();
+    expect(buildPluginCenterModel(projection).installed[0]?.defaultLaunchTarget).toBeUndefined();
   });
 
   it('uses an installed package icon URL without a market catalog', () => {
@@ -592,7 +598,16 @@ describe('v0.7.1 plugin inventory projection', () => {
     });
     const disabledProjection = projectPluginInventory({
       officialCatalog: [officialContainers],
-      installedPlugins: [installedRecord({ enable_state: 'disabled', disabled_reason: 'user_disabled' })],
+      installedPlugins: [installedRecord({
+        enable_state: 'disabled',
+        disabled_reason: 'user_disabled',
+        action_state: {
+          can_open: false,
+          can_enable: true,
+          can_disable: false,
+          can_uninstall: true,
+        },
+      })],
     });
 
     expect(buildPluginPanelModel(enabledProjection).tiles[1]).toMatchObject({
@@ -631,7 +646,7 @@ describe('v0.7.1 plugin inventory projection', () => {
     });
   });
 
-  it('requires an active read grant before exposing the Containers launch target', () => {
+  it('does not override Host launch authority when an active read grant is missing', () => {
     const projection = projectPluginInventory({
       officialCatalog: [officialContainers],
       installedPlugins: [installedRecord()],
@@ -640,7 +655,7 @@ describe('v0.7.1 plugin inventory projection', () => {
     expect(projection.items[0]).toMatchObject({
       lifecycleState: 'needs_attention',
       attentionReason: 'permission_required',
-      defaultLaunchTarget: undefined,
+      defaultLaunchTarget: expect.objectContaining({ surfaceID: officialContainers.defaultSurfaceID }),
       authorization: {
         permissions: expect.arrayContaining([
           expect.objectContaining({ permissionID: 'containers.read', granted: false }),
@@ -677,7 +692,7 @@ describe('v0.7.1 plugin inventory projection', () => {
     expect(projection.items[0]).toMatchObject({
       lifecycleState: 'needs_attention',
       attentionReason: 'permission_required',
-      defaultLaunchTarget: undefined,
+      defaultLaunchTarget: expect.objectContaining({ surfaceID: officialContainers.defaultSurfaceID }),
       authorization: {
         permissions: expect.arrayContaining([
           expect.objectContaining({ permissionID: 'containers.read', methods: ['containers.list'] }),
@@ -766,7 +781,7 @@ describe('v0.7.1 plugin inventory projection', () => {
     expect(projection.items[0]).toMatchObject({
       lifecycleState: 'needs_attention',
       attentionReason: 'policy_restricted',
-      defaultLaunchTarget: undefined,
+      defaultLaunchTarget: expect.objectContaining({ surfaceID: officialContainers.defaultSurfaceID }),
       authorization: {
         permissions: expect.arrayContaining([
           expect.objectContaining({ permissionID: 'containers.read', granted: true, blockedByPolicy: true }),
@@ -826,6 +841,14 @@ describe('v0.7.1 plugin inventory projection', () => {
       officialCatalog: [officialContainers],
       installedPlugins: [installedRecord({
         trust_state: 'needs_review',
+        action_state: {
+          can_open: false,
+          can_enable: false,
+          can_disable: true,
+          can_uninstall: true,
+          blocked_reason: 'runtime_unavailable',
+          recovery_action: 'retry',
+        },
         trust_assessment: {
           trust_state: 'needs_review',
           verified_hashes: {
@@ -846,10 +869,7 @@ describe('v0.7.1 plugin inventory projection', () => {
     });
     const installedTile = buildPluginPanelModel(projection, undefined, { canOpenSurfaces: true }).tiles
       .find((tile) => tile.kind === 'plugin' && tile.item.inventoryKey.startsWith('instance:'));
-    expect(installedTile).toMatchObject({
-      kind: 'plugin',
-      action: 'open_details',
-    });
+    expect(installedTile).toBeUndefined();
   });
 
   it('builds installed and update buckets from the typed registry record', () => {

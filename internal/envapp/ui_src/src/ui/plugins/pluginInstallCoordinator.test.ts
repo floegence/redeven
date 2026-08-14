@@ -1,382 +1,115 @@
-import {
-  PluginPlatformRequestError,
-  type PluginReleaseInstallOperation,
-} from '@floegence/redevplugin-ui';
+import type { PluginEvent, PluginExecution } from '@floegence/redevplugin-ui';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createPluginInstallCoordinator } from './pluginInstallCoordinator';
 
-const pluginID = 'com.example.official.toolbox';
-const pluginInstanceID = 'plugini_example_official_toolbox';
+const pluginInstanceID = 'plugini_redeven_official_containers';
 
-function operation(
-  overrides: Partial<PluginReleaseInstallOperation> = {},
-): PluginReleaseInstallOperation {
+function execution(overrides: Partial<PluginExecution> = {}): PluginExecution {
   return {
-    request_id: 'request-install-1',
-    operation_id: 'release_install_1',
+    execution_id: 'release_install_1',
     plugin_instance_id: pluginInstanceID,
-    request_sha256: 'a'.repeat(64),
-    status: 'running',
-    phase: 'download_package',
-    progress: { kind: 'bytes', completed: 1, total: 2 },
-    attempt: 1,
-    retry_after_ms: 250,
-    mutation_outcome: 'not_committed',
-    activation: { status: 'pending' },
-    phase_diagnostics: [],
-    created_at: '2026-08-05T08:00:00Z',
-    updated_at: '2026-08-05T08:00:01Z',
+    kind: 'operation',
+    status: 'completed',
+    cursor: 1,
+    cancelable: false,
+    created_at: '2026-08-14T00:00:00Z',
+    updated_at: '2026-08-14T00:00:01Z',
+    terminal_at: '2026-08-14T00:00:01Z',
     ...overrides,
-  } as PluginReleaseInstallOperation;
+  };
 }
 
-function harness() {
-  let nextRequest = 0;
+function event(sequence = 1): PluginEvent {
+  return {
+    execution_id: 'release_install_1',
+    sequence,
+    kind: 'progress',
+    payload: { phase: 'download_package', progress: { kind: 'bytes', completed: 5, total: 10 } },
+  };
+}
+
+function harness(overrides: Record<string, unknown> = {}) {
   const lifecycle = {
-    installOfficialRelease: vi.fn(),
-    listReleaseInstallOperations: vi.fn(async () => [] as PluginReleaseInstallOperation[]),
-    getReleaseInstallOperationByRequest: vi.fn(async () => operation()),
-    watchReleaseInstallOperation: vi.fn(),
+    installOfficialRelease: vi.fn(async (_command, _requestID, _options, onUpdate) => {
+      const value = execution();
+      onUpdate?.(value, [event()]);
+      return value;
+    }),
+    listReleaseInstallExecutions: vi.fn(async () => [] as PluginExecution[]),
+    getReleaseInstallExecution: vi.fn(async () => execution()),
+    listReleaseInstallExecutionEvents: vi.fn(async () => ({
+      execution_id: 'release_install_1', events: [event()], cursor: 1,
+    })),
+    ...overrides,
   };
   const refreshInventory = vi.fn(async () => undefined);
   const coordinator = createPluginInstallCoordinator({
-    lifecycle,
+    lifecycle: lifecycle as never,
     refreshInventory,
-    createRequestID: () => `request-install-${++nextRequest}`,
-    resolvePluginID: (instanceID) => instanceID === pluginInstanceID ? pluginID : undefined,
+    createRequestID: () => 'request-1',
+    resolvePluginID: (candidate) => candidate === pluginInstanceID ? 'com.redeven.official.containers' : undefined,
   });
   return { coordinator, lifecycle, refreshInventory };
 }
 
-describe('plugin install coordinator', () => {
-  it('projects authoritative progress and admits one installation submission at a time', async () => {
-    const { coordinator, lifecycle } = harness();
-    let finish!: (value: PluginReleaseInstallOperation) => void;
-    lifecycle.installOfficialRelease.mockImplementation(async (
-      _command,
-      requestID,
-      _options,
-      onUpdate,
-    ) => {
-      onUpdate(operation({ request_id: requestID }));
-      return new Promise<PluginReleaseInstallOperation>((resolve) => { finish = resolve; });
-    });
-
-    const first = coordinator.start(pluginID, pluginInstanceID);
-    const duplicate = coordinator.start(pluginID, pluginInstanceID);
-    await Promise.resolve();
-
-    expect(lifecycle.installOfficialRelease).toHaveBeenCalledTimes(1);
-    expect(coordinator.projections()).toEqual([
-      expect.objectContaining({
-        pluginInstanceID,
-        requestID: 'request-install-1',
-        observation: 'watching',
-        operation: expect.objectContaining({
-          phase: 'download_package',
-          progress: { kind: 'bytes', completed: 1, total: 2 },
-        }),
-      }),
-    ]);
-
-    finish(operation({
-      request_id: 'request-install-1',
-      status: 'failed',
-      phase: 'failed',
-      progress: { kind: 'indeterminate' },
-      failure: { code: 'PLUGIN_RELEASE_NETWORK', retryable: true },
-    }));
-    await expect(first).resolves.toBeUndefined();
-    await expect(duplicate).resolves.toBeUndefined();
-    expect(coordinator.projections()).toEqual([
-      expect.objectContaining({
-        pluginInstanceID,
-        requestID: 'request-install-1',
-        observation: 'failed',
-        operation: expect.objectContaining({
-          status: 'failed',
-          phase: 'failed',
-          failure: { code: 'PLUGIN_RELEASE_NETWORK', retryable: true },
-        }),
-      }),
-    ]);
-  });
-
-  it('reattaches an active operation listed after the Plugin Center reopens', async () => {
+describe('plugin install execution coordinator', () => {
+  it('submits one Host execution and removes presentation after authoritative inventory refresh', async () => {
     const { coordinator, lifecycle, refreshInventory } = harness();
-    lifecycle.listReleaseInstallOperations.mockResolvedValueOnce([operation()]);
-    lifecycle.watchReleaseInstallOperation.mockImplementation(async (_operationID, _options, onUpdate) => {
-      const completed = operation({
-        status: 'succeeded',
-        phase: 'complete',
-        progress: { kind: 'items', completed: 1, total: 1 },
-        mutation_outcome: 'committed',
-      });
-      onUpdate(completed);
-      return completed;
-    });
 
-    await coordinator.resume();
+    await coordinator.start('com.redeven.official.containers', pluginInstanceID);
 
-    expect(lifecycle.watchReleaseInstallOperation).toHaveBeenCalledWith(
-      'release_install_1',
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
-      expect.any(Function),
-    );
+    expect(lifecycle.installOfficialRelease).toHaveBeenCalledOnce();
     expect(refreshInventory).toHaveBeenCalledOnce();
     expect(coordinator.projections()).toEqual([]);
   });
 
-  it('projects a typed submission failure as a retryable terminal state', async () => {
-    const { coordinator, lifecycle } = harness();
-    lifecycle.installOfficialRelease.mockRejectedValueOnce(new PluginPlatformRequestError(
-      'PLUGIN_RELEASE_NETWORK',
-      'Release transport is temporarily unavailable',
-    ));
+  it('keeps the unified failed execution as the retry authority', async () => {
+    const failed = execution({ status: 'failed', failure_code: 'PLUGIN_RELEASE_NETWORK' });
+    const { coordinator } = harness({
+      installOfficialRelease: vi.fn(async (_command, _requestID, _options, onUpdate) => {
+        onUpdate?.(failed, []);
+        return failed;
+      }),
+    });
 
-    await coordinator.start(pluginID, pluginInstanceID);
+    await coordinator.start('com.redeven.official.containers', pluginInstanceID);
 
     expect(coordinator.projections()).toEqual([
       expect.objectContaining({
-        pluginID,
-        pluginInstanceID,
-        requestID: 'request-install-1',
-        observation: 'failed',
-        startFailure: { code: 'PLUGIN_RELEASE_NETWORK', retryable: true },
-      }),
-    ]);
-  });
-
-  it('restores a recent terminal failure after the Env App reopens', async () => {
-    const { coordinator, lifecycle } = harness();
-    const terminalAt = new Date(Date.now() - 60_000).toISOString();
-    lifecycle.listReleaseInstallOperations.mockResolvedValueOnce([operation({
-      status: 'failed',
-      phase: 'failed',
-      progress: { kind: 'indeterminate' },
-      failure: { code: 'PLUGIN_RELEASE_REF_VERIFICATION_FAILED', retryable: false },
-      updated_at: terminalAt,
-      terminal_at: terminalAt,
-    })]);
-
-    await coordinator.resume();
-
-    expect(lifecycle.watchReleaseInstallOperation).not.toHaveBeenCalled();
-    expect(coordinator.projections()).toEqual([
-      expect.objectContaining({
-        pluginID,
         pluginInstanceID,
         observation: 'failed',
-        operation: expect.objectContaining({
-          status: 'failed',
-          failure: { code: 'PLUGIN_RELEASE_REF_VERIFICATION_FAILED', retryable: false },
-        }),
+        execution: failed,
+        events: [],
       }),
     ]);
   });
 
-  it('does not restore stale or superseded terminal failures', async () => {
-    const { coordinator, lifecycle } = harness();
-    const staleTerminalAt = new Date(Date.now() - (25 * 60 * 60 * 1_000)).toISOString();
-    const recentTerminalAt = new Date(Date.now() - 60_000).toISOString();
-    lifecycle.listReleaseInstallOperations.mockResolvedValueOnce([
-      operation({
-        operation_id: 'release_install_stale',
-        status: 'failed',
-        phase: 'failed',
-        progress: { kind: 'indeterminate' },
-        failure: { code: 'PLUGIN_RELEASE_NETWORK', retryable: true },
-        updated_at: staleTerminalAt,
-        terminal_at: staleTerminalAt,
+  it('retains public Execution events when inventory refresh needs retry', async () => {
+    const refreshInventory = vi.fn(async () => { throw new Error('offline'); });
+    const lifecycle = {
+      installOfficialRelease: vi.fn(async (_command: unknown, _requestID: string, _options: unknown, onUpdate?: (value: PluginExecution, events: PluginEvent[]) => void) => {
+        const value = execution();
+        onUpdate?.(value, [event()]);
+        return value;
       }),
-      operation({
-        operation_id: 'release_install_recent_failure',
-        created_at: '2026-08-05T08:01:00Z',
-        status: 'failed',
-        phase: 'failed',
-        progress: { kind: 'indeterminate' },
-        failure: { code: 'PLUGIN_RELEASE_TIMEOUT', retryable: true },
-        updated_at: recentTerminalAt,
-        terminal_at: recentTerminalAt,
-      }),
-      operation({
-        operation_id: 'release_install_later_success',
-        created_at: '2026-08-05T08:02:00Z',
-        status: 'succeeded',
-        phase: 'complete',
-        progress: { kind: 'items', completed: 1, total: 1 },
-        mutation_outcome: 'committed',
-        updated_at: recentTerminalAt,
-        terminal_at: recentTerminalAt,
-      }),
-    ]);
-
-    await coordinator.resume();
-
-    expect(lifecycle.getReleaseInstallOperationByRequest).not.toHaveBeenCalled();
-    expect(lifecycle.watchReleaseInstallOperation).not.toHaveBeenCalled();
-    expect(coordinator.projections()).toEqual([]);
-  });
-
-  it('orders RFC3339Nano operation timestamps by time rather than text', async () => {
-    const { coordinator, lifecycle } = harness();
-    const terminalAt = new Date(Date.now() - 60_000).toISOString();
-    lifecycle.listReleaseInstallOperations.mockResolvedValueOnce([
-      operation({
-        operation_id: 'release_install_exact_second',
-        created_at: '2026-08-05T08:01:00Z',
-        status: 'succeeded',
-        phase: 'complete',
-        progress: { kind: 'items', completed: 1, total: 1 },
-        mutation_outcome: 'committed',
-        updated_at: '2026-08-05T08:01:00Z',
-        terminal_at: '2026-08-05T08:01:00Z',
-      }),
-      operation({
-        operation_id: 'release_install_fractional_second',
-        created_at: '2026-08-05T08:01:00.500Z',
-        status: 'failed',
-        phase: 'failed',
-        progress: { kind: 'indeterminate' },
-        failure: { code: 'PLUGIN_RELEASE_NETWORK', retryable: true },
-        updated_at: terminalAt,
-        terminal_at: terminalAt,
-      }),
-    ]);
-
-    await coordinator.resume();
-
-    expect(coordinator.projections()[0]?.operation?.operation_id).toBe(
-      'release_install_fractional_second',
-    );
-  });
-
-  it('reattaches the same request after a transport interruption without creating a new install', async () => {
-    const { coordinator, lifecycle } = harness();
-    lifecycle.installOfficialRelease.mockRejectedValueOnce(new TypeError('connection lost'));
-    lifecycle.getReleaseInstallOperationByRequest.mockResolvedValueOnce(operation());
-    lifecycle.watchReleaseInstallOperation.mockResolvedValueOnce(operation({
-      status: 'failed',
-      phase: 'failed',
-      progress: { kind: 'indeterminate' },
-      failure: { code: 'PLUGIN_INSTALL_INTERRUPTED', retryable: true },
-    }));
-
-    await coordinator.start(pluginID, pluginInstanceID);
-
-    expect(lifecycle.installOfficialRelease).toHaveBeenCalledTimes(1);
-    expect(lifecycle.getReleaseInstallOperationByRequest).toHaveBeenCalledWith(
-      'request-install-1',
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
-    );
-    expect(coordinator.projections()[0]).toMatchObject({
-      requestID: 'request-install-1',
-      operation: {
-        status: 'failed',
-        failure: { code: 'PLUGIN_INSTALL_INTERRUPTED', retryable: true },
-      },
+      listReleaseInstallExecutions: vi.fn(async () => [] as PluginExecution[]),
+      getReleaseInstallExecution: vi.fn(async () => execution()),
+      listReleaseInstallExecutionEvents: vi.fn(async () => ({ execution_id: 'release_install_1', events: [], cursor: 1 })),
+    };
+    const coordinator = createPluginInstallCoordinator({
+      lifecycle: lifecycle as never,
+      refreshInventory,
+      createRequestID: () => 'request-1',
+      resolvePluginID: () => 'com.redeven.official.containers',
     });
-  });
 
-  it('keeps reattaching the same request until a transport-interrupted install reaches its terminal state', async () => {
-    vi.useFakeTimers();
-    try {
-      const { coordinator, lifecycle, refreshInventory } = harness();
-      lifecycle.installOfficialRelease.mockImplementationOnce(async (
-        _command,
-        requestID,
-        _options,
-        onUpdate,
-      ) => {
-        onUpdate(operation({ request_id: requestID }));
-        throw new TypeError('watch connection lost');
-      });
-      lifecycle.getReleaseInstallOperationByRequest
-        .mockResolvedValueOnce(operation())
-        .mockResolvedValueOnce(operation({
-          status: 'succeeded',
-          phase: 'complete',
-          progress: { kind: 'items', completed: 1, total: 1 },
-          mutation_outcome: 'committed',
-          activation: {
-            status: 'needs_attention',
-            missing_permission_ids: ['containers.read'],
-            next_action: 'approve_permissions',
-          },
-        }));
-      lifecycle.watchReleaseInstallOperation.mockRejectedValueOnce(new TypeError('poll connection lost'));
-
-      const install = coordinator.start(pluginID, pluginInstanceID);
-      await vi.runAllTimersAsync();
-      await install;
-
-      expect(lifecycle.installOfficialRelease).toHaveBeenCalledTimes(1);
-      expect(lifecycle.getReleaseInstallOperationByRequest).toHaveBeenCalledTimes(2);
-      expect(refreshInventory).toHaveBeenCalledOnce();
-      expect(coordinator.projections()).toEqual([]);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('reports inventory refresh failure separately from a committed installation', async () => {
-    const { coordinator, lifecycle, refreshInventory } = harness();
-    const completed = operation({
-      status: 'succeeded',
-      phase: 'complete',
-      progress: { kind: 'items', completed: 1, total: 1 },
-      mutation_outcome: 'committed',
-    });
-    lifecycle.installOfficialRelease.mockResolvedValueOnce(completed);
-    refreshInventory.mockRejectedValueOnce(new Error('inventory unavailable'));
-
-    await coordinator.start(pluginID, pluginInstanceID);
+    await coordinator.start('com.redeven.official.containers', pluginInstanceID);
 
     expect(coordinator.projections()[0]).toMatchObject({
       observation: 'refresh_failed',
-      operation: { status: 'succeeded', mutation_outcome: 'committed' },
+      execution: { execution_id: 'release_install_1', status: 'completed' },
+      events: [{ sequence: 1, kind: 'progress' }],
     });
-    await coordinator.retry(pluginInstanceID);
-    expect(refreshInventory).toHaveBeenCalledTimes(2);
-    expect(lifecycle.installOfficialRelease).toHaveBeenCalledTimes(1);
-    expect(coordinator.projections()).toEqual([]);
-  });
-
-  it('uses a new request only after a retryable terminal failure', async () => {
-    const { coordinator, lifecycle } = harness();
-    lifecycle.installOfficialRelease
-      .mockResolvedValueOnce(operation({
-        status: 'failed',
-        phase: 'failed',
-        progress: { kind: 'indeterminate' },
-        failure: { code: 'PLUGIN_RELEASE_NETWORK', retryable: true },
-      }))
-      .mockResolvedValueOnce(operation({
-        request_id: 'request-install-2',
-        operation_id: 'release_install_2',
-        status: 'failed',
-        phase: 'failed',
-        progress: { kind: 'indeterminate' },
-        failure: { code: 'PLUGIN_RELEASE_TIMEOUT', retryable: true },
-      }));
-
-    await coordinator.start(pluginID, pluginInstanceID);
-    await coordinator.retry(pluginInstanceID);
-
-    expect(lifecycle.installOfficialRelease).toHaveBeenNthCalledWith(
-      1,
-      { type: 'install', pluginID, source: 'official_catalog' },
-      'request-install-1',
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
-      expect.any(Function),
-    );
-    expect(lifecycle.installOfficialRelease).toHaveBeenNthCalledWith(
-      2,
-      { type: 'install', pluginID, source: 'official_catalog' },
-      'request-install-2',
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
-      expect.any(Function),
-    );
   });
 });

@@ -22,7 +22,7 @@ const version = '1.2.3';
 const sourceCommit = '1'.repeat(40);
 const productCommit = '2'.repeat(40);
 const packageSet = {
-  schema_version: 'redevplugin.platform_package_set.v1',
+  schema_version: 'redevplugin.platform_package_set.v3',
   platform_version: version,
   go_module: { module: 'github.com/floegence/redevplugin', version: `v${version}` },
   npm_packages: [
@@ -30,19 +30,15 @@ const packageSet = {
     { name: '@floegence/redevplugin-ui', version },
   ],
   rust_crates: [
-    { name: 'redevplugin-contracts', version, role: 'contracts' },
-    { name: 'redevplugin-ipc', version, role: 'ipc' },
-    { name: 'redevplugin-wasm-abi', version, role: 'wasm_abi' },
-    { name: 'redevplugin-target-classifier', version, role: 'target_classifier' },
-    { name: 'redevplugin-worker-sdk', version, role: 'worker_sdk' },
     { name: 'redevplugin-runtime', version, role: 'runtime' },
+    { name: 'redevplugin-worker-sdk', version, role: 'worker_sdk' },
   ],
   contract_registry_version: 'contract-registry-v2',
   contract_set_sha256: '3'.repeat(64),
 };
 const integrity = `sha512-${Buffer.alloc(64, 7).toString('base64')}`;
 const publication = {
-  schema_version: 'redevplugin.platform_package_publication.v1',
+  schema_version: 'redevplugin.platform_package_publication.v2',
   platform_version: version,
   source_commit: sourceCommit,
   workflow: {
@@ -67,7 +63,7 @@ const publication = {
 
 function createFixture(root) {
   mkdirSync(root, { recursive: true });
-  const publicationPath = path.join(root, 'platform-package-publication-v1.json');
+  const publicationPath = path.join(root, 'platform-package-publication-v2.json');
   writeFileSync(publicationPath, `${JSON.stringify(publication)}\n`);
   const verification = createPublicationVerification(publication, packageSet, `v${version}`, publicationPath);
   rmSync(publicationPath);

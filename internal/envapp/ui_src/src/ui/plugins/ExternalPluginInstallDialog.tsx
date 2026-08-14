@@ -1111,7 +1111,6 @@ function InspectionReport(props: {
           <AuditFact label={i18n.t('uiCopy.plugin.external.manifestHash')} value={props.inspection.inspected_hashes.manifest_sha256} />
           <AuditFact label={i18n.t('uiCopy.plugin.external.entriesHash')} value={props.inspection.inspected_hashes.entries_sha256} />
           <AuditFact label={i18n.t('uiCopy.plugin.external.securitySummaryHash')} value={props.inspection.security_summary.summary_sha256} />
-          <AuditFact label={i18n.t('uiCopy.plugin.external.confirmationDigest')} value={props.inspection.confirmation_digest} />
         </section>
       </div>
     </details>

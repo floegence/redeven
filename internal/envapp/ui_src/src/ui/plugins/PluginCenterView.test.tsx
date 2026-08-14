@@ -164,23 +164,12 @@ function externalInspectionForCenter(): ExternalPluginInspection {
       intents: [],
       surfaces: [],
     },
-    confirmation_digest: 'sha256:684a09cfd858448baa7d52c3d30932d7684a09cfd858448baa7d52c3d30932d7',
   };
 }
 
 function externalCommitForCenter(source: ExternalPluginInspection): ExternalPluginCommitResult {
   const packageHash = source.inspected_hashes.package_sha256;
   return {
-    status: 'committed',
-    inspection_id: source.inspection_id,
-    intent: source.intent,
-    receipt: {
-      commit_id: 'commit_external_center_test',
-      inspection_id: source.inspection_id,
-      package_sha256: packageHash,
-      management_revision: 1,
-      committed_at: '2026-07-27T10:01:00Z',
-    },
     plugin: {
       plugin_instance_id: source.intent.plugin_instance_id,
       publisher_id: source.publisher_id,
@@ -1301,24 +1290,23 @@ describe('PluginCenterView', () => {
         installOperations={[{
           pluginID: containersPlugin.pluginID,
           pluginInstanceID: containersPlugin.officialCatalog.pluginInstanceID,
-          requestID: 'request_install_containers',
           observation: 'watching',
-          operation: {
-            request_id: 'request_install_containers',
-            operation_id: 'release_install_containers',
+          execution: {
+            execution_id: 'release_install_containers',
             plugin_instance_id: containersPlugin.officialCatalog.pluginInstanceID,
-            request_sha256: 'a'.repeat(64),
+            kind: 'operation',
             status: 'running',
-            phase: 'download_package',
-            progress: { kind: 'bytes', completed: 262_144, total: 524_288 },
-            attempt: 1,
-            retry_after_ms: 250,
-            mutation_outcome: 'not_committed',
-            activation: { status: 'pending' },
-            phase_diagnostics: [],
+            cursor: 1,
+            cancelable: false,
             created_at: '2026-08-05T08:00:00Z',
             updated_at: '2026-08-05T08:00:01Z',
           },
+          events: [{
+            execution_id: 'release_install_containers',
+            sequence: 1,
+            kind: 'progress',
+            payload: { phase: 'download_package', progress: { kind: 'bytes', completed: 262_144, total: 524_288 } },
+          }],
         }]}
         onCommand={vi.fn()}
         onRefresh={vi.fn()}
@@ -1330,10 +1318,10 @@ describe('PluginCenterView', () => {
     const target = mount.querySelector('[data-plugin-directory-card="catalog:containers"]')!;
     const other = mount.querySelector('[data-plugin-directory-card="catalog:database"]')!;
     const progress = target.querySelector<HTMLElement>('[data-plugin-install-progress]')!;
-    expect(target.querySelector('[data-plugin-install-operation]')?.textContent).toContain('Downloading plugin package');
+    expect(target.querySelector('[data-plugin-install-execution]')?.textContent).toContain('Downloading plugin package');
     expect(progress.getAttribute('aria-valuenow')).toBe('262144');
     expect(progress.getAttribute('aria-valuemax')).toBe('524288');
-    expect(other.querySelector('[data-plugin-install-operation]')).toBeNull();
+    expect(other.querySelector('[data-plugin-install-execution]')).toBeNull();
 
     (mount.querySelector('[data-plugin-center-item="catalog:database"]') as HTMLButtonElement).click();
     expect(mount.querySelector('[data-plugin-center-details="catalog:database"]')).not.toBeNull();
@@ -1352,26 +1340,20 @@ describe('PluginCenterView', () => {
         installOperations={[{
           pluginID: containersPlugin.pluginID,
           pluginInstanceID: containersPlugin.officialCatalog.pluginInstanceID,
-          requestID: 'request_install_containers',
           observation: 'watching',
-          operation: {
-            request_id: 'request_install_containers',
-            operation_id: 'release_install_containers',
+          execution: {
+            execution_id: 'release_install_containers',
             plugin_instance_id: containersPlugin.officialCatalog.pluginInstanceID,
-            request_sha256: 'a'.repeat(64),
+            kind: 'operation',
             status: 'failed',
-            phase: 'failed',
-            progress: { kind: 'indeterminate' },
-            attempt: 3,
-            retry_after_ms: 0,
-            mutation_outcome: 'not_committed',
-            failure: { code: 'PLUGIN_RELEASE_NETWORK', retryable: true },
-            activation: { status: 'pending' },
-            phase_diagnostics: [],
+            cursor: 1,
+            failure_code: 'PLUGIN_RELEASE_NETWORK',
+            cancelable: false,
             created_at: '2026-08-05T08:00:00Z',
             updated_at: '2026-08-05T08:00:03Z',
             terminal_at: '2026-08-05T08:00:03Z',
           },
+          events: [],
         }]}
         onRetryInstall={onRetryInstall}
         onCommand={vi.fn()}
@@ -1381,7 +1363,7 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    const status = mount.querySelector('[data-plugin-install-operation]')!;
+    const status = mount.querySelector('[data-plugin-install-execution]')!;
     expect(status.textContent).toContain('The plugin release could not be reached');
     expect(status.textContent).not.toContain('PLUGIN_RELEASE_NETWORK');
     (status.querySelector('[data-plugin-install-retry]') as HTMLButtonElement).click();
@@ -1399,26 +1381,20 @@ describe('PluginCenterView', () => {
         installOperations={[{
           pluginID: containersPlugin.pluginID,
           pluginInstanceID: containersPlugin.officialCatalog.pluginInstanceID,
-          requestID: 'request_install_containers',
           observation: 'watching',
-          operation: {
-            request_id: 'request_install_containers',
-            operation_id: 'release_install_containers',
+          execution: {
+            execution_id: 'release_install_containers',
             plugin_instance_id: containersPlugin.officialCatalog.pluginInstanceID,
-            request_sha256: 'a'.repeat(64),
+            kind: 'operation',
             status: 'failed',
-            phase: 'failed',
-            progress: { kind: 'indeterminate' },
-            attempt: 3,
-            retry_after_ms: 0,
-            mutation_outcome: 'not_committed',
-            failure: { code: 'PLUGIN_RELEASE_TIMEOUT', retryable: true },
-            activation: { status: 'pending' },
-            phase_diagnostics: [],
+            cursor: 1,
+            failure_code: 'PLUGIN_RELEASE_TIMEOUT',
+            cancelable: false,
             created_at: '2026-08-05T08:00:00Z',
             updated_at: '2026-08-05T08:00:30Z',
             terminal_at: '2026-08-05T08:00:30Z',
           },
+          events: [],
         }]}
         onRetryInstall={onRetryInstall}
         onCommand={vi.fn()}
@@ -1428,7 +1404,7 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    const status = mount.querySelector('[data-plugin-install-operation]')!;
+    const status = mount.querySelector('[data-plugin-install-execution]')!;
     expect(status.textContent).toContain('did not respond in time');
     expect(status.textContent?.toLowerCase()).not.toContain('permission');
     (status.querySelector('[data-plugin-install-retry]') as HTMLButtonElement).click();
@@ -1446,25 +1422,19 @@ describe('PluginCenterView', () => {
         installOperations={[{
           pluginID: containersPlugin.pluginID,
           pluginInstanceID: containersPlugin.officialCatalog.pluginInstanceID,
-          requestID: 'request_install_containers',
           observation: 'refresh_failed',
-          operation: {
-            request_id: 'request_install_containers',
-            operation_id: 'release_install_containers',
+          execution: {
+            execution_id: 'release_install_containers',
             plugin_instance_id: containersPlugin.officialCatalog.pluginInstanceID,
-            request_sha256: 'a'.repeat(64),
-            status: 'succeeded',
-            phase: 'complete',
-            progress: { kind: 'items', completed: 1, total: 1 },
-            attempt: 1,
-            retry_after_ms: 0,
-            mutation_outcome: 'committed',
-            activation: { status: 'enabled' },
-            phase_diagnostics: [],
+            kind: 'operation',
+            status: 'completed',
+            cursor: 1,
+            cancelable: false,
             created_at: '2026-08-05T08:00:00Z',
             updated_at: '2026-08-05T08:00:03Z',
             terminal_at: '2026-08-05T08:00:03Z',
           },
+          events: [],
         }]}
         onRetryInstall={onRetryInstall}
         onCommand={vi.fn()}
@@ -1474,7 +1444,7 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    const status = mount.querySelector('[data-plugin-install-operation]')!;
+    const status = mount.querySelector('[data-plugin-install-execution]')!;
     expect(status.textContent).toContain('installed, but Plugin Center could not refresh');
     expect(status.textContent).not.toContain('installation failed');
     (status.querySelector('[data-plugin-install-retry]') as HTMLButtonElement).click();
@@ -2142,7 +2112,7 @@ describe('PluginCenterView', () => {
     });
   });
 
-  it('presents typed fenced recovery guidance without suggesting a blind retry', () => {
+  it('presents typed revoked recovery guidance without suggesting a blind retry', () => {
     const mount = document.createElement('div');
     document.body.append(mount);
     const enabledProjection = containersPermissionProjection(true);
@@ -2158,9 +2128,9 @@ describe('PluginCenterView', () => {
     };
     const runtimeRecovery = {
       state: 'failed',
-      error: 'Plugin trust source is fenced; contact an administrator',
-      reason: 'trust_fenced',
-      action: 'contact_admin',
+      error: 'Plugin trust was revoked; reinstall from a trusted source',
+      reason: 'trust_revoked',
+      action: 'reinstall',
     } as const;
 
     dispose = render(() => (
@@ -2178,8 +2148,8 @@ describe('PluginCenterView', () => {
     ), mount);
 
     const recovery = mount.querySelector<HTMLElement>('[data-plugin-runtime-recovery="failed"]');
-    expect(recovery?.textContent).toContain('Plugin trust is temporarily blocked by an administrator.');
-    expect(recovery?.textContent).toContain('Contact an administrator before trying again.');
+    expect(recovery?.textContent).toContain('This plugin release is no longer trusted.');
+    expect(recovery?.textContent).toContain('Reinstall the plugin from a trusted source');
     expect(recovery?.textContent).not.toContain('then retry runtime recovery');
     expect(mount.querySelector<HTMLButtonElement>('[data-plugin-center-card-primary="catalog:containers"]')?.disabled).toBe(true);
   });

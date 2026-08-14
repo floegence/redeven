@@ -52,15 +52,10 @@ func TestLiveOfficialContainersReleaseTrust(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	trustDir := os.Getenv("REDEVEN_LIVE_RELEASE_TRUST_DIR")
-	if trustDir == "" {
-		trustDir = filepath.Join(t.TempDir(), "trust")
-	}
-	trust, store, err := newOfficialReleaseTrust(trustDir, provider, time.Now)
+	trust, err := newOfficialReleaseTrust(provider)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = store.Close() })
 	ref := release.PublisherReleaseRef.ReleaseRef
 	ctx := context.Background()
 	prepared, err := trust.PrepareRelease(ctx, releasetrust.ReleaseIdentity{

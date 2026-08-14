@@ -39,9 +39,11 @@ func TestOfficialReleaseModuleUsesValidatedMarketProjection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = closeTrust() })
+	if closeTrust != nil {
+		t.Cleanup(func() { _ = closeTrust() })
+	}
 	if ref != release.PublisherReleaseRef.ReleaseRef || module.Trust == nil || module.ReleaseArtifactResolver == nil ||
-		module.HostRequirements == nil || module.CapabilityContractArtifacts == nil {
+		module.HostRequirements == nil {
 		t.Fatalf("release module is incomplete: ref=%#v module=%#v", ref, module)
 	}
 
@@ -59,31 +61,16 @@ func TestOfficialReleaseModuleUsesValidatedMarketProjection(t *testing.T) {
 }
 
 func TestOfficialReleaseProviderRejectsTrustAnchorDrift(t *testing.T) {
-	for name, mutate := range map[string]func(*pluginmarket.LatestRelease){
-		"root": func(release *pluginmarket.LatestRelease) {
-			release.PublisherReleaseRef.Root.PublicKey = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
-		},
-		"ledger": func(release *pluginmarket.LatestRelease) {
-			release.PublisherReleaseRef.SigningLedger.KeyID = "redeven_official_ledger_other"
-		},
-	} {
-		t.Run(name, func(t *testing.T) {
-			release := officialMarketReleaseFixture(t)
-			mutate(&release)
-			_, err := newOfficialReleaseProvider(release, rejectingReleaseAssetFetcher{})
-			if err == nil || !strings.Contains(err.Error(), "trust anchors") {
-				t.Fatalf("newOfficialReleaseProvider() error = %v", err)
-			}
-		})
+	release := officialMarketReleaseFixture(t)
+	release.PublisherReleaseRef.Root.PublicKey = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+	_, err := newOfficialReleaseProvider(release, rejectingReleaseAssetFetcher{})
+	if err == nil || !strings.Contains(err.Error(), "trust anchors") {
+		t.Fatalf("newOfficialReleaseProvider() error = %v", err)
 	}
 }
 
 func TestOfficialReleaseProviderPinsV4HostCapability(t *testing.T) {
 	provider, err := newOfficialReleaseProvider(officialMarketReleaseFixture(t), rejectingReleaseAssetFetcher{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	bundle, _, err := redevpluginartifacts.ContainersCapabilityBundle()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,27 +80,12 @@ func TestOfficialReleaseProviderPinsV4HostCapability(t *testing.T) {
 		Requirements: []host.HostRequirement{{
 			HostID: officialHostID, MinHostVersion: officialMinHostVersion,
 			RequiredCapabilityContracts: []host.HostCapabilityRequirement{{
-				CapabilityID: containersCapabilityID, CapabilityVersion: containersCapabilityVersion, Contract: bundle.Pin,
+				CapabilityID: containersCapabilityID, CapabilityVersion: containersCapabilityVersion,
 			}},
 		}},
 	})
 	if err != nil || selection.HostID != officialHostID {
 		t.Fatalf("host requirement selection = %#v, error = %v", selection, err)
-	}
-	resolved, err := provider.ResolveCapabilityContract(context.Background(), host.CapabilityContractResolveRequest{
-		SourceID: officialReleaseSourceID, PluginPublisherID: officialPublisherID, Pin: bundle.Pin,
-	})
-	if err != nil || resolved.Artifacts == nil {
-		t.Fatalf("capability resolution error = %v", err)
-	}
-	artifact, err := resolved.Artifacts.OpenCapabilityContractArtifact(context.Background(), bundle.Pin.ArtifactRef)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = artifact.Reader.Close() })
-	if artifact.Size <= 0 || artifact.MediaType != "application/schema+json" ||
-		artifact.Origin != host.CapabilityArtifactOriginHost || len(artifact.FetchChain) != 0 {
-		t.Fatalf("capability artifact = %#v", artifact)
 	}
 }
 
@@ -173,10 +145,6 @@ func officialMarketReleaseFixture(t *testing.T) pluginmarket.LatestRelease {
 	}
 	release.PublisherReleaseRef.Root = pluginmarket.PublicKey{
 		Algorithm: "ed25519", KeyID: anchors.Root.KeyID, PublicKey: encodePublicKey(anchors.Root.PublicKey),
-	}
-	release.PublisherReleaseRef.SigningLedger = pluginmarket.SigningLedger{
-		LogID: anchors.SigningLedgerLog, Algorithm: "ed25519", KeyID: anchors.SigningLedger.KeyID,
-		PublicKey: encodePublicKey(anchors.SigningLedger.PublicKey),
 	}
 	release.PublisherReleaseRef.Files = []pluginmarket.PublishedFile{{
 		Locator: locator, AssetName: metadataAsset.Name, SHA256: metadataSHA256, Size: metadataAsset.Size,

@@ -55,7 +55,7 @@ new inspection where applicable.
 Successful recovery preserves the complete source as an inactive archive and
 commits a fresh empty generation atomically. Redeven verifies both outcomes and
 reuses only the fresh generation on restart. Archived packages, grants, policy,
-settings, secrets, storage, receipts, and runtime state are not reactivated, and
+settings, secrets, storage, and runtime state are not reactivated, and
 Redeven never deletes the archive or edits the migration journal.
 
 ## HTTP and direct authorization
@@ -134,27 +134,19 @@ trust badge.
 
 ## Package admission and trust
 
-The retained official release-ref install/update path accepts
-only the exact official root delegation, channel policy and pointer, revocation
-and pointer, signing-ledger checkpoint/evidence/proofs/receipts, publisher,
-plugin, version, signed release metadata, package hashes, host requirement, and
-capability contract pin. Committed and pending trust state, monotonic counters,
-and locally signed append-only trusted time are durable. Unsigned input,
-browser-supplied trust state, arbitrary package bytes, rollback, unknown
-publisher, expired evidence, and invented fetch provenance are denied.
-
-The released trusted-time request carries the authoritative previously committed
-checkpoint tree size. Redeven's append-only adapter derives consistency proofs
-from that size rather than from its local leaf count, so a leaf appended before
-a lost response remains auditable without being mistaken for committed state.
-If the committed checkpoint is ahead of the local log, observation fails before
-another leaf or trust state is written; the adapter never repairs, truncates, or
-silently resets the log.
+The retained official release-ref install/update path accepts only the exact
+official Ed25519 root delegation, channel/source policy, revocation evidence,
+publisher, plugin, version, signed release metadata, package hashes, and Host
+requirement. The Containers capability is a Redeven-versioned Host-known contract,
+not a separately published trust chain. Browser-supplied trust state, arbitrary
+package bytes, rollback, unknown publishers, invalid or revoked signatures, and
+invented fetch provenance are denied. Redeven persists no trusted-time,
+transparency ledger, publisher-continuity, or activation-evidence database.
 
 Plugin Center installs an official market result only through this release-ref
 boundary. The frozen market snapshot identifies immutable GitHub assets and
 their complete transport, but cannot assert trust or replace Redeven's pinned
-official root and signing-ledger keys. ReDevPlugin downloads and verifies the
+official root key. ReDevPlugin downloads and verifies the
 exact signed transport before changing registry state. Invalid, incomplete,
 expired, rewritten, or anchor-mismatched evidence fails closed without falling
 back to the external-package transaction.
@@ -162,35 +154,35 @@ back to the external-package transaction.
 The external-package path is separate from official release admission. A
 validated public HTTPS package URL or GitHub Release is retrieved through the
 released bounded fetcher and resolver; a local `.redevplugin` upload crosses the
-same package validator and stage. Public HTTPS retrieval validates every DNS
+same package validator. Public HTTPS retrieval validates every DNS
 result and redirect hop, pins the validated connection target while retaining
 TLS hostname verification, strips cross-origin credentials, and bounds the
 identity-encoded response before parsing. The browser cannot assert redirect
 history, final origin, digest, or GitHub release identity.
 
-Inspection freezes staged bytes and produces owner-bound source provenance,
-signature assessment, execution approval, update eligibility, complete security
-summary and hash, and a confirmation digest. The product shows those facts,
+Inspection produces a process-local, TTL-bounded opaque id plus owner-bound source
+provenance, signature assessment, execution approval, update eligibility,
+complete security summary and hash, and a confirmation digest. The product shows those facts,
 including permissions, capability methods, workers, network, storage, secret
-references, core actions, intents, surfaces, and update changes, before commit.
-Commit reopens and re-verifies the exact artifact and requires the matching
-inspection id and confirmation digest. Query reconciles only the exact commit.
-An unknown or in-progress mutation outcome marks the inspection query-only in
-the product client. Timeout, cancellation, or a temporary query failure retains
-that state; only a committed or failed terminal result clears it.
+references, core actions, intents, surfaces, and update changes, before install.
+Install rebinds the exact owner/session, reopens and re-verifies the exact bytes
+and expected hash, and enters the Host's atomic control-database transaction.
+Inspection, receipt, and query state are not durable. An unknown transport
+outcome retires stale product authority until inventory refresh; it never causes
+blind mutation replay.
 
 An absent, unknown-signer, or temporarily unavailable signature is not an
 integrity failure, but it is also not trust. An administrator may explicitly
 confirm installation; the result is disabled, has zero grants, and is eligible
-only for manual update. Invalid and revoked signatures block commit and
+only for manual update. Invalid and revoked signatures block install and
 execution. Verified, current signing evidence may raise trust and automatic
 update eligibility, but signature status never grants permissions. Redeven does
-not add a new official key, signing ledger, or authorization workflow; the
+not add a new authorization workflow; the
 existing official release-ref verification remains unchanged.
 
 ## Capability confirmation plans
 
-ReDevPlugin validates a capability preflight result against the signed
+ReDevPlugin validates a capability preflight result against the Host-known
 capability response schema before it becomes a confirmation plan. A validated
 ordinary domain object may be displayed and included in the exact plan hash.
 Values in the reserved `redevplugin.capability.risk_plan.*` namespace must match
@@ -210,6 +202,8 @@ Handle grants also bind plugin fingerprint, runtime generation, owner audience,
 method, resource scope, policy/management revisions, and revoke epoch. Linux
 runtime evidence is rebuilt and verified from the attested source set; Darwin
 must omit runtime bytes and evidence.
+The expected runtime digest comes from the product release marker. Startup must
+not hash the field binary and accept that value as its own trust anchor.
 
 ## Business adapter and observability boundary
 
@@ -242,9 +236,9 @@ tokens, weaken route policy, edit opaque state, or replace released brokers.
 - `redeven:cmd/redeven/plugin_state_recovery_test.go:1` - Proves confirmation, digest, runtime-lock, and path-redaction behavior.
 - `redeven:internal/redevpluginintegration/security_adapter.go:1` - Implements the four-step web security contract.
 - `redeven:internal/redevpluginintegration/adapters_test.go:1` - Covers origin, CSRF, session, and action denial.
-- `redeven:internal/redevpluginintegration/release_module.go:1` - Enforces official source, signature, revocation, and capability pins.
-- `redeven:internal/redevpluginintegration/integration.go:260` - Registers the released staged external-package source and assessment module.
-- `redeven:internal/redevpluginintegration/external_package_test.go:24` - Proves unsigned upload inspection and explicit commit produce a disabled installed record.
+- `redeven:internal/redevpluginintegration/release_module.go:1` - Enforces official source, signature, revocation, and Host-known capability requirements.
+- `redeven:internal/redevpluginintegration/integration.go:260` - Registers the process-local external-package inspection and assessment module.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/ExternalPluginInstallDialog.test.tsx:1` - Proves unsigned inspection requires explicit confirmation and installs disabled with zero grants.
 - `redeven:internal/redevpluginintegration/release_module_test.go:1` - Proves expired official release evidence fails without a catalog record.
 - `redeven:internal/redevpluginintegration/runtime_module.go:1` - Binds runtime target, hash, IPC, ABI, leases, and Host services.
 - `redeven:internal/redevpluginintegration/containers_capability.go:1` - Adapts authorized capability invocations to domain behavior.
@@ -253,6 +247,6 @@ tokens, weaken route policy, edit opaque state, or replace released brokers.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginPlatform.ts:1` - Restricts UI transport to the canonical same-origin namespace and attaches CSRF proof.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:1` - Reads grants and policies and submits revision-fenced permission mutations through the released client.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginInventoryProjection.ts:1` - Keeps grants, allowlist caps, denied methods, and required-to-open methods distinct.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/ExternalPluginInstallDialog.tsx:1` - Presents immutable source, trust, security, and confirmation evidence before commit.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/ExternalPluginInstallDialog.tsx:1` - Presents immutable source, trust, security, and confirmation evidence before Host install.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginConfirmationQueue.test.tsx:211` - Proves strict risk-plan rendering and complete validated Containers domain-plan review without granting authority from display content.
 - `redeven:internal/redevpluginintegration/containers_capability_test.go:78` - Proves Containers preflight output satisfies the released capability response contract before confirmation.

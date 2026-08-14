@@ -20,13 +20,11 @@ import (
 func TestContainersStatsWatchStreamsCandidateEventAndCancels(t *testing.T) {
 	client := &extendedCapabilityEngineClient{capabilityEngineClient: &capabilityEngineClient{}}
 	adapter := newTestContainersCapabilityAdapter(client)
-	operation := newTestOperationSink("operation_stats")
-	stream := newTestStreamSink("stream_stats")
+	sink := newTestOperationSink("execution_stats")
 	result, err := adapter.Invoke(context.Background(), capability.Invocation{
 		Execution: capability.ExecutionContext{
 			ExecutionBinding: capability.ExecutionBinding{TargetMethod: string(containers.MethodContainersStatsWatch)},
-			Operation:        operation,
-			Stream:           stream,
+			Events:           sink,
 		},
 		Arguments: map[string]any{"engine": "docker", "container_id": "container_1", "interval_ms": 1000},
 	})
@@ -35,7 +33,7 @@ func TestContainersStatsWatchStreamsCandidateEventAndCancels(t *testing.T) {
 	}
 	validateContainersV3CandidateResponse(t, string(containers.MethodContainersStatsWatch), result.Data)
 	select {
-	case event := <-stream.events:
+	case event := <-sink.events:
 		validateContainersV3CandidateEvent(t, string(containers.MethodContainersStatsWatch), event)
 		encoded := mustPreparedResponse(t, event)
 		for _, expected := range []string{"\"container_id\":\"container_1\"", "\"cpu_percent\":1.5", "\"memory_bytes\":1024"} {
@@ -46,15 +44,15 @@ func TestContainersStatsWatchStreamsCandidateEventAndCancels(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("stats event was not appended immediately")
 	}
-	if err := adapter.CancelOperation(context.Background(), capability.OperationCancellation{
-		OperationID: operation.ID(),
+	if err := adapter.CancelExecution(context.Background(), capability.ExecutionCancellation{
+		ExecutionID: sink.ID(),
 		Execution: capability.ExecutionContext{ExecutionBinding: capability.ExecutionBinding{
 			TargetMethod: string(containers.MethodContainersStatsWatch),
 		}},
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if terminal := waitTerminal(t, operation.terminal); terminal != "canceled" {
+	if terminal := waitTerminal(t, sink.terminal); terminal != "canceled" {
 		t.Fatalf("stats operation terminal = %q", terminal)
 	}
 	if err := adapter.Close(); err != nil {
@@ -68,8 +66,7 @@ func TestContainersStatsWatchRejectsInvalidIntervalBeforeRegisteringTask(t *test
 	_, err := adapter.Invoke(context.Background(), capability.Invocation{
 		Execution: capability.ExecutionContext{
 			ExecutionBinding: capability.ExecutionBinding{TargetMethod: string(containers.MethodContainersStatsWatch)},
-			Operation:        operation,
-			Stream:           newTestStreamSink("stream_stats_invalid"),
+			Events:           operation,
 		},
 		Arguments: map[string]any{"engine": "docker", "container_id": "container_1", "interval_ms": 999},
 	})
@@ -176,7 +173,7 @@ func TestContainersPruneOperationForwardsExactConfirmedIdentities(t *testing.T) 
 		result, err := adapter.Invoke(context.Background(), capability.Invocation{
 			Execution: capability.ExecutionContext{
 				ExecutionBinding: capability.ExecutionBinding{TargetMethod: string(test.method)},
-				Operation:        sink,
+				Events:           sink,
 			},
 			Arguments: map[string]any{"engine": "docker", "resource_identities": test.identities},
 		})

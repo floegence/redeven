@@ -1302,7 +1302,7 @@
     },
     {
       "path": "internal/codeapp/appserver/server.go",
-      "sha256": "f8a442da3d40687b71b7a198a481fc989b974804c5a499af6c9031ae989f2b37",
+      "sha256": "79c717ae1180e13e21fefcd4913715c1f82626600fd1d7941841d552d3cad627",
       "sink_kinds": [
         "file",
         "json_file"
@@ -1329,7 +1329,7 @@
         "event",
         "v"
       ],
-      "review_note": "Writes response transport bytes and delegates explicit Web Service save commands to the portforward owner; it does not own or duplicate durable state and is not durable conversation storage."
+      "review_note": "The catalog generation check changes only request validation; this file writes response transport bytes and delegates explicit Web Service save commands without owning durable state."
     },
     {
       "path": "internal/codeapp/codeserver/artifact.go",
@@ -1663,7 +1663,7 @@
     },
     {
       "path": "internal/envapp/ui_src/src/ui/EnvAppShell.tsx",
-      "sha256": "3954adad4fe81bd579b87cec20f345f8574e3cdd99fff4da26959e01f5777b7d",
+      "sha256": "24c4e345a79a302a750925714a87471635dc694fcfe17b6f0c9d4f821111ae3e",
       "sink_kinds": [
         "web_storage"
       ],
@@ -1676,7 +1676,7 @@
       "keys": [
         "redeven_env_public_id"
       ],
-      "review_note": "Stores the current environment identifier for the active browser session."
+      "review_note": "Plugin recovery ownership changes do not add durable UI state; this file still stores only the current environment identifier for the active browser session."
     },
     {
       "path": "internal/envapp/ui_src/src/ui/services/controlplaneApi.ts",
@@ -2006,86 +2006,6 @@
       ],
       "tables": [
         "port_forwards"
-      ],
-      "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
-    },
-    {
-      "path": "internal/redevpluginintegration/integration.go",
-      "sha256": "549ff7117de04af9a978165fd2af8f5c6c8a1c81b50683a7849d63a5924cb25d",
-      "sink_kinds": [
-        "file"
-      ],
-      "review_status": "reviewed",
-      "owner": "redeven ReDevPlugin adapter",
-      "authority": "upstream_adapter",
-      "data_classes": [
-        "product adapter audit, trust, or lifecycle records"
-      ],
-      "review_note": "Stores or invokes upstream product adapter records only; Floret remains authoritative for admitted Agent state."
-    },
-    {
-      "path": "internal/redevpluginintegration/release_module.go",
-      "sha256": "527b43ab5e0d6ac52b8b475e8a7756fee33183fc539b9323494844b1314b0430",
-      "sink_kinds": [
-        "file"
-      ],
-      "review_status": "reviewed",
-      "owner": "redeven ReDevPlugin adapter",
-      "authority": "upstream_adapter",
-      "data_classes": [
-        "product adapter audit, trust, or lifecycle records"
-      ],
-      "review_note": "Reviewed after updating the immutable official Containers release coordinate; the file sink inventory and upstream adapter authority are unchanged, and Floret remains authoritative for admitted Agent state."
-    },
-    {
-      "path": "internal/redevpluginintegration/release_trust_store.go",
-      "sha256": "bf02429d71a929823b4cd78f6a0fa2f3a131e110fe30e70a08ea70d6fe23bf56",
-      "sink_kinds": [
-        "file",
-        "json_file",
-        "sqlite"
-      ],
-      "review_status": "reviewed",
-      "owner": "redeven ReDevPlugin adapter",
-      "authority": "upstream_adapter",
-      "data_classes": [
-        "product adapter audit, trust, or lifecycle records"
-      ],
-      "tables": [
-        "release_trust_state",
-        "trusted_time_leaves"
-      ],
-      "codecs": [
-        "encoding/json.Marshal"
-      ],
-      "dtos": [
-        "evidence",
-        "leaf",
-        "struct {\n\tDomain\t\tstring\t`json:\"domain\"`\n\tLeafSHA256\tstring\t`json:\"leaf_sha256\"`\n\tIntegratedTime\tstring\t`json:\"integrated_time\"`\n\tLogID\t\tstring\t`json:\"log_id\"`\n}{\n\tDomain:\t\"redevplugin.trusted-time.set.v1\", LeafSHA256: leafSHA256,\n\tIntegratedTime:\tintegrated.Format(time.RFC3339Nano), LogID: request.LogID(),\n}",
-        "struct {\n\tDomain\t\tstring\t`json:\"domain\"`\n\tSchemaVersion\tstring\t`json:\"schema_version\"`\n\tLogID\t\tstring\t`json:\"log_id\"`\n\tTreeSize\tuint64\t`json:\"tree_size\"`\n\tRootHash\tstring\t`json:\"root_hash\"`\n\tCheckpointTime\tstring\t`json:\"checkpoint_time\"`\n\tKeyID\t\tstring\t`json:\"key_id\"`\n}{\n\tDomain:\t\"redevplugin.trusted-time.checkpoint.v1\", SchemaVersion: checkpoint.SchemaVersion,\n\tLogID:\tcheckpoint.LogID, TreeSize: checkpoint.TreeSize, RootHash: checkpoint.RootHash,\n\tCheckpointTime:\tcheckpoint.CheckpointTime, KeyID: checkpoint.KeyID,\n}"
-      ],
-      "review_note": "Reviewed after deriving consistency proofs from the committed checkpoint size and failing before writes on invalid checkpoints; the file, JSON, and SQLite sink inventory and upstream adapter authority are unchanged."
-    },
-    {
-      "path": "internal/redevpluginintegration/session_lifecycle_adapter.go",
-      "sha256": "a2fd9a066bdd29246d0cae39526928d8bc0fea5e72d88a6da0660f214fcb3774",
-      "sink_kinds": [
-        "file",
-        "json_file"
-      ],
-      "review_status": "reviewed",
-      "owner": "redeven ReDevPlugin adapter",
-      "authority": "upstream_adapter",
-      "data_classes": [
-        "product adapter audit, trust, or lifecycle records"
-      ],
-      "codecs": [
-        "encoding/json.Marshal",
-        "encoding/json.MarshalIndent"
-      ],
-      "dtos": [
-        "sessionLifecycleChecksumPayload{\n\tGenerationID:\tgenerationID,\n\tRevision:\trevision,\n\tRecords:\trecords,\n}",
-        "value"
       ],
       "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
     },

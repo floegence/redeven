@@ -35,7 +35,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
 const packageHash = 'sha256:8ecf6c0d206ee557c5528e2192b2594b5d097912b83028d43ff1336532b06d13';
 const manifestHash = 'sha256:f96534ca709165d0e30f6e7713a57ec0754f84f84ccadc2edc000f19dde7cc3d';
 const entriesHash = 'sha256:8a0048517719d934e52406dc6e9964d9ca165728d3e530d2c4df16f619bf17fa';
-const confirmationDigest = 'sha256:684a09cfd858448baa7d52c3d30932d7684a09cfd858448baa7d52c3d30932d7';
+const confirmationDigest = packageHash;
 
 let dispose: (() => void) | undefined;
 
@@ -102,22 +102,11 @@ function inspection(
       intents: [],
       surfaces: [],
     },
-    confirmation_digest: confirmationDigest,
   };
 }
 
 function committedResult(source: ExternalPluginInspection): ExternalPluginCommitResult {
   return {
-    status: 'committed',
-    inspection_id: source.inspection_id,
-    intent: source.intent,
-    receipt: {
-      commit_id: 'commit_external_12345678',
-      inspection_id: source.inspection_id,
-      package_sha256: packageHash,
-      management_revision: 1,
-      committed_at: '2026-07-24T10:01:00Z',
-    },
     plugin: {
       plugin_instance_id: source.intent.plugin_instance_id,
       publisher_id: source.publisher_id,

@@ -21,7 +21,6 @@ func TestRedevenOwnedSQLiteOpeningsUseMigrationEngine(t *testing.T) {
 		"internal/codeapp/registry/registry.go":                  {},
 		"internal/notes/service.go":                              {},
 		"internal/portforward/registry/registry.go":              {},
-		"internal/redevpluginintegration/release_trust_store.go": {},
 		"internal/threadreadstate/store.go":                      {},
 		"internal/workbenchlayout/service.go":                    {},
 	}

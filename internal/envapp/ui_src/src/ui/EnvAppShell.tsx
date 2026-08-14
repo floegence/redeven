@@ -266,9 +266,6 @@ const EMPTY_FLOWER_COMPANION_PRESENCE: FlowerCompanionPresenceProjection = {
 const ACTIVE_SURFACE_STORAGE_KEY = 'redeven_envapp_active_tab';
 const DESKTOP_VIEW_MODE_STORAGE_KEY = 'redeven_envapp_desktop_view_mode';
 const ACCESS_RESUME_TIMEOUT_MS = 15_000;
-// Release-bound plugins may need the platform's bounded trust reconstruction
-// window on the first refresh after a host restart.
-const PLUGIN_RUNTIME_RECOVERY_TIMEOUT_MS = 90_000;
 const WORKBENCH_HANDOFF_ANCHOR_MAX_AGE_MS = 1_500;
 const NOTES_OVERLAY_KEYBIND = 'mod+.';
 
@@ -292,16 +289,6 @@ const FileBrowserSurfaceHost = lazy(() => import('./widgets/FileBrowserSurfaceHo
 const EnvWorkbenchPage = lazy(() => import('./workbench/EnvWorkbenchPage').then((module) => ({ default: module.EnvWorkbenchPage })));
 
 type EnvActivitySurfaceId = EnvSurfaceId | 'settings' | typeof PLUGIN_CENTER_ACTIVITY_ID;
-
-function pluginRuntimePackageIdentity(item: import('./plugins/pluginTypes').PluginInventoryItem): string {
-  const installedPackage = item.installedPackage;
-  if (!installedPackage) return `${item.version ?? ''}\u0000${item.managementRevision ?? ''}`;
-  return [
-    installedPackage.packageHash,
-    installedPackage.manifestHash,
-    installedPackage.entriesHash,
-  ].join('\u0000');
-}
 
 type ActivityPluginWindow = Readonly<{
   instanceID: string;
@@ -564,7 +551,6 @@ export function EnvAppShell() {
   const [pluginRuntimeRecoveryComplete, setPluginRuntimeRecoveryComplete] = createSignal(false);
   const [pluginRuntimeRecoveryState, setPluginRuntimeRecoveryState] = createSignal<'recovering' | 'failed' | 'ready'>('recovering');
   const [pluginRuntimeRecoveryByInstanceID, setPluginRuntimeRecoveryByInstanceID] = createSignal<Record<string, import('./plugins/pluginTypes').PluginRuntimeRecoveryPresentation>>({});
-  const [pluginRuntimeRecoveryRetrySeq, setPluginRuntimeRecoveryRetrySeq] = createSignal(0);
   const retiredPluginManagementRevisionByInstanceID = new Map<string, number>();
   const retirePluginManagementRevision = (pluginInstanceID: string, revision: number) => {
     const previous = retiredPluginManagementRevisionByInstanceID.get(pluginInstanceID) ?? 0;
@@ -1243,20 +1229,15 @@ export function EnvAppShell() {
   });
   let pluginRuntimeRecoveryClient: unknown = null;
   let pluginRuntimeRecoveryAbort: AbortController | undefined;
-  let pluginRuntimeRecoveryKnownIdentities = new Map<string, string>();
-  let pluginRuntimeRecoveryFailedInstances = new Set<string>();
-  let pluginRuntimeRecoveryAutoCatchupSignatures = new Set<string>();
+  const [pluginRuntimeRecoveryRequest, setPluginRuntimeRecoveryRequest] = createSignal(0);
   createEffect(() => {
-    pluginRuntimeRecoveryRetrySeq();
+    pluginRuntimeRecoveryRequest();
     const connectedClient = protocol.status() === 'connected' ? protocol.session() : null;
     const sessionReady = !isLocalMode() || pluginSessionReady();
     if (!connectedClient || !sessionReady) {
       pluginRuntimeRecoveryClient = null;
       pluginRuntimeRecoveryAbort?.abort('Plugin runtime session disconnected');
       pluginRuntimeRecoveryAbort = undefined;
-      pluginRuntimeRecoveryKnownIdentities = new Map();
-      pluginRuntimeRecoveryFailedInstances = new Set();
-      pluginRuntimeRecoveryAutoCatchupSignatures = new Set();
       setPluginRuntimeRecoveryComplete(false);
       setPluginRuntimeRecoveryByInstanceID({});
       setPluginRuntimeRecoveryState('recovering');
@@ -1268,140 +1249,78 @@ export function EnvAppShell() {
       setPluginRuntimeRecoveryState('ready');
       return;
     }
-    const enabledRuntimeIdentities = new Map(
-      pluginInventoryProjection()?.items
-        .filter((item) => item.pluginInstanceID && item.lifecycleState === 'enabled')
-        .map((item) => [item.pluginInstanceID!, pluginRuntimePackageIdentity(item)] as const) ?? [],
-    );
-    const hasUncoveredEnabledInstance = [...enabledRuntimeIdentities].some(
-      ([pluginInstanceID, identity]) => pluginRuntimeRecoveryKnownIdentities.get(pluginInstanceID) !== identity,
-    );
-    const uncoveredInstanceSignature = [...enabledRuntimeIdentities]
-      .filter(([pluginInstanceID, identity]) => pluginRuntimeRecoveryKnownIdentities.get(pluginInstanceID) !== identity)
-      .map(([pluginInstanceID, identity]) => `${pluginInstanceID}\u0001${identity}`)
-      .sort()
-      .join('\u0000');
-    if (pluginRuntimeRecoveryClient === connectedClient && (
-      untrack(pluginRuntimeRecoveryState) === 'recovering'
-      || untrack(pluginRuntimeRecoveryState) === 'failed'
-      || !hasUncoveredEnabledInstance
-      || pluginRuntimeRecoveryAutoCatchupSignatures.has(uncoveredInstanceSignature)
-    )) return;
+    if (pluginRuntimeRecoveryClient === connectedClient) return;
     pluginRuntimeRecoveryClient = connectedClient;
     pluginRuntimeRecoveryAbort?.abort('Plugin runtime recovery superseded');
     const controller = new AbortController();
     pluginRuntimeRecoveryAbort = controller;
     setPluginRuntimeRecoveryComplete(false);
-    const recoveringByInstanceID: Record<string, import('./plugins/pluginTypes').PluginRuntimeRecoveryPresentation> = {};
-    for (const item of pluginInventoryProjection()?.items ?? []) {
-      if (item.pluginInstanceID && item.lifecycleState === 'enabled') {
-        recoveringByInstanceID[item.pluginInstanceID] = { state: 'recovering' };
-      }
-    }
-    setPluginRuntimeRecoveryByInstanceID(recoveringByInstanceID);
+    setPluginRuntimeRecoveryByInstanceID({});
     setPluginRuntimeRecoveryState('recovering');
-    let recoveryTimedOut = false;
-    const recoveryTimer = window.setTimeout(() => {
-      recoveryTimedOut = true;
-      controller.abort('Plugin runtime recovery timed out');
-    }, PLUGIN_RUNTIME_RECOVERY_TIMEOUT_MS);
-    void pluginLifecycle.refreshEnabledRuntimeState({ signal: controller.signal }).then((result) => {
+    void pluginLifecycle.recoverEnabled({ signal: controller.signal }).then((result) => {
       if (controller.signal.aborted || pluginRuntimeRecoveryClient !== connectedClient) return;
-      window.clearTimeout(recoveryTimer);
       const failures = result.results.filter((entry) => entry.status === 'failed');
-      const failedInstanceIDs = new Set(failures.map((entry) => entry.plugin_instance_id));
-      for (const instanceID of failedInstanceIDs) pluginRuntimeRecoveryFailedInstances.add(instanceID);
-      for (const entry of result.results) {
-        if (entry.status !== 'failed') pluginRuntimeRecoveryFailedInstances.delete(entry.plugin_instance_id);
-      }
       const recoveryByInstanceID: Record<string, import('./plugins/pluginTypes').PluginRuntimeRecoveryPresentation> = {};
       for (const entry of result.results) {
         recoveryByInstanceID[entry.plugin_instance_id] = entry.status === 'failed'
           ? {
             state: 'failed',
-            error: `${entry.plugin_instance_id}: ${entry.error.message}`,
-            reason: entry.error.reason,
-            action: entry.error.action,
+            error: `${entry.plugin_instance_id}: ${entry.reason ?? 'unknown'}`,
+            reason: entry.reason,
+            action: entry.action,
           }
           : { state: 'ready' };
       }
-      const currentEnabledRuntimeIdentities = new Map(
-        (pluginInventoryProjection()?.items ?? [])
-          .filter((item) => item.pluginInstanceID && item.lifecycleState === 'enabled')
-          .map((item) => [item.pluginInstanceID!, pluginRuntimePackageIdentity(item)] as const),
-      );
-      pluginRuntimeRecoveryKnownIdentities = new Map(
-        result.results.map((entry) => [
-          entry.plugin_instance_id,
-          enabledRuntimeIdentities.get(entry.plugin_instance_id)
-            ?? currentEnabledRuntimeIdentities.get(entry.plugin_instance_id)
-            ?? '',
-        ]),
-      );
       setPluginRuntimeRecoveryByInstanceID(recoveryByInstanceID);
       setPluginRuntimeRecoveryComplete(true);
       if (failures.length > 0) {
         setPluginRuntimeRecoveryState('failed');
         notify.error(
           i18n.t('uiCopy.plugin.needsAttention'),
-          failures.map((entry) => `${entry.plugin_instance_id}: ${entry.error.message}`).join('\n'),
+          failures.map((entry) => `${entry.plugin_instance_id}: ${entry.reason ?? 'unknown'}`).join('\n'),
         );
       } else {
         setPluginRuntimeRecoveryState('ready');
       }
-      const uncoveredInstanceIDs = (pluginInventoryProjection()?.items ?? [])
-        .filter((item) => item.pluginInstanceID && item.lifecycleState === 'enabled')
-        .map((item) => [item.pluginInstanceID!, pluginRuntimePackageIdentity(item)] as const)
-        .filter(([pluginInstanceID]) => !pluginRuntimeRecoveryFailedInstances.has(pluginInstanceID))
-        .filter(([pluginInstanceID, identity]) => pluginRuntimeRecoveryKnownIdentities.get(pluginInstanceID) !== identity)
-        .map(([pluginInstanceID, identity]) => `${pluginInstanceID}\u0001${identity}`)
-        .sort();
-      const catchupSignature = uncoveredInstanceIDs.join('\u0000');
-      if (catchupSignature && !pluginRuntimeRecoveryAutoCatchupSignatures.has(catchupSignature)) {
-        pluginRuntimeRecoveryAutoCatchupSignatures.add(catchupSignature);
-        queueMicrotask(() => {
-          if (pluginRuntimeRecoveryClient === connectedClient) {
-            setPluginRuntimeRecoveryRetrySeq((sequence) => sequence + 1);
-          }
-        });
-      }
     }).catch((error: unknown) => {
-      if ((controller.signal.aborted && !recoveryTimedOut) || pluginRuntimeRecoveryClient !== connectedClient) return;
-      window.clearTimeout(recoveryTimer);
+      if (controller.signal.aborted || pluginRuntimeRecoveryClient !== connectedClient) return;
       setPluginRuntimeRecoveryComplete(true);
-      const recoveryByInstanceID: Record<string, import('./plugins/pluginTypes').PluginRuntimeRecoveryPresentation> = {};
-      for (const item of pluginInventoryProjection()?.items ?? []) {
-        if (item.pluginInstanceID && item.lifecycleState === 'enabled') {
-          recoveryByInstanceID[item.pluginInstanceID] = { state: 'failed', error: getErrorMessage(error) };
-        }
-      }
-      pluginRuntimeRecoveryKnownIdentities = new Map(
-        pluginInventoryProjection()?.items
-          .filter((item) => item.pluginInstanceID && item.lifecycleState === 'enabled')
-          .map((item) => [item.pluginInstanceID!, pluginRuntimePackageIdentity(item)] as const) ?? [],
-      );
-      setPluginRuntimeRecoveryByInstanceID(recoveryByInstanceID);
+      setPluginRuntimeRecoveryByInstanceID({});
       setPluginRuntimeRecoveryState('failed');
       notify.error(i18n.t('uiCopy.plugin.needsAttention'), getErrorMessage(error));
     });
   });
-  const retryPluginRuntimeRecovery = (_pluginInstanceID?: string) => {
-    if (pluginRuntimeRecoveryState() !== 'failed') return;
+  const retryPluginRuntimeRecovery = (pluginInstanceID?: string) => {
     if (protocol.status() !== 'connected' || (isLocalMode() && !pluginSessionReady())) return;
-    pluginRuntimeRecoveryAbort?.abort('Plugin runtime recovery retry requested');
-    if (_pluginInstanceID) pluginRuntimeRecoveryFailedInstances.delete(_pluginInstanceID);
-    else pluginRuntimeRecoveryFailedInstances = new Set();
-    pluginRuntimeRecoveryClient = null;
-    setPluginRuntimeRecoveryState('recovering');
-    setPluginRuntimeRecoveryComplete(false);
-    setPluginRuntimeRecoveryByInstanceID((current) => {
-      const next = { ...current };
-      for (const [pluginInstanceID, recovery] of Object.entries(next)) {
-        if (recovery.state === 'failed') next[pluginInstanceID] = { state: 'recovering' };
-      }
-      return next;
+    if (!pluginInstanceID) {
+      if (!pluginRuntimeRecoveryComplete()) return;
+      pluginRuntimeRecoveryClient = null;
+      setPluginRuntimeRecoveryComplete(false);
+      setPluginRuntimeRecoveryRequest((request) => request + 1);
+      return;
+    }
+    setPluginRuntimeRecoveryByInstanceID((current) => ({
+      ...current,
+      [pluginInstanceID]: { state: 'recovering' },
+    }));
+    void pluginLifecycle.retryRecovery(pluginInstanceID).then((result) => {
+      setPluginRuntimeRecoveryByInstanceID((current) => ({
+        ...current,
+        [pluginInstanceID]: result.status === 'ready'
+          ? { state: 'ready' }
+          : {
+            state: 'failed',
+            error: `${pluginInstanceID}: ${result.reason ?? 'unknown'}`,
+            reason: result.reason,
+            action: result.action,
+          },
+      }));
+    }).catch((error: unknown) => {
+      setPluginRuntimeRecoveryByInstanceID((current) => ({
+        ...current,
+        [pluginInstanceID]: { state: 'failed', error: getErrorMessage(error) },
+      }));
     });
-    setPluginRuntimeRecoveryRetrySeq((sequence) => sequence + 1);
   };
   onCleanup(() => pluginRuntimeRecoveryAbort?.abort('Plugin runtime recovery disposed'));
   let pluginInstallResumeEligible = false;
@@ -1746,8 +1665,6 @@ export function EnvAppShell() {
       ? inspection.intent.expected_management_revision
       : undefined;
     let cleanup: Promise<void> | undefined;
-    let sawInProgress = false;
-    let sawFailedTerminal = false;
     const retireUpdatedPluginSurfaces = () => {
       if (!updatePluginInstanceID || cleanup) return cleanup;
       pluginConfirmationQueue.cancelAll();
@@ -1771,16 +1688,10 @@ export function EnvAppShell() {
     };
     let result: ExternalPluginCommitResult;
     try {
-      result = await pluginLifecycle.commitExternalPackage(inspection, { signal }, (progress) => {
-        if (progress.status === 'in_progress') {
-          sawInProgress = true;
-          void retireUpdatedPluginSurfaces();
-        } else if (progress.status === 'failed') {
-          sawFailedTerminal = true;
-        }
-      });
+      if (updatePluginInstanceID) await retireUpdatedPluginSurfaces();
+      result = await pluginLifecycle.installExternalPackage(inspection, { signal });
     } catch (error) {
-      if (updatePluginInstanceID && updateExpectedManagementRevision && sawInProgress && !sawFailedTerminal) {
+      if (updatePluginInstanceID && updateExpectedManagementRevision && pluginMutationOutcome(error) === 'unknown') {
         retirePluginManagementRevision(
           updatePluginInstanceID,
           updateExpectedManagementRevision,
@@ -1788,7 +1699,6 @@ export function EnvAppShell() {
       }
       const cleanupResults = await Promise.allSettled([
         consumePluginUnknownOutcomeCleanup(),
-        cleanup ?? Promise.resolve(),
       ]);
       const cleanupErrors = cleanupResults.flatMap((cleanupResult) => (
         cleanupResult.status === 'rejected' ? [cleanupResult.reason] : []

@@ -16,7 +16,6 @@ import (
 	"github.com/floegence/redeven/internal/diagnostics"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/sessionhop"
-	"github.com/floegence/redevplugin/pkg/externalsource"
 	"github.com/floegence/redevplugin/pkg/host"
 	"github.com/floegence/redevplugin/pkg/manifest"
 	"github.com/floegence/redevplugin/pkg/observability"
@@ -140,8 +139,7 @@ func TestMethodAuthorizationDefersExactEffectToLocalPolicy(t *testing.T) {
 				host.ManagementActionCallPluginMethod,
 				host.ManagementActionPrepareMethodConfirmation,
 				host.ManagementActionInvokeIntent,
-				host.ManagementActionCancelOperation,
-				host.ManagementActionCancelSurfaceOperation,
+				host.ManagementActionCancelExecution,
 			} {
 				if !permissionsAllowAction(testCase.perms, action) {
 					t.Fatalf("%s unexpectedly denied for %+v", action, testCase.perms)
@@ -158,7 +156,7 @@ func TestSharedRuntimeManagementRequiresAdmin(t *testing.T) {
 	for _, action := range []host.ManagementAction{
 		host.ManagementActionStartRuntime,
 		host.ManagementActionStopRuntime,
-		host.ManagementActionRefreshEnabledPlugins,
+		host.ManagementActionRecoverEnabledPlugins,
 	} {
 		if permissionsAllowAction(sessionPermissions{execute: true}, action) {
 			t.Fatalf("%s accepted execute-only shared runtime control", action)
@@ -172,7 +170,7 @@ func TestSharedRuntimeManagementRequiresAdmin(t *testing.T) {
 func TestExternalPackageAdmissionUsesExplicitPermissionTiers(t *testing.T) {
 	for _, action := range []host.ManagementAction{
 		host.ManagementActionInspectExternalPackage,
-		host.ManagementActionCommitExternalPackage,
+		host.ManagementActionInstallInspectedPackage,
 	} {
 		if permissionsAllowAction(sessionPermissions{read: true}, action) {
 			t.Fatalf("%s accepted read-only external package mutation", action)
@@ -182,7 +180,6 @@ func TestExternalPackageAdmissionUsesExplicitPermissionTiers(t *testing.T) {
 		}
 	}
 	for _, action := range []host.ManagementAction{
-		host.ManagementActionQueryExternalPackageCommit,
 		host.ManagementActionListPermissionGrants,
 		host.ManagementActionGetPermissionRequirements,
 	} {
@@ -195,16 +192,16 @@ func TestExternalPackageAdmissionUsesExplicitPermissionTiers(t *testing.T) {
 	}
 }
 
-func TestReleaseInstallOperationsUseExplicitPermissionTiers(t *testing.T) {
-	if permissionsAllowAction(sessionPermissions{read: true}, host.ManagementActionStartReleaseInstall) {
+func TestReleaseInstallUsesExplicitPermissionTiers(t *testing.T) {
+	if permissionsAllowAction(sessionPermissions{read: true}, host.ManagementActionInstallReleaseRef) {
 		t.Fatal("release install start accepted read-only session")
 	}
-	if !permissionsAllowAction(sessionPermissions{admin: true}, host.ManagementActionStartReleaseInstall) {
+	if !permissionsAllowAction(sessionPermissions{admin: true}, host.ManagementActionInstallReleaseRef) {
 		t.Fatal("release install start denied admin session")
 	}
 	for _, action := range []host.ManagementAction{
-		host.ManagementActionGetReleaseInstall,
-		host.ManagementActionListReleaseInstalls,
+		host.ManagementActionGetExecution,
+		host.ManagementActionListExecutions,
 	} {
 		if permissionsAllowAction(sessionPermissions{}, action) {
 			t.Fatalf("%s accepted without read permission", action)
@@ -534,50 +531,29 @@ func TestNewCreatesDurableReDevPluginState(t *testing.T) {
 		t.Fatalf("fresh generation status = %#v", generation.Status)
 	}
 	for _, rel := range []string{
-		"db/registry.sqlite",
-		"db/operations.sqlite",
-		"db/observability.sqlite",
-		"db/session_scopes.sqlite",
-		"external-package-stage",
+		"control.sqlite",
+		"observability.sqlite",
+		"secrets.sqlite",
+		"external-inspections",
+		"plugin-data",
+		"release-artifacts",
 		"assets",
-		"storage",
 	} {
 		if _, err := os.Stat(filepath.Join(generation.Path, rel)); err != nil {
 			t.Fatalf("expected durable state %s: %v", rel, err)
 		}
 	}
+	for _, rel := range []string{
+		"db/registry.sqlite", "db/operations.sqlite", "db/streams.sqlite",
+		"db/install_stage.sqlite", "db/confirmation_intents.sqlite", "db/session_scopes.sqlite",
+		"external-package-stage", "storage", "closed_sessions.json",
+	} {
+		if _, err := os.Stat(filepath.Join(generation.Path, rel)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("obsolete state owner %s exists: %v", rel, err)
+		}
+	}
 	if _, err := os.Stat(filepath.Join(root, "db")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("fresh install created legacy root state: %v", err)
-	}
-}
-
-func TestNewClosesExternalStageWhenReleaseModuleFails(t *testing.T) {
-	stateDir := t.TempDir()
-	wantErr := errors.New("release module failed")
-	closeCalls := 0
-	var closedStage *externalsource.StageStore
-	opts := ownerScopeTestOptions(t, stateDir)
-	opts.newReleaseModule = func(string) (*host.ReleaseModule, host.PluginReleaseRef, func() error, error) {
-		return nil, host.PluginReleaseRef{}, nil, wantErr
-	}
-	opts.closeExternalStage = func(stage *externalsource.StageStore) error {
-		closeCalls++
-		closedStage = stage
-		return stage.Close()
-	}
-
-	integration, err := New(context.Background(), opts)
-	if integration != nil || !errors.Is(err, wantErr) {
-		t.Fatalf("New() = %#v, %v, want nil, %v", integration, err, wantErr)
-	}
-	if closeCalls != 1 {
-		t.Fatalf("external stage close calls = %d, want 1", closeCalls)
-	}
-	if closedStage == nil {
-		t.Fatal("external stage closer did not receive the opened store")
-	}
-	if _, err := closedStage.StageUpload(context.Background(), "owner_test", strings.NewReader("x"), 1); err == nil {
-		t.Fatal("external stage accepted an upload after release module failure")
 	}
 }
 
@@ -621,14 +597,14 @@ func TestNewAutomaticallyMigratesV065OwnerScopeState(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(quarantineRoot, legacyDatabaseMarker)); err != nil {
 		t.Fatalf("quarantined legacy database marker: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(generation.Path, "db", "registry.sqlite")); err != nil {
-		t.Fatalf("active generation registry: %v", err)
+	if _, err := os.Stat(filepath.Join(generation.Path, "control.sqlite")); err != nil {
+		t.Fatalf("active generation control database: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(root, "db")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("legacy db remained active: %v", err)
 	}
 
-	activeMarker := filepath.Join(generation.Path, "storage", "created-after-migration")
+	activeMarker := filepath.Join(generation.Path, "assets", "created-after-migration")
 	if err := os.WriteFile(activeMarker, []byte("active"), 0o600); err != nil {
 		t.Fatal(err)
 	}

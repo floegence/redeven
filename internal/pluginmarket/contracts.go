@@ -188,13 +188,6 @@ type PublicKey struct {
 	PublicKey string `json:"public_key"`
 }
 
-type SigningLedger struct {
-	LogID     string `json:"log_id"`
-	Algorithm string `json:"algorithm"`
-	KeyID     string `json:"key_id"`
-	PublicKey string `json:"public_key"`
-}
-
 type PublishedFile struct {
 	Locator   string `json:"locator"`
 	AssetName string `json:"asset_name"`
@@ -206,7 +199,6 @@ type PublisherReleaseRef struct {
 	SchemaVersion string                `json:"schema_version"`
 	ReleaseRef    host.PluginReleaseRef `json:"release_ref"`
 	Root          PublicKey             `json:"root"`
-	SigningLedger SigningLedger         `json:"signing_ledger"`
 	Files         []PublishedFile       `json:"files"`
 }
 
@@ -586,7 +578,6 @@ func validateLatestRelease(release LatestRelease) error {
 		release.PublisherReleaseRef.SchemaVersion != "redevplugin.publisher_release_ref.v1" || ref.PluginID != release.PluginID || ref.Channel != release.Channel || ref.Version != release.Version ||
 		!idPattern.MatchString(ref.SourceID) || !idPattern.MatchString(ref.PublisherID) || !locatorPattern.MatchString(ref.ReleaseMetadataRef) || !shaPattern.MatchString(ref.ReleaseMetadataSHA256) ||
 		release.PublisherReleaseRef.Root.Algorithm != "ed25519" || !idPattern.MatchString(release.PublisherReleaseRef.Root.KeyID) || strings.TrimSpace(release.PublisherReleaseRef.Root.PublicKey) == "" ||
-		release.PublisherReleaseRef.SigningLedger.Algorithm != "ed25519" || !idPattern.MatchString(release.PublisherReleaseRef.SigningLedger.LogID) || !idPattern.MatchString(release.PublisherReleaseRef.SigningLedger.KeyID) || strings.TrimSpace(release.PublisherReleaseRef.SigningLedger.PublicKey) == "" ||
 		!idPattern.MatchString(release.SignerKeyID) || !semverPattern.MatchString(release.Compatibility.MinRedevenVersion) || !semverPattern.MatchString(release.Compatibility.MinReDevPluginVersion) ||
 		!shaPattern.MatchString(release.ReleaseIdentityDigest) || !shaPattern.MatchString(release.TrustRoot.SHA256) || !validHTTPSURL(release.TrustRoot.URL) {
 		return invalid("latest release identity is invalid")

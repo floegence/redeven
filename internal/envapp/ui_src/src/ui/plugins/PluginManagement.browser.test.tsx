@@ -481,7 +481,6 @@ function browserInspection(): ExternalPluginInspection {
       intents: [],
       surfaces: [],
     },
-    confirmation_digest: 'sha256:684a09cfd858448baa7d52c3d30932d7684a09cfd858448baa7d52c3d30932d7',
   };
 }
 
