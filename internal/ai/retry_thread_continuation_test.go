@@ -9,9 +9,9 @@ import (
 
 func TestContinuationRetryLogicalRequestIDIsStableAndSourceScoped(t *testing.T) {
 	source := &flruntime.ThreadTurnSnapshot{
-		TurnID: "turn-failed",
-		RunID: "run-failed",
-		Status: flruntime.TurnStatusFailed,
+		TurnID:   "turn-failed",
+		RunID:    "run-failed",
+		Status:   flruntime.TurnStatusFailed,
 		CanRetry: true,
 	}
 	firstID, firstExecution, err := continuationRetryLogicalRequestID("thread-a", source)
