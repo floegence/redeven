@@ -12,8 +12,10 @@ const ciSource = await readFile(new URL('../../../../.github/workflows/ci-check.
 const prePushSource = await readFile(new URL('../../../../scripts/check_renderer_e2e.sh', import.meta.url), 'utf8');
 const uiGateSource = await readFile(new URL('../../../../scripts/check_ui_tests.sh', import.meta.url), 'utf8');
 const performanceSource = await readFile(new URL('./checkTerminalInteractionPerformance.mjs', import.meta.url), 'utf8');
+const packagedRendererSource = await readFile(new URL('./checkPackagedRenderer.mjs', import.meta.url), 'utf8');
 const browserConfigSource = await readFile(new URL('../vitest.browser.config.ts', import.meta.url), 'utf8');
 const packageSource = await readFile(new URL('../package.json', import.meta.url), 'utf8');
+const viteConfigSource = await readFile(new URL('../vite.config.ts', import.meta.url), 'utf8');
 const releaseSource = await readFile(new URL('../../../../.github/workflows/release.yml', import.meta.url), 'utf8');
 
 test('keeps the supported terminal carriers explicit in the exact-main pre-push gate', () => {
@@ -122,4 +124,11 @@ test('keeps one real semantic renderer across refresh', () => {
   assert.match(carrierSource, /\[data-testid="terminal-sidebar-refresh"\]:visible/u);
   assert.match(carrierSource, /if \(!preservedCanvas\) throw new Error\('refresh replaced the semantic canvas'\)/u);
   assert.match(carrierSource, /presentation_sequence/u);
+});
+
+test('keeps the packaged Env App free of the removed browser terminal WASM renderer', () => {
+  assert.match(packagedRendererSource, /contains removed browser terminal WASM assets/u);
+  assert.doesNotMatch(packagedRendererSource, /does not contain a content-hashed WASM renderer|WebAssembly\.compile|WASM renderer load/u);
+  assert.doesNotMatch(viteConfigSource, /vite-plugin-wasm|\bwasm\(\)/u);
+  assert.doesNotMatch(packageSource, /vite-plugin-wasm/u);
 });

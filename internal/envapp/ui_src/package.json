@@ -120,7 +120,6 @@
     "typescript": "^5.7.2",
     "vite": "^8.0.16",
     "vite-plugin-solid": "^2.11.12",
-    "vite-plugin-wasm": "^3.6.0",
     "vitest": "4.1.10",
     "ws": "8.21.0"
   }
