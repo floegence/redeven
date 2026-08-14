@@ -1,83 +1,65 @@
-import { createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+  onMount,
+  untrack,
+} from 'solid-js';
 
 import {
-  TerminalCore,
-  createPagedTerminalOutputCoordinator,
-  getDefaultTerminalConfig,
-  type AtomicPagedTerminalOutputCoordinatorHandle,
-  type Logger,
-  type PagedTerminalHistoryPage,
-  type PagedTerminalOutputFailureCode,
-  type PagedTerminalOutputSnapshot,
-  type PreparedPagedTerminalHistory,
-  type TerminalAppearance,
-  type TerminalOutputPipelineChunk,
-  type TerminalResponsiveConfig,
-  type TerminalRestorableSnapshot,
-  type TerminalSessionInfo,
-} from '@floegence/floeterm-terminal-web';
-import {
-  classifyTerminalAttachLifecycleExit,
-  type RedevenTerminalEventSource,
-  type RedevenTerminalTransport,
-} from '../services/terminalTransport';
+  getThemeColors,
+  presentationAdvances,
+  RendererSurface,
+  SEMANTIC_CELL_HEIGHT_CSS_PX,
+  SEMANTIC_CELL_WIDTH_CSS_PX,
+  SEMANTIC_TERMINAL_FONT_FAMILY,
+  TerminalInputBridge,
+  validatePresentation,
+  type SemanticFrame,
+  type SemanticHistoryPage,
+  type SemanticHistoryRequest,
+  type SemanticPresentation,
+  type SemanticTerminalCellMetrics,
+  type SemanticTerminalPalette,
+  type TerminalKeyInputIntent,
+} from '@floegence/floeterm-terminal-web/semantic';
+import type { TerminalSessionInfo } from '../protocol/redeven_v1/sdk/terminal';
 import type { TerminalNameUpdateEvent } from '../protocol/redeven_v1/sdk/terminal';
-import { createTerminalFileLinkProvider, type TerminalResolvedLinkTarget } from '../services/terminalLinkProvider';
+import type {
+  RedevenTerminalEventSource,
+  RedevenTerminalTransport,
+} from '../services/terminalTransport';
 import type { TerminalShellIntegrationEvent } from '../services/terminalShellIntegration';
+import type { TerminalResolvedLinkTarget } from '../services/terminalLinkProvider';
 import {
-  createTerminalOutputProjection,
-  tagTerminalOutputChunk,
-} from '../services/terminalOutputProjection';
-import { createTerminalCheckpointCompactor } from '../services/terminalCheckpointCompaction';
-import {
-  restoreTerminalSnapshotOrReplay,
-  type TerminalWorkingSetInteraction,
-  type TerminalWorkingSetRuntime,
-} from '../services/terminalAdaptiveWorkingSet';
-import { normalizeAbsolutePath as normalizeAskFlowerAbsolutePath } from '../utils/askFlowerPath';
+  isSemanticTerminalPalette,
+  resolveSemanticTerminalLinkAtPoint,
+} from './semanticTerminalViewport';
+import type {
+  SemanticTerminalAppearance,
+  SemanticTerminalCopyResult,
+  SemanticTerminalSearchResult,
+  SemanticTerminalViewportHandle,
+} from './semanticTerminalViewport';
+import type { TerminalSharedGeometryPresentation } from './terminalSharedGeometryPresentation';
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 import { useI18n } from '../i18n';
-import {
-  markTerminalRecoveryMilestone,
-  publishTerminalRecoveryEvent,
-  startTerminalRecoveryTrace,
-  terminalRecoveryDiagnosticsQuery,
-  type TerminalRecoveryEventDetail,
-  type TerminalRecoveryPhase,
-  type TerminalRecoveryTrace,
-} from '../services/terminalRecoveryDiagnostics';
-import {
-  markTerminalPerformance,
-  pseudonymousTerminalSessionRef,
-} from '../services/terminalPerformance';
-import {
-  createTerminalGeometryPresentationController,
-  type TerminalEffectiveGeometry,
-  type TerminalGeometryRequestContext,
-  type TerminalSharedGeometryPresentation,
-} from './terminalSharedGeometryPresentation';
 
-type SessionLoadingState = 'idle' | 'initializing' | 'attaching' | 'loading_history' | 'reconnecting';
-
-const TERMINAL_LOADING_CURTAIN_DELAY_MS = 250;
-
-type SharedTerminalGeometryEvent = Readonly<{
-  sessionId: string;
-  lifecycleEpoch: number;
+type SessionLoadingState = 'initializing' | 'attaching' | 'reconnecting' | 'idle';
+type GridSize = Readonly<{ cols: number; rows: number }>;
+type EffectiveGeometry = GridSize & Readonly<{
   generation: number;
-  outputSequenceBoundary: number;
-  cols: number;
-  rows: number;
+  presentationSequence: number;
 }>;
 
-type PendingBaselineRender = Readonly<{
-  core: TerminalCore;
-  initSequence: number;
-  trace: TerminalRecoveryTrace;
-  detail: TerminalRecoveryEventDetail;
-  armed: boolean;
-}>;
+const MIN_TERMINAL_COLS = 2;
+const MIN_TERMINAL_ROWS = 1;
+const MAX_TERMINAL_COLS = 500;
+const MAX_TERMINAL_ROWS = 200;
+const SEMANTIC_HISTORY_PAGE_LIMIT = 200;
+const RECONNECT_DELAYS_MS = [100, 300, 900] as const;
 
 export function shouldPublishTerminalOutputCoverage(
   previousAttachGeneration: number,
@@ -89,49 +71,53 @@ export function shouldPublishTerminalOutputCoverage(
     || nextCoveredThroughSequence > previousCoveredThroughSequence;
 }
 
-function buildLogger(): Logger {
+function sameGrid(left: GridSize | null, right: GridSize): boolean {
+  return left?.cols === right.cols && left.rows === right.rows;
+}
+
+function frameLines(frame: SemanticFrame | null): string[] {
+  if (!frame) return [];
+  return frame.rows.map((row) => row.cells.map((cell) => cell.text).join('').trimEnd());
+}
+
+function frameText(frame: SemanticFrame | null): string {
+  return frameLines(frame).join('\n').replace(/\n+$/, '');
+}
+
+function terminalPalette(colors: Readonly<Record<string, string>>): SemanticTerminalPalette {
+  if (isSemanticTerminalPalette(colors)) return { ...colors };
+  const fallback = getThemeColors('dark');
   return {
-    debug: () => undefined,
-    info: () => undefined,
-    warn: () => undefined,
-    error: () => undefined,
+    ...fallback,
+    ...(typeof colors.background === 'string' ? { background: colors.background } : {}),
+    ...(typeof colors.foreground === 'string' ? { foreground: colors.foreground } : {}),
+    ...(typeof colors.cursor === 'string' ? { cursor: colors.cursor } : {}),
+    ...(typeof colors.cursorAccent === 'string' ? { cursorAccent: colors.cursorAccent } : {}),
   };
 }
 
-function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
-
-  const units = ['B', 'KB', 'MB', 'GB'];
-  let value = bytes;
-  let unitIndex = 0;
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex += 1;
-  }
-
-  const rounded = unitIndex === 0 ? Math.round(value) : Math.round(value * 10) / 10;
-  return `${rounded} ${units[unitIndex]}`;
+function copyResult(
+  copied: boolean,
+  source: 'shortcut' | 'command',
+  textLength = 0,
+): SemanticTerminalCopyResult {
+  return copied
+    ? { copied: true, source, textLength }
+    : { copied: false, source, reason: 'clipboard_unavailable' };
 }
 
 export type TerminalSessionRuntimeActions = Readonly<{
   reload: () => Promise<void>;
-  resetAfterClear: () => Promise<boolean>;
   retryOutputRecovery: () => Promise<void>;
   focusIfInteractive: () => 'focused' | 'not_interactive' | 'selection_active';
 }>;
 
 export type TerminalSessionRuntimeStatus = Readonly<{
   state: 'idle' | 'reconnecting' | 'retrying' | 'degraded' | 'blocking';
-  failureCode?: PagedTerminalOutputFailureCode | 'terminal_unavailable';
+  failureCode?: string;
   retryable?: boolean;
   diagnosticsQuery?: string;
 }>;
-
-function isTerminalRecoveryRetryable(
-  code: PagedTerminalOutputFailureCode | 'terminal_unavailable' | null,
-): boolean {
-  return code !== 'history_contract_missing' && code !== 'history_contract_invalid';
-}
 
 export type TerminalSessionRuntimeProps = Readonly<{
   session: TerminalSessionInfo;
@@ -150,10 +136,9 @@ export type TerminalSessionRuntimeProps = Readonly<{
   connId: string;
   transport: RedevenTerminalTransport;
   eventSource: RedevenTerminalEventSource;
-  registerCore: (sessionId: string, core: TerminalCore | null) => void;
+  registerViewport: (sessionId: string, viewport: SemanticTerminalViewportHandle | null) => void;
   registerSurfaceElement: (sessionId: string, surface: HTMLDivElement | null) => void;
   registerActions: (sessionId: string, actions: TerminalSessionRuntimeActions | null) => void;
-  registerWorkingSetRuntime: (sessionId: string, runtime: TerminalWorkingSetRuntime | null) => void;
   onRuntimeStatus?: (sessionId: string, status: TerminalSessionRuntimeStatus) => void;
   onGeometryPresentation?: (
     sessionId: string,
@@ -167,11 +152,18 @@ export type TerminalSessionRuntimeProps = Readonly<{
     sessionId: string,
     update: { attachGeneration: number; coveredThroughSequence: number; rebased?: boolean },
   ) => void;
+  onHistorySummary?: (
+    sessionId: string,
+    summary: Readonly<{ revision: number; totalRows: number; screenStartOffset: number }>,
+  ) => void;
   onPendingOutputReset?: (sessionId: string, opts?: { preserveUnread?: boolean }) => void;
-  setWorkingSetInteraction: (sessionId: string, interaction: TerminalWorkingSetInteraction, active: boolean) => void;
   onSurfaceClick?: (event: MouseEvent) => void;
   onBell?: (sessionId: string) => void;
-  onShellIntegrationEvent?: (sessionId: string, event: TerminalShellIntegrationEvent, source: 'history' | 'live') => void;
+  onShellIntegrationEvent?: (
+    sessionId: string,
+    event: TerminalShellIntegrationEvent,
+    source: 'history' | 'live',
+  ) => void;
   onVisibleOutput?: (
     sessionId: string,
     source: 'history' | 'live',
@@ -179,1795 +171,837 @@ export type TerminalSessionRuntimeProps = Readonly<{
     sequence: number | undefined,
   ) => void;
   onTerminalFileLinkOpen?: (target: TerminalResolvedLinkTarget) => Promise<void> | void;
-  onNameUpdate?: (sessionId: string, newName: string, workingDir: string, localPathCapability: TerminalNameUpdateEvent['localPathCapability']) => void;
-  requestPreparedHistory?: (sessionId: string) => Promise<PreparedPagedTerminalHistory | null>;
+  onTerminalExternalLinkOpen?: (url: string) => Promise<void> | void;
+  onNameUpdate?: (
+    sessionId: string,
+    newName: string,
+    workingDir: string,
+    localPathCapability: TerminalNameUpdateEvent['localPathCapability'],
+  ) => void;
+  requestPreparedHistory?: (sessionId: string) => Promise<unknown>;
+}>;
+
+type SearchMatch = Readonly<{
+  page: SemanticHistoryPage;
+  frame: SemanticFrame;
+  line: number;
 }>;
 
 export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   const i18n = useI18n();
-  const stableSessionId = props.session.id;
-  const sessionId = () => stableSessionId;
-  const colors = () => props.themeColors();
-  const fontSize = () => props.fontSize();
-  const fontFamily = () => props.fontFamily();
+  const sessionId = String(props.session.id ?? '').trim();
   const [loading, setLoading] = createSignal<SessionLoadingState>('initializing');
-  const [readyOnce, setReadyOnce] = createSignal(false);
-  const [outputRecoveryState, setOutputRecoveryState] = createSignal<PagedTerminalOutputSnapshot['state']>('idle');
-  const [baselineReady, setBaselineReady] = createSignal(false);
-  const [recoveryFailureCode, setRecoveryFailureCode] = createSignal<PagedTerminalOutputFailureCode | null>(null);
-  const [recoveryRetryable, setRecoveryRetryable] = createSignal<boolean | null>(null);
-  const [blockingFailureCode, setBlockingFailureCode] = createSignal<'terminal_unavailable' | PagedTerminalOutputFailureCode | null>(null);
-  const [showRetryingStatus, setShowRetryingStatus] = createSignal(false);
-  const [historyReplayProgress, setHistoryReplayProgress] = createSignal<{ loadedBytes: number; totalBytes: number } | null>(null);
-  const [geometryRendererReady, setGeometryRendererReady] = createSignal(false);
-  const geometryPresentation = createTerminalGeometryPresentationController({
-    onPresentation: presentation => props.onGeometryPresentation?.(stableSessionId, presentation),
-  });
+  const [ready, setReady] = createSignal(false);
+  const [runtimeError, setRuntimeError] = createSignal('');
+  const [historyPage, setHistoryPage] = createSignal<SemanticHistoryPage | null>(null);
+  const [historyProjected, setHistoryProjected] = createSignal(false);
+  const [historyBusy, setHistoryBusy] = createSignal(false);
+  const [presentationRevision, setPresentationRevision] = createSignal(0);
+  const [geometryRevision, setGeometryRevision] = createSignal(0);
 
-  const [showLoading, setShowLoading] = createSignal(false);
-  let loadingDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let host: HTMLDivElement | null = null;
+  let canvas: HTMLCanvasElement | null = null;
+  let inputElement: HTMLTextAreaElement | null = null;
+  let renderer: RendererSurface | null = null;
+  let inputBridge: TerminalInputBridge | null = null;
+  let resizeObserver: ResizeObserver | null = null;
+  let latestPresentation: SemanticPresentation | null = null;
+  let latestEffectiveGeometry: EffectiveGeometry | null = null;
+  let desiredSize: GridSize | null = null;
+  let appliedSize: GridSize | null = null;
+  let inFlightSize: GridSize | null = null;
+  let resizeWork: Promise<void> | null = null;
+  let attached = false;
+  let runtimeAttachGeneration = 0;
+  let attachmentOperation = 0;
+  let disposed = false;
+  let lastProtocolClient: unknown;
+  let reconnectAttempt = 0;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let lastReconnectError: Error | null = null;
+  let historyRequestEpoch = 0;
+  let searchRequestEpoch = 0;
+  let searchQuery = '';
+  let searchMatches: SearchMatch[] = [];
+  let searchIndex = -1;
+  let searchCallback: ((result: SemanticTerminalSearchResult) => void) | null = null;
+  let lastBell = 0;
+  let geometryLifecycleEpoch = 0;
+  let geometryRendererEpoch = 1;
+  let geometryRequestEpoch = 0;
+  let appliedTypography: Readonly<{ fontSize: number; fontFamily: string }> | null = null;
 
-  const loadingMessage = createMemo(() => {
-    if (loading() === 'initializing') return i18n.t('terminal.initializing');
-    if (loading() === 'attaching') return i18n.t('terminal.attaching');
-    if (loading() === 'reconnecting') return i18n.t('terminal.reconnecting');
-    if (loading() === 'loading_history') {
-      const progress = historyReplayProgress();
-      if (progress && progress.totalBytes > 0) {
-        return i18n.t('terminal.loadingHistoryProgress', {
-          loaded: formatBytes(Math.min(progress.loadedBytes, progress.totalBytes)),
-          total: formatBytes(progress.totalBytes),
-        });
-      }
-      return i18n.t('terminal.loadingHistory');
-    }
-    return undefined;
-  });
-
-  const runtimeStatus = createMemo<TerminalSessionRuntimeStatus>(() => {
-    const blocking = blockingFailureCode();
-    if (blocking) {
-      return {
-        state: 'blocking',
-        failureCode: blocking,
-        retryable: isTerminalRecoveryRetryable(blocking),
-        diagnosticsQuery: terminalRecoveryDiagnosticsQuery(recoveryTrace, blocking),
-      };
-    }
-    if (loading() === 'reconnecting') return { state: 'reconnecting' };
-    if (baselineReady() && outputRecoveryState() === 'failed') {
-      return {
-        state: 'degraded',
-        failureCode: recoveryFailureCode() ?? undefined,
-        retryable: recoveryRetryable() ?? undefined,
-        diagnosticsQuery: terminalRecoveryDiagnosticsQuery(recoveryTrace, recoveryFailureCode() ?? undefined),
-      };
-    }
-    if (baselineReady() && outputRecoveryState() === 'retry-wait' && showRetryingStatus()) {
-      return {
-        state: 'retrying',
-        failureCode: recoveryFailureCode() ?? undefined,
-        diagnosticsQuery: terminalRecoveryDiagnosticsQuery(recoveryTrace, recoveryFailureCode() ?? undefined),
-      };
-    }
-    return { state: 'idle' };
-  });
-
-  createEffect(() => {
-    const status = runtimeStatus();
-    props.onRuntimeStatus?.(stableSessionId, status);
-  });
-
-  createEffect(() => {
-    geometryPresentation.setEligible(
-      props.viewActive()
-      && props.active()
-      && geometryRendererReady()
-      && runtimeStatus().state === 'idle',
-    );
-  });
-
-  createEffect(() => {
-    const shouldDelay = baselineReady() && outputRecoveryState() === 'retry-wait';
-    setShowRetryingStatus(false);
-    if (!shouldDelay) return;
-    const timer = setTimeout(() => setShowRetryingStatus(true), 750);
-    onCleanup(() => clearTimeout(timer));
-  });
-
-  createEffect(() => {
-    const isLoading = loading() !== 'idle';
-    if (loadingDebounceTimer) {
-      clearTimeout(loadingDebounceTimer);
-      loadingDebounceTimer = null;
-    }
-    if (isLoading) {
-      loadingDebounceTimer = setTimeout(() => {
-        setShowLoading(true);
-      }, TERMINAL_LOADING_CURTAIN_DELAY_MS);
-    } else {
-      setShowLoading(false);
-    }
-  });
-
-  onCleanup(() => {
-    if (loadingDebounceTimer) {
-      clearTimeout(loadingDebounceTimer);
-    }
-  });
-
-  let container: HTMLDivElement | null = null;
-  let term: TerminalCore | null = null;
-  let unsubData: (() => void) | null = null;
-  let unsubNameUpdate: (() => void) | null = null;
-  let unsubGeometry: (() => void) | null = null;
-  let unsubAttachmentLifecycle: (() => void) | null = null;
-  let appearanceRaf: number | null = null;
-  let activationRaf: number | null = null;
-  let inputProtectionTimer: ReturnType<typeof setTimeout> | null = null;
-  let workingSetRegistered = false;
-  let recoveryTrace: TerminalRecoveryTrace | null = null;
-  let pendingBaselineRender: PendingBaselineRender | null = null;
-  let recoveryPhase: TerminalRecoveryPhase | null = null;
-  let historyPageCount = 0;
-  let historyChunkCount = 0;
-  let historyBytes = 0;
-  let lastHistoryGeneration: number | undefined;
-  let lastSnapshotEndSequence: number | undefined;
-  let lastFirstRetainedSequence: number | undefined;
-  let historyReset = false;
-  let historyTruncated = false;
-  let lastRetryEventKey = '';
-  let lastWrittenOutputSequence = 0;
-  let lastAppliedGeometryGeneration = 0;
-  let lastAppliedGeometryBoundary = -1;
-  let pendingGeometryEvents: SharedTerminalGeometryEvent[] = [];
-  const geometryGridByGeneration = new Map<number, Readonly<{ cols: number; rows: number }>>();
-  let activeGeometryLifecycleEpoch = 0;
-  let activeGeometryRendererEpoch = 0;
-  let activeRuntimeAttachGeneration = 0;
-  let latestGeometryResizeContext: TerminalGeometryRequestContext | null = null;
-  const snapshotGeometryFacts = new WeakMap<object, Readonly<{
-    effective: TerminalEffectiveGeometry;
-    coveredThroughSequence: number;
-  }>>();
-  let liveAttachmentReady = false;
-  let terminalPresentationSettling = false;
-  let latestHostDimensions: Readonly<{ cols: number; rows: number }> | null = null;
-  const currentHostDimensions = () => latestHostDimensions;
-  let lastDegradedEventKey = '';
-  let lastBlockingEventKey = '';
-  let liveMilestoneMarked = false;
-  let outputCoordinatorEpoch = 0;
-  let observedLiveAttachGeneration = 0;
-  let maxObservedLiveSequence = 0;
-  let activitySettledAttachGeneration = 0;
-  let activitySettledThroughSequence = 0;
-  let preAttachLiveChunks: TerminalOutputPipelineChunk[] | null = null;
-  let viewAttachmentActive = props.viewActive();
-
-  const transitionRecoveryPhase = (next: TerminalRecoveryPhase) => {
-    const trace = recoveryTrace;
-    if (!trace || recoveryPhase === next) return;
-    publishTerminalRecoveryEvent(trace, 'phase_transition', {
-      phase_from: recoveryPhase ?? undefined,
-      phase_to: next,
-    });
-    recoveryPhase = next;
-  };
-
-  const startRecoveryTrace = () => {
-    pendingBaselineRender = null;
-    recoveryTrace = startTerminalRecoveryTrace(stableSessionId, props.variant);
-    recoveryPhase = null;
-    historyPageCount = 0;
-    historyChunkCount = 0;
-    historyBytes = 0;
-    lastHistoryGeneration = undefined;
-    lastSnapshotEndSequence = undefined;
-    lastFirstRetainedSequence = undefined;
-    historyReset = false;
-    historyTruncated = false;
-    lastRetryEventKey = '';
-    lastDegradedEventKey = '';
-    lastBlockingEventKey = '';
-    setRecoveryRetryable(null);
-    liveMilestoneMarked = false;
-    transitionRecoveryPhase('initializing');
-    return recoveryTrace;
-  };
-
-  const armBaselineRender = (
-    core: TerminalCore,
-    trace: TerminalRecoveryTrace,
-    initSequence: number,
-  ) => {
-    const pending = pendingBaselineRender;
-    if (
-      !pending
-      || pending.core !== core
-      || pending.trace !== trace
-      || pending.initSequence !== initSequence
-    ) {
-      return;
-    }
-    pendingBaselineRender = { ...pending, armed: true };
-  };
-
-  const reportBlockingFailure = (code: 'terminal_unavailable' | PagedTerminalOutputFailureCode) => {
-    pendingBaselineRender = null;
-    const trace = recoveryTrace;
-    if (trace) {
-      const eventKey = `${trace.surfaceGeneration}:${code}`;
-      if (lastBlockingEventKey !== eventKey) {
-        lastBlockingEventKey = eventKey;
-        publishTerminalRecoveryEvent(trace, 'blocking', {
-          error_code: code,
-          recovery_action: isTerminalRecoveryRetryable(code) ? 'retry' : 'update_runtime',
-        });
-      }
-    }
-    setBlockingFailureCode(code);
-  };
-
-  const buildTerminalAppearance = (): TerminalAppearance => ({
-    theme: colors(),
-    fontSize: fontSize(),
-    fontFamily: fontFamily(),
-  });
-
-  const applyTerminalAppearance = (
-    core: TerminalCore,
-    appearance: TerminalAppearance = buildTerminalAppearance(),
-    opts?: { forceResize?: boolean; focus?: boolean },
-  ) => {
-    core.setAppearance(appearance);
-    if (opts?.forceResize) {
-      core.forceResize();
-    }
-    if (opts?.focus && props.viewActive() && props.active() && props.autoFocus() && !core.hasSelection()) {
-      core.focus();
-    }
-  };
-
-  const cancelPendingAppearanceApply = () => {
-    if (appearanceRaf !== null) {
-      cancelAnimationFrame(appearanceRaf);
-      appearanceRaf = null;
-    }
-  };
-
-  const cancelPendingActivationRefresh = () => {
-    if (activationRaf !== null) {
-      cancelAnimationFrame(activationRaf);
-      activationRaf = null;
-    }
-  };
-
-  const scheduleTerminalAppearanceApply = (appearance: TerminalAppearance) => {
-    cancelPendingAppearanceApply();
-    appearanceRaf = requestAnimationFrame(() => {
-      appearanceRaf = null;
-      const core = term;
-      if (!core) return;
-      applyTerminalAppearance(core, appearance);
-    });
-  };
-
-  const scheduleTerminalActivationRefresh = () => {
-    cancelPendingActivationRefresh();
-    activationRaf = requestAnimationFrame(() => {
-      activationRaf = null;
-      const core = term;
-      if (!core || terminalInputBlocked() || core.hasSelection()) return;
-      const activeElement = typeof document === 'undefined' ? null : document.activeElement;
-      const focusStillOwned = activeElement == null
-        || activeElement === document.body
-        || Boolean(container?.contains(activeElement));
-      applyTerminalAppearance(core, buildTerminalAppearance(), {
-        forceResize: true,
-        focus: focusStillOwned,
-      });
-    });
-  };
-
-  const outputProjection = createTerminalOutputProjection({
-    onShellIntegrationEvent: (event, source) => {
-      props.onShellIntegrationEvent?.(sessionId(), event, source);
-    },
-    onChunkCommitted: (source, sequence) => {
-      const normalizedSequence = normalizeLiveSequence(sequence);
-      const snapshot = outputCoordinator?.getSnapshot();
-      if (snapshot && normalizedSequence !== undefined) {
-        if (activitySettledAttachGeneration !== snapshot.attachGeneration) {
-          activitySettledAttachGeneration = snapshot.attachGeneration;
-          activitySettledThroughSequence = snapshot.coveredThroughSequence;
-        }
-        activitySettledThroughSequence = Math.max(activitySettledThroughSequence, normalizedSequence);
-      }
-      props.onOutputCommitted?.(sessionId(), source, sequence);
-    },
-    onVisibleOutput: (source, byteLength, sequence) => {
-      props.onVisibleOutput?.(sessionId(), source, byteLength, sequence);
-    },
-  });
-  const checkpointCompactor = createTerminalCheckpointCompactor({
-    commit: (id, checkpoint) => props.transport.commitHistoryCheckpoint(id, checkpoint),
-    onFailure: (error) => {
-      console.warn('[TerminalPanel] Checkpoint compaction stopped; durable raw history remains retained', {
-        event: 'terminal_checkpoint_compaction_stopped',
-        error: error.message,
-      });
-    },
-  });
-  let outputCoordinator: AtomicPagedTerminalOutputCoordinatorHandle | null = null;
-  let outputCoordinatorSnapshot: PagedTerminalOutputSnapshot | null = null;
-  let replayCoveredBytes = 0;
-  let replayTotalBytes = 0;
-
-  const liveRenderActive = () => {
-    const active = props.viewActive() && props.active();
-    return term !== null && active;
-  };
-
-  const normalizeLiveSequence = (sequence: number | undefined): number | undefined => (
-    typeof sequence === 'number' && Number.isFinite(sequence) && sequence > 0
-      ? Math.floor(sequence)
-      : undefined
+  const currentFrame = (): SemanticFrame | null => (
+    historyProjected() ? historyPage()?.frame ?? null : latestPresentation?.frame ?? null
   );
 
-  const terminalInputBlocked = () => {
-    if (loading() !== 'idle' || !baselineReady() || blockingFailureCode()) return true;
-    return false;
+  const historySummary = createMemo(() => {
+    void presentationRevision();
+    const frame = latestPresentation?.frame;
+    return {
+      totalRows: frame?.history.totalRows ?? 0,
+      screenStartOffset: frame?.history.screenStartOffset ?? 0,
+    };
+  });
+  const resolvedPalette = createMemo(() => terminalPalette(props.themeColors()));
+
+  const cellMetrics = (): SemanticTerminalCellMetrics => renderer?.getCellMetrics() ?? {
+    cellWidthCssPx: SEMANTIC_CELL_WIDTH_CSS_PX,
+    cellHeightCssPx: SEMANTIC_CELL_HEIGHT_CSS_PX,
   };
 
-  const focusTerminalIfInteractive = () => {
-    const core = term;
-    if (!core || terminalInputBlocked()) return 'not_interactive' as const;
-    if (!props.viewActive() || !props.active() || !props.autoFocus()) return 'not_interactive' as const;
-    if (core.hasSelection()) return 'selection_active' as const;
-    core.focus();
-    return 'focused' as const;
-  };
-
-  const clearOutputSubscription = () => {
-    unsubData?.();
-    unsubData = null;
-    unsubNameUpdate?.();
-    unsubNameUpdate = null;
-    unsubGeometry?.();
-    unsubGeometry = null;
-    unsubAttachmentLifecycle?.();
-    unsubAttachmentLifecycle = null;
-  };
-
-  const applyPendingGeometry = () => {
-    const core = term;
-    if (!core) return;
-    while (pendingGeometryEvents.length > 0) {
-      const event = pendingGeometryEvents[0]!;
-      if (event.lifecycleEpoch !== activeGeometryLifecycleEpoch) {
-        pendingGeometryEvents.shift();
-        continue;
-      }
-      if (event.generation < lastAppliedGeometryGeneration
-        || (event.generation === lastAppliedGeometryGeneration
-          && event.outputSequenceBoundary <= lastAppliedGeometryBoundary)) {
-        pendingGeometryEvents.shift();
-        continue;
-      }
-      if (event.outputSequenceBoundary > lastWrittenOutputSequence) return;
-      pendingGeometryEvents.shift();
-      lastAppliedGeometryGeneration = event.generation;
-      lastAppliedGeometryBoundary = event.outputSequenceBoundary;
-      // A server-confirmed effective grid is presentation input, not a new
-      // local host-capacity report. Later observer/focus resizes remain active.
-      core.setFixedDimensions(
-        { cols: event.cols, rows: event.rows },
-        { notifyResize: false },
-      );
-      geometryPresentation.noteAppliedEffective({
-        lifecycleEpoch: event.lifecycleEpoch,
-        rendererEpoch: activeGeometryRendererEpoch,
-        generation: event.generation,
-        outputSequenceBoundary: event.outputSequenceBoundary,
-        cols: event.cols,
-        rows: event.rows,
-      });
-    }
-  };
-
-  const queueTerminalGeometry = (event: SharedTerminalGeometryEvent) => {
-    if (!Number.isSafeInteger(event.generation) || event.generation <= 0
-      || !Number.isSafeInteger(event.outputSequenceBoundary) || event.outputSequenceBoundary < 0
-      || !Number.isSafeInteger(event.cols) || event.cols <= 0
-      || !Number.isSafeInteger(event.rows) || event.rows <= 0) {
-      reportBlockingFailure('terminal_unavailable');
-      return;
-    }
-    if (event.lifecycleEpoch !== activeGeometryLifecycleEpoch) return;
-    const generationGrid = geometryGridByGeneration.get(event.generation);
-    if (generationGrid
-      && (generationGrid.cols !== event.cols || generationGrid.rows !== event.rows)) {
-      reportBlockingFailure('terminal_unavailable');
-      return;
-    }
-    if (!generationGrid) {
-      geometryGridByGeneration.set(event.generation, { cols: event.cols, rows: event.rows });
-    }
-    if (!geometryPresentation.noteKnownEffective(event)) {
-      const known = geometryPresentation.getState().knownEffective;
-      if (known
-        && known.generation === event.generation
-        && (known.cols !== event.cols || known.rows !== event.rows)) {
-        reportBlockingFailure('terminal_unavailable');
-        return;
-      }
-    }
-    if (event.generation < lastAppliedGeometryGeneration
-      || (event.generation === lastAppliedGeometryGeneration
-        && event.outputSequenceBoundary <= lastAppliedGeometryBoundary)) return;
-    const duplicate = pendingGeometryEvents.find(pending => (
-      pending.lifecycleEpoch === event.lifecycleEpoch
-      && pending.generation === event.generation
-      && pending.outputSequenceBoundary === event.outputSequenceBoundary
-    ));
-    if (duplicate) {
-      if (duplicate.cols !== event.cols
-        || duplicate.rows !== event.rows) {
-        reportBlockingFailure('terminal_unavailable');
-      }
-      return;
-    }
-    pendingGeometryEvents.push(event);
-    pendingGeometryEvents.sort((left, right) => (
-      left.generation - right.generation
-      || left.outputSequenceBoundary - right.outputSequenceBoundary
-    ));
-    applyPendingGeometry();
-  };
-
-  const concatTerminalChunks = (chunks: readonly TerminalOutputPipelineChunk[]): Uint8Array => {
-    const size = chunks.reduce((total, chunk) => total + chunk.data.byteLength, 0);
-    const result = new Uint8Array(size);
-    let offset = 0;
-    for (const chunk of chunks) {
-      result.set(chunk.data, offset);
-      offset += chunk.data.byteLength;
-    }
-    return result;
-  };
-
-  const applyTransientFixedDimensions = (
-    core: TerminalCore,
-    dimensions: Readonly<{ cols: number; rows: number }>,
-  ): void => {
-    core.setFixedDimensions(dimensions, { notifyResize: false });
-  };
-
-  const writeTerminalChunks = async (
-    chunks: readonly TerminalOutputPipelineChunk[],
-    history: boolean,
-  ): Promise<void> => {
-    const core = term;
-    if (!core) throw new Error('Terminal output writer lost its active core');
-    let remaining = [...chunks];
-    while (remaining.length > 0) {
-      applyPendingGeometry();
-      const boundary = pendingGeometryEvents[0]?.outputSequenceBoundary;
-      const splitIndex = boundary === undefined
-        ? remaining.length
-        : remaining.findIndex(chunk => (normalizeLiveSequence(chunk.sequence) ?? 0) > boundary);
-      const count = splitIndex < 0 ? remaining.length : splitIndex;
-      if (count === 0) {
-        throw new Error(`Terminal output did not cover geometry boundary ${boundary}`);
-      }
-      const current = remaining.slice(0, count);
-      remaining = remaining.slice(count);
-      const payload = concatTerminalChunks(current);
-      const liveGeometry = !history && current.length > 0
-        ? (() => {
-          const first = current[0]!;
-          if (first.geometryGeneration === undefined || first.cols === undefined || first.rows === undefined) {
-            return null;
-          }
-          if (!Number.isSafeInteger(first.geometryGeneration) || first.geometryGeneration <= 0
-            || !Number.isSafeInteger(first.cols) || first.cols <= 0
-            || !Number.isSafeInteger(first.rows) || first.rows <= 0) {
-            throw new Error('Terminal live output geometry is invalid');
-          }
-          for (const chunk of current.slice(1)) {
-            if (chunk.geometryGeneration !== first.geometryGeneration
-              || chunk.cols !== first.cols
-              || chunk.rows !== first.rows) {
-              throw new Error('Terminal live output batch crossed a geometry boundary');
-            }
-          }
-          return { cols: first.cols, rows: first.rows };
-        })()
-        : null;
-      const sharedGeometry = liveGeometry
-        ? (() => {
-          const state = geometryPresentation.getState();
-          const effective = state.appliedEffective ?? state.knownEffective;
-          return effective ? { cols: effective.cols, rows: effective.rows } : null;
-        })()
-        : null;
-      if (liveGeometry && (!sharedGeometry
-        || sharedGeometry.cols !== liveGeometry.cols
-        || sharedGeometry.rows !== liveGeometry.rows)) {
-        applyTransientFixedDimensions(core, liveGeometry);
-      }
-      try {
-        if (payload.byteLength > 0) {
-          if (history) {
-            await new Promise<void>((resolve) => core.writeHistory(payload, resolve));
-          } else {
-            core.writeFrame(payload);
-          }
-        }
-      } finally {
-        if (liveGeometry && sharedGeometry
-          && (sharedGeometry.cols !== liveGeometry.cols || sharedGeometry.rows !== liveGeometry.rows)) {
-          applyTransientFixedDimensions(core, sharedGeometry);
-        }
-      }
-      for (const chunk of current) {
-        const sequence = normalizeLiveSequence(chunk.sequence);
-        if (sequence !== undefined) lastWrittenOutputSequence = Math.max(lastWrittenOutputSequence, sequence);
-      }
-      checkpointCompactor.append(current.map(chunk => ({
-        sequence: normalizeLiveSequence(chunk.sequence) ?? 0,
-        data: chunk.data,
-        geometryGeneration: Number(chunk.geometryGeneration ?? 0),
-        cols: Number(chunk.cols ?? 0),
-        rows: Number(chunk.rows ?? 0),
-      })));
-      applyPendingGeometry();
-    }
-  };
-
-  const handleLiveTerminalData = (
-    data: Uint8Array,
-    sequence: number | undefined,
-    geometry?: Readonly<{
-      geometryGeneration?: number;
-      cols?: number;
-      rows?: number;
-    }>,
-  ) => {
-    const coordinator = outputCoordinator;
-    if (!coordinator) return;
-
-    const normalizedSequence = normalizeLiveSequence(sequence);
-    const snapshot = coordinator.getSnapshot();
-    if (snapshot.attachGeneration !== observedLiveAttachGeneration) {
-      observedLiveAttachGeneration = snapshot.attachGeneration;
-      maxObservedLiveSequence = snapshot.coveredThroughSequence;
-    } else {
-      maxObservedLiveSequence = Math.max(maxObservedLiveSequence, snapshot.coveredThroughSequence);
-    }
+  const applyTypography = (fontSize: number, fontFamily: string): boolean => {
+    if (!renderer) return false;
     if (
-      normalizedSequence
-      && normalizedSequence <= snapshot.coveredThroughSequence
+      appliedTypography?.fontSize === fontSize
+      && appliedTypography.fontFamily === fontFamily
     ) {
-      return;
-    }
-
-    const projectionFloor = maxObservedLiveSequence;
-    const trace = recoveryTrace;
-    if (trace && normalizedSequence !== undefined && normalizedSequence > projectionFloor + 1) {
-      publishTerminalRecoveryEvent(trace, 'live', {
-        coordinator_attach_generation: snapshot.attachGeneration,
-        catch_up_gap_sequences: normalizedSequence - projectionFloor - 1,
-        covered_through_sequence: snapshot.coveredThroughSequence,
-      });
-    }
-    if (normalizedSequence !== undefined) {
-      maxObservedLiveSequence = Math.max(maxObservedLiveSequence, normalizedSequence);
-    }
-    if (trace && !liveMilestoneMarked) {
-      liveMilestoneMarked = true;
-      markTerminalRecoveryMilestone(trace, 'live', {
-        coordinator_attach_generation: snapshot.attachGeneration,
-        covered_through_sequence: snapshot.coveredThroughSequence,
-      });
-      publishTerminalRecoveryEvent(trace, 'live', {
-        coordinator_attach_generation: snapshot.attachGeneration,
-        covered_through_sequence: snapshot.coveredThroughSequence,
-      });
-    }
-    if (data.byteLength > 0) {
-      const alreadySettledForActivity = normalizedSequence !== undefined
-        && activitySettledAttachGeneration === snapshot.attachGeneration
-        && normalizedSequence <= activitySettledThroughSequence;
-      if (!alreadySettledForActivity) {
-        props.onLiveOutputObserved?.(sessionId(), data.byteLength, normalizedSequence);
-      }
-    }
-    const liveChunk = tagTerminalOutputChunk({
-      sequence: normalizedSequence,
-      data,
-      ...(geometry?.geometryGeneration !== undefined
-        ? { geometryGeneration: geometry.geometryGeneration }
-        : {}),
-      ...(geometry?.cols !== undefined ? { cols: geometry.cols } : {}),
-      ...(geometry?.rows !== undefined ? { rows: geometry.rows } : {}),
-    }, 'live');
-    if (preAttachLiveChunks) {
-      preAttachLiveChunks.push(liveChunk);
-      return;
-    }
-    coordinator.pushLive(liveChunk);
-  };
-
-  let initSeq = 0;
-  let reloadSeq = 0;
-  const disposeCore = () => {
-    cancelPendingAppearanceApply();
-    cancelPendingActivationRefresh();
-    pendingBaselineRender = null;
-    setGeometryRendererReady(false);
-    geometryPresentation.endRenderer(activeGeometryRendererEpoch);
-    term?.dispose();
-    term = null;
-    props.registerCore(sessionId(), null);
-  };
-
-  const disposeTerminal = (opts?: { preservePendingUnread?: boolean }) => {
-    clearOutputSubscription();
-    if (inputProtectionTimer) {
-      clearTimeout(inputProtectionTimer);
-      inputProtectionTimer = null;
-    }
-    props.setWorkingSetInteraction(sessionId(), 'input', false);
-    props.setWorkingSetInteraction(sessionId(), 'composition', false);
-    outputCoordinator?.dispose();
-    outputCoordinator = null;
-    outputCoordinatorSnapshot = null;
-    checkpointCompactor.reset();
-    observedLiveAttachGeneration = 0;
-    maxObservedLiveSequence = 0;
-    activitySettledAttachGeneration = 0;
-    activitySettledThroughSequence = 0;
-    preAttachLiveChunks = null;
-    lastWrittenOutputSequence = 0;
-    lastAppliedGeometryGeneration = 0;
-    lastAppliedGeometryBoundary = -1;
-    pendingGeometryEvents = [];
-    geometryGridByGeneration.clear();
-    if (activeRuntimeAttachGeneration > 0) {
-      geometryPresentation.closeAttachment(activeRuntimeAttachGeneration);
-    }
-    activeRuntimeAttachGeneration = 0;
-    latestGeometryResizeContext = null;
-    liveAttachmentReady = false;
-    latestHostDimensions = null;
-    props.onPendingOutputReset?.(sessionId(), {
-      preserveUnread: opts?.preservePendingUnread !== false,
-    });
-    setBaselineReady(false);
-    setRecoveryFailureCode(null);
-    disposeCore();
-    outputProjection.reset();
-    setReadyOnce(false);
-    if (workingSetRegistered) {
-      workingSetRegistered = false;
-      props.registerWorkingSetRuntime(sessionId(), null);
-    }
-  };
-
-  const releaseInactiveViewAttachment = () => {
-    const id = sessionId();
-    if (!id) return;
-
-    // Inactive KeepAlive views must not remain in Floeterm's shared PTY
-    // geometry calculation. Invalidate every pending recovery before closing
-    // the live entry so an old attach cannot publish into a later activation.
-    initSeq += 1;
-    reloadSeq += 1;
-    disposeTerminal();
-    props.transport.forgetSession(id);
-    setLoading('idle');
-    setShowLoading(false);
-  };
-
-  let disposed = false;
-  let waitingForProtocolClient: unknown = null;
-  const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-  const reload = async (opts?: {
-    fadeOut?: boolean;
-    preservePendingUnread?: boolean;
-  }): Promise<boolean> => {
-    if (disposed) return false;
-    const id = sessionId();
-    if (!id) return false;
-    if (!props.connected()) return false;
-    if (!container) return false;
-
-    const seq = ++reloadSeq;
-    // Keep the surface hidden until the new terminal is attached and history is replayed (same as page open).
-    setBlockingFailureCode(null);
-    waitingForProtocolClient = null;
-    setLoading('initializing');
-
-    if (opts?.fadeOut) {
-      container.style.opacity = '0';
-      await sleep(150);
-      if (disposed || seq !== reloadSeq) return false;
-    }
-
-    // Invalidate the old init before waiting so a baseline waiter cannot publish stale state.
-    initSeq += 1;
-    const coordinator = outputCoordinator;
-    if (coordinator) await coordinator.pause();
-    if (disposed || seq !== reloadSeq) return false;
-    disposeTerminal({ preservePendingUnread: opts?.preservePendingUnread });
-
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    if (disposed || seq !== reloadSeq) return false;
-    if (!props.connected()) return false;
-    if (!container) return false;
-
-    try {
-      await initOnce();
-      return baselineReady() && !blockingFailureCode();
-    } catch {
-      setLoading('idle');
-      reportBlockingFailure('terminal_unavailable');
-      const el = container;
-      if (el) el.style.opacity = '1';
       return false;
     }
+    renderer.setTypography({ fontSizeCssPx: fontSize, fontFamily });
+    appliedTypography = { fontSize, fontFamily };
+    inputBridge?.syncGeometry();
+    return true;
   };
 
-  createEffect(() => {
-    const id = sessionId();
-    if (!id) return;
-    props.registerActions(id, {
-      reload: async () => {
-        await reload();
-      },
-      resetAfterClear: () => reload({ preservePendingUnread: false }),
-      retryOutputRecovery: async () => {
-        setRecoveryFailureCode(null);
-        if (blockingFailureCode() || !readyOnce()) {
-          await reload();
-          return;
-        }
-        outputCoordinator?.retry();
-      },
-      focusIfInteractive: focusTerminalIfInteractive,
-    });
-    onCleanup(() => {
-      props.registerActions(id, null);
-    });
+  const historyMaximum = createMemo(() => Math.max(0, historySummary().screenStartOffset));
+  const historyCurrent = createMemo(() => (
+    historyProjected()
+      ? Math.min(historyMaximum(), historyPage()?.offset ?? historyMaximum())
+      : historyMaximum()
+  ));
+  const historyThumbSize = createMemo(() => {
+    const totalRows = historyPage()?.totalRows ?? historySummary().totalRows;
+    const visibleRows = currentFrame()?.height ?? 0;
+    if (totalRows <= 0 || visibleRows <= 0) return 100;
+    return Math.max(8, Math.min(100, visibleRows / totalRows * 100));
+  });
+  const historyThumbStart = createMemo(() => {
+    const maximum = historyMaximum();
+    if (maximum <= 0) return 0;
+    return Math.min(
+      100 - historyThumbSize(),
+      historyCurrent() / maximum * (100 - historyThumbSize()),
+    );
   });
 
-  const protectTerminalInput = () => {
-    props.setWorkingSetInteraction(sessionId(), 'input', true);
-    if (inputProtectionTimer) clearTimeout(inputProtectionTimer);
-    inputProtectionTimer = setTimeout(() => {
-      inputProtectionTimer = null;
-      props.setWorkingSetInteraction(sessionId(), 'input', false);
-    }, 750);
+  const setStatus = (status: TerminalSessionRuntimeStatus) => {
+    props.onRuntimeStatus?.(sessionId, status);
   };
 
-  const requestTerminalResize = async (
-    id: string,
-    size: Readonly<{ cols: number; rows: number }>,
-  ): Promise<TerminalEffectiveGeometry | null> => {
-    const context = geometryPresentation.beginResize(size);
-    if (!context) return null;
-    latestGeometryResizeContext = context;
-    try {
-      const result = await props.transport.resizeWithEffectiveGeometry(id, size.cols, size.rows);
-      if (disposed) return null;
-      const effective = geometryPresentation.acknowledgeResize(context, result);
-      if (!effective) return null;
-      queueTerminalGeometry({ sessionId: id, ...effective });
-      return effective;
-    } catch (errorValue) {
-      geometryPresentation.failResize(context);
-      if (latestGeometryResizeContext?.callSequence !== context.callSequence
-        || !liveAttachmentReady
-        || disposed) return null;
-      const lifecycleExit = classifyTerminalAttachLifecycleExit(errorValue);
-      if (lifecycleExit === 'session_gone') {
-        if (props.onSessionGone) props.onSessionGone(id);
-        else props.transport.forgetSession(id);
-        return null;
-      }
-      if (lifecycleExit === 'disconnected') {
-        waitingForProtocolClient = props.protocolClient();
-        setLoading('reconnecting');
-        return null;
-      }
-      reportBlockingFailure('terminal_unavailable');
-      return null;
+  const failClosed = (error: unknown, code = 'semantic_terminal_unavailable') => {
+    const message = error instanceof Error ? error.message : String(error);
+    setRuntimeError(message || i18n.t('terminal.terminalUnavailable'));
+    setStatus({ state: 'blocking', failureCode: code, retryable: false });
+  };
+
+  const measure = (): GridSize => {
+    const bounds = host?.getBoundingClientRect();
+    if (!bounds || bounds.width <= 0 || bounds.height <= 0) {
+      return appliedSize ?? desiredSize ?? { cols: 80, rows: 24 };
     }
+    const metrics = cellMetrics();
+    return {
+      cols: Math.max(
+        MIN_TERMINAL_COLS,
+        Math.min(MAX_TERMINAL_COLS, Math.floor(bounds.width / metrics.cellWidthCssPx)),
+      ),
+      rows: Math.max(
+        MIN_TERMINAL_ROWS,
+        Math.min(MAX_TERMINAL_ROWS, Math.floor(bounds.height / metrics.cellHeightCssPx)),
+      ),
+    };
   };
 
-  const terminalPresentationIsCurrent = (
-    core: TerminalCore,
-    initSequence: number,
-    reloadSequence: number,
-    trace: TerminalRecoveryTrace,
-  ): boolean => !disposed
-    && initSequence === initSeq
-    && reloadSequence === reloadSeq
-    && recoveryTrace === trace
-    && term === core;
-
-  const waitForAppliedGeometry = async (
-    effective: TerminalEffectiveGeometry,
-    core: TerminalCore,
-    initSequence: number,
-    reloadSequence: number,
-    trace: TerminalRecoveryTrace,
-  ): Promise<void> => {
-    const deadline = Date.now() + 5000;
-    while (Date.now() < deadline) {
-      if (!terminalPresentationIsCurrent(core, initSequence, reloadSequence, trace)) {
-        throw new Error('Terminal geometry presentation was superseded');
-      }
-      applyPendingGeometry();
-      const applied = geometryPresentation.getState().appliedEffective;
-      if (applied
-        && applied.lifecycleEpoch === effective.lifecycleEpoch
-        && applied.rendererEpoch === activeGeometryRendererEpoch
-        && applied.generation === effective.generation
-        && applied.outputSequenceBoundary === effective.outputSequenceBoundary
-        && applied.cols === effective.cols
-        && applied.rows === effective.rows) {
-        return;
-      }
-      await new Promise<void>((resolve) => setTimeout(resolve, 16));
-    }
-    throw new Error('Terminal geometry presentation did not reach the acknowledged boundary');
+  const syncInputGeometry = () => {
+    if (!canvas || !inputElement) return;
+    const bounds = canvas.getBoundingClientRect();
+    const metrics = cellMetrics();
+    canvas.dataset.terminalCellWidth = String(metrics.cellWidthCssPx);
+    canvas.dataset.terminalCellHeight = String(metrics.cellHeightCssPx);
+    const rect = renderer?.getCursorClientRect() ?? {
+      left: bounds.left,
+      top: bounds.top,
+      width: Math.min(metrics.cellWidthCssPx, Math.max(1, bounds.width)),
+      height: Math.min(metrics.cellHeightCssPx, Math.max(1, bounds.height)),
+    };
+    inputElement.style.left = `${rect.left}px`;
+    inputElement.style.top = `${rect.top}px`;
+    inputElement.style.width = `${Math.max(1, rect.width)}px`;
+    inputElement.style.height = `${Math.max(1, rect.height)}px`;
+    inputElement.style.lineHeight = `${Math.max(1, rect.height)}px`;
+    inputElement.style.font = `${appliedTypography?.fontSize ?? 14}px ${appliedTypography?.fontFamily ?? SEMANTIC_TERMINAL_FONT_FAMILY}`;
   };
 
-  const settleTerminalPresentation = async (
-    id: string,
-    core: TerminalCore,
-    initSequence: number,
-    reloadSequence: number,
-    trace: TerminalRecoveryTrace,
-    pendingInitialResize: Promise<TerminalEffectiveGeometry | null> | null = null,
-  ): Promise<boolean> => {
-    terminalPresentationSettling = true;
-    try {
-      let geometryChanged = false;
-      await Promise.all([
-        core.forceResizeAndWaitForCommittedFrame(),
-        pendingInitialResize ?? Promise.resolve(null),
-      ]);
-      if (!terminalPresentationIsCurrent(core, initSequence, reloadSequence, trace)) return false;
-
-      if (props.viewActive() && props.active()) {
-        const hostDimensions = core.measureHostDimensions?.();
-        const acknowledgedLocal = geometryPresentation.getState().acknowledgedLocal;
-        if (hostDimensions && (!acknowledgedLocal
-          || hostDimensions.cols !== acknowledgedLocal.cols
-          || hostDimensions.rows !== acknowledgedLocal.rows)) {
-          const acknowledged = await requestTerminalResize(id, hostDimensions);
-          if (!acknowledged) {
-            if (!terminalPresentationIsCurrent(core, initSequence, reloadSequence, trace)
-              || loading() === 'reconnecting'
-              || !liveAttachmentReady) return false;
-            throw new Error('Terminal host capacity resize was not acknowledged');
-          }
-          await waitForAppliedGeometry(acknowledged, core, initSequence, reloadSequence, trace);
-          geometryChanged = true;
-        }
-      }
-
-      if (geometryChanged) await core.forceResizeAndWaitForCommittedFrame();
-      return terminalPresentationIsCurrent(core, initSequence, reloadSequence, trace);
-    } finally {
-      terminalPresentationSettling = false;
-    }
-  };
-
-  const createCore = (
-    id: string,
-    target: HTMLDivElement,
-    options?: Readonly<{ preserveGeometryQueue?: boolean }>,
-  ): TerminalCore => {
-    activeGeometryRendererEpoch = geometryPresentation.beginRenderer();
-    lastWrittenOutputSequence = 0;
-    lastAppliedGeometryGeneration = 0;
-    lastAppliedGeometryBoundary = -1;
-    if (!options?.preserveGeometryQueue) pendingGeometryEvents = [];
-    let core: TerminalCore | null = null;
-    core = new TerminalCore(
-      target,
-      getDefaultTerminalConfig('dark', {
-        cursorBlink: false,
-        rendererType: 'webgl',
-        fontSize: fontSize(),
-        // Workbench zoom is an outer visual transform; terminal geometry stays stable.
-        presentationScale: 1,
-        fit: { scrollbarReservePx: 15 },
-        scrollbar: {
-          visibility: 'persistent',
-          ariaLabel: i18n.t('terminal.historyScrollbar'),
-        },
-        allowTransparency: false,
-        theme: colors(),
-        fontFamily: fontFamily(),
-        clipboard: {
-          copyOnSelect: false,
-        },
-        responsive: {
-          fitOnFocus: true,
-          emitResizeOnFocus: true,
-          notifyResizeOnlyWhenFocused: true,
-          reportHostDimensionsWithFixedGrid: true,
-        } satisfies TerminalResponsiveConfig,
-      }),
-      {
-        onData: (data: string) => {
-          if (!props.viewActive() || !props.active()) return;
-          if (terminalInputBlocked()) return;
-          protectTerminalInput();
-          void props.transport.sendInput(id, data, props.connId);
-        },
-        onResize: (size: { cols: number; rows: number }) => {
-          if (!props.viewActive() || !props.active()) return;
-          latestHostDimensions = { cols: size.cols, rows: size.rows };
-          geometryPresentation.observeLocal(size);
-          if (!liveAttachmentReady || terminalPresentationSettling) return;
-          void requestTerminalResize(id, size);
-        },
-        onError: () => {
-          console.error('[TerminalPanel] Terminal core failed', { event: 'terminal_core_failed' });
-          reportBlockingFailure('terminal_unavailable');
-        },
-        onBell: () => {
-          props.onBell?.(id);
-        },
-        onRender: () => {
-          const pending = pendingBaselineRender;
-          if (
-            !pending
-            || !pending.armed
-            || !core
-            || pending.core !== core
-            || term !== core
-            || pending.initSequence !== initSeq
-            || recoveryTrace !== pending.trace
-          ) {
-            return;
-          }
-          pendingBaselineRender = null;
-          markTerminalRecoveryMilestone(pending.trace, 'baseline-rendered', pending.detail);
-        },
-      },
-      buildLogger(),
-    );
-
-    core.registerLinkProvider?.(createTerminalFileLinkProvider({
-      core,
-      isEnabled: () => props.canOpenFilePreview(),
-      getContext: () => ({
-        workingDirAbs: normalizeAskFlowerAbsolutePath(props.session.workingDir ?? '')
-          || normalizeAskFlowerAbsolutePath(props.agentHomePathAbs())
-          || '/',
-        agentHomePathAbs: normalizeAskFlowerAbsolutePath(props.agentHomePathAbs()) || undefined,
-      }),
-      onActivate: (targetLink) => props.onTerminalFileLinkOpen?.(targetLink),
-    }));
-
-    term = core;
-    props.registerCore(id, core);
-    return core;
-  };
-
-  const ensureOutputCoordinator = (id: string) => {
-    if (outputCoordinator) return outputCoordinator;
-    const coordinatorEpoch = ++outputCoordinatorEpoch;
-    replayCoveredBytes = 0;
-    replayTotalBytes = 0;
-    outputCoordinator = createPagedTerminalOutputCoordinator({
-      isInteractive: liveRenderActive,
-      policy: {
-        maxRetainedLiveChunks: 2048,
-        maxRetainedLiveBytes: 8 * 1024 * 1024,
-        retryDelaysMs: [250, 1000, 4000],
-      },
-      fetchPage: async ({ startSequence, endSequence, historyGeneration, cursor, signal }) => {
-        const requestInitSequence = initSeq;
-        const requestTrace = recoveryTrace;
-        const pageCursor = typeof cursor === 'number' ? cursor : startSequence;
-        const pageOptions = endSequence === undefined && historyGeneration === undefined
-          ? undefined
-          : { snapshotEndSequence: endSequence, historyGeneration };
-        const page = pageOptions === undefined
-          ? await props.transport.historyPage(id, pageCursor, -1)
-          : await props.transport.historyPage(id, pageCursor, -1, pageOptions);
-        const requestStillCurrent = !signal.aborted
-          && requestInitSequence === initSeq
-          && requestTrace === recoveryTrace
-          && coordinatorEpoch === outputCoordinatorEpoch;
-        if (requestStillCurrent && page.checkpoint?.parserEpoch !== undefined
-          && page.checkpoint.parserEpoch !== page.historyGeneration) {
-          throw new Error('Terminal history checkpoint parser epoch does not match its history generation');
-        }
-        if (requestStillCurrent && page.checkpoint) {
-          checkpointCompactor.configure({
-            sessionId: id,
-            historyGeneration: page.historyGeneration,
-            cols: page.checkpoint.cols,
-            rows: page.checkpoint.rows,
-            checkpoint: page.checkpoint,
-          });
-        }
-        if (requestStillCurrent) {
-          historyPageCount += 1;
-          historyChunkCount += page.chunks.length;
-          historyBytes += Math.max(0, page.coveredBytes);
-          lastHistoryGeneration = page.historyGeneration;
-          lastSnapshotEndSequence = page.snapshotEndSequence;
-          lastFirstRetainedSequence = page.firstRetainedSequence;
-          historyReset ||= page.historyReset;
-          historyTruncated ||= page.historyTruncated;
-          if (requestTrace) {
-            publishTerminalRecoveryEvent(requestTrace, 'history_page', {
-              history_page_count: historyPageCount,
-              history_chunk_count: historyChunkCount,
-              history_bytes: historyBytes,
-              covered_through_sequence: page.coveredThroughSequence,
-              snapshot_end_sequence: page.snapshotEndSequence,
-              first_retained_sequence: page.firstRetainedSequence,
-              history_generation: page.historyGeneration,
-              history_reset: page.historyReset,
-              history_truncated: page.historyTruncated,
-            });
-          }
-          replayCoveredBytes += Math.max(0, page.coveredBytes);
-          replayTotalBytes = page.totalBytes > 0 ? page.totalBytes : replayTotalBytes;
-          if (replayTotalBytes > 0) {
-            setHistoryReplayProgress({
-              loadedBytes: Math.min(replayCoveredBytes, replayTotalBytes),
-              totalBytes: replayTotalBytes,
-            });
-          }
-        }
-        return {
-          chunks: page.chunks.map((chunk) => tagTerminalOutputChunk(chunk, 'history')),
-          ...(page.checkpoint ? { checkpoint: page.checkpoint } : {}),
-          ...(page.deltaStartSequence !== undefined
-            ? { deltaStartSequence: page.deltaStartSequence }
-            : {}),
-          hasMore: page.hasMore,
-          nextCursor: page.hasMore
-            && Number.isSafeInteger(page.nextStartSeq)
-            && page.nextStartSeq > pageCursor
-            ? page.nextStartSeq
-            : undefined,
-          firstAvailableSequence: page.firstSequence > 0 ? page.firstSequence : undefined,
-          ...(Object.prototype.hasOwnProperty.call(page, 'firstRetainedSequence')
-            ? { firstRetainedSequence: page.firstRetainedSequence }
-            : {}),
-          ...(Object.prototype.hasOwnProperty.call(page, 'coveredThroughSequence')
-            ? { coveredThroughSequence: page.coveredThroughSequence as number }
-            : {}),
-          ...(Object.prototype.hasOwnProperty.call(page, 'snapshotEndSequence')
-            ? { snapshotEndSequence: page.snapshotEndSequence }
-            : {}),
-          ...(Object.prototype.hasOwnProperty.call(page, 'historyGeneration')
-            ? { historyGeneration: page.historyGeneration }
-            : {}),
-          historyReset: page.historyReset,
-          historyTruncated: page.historyTruncated,
-          coveredBytes: page.coveredBytes,
-          totalBytes: page.totalBytes,
-        } as PagedTerminalHistoryPage;
-      },
-      transformChunk: outputProjection.transformChunk,
-      applyHistoryGeometry: ({ cols, rows }) => {
-        const core = term;
-        if (!core) throw new Error('Terminal history geometry has no active core');
-        applyTransientFixedDimensions(core, { cols, rows });
-      },
-      restoreCheckpoint: async (checkpoint) => {
-        const core = term;
-        if (!core) throw new Error('Terminal checkpoint restore has no active core');
-        applyTransientFixedDimensions(core, { cols: checkpoint.cols, rows: checkpoint.rows });
-        await core.restoreAuthoritativeCheckpoint(checkpoint);
-      },
-      write: (_payload, chunks) => writeTerminalChunks(chunks, false),
-      writeHistory: (_payload, chunks) => writeTerminalChunks(chunks, true),
-      clear: () => {
-        term?.clear();
-        outputProjection.reset();
-      },
-      onHistoryTruncated: (reason) => {
-        console.debug('[TerminalPanel] Rebased truncated terminal history', {
-          event: 'terminal_history_rebased',
-          reason,
-        });
-        setOutputRecoveryState('catching-up');
-        const snapshot = outputCoordinator?.getSnapshot();
-        if (snapshot) {
-          activitySettledAttachGeneration = snapshot.attachGeneration;
-          activitySettledThroughSequence = snapshot.coveredThroughSequence;
-          props.onOutputCoverage?.(id, {
-            attachGeneration: snapshot.attachGeneration,
-            coveredThroughSequence: snapshot.coveredThroughSequence,
-            rebased: true,
-          });
-        }
-      },
-      onStateChange: (snapshot) => {
-        const baselineBecameReady = snapshot.baselineReady
-          && outputCoordinatorSnapshot?.baselineReady !== true;
-        outputCoordinatorSnapshot = snapshot;
-        if (baselineBecameReady) {
-          lastWrittenOutputSequence = Math.max(
-            lastWrittenOutputSequence,
-            snapshot.coveredThroughSequence,
-          );
-          applyPendingGeometry();
-        }
-        if (snapshot.attachGeneration !== observedLiveAttachGeneration) {
-          observedLiveAttachGeneration = snapshot.attachGeneration;
-          maxObservedLiveSequence = snapshot.coveredThroughSequence;
-        } else {
-          maxObservedLiveSequence = Math.max(maxObservedLiveSequence, snapshot.coveredThroughSequence);
-        }
-        const activityCoverageChanged = shouldPublishTerminalOutputCoverage(
-          activitySettledAttachGeneration,
-          activitySettledThroughSequence,
-          snapshot.attachGeneration,
-          snapshot.coveredThroughSequence,
-        );
-        if (activitySettledAttachGeneration !== snapshot.attachGeneration) {
-          activitySettledAttachGeneration = snapshot.attachGeneration;
-          activitySettledThroughSequence = snapshot.coveredThroughSequence;
-        } else {
-          activitySettledThroughSequence = Math.max(
-            activitySettledThroughSequence,
-            snapshot.coveredThroughSequence,
-          );
-        }
-        if (activityCoverageChanged) {
-          props.onOutputCoverage?.(id, {
-            attachGeneration: snapshot.attachGeneration,
-            coveredThroughSequence: snapshot.coveredThroughSequence,
-          });
-        }
-        setOutputRecoveryState(snapshot.state);
-        setBaselineReady(snapshot.baselineReady);
-        setRecoveryFailureCode(snapshot.failure?.code ?? null);
-        setRecoveryRetryable(snapshot.failure?.retryable ?? null);
-        const trace = recoveryTrace;
-        if (trace && snapshot.state === 'retry-wait') {
-          const retryKey = `${snapshot.attachGeneration}:${snapshot.retryAttempt}`;
-          if (lastRetryEventKey !== retryKey) {
-            lastRetryEventKey = retryKey;
-            publishTerminalRecoveryEvent(trace, 'retry_scheduled', {
-              coordinator_attach_generation: snapshot.attachGeneration,
-              retry_attempt: snapshot.retryAttempt,
-              retry_delay_ms: [250, 1000, 4000][Math.max(0, snapshot.retryAttempt - 1)],
-              error_code: snapshot.failure?.code,
-              covered_through_sequence: snapshot.coveredThroughSequence,
-              recovery_action: 'retry',
-            });
-          }
-        }
-        if (trace && snapshot.state === 'failed') {
-          const degradedKey = `${snapshot.attachGeneration}:${snapshot.failure?.code ?? 'unknown'}`;
-          if (lastDegradedEventKey !== degradedKey) {
-            lastDegradedEventKey = degradedKey;
-            publishTerminalRecoveryEvent(trace, 'degraded', {
-              coordinator_attach_generation: snapshot.attachGeneration,
-              retry_attempt: snapshot.retryAttempt,
-              error_code: snapshot.failure?.code,
-              covered_through_sequence: snapshot.coveredThroughSequence,
-              recovery_action: snapshot.failure?.retryable === false ? 'update_runtime' : 'retry',
-            });
-          }
-        }
-        if (snapshot.state === 'live') {
-          setHistoryReplayProgress(null);
-        }
+  const publishGeometryPresentation = (local: GridSize, effective: EffectiveGeometry) => {
+    props.onGeometryPresentation?.(sessionId, {
+      lifecycleEpoch: geometryLifecycleEpoch,
+      rendererEpoch: geometryRendererEpoch,
+      requestEpoch: geometryRequestEpoch,
+      local: { ...local },
+      effective: {
+        lifecycleEpoch: geometryLifecycleEpoch,
+        rendererEpoch: geometryRendererEpoch,
+        generation: effective.generation,
+        presentationSequence: effective.presentationSequence,
+        cols: effective.cols,
+        rows: effective.rows,
       },
     });
-    return outputCoordinator;
   };
 
-  const initOnce = async () => {
-    const id = sessionId();
-    const target = container;
-    if (!target) throw new Error('Terminal not mounted');
+  const acceptEffectiveGeometry = (geometry: EffectiveGeometry, local: GridSize) => {
+    if (
+      latestEffectiveGeometry
+      && (
+        geometry.generation < latestEffectiveGeometry.generation
+        || geometry.presentationSequence < latestEffectiveGeometry.presentationSequence
+      )
+    ) {
+      throw new Error('terminal geometry settlement regressed');
+    }
+    if (
+      latestEffectiveGeometry
+      && geometry.generation === latestEffectiveGeometry.generation
+      && !sameGrid(latestEffectiveGeometry, geometry)
+    ) {
+      throw new Error('terminal geometry changed without advancing its generation');
+    }
+    latestEffectiveGeometry = { ...geometry };
+    appliedSize = { cols: geometry.cols, rows: geometry.rows };
+    setGeometryRevision((value) => value + 1);
+    publishGeometryPresentation(local, geometry);
+  };
 
-    const seq = ++initSeq;
-    const reloadSequence = reloadSeq;
-    const trace = startRecoveryTrace();
-    const focusOwnerAtStart = typeof document === 'undefined' ? null : document.activeElement;
-    const focusWasAvailableAtStart = focusOwnerAtStart == null
-      || focusOwnerAtStart === document.body
-      || target.contains(focusOwnerAtStart);
-    setBlockingFailureCode(null);
-    setLoading('initializing');
-    liveAttachmentReady = false;
-    latestHostDimensions = null;
-    activeGeometryLifecycleEpoch = geometryPresentation.beginLifecycle();
-    geometryGridByGeneration.clear();
-    activeRuntimeAttachGeneration = 0;
-    latestGeometryResizeContext = null;
-
-    const core = createCore(id, target);
-    const coordinator = ensureOutputCoordinator(id);
-    const preparedHistoryPromise = props.requestPreparedHistory?.(id) ?? null;
-
+  const attach = async (): Promise<void> => {
+    if (disposed || !props.connected()) return;
+    const operation = ++attachmentOperation;
+    const requested = desiredSize ?? measure();
+    desiredSize = requested;
+    geometryLifecycleEpoch += 1;
+    geometryRequestEpoch += 1;
+    setLoading(ready() ? 'reconnecting' : 'attaching');
+    setStatus({ state: ready() ? 'reconnecting' : 'idle' });
     try {
-      await core.initialize({ priority: 'interactive' });
-      if (seq !== initSeq) return;
+      const result = await props.transport.attachWithPresentation(
+        sessionId,
+        requested.cols,
+        requested.rows,
+      );
+      if (disposed || operation !== attachmentOperation) return;
+      attached = true;
+      runtimeAttachGeneration = result.runtimeAttachGeneration;
+      reconnectAttempt = 0;
+      lastReconnectError = null;
+      acceptEffectiveGeometry({
+        generation: result.geometryGeneration,
+        presentationSequence: result.presentationSequence,
+        cols: result.cols,
+        rows: result.rows,
+      }, requested);
+      if (appliedSize && sameGrid(desiredSize, appliedSize)) desiredSize = null;
+      setRuntimeError('');
+      setStatus({ state: 'idle' });
+      if (desiredSize) void startResizeWork();
+    } catch (error) {
+      if (disposed || operation !== attachmentOperation) return;
+      attached = false;
+      runtimeAttachGeneration = 0;
+      lastReconnectError = error instanceof Error ? error : new Error(String(error));
+      failClosed(error, 'terminal_attach_failed');
+      throw error;
+    }
+  };
 
-      // After core.initialize(), the underlying terminal instance is ready: re-register to keep the outer registry consistent.
-      props.registerCore(id, core);
-
-      applyTerminalAppearance(core, buildTerminalAppearance(), { forceResize: true });
-
-      // Begin retaining live output before subscription and before the server
-      // captures the atomic history boundary for this attachment.
-      activitySettledAttachGeneration = 0;
-      activitySettledThroughSequence = 0;
-      let coordinatorAttachGeneration = coordinator.beginAttach(0);
-      activitySettledAttachGeneration = coordinatorAttachGeneration;
-      preAttachLiveChunks = [];
-
-      clearOutputSubscription();
-      unsubData = props.eventSource.onTerminalData(id, (ev) => {
-        handleLiveTerminalData(ev.data, ev.sequence, {
-          geometryGeneration: ev.geometryGeneration,
-          cols: ev.cols,
-          rows: ev.rows,
-        });
-      });
-
-      if (props.eventSource.onTerminalGeometry) {
-        const lifecycleEpoch = activeGeometryLifecycleEpoch;
-        unsubGeometry = props.eventSource.onTerminalGeometry(id, event => {
-          queueTerminalGeometry({ ...event, lifecycleEpoch });
-        });
-      }
-
-      const lifecycleEpoch = activeGeometryLifecycleEpoch;
-      unsubAttachmentLifecycle = props.eventSource.onTerminalLiveAttachmentLifecycle(id, event => {
-        if (lifecycleEpoch !== activeGeometryLifecycleEpoch) return;
-        if (event.state === 'attached') {
-          if (!geometryPresentation.bindAttachment(lifecycleEpoch, event.runtimeAttachGeneration)) {
-            reportBlockingFailure('terminal_unavailable');
-            return;
-          }
-          activeRuntimeAttachGeneration = event.runtimeAttachGeneration;
-          liveAttachmentReady = true;
-          return;
-        }
-        geometryPresentation.closeAttachment(event.runtimeAttachGeneration);
-        if (event.runtimeAttachGeneration !== activeRuntimeAttachGeneration) return;
-        activeRuntimeAttachGeneration = 0;
-        liveAttachmentReady = false;
-        term?.setConnected(false);
-        if (event.reason === 'session_closed' || event.reason === 'session_deleted') {
-          setLoading('idle');
-          if (props.onSessionGone) props.onSessionGone(id);
-          else props.transport.forgetSession(id);
-          return;
-        }
-        if (event.reason === 'stream_ended'
-          || event.reason === 'error'
-          || event.reason === 'connection_epoch_changed') {
-          waitingForProtocolClient = null;
-          setLoading('reconnecting');
-          queueMicrotask(() => {
-            if (!disposed && loading() === 'reconnecting') void reload();
-          });
-        }
-      });
-
-      if (props.eventSource.onTerminalNameUpdate) {
-        unsubNameUpdate = props.eventSource.onTerminalNameUpdate(id, (ev) => {
-          props.onNameUpdate?.(ev.sessionId, ev.newName, ev.workingDir, ev.localPathCapability);
-        });
-      }
-
-      setLoading('attaching');
-      transitionRecoveryPhase('attaching');
-      const dims = core.getDimensions();
-      geometryPresentation.observeLocal(dims);
-      const attachRequestEpoch = geometryPresentation.getState().requestEpoch;
-      markTerminalRecoveryMilestone(trace, 'attach-start', { cols: dims.cols, rows: dims.rows });
-      const attachResult = await props.transport.attachWithHistoryBoundary(id, dims.cols, dims.rows);
-      if (seq !== initSeq) return;
-      if (!Object.prototype.hasOwnProperty.call(attachResult, 'historyBoundarySequence')) {
-        reportBlockingFailure('history_contract_missing');
-        throw new Error('Terminal attach response omitted the history boundary');
-      }
-      const historyBoundarySequence = attachResult.historyBoundarySequence;
-      if (!Number.isSafeInteger(historyBoundarySequence) || (historyBoundarySequence as number) < 0) {
-        reportBlockingFailure('history_contract_invalid');
-        throw new Error('Terminal attach response returned an invalid history boundary');
-      }
-      const historyStartSequence = attachResult.historyStartSequence;
-      if (!Number.isSafeInteger(historyStartSequence) || (historyStartSequence as number) < 0) {
-        reportBlockingFailure('history_contract_invalid');
-        throw new Error('Terminal attach response returned an invalid history start sequence');
-      }
-      const bufferedLiveChunks = preAttachLiveChunks;
-      coordinatorAttachGeneration = coordinator.beginAttach(historyStartSequence);
-      activitySettledAttachGeneration = coordinatorAttachGeneration;
-      preAttachLiveChunks = null;
-      for (const chunk of bufferedLiveChunks ?? []) coordinator.pushLive(chunk);
-      const initialEffective = geometryPresentation.acknowledgeAttach({
-        lifecycleEpoch,
-        rendererEpoch: activeGeometryRendererEpoch,
-        requestEpoch: attachRequestEpoch,
-        requested: dims,
-        runtimeAttachGeneration: attachResult.runtimeAttachGeneration,
-        effective: {
-          generation: attachResult.geometryGeneration,
-          outputSequenceBoundary: historyBoundarySequence,
-          cols: attachResult.cols,
-          rows: attachResult.rows,
-        },
-      });
-      if (!initialEffective) {
-        reportBlockingFailure('terminal_unavailable');
-        throw new Error('Terminal attach geometry acknowledgement was inconsistent');
-      }
-      activeRuntimeAttachGeneration = attachResult.runtimeAttachGeneration;
-      queueTerminalGeometry({ sessionId: id, ...initialEffective });
-      checkpointCompactor.configure({
-        sessionId: id,
-        historyGeneration: attachResult.historyGeneration,
-        cols: attachResult.cols,
-        rows: attachResult.rows,
-        initialSequence: Math.max(0, attachResult.historyStartSequence - 1),
-      });
-      markTerminalRecoveryMilestone(trace, 'attach-ack', {
-        runtime_attach_generation: attachResult.runtimeAttachGeneration,
-        cols: dims.cols,
-        rows: dims.rows,
-        snapshot_end_sequence: historyBoundarySequence,
-      });
-      publishTerminalRecoveryEvent(trace, 'attach_ack', {
-        runtime_attach_generation: attachResult.runtimeAttachGeneration,
-        cols: dims.cols,
-        rows: dims.rows,
-        snapshot_end_sequence: historyBoundarySequence,
-      });
-      core.setConnected(true);
-      liveAttachmentReady = true;
-      const latestDimensions = currentHostDimensions();
-      let initialHostResize: Promise<TerminalEffectiveGeometry | null> | null = null;
-      if (latestDimensions && (latestDimensions.cols !== dims.cols || latestDimensions.rows !== dims.rows)) {
-        // The host-capacity acknowledgement is independent of history replay. Start
-        // it before fetching the baseline so the transport round trip overlaps the
-        // parser work; the queued effective geometry is applied only at its output
-        // sequence boundary and the final committed-frame fence still presents it.
-        initialHostResize = requestTerminalResize(id, latestDimensions);
-      }
-
-      setLoading('loading_history');
-      transitionRecoveryPhase('replaying');
-      core.clear();
-      outputProjection.reset();
+  const runResizeWork = async () => {
+    while (!disposed && attached && desiredSize) {
+      const requested = desiredSize;
+      desiredSize = null;
+      if (sameGrid(appliedSize, requested)) continue;
+      inFlightSize = requested;
+      geometryRequestEpoch += 1;
       try {
-        markTerminalRecoveryMilestone(trace, 'baseline-queued');
-        const preparedHistory = preparedHistoryPromise
-          ? await preparedHistoryPromise.catch(() => null)
-          : null;
-        if (seq !== initSeq) return;
-        void coordinator.completeAttach(
-          coordinatorAttachGeneration,
-          historyBoundarySequence,
-          preparedHistory ? { preparedHistory } : undefined,
+        const result = await props.transport.resizeWithEffectiveGeometry(
+          sessionId,
+          requested.cols,
+          requested.rows,
         );
-        const baseline = await coordinator.waitForBaseline();
-        if (!baseline.baselineReady) {
-          reportBlockingFailure(baseline.failure?.code ?? 'terminal_unavailable');
-          throw new Error('Terminal history baseline unavailable');
+        if (disposed || !attached) return;
+        if (result.runtimeAttachGeneration !== runtimeAttachGeneration) {
+          throw new Error('terminal resize settled for a stale attachment generation');
         }
-        if (preparedHistoryPromise) {
-          const preparedHistoryOutcome = baseline.preparedHistoryOutcome;
-          const preparedHistoryHit = preparedHistory !== null
-            && preparedHistoryOutcome?.status === 'accepted';
-          const preparedHistoryRebased = preparedHistory !== null
-            && preparedHistoryOutcome?.rebased === true;
-          if (preparedHistoryRebased) {
-            markTerminalPerformance('prepared-history-rebased', {
-              session_ref: pseudonymousTerminalSessionRef(id),
-              variant: props.variant,
-              history_generation: preparedHistory.historyGeneration,
-              byte_length: preparedHistory.byteLength,
-              page_count: preparedHistory.pageCount,
-            });
-            publishTerminalRecoveryEvent(trace, 'prepared_history_rebased', {
-              history_generation: preparedHistory.historyGeneration,
-              prepared_history_bytes: preparedHistory.byteLength,
-              prepared_history_page_count: preparedHistory.pageCount,
-            });
-          }
-          markTerminalPerformance(
-            preparedHistoryHit ? 'prepared-history-hit' : 'prepared-history-miss',
-            {
-              session_ref: pseudonymousTerminalSessionRef(id),
-              variant: props.variant,
-              byte_length: preparedHistory?.byteLength,
-              page_count: preparedHistory?.pageCount,
-              delta_byte_length: historyBytes,
-              delta_page_count: historyPageCount,
-            },
-          );
-          publishTerminalRecoveryEvent(
-            trace,
-            preparedHistoryHit ? 'prepared_history_hit' : 'prepared_history_miss',
-            preparedHistory
-              ? {
-                prepared_history_bytes: preparedHistory.byteLength,
-                prepared_history_page_count: preparedHistory.pageCount,
-                history_bytes: historyBytes,
-                history_page_count: historyPageCount,
-              }
-              : {},
-          );
+        if (!sameGrid(result.requested, requested)) {
+          throw new Error('terminal resize settlement changed the requested geometry');
         }
-        const baselineDetail: TerminalRecoveryEventDetail = {
-          coordinator_attach_generation: baseline.attachGeneration,
-          history_generation: lastHistoryGeneration,
-          history_page_count: historyPageCount,
-          history_chunk_count: historyChunkCount,
-          history_bytes: historyBytes,
-          covered_through_sequence: baseline.coveredThroughSequence,
-          snapshot_end_sequence: lastSnapshotEndSequence,
-          first_retained_sequence: lastFirstRetainedSequence,
-          history_reset: historyReset,
-          history_truncated: historyTruncated,
-        };
-        markTerminalRecoveryMilestone(trace, 'baseline-parser-committed', baselineDetail);
-        pendingBaselineRender = {
-          core,
-          initSequence: seq,
-          trace,
-          detail: baselineDetail,
-          armed: false,
-        };
-        publishTerminalRecoveryEvent(trace, 'baseline_ready', baselineDetail);
-      } finally {
-        setHistoryReplayProgress(null);
-      }
-      if (seq !== initSeq) return;
-
-      armBaselineRender(core, trace, seq);
-      if (!await settleTerminalPresentation(
-        id,
-        core,
-        seq,
-        reloadSequence,
-        trace,
-        initialHostResize,
-      )) return;
-      if (seq !== initSeq || recoveryTrace !== trace || term !== core) return;
-      setLoading('idle');
-      setReadyOnce(true);
-      setGeometryRendererReady(true);
-      transitionRecoveryPhase('interactive');
-      markTerminalRecoveryMilestone(trace, 'interactive', {
-        coordinator_attach_generation: outputCoordinatorSnapshot?.attachGeneration,
-        history_generation: lastHistoryGeneration,
-        covered_through_sequence: outputCoordinatorSnapshot?.coveredThroughSequence,
-      });
-      const activeElement = typeof document === 'undefined' ? null : document.activeElement;
-      const focusStillOwned = focusWasAvailableAtStart && (activeElement == null
-        || activeElement === document.body
-        || target.contains(activeElement));
-      if (focusStillOwned && props.viewActive() && props.active() && props.autoFocus() && !core.hasSelection()) core.focus();
-      const el = container;
-      if (el && el.style.opacity !== '1') {
-        el.style.opacity = '1';
-      }
-      props.onInteractive?.(id);
-    } catch (errorValue) {
-      if (seq !== initSeq) return;
-      if (pendingBaselineRender?.trace === trace) pendingBaselineRender = null;
-      const lifecycleExit = classifyTerminalAttachLifecycleExit(errorValue);
-      if (lifecycleExit) {
-        if (lifecycleExit === 'session_gone') {
-          setLoading('idle');
-          if (props.onSessionGone) props.onSessionGone(id);
-          else props.transport.forgetSession(id);
-        } else {
-          waitingForProtocolClient = props.protocolClient();
-          setLoading('reconnecting');
-        }
-        const el = container;
-        if (el) el.style.opacity = '1';
+        acceptEffectiveGeometry(result.effective, requested);
+        setRuntimeError('');
+        setStatus({ state: 'idle' });
+      } catch (error) {
+        if (!disposed && attached) failClosed(error, 'terminal_resize_failed');
         return;
+      } finally {
+        inFlightSize = null;
       }
-      transitionRecoveryPhase('failed');
-      setLoading('idle');
-      if (!blockingFailureCode()) reportBlockingFailure('terminal_unavailable');
-      const el = container;
-      if (el) el.style.opacity = '1';
     }
   };
 
-  const hibernateForWorkingSet = async (): Promise<TerminalRestorableSnapshot | null> => {
-    const core = term;
-    if (!core) return null;
-
-    const coordinator = outputCoordinator;
-    if (!coordinator) return null;
-    const restoreCoordinatorActivity = () => {
-      if (outputCoordinator === coordinator) coordinator.setActive(liveRenderActive());
-    };
-    try {
-      const coordinatorSnapshot = await coordinator.pause();
-      if (term !== core) {
-        restoreCoordinatorActivity();
-        return null;
-      }
-
-      const snapshot = core.captureRestorableSnapshot({
-        coveredThroughSequence: coordinatorSnapshot.coveredThroughSequence,
+  const startResizeWork = (): Promise<void> => {
+    if (!resizeWork) {
+      resizeWork = runResizeWork().finally(() => {
+        resizeWork = null;
+        if (!disposed && attached && desiredSize) void startResizeWork();
       });
-      const knownEffective = geometryPresentation.getState().knownEffective;
-      if (snapshot
-        && knownEffective
-        && snapshot.cols === knownEffective.cols
-        && snapshot.rows === knownEffective.rows
-        && snapshot.coveredThroughSequence >= knownEffective.outputSequenceBoundary) {
-        snapshotGeometryFacts.set(snapshot, {
-          effective: knownEffective,
-          coveredThroughSequence: snapshot.coveredThroughSequence,
-        });
-      }
-      disposeCore();
-      return snapshot;
-    } catch (errorValue) {
-      restoreCoordinatorActivity();
-      throw errorValue;
     }
+    return resizeWork;
   };
 
-  const resumeFromWorkingSet = async (snapshot: TerminalRestorableSnapshot | null): Promise<void> => {
-    if (term) {
-      outputCoordinator?.setActive(liveRenderActive());
+  const requestResize = async (): Promise<void> => {
+    if (disposed) return;
+    renderer?.resize();
+    inputBridge?.syncGeometry();
+    const next = measure();
+    if (!attached) {
+      desiredSize = next;
+      if (props.connected()) await attach();
       return;
     }
-    const id = sessionId();
-    const target = container;
-    if (!target || !props.connected()) {
-      throw new Error('Terminal cannot resume while disconnected');
+    desiredSize = inFlightSize && sameGrid(inFlightSize, next)
+      ? null
+      : sameGrid(appliedSize, next) ? null : next;
+    await startResizeWork();
+  };
+
+  const clearReconnectTimer = () => {
+    if (reconnectTimer !== null) clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  };
+
+  const scheduleReconnect = () => {
+    if (disposed || !props.connected() || reconnectTimer !== null) return;
+    if (reconnectAttempt >= RECONNECT_DELAYS_MS.length) {
+      failClosed(
+        lastReconnectError ?? new Error('terminal live attachment could not be restored'),
+        'terminal_reconnect_exhausted',
+      );
+      return;
     }
+    const delay = RECONNECT_DELAYS_MS[reconnectAttempt] ?? RECONNECT_DELAYS_MS.at(-1)!;
+    reconnectAttempt += 1;
+    setLoading('reconnecting');
+    setStatus({ state: 'reconnecting', retryable: true });
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      void attach().catch(() => {
+        if (!disposed) scheduleReconnect();
+      });
+    }, delay);
+  };
 
-    const seq = ++initSeq;
-    const reloadSequence = reloadSeq;
-    const trace = startRecoveryTrace();
-    const focusOwnerAtStart = typeof document === 'undefined' ? null : document.activeElement;
-    const focusWasAvailableAtStart = focusOwnerAtStart == null
-      || focusOwnerAtStart === document.body
-      || target.contains(focusOwnerAtStart);
-    setBlockingFailureCode(null);
-    setLoading('initializing');
-    setShowLoading(true);
-    const core = createCore(id, target, { preserveGeometryQueue: true });
-    const coordinator = ensureOutputCoordinator(id);
+  const sendInput = (data: string) => {
+    if (!data || !props.connected() || !props.viewActive() || !props.active()) return;
+    void props.transport.sendInput(sessionId, data).catch((error) => {
+      failClosed(error, 'terminal_input_failed');
+    });
+  };
 
+  const sendInputIntent = (intent: TerminalKeyInputIntent) => {
+    if (!props.connected() || !props.viewActive() || !props.active()) return;
+    void props.transport.sendInputIntent(sessionId, intent).catch((error) => {
+      failClosed(error, 'terminal_input_failed');
+    });
+  };
+
+  const showLatestPresentation = () => {
+    historyRequestEpoch += 1;
+    setHistoryProjected(false);
+    setHistoryPage(null);
+    renderer?.project(null);
+  };
+
+  const queryHistory = async (
+    direction: SemanticHistoryRequest['direction'],
+    project: boolean,
+  ): Promise<SemanticHistoryPage | null> => {
+    const presentation = latestPresentation;
+    if (!presentation || historyBusy()) return null;
+    const current = historyPage();
+    if ((direction === 'forward' || direction === 'backward') && !current) return null;
+    const requestEpoch = ++historyRequestEpoch;
+    setHistoryBusy(true);
     try {
-      await core.initialize({ priority: 'interactive' });
-      if (seq !== initSeq) return;
-      props.registerCore(id, core);
-      applyTerminalAppearance(core, buildTerminalAppearance(), { forceResize: true });
-      core.setConnected(true);
-
-      const snapshotCapture = snapshot ? snapshotGeometryFacts.get(snapshot) ?? null : null;
-      const snapshotFact = snapshotCapture?.effective ?? null;
-      const snapshotEffective = snapshot
-        && snapshotFact
-        && snapshotCapture
-        && snapshotFact.lifecycleEpoch === activeGeometryLifecycleEpoch
-        && snapshot.cols === snapshotFact.cols
-        && snapshot.rows === snapshotFact.rows
-        && snapshot.coveredThroughSequence === snapshotCapture.coveredThroughSequence
-        && snapshot.coveredThroughSequence >= snapshotFact.outputSequenceBoundary
-        ? snapshotFact
-        : null;
-      const validSnapshot = snapshotEffective ? snapshot : null;
-      const retainedEffective = geometryPresentation.getState().knownEffective;
-      let seedEffective = snapshotEffective ?? retainedEffective;
-      if (!seedEffective) {
-        const dimensions = core.getDimensions();
-        latestHostDimensions = dimensions;
-        geometryPresentation.observeLocal(dimensions);
-        seedEffective = await requestTerminalResize(id, dimensions);
-        if (!seedEffective) {
-          throw new Error('Terminal resume could not confirm the current shared geometry');
-        }
-      }
-      if (seedEffective) {
-        core.setFixedDimensions({ cols: seedEffective.cols, rows: seedEffective.rows });
-      }
-
-      const restoreSource = await restoreTerminalSnapshotOrReplay({
-        snapshot: validSnapshot,
-        restoreSnapshot: (value) => core.restoreSnapshot(value),
-        replayHistory: async () => {
-          replayCoveredBytes = 0;
-          replayTotalBytes = 0;
-          setLoading('loading_history');
-          transitionRecoveryPhase('replaying');
-          core.clear();
-          outputProjection.reset();
-          try {
-            markTerminalRecoveryMilestone(trace, 'baseline-queued');
-            void coordinator.attach(0);
-            const baseline = await coordinator.waitForBaseline();
-            if (!baseline.baselineReady) {
-              reportBlockingFailure(baseline.failure?.code ?? 'terminal_unavailable');
-              throw new Error('Terminal history baseline unavailable');
-            }
-            const baselineDetail: TerminalRecoveryEventDetail = {
-              coordinator_attach_generation: baseline.attachGeneration,
-              history_generation: lastHistoryGeneration,
-              history_page_count: historyPageCount,
-              history_chunk_count: historyChunkCount,
-              history_bytes: historyBytes,
-              covered_through_sequence: baseline.coveredThroughSequence,
-              snapshot_end_sequence: lastSnapshotEndSequence,
-              first_retained_sequence: lastFirstRetainedSequence,
-              history_reset: historyReset,
-              history_truncated: historyTruncated,
-            };
-            markTerminalRecoveryMilestone(trace, 'baseline-parser-committed', baselineDetail);
-            pendingBaselineRender = {
-              core,
-              initSequence: seq,
-              trace,
-              detail: baselineDetail,
-              armed: false,
-            };
-            publishTerminalRecoveryEvent(trace, 'baseline_ready', baselineDetail);
-          } finally {
-            setHistoryReplayProgress(null);
-          }
-          if (seq !== initSeq) return;
-        },
+      const page = await props.transport.semanticHistory(sessionId, {
+        ...(direction === 'forward' || direction === 'backward'
+          ? { anchor: current!.anchor }
+          : {}),
+        direction,
+        limit: Math.min(SEMANTIC_HISTORY_PAGE_LIMIT, presentation.frame.height),
       });
-      if (seq !== initSeq) return;
-
-      if (restoreSource === 'snapshot' && validSnapshot && snapshotEffective) {
-        lastWrittenOutputSequence = Math.max(
-          lastWrittenOutputSequence,
-          validSnapshot.coveredThroughSequence,
-        );
-        queueTerminalGeometry({ sessionId: id, ...snapshotEffective });
+      if (requestEpoch !== historyRequestEpoch) return null;
+      setHistoryPage(page);
+      if (project && page.offset < page.screenStartOffset) {
+        setHistoryProjected(true);
+        renderer?.project(page.frame);
+      } else {
+        setHistoryProjected(false);
+        renderer?.project(null);
       }
-      const latestEffective = geometryPresentation.getState().knownEffective;
-      if (latestEffective) queueTerminalGeometry({ sessionId: id, ...latestEffective });
-
-      coordinator.setActive(liveRenderActive());
-      armBaselineRender(core, trace, seq);
-      if (!await settleTerminalPresentation(id, core, seq, reloadSequence, trace)) return;
-      if (term !== core || seq !== initSeq || recoveryTrace !== trace) return;
-      setLoading('idle');
-      setReadyOnce(true);
-      setShowLoading(false);
-      setGeometryRendererReady(true);
-      transitionRecoveryPhase('interactive');
-      markTerminalRecoveryMilestone(trace, 'interactive', {
-        coordinator_attach_generation: coordinator.getSnapshot().attachGeneration,
-        covered_through_sequence: coordinator.getSnapshot().coveredThroughSequence,
-      });
-      const activeElement = typeof document === 'undefined' ? null : document.activeElement;
-      const focusStillOwned = focusWasAvailableAtStart && (activeElement == null
-        || activeElement === document.body
-        || target.contains(activeElement));
-      const interactiveCore = core as TerminalCore;
-      if (focusStillOwned && props.viewActive() && props.active() && props.autoFocus() && !interactiveCore.hasSelection()) interactiveCore.focus();
-      props.onInteractive?.(id);
-    } catch (errorValue) {
-      if (seq !== initSeq) return;
-      if (pendingBaselineRender?.trace === trace) pendingBaselineRender = null;
-      transitionRecoveryPhase('failed');
-      setLoading('idle');
-      setShowLoading(false);
-      if (!blockingFailureCode()) reportBlockingFailure('terminal_unavailable');
-      throw errorValue;
+      return page;
+    } catch (error) {
+      if (requestEpoch === historyRequestEpoch && !(error instanceof DOMException && error.name === 'AbortError')) {
+        failClosed(error, 'semantic_history_failed');
+      }
+      return null;
+    } finally {
+      if (requestEpoch === historyRequestEpoch) setHistoryBusy(false);
     }
   };
 
-  const workingSetRuntime: TerminalWorkingSetRuntime = {
-    getResourceEstimate: () => term?.getResourceEstimate() ?? {
-      bufferBytes: 0,
-      cellCount: 0,
-      wasmMemoryBytes: 0,
-      estimatedBytes: 0,
-      rendererType: 'webgl',
-    },
-    isProtected: () => term?.hasSelection() === true,
-    hibernate: hibernateForWorkingSet,
-    resume: resumeFromWorkingSet,
+  const scrollHistory = async (direction: 'forward' | 'backward') => {
+    if (!latestPresentation || historyBusy()) return;
+    if (direction === 'forward' && !historyProjected()) return;
+    let current = historyPage();
+    if (!current) current = await queryHistory('end', false);
+    if (!current) return;
+    if (direction === 'backward' && !current.hasPrevious) return;
+    if (direction === 'forward' && !current.hasNext) {
+      showLatestPresentation();
+      return;
+    }
+    await queryHistory(direction, true);
   };
 
-  createEffect(() => {
-    if (!readyOnce() || workingSetRegistered) return;
-    workingSetRegistered = true;
-    props.registerWorkingSetRuntime(sessionId(), workingSetRuntime);
+  const publishSearchResult = () => {
+    searchCallback?.({
+      resultIndex: searchIndex,
+      resultCount: searchMatches.length,
+    });
+  };
+
+  const scanHistory = async (query: string, requestEpoch: number) => {
+    const presentation = latestPresentation;
+    if (!presentation) return;
+    const normalized = query.toLocaleLowerCase();
+    const matches: SearchMatch[] = [];
+    let page = await props.transport.semanticHistory(sessionId, {
+      direction: 'start',
+      limit: SEMANTIC_HISTORY_PAGE_LIMIT,
+    });
+    const maxPages = Math.max(1, Math.ceil(page.totalRows / SEMANTIC_HISTORY_PAGE_LIMIT) + 1);
+    for (let pageIndex = 0; pageIndex < maxPages; pageIndex += 1) {
+      if (requestEpoch !== searchRequestEpoch) return;
+      frameLines(page.frame).forEach((line, lineIndex) => {
+        if (line.toLocaleLowerCase().includes(normalized)) {
+          matches.push({ page, frame: page.frame, line: lineIndex });
+        }
+      });
+      if (!page.hasNext) break;
+      page = await props.transport.semanticHistory(sessionId, {
+        anchor: page.anchor,
+        direction: 'forward',
+        limit: SEMANTIC_HISTORY_PAGE_LIMIT,
+      });
+    }
+    if (requestEpoch !== searchRequestEpoch) return;
+    searchMatches = matches;
+    searchIndex = matches.length > 0 ? 0 : -1;
+    if (searchIndex >= 0) {
+      setHistoryPage(matches[searchIndex]!.page);
+      setHistoryProjected(true);
+      renderer?.project(matches[searchIndex]!.frame);
+    }
+    publishSearchResult();
+  };
+
+  const find = (query: string, delta: 1 | -1) => {
+    const normalized = query.trim();
+    if (!normalized) {
+      viewport.clearSearch();
+      return;
+    }
+    if (normalized !== searchQuery) {
+      searchQuery = normalized;
+      searchMatches = [];
+      searchIndex = -1;
+      publishSearchResult();
+      const requestEpoch = ++searchRequestEpoch;
+      void scanHistory(normalized, requestEpoch).catch((error) => {
+        if (requestEpoch === searchRequestEpoch) failClosed(error, 'semantic_search_failed');
+      });
+      return;
+    }
+    if (searchMatches.length === 0) return;
+    searchIndex = (searchIndex + delta + searchMatches.length) % searchMatches.length;
+    setHistoryPage(searchMatches[searchIndex]!.page);
+    setHistoryProjected(true);
+    renderer?.project(searchMatches[searchIndex]!.frame);
+    publishSearchResult();
+  };
+
+  const copySelection = async (
+    source: 'shortcut' | 'command' | 'copy_event',
+    clipboardData?: DataTransfer | null,
+  ): Promise<SemanticTerminalCopyResult | Readonly<{
+    copied: true;
+    source: 'copy_event';
+    textLength: number;
+  }> | Readonly<{
+    copied: false;
+    source: 'copy_event';
+    reason: 'empty_selection' | 'clipboard_unavailable';
+  }>> => {
+    const text = renderer?.getSelectionText() ?? '';
+    if (!text) return { copied: false, source, reason: 'empty_selection' };
+    if (clipboardData) {
+      clipboardData.setData('text/plain', text);
+      return { copied: true, source, textLength: text.length };
+    }
+    if (!navigator.clipboard?.writeText) {
+      return source === 'copy_event'
+        ? { copied: false, source, reason: 'clipboard_unavailable' }
+        : copyResult(false, source);
+    }
+    await navigator.clipboard.writeText(text);
+    return source === 'copy_event'
+      ? { copied: true, source, textLength: text.length }
+      : copyResult(true, source, text.length);
+  };
+
+  const viewport: SemanticTerminalViewportHandle = {
+    focus: (options) => inputBridge?.focus(options),
+    forceResize: () => { void requestResize(); },
+    setAppearance: (appearance: SemanticTerminalAppearance) => {
+      renderer?.setPalette(terminalPalette(appearance.theme));
+      if (applyTypography(appearance.fontSize, appearance.fontFamily)) {
+        void requestResize();
+      }
+    },
+    getDimensions: () => appliedSize ?? measure(),
+    getTerminalInfo: () => {
+      const frame = currentFrame();
+      return {
+        rows: frame?.height ?? 0,
+        cols: frame?.width ?? 0,
+        bufferLength: frame?.history.totalRows ?? 0,
+      };
+    },
+    readBufferLine: (row, options) => {
+      const frame = currentFrame();
+      if (!frame) return '';
+      const firstRow = historyProjected()
+        ? historyPage()?.offset ?? 0
+        : frame.history.screenStartOffset;
+      const localRow = row - firstRow;
+      const text = frame.rows[localRow]?.cells.map((cell) => cell.text).join('') ?? '';
+      return options?.trimRight === false ? text : text.trimEnd();
+    },
+    getVisibleScreenText: () => frameText(currentFrame()),
+    getSelectionText: () => renderer?.getSelectionText() ?? '',
+    hasSelection: () => renderer?.hasSelection() ?? false,
+    copySelection: (source) => copySelection(source) as Promise<SemanticTerminalCopyResult>,
+    getTouchScrollRuntime: () => ({
+      isAlternateScreen: () => latestPresentation?.frame.bufferKind === 'alternate',
+      getScrollbackLength: () => latestPresentation?.frame.history.screenStartOffset ?? 0,
+      scrollLines: (lines) => {
+        if (lines === 0) return;
+        void scrollHistory(lines > 0 ? 'forward' : 'backward');
+      },
+      sendAlternateScreenInput: sendInput,
+    }),
+    setSearchResultsCallback: (callback) => {
+      searchCallback = callback;
+      publishSearchResult();
+    },
+    clearSearch: () => {
+      searchRequestEpoch += 1;
+      searchQuery = '';
+      searchMatches = [];
+      searchIndex = -1;
+      showLatestPresentation();
+      publishSearchResult();
+    },
+    findNext: (query) => find(query, 1),
+    findPrevious: (query) => find(query, -1),
+    getPresentation: () => latestPresentation,
+  };
+
+  const actions: TerminalSessionRuntimeActions = {
+    reload: async () => {
+      reconnectAttempt = 0;
+      clearReconnectTimer();
+      attached = false;
+      runtimeAttachGeneration = 0;
+      props.transport.forgetSession(sessionId);
+      await attach();
+    },
+    retryOutputRecovery: async () => {
+      await actions.reload();
+    },
+    focusIfInteractive: () => {
+      if (!props.active() || !props.viewActive()) return 'not_interactive';
+      if (renderer?.hasSelection()) return 'selection_active';
+      inputBridge?.focus({ preventScroll: true });
+      return 'focused';
+    },
+  };
+
+  const applyPresentation = (value: unknown) => {
+    const presentation = validatePresentation(value);
+    if (!presentationAdvances(latestPresentation, presentation)) return;
+    const previous = latestPresentation;
+    if (
+      previous
+      && (
+        previous.frame.width !== presentation.frame.width
+        || previous.frame.height !== presentation.frame.height
+        || (previous.state.contentEpoch ?? 0) !== (presentation.state.contentEpoch ?? 0)
+      )
+    ) {
+      showLatestPresentation();
+    }
+    latestPresentation = presentation;
+    renderer?.apply(presentation);
+    inputBridge?.syncGeometry();
+    setPresentationRevision((value) => value + 1);
+    setReady(true);
+    setLoading('idle');
+    setRuntimeError('');
+    setStatus({ state: 'idle' });
+    props.onOutputCommitted?.(sessionId, 'live', presentation.sequence);
+    props.onOutputCoverage?.(sessionId, {
+      attachGeneration: runtimeAttachGeneration,
+      coveredThroughSequence: presentation.sequence,
+    });
+    props.onHistorySummary?.(sessionId, presentation.frame.history);
+    if ((presentation.state.bell ?? 0) > lastBell) props.onBell?.(sessionId);
+    lastBell = presentation.state.bell ?? lastBell;
+    props.onInteractive?.(sessionId);
+    if (props.active() && props.viewActive() && props.autoFocus() && !renderer?.hasSelection()) {
+      inputBridge?.focus({ preventScroll: true });
+    }
+  };
+
+  onMount(() => {
+    if (!host || !canvas || !inputElement) {
+      failClosed(new Error('semantic terminal surface is incomplete'));
+      return;
+    }
+
+    renderer = new RendererSurface(canvas, (error) => failClosed(error, 'semantic_renderer_failed'));
+    renderer.setPalette(resolvedPalette());
+    applyTypography(props.fontSize(), props.fontFamily());
+    inputBridge = new TerminalInputBridge({
+      inputHost: canvas,
+      inputElement,
+      onData: sendInput,
+      onInputIntent: sendInputIntent,
+      hasSelection: () => renderer?.hasSelection() ?? false,
+      copySelection,
+      syncInputGeometry,
+    });
+    props.registerViewport(sessionId, viewport);
+    props.registerActions(sessionId, actions);
+
+    const unsubscribePresentation = props.eventSource.onTerminalPresentation(
+      sessionId,
+      (value) => {
+        try {
+          applyPresentation(value);
+        } catch (error) {
+          failClosed(error, 'semantic_presentation_invalid');
+        }
+      },
+    );
+    const unsubscribeGeometry = props.eventSource.onTerminalGeometry(sessionId, (event) => {
+      try {
+        acceptEffectiveGeometry({
+          generation: event.generation,
+          presentationSequence: event.presentationSequence,
+          cols: event.cols,
+          rows: event.rows,
+        }, measure());
+      } catch (error) {
+        failClosed(error, 'semantic_geometry_invalid');
+      }
+    });
+    const unsubscribeLifecycle = props.eventSource.onTerminalLiveAttachmentLifecycle(
+      sessionId,
+      (event) => {
+        if (event.state === 'attached') {
+          attached = true;
+          runtimeAttachGeneration = event.runtimeAttachGeneration;
+          reconnectAttempt = 0;
+          clearReconnectTimer();
+          return;
+        }
+        if (event.runtimeAttachGeneration !== runtimeAttachGeneration && runtimeAttachGeneration > 0) return;
+        attached = false;
+        runtimeAttachGeneration = 0;
+        appliedSize = null;
+        latestEffectiveGeometry = null;
+        props.onGeometryPresentation?.(sessionId, null);
+        if (event.reason === 'session_closed' || event.reason === 'session_deleted') {
+          props.onSessionGone?.(sessionId);
+          return;
+        }
+        if (event.reason === 'disposed' || event.reason === 'detached') return;
+        if (event.reason === 'superseded' && attachmentOperation > 0) return;
+        scheduleReconnect();
+      },
+    );
+    const unsubscribeDeleted = props.eventSource.onSessionDeleted(sessionId, () => {
+      props.onSessionGone?.(sessionId);
+    });
+    const unsubscribeName = props.eventSource.onTerminalNameUpdate?.(sessionId, (event) => {
+      props.onNameUpdate?.(
+        sessionId,
+        event.newName,
+        event.workingDir,
+        event.localPathCapability,
+      );
+    });
+
+    resizeObserver = typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver(() => { void requestResize(); });
+    resizeObserver?.observe(host);
+    const handleWindowResize = () => { void requestResize(); };
+    const handleScroll = () => inputBridge?.syncGeometry();
+    window.addEventListener('resize', handleWindowResize);
+    window.addEventListener('scroll', handleScroll, true);
+    document.fonts?.addEventListener?.('loadingdone', handleWindowResize);
+    void document.fonts?.ready.then(handleWindowResize);
+    syncInputGeometry();
+    untrack(() => { void requestResize(); });
+
+    onCleanup(() => {
+      unsubscribePresentation();
+      unsubscribeGeometry();
+      unsubscribeLifecycle();
+      unsubscribeDeleted();
+      unsubscribeName?.();
+      resizeObserver?.disconnect();
+      resizeObserver = null;
+      window.removeEventListener('resize', handleWindowResize);
+      window.removeEventListener('scroll', handleScroll, true);
+      document.fonts?.removeEventListener?.('loadingdone', handleWindowResize);
+    });
   });
 
   createEffect(() => {
-    const active = liveRenderActive();
-    outputCoordinator?.setActive(active);
+    renderer?.setPalette(resolvedPalette());
   });
 
   createEffect(() => {
-    const client = props.protocolClient();
-    if (!client) return;
-    if (!container) return;
-    if (!props.viewActive()) return;
-    if (untrack(loading) === 'reconnecting' && client === waitingForProtocolClient) return;
-
-    // Untrack to avoid capturing theme/font reactivity as init dependencies.
-    untrack(() => void reload());
+    const fontSize = props.fontSize();
+    const fontFamily = props.fontFamily();
+    if (applyTypography(fontSize, fontFamily)) {
+      void requestResize();
+    }
   });
 
   createEffect(() => {
-    const active = props.viewActive();
-    if (active === viewAttachmentActive) return;
-    viewAttachmentActive = active;
-    if (!active) releaseInactiveViewAttachment();
+    const currentClient = props.protocolClient();
+    const connected = props.connected();
+    if (!connected || !currentClient) {
+      if (lastProtocolClient !== undefined) {
+        attachmentOperation += 1;
+        attached = false;
+        runtimeAttachGeneration = 0;
+        clearReconnectTimer();
+      }
+      lastProtocolClient = currentClient;
+      setLoading('reconnecting');
+      setStatus({ state: 'reconnecting', retryable: true });
+      return;
+    }
+    if (lastProtocolClient === currentClient && (attached || resizeWork)) return;
+    lastProtocolClient = currentClient;
+    reconnectAttempt = 0;
+    lastReconnectError = null;
+    untrack(() => { void attach().catch(() => scheduleReconnect()); });
   });
 
   createEffect(() => {
-    const appearance = buildTerminalAppearance();
-    if (!term) return;
-    scheduleTerminalAppearanceApply(appearance);
-  });
-
-  createEffect(() => {
-    const ariaLabel = i18n.t('terminal.historyScrollbar');
-    if (!term) return;
-    term.setScrollbarOptions({ ariaLabel });
-  });
-
-  createEffect(() => {
-    if (!props.viewActive() || !props.active()) return;
-    if (!term) return;
-    if (loading() !== 'idle') return;
-    scheduleTerminalActivationRefresh();
+    if (!props.active() || !props.viewActive() || !props.autoFocus() || !ready()) return;
+    if (renderer?.hasSelection()) return;
+    inputBridge?.focus({ preventScroll: true });
   });
 
   onCleanup(() => {
     disposed = true;
-    initSeq += 1;
-    reloadSeq += 1;
-    disposeTerminal();
-    checkpointCompactor.dispose();
-    geometryPresentation.dispose();
-    props.registerCore(sessionId(), null);
-    props.registerSurfaceElement(sessionId(), null);
-    props.onRuntimeStatus?.(stableSessionId, { state: 'idle' });
+    attachmentOperation += 1;
+    historyRequestEpoch += 1;
+    searchRequestEpoch += 1;
+    clearReconnectTimer();
+    lastReconnectError = null;
+    inputBridge?.dispose();
+    inputBridge = null;
+    renderer?.dispose();
+    renderer = null;
+    appliedTypography = null;
+    props.transport.forgetSession(sessionId);
+    props.registerViewport(sessionId, null);
+    props.registerActions(sessionId, null);
+    props.registerSurfaceElement(sessionId, null);
+    props.onGeometryPresentation?.(sessionId, null);
+    props.onRuntimeStatus?.(sessionId, { state: 'idle' });
   });
 
-  const terminalBackground = () => colors().background ?? '#1e1e1e';
-  const terminalForeground = () => colors().foreground ?? '#c9d1d9';
-  const terminalLoadingVars = () => ({
-    '--redeven-terminal-loading-background': terminalBackground(),
-    '--redeven-terminal-loading-foreground': terminalForeground(),
+  const terminalBackground = () => resolvedPalette().background;
+  const terminalForeground = () => resolvedPalette().foreground;
+  const presentationTrace = () => {
+    void presentationRevision();
+    return latestPresentation;
+  };
+  const geometryTrace = () => {
+    void geometryRevision();
+    return latestEffectiveGeometry;
+  };
+  const loadingMessage = createMemo(() => {
+    if (loading() === 'attaching') return i18n.t('terminal.attaching');
+    if (loading() === 'reconnecting') return i18n.t('terminal.reconnecting');
+    return i18n.t('terminal.initializing');
   });
+
+  const activateSemanticLink = (event: MouseEvent) => {
+    if ((!event.metaKey && !event.ctrlKey) || renderer?.hasSelection()) return false;
+    const frame = currentFrame();
+    if (!frame || !canvas) return false;
+    const target = resolveSemanticTerminalLinkAtPoint(frame, {
+      clientX: event.clientX,
+      clientY: event.clientY,
+      bounds: canvas.getBoundingClientRect(),
+      workingDirAbs: props.session.workingDir,
+      agentHomePathAbs: props.agentHomePathAbs(),
+    });
+    if (!target) return false;
+    if (target.kind === 'external') {
+      void props.onTerminalExternalLinkOpen?.(target.url);
+    } else if (props.canOpenFilePreview()) {
+      void props.onTerminalFileLinkOpen?.(target.target);
+    } else {
+      return false;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    return true;
+  };
+
   return (
     <div
-      aria-busy={terminalInputBlocked()}
+      aria-busy={!ready() || loading() !== 'idle'}
       class="h-full min-h-0 relative overflow-hidden"
-      data-terminal-runtime-session={stableSessionId}
-      onCompositionStart={() => props.setWorkingSetInteraction(sessionId(), 'composition', true)}
-      onCompositionEnd={() => props.setWorkingSetInteraction(sessionId(), 'composition', false)}
+      data-terminal-runtime-session={sessionId}
+      data-terminal-renderer="semantic"
+      data-terminal-presentation-sequence={presentationTrace()?.sequence ?? ''}
+      data-terminal-content-epoch={presentationTrace()?.state.contentEpoch ?? ''}
+      data-terminal-frame-cols={presentationTrace()?.frame.width ?? ''}
+      data-terminal-frame-rows={presentationTrace()?.frame.height ?? ''}
+      data-terminal-buffer-kind={presentationTrace()?.frame.bufferKind ?? ''}
+      data-terminal-geometry-generation={geometryTrace()?.generation ?? ''}
+      data-terminal-geometry-sequence={geometryTrace()?.presentationSequence ?? ''}
+      data-terminal-geometry-cols={geometryTrace()?.cols ?? ''}
+      data-terminal-geometry-rows={geometryTrace()?.rows ?? ''}
       style={{
         'background-color': terminalBackground(),
         '--terminal-bottom-inset': `${props.bottomInsetPx()}px`,
@@ -1976,30 +1010,122 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         '--primary': terminalForeground(),
         '--muted': `color-mix(in srgb, ${terminalForeground()} 12%, ${terminalBackground()})`,
         '--muted-foreground': `color-mix(in srgb, ${terminalForeground()} 70%, transparent)`,
-        ...terminalLoadingVars(),
+        '--redeven-terminal-loading-background': terminalBackground(),
+        '--redeven-terminal-loading-foreground': terminalForeground(),
       }}
     >
       <div
-        ref={(n) => {
-          container = n;
-          props.registerSurfaceElement(sessionId(), n);
+        ref={(node) => {
+          host = node;
+          props.registerSurfaceElement(sessionId, node);
         }}
         {...REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS}
         class="absolute top-2 left-2 right-0 bottom-0 redeven-terminal-surface"
-        onClick={(event) => props.onSurfaceClick?.(event)}
-        style={{
-          transition: 'opacity 0.15s ease-out',
-          bottom: 'var(--terminal-bottom-inset)',
-          opacity: readyOnce() ? (showLoading() ? '0' : '1') : (loading() === 'idle' ? '1' : '0'),
+        data-terminal-semantic-surface="true"
+        onClick={(event) => {
+          if (!activateSemanticLink(event)) props.onSurfaceClick?.(event);
         }}
-      />
+        onWheel={(event) => {
+          if (latestPresentation?.frame.bufferKind === 'alternate') return;
+          if (event.deltaY === 0) return;
+          event.preventDefault();
+          void scrollHistory(event.deltaY > 0 ? 'forward' : 'backward');
+        }}
+        style={{
+          bottom: 'var(--terminal-bottom-inset)',
+          'background-color': terminalBackground(),
+          opacity: ready() ? '1' : '0',
+        }}
+      >
+        <canvas
+          ref={(node) => { canvas = node; }}
+          aria-label={i18n.t('terminal.title')}
+          data-terminal-semantic-canvas="true"
+          class="absolute inset-0 h-full w-full"
+          onPointerDown={(event) => {
+            if (event.button !== 0) return;
+            event.preventDefault();
+            inputBridge?.focus({ preventScroll: true });
+            event.currentTarget.setPointerCapture(event.pointerId);
+            renderer?.beginSelection(event.clientX, event.clientY);
+          }}
+          onPointerMove={(event) => {
+            if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+              renderer?.updateSelection(event.clientX, event.clientY);
+            }
+          }}
+          onPointerUp={(event) => {
+            renderer?.endSelection(event.clientX, event.clientY);
+            if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+              event.currentTarget.releasePointerCapture(event.pointerId);
+            }
+          }}
+        />
+        <textarea
+          ref={(node) => { inputElement = node; }}
+          aria-label={i18n.t('terminal.inputAria')}
+          data-terminal-input-bridge="semantic"
+          spellcheck={false}
+          autocapitalize="off"
+          autocomplete="off"
+          class="fixed border-0 p-0 m-0 resize-none overflow-hidden outline-none"
+          style={{
+            opacity: '0.01',
+            color: 'transparent',
+            'caret-color': 'transparent',
+            'background-color': 'transparent',
+            'z-index': '2',
+          }}
+        />
+        <div
+          aria-label={i18n.t('terminal.historyScrollbar')}
+          aria-orientation="vertical"
+          aria-valuemax={historyMaximum()}
+          aria-valuemin="0"
+          aria-valuenow={historyCurrent()}
+          data-floeterm-scrollbar=""
+          data-visible={historyMaximum() > 0 ? 'true' : 'false'}
+          hidden={historyMaximum() <= 0}
+          role="scrollbar"
+          class="absolute right-0 top-0 bottom-0 w-3"
+          onPointerDown={(event) => {
+            const bounds = event.currentTarget.getBoundingClientRect();
+            const ratio = Math.max(0, Math.min(1, (event.clientY - bounds.top) / Math.max(1, bounds.height)));
+            if (ratio <= 0.25) void queryHistory('start', true);
+            else if (ratio >= 0.75) showLatestPresentation();
+            else if (ratio < 0.5) void scrollHistory('backward');
+            else void scrollHistory('forward');
+          }}
+          style={{ background: `color-mix(in srgb, ${terminalForeground()} 8%, transparent)` }}
+        >
+          <div
+            data-floeterm-scrollbar-thumb=""
+            class="absolute left-0.5 right-0.5 rounded-sm"
+            style={{
+              top: `${historyThumbStart()}%`,
+              height: `${historyThumbSize()}%`,
+              background: `color-mix(in srgb, ${terminalForeground()} 38%, transparent)`,
+            }}
+          />
+        </div>
+      </div>
 
       <RedevenLoadingCurtain
-        visible={showLoading()}
+        visible={!ready()}
         eyebrow={i18n.t('terminal.creatingEyebrow')}
         message={loadingMessage()}
         class="redeven-terminal-loading-curtain"
       />
+
+      {runtimeError() ? (
+        <div
+          class="absolute left-3 right-3 bottom-3 z-10 border border-destructive/40 bg-background px-3 py-2 text-xs text-destructive"
+          data-terminal-semantic-error="true"
+          role="alert"
+        >
+          {runtimeError()}
+        </div>
+      ) : null}
     </div>
   );
 }

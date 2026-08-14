@@ -7,6 +7,7 @@ import {
   TerminalLiveServerError,
   decodeAttach,
   decodeInput,
+  decodeInputIntent,
   decodeResize,
   encodeAttached,
   encodeResizeApplied,
@@ -34,13 +35,8 @@ class FakeStream implements TerminalByteStream {
     this.writes.push(data.slice());
   }
 
-  async close(): Promise<void> {
-    this.push(null);
-  }
-
-  async reset(): Promise<void> {
-    this.push(null);
-  }
+  async close(): Promise<void> { this.push(null); }
+  async reset(): Promise<void> { this.push(null); }
 
   push(data: Uint8Array | null): void {
     const waiter = this.waiters.shift();
@@ -63,72 +59,65 @@ const decodeSingleWrite = (data: Uint8Array) => {
   return frames[0]!;
 };
 
+const semanticFrame = {
+  width: 80,
+  height: 24,
+  bufferKind: 'normal',
+  rows: Array.from({ length: 24 }, () => ({ cells: Array.from({ length: 80 }, () => ({ text: '', width: 1 })) })),
+  cursor: { x: 0, y: 0, visible: true, shape: 'block', blinking: false },
+  history: { revision: 1, totalRows: 24, screenStartOffset: 0 },
+  graphics: { generation: 0, images: [], placements: [] },
+};
+
 const createRpcMock = () => {
-  let nameHandler: ((event: {
-    sessionId: string;
-    newName: string;
-    workingDir: string;
-    localPathCapability: { workingDir: string } | null;
-  }) => void) | undefined;
-  let commandHandler: ((event: {
-    sessionId: string;
-    foregroundCommand: { phase: 'unknown' | 'idle' | 'running'; displayName: string; revision: number; updatedAtMs: number };
-  }) => void) | undefined;
+  let nameHandler: ((event: any) => void) | undefined;
   const terminal = {
-    history: vi.fn().mockResolvedValue({
-      chunks: [{
-        sequence: 4,
-        timestampMs: 10,
-        data: new TextEncoder().encode('history'),
-        geometryGeneration: 7,
-        cols: 120,
-        rows: 55,
-      }],
-      nextStartSeq: 0,
-      hasMore: false,
-      firstSequence: 0,
-      lastSequence: 0,
-      coveredThroughSequence: 4,
-      snapshotEndSequence: 4,
-      firstRetainedSequence: 1,
-      historyGeneration: 2,
-      historyReset: false,
-      historyTruncated: false,
-      coveredBytes: 0,
-      totalBytes: 0,
+    semanticHistory: vi.fn().mockResolvedValue({
+      revision: 1,
+      anchor: 'anchor',
+      firstAvailable: 'first',
+      lastAvailable: 'last',
+      screenStart: 'screen',
+      offset: 0,
+      totalRows: 24,
+      screenStartOffset: 0,
+      hasPrevious: false,
+      hasNext: false,
+      frame: semanticFrame,
     }),
-    commitHistoryCheckpoint: vi.fn().mockResolvedValue({ ok: true }),
-    clear: vi.fn().mockResolvedValue({ ok: true }),
+    semanticClear: vi.fn().mockResolvedValue({ presentationSequence: 3, contentEpoch: 2 }),
     listSessions: vi.fn().mockResolvedValue({ sessions: [] }),
     createSession: vi.fn(),
     deleteSession: vi.fn().mockResolvedValue({ ok: true }),
-    getSessionStats: vi.fn().mockResolvedValue({ history: { totalBytes: 12 } }),
     onNameUpdate: vi.fn((handler) => {
       nameHandler = handler;
       return () => { nameHandler = undefined; };
     }),
-    onForegroundCommandUpdate: vi.fn((handler) => {
-      commandHandler = handler;
-      return () => { commandHandler = undefined; };
-    }),
+    onForegroundCommandUpdate: vi.fn(() => () => undefined),
+    onOutputActivityUpdate: vi.fn(() => () => undefined),
+    onExecutionContextUpdate: vi.fn(() => () => undefined),
+    onWorkStateUpdate: vi.fn(() => () => undefined),
   };
   return {
     rpc: { terminal } as any,
-    emitName: (event: {
-      sessionId: string;
-      newName: string;
-      workingDir: string;
-      localPathCapability: { workingDir: string } | null;
-    }) => nameHandler?.(event),
-    emitCommand: (event: {
-      sessionId: string;
-      foregroundCommand: { phase: 'unknown' | 'idle' | 'running'; displayName: string; revision: number; updatedAtMs: number };
-    }) => commandHandler?.(event),
+    emitName: (event: any) => nameHandler?.(event),
   };
 };
 
-describe('terminal live transport', () => {
-  it('uses only the terminal/live_v1 stream for attach, input, and resize', async () => {
+async function attach(bundle: ReturnType<typeof createRedevenTerminalLiveBundle>, stream: FakeStream) {
+  const attaching = bundle.transport.attachWithPresentation('session-1', 80, 24);
+  await waitUntil(() => stream.writes.length === 1);
+  stream.push(encodeAttached({
+    presentationSequence: 1n,
+    geometryGeneration: 1n,
+    cols: 80,
+    rows: 24,
+  }));
+  return await attaching;
+}
+
+describe('terminal semantic live transport', () => {
+  it('uses only terminal/live_v1 for attach, input, and canonical resize settlement', async () => {
     const { rpc } = createRpcMock();
     const stream = new FakeStream();
     const openStream = vi.fn().mockResolvedValue(stream);
@@ -136,7 +125,7 @@ describe('terminal live transport', () => {
     const lifecycle: unknown[] = [];
     bundle.eventSource.onTerminalLiveAttachmentLifecycle('session-1', event => lifecycle.push(event));
 
-    const attaching = bundle.transport.attachWithHistoryBoundary('session-1', 80, 24);
+    const attaching = bundle.transport.attachWithPresentation('session-1', 80, 24);
     await waitUntil(() => stream.writes.length === 1);
     expect(openStream).toHaveBeenCalledWith(StreamKind, undefined);
     expect(decodeAttach(decodeSingleWrite(stream.writes[0]!))).toEqual({
@@ -146,88 +135,120 @@ describe('terminal live transport', () => {
       cols: 80,
       rows: 24,
     });
-
     stream.push(encodeAttached({
-      historyBoundarySequence: 4n,
-      historyGeneration: 2n,
-      historyStartSequence: 1n,
+      presentationSequence: 1n,
       geometryGeneration: 1n,
       cols: 80,
       rows: 24,
     }));
-    await expect(attaching).resolves.toMatchObject({
-      historyBoundarySequence: 4,
-      historyGeneration: 2,
-      historyStartSequence: 1,
+    await expect(attaching).resolves.toEqual({
+      presentationSequence: 1,
       geometryGeneration: 1,
       runtimeAttachGeneration: 1,
       cols: 80,
       rows: 24,
     });
-    expect(lifecycle).toEqual([{
-      sessionId: 'session-1',
-      runtimeAttachGeneration: 1,
-      state: 'attached',
-    }]);
 
     await bundle.transport.sendInput('session-1', 'aa');
     const input = decodeInput(decodeSingleWrite(stream.writes[1]!));
     expect(input.sequence).toBe(1n);
     expect(new TextDecoder().decode(input.data)).toBe('aa');
 
+    await bundle.transport.sendInputIntent('session-1', {
+      kind: 'key',
+      code: 'ArrowLeft',
+      text: '',
+      action: 'press',
+      modifiers: {
+        shift: true,
+        control: true,
+        alt: false,
+        super: false,
+        capsLock: false,
+        numLock: true,
+      },
+    });
+    expect(decodeInputIntent(decodeSingleWrite(stream.writes[2]!))).toEqual({
+      sequence: 2n,
+      code: 'ArrowLeft',
+      text: '',
+      action: 'press',
+      modifiers: 35,
+    });
+
     const resizing = bundle.transport.resizeWithEffectiveGeometry('session-1', 100, 30);
-    await waitUntil(() => stream.writes.length === 3);
-    const resize = decodeResize(decodeSingleWrite(stream.writes[2]!));
-    expect(resize).toEqual({ sequence: 1n, cols: 100, rows: 30 });
+    await waitUntil(() => stream.writes.length === 4);
+    const resize = decodeResize(decodeSingleWrite(stream.writes[3]!));
     stream.push(encodeResizeApplied({
       sequence: resize.sequence,
       geometryGeneration: 2n,
-      outputSequenceBoundary: 4n,
+      presentationSequence: 4n,
       cols: 100,
       rows: 30,
     }));
     await expect(resizing).resolves.toEqual({
       runtimeAttachGeneration: 1,
       requested: { cols: 100, rows: 30 },
-      effective: {
-        generation: 2,
-        outputSequenceBoundary: 4,
-        cols: 100,
-        rows: 30,
-      },
+      effective: { generation: 2, presentationSequence: 4, cols: 100, rows: 30 },
     });
-
-    bundle.transport.forgetSession('session-1');
-    expect(lifecycle).toEqual([
-      { sessionId: 'session-1', runtimeAttachGeneration: 1, state: 'attached' },
-      { sessionId: 'session-1', runtimeAttachGeneration: 1, state: 'closed', reason: 'detached' },
-    ]);
+    expect(lifecycle).toEqual([{
+      sessionId: 'session-1',
+      runtimeAttachGeneration: 1,
+      state: 'attached',
+    }]);
   });
 
-  it('keeps history and name updates on the RPC control plane', async () => {
+  it('binds semantic history and clear RPCs to the current connection generation', async () => {
+    const { rpc } = createRpcMock();
+    const stream = new FakeStream();
+    const bundle = createRedevenTerminalLiveBundle(
+      rpc,
+      () => ({ openStream: vi.fn().mockResolvedValue(stream) } as any),
+      'connection-1',
+    );
+    await attach(bundle, stream);
+
+    await bundle.transport.semanticHistory('session-1', { direction: 'end', limit: 24 });
+    expect(rpc.terminal.semanticHistory).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      connectionId: 'connection-1',
+      transportGeneration: 1,
+      direction: 'end',
+      limit: 24,
+    });
+    await expect(bundle.transport.clearSemanticContent?.('session-1')).resolves.toEqual({
+      presentationSequence: 3,
+      contentEpoch: 2,
+    });
+    expect(rpc.terminal.semanticClear).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      connectionId: 'connection-1',
+      transportGeneration: 1,
+    });
+  });
+
+  it('validates semantic history only at the lazy live-feature boundary', async () => {
+    const { rpc } = createRpcMock();
+    rpc.terminal.semanticHistory.mockResolvedValueOnce({ revision: 1, frame: null });
+    const stream = new FakeStream();
+    const bundle = createRedevenTerminalLiveBundle(
+      rpc,
+      () => ({ openStream: vi.fn().mockResolvedValue(stream) } as any),
+      'connection-1',
+    );
+    await attach(bundle, stream);
+
+    await expect(bundle.transport.semanticHistory('session-1', {
+      direction: 'end',
+      limit: 24,
+    })).rejects.toThrow();
+  });
+
+  it('forwards view-neutral metadata events without a terminal parser', () => {
     const { rpc, emitName } = createRpcMock();
     const bundle = createRedevenTerminalLiveBundle(rpc, () => null, 'connection-1');
     const names: unknown[] = [];
-    const unsubscribe = bundle.eventSource.onTerminalNameUpdate?.('session-1', event => names.push(event));
-
-    const page = await bundle.transport.historyPage('session-1', 1, 4, {
-      historyGeneration: 2,
-      snapshotEndSequence: 4,
-    });
-    expect(rpc.terminal.history).toHaveBeenCalledWith(expect.objectContaining({
-      sessionId: 'session-1',
-      startSeq: 1,
-      endSeq: 4,
-      historyGeneration: 2,
-    }));
-    expect(page).toMatchObject({ coveredThroughSequence: 4, historyGeneration: 2 });
-    expect(page.chunks).toEqual([expect.objectContaining({
-      sequence: 4,
-      geometryGeneration: 7,
-      cols: 120,
-      rows: 55,
-    })]);
-
+    bundle.eventSource.onTerminalNameUpdate?.('session-1', event => names.push(event));
     emitName({ sessionId: 'other', newName: 'ignored', workingDir: '/', localPathCapability: null });
     emitName({
       sessionId: 'session-1',
@@ -235,101 +256,19 @@ describe('terminal live transport', () => {
       workingDir: '/workspace',
       localPathCapability: { workingDir: '/workspace' },
     });
-    expect(names).toEqual([{
-      sessionId: 'session-1',
-      newName: 'shell',
-      workingDir: '/workspace',
-      localPathCapability: { workingDir: '/workspace' },
-    }]);
-    unsubscribe?.();
+    expect(names).toEqual([expect.objectContaining({ sessionId: 'session-1', newName: 'shell' })]);
   });
 
-  it('forwards authoritative checkpoints and commits them only through the RPC control plane', async () => {
-    const { rpc } = createRpcMock();
-    const checkpoint = {
-      formatVersion: 1 as const,
-      engineId: 'floegence-ghostty-web' as const,
-      coveredThroughSequence: 41,
-      geometryGeneration: 8,
-      parserEpoch: 3,
-      cols: 132,
-      rows: 48,
-      checksumSha256: 'a'.repeat(64),
-      stateDigestSha256: 'b'.repeat(64),
-      bytes: new TextEncoder().encode('checkpoint'),
-    };
-    rpc.terminal.history.mockResolvedValueOnce({
-      chunks: [],
-      checkpoint,
-      deltaStartSequence: 42,
-      nextStartSeq: 0,
-      hasMore: false,
-      firstSequence: 0,
-      lastSequence: 0,
-      coveredThroughSequence: 41,
-      snapshotEndSequence: 41,
-      firstRetainedSequence: 42,
-      historyGeneration: 3,
-      historyReset: false,
-      historyTruncated: true,
-      coveredBytes: 0,
-      totalBytes: 0,
-    });
-    const bundle = createRedevenTerminalLiveBundle(rpc, () => null, 'connection-1');
-
-    await expect(bundle.transport.historyPage('session-1', 1, 41, {
-      historyGeneration: 3,
-      snapshotEndSequence: 41,
-    })).resolves.toMatchObject({ checkpoint, deltaStartSequence: 42 });
-    await (bundle.transport as any).commitHistoryCheckpoint('session-1', checkpoint);
-
-    expect(rpc.terminal.commitHistoryCheckpoint).toHaveBeenCalledWith({
-      sessionId: 'session-1',
-      checkpoint,
-    });
-  });
-
-  it('forwards foreground command updates on the RPC control plane', () => {
-    const { rpc, emitCommand } = createRpcMock();
-    const bundle = createRedevenTerminalLiveBundle(rpc, () => null, 'connection-1');
-    const commands: unknown[] = [];
-    const unsubscribe = bundle.eventSource.onTerminalForegroundCommandUpdate?.(
-      'session-1',
-      event => commands.push(event),
-    );
-
-    emitCommand({
-      sessionId: 'other',
-      foregroundCommand: { phase: 'running', displayName: 'ignored', revision: 1, updatedAtMs: 1 },
-    });
-    emitCommand({
-      sessionId: 'session-1',
-      foregroundCommand: { phase: 'running', displayName: 'top', revision: 2, updatedAtMs: 2 },
-    });
-
-    expect(commands).toEqual([{
-      sessionId: 'session-1',
-      foregroundCommand: { phase: 'running', displayName: 'top', revision: 2, updatedAtMs: 2 },
-    }]);
-    unsubscribe?.();
-  });
-
-  it('requires a connected Flowersec client instead of falling back to RPC live calls', async () => {
+  it('requires a connected client and classifies only explicit lifecycle exits', async () => {
     const { rpc } = createRpcMock();
     const bundle = createRedevenTerminalLiveBundle(rpc, () => null, 'connection-1');
     await expect(bundle.transport.attach('session-1', 80, 24)).rejects.toBeInstanceOf(ProtocolNotConnectedError);
-  });
-
-  it('classifies explicit attach lifecycle exits', () => {
     expect(isBestEffortTerminalDisconnectError(new ProtocolNotConnectedError())).toBe(true);
     expect(classifyTerminalAttachLifecycleExit(new TerminalLiveServerError(
       TerminalLiveErrorCode.SessionNotFound,
       'terminal session not found',
     ))).toBe('session_gone');
-    expect(classifyTerminalAttachLifecycleExit(new RpcError({ typeId: 2007, code: 404 }))).toBe('session_gone');
     expect(classifyTerminalAttachLifecycleExit(new RpcError({ typeId: 2007, code: 409 }))).toBeNull();
-    expect(classifyTerminalAttachLifecycleExit(new RpcError({ typeId: 2007, code: 410 }))).toBeNull();
-    expect(classifyTerminalAttachLifecycleExit(new RpcError({ typeId: 2007, code: 500 }))).toBeNull();
   });
 
   it('allocates a distinct live connection identity for every terminal view', () => {

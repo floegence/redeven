@@ -2439,6 +2439,7 @@
     "initializing": "Initialisation du terminal...",
     "attaching": "Connexion au terminal...",
     "loadingHistory": "Chargement de l'historique...",
+    "inputAria": "Saisie du terminal",
     "historyScrollbar": "Historique du terminal",
     "loadingHistoryProgress": "Chargement de l'historique {loaded} / {total}",
     "recoveringOutput": "Récupération de la sortie du terminal...",

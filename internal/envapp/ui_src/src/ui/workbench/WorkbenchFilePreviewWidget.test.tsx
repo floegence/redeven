@@ -185,7 +185,7 @@ function renderPreviewWidget(options: {
           updateTerminalPanelState: vi.fn(),
           createTerminalSession: vi.fn(async () => null),
           deleteTerminalSession: vi.fn(async () => undefined),
-          registerTerminalCore: vi.fn(),
+          registerTerminalViewport: vi.fn(),
           registerTerminalSurface: vi.fn(),
           terminalOpenRequest: () => null,
           dispatchTerminalOpenRequest: vi.fn(),

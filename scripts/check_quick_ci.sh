@@ -20,7 +20,8 @@ done
 python3 -c 'from pathlib import Path; [compile(Path(name).read_text(encoding="utf-8"), name, "exec") for name in ("scripts/safe_extract_tar.py", "scripts/extract_desktop_runtime.py")]'
 
 echo "[INFO] checking bounded cloud policy and committed knowledge artifacts"
-node --test scripts/quick_ci_policy.test.mjs scripts/actionlint_runner_policy.test.mjs
+node --test scripts/quick_ci_policy.test.mjs scripts/actionlint_runner_policy.test.mjs scripts/check_go_version_consistency.test.mjs
+node scripts/check_go_version_consistency.mjs
 node --test scripts/check_readme_localizations.test.mjs
 node scripts/check_readme_localizations.mjs
 ./scripts/okf/check_source_integrity.sh

@@ -1,3 +1,5 @@
+//go:build floeterm_native
+
 package terminal
 
 import (
@@ -347,10 +349,23 @@ func newShellLifecycleTestManagerWithRecorder(t *testing.T, root string, shellPa
 
 func activateShellTestSession(t *testing.T, manager *Manager, terminalSession *termgo.Session) {
 	t.Helper()
-	terminalSession.AddConnectionWithHistoryBoundary("shell-integration", 80, 24)
-	t.Cleanup(func() { terminalSession.RemoveConnection("shell-integration") })
+	if err := terminalSession.AttachSemanticView("shell-integration", "local", 1); err != nil {
+		t.Fatalf("AttachSemanticView() error = %v", err)
+	}
+	terminalSession.EnsureSemanticController("shell-integration", "local", 1)
+	attachment, err := terminalSession.AttachSemanticLiveConnection("shell-integration", 1, 80, 24, termgo.LiveSubscriber{})
+	if err != nil {
+		t.Fatalf("AttachSemanticLiveConnection() error = %v", err)
+	}
+	t.Cleanup(func() {
+		attachment.Detach()
+		terminalSession.LogicalDetachSemanticView("shell-integration", 1)
+	})
 	if err := manager.activateSessionFunc(context.Background(), terminalSession.ID, 80, 24); err != nil {
 		t.Fatalf("ActivateSessionContext() error = %v", err)
+	}
+	if _, err := terminalSession.ApplySemanticControllerSize("shell-integration", 80, 24, true); err != nil {
+		t.Fatalf("ApplySemanticControllerSize() error = %v", err)
 	}
 }
 
@@ -373,20 +388,16 @@ func newIsolatedShellHome(t *testing.T) string {
 	return homeDir
 }
 
-func nextHistorySequence(t *testing.T, session *termgo.Session) int64 {
+func nextHistorySequence(t *testing.T, session *termgo.Session) uint64 {
 	t.Helper()
-
-	chunks, err := session.GetHistoryChunks()
-	if err != nil {
-		t.Fatalf("GetHistoryChunks() error = %v", err)
-	}
-	if len(chunks) == 0 {
+	presentation, ok := session.LatestPresentation()
+	if !ok {
 		return 1
 	}
-	return chunks[len(chunks)-1].Sequence + 1
+	return presentation.Sequence + 1
 }
 
-func waitForHistoryContains(t *testing.T, session *termgo.Session, fromSeq int64, timeout time.Duration, needles ...string) string {
+func waitForHistoryContains(t *testing.T, session *termgo.Session, fromSeq uint64, timeout time.Duration, needles ...string) string {
 	t.Helper()
 
 	deadline := time.Now().Add(timeout)
@@ -404,17 +415,25 @@ func waitForHistoryContains(t *testing.T, session *termgo.Session, fromSeq int64
 	return ""
 }
 
-func historyTextFromSequence(t *testing.T, session *termgo.Session, fromSeq int64) string {
+func historyTextFromSequence(t *testing.T, session *termgo.Session, fromSeq uint64) string {
 	t.Helper()
-
-	chunks, err := session.GetHistoryFromSequence(fromSeq)
-	if err != nil {
-		t.Fatalf("GetHistoryFromSequence(%d) error = %v", fromSeq, err)
+	presentation, ok := session.LatestPresentation()
+	if !ok || presentation.Sequence < fromSeq {
+		return ""
 	}
-
+	page, err := session.ReadSemanticHistory("shell-integration", 1, termgo.SemanticHistoryRequest{
+		Direction: termgo.HistoryEnd,
+		Limit:     termgo.MaxSemanticHistoryRows,
+	})
+	if err != nil {
+		t.Fatalf("ReadSemanticHistory() error = %v", err)
+	}
 	var builder strings.Builder
-	for _, chunk := range chunks {
-		builder.Write(chunk.Data)
+	for _, row := range page.Frame.Rows {
+		for _, cell := range row.Cells {
+			builder.WriteString(cell.Text)
+		}
+		builder.WriteByte('\n')
 	}
 	return builder.String()
 }
@@ -454,12 +473,6 @@ type shellEventRecorder struct {
 	mu             sync.Mutex
 	nameUpdates    []shellNameUpdate
 	commandUpdates []termgo.TerminalSessionInfo
-}
-
-func (r *shellEventRecorder) OnTerminalData(sessionID string, event termgo.TerminalOutputEvent) {
-	if r.delegate != nil {
-		r.delegate.OnTerminalData(sessionID, event)
-	}
 }
 
 func (r *shellEventRecorder) OnTerminalNameChanged(sessionID string, oldName string, newName string, workingDir string) {

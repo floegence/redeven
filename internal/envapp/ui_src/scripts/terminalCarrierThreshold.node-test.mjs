@@ -3,56 +3,36 @@ import test from 'node:test';
 
 import {
   assertFixedTerminalPerformanceBrowserMode,
-  assertTerminalCarrierHistoryVisualEvidence,
-  assertTerminalCarrierHistoryVisualMatch,
   assertTerminalCarrierInteractiveLimit,
   assertTerminalCarrierP95Limit,
   buildFixedTerminalPerformanceReport,
   parseFixedTerminalPerformanceMetrics,
-  terminalCarrierExpectedRetainedBytes,
   terminalCarrierSampleMarkerName,
   terminalPerformanceSourceStateHash,
   terminalCarrierPercentile,
 } from './terminalCarrierThreshold.mjs';
 
-test('retains byte-exact terminal carrier fixtures up to the ring-buffer cap', () => {
-  const historyMaxBytes = 8 * 1024 * 1024;
-  assert.equal(terminalCarrierExpectedRetainedBytes({ fixtureBytes: 0, historyMaxBytes }), 0);
-  assert.equal(terminalCarrierExpectedRetainedBytes({
-    fixtureBytes: 448 * 1024,
-    historyMaxBytes,
-  }), 448 * 1024);
-  assert.equal(terminalCarrierExpectedRetainedBytes({
-    fixtureBytes: historyMaxBytes,
-    historyMaxBytes,
-  }), historyMaxBytes);
-  assert.equal(terminalCarrierExpectedRetainedBytes({
-    fixtureBytes: historyMaxBytes + 1,
-    historyMaxBytes,
-  }), historyMaxBytes);
-});
-
 test('allows disabled and in-budget terminal carrier samples', () => {
   assert.doesNotThrow(() => assertTerminalCarrierInteractiveLimit({
-    stage: 'shared_prepared_history',
+    stage: 'semantic_multi_view',
     interactiveMs: 500,
     maxInteractiveMs: 0,
   }));
   assert.doesNotThrow(() => assertTerminalCarrierInteractiveLimit({
-    stage: 'shared_prepared_history',
+    stage: 'semantic_multi_view',
     interactiveMs: 150,
     maxInteractiveMs: 150,
   }));
 });
 
-test('rejects an over-budget shared prepared-history sample with diagnostics', () => {
+test('rejects an over-budget semantic multi-view sample with diagnostics', () => {
   assert.throws(
     () => assertTerminalCarrierInteractiveLimit({
-      stage: 'shared_prepared_history',
+      stage: 'semantic_multi_view',
       interactiveMs: 150.1,
       maxInteractiveMs: 150,
     }),
-    /shared_prepared_history.*interactive_ms=150\.1.*max_interactive_ms=150/,
+    /semantic_multi_view.*interactive_ms=150\.1.*max_interactive_ms=150/,
   );
 });
 
@@ -65,92 +45,31 @@ test('calculates a nearest-rank terminal carrier percentile', () => {
 test('calculates the carrier p95 independently from the separate per-sample gate', () => {
   const nineteenFastSamples = Array.from({ length: 19 }, (_, index) => index + 20);
   assert.equal(assertTerminalCarrierP95Limit({
-    stage: 'shared_prepared_history',
+    stage: 'semantic_multi_view',
     values: [...nineteenFastSamples, 1106.9],
     maxP95Ms: 150,
   }), 38);
   assert.throws(
     () => assertTerminalCarrierP95Limit({
-      stage: 'shared_prepared_history',
+      stage: 'semantic_multi_view',
       values: [...nineteenFastSamples.slice(0, 18), 160, 1106.9],
       maxP95Ms: 150,
     }),
-    /shared_prepared_history.*p95_ms=160.*max_p95_ms=150/,
+    /semantic_multi_view.*p95_ms=160.*max_p95_ms=150/,
   );
 });
 
-test('compares shared prepared-history canvas evidence against the same-sample panel baseline', () => {
-  const match = assertTerminalCarrierHistoryVisualMatch(
-    { inkRatio: 0.3, grid: [0.1, 0.2, 0.3] },
-    { inkRatio: 0.29, grid: [0.1, 0.22, 0.28] },
-  );
-  assert.ok(Math.abs(match.meanGridDelta - (0.04 / 3)) < Number.EPSILON);
-  assert.equal(match.recoveredInkRatio, 0.29);
-  assert.throws(
-    () => assertTerminalCarrierHistoryVisualMatch(
-      { inkRatio: 0.3, grid: [0.1, 0.2] },
-      { inkRatio: 0.25, grid: [0.5, 0.6] },
-    ),
-    /provided history baseline.*grid_delta=0\.4000/,
-  );
-});
-
-test('uses strict grid evidence only when the terminal layouts match', () => {
-  const match = assertTerminalCarrierHistoryVisualEvidence({
-    baselineVisual: { inkRatio: 0.3, grid: [0.1, 0.2, 0.3] },
-    recoveredVisual: { inkRatio: 0.29, grid: [0.1, 0.22, 0.28] },
-    baselineLayout: { cols: 120, rows: 40 },
-    recoveredLayout: { cols: 120, rows: 40 },
-  });
-
-  assert.equal(match.mode, 'same-layout-grid');
-  assert.equal(match.layouts_match, true);
-  assert.ok(Math.abs(match.meanGridDelta - (0.04 / 3)) < Number.EPSILON);
-  assert.throws(
-    () => assertTerminalCarrierHistoryVisualEvidence({
-      baselineVisual: { inkRatio: 0.3, grid: [0.1, 0.2] },
-      recoveredVisual: { inkRatio: 0.25, grid: [0.5, 0.6] },
-      baselineLayout: { cols: 120, rows: 40 },
-      recoveredLayout: { cols: 120, rows: 40 },
-    }),
-    /provided history baseline.*grid_delta=0\.4000/,
-  );
-});
-
-test('uses nonblank coarse evidence when terminal geometry changes across surfaces', () => {
-  const evidence = assertTerminalCarrierHistoryVisualEvidence({
-    baselineVisual: { inkRatio: 0.1415, grid: [0.02, 0.15, 0.4, 0.01] },
-    recoveredVisual: { inkRatio: 0.2543, grid: [0.4, 0.02, 0.1, 0.3] },
-    baselineLayout: { cols: 160, rows: 44 },
-    recoveredLayout: { cols: 96, rows: 28 },
-  });
-
-  assert.equal(evidence.mode, 'different-layout-coarse');
-  assert.equal(evidence.layouts_match, false);
-  assert.equal(evidence.meanGridDelta, null);
-  assert.ok(evidence.inkRatioScale < 2);
-  assert.throws(
-    () => assertTerminalCarrierHistoryVisualEvidence({
-      baselineVisual: { inkRatio: 0.1415, grid: [0.02, 0.15, 0.4, 0.01] },
-      recoveredVisual: { inkRatio: 0.001, grid: [0, 0, 0, 0] },
-      baselineLayout: { cols: 160, rows: 44 },
-      recoveredLayout: { cols: 96, rows: 28 },
-    }),
-    /blank or too sparse/,
-  );
-});
-
-test('creates a unique shared prepared-history input marker for every sample', () => {
+test('creates a unique semantic multi-view input marker for every sample', () => {
   assert.equal(
-    terminalCarrierSampleMarkerName('input-shared-prepared-history', 1),
-    'input-shared-prepared-history-1',
+    terminalCarrierSampleMarkerName('semantic-multi-view-input', 1),
+    'semantic-multi-view-input-1',
   );
   assert.equal(
-    terminalCarrierSampleMarkerName('input-shared-prepared-history', 20),
-    'input-shared-prepared-history-20',
+    terminalCarrierSampleMarkerName('semantic-multi-view-input', 20),
+    'semantic-multi-view-input-20',
   );
   assert.throws(
-    () => terminalCarrierSampleMarkerName('input-shared-prepared-history', 0),
+    () => terminalCarrierSampleMarkerName('semantic-multi-view-input', 0),
     /positive safe integer/,
   );
 });
@@ -237,17 +156,16 @@ test('parses structured browser p95 evidence while ignoring ordinary Vitest outp
 
 test('builds one fixed-performance report with browser, carrier, revision, and runner evidence', () => {
   const browserMetrics = parseFixedTerminalPerformanceMetrics([
-    '[terminal-fixed-performance] {"metric":"terminal_activity_sidebar_presented","samples_ms":[20,24.1],"sample_count":2,"p95_ms":24.1,"limit_ms":100}',
-    '[terminal-fixed-performance] {"metric":"terminal_sidebar_presented","samples_ms":[20,21.4],"sample_count":2,"p95_ms":21.4,"limit_ms":100}',
-    '[terminal-fixed-performance] {"metric":"terminal_pending_row_painted","samples_ms":[17,18.2],"sample_count":2,"p95_ms":18.2,"limit_ms":32}',
-    '[terminal-fixed-performance] {"metric":"terminal_warm_core_switch","samples_ms":[18,18.8],"sample_count":2,"p95_ms":18.8,"limit_ms":50}',
+    '[terminal-fixed-performance] {"metric":"terminal_semantic_presentation_paint","samples_ms":[20,24.1],"sample_count":2,"p95_ms":24.1,"limit_ms":100}',
+    '[terminal-fixed-performance] {"metric":"terminal_semantic_input_dispatch","samples_ms":[17,18.2],"sample_count":2,"p95_ms":18.2,"limit_ms":32}',
+    '[terminal-fixed-performance] {"metric":"terminal_semantic_resize_settle","samples_ms":[18,18.8],"sample_count":2,"p95_ms":18.8,"limit_ms":150}',
   ].join('\n'));
   const carrierReport = {
     status: 'passed',
     runner: { browser_mode: 'headless' },
-    threshold: { max_interactive_ms: 150 },
-    shared_prepared_history_summary: { sample_count: 2, interactive_p95_ms: 59.9 },
-    shared_prepared_history_samples: [
+    threshold: { max_multi_view_p95_ms: 150 },
+    multi_view_summary: { sample_count: 2, interactive_p95_ms: 59.9 },
+    multi_view_samples: [
       { sample_index: 1, interactive_ms: 41.2 },
       { sample_index: 2, interactive_ms: 59.9 },
     ],
@@ -266,37 +184,35 @@ test('builds one fixed-performance report with browser, carrier, revision, and r
   assert.equal(report.status, 'passed');
   assert.equal(report.source_revision, sourceRevision);
   assert.equal(report.runner, runner);
-  assert.equal(report.browser.metrics.length, 4);
-  assert.equal(report.browser.metrics[0].scenario, 'preloaded_activity_entry');
+  assert.equal(report.browser.metrics.length, 3);
   assert.deepEqual(report.carrier.metric, {
-    metric: 'shared_prepared_history_interactive',
+    metric: 'semantic_multi_view_interactive',
     sample_count: 2,
     p95_ms: 59.9,
     limit_ms: 150,
     samples_ms: [41.2, 59.9],
     status: 'passed',
-    scenario: 'shared_prepared_history',
+    scenario: 'semantic_multi_view',
   });
   assert.equal(report.carrier.evidence, carrierReport);
 });
 
-test('accepts one shared prepared-history scheduling outlier when the complete p95 stays in budget', () => {
+test('accepts one semantic multi-view scheduling outlier when the complete p95 stays in budget', () => {
   const samplesMs = [
     114.8, 120.9, 136.6, 138.1, 139.2, 140.1, 141.3, 142.5, 143.2, 144.1,
     145.2, 146.3, 147.1, 147.8, 148.2, 148.6, 148.9, 149.1, 149.2, 151.5,
   ];
   const browserMetrics = [
-    { metric: 'terminal_activity_sidebar_presented', samples_ms: [8], sample_count: 1, p95_ms: 8, limit_ms: 100 },
-    { metric: 'terminal_sidebar_presented', samples_ms: [8], sample_count: 1, p95_ms: 8, limit_ms: 100 },
-    { metric: 'terminal_pending_row_painted', samples_ms: [8], sample_count: 1, p95_ms: 8, limit_ms: 32 },
-    { metric: 'terminal_warm_core_switch', samples_ms: [8], sample_count: 1, p95_ms: 8, limit_ms: 50 },
+    { metric: 'terminal_semantic_presentation_paint', samples_ms: [8], sample_count: 1, p95_ms: 8, limit_ms: 100 },
+    { metric: 'terminal_semantic_input_dispatch', samples_ms: [8], sample_count: 1, p95_ms: 8, limit_ms: 32 },
+    { metric: 'terminal_semantic_resize_settle', samples_ms: [8], sample_count: 1, p95_ms: 8, limit_ms: 150 },
   ];
   const carrierReport = {
     status: 'passed',
     runner: { browser_mode: 'headless' },
-    threshold: { max_interactive_ms: 150, max_shared_prepared_history_p95_ms: 150 },
-    shared_prepared_history_summary: { sample_count: 20, interactive_p95_ms: 149.2 },
-    shared_prepared_history_samples: samplesMs.map((interactive_ms, index) => ({
+    threshold: { max_multi_view_p95_ms: 150 },
+    multi_view_summary: { sample_count: 20, interactive_p95_ms: 149.2 },
+    multi_view_samples: samplesMs.map((interactive_ms, index) => ({
       sample_index: index + 1,
       interactive_ms,
     })),
@@ -312,16 +228,15 @@ test('accepts one shared prepared-history scheduling outlier when the complete p
 
 test('rejects incomplete or internally inconsistent fixed-performance evidence', () => {
   const incompleteBrowserMetrics = parseFixedTerminalPerformanceMetrics([
-    '[terminal-fixed-performance] {"metric":"terminal_activity_sidebar_presented","samples_ms":[20,24.1],"sample_count":2,"p95_ms":24.1,"limit_ms":100}',
-    '[terminal-fixed-performance] {"metric":"terminal_sidebar_presented","samples_ms":[20,21.4],"sample_count":2,"p95_ms":21.4,"limit_ms":100}',
-    '[terminal-fixed-performance] {"metric":"terminal_pending_row_painted","samples_ms":[17,18.2],"sample_count":2,"p95_ms":18.2,"limit_ms":32}',
+    '[terminal-fixed-performance] {"metric":"terminal_semantic_presentation_paint","samples_ms":[20,24.1],"sample_count":2,"p95_ms":24.1,"limit_ms":100}',
+    '[terminal-fixed-performance] {"metric":"terminal_semantic_input_dispatch","samples_ms":[17,18.2],"sample_count":2,"p95_ms":18.2,"limit_ms":32}',
   ].join('\n'));
   const carrierReport = {
     status: 'passed',
     runner: { browser_mode: 'headless' },
-    threshold: { max_interactive_ms: 150 },
-    shared_prepared_history_summary: { sample_count: 2, interactive_p95_ms: 59.9 },
-    shared_prepared_history_samples: [{ sample_index: 1 }],
+    threshold: { max_multi_view_p95_ms: 150 },
+    multi_view_summary: { sample_count: 2, interactive_p95_ms: 59.9 },
+    multi_view_samples: [{ sample_index: 1 }],
   };
 
   assert.throws(
@@ -331,7 +246,7 @@ test('rejects incomplete or internally inconsistent fixed-performance evidence',
       sourceRevision: {},
       runner: { browser_mode: 'headless' },
     }),
-    /missing terminal_warm_core_switch/,
+    /missing terminal_semantic_resize_settle/,
   );
   assert.throws(
     () => parseFixedTerminalPerformanceMetrics([
@@ -349,10 +264,9 @@ test('rejects incomplete or internally inconsistent fixed-performance evidence',
   assert.throws(
     () => buildFixedTerminalPerformanceReport({
       browserMetrics: [
-        { metric: 'terminal_activity_sidebar_presented', samples_ms: [20, 24.1], sample_count: 2, p95_ms: 24.1, limit_ms: 100 },
-        { metric: 'terminal_sidebar_presented', samples_ms: [20, 21.4], sample_count: 2, p95_ms: 21.4, limit_ms: 100 },
-        { metric: 'terminal_pending_row_painted', samples_ms: [17, 18.2], sample_count: 2, p95_ms: 18.2, limit_ms: 32 },
-        { metric: 'terminal_warm_core_switch', samples_ms: [18, 18.8], sample_count: 2, p95_ms: 18.8, limit_ms: 50 },
+        { metric: 'terminal_semantic_presentation_paint', samples_ms: [20, 24.1], sample_count: 2, p95_ms: 24.1, limit_ms: 100 },
+        { metric: 'terminal_semantic_input_dispatch', samples_ms: [17, 18.2], sample_count: 2, p95_ms: 18.2, limit_ms: 32 },
+        { metric: 'terminal_semantic_resize_settle', samples_ms: [18, 18.8], sample_count: 2, p95_ms: 18.8, limit_ms: 150 },
       ],
       carrierReport,
       sourceRevision: {},

@@ -6,7 +6,7 @@ export type TerminalGridSize = Readonly<{
 export type TerminalEffectiveGeometry = TerminalGridSize & Readonly<{
   lifecycleEpoch: number;
   generation: number;
-  outputSequenceBoundary: number;
+  presentationSequence: number;
 }>;
 
 export type TerminalAppliedGeometry = TerminalEffectiveGeometry & Readonly<{
@@ -73,7 +73,7 @@ function sameEffective(
   return Boolean(left && right
     && left.lifecycleEpoch === right.lifecycleEpoch
     && left.generation === right.generation
-    && left.outputSequenceBoundary === right.outputSequenceBoundary
+    && left.presentationSequence === right.presentationSequence
     && left.cols === right.cols
     && left.rows === right.rows);
 }
@@ -410,7 +410,7 @@ export function createTerminalGeometryPresentationController(
         hideImmediately();
         return 'conflict';
       }
-      if (effective.outputSequenceBoundary < current.outputSequenceBoundary) return 'stale';
+      if (effective.presentationSequence < current.presentationSequence) return 'stale';
     }
     knownEffective = { ...effective };
     reconcile();

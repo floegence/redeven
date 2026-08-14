@@ -20,13 +20,11 @@ func TestTerminalRPCTypeIDsAreUnique(t *testing.T) {
 		"clear":                     TypeID_TERMINAL_CLEAR,
 		"session delete":            TypeID_TERMINAL_SESSION_DELETE,
 		"name update":               TypeID_TERMINAL_NAME_UPDATE,
-		"session stats":             TypeID_TERMINAL_SESSION_STATS,
 		"sessions changed":          TypeID_TERMINAL_SESSIONS_CHANGED,
 		"foreground command update": TypeID_TERMINAL_FOREGROUND_COMMAND_UPDATE,
 		"output activity update":    TypeID_TERMINAL_OUTPUT_ACTIVITY_UPDATE,
 		"execution context update":  TypeID_TERMINAL_EXECUTION_CONTEXT_UPDATE,
 		"semantic work update":      TypeID_TERMINAL_WORK_STATE_UPDATE,
-		"history checkpoint commit": TypeID_TERMINAL_HISTORY_CHECKPOINT_COMMIT,
 	} {
 		if previous, exists := typeIDs[typeID]; exists {
 			t.Fatalf("terminal RPC Type ID %d is shared by %q and %q", typeID, previous, name)
@@ -43,8 +41,8 @@ func TestTerminalRPCTypeIDsAreUnique(t *testing.T) {
 	if TypeID_TERMINAL_WORK_STATE_UPDATE != 2016 {
 		t.Fatalf("semantic work Type ID = %d, want 2016", TypeID_TERMINAL_WORK_STATE_UPDATE)
 	}
-	if TypeID_TERMINAL_HISTORY_CHECKPOINT_COMMIT != 2017 {
-		t.Fatalf("history checkpoint commit Type ID = %d, want 2017", TypeID_TERMINAL_HISTORY_CHECKPOINT_COMMIT)
+	if TypeID_TERMINAL_CLEAR != 2008 {
+		t.Fatalf("semantic clear Type ID = %d, want 2008", TypeID_TERMINAL_CLEAR)
 	}
 }
 

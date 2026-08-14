@@ -25,7 +25,7 @@ describe('workbench terminal visual coordinator', () => {
     const core = createFakeCore();
     const surface = createSurface();
 
-    coordinator.registerCore('widget-1', 'session-1', core as any);
+    coordinator.registerViewport('widget-1', 'session-1', core as any);
     coordinator.registerSurface('widget-1', 'session-1', surface);
 
     const token = coordinator.beginInteraction('viewport_pan');
@@ -50,7 +50,7 @@ describe('workbench terminal visual coordinator', () => {
     const coordinator = createWorkbenchTerminalVisualCoordinator();
     const core = createFakeCore();
 
-    coordinator.registerCore('widget-1', 'session-1', core as any);
+    coordinator.registerViewport('widget-1', 'session-1', core as any);
 
     const first = coordinator.beginInteraction('widget_drag');
     const second = coordinator.beginInteraction('widget_maximize');
@@ -81,11 +81,11 @@ describe('workbench terminal visual coordinator', () => {
     const core = createFakeCore();
     const surface = createSurface();
 
-    coordinator.registerCore('widget-1', 'session-1', core as any);
+    coordinator.registerViewport('widget-1', 'session-1', core as any);
     coordinator.registerSurface('widget-1', 'session-1', surface);
     expect(coordinator.getDiagnostics().registeredTerminalCount).toBe(1);
 
-    coordinator.registerCore('widget-1', 'session-1', null);
+    coordinator.registerViewport('widget-1', 'session-1', null);
     expect(coordinator.getDiagnostics().registeredTerminalCount).toBe(1);
 
     coordinator.registerSurface('widget-1', 'session-1', null);
@@ -102,7 +102,7 @@ describe('workbench terminal visual coordinator', () => {
 
   it('clears registrations and interaction state on dispose', () => {
     const coordinator = createWorkbenchTerminalVisualCoordinator();
-    coordinator.registerCore('widget-1', 'session-1', createFakeCore() as any);
+    coordinator.registerViewport('widget-1', 'session-1', createFakeCore() as any);
     coordinator.setSelectedWidgetId('widget-1');
     coordinator.beginInteraction('widget_drag');
 

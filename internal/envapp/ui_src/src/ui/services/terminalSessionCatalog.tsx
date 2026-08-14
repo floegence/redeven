@@ -7,30 +7,14 @@ import type {
   TerminalWorkStateInfo,
 } from '@floegence/floeterm-terminal-web/sessions';
 import type { TerminalSessionInfo } from '../protocol/redeven_v1/sdk/terminal';
-import type { PreparedPagedTerminalHistory } from '@floegence/floeterm-terminal-web/history';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useRedevenRpc } from '../protocol/redeven_v1';
 import { useEnvContext } from '../pages/EnvContext';
 import { canLaunchProcess, isPermissionDeniedError } from '../utils/permission';
-import {
-  createRedevenPagedHistoryFetcher,
-  createRedevenTerminalCatalogTransport,
-} from './terminalCatalogTransport';
+import { createRedevenTerminalCatalogTransport } from './terminalCatalogTransport';
 import { createRedevenTerminalSessionsCoordinator } from './terminalSessions';
-import { scheduleTerminalFeaturePreload } from './terminalFeaturePreload';
-import {
-  createTerminalHistoryWarmup,
-  type TerminalHistoryWarmup,
-  type TerminalHistoryWarmupEvent,
-} from './terminalHistoryWarmup';
-import { resolveTerminalWarmBudgetBytes } from './terminalAdaptiveWorkingSet';
 import { TerminalSessionsLifecycleSync } from './terminalSessionsLifecycleSync';
-import { publishDebugConsoleStructuredEvent } from './debugConsoleCapture';
-import {
-  markTerminalPerformance,
-  pseudonymousTerminalSessionRef,
-  type TerminalPerformanceStage,
-} from './terminalPerformance';
+import { markTerminalPerformance } from './terminalPerformance';
 
 export type TerminalSessionCatalogValue = Readonly<{
   sessions: Accessor<readonly TerminalSessionInfo[]>;
@@ -58,15 +42,6 @@ export type TerminalSessionCatalogValue = Readonly<{
     localPathCapability?: TerminalSessionInfo['localPathCapability'] | null;
   }) => void;
   clearForPermissionDenied: () => void;
-  requestPreparedHistory: (sessionId: string) => Promise<PreparedPagedTerminalHistory | null>;
-  startHistoryWarmup: () => void;
-  noteOutputCommitted: (
-    sessionId: string,
-    source: 'history' | 'live',
-    sequence: number | undefined,
-  ) => void;
-  invalidateHistory: (sessionId: string, reason?: string) => void;
-  setSurfaceActive: (surfaceId: string, active: boolean) => void;
 }>;
 
 export const TerminalSessionCatalogContext = createContext<TerminalSessionCatalogValue>();
@@ -102,19 +77,6 @@ function conflictedExecutionContext(
   };
 }
 
-export function terminalHistoryWarmupPerformanceStage(
-  event: TerminalHistoryWarmupEvent['event'],
-): TerminalPerformanceStage {
-  switch (event) {
-    case 'start': return 'history-prefetch-start';
-    case 'ready': return 'history-prefetch-ready';
-    case 'skipped': return 'history-prefetch-skipped';
-    case 'evicted': return 'history-prefetch-evicted';
-    case 'paused': return 'warm-queue-paused';
-    case 'complete': return 'warm-queue-complete';
-  }
-}
-
 export function TerminalSessionCatalogProvider(props: ParentProps) {
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
@@ -137,16 +99,13 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
   let unsubscribeOutputActivity: (() => void) | null = null;
   let unsubscribeExecutionContext: (() => void) | null = null;
   let unsubscribeWorkState: (() => void) | null = null;
-  let preloadCancel: (() => void) | null = null;
   let lifecycleRevision = 0;
   let refreshRequestSequence = 0;
   let providerDisposed = false;
   let coordinatorHydrated = false;
-  let historyWarmup: TerminalHistoryWarmup | null = null;
   let deniedClient: object | null = null;
   let deniedEnvId = '';
   let deniedPermissions: unknown = null;
-  const activeSurfaceIds = new Set<string>();
   const removedSessionIds = new Set<string>();
   const pendingForegroundCommands = new Map<string, TerminalForegroundCommandInfo>();
   const pendingOutputActivities = new Map<string, TerminalOutputActivityInfo>();
@@ -517,7 +476,6 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
 
     const frozen = Object.freeze([...visible]);
     setSessions(frozen);
-    historyWarmup?.syncSessions(frozen);
   };
 
   const clearPermissionDenied = () => {
@@ -569,8 +527,6 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     activeCoordinator = null;
     activeClient = null;
     coordinatorHydrated = false;
-    historyWarmup?.dispose();
-    historyWarmup = null;
     setCoordinator(null);
     if (!preserveSnapshot) {
       removedSessionIds.clear();
@@ -593,45 +549,6 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     });
     for (const session of sessions()) next.upsertSession(session);
     activeCoordinator = next;
-    const deviceMemoryGiB = typeof navigator === 'undefined'
-      ? undefined
-      : (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
-    const connection = typeof navigator === 'undefined'
-      ? undefined
-      : (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
-    historyWarmup = createTerminalHistoryWarmup({
-      budgetBytes: Math.min(32 * 1024 * 1024, Math.floor(resolveTerminalWarmBudgetBytes(deviceMemoryGiB) / 8)),
-      saveData: connection?.saveData === true,
-      fetchPage: (sessionId, request) => createRedevenPagedHistoryFetcher(rpc, sessionId)(request),
-      onEvent: (event) => {
-        const sessionRef = event.sessionId ? pseudonymousTerminalSessionRef(event.sessionId) : undefined;
-        const stage = terminalHistoryWarmupPerformanceStage(event.event);
-        publishDebugConsoleStructuredEvent({
-          created_at: new Date().toISOString(),
-          source: 'ui',
-          scope: 'terminal_warmup',
-          kind: stage ?? `history-prefetch-${event.event}`,
-          trace_id: sessionRef ? `terminal-warmup-${sessionRef}` : undefined,
-          duration_ms: event.durationMs,
-          message: `Terminal history prefetch ${event.event}`,
-          detail: {
-            session_ref: sessionRef,
-            page_count: event.pageCount,
-            byte_length: event.byteLength,
-            reason: event.reason,
-          },
-        });
-        markTerminalPerformance(stage, {
-          session_ref: sessionRef,
-          page_count: event.pageCount,
-          byte_length: event.byteLength,
-          duration_ms: event.durationMs,
-          reason: event.reason,
-        });
-      },
-    });
-    historyWarmup.setPageActive(activeSurfaceIds.size > 0);
-    if (typeof document !== 'undefined') historyWarmup.setPageHidden(document.hidden);
     setCoordinator(next);
     unsubscribeCoordinator = next.subscribe((snapshot) => {
       if (!coordinatorHydrated && snapshot.length === 0) return;
@@ -822,7 +739,6 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
       latestWorkStates.delete(normalized);
       pendingExecutionContextConflicts.delete(normalized);
       localPathCapabilityOverrides.delete(normalized);
-      historyWarmup?.invalidate(normalized, 'removed');
       const current = getCoordinator();
       if (current) current.removeSession(normalized);
       else applySnapshot(sessions().filter((session) => session.id !== normalized));
@@ -862,8 +778,6 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
   };
 
   const clearForPermissionDenied = () => {
-    preloadCancel?.();
-    preloadCancel = null;
     disposeConnection(false);
     setStale(false);
     markPermissionDenied(
@@ -873,42 +787,10 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     );
   };
 
-  const requestPreparedHistory = (sessionId: string) => (
-    historyWarmup?.request(sessionId, 'interactive') ?? Promise.resolve(null)
-  );
-
-  const startHistoryWarmup = () => historyWarmup?.start();
-
-  const noteOutputCommitted = (
-    sessionId: string,
-    source: 'history' | 'live',
-    sequence: number | undefined,
-  ) => {
-    historyWarmup?.noteOutputCommitted(sessionId, source, sequence);
-  };
-
-  const invalidateHistory = (sessionId: string, reason?: string) => {
-    historyWarmup?.invalidate(sessionId, reason);
-  };
-
-  const setSurfaceActive = (surfaceId: string, active: boolean) => {
-    const id = String(surfaceId ?? '').trim();
-    if (!id) return;
-    if (active) activeSurfaceIds.add(id);
-    else activeSurfaceIds.delete(id);
-    historyWarmup?.setPageActive(activeSurfaceIds.size > 0);
-  };
-
   const remoteOpeningObservedAtMs = (sessionId: string): number | undefined => {
     remoteOpeningEpochRevision();
     return remoteOpeningObservedAtBySession.get(String(sessionId ?? '').trim());
   };
-
-  if (typeof document !== 'undefined') {
-    const onVisibilityChange = () => historyWarmup?.setPageHidden(document.hidden);
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    onCleanup(() => document.removeEventListener('visibilitychange', onVisibilityChange));
-  }
 
   createEffect(() => {
     const envId = String(env.env_id() ?? '').trim();
@@ -930,16 +812,12 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
 
     if (!permissionReady) {
       clearPermissionDenied();
-      preloadCancel?.();
-      preloadCancel = null;
       disposeConnection(false);
       setStale(false);
       return;
     }
 
     if (!allowed) {
-      preloadCancel?.();
-      preloadCancel = null;
       disposeConnection(false);
       setStale(false);
       markPermissionDenied(client, envId, permissions);
@@ -947,8 +825,6 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     }
 
     if (serverDenialIsCurrent) {
-      preloadCancel?.();
-      preloadCancel = null;
       disposeConnection(false);
       setStale(false);
       return;
@@ -968,17 +844,10 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     untrack(() => ensureCoordinator(client));
     void untrack(() => refresh()).catch(() => undefined);
 
-    preloadCancel?.();
-    preloadCancel = scheduleTerminalFeaturePreload({ reason: 'idle' });
-    onCleanup(() => {
-      preloadCancel?.();
-      preloadCancel = null;
-    });
   });
 
   onCleanup(() => {
     providerDisposed = true;
-    preloadCancel?.();
     disposeConnection(false);
   });
 
@@ -998,11 +867,6 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     removeSession,
     updateSessionMeta,
     clearForPermissionDenied,
-    requestPreparedHistory,
-    startHistoryWarmup,
-    noteOutputCommitted,
-    invalidateHistory,
-    setSurfaceActive,
   };
 
   return (

@@ -14,23 +14,21 @@ import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { FlowerContextMenuIcon } from '../icons/FlowerSoftAuraIcon';
 import { useRedevenRpc } from '../protocol/redeven_v1';
 import {
-  TerminalCore,
   getThemeColors,
   isTerminalThemeName,
   normalizeTerminalExecutionContextInfo,
   normalizeTerminalWorkStateInfo,
   type Logger,
-  type TerminalAppearance,
   type TerminalExecutionContextInfo,
   type TerminalOutputActivityInfo,
   type TerminalThemeName,
-  type TerminalTouchScrollRuntime,
   type TerminalWorkStateInfo,
 } from '@floegence/floeterm-terminal-web';
 import type { TerminalSessionInfo } from '../protocol/redeven_v1/sdk/terminal';
 import {
   createRedevenTerminalLiveBundle,
   createTerminalConnId,
+  type RedevenTerminalTransport,
 } from '../services/terminalTransport';
 import { disposeRedevenTerminalSessionsCoordinator, getRedevenTerminalSessionsCoordinator } from '../services/terminalSessions';
 import { useTerminalSessionCatalog } from '../services/terminalSessionCatalog';
@@ -81,6 +79,10 @@ import { resolveTerminalMobileKeyboardInsetPx } from './terminalMobileKeyboardIn
 import { useFilePreviewContext } from './FilePreviewContext';
 import { fileItemFromPath } from '../utils/filePreviewItem';
 import { writeTextToClipboard } from '../utils/clipboard';
+import {
+  desktopShellExternalURLOpenAvailable,
+  openExternalURLInDesktopShell,
+} from '../services/desktopShellBridge';
 import type { TerminalResolvedLinkTarget } from '../services/terminalLinkProvider';
 import type { TerminalShellIntegrationEvent } from '../services/terminalShellIntegration';
 import { createTerminalTabActivityTracker, type TerminalSessionWorkState, type TerminalTabVisualState } from '../services/terminalTabActivity';
@@ -94,14 +96,6 @@ import { useI18n } from '../i18n';
 import { Tooltip } from '../primitives/Tooltip';
 import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
 import {
-  createTerminalAdaptiveWorkingSetManager,
-  type TerminalWorkingSetInteraction,
-  type TerminalWorkingSetRuntime,
-} from '../services/terminalAdaptiveWorkingSet';
-import {
-  releaseTerminalRecoveryDiagnostics,
-} from '../services/terminalRecoveryDiagnostics';
-import {
   markTerminalPerformance,
   pseudonymousTerminalSessionRef,
 } from '../services/terminalPerformance';
@@ -110,6 +104,11 @@ import {
   type TerminalSessionRuntimeActions,
   type TerminalSessionRuntimeStatus,
 } from './TerminalSessionRuntime';
+import type {
+  SemanticTerminalAppearance,
+  SemanticTerminalTouchScrollRuntime,
+  SemanticTerminalViewportHandle,
+} from './semanticTerminalViewport';
 import {
   TerminalSessionNavigator,
   TerminalSessionChromeIcon,
@@ -204,7 +203,10 @@ export interface TerminalPanelProps {
   terminalGeometryPreferences?: TerminalPanelGeometryPreferences;
   workbenchSelected?: boolean;
   workbenchActivationSeq?: number;
-  onWorkbenchTerminalCoreChange?: (sessionId: string, core: TerminalCore | null) => void;
+  onWorkbenchTerminalViewportChange?: (
+    sessionId: string,
+    viewport: SemanticTerminalViewportHandle | null,
+  ) => void;
   onWorkbenchTerminalSurfaceChange?: (sessionId: string, surface: HTMLDivElement | null) => void;
   onTitleChange?: (title: string) => void;
 }
@@ -287,22 +289,6 @@ function buildLogger(): Logger {
   };
 }
 
-function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
-
-  const units = ['B', 'KB', 'MB', 'GB'];
-  let value = bytes;
-  let unitIndex = 0;
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex += 1;
-  }
-
-  const rounded = unitIndex === 0 ? Math.round(value) : Math.round(value * 10) / 10;
-  return `${rounded} ${units[unitIndex]}`;
-}
-
-const HISTORY_STATS_POLL_MS = 10_000;
 const MAX_INLINE_TERMINAL_CONTEXT_CHARS = 10_000;
 
 const TERMINAL_INPUT_SELECTOR = 'textarea[aria-label="Terminal input"], textarea';
@@ -355,6 +341,17 @@ function waitForTerminalUiPaint(): Promise<void> {
   return new Promise((resolve) => deferAfterPaint(resolve));
 }
 
+export async function clearSemanticTerminalContent(
+  transport: RedevenTerminalTransport,
+  sessionId: string,
+) {
+  const normalizedSessionId = String(sessionId ?? '').trim();
+  if (!normalizedSessionId || !transport.clearSemanticContent) {
+    throw new Error('Semantic terminal clear is unavailable');
+  }
+  return await transport.clearSemanticContent(normalizedSessionId);
+}
+
 type terminal_context_snapshot = {
   sessionId: string;
   selectionText: string;
@@ -362,24 +359,26 @@ type terminal_context_snapshot = {
   hasSelection: boolean;
 };
 
-function resolveTerminalTouchScrollTarget(core: TerminalCore | null): TerminalTouchScrollRuntime | null {
-  if (!core) return null;
-  return core.getTouchScrollRuntime();
+function resolveTerminalTouchScrollTarget(
+  viewport: SemanticTerminalViewportHandle | null,
+): SemanticTerminalTouchScrollRuntime | null {
+  if (!viewport) return null;
+  return viewport.getTouchScrollRuntime();
 }
 
-function readTerminalSelectionText(core: TerminalCore | null): string {
+function readTerminalSelectionText(viewport: SemanticTerminalViewportHandle | null): string {
   try {
-    return String(core?.getSelectionText?.() ?? '');
+    return String(viewport?.getSelectionText?.() ?? '');
   } catch {
     return '';
   }
 }
 
-function readTerminalScreenText(core: TerminalCore | null): string {
-  if (!core) return '';
+function readTerminalScreenText(viewport: SemanticTerminalViewportHandle | null): string {
+  if (!viewport) return '';
 
   try {
-    const terminalInfo = core.getTerminalInfo();
+    const terminalInfo = viewport.getTerminalInfo();
     const rowCount = Math.max(0, Math.floor(Number(terminalInfo?.rows ?? 0)));
     const bufferLength = Math.max(0, Math.floor(Number(terminalInfo?.bufferLength ?? 0)));
     if (rowCount <= 0 || bufferLength <= 0) return '';
@@ -387,7 +386,7 @@ function readTerminalScreenText(core: TerminalCore | null): string {
     const lines: string[] = [];
     const startRow = Math.max(0, bufferLength - rowCount);
     for (let row = startRow; row < bufferLength; row += 1) {
-      lines.push(core.readBufferLine(row, { trimRight: true }));
+      lines.push(viewport.readBufferLine(row, { trimRight: true }));
     }
 
     const text = lines.join('\n').trim();
@@ -399,12 +398,15 @@ function readTerminalScreenText(core: TerminalCore | null): string {
   }
 }
 
-function buildTerminalContextSnapshot(sessionId: string, core: TerminalCore | null): terminal_context_snapshot {
+function buildTerminalContextSnapshot(
+  sessionId: string,
+  viewport: SemanticTerminalViewportHandle | null,
+): terminal_context_snapshot {
   const normalizedSessionId = String(sessionId ?? '').trim();
-  const rawSelectionText = readTerminalSelectionText(core);
+  const rawSelectionText = readTerminalSelectionText(viewport);
   const hasSelection = (() => {
     try {
-      return Boolean(core?.hasSelection?.() ?? false);
+      return Boolean(viewport?.hasSelection?.() ?? false);
     } catch {
       return rawSelectionText.length > 0;
     }
@@ -413,7 +415,7 @@ function buildTerminalContextSnapshot(sessionId: string, core: TerminalCore | nu
   return {
     sessionId: normalizedSessionId,
     selectionText: normalizedSelectionText,
-    screenText: hasSelection ? '' : readTerminalScreenText(core),
+    screenText: hasSelection ? '' : readTerminalScreenText(viewport),
     hasSelection,
   };
 }
@@ -969,7 +971,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const [terminalContextMenuHostEl, setTerminalContextMenuHostEl] = createSignal<HTMLDivElement | null>(null);
 
   let searchLastAppliedKey = '';
-  let searchBoundCore: TerminalCore | null = null;
+  let searchBoundViewport: SemanticTerminalViewportHandle | null = null;
 
   ensureTerminalPreferencesInitialized(floe.persist);
   const terminalPrefs = useTerminalPreferences();
@@ -981,12 +983,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const fallbackSessionsCoordinator = terminalCatalog
     ? null
     : getRedevenTerminalSessionsCoordinator({ connId, transport, logger: buildLogger() });
-  const terminalWorkingSet = createTerminalAdaptiveWorkingSetManager({
-    deviceMemoryGiB: typeof navigator === 'undefined'
-      ? undefined
-      : (navigator as Navigator & { deviceMemory?: number }).deviceMemory,
-  });
-  const workingSetRuntimeDisposers = new Map<string, () => void>();
   let disposed = false;
   let nextCreateOperationSequence = 0;
   let lastSidebarPresentedEpoch = -1;
@@ -999,8 +995,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   onCleanup(() => {
     disposed = true;
     transport.dispose();
-    terminalWorkingSet.dispose();
-    workingSetRuntimeDisposers.clear();
     if (sidebarPathCopyResetTimer !== undefined) {
       globalThis.clearTimeout(sidebarPathCopyResetTimer);
       sidebarPathCopyResetTimer = undefined;
@@ -1030,12 +1024,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     && protocol.session?.() === fence.protocolClient
     && (terminalCatalog?.connectionEpoch() ?? 0) === fence.connectionEpoch
   );
-
-  createEffect(() => {
-    if (!terminalCatalog) return;
-    terminalCatalog.setSurfaceActive(panelId, connected() && viewActive() && workbenchSelected());
-    onCleanup(() => terminalCatalog.setSurfaceActive(panelId, false));
-  });
 
   createEffect(() => {
     if (terminalFocusOwner()) return;
@@ -1293,9 +1281,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return true;
   };
 
-  const [historyBytes, setHistoryBytes] = createSignal<number | null>(null);
+  const [historyRowsBySession, setHistoryRowsBySession] = createSignal<Readonly<Record<string, number>>>({});
 
-  const coreRegistry = new Map<string, TerminalCore>();
+  const viewportRegistry = new Map<string, SemanticTerminalViewportHandle>();
   const surfaceRegistry = new Map<string, HTMLDivElement>();
   const actionsRegistry = new Map<string, TerminalSessionRuntimeActions>();
   const mobileKeyboardPathCache = new Map<string, TerminalMobileKeyboardPathEntry[]>();
@@ -1318,7 +1306,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     },
   });
 
-  const [coreRegistrySeq, setCoreRegistrySeq] = createSignal(0);
+  const [viewportRegistrySeq, setViewportRegistrySeq] = createSignal(0);
   const [surfaceRegistrySeq, setSurfaceRegistrySeq] = createSignal(0);
   let mobileKeyboardInsetSyncRaf: number | null = null;
 
@@ -1329,17 +1317,17 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     )
   ), []);
 
-  const buildRegisteredTerminalAppearance = (): TerminalAppearance => ({
+  const buildRegisteredTerminalAppearance = (): SemanticTerminalAppearance => ({
     theme: terminalThemeColors(),
     fontSize: fontSize(),
     fontFamily: fontFamily(),
   });
 
   const applyRegisteredTerminalAppearance = (
-    core: TerminalCore,
-    appearance: TerminalAppearance = buildRegisteredTerminalAppearance(),
+    viewport: SemanticTerminalViewportHandle,
+    appearance: SemanticTerminalAppearance = buildRegisteredTerminalAppearance(),
   ) => {
-    core.setAppearance(appearance);
+    viewport.setAppearance(appearance);
   };
 
   const updateSessionGroupState = (
@@ -1496,33 +1484,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const activeId = activeDisplaySessionId();
     return activeId && !visiblePendingTerminalSessionById(activeId) ? activeId : null;
   });
-
-  createEffect(() => {
-    terminalWorkingSet.setActiveSession(activeSessionId());
+  const activeHistoryRows = createMemo(() => {
+    const sessionId = activeSessionId();
+    return sessionId ? historyRowsBySession()[sessionId] ?? null : null;
   });
-
-  createEffect(() => {
-    const id = searchOpen() ? activeSessionId() : null;
-    if (!id) return;
-    terminalWorkingSet.setInteraction(id, 'search', true);
-    onCleanup(() => terminalWorkingSet.setInteraction(id, 'search', false));
-  });
-
-  createEffect(() => {
-    const id = terminalAskMenu()?.selection.sessionId ?? terminalSidebarMenu()?.sessionId ?? null;
-    if (!id) return;
-    terminalWorkingSet.setInteraction(id, 'context-menu', true);
-    onCleanup(() => terminalWorkingSet.setInteraction(id, 'context-menu', false));
-  });
-
-  if (typeof document !== 'undefined') {
-    const handleTerminalPageVisibility = () => {
-      terminalWorkingSet.setPageHidden(document.hidden);
-    };
-    handleTerminalPageVisibility();
-    document.addEventListener('visibilitychange', handleTerminalPageVisibility);
-    onCleanup(() => document.removeEventListener('visibilitychange', handleTerminalPageVisibility));
-  }
 
   const activePendingSession = createMemo<pending_terminal_session | null>(() => {
     const activeId = activeDisplaySessionId();
@@ -1718,7 +1683,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       isActive: true,
       lastActiveAtMs: Date.now(),
     });
-    terminalCatalog?.startHistoryWarmup();
     const intent = pendingTerminalFocusIntent;
     if (!intent || intent.sessionId !== sessionId) return;
     tryPendingTerminalFocus(intent);
@@ -1771,35 +1735,18 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     tabActivityTracker.dispose();
   });
 
-  const registerWorkingSetRuntime = (id: string, runtime: TerminalWorkingSetRuntime | null) => {
-    const normalizedId = String(id ?? '').trim();
-    if (!normalizedId) return;
-    workingSetRuntimeDisposers.get(normalizedId)?.();
-    workingSetRuntimeDisposers.delete(normalizedId);
-    if (!runtime) return;
-    workingSetRuntimeDisposers.set(normalizedId, terminalWorkingSet.register(normalizedId, runtime));
-  };
-
-  const setWorkingSetInteraction = (
-    id: string,
-    interaction: TerminalWorkingSetInteraction,
-    active: boolean,
-  ) => {
-    terminalWorkingSet.setInteraction(id, interaction, active);
-  };
-
-  const registerCore = (id: string, core: TerminalCore | null) => {
+  const registerViewport = (id: string, viewport: SemanticTerminalViewportHandle | null) => {
     if (!id) return;
-    if (core) {
-      coreRegistry.set(id, core);
-      applyRegisteredTerminalAppearance(core);
-      props.onWorkbenchTerminalCoreChange?.(id, core);
-      setCoreRegistrySeq((v) => v + 1);
+    if (viewport) {
+      viewportRegistry.set(id, viewport);
+      applyRegisteredTerminalAppearance(viewport);
+      props.onWorkbenchTerminalViewportChange?.(id, viewport);
+      setViewportRegistrySeq((v) => v + 1);
       return;
     }
-    coreRegistry.delete(id);
-    props.onWorkbenchTerminalCoreChange?.(id, null);
-    setCoreRegistrySeq((v) => v + 1);
+    viewportRegistry.delete(id);
+    props.onWorkbenchTerminalViewportChange?.(id, null);
+    setViewportRegistrySeq((v) => v + 1);
   };
 
   const registerSurfaceElement = (id: string, surface: HTMLDivElement | null) => {
@@ -1836,6 +1783,16 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     });
   };
 
+  const handleHistorySummary = (
+    id: string,
+    summary: Readonly<{ totalRows: number }>,
+  ) => {
+    const totalRows = Math.max(0, Math.floor(Number(summary.totalRows) || 0));
+    setHistoryRowsBySession((current) => (
+      current[id] === totalRows ? current : { ...current, [id]: totalRows }
+    ));
+  };
+
   const handleGeometryPresentation = (
     id: string,
     presentation: TerminalSharedGeometryPresentation | null,
@@ -1855,7 +1812,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         && previous.local.cols === presentation.local.cols
         && previous.local.rows === presentation.local.rows
         && previous.effective.generation === presentation.effective.generation
-        && previous.effective.outputSequenceBoundary === presentation.effective.outputSequenceBoundary
+        && previous.effective.presentationSequence === presentation.effective.presentationSequence
         && previous.effective.cols === presentation.effective.cols
         && previous.effective.rows === presentation.effective.rows) return current;
       return { ...current, [id]: presentation };
@@ -1989,9 +1946,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   createEffect(() => {
     const appearance = buildRegisteredTerminalAppearance();
-    void coreRegistrySeq();
-    for (const core of coreRegistry.values()) {
-      applyRegisteredTerminalAppearance(core, appearance);
+    void viewportRegistrySeq();
+    for (const viewport of viewportRegistry.values()) {
+      applyRegisteredTerminalAppearance(viewport, appearance);
     }
   });
 
@@ -2048,9 +2005,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     sequence: number | undefined,
   ) => {
     tabActivityTracker.handleOutputCommitted(sessionId, { source, sequence });
-    if (source === 'live') {
-      terminalCatalog?.noteOutputCommitted(sessionId, source, sequence);
-    }
   };
 
   const handleOutputCoverage = (
@@ -2074,7 +2028,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       byteLength,
       shouldMarkUnread: shouldMarkSessionUnread(sessionId),
     });
-    if (source === 'live') terminalWorkingSet.evaluate();
   };
 
   const handleLiveOutputObserved = (
@@ -2104,6 +2057,19 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       const message = error instanceof Error ? error.message : String(error);
       notify.error(i18n.t('terminal.failedToOpenFilePreviewTitle'), message || i18n.t('terminal.couldNotOpenFileReference'));
     }
+  };
+
+  const openTerminalExternalLink = async (url: string) => {
+    if (desktopShellExternalURLOpenAvailable()) {
+      const result = await openExternalURLInDesktopShell(url);
+      if (result?.ok) return;
+      notify.error(
+        i18n.t('terminal.failedToOpenFilePreviewTitle'),
+        result?.message || i18n.t('terminal.couldNotOpenFileReference'),
+      );
+      return;
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   const activeSession = createMemo<TerminalSessionInfo | null>(() => {
@@ -2490,9 +2456,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   };
 
   const activeTerminalHasSelection = () => {
-    const core = getActiveCore();
+    const viewport = getActiveViewport();
     try {
-      return Boolean(core?.hasSelection?.() ?? false);
+      return Boolean(viewport?.hasSelection?.() ?? false);
     } catch {
       return false;
     }
@@ -2539,7 +2505,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   createEffect(() => {
     void surfaceRegistrySeq();
-    void coreRegistrySeq();
+    void viewportRegistrySeq();
     void shouldUseFloeMobileKeyboard();
 
     requestAnimationFrame(() => {
@@ -2644,39 +2610,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
     onCleanup(() => {
       cancelled = true;
-    });
-  });
-
-  createEffect(() => {
-    const sid = activeSessionId();
-    const isConnected = connected();
-    if (!isConnected || !sid) {
-      setHistoryBytes(null);
-      return;
-    }
-
-    setHistoryBytes(null);
-
-    let cancelled = false;
-    let timer: ReturnType<typeof setInterval> | null = null;
-
-    const refresh = async () => {
-      try {
-        const stats = await transport.getSessionStats(sid);
-        if (cancelled) return;
-        setHistoryBytes(stats.history.totalBytes);
-      } catch {
-      }
-    };
-
-    void refresh();
-    if (HISTORY_STATS_POLL_MS > 0) {
-      timer = setInterval(() => void refresh(), HISTORY_STATS_POLL_MS);
-    }
-
-    onCleanup(() => {
-      cancelled = true;
-      if (timer) clearInterval(timer);
     });
   });
 
@@ -2988,13 +2921,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     setError(null);
 
     try {
-      terminalCatalog?.invalidateHistory(sid, 'clear');
-      await transport.clear(sid);
-      const actions = actionsRegistry.get(sid);
-      if (actions && !await actions.resetAfterClear()) {
-        throw new Error(i18n.t('terminal.clearFailedMessage'));
-      }
-      await transport.sendInput(sid, '\r', connId);
+      await clearSemanticTerminalContent(transport, sid);
       notify.success(
         i18n.t('terminal.clearSucceededTitle'),
         i18n.t('terminal.clearSucceededMessage'),
@@ -3025,17 +2952,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const [refreshing, setRefreshing] = createSignal(false);
 
-  const refreshHistoryStats = async (sid: string) => {
-    if (!connected()) return;
-    if (!sid) return;
-    try {
-      const stats = await transport.getSessionStats(sid);
-      if (activeSessionId() !== sid) return;
-      setHistoryBytes(stats.history.totalBytes);
-    } catch {
-    }
-  };
-
   const waitForActions = async (sid: string, maxFrames = 4) => {
     for (let i = 0; i < maxFrames; i += 1) {
       const actions = actionsRegistry.get(sid);
@@ -3056,13 +2972,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
       const sid = activeSessionId();
       if (sid) {
-        setHistoryBytes(null);
-
-        // Ensure the refresh flow matches the page open path: rebuild + attach + replay history.
+        // Explicit refresh replaces only this view attachment and bootstraps
+        // the latest atomic semantic Presentation.
         const actions = await waitForActions(sid);
         await actions?.reload();
-
-        await refreshHistoryStats(sid);
       }
     } catch (e) {
       if (handleExecuteDenied(e)) return;
@@ -3259,7 +3172,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
           next[id] = status;
         } else {
           changed = true;
-          releaseTerminalRecoveryDiagnostics(id);
         }
       }
       return changed ? next : prev;
@@ -3430,10 +3342,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   let mobileToolbarEl: HTMLDivElement | null = null;
   const [mobileKeyboardElement, setMobileKeyboardElement] = createSignal<HTMLDivElement | null>(null);
 
-  const getActiveCore = () => {
+  const getActiveViewport = () => {
     const sid = activeSessionId();
     if (!sid) return null;
-    return coreRegistry.get(sid) ?? null;
+    return viewportRegistry.get(sid) ?? null;
   };
 
   const getActiveSurfaceElement = () => {
@@ -3446,8 +3358,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return resolveTerminalInputElement(getActiveSurfaceElement());
   };
 
-  const getTerminalTouchScrollLineHeightPx = (surface: HTMLDivElement, core: TerminalCore) => {
-    const rows = Math.max(1, core.getDimensions().rows);
+  const getTerminalTouchScrollLineHeightPx = (
+    surface: HTMLDivElement,
+    viewport: SemanticTerminalViewportHandle,
+  ) => {
+    const rows = Math.max(1, viewport.getDimensions().rows);
     const height = surface.getBoundingClientRect().height;
     if (!Number.isFinite(height) || height <= 0) {
       return MOBILE_TERMINAL_TOUCH_SCROLL_LINE_HEIGHT_FALLBACK_PX;
@@ -3456,10 +3371,14 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return Math.max(MOBILE_TERMINAL_TOUCH_SCROLL_MIN_LINE_HEIGHT_PX, height / rows);
   };
 
-  const applyTerminalTouchScrollLines = (sessionId: string, core: TerminalCore, lineDelta: number): boolean => {
+  const applyTerminalTouchScrollLines = (
+    sessionId: string,
+    viewport: SemanticTerminalViewportHandle,
+    lineDelta: number,
+  ): boolean => {
     if (lineDelta === 0) return false;
 
-    const target = resolveTerminalTouchScrollTarget(core);
+    const target = resolveTerminalTouchScrollTarget(viewport);
     if (!target) return false;
 
     if (target.isAlternateScreen?.()) {
@@ -3564,26 +3483,26 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (!sid) return;
     if (!connected()) return;
 
-    const core = coreRegistry.get(sid);
-    if (!core) return;
+    const viewport = viewportRegistry.get(sid);
+    if (!viewport) return;
 
     requestAnimationFrame(() => {
       if (activeSessionId() !== sid) return;
       if (!connected()) return;
       if (terminalViewportInsetPx() !== inset) return;
-      core.forceResize();
+      viewport.forceResize();
     });
   });
 
   createEffect(() => {
     void surfaceRegistrySeq();
-    void coreRegistrySeq();
+    void viewportRegistrySeq();
     const sid = activeSessionId();
     const surface = getActiveSurfaceElement();
-    const core = getActiveCore();
+    const viewport = getActiveViewport();
     const mobile = isMobileLayout();
 
-    if (!mobile || !sid || !surface || !core) return;
+    if (!mobile || !sid || !surface || !viewport) return;
 
     let pointerId: number | null = null;
     let lastY = 0;
@@ -3619,12 +3538,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       lastY = event.clientY;
       accumulatedPx += deltaY;
 
-      const lineHeightPx = getTerminalTouchScrollLineHeightPx(surface, core);
+      const lineHeightPx = getTerminalTouchScrollLineHeightPx(surface, viewport);
       const rawLineDelta = -accumulatedPx / lineHeightPx;
       const wholeLineDelta = rawLineDelta > 0 ? Math.floor(rawLineDelta) : Math.ceil(rawLineDelta);
       if (wholeLineDelta === 0) return;
 
-      if (!applyTerminalTouchScrollLines(sid, core, wholeLineDelta)) {
+      if (!applyTerminalTouchScrollLines(sid, viewport, wholeLineDelta)) {
         accumulatedPx = 0;
         return;
       }
@@ -3672,7 +3591,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       recordMobileKeyboardHistory(sid, update.committedCommand);
     }
 
-    void transport.sendInput(sid, payload, connId).catch((e) => {
+    void transport.sendInput(sid, payload).catch((e) => {
       if (handleExecuteDenied(e)) return;
       setError(e instanceof Error ? e.message : String(e));
     });
@@ -3767,8 +3686,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const resolvedSession = activeSession ?? sessions()[0] ?? null;
     if (!resolvedSession) return;
 
-    const core = coreRegistry.get(resolvedSession.id) ?? getActiveCore();
-    const selection = buildTerminalContextSnapshot(resolvedSession.id, core);
+    const viewport = viewportRegistry.get(resolvedSession.id) ?? getActiveViewport();
+    const selection = buildTerminalContextSnapshot(resolvedSession.id, viewport);
 
     if (!currentActiveId) {
       setActiveSessionId(resolvedSession.id);
@@ -3836,11 +3755,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const normalizedSessionId = String(context.sessionId ?? '').trim();
     if (!normalizedSessionId) return false;
 
-    const core = coreRegistry.get(normalizedSessionId)
-      ?? (activeSessionId() === normalizedSessionId ? getActiveCore() : null);
-    if (!core) return false;
+    const viewport = viewportRegistry.get(normalizedSessionId)
+      ?? (activeSessionId() === normalizedSessionId ? getActiveViewport() : null);
+    if (!viewport) return false;
 
-    const result = await core.copySelection(context.source === 'shortcut' ? 'shortcut' : 'command');
+    const result = await viewport.copySelection(context.source === 'shortcut' ? 'shortcut' : 'command');
     if (result.copied) return true;
     if (result.reason === 'clipboard_unavailable') {
       throw new Error(i18n.t('terminal.clipboardUnavailable'));
@@ -3961,7 +3880,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const currentItem = sessionListItemById().get(item.id);
     if (!currentItem) return;
     const workingDir = normalizeAskFlowerAbsolutePath(currentItem.localWorkingDir);
-    const selection = buildTerminalContextSnapshot(currentItem.id, coreRegistry.get(currentItem.id) ?? null);
+    const selection = buildTerminalContextSnapshot(
+      currentItem.id,
+      viewportRegistry.get(currentItem.id) ?? null,
+    );
     setTerminalSidebarMenu(null);
     const handoff = () => openTerminalAskFlowerContext({ x: anchor.x, y: anchor.y, workingDir, selection });
     if (isMobileLayout() && sessionDrawerOpen()) {
@@ -4193,21 +4115,21 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     requestAnimationFrame(() => menu.triggerElement?.focus({ preventScroll: true }));
   };
 
-  const bindSearchCore = (core: TerminalCore | null) => {
-    if (searchBoundCore && searchBoundCore !== core) {
-      // Unbind callbacks from the previous core to avoid cross-session search counters.
-      searchBoundCore.setSearchResultsCallback(null);
+  const bindSearchViewport = (viewport: SemanticTerminalViewportHandle | null) => {
+    if (searchBoundViewport && searchBoundViewport !== viewport) {
+      // Unbind callbacks from the previous viewport to avoid cross-session search counters.
+      searchBoundViewport.setSearchResultsCallback(null);
     }
 
-    searchBoundCore = core;
+    searchBoundViewport = viewport;
 
-    if (!core) {
+    if (!viewport) {
       setSearchResultIndex(-1);
       setSearchResultCount(0);
       return;
     }
 
-    core.setSearchResultsCallback(({ resultIndex, resultCount }) => {
+    viewport.setSearchResultsCallback(({ resultIndex, resultCount }) => {
       setSearchResultIndex(Number.isFinite(resultIndex) ? resultIndex : -1);
       setSearchResultCount(Number.isFinite(resultCount) ? resultCount : 0);
     });
@@ -4216,16 +4138,16 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   createEffect(() => {
     const open = searchOpen();
     const sid = activeSessionId();
-    void coreRegistrySeq();
+    void viewportRegistrySeq();
 
-    const core = sid ? (coreRegistry.get(sid) ?? null) : null;
-    if (!open || !core) {
-      bindSearchCore(null);
+    const viewport = sid ? (viewportRegistry.get(sid) ?? null) : null;
+    if (!open || !viewport) {
+      bindSearchViewport(null);
       searchLastAppliedKey = '';
       return;
     }
 
-    bindSearchCore(core);
+    bindSearchViewport(viewport);
   });
 
   let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -4233,7 +4155,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const open = searchOpen();
     const q = searchQuery();
     const sid = activeSessionId();
-    void coreRegistrySeq();
+    void viewportRegistrySeq();
     if (!open || !sid) {
       if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
       searchDebounceTimer = null;
@@ -4242,27 +4164,27 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
     if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
     searchDebounceTimer = setTimeout(() => {
-      const core = coreRegistry.get(sid) ?? null;
-      if (!core) return;
+      const viewport = viewportRegistry.get(sid) ?? null;
+      if (!viewport) return;
 
       const term = q.trim();
       const key = `${sid}:${term}`;
       if (key === searchLastAppliedKey) return;
 
       if (!term) {
-        core.clearSearch();
+        viewport.clearSearch();
         searchLastAppliedKey = key;
         return;
       }
 
-      core.findNext(term);
+      viewport.findNext(term);
       searchLastAppliedKey = key;
     }, 120);
   });
 
   onCleanup(() => {
     if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
-    bindSearchCore(null);
+    bindSearchViewport(null);
   });
 
   const openSearch = () => {
@@ -4280,25 +4202,25 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     setSearchResultCount(0);
     searchLastAppliedKey = '';
     // Search UI is panel-scoped; clear all sessions on close to avoid lingering highlights.
-    for (const core of coreRegistry.values()) {
-      core.clearSearch();
+    for (const viewport of viewportRegistry.values()) {
+      viewport.clearSearch();
     }
-    bindSearchCore(null);
+    bindSearchViewport(null);
     restoreActiveTerminalFocus();
   };
 
   const goNextMatch = () => {
-    const core = getActiveCore();
+    const viewport = getActiveViewport();
     const term = searchQuery().trim();
-    if (!core || !term) return;
-    core.findNext(term);
+    if (!viewport || !term) return;
+    viewport.findNext(term);
   };
 
   const goPrevMatch = () => {
-    const core = getActiveCore();
+    const viewport = getActiveViewport();
     const term = searchQuery().trim();
-    if (!core || !term) return;
-    core.findPrevious(term);
+    if (!viewport || !term) return;
+    viewport.findPrevious(term);
   };
 
   createEffect(() => {
@@ -4749,10 +4671,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                               connId={connId}
                               transport={transport}
                               eventSource={eventSource}
-                              registerCore={registerCore}
+                              registerViewport={registerViewport}
                               registerSurfaceElement={registerSurfaceElement}
                               registerActions={registerActions}
-                              registerWorkingSetRuntime={registerWorkingSetRuntime}
                               onRuntimeStatus={handleRuntimeStatus}
                               onGeometryPresentation={handleGeometryPresentation}
                               onSessionGone={handleTerminalSessionGone}
@@ -4760,15 +4681,15 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                               onLiveOutputObserved={handleLiveOutputObserved}
                               onOutputCommitted={handleOutputCommitted}
                               onOutputCoverage={handleOutputCoverage}
+                              onHistorySummary={handleHistorySummary}
                               onPendingOutputReset={resetPendingOutput}
-                              setWorkingSetInteraction={setWorkingSetInteraction}
                               onSurfaceClick={handleWorkbenchTerminalSurfaceClick}
                               onBell={handleSessionBell}
                               onShellIntegrationEvent={handleShellIntegrationEvent}
                               onVisibleOutput={handleVisibleOutput}
                               onTerminalFileLinkOpen={openTerminalFileLinkTarget}
+                              onTerminalExternalLinkOpen={openTerminalExternalLink}
                               onNameUpdate={handleNameUpdate}
-                              requestPreparedHistory={terminalCatalog?.requestPreparedHistory}
                             />
                           </TabPanel>
                         </Show>
@@ -4950,11 +4871,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                     )}
                   </Show>
                   <span
-                    data-terminal-history-bytes={historyBytes() === null ? '' : String(historyBytes())}
+                    data-terminal-history-rows={activeHistoryRows() === null ? '' : String(activeHistoryRows())}
                     class="terminal-shared-geometry-history ml-auto shrink-0"
                     classList={{ hidden: useMobileRecoveryStatusBar() }}
                   >
-                    {i18n.t('terminal.statusHistory')}: {historyBytes() === null ? '-' : formatBytes(historyBytes() ?? 0)}
+                    {i18n.t('terminal.statusHistory')}: {activeHistoryRows() === null ? '-' : activeHistoryRows()}
                   </span>
                 </div>
                 <Show when={activeRuntimeStatus().state === 'degraded' || activeRuntimeStatus().state === 'blocking'}>

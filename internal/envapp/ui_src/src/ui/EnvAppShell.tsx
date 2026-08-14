@@ -145,7 +145,6 @@ import { reloadCurrentPage } from './utils/windowNavigation';
 import { resolveEnvSidebarVisibilityMotion, shouldEnvTabOpenSidebar } from './envSidebarVisibilityMotion';
 import { createUIPresentationEventRecorder } from './services/uiPresentationTransactions';
 import { TerminalSessionCatalogProvider } from './services/terminalSessionCatalog';
-import { preloadTerminalFeatureResources } from './services/terminalFeaturePreload';
 import { buildDesktopShellCommandPaletteEntries } from './services/desktopShellCommandPalette';
 import {
   desktopShellBridgeAvailable,
@@ -3670,9 +3669,6 @@ export function EnvAppShell() {
   });
 
   const openSurface = (surfaceId: EnvSurfaceId, options?: EnvOpenSurfaceOptions) => {
-    if (surfaceId === 'terminal') {
-      void preloadTerminalFeatureResources({ reason: 'intent' }).catch(() => undefined);
-    }
     const targetSurface = resolveOpenSurfaceTarget(surfaceId, options);
 
     if (viewMode() === 'workbench') {
@@ -4565,9 +4561,6 @@ export function EnvAppShell() {
     source: (event) => event.metadata?.source ?? 'activity-bar',
   });
   const handleActivitySelectionEvent = (event: UIFirstSelectionEvent<string, EnvActivitySelectionMetadata>) => {
-    if (event.phase === 'requested' && event.value === 'terminal') {
-      void preloadTerminalFeatureResources({ reason: 'intent' }).catch(() => undefined);
-    }
     recordActivitySelectionEvent(event);
   };
 

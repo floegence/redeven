@@ -2551,6 +2551,7 @@
     "initializing": "Инициализация терминала...",
     "attaching": "Подключение терминала...",
     "loadingHistory": "Загрузка истории...",
+    "inputAria": "Ввод в терминал",
     "historyScrollbar": "История терминала",
     "loadingHistoryProgress": "Загрузка истории {loaded} / {total}",
     "recoveringOutput": "Восстановление вывода терминала...",

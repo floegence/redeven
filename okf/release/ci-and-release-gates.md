@@ -43,6 +43,16 @@ generated assets, ReDevPlugin/Gateway/Flower integration, UI/Desktop checks,
 Docker Runtime E2E, OKF, serial uncached Go tests, and golangci-lint. Any
 generator that changes the tree fails the gate.
 
+`go.mod` is the single authoritative Go toolchain version and currently pins
+Go 1.26.6. Every GitHub Actions `setup-go` step resolves that file through
+`go-version-file: go.mod`; owned container capability checks select the matching
+`GOTOOLCHAIN=go1.26.6+auto`; public README prerequisites and badges mirror the
+same value. Quick CI and the exact-main final integration gate run
+`scripts/check_go_version_consistency.mjs`, which rejects drift among these
+sources and requires the local gate runtime to report the exact version. Build,
+test, Desktop, and release paths therefore cannot silently select an older Go
+patch release.
+
 The exact-main UI and renderer steps invoke the canonical headless browser and
 terminal carrier gates without a display server. Explicit headed runs are
 manual diagnostics and cannot replace exact-main evidence. Browser-mode and
@@ -229,6 +239,7 @@ not become a fallback, shim, or local artifact path.
 - `redeven:.githooks/pre-commit:1` - Defines the fast staged gate.
 - `redeven:.githooks/pre-push:1` - Binds full validation to the exact main push.
 - `redeven:scripts/check_final_integration.sh:1` - Defines the complete local integration gate.
+- `redeven:scripts/check_go_version_consistency.mjs:1` - Binds Go workflows, capability checks, public prerequisites, and the local gate runtime to `go.mod`.
 - `redeven:scripts/check_desktop_electron_test_runtime.sh:1` - Fails closed when the exact npm Electron runtime cannot execute without modifying host trust.
 - `redeven:desktop/src/build/desktopPreloadRuntime.test.ts:1` - Runs real Electron preload bridges in isolated working and user-data directories.
 - `redeven:scripts/check_plugin_integration.sh:1` - Defines focused ReDevPlugin integration coverage.

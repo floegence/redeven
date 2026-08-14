@@ -2439,6 +2439,7 @@
     "initializing": "Inicializando terminal...",
     "attaching": "Conectando o terminal...",
     "loadingHistory": "Carregando histórico...",
+    "inputAria": "Entrada do terminal",
     "historyScrollbar": "Histórico do terminal",
     "loadingHistoryProgress": "Carregando histórico {loaded} / {total}",
     "recoveringOutput": "Recuperando saída do terminal...",

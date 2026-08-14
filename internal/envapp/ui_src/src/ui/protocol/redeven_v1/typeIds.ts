@@ -45,18 +45,16 @@ export const redevenV1TypeIds = {
   terminal: {
     sessionCreate: 2001,
     sessionList: 2002,
-    history: 2007,
-    clear: 2008,
+    semanticHistory: 2007,
+    semanticClear: 2008,
 
     sessionDelete: 2009,
     nameUpdate: 2010,
-    sessionStats: 2011,
     sessionsChanged: 2012,
     foregroundCommandUpdate: 2013,
     outputActivityUpdate: 2014,
     executionContextUpdate: 2015,
     workStateUpdate: 2016,
-    historyCheckpointCommit: 2017,
   },
   monitor: {
     sysMonitor: 3001,

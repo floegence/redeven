@@ -103,68 +103,24 @@ export type wire_terminal_work_state_update_notify = {
 
 export type wire_terminal_history_req = {
   session_id: string;
-  start_seq: number;
-  end_seq: number;
-  history_generation?: number;
-  limit_chunks?: number;
-  max_bytes?: number;
+  connection_id: string;
+  transport_generation: number;
+  anchor?: string;
+  direction: SemanticHistoryDirection;
+  limit: number;
 };
 
-export type wire_terminal_history_chunk = {
-  sequence: number;
-  timestamp_ms: number;
-  data_b64: string;
-  geometry_generation?: number;
-  cols?: number;
-  rows?: number;
-};
-
-export type wire_terminal_history_checkpoint = {
-  format_version: number;
-  engine_id: string;
-  covered_through_sequence: number;
-  geometry_generation: number;
-  parser_epoch: number;
-  cols: number;
-  rows: number;
-  checksum_sha256: string;
-  state_digest_sha256: string;
-  data_b64: string;
-};
-
-export type wire_terminal_history_resp = {
-  chunks: wire_terminal_history_chunk[];
-  checkpoint?: wire_terminal_history_checkpoint;
-  delta_start_sequence?: number;
-  next_start_seq?: number;
-  has_more?: boolean;
-  first_sequence?: number;
-  last_sequence?: number;
-  covered_through_sequence?: number;
-  snapshot_end_sequence?: number;
-  first_retained_sequence?: number;
-  history_generation?: number;
-  history_reset?: boolean;
-  history_truncated?: boolean;
-  covered_bytes?: number;
-  total_bytes?: number;
-};
-
-export type wire_terminal_history_checkpoint_commit_req = {
-  session_id: string;
-  checkpoint: wire_terminal_history_checkpoint;
-};
-
-export type wire_terminal_history_checkpoint_commit_resp = {
-  ok: boolean;
-};
+export type wire_terminal_history_resp = SemanticHistoryPage;
 
 export type wire_terminal_clear_req = {
   session_id: string;
+  connection_id: string;
+  transport_generation: number;
 };
 
 export type wire_terminal_clear_resp = {
-  ok: boolean;
+  presentation_sequence: number;
+  content_epoch: number;
 };
 
 export type wire_terminal_session_delete_req = {
@@ -173,16 +129,6 @@ export type wire_terminal_session_delete_req = {
 
 export type wire_terminal_session_delete_resp = {
   ok: boolean;
-};
-
-export type wire_terminal_session_stats_req = {
-  session_id: string;
-};
-
-export type wire_terminal_session_stats_resp = {
-  history: {
-    total_bytes: number;
-  };
 };
 
 export type wire_terminal_sessions_changed_notify = {
@@ -195,3 +141,7 @@ export type wire_terminal_sessions_changed_notify = {
   failure_code?: string;
   failure_message?: string;
 };
+import type {
+  SemanticHistoryDirection,
+  SemanticHistoryPage,
+} from '@floegence/floeterm-terminal-web/semantic';

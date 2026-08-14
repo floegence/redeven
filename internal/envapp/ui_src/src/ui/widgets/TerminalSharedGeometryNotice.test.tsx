@@ -54,7 +54,7 @@ const presentation: TerminalSharedGeometryPresentation = {
     lifecycleEpoch: 3,
     rendererEpoch: 2,
     generation: 5,
-    outputSequenceBoundary: 12,
+    presentationSequence: 12,
     cols: 80,
     rows: 24,
   },

@@ -136,13 +136,6 @@ class FakeCoordinator {
 }
 
 const coordinatorState = vi.hoisted(() => ({ current: null as FakeCoordinator | null }));
-const terminalHistoryState = vi.hoisted(() => ({
-  prepare: vi.fn(),
-}));
-
-vi.mock('@floegence/floeterm-terminal-web/history', () => ({
-  preparePagedTerminalHistory: terminalHistoryState.prepare,
-}));
 vi.mock('@floegence/floe-webapp-protocol', () => ({
   useProtocol: () => ({ session: protocolState.client, status: protocolState.status }),
   ProtocolNotConnectedError: class extends Error {},
@@ -181,7 +174,6 @@ vi.mock('../widgets/TerminalPanel', () => ({ TerminalPanel: () => null }));
 
 import {
   TerminalSessionCatalogProvider,
-  terminalHistoryWarmupPerformanceStage,
   useTerminalSessionCatalog,
 } from './terminalSessionCatalog';
 import { deriveTerminalSessionChrome } from './terminalSessionChrome';
@@ -238,7 +230,6 @@ describe('TerminalSessionCatalogProvider', () => {
       rpcState.workStateHandler = handler;
       return () => { rpcState.workStateHandler = null; };
     });
-    terminalHistoryState.prepare.mockReset();
     coordinatorState.current = null;
   });
 
@@ -258,41 +249,6 @@ describe('TerminalSessionCatalogProvider', () => {
     await vi.waitFor(() => expect(latest?.hydrated()).toBe(true));
     expect(latest.sessions().map((session: any) => session.id)).toEqual(['s1']);
     expect(rpcState.list).toHaveBeenCalledTimes(1);
-    dispose();
-  });
-
-  it('forwards committed output to the history cache owner without invalidating replay', async () => {
-    const emptySeed = {
-      chunks: [],
-      requestedStartSequence: 1,
-      firstRetainedSequence: 0,
-      coveredThroughSequence: 0,
-      snapshotEndSequence: 0,
-      historyGeneration: 1,
-      byteLength: 0,
-      pageCount: 0,
-      complete: true,
-    } as const;
-    terminalHistoryState.prepare.mockResolvedValue(emptySeed);
-    let latest: any = null;
-    const host = document.createElement('div');
-    const dispose = render(() => (
-      <TerminalSessionCatalogProvider>
-        <Consumer onValue={(value) => { latest = value; }} />
-      </TerminalSessionCatalogProvider>
-    ), host);
-    await vi.waitFor(() => expect(latest?.hydrated()).toBe(true));
-
-    latest.setSurfaceActive('test-surface', true);
-    latest.startHistoryWarmup();
-    await vi.waitFor(() => expect(terminalHistoryState.prepare).toHaveBeenCalledTimes(1));
-    await expect(latest.requestPreparedHistory('s1')).resolves.toBe(emptySeed);
-
-    latest.noteOutputCommitted('s1', 'history', 1);
-    await expect(latest.requestPreparedHistory('s1')).resolves.toBe(emptySeed);
-
-    latest.noteOutputCommitted('s1', 'live', 1);
-    await expect(latest.requestPreparedHistory('s1')).resolves.toBeNull();
     dispose();
   });
 
@@ -1445,18 +1401,5 @@ describe('TerminalSessionCatalogProvider', () => {
     protocolState.setClient(null);
     await vi.waitFor(() => expect(latest.stale()).toBe(true));
     dispose();
-  });
-});
-
-describe('terminalHistoryWarmupPerformanceStage', () => {
-  it.each([
-    ['start', 'history-prefetch-start'],
-    ['ready', 'history-prefetch-ready'],
-    ['skipped', 'history-prefetch-skipped'],
-    ['evicted', 'history-prefetch-evicted'],
-    ['paused', 'warm-queue-paused'],
-    ['complete', 'warm-queue-complete'],
-  ] as const)('maps %s to %s', (event, stage) => {
-    expect(terminalHistoryWarmupPerformanceStage(event)).toBe(stage);
   });
 });

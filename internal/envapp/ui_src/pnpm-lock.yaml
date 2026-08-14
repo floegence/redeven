@@ -41,8 +41,8 @@ importers:
         specifier: 0.40.18
         version: 0.40.18(solid-js@1.9.13)
       '@floegence/floeterm-terminal-web':
-        specifier: 0.14.1
-        version: 0.14.1
+        specifier: 0.15.4
+        version: 0.15.4
       '@floegence/flowersec-core':
         specifier: 2.3.10
         version: 2.3.10
@@ -371,10 +371,6 @@ packages:
   '@fast-csv/parse@4.3.6':
     resolution: {integrity: sha512-uRsLYksqpbDmWaSmzvJcuApSEe38+6NQZBUsuAyMZKqHxH0g1wcJgsKUvN3WC8tewaqFjBMMGrkHmC+T7k8LvA==}
 
-  '@floegence/beamterm-renderer@1.0.2':
-    resolution: {integrity: sha512-F8phI5jylhMnQQN7qesEg6tGj/80Peum9PGDZkOj1LLOGta+Fq8QhGwTkCtd35iR1AYJQ2LSK4FcDf5bs1vOsw==}
-    engines: {node: '>=20'}
-
   '@floegence/floe-webapp-boot@0.40.18':
     resolution: {integrity: sha512-EmRqDuvbgqlo4KNMhxYZ6dTr8icF0arVyIJNkuxNEbnxdS9JkS4jA5SkGVkgZcHMXikX9WccvCxDsEZSgK0gLQ==}
     engines: {node: '>=24.0.0'}
@@ -391,8 +387,8 @@ packages:
     peerDependencies:
       solid-js: ^1.8.0
 
-  '@floegence/floeterm-terminal-web@0.14.1':
-    resolution: {integrity: sha512-Y3oAQFJRNZv71z+QQiY7ieabJ128AJcR9NTe+C/mxNU24u7Y+bnwaMbNZKTfbFOpnR+ougHMaKjvQNQ2fFOGdA==}
+  '@floegence/floeterm-terminal-web@0.15.4':
+    resolution: {integrity: sha512-humedPZVqsCCxBZXrb+sSSaZcN6BCeU6cukv/2VRPSWfdL6gGlKciDlo+FBQM58LAzfiQTK3ZROBJN/UOet9SQ==}
 
   '@floegence/flowersec-core@2.3.10':
     resolution: {integrity: sha512-EnfgOlvl0qKU8OV/MqTeT7xo9xt23weZ0J6OTgsJ6w9kk8+9CEGvJKszTf7eIiWXXXGNJReLdQ+m0RAuO++CLw==}
@@ -428,9 +424,6 @@ packages:
   '@floegence/flowersec-node-native@2.3.10':
     resolution: {integrity: sha512-LU/sHDtBOKcabQ/geQlOy89iKeEPHDvI/B7di/JzEalpX4HLUSP8UTjtgHGV5XSGYo+R3ugrm3x3b1HMniT5MQ==}
     engines: {node: '>=20.19.0'}
-
-  '@floegence/ghostty-web@0.5.0-rc.0':
-    resolution: {integrity: sha512-4fRGcIdoIrIqQhbh3iFRha4jSW2NK/tWUSIHv8/5j8ZmzC0T0TTLqX+5GlQKxqPvZEBe21R4asD71v35vhKB2g==}
 
   '@floegence/redevplugin-contracts@0.7.27':
     resolution: {integrity: sha512-03GIMn+I06/pe///gfLJGKE8Y994sjjiq0pvY9BbdnvWXfpOIs16SkpwLmHMSV7ghLv2YIROIRsZbmGR5DJIpQ==}
@@ -2903,8 +2896,6 @@ snapshots:
       lodash.isundefined: 3.0.1
       lodash.uniq: 4.5.0
 
-  '@floegence/beamterm-renderer@1.0.2': {}
-
   '@floegence/floe-webapp-boot@0.40.18':
     dependencies:
       '@floegence/flowersec-core': 2.3.10
@@ -2932,10 +2923,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@floegence/floeterm-terminal-web@0.14.1':
-    dependencies:
-      '@floegence/beamterm-renderer': 1.0.2
-      '@floegence/ghostty-web': 0.5.0-rc.0
+  '@floegence/floeterm-terminal-web@0.15.4': {}
 
   '@floegence/flowersec-core@2.3.10':
     dependencies:
@@ -2969,8 +2957,6 @@ snapshots:
       '@floegence/flowersec-node-native-linux-arm64-gnu': 2.3.10
       '@floegence/flowersec-node-native-linux-x64-gnu': 2.3.10
     optional: true
-
-  '@floegence/ghostty-web@0.5.0-rc.0': {}
 
   '@floegence/redevplugin-contracts@0.7.27': {}
 

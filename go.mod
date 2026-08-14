@@ -1,11 +1,11 @@
 module github.com/floegence/redeven
 
-go 1.26.5
+go 1.26.6
 
 require (
 	github.com/anthropics/anthropic-sdk-go v1.22.1
 	github.com/creack/pty v1.1.24
-	github.com/floegence/floeterm/terminal-go v0.9.1
+	github.com/floegence/floeterm/terminal-go v0.10.3
 	github.com/floegence/flowersec/flowersec-go/v2 v2.3.10
 	github.com/floegence/redevplugin v0.7.27
 	github.com/gorilla/websocket v1.5.3
