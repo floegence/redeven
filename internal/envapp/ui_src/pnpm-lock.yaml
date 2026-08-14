@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@floegence/flowersec-core': 2.3.9
+  '@floegence/flowersec-core': 2.3.10
   '@babel/core': ^7.29.7
   brace-expansion: ^5.0.9
   dompurify: ^3.4.12
@@ -32,20 +32,20 @@ importers:
         specifier: ^0.0.5
         version: 0.0.5
       '@floegence/floe-webapp-boot':
-        specifier: 0.40.17
-        version: 0.40.17
+        specifier: 0.40.18
+        version: 0.40.18
       '@floegence/floe-webapp-core':
-        specifier: 0.40.17
-        version: 0.40.17(solid-js@1.9.13)
+        specifier: 0.40.18
+        version: 0.40.18(solid-js@1.9.13)
       '@floegence/floe-webapp-protocol':
-        specifier: 0.40.17
-        version: 0.40.17(solid-js@1.9.13)
+        specifier: 0.40.18
+        version: 0.40.18(solid-js@1.9.13)
       '@floegence/floeterm-terminal-web':
         specifier: 0.14.1
         version: 0.14.1
       '@floegence/flowersec-core':
-        specifier: 2.3.9
-        version: 2.3.9
+        specifier: 2.3.10
+        version: 2.3.10
       '@floegence/redevplugin-contracts':
         specifier: 0.7.27
         version: 0.7.27
@@ -375,18 +375,18 @@ packages:
     resolution: {integrity: sha512-F8phI5jylhMnQQN7qesEg6tGj/80Peum9PGDZkOj1LLOGta+Fq8QhGwTkCtd35iR1AYJQ2LSK4FcDf5bs1vOsw==}
     engines: {node: '>=20'}
 
-  '@floegence/floe-webapp-boot@0.40.17':
-    resolution: {integrity: sha512-ibSD5uqNjNYwSNZijLHUU5ZmB49+lrBLLZCxsVm5dNbLadYwAaIveZEcD/Th/VlT67wCFHET9AohiTVhrb1++w==}
+  '@floegence/floe-webapp-boot@0.40.18':
+    resolution: {integrity: sha512-EmRqDuvbgqlo4KNMhxYZ6dTr8icF0arVyIJNkuxNEbnxdS9JkS4jA5SkGVkgZcHMXikX9WccvCxDsEZSgK0gLQ==}
     engines: {node: '>=24.0.0'}
 
-  '@floegence/floe-webapp-core@0.40.17':
-    resolution: {integrity: sha512-6XsjG0u9pxRGCSL3V54zhwxabCfID8HK8AqX2tZJaiO3wGdU/GVYGeq71Z6iSkUbly6hpLhK98Mo71EwZ7xO2Q==}
+  '@floegence/floe-webapp-core@0.40.18':
+    resolution: {integrity: sha512-Ks4/u6NNwVYOVHfxy8Zp34YqtQ8AN1U4fmgIHT18NwzvoTOilX/poPkjDilySQXzRGEebxwLGyUcoqDAwBqQmQ==}
     engines: {node: '>=24.0.0'}
     peerDependencies:
       solid-js: ^1.8.0
 
-  '@floegence/floe-webapp-protocol@0.40.17':
-    resolution: {integrity: sha512-XRDV+eaMUZQrCHHB4u3ZjYdrDmnj5MkzKGReiKeity+S8RVJFbRouH+Ocjoja3jeT2lz8xk2AJRrh5kAWP9Lzg==}
+  '@floegence/floe-webapp-protocol@0.40.18':
+    resolution: {integrity: sha512-ShKKeGpmdbAmqJNZaj6YpQYbD4L4Jw8lPDqfoKXWCS/yMSVl1QnaLArqTRgJzZ6Asd+0NQoKVe0vDs4z60i/Zw==}
     engines: {node: '>=24.0.0'}
     peerDependencies:
       solid-js: ^1.8.0
@@ -394,37 +394,39 @@ packages:
   '@floegence/floeterm-terminal-web@0.14.1':
     resolution: {integrity: sha512-Y3oAQFJRNZv71z+QQiY7ieabJ128AJcR9NTe+C/mxNU24u7Y+bnwaMbNZKTfbFOpnR+ougHMaKjvQNQ2fFOGdA==}
 
-  '@floegence/flowersec-core@2.3.9':
-    resolution: {integrity: sha512-tCclO65lwyfzXzvRvosiEXcCmR8UznqD0lqM3yEdN7NGgJuWInVM5+5kNaYbKyMoH64Bh00cBBUFHToUuY6uzA==}
+  '@floegence/flowersec-core@2.3.10':
+    resolution: {integrity: sha512-EnfgOlvl0qKU8OV/MqTeT7xo9xt23weZ0J6OTgsJ6w9kk8+9CEGvJKszTf7eIiWXXXGNJReLdQ+m0RAuO++CLw==}
     engines: {node: '>=20.19.0'}
     hasBin: true
 
-  '@floegence/flowersec-node-native-darwin-arm64@2.3.9':
-    resolution: {integrity: sha512-0CYcthN6bN4A7KK6dX127fCYsk32uVKRJ39+Ak1n+iDrh+FWP19qDU5O3/OxF9s2bBCNKZ+URrW7QBEMg7xx+w==}
+  '@floegence/flowersec-node-native-darwin-arm64@2.3.10':
+    resolution: {integrity: sha512-TQgHpINDOOjDXc99K64DDWthTpkB2io4T5IxWd7QSuQdll1IuAaLQsQK3XJluXEY0bQ7OMTTo5aBKnxAXXCmFg==}
     engines: {node: '>=20.19.0'}
     cpu: [arm64]
     os: [darwin]
 
-  '@floegence/flowersec-node-native-darwin-x64@2.3.9':
-    resolution: {integrity: sha512-ubjEP0FxVTAuEZ4jD0Zz8FUZcrSydZzF9guIE+8T8bXpmzNNLFh4VGvg4Eb9TbW0L0mdzyktLuLVlUHLRWfARA==}
+  '@floegence/flowersec-node-native-darwin-x64@2.3.10':
+    resolution: {integrity: sha512-HIrnCIndMNJ75fN7sG8Wy1gA0oetRww3cwmBvS+N2XN+ps2tY3hDNO1dH+DaG1IfFuyzO0mV/c4b+m/9sRlFWA==}
     engines: {node: '>=20.19.0'}
     cpu: [x64]
     os: [darwin]
 
-  '@floegence/flowersec-node-native-linux-arm64-gnu@2.3.9':
-    resolution: {integrity: sha512-Bk6F5Hv8VETifzJ7cwQ7HKRgRrxSIh/kOeu/z5WNUptSfHf1wpE2/sHh7mYjNyGFVcovY30/nGACrJYgIi9eNw==}
+  '@floegence/flowersec-node-native-linux-arm64-gnu@2.3.10':
+    resolution: {integrity: sha512-wNq70SvHi1G1+zDCjzAJ5YcI4z2nYFGRvydsFi/Uo52n4VyhFYGpvkeFPZEU8hmbB1zYDebhX2xrrXi4hCseog==}
     engines: {node: '>=20.19.0'}
     cpu: [arm64]
     os: [linux]
+    libc: [glibc]
 
-  '@floegence/flowersec-node-native-linux-x64-gnu@2.3.9':
-    resolution: {integrity: sha512-0Kpxe+pfiWbREVNRDy7ASnBs/UpIPPeVXGJ9+TaQE33G7dPDl0yGk2nOt4TM3Gvdxn4Py5XKVh84YAwnMD9oBA==}
+  '@floegence/flowersec-node-native-linux-x64-gnu@2.3.10':
+    resolution: {integrity: sha512-ChlvOyWV19T5TY0GhBKF9doy93Kt1FZa18zsw2Z/60LXEAv9ziZB79osWcQ4W5jyMW5NWIUCXcbEvy1fBGFLXg==}
     engines: {node: '>=20.19.0'}
     cpu: [x64]
     os: [linux]
+    libc: [glibc]
 
-  '@floegence/flowersec-node-native@2.3.9':
-    resolution: {integrity: sha512-06LO3pujMXkS5Lon0LCcTADFX2hNPYB8yT3pbl349cGOTMwG/ztt+P0c2XW8c7mZchSU+q5aQytT4nLpO36C+g==}
+  '@floegence/flowersec-node-native@2.3.10':
+    resolution: {integrity: sha512-LU/sHDtBOKcabQ/geQlOy89iKeEPHDvI/B7di/JzEalpX4HLUSP8UTjtgHGV5XSGYo+R3ugrm3x3b1HMniT5MQ==}
     engines: {node: '>=20.19.0'}
 
   '@floegence/ghostty-web@0.5.0-rc.0':
@@ -534,30 +536,35 @@ packages:
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [linux]
+    libc: [glibc]
 
   '@napi-rs/canvas-linux-arm64-musl@0.1.100':
     resolution: {integrity: sha512-K3mDW66N+xT2/V439u1alFANiBUjdEx2gLiNYnCmUsva5jZMxWTjafBYwTzYK+EMFMHrUoabuU+T1BIP5CgbYQ==}
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [linux]
+    libc: [musl]
 
   '@napi-rs/canvas-linux-riscv64-gnu@0.1.100':
     resolution: {integrity: sha512-mooqUBTIsccZpnoQC4NgrC1v6C1vof39etLNMnBwCY+p0gajWJvAHLGQ6g/gGyS5YrpDW+GefSN4+Cvcr08UWw==}
     engines: {node: '>= 10'}
     cpu: [riscv64]
     os: [linux]
+    libc: [glibc]
 
   '@napi-rs/canvas-linux-x64-gnu@0.1.100':
     resolution: {integrity: sha512-1eCvkDCazm7FFhsT7DfGOdSaHgZVK3bt/dSBl5EWHOWmnz+I7j8tPseJqqD81NF+MH21jKUK4wQSDjN0mdhnTg==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [linux]
+    libc: [glibc]
 
   '@napi-rs/canvas-linux-x64-musl@0.1.100':
     resolution: {integrity: sha512-20arT6lnI19S68qNlii73TSEDbECNgzMz2EpldC1V3mZFuRkeujXkcebRk0LRJe9SEUAooYiLokfMViY8IX7yA==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [linux]
+    libc: [musl]
 
   '@napi-rs/canvas-win32-arm64-msvc@0.1.100':
     resolution: {integrity: sha512-DZFFT1wIAg37LJw37yhMRFfjATd3vTQzjZ1Yki8u2vhO6Hi5VE6BVaGQ1aaDu7xb4iMErz+9EOwjpS7xcxFeBw==}
@@ -634,36 +641,42 @@ packages:
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [linux]
+    libc: [glibc]
 
   '@rolldown/binding-linux-arm64-musl@1.0.3':
     resolution: {integrity: sha512-VWkUHwWriDciit80wleYwKILoR/KMvxh/IdwS/paX+ZgpuRpCrKLUdadJbc0NpBEiyhpYawsJ73j9aCvOH+f7Q==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [linux]
+    libc: [musl]
 
   '@rolldown/binding-linux-ppc64-gnu@1.0.3':
     resolution: {integrity: sha512-5f1laC0SlIR0yDbFCd8acUhvJIag6N3zC5P7oUPN6wX0aOma+uKJ0wBDH5aq7I1PVI2ttTlhJwzwRIBnLiSGEg==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [ppc64]
     os: [linux]
+    libc: [glibc]
 
   '@rolldown/binding-linux-s390x-gnu@1.0.3':
     resolution: {integrity: sha512-Iq4ko0r4XsgbrF/LunNgHtAGLRRVE2kXonAXQ/MV0mC6jQpMOhW1SvtZja2EhC/kd05++bP78dsqBeIQyYJ6Yg==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [s390x]
     os: [linux]
+    libc: [glibc]
 
   '@rolldown/binding-linux-x64-gnu@1.0.3':
     resolution: {integrity: sha512-B8m6tD5+/N5FeNQFbKlLA/2yVq9ycQP1SeedyEYYKWBNR3ZQbkvIUcNnDNM03lO1l5F2roiiFJGgvoLLyZXtSg==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [linux]
+    libc: [glibc]
 
   '@rolldown/binding-linux-x64-musl@1.0.3':
     resolution: {integrity: sha512-pSdpdUJHkuCxun9LE7jvgUB9qsRgaiyNNCX7m/AvHTcq67AiT/Yhoxvw5zPfhrM8k/BfP8ce/hMOpthKDpEUow==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [linux]
+    libc: [musl]
 
   '@rolldown/binding-openharmony-arm64@1.0.3':
     resolution: {integrity: sha512-OXXS3RKJgX2uLwM+gYyuH5omcH8fL1LJs96pZGgtetVCahON57+d4SJHzTgZiOjxgGkSnpXpOsWuPDGAKAigEg==}
@@ -778,24 +791,28 @@ packages:
     engines: {node: '>= 20'}
     cpu: [arm64]
     os: [linux]
+    libc: [glibc]
 
   '@tailwindcss/oxide-linux-arm64-musl@4.3.1':
     resolution: {integrity: sha512-Bwv9KwOvE0VKa86xPFif9b9c3Y1NxOV1P0gLti/IYaWEsQYZXDlxfGEtA8mdDZ7SG3wyNXAWYT5SIn3giL57oA==}
     engines: {node: '>= 20'}
     cpu: [arm64]
     os: [linux]
+    libc: [musl]
 
   '@tailwindcss/oxide-linux-x64-gnu@4.3.1':
     resolution: {integrity: sha512-Ymi8O8T15HYQdOUWUtTI6ldN0neHP85FC+Qz32xTcZ7iJXtem/x8ITev0o1e9e5rkqj4lONZfTRLvkmin1+tKg==}
     engines: {node: '>= 20'}
     cpu: [x64]
     os: [linux]
+    libc: [glibc]
 
   '@tailwindcss/oxide-linux-x64-musl@4.3.1':
     resolution: {integrity: sha512-M+P/91qJ6uILLw4k2G93GMDRAXj61SMvFQYt39AqvUqYgExXpLL5aepfns7sj4HiAQeolirQF9E0lzRvdf4zPQ==}
     engines: {node: '>= 20'}
     cpu: [x64]
     os: [linux]
+    libc: [musl]
 
   '@tailwindcss/oxide-wasm32-wasi@4.3.1':
     resolution: {integrity: sha512-zsM8uOeqvVGHsAXsJxsT28ttosFahLJKCLOTUBqRAtKnVgGSRitds9T432QiT8b77Yga7JIBkulIRRlJPtYhRA==}
@@ -1861,24 +1878,28 @@ packages:
     engines: {node: '>= 12.0.0'}
     cpu: [arm64]
     os: [linux]
+    libc: [glibc]
 
   lightningcss-linux-arm64-musl@1.32.0:
     resolution: {integrity: sha512-UpQkoenr4UJEzgVIYpI80lDFvRmPVg6oqboNHfoH4CQIfNA+HOrZ7Mo7KZP02dC6LjghPQJeBsvXhJod/wnIBg==}
     engines: {node: '>= 12.0.0'}
     cpu: [arm64]
     os: [linux]
+    libc: [musl]
 
   lightningcss-linux-x64-gnu@1.32.0:
     resolution: {integrity: sha512-V7Qr52IhZmdKPVr+Vtw8o+WLsQJYCTd8loIfpDaMRWGUZfBOYEJeyJIkqGIDMZPwPx24pUMfwSxxI8phr/MbOA==}
     engines: {node: '>= 12.0.0'}
     cpu: [x64]
     os: [linux]
+    libc: [glibc]
 
   lightningcss-linux-x64-musl@1.32.0:
     resolution: {integrity: sha512-bYcLp+Vb0awsiXg/80uCRezCYHNg1/l3mt0gzHnWV9XP1W5sKa5/TCdGWaR/zBM2PeF/HbsQv/j2URNOiVuxWg==}
     engines: {node: '>= 12.0.0'}
     cpu: [x64]
     os: [linux]
+    libc: [musl]
 
   lightningcss-win32-arm64-msvc@1.32.0:
     resolution: {integrity: sha512-8SbC8BR40pS6baCM8sbtYDSwEVQd4JlFTOlaD3gWGHfThTcABnNDBda6eTZeqbofalIJhFx0qKzgHJmcPTnGdw==}
@@ -2884,14 +2905,14 @@ snapshots:
 
   '@floegence/beamterm-renderer@1.0.2': {}
 
-  '@floegence/floe-webapp-boot@0.40.17':
+  '@floegence/floe-webapp-boot@0.40.18':
     dependencies:
-      '@floegence/flowersec-core': 2.3.9
+      '@floegence/flowersec-core': 2.3.10
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@floegence/floe-webapp-core@0.40.17(solid-js@1.9.13)':
+  '@floegence/floe-webapp-core@0.40.18(solid-js@1.9.13)':
     dependencies:
       clsx: 2.1.1
       diff: 8.0.4
@@ -2903,9 +2924,9 @@ snapshots:
       solid-motionone: 1.0.4(solid-js@1.9.13)
       tailwind-merge: 3.6.0
 
-  '@floegence/floe-webapp-protocol@0.40.17(solid-js@1.9.13)':
+  '@floegence/floe-webapp-protocol@0.40.18(solid-js@1.9.13)':
     dependencies:
-      '@floegence/flowersec-core': 2.3.9
+      '@floegence/flowersec-core': 2.3.10
       solid-js: 1.9.13
     transitivePeerDependencies:
       - bufferutil
@@ -2916,7 +2937,7 @@ snapshots:
       '@floegence/beamterm-renderer': 1.0.2
       '@floegence/ghostty-web': 0.5.0-rc.0
 
-  '@floegence/flowersec-core@2.3.9':
+  '@floegence/flowersec-core@2.3.10':
     dependencies:
       '@noble/ciphers': 2.3.0
       '@noble/curves': 2.3.0
@@ -2924,29 +2945,29 @@ snapshots:
       tr46: 5.0.0
       ws: 8.21.3
     optionalDependencies:
-      '@floegence/flowersec-node-native': 2.3.9
+      '@floegence/flowersec-node-native': 2.3.10
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@floegence/flowersec-node-native-darwin-arm64@2.3.9':
+  '@floegence/flowersec-node-native-darwin-arm64@2.3.10':
     optional: true
 
-  '@floegence/flowersec-node-native-darwin-x64@2.3.9':
+  '@floegence/flowersec-node-native-darwin-x64@2.3.10':
     optional: true
 
-  '@floegence/flowersec-node-native-linux-arm64-gnu@2.3.9':
+  '@floegence/flowersec-node-native-linux-arm64-gnu@2.3.10':
     optional: true
 
-  '@floegence/flowersec-node-native-linux-x64-gnu@2.3.9':
+  '@floegence/flowersec-node-native-linux-x64-gnu@2.3.10':
     optional: true
 
-  '@floegence/flowersec-node-native@2.3.9':
+  '@floegence/flowersec-node-native@2.3.10':
     optionalDependencies:
-      '@floegence/flowersec-node-native-darwin-arm64': 2.3.9
-      '@floegence/flowersec-node-native-darwin-x64': 2.3.9
-      '@floegence/flowersec-node-native-linux-arm64-gnu': 2.3.9
-      '@floegence/flowersec-node-native-linux-x64-gnu': 2.3.9
+      '@floegence/flowersec-node-native-darwin-arm64': 2.3.10
+      '@floegence/flowersec-node-native-darwin-x64': 2.3.10
+      '@floegence/flowersec-node-native-linux-arm64-gnu': 2.3.10
+      '@floegence/flowersec-node-native-linux-x64-gnu': 2.3.10
     optional: true
 
   '@floegence/ghostty-web@0.5.0-rc.0': {}
