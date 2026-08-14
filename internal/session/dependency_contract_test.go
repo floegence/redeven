@@ -22,9 +22,9 @@ import (
 
 const (
 	flowersecGoModule    = "github.com/floegence/flowersec/flowersec-go/v2"
-	flowersecGoVersion   = "v2.3.10"
+	flowersecGoVersion   = "v2.4.1"
 	flowersecCorePackage = "@floegence/flowersec-core"
-	flowersecCoreVersion = "2.3.10"
+	flowersecCoreVersion = "2.4.1"
 )
 
 func TestDesktopPnpmPeerInstallSettingMatchesLockfile(t *testing.T) {
@@ -225,6 +225,8 @@ func TestFlowersecTransportPoliciesAreExplicit(t *testing.T) {
 	agentSource := readRepoFile(t, root, "internal/agent/agent.go")
 	for _, marker := range []string{
 		"flowersec.NewConnectionController(&controlArtifactSource",
+		"flowersec.NewRPCHandlers()",
+		"RPCHandlers:    handlers",
 		"flowersec.Connect(ctx, lease, flowersec.ConnectorOptions{",
 		"flowersec.ParseArtifact(grant.ArtifactJSON)",
 		"flowersec.NewArtifactLease(artifact",
@@ -303,58 +305,58 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 	root := repoRootForTest(t)
 	expectedPackages := map[string][]string{
 		"desktop/package.json": {
-			"\"@floegence/floe-webapp-core\": \"0.40.18\"",
+			"\"@floegence/floe-webapp-core\": \"0.40.19\"",
 		},
 		"desktop/package-lock.json": {
-			"floe-webapp-core-0.40.18.tgz",
+			"floe-webapp-core-0.40.19.tgz",
 		},
 		"desktop/pnpm-lock.yaml": {
-			"@floegence/floe-webapp-core@0.40.18",
+			"@floegence/floe-webapp-core@0.40.19",
 		},
 		"internal/envapp/ui_src/package.json": {
-			"\"@floegence/floe-webapp-boot\": \"0.40.18\"",
-			"\"@floegence/floe-webapp-core\": \"0.40.18\"",
-			"\"@floegence/floe-webapp-protocol\": \"0.40.18\"",
+			"\"@floegence/floe-webapp-boot\": \"0.40.19\"",
+			"\"@floegence/floe-webapp-core\": \"0.40.19\"",
+			"\"@floegence/floe-webapp-protocol\": \"0.40.19\"",
 			"\"@floegence/floeterm-terminal-web\": \"0.15.4\"",
-			"\"@floegence/flowersec-core\": \"2.3.10\"",
+			"\"@floegence/flowersec-core\": \"2.4.1\"",
 		},
 		"internal/envapp/ui_src/package-lock.json": {
-			"floe-webapp-boot-0.40.18.tgz",
-			"floe-webapp-core-0.40.18.tgz",
-			"floe-webapp-protocol-0.40.18.tgz",
+			"floe-webapp-boot-0.40.19.tgz",
+			"floe-webapp-core-0.40.19.tgz",
+			"floe-webapp-protocol-0.40.19.tgz",
 			"floeterm-terminal-web-0.15.4.tgz",
-			"flowersec-core-2.3.10.tgz",
+			"flowersec-core-2.4.1.tgz",
 		},
 		"internal/envapp/ui_src/pnpm-lock.yaml": {
-			"@floegence/floe-webapp-boot@0.40.18",
-			"@floegence/floe-webapp-core@0.40.18",
-			"@floegence/floe-webapp-protocol@0.40.18",
+			"@floegence/floe-webapp-boot@0.40.19",
+			"@floegence/floe-webapp-core@0.40.19",
+			"@floegence/floe-webapp-protocol@0.40.19",
 			"@floegence/floeterm-terminal-web@0.15.4",
-			"@floegence/flowersec-core@2.3.10",
+			"@floegence/flowersec-core@2.4.1",
 		},
 		"internal/codeapp/ui_src/package.json": {
-			"\"@floegence/flowersec-core\": \"2.3.10\"",
+			"\"@floegence/flowersec-core\": \"2.4.1\"",
 		},
 		"internal/codeapp/ui_src/package-lock.json": {
-			"flowersec-core-2.3.10.tgz",
+			"flowersec-core-2.4.1.tgz",
 		},
 		"THIRD_PARTY_NOTICES.md": {
-			"@floegence/floe-webapp-boot | 0.40.18",
-			"@floegence/floe-webapp-core | 0.40.18",
-			"@floegence/floe-webapp-protocol | 0.40.18",
+			"@floegence/floe-webapp-boot | 0.40.19",
+			"@floegence/floe-webapp-core | 0.40.19",
+			"@floegence/floe-webapp-protocol | 0.40.19",
 			"@floegence/floeterm-terminal-web | 0.15.4",
-			"@floegence/flowersec-core | 2.3.10",
+			"@floegence/flowersec-core | 2.4.1",
 		},
 		"okf/architecture/runtime-transport-dependencies.md": {
 			"terminal-go v0.10.3",
-			"Flowersec Go v2.3.10",
-			"Flowersec Core v2.3.10",
+			"Flowersec Go v2.4.1",
+			"Flowersec Core v2.4.1",
 		},
 		"okf/architecture/env-app-upstream-web-dependencies.md": {
 			"terminal-web v0.15.4",
 			"semantic Presentation",
-			"Floe Webapp Boot, Core, and Protocol v0.40.18",
-			"Flowersec Core v2.3.10",
+			"Floe Webapp Boot, Core, and Protocol v0.40.19",
+			"Flowersec Core v2.4.1",
 		},
 	}
 	for file, expectedMarkers := range expectedPackages {
