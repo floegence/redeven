@@ -539,6 +539,10 @@
 }
 
 /* KaTeX */
+.file-markdown-body .katex-mathml {
+  clip-path: inset(50%);
+}
+
 .file-markdown-body .katex-error {
   color: var(--redeven-status-error-foreground, var(--error));
   background: var(--redeven-status-error-soft, color-mix(in srgb, var(--error) 8%, transparent));
