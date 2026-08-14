@@ -14,6 +14,7 @@ import (
 	"testing/fstest"
 	"time"
 
+	flruntime "github.com/floegence/floret/v4/runtime"
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
@@ -133,21 +134,11 @@ func TestServer_AI_FollowupsEndpoints(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SendUserTurn active: %v", err)
 	}
-	if started.Kind != "admitting" || strings.TrimSpace(started.AdmissionID) == "" || strings.TrimSpace(started.RunID) != "" || strings.TrimSpace(started.TurnID) != "" {
-		t.Fatalf("active admission receipt=%#v", started)
+	if started.Kind != "start" || strings.TrimSpace(started.TurnID) == "" || started.Current.Activity != flruntime.ThreadActivityActive {
+		t.Fatalf("active command result=%#v", started)
 	}
 
 	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if aiSvc.HasActiveThreadForEndpoint(meta.EndpointID, thread.ThreadID) {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	if !aiSvc.HasActiveThreadForEndpoint(meta.EndpointID, thread.ThreadID) {
-		t.Fatalf("active run did not start in time")
-	}
-	deadline = time.Now().Add(2 * time.Second)
 	activeRunID := ""
 	for time.Now().Before(deadline) {
 		view, viewErr := aiSvc.GetThread(ctx, &meta, thread.ThreadID)
@@ -272,17 +263,6 @@ func TestServer_AI_FollowupsEndpoints(t *testing.T) {
 	}
 
 	{
-		body := bytes.NewBufferString(`{"lane":"queued","ordered_followup_ids":["` + followupID1 + `","` + followupID2 + `"],"expected_revision":` + jsonNumberString(revision) + `}`)
-		req := httptest.NewRequest(http.MethodPatch, "/_redeven_proxy/api/ai/threads/"+thread.ThreadID+"/followups/order", body)
-		req.Header.Set("Origin", envOrigin)
-		rr := httptest.NewRecorder()
-		srv.serveHTTP(rr, req)
-		if rr.Code != http.StatusConflict {
-			t.Fatalf("stale reorder status=%d body=%s", rr.Code, rr.Body.String())
-		}
-	}
-
-	{
 		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/ai/threads/"+thread.ThreadID+"/followups", nil)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
@@ -303,41 +283,6 @@ func TestServer_AI_FollowupsEndpoints(t *testing.T) {
 		}
 		if len(resp.Data.Queued) != 2 || resp.Data.Queued[0].FollowupID != followupID2 || resp.Data.Queued[1].FollowupID != followupID1 {
 			t.Fatalf("unexpected reordered followups response: %s", rr.Body.String())
-		}
-	}
-
-	{
-		body := bytes.NewBufferString(`{"text":"edited queued text"}`)
-		req := httptest.NewRequest(http.MethodPatch, "/_redeven_proxy/api/ai/threads/"+thread.ThreadID+"/followups/"+followupID2, body)
-		req.Header.Set("Origin", envOrigin)
-		rr := httptest.NewRecorder()
-		srv.serveHTTP(rr, req)
-		if rr.Code != http.StatusOK {
-			t.Fatalf("patch followup status=%d body=%s", rr.Code, rr.Body.String())
-		}
-	}
-
-	{
-		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/ai/threads/"+thread.ThreadID+"/followups", nil)
-		req.Header.Set("Origin", envOrigin)
-		rr := httptest.NewRecorder()
-		srv.serveHTTP(rr, req)
-		if rr.Code != http.StatusOK {
-			t.Fatalf("list followups after patch status=%d body=%s", rr.Code, rr.Body.String())
-		}
-		var resp struct {
-			Data struct {
-				Queued []struct {
-					FollowupID string `json:"followup_id"`
-					Text       string `json:"text"`
-				} `json:"queued"`
-			} `json:"data"`
-		}
-		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
-			t.Fatalf("unmarshal list followups after patch: %v", err)
-		}
-		if len(resp.Data.Queued) != 2 || resp.Data.Queued[0].FollowupID != followupID2 || resp.Data.Queued[0].Text != "edited queued text" {
-			t.Fatalf("unexpected patched followups response: %s", rr.Body.String())
 		}
 	}
 
@@ -415,14 +360,6 @@ func TestServer_AI_FollowupsEndpoints(t *testing.T) {
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
 		srv.serveHTTP(rr, req)
-		for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); {
-			if rr.Code == http.StatusOK && strings.Contains(rr.Body.String(), `"queued":[]`) && strings.Contains(rr.Body.String(), `"drafts":[{"followup_id":"`+followupID2) {
-				break
-			}
-			time.Sleep(20 * time.Millisecond)
-			rr = httptest.NewRecorder()
-			srv.serveHTTP(rr, req)
-		}
 		if rr.Code != http.StatusOK {
 			t.Fatalf("list followups after cancel status=%d body=%s", rr.Code, rr.Body.String())
 		}
@@ -440,7 +377,7 @@ func TestServer_AI_FollowupsEndpoints(t *testing.T) {
 		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 			t.Fatalf("unmarshal list followups after cancel: %v", err)
 		}
-		if len(resp.Data.Queued) != 0 || len(resp.Data.Drafts) != 1 || resp.Data.Drafts[0].FollowupID != followupID2 {
+		if len(resp.Data.Queued) != 1 || resp.Data.Queued[0].FollowupID != followupID2 || len(resp.Data.Drafts) != 0 {
 			t.Fatalf("unexpected followups after cancel: %s", rr.Body.String())
 		}
 	}

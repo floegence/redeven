@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   adapter,
+  approvalCommandResult,
   inputRequest,
   liveBootstrap,
   renderSurfaceWithAdapter,
@@ -89,9 +90,13 @@ describe('Flower bottom decision surface', () => {
     });
     const submitInput = vi.fn(async (input) => ({
       thread_id: input.thread_id,
-      turn_id: 'turn-answer',
-      run_id: 'run-answer',
       consumed_prompt_id: input.prompt_id,
+      current: {
+        thread_id: input.thread_id,
+        view_version: 21,
+        activity: 'active' as const,
+        interactions: [],
+      },
     }));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
@@ -172,7 +177,7 @@ describe('Flower bottom decision surface', () => {
     expect(Array.from(surface.querySelectorAll('.flower-input-request-choice-selected')).map((node) => node.textContent?.trim())).toEqual([]);
   });
 
-  it('keeps approval identity while removing nested cards and unrelated chat controls', async () => {
+  it('keeps approval identity and Stop available without nested cards', async () => {
     const action = {
       action_id: 'approval-decision-surface',
       origin: 'main_tool' as const,
@@ -203,16 +208,8 @@ describe('Flower bottom decision surface', () => {
       thread_id: 'thread-approval-decision-surface',
       status: 'waiting_approval',
       approval_actions: [action],
-      approval_queue: {
-        generation: 7,
-        revision: 3,
-        current_action_id: action.action_id,
-        current_position: 1,
-        total: 1,
-        unresolved_count: 1,
-      },
     });
-    const submitApproval = vi.fn(async () => ({ ok: true, current_cursor: 22 }));
+    const submitApproval = vi.fn(async (input) => approvalCommandResult(input.thread_id, input.interaction_id, input.approved, 22));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [approvalThread]),
@@ -233,14 +230,17 @@ describe('Flower bottom decision surface', () => {
     expect(surface.querySelector('.flower-decision-surface')).toBeNull();
     expect(surface.querySelector('.flower-approval-card')).toBeNull();
     expect(surface.querySelector('.flower-approval-copy-btn')).toBeNull();
-    expect(surface.querySelector('.flower-composer-footer')).toBeNull();
+    expect(surface.querySelector('.flower-composer-footer')).not.toBeNull();
     expect(surface.querySelector('.flower-composer-stop-thread')).toBeNull();
+    const stop = surface.querySelector<HTMLButtonElement>('[data-flower-primary-action="stop"]');
+    expect(stop).not.toBeNull();
+    expect(stop?.disabled).toBe(false);
     expect(surface.querySelector('.flower-composer-attachment-button')).toBeNull();
-    expect(surface.querySelector('[data-flower-composer-control="working_dir"]')).toBeNull();
-    expect(surface.querySelector('[data-flower-composer-control="permission"]')).toBeNull();
-    expect(surface.querySelector('[data-flower-composer-control="model_reasoning"]')).toBeNull();
+    expect(surface.querySelector('[data-flower-composer-control="working_dir"]')).not.toBeNull();
+    expect(surface.querySelector('.flower-permission-selector')).not.toBeNull();
+    expect(surface.querySelector('[data-flower-composer-control="model_reasoning"]')).not.toBeNull();
     expect(surface.textContent).not.toContain('Review before this runs');
-    expect(surface.textContent).not.toContain('Approval required');
+    expect(surface.textContent).toContain('Approval required');
     expect(surface.querySelector('.flower-approval-intro')).toBeNull();
     expect(surface.textContent).not.toContain('terminal.exec');
     expect(surface.textContent?.match(/printf flower-decision-surface/g)).toHaveLength(1);
@@ -249,16 +249,11 @@ describe('Flower bottom decision surface', () => {
     expect(decisions.map((button) => button.textContent?.trim())).toEqual(['Reject', 'Allow once']);
     decisions[1].click();
     await waitFor(() => submitApproval.mock.calls.length === 1);
-    expect(submitApproval).toHaveBeenCalledWith(expect.objectContaining({
+    expect(submitApproval).toHaveBeenCalledWith({
       thread_id: approvalThread.thread_id,
-      action_id: action.action_id,
+      interaction_id: action.action_id,
       approved: true,
-      expected_seq: action.expected_seq,
-      revision: action.revision,
-      version: action.version,
-      surface_epoch: action.surface_epoch,
-      queue_generation: action.queue_generation,
-    }));
+    });
   });
 
   it('does not render a command summary above the canonical approval command', async () => {

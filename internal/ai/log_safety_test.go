@@ -24,21 +24,6 @@ func TestSafeRunLogAttrsSanitizesKeysValuesAndErrors(t *testing.T) {
 	}
 }
 
-func TestQueuedTurnStartLogAttrsSanitizesErrorIdentityOverrides(t *testing.T) {
-	attrs := queuedTurnStartLogAttrs(&queuedTurnStartError{
-		endpointID: "endpoint\nforged",
-		threadID:   "thread\rforged",
-		err:        testLogError("failed\nforged"),
-	}, "fallback", "fallback")
-
-	if attrs[1] != "endpoint forged" {
-		t.Fatalf("endpoint_id = %#v, want sanitized value", attrs[1])
-	}
-	if attrs[3] != "thread forged" {
-		t.Fatalf("thread_id = %#v, want sanitized value", attrs[3])
-	}
-}
-
 type testLogError string
 
 func (e testLogError) Error() string { return string(e) }

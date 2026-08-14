@@ -9257,16 +9257,6 @@ type RuntimeFlowerRoute = Readonly<{
 
 const runtimeFlowerNoQuery = (parsed: URL): boolean => parsed.search === '';
 const runtimeFlowerLimitQuery = (parsed: URL): boolean => parsed.search === '' || /^\?limit=\d{1,4}$/u.test(parsed.search);
-const runtimeFlowerStreamQuery = (parsed: URL): boolean => {
-  const allowed = new Set(['summary_generation', 'summary_after_seq', 'thread_id', 'thread_generation', 'thread_after_seq']);
-  if (![...parsed.searchParams.keys()].every((key) => allowed.has(key))) return false;
-  const threadIDs = parsed.searchParams.getAll('thread_id');
-  if (threadIDs.length !== 1 || !threadIDs[0]?.trim() || threadIDs[0].length > 200) return false;
-  return ['summary_generation', 'summary_after_seq', 'thread_generation', 'thread_after_seq'].every((name) => {
-    const values = parsed.searchParams.getAll(name);
-    return values.length === 1 && /^\d{1,18}$/u.test(values[0] ?? '');
-  });
-};
 const runtimeFlowerSubagentDetailQuery = (parsed: URL): boolean => parsed.search === ''
   || /^\?after_ordinal=\d+$/u.test(parsed.search)
   || /^\?limit=\d{1,4}$/u.test(parsed.search)
@@ -9301,15 +9291,17 @@ const RUNTIME_FLOWER_ROUTES: readonly RuntimeFlowerRoute[] = [
   { path: '/_redeven_proxy/api/ai/threads', methods: ['GET', 'POST'], allowsQuery: runtimeFlowerLimitQuery },
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+$/u, methods: ['GET', 'PATCH'] },
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+$/u, methods: ['DELETE'], allowsQuery: runtimeFlowerDeleteQuery },
-  { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/live\/bootstrap$/u, methods: ['GET'] },
-  { path: '/_redeven_proxy/api/ai/flower/stream', methods: ['GET'], allowsQuery: runtimeFlowerStreamQuery },
+  { path: '/_redeven_proxy/api/ai/flower/stream', methods: ['GET'] },
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/subagents\/[^/]+\/detail$/u, methods: ['GET'], allowsQuery: runtimeFlowerSubagentDetailQuery },
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/read$/u, methods: ['POST'] },
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/turns$/u, methods: ['POST'] },
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/fork$/u, methods: ['POST'] },
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/input_response$/u, methods: ['POST'] },
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/approvals$/u, methods: ['POST'] },
-  { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/context\/compact$/u, methods: ['POST'] },
+  { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/followups\/order$/u, methods: ['PATCH'] },
+  { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/followups\/[^/]+$/u, methods: ['DELETE'] },
+  { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/retry$/u, methods: ['POST'] },
+  { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/retry_effect$/u, methods: ['POST'] },
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/cancel$/u, methods: ['POST'] },
   { path: /^\/_redeven_proxy\/api\/ai\/runs\/[^/]+\/terminal\/[^/]+\/read$/u, methods: ['GET'], allowsQuery: runtimeFlowerTerminalReadQuery },
   { path: /^\/_redeven_proxy\/api\/ai\/uploads\/[^/]+$/u, methods: ['GET', 'DELETE'] },

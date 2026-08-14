@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	fltools "github.com/floegence/floret/v3/tools"
+	fltools "github.com/floegence/floret/v4/tools"
 	"github.com/floegence/redeven/internal/session"
 )
 

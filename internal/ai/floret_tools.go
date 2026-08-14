@@ -9,16 +9,17 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/floegence/floret/v3/identity"
-	"github.com/floegence/floret/v3/observation"
-	flruntime "github.com/floegence/floret/v3/runtime"
-	fltools "github.com/floegence/floret/v3/tools"
+	"github.com/floegence/floret/v4/identity"
+	"github.com/floegence/floret/v4/observation"
+	flruntime "github.com/floegence/floret/v4/runtime"
+	fltools "github.com/floegence/floret/v4/tools"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
 
 type floretToolRuntimeState struct {
 	mu    sync.Mutex
 	state todoRuntimeState
+	items []TodoItem
 }
 
 const (
@@ -44,6 +45,35 @@ func (s *floretToolRuntimeState) snapshot() todoRuntimeState {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.state
+}
+
+func (s *floretToolRuntimeState) todos() ([]TodoItem, int64) {
+	if s == nil {
+		return nil, 0
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]TodoItem(nil), s.items...), s.state.TodoSnapshotVersion
+}
+
+func (s *floretToolRuntimeState) replaceTodos(items []TodoItem, expectedVersion *int64) (todoRuntimeState, error) {
+	if s == nil {
+		return todoRuntimeState{}, errors.New("todo runtime state is unavailable")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if expectedVersion != nil && *expectedVersion != s.state.TodoSnapshotVersion {
+		return todoRuntimeState{}, fmt.Errorf("todo version conflict: have %d, expected %d", s.state.TodoSnapshotVersion, *expectedVersion)
+	}
+	s.items = append([]TodoItem(nil), items...)
+	summary := summarizeTodos(items)
+	actionable := actionableTodoSummary(items)
+	s.state.TodoTrackingEnabled = true
+	s.state.TodoTotalCount = summary.Total
+	s.state.TodoOpenCount = actionable.Pending + actionable.InProgress
+	s.state.TodoInProgressCount = actionable.InProgress
+	s.state.TodoSnapshotVersion++
+	return s.state, nil
 }
 
 func (s *floretToolRuntimeState) updateFromToolResult(call ToolCall, result ToolResult, round int) {
@@ -190,107 +220,16 @@ func floretRunContextForIDs(ctx context.Context, base *run, rawRunID string, raw
 	runID := strings.TrimSpace(rawRunID)
 	threadID := strings.TrimSpace(rawThreadID)
 	turnID := strings.TrimSpace(rawTurnID)
-	settlementRunID := runID
-	settlementThreadID := threadID
-	settlementTurnID := turnID
 	childThreadID := strings.TrimSpace(hostContext[subagentToolHostContextChildThreadIDKey])
 	childRunID := strings.TrimSpace(hostContext[subagentToolHostContextChildRunIDKey])
-	if childThreadID == "" && childRunID == "" {
-		wantRunID, wantThreadID, wantTurnID := base.floretCanonicalIdentity()
-		if err := requireFloretRunIdentity("parent tool invocation", runID, threadID, turnID, wantRunID, wantThreadID, wantTurnID); err != nil {
-			return nil, err
-		}
-		return base, nil
+	if childThreadID != "" || childRunID != "" {
+		return nil, errors.New("legacy child execution identity is not accepted by the typed thread runtime")
 	}
-	if childThreadID == "" || childRunID == "" {
-		return nil, errors.New("floret child tool invocation missing explicit child identity")
-	}
-	if childRunID == childThreadID {
-		return nil, errors.New("floret child tool invocation child run aliases child thread")
-	}
-	if parentRunID := strings.TrimSpace(base.id); parentRunID != "" && childRunID == parentRunID && strings.TrimSpace(base.threadID) != childThreadID {
-		return nil, errors.New("floret child tool invocation child run aliases parent run")
-	}
-	if threadID == "" || threadID != childThreadID {
-		return nil, floretIdentityMismatchError("child tool invocation", "thread", threadID, childThreadID)
-	}
-	if turnID == "" {
-		return nil, errors.New("floret child tool invocation missing turn id")
-	}
-	runID = childRunID
-	threadID = childThreadID
-	if base.subagentDepth > 0 {
-		if err := requireFloretRunIdentity("bound child tool invocation", runID, threadID, turnID, strings.TrimSpace(base.id), strings.TrimSpace(base.threadID), strings.TrimSpace(base.turnID)); err != nil {
-			return nil, err
-		}
-		return base, nil
-	}
-	var runtime *floretSubagentRuntime
-	if base.host.subagentRuntime != nil {
-		runtime = base.host.subagentRuntime()
-	}
-	if runtime == nil {
-		if candidate, ok := base.subagentRuntime.(*floretSubagentRuntime); ok {
-			runtime = candidate
-		}
-	}
-	if runtime == nil {
-		return nil, errors.New("floret child execution authority is unavailable")
-	}
-	execution, err := runtime.childExecutionCapabilities(ctx, childThreadID, childRunID)
-	if err != nil {
+	wantRunID, wantThreadID, wantTurnID := base.floretCanonicalIdentity()
+	if err := requireFloretRunIdentity("tool invocation", runID, threadID, turnID, wantRunID, wantThreadID, wantTurnID); err != nil {
 		return nil, err
 	}
-	child := newRun(runOptions{
-		Log:                   base.log,
-		StateDir:              base.stateDir,
-		AgentHomeDir:          base.agentHomeDir,
-		WorkingDir:            base.workingDir,
-		FilesystemScope:       base.scope,
-		Shell:                 base.shell,
-		HostCapabilities:      execution.host,
-		AIConfig:              base.cfg,
-		SessionMeta:           base.sessionMeta,
-		ResolveProviderKey:    base.resolveProviderKey,
-		ResolveWebSearchKey:   base.resolveWebSearchKey,
-		DesktopModelSource:    base.desktopModelSource,
-		LiveMetrics:           base.liveMetrics,
-		RunID:                 runID,
-		ChannelID:             base.channelID,
-		EndpointID:            base.endpointID,
-		ThreadID:              threadID,
-		TurnID:                turnID,
-		UserPublicID:          base.userPublicID,
-		MessageID:             turnID,
-		UploadsDir:            base.uploadsDir,
-		ProductCapabilities:   execution.product,
-		EffectAuthorizations:  base.effectAuthorizations,
-		PersistOpTimeout:      base.persistOpTimeout,
-		MaxWallTime:           base.maxWallTime,
-		IdleTimeout:           base.idleTimeout,
-		ToolApprovalTimeout:   base.toolApprovalTO,
-		SubagentDepth:         base.subagentDepth + 1,
-		AllowSubagentDelegate: false,
-		ToolAllowlist:         mapKeys(base.toolAllowlist),
-		NoUserInteraction:     true,
-		WebSearchToolEnabled:  base.webSearchToolEnabled,
-		WebSearchMode:         base.webSearchMode,
-		SkillManager:          base.skillManager,
-		ToolTargetPolicy:      base.toolTargetPolicy,
-		TargetToolExecutor:    base.targetToolExecutor,
-	})
-	child.setPermissionState(authorizationSnapshot.PermissionType, authorizationSnapshot)
-	child.toolAllowlist = stringSet(authorizationSnapshot.VisibleToolNames...)
-	child.settlementThreadID = settlementThreadID
-	child.settlementRunID = settlementRunID
-	child.settlementTurnID = settlementTurnID
-	base.mu.Lock()
-	settlementOwnerResolver := base.settlementOwnerResolver
-	base.mu.Unlock()
-	child.setPendingToolSettlementOwnerResolver(settlementOwnerResolver)
-	child.bindSubagentParentAuthority(base)
-	child.currentModelID = base.currentModelID
-	return child, nil
+	return base, nil
 }
 
 func requireFloretRunIdentity(label string, runID string, threadID string, turnID string, wantRunID string, wantThreadID string, wantTurnID string) error {

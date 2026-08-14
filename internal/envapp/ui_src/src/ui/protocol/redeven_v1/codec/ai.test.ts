@@ -1,42 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   fromWireAIEventNotify,
-  fromWireAICompactThreadContextResponse,
   fromWireAIListMessagesResponse,
-  toWireAICompactThreadContextRequest,
   toWireAISubmitRequestUserInputResponseRequest,
   toWireAISendUserTurnRequest,
 } from './ai';
 
 describe('Redeven v1 AI codec', () => {
-  it('preserves timeline decorations in paged message responses', () => {
-    const response = fromWireAIListMessagesResponse({
-      messages: [{ row_id: 10, message_json: { id: 'msg-user', role: 'user' } }],
-      timeline_decorations: [{
-        decoration_id: 'turn-projection-unavailable:turn-1',
-        kind: 'turn_projection_unavailable',
-        anchor: { target_kind: 'message', message_id: 'msg-user', edge: 'after' },
-        ordinal: 0,
-        projection_unavailable: {
-          turn_id: 'turn-1',
-          run_id: 'run-1',
-          expected_message_id: 'msg-assistant',
-          reason: 'not_renderable',
-        },
-      }],
-      next_after_row_id: 10,
-      has_more: true,
-    });
-
-    expect(response.timelineDecorations).toEqual([expect.objectContaining({
-      kind: 'turn_projection_unavailable',
-      projection_unavailable: expect.objectContaining({
-        run_id: 'run-1',
-        reason: 'not_renderable',
-      }),
-    })]);
-  });
-
   it('passes Ask Flower context actions through sendUserTurn without permission material', () => {
     const req = toWireAISendUserTurnRequest({
       threadId: 'th_1',
@@ -125,26 +95,6 @@ describe('Redeven v1 AI codec', () => {
     });
 
     expect(req.options).not.toHaveProperty('reasoning_selection');
-  });
-
-  it('round trips compact thread context payloads', () => {
-    expect(toWireAICompactThreadContextRequest({
-      threadId: ' th_compact ',
-      activeRunId: ' run_live ',
-    })).toEqual({
-      thread_id: 'th_compact',
-      active_run_id: 'run_live',
-    });
-
-    expect(fromWireAICompactThreadContextResponse({
-      request_id: ' req_1 ',
-      kind: ' accepted ',
-      error_code: '',
-    })).toEqual({
-      requestId: 'req_1',
-      kind: 'accepted',
-      errorCode: undefined,
-    });
   });
 
   it('encodes reasoning selection in input response options', () => {

@@ -5,8 +5,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/floegence/redeven/internal/ai"
@@ -30,32 +28,7 @@ func serveAIFlowerLiveStreamWithTiming(
 	heartbeatInterval time.Duration,
 	writeTimeout time.Duration,
 ) {
-	query := r.URL.Query()
-	threadID := strings.TrimSpace(query.Get("thread_id"))
-	if threadID == "" {
-		writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing thread_id"})
-		return
-	}
-	parseCursor := func(name string) (int64, bool) {
-		raw := strings.TrimSpace(query.Get(name))
-		if raw == "" {
-			return 0, true
-		}
-		value, err := strconv.ParseInt(raw, 10, 64)
-		return value, err == nil && value >= 0
-	}
-	generation, validGeneration := parseCursor("thread_generation")
-	afterSeq, validCursor := parseCursor("thread_after_seq")
-	summaryGeneration, validSummaryGeneration := parseCursor("summary_generation")
-	summaryAfterSeq, validSummaryCursor := parseCursor("summary_after_seq")
-	if !validGeneration || !validCursor || !validSummaryGeneration || !validSummaryCursor {
-		writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid Flower live stream cursor"})
-		return
-	}
-	subscription, err := aiSvc.SubscribeFlowerLiveStream(r.Context(), meta, ai.FlowerLiveStreamRequest{
-		ThreadID: threadID, StreamGeneration: generation, AfterSeq: afterSeq,
-		SummaryGeneration: summaryGeneration, SummaryAfterSeq: summaryAfterSeq,
-	})
+	subscription, err := aiSvc.SubscribeFlowerLiveStream(r.Context(), meta, ai.FlowerLiveStreamRequest{})
 	if err != nil {
 		if errors.Is(err, ai.ErrFlowerLiveTooManySubscribers) {
 			w.Header().Set("Retry-After", "10")
@@ -115,9 +88,6 @@ func serveAIFlowerLiveStreamWithTiming(
 			return
 		}
 		if frame == nil || write("data: ", frame.Data) != nil {
-			return
-		}
-		if frame.Kind == ai.FlowerLiveStreamResyncRequired {
 			return
 		}
 	}

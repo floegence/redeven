@@ -68,7 +68,7 @@ func TestRedevenOwnedSQLiteOpeningsUseMigrationEngine(t *testing.T) {
 
 			sqlAliases := importAliases(parsed, "database/sql", "sql")
 			sqliteutilAliases := importAliases(parsed, "github.com/floegence/redeven/internal/persistence/sqliteutil", "sqliteutil")
-			floretStorageAliases := importAliases(parsed, "github.com/floegence/floret/v3/storage", "storage")
+			floretStorageAliases := importAliases(parsed, "github.com/floegence/floret/v4/storage", "storage")
 			ast.Inspect(parsed, func(node ast.Node) bool {
 				call, ok := node.(*ast.CallExpr)
 				if !ok {

@@ -11,7 +11,7 @@ import (
 	"os"
 	"strings"
 
-	flruntime "github.com/floegence/floret/v3/runtime"
+	flruntime "github.com/floegence/floret/v4/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
@@ -100,21 +100,15 @@ func (r *run) floretTurnInput(ctx context.Context, input RunInput, references []
 		}
 		return out, nil
 	}
-	if r == nil || r.product.getQueuedTurnOwnedUpload == nil {
+	if r == nil || r.product.getThreadOwnedUpload == nil {
 		return flruntime.TurnInput{}, errors.New("attachment store is unavailable")
-	}
-	r.muPendingCommand.Lock()
-	commandID := strings.TrimSpace(r.pendingCommandID)
-	r.muPendingCommand.Unlock()
-	if commandID == "" {
-		return flruntime.TurnInput{}, errors.New("attachment admission requires a pending command")
 	}
 	for index, attachment := range input.Attachments {
 		uploadID, err := normalizeUploadID(attachment.AttachmentID)
 		if err != nil {
 			return flruntime.TurnInput{}, fmt.Errorf("attachment %d has an invalid attachment_id", index)
 		}
-		record, err := r.product.loadQueuedTurnOwnedUpload(ctxOrBackground(ctx), commandID, uploadID)
+		record, err := r.product.loadThreadOwnedUpload(ctxOrBackground(ctx), uploadID)
 		if err != nil {
 			return flruntime.TurnInput{}, fmt.Errorf("load attachment %d: %w", index, err)
 		}
@@ -202,17 +196,11 @@ func (r *run) preflightFloretTurnAttachments(ctx context.Context, input flruntim
 	if len(input.Attachments) == 0 {
 		return input, nil, nil
 	}
-	if r == nil || r.product.getQueuedTurnOwnedUpload == nil {
+	if r == nil || r.product.getThreadOwnedUpload == nil {
 		return flruntime.TurnInput{}, nil, errors.New("attachment store is unavailable")
 	}
 	if provider == nil {
 		return flruntime.TurnInput{}, nil, errors.New("provider adapter is unavailable")
-	}
-	r.muPendingCommand.Lock()
-	commandID := strings.TrimSpace(r.pendingCommandID)
-	r.muPendingCommand.Unlock()
-	if commandID == "" {
-		return flruntime.TurnInput{}, nil, errors.New("attachment admission requires a pending command")
 	}
 	frozen := make(map[string]frozenFloretAttachment, len(input.Attachments))
 	for index, attachment := range input.Attachments {
@@ -223,9 +211,9 @@ func (r *run) preflightFloretTurnAttachments(ctx context.Context, input flruntim
 		if digest == "" {
 			return flruntime.TurnInput{}, nil, fmt.Errorf("preflight attachment %d: resource reference is not content-addressed", index)
 		}
-		record, err := r.product.loadQueuedTurnOwnedUpload(ctxOrBackground(ctx), commandID, uploadID)
+		record, err := r.product.loadThreadOwnedUpload(ctxOrBackground(ctx), uploadID)
 		if errors.Is(err, sql.ErrNoRows) {
-			return flruntime.TurnInput{}, nil, fmt.Errorf("preflight attachment %d: resource %q is not owned by pending command %q", index, uploadID, commandID)
+			return flruntime.TurnInput{}, nil, fmt.Errorf("preflight attachment %d: resource %q is not owned by thread %q", index, uploadID, r.threadID)
 		}
 		if err != nil {
 			return flruntime.TurnInput{}, nil, fmt.Errorf("preflight attachment %d: %w", index, err)

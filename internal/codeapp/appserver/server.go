@@ -1476,14 +1476,8 @@ func aiThreadActionHTTPStatus(err error) int {
 		errors.Is(err, ai.ErrWaitingPromptChanged),
 		errors.Is(err, ai.ErrTurnIdempotencyConflict),
 		errors.Is(err, ai.ErrInitialTurnStateConflict),
-		errors.Is(err, ai.ErrFollowupsRevisionChanged),
-		errors.Is(err, ai.ErrCompactAlreadyPending),
-		errors.Is(err, ai.ErrNoCompactableContext),
-		errors.Is(err, ai.ErrThreadContinuationRetryUnavailable),
-		errors.Is(err, ai.ErrThreadStopPending):
+		errors.Is(err, ai.ErrThreadContinuationRetryUnavailable):
 		return http.StatusConflict
-	case errors.Is(err, ai.ErrThreadStopUnavailable):
-		return http.StatusServiceUnavailable
 	}
 	msg := strings.ToLower(strings.TrimSpace(err.Error()))
 	if strings.Contains(msg, "thread not found") || strings.Contains(msg, "run not found") {
@@ -4735,41 +4729,16 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			if !g.requireAIService(w, aiSvc) {
 				return
 			}
-			th, err := aiSvc.GetThread(r.Context(), meta, threadID)
+			detail, err := aiSvc.GetFlowerThreadDetail(r.Context(), meta, threadID)
 			if err != nil {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 				return
 			}
-			if th == nil {
+			if detail == nil {
 				writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "thread not found"})
 				return
 			}
-			view, err := g.buildAIThreadEnvelope(r.Context(), meta, th)
-			if err != nil {
-				writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: err.Error()})
-				return
-			}
-			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
-			return
-
-		case action == "live" && r.Method == http.MethodGet && len(parts) == 3 && strings.TrimSpace(parts[2]) == "bootstrap":
-			meta, ok := g.requirePermission(w, r, requiredPermissionRead)
-			if !ok {
-				return
-			}
-			if !g.requireAIService(w, aiSvc) {
-				return
-			}
-			snapshot, err := aiSvc.GetFlowerThreadLiveBootstrap(r.Context(), meta, threadID)
-			if err != nil {
-				status := http.StatusBadRequest
-				if errors.Is(err, sql.ErrNoRows) {
-					status = http.StatusNotFound
-				}
-				writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
-				return
-			}
-			view, err := g.buildAIFlowerLiveBootstrapView(r.Context(), meta, snapshot)
+			view, err := g.buildAIFlowerThreadDetailEnvelope(r.Context(), meta, detail)
 			if err != nil {
 				writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: err.Error()})
 				return
@@ -5067,53 +5036,6 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusAccepted, apiResp{OK: true, Data: resp})
 			return
 
-		case action == "context" && r.Method == http.MethodPost && len(parts) == 3 && strings.TrimSpace(parts[2]) == "compact":
-			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
-			if !ok {
-				return
-			}
-			if !g.requireAIService(w, aiSvc) {
-				return
-			}
-			if !aiSvc.Enabled() {
-				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
-				return
-			}
-			dec := json.NewDecoder(r.Body)
-			dec.DisallowUnknownFields()
-			var body ai.CompactThreadContextRequest
-			if err := dec.Decode(&body); err != nil {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
-				return
-			}
-			if err := dec.Decode(&struct{}{}); err != io.EOF {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
-				return
-			}
-			bodyThreadID := strings.TrimSpace(body.ThreadID)
-			if bodyThreadID != "" && bodyThreadID != threadID {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "thread id mismatch"})
-				return
-			}
-			body.ThreadID = threadID
-			resp, err := aiSvc.CompactThreadContext(r.Context(), meta, body)
-			if err != nil {
-				g.appendAudit(meta, "ai_thread_context_compact", "failure", map[string]any{
-					"thread_id":     threadID,
-					"active_run_id": strings.TrimSpace(body.ActiveRunID),
-				}, err)
-				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
-				return
-			}
-			g.appendAudit(meta, "ai_thread_context_compact", "success", map[string]any{
-				"thread_id":     threadID,
-				"active_run_id": strings.TrimSpace(body.ActiveRunID),
-				"request_id":    strings.TrimSpace(resp.RequestID),
-				"kind":          strings.TrimSpace(resp.Kind),
-			}, nil)
-			writeJSON(w, http.StatusAccepted, apiResp{OK: true, Data: resp})
-			return
-
 		case action == "approvals" && r.Method == http.MethodPost && len(parts) == 2:
 			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 			if !ok {
@@ -5142,23 +5064,19 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			resp, err := aiSvc.SubmitFlowerApproval(meta, body)
 			if err != nil {
 				g.appendAudit(meta, "ai_tool_approval", "failure", map[string]any{
-					"thread_id":    threadID,
-					"run_id":       strings.TrimSpace(body.RunID),
-					"action_id":    strings.TrimSpace(body.ActionID),
-					"tool_id":      strings.TrimSpace(body.ToolID),
-					"approved":     body.Approved,
-					"expected_seq": body.ExpectedSeq,
+					"thread_id":      threadID,
+					"interaction_id": strings.TrimSpace(body.InteractionID),
+					"approved":       body.Approved,
+					"reject_all":     body.RejectAll,
 				}, err)
 				writeAIApprovalError(w, err)
 				return
 			}
 			g.appendAudit(meta, "ai_tool_approval", "success", map[string]any{
-				"thread_id":    threadID,
-				"run_id":       strings.TrimSpace(body.RunID),
-				"action_id":    strings.TrimSpace(body.ActionID),
-				"tool_id":      strings.TrimSpace(body.ToolID),
-				"approved":     body.Approved,
-				"expected_seq": body.ExpectedSeq,
+				"thread_id":      threadID,
+				"interaction_id": strings.TrimSpace(body.InteractionID),
+				"approved":       body.Approved,
+				"reject_all":     body.RejectAll,
 			}, nil)
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: resp})
 			return
@@ -5289,6 +5207,35 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: resp})
 			return
 
+		case action == "retry_effect" && r.Method == http.MethodPost:
+			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+			if !ok {
+				return
+			}
+			if !g.requireAIService(w, aiSvc) {
+				return
+			}
+			dec := json.NewDecoder(r.Body)
+			dec.DisallowUnknownFields()
+			var body ai.RetryThreadEffectRequest
+			if err := dec.Decode(&body); err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			if err := dec.Decode(&struct{}{}); err != io.EOF {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			resp, err := aiSvc.RetryThreadEffect(r.Context(), meta, threadID, body)
+			if err != nil {
+				g.appendAudit(meta, "ai_thread_effect_retry", "failure", map[string]any{"thread_id": threadID, "tool_call_id": body.ToolCallID}, err)
+				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			g.appendAudit(meta, "ai_thread_effect_retry", "success", map[string]any{"thread_id": threadID, "tool_call_id": body.ToolCallID}, nil)
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: resp})
+			return
+
 		case action == "cancel" && r.Method == http.MethodPost:
 			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 			if !ok {
@@ -5327,8 +5274,6 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 					status = http.StatusConflict
 				} else if errors.Is(err, sql.ErrNoRows) {
 					status = http.StatusNotFound
-				} else if errors.Is(err, ai.ErrThreadDeleteOperationFailed) {
-					status = http.StatusInternalServerError
 				}
 				auditFields := map[string]any{"thread_id": threadID}
 				var responseData interface{}
@@ -5339,9 +5284,6 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				}
 				g.appendAudit(meta, "ai_thread_delete", "failure", auditFields, err)
 				errorCode := ""
-				if errors.Is(err, ai.ErrThreadDeleteOperationFailed) {
-					errorCode = "AI_THREAD_DELETE_OPERATION_FAILED"
-				}
 				writeJSON(w, status, apiResp{OK: false, Error: err.Error(), ErrorCode: errorCode, Data: responseData})
 				return
 			}
@@ -5361,26 +5303,6 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			}
 			g.appendAudit(meta, "ai_thread_delete", auditOutcome, map[string]any{"thread_id": threadID, "operation_id": result.OperationID, "status": result.Status}, nil)
 			writeJSON(w, status, apiResp{OK: status < http.StatusInternalServerError, Data: result})
-			return
-
-		case action == "todos" && r.Method == http.MethodGet:
-			meta, ok := g.requirePermission(w, r, requiredPermissionRead)
-			if !ok {
-				return
-			}
-			if !g.requireAIService(w, aiSvc) {
-				return
-			}
-			out, err := aiSvc.GetThreadTodos(r.Context(), meta, threadID)
-			if err != nil {
-				status := http.StatusBadRequest
-				if errors.Is(err, sql.ErrNoRows) {
-					status = http.StatusNotFound
-				}
-				writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
-				return
-			}
-			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"todos": out}})
 			return
 
 		case action == "followups" && r.Method == http.MethodGet && len(parts) == 2:
@@ -5424,16 +5346,13 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			}
 			if err := aiSvc.ReorderFollowups(r.Context(), meta, threadID, body); err != nil {
 				status := http.StatusBadRequest
-				if errors.Is(err, ai.ErrFollowupsRevisionChanged) {
-					status = http.StatusConflict
-				}
 				writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
 				return
 			}
 			writeJSON(w, http.StatusOK, apiResp{OK: true})
 			return
 
-		case action == "followups" && r.Method == http.MethodPatch && len(parts) == 3:
+		case action == "followups" && r.Method == http.MethodPost && len(parts) == 4 && strings.TrimSpace(parts[3]) == "promote":
 			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 			if !ok {
 				return
@@ -5446,22 +5365,8 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 				return
 			}
-			dec := json.NewDecoder(r.Body)
-			dec.DisallowUnknownFields()
-			var body ai.PatchFollowupRequest
-			if err := dec.Decode(&body); err != nil {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
-				return
-			}
-			if err := dec.Decode(&struct{}{}); err != io.EOF {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
-				return
-			}
-			if body.Text == nil {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing fields"})
-				return
-			}
-			if err := aiSvc.UpdateFollowup(r.Context(), meta, threadID, followupID, body); err != nil {
+			view, err := aiSvc.PromoteFollowup(r.Context(), meta, threadID, followupID)
+			if err != nil {
 				status := http.StatusBadRequest
 				if errors.Is(err, sql.ErrNoRows) {
 					status = http.StatusNotFound
@@ -5469,7 +5374,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
 				return
 			}
-			writeJSON(w, http.StatusOK, apiResp{OK: true})
+			writeJSON(w, http.StatusAccepted, apiResp{OK: true, Data: view})
 			return
 
 		case action == "followups" && r.Method == http.MethodDelete && len(parts) == 3:
@@ -5520,13 +5425,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 
 			out, err := aiSvc.ListThreadMessages(r.Context(), meta, threadID, limit, beforeID)
 			if err != nil {
-				status := http.StatusBadRequest
-				code := ""
-				if errors.Is(err, ai.ErrCanonicalTimelineResyncRequired) {
-					status = http.StatusConflict
-					code = ai.CanonicalTimelineResyncErrorCode
-				}
-				writeJSON(w, status, apiResp{OK: false, Error: err.Error(), ErrorCode: code})
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 				return
 			}
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})

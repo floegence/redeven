@@ -3,8 +3,8 @@ package ai
 import (
 	"testing"
 
-	flconfig "github.com/floegence/floret/v3/config"
-	flprovider "github.com/floegence/floret/v3/provider"
+	flconfig "github.com/floegence/floret/v4/config"
+	flprovider "github.com/floegence/floret/v4/provider"
 	"github.com/floegence/redeven/internal/config"
 )
 

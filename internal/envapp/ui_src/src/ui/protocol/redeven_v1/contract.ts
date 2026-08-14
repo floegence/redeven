@@ -5,8 +5,6 @@ import {
 } from '../../services/debugConsoleCapture';
 import { redevenV1TypeIds } from './typeIds';
 import type {
-  AICompactThreadContextRequest,
-  AICompactThreadContextResponse,
   AIRealtimeEvent,
   AIListMessagesRequest,
   AIListMessagesResponse,
@@ -16,9 +14,6 @@ import type {
   AISubmitRequestUserInputResponseResponse,
   AIStopThreadRequest,
   AIStopThreadResponse,
-  AISubscribeSummaryResponse,
-  AISubscribeThreadRequest,
-  AISubscribeThreadResponse,
 } from './sdk/ai';
 import type { AccessResumeRequest, AccessResumeResponse, AccessStatusResponse } from './sdk/access';
 import type { FsCopyRequest, FsCopyResponse, FsDeleteRequest, FsDeleteResponse, FsListRequest, FsListResponse, FsMkdirRequest, FsMkdirResponse, FsPathContextResponse, FsReadFileRequest, FsReadFileResponse, FsRenameRequest, FsRenameResponse, FsWriteFileRequest, FsWriteFileResponse } from './sdk/fs';
@@ -96,18 +91,13 @@ import type { SysPingResponse, SysRestartResponse, SysUpgradeRequest, SysUpgrade
 import type { TerminalExecutionContextUpdateEvent, TerminalForegroundCommandUpdateEvent, TerminalSemanticClearRequest, TerminalSemanticClearResponse, TerminalSemanticHistoryRequest, TerminalSemanticHistoryResponse, TerminalNameUpdateEvent, TerminalOutputActivityUpdateEvent, TerminalSessionCreateRequest, TerminalSessionCreateResponse, TerminalSessionDeleteRequest, TerminalSessionDeleteResponse, TerminalSessionInfo, TerminalSessionsChangedEvent, TerminalWorkStateUpdateEvent } from './sdk/terminal';
 import {
   fromWireAIEventNotify,
-  fromWireAICompactThreadContextResponse,
   fromWireAIListMessagesResponse,
   fromWireAISendUserTurnResponse,
   fromWireAISubmitRequestUserInputResponseResponse,
-  fromWireAISubscribeSummaryResponse,
-  fromWireAISubscribeThreadResponse,
   fromWireAIStopThreadResponse,
   toWireAIListMessagesRequest,
-  toWireAICompactThreadContextRequest,
   toWireAISendUserTurnRequest,
   toWireAISubmitRequestUserInputResponseRequest,
-  toWireAISubscribeThreadRequest,
   toWireAIStopThreadRequest,
 } from './codec/ai';
 import { fromWireAccessResumeResponse, fromWireAccessStatusResponse, toWireAccessResumeRequest } from './codec/access';
@@ -187,8 +177,6 @@ import { fromWireTerminalExecutionContextUpdateNotify, fromWireTerminalForegroun
 import type { wire_access_resume_req, wire_access_resume_resp, wire_access_status_resp } from './wire/access';
 import type {
   wire_ai_event_notify,
-  wire_ai_compact_thread_context_req,
-  wire_ai_compact_thread_context_resp,
   wire_ai_list_messages_req,
   wire_ai_list_messages_resp,
   wire_ai_send_user_turn_req,
@@ -197,9 +185,6 @@ import type {
   wire_ai_submit_request_user_input_response_resp,
   wire_ai_stop_thread_req,
   wire_ai_stop_thread_resp,
-  wire_ai_subscribe_summary_resp,
-  wire_ai_subscribe_thread_req,
-  wire_ai_subscribe_thread_resp,
 } from './wire/ai';
 import type { wire_fs_copy_req, wire_fs_copy_resp, wire_fs_delete_req, wire_fs_delete_resp, wire_fs_get_path_context_resp, wire_fs_list_req, wire_fs_list_resp, wire_fs_mkdir_req, wire_fs_mkdir_resp, wire_fs_read_file_req, wire_fs_read_file_resp, wire_fs_rename_req, wire_fs_rename_resp, wire_fs_write_file_req, wire_fs_write_file_resp } from './wire/fs';
 import type {
@@ -334,10 +319,7 @@ export type RedevenV1Rpc = {
   };
   ai: {
     sendUserTurn: (req: AISendUserTurnRequest) => Promise<AISendUserTurnResponse>;
-    compactThreadContext: (req: AICompactThreadContextRequest) => Promise<AICompactThreadContextResponse>;
     submitRequestUserInputResponse: (req: AISubmitRequestUserInputResponseRequest) => Promise<AISubmitRequestUserInputResponseResponse>;
-    subscribeSummary: () => Promise<AISubscribeSummaryResponse>;
-    subscribeThread: (req: AISubscribeThreadRequest) => Promise<AISubscribeThreadResponse>;
     stopThread: (req: AIStopThreadRequest) => Promise<AIStopThreadResponse>;
     listMessages: (req: AIListMessagesRequest) => Promise<AIListMessagesResponse>;
     onEvent: (handler: (event: AIRealtimeEvent) => void) => () => void;
@@ -674,24 +656,10 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
         const resp = await call<wire_ai_send_user_turn_req, wire_ai_send_user_turn_resp>(redevenV1TypeIds.ai.sendUserTurn, payload);
         return fromWireAISendUserTurnResponse(resp);
       },
-      compactThreadContext: async (req) => {
-        const payload = toWireAICompactThreadContextRequest(req);
-        const resp = await call<wire_ai_compact_thread_context_req, wire_ai_compact_thread_context_resp>(redevenV1TypeIds.ai.compactThreadContext, payload);
-        return fromWireAICompactThreadContextResponse(resp);
-      },
       submitRequestUserInputResponse: async (req) => {
         const payload = toWireAISubmitRequestUserInputResponseRequest(req);
         const resp = await call<wire_ai_submit_request_user_input_response_req, wire_ai_submit_request_user_input_response_resp>(redevenV1TypeIds.ai.submitRequestUserInputResponse, payload);
         return fromWireAISubmitRequestUserInputResponseResponse(resp);
-      },
-      subscribeSummary: async () => {
-        const resp = await call<Record<string, never>, wire_ai_subscribe_summary_resp>(redevenV1TypeIds.ai.subscribeSummary, {});
-        return fromWireAISubscribeSummaryResponse(resp);
-      },
-      subscribeThread: async (req) => {
-        const payload = toWireAISubscribeThreadRequest(req);
-        const resp = await call<wire_ai_subscribe_thread_req, wire_ai_subscribe_thread_resp>(redevenV1TypeIds.ai.subscribeThread, payload);
-        return fromWireAISubscribeThreadResponse(resp);
       },
       stopThread: async (req) => {
         const payload = toWireAIStopThreadRequest(req);

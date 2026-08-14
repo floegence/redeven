@@ -125,6 +125,7 @@ func (s *Store) Close() error {
 
 type ThreadSettings struct {
 	ThreadID               string `json:"thread_id"`
+	ParentThreadID         string `json:"parent_thread_id,omitempty"`
 	EndpointID             string `json:"endpoint_id"`
 	NamespacePublicID      string `json:"namespace_public_id"`
 	ModelID                string `json:"model_id"`
@@ -132,7 +133,6 @@ type ThreadSettings struct {
 	PermissionType         string `json:"permission_type"`
 	WorkingDir             string `json:"working_dir"`
 	PinnedAtUnixMs         int64  `json:"pinned_at_unix_ms"`
-	QueueRevision          int64  `json:"queue_revision"`
 
 	CreatedByUserPublicID string `json:"created_by_user_public_id"`
 	CreatedByUserEmail    string `json:"created_by_user_email"`
@@ -141,43 +141,6 @@ type ThreadSettings struct {
 
 	SettingsCreatedAtUnixMs int64 `json:"settings_created_at_unix_ms"`
 	SettingsUpdatedAtUnixMs int64 `json:"settings_updated_at_unix_ms"`
-}
-
-type QueuedTurn struct {
-	QueueID string `json:"queue_id"`
-
-	ThreadID       string `json:"thread_id"`
-	EndpointID     string `json:"endpoint_id"`
-	ChannelID      string `json:"channel_id"`
-	Lane           string `json:"lane"`
-	AdmissionState string `json:"admission_state"`
-
-	TurnID  string `json:"turn_id"`
-	RunID   string `json:"run_id"`
-	ModelID string `json:"model_id"`
-
-	TextContent       string `json:"text_content"`
-	AttachmentsJSON   string `json:"attachments_json"`
-	ContextActionJSON string `json:"context_action_json"`
-	OptionsJSON       string `json:"options_json"`
-	SessionMetaJSON   string `json:"session_meta_json"`
-
-	CreatedByUserPublicID string `json:"created_by_user_public_id"`
-	CreatedByUserEmail    string `json:"created_by_user_email"`
-
-	SortIndex       int64 `json:"sort_index"`
-	CreatedAtUnixMs int64 `json:"created_at_unix_ms"`
-	UpdatedAtUnixMs int64 `json:"updated_at_unix_ms"`
-}
-
-type QueuedThread struct {
-	EndpointID           string `json:"endpoint_id"`
-	ThreadID             string `json:"thread_id"`
-	NamespacePublicID    string `json:"namespace_public_id"`
-	QueuedTurnCount      int    `json:"queued_turn_count"`
-	FirstQueuedAtUnixMs  int64  `json:"first_queued_at_unix_ms"`
-	FirstQueuedSortIndex int64  `json:"first_queued_sort_index"`
-	FirstQueuedTurnID    string `json:"first_queued_turn_id"`
 }
 
 type ThreadsCursor struct {
@@ -192,8 +155,8 @@ type ThreadSettingsRecoveryCursor struct {
 }
 
 const threadSelectColumnsSQL = `
-  thread_id, endpoint_id, namespace_public_id, model_id, reasoning_selection_json, permission_type, working_dir,
-  pinned_at_unix_ms, queue_revision,
+  thread_id, parent_thread_id, endpoint_id, namespace_public_id, model_id, reasoning_selection_json, permission_type, working_dir,
+  pinned_at_unix_ms,
   created_by_user_public_id, created_by_user_email,
   updated_by_user_public_id, updated_by_user_email,
   settings_created_at_unix_ms, settings_updated_at_unix_ms
@@ -209,6 +172,7 @@ func scanThreadRow(scan rowScanner, t *ThreadSettings) error {
 	}
 	if err := scan.Scan(
 		&t.ThreadID,
+		&t.ParentThreadID,
 		&t.EndpointID,
 		&t.NamespacePublicID,
 		&t.ModelID,
@@ -216,7 +180,6 @@ func scanThreadRow(scan rowScanner, t *ThreadSettings) error {
 		&t.PermissionType,
 		&t.WorkingDir,
 		&t.PinnedAtUnixMs,
-		&t.QueueRevision,
 		&t.CreatedByUserPublicID,
 		&t.CreatedByUserEmail,
 		&t.UpdatedByUserPublicID,
@@ -332,13 +295,7 @@ func (s *Store) ListThreadSettings(ctx context.Context, endpointID string, limit
 SELECT
 %s
 FROM ai_thread_settings
-WHERE endpoint_id = ?
-  AND NOT EXISTS (
-    SELECT 1
-    FROM ai_thread_delete_operations AS delete_operation
-    WHERE delete_operation.endpoint_id = ai_thread_settings.endpoint_id
-      AND delete_operation.thread_id = ai_thread_settings.thread_id
-  )
+WHERE endpoint_id = ? AND parent_thread_id = ''
 `, threadSelectColumnsSQL)
 	if cursor.SettingsCreatedAtUnixMs > 0 && strings.TrimSpace(cursor.ThreadID) != "" {
 		cursorPinned := nonNegativeInt64(cursor.PinnedAtUnixMs)
@@ -520,6 +477,7 @@ func (s *Store) CreateThreadSettings(ctx context.Context, t ThreadSettings) erro
 	}
 
 	t.ThreadID = strings.TrimSpace(t.ThreadID)
+	t.ParentThreadID = strings.TrimSpace(t.ParentThreadID)
 	t.EndpointID = strings.TrimSpace(t.EndpointID)
 	t.NamespacePublicID = strings.TrimSpace(t.NamespacePublicID)
 	t.ModelID = strings.TrimSpace(t.ModelID)
@@ -550,19 +508,17 @@ func (s *Store) CreateThreadSettings(ctx context.Context, t ThreadSettings) erro
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err := requireThreadWritableTx(ctx, tx, t.EndpointID, t.ThreadID); err != nil {
-		return err
-	}
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO ai_thread_settings(
-		  thread_id, endpoint_id, namespace_public_id, model_id, reasoning_selection_json, permission_type, working_dir,
-	  pinned_at_unix_ms, queue_revision,
+		  thread_id, parent_thread_id, endpoint_id, namespace_public_id, model_id, reasoning_selection_json, permission_type, working_dir,
+	  pinned_at_unix_ms,
 	  created_by_user_public_id, created_by_user_email,
 	  updated_by_user_public_id, updated_by_user_email,
 	  settings_created_at_unix_ms, settings_updated_at_unix_ms
 			) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		t.ThreadID,
+		t.ParentThreadID,
 		t.EndpointID,
 		t.NamespacePublicID,
 		t.ModelID,
@@ -570,7 +526,6 @@ func (s *Store) CreateThreadSettings(ctx context.Context, t ThreadSettings) erro
 		t.PermissionType,
 		t.WorkingDir,
 		nonNegativeInt64(t.PinnedAtUnixMs),
-		nonNegativeInt64(t.QueueRevision),
 		t.CreatedByUserPublicID,
 		t.CreatedByUserEmail,
 		t.UpdatedByUserPublicID,
@@ -578,9 +533,6 @@ func (s *Store) CreateThreadSettings(ctx context.Context, t ThreadSettings) erro
 		t.SettingsCreatedAtUnixMs,
 		t.SettingsUpdatedAtUnixMs,
 	)
-	if err != nil && strings.Contains(strings.ToLower(err.Error()), "thread id retired") {
-		return ErrThreadIDRetired
-	}
 	if err != nil {
 		return err
 	}
@@ -801,342 +753,6 @@ func canonicalPermissionType(permissionType string) (string, error) {
 	default:
 		return "", fmt.Errorf("invalid thread permission type %q", permissionType)
 	}
-}
-
-func (s *Store) GetQueuedTurn(ctx context.Context, endpointID string, threadID string, queueID string) (*QueuedTurn, error) {
-	if s == nil || s.db == nil {
-		return nil, errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	queueID = strings.TrimSpace(queueID)
-	if endpointID == "" || threadID == "" || queueID == "" {
-		return nil, errors.New("invalid request")
-	}
-
-	row := s.db.QueryRowContext(ctx, `
-SELECT queue_id, endpoint_id, thread_id, channel_id, lane, admission_state, turn_id, run_id, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json,
-       created_by_user_public_id, created_by_user_email, sort_index, created_at_unix_ms, updated_at_unix_ms
-FROM ai_queued_turns
-WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ? AND lane = ?
-	`, endpointID, threadID, queueID, FollowupLaneQueued)
-	out, err := scanFollowup(row)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, sql.ErrNoRows
-		}
-		return nil, err
-	}
-	return &out, nil
-}
-
-func (s *Store) EnqueueQueuedTurn(ctx context.Context, rec QueuedTurn) (QueuedTurn, int, error) {
-	rec.Lane = FollowupLaneQueued
-	created, position, _, err := s.CreateFollowup(ctx, rec)
-	return created, position, err
-}
-
-func (s *Store) CountQueuedTurns(ctx context.Context, endpointID string, threadID string) (int, error) {
-	if s == nil || s.db == nil {
-		return 0, errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	if endpointID == "" || threadID == "" {
-		return 0, errors.New("invalid request")
-	}
-	var count int
-	err := s.db.QueryRowContext(ctx, `
-SELECT COUNT(1)
-FROM ai_queued_turns
-WHERE endpoint_id = ? AND thread_id = ? AND lane = ?
-`, endpointID, threadID, FollowupLaneQueued).Scan(&count)
-	if err != nil {
-		return 0, err
-	}
-	return count, nil
-}
-
-func (s *Store) CountQueuedTurnsByThread(ctx context.Context, endpointID string, threadIDs []string) (map[string]int, error) {
-	if s == nil || s.db == nil {
-		return nil, errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	if endpointID == "" {
-		return nil, errors.New("invalid request")
-	}
-	out := make(map[string]int, len(threadIDs))
-	cleanIDs := make([]string, 0, len(threadIDs))
-	seen := make(map[string]struct{}, len(threadIDs))
-	for _, raw := range threadIDs {
-		id := strings.TrimSpace(raw)
-		if id == "" {
-			continue
-		}
-		if _, ok := seen[id]; ok {
-			continue
-		}
-		seen[id] = struct{}{}
-		cleanIDs = append(cleanIDs, id)
-		out[id] = 0
-	}
-	if len(cleanIDs) == 0 {
-		return out, nil
-	}
-
-	placeholders := strings.TrimRight(strings.Repeat("?,", len(cleanIDs)), ",")
-	args := make([]any, 0, len(cleanIDs)+1)
-	args = append(args, endpointID)
-	for _, id := range cleanIDs {
-		args = append(args, id)
-	}
-
-	args = append(args, FollowupLaneQueued)
-	rows, err := s.db.QueryContext(ctx, `
-SELECT thread_id, COUNT(1)
-FROM ai_queued_turns
-WHERE endpoint_id = ? AND thread_id IN (`+placeholders+`) AND lane = ?
-GROUP BY thread_id
-`, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var threadID string
-		var count int
-		if err := rows.Scan(&threadID, &count); err != nil {
-			return nil, err
-		}
-		out[strings.TrimSpace(threadID)] = count
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (s *Store) ListQueuedTurns(ctx context.Context, endpointID string, threadID string, limit int) ([]QueuedTurn, error) {
-	if s == nil || s.db == nil {
-		return nil, errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	if endpointID == "" || threadID == "" {
-		return nil, errors.New("invalid request")
-	}
-	if limit <= 0 {
-		limit = 100
-	}
-	if limit > 500 {
-		limit = 500
-	}
-
-	return s.ListFollowupsByLane(ctx, endpointID, threadID, FollowupLaneQueued, limit)
-}
-
-func (s *Store) UpdateQueuedTurn(ctx context.Context, endpointID string, threadID string, queueID string, textContent string) error {
-	if s == nil || s.db == nil {
-		return errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	queueID = strings.TrimSpace(queueID)
-	textContent = strings.TrimSpace(textContent)
-	if endpointID == "" || threadID == "" || queueID == "" || textContent == "" {
-		return errors.New("invalid request")
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := requireThreadWritableTx(ctx, tx, endpointID, threadID); err != nil {
-		return err
-	}
-	if err := requireFollowupMutableTx(ctx, tx, endpointID, threadID, queueID); err != nil {
-		return err
-	}
-	now := time.Now().UnixMilli()
-	res, err := tx.ExecContext(ctx, `
-UPDATE ai_queued_turns
-SET text_content = ?, updated_at_unix_ms = ?
-WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ? AND lane = ?
-`, textContent, now, endpointID, threadID, queueID, FollowupLaneQueued)
-	if err != nil {
-		return err
-	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return sql.ErrNoRows
-	}
-	if _, err := bumpThreadFollowupsRevisionTx(ctx, tx, endpointID, threadID); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-
-func (s *Store) DeleteQueuedTurn(ctx context.Context, endpointID string, threadID string, queueID string) error {
-	if s == nil || s.db == nil {
-		return errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	queueID = strings.TrimSpace(queueID)
-	if endpointID == "" || threadID == "" || queueID == "" {
-		return errors.New("invalid request")
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := requireThreadWritableTx(ctx, tx, endpointID, threadID); err != nil {
-		return err
-	}
-	if err := requireFollowupMutableTx(ctx, tx, endpointID, threadID, queueID); err != nil {
-		return err
-	}
-	res, err := tx.ExecContext(ctx, `
-DELETE FROM ai_queued_turns
-WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ? AND lane = ?
-`, endpointID, threadID, queueID, FollowupLaneQueued)
-	if err != nil {
-		return err
-	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return sql.ErrNoRows
-	}
-	if _, err := bumpThreadFollowupsRevisionTx(ctx, tx, endpointID, threadID); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-
-func (s *Store) DeleteQueuedTurns(ctx context.Context, endpointID string, threadID string) error {
-	if s == nil || s.db == nil {
-		return errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	if endpointID == "" || threadID == "" {
-		return errors.New("invalid request")
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := requireThreadWritableTx(ctx, tx, endpointID, threadID); err != nil {
-		return err
-	}
-	var inFlight int
-	if err := tx.QueryRowContext(ctx, `
-SELECT COUNT(1)
-FROM ai_queued_turns
-WHERE endpoint_id = ? AND thread_id = ? AND lane = ? AND admission_state = ?
-`, endpointID, threadID, FollowupLaneQueued, PendingTurnAdmissionInFlight).Scan(&inFlight); err != nil {
-		return err
-	}
-	if inFlight != 0 {
-		return ErrPendingTurnAdmissionInProgress
-	}
-	res, err := tx.ExecContext(ctx, `
-DELETE FROM ai_queued_turns
-WHERE endpoint_id = ? AND thread_id = ? AND lane = ?
-`, endpointID, threadID, FollowupLaneQueued)
-	if err != nil {
-		return err
-	}
-	n, _ := res.RowsAffected()
-	if n > 0 {
-		if _, err := bumpThreadFollowupsRevisionTx(ctx, tx, endpointID, threadID); err != nil {
-			return err
-		}
-	}
-	return tx.Commit()
-}
-
-func (s *Store) PopNextQueuedTurn(ctx context.Context, endpointID string, threadID string) (*QueuedTurn, error) {
-	if s == nil || s.db == nil {
-		return nil, errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	if endpointID == "" || threadID == "" {
-		return nil, errors.New("invalid request")
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := requireThreadWritableTx(ctx, tx, endpointID, threadID); err != nil {
-		return nil, err
-	}
-
-	rec, err := getNextQueuedTurnTx(ctx, tx, endpointID, threadID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	if _, err := tx.ExecContext(ctx, `
-DELETE FROM ai_queued_turns
-WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ? AND lane = ? AND admission_state = ?
-`, endpointID, threadID, rec.QueueID, FollowupLaneQueued, PendingTurnAdmissionReady); err != nil {
-		return nil, err
-	}
-	if _, err := bumpThreadFollowupsRevisionTx(ctx, tx, endpointID, threadID); err != nil {
-		return nil, err
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-	return rec, nil
-}
-
-func getNextQueuedTurnTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string) (*QueuedTurn, error) {
-	row := tx.QueryRowContext(ctx, `
-SELECT queue_id, endpoint_id, thread_id, channel_id, lane, admission_state, turn_id, run_id, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json,
-       created_by_user_public_id, created_by_user_email, sort_index, created_at_unix_ms, updated_at_unix_ms
-FROM ai_queued_turns
-WHERE endpoint_id = ? AND thread_id = ? AND lane = ? AND admission_state = ?
-ORDER BY sort_index ASC, queue_id ASC
-LIMIT 1
-`, endpointID, threadID, FollowupLaneQueued, PendingTurnAdmissionReady)
-	rec, err := scanFollowup(row)
-	if err != nil {
-		return nil, err
-	}
-	return &rec, nil
 }
 
 func boolToInt(v bool) int {

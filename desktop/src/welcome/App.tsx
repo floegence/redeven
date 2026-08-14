@@ -125,9 +125,8 @@ import {
   FlowerSoftAuraIcon,
   FlowerSurface,
   FlowerTurnLauncherWindow,
-  createFlowerComposerDraftCoordinator,
-  createFlowerClientRequestID,
-  flowerTurnAdmissionUncertainIdentity,
+	createFlowerComposerDraftCoordinator,
+	createFlowerClientRequestID,
   type FlowerTurnLauncherAnchor,
   type FlowerTurnLauncherIntent,
   type FlowerTurnLauncherSubmitInput,
@@ -6143,19 +6142,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       closeFlowerTurnLauncher();
       await openFlowerSurface();
       showActionToast(i18n().t('toast.flowerPromptQueued'), 'success');
-    } catch (error) {
-      const uncertain = flowerTurnAdmissionUncertainIdentity(error);
-      if (uncertain?.thread_id) {
-        flowerFocusThreadRequestSequence += 1;
-        setFlowerFocusThreadRequest({
-          request_id: `welcome-flower-focus-${flowerFocusThreadRequestSequence}`,
-          thread_id: uncertain.thread_id,
-        });
-        closeFlowerTurnLauncher();
-        await openFlowerSurface();
-        return;
-      }
-      showActionToast(getErrorMessage(error), 'error');
+	} catch (error) {
+		showActionToast(getErrorMessage(error), 'error');
       throw error;
     }
   }

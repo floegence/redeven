@@ -382,6 +382,13 @@ Rules:
 - When evidence contradicts an assumption, update the model and tests first. Record unresolved uncertainty and residual risk explicitly rather than hiding it behind retries, polling, silent fallback, or broader policy.
 - Reviews must ask: what is the simplest explanation supported by the evidence, what is the single owner, and which proposed code can be removed? A design that cannot answer those questions is not ready to implement.
 
+## Flower Runtime Simplicity Contract
+
+- Redeven integrates Floret through one typed thread runtime boundary. Product handlers authorize and map requests; they do not wait for provider work, mirror Floret lifecycle state, or maintain admission receipts, authority handoffs, or materialized projections.
+- Flower observes one workspace stream. Thread selection never reconnects transport. A disconnect refreshes workspace summaries and the selected current view; it does not start cursor replay, polling, or a second resynchronization state machine.
+- Browser state has four owners: `ThreadCache`, `ComposerDraftStore`, short-lived `TransportOutbox`, and `LiveTransport`. Summary updates never mutate cached detail, and command progress never disables the thread rail or whole composer.
+- Redeven schema migrations may import retired product queue data exactly once, but migration-only decoders and tables must not remain callable from production handlers.
+
 ## IMPORTANT Design Constraints
 
 - `IMPORTANT:` comments mark product, security, or interaction invariants that must stay rare, intentional, and backed by code or tests where practical.
@@ -984,188 +991,13 @@ Use this checklist when reviewing any Redeven plugin integration change:
 
 ## Flower / Floret Boundary
 
-Redeven consumes Floret only through published `github.com/floegence/floret/v3`
-module versions. Outside Local Fast Debugging, do not use `replace`, `go.work`,
-`go.work.sum`, local sibling paths, package-manager links, or build aliases to
-point Redeven at a local Floret checkout. Run Floret dependency checks with
-`GOWORK=off`.
+Redeven consumes the published `github.com/floegence/floret/v4` typed thread runtime. Redeven owns product authorization, attachment resolution, effect execution, provider configuration, read acknowledgement, and UI mapping. Floret owns each thread current view, canonical journal, queue, interactions, effect-attempt identity, and restart recovery.
 
-Flower and Redeven own product policy, concrete tool implementations, host
-thread settings, unadmitted commands, Desktop and Env App adapters, provider
-credentials and profiles, provider wire adapters, session grants, filesystem
-scope, target routing, approval UX, resource references, read acknowledgement,
-and product modes. Redeven presentation is a stateless mapping over Floret public
-snapshots plus current-process live drafts bound to exact canonical identity.
+Product handlers perform authorization and DTO mapping, then call typed `View`, `Send`, `Respond`, `Cancel`, `Retry`, `RetryEffect`, or `Subscribe` operations. They must not wait for provider work or maintain receipt, admission, authority, recovery, projection, replay, or lifecycle mirrors. Effects execute only through the exact one-shot authorization supplied by the Floret invocation.
 
-Floret owns the reusable Agent lifecycle consumed by Redeven. Its durable
-journal, public thread and turn snapshots, turn projections, pending approval
-snapshot, context snapshot, and typed Agent todo state are the only authority
-for admitted user and assistant conversation, turn/run order and lifecycle,
-thread titles, failure and waiting state, control signals, approvals, todos,
-provider-visible context, tool identity and lifecycle, Activity projection,
-pending settlement, and opaque provider state. Redeven must not persist a
-second queryable copy, reconstruct one from audit or transport events, or query
-Floret-managed storage.
+Flower uses one workspace live transport, a summary/detail-separated bounded thread cache, composer drafts, and a short-lived request-key outbox. Summary updates never mutate detail. Thread selection never owns execution or reconnects transport. Approval, waiting, loading, and commands never disable thread navigation.
 
-The AI composition root may hold the broad Floret `runtime.Host` and transient
-`*runtime.Thread` handles only long enough to issue native responsibility-bound
-capabilities. Read adapters retain `runtime.ThreadReader`, lifecycle
-coordinators retain `runtime.ThreadLifecycle`, runs retain
-`runtime.TurnExecutor`, compaction retains `runtime.ThreadCompactor`, and
-SubAgent execution retains `runtime.SubAgentManager`. Production integration
-must not recreate or wrap the removed broad `Thread` methods. Every operation
-must start from the matching native narrow capability.
-
-Redeven code must not bypass those Floret lifecycles:
-- tool approval must flow through Floret `PermissionSpec`, resource extraction,
-  and `EffectAuthorizationGate`; Redeven owns the current product permission
-  read and approval UX, while the gate returns one exact, one-shot proof to the
-  Floret invocation that requested the effect;
-- provider adapters may map provider bytes to Floret `provider.Event`, but must not
-  create durable Flower messages, mutate canonical order, or publish an
-  independent activity timeline;
-- tool handlers may execute only with the exact one-shot authorization proof
-  issued for their invocation; they must not independently read policy, wait
-  for approval, or reconstruct authorization after Floret dispatch;
-- non-passive handlers and direct PTY writes hold a shared effect-authority
-  lease from the final current-permission read through the concrete effect;
-  delete, fork, permission changes, and other lifecycle mutations take the
-  exclusive side of the same root-thread gate. Read-only `subagents` `list`
-  and `inspect` release the gate before their handler; `wait` remains gated
-  because it may admit pending child input and start provider work, and it
-  opens only the exact requested child join scopes required for that work.
-  Parent and child effects may safely hold shared leases concurrently. A
-  lifecycle writer queued behind an active scoped cohort may allow only the
-  exact child named by `close`, exact children named by `wait`, or canonical
-  children covered by `close_all`, to finish; unrelated root/child effects
-  remain fenced. After that cohort reaches zero, the writer takes exclusive
-  authority before new effects;
-- control signals must not be registered as ordinary tools;
-- `ask_user`, `task_complete`, and custom control signals receive no synthetic
-  tool result or Redeven completion gate. Redeven may apply product confirmation
-  policy, but waiting and terminal lifecycle remain Floret facts;
-- a normal admitted turn submits canonical input and execution policy exactly
-  once through `AdmitTurn`. After the product receipt transaction commits,
-  provider execution receives only the same `TurnAdmissionReceipt` plus
-  `ExecutionContext`. `SupplementalContext` and the signal projector are
-  process-local execution inputs; Redeven must not persist the admitted command
-  as a recovery execution plan or pass it again to `ExecuteAdmission`;
-- a user command may retain prompt text and queued upload ownership only before
-  Floret admission. A committed public Floret turn causes Redeven to atomically
-  remove that command and move its uploads to thread ownership; restart
-  reconciliation checks the exact opaque `TurnID` through `ReadThreadTurn`.
-  Before runtime authority reopens, an `in_flight` command without that
-  canonical turn is atomically released through its exact command, turn, and
-  run identity so one runtime settlement owner may retry it;
-- admitted attachment metadata and opaque `ResourceRef` values live only in the
-  Floret canonical user message. Redeven owns upload bytes and thread-level
-  resource ownership. Before admission it freezes the exact bytes and binds a
-  content digest into the otherwise opaque reference; current provider dispatch
-  consumes that frozen result, while later projection rereads the host resource
-  and verifies the same digest. Redeven must not persist admitted `TurnID`/`RunID`
-  attachment mappings or degrade resolution failures into filename text;
-- initial thread presentation must use `ThreadReader.Bootstrap` so thread,
-  overview, first turn page, approvals, todos, context, pending work, and
-  SubAgents share one Floret revision. Any direct Floret subscription must
-  continue with `AfterRevision` equal to that bootstrap revision. Historical
-  pagination remains on `ListThreadTurns` and must not be treated as an atomic
-  bootstrap;
-- Known-`TurnID` reconciliation, attachment membership, and canonical reference
-  membership must use `ReadThreadTurn`; only `ErrTurnNotFound` means absent, and
-  authority, storage, or corruption errors must fail closed without a
-  `ListThreadTurns` fallback. Flower history and pagination continue to read
-  `ListThreadTurns`; subsequent exact reads use the corresponding narrow reader
-  methods. The
-  unknown-`TurnID` attachment lookup may scan canonical `ListThreadTurns` pages
-  until its versioned locator carries a source TurnID. Realtime events may carry only in-memory run
-  presentation and canonical replacement signals; they must not carry transcript
-  messages or a transcript-reset protocol;
-- SubAgent transcript presentation must read typed `ListThreadTurns` pages from
-  the parent-scoped Floret host. Only `delegated_mission` user rows may be hidden,
-  and only by exact `UserMessageOrigin` plus `UserEntryID`. Redeven must not
-  request raw child messages, parse detail-event metadata as authority, synthesize
-  message identities, duplicate retry user rows, or rebuild conversation from
-  `ReadSubAgentDetail`; sanitized detail events remain a separate diagnostic ledger;
-- provider adapters may pass `PreviousState` and `ResponseState` only at the
-  typed Floret gateway boundary. Floret persists the complete opaque state and
-  invalidates it by journal leaf plus the non-sensitive gateway compatibility
-  key; Redeven must not persist, clear, match, truncate, or interpret it;
-- context usage and compaction are read from Floret `ReadThreadContext` for
-  bootstrap and mapped into current-process Flower presentation only. Redeven
-  must not persist context lifecycle events or mapped context snapshots;
-- canonical turn projection reads must use
-  `ThreadReader.ReadAuthoritativeProjection`; Redeven may map its enclosed
-  projection into product presentation but must not consume a derived event
-  reducer result as lifecycle authority;
-- Floret owns canonical Agent todo validation, including the 40-item limit,
-  stable non-empty unique IDs, non-empty content, the status set, and at most
-  one `in_progress` item. Redeven may derive tool schema values from Floret and
-  apply product guidance such as excluding control-signal prose, but it must
-  not normalize, repair, or implement a second todo state machine;
-- Redeven product tables may reference opaque Floret `ThreadID`/`TurnID`/`RunID`
-  values, but must not store their content, status, ordinal, projection,
-  lifecycle, control, approval, todo, context, provider, or tool-state copies;
-- Floret `runtime.Host`, `storage.Backend`, identity-bound public handles, and
-  aggregate bootstrap results exist only in the AI composition root. Public
-  handles are converted there into responsibility-specific local coordinator
-  authorities rather than one full-capability object. A normal run receives only runtime authority already
-  bound to its exact root `ThreadID`. Its product capability shape is an exact
-  allowlist, and current-run permission reads cannot accept caller-supplied
-  owner identity. Derived child execution is constructed only after canonical
-  parent-child membership and finalized child audit are verified, with the
-  parent permission gate and resources bound to that exact child thread. It is
-  never created by copying the root capability object and has no further
-  lifecycle, queue, publication, presentation, or resource-authority derivation.
-  The run-reachable SubAgent runtime contains only a validated exact-child
-  resolver; the arbitrary-child handle opener remains a composition-owned object that
-  cannot be recovered through a concrete runtime type assertion.
-  A child audit's original `ParentRunID` is lineage, not a requirement that the
-  durable child may be used only from the creating parent turn;
-- interrupted-turn recovery capability belongs only to the startup recovery
-  coordinator. Composition must issue recovery handles already bound to exact
-  root or parent-child identity and durable proof before retry ownership is retained.
-  Root enumeration must come from a composition-owned Floret
-  `ThreadInventory` handle; paged Redeven settings are only a product-configuration
-  reconciliation input and must not create, omit, or replace canonical roots.
-  Runtime binding stays closed until interrupted-turn and pending SubAgent
-  publication recovery completes, and Redeven must not mint pending-tool
-  recovery without durable host process ownership. Startup must process every
-  pending delete page before recovery-target enumeration and fail closed while
-  any selected delete has not removed its product settings;
-- a pending SubAgent publication may retain the exact hashed spawn request and
-  host intent only until the idempotent Floret publication and product
-  permission audit reaches committed or terminal failed state. Both states must
-  clear request/session/model payloads; the remaining operation identity must
-  not become child membership, status, message, event, or lifecycle storage;
-- Redeven may retain product-owned audit records for user operations, policy,
-  routing, and permissions, but those records must not contain a queryable copy
-  of Floret tool state and must never become a Flower UI or evaluation source;
-- a Redeven-owned pending process must bind its exact Floret settlement target,
-  including the creating effect-attempt identity, and the creating Host before
-  the process starts. Terminal reads and writes are PTY-only operations; final
-  settlement goes once through that bound Host and never through run lookup,
-  Host guessing, or a maintenance fallback;
-- completed Flower tool status, output, exit code, duration, and errors must
-  come from Floret `ThreadTurnProjection` Activity payloads. Redeven process
-  reads are allowed only while the corresponding PTY is running;
-- activity presentation must use Redeven's `ToolPresentationSpec` projection as
-  the single product display policy and must travel with the Floret tool call,
-  not as separately persisted presentation state.
-- fork calls Floret first and validates only the operation and destination
-  identity. Redeven copies host settings and thread-level resource ownership
-  without consuming or persisting Floret turn/run rewrite maps or the Floret
-  fork result. Delete coordinates product cleanup with Floret public
-  `DeleteThread` and never edits or cleans shadow Agent tables.
-
-Flower read state is user scoped. Live thread patches returned through appserver
-must carry the current `read_status` when thread activity changes, so a running
-thread that stays selected until completion is marked read by the selected
-surface while background completions remain unread.
-
-Do not move Redeven product concerns into Floret to satisfy short-term
-integration needs. If a future design intentionally changes this boundary, it
-must first update the Floret and Redeven public contracts, AGENTS rules, OKF,
-tests, and published Floret release notes.
+Outside temporary Local Fast Debugging, Redeven must use the released v4 module with `GOWORK=off`; local sibling wiring is never a committed integration boundary.
 
 ## UI Interaction Affordance
 

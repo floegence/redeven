@@ -4,12 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"strings"
 
-	"github.com/floegence/floret/v3/observation"
-	flprovider "github.com/floegence/floret/v3/provider"
-	flruntime "github.com/floegence/floret/v3/runtime"
+	"github.com/floegence/floret/v4/observation"
+	flprovider "github.com/floegence/floret/v4/provider"
+	flruntime "github.com/floegence/floret/v4/runtime"
 )
 
 const (
@@ -37,55 +36,24 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 	if r == nil {
 		return
 	}
-	if ev.Projection != nil {
-		if err := ev.Projection.Validate(); err != nil && floretEventProjectionIsUnformed(err) {
-			r.recordRunDiagnostic("floret.projection.skipped", RealtimeStreamKindLifecycle, map[string]any{
-				"source": "event",
-				"error":  sanitizeLogText(err.Error(), 240),
-			})
-			ev.Projection = nil
-		}
-	}
 	isTitleEvent := ev.Type == floretEventThreadTitlePending || ev.Type == floretEventThreadTitleUpdated || ev.Type == floretEventThreadTitleFailed
 	if err := ev.Validate(); err != nil {
 		r.rejectFloretContract("event", err)
 		return
 	}
-	canonicalUserEntry := ev.Type == observation.EventTypeThreadEntryCommitted && ev.Committed != nil && ev.Committed.Kind == flruntime.ThreadDetailEventUserMessage
+	canonicalUserEntry := false
 	if canonicalUserEntry {
-		var err error
-		if r.awaitFloretAdmission.Load() {
-			if strings.TrimSpace(string(ev.ThreadID)) != strings.TrimSpace(r.threadID) {
-				err = errors.New("pre-receipt Floret admission event is bound to another thread")
-			}
-		} else {
-			err = r.observeFloretCanonicalIdentity(string(ev.RunID), string(ev.ThreadID), string(ev.TurnID))
-		}
+		err := r.observeFloretCanonicalIdentity(string(ev.RunID), string(ev.ThreadID), string(ev.TurnID))
 		if err != nil {
 			r.rejectFloretContract("turn_admission", err)
 			return
 		}
 	} else if !isTitleEvent {
-		var err error
-		if r.awaitFloretAdmission.Load() {
-			identity := r.floretRuntimeEventIdentitySnapshot()
-			if !identity.configured {
-				if strings.TrimSpace(string(ev.ThreadID)) != strings.TrimSpace(r.threadID) {
-					r.rejectFloretContract("event_identity", errors.New("pre-admission Floret event is bound to another thread"))
-				}
-				return
-			}
-			err = r.bindFloretCanonicalIdentity(string(ev.RunID), string(ev.ThreadID), string(ev.TurnID))
-		} else {
-			err = r.observeFloretCanonicalIdentity(string(ev.RunID), string(ev.ThreadID), string(ev.TurnID))
-		}
+		err := r.observeFloretCanonicalIdentity(string(ev.RunID), string(ev.ThreadID), string(ev.TurnID))
 		if err != nil {
 			r.rejectFloretContract("event_identity", err)
 			return
 		}
-	}
-	if r.awaitFloretAdmission.Load() && !r.acceptsPresentationUpdates() {
-		return
 	}
 	if err := r.validateFloretRuntimeEvent(ev); err != nil {
 		r.rejectFloretContract("event", err)
@@ -101,26 +69,9 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 			return
 		}
 	}
-	if canonicalUserEntry {
-		if r.awaitFloretAdmission.Load() {
-			return
-		}
-		r.floretAdmitted.Store(true)
-	}
 	if (ev.Type == floretEventThreadTitlePending || ev.Type == floretEventThreadTitleUpdated || ev.Type == floretEventThreadTitleFailed) && r.host.broadcastThreadSummary != nil {
 		_ = r.host.broadcastThreadSummary()
 	}
-	approvalLifecycle := ev.Type == floretEventToolApprovalRequested || ev.Type == floretEventToolApprovalApproved ||
-		ev.Type == floretEventToolApprovalRejected || ev.Type == floretEventToolApprovalTimedOut ||
-		ev.Type == floretEventToolApprovalCanceled
-	if approvalLifecycle {
-		if err := r.syncFloretApprovalQueue(context.Background()); err != nil {
-			r.rejectFloretContract("approval_queue", err)
-			return
-		}
-	}
-	// Receipt admission publishes the canonical timeline before live assistant
-	// state. Observation events may only render after that durable boundary.
 	if !r.acceptsPresentationUpdates() {
 		return
 	}
@@ -133,22 +84,6 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 	r.applyFloretSourceObservation(ev.Sources)
 	r.applyFloretContextStatus(ev.ContextStatus)
 	r.applyFloretCompaction(ev.Compaction)
-	if ev.ProjectionDelta != nil {
-		if _, err := r.applyFloretThreadProjectionDeltaInternal(*ev.ProjectionDelta); err != nil {
-			if ev.Projection == nil {
-				r.rejectFloretContract("turn_projection_delta", err)
-				return
-			}
-			r.recordRunDiagnostic("floret.projection_delta.fallback", RealtimeStreamKindLifecycle, map[string]any{
-				"error": sanitizeLogText(err.Error(), 240),
-			})
-			if r.applyFloretThreadProjection(*ev.Projection) {
-				r.rememberFloretProjectionDeltaLineage(*ev.Projection)
-			}
-		}
-	} else if ev.Projection != nil {
-		r.applyFloretThreadProjection(*ev.Projection)
-	}
 	r.recordFloretActivityEvent(ev)
 	switch ev.Type {
 	case floretEventProviderRequest:
@@ -251,37 +186,6 @@ func (r *run) activateFloretProviderAttempt(metadata map[string]any) (bool, erro
 	r.providerAttempt = identity
 	r.muProviderAttempt.Unlock()
 
-	canonicalBlocks, err := r.floretCanonicalProjectionBlocks()
-	if err != nil {
-		return false, fmt.Errorf("rebuild canonical provider prefix: %w", err)
-	}
-	r.muAssistant.Lock()
-	oldBlocks := append([]any(nil), r.assistantBlocks...)
-	r.assistantBlocks = canonicalBlocks
-	r.assistantAnswer = assistantAnswerState{}
-	r.muAssistant.Unlock()
-	r.mu.Lock()
-	r.nextBlockIndex = len(canonicalBlocks)
-	r.currentTextBlockIndex = -1
-	r.needNewTextBlock = true
-	r.currentThinkingBlockIndex = -1
-	r.needNewThinkingBlock = true
-	r.mu.Unlock()
-	r.sendStreamEvent(streamEventMessageStart{Type: "message-start", MessageID: r.messageID, AttemptEpoch: identity.attemptEpoch})
-	for idx, block := range canonicalBlocks {
-		if idx < len(oldBlocks) && reflect.DeepEqual(oldBlocks[idx], block) {
-			continue
-		}
-		r.sendStreamEvent(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
-	}
-	for idx := len(canonicalBlocks); idx < len(oldBlocks); idx++ {
-		r.sendStreamEvent(streamEventBlockSet{
-			Type:       "block-set",
-			MessageID:  r.messageID,
-			BlockIndex: idx,
-			Block:      persistedMarkdownBlock{Type: "markdown", Content: ""},
-		})
-	}
 	return true, nil
 }
 
@@ -296,41 +200,6 @@ func intFromAny(value any) int {
 	default:
 		return 0
 	}
-}
-
-func floretEventProjectionIsUnformed(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := err.Error()
-	return strings.Contains(msg, "turn projection identity is incomplete") ||
-		strings.Contains(msg, "turn projection ordinal must be positive") ||
-		strings.Contains(msg, `unsupported turn projection status ""`)
-}
-
-func (r *run) publishCanonicalUserAdmission() error {
-	if r == nil {
-		return errors.New("run admission coordinator is unavailable")
-	}
-	canonicalRunID, _, canonicalTurnID := r.floretCanonicalIdentity()
-	if canonicalRunID == "" || canonicalTurnID == "" {
-		return errors.New("canonical admission identity is unavailable")
-	}
-	if r.host.broadcastThreadSummary == nil {
-		return errors.New("run thread snapshot publisher is unavailable")
-	}
-	if err := r.host.broadcastThreadSummary(); err != nil {
-		return fmt.Errorf("publish admitted thread snapshot: %w", err)
-	}
-	if r.host.replaceLiveDraftWithCanonicalTimeline == nil {
-		return errors.New("canonical timeline publisher is unavailable")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), r.persistTimeout())
-	defer cancel()
-	if err := r.host.replaceLiveDraftWithCanonicalTimeline(ctx, canonicalRunID, canonicalTurnID, r.messageID, "canonical_admission"); err != nil {
-		return fmt.Errorf("publish canonical admission timeline: %w", err)
-	}
-	return nil
 }
 
 func (r *run) validateFloretRuntimeEvent(ev flruntime.Event) error {
@@ -356,22 +225,6 @@ func (r *run) validateFloretRuntimeEvent(ev flruntime.Event) error {
 			return errors.New("Floret event thread or turn identity mismatch")
 		} else if identity.checkRunID && eventRunID != identity.runID {
 			return errors.New("Floret event run identity mismatch")
-		}
-	}
-	if ev.Projection != nil && !r.floretThreadProjectionMatchesRun(*ev.Projection) {
-		return errors.New("Floret event projection identity mismatch")
-	}
-	if ev.ProjectionDelta != nil {
-		canonicalRunID, canonicalThreadID, canonicalTurnID := r.floretCanonicalIdentity()
-		if !projectionIdentityMatchesRun(
-			strings.TrimSpace(string(ev.ProjectionDelta.RunID)),
-			strings.TrimSpace(string(ev.ProjectionDelta.ThreadID)),
-			strings.TrimSpace(string(ev.ProjectionDelta.TurnID)),
-			canonicalRunID,
-			canonicalThreadID,
-			canonicalTurnID,
-		) {
-			return errors.New("Floret event projection delta identity mismatch")
 		}
 	}
 	return nil
@@ -433,10 +286,6 @@ func (r *run) applyFloretCompaction(compaction *observation.CompactionEvent) {
 		Compaction:         projected,
 		TimelineDecoration: decoration,
 	})
-	switch compaction.Phase {
-	case observation.CompactionPhaseComplete, observation.CompactionPhaseFailed, observation.CompactionPhaseCancelled, observation.CompactionPhaseNoop:
-		r.finishManualCompaction(compaction.RequestID)
-	}
 }
 
 func (r *run) flowerContextCompactionDecoration(compaction FlowerContextCompaction) (FlowerTimelineDecoration, error) {

@@ -80,15 +80,7 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
       data-flower-thread-indicator={indicator().visual}
       data-flower-thread-unread-dot={indicator().attention === 'unread' ? 'true' : 'false'}
       data-flower-thread-action-required={indicator().actionRequired ? 'true' : 'false'}
-      data-flower-thread-admission-pending={props.item.admission_pending ? 'true' : undefined}
-      onContextMenu={(event) => {
-        if (props.item.admission_pending) {
-          event.preventDefault();
-          event.stopPropagation();
-          return;
-        }
-        props.onContextMenu?.(event, props.item);
-      }}
+      onContextMenu={(event) => props.onContextMenu?.(event, props.item)}
       class={cn(
         'flower-thread-card group relative w-full cursor-pointer rounded-lg border',
         props.active && 'flower-thread-card-active',
@@ -107,10 +99,6 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
         }}
         onKeyDown={(event) => {
           if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
-            if (props.item.admission_pending) {
-              event.preventDefault();
-              return;
-            }
             props.onKeyboardMenu?.(event, props.item);
           }
         }}
@@ -137,7 +125,7 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
           {fmtFlowerShortTime(props.item.created_at_ms, copy())}
         </span>
       </div>
-      <Show when={!props.item.admission_pending && props.onPin && itemCanPin()}>
+      <Show when={props.onPin && itemCanPin()}>
         <button
           type="button"
           class="flower-thread-card-pin-button"
@@ -152,20 +140,18 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
           <Pin class={cn('h-3.5 w-3.5', props.item.pinned && 'text-primary')} />
         </button>
       </Show>
-      <Show when={!props.item.admission_pending}>
-        <button
-          type="button"
-          class="flower-thread-card-menu-button"
-          aria-label={copy().contextMenuLabel(title())}
-          title={copy().contextMenuLabel(title())}
-          onClick={(event) => {
-            event.stopPropagation();
-            props.onContextMenu?.(event, props.item);
-          }}
-        >
-          <MoreHorizontal class="h-3.5 w-3.5" />
-        </button>
-      </Show>
+      <button
+        type="button"
+        class="flower-thread-card-menu-button"
+        aria-label={copy().contextMenuLabel(title())}
+        title={copy().contextMenuLabel(title())}
+        onClick={(event) => {
+          event.stopPropagation();
+          props.onContextMenu?.(event, props.item);
+        }}
+      >
+        <MoreHorizontal class="h-3.5 w-3.5" />
+      </button>
       <Show when={props.item.status === 'waiting_approval'}>
         <div
           class="flower-thread-card-approval-indicator"

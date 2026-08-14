@@ -9,23 +9,52 @@ import (
 	"errors"
 	"strings"
 	"time"
-	"unicode/utf8"
 )
 
-func (s *Store) PrepareThreadCreateWithInitialTurn(ctx context.Context, createReq PrepareThreadCreateRequest, rec QueuedTurn, uploadIDs []string, claimedAtUnixMs int64, attachmentAdmission AttachmentAdmission, stagingScope *UploadStagingScope) (ThreadCreateOperation, QueuedTurn, error) {
-	rec.ThreadID = ""
-	rec.TurnID = ""
-	rec.RunID = ""
-	rec.AdmissionState = PendingTurnAdmissionReady
-	createReq.InitialTurn = &rec
-	createReq.UploadIDs = uploadIDs
-	createReq.AttachmentAdmission = attachmentAdmission
-	createReq.StagingScope = stagingScope
-	if createReq.CreatedAtMS <= 0 {
-		createReq.CreatedAtMS = rec.CreatedAtUnixMs
+// ClaimStagedUploadsToThread moves product-owned upload references from a
+// transport staging scope to their canonical thread. It does not create a turn,
+// queue item, admission receipt, or any other agent lifecycle state.
+func (s *Store) ClaimStagedUploadsToThread(
+	ctx context.Context,
+	endpointID string,
+	threadID string,
+	uploadIDs []string,
+	claimedAtUnixMs int64,
+	admission AttachmentClaimPolicy,
+	scope UploadStagingScope,
+) error {
+	if s == nil || s.db == nil {
+		return errors.New("store not initialized")
 	}
-	operation, err := s.PrepareThreadCreateOperation(ctx, createReq)
-	return operation, rec, err
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	scope = normalizeUploadStagingScope(scope)
+	uploadIDs = dedupeNonEmptyStrings(uploadIDs)
+	if endpointID == "" || threadID == "" || scope.EndpointID != endpointID {
+		return errors.New("invalid upload claim")
+	}
+	if len(uploadIDs) == 0 {
+		return nil
+	}
+	if claimedAtUnixMs <= 0 {
+		claimedAtUnixMs = time.Now().UnixMilli()
+	}
+	tx, err := s.db.BeginTx(ctxOrBackground(ctx), nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := requireUploadStagingScopeActiveTx(ctxOrBackground(ctx), tx, scope, time.Now().UnixMilli()); err != nil {
+		return err
+	}
+	if err := validateAttachmentClaimPolicyTx(ctxOrBackground(ctx), tx, endpointID, uploadIDs, admission); err != nil {
+		return err
+	}
+	refID := stagingUploadRefID(scope.OwnerUserHash, scope.StagingScopeID)
+	if err := bindUploadsToRefTx(ctxOrBackground(ctx), tx, endpointID, threadID, UploadRefKindThread, threadID, uploadIDs, claimedAtUnixMs, UploadRefKindStaging, refID, scope.OwnerUserHash); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 type UploadStagingScope struct {
@@ -57,7 +86,6 @@ func (s *Store) CompleteUploadAttemptToStaging(ctx context.Context, attempt Uplo
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	observeStoreTransaction(ctx, "complete_upload_attempt_to_staging")
 	var active int
 	if err := tx.QueryRowContext(ctxOrBackground(ctx), `
 SELECT COUNT(1) FROM ai_upload_staging_scopes
@@ -136,102 +164,6 @@ WHERE staging_scope_id = ? AND endpoint_id = ? AND owner_user_hash = ? AND targe
 		return errors.New("upload staging scope is unavailable")
 	}
 	return nil
-}
-
-func normalizeFrozenQueuedTurn(rec QueuedTurn) (QueuedTurn, error) {
-	rec.QueueID = strings.TrimSpace(rec.QueueID)
-	rec.EndpointID = strings.TrimSpace(rec.EndpointID)
-	rec.ThreadID = strings.TrimSpace(rec.ThreadID)
-	rec.ChannelID = strings.TrimSpace(rec.ChannelID)
-	lane, err := parseFollowupLane(rec.Lane)
-	if err != nil {
-		return QueuedTurn{}, err
-	}
-	rec.Lane = lane
-	rec.TurnID = strings.TrimSpace(rec.TurnID)
-	rec.RunID = strings.TrimSpace(rec.RunID)
-	rec.ModelID = strings.TrimSpace(rec.ModelID)
-	if !utf8.ValidString(rec.TextContent) {
-		return QueuedTurn{}, errors.New("invalid text content")
-	}
-	rec.AttachmentsJSON = strings.TrimSpace(rec.AttachmentsJSON)
-	rec.ContextActionJSON = strings.TrimSpace(rec.ContextActionJSON)
-	rec.OptionsJSON = strings.TrimSpace(rec.OptionsJSON)
-	rec.SessionMetaJSON = strings.TrimSpace(rec.SessionMetaJSON)
-	rec.CreatedByUserPublicID = strings.TrimSpace(rec.CreatedByUserPublicID)
-	rec.CreatedByUserEmail = strings.TrimSpace(rec.CreatedByUserEmail)
-	if rec.QueueID == "" || rec.EndpointID == "" || rec.ThreadID == "" || rec.ChannelID == "" || rec.TurnID != "" || rec.RunID != "" {
-		return QueuedTurn{}, errors.New("invalid request")
-	}
-	if rec.AttachmentsJSON == "" {
-		rec.AttachmentsJSON = "[]"
-	}
-	if rec.OptionsJSON == "" {
-		rec.OptionsJSON = "{}"
-	}
-	if rec.SessionMetaJSON == "" {
-		rec.SessionMetaJSON = "{}"
-	}
-	now := time.Now().UnixMilli()
-	if rec.CreatedAtUnixMs <= 0 {
-		rec.CreatedAtUnixMs = now
-	}
-	if rec.UpdatedAtUnixMs <= 0 {
-		rec.UpdatedAtUnixMs = rec.CreatedAtUnixMs
-	}
-	return rec, nil
-}
-
-func sameFrozenQueuedTurn(a, b QueuedTurn) bool {
-	return a.EndpointID == b.EndpointID && a.ThreadID == b.ThreadID && a.TurnID == b.TurnID &&
-		a.RunID == b.RunID && a.ModelID == b.ModelID && a.TextContent == b.TextContent &&
-		a.AttachmentsJSON == b.AttachmentsJSON && a.ContextActionJSON == b.ContextActionJSON &&
-		a.OptionsJSON == b.OptionsJSON && a.SessionMetaJSON == b.SessionMetaJSON && a.ChannelID == b.ChannelID
-}
-
-func (s *Store) CreateFollowupFromStaging(ctx context.Context, rec QueuedTurn, uploadIDs []string, claimedAtUnixMs int64, attachmentAdmission AttachmentAdmission, scope UploadStagingScope) (QueuedTurn, int, int64, error) {
-	if s == nil || s.db == nil {
-		return QueuedTurn{}, 0, 0, errors.New("store not initialized")
-	}
-	var err error
-	rec, err = normalizeFrozenQueuedTurn(rec)
-	if err != nil {
-		return QueuedTurn{}, 0, 0, err
-	}
-	scope = normalizeUploadStagingScope(scope)
-	if scope.EndpointID != rec.EndpointID || scope.TargetID != rec.ThreadID {
-		return QueuedTurn{}, 0, 0, errors.New("upload staging target changed")
-	}
-	uploadIDs = dedupeNonEmptyStrings(uploadIDs)
-	if claimedAtUnixMs <= 0 {
-		claimedAtUnixMs = rec.CreatedAtUnixMs
-	}
-	tx, err := s.db.BeginTx(ctxOrBackground(ctx), nil)
-	if err != nil {
-		return QueuedTurn{}, 0, 0, err
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := requireUploadStagingScopeActiveTx(ctxOrBackground(ctx), tx, scope, time.Now().UnixMilli()); err != nil {
-		return QueuedTurn{}, 0, 0, err
-	}
-	if err := validateAttachmentAdmissionTx(ctxOrBackground(ctx), tx, rec.EndpointID, uploadIDs, attachmentAdmission); err != nil {
-		return QueuedTurn{}, 0, 0, err
-	}
-	queued, position, revision, err := createFollowupTx(ctxOrBackground(ctx), tx, rec)
-	if err != nil {
-		return QueuedTurn{}, 0, 0, err
-	}
-	if !sameFrozenQueuedTurn(queued, rec) {
-		return QueuedTurn{}, 0, 0, errors.New("turn id conflicts with a different frozen command")
-	}
-	refID := stagingUploadRefID(scope.OwnerUserHash, scope.StagingScopeID)
-	if err := bindUploadsToRefTx(ctxOrBackground(ctx), tx, rec.EndpointID, rec.ThreadID, UploadRefKindQueuedTurn, queued.QueueID, uploadIDs, claimedAtUnixMs, UploadRefKindStaging, refID, scope.OwnerUserHash); err != nil {
-		return QueuedTurn{}, 0, 0, err
-	}
-	if err := tx.Commit(); err != nil {
-		return QueuedTurn{}, 0, 0, err
-	}
-	return queued, position, revision, nil
 }
 
 func normalizeUploadStagingScope(scope UploadStagingScope) UploadStagingScope {

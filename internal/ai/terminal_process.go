@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/creack/pty"
-	flruntime "github.com/floegence/floret/v3/runtime"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/processenv"
 )
@@ -48,27 +47,19 @@ type terminalProcessManager struct {
 }
 
 type terminalProcessStartRequest struct {
-	ProcessID                 string
-	EndpointID                string
-	ThreadID                  string
-	RunID                     string
-	TurnID                    string
-	ActiveSettlementOwner     floretPendingToolSettler
-	RecoveryCoordinator       floretPendingToolRecoveryCoordinator
-	RecoveryAuthorityThreadID string
-	SettlementTarget          flruntime.PendingToolSettlementTarget
-	Finalize                  terminalProcessFinalizeFunc
-	AuthorityBarrier          *floretAuthorityBarrier
-	ToolID                    string
-	ToolName                  string
-	Command                   string
-	Stdin                     string
-	CwdAbs                    string
-	Shell                     string
-	Env                       []string
+	ProcessID  string
+	EndpointID string
+	ThreadID   string
+	RunID      string
+	TurnID     string
+	ToolID     string
+	ToolName   string
+	Command    string
+	Stdin      string
+	CwdAbs     string
+	Shell      string
+	Env        []string
 }
-
-type terminalProcessFinalizeFunc func(context.Context, floretPendingToolSettler, flruntime.PendingToolSettlementTarget, terminalProcessSnapshot) error
 
 type terminalProcessReadRequest struct {
 	ProcessID string
@@ -109,45 +100,35 @@ type terminalProcessSnapshot struct {
 }
 
 type terminalProcess struct {
-	mu                        sync.Mutex
-	cond                      *sync.Cond
-	manager                   *terminalProcessManager
-	id                        string
-	endpointID                string
-	threadID                  string
-	runID                     string
-	turnID                    string
-	activeSettlementOwner     floretPendingToolSettler
-	recoveryCoordinator       floretPendingToolRecoveryCoordinator
-	recoveryAuthorityThreadID string
-	settlementTarget          flruntime.PendingToolSettlementTarget
-	finalize                  terminalProcessFinalizeFunc
-	toolID                    string
-	toolName                  string
-	command                   string
-	cwd                       string
-	cmd                       *exec.Cmd
-	tty                       *os.File
-	readDone                  chan struct{}
-	startedAt                 time.Time
-	endedAt                   time.Time
-	status                    string
-	exitCode                  int
-	err                       *aitools.ToolError
-	outputChunks              []terminalProcessOutputChunk
-	retainedBytes             int
-	lastSeq                   int64
-	total                     int64
-	truncated                 bool
-	pending                   bool
-	reaped                    bool
-	terminationRequested      bool
-	initialInputFailed        bool
-	reapedDone                chan struct{}
-	finalizeOnce              sync.Once
-	finalizationDone          chan struct{}
-	finalizationErr           error
-	authorityBarrier          *floretAuthorityBarrier
+	mu                   sync.Mutex
+	cond                 *sync.Cond
+	manager              *terminalProcessManager
+	id                   string
+	endpointID           string
+	threadID             string
+	runID                string
+	turnID               string
+	toolID               string
+	toolName             string
+	command              string
+	cwd                  string
+	cmd                  *exec.Cmd
+	tty                  *os.File
+	readDone             chan struct{}
+	startedAt            time.Time
+	endedAt              time.Time
+	status               string
+	exitCode             int
+	err                  *aitools.ToolError
+	outputChunks         []terminalProcessOutputChunk
+	retainedBytes        int
+	lastSeq              int64
+	total                int64
+	truncated            bool
+	reaped               bool
+	terminationRequested bool
+	initialInputFailed   bool
+	reapedDone           chan struct{}
 }
 
 func newTerminalProcessManager() *terminalProcessManager {
@@ -179,44 +160,6 @@ func (m *terminalProcessManager) Start(req terminalProcessStartRequest) (*termin
 	if processID == "" {
 		return nil, errors.New("terminal process id is required")
 	}
-	if req.ActiveSettlementOwner == nil {
-		return nil, errors.New("terminal process active settlement owner is required")
-	}
-	if req.RecoveryCoordinator == nil {
-		return nil, errors.New("terminal process recovery coordinator is required")
-	}
-	if strings.TrimSpace(req.RecoveryAuthorityThreadID) == "" {
-		return nil, errors.New("terminal process recovery authority thread is required")
-	}
-	if req.AuthorityBarrier == nil {
-		return nil, errors.New("terminal process authority barrier is required")
-	}
-	if req.Finalize == nil {
-		return nil, errors.New("terminal process finalizer is required")
-	}
-	target := req.SettlementTarget
-	if strings.TrimSpace(string(target.ThreadID)) == "" ||
-		strings.TrimSpace(string(target.TurnID)) == "" ||
-		strings.TrimSpace(string(target.RunID)) == "" ||
-		strings.TrimSpace(target.ToolCallID) == "" ||
-		strings.TrimSpace(target.ToolName) == "" ||
-		strings.TrimSpace(target.Handle) == "" ||
-		strings.TrimSpace(target.EffectAttemptID) == "" {
-		return nil, errors.New("terminal process settlement target incomplete")
-	}
-	if strings.TrimSpace(target.Handle) != processID ||
-		strings.TrimSpace(target.ToolCallID) != strings.TrimSpace(req.ToolID) ||
-		strings.TrimSpace(target.ToolName) != firstNonEmptyString(req.ToolName, "terminal.exec") {
-		return nil, errors.New("terminal process settlement target mismatch")
-	}
-	// A SubAgent's Redeven execution run/turn identity can differ from the
-	// canonical Floret settlement run/turn identity. The execution thread is the
-	// shared exact boundary; the immutable settlement target carries the Floret
-	// run and turn proof separately.
-	if strings.TrimSpace(string(target.ThreadID)) != strings.TrimSpace(req.ThreadID) {
-		return nil, errors.New("terminal process settlement identity mismatch")
-	}
-
 	m.mu.Lock()
 	if m.active >= terminalProcessMaxActive {
 		m.mu.Unlock()
@@ -237,30 +180,23 @@ func (m *terminalProcessManager) Start(req terminalProcessStartRequest) (*termin
 		return nil, err
 	}
 	proc := &terminalProcess{
-		manager:                   m,
-		id:                        processID,
-		endpointID:                strings.TrimSpace(req.EndpointID),
-		threadID:                  strings.TrimSpace(req.ThreadID),
-		runID:                     strings.TrimSpace(req.RunID),
-		turnID:                    strings.TrimSpace(req.TurnID),
-		activeSettlementOwner:     req.ActiveSettlementOwner,
-		recoveryCoordinator:       req.RecoveryCoordinator,
-		recoveryAuthorityThreadID: strings.TrimSpace(req.RecoveryAuthorityThreadID),
-		settlementTarget:          target,
-		finalize:                  req.Finalize,
-		toolID:                    strings.TrimSpace(req.ToolID),
-		toolName:                  firstNonEmptyString(req.ToolName, "terminal.exec"),
-		command:                   command,
-		cwd:                       cwd,
-		cmd:                       cmd,
-		tty:                       tty,
-		readDone:                  make(chan struct{}),
-		reapedDone:                make(chan struct{}),
-		finalizationDone:          make(chan struct{}),
-		authorityBarrier:          req.AuthorityBarrier,
-		startedAt:                 time.Now(),
-		status:                    terminalProcessStatusRunning,
-		exitCode:                  0,
+		manager:    m,
+		id:         processID,
+		endpointID: strings.TrimSpace(req.EndpointID),
+		threadID:   strings.TrimSpace(req.ThreadID),
+		runID:      strings.TrimSpace(req.RunID),
+		turnID:     strings.TrimSpace(req.TurnID),
+		toolID:     strings.TrimSpace(req.ToolID),
+		toolName:   firstNonEmptyString(req.ToolName, "terminal.exec"),
+		command:    command,
+		cwd:        cwd,
+		cmd:        cmd,
+		tty:        tty,
+		readDone:   make(chan struct{}),
+		reapedDone: make(chan struct{}),
+		startedAt:  time.Now(),
+		status:     terminalProcessStatusRunning,
+		exitCode:   0,
 	}
 	proc.cond = sync.NewCond(&proc.mu)
 
@@ -271,11 +207,6 @@ func (m *terminalProcessManager) Start(req terminalProcessStartRequest) (*termin
 	go proc.readLoop()
 	go proc.waitLoop()
 	go proc.maxRuntimeLoop()
-	go func() {
-		<-proc.authorityBarrier.done
-		proc.startFinalizationIfReady()
-	}()
-
 	return completeTerminalProcessStart(proc, tty, req.Stdin)
 }
 
@@ -426,10 +357,8 @@ func (p *terminalProcess) MarkPending() terminalProcessSnapshot {
 		return terminalProcessSnapshot{}
 	}
 	p.mu.Lock()
-	p.pending = true
 	snapshot := p.snapshotLocked(terminalProcessTailCapBytes)
 	p.mu.Unlock()
-	p.startFinalizationIfReady()
 	return snapshot
 }
 
@@ -570,9 +499,7 @@ func (p *terminalProcess) Terminate(ctx context.Context) (terminalProcessSnapsho
 }
 
 // TerminateForActiveTurn is used by terminal.terminate while the owning
-// Floret turn is still executing. The process result is safe to return after
-// reaping; canonical pending-tool settlement must wait for RunTurn to publish
-// its terminal authority proof and is finalized by startFinalizationIfReady.
+// Floret turn is still executing.
 func (p *terminalProcess) TerminateForActiveTurn(ctx context.Context) (terminalProcessSnapshot, error) {
 	if p == nil {
 		return terminalProcessSnapshot{}, errors.New("terminal process not found")
@@ -618,22 +545,10 @@ func (p *terminalProcess) waitForTermination(ctx context.Context, terminateErr e
 	if err := p.waitForReap(ctx, terminateErr); err != nil {
 		return p.Snapshot(), err
 	}
-	p.startFinalizationIfReady()
 	p.mu.Lock()
-	pending := p.pending
-	p.mu.Unlock()
-	if pending {
-		select {
-		case <-p.finalizationDone:
-		case <-ctx.Done():
-			return p.Snapshot(), errors.Join(terminateErr, ctx.Err())
-		}
-	}
-	p.mu.Lock()
-	finalizationErr := p.finalizationErr
 	snapshot := p.snapshotLocked(terminalProcessTailCapBytes)
 	p.mu.Unlock()
-	return snapshot, errors.Join(terminateErr, finalizationErr)
+	return snapshot, terminateErr
 }
 
 func (p *terminalProcess) waitForReap(ctx context.Context, terminateErr error) error {
@@ -729,7 +644,6 @@ func (p *terminalProcess) waitLoop() {
 	p.mu.Unlock()
 	close(p.reapedDone)
 	p.managerProcessEnded()
-	p.startFinalizationIfReady()
 }
 
 func (p *terminalProcess) waitForOutputDrain() {
@@ -802,67 +716,13 @@ func (p *terminalProcess) finalizePendingForRunEnd(ctx context.Context) (bool, e
 		ctx = context.Background()
 	}
 	p.mu.Lock()
-	if !p.pending {
+	if p.status != terminalProcessStatusRunning {
 		p.mu.Unlock()
 		return false, nil
 	}
 	p.mu.Unlock()
 	_, err := p.Terminate(ctx)
 	return true, err
-}
-
-func (p *terminalProcess) startFinalizationIfReady() {
-	if p == nil {
-		return
-	}
-	p.mu.Lock()
-	ready := p.pending && p.reaped
-	barrier := p.authorityBarrier
-	p.mu.Unlock()
-	if !ready {
-		return
-	}
-	select {
-	case <-barrier.done:
-	default:
-		return
-	}
-	p.finalizeOnce.Do(func() {
-		go func() {
-			p.mu.Lock()
-			recovery := p.recoveryCoordinator
-			executionThreadID := p.threadID
-			authorityThreadID := p.recoveryAuthorityThreadID
-			target := p.settlementTarget
-			finalize := p.finalize
-			snapshot := p.snapshotLocked(terminalProcessTailCapBytes)
-			p.mu.Unlock()
-			err := barrier.wait()
-			if err == nil {
-				if recovery == nil {
-					err = errors.New("terminal process recovery coordinator is unavailable")
-				} else {
-					ctx, cancel := context.WithTimeout(context.Background(), terminalProcessRecoveryTimeout)
-					err = recovery.Settle(ctx, executionThreadID, authorityThreadID, func(settleCtx context.Context, owner floretPendingToolSettler) error {
-						return finalize(settleCtx, owner, target, snapshot)
-					})
-					cancel()
-				}
-			}
-			p.finishFinalization(err)
-		}()
-	})
-}
-
-func (p *terminalProcess) finishFinalization(err error) {
-	if p == nil {
-		return
-	}
-	p.mu.Lock()
-	p.finalizationErr = err
-	p.cond.Broadcast()
-	p.mu.Unlock()
-	close(p.finalizationDone)
 }
 
 func (p *terminalProcess) snapshotLocked(maxBytes int64) terminalProcessSnapshot {

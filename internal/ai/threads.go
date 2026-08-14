@@ -3,19 +3,16 @@ package ai
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/floegence/floret/v3/identity"
-	flruntime "github.com/floegence/floret/v3/runtime"
+	"github.com/floegence/floret/v4/identity"
+	flruntime "github.com/floegence/floret/v4/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/filesystemscope"
@@ -56,7 +53,7 @@ func threadWorkingDir(th *threadstore.ThreadSettings) (string, error) {
 	return workingDir, nil
 }
 
-func (s *Service) threadViewFromRecord(ctx context.Context, th *threadstore.ThreadSettings, queuedTurnCount int, snapshot flruntime.ThreadSnapshot, latest *flruntime.ThreadTurnSnapshot) (ThreadView, error) {
+func (s *Service) threadViewFromRecord(ctx context.Context, th *threadstore.ThreadSettings, current flruntime.ThreadView, summary *flruntime.ThreadSummary) (ThreadView, error) {
 	if th == nil {
 		return ThreadView{}, errors.New("thread settings are missing")
 	}
@@ -64,19 +61,13 @@ func (s *Service) threadViewFromRecord(ctx context.Context, th *threadstore.Thre
 	if err != nil {
 		return ThreadView{}, err
 	}
-	runStatus, runErrorCode, runError, err := threadViewRunState(snapshot, latest)
-	if err != nil {
-		return ThreadView{}, err
-	}
+	runStatus, runErrorCode, runError := threadViewRunState(current)
 	activeRunID := ""
-	if snapshot.Status == flruntime.ThreadStatusRunning || snapshot.Status == flruntime.ThreadStatusWaiting {
-		activeRunID = strings.TrimSpace(string(snapshot.LatestRunID))
+	if current.Activity == flruntime.ThreadActivityActive {
+		activeRunID = strings.TrimSpace(current.TurnID.String())
 	}
-	lastMessageAt, lastMessagePreview := canonicalThreadPreview(latest)
-	waitingPrompt, err := requestUserInputPromptFromFloretTurn(latest)
-	if err != nil {
-		return ThreadView{}, err
-	}
+	lastMessageAt, lastMessagePreview := currentThreadPreview(current)
+	waitingPrompt := requestUserInputPromptFromCurrent(current)
 	workingDir, err := threadWorkingDir(th)
 	if err != nil {
 		return ThreadView{}, err
@@ -92,16 +83,33 @@ func (s *Service) threadViewFromRecord(ctx context.Context, th *threadstore.Thre
 	if err := config.ValidateAIReasoningSelection(capability, reasoningSelection); err != nil {
 		return ThreadView{}, reasoningSelectionError(strings.TrimSpace(th.ModelID), err)
 	}
+	createdAt := th.SettingsCreatedAtUnixMs
+	updatedAt := th.SettingsUpdatedAtUnixMs
+	title := ""
+	titleStatus := ""
+	if summary != nil {
+		title = strings.TrimSpace(summary.Title)
+		titleStatus = strings.TrimSpace(string(summary.TitleStatus))
+		if !summary.CreatedAt.IsZero() {
+			createdAt = summary.CreatedAt.UnixMilli()
+		}
+		if !summary.UpdatedAt.IsZero() {
+			updatedAt = summary.UpdatedAt.UnixMilli()
+		}
+		if lastMessageAt == 0 && lastMessagePreview != "" {
+			lastMessageAt = updatedAt
+		}
+	}
 	view := ThreadView{
 		ThreadID:            strings.TrimSpace(th.ThreadID),
-		Title:               strings.TrimSpace(snapshot.Title),
-		TitleStatus:         strings.TrimSpace(string(snapshot.TitleStatus)),
+		Title:               title,
+		TitleStatus:         titleStatus,
 		ModelID:             strings.TrimSpace(th.ModelID),
 		PermissionType:      permissionTypeString(permissionType),
 		WorkingDir:          workingDir,
-		QueuedTurnCount:     queuedTurnCount,
+		QueuedTurnCount:     len(current.Queue),
 		RunStatus:           runStatus,
-		RunUpdatedAtUnixMs:  snapshot.UpdatedAt.UnixMilli(),
+		RunUpdatedAtUnixMs:  updatedAt,
 		RunErrorCode:        runErrorCode,
 		RunError:            runError,
 		WaitingPrompt:       waitingPrompt,
@@ -109,30 +117,31 @@ func (s *Service) threadViewFromRecord(ctx context.Context, th *threadstore.Thre
 		ReasoningSelection:  reasoningSelection,
 		ReasoningCapability: capability,
 		PinnedAtUnixMs:      th.PinnedAtUnixMs,
-		CreatedAtUnixMs:     snapshot.CreatedAt.UnixMilli(),
-		UpdatedAtUnixMs:     snapshot.UpdatedAt.UnixMilli(),
+		CreatedAtUnixMs:     createdAt,
+		UpdatedAtUnixMs:     updatedAt,
 		LastMessageAtUnixMs: lastMessageAt,
 		LastMessagePreview:  lastMessagePreview,
 		FlowerActivity: FlowerThreadReadSnapshot{
-			ActivityRevision:    snapshot.ThroughOrdinal,
+			ActivityRevision:    max(updatedAt, lastMessageAt),
 			LastMessageAtUnixMs: lastMessageAt,
-			ActivitySignature:   fmt.Sprintf("%s:%d", strings.TrimSpace(th.ThreadID), snapshot.ThroughOrdinal),
+			ActivitySignature:   fmt.Sprintf("%s:%d:%s:%d:%d", strings.TrimSpace(th.ThreadID), max(updatedAt, lastMessageAt), current.Activity, current.Attention.ApprovalCount, current.Attention.InputCount),
 			WaitingPromptID:     waitingPromptID(waitingPrompt),
 		},
 	}
+	children, err := s.listFlowerSubagentsForParent(ctx, current.ThreadID)
+	if err != nil {
+		return ThreadView{}, err
+	}
+	view.Subagents = children
 	return view, nil
 }
 
-func (s *Service) readCanonicalThreadState(ctx context.Context, threadID string) (flruntime.ThreadSnapshot, *flruntime.ThreadTurnSnapshot, error) {
-	host, err := s.openFloretThreadReadHost(ctx, threadID)
+func (s *Service) readCanonicalThreadState(ctx context.Context, threadID string) (flruntime.ThreadView, error) {
+	typed, err := s.typedFloretRuntime()
 	if err != nil {
-		return flruntime.ThreadSnapshot{}, nil, err
+		return flruntime.ThreadView{}, err
 	}
-	bootstrap, err := host.Bootstrap(ctx, flruntime.ThreadBootstrapRequest{TurnLimit: 1})
-	if err != nil {
-		return flruntime.ThreadSnapshot{}, nil, err
-	}
-	return bootstrap.Thread, bootstrap.Overview.LatestTurn, nil
+	return typed.View(ctxOrBackground(ctx), identity.ThreadID(strings.TrimSpace(threadID)))
 }
 
 func (s *Service) lockCanonicalThreadSettingsMutation(ctx context.Context, endpointID string, threadID string) (*threadstore.Store, *threadstore.ThreadSettings, func(), error) {
@@ -144,13 +153,7 @@ func (s *Service) lockCanonicalThreadSettingsMutation(ctx context.Context, endpo
 	if endpointID == "" || threadID == "" {
 		return nil, nil, nil, errors.New("invalid thread identity")
 	}
-	if s.threadMgr == nil {
-		return nil, nil, nil, errors.New("thread manager not ready")
-	}
-	unlock, err := s.threadMgr.lockThreadLifecycle(endpointID, threadID)
-	if err != nil {
-		return nil, nil, nil, err
-	}
+	unlock := func() {}
 	fail := func(err error) (*threadstore.Store, *threadstore.ThreadSettings, func(), error) {
 		unlock()
 		return nil, nil, nil, err
@@ -171,103 +174,83 @@ func (s *Service) lockCanonicalThreadSettingsMutation(ctx context.Context, endpo
 	if settings == nil {
 		return fail(sql.ErrNoRows)
 	}
-	if _, _, err := s.readCanonicalThreadState(ctxOrBackground(ctx), threadID); err != nil {
+	if _, err := s.readCanonicalThreadState(ctxOrBackground(ctx), threadID); err != nil {
 		return fail(err)
 	}
 	return db, settings, unlock, nil
 }
 
-func threadViewRunState(snapshot flruntime.ThreadSnapshot, latest *flruntime.ThreadTurnSnapshot) (string, string, string, error) {
-	switch snapshot.Status {
-	case flruntime.ThreadStatusRunning:
-		return string(RunStateRunning), "", "", nil
-	case flruntime.ThreadStatusWaiting:
-		waitingPrompt, err := requestUserInputPromptFromFloretTurn(latest)
-		if err != nil {
-			return "", "", "", err
-		}
-		if waitingPrompt != nil {
-			return string(RunStateWaitingUser), "", "", nil
-		}
-		return string(RunStateWaitingApproval), "", "", nil
-	case flruntime.ThreadStatusCompleted:
-		return string(RunStateSuccess), "", "", nil
-	case flruntime.ThreadStatusFailed:
-		failure := ""
-		if latest != nil && latest.Failure != nil {
-			failure = strings.TrimSpace(latest.Failure.Message)
-			if latest.Failure.Code == flruntime.ThreadTurnFailureControlError {
-				return string(RunStateFailed), string(flruntime.ThreadTurnFailureControlError), failure, nil
-			}
-		}
-		if code := classifyRunFailureCode(errors.New(failure), ""); code != "" {
-			return string(RunStateFailed), code, userFacingRunError(code, ""), nil
-		}
-		return string(RunStateFailed), "floret_turn_failed", failure, nil
-	case flruntime.ThreadStatusCancelled:
-		return string(RunStateCanceled), "", "", nil
-	case flruntime.ThreadStatusInterrupted:
-		failure := ""
-		if latest != nil && latest.Failure != nil {
-			failure = strings.TrimSpace(latest.Failure.Message)
-		}
-		return string(RunStateFailed), "floret_turn_interrupted", failure, nil
-	case flruntime.ThreadStatusIdle:
-		return string(RunStateIdle), "", "", nil
-	default:
-		return "", "", "", fmt.Errorf("unsupported Floret thread status %q", snapshot.Status)
-	}
-}
-
-func canonicalThreadPreview(latest *flruntime.ThreadTurnSnapshot) (int64, string) {
-	if latest == nil {
-		return 0, ""
-	}
-	preview := ""
-	for index := len(latest.Projection.Segments) - 1; index >= 0; index-- {
-		segment := latest.Projection.Segments[index]
-		preview = strings.TrimSpace(segment.Text)
-		if preview == "" && segment.Signal != nil {
-			preview = strings.TrimSpace(segment.Signal.Text)
-		}
-		if preview != "" {
-			break
-		}
-	}
-	if preview == "" {
-		preview = strings.TrimSpace(latest.UserInput)
-	}
-	return latest.UpdatedAt.UnixMilli(), truncateRunes(preview, 160)
-}
-
-func requestUserInputPromptFromFloretTurn(turn *flruntime.ThreadTurnSnapshot) (*RequestUserInputPrompt, error) {
-	if turn == nil || turn.Status != flruntime.TurnStatusWaiting {
-		return nil, nil
-	}
-	for index := len(turn.ControlSignals) - 1; index >= 0; index-- {
-		signal := turn.ControlSignals[index]
-		if strings.TrimSpace(signal.Name) != "ask_user" {
+func threadViewRunState(current flruntime.ThreadView) (string, string, string) {
+	hasInput := false
+	hasApproval := false
+	for _, interaction := range current.Interactions {
+		if interaction.Resolved {
 			continue
 		}
-		payload := make(map[string]any, len(signal.Payload)+4)
-		for key, value := range signal.Payload {
-			payload[key] = value
-		}
-		payload["prompt_id"] = "rui_" + strings.TrimSpace(string(turn.TurnID)) + "_" + strings.TrimSpace(signal.CallID)
-		payload["message_id"] = strings.TrimSpace(string(turn.TurnID))
-		payload["tool_id"] = strings.TrimSpace(signal.CallID)
-		payload["tool_name"] = "ask_user"
-		raw, err := json.Marshal(payload)
-		if err != nil {
-			return nil, fmt.Errorf("marshal Floret ask_user payload: %w", err)
-		}
-		prompt := parseRequestUserInputPromptJSON(string(raw))
-		if prompt == nil {
-			return nil, errors.New("Floret ask_user payload is malformed")
-		}
-		return prompt, nil
+		hasInput = hasInput || interaction.Kind == flruntime.ThreadInteractionInput
+		hasApproval = hasApproval || interaction.Kind == flruntime.ThreadInteractionApproval || interaction.Kind == flruntime.ThreadInteractionEffectRetry
 	}
-	return nil, nil
+	switch {
+	case hasInput:
+		return string(RunStateWaitingUser), "", ""
+	case hasApproval:
+		return string(RunStateWaitingApproval), "", ""
+	case current.Activity == flruntime.ThreadActivityActive:
+		return string(RunStateRunning), "", ""
+	case current.LastOutcome == nil:
+		return string(RunStateIdle), "", ""
+	case *current.LastOutcome == flruntime.TurnOutcomeCompleted:
+		return string(RunStateSuccess), "", ""
+	case *current.LastOutcome == flruntime.TurnOutcomeCancelled:
+		return string(RunStateCanceled), "", ""
+	case *current.LastOutcome == flruntime.TurnOutcomeInterrupted:
+		return string(RunStateFailed), "floret_turn_interrupted", strings.TrimSpace(current.Error)
+	default:
+		return string(RunStateFailed), "floret_turn_failed", strings.TrimSpace(current.Error)
+	}
+}
+
+func currentThreadPreview(current flruntime.ThreadView) (int64, string) {
+	for index := len(current.Items) - 1; index >= 0; index-- {
+		if text := strings.TrimSpace(current.Items[index].Text); text != "" {
+			return 0, truncateRunes(text, 160)
+		}
+	}
+	return 0, ""
+}
+
+func requestUserInputPromptFromCurrent(current flruntime.ThreadView) *RequestUserInputPrompt {
+	for index := len(current.Interactions) - 1; index >= 0; index-- {
+		interaction := current.Interactions[index]
+		if interaction.Resolved || interaction.Kind != flruntime.ThreadInteractionInput || interaction.Input == nil {
+			continue
+		}
+		questions := make([]RequestUserInputQuestion, 0, len(interaction.Input.Questions))
+		containsSecret := false
+		for _, source := range interaction.Input.Questions {
+			choices := make([]RequestUserInputChoice, 0, len(source.Options))
+			for _, option := range source.Options {
+				option = strings.TrimSpace(option)
+				if option != "" {
+					choices = append(choices, RequestUserInputChoice{ChoiceID: option, Label: option, Kind: "choice"})
+				}
+			}
+			mode := strings.TrimSpace(source.Kind)
+			if mode == "" {
+				mode = "write"
+			}
+			questions = append(questions, RequestUserInputQuestion{
+				ID: source.ID, Header: source.Prompt, Question: source.Prompt, IsSecret: source.Secret,
+				ResponseMode: mode, WriteLabel: source.WriteLabel, Choices: choices,
+			})
+			containsSecret = containsSecret || source.Secret
+		}
+		return &RequestUserInputPrompt{
+			PromptID: interaction.ID, MessageID: interaction.TurnID.String(), ToolID: interaction.ToolCallID,
+			ToolName: "ask_user", Questions: questions, PublicSummary: interaction.Input.Summary, ContainsSecret: containsSecret,
+		}
+	}
+	return nil
 }
 
 func waitingPromptID(prompt *RequestUserInputPrompt) string {
@@ -326,13 +309,6 @@ func (s *Service) GetThread(ctx context.Context, meta *session.Meta, threadID st
 	}
 
 	endpointID := strings.TrimSpace(meta.EndpointID)
-	deleteOperation, err := db.GetThreadDeleteOperation(ctx, endpointID, threadID)
-	if err != nil {
-		return nil, err
-	}
-	if deleteOperation != nil {
-		return nil, nil
-	}
 	th, err := db.GetThreadSettings(ctx, endpointID, threadID)
 	if err != nil {
 		return nil, err
@@ -340,34 +316,62 @@ func (s *Service) GetThread(ctx context.Context, meta *session.Meta, threadID st
 	if th == nil {
 		return nil, nil
 	}
-	queuedTurnCount, err := db.CountFollowupsByLane(ctx, endpointID, threadID, threadstore.FollowupLaneQueued)
-	if err != nil {
-		return nil, err
-	}
-
-	snapshot, latest, err := s.readCanonicalThreadState(ctx, threadID)
+	current, err := s.readCanonicalThreadState(ctx, threadID)
 	if err != nil {
 		return nil, fmt.Errorf("read canonical Floret thread %s: %w", threadID, err)
 	}
-	view, err := s.threadViewFromRecord(ctx, th, queuedTurnCount, snapshot, latest)
+	typed, err := s.typedFloretRuntime()
 	if err != nil {
 		return nil, err
 	}
-	view.QueuedTurns = make([]QueuedTurnView, 0, queuedTurnCount)
-	if queuedTurnCount > 0 {
-		queued, listErr := db.ListFollowupsByLane(ctx, endpointID, threadID, threadstore.FollowupLaneQueued, queuedTurnCount)
-		if listErr != nil {
-			return nil, listErr
-		}
-		for _, record := range queued {
-			queuedView, err := s.queuedTurnThreadView(ctx, record)
-			if err != nil {
-				return nil, fmt.Errorf("decode queued turn %q: %w", record.QueueID, err)
-			}
-			view.QueuedTurns = append(view.QueuedTurns, queuedView)
+	summaries, err := typed.List(ctxOrBackground(ctx), flruntime.ThreadScope{})
+	if err != nil {
+		return nil, err
+	}
+	var summary *flruntime.ThreadSummary
+	for index := range summaries {
+		if summaries[index].ID == current.ThreadID {
+			summary = &summaries[index]
+			break
 		}
 	}
+	if summary == nil {
+		return nil, fmt.Errorf("product thread settings reference missing canonical Floret root %q", threadID)
+	}
+	view, err := s.threadViewFromRecord(ctx, th, current, summary)
+	if err != nil {
+		return nil, err
+	}
+	view.QueuedTurns = make([]QueuedTurnView, 0, len(current.Queue))
+	for _, queued := range current.Queue {
+		followup := queuedInputFollowupView(queued, len(view.QueuedTurns)+1)
+		view.QueuedTurns = append(view.QueuedTurns, QueuedTurnView{
+			QueueID: followup.FollowupID, Text: followup.Text, CreatedAtUnixMs: followup.CreatedAtUnixMs,
+			Attachments: followup.Attachments,
+		})
+	}
+	applyThreadRuntimeSummary(&view, current)
 	return &view, nil
+}
+
+// GetFlowerThreadDetail is the single detail read boundary for Flower. The
+// product thread metadata remains owned by Redeven while Floret supplies the
+// renderable current view; callers must replace both fields together.
+func (s *Service) GetFlowerThreadDetail(ctx context.Context, meta *session.Meta, threadID string) (*FlowerThreadDetail, error) {
+	thread, err := s.GetThread(ctx, meta, threadID)
+	if err != nil || thread == nil {
+		return nil, err
+	}
+	runtime, err := s.typedFloretRuntime()
+	if err != nil {
+		return nil, err
+	}
+	current, err := runtime.View(ctx, identity.ThreadID(strings.TrimSpace(threadID)))
+	if err != nil {
+		return nil, fmt.Errorf("read thread runtime view: %w", err)
+	}
+	applyThreadRuntimeSummary(thread, current)
+	return &FlowerThreadDetail{Thread: *thread, Current: publicFloretThreadView(current)}, nil
 }
 
 func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int, cursor string) (*ListThreadsResponse, error) {
@@ -394,116 +398,83 @@ func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int
 	if err != nil {
 		return nil, err
 	}
-	threadIDs := make([]string, 0, len(list))
-	for _, t := range list {
-		threadIDs = append(threadIDs, strings.TrimSpace(t.ThreadID))
-	}
-	queuedTurnCounts, err := db.CountFollowupsByThreadAndLane(ctx, endpointID, threadIDs, threadstore.FollowupLaneQueued)
+	typed, err := s.typedFloretRuntime()
 	if err != nil {
 		return nil, err
 	}
-	canonicalByThread, latestByThread, err := s.readCanonicalThreadListStates(ctx, threadIDs)
+	summaries, err := typed.List(ctxOrBackground(ctx), flruntime.ThreadScope{})
 	if err != nil {
 		return nil, err
+	}
+	summaryByThread := make(map[string]flruntime.ThreadSummary, len(summaries))
+	for _, summary := range summaries {
+		summaryByThread[summary.ID.String()] = summary
 	}
 	out := &ListThreadsResponse{Threads: make([]ThreadView, 0, len(list)), NextCursor: strings.TrimSpace(next)}
 	for _, t := range list {
 		threadID := strings.TrimSpace(t.ThreadID)
-		view, err := s.threadViewFromRecord(ctx, &t, queuedTurnCounts[threadID], canonicalByThread[threadID], latestByThread[threadID])
+		summary, found := summaryByThread[threadID]
+		if !found {
+			return nil, fmt.Errorf("product thread settings reference missing canonical Floret root %q", threadID)
+		}
+		current, currentErr := typed.View(ctxOrBackground(ctx), identity.ThreadID(threadID))
+		if currentErr != nil {
+			return nil, fmt.Errorf("read thread %s runtime view: %w", threadID, currentErr)
+		}
+		view, err := s.threadViewFromRecord(ctx, &t, current, &summary)
 		if err != nil {
 			return nil, fmt.Errorf("build thread %s view: %w", threadID, err)
 		}
-		s.mu.Lock()
-		liveState := s.flowerLiveMaterializedStateLocked(endpointID, threadID)
-		s.mu.Unlock()
-		pending, pendingCount, approvalGeneration, approvalRevision := flowerLiveApprovalSummary(liveState, view.ActiveRunID)
-		view.ApprovalPending = &pending
-		view.ApprovalPendingCount = pendingCount
-		view.ApprovalGeneration = approvalGeneration
-		view.ApprovalRevision = approvalRevision
-		if pending && view.RunStatus != string(RunStateWaitingUser) {
-			view.RunStatus = string(RunStateWaitingApproval)
-		}
+		applyThreadRuntimeSummary(&view, current)
 		out.Threads = append(out.Threads, view)
 	}
 	return out, nil
 }
 
-func (s *Service) readCanonicalThreadListStates(ctx context.Context, threadIDs []string) (map[string]flruntime.ThreadSnapshot, map[string]*flruntime.ThreadTurnSnapshot, error) {
-	canonicalByThread := make(map[string]flruntime.ThreadSnapshot, len(threadIDs))
-	latestByThread := make(map[string]*flruntime.ThreadTurnSnapshot, len(threadIDs))
-	if len(threadIDs) == 0 {
-		return canonicalByThread, latestByThread, nil
+func applyThreadRuntimeSummary(view *ThreadView, current flruntime.ThreadView) {
+	if view == nil || strings.TrimSpace(view.ThreadID) == "" || current.ThreadID.String() != strings.TrimSpace(view.ThreadID) {
+		return
 	}
-	if s == nil || s.floretReads == nil {
-		return nil, nil, errors.New("Floret read capabilities are unavailable")
-	}
-	wanted := make(map[identity.ThreadID]struct{}, len(threadIDs))
-	for _, rawThreadID := range threadIDs {
-		threadID := identity.ThreadID(strings.TrimSpace(rawThreadID))
-		if threadID == "" || string(threadID) != rawThreadID {
-			return nil, nil, errors.New("product thread list contains an invalid Floret identity")
+	view.QueuedTurnCount = len(current.Queue)
+	view.RunErrorCode = ""
+	view.RunError = ""
+	hasInput := false
+	approvalCount := 0
+	for _, interaction := range current.Interactions {
+		if interaction.Resolved {
+			continue
 		}
-		if _, duplicate := wanted[threadID]; duplicate {
-			return nil, nil, fmt.Errorf("product thread list contains duplicate Floret thread %q", threadID)
-		}
-		wanted[threadID] = struct{}{}
-	}
-
-	seenCanonical := make(map[identity.ThreadID]struct{})
-	var inventoryCursor string
-	for {
-		page, err := s.floretReads.listRootThreads(ctx, floretListRootThreadsRequest{Cursor: inventoryCursor, Limit: 200})
-		if err != nil {
-			return nil, nil, fmt.Errorf("list canonical Floret root threads: %w", err)
-		}
-		pageThreads := make(map[identity.ThreadID]struct{}, len(page.Threads))
-		for _, snapshot := range page.Threads {
-			threadID := snapshot.ID
-			if threadID == "" || strings.TrimSpace(string(threadID)) != string(threadID) {
-				return nil, nil, errors.New("canonical Floret root inventory contains an invalid identity")
-			}
-			if _, duplicate := seenCanonical[threadID]; duplicate {
-				return nil, nil, fmt.Errorf("canonical Floret root inventory contains duplicate thread %q", threadID)
-			}
-			seenCanonical[threadID] = struct{}{}
-			pageThreads[threadID] = struct{}{}
-			if _, required := wanted[threadID]; !required {
-				continue
-			}
-			canonicalByThread[string(threadID)] = snapshot
-			if latest := page.LatestTurnByThread[threadID]; latest != nil {
-				if err := latest.Validate(); err != nil {
-					return nil, nil, fmt.Errorf("validate canonical Floret latest turn for %q: %w", threadID, err)
-				}
-				if latest.Projection.ThreadID != threadID {
-					return nil, nil, fmt.Errorf("canonical Floret latest turn belongs to thread %q, want %q", latest.Projection.ThreadID, threadID)
-				}
-				latestByThread[string(threadID)] = latest
-			}
-		}
-		for threadID, latest := range page.LatestTurnByThread {
-			if _, belongsToPage := pageThreads[threadID]; !belongsToPage || latest == nil {
-				return nil, nil, errors.New("canonical Floret root inventory latest-turn index is inconsistent")
-			}
-		}
-		if len(canonicalByThread) == len(wanted) {
-			return canonicalByThread, latestByThread, nil
-		}
-		if !page.HasMore {
-			break
-		}
-		if page.NextCursor == "" || page.NextCursor == inventoryCursor {
-			return nil, nil, errors.New("canonical Floret root inventory pagination did not advance")
-		}
-		inventoryCursor = page.NextCursor
-	}
-	for _, threadID := range threadIDs {
-		if _, found := canonicalByThread[threadID]; !found {
-			return nil, nil, fmt.Errorf("product thread settings reference missing canonical Floret root %q", threadID)
+		switch interaction.Kind {
+		case flruntime.ThreadInteractionInput:
+			hasInput = true
+		case flruntime.ThreadInteractionApproval:
+			approvalCount++
 		}
 	}
-	return canonicalByThread, latestByThread, nil
+	pending := approvalCount > 0
+	view.ApprovalPending = &pending
+	view.ApprovalPendingCount = approvalCount
+	switch {
+	case hasInput:
+		view.RunStatus = string(RunStateWaitingUser)
+	case pending:
+		view.RunStatus = string(RunStateWaitingApproval)
+	case current.Activity == flruntime.ThreadActivityActive:
+		view.RunStatus = string(RunStateRunning)
+	case current.LastOutcome != nil && *current.LastOutcome == flruntime.TurnOutcomeCompleted:
+		view.RunStatus = string(RunStateSuccess)
+	case current.LastOutcome != nil && *current.LastOutcome == flruntime.TurnOutcomeFailed:
+		view.RunStatus = string(RunStateFailed)
+		view.RunErrorCode = "floret_turn_failed"
+		view.RunError = strings.TrimSpace(current.Error)
+	case current.LastOutcome != nil && *current.LastOutcome == flruntime.TurnOutcomeCancelled:
+		view.RunStatus = string(RunStateCanceled)
+	}
+	if current.Activity == flruntime.ThreadActivityActive && current.TurnID != "" {
+		view.ActiveRunID = current.TurnID.String()
+	} else if current.Activity != flruntime.ThreadActivityActive {
+		view.ActiveRunID = ""
+	}
 }
 
 func (s *Service) CreateThread(ctx context.Context, meta *session.Meta, title string, modelID string, permissionType string, workingDir string) (*ThreadView, error) {
@@ -621,29 +592,59 @@ func (s *Service) CreateThreadWithOptions(ctx context.Context, meta *session.Met
 	if err != nil {
 		return nil, err
 	}
-	now := t.SettingsCreatedAtUnixMs
-	s.orphanMaintenanceMu.Lock()
-	operation, err := db.PrepareThreadCreateOperation(ctx, threadstore.PrepareThreadCreateRequest{
-		ClientRequestID: clientRequestID, Settings: t, ExplicitTitle: strings.TrimSpace(req.Title), CreatedAtMS: now,
-	})
+	runtime, err := s.typedFloretRuntime()
 	if err != nil {
-		s.orphanMaintenanceMu.Unlock()
 		return nil, err
 	}
-	t, err = s.resumeThreadCreateOperation(ctx, operation)
-	s.orphanMaintenanceMu.Unlock()
+	current, err := runtime.Create(ctxOrBackground(ctx), flruntime.CreateThreadInput{RequestKey: flruntime.RequestKey(clientRequestID)})
 	if err != nil {
 		return nil, fmt.Errorf("create thread: %w", err)
 	}
-	snapshot, latest, err := s.readCanonicalThreadState(ctx, t.ThreadID)
-	if err != nil {
+	t.ThreadID = current.ThreadID.String()
+	if err := db.AdoptCanonicalRootSettings(ctxOrBackground(ctx), t); err != nil {
 		return nil, err
 	}
-	view, err := s.threadViewFromRecord(ctx, &t, 0, snapshot, latest)
-	if err != nil {
-		return nil, err
+	title := strings.TrimSpace(req.Title)
+	if title != "" {
+		current, err = runtime.SetTitle(ctxOrBackground(ctx), flruntime.SetTitleInput{
+			ThreadID: current.ThreadID, Title: title, RequestKey: flruntime.RequestKey(clientRequestID + ":title"),
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
+	view := threadViewFromRuntimeCurrent(t, current, title)
 	return &view, nil
+}
+
+func threadViewFromRuntimeCurrent(settings threadstore.ThreadSettings, current flruntime.ThreadView, title string) ThreadView {
+	runStatus := string(RunStateIdle)
+	if current.Activity == flruntime.ThreadActivityActive {
+		switch {
+		case current.Attention.InputCount > 0:
+			runStatus = string(RunStateWaitingUser)
+		case current.Attention.ApprovalCount > 0:
+			runStatus = string(RunStateWaitingApproval)
+		default:
+			runStatus = string(RunStateRunning)
+		}
+	}
+	preview := ""
+	for index := len(current.Items) - 1; index >= 0; index-- {
+		if text := strings.TrimSpace(current.Items[index].Text); text != "" {
+			preview = text
+			break
+		}
+	}
+	return ThreadView{
+		ThreadID: current.ThreadID.String(), Title: strings.TrimSpace(title), ModelID: settings.ModelID,
+		PermissionType: settings.PermissionType, WorkingDir: settings.WorkingDir,
+		QueuedTurnCount: len(current.Queue), RunStatus: runStatus,
+		ApprovalPendingCount: current.Attention.ApprovalCount, ActiveRunID: current.TurnID.String(),
+		PinnedAtUnixMs: settings.PinnedAtUnixMs, CreatedAtUnixMs: settings.SettingsCreatedAtUnixMs,
+		UpdatedAtUnixMs: settings.SettingsUpdatedAtUnixMs, LastMessageAtUnixMs: settings.SettingsUpdatedAtUnixMs,
+		LastMessagePreview: preview,
+	}
 }
 
 func (s *Service) ValidateWorkingDir(workingDir string) (string, error) {
@@ -681,26 +682,6 @@ func validateThreadWorkingDir(workingDir string, scope *filesystemscope.Registry
 	return resolved.RealAbs, nil
 }
 
-type threadTitleFloretCoordinator struct {
-	authority floretThreadTitleAuthority
-}
-
-func stableThreadTitleRequestID(threadID string, title string) identity.LogicalRequestID {
-	sum := sha256.Sum256([]byte(strings.TrimSpace(threadID) + "\x00" + title))
-	return identity.LogicalRequestID("thread_title_" + hex.EncodeToString(sum[:18]))
-}
-
-func (c *threadTitleFloretCoordinator) set(ctx context.Context, threadID string, title string) (flruntime.ThreadSnapshot, error) {
-	if c == nil || c.authority == nil {
-		return flruntime.ThreadSnapshot{}, errors.New("Floret title coordinator authority is unavailable")
-	}
-	result, err := c.authority.SetThreadTitle(ctxOrBackground(ctx), identity.ThreadID(strings.TrimSpace(threadID)), flruntime.SetThreadTitleCommand{
-		LogicalRequestID: stableThreadTitleRequestID(threadID, title),
-		Title:            title,
-	})
-	return result.Thread, err
-}
-
 func (s *Service) RenameThread(ctx context.Context, meta *session.Meta, threadID string, title string) error {
 	if s == nil {
 		return errors.New("nil service")
@@ -716,17 +697,25 @@ func (s *Service) RenameThread(ctx context.Context, meta *session.Meta, threadID
 	if endpointID == "" {
 		return errors.New("invalid request")
 	}
-	_, _, unlockLifecycle, err := s.lockCanonicalThreadSettingsMutation(ctx, endpointID, threadID)
+	db, _, unlockLifecycle, err := s.lockCanonicalThreadSettingsMutation(ctx, endpointID, threadID)
 	if err != nil {
 		return err
 	}
 	defer unlockLifecycle()
-	if s.threadTitleFloret == nil {
-		return errors.New("Floret title coordinator authority is unavailable")
-	}
-	if _, err := s.threadTitleFloret.set(ctx, threadID, title); err != nil {
+	runtime, err := s.typedFloretRuntime()
+	if err != nil {
 		return err
 	}
+	requestID, err := newProductRequestID("title_")
+	if err != nil {
+		return err
+	}
+	if _, err := runtime.SetTitle(ctxOrBackground(ctx), flruntime.SetTitleInput{
+		ThreadID: identity.ThreadID(threadID), Title: title, RequestKey: flruntime.RequestKey(requestID),
+	}); err != nil {
+		return err
+	}
+	_ = db
 	s.broadcastThreadSummary(endpointID, threadID)
 	return nil
 }
@@ -795,82 +784,70 @@ func (s *Service) ForkThreadWithOptions(ctx context.Context, meta *session.Meta,
 		return nil, errors.New("invalid client_request_id")
 	}
 	title := strings.TrimSpace(req.Title)
-	createdAtUnixMs := time.Now().UnixMilli()
-	s.orphanMaintenanceMu.Lock()
-	operation, err := func() (*threadstore.ForkOperation, error) {
-		if s.threadMgr == nil {
-			return nil, errors.New("thread manager not ready")
-		}
-		unlockLifecycle, err := s.threadMgr.lockThreadLifecycle(endpointID, sourceThreadID)
-		if err != nil {
-			return nil, err
-		}
-		defer unlockLifecycle()
-		source, err := db.GetThreadSettings(ctx, endpointID, sourceThreadID)
-		if err != nil {
-			return nil, err
-		}
-		if source == nil {
-			return nil, sql.ErrNoRows
-		}
-		sourceSnapshot, _, err := s.readCanonicalThreadState(ctx, sourceThreadID)
-		if err != nil {
-			return nil, fmt.Errorf("read canonical Floret thread %s: %w", sourceThreadID, err)
-		}
-		s.mu.Lock()
-		thKey := runThreadKey(endpointID, sourceThreadID)
-		activeRunID := strings.TrimSpace(s.activeRunByTh[thKey])
-		finalizingRunID := strings.TrimSpace(s.stopFinalizingByTh[thKey])
-		idleCompaction := s.idleCompactionByTh[thKey]
-		idleBusy := idleCompaction != nil && idleCompaction.busy()
-		s.mu.Unlock()
-		if activeRunID != "" || finalizingRunID != "" || idleBusy || threadForkBlockedByRunState(sourceSnapshot) {
-			return nil, ErrThreadForkUnavailable
-		}
-		if err := validatePendingTurnRecoveryState(ctx, endpointID, sourceThreadID, db, false); err != nil {
-			return nil, fmt.Errorf("validate pending turns before fork: %w", err)
-		}
-		return db.PrepareForkOperation(ctx, threadstore.ForkThreadRequest{
-			ClientRequestID:       clientRequestID,
-			EndpointID:            endpointID,
-			SourceThreadID:        sourceThreadID,
-			Title:                 title,
-			CreatedByUserPublicID: strings.TrimSpace(meta.UserPublicID),
-			CreatedByUserEmail:    strings.TrimSpace(meta.UserEmail),
-			CreatedAtUnixMs:       createdAtUnixMs,
+	source, err := db.GetThreadSettings(ctxOrBackground(ctx), endpointID, sourceThreadID)
+	if err != nil {
+		return nil, err
+	}
+	if source == nil {
+		return nil, sql.ErrNoRows
+	}
+	runtime, err := s.typedFloretRuntime()
+	if err != nil {
+		return nil, err
+	}
+	current, err := runtime.Fork(ctxOrBackground(ctx), flruntime.ForkThreadInput{
+		SourceThreadID: identity.ThreadID(sourceThreadID), RequestKey: flruntime.RequestKey(clientRequestID),
+	})
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UnixMilli()
+	forked := *source
+	forked.ThreadID = current.ThreadID.String()
+	forked.PinnedAtUnixMs = 0
+	forked.CreatedByUserPublicID = strings.TrimSpace(meta.UserPublicID)
+	forked.CreatedByUserEmail = strings.TrimSpace(meta.UserEmail)
+	forked.UpdatedByUserPublicID = strings.TrimSpace(meta.UserPublicID)
+	forked.UpdatedByUserEmail = strings.TrimSpace(meta.UserEmail)
+	forked.SettingsCreatedAtUnixMs = now
+	forked.SettingsUpdatedAtUnixMs = now
+	if err := db.AdoptCanonicalRootSettings(ctxOrBackground(ctx), forked); err != nil {
+		return nil, err
+	}
+	if title != "" {
+		current, err = runtime.SetTitle(ctxOrBackground(ctx), flruntime.SetTitleInput{
+			ThreadID: current.ThreadID, Title: title, RequestKey: flruntime.RequestKey(clientRequestID + ":title"),
 		})
-	}()
-	if err != nil {
-		s.orphanMaintenanceMu.Unlock()
-		return nil, err
+		if err != nil {
+			return nil, err
+		}
 	}
-	forked, err := s.resumeThreadForkOperation(ctx, db, operation)
-	s.orphanMaintenanceMu.Unlock()
-	if err != nil {
-		return nil, err
-	}
-	return s.GetThread(ctx, meta, forked.ThreadID)
+	view := threadViewFromRuntimeCurrent(forked, current, title)
+	return &view, nil
 }
 
-func threadForkBlockedByRunState(snapshot flruntime.ThreadSnapshot) bool {
-	return canonicalThreadBusy(snapshot)
+func threadForkBlockedByRunState(current flruntime.ThreadView) bool {
+	return canonicalThreadBusy(current)
 }
 
-func canonicalThreadBusy(snapshot flruntime.ThreadSnapshot) bool {
-	switch snapshot.Status {
-	case flruntime.ThreadStatusRunning, flruntime.ThreadStatusWaiting:
+func canonicalThreadBusy(current flruntime.ThreadView) bool {
+	if current.Activity == flruntime.ThreadActivityActive {
 		return true
-	default:
-		return false
 	}
+	for _, interaction := range current.Interactions {
+		if !interaction.Resolved {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) threadPreferenceChangeBlocked(ctx context.Context, threadID string) (bool, error) {
-	snapshot, _, err := s.readCanonicalThreadState(ctx, threadID)
+	current, err := s.readCanonicalThreadState(ctx, threadID)
 	if err != nil {
 		return false, err
 	}
-	return canonicalThreadBusy(snapshot), nil
+	return canonicalThreadBusy(current), nil
 }
 
 func (s *Service) SetThreadModel(ctx context.Context, meta *session.Meta, threadID string, modelID string) error {
@@ -923,9 +900,7 @@ func (s *Service) SetThreadModel(ctx context.Context, meta *session.Meta, thread
 	if err != nil {
 		return err
 	}
-	if s.HasActiveThreadForEndpoint(endpointID, threadID) ||
-		s.idleThreadCompactionRequestID(endpointID, threadID) != "" ||
-		preferenceBlocked {
+	if preferenceBlocked {
 		return ErrThreadBusy
 	}
 
@@ -979,9 +954,7 @@ func (s *Service) SetThreadReasoningSelection(ctx context.Context, meta *session
 	if err != nil {
 		return err
 	}
-	if s.HasActiveThreadForEndpoint(endpointID, threadID) ||
-		s.idleThreadCompactionRequestID(endpointID, threadID) != "" ||
-		preferenceBlocked {
+	if preferenceBlocked {
 		return ErrThreadBusy
 	}
 	capability, modelDefault, _, err := s.threadReasoningDefaults(ctx, strings.TrimSpace(th.ModelID))
@@ -1033,9 +1006,7 @@ func (s *Service) ClearThreadReasoningSelection(ctx context.Context, meta *sessi
 	if err != nil {
 		return err
 	}
-	if s.HasActiveThreadForEndpoint(endpointID, threadID) ||
-		s.idleThreadCompactionRequestID(endpointID, threadID) != "" ||
-		preferenceBlocked {
+	if preferenceBlocked {
 		return ErrThreadBusy
 	}
 	if err := db.UpdateThreadReasoningSelection(ctx, endpointID, threadID, ""); err != nil {
@@ -1104,6 +1075,20 @@ func (s *Service) CancelThread(meta *session.Meta, threadID string) error {
 	return err
 }
 
+type ThreadDeleteStatus string
+
+const (
+	ThreadDeleteStatusPending   ThreadDeleteStatus = "pending"
+	ThreadDeleteStatusCommitted ThreadDeleteStatus = "committed"
+	ThreadDeleteStatusFailed    ThreadDeleteStatus = "failed"
+)
+
+type ThreadDeleteResult struct {
+	OperationID     string             `json:"operation_id"`
+	Status          ThreadDeleteStatus `json:"status"`
+	IntentPersisted bool               `json:"intent_persisted"`
+}
+
 func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID string, force bool) (ThreadDeleteResult, error) {
 	if s == nil {
 		return ThreadDeleteResult{}, errors.New("nil service")
@@ -1120,122 +1105,57 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 		return ThreadDeleteResult{}, errors.New("invalid request")
 	}
 
-	thKey := runThreadKey(endpointID, threadID)
 	s.mu.Lock()
 	db := s.threadsDB
-	persistTO := s.persistOpTO
-	readStateRequired := s.flowerReadStateCleaner != nil
+	readStateCleaner := s.flowerReadStateCleaner
 	s.mu.Unlock()
 	if db == nil {
 		return ThreadDeleteResult{}, errors.New("threads store not ready")
 	}
-	if persistTO <= 0 {
-		persistTO = defaultPersistOpTimeout
-	}
-	operation, err := func() (threadstore.ThreadDeleteOperation, error) {
-		if s.threadMgr == nil {
-			return threadstore.ThreadDeleteOperation{}, errors.New("thread manager not ready")
-		}
-		unlockLifecycle, err := s.threadMgr.lockThreadLifecycle(endpointID, threadID)
-		if err != nil {
-			return threadstore.ThreadDeleteOperation{}, err
-		}
-		defer unlockLifecycle()
-		existingCtx, existingCancel := context.WithTimeout(ctxOrBackground(ctx), persistTO)
-		existingOperation, err := db.GetThreadDeleteOperation(existingCtx, endpointID, threadID)
-		existingCancel()
-		if err != nil {
-			return threadstore.ThreadDeleteOperation{}, err
-		}
-		var operation threadstore.ThreadDeleteOperation
-		if existingOperation != nil {
-			operation = *existingOperation
-		} else {
-			loadCtx, loadCancel := context.WithTimeout(ctxOrBackground(ctx), persistTO)
-			th, err := db.GetThreadSettings(loadCtx, endpointID, threadID)
-			loadCancel()
-			if err != nil {
-				return threadstore.ThreadDeleteOperation{}, err
-			}
-			if th == nil {
-				return threadstore.ThreadDeleteOperation{}, sql.ErrNoRows
-			}
-			s.mu.Lock()
-			runID := strings.TrimSpace(s.activeRunByTh[thKey])
-			finalizingRunID := strings.TrimSpace(s.stopFinalizingByTh[thKey])
-			idleCompaction := s.idleCompactionByTh[thKey]
-			if idleCompaction != nil && idleCompaction.isCancelled() {
-				idleCompaction = nil
-			}
-			s.mu.Unlock()
-			threadBusy := runID != "" || finalizingRunID != "" || idleCompaction != nil
-			if threadBusy && !force {
-				return threadstore.ThreadDeleteOperation{}, ErrThreadBusy
-			}
-			if !threadBusy {
-				if err := validatePendingTurnRecoveryState(ctxOrBackground(ctx), endpointID, threadID, db, false); err != nil {
-					return threadstore.ThreadDeleteOperation{}, fmt.Errorf("validate pending turns before delete: %w", err)
-				}
-			}
-			deleteCtx, cancel := context.WithTimeout(ctxOrBackground(ctx), persistTO)
-			operation, err = db.PrepareThreadDeleteOperation(deleteCtx, endpointID, threadID, readStateRequired)
-			cancel()
-			if err != nil {
-				return threadstore.ThreadDeleteOperation{}, err
-			}
-		}
-		s.mu.Lock()
-		runID := strings.TrimSpace(s.activeRunByTh[thKey])
-		finalizingRunID := strings.TrimSpace(s.stopFinalizingByTh[thKey])
-		r := s.runs[runID]
-		idleCompaction := s.idleCompactionByTh[thKey]
-		if idleCompaction != nil && idleCompaction.isCancelled() {
-			idleCompaction = nil
-		}
-		s.mu.Unlock()
-		if runID != "" {
-			if r != nil {
-				r.markDetached()
-				r.requestCancel("canceled")
-			}
-			s.mu.Lock()
-			if strings.TrimSpace(s.activeRunByTh[thKey]) == runID {
-				delete(s.activeRunByTh, thKey)
-			}
-			delete(s.stopFinalizingByTh, thKey)
-			s.mu.Unlock()
-		} else if finalizingRunID != "" {
-			s.mu.Lock()
-			if strings.TrimSpace(s.stopFinalizingByTh[thKey]) == finalizingRunID {
-				delete(s.stopFinalizingByTh, thKey)
-			}
-			s.mu.Unlock()
-		}
-		if idleCompaction != nil {
-			s.cancelIdleThreadCompactionWithBroadcast(endpointID, threadID)
-		}
-		return operation, nil
-	}()
+	settings, err := db.GetThreadSettings(ctxOrBackground(ctx), endpointID, threadID)
 	if err != nil {
 		return ThreadDeleteResult{}, err
 	}
-	if runtime := s.removeThreadSubagentRuntime(thKey); runtime != nil {
-		runtime.release()
+	if settings == nil {
+		return ThreadDeleteResult{}, sql.ErrNoRows
 	}
-	advanced, replayErr := s.advanceThreadDeleteOperation(ctx, operation.OperationID, operation.EndpointID, operation.ThreadID)
-	if strings.TrimSpace(advanced.Status) != "" {
-		operation = advanced
+	runtime, err := s.typedFloretRuntime()
+	if err != nil {
+		return ThreadDeleteResult{}, err
 	}
-	if operation.ProductDataDeletedAtUnixMs > 0 {
-		s.scheduleThreadstoreCompaction("thread_delete")
+	view, err := runtime.View(ctxOrBackground(ctx), identity.ThreadID(threadID))
+	if err != nil {
+		return ThreadDeleteResult{}, err
 	}
-	if replayErr != nil && !errors.Is(replayErr, ErrThreadDeleteOperationFailed) {
-		if s.log != nil {
-			s.log.Warn("ai: accepted durable thread delete intent while advancement remains pending", "operation_id", operation.OperationID, "endpoint_id", operation.EndpointID, "thread_id", operation.ThreadID, "error", replayErr)
-		}
-		return threadDeleteResult(operation), nil
+	if view.Activity == flruntime.ThreadActivityActive && !force {
+		return ThreadDeleteResult{}, ErrThreadBusy
 	}
-	return threadDeleteResult(operation), replayErr
+	requestID, err := newProductRequestID("delete_")
+	if err != nil {
+		return ThreadDeleteResult{}, err
+	}
+	if force {
+		_, _ = runtime.Cancel(ctxOrBackground(ctx), flruntime.CancelInput{
+			ThreadID: identity.ThreadID(threadID), RequestKey: flruntime.RequestKey(requestID + ":cancel"),
+		})
+	}
+	if err := runtime.Delete(ctxOrBackground(ctx), flruntime.DeleteThreadInput{
+		ThreadID: identity.ThreadID(threadID), RequestKey: flruntime.RequestKey(requestID),
+	}); err != nil {
+		return ThreadDeleteResult{}, err
+	}
+	if err := db.DeleteThreadProductData(ctxOrBackground(ctx), endpointID, threadID); err != nil {
+		return ThreadDeleteResult{}, err
+	}
+	if readStateCleaner != nil {
+		go func() {
+			if err := readStateCleaner.RetireFlowerThreadReadState(context.Background(), endpointID, threadID); err != nil && s.log != nil {
+				s.log.Warn("retire Flower thread read state after canonical delete", "thread_id", threadID, "error", err)
+			}
+		}()
+	}
+	s.scheduleThreadstoreCompaction("thread_delete")
+	return ThreadDeleteResult{OperationID: requestID, Status: ThreadDeleteStatusCommitted, IntentPersisted: true}, nil
 }
 
 func (s *Service) ListThreadMessages(ctx context.Context, meta *session.Meta, threadID string, limit int, beforeID int64) (*ListThreadMessagesResponse, error) {
@@ -1278,52 +1198,4 @@ func (s *Service) ListThreadMessages(ctx context.Context, meta *session.Meta, th
 	}
 	out.TotalReturned = len(out.Messages)
 	return out, nil
-}
-
-func (s *Service) GetThreadTodos(ctx context.Context, meta *session.Meta, threadID string) (*ThreadTodosView, error) {
-	if s == nil {
-		return nil, errors.New("nil service")
-	}
-	if err := requireRead(meta); err != nil {
-		return nil, err
-	}
-	s.mu.Lock()
-	db := s.threadsDB
-	s.mu.Unlock()
-	if db == nil {
-		return nil, errors.New("threads store not ready")
-	}
-	threadID = strings.TrimSpace(threadID)
-	if threadID == "" {
-		return nil, errors.New("missing thread_id")
-	}
-	endpointID := strings.TrimSpace(meta.EndpointID)
-	if endpointID == "" {
-		return nil, errors.New("invalid request")
-	}
-	th, err := db.GetThreadSettings(ctx, endpointID, threadID)
-	if err != nil {
-		return nil, err
-	}
-	if th == nil {
-		return nil, sql.ErrNoRows
-	}
-
-	host, err := s.openFloretThreadReadHost(ctx, threadID)
-	if err != nil {
-		return nil, err
-	}
-	snapshot, err := host.ReadThreadAgentTodos(ctx)
-	if err != nil {
-		return nil, err
-	}
-	todos := make([]TodoItem, 0, len(snapshot.Items))
-	for _, item := range snapshot.Items {
-		todos = append(todos, TodoItem{ID: item.ID, Content: item.Content, Status: string(item.Status)})
-	}
-	return &ThreadTodosView{
-		Version:         snapshot.Version,
-		UpdatedAtUnixMs: snapshot.UpdatedAt.UnixMilli(),
-		Todos:           append([]TodoItem(nil), todos...),
-	}, nil
 }

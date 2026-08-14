@@ -261,6 +261,7 @@ func ValidateThreadstoreBoundaryManifest(manifest ThreadstoreBoundaryManifest, s
 	allowedAuthorities := map[string]struct{}{
 		"schema_metadata": {}, "coordination_operation": {}, "permission_authorization": {},
 		"upload_physical_resource": {}, "pre_admission_queue": {}, "product_routing": {}, "product_settings": {},
+		"migration_input": {},
 	}
 	tableContracts := make(map[string]ThreadstoreTableContract, len(manifest.Tables))
 	for _, contract := range manifest.Tables {
@@ -339,20 +340,6 @@ func ValidateThreadstoreBoundaryManifest(manifest ThreadstoreBoundaryManifest, s
 		}
 		if !reflectStringSlice(contract.Triggers, mapStringKeys(triggerUseNames)) {
 			issues = append(issues, fmt.Sprintf("threadstore table %s trigger purposes do not cover exact triggers", contract.Table))
-		}
-	}
-	for _, name := range []string{"idx_ai_turn_admission_receipts_turn", "idx_ai_turn_admission_receipts_run", "idx_ai_turn_admission_receipts_entry"} {
-		if _, ok := tableContracts["ai_turn_admission_receipts"]; !ok {
-			continue
-		}
-		found := false
-		for _, use := range tableContracts["ai_turn_admission_receipts"].IndexUses {
-			if use.Name == name && use.IntegrityOnly && len(use.AllowedQueryIDs) == 0 {
-				found = true
-			}
-		}
-		if !found {
-			issues = append(issues, fmt.Sprintf("canonical receipt index %s must remain integrity-only", name))
 		}
 	}
 	for table, columns := range schemaColumns {
@@ -497,8 +484,6 @@ func RefreshThreadstorePhysicalContracts(manifest ThreadstoreBoundaryManifest, c
 func compareThreadstoreQueries(reviewed, scanned []ThreadstoreQueryContract, tables map[string]ThreadstoreTableContract) []string {
 	var issues []string
 	registered := make(map[string]ThreadstoreQueryContract, len(reviewed))
-	reviewedReceiptUses := make(map[string]struct{}, len(reviewedAdmissionReceiptQueryUses))
-	_, receiptsOwned := tables["ai_turn_admission_receipts"]
 	for _, query := range reviewed {
 		if _, exists := registered[query.ID]; exists {
 			issues = append(issues, fmt.Sprintf("threadstore query ID %s is duplicated", query.ID))
@@ -517,17 +502,6 @@ func compareThreadstoreQueries(reviewed, scanned []ThreadstoreQueryContract, tab
 		if (query.Action == "insert" || query.Action == "update") && len(query.WriteColumns) == 0 {
 			issues = append(issues, fmt.Sprintf("threadstore DML query %s has no reviewed write columns", query.ID))
 		}
-		if contains(query.Tables, "ai_turn_admission_receipts") {
-			use, ok := reviewedAdmissionReceiptQueryUses[query.ID]
-			if !ok {
-				issues = append(issues, fmt.Sprintf("threadstore receipt query %s is outside the admission coordination/startup recovery closed set", query.ID))
-			} else {
-				reviewedReceiptUses[query.ID] = struct{}{}
-				if query.Action != use.action || query.ConsumerKind != use.consumerKind {
-					issues = append(issues, fmt.Sprintf("threadstore receipt query %s use is (%s, %s), want (%s, %s)", query.ID, query.Action, query.ConsumerKind, use.action, use.consumerKind))
-				}
-			}
-		}
 		if query.SQLSHA256 == "" && strings.TrimSpace(query.DynamicReview) == "" {
 			issues = append(issues, fmt.Sprintf("dynamic threadstore query %s requires an explicit review exception", query.ID))
 		}
@@ -535,7 +509,7 @@ func compareThreadstoreQueries(reviewed, scanned []ThreadstoreQueryContract, tab
 			issues = append(issues, fmt.Sprintf("dynamic threadstore query %s is not bound to the reviewed builder closure", query.ID))
 		}
 		for _, table := range query.Tables {
-			if _, ok := tables[table]; !ok && table != "sqlite_master" && !strings.HasPrefix(table, "pragma_") {
+			if _, ok := tables[table]; !ok && table != "sqlite_master" && !strings.HasPrefix(table, "pragma_") && !isReviewedV1MigrationTable(query, table) {
 				issues = append(issues, fmt.Sprintf("threadstore query %s references unowned table %s", query.ID, table))
 			}
 		}
@@ -576,13 +550,6 @@ func compareThreadstoreQueries(reviewed, scanned []ThreadstoreQueryContract, tab
 			}
 		}
 	}
-	if receiptsOwned {
-		for id := range reviewedAdmissionReceiptQueryUses {
-			if _, ok := reviewedReceiptUses[id]; !ok {
-				issues = append(issues, fmt.Sprintf("reviewed admission receipt query use %s is stale or missing", id))
-			}
-		}
-	}
 	for _, actual := range scanned {
 		expected, ok := registered[actual.ID]
 		if !ok {
@@ -598,6 +565,25 @@ func compareThreadstoreQueries(reviewed, scanned []ThreadstoreQueryContract, tab
 		issues = append(issues, fmt.Sprintf("stale threadstore SQL query contract %s", id))
 	}
 	return issues
+}
+
+func isReviewedV1MigrationTable(query ThreadstoreQueryContract, table string) bool {
+	if query.Function != "migrateThreadstoreV1ToV2" || query.Action != "schema" || query.ConsumerKind != "schema_maintenance" {
+		return false
+	}
+	switch table {
+	case "ai_child_permission_snapshots",
+		"ai_permission_snapshots",
+		"ai_queued_turns",
+		"ai_subagent_publication_operations",
+		"ai_thread_create_operations",
+		"ai_thread_delete_operations",
+		"ai_thread_fork_operations",
+		"ai_turn_admission_receipts":
+		return true
+	default:
+		return false
+	}
 }
 
 func RefreshThreadstoreQueries(existing ThreadstoreBoundaryManifest, scanned []ThreadstoreQueryContract) ThreadstoreBoundaryManifest {
@@ -635,15 +621,11 @@ func RefreshThreadstoreUsageContracts(manifest ThreadstoreBoundaryManifest) Thre
 			}
 		}
 	}
-	canonicalReceiptIndexes := map[string]struct{}{
-		"idx_ai_turn_admission_receipts_turn": {}, "idx_ai_turn_admission_receipts_run": {}, "idx_ai_turn_admission_receipts_entry": {},
-	}
 	for index := range manifest.Tables {
 		table := &manifest.Tables[index]
 		table.IndexUses = nil
 		for _, name := range table.Indexes {
-			_, canonicalIntegrity := canonicalReceiptIndexes[name]
-			integrityOnly := strings.HasPrefix(name, "sqlite_autoindex_") || canonicalIntegrity
+			integrityOnly := strings.HasPrefix(name, "sqlite_autoindex_")
 			use := ThreadstoreIndexUse{Name: name, IntegrityOnly: integrityOnly}
 			if integrityOnly {
 				use.Purpose = "enforce reviewed uniqueness or canonical identity integrity; not a query authorization surface"
@@ -675,11 +657,9 @@ func reviewedDynamicThreadstoreQuery(query ThreadstoreQueryContract) string {
 	// This is an explicit closed set. A new or semantically changed expression
 	// receives a different ID and remains unreviewed until added here.
 	reviews := map[string]string{
-		"threadstore.000dfebd0b139cd3": "reviewed ai_queued_turns keyset page; optional predicate is assembled from validated cursor fields",
 		"threadstore.056535db2815e7bf": "reviewed shared sqliteutil pragma execution; threadstore supplies only the three package-constant PRAGMA statements in threadstoreSchemaSpec",
 		"threadstore.06a04faca957c1fb": "reviewed fixed-table ai_uploads UPDATE; dynamic fragment is a validated placeholder list only",
 		"threadstore.06b73535a1ce4063": "reviewed ai_thread_settings keyset page; optional predicate is assembled from a validated opaque cursor",
-		"threadstore.0c4e9c2b1ac935a4": "reviewed fixed-table ai_queued_turns aggregate; dynamic fragment is a validated placeholder list only",
 		"threadstore.18f0a98e6b38e014": "reviewed ai_thread_settings exact read; format argument is the package-constant reviewed column projection",
 		"threadstore.392dee5f83c0ae32": "reviewed shared schema introspection; identifier is strictly quoted and supplied by the sqliteutil schema verifier",
 		"threadstore.1b83da901a7b729b": "reviewed fixed-table ai_uploads UPDATE; dynamic fragment is a validated placeholder list only",
@@ -688,46 +668,22 @@ func reviewedDynamicThreadstoreQuery(query ThreadstoreQueryContract) string {
 		"threadstore.45a9d0bdcc330c5e": "reviewed schema introspection; identifier is quoted and originates from the exact sqlite_master snapshot",
 		"threadstore.52da3b758570149e": "reviewed fixed-table ai_uploads DELETE; dynamic fragment is a validated placeholder list only",
 		"threadstore.57423acdd6f3d3f2": "reviewed SQLite maintenance PRAGMA; formatted value is a bounded integer page count",
-		"threadstore.58b4381ca4d2a087": "reviewed fixed-table ai_queued_turns aggregate; dynamic fragment is a validated placeholder list only",
-		"threadstore.7010b2ad8d7d5d7b": "reviewed ai_thread_delete_operations transition; SQL is selected from a closed package-local step enum",
 		"threadstore.877e975b3157627c": "reviewed fixed-table ai_upload_refs DELETE; dynamic fragment is a validated placeholder list only",
 		"threadstore.96cb5db51dc05223": "reviewed ai_thread_settings exact read; format argument is the package-constant reviewed column projection",
 		"threadstore.99f119b8babb76ed": "reviewed ai_thread_settings exact read; format argument is the package-constant reviewed column projection",
 		"threadstore.a42231375ad5054c": "reviewed shared SQLite user_version write; formatted value is the validated contiguous schema version",
 		"threadstore.b031cb59feb33348": "reviewed schema introspection; identifier is quoted and originates from the exact sqlite_master snapshot",
 		"threadstore.b29d6564f354d819": "reviewed schema introspection; identifier is quoted and originates from the exact sqlite_master snapshot",
-		"threadstore.b80eadbbf3f88022": "reviewed ai_subagent_publication_operations recovery page; optional scope predicate only narrows endpoint and parent",
-		"threadstore.bc18286bdc27141c": "reviewed ai_thread_fork_operations recovery list; dynamic WHERE is selected from a closed boolean branch",
 		"threadstore.d0f67f8765bb2a81": "reviewed ai_uploads cleanup transition; UPDATE text is selected from a closed product-state branch",
 		"threadstore.d8b5ab2c0ba41c63": "reviewed ai_uploads/ai_upload_refs cleanup query; optional clauses only narrow product resource eligibility",
-		"threadstore.d91a6280ef979cab": "reviewed ai_thread_fork_operations broadcast CAS; dynamic column is restricted to the two broadcast timestamp fields",
 		"threadstore.df3ccbde3304ed95": "reviewed ai_thread_settings exact read; format argument is the package-constant reviewed column projection",
-		"threadstore.e5420d060c493eae": "reviewed ai_queued_turns lane page; optional LIMIT is the only dynamic fragment",
-		"threadstore.f8f96c8d4b0302fa": "reviewed ai_queued_turns thread aggregate; optional keyset predicate uses validated endpoint/thread cursor fields",
 		"threadstore.fa59a5e9f6bba496": "reviewed product cleanup transaction; SQL is selected from a closed package-local table deletion list",
 		"threadstore.2c98775a07b4d6a1": "reviewed ai_thread_settings recovery page; optional predicate uses exact endpoint/thread keyset fields",
 	}
 	return reviews[query.ID]
 }
 
-type reviewedThreadstoreQueryUse struct {
-	action       string
-	consumerKind string
-}
-
-var reviewedAdmissionReceiptQueryUses = map[string]reviewedThreadstoreQueryUse{
-	"threadstore.0ea12aa5ec35d13c": {action: "read", consumerKind: "startup_recovery"},
-	"threadstore.1da1430999a994c7": {action: "schema", consumerKind: "schema_maintenance"},
-	"threadstore.8359c775e6198c95": {action: "update", consumerKind: "admission_coordination"},
-	"threadstore.8cae1aa6be4ba0b6": {action: "delete", consumerKind: "admission_coordination"},
-	"threadstore.c67e71a1cac5ea18": {action: "read", consumerKind: "admission_coordination"},
-	"threadstore.dc493aa9f3b1022c": {action: "insert", consumerKind: "admission_coordination"},
-}
-
 func reviewedThreadstoreConsumerKind(query ThreadstoreQueryContract) string {
-	if use, ok := reviewedAdmissionReceiptQueryUses[query.ID]; ok {
-		return use.consumerKind
-	}
 	if query.Action == "schema" || strings.Contains(query.Path, "/sqliteutil/") {
 		return "schema_maintenance"
 	}
@@ -736,7 +692,7 @@ func reviewedThreadstoreConsumerKind(query ThreadstoreQueryContract) string {
 
 func isReviewedThreadstoreConsumerKind(kind string) bool {
 	switch kind {
-	case "admission_coordination", "product_operation", "schema_maintenance", "startup_recovery":
+	case "product_operation", "schema_maintenance", "startup_recovery":
 		return true
 	default:
 		return false
@@ -754,21 +710,14 @@ func applyReviewedDynamicInventory(query *ThreadstoreQueryContract) {
 		write  []string
 	}
 	inventories := map[string]inventory{
-		"threadstore.000dfebd0b139cd3": {[]string{"ai_queued_turns"}, []string{"endpoint_id", "lane", "queue_id", "sort_index", "thread_id"}, []string{"admission_state", "attachments_json", "channel_id", "context_action_json", "created_at_unix_ms", "created_by_user_email", "created_by_user_public_id", "endpoint_id", "lane", "model_id", "options_json", "queue_id", "run_id", "session_meta_json", "sort_index", "text_content", "thread_id", "turn_id", "updated_at_unix_ms"}, nil},
-		"threadstore.06b73535a1ce4063": {[]string{"ai_thread_settings"}, []string{"pinned_at_unix_ms", "settings_created_at_unix_ms", "thread_id"}, []string{"created_by_user_email", "created_by_user_public_id", "endpoint_id", "model_id", "namespace_public_id", "permission_type", "pinned_at_unix_ms", "queue_revision", "reasoning_selection_json", "settings_created_at_unix_ms", "settings_updated_at_unix_ms", "thread_id", "updated_by_user_email", "updated_by_user_public_id", "working_dir"}, nil},
-		"threadstore.2c98775a07b4d6a1": {[]string{"ai_thread_settings"}, []string{"endpoint_id", "thread_id"}, []string{"created_by_user_email", "created_by_user_public_id", "endpoint_id", "model_id", "namespace_public_id", "permission_type", "pinned_at_unix_ms", "queue_revision", "reasoning_selection_json", "settings_created_at_unix_ms", "settings_updated_at_unix_ms", "thread_id", "updated_by_user_email", "updated_by_user_public_id", "working_dir"}, nil},
-		"threadstore.7010b2ad8d7d5d7b": {[]string{"ai_thread_delete_operations"}, []string{"operation_id", "status"}, []string{"operation_id", "status"}, []string{"error_code", "error_message", "files_cleaned_at_unix_ms", "floret_deleted_at_unix_ms", "read_state_deleted_at_unix_ms", "updated_at_unix_ms"}},
-		"threadstore.bc18286bdc27141c": {[]string{"ai_thread_fork_operations"}, []string{"destination_broadcasted_at_unix_ms", "source_broadcasted_at_unix_ms", "stage"}, []string{"destination_broadcasted_at_unix_ms", "source_broadcasted_at_unix_ms", "stage"}, nil},
-		"threadstore.b80eadbbf3f88022": {[]string{"ai_subagent_publication_operations"}, []string{"endpoint_id", "parent_thread_id", "state"}, []string{"child_run_id", "child_snapshot_id", "child_thread_id", "committed_at_unix_ms", "created_at_unix_ms", "endpoint_id", "failed_at_unix_ms", "model_id", "parent_run_id", "parent_snapshot_id", "parent_thread_id", "parent_turn_id", "publication_id", "reasoning_selection_json", "request_hash", "request_json", "session_meta_json", "spawn_tool_call_id", "state"}, nil},
+		"threadstore.06b73535a1ce4063": {[]string{"ai_thread_settings"}, []string{"pinned_at_unix_ms", "settings_created_at_unix_ms", "thread_id"}, []string{"created_by_user_email", "created_by_user_public_id", "endpoint_id", "model_id", "namespace_public_id", "parent_thread_id", "permission_type", "pinned_at_unix_ms", "reasoning_selection_json", "settings_created_at_unix_ms", "settings_updated_at_unix_ms", "thread_id", "updated_by_user_email", "updated_by_user_public_id", "working_dir"}, nil},
+		"threadstore.2c98775a07b4d6a1": {[]string{"ai_thread_settings"}, []string{"endpoint_id", "thread_id"}, []string{"created_by_user_email", "created_by_user_public_id", "endpoint_id", "model_id", "namespace_public_id", "parent_thread_id", "permission_type", "pinned_at_unix_ms", "reasoning_selection_json", "settings_created_at_unix_ms", "settings_updated_at_unix_ms", "thread_id", "updated_by_user_email", "updated_by_user_public_id", "working_dir"}, nil},
 		"threadstore.d0f67f8765bb2a81": {[]string{"ai_uploads"}, []string{"endpoint_id", "upload_id"}, []string{"endpoint_id", "upload_id"}, []string{"delete_after_unix_ms", "state"}},
 		"threadstore.d8b5ab2c0ba41c63": {[]string{"ai_upload_refs", "ai_uploads"}, []string{"endpoint_id", "upload_id"}, []string{"endpoint_id", "upload_id"}, nil},
-		"threadstore.d91a6280ef979cab": {[]string{"ai_thread_fork_operations"}, []string{"destination_broadcasted_at_unix_ms", "operation_id", "source_broadcasted_at_unix_ms", "stage"}, []string{"destination_broadcasted_at_unix_ms", "operation_id", "source_broadcasted_at_unix_ms", "stage"}, []string{"destination_broadcasted_at_unix_ms", "source_broadcasted_at_unix_ms", "updated_at_unix_ms"}},
-		"threadstore.e5420d060c493eae": {[]string{"ai_queued_turns"}, []string{"endpoint_id", "lane", "thread_id"}, []string{"admission_state", "attachments_json", "channel_id", "context_action_json", "created_at_unix_ms", "created_by_user_email", "created_by_user_public_id", "endpoint_id", "lane", "model_id", "options_json", "queue_id", "run_id", "session_meta_json", "sort_index", "text_content", "thread_id", "turn_id", "updated_at_unix_ms"}, nil},
-		"threadstore.f8f96c8d4b0302fa": {[]string{"ai_queued_turns"}, []string{"endpoint_id", "lane", "thread_id"}, []string{"endpoint_id", "lane", "thread_id"}, nil},
 		"threadstore.fa59a5e9f6bba496": {
-			[]string{"ai_child_permission_snapshots", "ai_flower_thread_routing", "ai_permission_snapshots", "ai_queued_turns", "ai_subagent_publication_operations", "ai_upload_staging_scopes"},
-			[]string{"child_thread_id", "endpoint_id", "owner_thread_id", "parent_thread_id", "target_id", "thread_id"},
-			[]string{"child_thread_id", "endpoint_id", "owner_thread_id", "parent_thread_id", "target_id", "thread_id"},
+			[]string{"ai_flower_thread_routing", "ai_pending_input_imports", "ai_upload_staging_scopes"},
+			[]string{"endpoint_id", "target_id", "thread_id"},
+			[]string{"endpoint_id", "target_id", "thread_id"},
 			nil,
 		},
 	}

@@ -441,7 +441,19 @@ describe('FlowerSurface navigation', () => {
     let acceptedTurnID = '';
     const launchTurn = vi.fn(async (input: FlowerTurnLaunchInput) => {
       acceptedTurnID = 'turn-accepted-without-messages';
-      return launchReceipt(acceptedThread.thread_id, acceptedTurnID, 'start', input.client_request_id);
+      const receipt = launchReceipt(acceptedThread.thread_id, acceptedTurnID, 'start', input.client_request_id);
+      return {
+        ...receipt,
+        current: {
+          ...receipt.current,
+          items: [{
+            id: `user:${input.client_request_id}`,
+            turn_id: acceptedTurnID,
+            kind: 'user' as const,
+            text: input.prompt,
+          }],
+        },
+      };
     });
     const loadThread = vi.fn(async () => liveBootstrap(thread({
       ...acceptedThread,
@@ -472,12 +484,11 @@ describe('FlowerSurface navigation', () => {
     (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
 
     await waitFor(() => launchTurn.mock.calls.length > 0);
-    await waitFor(() => loadThread.mock.calls.length > 0);
     await waitFor(() => runtime.textContent?.includes('follow the accepted thread') ?? false);
     expect(runtime.textContent).toContain('follow the accepted thread');
     expect(runtime.querySelector('[data-flower-message-role="user"][data-flower-message-status="complete"]')).toBeTruthy();
     expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();
-    expect(loadThread).toHaveBeenCalledWith('thread-accepted-without-messages');
+    expect(loadThread).not.toHaveBeenCalled();
   });
 
   it('renders run and message errors as structured error cards', async () => {
@@ -531,6 +542,9 @@ describe('FlowerSurface navigation', () => {
       ...adapter(true),
       listThreads,
       loadThread: vi.fn(async () => liveBootstrap(visibleThread)),
+      connectLiveStream: async function* ({ signal }) {
+        await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
+      },
     });
 
     await waitFor(() => runtime.textContent?.includes('Flower waiting input request is incomplete.') ?? false);

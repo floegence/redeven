@@ -6,11 +6,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/floegence/redeven/internal/config"
+	flruntime "github.com/floegence/floret/v4/runtime"
 )
 
 const FlowerLiveSchemaVersion int64 = 1
-const flowerLiveFallbackStreamGeneration int64 = 1
 
 type FlowerThreadReadSnapshot struct {
 	ActivityRevision    int64  `json:"activity_revision"`
@@ -32,29 +31,6 @@ type FlowerThreadReadView struct {
 	ReadState FlowerThreadReadRecord   `json:"read_state"`
 }
 
-type FlowerLiveKind string
-
-const (
-	FlowerLiveRunStarted               FlowerLiveKind = "run.started"
-	FlowerLiveRunStatusChanged         FlowerLiveKind = "run.status_changed"
-	FlowerLiveThreadPatched            FlowerLiveKind = "thread.patched"
-	FlowerLiveMessageStarted           FlowerLiveKind = "message.started"
-	FlowerLiveMessageBlockStart        FlowerLiveKind = "message.block_started"
-	FlowerLiveMessageBlockDelta        FlowerLiveKind = "message.block_delta"
-	FlowerLiveMessageBlockSet          FlowerLiveKind = "message.block_set"
-	FlowerLiveMessageFailed            FlowerLiveKind = "message.failed"
-	FlowerLiveApprovalRequested        FlowerLiveKind = "approval.requested"
-	FlowerLiveApprovalResolved         FlowerLiveKind = "approval.resolved"
-	FlowerLiveApprovalQueueReplaced    FlowerLiveKind = "approval.queue_replaced"
-	FlowerLiveInputRequested           FlowerLiveKind = "input.requested"
-	FlowerLiveInputResolved            FlowerLiveKind = "input.resolved"
-	FlowerLiveModelIOUpdated           FlowerLiveKind = "model_io.updated"
-	FlowerLiveContextUsageUpdated      FlowerLiveKind = "context.usage.updated"
-	FlowerLiveContextCompactionUpdated FlowerLiveKind = "context.compaction.updated"
-	FlowerLiveTimelineReplaced         FlowerLiveKind = "timeline.replaced"
-	FlowerLiveResyncRequired           FlowerLiveKind = "stream.resync_required"
-)
-
 type FlowerModelIOPhase string
 
 const (
@@ -70,323 +46,6 @@ type FlowerModelIOStatus struct {
 	RunID       string             `json:"run_id,omitempty"`
 	StepIndex   int                `json:"step_index,omitempty"`
 	UpdatedAtMs int64              `json:"updated_at_ms"`
-}
-
-type FlowerLiveEvent struct {
-	SchemaVersion int64           `json:"schema_version"`
-	Seq           int64           `json:"seq"`
-	EndpointID    string          `json:"endpoint_id"`
-	ThreadID      string          `json:"thread_id"`
-	RunID         string          `json:"run_id,omitempty"`
-	TurnID        string          `json:"turn_id,omitempty"`
-	TraceID       string          `json:"trace_id,omitempty"`
-	Step          string          `json:"step,omitempty"`
-	AtUnixMs      int64           `json:"at_unix_ms"`
-	Kind          FlowerLiveKind  `json:"kind"`
-	Payload       json.RawMessage `json:"payload"`
-}
-
-type FlowerLiveRunStartedPayload struct {
-	RunID     string `json:"run_id"`
-	TurnID    string `json:"turn_id,omitempty"`
-	MessageID string `json:"message_id,omitempty"`
-	Status    string `json:"status"`
-	ModelID   string `json:"model_id,omitempty"`
-}
-
-type FlowerLiveRunStatusChangedPayload struct {
-	RunID         string                  `json:"run_id"`
-	Status        string                  `json:"status"`
-	ErrorCode     string                  `json:"error_code,omitempty"`
-	Error         string                  `json:"error,omitempty"`
-	WaitingPrompt *RequestUserInputPrompt `json:"waiting_prompt,omitempty"`
-}
-
-type FlowerLiveThreadPatch struct {
-	ThreadID               string                        `json:"thread_id,omitempty"`
-	Title                  string                        `json:"title,omitempty"`
-	TitleStatus            string                        `json:"title_status,omitempty"`
-	ModelID                string                        `json:"model_id,omitempty"`
-	PermissionType         string                        `json:"permission_type,omitempty"`
-	WorkingDir             string                        `json:"working_dir,omitempty"`
-	QueuedTurnCount        *int                          `json:"queued_turn_count,omitempty"`
-	QueuedTurns            []QueuedTurnView              `json:"queued_turns,omitempty"`
-	QueuedTurnsSet         bool                          `json:"-"`
-	RunStatus              string                        `json:"run_status,omitempty"`
-	RunUpdatedAtUnixMs     int64                         `json:"run_updated_at_unix_ms,omitempty"`
-	RunErrorCode           string                        `json:"run_error_code,omitempty"`
-	RunError               string                        `json:"run_error,omitempty"`
-	WaitingPrompt          *RequestUserInputPrompt       `json:"waiting_prompt,omitempty"`
-	ActiveRunID            string                        `json:"active_run_id,omitempty"`
-	ApprovalPending        *bool                         `json:"approval_pending,omitempty"`
-	ApprovalPendingCount   int                           `json:"approval_pending_count,omitempty"`
-	ApprovalGeneration     int64                         `json:"approval_generation,omitempty"`
-	ApprovalRevision       int64                         `json:"approval_revision,omitempty"`
-	PinnedAtUnixMs         int64                         `json:"pinned_at_unix_ms,omitempty"`
-	CreatedAtUnixMs        int64                         `json:"created_at_unix_ms,omitempty"`
-	UpdatedAtUnixMs        int64                         `json:"updated_at_unix_ms,omitempty"`
-	LastMessageAtUnixMs    int64                         `json:"last_message_at_unix_ms,omitempty"`
-	LastMessagePreview     string                        `json:"last_message_preview,omitempty"`
-	ReasoningSelection     *config.AIReasoningSelection  `json:"reasoning_selection,omitempty"`
-	ReasoningCapability    *config.AIReasoningCapability `json:"reasoning_capability,omitempty"`
-	ReasoningSelectionSet  bool                          `json:"-"`
-	ReasoningCapabilitySet bool                          `json:"-"`
-	ReadStatus             *FlowerThreadReadView         `json:"read_status,omitempty"`
-	Subagents              []FlowerSubagentSummary       `json:"subagents,omitempty"`
-	SubagentsSet           bool                          `json:"-"`
-	TitleSet               bool                          `json:"-"`
-}
-
-func (p FlowerLiveThreadPatch) MarshalJSON() ([]byte, error) {
-	type patchJSON struct {
-		ThreadID             string                        `json:"thread_id,omitempty"`
-		Title                string                        `json:"title,omitempty"`
-		TitleStatus          string                        `json:"title_status,omitempty"`
-		ModelID              string                        `json:"model_id,omitempty"`
-		PermissionType       string                        `json:"permission_type,omitempty"`
-		WorkingDir           string                        `json:"working_dir,omitempty"`
-		QueuedTurnCount      *int                          `json:"queued_turn_count,omitempty"`
-		QueuedTurns          []QueuedTurnView              `json:"queued_turns,omitempty"`
-		RunStatus            string                        `json:"run_status,omitempty"`
-		RunUpdatedAtUnixMs   int64                         `json:"run_updated_at_unix_ms,omitempty"`
-		RunErrorCode         string                        `json:"run_error_code,omitempty"`
-		RunError             string                        `json:"run_error,omitempty"`
-		WaitingPrompt        *RequestUserInputPrompt       `json:"waiting_prompt,omitempty"`
-		ActiveRunID          string                        `json:"active_run_id,omitempty"`
-		ApprovalPending      *bool                         `json:"approval_pending,omitempty"`
-		ApprovalPendingCount int                           `json:"approval_pending_count,omitempty"`
-		ApprovalGeneration   int64                         `json:"approval_generation,omitempty"`
-		ApprovalRevision     int64                         `json:"approval_revision,omitempty"`
-		PinnedAtUnixMs       int64                         `json:"pinned_at_unix_ms,omitempty"`
-		CreatedAtUnixMs      int64                         `json:"created_at_unix_ms,omitempty"`
-		UpdatedAtUnixMs      int64                         `json:"updated_at_unix_ms,omitempty"`
-		LastMessageAtUnixMs  int64                         `json:"last_message_at_unix_ms,omitempty"`
-		LastMessagePreview   string                        `json:"last_message_preview,omitempty"`
-		ReasoningSelection   *config.AIReasoningSelection  `json:"reasoning_selection,omitempty"`
-		ReasoningCapability  *config.AIReasoningCapability `json:"reasoning_capability,omitempty"`
-		ReadStatus           *FlowerThreadReadView         `json:"read_status,omitempty"`
-		Subagents            []FlowerSubagentSummary       `json:"subagents,omitempty"`
-	}
-	out := patchJSON{
-		ThreadID:             p.ThreadID,
-		Title:                p.Title,
-		TitleStatus:          p.TitleStatus,
-		ModelID:              p.ModelID,
-		PermissionType:       p.PermissionType,
-		WorkingDir:           p.WorkingDir,
-		QueuedTurnCount:      p.QueuedTurnCount,
-		QueuedTurns:          cloneQueuedTurnViews(p.QueuedTurns),
-		RunStatus:            p.RunStatus,
-		RunUpdatedAtUnixMs:   p.RunUpdatedAtUnixMs,
-		RunErrorCode:         p.RunErrorCode,
-		RunError:             p.RunError,
-		WaitingPrompt:        p.WaitingPrompt,
-		ActiveRunID:          p.ActiveRunID,
-		ApprovalPending:      p.ApprovalPending,
-		ApprovalPendingCount: p.ApprovalPendingCount,
-		ApprovalGeneration:   p.ApprovalGeneration,
-		ApprovalRevision:     p.ApprovalRevision,
-		PinnedAtUnixMs:       p.PinnedAtUnixMs,
-		CreatedAtUnixMs:      p.CreatedAtUnixMs,
-		UpdatedAtUnixMs:      p.UpdatedAtUnixMs,
-		LastMessageAtUnixMs:  p.LastMessageAtUnixMs,
-		LastMessagePreview:   p.LastMessagePreview,
-		ReasoningSelection:   p.ReasoningSelection,
-		ReasoningCapability:  p.ReasoningCapability,
-		ReadStatus:           p.ReadStatus,
-		Subagents:            cloneFlowerSubagentSummaries(p.Subagents),
-	}
-	needsRecordPatch := (p.ReasoningSelectionSet && p.ReasoningSelection == nil) ||
-		(p.ReasoningCapabilitySet && p.ReasoningCapability == nil) ||
-		p.QueuedTurnsSet ||
-		p.SubagentsSet ||
-		p.TitleSet
-	if !needsRecordPatch {
-		return json.Marshal(out)
-	}
-	data, err := json.Marshal(out)
-	if err != nil {
-		return nil, err
-	}
-	var record map[string]json.RawMessage
-	if err := json.Unmarshal(data, &record); err != nil {
-		return nil, err
-	}
-	if p.ReasoningSelectionSet && p.ReasoningSelection == nil {
-		record["reasoning_selection"] = json.RawMessage("null")
-	}
-	if p.ReasoningCapabilitySet && p.ReasoningCapability == nil {
-		record["reasoning_capability"] = json.RawMessage("null")
-	}
-	if p.QueuedTurnsSet {
-		queuedTurns := cloneQueuedTurnViews(p.QueuedTurns)
-		if queuedTurns == nil {
-			queuedTurns = []QueuedTurnView{}
-		}
-		queuedTurnsData, err := json.Marshal(queuedTurns)
-		if err != nil {
-			return nil, err
-		}
-		record["queued_turns"] = queuedTurnsData
-	}
-	if p.SubagentsSet {
-		subagents := cloneFlowerSubagentSummaries(p.Subagents)
-		if subagents == nil {
-			subagents = []FlowerSubagentSummary{}
-		}
-		subagentsData, err := json.Marshal(subagents)
-		if err != nil {
-			return nil, err
-		}
-		record["subagents"] = subagentsData
-	}
-	if p.TitleSet {
-		titleData, err := json.Marshal(p.Title)
-		if err != nil {
-			return nil, err
-		}
-		record["title"] = titleData
-	}
-	return json.Marshal(record)
-}
-
-func (p *FlowerLiveThreadPatch) UnmarshalJSON(data []byte) error {
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(data, &fields); err != nil {
-		return err
-	}
-	var raw struct {
-		ThreadID             string                  `json:"thread_id,omitempty"`
-		Title                string                  `json:"title,omitempty"`
-		TitleStatus          string                  `json:"title_status,omitempty"`
-		ModelID              string                  `json:"model_id,omitempty"`
-		PermissionType       string                  `json:"permission_type,omitempty"`
-		WorkingDir           string                  `json:"working_dir,omitempty"`
-		QueuedTurnCount      *int                    `json:"queued_turn_count,omitempty"`
-		QueuedTurns          []QueuedTurnView        `json:"queued_turns,omitempty"`
-		RunStatus            string                  `json:"run_status,omitempty"`
-		RunUpdatedAtUnixMs   int64                   `json:"run_updated_at_unix_ms,omitempty"`
-		RunErrorCode         string                  `json:"run_error_code,omitempty"`
-		RunError             string                  `json:"run_error,omitempty"`
-		WaitingPrompt        *RequestUserInputPrompt `json:"waiting_prompt,omitempty"`
-		ActiveRunID          string                  `json:"active_run_id,omitempty"`
-		ApprovalPending      *bool                   `json:"approval_pending,omitempty"`
-		ApprovalPendingCount int                     `json:"approval_pending_count,omitempty"`
-		ApprovalGeneration   int64                   `json:"approval_generation,omitempty"`
-		ApprovalRevision     int64                   `json:"approval_revision,omitempty"`
-		PinnedAtUnixMs       int64                   `json:"pinned_at_unix_ms,omitempty"`
-		CreatedAtUnixMs      int64                   `json:"created_at_unix_ms,omitempty"`
-		UpdatedAtUnixMs      int64                   `json:"updated_at_unix_ms,omitempty"`
-		LastMessageAtUnixMs  int64                   `json:"last_message_at_unix_ms,omitempty"`
-		LastMessagePreview   string                  `json:"last_message_preview,omitempty"`
-		ReasoningSelection   json.RawMessage         `json:"reasoning_selection"`
-		ReasoningCapability  json.RawMessage         `json:"reasoning_capability"`
-		ReadStatus           *FlowerThreadReadView   `json:"read_status,omitempty"`
-		Subagents            []FlowerSubagentSummary `json:"subagents,omitempty"`
-	}
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
-	}
-	*p = FlowerLiveThreadPatch{
-		ThreadID:             raw.ThreadID,
-		Title:                raw.Title,
-		TitleStatus:          raw.TitleStatus,
-		ModelID:              raw.ModelID,
-		PermissionType:       raw.PermissionType,
-		WorkingDir:           raw.WorkingDir,
-		QueuedTurnCount:      raw.QueuedTurnCount,
-		QueuedTurns:          cloneQueuedTurnViews(raw.QueuedTurns),
-		RunStatus:            raw.RunStatus,
-		RunUpdatedAtUnixMs:   raw.RunUpdatedAtUnixMs,
-		RunErrorCode:         raw.RunErrorCode,
-		RunError:             raw.RunError,
-		WaitingPrompt:        raw.WaitingPrompt,
-		ActiveRunID:          raw.ActiveRunID,
-		ApprovalPending:      raw.ApprovalPending,
-		ApprovalPendingCount: raw.ApprovalPendingCount,
-		ApprovalGeneration:   raw.ApprovalGeneration,
-		ApprovalRevision:     raw.ApprovalRevision,
-		PinnedAtUnixMs:       raw.PinnedAtUnixMs,
-		CreatedAtUnixMs:      raw.CreatedAtUnixMs,
-		UpdatedAtUnixMs:      raw.UpdatedAtUnixMs,
-		LastMessageAtUnixMs:  raw.LastMessageAtUnixMs,
-		LastMessagePreview:   raw.LastMessagePreview,
-		ReadStatus:           raw.ReadStatus,
-		Subagents:            cloneFlowerSubagentSummaries(raw.Subagents),
-	}
-	if _, ok := fields["queued_turns"]; ok {
-		p.QueuedTurnsSet = true
-		if p.QueuedTurns == nil {
-			p.QueuedTurns = []QueuedTurnView{}
-		}
-	}
-	if _, ok := fields["subagents"]; ok {
-		p.SubagentsSet = true
-		if p.Subagents == nil {
-			p.Subagents = []FlowerSubagentSummary{}
-		}
-	}
-	if _, ok := fields["title"]; ok {
-		p.TitleSet = true
-	}
-	if raw.ReasoningSelection != nil {
-		p.ReasoningSelectionSet = true
-		if string(raw.ReasoningSelection) != "null" {
-			var selection config.AIReasoningSelection
-			if err := json.Unmarshal(raw.ReasoningSelection, &selection); err != nil {
-				return err
-			}
-			selection = config.NormalizeAIReasoningSelection(selection)
-			p.ReasoningSelection = &selection
-		}
-	}
-	if raw.ReasoningCapability != nil {
-		p.ReasoningCapabilitySet = true
-		if string(raw.ReasoningCapability) != "null" {
-			var capability config.AIReasoningCapability
-			if err := json.Unmarshal(raw.ReasoningCapability, &capability); err != nil {
-				return err
-			}
-			capability = capability.Normalize()
-			p.ReasoningCapability = &capability
-		}
-	}
-	return nil
-}
-
-type FlowerLiveThreadPatchedPayload struct {
-	Patch FlowerLiveThreadPatch `json:"patch"`
-}
-
-type FlowerLiveMessageStartedPayload struct {
-	MessageID    string `json:"message_id"`
-	Role         string `json:"role"`
-	Status       string `json:"status"`
-	CreatedAtMs  int64  `json:"created_at_ms"`
-	AttemptEpoch int    `json:"attempt_epoch,omitempty"`
-}
-
-type FlowerLiveMessageBlockStartedPayload struct {
-	MessageID  string `json:"message_id"`
-	BlockIndex int    `json:"block_index"`
-	BlockType  string `json:"block_type"`
-}
-
-type FlowerLiveMessageBlockDeltaPayload struct {
-	MessageID  string `json:"message_id"`
-	BlockIndex int    `json:"block_index"`
-	Delta      string `json:"delta"`
-}
-
-type FlowerLiveMessageBlockSetPayload struct {
-	MessageID  string `json:"message_id"`
-	BlockIndex int    `json:"block_index"`
-	Block      any    `json:"block"`
-}
-
-type FlowerLiveMessageFailedPayload struct {
-	MessageID string `json:"message_id"`
-	Error     string `json:"error"`
 }
 
 type FlowerApprovalState string
@@ -425,40 +84,26 @@ const (
 )
 
 type FlowerApprovalAction struct {
-	ActionID        string                    `json:"action_id"`
-	Origin          FlowerApprovalOrigin      `json:"origin"`
-	RunID           string                    `json:"run_id,omitempty"`
-	TurnID          string                    `json:"turn_id,omitempty"`
-	StepID          string                    `json:"step_id,omitempty"`
-	ToolID          string                    `json:"tool_id,omitempty"`
-	ToolName        string                    `json:"tool_name"`
-	State           FlowerApprovalState       `json:"state"`
-	Status          FlowerApprovalStatus      `json:"status"`
-	Revision        int64                     `json:"revision"`
-	Version         int64                     `json:"version"`
-	SurfaceEpoch    int64                     `json:"surface_epoch,omitempty"`
-	SurfaceRole     FlowerApprovalSurfaceRole `json:"surface_role,omitempty"`
-	Scope           string                    `json:"scope,omitempty"`
-	RequestedAtMs   int64                     `json:"requested_at_unix_ms"`
-	ResolvedAtMs    int64                     `json:"resolved_at_unix_ms,omitempty"`
-	ExpiresAtMs     int64                     `json:"expires_at_unix_ms,omitempty"`
-	CanApprove      bool                      `json:"can_approve"`
-	ExpectedSeq     int64                     `json:"expected_seq,omitempty"`
-	ReadOnlyReason  string                    `json:"read_only_reason,omitempty"`
-	QueueGeneration int64                     `json:"queue_generation"`
-	QueueOrder      int64                     `json:"queue_order"`
-	BatchIndex      int                       `json:"batch_index"`
-	BatchSize       int                       `json:"batch_size"`
-	Summary         FlowerApprovalSummary     `json:"summary"`
-}
-
-type FlowerApprovalQueue struct {
-	Generation      int64  `json:"generation"`
-	Revision        int64  `json:"revision"`
-	CurrentActionID string `json:"current_action_id,omitempty"`
-	CurrentPosition int    `json:"current_position"`
-	Total           int    `json:"total"`
-	UnresolvedCount int    `json:"unresolved_count"`
+	ActionID       string                    `json:"action_id"`
+	Origin         FlowerApprovalOrigin      `json:"origin"`
+	RunID          string                    `json:"run_id,omitempty"`
+	TurnID         string                    `json:"turn_id,omitempty"`
+	StepID         string                    `json:"step_id,omitempty"`
+	ToolID         string                    `json:"tool_id,omitempty"`
+	ToolName       string                    `json:"tool_name"`
+	State          FlowerApprovalState       `json:"state"`
+	Status         FlowerApprovalStatus      `json:"status"`
+	SurfaceRole    FlowerApprovalSurfaceRole `json:"surface_role,omitempty"`
+	Scope          string                    `json:"scope,omitempty"`
+	RequestedAtMs  int64                     `json:"requested_at_unix_ms"`
+	ResolvedAtMs   int64                     `json:"resolved_at_unix_ms,omitempty"`
+	ExpiresAtMs    int64                     `json:"expires_at_unix_ms,omitempty"`
+	CanApprove     bool                      `json:"can_approve"`
+	ReadOnlyReason string                    `json:"read_only_reason,omitempty"`
+	QueueOrder     int64                     `json:"queue_order"`
+	BatchIndex     int                       `json:"batch_index"`
+	BatchSize      int                       `json:"batch_size"`
+	Summary        FlowerApprovalSummary     `json:"summary"`
 }
 
 type FlowerApprovalSummary struct {
@@ -475,37 +120,6 @@ type FlowerSafeTarget struct {
 	Kind  string `json:"kind"`
 	Label string `json:"label"`
 	URI   string `json:"uri,omitempty"`
-}
-
-type FlowerLiveApprovalPayload struct {
-	Action        FlowerApprovalAction `json:"action"`
-	ApprovalQueue *FlowerApprovalQueue `json:"approval_queue,omitempty"`
-}
-
-type FlowerLiveApprovalQueuePayload struct {
-	Actions       []FlowerApprovalAction `json:"actions"`
-	ApprovalQueue FlowerApprovalQueue    `json:"approval_queue"`
-}
-
-type FlowerLiveInputRequestedPayload struct {
-	Request RequestUserInputPrompt `json:"request"`
-}
-
-type FlowerLiveInputResolvedPayload struct {
-	PromptID string `json:"prompt_id"`
-}
-
-type FlowerLiveUsageUpdatedPayload struct {
-	Usage FlowerContextUsage `json:"usage"`
-}
-
-type FlowerLiveContextCompactionUpdatedPayload struct {
-	Compaction         FlowerContextCompaction  `json:"compaction"`
-	TimelineDecoration FlowerTimelineDecoration `json:"timeline_decoration"`
-}
-
-type FlowerLiveModelIOUpdatedPayload struct {
-	Status *FlowerModelIOStatus `json:"status"`
 }
 
 type FlowerContextUsage struct {
@@ -697,167 +311,14 @@ type FlowerMessageReference struct {
 	Truncated   bool   `json:"truncated,omitempty"`
 }
 
-type FlowerLiveTimelineReplacedPayload struct {
-	Messages            []FlowerTimelineMessage     `json:"messages"`
-	StreamGeneration    int64                       `json:"stream_generation"`
-	SnapshotThroughSeq  int64                       `json:"snapshot_through_seq"`
-	ThreadPatch         FlowerLiveThreadPatch       `json:"thread_patch"`
-	LiveState           FlowerLiveMaterializedState `json:"live_state"`
-	ContextUsage        *FlowerContextUsage         `json:"context_usage"`
-	ContextCompactions  []FlowerContextCompaction   `json:"context_compactions"`
-	TimelineDecorations []FlowerTimelineDecoration  `json:"timeline_decorations"`
-}
-
-type FlowerLiveResyncRequiredPayload struct {
-	Reason string `json:"reason"`
-}
-
-type FlowerLiveMessageDraft struct {
-	ThreadID     string            `json:"thread_id"`
-	TurnID       string            `json:"turn_id"`
-	RunID        string            `json:"run_id"`
-	MessageID    string            `json:"message_id"`
-	Role         string            `json:"role"`
-	Status       string            `json:"status"`
-	CreatedAtMs  int64             `json:"created_at_ms"`
-	AttemptEpoch int               `json:"attempt_epoch,omitempty"`
-	Blocks       []FlowerLiveBlock `json:"blocks"`
-}
-
-type FlowerLiveBlock struct {
-	Type    string          `json:"type"`
-	Content string          `json:"content,omitempty"`
-	Block   json.RawMessage `json:"block,omitempty"`
-}
-
-type FlowerLiveRunState struct {
-	RunID         string                  `json:"run_id"`
-	Status        string                  `json:"status"`
-	MessageID     string                  `json:"message_id,omitempty"`
-	WaitingPrompt *RequestUserInputPrompt `json:"waiting_prompt,omitempty"`
-	ErrorCode     string                  `json:"error_code,omitempty"`
-	Error         string                  `json:"error,omitempty"`
-}
-
-type FlowerLiveMaterializedState struct {
-	ThreadPatch         FlowerLiveThreadPatch             `json:"thread_patch"`
-	Messages            map[string]FlowerLiveMessageDraft `json:"-"`
-	Runs                map[string]FlowerLiveRunState     `json:"runs"`
-	ModelIO             *FlowerModelIOStatus              `json:"model_io,omitempty"`
-	ContextUsage        *FlowerContextUsage               `json:"context_usage,omitempty"`
-	ContextCompactions  []FlowerContextCompaction         `json:"context_compactions,omitempty"`
-	TimelineDecorations []FlowerTimelineDecoration        `json:"timeline_decorations,omitempty"`
-	ApprovalActions     map[string]FlowerApprovalAction   `json:"approval_actions"`
-	ApprovalActionsSeen bool                              `json:"-"`
-	ApprovalQueue       *FlowerApprovalQueue              `json:"approval_queue,omitempty"`
-	InputRequests       map[string]RequestUserInputPrompt `json:"input_requests"`
-}
-
-func (s FlowerLiveMaterializedState) MarshalJSON() ([]byte, error) {
-	type flowerLiveMaterializedStateJSON struct {
-		ThreadPatch         FlowerLiveThreadPatch             `json:"thread_patch"`
-		Runs                map[string]FlowerLiveRunState     `json:"runs"`
-		ModelIO             *FlowerModelIOStatus              `json:"model_io,omitempty"`
-		ContextUsage        *FlowerContextUsage               `json:"context_usage,omitempty"`
-		ContextCompactions  []FlowerContextCompaction         `json:"context_compactions,omitempty"`
-		TimelineDecorations []FlowerTimelineDecoration        `json:"timeline_decorations,omitempty"`
-		ApprovalActions     *map[string]FlowerApprovalAction  `json:"approval_actions,omitempty"`
-		ApprovalQueue       *FlowerApprovalQueue              `json:"approval_queue,omitempty"`
-		InputRequests       map[string]RequestUserInputPrompt `json:"input_requests"`
-	}
-	var approvals *map[string]FlowerApprovalAction
-	if s.ApprovalActionsSeen {
-		actions := s.ApprovalActions
-		if actions == nil {
-			actions = map[string]FlowerApprovalAction{}
-		}
-		approvals = &actions
-	}
-	return json.Marshal(flowerLiveMaterializedStateJSON{
-		ThreadPatch:         s.ThreadPatch,
-		Runs:                s.Runs,
-		ModelIO:             s.ModelIO,
-		ContextUsage:        s.ContextUsage,
-		ContextCompactions:  s.ContextCompactions,
-		TimelineDecorations: s.TimelineDecorations,
-		ApprovalActions:     approvals,
-		ApprovalQueue:       cloneFlowerApprovalQueue(s.ApprovalQueue),
-		InputRequests:       s.InputRequests,
-	})
-}
-
-func (s *FlowerLiveMaterializedState) UnmarshalJSON(data []byte) error {
-	type flowerLiveMaterializedStateJSON struct {
-		ThreadPatch         FlowerLiveThreadPatch             `json:"thread_patch"`
-		Runs                map[string]FlowerLiveRunState     `json:"runs"`
-		ModelIO             *FlowerModelIOStatus              `json:"model_io,omitempty"`
-		ContextUsage        *FlowerContextUsage               `json:"context_usage,omitempty"`
-		ContextCompactions  []FlowerContextCompaction         `json:"context_compactions,omitempty"`
-		TimelineDecorations []FlowerTimelineDecoration        `json:"timeline_decorations,omitempty"`
-		ApprovalActions     *map[string]FlowerApprovalAction  `json:"approval_actions,omitempty"`
-		ApprovalQueue       *FlowerApprovalQueue              `json:"approval_queue,omitempty"`
-		InputRequests       map[string]RequestUserInputPrompt `json:"input_requests"`
-	}
-	var raw flowerLiveMaterializedStateJSON
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
-	}
-	s.ThreadPatch = raw.ThreadPatch
-	s.Runs = raw.Runs
-	s.ModelIO = raw.ModelIO
-	s.ContextUsage = raw.ContextUsage
-	s.ContextCompactions = raw.ContextCompactions
-	s.TimelineDecorations = raw.TimelineDecorations
-	s.ApprovalActionsSeen = raw.ApprovalActions != nil
-	s.ApprovalQueue = cloneFlowerApprovalQueue(raw.ApprovalQueue)
-	if raw.ApprovalActions != nil {
-		s.ApprovalActions = *raw.ApprovalActions
-	} else {
-		s.ApprovalActions = nil
-	}
-	s.InputRequests = raw.InputRequests
-	return nil
-}
-
-type FlowerLiveBootstrapResponse struct {
-	SchemaVersion    int64                       `json:"schema_version"`
-	EndpointID       string                      `json:"endpoint_id"`
-	ThreadID         string                      `json:"thread_id"`
-	StreamGeneration int64                       `json:"stream_generation"`
-	Cursor           int64                       `json:"cursor"`
-	RetainedFromSeq  int64                       `json:"retained_from_seq"`
-	Thread           ThreadView                  `json:"thread"`
-	TimelineMessages []FlowerTimelineMessage     `json:"timeline_messages"`
-	LiveState        FlowerLiveMaterializedState `json:"live_state"`
-	ReadStatus       FlowerThreadReadView        `json:"read_status"`
-	GeneratedAtMs    int64                       `json:"generated_at_unix_ms"`
-}
-
-type FlowerLiveEventsResponse struct {
-	StreamGeneration int64             `json:"stream_generation"`
-	Events           []FlowerLiveEvent `json:"events"`
-	NextCursor       int64             `json:"next_cursor"`
-	HasMore          bool              `json:"has_more,omitempty"`
-	RetainedFromSeq  int64             `json:"retained_from_seq"`
-}
-
 type SubmitFlowerApprovalRequest struct {
-	ThreadID        string               `json:"thread_id"`
-	Origin          FlowerApprovalOrigin `json:"origin"`
-	RunID           string               `json:"run_id"`
-	ActionID        string               `json:"action_id"`
-	ToolID          string               `json:"tool_id"`
-	Approved        bool                 `json:"approved"`
-	ExpectedSeq     int64                `json:"expected_seq"`
-	Revision        int64                `json:"revision"`
-	Version         int64                `json:"version,omitempty"`
-	SurfaceEpoch    int64                `json:"surface_epoch,omitempty"`
-	QueueGeneration int64                `json:"queue_generation"`
-	QueueRevision   int64                `json:"queue_revision"`
-	IdempotencyKey  string               `json:"idempotency_key,omitempty"`
+	ThreadID      string `json:"thread_id"`
+	InteractionID string `json:"interaction_id"`
+	Approved      bool   `json:"approved"`
+	RejectAll     bool   `json:"reject_all,omitempty"`
 }
 
 type SubmitFlowerApprovalResponse struct {
-	OK            bool  `json:"ok"`
-	CurrentCursor int64 `json:"current_cursor"`
+	OK      bool                 `json:"ok"`
+	Current flruntime.ThreadView `json:"current"`
 }

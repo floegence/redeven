@@ -5,86 +5,21 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 	"strings"
 
-	flruntime "github.com/floegence/floret/v3/runtime"
+	"github.com/floegence/floret/v4/identity"
+	flruntime "github.com/floegence/floret/v4/runtime"
 )
 
+// threadTimelineMessage is an HTTP pagination envelope over the typed current
+// view. RowID is response-local ordering, not a durable lifecycle cursor.
 type threadTimelineMessage struct {
-	RowID            int64
-	MessageID        string
-	CreatedAt        int64
-	CanonicalTurn    string
-	CanonicalRun     string
-	LogicalRequestID string
-	TurnOrdinal      int64
-	TurnStatus       flruntime.TurnStatus
-	MessageJSON      json.RawMessage
-	Decoration       *FlowerTimelineDecoration
-}
-
-func (s *Service) listThreadTimelineMessages(ctx context.Context, endpointID string, threadID string, limit int, beforeRowID int64) ([]threadTimelineMessage, int64, bool, error) {
-	items, err := s.loadThreadTimelineMessages(ctx, endpointID, threadID)
-	if err != nil {
-		return nil, 0, false, err
-	}
-	messages := timelineMessageItems(items)
-	limit = normalizeTimelineLimit(limit)
-	end := len(messages)
-	if beforeRowID > 0 {
-		found := false
-		for index, item := range messages {
-			if item.RowID == beforeRowID {
-				end = index
-				found = true
-				break
-			}
-		}
-		if !found {
-			return nil, 0, false, canonicalTimelineResyncErrorf("before cursor %d is not present in the canonical timeline", beforeRowID)
-		}
-	}
-	start := max(0, end-limit)
-	page := append([]threadTimelineMessage(nil), messages[start:end]...)
-	out := timelinePageWithRelatedDecorations(items, page)
-	if start == 0 || len(page) == 0 {
-		return out, 0, false, nil
-	}
-	return out, page[0].RowID, true, nil
-}
-
-func (s *Service) listThreadTimelineMessagesAfter(ctx context.Context, endpointID string, threadID string, limit int, afterRowID int64, tail bool) ([]threadTimelineMessage, int64, bool, error) {
-	items, err := s.loadThreadTimelineMessages(ctx, endpointID, threadID)
-	if err != nil {
-		return nil, 0, false, err
-	}
-	messages := timelineMessageItems(items)
-	limit = normalizeTimelineLimit(limit)
-	start := 0
-	if tail {
-		start = max(0, len(messages)-limit)
-	} else if afterRowID > 0 {
-		found := false
-		for index, item := range messages {
-			if item.RowID == afterRowID {
-				start = index + 1
-				found = true
-				break
-			}
-		}
-		if !found {
-			return nil, 0, false, canonicalTimelineResyncErrorf("after cursor %d is not present in the canonical timeline", afterRowID)
-		}
-	}
-	end := min(len(messages), start+limit)
-	page := append([]threadTimelineMessage(nil), messages[start:end]...)
-	out := timelinePageWithRelatedDecorations(items, page)
-	next := afterRowID
-	if len(page) > 0 {
-		next = page[len(page)-1].RowID
-	}
-	return out, next, end < len(messages), nil
+	RowID       int64
+	MessageID   string
+	MessageJSON json.RawMessage
+	Decoration  *FlowerTimelineDecoration
 }
 
 func normalizeTimelineLimit(limit int) int {
@@ -94,273 +29,139 @@ func normalizeTimelineLimit(limit int) int {
 	return min(limit, 500)
 }
 
-func timelineMessageItems(items []threadTimelineMessage) []threadTimelineMessage {
-	out := make([]threadTimelineMessage, 0, len(items))
-	for _, item := range items {
-		if item.Decoration == nil {
-			out = append(out, item)
-		}
+func (service *Service) typedTimelineMessages(ctx context.Context, endpointID, threadID string) ([]threadTimelineMessage, error) {
+	if service == nil || service.threadRuntime == nil || service.threadsDB == nil {
+		return nil, errors.New("Flower thread runtime is unavailable")
 	}
-	return out
-}
-
-func timelinePageWithRelatedDecorations(items []threadTimelineMessage, page []threadTimelineMessage) []threadTimelineMessage {
-	if len(page) == 0 {
-		return nil
-	}
-	rows := make(map[int64]struct{}, len(page))
-	messageIDs := make(map[string]struct{}, len(page))
-	for _, item := range page {
-		rows[item.RowID] = struct{}{}
-		messageIDs[strings.TrimSpace(item.MessageID)] = struct{}{}
-	}
-	out := make([]threadTimelineMessage, 0, len(page))
-	for _, item := range items {
-		if item.Decoration == nil {
-			if _, ok := rows[item.RowID]; ok {
-				out = append(out, item)
-			}
-			continue
-		}
-		if _, ok := messageIDs[strings.TrimSpace(item.Decoration.Anchor.MessageID)]; ok {
-			out = append(out, item)
-		}
-	}
-	return out
-}
-
-func (s *Service) loadThreadTimelineMessages(ctx context.Context, endpointID string, threadID string) ([]threadTimelineMessage, error) {
-	if s == nil {
-		return nil, errors.New("nil service")
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
+	endpointID, threadID = strings.TrimSpace(endpointID), strings.TrimSpace(threadID)
 	if endpointID == "" || threadID == "" {
 		return nil, errors.New("invalid request")
 	}
-	host, err := s.openFloretThreadReadHost(ctx, threadID)
+	settings, err := service.threadsDB.GetThreadSettings(ctxOrBackground(ctx), endpointID, threadID)
+	if err != nil || settings == nil {
+		if err == nil {
+			err = flruntime.ErrThreadNotFound
+		}
+		return nil, err
+	}
+	view, err := service.threadRuntime.View(ctxOrBackground(ctx), identity.ThreadID(threadID))
 	if err != nil {
 		return nil, err
 	}
-	turns, err := listAllFloretThreadTurns(ctx, host, threadID)
-	if err != nil {
-		return nil, err
+	items := append([]flruntime.ThreadItem(nil), view.Items...)
+	if len(items) == 0 {
+		history, historyErr := service.threadRuntime.History(ctxOrBackground(ctx), identity.ThreadID(threadID), "", 200)
+		if historyErr != nil {
+			return nil, historyErr
+		}
+		items = history.Items
 	}
-	return s.threadTimelineMessagesFromTurns(endpointID, threadID, turns)
-}
-
-func (s *Service) loadThreadTimelineMessagesFromBootstrap(ctx context.Context, endpointID string, threadID string, host interface {
-	ListThreadTurns(context.Context, flruntime.ThreadTurnsRequest) (flruntime.ThreadTurnsPage, error)
-}, bootstrap flruntime.ThreadBootstrap) ([]threadTimelineMessage, error) {
-	turns, err := listAllFloretThreadTurnsFromPage(ctx, host, threadID, bootstrap.Turns)
-	if err != nil {
-		return nil, err
-	}
-	return s.threadTimelineMessagesFromTurns(endpointID, threadID, turns)
-}
-
-func (s *Service) threadTimelineMessagesFromTurns(endpointID string, threadID string, turns []flruntime.ThreadTurnSnapshot) ([]threadTimelineMessage, error) {
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	if endpointID == "" || threadID == "" {
-		return nil, errors.New("invalid canonical timeline identity")
-	}
-	items := make([]threadTimelineMessage, 0, len(turns)*2)
-	seenTurns := make(map[string]struct{}, len(turns))
-	canonicalUserAnchors := make(map[string]string, len(turns))
-	supersededRetryTurns := make(map[string]struct{}, len(turns))
-	for _, turn := range turns {
-		if turn.RetrySource == nil {
+	out := make([]threadTimelineMessage, 0, len(items)+1)
+	for _, item := range items {
+		raw, ok, itemErr := typedThreadItemMessage(threadID, item)
+		if itemErr != nil {
+			return nil, itemErr
+		}
+		if !ok {
 			continue
 		}
-		sourceTurnID := strings.TrimSpace(string(turn.RetrySource.TurnID))
-		if sourceTurnID != "" {
-			supersededRetryTurns[sourceTurnID] = struct{}{}
-		}
+		out = append(out, threadTimelineMessage{RowID: int64(len(out) + 1), MessageID: item.ID, MessageJSON: raw})
 	}
-	for _, turn := range turns {
-		turnID := strings.TrimSpace(string(turn.TurnID))
-		runID := strings.TrimSpace(string(turn.RunID))
-		userEntryID := strings.TrimSpace(turn.UserEntryID)
-		if turnID == "" || runID == "" || turn.Ordinal <= 0 {
-			return nil, fmt.Errorf("Floret turn %q has incomplete canonical identity", turnID)
+	if draft := strings.TrimSpace(view.AssistantDraft); draft != "" {
+		raw, marshalErr := json.Marshal(map[string]any{
+			"id": "draft:" + view.TurnID.String(), "thread_id": threadID, "turn_id": view.TurnID.String(),
+			"role": "assistant", "status": "streaming", "content": draft,
+			"blocks": []any{persistedMarkdownBlock{Type: "markdown", Content: draft}}, "live": true, "active_cursor": true,
+		})
+		if marshalErr != nil {
+			return nil, marshalErr
 		}
-		if _, duplicate := seenTurns[turnID]; duplicate {
-			return nil, canonicalTimelineResyncErrorf("turn %q is duplicated", turnID)
-		}
-		userRowID := turn.Ordinal * 4
-		if turn.RetrySource != nil {
-			sourceTurnID := strings.TrimSpace(string(turn.RetrySource.TurnID))
-			if sourceTurnID == "" || sourceTurnID == turnID {
-				return nil, canonicalTimelineResyncErrorf("retry turn %q has an invalid source", turnID)
-			}
-			if _, found := seenTurns[sourceTurnID]; !found {
-				return nil, canonicalTimelineResyncErrorf("retry turn %q references unavailable source %q", turnID, sourceTurnID)
-			}
-			if userEntryID != "" || strings.TrimSpace(turn.UserInput) != "" || len(turn.UserAttachments) != 0 || len(turn.UserReferences) != 0 {
-				return nil, canonicalTimelineResyncErrorf("retry turn %q duplicates canonical user input", turnID)
-			}
-			canonicalUserAnchors[turnID] = canonicalUserAnchors[sourceTurnID]
-			if canonicalUserAnchors[turnID] == "" {
-				return nil, canonicalTimelineResyncErrorf("retry turn %q has no canonical user anchor", turnID)
-			}
-		} else {
-			if userEntryID == "" {
-				return nil, canonicalTimelineResyncErrorf("turn %q is missing its canonical user entry", turnID)
-			}
-			userCreatedAt := turn.StartedAt.UnixMilli()
-			userRaw, err := canonicalUserTimelineMessageForThread(threadID, turnID, userEntryID, turn.UserInput, turn.UserAttachments, turn.UserReferences, userCreatedAt)
-			if err != nil {
-				return nil, err
-			}
-			userRaw, err = addTimelineLogicalRequestID(userRaw, string(turn.LogicalRequestID))
-			if err != nil {
-				return nil, err
-			}
-			canonicalUserAnchors[turnID] = userEntryID
-			items = append(items, threadTimelineMessage{
-				RowID: userRowID, MessageID: userEntryID, CreatedAt: userCreatedAt,
-				CanonicalTurn: turnID, CanonicalRun: runID,
-				LogicalRequestID: strings.TrimSpace(string(turn.LogicalRequestID)),
-				TurnOrdinal:      turn.Ordinal, TurnStatus: turn.Status, MessageJSON: userRaw,
-			})
-		}
-		assistant, reason, err := s.floretProjectionMessage(endpointID, threadID, turn)
-		if err != nil {
-			return nil, err
-		}
-		if len(assistant) > 0 {
-			assistant, err = addTimelineLogicalRequestID(assistant, string(turn.LogicalRequestID))
-			if err != nil {
-				return nil, err
-			}
-			items = append(items, threadTimelineMessage{
-				RowID: userRowID + 1, MessageID: turnID, CreatedAt: turn.UpdatedAt.UnixMilli(),
-				CanonicalTurn: turnID, CanonicalRun: runID,
-				LogicalRequestID: strings.TrimSpace(string(turn.LogicalRequestID)),
-				TurnOrdinal:      turn.Ordinal, TurnStatus: turn.Status, MessageJSON: assistant,
-			})
-		} else if reason.Valid() {
-			if _, superseded := supersededRetryTurns[turnID]; superseded {
-				seenTurns[turnID] = struct{}{}
-				continue
-			}
-			decoration, err := projectionUnavailableDecoration(turn, reason, canonicalUserAnchors[turnID])
-			if err != nil {
-				return nil, err
-			}
-			items = append(items, threadTimelineMessage{
-				RowID: userRowID + 1, MessageID: turnID, CreatedAt: turn.UpdatedAt.UnixMilli(),
-				CanonicalTurn: turnID, CanonicalRun: runID,
-				LogicalRequestID: strings.TrimSpace(string(turn.LogicalRequestID)),
-				TurnOrdinal:      turn.Ordinal, TurnStatus: turn.Status, Decoration: &decoration,
-			})
-		}
-		seenTurns[turnID] = struct{}{}
+		out = append(out, threadTimelineMessage{RowID: int64(len(out) + 1), MessageID: "draft:" + view.TurnID.String(), MessageJSON: raw})
 	}
-	return items, nil
+	return out, nil
 }
 
-// addTimelineLogicalRequestID adds the canonical association to the public
-// message envelope without introducing a second identity source.
-func addTimelineLogicalRequestID(raw json.RawMessage, logicalRequestID string) (json.RawMessage, error) {
-	logical := strings.TrimSpace(logicalRequestID)
-	if logical == "" {
-		return raw, nil
+func typedThreadItemMessage(threadID string, item flruntime.ThreadItem) (json.RawMessage, bool, error) {
+	createdAt := item.CreatedAt.UnixMilli()
+	if item.Kind == flruntime.ThreadItemUser {
+		raw, err := canonicalUserTimelineMessageForThread(threadID, item.TurnID.String(), item.ID, item.Text, item.Attachments, item.References, createdAt)
+		return raw, err == nil, err
 	}
-	var fields map[string]any
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		return nil, err
+	if item.Kind != flruntime.ThreadItemAssistant {
+		return nil, false, nil
 	}
-	if fields == nil {
-		return nil, errors.New("canonical timeline message must be an object")
+	text := strings.TrimSpace(item.Text)
+	if text == "" {
+		return nil, false, nil
 	}
-	fields["logical_request_id"] = logical
-	return json.Marshal(fields)
+	raw, err := json.Marshal(map[string]any{
+		"id": item.ID, "thread_id": threadID, "turn_id": item.TurnID.String(), "role": "assistant",
+		"status": "complete", "timestamp": createdAt, "content": text,
+		"blocks": []any{persistedMarkdownBlock{Type: "markdown", Content: text}}, "live": false, "active_cursor": false,
+	})
+	return raw, true, err
 }
 
-func listAllFloretThreadTurns(ctx context.Context, host interface {
-	ListThreadTurns(context.Context, flruntime.ThreadTurnsRequest) (flruntime.ThreadTurnsPage, error)
-}, threadID string) ([]flruntime.ThreadTurnSnapshot, error) {
-	page, err := host.ListThreadTurns(ctx, flruntime.ThreadTurnsRequest{Tail: 200})
+func (service *Service) listThreadTimelineMessages(ctx context.Context, endpointID, threadID string, limit int, beforeRowID int64) ([]threadTimelineMessage, int64, bool, error) {
+	items, err := service.typedTimelineMessages(ctx, endpointID, threadID)
+	if err != nil {
+		return nil, 0, false, err
+	}
+	limit = normalizeTimelineLimit(limit)
+	end := len(items)
+	if beforeRowID > 0 && int(beforeRowID) <= end {
+		end = int(beforeRowID) - 1
+	}
+	start := max(0, end-limit)
+	page := append([]threadTimelineMessage(nil), items[start:end]...)
+	if start == 0 || len(page) == 0 {
+		return page, 0, false, nil
+	}
+	return page, int64(start + 1), true, nil
+}
+
+func (service *Service) listThreadTimelineMessagesAfter(ctx context.Context, endpointID, threadID string, limit int, afterRowID int64, tail bool) ([]threadTimelineMessage, int64, bool, error) {
+	items, err := service.typedTimelineMessages(ctx, endpointID, threadID)
+	if err != nil {
+		return nil, 0, false, err
+	}
+	limit = normalizeTimelineLimit(limit)
+	start := max(0, int(afterRowID))
+	if tail {
+		start = max(0, len(items)-limit)
+	}
+	if start > len(items) {
+		start = len(items)
+	}
+	end := min(len(items), start+limit)
+	page := append([]threadTimelineMessage(nil), items[start:end]...)
+	return page, int64(end), end < len(items), nil
+}
+
+func (service *Service) buildCanonicalFlowerTimelineMessages(ctx context.Context, endpointID, threadID string) ([]FlowerTimelineMessage, error) {
+	items, err := service.typedTimelineMessages(ctx, endpointID, threadID)
 	if err != nil {
 		return nil, err
 	}
-	return listAllFloretThreadTurnsFromPage(ctx, host, threadID, page)
-}
-
-func listAllFloretThreadTurnsFromPage(ctx context.Context, host interface {
-	ListThreadTurns(context.Context, flruntime.ThreadTurnsRequest) (flruntime.ThreadTurnsPage, error)
-}, threadID string, page flruntime.ThreadTurnsPage) ([]flruntime.ThreadTurnSnapshot, error) {
-	newerThroughOrdinal := int64(-1)
-	newerOldestTurnOrdinal := int64(-1)
-	out := make([]flruntime.ThreadTurnSnapshot, 0)
-	var before *flruntime.ThreadTurnCursor
-	for {
-		if strings.TrimSpace(string(page.ThreadID)) != strings.TrimSpace(threadID) {
-			return nil, canonicalTimelineResyncErrorf("turn page thread identity differs from the requested thread")
+	out := make([]FlowerTimelineMessage, 0, len(items))
+	for _, item := range items {
+		message, ok, decodeErr := flowerTimelineMessageFromRaw(threadID, "", "", item.MessageID, item.MessageJSON)
+		if decodeErr != nil {
+			return nil, decodeErr
 		}
-		if page.ThroughOrdinal < 0 {
-			return nil, canonicalTimelineResyncErrorf("turn page through ordinal is negative")
-		}
-		if before != nil && len(page.Turns) == 0 {
-			return nil, canonicalTimelineResyncErrorf("historical turn page is empty after a page reported more turns")
-		}
-		if before != nil && (page.ThroughOrdinal >= newerThroughOrdinal || page.ThroughOrdinal >= newerOldestTurnOrdinal) {
-			return nil, canonicalTimelineResyncErrorf(
-				"historical turn page through ordinal %d does not precede newer page boundary %d and oldest turn %d",
-				page.ThroughOrdinal,
-				newerThroughOrdinal,
-				newerOldestTurnOrdinal,
-			)
-		}
-		for index, turn := range page.Turns {
-			if turn.Ordinal <= 0 || turn.Ordinal > page.ThroughOrdinal {
-				return nil, canonicalTimelineResyncErrorf("turn ordinal %d is outside page boundary %d", turn.Ordinal, page.ThroughOrdinal)
-			}
-			if index > 0 && turn.Ordinal <= page.Turns[index-1].Ordinal {
-				return nil, canonicalTimelineResyncErrorf("turn ordinals are not strictly increasing")
-			}
-		}
-		out = append(append(make([]flruntime.ThreadTurnSnapshot, 0, len(page.Turns)+len(out)), page.Turns...), out...)
-		if !page.HasMore {
-			break
-		}
-		if len(page.Turns) == 0 || page.BeforeCursor == nil || strings.TrimSpace(string(*page.BeforeCursor)) == "" {
-			return nil, errors.New("Floret turn pagination did not advance")
-		}
-		if before != nil && *page.BeforeCursor == *before {
-			return nil, errors.New("Floret turn pagination cursor did not advance")
-		}
-		newerThroughOrdinal = page.ThroughOrdinal
-		newerOldestTurnOrdinal = page.Turns[0].Ordinal
-		before = page.BeforeCursor
-		var err error
-		page, err = host.ListThreadTurns(ctx, flruntime.ThreadTurnsRequest{BeforeCursor: before, Limit: 200})
-		if err != nil {
-			return nil, err
-		}
-	}
-	for index, turn := range out {
-		if index > 0 && turn.Ordinal <= out[index-1].Ordinal {
-			return nil, canonicalTimelineResyncErrorf("turn ordinals are not strictly increasing")
+		if ok {
+			out = append(out, message)
 		}
 	}
 	return out, nil
 }
 
-func canonicalTimelineResyncErrorf(format string, args ...any) error {
-	return fmt.Errorf("%w: %s", ErrCanonicalTimelineResyncRequired, fmt.Sprintf(format, args...))
-}
-
-func canonicalUserTimelineMessage(turnID string, entryID string, input string, attachments []flruntime.MessageAttachment, references []flruntime.MessageReference, createdAt int64) (json.RawMessage, error) {
+func canonicalUserTimelineMessage(turnID, entryID, input string, attachments []flruntime.MessageAttachment, references []flruntime.MessageReference, createdAt int64) (json.RawMessage, error) {
 	return canonicalUserTimelineMessageForThread("", turnID, entryID, input, attachments, references, createdAt)
 }
 
-func canonicalUserTimelineMessageForThread(threadID string, turnID string, entryID string, input string, attachments []flruntime.MessageAttachment, references []flruntime.MessageReference, createdAt int64) (json.RawMessage, error) {
-	threadID = strings.TrimSpace(threadID)
-	turnID = strings.TrimSpace(turnID)
-	entryID = strings.TrimSpace(entryID)
+func canonicalUserTimelineMessageForThread(threadID, turnID, entryID, input string, attachments []flruntime.MessageAttachment, references []flruntime.MessageReference, createdAt int64) (json.RawMessage, error) {
+	threadID, turnID, entryID = strings.TrimSpace(threadID), strings.TrimSpace(turnID), strings.TrimSpace(entryID)
 	if turnID == "" || entryID == "" {
 		return nil, errors.New("canonical user message has incomplete identity")
 	}
@@ -372,17 +173,13 @@ func canonicalUserTimelineMessageForThread(threadID string, turnID string, entry
 		}
 		downloadURL := uploadURLPrefix + uploadID
 		if threadID != "" {
-			values := url.Values{"thread_id": {threadID}, "turn_id": {turnID}}
-			downloadURL += "?" + values.Encode()
+			downloadURL += "?" + url.Values{"thread_id": {threadID}, "turn_id": {turnID}}.Encode()
 		}
 		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(attachment.MIMEType)), "image/") {
 			blocks = append(blocks, persistedImageBlock{Type: "image", Src: downloadURL, Alt: strings.TrimSpace(attachment.Name)})
-			continue
+		} else {
+			blocks = append(blocks, persistedFileBlock{Type: "file", Name: strings.TrimSpace(attachment.Name), Size: attachment.SizeBytes, MimeType: strings.TrimSpace(attachment.MIMEType), URL: downloadURL})
 		}
-		blocks = append(blocks, persistedFileBlock{
-			Type: "file", Name: strings.TrimSpace(attachment.Name), Size: attachment.SizeBytes,
-			MimeType: strings.TrimSpace(attachment.MIMEType), URL: downloadURL,
-		})
 	}
 	if input = strings.TrimSpace(input); input != "" {
 		blocks = append(blocks, persistedMarkdownBlock{Type: "markdown", Content: input})
@@ -395,120 +192,85 @@ func canonicalUserTimelineMessageForThread(threadID string, turnID string, entry
 		return nil, errors.New("canonical user message has no content")
 	}
 	message := map[string]any{
-		"id": entryID, "turn_id": turnID, "role": "user", "status": "complete", "timestamp": createdAt,
-		"blocks": blocks,
+		"id": entryID, "thread_id": threadID, "turn_id": turnID, "role": "user", "status": "complete",
+		"timestamp": createdAt, "content": input, "blocks": blocks, "live": false, "active_cursor": false,
 	}
 	if len(publicReferences) > 0 {
 		message["references"] = publicReferences
 	}
 	raw, err := json.Marshal(message)
-	return json.RawMessage(raw), err
+	return raw, err
 }
 
 type publicFloretMessageReference = FlowerMessageReference
 
 func publicFloretMessageReferences(references []flruntime.MessageReference) ([]publicFloretMessageReference, error) {
-	if len(references) == 0 {
-		return nil, nil
-	}
 	out := make([]publicFloretMessageReference, 0, len(references))
 	for index, reference := range references {
 		if err := reference.Validate(); err != nil {
 			return nil, fmt.Errorf("canonical user reference %d: %w", index, err)
 		}
 		text := reference.Text
-		switch reference.Kind {
-		case flruntime.MessageReferenceFile, flruntime.MessageReferenceDirectory:
+		if reference.Kind == flruntime.MessageReferenceFile || reference.Kind == flruntime.MessageReferenceDirectory {
 			text = ""
 		}
-		out = append(out, publicFloretMessageReference{
-			ReferenceID: reference.ReferenceID,
-			Kind:        string(reference.Kind),
-			Label:       reference.Label,
-			Text:        text,
-			Truncated:   reference.Truncated,
-		})
+		out = append(out, FlowerMessageReference{ReferenceID: reference.ReferenceID, Kind: string(reference.Kind), Label: reference.Label, Text: text, Truncated: reference.Truncated})
 	}
 	return out, nil
 }
 
-func (s *Service) floretProjectionMessage(endpointID string, threadID string, turn flruntime.ThreadTurnSnapshot) (json.RawMessage, FlowerTurnProjectionUnavailableReason, error) {
-	projection := turn.Projection
-	if err := projection.Validate(); err != nil {
-		return nil, "", canonicalTimelineResyncErrorf("turn %q projection is invalid: %v", turn.TurnID, err)
-	}
-	if strings.TrimSpace(string(projection.ThreadID)) != strings.TrimSpace(threadID) ||
-		projection.TurnID != turn.TurnID || projection.RunID != turn.RunID ||
-		projection.ThroughOrdinal != turn.ThroughOrdinal {
-		return nil, "", canonicalTimelineResyncErrorf("turn %q projection identity differs from the turn page", turn.TurnID)
-	}
-	createdAt := turn.StartedAt.UnixMilli()
-	if createdAt <= 0 {
-		createdAt = turn.UpdatedAt.UnixMilli()
-	}
-	projectionRun := &run{
-		id: strings.TrimSpace(string(turn.RunID)), endpointID: strings.TrimSpace(endpointID),
-		threadID: strings.TrimSpace(threadID), turnID: strings.TrimSpace(string(turn.TurnID)), messageID: strings.TrimSpace(string(turn.TurnID)),
-		assistantCreatedAtUnixMs: createdAt,
-	}
-	projectionRun.expectFloretRuntimeEventIdentity(string(turn.RunID), threadID, string(turn.TurnID), true)
-	if err := projectionRun.validateFloretThreadProjection(projection); err != nil {
-		return nil, "", canonicalTimelineResyncErrorf("turn %q projection does not match its canonical identity: %v", turn.TurnID, err)
-	}
-	status, err := snapshotStatusForFloretProjection(projection)
-	if err != nil {
-		return nil, "", canonicalTimelineResyncErrorf("turn %q projection status is invalid: %v", turn.TurnID, err)
-	}
-	blocks, err := projectionRun.flowerBlocksFromFloretThreadProjection(projection)
-	if err != nil {
-		return nil, "", canonicalTimelineResyncErrorf("turn %q projection cannot be mapped: %v", turn.TurnID, err)
-	}
-	if len(blocks) == 0 {
-		// A user cancellation is a normal terminal outcome. There is no
-		// assistant body to render, but that is not a projection failure.
-		if projection.Status == flruntime.TurnStatusRunning || projection.Status == flruntime.TurnStatusCancelled {
-			return nil, "", nil
+func publicFloretThreadView(current flruntime.ThreadView) flruntime.ThreadView {
+	out := current
+	out.Items = append([]flruntime.ThreadItem(nil), current.Items...)
+	for index := range out.Items {
+		out.Items[index].Attachments = publicFloretAttachments(out.Items[index].Attachments)
+		out.Items[index].References = publicRuntimeReferences(out.Items[index].References)
+		if out.Items[index].Interaction != nil {
+			interaction := publicFloretInteraction(*out.Items[index].Interaction)
+			out.Items[index].Interaction = &interaction
 		}
-		return nil, FlowerTurnProjectionUnavailableNotRenderable, nil
 	}
-	projectionRun.assistantBlocks = blocks
-	raw, _, _, err := projectionRun.snapshotAssistantMessageJSONWithStatus(status)
-	if err != nil {
-		return nil, "", err
+	out.Queue = append([]flruntime.QueuedInput(nil), current.Queue...)
+	for index := range out.Queue {
+		out.Queue[index].Input.Attachments = publicFloretAttachments(out.Queue[index].Input.Attachments)
+		out.Queue[index].Input.References = publicRuntimeReferences(out.Queue[index].Input.References)
 	}
-	sanitized, err := SanitizeActivityTimelineMessageJSON(string(raw))
-	return sanitized, "", err
+	out.Interactions = append([]flruntime.ThreadInteraction(nil), current.Interactions...)
+	for index := range out.Interactions {
+		out.Interactions[index] = publicFloretInteraction(out.Interactions[index])
+	}
+	return out
 }
 
-func projectionUnavailableDecoration(turn flruntime.ThreadTurnSnapshot, reason FlowerTurnProjectionUnavailableReason, anchorUserEntryID string) (FlowerTimelineDecoration, error) {
-	turnID := strings.TrimSpace(string(turn.TurnID))
-	runID := strings.TrimSpace(string(turn.RunID))
-	anchorUserEntryID = strings.TrimSpace(anchorUserEntryID)
-	if turnID == "" || runID == "" || anchorUserEntryID == "" || !reason.Valid() {
-		return FlowerTimelineDecoration{}, errors.New("projection unavailable decoration identity is incomplete")
+func publicFloretAttachments(attachments []flruntime.MessageAttachment) []flruntime.MessageAttachment {
+	out := append([]flruntime.MessageAttachment(nil), attachments...)
+	for index := range out {
+		out[index].ResourceRef = ""
 	}
-	decoration := FlowerTimelineDecoration{
-		DecorationID: "turn-projection-unavailable:" + turnID,
-		Kind:         FlowerTimelineDecorationTurnProjectionUnavailable,
-		Anchor:       FlowerTimelineAnchor{TargetKind: "message", MessageID: anchorUserEntryID, Edge: "after"},
-		ProjectionUnavailable: &FlowerTurnProjectionUnavailable{
-			TurnID: turnID, RunID: runID, ExpectedMessageID: turnID, Reason: reason,
-		},
-	}
-	return decoration, decoration.Validate()
+	return out
 }
 
-func snapshotStatusForFloretProjection(projection flruntime.ThreadTurnProjection) (string, error) {
-	switch projection.Status {
-	case flruntime.TurnStatusRunning, flruntime.TurnStatusWaiting:
-		return "streaming", nil
-	case flruntime.TurnStatusCancelled:
-		return "canceled", nil
-	case flruntime.TurnStatusFailed:
-		return "error", nil
-	case flruntime.TurnStatusCompleted:
-		return "complete", nil
-	default:
-		return "", fmt.Errorf("unsupported Floret turn projection status %q", projection.Status)
+func publicRuntimeReferences(references []flruntime.MessageReference) []flruntime.MessageReference {
+	out := append([]flruntime.MessageReference(nil), references...)
+	for index := range out {
+		out[index].ResourceRef = ""
+		if out[index].Kind == flruntime.MessageReferenceFile || out[index].Kind == flruntime.MessageReferenceDirectory {
+			out[index].Text = ""
+		}
 	}
+	return out
+}
+
+func publicFloretInteraction(interaction flruntime.ThreadInteraction) flruntime.ThreadInteraction {
+	if interaction.Resolution == nil {
+		return interaction
+	}
+	resolution := *interaction.Resolution
+	if resolution.Redacted {
+		resolution.Input = nil
+	} else if resolution.Input != nil {
+		resolution.Input = maps.Clone(resolution.Input)
+	}
+	interaction.Resolution = &resolution
+	return interaction
 }

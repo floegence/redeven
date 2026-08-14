@@ -261,36 +261,15 @@ export type FlowerTimelineAnchor = Readonly<{
   edge: FlowerTimelineAnchorEdge;
 }>;
 
-export type FlowerTurnProjectionUnavailableReason = 'not_renderable';
-
-export type FlowerTurnProjectionUnavailable = Readonly<{
-  turn_id: string;
-  run_id: string;
-  expected_message_id: string;
-  reason: FlowerTurnProjectionUnavailableReason;
-}>;
-
 export type FlowerContextCompactionTimelineDecoration = Readonly<{
   decoration_id: string;
   kind: 'context_compaction';
   anchor: FlowerTimelineAnchor;
   ordinal: number;
   compaction: FlowerContextCompaction;
-  projection_unavailable?: never;
 }>;
 
-export type FlowerTurnProjectionUnavailableTimelineDecoration = Readonly<{
-  decoration_id: string;
-  kind: 'turn_projection_unavailable';
-  anchor: FlowerTimelineAnchor;
-  ordinal: number;
-  compaction?: never;
-  projection_unavailable: FlowerTurnProjectionUnavailable;
-}>;
-
-export type FlowerTimelineDecoration =
-  | FlowerContextCompactionTimelineDecoration
-  | FlowerTurnProjectionUnavailableTimelineDecoration;
+export type FlowerTimelineDecoration = FlowerContextCompactionTimelineDecoration;
 
 export type FlowerActivityStatus =
   | 'pending'
@@ -341,6 +320,10 @@ export type FlowerActivityItem = Readonly<{
   target_refs?: readonly FlowerActivityTargetRef[];
   payload?: Readonly<Record<string, unknown>>;
   metadata?: Readonly<Record<string, string>>;
+  effect_retry?: Readonly<{
+    effect_attempt_id: string;
+    tool_call_id: string;
+  }>;
 }>;
 
 export type FlowerActivityFileAction = Readonly<{
@@ -449,12 +432,11 @@ export type FlowerSubmitInputRequest = Readonly<{
   reasoning_selection?: FlowerReasoningSelection;
 }>;
 
-/** Canonical admission proof returned after a waiting prompt is consumed. */
+/** Authoritative thread view returned after a waiting prompt is consumed. */
 export type FlowerSubmitInputReceipt = Readonly<{
   thread_id: string;
-  turn_id: string;
-  run_id: string;
   consumed_prompt_id: string;
+  current: FlowerRuntimeCurrentView;
 }>;
 
 export type FlowerThreadActivitySnapshot = Readonly<{
@@ -511,8 +493,6 @@ export type FlowerThreadSnapshot = Readonly<{
   active_run_id?: string;
   approval_pending?: boolean;
   approval_pending_count?: number;
-  approval_generation?: number;
-  approval_revision?: number;
   queued_turn_count?: number;
   queued_turns?: readonly FlowerQueuedTurn[];
   permission_type?: FlowerPermissionType;
@@ -529,7 +509,6 @@ export type FlowerThreadSnapshot = Readonly<{
   timeline_decorations?: readonly FlowerTimelineDecoration[];
   subagents?: readonly FlowerSubagentSummary[];
   approval_actions?: readonly FlowerApprovalAction[];
-  approval_queue?: FlowerApprovalQueue | null;
   input_request?: FlowerInputRequest | null;
   error?: FlowerThreadError | null;
   read_status: FlowerThreadReadStatus;
@@ -651,33 +630,19 @@ export type FlowerSafeTarget = Readonly<{
 
 export type FlowerApprovalOrigin = 'main_tool' | 'control_confirm' | 'delegated_subagent';
 
-export type FlowerApprovalQueue = Readonly<{
-  generation: number;
-  revision: number;
-  current_action_id?: string;
-  current_position: number;
-  total: number;
-  unresolved_count: number;
-}>;
-
 type FlowerApprovalActionBase = Readonly<{
   action_id: string;
   turn_id?: string;
   tool_name: string;
   state: 'requested' | 'approved' | 'rejected' | 'timed_out' | 'canceled' | 'unavailable';
   status: 'pending' | 'resolved' | 'unavailable';
-  revision: number;
-  version: number;
-  surface_epoch?: number;
   surface_role?: 'primary_action' | 'locator' | 'mirror';
   scope?: string;
   requested_at_ms: number;
   resolved_at_ms?: number;
   expires_at_ms?: number;
   can_approve: boolean;
-  expected_seq?: number;
   read_only_reason?: string;
-  queue_generation?: number;
   queue_order?: number;
   batch_index?: number;
   batch_size?: number;
@@ -706,285 +671,132 @@ export type FlowerDelegatedSubagentApprovalAction = FlowerApprovalActionBase & R
 
 export type FlowerApprovalAction = FlowerMainToolApprovalAction | FlowerDelegatedSubagentApprovalAction;
 
-export type FlowerLiveKind =
-  | 'run.started'
-  | 'run.status_changed'
-  | 'thread.patched'
-  | 'message.started'
-  | 'message.block_started'
-  | 'message.block_delta'
-  | 'message.block_set'
-  | 'message.failed'
-  | 'approval.requested'
-  | 'approval.resolved'
-  | 'approval.queue_replaced'
-  | 'input.requested'
-  | 'input.resolved'
-  | 'model_io.updated'
-  | 'context.usage.updated'
-  | 'context.compaction.updated'
-  | 'timeline.replaced'
-  | 'stream.resync_required';
-
-export type FlowerLiveBlock = Readonly<{
-  type: string;
-  content?: string;
-  block?: unknown;
-}>;
-
-export type FlowerLiveRunState = Readonly<{
-  run_id: string;
-  status: string;
-  message_id?: string;
-  waiting_prompt?: FlowerInputRequest | null;
-  error_code?: string;
-  error?: string;
-}>;
-
-export type FlowerLiveThreadPatch = Readonly<{
-  thread_id?: string;
-  title?: string;
-  title_status?: FlowerTitleStatus;
-  model_id?: string;
-  permission_type?: FlowerPermissionType;
-  working_dir?: string;
-  queued_turn_count?: number;
-  queued_turns?: readonly FlowerQueuedTurn[];
-  run_status?: string;
-  run_updated_at_ms?: number;
-  run_error_code?: string;
-  run_error?: string;
-  waiting_prompt?: FlowerInputRequest | null;
-  active_run_id?: string;
-  approval_pending?: boolean;
-  approval_pending_count?: number;
-  approval_generation?: number;
-  approval_revision?: number;
-  pinned_at_ms?: number;
-  created_at_ms?: number;
-  updated_at_ms?: number;
-  last_message_at_ms?: number;
-  last_message_preview?: string;
-  reasoning_selection?: FlowerReasoningSelection | null;
-  reasoning_capability?: FlowerReasoningCapability | null;
-  read_only_reason?: string;
-  subagents?: readonly FlowerSubagentSummary[];
-  read_status?: FlowerThreadReadStatus;
-}>;
-
-export type FlowerLiveMaterializedState = Readonly<{
-  thread_patch: FlowerLiveThreadPatch;
-  runs: Readonly<Record<string, FlowerLiveRunState>>;
-  model_io?: FlowerModelIOStatus | null;
-  context_usage?: FlowerContextUsage | null;
-  context_compactions?: readonly FlowerContextCompaction[];
-  timeline_decorations?: readonly FlowerTimelineDecoration[];
-  approval_actions?: Readonly<Record<string, FlowerApprovalAction>>;
-  approval_queue?: FlowerApprovalQueue | null;
-  input_requests: Readonly<Record<string, FlowerInputRequest>>;
-}>;
-
-export type FlowerLiveBootstrap = Readonly<{
-  schema_version: number;
-  endpoint_id: string;
-  thread_id: string;
-  stream_generation: number;
-  cursor: number;
-  retained_from_seq: number;
-  thread: FlowerThreadSnapshot;
-  timeline_messages: readonly FlowerChatMessage[];
-  live_state: FlowerLiveMaterializedState;
-  read_status: FlowerThreadReadStatus;
-  generated_at_ms: number;
-}>;
-
-export type FlowerLiveMessageStartedPayload = Readonly<{
-  message_id: string;
-  role: 'assistant';
-  status: 'streaming';
-  created_at_ms: number;
-  attempt_epoch?: number;
-}>;
-
-export type FlowerLiveMessageBlockStartedPayload = Readonly<{
-  message_id: string;
-  block_index: number;
-  block_type: string;
-}>;
-
-export type FlowerLiveMessageBlockDeltaPayload = Readonly<{
-  message_id: string;
-  block_index: number;
-  delta: string;
-}>;
-
-export type FlowerLiveMessageBlockSetPayload = Readonly<{
-  message_id: string;
-  block_index: number;
-  block: FlowerLiveBlock;
-}>;
-
-export type FlowerLiveMessageFailedPayload = Readonly<{
-  message_id: string;
-  error: string;
-}>;
-
-export type FlowerLiveApprovalPayload = Readonly<{
-  action: FlowerApprovalAction;
-  approval_queue?: FlowerApprovalQueue;
-}>;
-
-export type FlowerLiveApprovalQueuePayload = Readonly<{
-  actions: readonly FlowerApprovalAction[];
-  approval_queue: FlowerApprovalQueue;
-}>;
-
-export type FlowerLiveInputRequestedPayload = Readonly<{
-  request: FlowerInputRequest;
-}>;
-
-export type FlowerLiveInputResolvedPayload = Readonly<{
-  prompt_id: string;
-}>;
-
-export type FlowerLiveUsageUpdatedPayload = Readonly<{
-  usage: FlowerContextUsage;
-}>;
-
-export type FlowerLiveContextCompactionUpdatedPayload = Readonly<{
-  compaction: FlowerContextCompaction;
-  timeline_decoration: FlowerContextCompactionTimelineDecoration;
-}>;
-
-export type FlowerLiveModelIOUpdatedPayload = Readonly<{
-  status?: FlowerModelIOStatus | null;
-}>;
-
-export type FlowerLiveTimelineReplacedPayload = Readonly<{
-  messages: readonly FlowerChatMessage[];
-  stream_generation: number;
-  snapshot_through_seq: number;
-  thread_patch?: FlowerLiveThreadPatch;
-  live_state?: FlowerLiveMaterializedState;
-  read_status?: FlowerThreadReadStatus;
-  context_usage?: FlowerContextUsage | null;
-  context_compactions?: readonly FlowerContextCompaction[];
-  timeline_decorations?: readonly FlowerTimelineDecoration[];
-}>;
-
-export type FlowerLiveResyncRequiredPayload = Readonly<{
-  reason: string;
-}>;
-
-export type FlowerLiveRunStartedPayload = Readonly<{
-  run_id: string;
-  turn_id?: string;
-  message_id?: string;
-  status: string;
-  model_id?: string;
-}>;
-
-export type FlowerLiveRunStatusChangedPayload = Readonly<{
-  run_id: string;
-  status: string;
-  error_code?: string;
-  error?: string;
-  waiting_prompt?: FlowerInputRequest | null;
-}>;
-
-export type FlowerLiveThreadPatchedPayload = Readonly<{
-  patch: FlowerLiveThreadPatch;
-}>;
-
-export type FlowerLiveEventPayloadByKind = Readonly<{
-  'run.started': FlowerLiveRunStartedPayload;
-  'run.status_changed': FlowerLiveRunStatusChangedPayload;
-  'thread.patched': FlowerLiveThreadPatchedPayload;
-  'message.started': FlowerLiveMessageStartedPayload;
-  'message.block_started': FlowerLiveMessageBlockStartedPayload;
-  'message.block_delta': FlowerLiveMessageBlockDeltaPayload;
-  'message.block_set': FlowerLiveMessageBlockSetPayload;
-  'message.failed': FlowerLiveMessageFailedPayload;
-  'approval.requested': FlowerLiveApprovalPayload;
-  'approval.resolved': FlowerLiveApprovalPayload;
-  'approval.queue_replaced': FlowerLiveApprovalQueuePayload;
-  'input.requested': FlowerLiveInputRequestedPayload;
-  'input.resolved': FlowerLiveInputResolvedPayload;
-  'model_io.updated': FlowerLiveModelIOUpdatedPayload;
-  'context.usage.updated': FlowerLiveUsageUpdatedPayload;
-  'context.compaction.updated': FlowerLiveContextCompactionUpdatedPayload;
-  'timeline.replaced': FlowerLiveTimelineReplacedPayload;
-  'stream.resync_required': FlowerLiveResyncRequiredPayload;
-}>;
-
-export type FlowerLiveEvent<K extends FlowerLiveKind = FlowerLiveKind> = K extends FlowerLiveKind ? Readonly<{
-  schema_version: number;
-  seq: number;
-  endpoint_id: string;
-  thread_id: string;
-  run_id?: string;
-  turn_id?: string;
-  trace_id?: string;
-  step?: string;
-  at_unix_ms: number;
-  kind: K;
-  payload: FlowerLiveEventPayloadByKind[K];
-}> : never;
-
-export type FlowerLiveEventsResponse = Readonly<{
-  stream_generation: number;
-  events: readonly FlowerLiveEvent[];
-  next_cursor: number;
-  has_more?: boolean;
-  retained_from_seq: number;
-}>;
-
 export type FlowerLiveStreamConnectInput = Readonly<{
-  thread_id: string;
-  thread_generation: number;
-  thread_after_seq: number;
-  summary_generation: number;
-  summary_after_seq: number;
   signal: AbortSignal;
+}>;
+
+export type FlowerRuntimeCurrentItem = Readonly<{
+  id: string;
+  turn_id?: string;
+  kind: 'user' | 'assistant' | 'tool' | 'interaction';
+  text?: string;
+  created_at?: string;
+  attachments?: readonly Readonly<{
+    resource_ref?: string;
+    name: string;
+    mime_type?: string;
+    size_bytes?: number;
+  }>[];
+  references?: readonly Readonly<{
+    reference_id: string;
+    kind: 'text' | 'file' | 'directory' | 'terminal' | 'process';
+    label: string;
+    text?: string;
+    truncated?: boolean;
+  }>[];
+  activity?: Readonly<Record<string, unknown>>;
+  interaction?: FlowerRuntimeInteraction;
+}>;
+
+export type FlowerRuntimeInteraction = Readonly<{
+  id: string;
+  turn_id?: string;
+  kind: 'approval' | 'input' | 'effect_retry';
+  run_id?: string;
+  tool_call_id?: string;
+  resolved?: boolean;
+  approved?: boolean;
+  approval?: Readonly<{
+    label: string;
+    description?: string;
+    command?: string;
+    effects?: readonly string[];
+    targets?: readonly string[];
+    risk?: string;
+    tool_name: string;
+    tool_call_id: string;
+  }>;
+  input?: Readonly<{
+    summary: string;
+    questions: readonly Readonly<{
+      id: string;
+      prompt: string;
+      kind: string;
+      options?: readonly string[];
+      write_label?: string;
+      secret?: boolean;
+    }>[];
+  }>;
+  effect_retry?: Readonly<{
+    effect_attempt_id: string;
+    tool_call_id: string;
+    tool_name: string;
+  }>;
+  resolution?: Readonly<{
+    accepted: boolean;
+    redacted?: boolean;
+    outcome?: string;
+    approved?: boolean;
+    input?: Readonly<Record<string, string>>;
+    at?: string;
+  }>;
+  signal?: Readonly<{
+    name?: string;
+    call_id?: string;
+    disposition?: string;
+    text?: string;
+    payload?: Readonly<Record<string, unknown>>;
+  }>;
+}>;
+
+export type FlowerRuntimeCurrentView = Readonly<{
+  thread_id: string;
+  view_version: number;
+  activity?: 'idle' | 'active';
+  turn_id?: string;
+  last_outcome?: 'completed' | 'failed' | 'cancelled' | 'interrupted';
+  attention?: Readonly<{ approval_count?: number; input_count?: number }>;
+  items?: readonly FlowerRuntimeCurrentItem[];
+  queue?: readonly Readonly<{ request_key: string; input: Readonly<{ text?: string }> }>[];
+  interactions?: readonly FlowerRuntimeInteraction[];
+  assistant_draft?: string;
+  thinking_draft?: string;
+}>;
+
+// FlowerThreadView is one replaceable detail snapshot. Its version is the
+// in-memory ThreadRuntime view version, never a durable replay cursor.
+export type FlowerThreadView = Readonly<{
+  thread: FlowerThreadSnapshot;
+  current: FlowerRuntimeCurrentView;
 }>;
 
 export type FlowerLiveStreamEnvelope = Readonly<{
   schema_version: number;
-  kind: 'ready' | 'summary.batch' | 'thread.batch' | 'viewer.read_state' | 'resync_required';
-  stream_generation: number;
+  kind: 'ready' | 'summary.batch' | 'thread.batch' | 'viewer.read_state';
   thread_id?: string;
-  from_seq?: number;
-  through_seq?: number;
-  retained_from_seq?: number;
-  summary_through_seq?: number;
-  summary_retained_from_seq?: number;
-  events?: readonly FlowerLiveEvent[];
+  summaries?: readonly FlowerThreadSnapshot[];
+  /** Typed current-state replacement from Floret; never contains replay metadata. */
+  current?: FlowerRuntimeCurrentView;
   read_status?: FlowerThreadReadStatus;
-  reason?: string;
 }>;
 
-type FlowerSubmitApprovalRequestBase = Readonly<{
+export type FlowerSubmitApprovalRequest = Readonly<{
   thread_id: string;
-  action_id: string;
+  interaction_id: string;
   approved: boolean;
-  expected_seq?: number;
-  revision: number;
-  version?: number;
-  surface_epoch?: number;
-  queue_generation: number;
-  queue_revision: number;
-  idempotency_key?: string;
+  reject_all?: boolean;
 }>;
 
-export type FlowerSubmitApprovalRequest = FlowerSubmitApprovalRequestBase & Readonly<{
-  origin: FlowerApprovalOrigin;
-  run_id: string;
-  tool_id: string;
+export type FlowerRetryEffectRequest = Readonly<{
+  thread_id: string;
+  effect_attempt_id: string;
+  tool_call_id: string;
+  acknowledge_unknown_risk: true;
 }>;
 
-export type FlowerApprovalDecisionReceipt = Readonly<{
+export type FlowerApprovalCommandResult = Readonly<{
   ok: boolean;
-  current_cursor: number;
+  current: FlowerRuntimeCurrentView;
 }>;
 
 export type FlowerThreadListItem = Readonly<{
@@ -1001,14 +813,10 @@ export type FlowerThreadListItem = Readonly<{
   status: FlowerThreadStatus;
   approval_pending?: boolean;
   approval_pending_count?: number;
-  approval_generation?: number;
-  approval_revision?: number;
   source_label: string;
   target_labels: readonly string[];
   read_only_reason?: string;
   read_status: FlowerThreadReadStatus;
-  /** Local-only projection while canonical turn admission is in flight. */
-  admission_pending?: boolean;
 }>;
 
 export type FlowerHandlerRef = Readonly<{
@@ -1086,7 +894,6 @@ export type FlowerTurnLaunchInput = Readonly<{
   decision?: FlowerRouterDecision | null;
   context_action?: unknown;
   attachment_ids?: readonly string[];
-  source_followup_id?: string;
   working_dir?: string;
   model_id?: string;
   permission_type?: FlowerPermissionType;
@@ -1096,34 +903,11 @@ export type FlowerTurnLaunchInput = Readonly<{
 export type FlowerTurnLaunchReceipt = Readonly<{
   client_request_id: string;
   thread_id: string;
-  turn_id: string;
-  run_id: string;
-  kind: 'start';
-}> | Readonly<{
-  client_request_id: string;
-  thread_id: string;
-  admission_id: string;
-  kind: 'admitting';
-}> | Readonly<{
-  client_request_id: string;
-  thread_id: string;
-  queue_id: string;
-  kind: 'queued';
-}>;
-
-export type FlowerCompactThreadContextInput = Readonly<{
-  thread_id: string;
-  active_run_id?: string;
+  current: FlowerRuntimeCurrentView;
 }>;
 
 export type FlowerTurnLaunchFailure = Error & Readonly<{
   fresh_decision?: FlowerRouterDecision;
-  uncertain_admission?: Readonly<{
-    client_request_id: string;
-    thread_id?: string;
-    queue_id?: string;
-    turn_id?: string;
-  }>;
 }>;
 
 export type FlowerAttachmentSource = 'file' | 'paste' | 'drop' | 'long_text';
@@ -1361,21 +1145,20 @@ export type FlowerSurfaceAdapter = Readonly<{
   saveDefaultPermission: (permissionType: FlowerPermissionType) => Promise<FlowerSettingsSnapshot>;
   saveModelProfile: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
   listThreads: () => Promise<readonly FlowerThreadSnapshot[]>;
-  loadThread: (threadID: string) => Promise<FlowerLiveBootstrap>;
-  /** @deprecated Live product surfaces use connectLiveStream. */
-  listThreadLiveEvents: (threadID: string, afterSeq: number, limit?: number) => Promise<FlowerLiveEventsResponse>;
+  loadThread: (threadID: string) => Promise<FlowerThreadView>;
   connectLiveStream?: (input: FlowerLiveStreamConnectInput) => AsyncIterable<FlowerLiveStreamEnvelope>;
   loadSubagentDetail: (parentThreadID: string, childThreadID: string, afterOrdinal?: number, limit?: number) => Promise<FlowerSubagentDetail>;
   markThreadRead: (threadID: string, snapshot: FlowerThreadActivitySnapshot) => Promise<FlowerThreadReadStatus>;
-  renameThread?: (threadID: string, title: string) => Promise<FlowerLiveBootstrap>;
-  setThreadPinned?: (threadID: string, pinned: boolean) => Promise<FlowerLiveBootstrap | undefined>;
-  setThreadPermissionType?: (threadID: string, permissionType: FlowerPermissionType) => Promise<FlowerLiveBootstrap>;
+  renameThread?: (threadID: string, title: string) => Promise<FlowerThreadView>;
+  setThreadPinned?: (threadID: string, pinned: boolean) => Promise<FlowerThreadView | undefined>;
+  setThreadPermissionType?: (threadID: string, permissionType: FlowerPermissionType) => Promise<FlowerThreadView>;
   persistDefaultModel: (modelID: string) => Promise<FlowerSettingsSnapshot>;
-  setThreadModel?: (threadID: string, modelID: string) => Promise<FlowerLiveBootstrap>;
-  setThreadReasoningSelection?: (threadID: string, selection: FlowerReasoningSelection | undefined) => Promise<FlowerLiveBootstrap>;
-  reorderQueuedTurns?: (threadID: string, orderedQueueIDs: readonly string[]) => Promise<FlowerLiveBootstrap>;
-  deleteQueuedTurn?: (threadID: string, queueID: string) => Promise<FlowerLiveBootstrap>;
-  forkThread?: (threadID: string, clientRequestID: string) => Promise<FlowerLiveBootstrap>;
+  setThreadModel?: (threadID: string, modelID: string) => Promise<FlowerThreadView>;
+  setThreadReasoningSelection?: (threadID: string, selection: FlowerReasoningSelection | undefined) => Promise<FlowerThreadView>;
+  reorderQueuedTurns?: (threadID: string, orderedQueueIDs: readonly string[]) => Promise<FlowerThreadView>;
+  deleteQueuedTurn?: (threadID: string, queueID: string) => Promise<FlowerThreadView>;
+  promoteQueuedTurn?: (threadID: string, queueID: string) => Promise<FlowerThreadView>;
+  forkThread?: (threadID: string, clientRequestID: string) => Promise<FlowerThreadView>;
   deleteThread?: (threadID: string) => Promise<FlowerThreadDeleteOutcome>;
   resolveHandler: (input?: FlowerResolveHandlerInput) => Promise<FlowerRouterDecision>;
   loadAttachmentCapability?: (modelID: string) => Promise<FlowerAttachmentCapability>;
@@ -1387,11 +1170,11 @@ export type FlowerSurfaceAdapter = Readonly<{
   loadStagedAttachmentPreview?: (attachment: FlowerStagedAttachment, scope: FlowerAttachmentStagingScope, signal: AbortSignal) => Promise<Blob>;
   previewStagedAttachment?: (attachment: FlowerStagedAttachment, scope: FlowerAttachmentStagingScope) => void | Promise<void>;
   launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerTurnLaunchReceipt>;
-  retryThread: (threadID: string) => Promise<FlowerLiveBootstrap>;
-  compactThreadContext: (input: FlowerCompactThreadContextInput) => Promise<FlowerLiveBootstrap>;
-  stopThread: (threadID: string) => Promise<FlowerLiveBootstrap>;
+  retryThread: (threadID: string) => Promise<FlowerThreadView>;
+  retryEffect: (input: FlowerRetryEffectRequest) => Promise<void>;
+  stopThread: (threadID: string) => Promise<FlowerThreadView>;
   submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerSubmitInputReceipt>;
-  submitApproval: (input: FlowerSubmitApprovalRequest) => Promise<FlowerApprovalDecisionReceipt>;
+  submitApproval: (input: FlowerSubmitApprovalRequest) => Promise<FlowerApprovalCommandResult>;
   readTerminalProcess?: (input: FlowerTerminalProcessReadRequest) => Promise<FlowerTerminalProcessSnapshot>;
   getWorkingDirectoryPathContext?: () => Promise<FlowerWorkingDirectoryPathContext>;
   listWorkingDirectoryEntries?: (input: FlowerWorkingDirectoryListInput) => Promise<readonly FlowerWorkingDirectoryEntry[]>;

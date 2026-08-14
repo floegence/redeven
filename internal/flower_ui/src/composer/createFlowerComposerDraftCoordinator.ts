@@ -10,8 +10,7 @@ import type { FlowerAttachmentController } from '../attachments/createFlowerAtta
 export type FlowerComposerDraftMode =
   | 'ordinary'
   | 'over_limit_editing'
-  | 'preparing_long_text_submission'
-  | 'admission_in_flight';
+  | 'preparing_long_text_submission';
 
 export type FlowerComposerDraftAttachment = Readonly<{
   local_id: string;
@@ -42,11 +41,18 @@ export type FlowerComposerDraftValue = Readonly<{
   permission_type?: FlowerPermissionType;
   reasoning_selection?: FlowerReasoningSelection;
   working_dir?: string;
+  /** Stable upload-staging target for an unsent new-thread draft. */
   client_request_id?: string;
-  admission_started?: boolean;
   prepared_long_text_local_id?: string;
   prepared_long_text_attachment_id?: string;
   capability_revision?: string;
+  input_prompt_signature?: string;
+  input_drafts?: Readonly<Record<string, Readonly<{
+    answer_kind?: 'choice' | 'custom';
+    choice_id?: string;
+    text?: string;
+  }>>>;
+  active_input_question_id?: string;
 }>;
 
 export type FlowerComposerDraftSnapshot = Readonly<{

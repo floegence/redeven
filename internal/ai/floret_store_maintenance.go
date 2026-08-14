@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	flruntime "github.com/floegence/floret/v3/runtime"
-	flstorage "github.com/floegence/floret/v3/storage"
-	flstoragespi "github.com/floegence/floret/v3/storage/spi"
+	flruntime "github.com/floegence/floret/v4/runtime"
+	flstorage "github.com/floegence/floret/v4/storage"
+	flstoragespi "github.com/floegence/floret/v4/storage/spi"
 )
 
 type FloretStoreStartupClass string

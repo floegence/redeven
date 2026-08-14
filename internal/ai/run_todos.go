@@ -3,31 +3,24 @@ package ai
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
-
-	"github.com/floegence/floret/v3/identity"
-	flruntime "github.com/floegence/floret/v3/runtime"
+	"time"
 )
 
-func (r *run) toolWriteTodos(ctx context.Context, toolID string, todos []TodoItem, expectedVersion *int64, explanation string) (any, error) {
+func (r *run) toolWriteTodos(_ context.Context, toolID string, todos []TodoItem, expectedVersion *int64, explanation string) (any, error) {
 	if r == nil {
 		return nil, errors.New("run is not ready")
 	}
-	host := r.activeFloretHost()
-	if host == nil {
-		return nil, errors.New("Floret host is not ready")
+	state := r.toolRuntimeState
+	if state == nil {
+		return nil, errors.New("todo runtime state is not ready")
 	}
-	runID, threadID, turnID := r.floretCanonicalIdentity()
 	toolID = strings.TrimSpace(toolID)
-	if threadID == "" || turnID == "" || runID == "" || toolID == "" {
-		return nil, errors.New("canonical todo update identity is incomplete")
+	if toolID == "" {
+		return nil, errors.New("todo tool identity is incomplete")
 	}
-	current, err := host.ReadThreadAgentTodos(ctx)
-	if err != nil {
-		return nil, err
-	}
-	hydratedTodos, hydratedCount, missingCount := hydrateTodoContent(todos, current.Items)
+	current, _ := state.todos()
+	hydratedTodos, hydratedCount, missingCount := hydrateTodoContent(todos, current)
 	if hydratedCount > 0 {
 		r.recordRunDiagnostic("todos.args_hydrated", RealtimeStreamKindLifecycle, map[string]any{
 			"hydrated_count": hydratedCount, "missing_content_count": missingCount,
@@ -37,39 +30,24 @@ func (r *run) toolWriteTodos(ctx context.Context, toolID string, todos []TodoIte
 	if err := validateActionableTodoItems(hydratedTodos); err != nil {
 		return nil, err
 	}
-	expected := current.Version
-	if expectedVersion != nil {
-		expected = *expectedVersion
-	}
-	items := make([]flruntime.AgentTodo, 0, len(hydratedTodos))
-	for _, item := range hydratedTodos {
-		items = append(items, flruntime.AgentTodo{ID: item.ID, Content: item.Content, Status: flruntime.AgentTodoStatus(item.Status)})
-	}
-	snapshot, err := host.UpdateThreadAgentTodos(ctx, flruntime.UpdateTodosCommand{
-		LogicalRequestID: identity.LogicalRequestID("todo-" + toolID),
-		ExpectedVersion:  expected, Items: items,
-		TurnID: identity.TurnID(turnID), RunID: identity.RunID(runID), ToolCallID: toolID,
-	})
+	snapshot, err := state.replaceTodos(hydratedTodos, expectedVersion)
 	if err != nil {
-		if errors.Is(err, flruntime.ErrAgentTodoVersionConflict) {
-			return nil, fmt.Errorf("todo version conflict: refresh and retry: %w", err)
-		}
 		return nil, err
 	}
 	summary := summarizeTodos(hydratedTodos)
-	updatedAt := snapshot.UpdatedAt.UnixMilli()
+	updatedAt := time.Now().UnixMilli()
 	r.recordRunDiagnostic("todos.updated", RealtimeStreamKindTool, map[string]any{
-		"version": snapshot.Version, "summary": summary, "updated_at_unix_ms": updatedAt,
-		"updated_by_tool": toolID, "updated_by_run": runID, "explanation_hint": strings.TrimSpace(explanation),
+		"version": snapshot.TodoSnapshotVersion, "summary": summary, "updated_at_unix_ms": updatedAt,
+		"updated_by_tool": toolID, "explanation_hint": strings.TrimSpace(explanation),
 	})
-	result := map[string]any{"version": snapshot.Version, "updated_at_unix_ms": updatedAt, "summary": summary, "todos": hydratedTodos}
+	result := map[string]any{"version": snapshot.TodoSnapshotVersion, "updated_at_unix_ms": updatedAt, "summary": summary, "todos": hydratedTodos}
 	if text := strings.TrimSpace(explanation); text != "" {
 		result["explanation"] = text
 	}
 	return result, nil
 }
 
-func hydrateTodoContent(todos []TodoItem, existing []flruntime.AgentTodo) ([]TodoItem, int, int) {
+func hydrateTodoContent(todos []TodoItem, existing []TodoItem) ([]TodoItem, int, int) {
 	out := append([]TodoItem(nil), todos...)
 	contentByID := make(map[string]string, len(existing))
 	for _, item := range existing {

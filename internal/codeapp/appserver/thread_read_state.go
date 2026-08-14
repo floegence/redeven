@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	flruntime "github.com/floegence/floret/v4/runtime"
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/codexbridge"
 	"github.com/floegence/redeven/internal/session"
@@ -45,6 +46,12 @@ type aiListThreadsView struct {
 type aiThreadEnvelope struct {
 	ClientRequestID string       `json:"client_request_id,omitempty"`
 	Thread          aiThreadView `json:"thread"`
+}
+
+type aiFlowerThreadDetailEnvelope struct {
+	ClientRequestID string               `json:"client_request_id,omitempty"`
+	Thread          aiThreadView         `json:"thread"`
+	Current         flruntime.ThreadView `json:"current"`
 }
 
 type aiMarkThreadReadRequest struct {
@@ -133,22 +140,22 @@ func (g *Server) buildAIThreadEnvelope(
 	return &aiThreadEnvelope{Thread: view}, nil
 }
 
-func (g *Server) buildAIFlowerLiveBootstrapView(
+func (g *Server) buildAIFlowerThreadDetailEnvelope(
 	ctx context.Context,
 	meta *session.Meta,
-	bootstrap *ai.FlowerLiveBootstrapResponse,
-) (*ai.FlowerLiveBootstrapResponse, error) {
-	if bootstrap == nil {
+	detail *ai.FlowerThreadDetail,
+) (*aiFlowerThreadDetailEnvelope, error) {
+	if detail == nil {
 		return nil, nil
 	}
-	records, err := g.ensureFlowerReadRecords(ctx, meta, []ai.ThreadView{bootstrap.Thread})
+	records, err := g.ensureFlowerReadRecords(ctx, meta, []ai.ThreadView{detail.Thread})
 	if err != nil {
 		return nil, err
 	}
-	readStatus := flowerReadStatusView(flowerSnapshotFromThread(bootstrap.Thread), records[strings.TrimSpace(bootstrap.Thread.ThreadID)])
-	out := *bootstrap
-	out.ReadStatus = flowerAIReadStatusView(readStatus)
-	return &out, nil
+	return &aiFlowerThreadDetailEnvelope{
+		Thread:  buildAIThreadView(detail.Thread, records[strings.TrimSpace(detail.Thread.ThreadID)]),
+		Current: detail.Current,
+	}, nil
 }
 
 func flowerAIReadStatusView(view flowerThreadReadStatusView) ai.FlowerThreadReadView {

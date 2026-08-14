@@ -94,11 +94,11 @@ func TestServerAIInitialTurnCreateIsIdempotentAndCanonicallyReadable(t *testing.
 		return recorder.Code, response.Data, recorder.Body.String()
 	}
 	firstStatus, first, firstBody := post(payload, "", "")
-	if firstStatus != http.StatusAccepted || first.Kind != "admitting" || first.ClientRequestID != clientRequestID || first.ThreadID == "" || first.AdmissionID == "" || first.TurnID != "" || first.RunID != "" {
+	if firstStatus != http.StatusAccepted || first.Kind != "start" || first.ClientRequestID != clientRequestID || first.ThreadID == "" || first.TurnID == "" {
 		t.Fatalf("first status=%d receipt=%#v body=%s", firstStatus, first, firstBody)
 	}
 	secondStatus, second, secondBody := post(payload, "", "")
-	if secondStatus != http.StatusAccepted || second != first {
+	if secondStatus != http.StatusAccepted || second.ClientRequestID != first.ClientRequestID || second.ThreadID != first.ThreadID || second.Kind != first.Kind || second.TurnID != first.TurnID || second.Current.ViewVersion < first.Current.ViewVersion {
 		t.Fatalf("second status=%d receipt=%#v body=%s, want %#v", secondStatus, second, secondBody, first)
 	}
 
@@ -163,7 +163,7 @@ func TestServerAIInitialTurnCreateIsIdempotentAndCanonicallyReadable(t *testing.
 		t.Fatalf("partial staging headers status=%d body=%s", partialStatus, partialBody)
 	}
 	attachmentStatus, attachmentReceipt, attachmentBody := post(attachmentPayload, scope.StagingScopeID, scope.Capability)
-	if attachmentStatus != http.StatusAccepted || attachmentReceipt.ClientRequestID != attachmentClientRequestID || attachmentReceipt.ThreadID == "" || attachmentReceipt.AdmissionID == "" || attachmentReceipt.TurnID != "" || attachmentReceipt.RunID != "" {
+	if attachmentStatus != http.StatusAccepted || attachmentReceipt.ClientRequestID != attachmentClientRequestID || attachmentReceipt.ThreadID == "" || attachmentReceipt.TurnID == "" {
 		t.Fatalf("attachment status=%d receipt=%#v body=%s", attachmentStatus, attachmentReceipt, attachmentBody)
 	}
 	attachmentReadRequest := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/ai/threads/"+attachmentReceipt.ThreadID+"/messages", nil)

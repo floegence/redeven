@@ -74,7 +74,7 @@ import {
   type FlowerTurnLauncherSubmitInput,
   createFlowerComposerDraftCoordinator,
 } from '../../../../flower_ui/src';
-import { createFlowerClientRequestID, flowerTurnAdmissionUncertainIdentity } from '../../../../flower_ui/src/flowerTurnAdmission';
+import { createFlowerClientRequestID } from '../../../../flower_ui/src/flowerRequestIdentity';
 import type { ContextActionExecutionContext } from './contextActions/protocol';
 import { createFlowerLinkedContextNavigation } from './flower/linkedContextNavigation';
 import { createAIReadinessController } from './flower/aiReadiness';
@@ -2307,17 +2307,6 @@ export function EnvAppShell() {
       closeFlowerTurnLauncher(false);
       handoffFlowerTurn(handoffContext, threadId);
     } catch (e) {
-      const uncertain = flowerTurnAdmissionUncertainIdentity(e);
-      const uncertainThreadID = trimString(uncertain?.thread_id);
-      if (uncertain && uncertainThreadID) {
-        closeFlowerTurnLauncher(false);
-        if (handoffContext) {
-          handoffFlowerTurn(handoffContext, uncertainThreadID);
-        } else {
-          focusAIThread(uncertainThreadID);
-        }
-        return;
-      }
       const msg = e instanceof Error ? e.message : String(e);
       notify.error(i18n.t('shell.notifications.failedToSendToFlowerTitle'), msg || i18n.t('shell.notifications.requestFailed'));
       throw e;

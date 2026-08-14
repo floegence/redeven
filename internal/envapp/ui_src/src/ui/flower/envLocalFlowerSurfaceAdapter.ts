@@ -9,7 +9,7 @@ import {
 } from '../services/localApi';
 import type { AgentSettingsResponse, AIConfig, AIModelProfile } from '../pages/settings/types';
 import type {
-  FlowerApprovalDecisionReceipt,
+  FlowerApprovalCommandResult,
   FlowerAttachmentUploadInput,
   FlowerAttachmentCapability,
   FlowerAttachmentStagingScope,
@@ -20,6 +20,7 @@ import type {
   FlowerPermissionType,
   FlowerRouterDecision,
   FlowerTurnLaunchInput,
+  FlowerTurnLaunchReceipt,
   FlowerSettingsDraft,
   FlowerSettingsSnapshot,
   FlowerModelSourceModel,
@@ -30,21 +31,17 @@ import type {
   FlowerStagedLongTextReadResult,
   FlowerTerminalProcessSnapshot,
   FlowerThreadReadStatus,
-  FlowerLiveBootstrap,
   FlowerLiveStreamConnectInput,
 } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import type { FlowerCanonicalReferenceNavigationTarget } from './linkedContextNavigation';
 import { requireAskFlowerContextActionEnvelope } from '../contextActions/protocol';
-import { mapFlowerLiveBootstrap } from '../../../../../flower_ui/src/flowerLiveMapper';
 import {
   createRuntimeFlowerSurfaceAdapter,
   FLOWER_THREAD_DELETE_OPERATION_FAILED_CODE,
 } from '../../../../../flower_ui/src/runtimeFlowerSurfaceAdapter';
 import {
   createFlowerClientRequestID,
-  flowerTurnAdmissionUncertainIdentity,
-  flowerTurnAdmissionUncertainFailure,
-} from '../../../../../flower_ui/src/flowerTurnAdmission';
+} from '../../../../../flower_ui/src/flowerRequestIdentity';
 import {
   normalizeFlowerReasoningCapability,
   serializeFlowerReasoningSelection,
@@ -119,15 +116,14 @@ type SendTurnResponse = Readonly<{
   run_id?: string;
   turn_id?: string;
   queue_id?: string;
-  admission_id?: string;
   kind?: string;
+  current?: FlowerTurnLaunchReceipt['current'];
 }>;
 
 type SubmitInputResponse = Readonly<{
-  run_id?: string;
-  turn_id?: string;
   kind?: string;
   consumed_waiting_prompt_id?: string;
+  current?: FlowerSubmitInputReceipt['current'];
 }>;
 
 type MarkThreadReadResponse = Readonly<{
@@ -534,10 +530,6 @@ function envLiveMapperOptions(options: EnvLocalFlowerSurfaceAdapterOptions) {
   };
 }
 
-function mapEnvFlowerLiveBootstrap(raw: unknown, options: EnvLocalFlowerSurfaceAdapterOptions): FlowerLiveBootstrap {
-  return mapFlowerLiveBootstrap(raw, envLiveMapperOptions(options));
-}
-
 function decision(options: EnvLocalFlowerSurfaceAdapterOptions): FlowerRouterDecision {
   const copy = adapterCopy(options);
   const envID = trim(options.envPublicID) || 'current';
@@ -644,10 +636,6 @@ function profileContainsModel(snapshot: FlowerSettingsSnapshot, modelID: string)
 export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfaceAdapterOptions): FlowerSurfaceAdapter {
   const copy = adapterCopy(options);
   const openCanonicalReferenceTarget = options.openCanonicalReferenceTarget;
-  const loadThread = async (threadID: string) => mapEnvFlowerLiveBootstrap(
-    await fetchLocalApiJSON<unknown>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(trim(threadID))}/live/bootstrap`, { method: 'GET' }),
-    options,
-  );
   const openCanonicalReference = openCanonicalReferenceTarget
     ? async (request: FlowerCanonicalReferenceOpenRequest): Promise<void> => {
         const threadID = trim(request.thread_id);
@@ -725,18 +713,11 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     canMutate: options.canMutate !== false,
     transport: {
       listThreads: () => fetchLocalApiJSON('/_redeven_proxy/api/ai/threads?limit=200', { method: 'GET' }),
-      loadThread: (threadID) => fetchLocalApiJSON(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/live/bootstrap`, { method: 'GET' }),
-		  listThreadLiveEvents: async () => {
-			throw new Error('Flower live polling is unavailable.');
-		  },
+      loadThread: (threadID) => fetchLocalApiJSON<unknown>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}`, { method: 'GET' }),
       connectLiveStream: async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<unknown> {
-        const params = new URLSearchParams({
-          thread_id: input.thread_id,
-          thread_generation: String(input.thread_generation),
-          thread_after_seq: String(input.thread_after_seq),
-          summary_generation: String(input.summary_generation),
-          summary_after_seq: String(input.summary_after_seq),
-        });
+        // Workspace SSE owns observation for every thread. Selection and
+        // recovery are client cache concerns; never send replay cursors.
+        const params = new URLSearchParams();
         const streamController = new AbortController();
         const abort = () => streamController.abort(input.signal.reason);
         input.signal.addEventListener('abort', abort, { once: true });
@@ -792,6 +773,10 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/followups/${encodeURIComponent(queueID)}`,
         { method: 'DELETE' },
       ),
+      promoteQueuedTurn: (threadID, queueID) => fetchLocalApiJSON(
+        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/followups/${encodeURIComponent(queueID)}/promote`,
+        { method: 'POST' },
+      ),
       forkThread: (threadID, body) => fetchLocalApiJSON<LoadThreadResponse>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/fork`, {
         method: 'POST',
         body: JSON.stringify(body),
@@ -811,9 +796,17 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
           throw error;
         }
       },
-      submitApproval: (body) => fetchLocalApiJSON<FlowerApprovalDecisionReceipt>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(body.thread_id)}/approvals`, {
+      submitApproval: (body) => fetchLocalApiJSON<FlowerApprovalCommandResult>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(body.thread_id)}/approvals`, {
         method: 'POST',
         body: JSON.stringify(body),
+      }),
+      retryEffect: (body) => fetchLocalApiJSON(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(body.thread_id)}/retry_effect`, {
+        method: 'POST',
+        body: JSON.stringify({
+          effect_attempt_id: body.effect_attempt_id,
+          tool_call_id: body.tool_call_id,
+          acknowledge_unknown_risk: true,
+        }),
       }),
     },
     mapperOptions: envLiveMapperOptions(options),
@@ -947,8 +940,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
           createBody.working_dir = trim(input.working_dir);
         }
       }
-      try {
-        const stagingHeaders = stagingScope ? flowerAttachmentStagingHeaders(stagingScope) : undefined;
+      const stagingHeaders = stagingScope ? flowerAttachmentStagingHeaders(stagingScope) : undefined;
         const endpoint = existingThreadID
           ? `/_redeven_proxy/api/ai/threads/${encodeURIComponent(existingThreadID)}/turns`
           : '/_redeven_proxy/api/ai/turns';
@@ -958,8 +950,8 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
             method: 'POST',
             ...(stagingHeaders ? { headers: stagingHeaders } : {}),
             body: JSON.stringify({
+              client_request_id: clientRequestID,
               ...(existingThreadID ? { thread_id: existingThreadID } : {}),
-              ...(trim(input.source_followup_id) ? { source_followup_id: trim(input.source_followup_id) } : {}),
               ...(stagingScope ? { staging_scope_id: stagingScope.staging_scope_id } : {}),
               ...(turnModelID ? { model: turnModelID } : {}),
               input: {
@@ -977,41 +969,20 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         );
         const responseClientRequestID = trim(response.client_request_id);
         const responseThreadID = trim(response.thread_id) || existingThreadID;
-        const turnID = trim(response.turn_id);
-        const runID = trim(response.run_id);
-        const queueID = trim(response.queue_id);
-        const admissionID = trim(response.admission_id);
-        const kind = trim(response.kind);
+        const current = response.current;
+        const currentValid = Boolean(
+          current
+          && trim(current.thread_id) === responseThreadID
+          && Number.isFinite(Number(current.view_version))
+          && Number(current.view_version) > 0,
+        );
         const clientIdentityValid = existingThreadID
           ? !responseClientRequestID || responseClientRequestID === clientRequestID
           : responseClientRequestID === clientRequestID;
-        const receiptValid = Boolean(responseThreadID && clientIdentityValid) && (
-          (kind === 'start' && Boolean(turnID && runID) && !queueID)
-          || (kind === 'admitting' && Boolean(admissionID) && !turnID && !runID && !queueID)
-          || (kind === 'queued' && Boolean(queueID) && !turnID && !runID)
-        );
-        if (!receiptValid) {
-          throw flowerTurnAdmissionUncertainFailure(
-            new Error('Flower turn admission returned an invalid receipt.'),
-            clientRequestID,
-            { ...(responseThreadID ? { thread_id: responseThreadID } : {}) },
-          );
+        if (!responseThreadID || !clientIdentityValid || !currentValid) {
+          throw new Error('Flower send returned an invalid current view.');
         }
-        if (kind === 'admitting') {
-          return { client_request_id: clientRequestID, thread_id: responseThreadID, admission_id: admissionID, kind };
-        }
-        return kind === 'start'
-          ? { client_request_id: clientRequestID, thread_id: responseThreadID, turn_id: turnID, run_id: runID, kind }
-          : { client_request_id: clientRequestID, thread_id: responseThreadID, queue_id: queueID, kind: 'queued' };
-      } catch (error) {
-        if (error instanceof LocalApiError && error.code !== 'INVALID_JSON_RESPONSE') throw error;
-        if (flowerTurnAdmissionUncertainIdentity(error)) {
-          throw error;
-        }
-        throw flowerTurnAdmissionUncertainFailure(error, clientRequestID, {
-          ...(existingThreadID ? { thread_id: existingThreadID } : {}),
-        });
-      }
+      return { client_request_id: clientRequestID, thread_id: responseThreadID, current: current! };
     },
     retryThread: async (threadID) => {
       const tid = trim(threadID);
@@ -1020,22 +991,11 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         method: 'POST',
         body: JSON.stringify({}),
       });
-      return loadThread(tid);
     },
     stopThread: async (threadID) => {
       const tid = trim(threadID);
       if (!tid) throw new Error(adapterCopy(options).missingThreadID);
       await options.rpc.ai.stopThread({ threadId: tid });
-      return loadThread(tid);
-    },
-    compactThreadContext: async (input) => {
-      const tid = trim(input.thread_id);
-      if (!tid) throw new Error(adapterCopy(options).missingThreadID);
-      await options.rpc.ai.compactThreadContext({
-        threadId: tid,
-        activeRunId: trim(input.active_run_id) || undefined,
-      });
-      return loadThread(tid);
     },
     submitInput: async (input) => {
       const tid = trim(input.thread_id);
@@ -1069,18 +1029,18 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         },
       );
       if (
-        !trim(response.turn_id)
-        || !trim(response.run_id)
-        || trim(response.kind) !== 'start'
+        trim(response.kind) !== 'accepted'
         || trim(response.consumed_waiting_prompt_id) !== promptID
+        || !response.current
+        || trim(response.current.thread_id) !== tid
+        || Number(response.current.view_version) <= 0
       ) {
-        throw new Error('Flower input response admission returned an invalid receipt.');
+        throw new Error('Flower input response returned an invalid current view.');
       }
       return {
         thread_id: tid,
-        turn_id: trim(response.turn_id),
-        run_id: trim(response.run_id),
         consumed_prompt_id: promptID,
+        current: response.current,
       } satisfies FlowerSubmitInputReceipt;
     },
     missingThreadID: copy.missingThreadID,

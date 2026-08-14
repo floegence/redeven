@@ -3,6 +3,7 @@ package threadstore
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -130,79 +131,9 @@ func TestThreadstoreBoundaryManifestCoversExactSchemaAndProductionSQL(t *testing
 	}
 }
 
-func TestAdmissionReceiptQueriesStayExactCoordinationOnly(t *testing.T) {
-	repositoryRoot := filepath.Clean(filepath.Join("..", "..", ".."))
-	manifest, err := boundarycontract.LoadThreadstoreBoundaryManifest(filepath.Join(repositoryRoot, "scripts", "contracts", "threadstore_boundary_manifest.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var receiptTable boundarycontract.ThreadstoreTableContract
-	for _, table := range manifest.Tables {
-		if table.Table == "ai_turn_admission_receipts" {
-			receiptTable = table
-			break
-		}
-	}
-	if receiptTable.Table == "" {
-		t.Fatal("ai_turn_admission_receipts is missing from the boundary manifest")
-	}
-	if !reflect.DeepEqual(receiptTable.AllowedLookupKeys, []string{"queue_id", "logical_request_id"}) {
-		t.Fatalf("receipt lookup allowlist = %v", receiptTable.AllowedLookupKeys)
-	}
-	if !strings.Contains(strings.ToLower(receiptTable.CanonicalIdentity), "integrity") || !strings.Contains(strings.ToLower(receiptTable.APIUIVisibility), "not exposed") {
-		t.Fatal("receipt canonical IDs must remain integrity-only and hidden from product APIs/UI")
-	}
-	canonicalKeys := map[string]struct{}{"thread_id": {}, "turn_id": {}, "run_id": {}, "entry_id": {}}
-	for _, query := range manifest.Queries {
-		if query.Action != "read" || !containsString(query.Tables, "ai_turn_admission_receipts") {
-			continue
-		}
-		for _, key := range query.LookupKeys {
-			if _, forbidden := canonicalKeys[key]; forbidden {
-				t.Fatalf("receipt read %s uses forbidden canonical lifecycle lookup key %s", query.ID, key)
-			}
-		}
-	}
-}
-
-func TestAdmissionReceiptSchemaStoresOnlyCoordinationEvidence(t *testing.T) {
-	reviewed, err := reviewedProductSchemaContract(threadstoreCurrentSchemaVersion)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var columns []reviewedSchemaColumn
-	for _, table := range reviewed.Tables {
-		if table.Name == "ai_turn_admission_receipts" {
-			columns = table.Columns
-			break
-		}
-	}
-	if len(columns) == 0 {
-		t.Fatal("ai_turn_admission_receipts is missing from the reviewed schema")
-	}
-	forbidden := map[string]struct{}{
-		"terminal_committed": {},
-		"terminal_replayed":  {},
-	}
-	for _, column := range columns {
-		if _, found := forbidden[column.Name]; found {
-			t.Fatalf("admission receipt column %q stores terminal outcome shadow state; receipts must stay coordination-only", column.Name)
-		}
-	}
-}
-
-func containsString(values []string, target string) bool {
-	for _, value := range values {
-		if value == target {
-			return true
-		}
-	}
-	return false
-}
-
 func buildReviewedSchemaManifestForTest(t *testing.T) reviewedSchemaManifest {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "v1.sqlite")
+	path := filepath.Join(t.TempDir(), "current.sqlite")
 	db := createReviewedSchemaDatabaseForTest(t, path)
 	tx, err := db.Begin()
 	if err != nil {
@@ -212,7 +143,7 @@ func buildReviewedSchemaManifestForTest(t *testing.T) reviewedSchemaManifest {
 	_ = tx.Rollback()
 	_ = db.Close()
 	if err != nil {
-		t.Fatalf("inspect schema v1: %v", err)
+		t.Fatalf("inspect current schema: %v", err)
 	}
 	return reviewedSchemaManifest{SchemaKind: threadstoreSchemaKind, Versions: []reviewedSchemaSnapshot{snapshot}}
 }
@@ -248,7 +179,7 @@ INSERT INTO __redeven_db_meta(
 		_ = tx.Rollback()
 		t.Fatal(err)
 	}
-	if _, err := tx.Exec("PRAGMA user_version = 1"); err != nil {
+	if _, err := tx.Exec(fmt.Sprintf("PRAGMA user_version = %d", threadstoreCurrentSchemaVersion)); err != nil {
 		_ = tx.Rollback()
 		t.Fatal(err)
 	}

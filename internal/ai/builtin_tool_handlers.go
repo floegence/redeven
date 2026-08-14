@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	flruntime "github.com/floegence/floret/v3/runtime"
+	flruntime "github.com/floegence/floret/v4/runtime"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
 
@@ -299,7 +299,6 @@ func normalizeSubagentsPayload(payload any) (any, bool) {
 	if !ok || record == nil {
 		return normalized, false
 	}
-	record = projectSubagentToolResult(record)
 	truncated := truncateSubagentsPayloadRecord(record)
 	if truncated {
 		record["truncated"] = true
@@ -763,7 +762,7 @@ func builtInToolDefinitions() []ToolDef {
 		{
 			Name:             "write_todos",
 			Description:      "Replace the current thread todo list snapshot for actionable work. Track work items only, not control signals such as task_complete or ask_user. Keep at most one in_progress item, avoid empty lists unless explicitly clearing prior todos, and use at least 3 todos when the user asks for explicit planning/task breakdown.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"todos": map[string]any{"type": "array", "items": map[string]any{"type": "object", "properties": map[string]any{"id": map[string]any{"type": "string"}, "content": map[string]any{"type": "string"}, "status": map[string]any{"type": "string", "enum": []string{string(flruntime.AgentTodoPending), string(flruntime.AgentTodoInProgress), string(flruntime.AgentTodoCompleted)}}}, "required": []string{"id", "content", "status"}, "additionalProperties": false}}, "expected_version": map[string]any{"type": "integer", "minimum": 0}, "explanation": map[string]any{"type": "string", "maxLength": 500}}, "required": []string{"todos"}, "additionalProperties": false}),
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"todos": map[string]any{"type": "array", "items": map[string]any{"type": "object", "properties": map[string]any{"id": map[string]any{"type": "string"}, "content": map[string]any{"type": "string"}, "status": map[string]any{"type": "string", "enum": []string{TodoStatusPending, TodoStatusInProgress, TodoStatusCompleted}}}, "required": []string{"id", "content", "status"}, "additionalProperties": false}}, "expected_version": map[string]any{"type": "integer", "minimum": 0}, "explanation": map[string]any{"type": "string", "maxLength": 500}}, "required": []string{"todos"}, "additionalProperties": false}),
 			Mutating:         false,
 			RequiresApproval: false,
 			Visibility:       ToolVisibilityInteraction,

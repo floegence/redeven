@@ -3,126 +3,15 @@ package ai
 import (
 	"context"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/floegence/floret/v3/identity"
-	flruntime "github.com/floegence/floret/v3/runtime"
 	"github.com/floegence/redeven/internal/session"
 )
-
-type attachmentAuthorityReadHost struct {
-	page          flruntime.ThreadTurnsPage
-	exactErr      error
-	exactRequests *[]identity.TurnID
-	listRequests  *[]flruntime.ThreadTurnsRequest
-}
-
-func (h attachmentAuthorityReadHost) ReadThread(context.Context) (flruntime.ThreadSnapshot, error) {
-	return flruntime.ThreadSnapshot{}, errors.New("not used")
-}
-func (h attachmentAuthorityReadHost) Bootstrap(context.Context, flruntime.ThreadBootstrapRequest) (flruntime.ThreadBootstrap, error) {
-	return flruntime.ThreadBootstrap{}, errors.New("not used")
-}
-func (h attachmentAuthorityReadHost) ReadThreadOverview(context.Context) (flruntime.ThreadOverview, error) {
-	return flruntime.ThreadOverview{}, errors.New("not used")
-}
-func (h attachmentAuthorityReadHost) ReadThreadTurn(_ context.Context, turnID identity.TurnID) (flruntime.ThreadTurnSnapshot, error) {
-	if h.exactRequests != nil {
-		*h.exactRequests = append(*h.exactRequests, turnID)
-	}
-	if h.exactErr != nil {
-		return flruntime.ThreadTurnSnapshot{}, h.exactErr
-	}
-	for _, turn := range h.page.Turns {
-		if turn.TurnID == turnID {
-			return turn, nil
-		}
-	}
-	return flruntime.ThreadTurnSnapshot{}, flruntime.ErrTurnNotFound
-}
-func (h attachmentAuthorityReadHost) ListThreadTurns(_ context.Context, req flruntime.ThreadTurnsRequest) (flruntime.ThreadTurnsPage, error) {
-	if h.listRequests != nil {
-		*h.listRequests = append(*h.listRequests, req)
-	}
-	return h.page, nil
-}
-func (h attachmentAuthorityReadHost) ReadThreadAgentTodos(context.Context) (flruntime.ThreadAgentTodoState, error) {
-	return flruntime.ThreadAgentTodoState{}, errors.New("not used")
-}
-func (h attachmentAuthorityReadHost) ReadThreadContext(context.Context) (flruntime.ThreadContextSnapshot, error) {
-	return flruntime.ThreadContextSnapshot{}, errors.New("not used")
-}
-func (h attachmentAuthorityReadHost) ReadTurnProjection(context.Context, identity.TurnID, identity.RunID) (flruntime.ThreadTurnProjection, error) {
-	return flruntime.ThreadTurnProjection{}, errors.New("not used")
-}
-
-func TestFloretLiveAttachmentAuthorityReadsExactCanonicalTurn(t *testing.T) {
-	t.Parallel()
-	const attachmentID = "upl_aaaaaaaaaaaaaaaaaaaaaaaa"
-	digest := strings.Repeat("a", 64)
-	ref, err := immutableFloretUploadResourceRef(attachmentID, digest)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var exactRequests []identity.TurnID
-	var listRequests []flruntime.ThreadTurnsRequest
-	authority := floretLiveAttachmentAuthority{threadID: "thread_1", host: attachmentAuthorityReadHost{
-		exactRequests: &exactRequests, listRequests: &listRequests,
-		page: flruntime.ThreadTurnsPage{
-			ThreadID: "thread_1",
-			Turns: []flruntime.ThreadTurnSnapshot{{
-				TurnID: "turn_1", UserAttachments: []flruntime.MessageAttachment{{
-					ResourceRef: ref, Name: "notes.txt", MIMEType: "text/plain; charset=utf-8", SizeBytes: 42,
-				}},
-			}},
-		}}}
-	membership, err := authority.ReadCanonicalAttachmentMembership(context.Background(), "thread_1", "turn_1", attachmentID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if membership.ResourceRef != ref || membership.ContentSHA256 != digest || membership.Name != "notes.txt" || membership.SizeBytes != 42 {
-		t.Fatalf("membership=%#v", membership)
-	}
-	if len(exactRequests) != 1 || exactRequests[0] != "turn_1" || len(listRequests) != 0 {
-		t.Fatalf("exact requests=%#v list requests=%#v", exactRequests, listRequests)
-	}
-	if _, err := authority.ReadCanonicalAttachmentMembership(context.Background(), "thread_1", "turn_other", attachmentID); !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("wrong turn error=%v, want sql.ErrNoRows", err)
-	}
-	if _, err := authority.ReadCanonicalAttachmentMembership(context.Background(), "thread_other", "turn_1", attachmentID); !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("wrong thread error=%v, want sql.ErrNoRows", err)
-	}
-}
-
-func TestFloretLiveAttachmentAuthorityScansOnlyWithoutTurnIdentity(t *testing.T) {
-	t.Parallel()
-	const attachmentID = "upl_bbbbbbbbbbbbbbbbbbbbbbbb"
-	ref, err := immutableFloretUploadResourceRef(attachmentID, strings.Repeat("b", 64))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var exactRequests []identity.TurnID
-	var listRequests []flruntime.ThreadTurnsRequest
-	authority := floretLiveAttachmentAuthority{threadID: "thread_1", host: attachmentAuthorityReadHost{
-		exactRequests: &exactRequests, listRequests: &listRequests,
-		page: flruntime.ThreadTurnsPage{ThreadID: "thread_1", Turns: []flruntime.ThreadTurnSnapshot{{
-			TurnID: "turn_1", UserAttachments: []flruntime.MessageAttachment{{ResourceRef: ref, Name: "notes.txt"}},
-		}}},
-	}}
-	if _, err := authority.find(context.Background(), "", attachmentID); err != nil {
-		t.Fatal(err)
-	}
-	if len(exactRequests) != 0 || len(listRequests) != 1 {
-		t.Fatalf("exact requests=%#v list requests=%#v", exactRequests, listRequests)
-	}
-}
 
 func TestAttachmentReadToolPagesUTF8AndRejectsCursorTampering(t *testing.T) {
 	t.Parallel()

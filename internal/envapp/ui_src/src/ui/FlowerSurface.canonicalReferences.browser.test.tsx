@@ -87,7 +87,13 @@ describe('Flower canonical reference browser presentation', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-canonical-reference-browser"] button')));
     (runtime.querySelector('[data-thread-id="thread-canonical-reference-browser"] button') as HTMLButtonElement).click();
+    const surface = runtime.querySelector('#redeven-flower-surface') as HTMLElement;
+    await waitFor(() => surface.getAttribute('data-flower-selected-thread-loading') === 'true');
+    expect(runtime.querySelectorAll('[data-flower-chat-context-chip="true"]')).toHaveLength(0);
+
+    threadLoad.resolve(canonicalBootstrap);
     await waitFor(() => runtime.querySelectorAll('[data-flower-chat-context-chip="true"]').length === 5);
+    await waitFor(() => surface.getAttribute('data-flower-selected-thread-loading') === 'false');
     await waitFor(() => {
       const transcript = runtime.querySelector('.flower-chat-transcript');
       return Boolean(transcript)
@@ -95,8 +101,6 @@ describe('Flower canonical reference browser presentation', () => {
         && transcript?.getAttribute('aria-busy') !== 'true';
     });
 
-    const surface = runtime.querySelector('#redeven-flower-surface') as HTMLElement;
-    expect(surface.getAttribute('data-flower-selected-thread-loading')).toBe('true');
     const message = runtime.querySelector('[data-flower-message-id="entry-canonical-reference-browser"]') as HTMLElement;
     const bubble = message.querySelector('.flower-chat-context-unified-bubble') as HTMLElement;
     const attachment = bubble.querySelector('.flower-message-file') as HTMLElement;
@@ -127,15 +131,6 @@ describe('Flower canonical reference browser presentation', () => {
 
     const fileChip = chips[1] as HTMLButtonElement;
     attachment.focus();
-    expect(document.activeElement).toBe(attachment);
-
-    threadLoad.resolve(canonicalBootstrap);
-    await waitFor(() => surface.getAttribute('data-flower-selected-thread-loading') === 'false');
-
-    const refreshedAttachment = runtime.querySelector('.flower-chat-context-unified-bubble .flower-message-file') as HTMLElement;
-    const refreshedFileChip = runtime.querySelectorAll('[data-flower-chat-context-chip="true"]')[1] as HTMLButtonElement;
-    expect(refreshedAttachment).toBe(attachment);
-    expect(refreshedFileChip).toBe(fileChip);
     expect(document.activeElement).toBe(attachment);
 
     fileChip.focus();

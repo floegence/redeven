@@ -8,40 +8,182 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	flconfig "github.com/floegence/floret/v4/config"
+	"github.com/floegence/floret/v4/identity"
+	flprovider "github.com/floegence/floret/v4/provider"
+	flruntime "github.com/floegence/floret/v4/runtime"
+	"github.com/floegence/redeven/internal/session"
 )
 
-func TestFlowerLiveStreamCoalescesDeltasAndDeduplicatesBlockSets(t *testing.T) {
+func TestFlowerWorkspaceStreamAcceptsEmptySelectionAndReceivesBackgroundThreadUpdates(t *testing.T) {
 	t.Parallel()
 	svc := newFlowerLiveMemoryTestService()
-	meta := flowerLiveMemoryTestMeta("env_live_stream_coalesce")
-	threadID := "thread_live_stream_coalesce"
-	subscription, err := svc.SubscribeFlowerLiveStream(context.Background(), &meta, FlowerLiveStreamRequest{ThreadID: threadID})
+	meta := flowerLiveMemoryTestMeta("env_live_workspace")
+	subscription, err := svc.SubscribeFlowerLiveStream(context.Background(), &meta, FlowerLiveStreamRequest{})
+	if err != nil {
+		t.Fatalf("workspace subscribe: %v", err)
+	}
+	defer subscription.Close()
+	if got := nextFlowerLiveStreamFrame(t, subscription).Kind; got != FlowerLiveStreamReady {
+		t.Fatalf("ready kind=%q", got)
+	}
+	svc.publishFlowerRuntimeCurrent(meta.EndpointID, flruntime.ThreadView{
+		ThreadID:    identity.ThreadID("background-thread"),
+		ViewVersion: 1, Activity: flruntime.ThreadActivityActive,
+	})
+	frame := nextFlowerLiveStreamFrame(t, subscription)
+	if frame.Kind != FlowerLiveStreamThreadBatch {
+		t.Fatalf("workspace update kind=%q, want thread.batch", frame.Kind)
+	}
+}
+
+func TestFlowerWorkspaceStreamReceivesTypedRuntimeCurrentViewWithoutSelectingThread(t *testing.T) {
+	ctx := context.Background()
+	svc := newSendTurnTestService(t)
+	meta := &session.Meta{
+		ChannelID: "channel_workspace_current", EndpointID: "env_workspace_current",
+		UserPublicID: "user_workspace_current", NamespacePublicID: "namespace_workspace_current",
+		CanRead: true, CanWrite: true, CanExecute: true,
+	}
+	thread, err := svc.CreateThread(ctx, meta, "Background thread", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	subscription, err := svc.SubscribeFlowerLiveStream(ctx, meta, FlowerLiveStreamRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer subscription.Close()
-	_ = nextFlowerLiveStreamFrame(t, subscription)
-	for index := range 10 {
-		svc.appendFlowerLiveEvent(FlowerLiveEvent{
-			EndpointID: meta.EndpointID, ThreadID: threadID, Kind: FlowerLiveMessageBlockDelta,
-			Payload: mustFlowerPayload(FlowerLiveMessageBlockDeltaPayload{MessageID: "message_1", BlockIndex: 0, Delta: string(rune('a' + index))}),
-		})
+	if ready := nextFlowerLiveStreamFrame(t, subscription); ready.Kind != FlowerLiveStreamReady {
+		t.Fatalf("ready kind=%q", ready.Kind)
 	}
-	batch := nextFlowerLiveStreamFrame(t, subscription)
-	var envelope FlowerLiveStreamEnvelope
-	if err := json.Unmarshal(batch.Data, &envelope); err != nil {
+	startedAt := time.Now()
+	result, err := svc.threadRuntime.Send(ctx, flruntime.SendInput{ThreadID: identity.ThreadID(thread.ThreadID), Input: flruntime.UserInput{Text: "continue in background"}, RequestKey: "request-workspace-current"})
+	if err != nil {
 		t.Fatal(err)
 	}
-	if batch.FromSeq != 1 || batch.ThroughSeq != 10 || len(envelope.Events) != 10 {
-		t.Fatalf("coalesced batch=%d..%d events=%d, want 1..10/10", batch.FromSeq, batch.ThroughSeq, len(envelope.Events))
+	if elapsed := time.Since(startedAt); elapsed >= 500*time.Millisecond {
+		t.Fatalf("typed Send elapsed %s, want below 500ms", elapsed)
+	}
+	if result.Activity != flruntime.ThreadActivityActive {
+		t.Fatalf("Send view activity=%q", result.Activity)
+	}
+	frame := nextFlowerLiveStreamFrame(t, subscription)
+	var envelope FlowerLiveStreamEnvelope
+	if err := json.Unmarshal(frame.Data, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if frame.Kind != FlowerLiveStreamThreadBatch || envelope.Current == nil {
+		t.Fatalf("workspace frame=%s, want typed current thread batch", frame.Data)
+	}
+	if envelope.ThreadID != thread.ThreadID || envelope.Current.ThreadID.String() != thread.ThreadID || envelope.Current.Activity != flruntime.ThreadActivityActive {
+		t.Fatalf("typed current envelope=%#v", envelope)
+	}
+}
+
+func TestFlowerWorkspaceSummaryFrameContainsSnapshotNotProjectionEvent(t *testing.T) {
+	ctx := context.Background()
+	svc := newSendTurnTestService(t)
+	meta := &session.Meta{
+		ChannelID: "channel_workspace_summary", EndpointID: "env_workspace_summary",
+		UserPublicID: "user_workspace_summary", NamespacePublicID: "namespace_workspace_summary",
+		CanRead: true, CanWrite: true, CanExecute: true,
+	}
+	thread, err := svc.CreateThread(ctx, meta, "Summary snapshot", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	subscription, err := svc.SubscribeFlowerLiveStream(ctx, meta, FlowerLiveStreamRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer subscription.Close()
+	if ready := nextFlowerLiveStreamFrame(t, subscription); ready.Kind != FlowerLiveStreamReady {
+		t.Fatalf("ready kind=%q", ready.Kind)
 	}
 
-	payload := mustFlowerPayload(FlowerLiveMessageBlockSetPayload{MessageID: "message_1", BlockIndex: 0, Block: map[string]any{"type": "text", "text": "done"}})
-	if _, accepted := svc.appendFlowerLiveEvent(FlowerLiveEvent{EndpointID: meta.EndpointID, ThreadID: threadID, Kind: FlowerLiveMessageBlockSet, Payload: payload}); !accepted {
-		t.Fatal("first block_set was rejected")
+	if err := svc.broadcastThreadSummary(meta.EndpointID, thread.ThreadID); err != nil {
+		t.Fatal(err)
 	}
-	if _, accepted := svc.appendFlowerLiveEvent(FlowerLiveEvent{EndpointID: meta.EndpointID, ThreadID: threadID, Kind: FlowerLiveMessageBlockSet, Payload: payload}); accepted {
-		t.Fatal("identical block_set was not deduplicated")
+	frame := nextFlowerLiveStreamFrame(t, subscription)
+	var envelope FlowerLiveStreamEnvelope
+	if err := json.Unmarshal(frame.Data, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if frame.Kind != FlowerLiveStreamSummaryBatch || len(envelope.Summaries) != 1 {
+		t.Fatalf("summary frame=%s, want one summary snapshot", frame.Data)
+	}
+	if envelope.Summaries[0].ThreadID != thread.ThreadID {
+		t.Fatalf("summary thread=%q, want %q", envelope.Summaries[0].ThreadID, thread.ThreadID)
+	}
+	if envelope.Current != nil {
+		t.Fatalf("summary frame mixed detail/projection state: %s", frame.Data)
+	}
+}
+
+func TestFlowerWorkspaceReadyUsesTypedRuntimeViewWithoutProjectionMirror(t *testing.T) {
+	ctx := context.Background()
+	svc := newSendTurnTestService(t)
+	meta := &session.Meta{
+		ChannelID: "channel_workspace_ready", EndpointID: "env_workspace_ready",
+		UserPublicID: "user_workspace_ready", NamespacePublicID: "namespace_workspace_ready",
+		CanRead: true, CanWrite: true, CanExecute: true,
+	}
+	thread, err := svc.CreateThread(ctx, meta, "Ready baseline thread", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	release := make(chan struct{})
+	gateway := testFloretGatewayFunc(func(context.Context, flprovider.Request) (<-chan flprovider.Event, error) {
+		<-release
+		events := make(chan flprovider.Event)
+		close(events)
+		return events, nil
+	})
+	agent, err := flruntime.NewAgent(flconfig.AgentConfig{Profile: flconfig.AgentProfile{ID: "assistant", Name: "Assistant"}, SystemPrompt: "Wait.", Context: flconfig.ContextPolicy{ContextWindowTokens: flconfig.DefaultContextWindowTokens}}, gateway)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { close(release) })
+	svc.floretEffects.put(identity.ThreadID(thread.ThreadID), "request-workspace-ready", floretEffectRequest{agent: agent})
+	result, err := svc.threadRuntime.Send(ctx, flruntime.SendInput{ThreadID: identity.ThreadID(thread.ThreadID), Input: flruntime.UserInput{Text: "remain active for baseline"}, RequestKey: "request-workspace-ready"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Activity != flruntime.ThreadActivityActive {
+		t.Fatalf("Send view activity=%q", result.Activity)
+	}
+	// Let the service runtime pump consume the original publication before the
+	// observer connects. The subscription must recover current state itself.
+	time.Sleep(100 * time.Millisecond)
+
+	subscription, err := svc.SubscribeFlowerLiveStream(ctx, meta, FlowerLiveStreamRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer subscription.Close()
+	ready := nextFlowerLiveStreamFrame(t, subscription)
+	var envelope FlowerLiveStreamEnvelope
+	if err := json.Unmarshal(ready.Data, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if ready.Kind != FlowerLiveStreamReady || len(envelope.Summaries) != 1 {
+		t.Fatalf("ready frame=%s", ready.Data)
+	}
+	if got := envelope.Summaries[0]; got.ThreadID != thread.ThreadID || got.RunStatus != string(RunStateRunning) {
+		t.Fatalf("ready summary=%#v, want typed running state", got)
+	}
+	currentFrame := nextFlowerLiveStreamFrame(t, subscription)
+	var currentEnvelope FlowerLiveStreamEnvelope
+	if err := json.Unmarshal(currentFrame.Data, &currentEnvelope); err != nil {
+		t.Fatal(err)
+	}
+	if currentFrame.Kind != FlowerLiveStreamThreadBatch || currentEnvelope.Current == nil {
+		t.Fatalf("baseline current frame=%s, want typed thread.batch", currentFrame.Data)
+	}
+	if currentEnvelope.ThreadID != thread.ThreadID || currentEnvelope.Current.ThreadID.String() != thread.ThreadID || currentEnvelope.Current.Activity != flruntime.ThreadActivityActive {
+		t.Fatalf("baseline current envelope=%#v", currentEnvelope)
 	}
 }
 
@@ -49,19 +191,13 @@ func TestFlowerLiveSummaryBatchDoesNotExposeViewerReadState(t *testing.T) {
 	t.Parallel()
 	svc := newFlowerLiveMemoryTestService()
 	meta := flowerLiveMemoryTestMeta("env_live_stream_private")
-	subscription, err := svc.SubscribeFlowerLiveStream(context.Background(), &meta, FlowerLiveStreamRequest{ThreadID: "selected_thread"})
+	subscription, err := svc.SubscribeFlowerLiveStream(context.Background(), &meta, FlowerLiveStreamRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer subscription.Close()
 	_ = nextFlowerLiveStreamFrame(t, subscription)
-	svc.appendFlowerLiveEvent(FlowerLiveEvent{
-		EndpointID: meta.EndpointID, ThreadID: "background_thread", Kind: FlowerLiveThreadPatched,
-		Payload: mustFlowerPayload(FlowerLiveThreadPatchedPayload{Patch: FlowerLiveThreadPatch{
-			ThreadID:   "background_thread",
-			ReadStatus: &FlowerThreadReadView{IsUnread: true, ReadState: FlowerThreadReadRecord{LastSeenActivitySignature: "private"}},
-		}}),
-	})
+	svc.publishFlowerLiveSummary(meta.EndpointID, ThreadView{ThreadID: "background_thread", Title: "shared"})
 	frame := nextFlowerLiveStreamFrame(t, subscription)
 	if frame.Kind != FlowerLiveStreamSummaryBatch {
 		t.Fatalf("frame kind=%q, want summary.batch", frame.Kind)
@@ -76,18 +212,14 @@ func TestFlowerLiveThreadBatchDoesNotExposeViewerReadState(t *testing.T) {
 	svc := newFlowerLiveMemoryTestService()
 	meta := flowerLiveMemoryTestMeta("env_live_stream_thread_private")
 	threadID := "selected_thread"
-	subscription, err := svc.SubscribeFlowerLiveStream(context.Background(), &meta, FlowerLiveStreamRequest{ThreadID: threadID})
+	subscription, err := svc.SubscribeFlowerLiveStream(context.Background(), &meta, FlowerLiveStreamRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer subscription.Close()
 	_ = nextFlowerLiveStreamFrame(t, subscription)
-	svc.appendFlowerLiveEvent(FlowerLiveEvent{
-		EndpointID: meta.EndpointID, ThreadID: threadID, Kind: FlowerLiveThreadPatched,
-		Payload: mustFlowerPayload(FlowerLiveThreadPatchedPayload{Patch: FlowerLiveThreadPatch{
-			ThreadID:   threadID,
-			ReadStatus: &FlowerThreadReadView{IsUnread: true, ReadState: FlowerThreadReadRecord{LastSeenActivitySignature: "private"}},
-		}}),
+	svc.publishFlowerRuntimeCurrent(meta.EndpointID, flruntime.ThreadView{
+		ThreadID: identity.ThreadID(threadID), ViewVersion: 1,
 	})
 	frame := nextFlowerLiveStreamFrame(t, subscription)
 	if frame.Kind != FlowerLiveStreamThreadBatch {
@@ -107,17 +239,17 @@ func TestFlowerLiveViewerReadStateIsSharedOnlyWithSameUser(t *testing.T) {
 	otherMeta.UserPublicID = "other_user"
 	threadID := "thread_viewer"
 
-	first, err := svc.SubscribeFlowerLiveStream(context.Background(), &firstMeta, FlowerLiveStreamRequest{ThreadID: threadID})
+	first, err := svc.SubscribeFlowerLiveStream(context.Background(), &firstMeta, FlowerLiveStreamRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer first.Close()
-	second, err := svc.SubscribeFlowerLiveStream(context.Background(), &secondMeta, FlowerLiveStreamRequest{ThreadID: threadID})
+	second, err := svc.SubscribeFlowerLiveStream(context.Background(), &secondMeta, FlowerLiveStreamRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer second.Close()
-	other, err := svc.SubscribeFlowerLiveStream(context.Background(), &otherMeta, FlowerLiveStreamRequest{ThreadID: threadID})
+	other, err := svc.SubscribeFlowerLiveStream(context.Background(), &otherMeta, FlowerLiveStreamRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,12 +303,12 @@ func TestFlowerLiveStreamSharesEncodedBatchesAcrossObservers(t *testing.T) {
 	meta.CanExecute = false
 	threadID := "thread_live_stream_shared"
 
-	first, err := svc.SubscribeFlowerLiveStream(context.Background(), &meta, FlowerLiveStreamRequest{ThreadID: threadID})
+	first, err := svc.SubscribeFlowerLiveStream(context.Background(), &meta, FlowerLiveStreamRequest{})
 	if err != nil {
 		t.Fatalf("subscribe first read-only observer: %v", err)
 	}
 	defer first.Close()
-	second, err := svc.SubscribeFlowerLiveStream(context.Background(), &meta, FlowerLiveStreamRequest{ThreadID: threadID})
+	second, err := svc.SubscribeFlowerLiveStream(context.Background(), &meta, FlowerLiveStreamRequest{})
 	if err != nil {
 		t.Fatalf("subscribe second read-only observer: %v", err)
 	}
@@ -188,11 +320,9 @@ func TestFlowerLiveStreamSharesEncodedBatchesAcrossObservers(t *testing.T) {
 		t.Fatalf("second frame kind=%q, want ready", got)
 	}
 
-	svc.appendFlowerLiveEvent(FlowerLiveEvent{
-		EndpointID: meta.EndpointID,
-		ThreadID:   threadID,
-		Kind:       FlowerLiveMessageBlockDelta,
-		Payload:    mustFlowerPayload(FlowerLiveMessageBlockDeltaPayload{MessageID: "message_1", BlockIndex: 0, Delta: "hello"}),
+	svc.publishFlowerRuntimeCurrent(meta.EndpointID, flruntime.ThreadView{
+		ThreadID:    identity.ThreadID(threadID),
+		ViewVersion: 1, Activity: flruntime.ThreadActivityActive, AssistantDraft: "hello",
 	})
 	firstBatch := nextFlowerLiveStreamFrame(t, first)
 	secondBatch := nextFlowerLiveStreamFrame(t, second)
@@ -213,7 +343,7 @@ func TestFlowerLiveStreamSharesCanonicalOrderAtObserverScale(t *testing.T) {
 			threadID := "thread_live_stream_scale"
 			subscriptions := make([]*FlowerLiveStreamSubscription, 0, observerCount)
 			for range observerCount {
-				subscription, err := svc.SubscribeFlowerLiveStream(context.Background(), &meta, FlowerLiveStreamRequest{ThreadID: threadID})
+				subscription, err := svc.SubscribeFlowerLiveStream(context.Background(), &meta, FlowerLiveStreamRequest{})
 				if err != nil {
 					t.Fatalf("subscribe observer %d/%d: %v", len(subscriptions)+1, observerCount, err)
 				}
@@ -225,15 +355,12 @@ func TestFlowerLiveStreamSharesCanonicalOrderAtObserverScale(t *testing.T) {
 					subscription.Close()
 				}
 			})
-			svc.appendFlowerLiveEvent(FlowerLiveEvent{
-				EndpointID: meta.EndpointID, ThreadID: threadID, Kind: FlowerLiveThreadPatched,
-				Payload: mustFlowerPayload(FlowerLiveThreadPatchedPayload{Patch: FlowerLiveThreadPatch{ThreadID: threadID, Title: "shared"}}),
-			})
+			svc.publishFlowerLiveSummary(meta.EndpointID, ThreadView{ThreadID: threadID, Title: "shared"})
 			var canonical *FlowerLiveStreamFrame
 			for index, subscription := range subscriptions {
 				frame := nextFlowerLiveStreamFrame(t, subscription)
-				if frame.Kind != FlowerLiveStreamThreadBatch || frame.FromSeq != 1 || frame.ThroughSeq != 1 {
-					t.Fatalf("observer %d frame=%#v, want canonical thread batch 1..1", index, frame)
+				if frame.Kind != FlowerLiveStreamSummaryBatch {
+					t.Fatalf("observer %d frame=%#v, want shared summary batch", index, frame)
 				}
 				if canonical == nil {
 					canonical = frame
@@ -265,59 +392,6 @@ func TestFlowerLiveStreamGlobalQueuedReferenceBudget(t *testing.T) {
 	}
 }
 
-func TestFlowerLiveMetricsTrackDeduplicationBatchesAndSubscribers(t *testing.T) {
-	svc := newFlowerLiveMemoryTestService()
-	meta := flowerLiveMemoryTestMeta("env_live_stream_metrics")
-	threadID := "thread_live_stream_metrics"
-	subscription, err := svc.SubscribeFlowerLiveStream(context.Background(), &meta, FlowerLiveStreamRequest{ThreadID: threadID})
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = nextFlowerLiveStreamFrame(t, subscription)
-	payload := mustFlowerPayload(FlowerLiveMessageBlockSetPayload{MessageID: "message_metrics", BlockIndex: 0, Block: map[string]any{"type": "text", "text": "same"}})
-	svc.appendFlowerLiveEvent(FlowerLiveEvent{EndpointID: meta.EndpointID, ThreadID: threadID, Kind: FlowerLiveMessageBlockSet, Payload: payload})
-	svc.appendFlowerLiveEvent(FlowerLiveEvent{EndpointID: meta.EndpointID, ThreadID: threadID, Kind: FlowerLiveMessageBlockSet, Payload: payload})
-	_ = nextFlowerLiveStreamFrame(t, subscription)
-	subscription.Close()
-
-	metrics := svc.FlowerLiveMetrics()
-	if metrics.CanonicalInputs != 2 || metrics.DeduplicatedBlockSets != 1 || metrics.LogicalEvents != 1 {
-		t.Fatalf("event metrics=%+v", metrics)
-	}
-	if metrics.Batches == 0 || metrics.EncodedBytes == 0 || metrics.PeakSubscribers != 1 || metrics.CurrentSubscribers != 0 {
-		t.Fatalf("stream metrics=%+v", metrics)
-	}
-}
-
-func TestFlowerLiveStreamRegistersBacklogAndLiveFanoutWithoutGap(t *testing.T) {
-	t.Parallel()
-	svc := newFlowerLiveMemoryTestService()
-	meta := flowerLiveMemoryTestMeta("env_live_stream_gap")
-	threadID := "thread_live_stream_gap"
-	first, _ := svc.appendFlowerLiveEvent(FlowerLiveEvent{
-		EndpointID: meta.EndpointID, ThreadID: threadID, Kind: FlowerLiveMessageBlockDelta,
-		Payload: mustFlowerPayload(FlowerLiveMessageBlockDeltaPayload{MessageID: "message_1", Delta: "a"}),
-	})
-	subscription, err := svc.SubscribeFlowerLiveStream(context.Background(), &meta, FlowerLiveStreamRequest{
-		ThreadID: threadID,
-		AfterSeq: 0,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer subscription.Close()
-	second, _ := svc.appendFlowerLiveEvent(FlowerLiveEvent{
-		EndpointID: meta.EndpointID, ThreadID: threadID, Kind: FlowerLiveMessageBlockDelta,
-		Payload: mustFlowerPayload(FlowerLiveMessageBlockDeltaPayload{MessageID: "message_1", Delta: "b"}),
-	})
-
-	ready := nextFlowerLiveStreamFrame(t, subscription)
-	batch := nextFlowerLiveStreamFrame(t, subscription)
-	if ready.Kind != FlowerLiveStreamReady || batch.FromSeq != first.Seq || batch.ThroughSeq != second.Seq {
-		t.Fatalf("frames=%#v/%#v, want ready then contiguous batch %d..%d", ready, batch, first.Seq, second.Seq)
-	}
-}
-
 func TestFlowerLiveStreamAdmissionAndSlowObserverIsolation(t *testing.T) {
 	t.Parallel()
 	svc := newFlowerLiveMemoryTestService()
@@ -325,7 +399,7 @@ func TestFlowerLiveStreamAdmissionAndSlowObserverIsolation(t *testing.T) {
 	threadID := "thread_live_stream_admission"
 	subscriptions := make([]*FlowerLiveStreamSubscription, 0, flowerLiveMaxSubscribersPerEndpoint)
 	for range flowerLiveMaxSubscribersPerEndpoint {
-		subscription, err := svc.SubscribeFlowerLiveStream(context.Background(), &meta, FlowerLiveStreamRequest{ThreadID: threadID})
+		subscription, err := svc.SubscribeFlowerLiveStream(context.Background(), &meta, FlowerLiveStreamRequest{})
 		if err != nil {
 			t.Fatalf("subscribe admitted observer %d: %v", len(subscriptions)+1, err)
 		}
@@ -336,7 +410,7 @@ func TestFlowerLiveStreamAdmissionAndSlowObserverIsolation(t *testing.T) {
 			subscription.Close()
 		}
 	}()
-	if _, err := svc.SubscribeFlowerLiveStream(context.Background(), &meta, FlowerLiveStreamRequest{ThreadID: threadID}); !errors.Is(err, ErrFlowerLiveTooManySubscribers) {
+	if _, err := svc.SubscribeFlowerLiveStream(context.Background(), &meta, FlowerLiveStreamRequest{}); !errors.Is(err, ErrFlowerLiveTooManySubscribers) {
 		t.Fatalf("257th observer error=%v, want admission error", err)
 	}
 
@@ -345,26 +419,22 @@ func TestFlowerLiveStreamAdmissionAndSlowObserverIsolation(t *testing.T) {
 	_ = nextFlowerLiveStreamFrame(t, fast)
 	_ = nextFlowerLiveStreamFrame(t, slow)
 	for index := range flowerLiveSubscriberBatchLimit + 1 {
-		svc.appendFlowerLiveEvent(FlowerLiveEvent{
-			EndpointID: meta.EndpointID, ThreadID: threadID, Kind: FlowerLiveMessageBlockDelta,
-			Payload: mustFlowerPayload(FlowerLiveMessageBlockDeltaPayload{MessageID: "message_1", Delta: string(rune('a' + index%26))}),
+		svc.publishFlowerRuntimeCurrent(meta.EndpointID, flruntime.ThreadView{
+			ThreadID: identity.ThreadID(threadID), ViewVersion: uint64(index + 1),
+			Activity: flruntime.ThreadActivityActive, AssistantDraft: fmt.Sprintf("draft-%d", index),
 		})
 		_ = nextFlowerLiveStreamFrame(t, fast)
 	}
 
-	seenResync := false
-	for range flowerLiveSubscriberBatchLimit + 2 {
-		frame, err := slow.Next(context.Background())
-		if err != nil {
-			break
-		}
-		if frame.Kind == FlowerLiveStreamResyncRequired {
-			seenResync = true
-			break
+	seenLatest := false
+	for range flowerLiveSubscriberBatchLimit {
+		frame := nextFlowerLiveStreamFrame(t, slow)
+		if strings.Contains(string(frame.Data), fmt.Sprintf("draft-%d", flowerLiveSubscriberBatchLimit)) {
+			seenLatest = true
 		}
 	}
-	if !seenResync {
-		t.Fatal("slow observer was not terminated with resync_required")
+	if !seenLatest {
+		t.Fatal("slow observer did not retain the newest workspace update")
 	}
 
 	before := svc.flowerLiveSubscriberCount(meta.EndpointID)
@@ -379,7 +449,7 @@ func TestFlowerLiveStreamRejectsMissingReadPermission(t *testing.T) {
 	svc := newFlowerLiveMemoryTestService()
 	meta := flowerLiveMemoryTestMeta("env_live_stream_denied")
 	meta.CanRead = false
-	if _, err := svc.SubscribeFlowerLiveStream(context.Background(), &meta, FlowerLiveStreamRequest{ThreadID: "thread_denied"}); !errors.Is(err, errReadPermissionDenied) {
+	if _, err := svc.SubscribeFlowerLiveStream(context.Background(), &meta, FlowerLiveStreamRequest{}); !errors.Is(err, errReadPermissionDenied) {
 		t.Fatalf("subscribe error=%v, want read permission denied", err)
 	}
 }

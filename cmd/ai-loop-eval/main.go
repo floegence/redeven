@@ -7,17 +7,18 @@ import (
 	"flag"
 	"fmt"
 	"math"
-	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 	"unicode/utf8"
 
+	"github.com/floegence/floret/v4/identity"
+	"github.com/floegence/floret/v4/observation"
+	flruntime "github.com/floegence/floret/v4/runtime"
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
@@ -25,7 +26,7 @@ import (
 )
 
 type turnMetrics struct {
-	RunID          string        `json:"run_id"`
+	TurnID         string        `json:"turn_id"`
 	Duration       time.Duration `json:"-"`
 	DurationMS     int64         `json:"duration_ms"`
 	ToolCallCount  int           `json:"tool_call_count"`
@@ -117,285 +118,95 @@ type evalReport struct {
 
 type evalProviderKeyResolver func(providerID string) (string, bool, error)
 
-type monitoredResponseWriter struct {
-	head    http.Header
-	monitor *streamMonitor
+type typedTurnObservation struct {
+	Terminal         bool
+	PendingApprovals []string
+	ToolCallCount    int
+	ToolErrorCount   int
+	RunError         string
+	MonitorAbort     string
 }
 
-func (w *monitoredResponseWriter) Header() http.Header {
-	if w.head == nil {
-		w.head = make(http.Header)
+func observeTypedTurn(current flruntime.ThreadView, turnID identity.TurnID) typedTurnObservation {
+	result := typedTurnObservation{}
+	for _, interaction := range current.Interactions {
+		if !interaction.Resolved && interaction.Kind == flruntime.ThreadInteractionApproval && strings.TrimSpace(interaction.ID) != "" {
+			result.PendingApprovals = append(result.PendingApprovals, interaction.ID)
+		}
 	}
-	return w.head
-}
-
-func (w *monitoredResponseWriter) WriteHeader(_ int) {}
-
-func (w *monitoredResponseWriter) Write(p []byte) (int, error) {
-	if w.monitor != nil {
-		w.monitor.feed(p)
-	}
-	return len(p), nil
-}
-
-type streamMonitor struct {
-	svc      *ai.Service
-	meta     *session.Meta
-	threadID string
-	runID    string
-	ctx      context.Context
-	cancel   context.CancelFunc
-
-	mu              sync.Mutex
-	partial         string
-	lastDelta       string
-	repeatDelta     int
-	toolSigCounter  map[string]int
-	approvalActions map[string]ai.FlowerApprovalAction
-	approvalSeen    map[string]struct{}
-	abortReason     string
-}
-
-func newStreamMonitor(svc *ai.Service, meta *session.Meta, threadID string, runID string, ctx context.Context, cancel context.CancelFunc) *streamMonitor {
-	return &streamMonitor{
-		svc:             svc,
-		meta:            meta,
-		threadID:        strings.TrimSpace(threadID),
-		runID:           runID,
-		ctx:             ctx,
-		cancel:          cancel,
-		toolSigCounter:  make(map[string]int),
-		approvalActions: make(map[string]ai.FlowerApprovalAction),
-		approvalSeen:    make(map[string]struct{}),
-	}
-}
-
-func (m *streamMonitor) feed(p []byte) {
-	if m == nil || len(p) == 0 {
-		return
-	}
-	m.mu.Lock()
-	m.partial += string(p)
-	lines := strings.Split(m.partial, "\n")
-	m.partial = lines[len(lines)-1]
-	m.mu.Unlock()
-
-	for i := 0; i < len(lines)-1; i++ {
-		line := strings.TrimSpace(lines[i])
-		if line == "" {
+	toolNames := make(map[string]int)
+	for _, item := range current.Items {
+		if item.TurnID != turnID || item.Kind != flruntime.ThreadItemTool || item.Activity == nil {
 			continue
 		}
-		m.consume(line)
+		result.ToolCallCount++
+		if item.Activity.Status == observation.ActivityStatusError || item.Activity.Status == observation.ActivityStatusCanceled {
+			result.ToolErrorCount++
+		}
+		name := strings.TrimSpace(item.Activity.ToolName)
+		if name == "" {
+			name = strings.TrimSpace(item.Activity.ToolID)
+		}
+		toolNames[name]++
+		if name != "" && toolNames[name] > 16 {
+			result.MonitorAbort = "tool_signature_loop"
+		}
 	}
+	if current.TurnID == turnID && current.Activity == flruntime.ThreadActivityIdle {
+		result.Terminal = true
+		switch current.Outcome {
+		case flruntime.TurnOutcomeFailed:
+			result.RunError = "turn failed"
+		case flruntime.TurnOutcomeCancelled:
+			result.RunError = "turn cancelled"
+		}
+	}
+	return result
 }
 
-func (m *streamMonitor) consume(line string) {
-	var payload map[string]any
-	if err := json.Unmarshal([]byte(line), &payload); err != nil {
-		return
-	}
-	typ := strings.TrimSpace(strings.ToLower(anyToString(payload["type"])))
-	switch typ {
-	case "block-delta":
-		m.consumeDelta(anyToString(payload["delta"]))
-	case "block-set":
-		blk, _ := payload["block"].(map[string]any)
-		m.consumeBlock(blk)
-	case "approval.requested":
-		m.consumeApprovalPayload(payload)
-	}
-}
-
-func (m *streamMonitor) consumeDelta(delta string) {
-	normalized := normalizeText(delta)
-	if normalized == "" {
-		return
-	}
-	m.mu.Lock()
-	if normalized == m.lastDelta {
-		m.repeatDelta++
-	} else {
-		m.lastDelta = normalized
-		m.repeatDelta = 1
-	}
-	repeat := m.repeatDelta
-	m.mu.Unlock()
-	if repeat >= 10 {
-		m.abort("repeated_delta")
-	}
-}
-
-func (m *streamMonitor) consumeBlock(block map[string]any) {
-	if len(block) == 0 {
-		return
-	}
-	switch strings.TrimSpace(strings.ToLower(anyToString(block["type"]))) {
-	case "activity-timeline":
-		items, _ := block["items"].([]any)
-		for _, rawItem := range items {
-			item, _ := rawItem.(map[string]any)
-			if len(item) == 0 {
+func waitForTypedTurn(ctx context.Context, svc *ai.Service, meta *session.Meta, subscription *ai.FlowerLiveStreamSubscription, threadID string, turnID identity.TurnID, current flruntime.ThreadView) typedTurnObservation {
+	handledApprovals := make(map[string]struct{})
+	for {
+		observed := observeTypedTurn(current, turnID)
+		if observed.MonitorAbort != "" {
+			_, _ = svc.StopThread(context.Background(), meta, threadID)
+			return observed
+		}
+		for _, interactionID := range observed.PendingApprovals {
+			if _, handled := handledApprovals[interactionID]; handled {
 				continue
 			}
-			m.consumeActivityApprovalItem(item)
-			m.consumeToolActivity(anyToString(item["tool_name"]), anyToString(item["tool_id"]), nil, anyToBool(item["requires_approval"]), anyToString(item["approval_state"]))
+			handledApprovals[interactionID] = struct{}{}
+			response, err := svc.SubmitFlowerApproval(meta, ai.SubmitFlowerApprovalRequest{
+				ThreadID: threadID, InteractionID: interactionID, Approved: false,
+			})
+			if err != nil {
+				observed.RunError = err.Error()
+				return observed
+			}
+			current = response.Current
 		}
-	}
-}
-
-func (m *streamMonitor) consumeActivityApprovalItem(item map[string]any) {
-	if m == nil || m.svc == nil || m.meta == nil || m.ctx == nil {
-		return
-	}
-	if len(item) == 0 || !anyToBool(item["requires_approval"]) {
-		return
-	}
-	approvalState := strings.TrimSpace(strings.ToLower(anyToString(item["approval_state"])))
-	if approvalState != "requested" {
-		return
-	}
-	runID := strings.TrimSpace(anyToString(item["run_id"]))
-	if runID == "" {
-		runID = strings.TrimSpace(m.runID)
-	}
-	toolID := strings.TrimSpace(anyToString(item["tool_id"]))
-	if runID == "" || toolID == "" {
-		return
-	}
-	bootstrap, err := m.svc.GetFlowerThreadLiveBootstrap(m.ctx, m.meta, m.threadID)
-	if err != nil || bootstrap == nil || bootstrap.LiveState.ApprovalActions == nil {
-		return
-	}
-	action := ai.FlowerApprovalAction{}
-	for _, candidate := range bootstrap.LiveState.ApprovalActions {
-		if candidate.RunID == runID && candidate.ToolID == toolID {
-			action = candidate
-			break
+		if observed.Terminal {
+			return observed
 		}
-	}
-	m.rememberApprovalAction(action)
-}
-
-func (m *streamMonitor) consumeApprovalPayload(payload map[string]any) {
-	record, _ := payload["payload"].(map[string]any)
-	actionRecord, _ := record["action"].(map[string]any)
-	if len(actionRecord) == 0 {
-		return
-	}
-	action := ai.FlowerApprovalAction{
-		ActionID:    strings.TrimSpace(anyToString(actionRecord["action_id"])),
-		RunID:       strings.TrimSpace(anyToString(actionRecord["run_id"])),
-		ToolID:      strings.TrimSpace(anyToString(actionRecord["tool_id"])),
-		ToolName:    strings.TrimSpace(anyToString(actionRecord["tool_name"])),
-		State:       ai.FlowerApprovalState(strings.TrimSpace(anyToString(actionRecord["state"]))),
-		Status:      ai.FlowerApprovalStatus(strings.TrimSpace(anyToString(actionRecord["status"]))),
-		Revision:    anyToInt64(actionRecord["revision"]),
-		ExpectedSeq: anyToInt64(actionRecord["expected_seq"]),
-		CanApprove:  anyToBool(actionRecord["can_approve"]),
-	}
-	if action.ActionID == "" || action.RunID == "" || action.ToolID == "" || action.Revision <= 0 || action.ExpectedSeq <= 0 {
-		return
-	}
-	m.rememberApprovalAction(action)
-}
-
-func (m *streamMonitor) rememberApprovalAction(action ai.FlowerApprovalAction) {
-	if action.ActionID == "" || action.RunID == "" || action.ToolID == "" || action.Revision <= 0 || action.ExpectedSeq <= 0 {
-		return
-	}
-	m.mu.Lock()
-	m.approvalActions[action.ToolID] = action
-	_, approvalHandled := m.approvalSeen[action.ToolID]
-	if action.State == ai.FlowerApprovalStateRequested && action.Status == ai.FlowerApprovalStatusPending && action.CanApprove && !approvalHandled {
-		m.approvalSeen[action.ToolID] = struct{}{}
-		go m.rejectTool(action.ToolID)
-	}
-	m.mu.Unlock()
-}
-
-func (m *streamMonitor) consumeToolActivity(toolName string, toolID string, rawArgs any, requiresApproval bool, approvalStateRaw string) {
-	toolName = strings.TrimSpace(strings.ToLower(toolName))
-	toolID = strings.TrimSpace(toolID)
-	if toolName == "" && toolID == "" {
-		return
-	}
-	args, _ := rawArgs.(map[string]any)
-	if args == nil {
-		args = map[string]any{}
-	}
-	signature := toolName + "|" + compactJSON(args)
-
-	m.mu.Lock()
-	m.toolSigCounter[signature] = m.toolSigCounter[signature] + 1
-	count := m.toolSigCounter[signature]
-	approvalState := strings.TrimSpace(strings.ToLower(approvalStateRaw))
-	action, hasAction := m.approvalActions[toolID]
-	_, approvalHandled := m.approvalSeen[toolID]
-	if requiresApproval && approvalState == "requested" && toolID != "" && hasAction && !approvalHandled {
-		m.approvalSeen[toolID] = struct{}{}
-		go m.rejectTool(action.ToolID)
-	}
-	m.mu.Unlock()
-
-	if count > 16 {
-		m.abort("tool_signature_loop")
-	}
-}
-
-func (m *streamMonitor) rejectTool(toolID string) {
-	if m == nil || strings.TrimSpace(toolID) == "" {
-		return
-	}
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		m.mu.Lock()
-		action := m.approvalActions[strings.TrimSpace(toolID)]
-		m.mu.Unlock()
-		_, err := m.svc.SubmitFlowerApproval(m.meta, ai.SubmitFlowerApprovalRequest{
-			ThreadID:    m.threadID,
-			RunID:       action.RunID,
-			ActionID:    action.ActionID,
-			ToolID:      action.ToolID,
-			Approved:    false,
-			ExpectedSeq: action.ExpectedSeq,
-			Revision:    action.Revision,
-		})
-		if err == nil {
-			return
+		frame, err := subscription.Next(ctx)
+		if err != nil {
+			detail, detailErr := svc.GetFlowerThreadDetail(context.Background(), meta, threadID)
+			if detailErr == nil && detail != nil {
+				observed = observeTypedTurn(detail.Current, turnID)
+				if observed.Terminal {
+					return observed
+				}
+			}
+			observed.RunError = err.Error()
+			return observed
 		}
-		select {
-		case <-m.ctx.Done():
-			return
-		case <-time.After(25 * time.Millisecond):
+		var envelope ai.FlowerLiveStreamEnvelope
+		if json.Unmarshal(frame.Data, &envelope) != nil || envelope.Kind != ai.FlowerLiveStreamThreadBatch || envelope.Current == nil || envelope.ThreadID != threadID {
+			continue
 		}
+		current = *envelope.Current
 	}
-}
-
-func (m *streamMonitor) abort(reason string) {
-	if m == nil {
-		return
-	}
-	reason = strings.TrimSpace(reason)
-	if reason == "" {
-		reason = "monitor_abort"
-	}
-	m.mu.Lock()
-	if m.abortReason != "" {
-		m.mu.Unlock()
-		return
-	}
-	m.abortReason = reason
-	m.mu.Unlock()
-	m.cancel()
-}
-
-func (m *streamMonitor) abortState() string {
-	if m == nil {
-		return ""
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return strings.TrimSpace(m.abortReason)
 }
 
 func main() {
@@ -615,9 +426,14 @@ func runTask(
 
 	turns := make([]turnMetrics, 0, len(inputs))
 	started := time.Now()
+	live, err := svc.SubscribeFlowerLiveStream(ctx, meta, ai.FlowerLiveStreamRequest{})
+	if err != nil {
+		return failedTaskResult(task, sourceWorkspace, sandbox, inputs, "subscribe_workspace_live_failed", err)
+	}
+	defer live.Close()
 
 	for _, turnText := range inputs {
-		runID, ridErr := ai.NewRunID()
+		requestID, ridErr := ai.NewRunID()
 		if ridErr != nil {
 			turns = append(turns, turnMetrics{RunError: ridErr.Error()})
 			continue
@@ -627,22 +443,30 @@ func runTask(
 			timeout = 90 * time.Second
 		}
 		runCtx, cancel := context.WithTimeout(ctx, timeout)
-		monitor := newStreamMonitor(svc, meta, thread.ThreadID, runID, runCtx, cancel)
-		writer := &monitoredResponseWriter{monitor: monitor}
-
 		oneStart := time.Now()
-		runErr := svc.StartRun(runCtx, meta, runID, ai.RunStartRequest{
-			ThreadID: thread.ThreadID,
-			Model:    modelID,
-			Input:    ai.RunInput{Text: turnText},
-			Options:  runOptions,
-		}, writer)
+		accepted, runErr := svc.SendUserTurn(runCtx, meta, ai.SendUserTurnRequest{
+			ClientRequestID: requestID,
+			ThreadID:        thread.ThreadID,
+			Model:           modelID,
+			Input:           ai.RunInput{Text: turnText},
+			Options:         runOptions,
+		})
+		observation := typedTurnObservation{}
+		if runErr == nil {
+			observation = waitForTypedTurn(runCtx, svc, meta, live, thread.ThreadID, identity.TurnID(accepted.TurnID), accepted.Current)
+		}
 		dur := time.Since(oneStart)
 		cancel()
 
-		metrics := turnMetrics{RunID: runID, Duration: dur, DurationMS: dur.Milliseconds(), MonitorAbort: monitor.abortState()}
+		metrics := turnMetrics{
+			TurnID: accepted.TurnID, Duration: dur, DurationMS: dur.Milliseconds(),
+			ToolCallCount: observation.ToolCallCount, ToolErrorCount: observation.ToolErrorCount,
+			MonitorAbort: observation.MonitorAbort,
+		}
 		if runErr != nil {
 			metrics.RunError = runErr.Error()
+		} else if observation.RunError != "" {
+			metrics.RunError = observation.RunError
 		}
 		turns = append(turns, metrics)
 	}
@@ -653,17 +477,6 @@ func runTask(
 		todoView = nil
 	}
 	toolCalls := loadCanonicalToolCalls(context.Background(), svc, meta, thread.ThreadID)
-	for index := range turns {
-		for _, call := range toolCalls {
-			if strings.TrimSpace(call.RunID) != strings.TrimSpace(turns[index].RunID) {
-				continue
-			}
-			turns[index].ToolCallCount++
-			if canonicalToolStatusFailed(call.Status) {
-				turns[index].ToolErrorCount++
-			}
-		}
-	}
 
 	finalText := extractLatestAssistantText(ctx, svc, meta, thread.ThreadID)
 	if strings.TrimSpace(finalText) == "" && threadView != nil {

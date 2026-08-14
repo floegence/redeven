@@ -32,11 +32,11 @@ func insertForkedThreadTx(ctx context.Context, tx *sql.Tx, req ForkThreadRequest
 	_, err = tx.ExecContext(ctx, `
 INSERT INTO ai_thread_settings(
   thread_id, endpoint_id, namespace_public_id, model_id, reasoning_selection_json,
-  permission_type, working_dir, pinned_at_unix_ms, queue_revision,
+  permission_type, working_dir, pinned_at_unix_ms,
   created_by_user_public_id, created_by_user_email,
   updated_by_user_public_id, updated_by_user_email,
   settings_created_at_unix_ms, settings_updated_at_unix_ms
-) VALUES(?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?)
+) VALUES(?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)
 `,
 		req.DestinationThreadID,
 		req.EndpointID,

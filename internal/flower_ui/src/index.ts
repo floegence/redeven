@@ -14,7 +14,7 @@ export type * from './contracts/flowerSurfaceContracts';
 export * from './flowerCompanionPresence';
 export * from './flowerCompanionLiveTail';
 export * from './flowerCompanionTailMotion';
-export * from './flowerTurnAdmission';
+export * from './flowerRequestIdentity';
 export * from './flowerTurnLauncherCopy';
 export * from './icons/FlowerIcon';
 export * from './icons/FlowerSoftAuraIcon';

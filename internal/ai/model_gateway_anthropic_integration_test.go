@@ -226,21 +226,13 @@ func TestIntegration_ModelGateway_Anthropic_Stream_Succeeds(t *testing.T) {
 		t.Fatalf("CreateThread: %v", err)
 	}
 
-	rr := httptest.NewRecorder()
-	if err := svc.StartRun(ctx, &meta, "run_test_model_gateway_anthropic_1", RunStartRequest{
+	if _, err := runTypedTurnForTest(t, ctx, svc, &meta, "run_test_model_gateway_anthropic_1", RunStartRequest{
 		ThreadID: th.ThreadID,
 		Model:    "anthropic/claude-3-5-sonnet-latest",
 		Input:    RunInput{Text: "hello"},
 		Options:  RunOptions{},
-	}, rr); err != nil {
-		t.Fatalf("StartRun: %v", err)
-	}
-
-	if !strings.Contains(rr.Body.String(), token) {
-		t.Fatalf("NDJSON stream missing token %q, body=%q", token, rr.Body.String())
-	}
-	if !strings.Contains(rr.Body.String(), `"type":"message-end"`) {
-		t.Fatalf("NDJSON stream missing message-end, body=%q", rr.Body.String())
+	}); err != nil {
+		t.Fatalf("typed Send: %v", err)
 	}
 
 	view, err := svc.GetThread(ctx, &meta, th.ThreadID)
@@ -282,18 +274,13 @@ func TestIntegration_ModelGateway_Anthropic_LengthContinuationSucceeds(t *testin
 	}
 
 	runID := "run_test_model_gateway_anthropic_length_1"
-	rr := httptest.NewRecorder()
-	if err := svc.StartRun(ctx, &meta, runID, RunStartRequest{
+	if _, err := runTypedTurnForTest(t, ctx, svc, &meta, runID, RunStartRequest{
 		ThreadID: th.ThreadID,
 		Model:    "anthropic/claude-3-5-sonnet-latest",
 		Input:    RunInput{Text: "请用 markdown 写一篇长篇童话故事"},
 		Options:  RunOptions{},
-	}, rr); err != nil {
-		t.Fatalf("StartRun: %v", err)
-	}
-
-	if !strings.Contains(rr.Body.String(), "PART_1") || !strings.Contains(rr.Body.String(), "PART_2") {
-		t.Fatalf("NDJSON stream should contain both continuation chunks, body=%q", rr.Body.String())
+	}); err != nil {
+		t.Fatalf("typed Send: %v", err)
 	}
 
 	view, err := svc.GetThread(ctx, &meta, th.ThreadID)
@@ -327,18 +314,17 @@ func TestIntegration_ModelGateway_Anthropic_ContentFilterFails(t *testing.T) {
 	}
 
 	runID := "run_test_model_gateway_anthropic_content_filter_1"
-	rr := httptest.NewRecorder()
-	err = svc.StartRun(ctx, &meta, runID, RunStartRequest{
+	_, err = runTypedTurnForTest(t, ctx, svc, &meta, runID, RunStartRequest{
 		ThreadID: th.ThreadID,
 		Model:    "anthropic/claude-3-5-sonnet-latest",
 		Input:    RunInput{Text: "请你输出一个5000字的故事"},
 		Options:  RunOptions{},
-	}, rr)
+	})
 	if err == nil {
-		t.Fatalf("StartRun should fail for content-filtered response")
+		t.Fatalf("typed Send should surface terminal provider failure")
 	}
-	if !strings.Contains(err.Error(), `finish_reason="content_filter"`) {
-		t.Fatalf("StartRun error=%q, want content_filter", err)
+	if !strings.Contains(err.Error(), "content filtered") {
+		t.Fatalf("typed turn error=%q, want content filter failure", err)
 	}
 
 	view, err := svc.GetThread(ctx, &meta, th.ThreadID)
@@ -374,14 +360,13 @@ func TestIntegration_ModelGateway_Anthropic_IdentityLengthContinuationCompletesW
 	}
 
 	runID := "run_test_model_gateway_anthropic_identity_length_1"
-	rr := httptest.NewRecorder()
-	if err := svc.StartRun(ctx, &meta, runID, RunStartRequest{
+	if _, err := runTypedTurnForTest(t, ctx, svc, &meta, runID, RunStartRequest{
 		ThreadID: th.ThreadID,
 		Model:    "anthropic/claude-3-5-sonnet-latest",
 		Input:    RunInput{Text: "你是谁"},
 		Options:  RunOptions{},
-	}, rr); err != nil {
-		t.Fatalf("StartRun: %v", err)
+	}); err != nil {
+		t.Fatalf("typed Send: %v", err)
 	}
 
 	view, err := svc.GetThread(ctx, &meta, th.ThreadID)

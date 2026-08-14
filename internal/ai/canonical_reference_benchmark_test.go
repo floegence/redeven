@@ -1,15 +1,12 @@
 package ai
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"testing"
 	"time"
 
-	"github.com/floegence/floret/v3/identity"
-	flruntime "github.com/floegence/floret/v3/runtime"
+	flruntime "github.com/floegence/floret/v4/runtime"
 )
 
 var (
@@ -64,44 +61,6 @@ func TestCanonicalReferencePerformanceBudgets(t *testing.T) {
 		}
 		if average := time.Since(startedAt) / iterations; average > 2*time.Millisecond {
 			t.Fatalf("browser projection average=%s, budget=2ms", average)
-		}
-	})
-
-	t.Run("exact lookup in 1000 turn thread", func(t *testing.T) {
-		const referenceID = "context:oldest"
-		reader := &canonicalReferenceBenchmarkTurnReader{turn: canonicalReferenceBenchmarkTurns(1000, referenceID)[0]}
-		lookupCalls := 0
-		lookup := func() error {
-			lookupCalls++
-			turn, err := reader.ReadThreadTurn(context.Background(), "turn_0000")
-			if err != nil {
-				return err
-			}
-			if _, ok := exactFlowerCanonicalReference(turn, referenceID); !ok {
-				return fmt.Errorf("oldest canonical reference was not found")
-			}
-			return nil
-		}
-		var lookupErr error
-		allocs := testing.AllocsPerRun(20, func() { lookupErr = lookup() })
-		if lookupErr != nil {
-			t.Fatal(lookupErr)
-		}
-		if allocs > 30 {
-			t.Fatalf("1000-turn lookup allocations=%.0f, budget=30", allocs)
-		}
-		const iterations = 25
-		startedAt := time.Now()
-		for range iterations {
-			if err := lookup(); err != nil {
-				t.Fatal(err)
-			}
-		}
-		if average := time.Since(startedAt) / iterations; average > 2*time.Millisecond {
-			t.Fatalf("1000-turn lookup average=%s, budget=2ms", average)
-		}
-		if reader.exactCalls != lookupCalls || reader.listCalls != 0 {
-			t.Fatalf("lookup calls=%d exact calls=%d list calls=%d", lookupCalls, reader.exactCalls, reader.listCalls)
 		}
 	})
 }
@@ -207,74 +166,6 @@ func BenchmarkCanonicalReferenceBrowserProjection(b *testing.B) {
 			}
 		})
 	}
-}
-
-type canonicalReferenceBenchmarkTurnReader struct {
-	turn       flruntime.ThreadTurnSnapshot
-	exactCalls int
-	listCalls  int
-}
-
-func (r *canonicalReferenceBenchmarkTurnReader) ReadThreadTurn(_ context.Context, turnID identity.TurnID) (flruntime.ThreadTurnSnapshot, error) {
-	r.exactCalls++
-	if turnID != r.turn.TurnID {
-		return flruntime.ThreadTurnSnapshot{}, flruntime.ErrTurnNotFound
-	}
-	return r.turn, nil
-}
-
-func (r *canonicalReferenceBenchmarkTurnReader) ListThreadTurns(context.Context, flruntime.ThreadTurnsRequest) (flruntime.ThreadTurnsPage, error) {
-	r.listCalls++
-	return flruntime.ThreadTurnsPage{}, errors.New("unexpected canonical history scan")
-}
-
-func BenchmarkCanonicalReferenceLookupAcross1000Turns(b *testing.B) {
-	const (
-		threadID    = "thread_benchmark"
-		turnCount   = 1000
-		referenceID = "context:oldest"
-	)
-	turns := canonicalReferenceBenchmarkTurns(turnCount, referenceID)
-	reader := canonicalReferenceBenchmarkTurnReader{turn: turns[0]}
-	b.ReportAllocs()
-	b.ResetTimer()
-	for range b.N {
-		turn, err := reader.ReadThreadTurn(context.Background(), "turn_0000")
-		if err != nil {
-			b.Fatal(err)
-		}
-		reference, ok := exactFlowerCanonicalReference(turn, referenceID)
-		if !ok {
-			b.Fatal("oldest canonical reference was not found")
-		}
-		canonicalReferenceBenchmarkReferences = []FlowerMessageReference{{
-			ReferenceID: reference.ReferenceID,
-			Kind:        string(reference.Kind),
-			Label:       reference.Label,
-		}}
-	}
-}
-
-func canonicalReferenceBenchmarkTurns(turnCount int, referenceID string) []flruntime.ThreadTurnSnapshot {
-	turns := make([]flruntime.ThreadTurnSnapshot, 0, turnCount)
-	for index := range turnCount {
-		turn := flruntime.ThreadTurnSnapshot{
-			TurnID:      identity.TurnID(fmt.Sprintf("turn_%04d", index)),
-			RunID:       identity.RunID(fmt.Sprintf("run_%04d", index)),
-			Ordinal:     int64(index + 1),
-			UserEntryID: fmt.Sprintf("entry_%04d", index),
-		}
-		if index == 0 {
-			turn.UserReferences = []flruntime.MessageReference{{
-				ReferenceID: referenceID,
-				Kind:        flruntime.MessageReferenceFile,
-				Label:       "oldest.txt",
-				ResourceRef: "redeven-context:v1:benchmark",
-			}}
-		}
-		turns = append(turns, turn)
-	}
-	return turns
 }
 
 func canonicalReferenceBenchmarkRawReferences(b *testing.B, count int) json.RawMessage {

@@ -3,14 +3,12 @@ package ai
 import (
 	"fmt"
 	"strings"
-
-	flruntime "github.com/floegence/floret/v3/runtime"
 )
 
 const (
-	TodoStatusPending    = string(flruntime.AgentTodoPending)
-	TodoStatusInProgress = string(flruntime.AgentTodoInProgress)
-	TodoStatusCompleted  = string(flruntime.AgentTodoCompleted)
+	TodoStatusPending    = "pending"
+	TodoStatusInProgress = "in_progress"
+	TodoStatusCompleted  = "completed"
 )
 
 var controlSignalTodoNames = []string{"task_complete", "ask_user"}
@@ -26,12 +24,6 @@ type TodoSummary struct {
 	Pending    int `json:"pending"`
 	InProgress int `json:"in_progress"`
 	Completed  int `json:"completed"`
-}
-
-type ThreadTodosView struct {
-	Version         int64      `json:"version"`
-	UpdatedAtUnixMs int64      `json:"updated_at_unix_ms"`
-	Todos           []TodoItem `json:"todos"`
 }
 
 func summarizeTodos(items []TodoItem) TodoSummary {

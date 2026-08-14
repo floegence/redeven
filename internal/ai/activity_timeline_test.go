@@ -2,19 +2,14 @@ package ai
 
 import (
 	"encoding/json"
-	"io"
-	"log/slog"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/floegence/floret/v3/observation"
-	flruntime "github.com/floegence/floret/v3/runtime"
-	fltools "github.com/floegence/floret/v3/tools"
+	"github.com/floegence/floret/v4/observation"
+	flruntime "github.com/floegence/floret/v4/runtime"
+	fltools "github.com/floegence/floret/v4/tools"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
-	"github.com/floegence/redeven/internal/session"
 )
 
 func TestDetachedRunIgnoresPresentationUpdates(t *testing.T) {
@@ -134,48 +129,6 @@ func TestSnapshotAssistantMessagePreservesBlockIndexesForAnchors(t *testing.T) {
 	block, ok := msg.Blocks[3].(map[string]any)
 	if !ok || block["type"] != activityTimelineBlockType {
 		t.Fatalf("block[3]=%T %#v, want activity timeline", msg.Blocks[3], msg.Blocks[3])
-	}
-}
-
-func TestHandleToolCallDoesNotEmitActivityTimeline(t *testing.T) {
-	t.Parallel()
-
-	workspace := t.TempDir()
-	if err := os.WriteFile(filepath.Join(workspace, "note.txt"), []byte("hello\n"), 0o600); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-	var frames []ActivityTimelineBlock
-	r := newRun(runOptions{
-		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
-		AgentHomeDir: workspace,
-		WorkingDir:   workspace,
-		SessionMeta:  &session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
-		RunID:        "run_handler_activity_source",
-		EndpointID:   "env_handler_activity_source",
-		ThreadID:     "thread_handler_activity_source",
-		MessageID:    "msg_handler_activity_source",
-		OnStreamEvent: func(ev any) {
-			bs, ok := ev.(streamEventBlockSet)
-			if !ok {
-				return
-			}
-			if block, ok := bs.Block.(ActivityTimelineBlock); ok {
-				frames = append(frames, block)
-			}
-		},
-	})
-	r.permissionType = FlowerPermissionReadonly
-	allowToolsForTest(t, r, "read_file")
-
-	outcome, err := r.handleToolCall(authorizedToolContextForTest(t, r, "tool_read_file_1", "read_file"), "tool_read_file_1", "read_file", map[string]any{"path": "note.txt"})
-	if err != nil {
-		t.Fatalf("handleToolCall: %v", err)
-	}
-	if outcome == nil || !outcome.Success {
-		t.Fatalf("outcome=%#v, want successful read_file", outcome)
-	}
-	if len(frames) != 0 {
-		t.Fatalf("activity frames=%d, want handleToolCall to leave activity emission to Floret observations", len(frames))
 	}
 }
 

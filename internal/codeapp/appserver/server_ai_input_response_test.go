@@ -14,9 +14,9 @@ import (
 	"testing/fstest"
 	"time"
 
-	"github.com/floegence/floret/v3/identity"
-	flprovider "github.com/floegence/floret/v3/provider"
-	flruntime "github.com/floegence/floret/v3/runtime"
+	"github.com/floegence/floret/v4/identity"
+	flprovider "github.com/floegence/floret/v4/provider"
+	flruntime "github.com/floegence/floret/v4/runtime"
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
@@ -82,13 +82,13 @@ func TestServer_AIThreadInputResponseUsesURLThreadID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
-	const waitingTurnID = "msg_appserver_input"
+	const waitingTurnID = "turn-11111111111111111111111111111111"
 	const waitingToolID = "tool_appserver_input"
-	const promptID = "rui_" + waitingTurnID + "_" + waitingToolID
+	const promptID = waitingToolID
 	if err := aiSvc.Close(); err != nil {
 		t.Fatalf("close AI service before canonical fixture: %v", err)
 	}
-	seedAppserverWaitingPrompt(t, stateDir, thread.ThreadID, waitingTurnID, "run_appserver_input", waitingToolID)
+	seedAppserverWaitingPrompt(t, stateDir, thread.ThreadID, waitingTurnID, "run-11111111111111111111111111111111", waitingToolID)
 	aiSvc, err = ai.NewService(aiOptions)
 	if err != nil {
 		t.Fatalf("reopen AI service after canonical fixture: %v", err)
@@ -111,7 +111,7 @@ func TestServer_AIThreadInputResponseUsesURLThreadID(t *testing.T) {
 	}
 
 	inputResponsePath := "/_redeven_proxy/api/ai/threads/" + url.PathEscape(thread.ThreadID) + "/input_response"
-	baseline, err := aiSvc.GetFlowerThreadLiveBootstrap(t.Context(), &meta, thread.ThreadID)
+	baseline, err := aiSvc.GetFlowerThreadDetail(t.Context(), &meta, thread.ThreadID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,15 +137,15 @@ func TestServer_AIThreadInputResponseUsesURLThreadID(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if view.QueuedTurnCount != 0 || len(view.QueuedTurns) != 0 || aiSvc.HasActiveThreadForEndpoint(meta.EndpointID, thread.ThreadID) {
+			if view.QueuedTurnCount != 0 || len(view.QueuedTurns) != 0 {
 				t.Fatalf("invalid input response changed product admission state: %#v", view)
 			}
-			bootstrap, err := aiSvc.GetFlowerThreadLiveBootstrap(t.Context(), &meta, thread.ThreadID)
+			bootstrap, err := aiSvc.GetFlowerThreadDetail(t.Context(), &meta, thread.ThreadID)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(bootstrap.TimelineMessages) != len(baseline.TimelineMessages) {
-				t.Fatalf("invalid input response changed canonical timeline: before=%d after=%d", len(baseline.TimelineMessages), len(bootstrap.TimelineMessages))
+			if len(bootstrap.Current.Items) != len(baseline.Current.Items) {
+				t.Fatalf("invalid input response changed canonical timeline: before=%d after=%d", len(baseline.Current.Items), len(bootstrap.Current.Items))
 			}
 		})
 	}
@@ -180,16 +180,15 @@ func TestServer_AIThreadInputResponseUsesURLThreadID(t *testing.T) {
 	var resp struct {
 		OK   bool `json:"ok"`
 		Data struct {
-			RunID                   string `json:"run_id"`
-			TurnID                  string `json:"turn_id"`
-			Kind                    string `json:"kind"`
-			ConsumedWaitingPromptID string `json:"consumed_waiting_prompt_id"`
+			Kind                    string               `json:"kind"`
+			ConsumedWaitingPromptID string               `json:"consumed_waiting_prompt_id"`
+			Current                 flruntime.ThreadView `json:"current"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("json.Unmarshal response: %v", err)
 	}
-	if !resp.OK || resp.Data.Kind != "start" || resp.Data.RunID == "" || resp.Data.TurnID == "" || resp.Data.ConsumedWaitingPromptID != promptID {
+	if !resp.OK || resp.Data.Kind != "accepted" || resp.Data.Current.ThreadID.String() != thread.ThreadID || resp.Data.Current.ViewVersion == 0 || resp.Data.ConsumedWaitingPromptID != promptID {
 		t.Fatalf("unexpected input response payload: %+v", resp)
 	}
 }
@@ -233,7 +232,7 @@ func seedAppserverWaitingPrompt(t *testing.T, stateDir string, threadID string, 
 		Input:   flruntime.TurnInput{Text: "wait for user input"},
 		Signals: flruntime.TurnSignalSpec{Definitions: flruntime.CoreControlDefinitions(false), Identity: "core-control-v1", Project: flruntime.ProjectCoreControlSignal},
 	})
-	if result.Status != flruntime.TurnStatusWaiting {
-		t.Fatalf("waiting turn status=%q, want waiting", result.Status)
+	if len(result.Interactions) != 1 || result.Interactions[0].Kind != flruntime.ThreadInteractionInput || result.Interactions[0].Resolved {
+		t.Fatalf("waiting thread view=%#v", result)
 	}
 }

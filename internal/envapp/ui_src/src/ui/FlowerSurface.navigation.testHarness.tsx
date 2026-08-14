@@ -14,14 +14,16 @@ import {
 import type { FlowerThreadSwitcherCopy } from '../../../../flower_ui/src/threads/FlowerThreadSwitcher';
 
 const FlowerSurface: Component<Omit<FlowerSurfaceProps, 'draftCoordinator'>> = (props) => {
+  const legacy = props.adapter as TestFlowerSurfaceAdapter;
   const adapter = props.adapter.connectLiveStream
     ? props.adapter
-    : { ...props.adapter, connectLiveStream: (input: FlowerLiveStreamConnectInput) => testLiveStreamFromLegacyFixture(props.adapter, input) };
+    : { ...props.adapter, connectLiveStream: (input: FlowerLiveStreamConnectInput) => testLiveStreamFromLegacyFixture(legacy, input) };
   return <FlowerSurfaceComponent {...props} adapter={adapter} draftCoordinator={createFlowerComposerDraftCoordinator()} />;
 };
 import type {
-	FlowerActivityItem,
-	FlowerActivityTimelineBlock,
+  FlowerActivityItem,
+  FlowerActivityTimelineBlock,
+  FlowerApprovalCommandResult,
 	FlowerChatMessage,
   FlowerInputRequest,
   FlowerRouterDecision,
@@ -29,7 +31,7 @@ import type {
   FlowerSurfaceAdapter,
   FlowerSettingsSnapshot,
   FlowerThreadReadStatus,
-  FlowerLiveBootstrap,
+  FlowerThreadView,
   FlowerThreadSnapshot,
   FlowerSubmitInputReceipt,
   FlowerTurnLaunchReceipt,
@@ -41,53 +43,49 @@ import type {
   FlowerSubagentSummary,
   FlowerLiveStreamConnectInput,
   FlowerLiveStreamEnvelope,
+  FlowerRuntimeCurrentView,
+  FlowerRuntimeCurrentItem,
 } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
+export type TestFlowerSurfaceAdapter = FlowerSurfaceAdapter & Readonly<{
+  listThreadLiveEvents?: (threadID: string, afterSeq: number, limit?: number) => Promise<Readonly<{
+    events: readonly Readonly<{ seq: number }>[];
+    next_cursor: number;
+  }>>;
+}>;
+
 async function* testLiveStreamFromLegacyFixture(
-  adapter: FlowerSurfaceAdapter,
+  adapter: TestFlowerSurfaceAdapter,
   input: FlowerLiveStreamConnectInput,
 ): AsyncIterable<FlowerLiveStreamEnvelope> {
-  let cursor = input.thread_after_seq;
-  let generation = Math.max(1, input.thread_generation);
+  const summaries = await adapter.listThreads();
+  const cursors = new Map<string, number>();
   yield {
     schema_version: 1,
     kind: 'ready',
-    stream_generation: generation,
-    thread_id: input.thread_id,
-    through_seq: cursor,
-    retained_from_seq: 1,
-    summary_through_seq: input.summary_after_seq,
-    summary_retained_from_seq: 1,
+    summaries,
   };
+  if (!adapter.listThreadLiveEvents) {
+    await new Promise<void>((resolve) => input.signal.addEventListener('abort', () => resolve(), { once: true }));
+    return;
+  }
   while (!input.signal.aborted) {
-    const response = await adapter.listThreadLiveEvents(input.thread_id, cursor, 100);
-    if (input.signal.aborted) return;
-    if (response.stream_generation !== generation && cursor > 0) {
-      yield {
-        schema_version: 1,
-        kind: 'resync_required',
-        stream_generation: response.stream_generation,
-        thread_id: input.thread_id,
-        reason: 'test_generation_changed',
-      };
-      return;
+    for (const summary of summaries) {
+      const threadID = summary.thread_id;
+      const response = await adapter.listThreadLiveEvents(threadID, cursors.get(threadID) ?? 0, 100);
+      if (input.signal.aborted) return;
+      if (response.events.length > 0) {
+        for (const event of response.events) {
+          cursors.set(threadID, Math.max(cursors.get(threadID) ?? 0, event.seq));
+        }
+        yield {
+          schema_version: 1,
+          kind: 'ready',
+          summaries: await adapter.listThreads(),
+        };
+      }
+      cursors.set(threadID, Math.max(cursors.get(threadID) ?? 0, response.next_cursor));
     }
-    generation = response.stream_generation;
-    for (const event of response.events) {
-      cursor = Math.max(cursor, event.seq);
-      yield {
-        schema_version: 1,
-        kind: 'thread.batch',
-        stream_generation: generation,
-        thread_id: input.thread_id,
-        from_seq: event.seq,
-        through_seq: cursor,
-        retained_from_seq: response.retained_from_seq,
-        events: [event],
-      };
-    }
-    cursor = Math.max(cursor, response.next_cursor);
-    if (response.has_more) continue;
     await new Promise<void>((resolve) => {
       const timer = window.setTimeout(resolve, 20);
       input.signal.addEventListener('abort', () => {
@@ -421,41 +419,8 @@ export function modelIOStatus(overrides: Partial<FlowerModelIOStatus> = {}): Flo
   };
 }
 
-export function liveBootstrap(threadValue: FlowerThreadSnapshot, cursor = 0): FlowerLiveBootstrap {
-  const modelIORunID = threadValue.model_io_status?.run_id;
-  const activeRunID = modelIORunID || threadValue.active_run_id;
-  const hasApprovalActions = threadValue.approval_actions !== undefined;
-  const approvalActions = Object.fromEntries((threadValue.approval_actions ?? []).map((action) => [action.action_id, action]));
-  const inputRequests = threadValue.status === 'waiting_user' && threadValue.input_request
-    ? { [threadValue.input_request.prompt_id]: threadValue.input_request }
-    : {};
-  return {
-    schema_version: 1,
-    endpoint_id: 'test-runtime',
-    thread_id: threadValue.thread_id,
-    stream_generation: 1,
-    cursor,
-    retained_from_seq: 1,
-    thread: threadValue,
-    timeline_messages: threadValue.messages,
-    live_state: {
-      thread_patch: {
-        ...(threadValue.queued_turn_count !== undefined ? { queued_turn_count: threadValue.queued_turn_count } : {}),
-      },
-      runs: activeRunID
-        ? { [activeRunID]: { run_id: activeRunID, status: threadValue.status } }
-        : {},
-      ...(threadValue.model_io_status ? { model_io: threadValue.model_io_status } : {}),
-      ...(threadValue.context_usage ? { context_usage: threadValue.context_usage } : {}),
-      ...(threadValue.context_compactions ? { context_compactions: threadValue.context_compactions as readonly FlowerContextCompaction[] } : {}),
-      ...(threadValue.timeline_decorations ? { timeline_decorations: threadValue.timeline_decorations as readonly FlowerTimelineDecoration[] } : {}),
-      ...(hasApprovalActions ? { approval_actions: approvalActions } : {}),
-      ...(threadValue.approval_queue ? { approval_queue: threadValue.approval_queue } : {}),
-      input_requests: inputRequests,
-    },
-    read_status: threadValue.read_status,
-    generated_at_ms: Math.max(Date.now(), threadValue.updated_at_ms),
-  };
+export function liveBootstrap(threadValue: FlowerThreadSnapshot, version = 0): FlowerThreadView {
+  return { thread: threadValue, current: runtimeCurrentView(threadValue, Math.max(0, version)) };
 }
 
 export const TEST_CLIENT_REQUEST_ID = 'client_test_request';
@@ -466,28 +431,119 @@ export function launchReceipt(
   kind: 'start' | 'queued' = 'start',
   clientRequestID = TEST_CLIENT_REQUEST_ID,
 ): FlowerTurnLaunchReceipt {
-  return kind === 'queued'
-    ? { client_request_id: clientRequestID, thread_id: threadID, queue_id: canonicalID, kind }
-    : {
-      client_request_id: clientRequestID,
+  return {
+    client_request_id: clientRequestID,
+    thread_id: threadID,
+    current: {
       thread_id: threadID,
-      turn_id: canonicalID,
-      run_id: `run-${canonicalID}`,
-      kind,
-    };
+      view_version: 1,
+      activity: 'active',
+      ...(kind === 'queued'
+        ? { queue: [{ request_key: canonicalID, input: { text: '' } }] }
+        : {
+            turn_id: canonicalID,
+            items: [{
+              id: `user:${clientRequestID}`,
+              turn_id: canonicalID,
+              kind: 'user' as const,
+              text: '',
+            }],
+          }),
+    },
+  };
+}
+
+export function runtimeCurrentView(
+  threadValue: FlowerThreadSnapshot,
+  version = 1,
+): FlowerRuntimeCurrentView {
+  const interactions = [
+    ...(threadValue.approval_actions ?? []).map((action) => ({
+      id: action.action_id,
+      kind: 'approval' as const,
+      tool_call_id: action.tool_id,
+      resolved: action.status !== 'pending' || action.state !== 'requested',
+      approved: action.state === 'approved',
+    })),
+    ...(threadValue.input_request ? [{
+      id: threadValue.input_request.prompt_id,
+      kind: 'input' as const,
+      resolved: false,
+      signal: {
+        name: 'ask_user',
+        call_id: threadValue.input_request.tool_id,
+        payload: threadValue.input_request as unknown as Readonly<Record<string, unknown>>,
+      },
+    }] : []),
+  ];
+  const items: FlowerRuntimeCurrentItem[] = threadValue.messages.flatMap<FlowerRuntimeCurrentItem>((message) => {
+    const activity = message.blocks?.find((block) => block.type === 'activity-timeline');
+    if (activity?.type === 'activity-timeline') {
+      return activity.items.map((item) => ({
+        id: item.item_id,
+        turn_id: message.turn_id,
+        kind: 'tool' as const,
+        activity: item as unknown as Readonly<Record<string, unknown>>,
+      }));
+    }
+    return [{
+      id: message.id,
+      turn_id: message.turn_id,
+      kind: message.role === 'user' ? 'user' as const : 'assistant' as const,
+      text: message.content,
+    }];
+  });
+  return {
+    thread_id: threadValue.thread_id,
+    view_version: version,
+    activity: threadValue.status === 'idle' || threadValue.status === 'success' || threadValue.status === 'failed' || threadValue.status === 'canceled'
+      ? 'idle'
+      : 'active',
+    ...(threadValue.active_run_id ? { turn_id: threadValue.active_run_id } : {}),
+    ...(threadValue.status === 'success' ? { last_outcome: 'completed' as const } : {}),
+    ...(threadValue.status === 'failed' ? { last_outcome: 'failed' as const } : {}),
+    ...(threadValue.status === 'canceled' ? { last_outcome: 'cancelled' as const } : {}),
+    items,
+    queue: (threadValue.queued_turns ?? []).map((queued) => ({
+      request_key: queued.queue_id,
+      input: { text: queued.prompt },
+    })),
+    interactions,
+  };
 }
 
 export function inputAdmissionReceipt(
   threadID: string,
   promptID: string,
-  turnID = 'turn-input-response',
-  runID = 'run-input-response',
+  _turnID = 'turn-input-response',
+  _runID = 'run-input-response',
 ): FlowerSubmitInputReceipt {
   return {
     thread_id: threadID,
-    turn_id: turnID,
-    run_id: runID,
     consumed_prompt_id: promptID,
+    current: {
+      thread_id: threadID,
+      view_version: 1,
+      activity: 'active',
+      interactions: [],
+    },
+  };
+}
+
+export function approvalCommandResult(
+  threadID: string,
+  interactionID: string,
+  approved: boolean,
+  version = 1,
+): FlowerApprovalCommandResult {
+  return {
+    ok: true,
+    current: {
+      thread_id: threadID,
+      view_version: version,
+      activity: 'active',
+      interactions: [{ id: interactionID, kind: 'approval', resolved: true, approved }],
+    },
   };
 }
 
@@ -844,7 +900,7 @@ export function blockedDecision(): FlowerRouterDecision {
   };
 }
 
-export function adapter(configured = true): FlowerSurfaceAdapter {
+export function adapter(configured = true): TestFlowerSurfaceAdapter {
   return {
     runtime: {
       runtime_id: 'runtime',
@@ -897,13 +953,10 @@ export function adapter(configured = true): FlowerSurfaceAdapter {
       return { ...receipt, client_request_id: input.client_request_id };
     }),
     retryThread: vi.fn(async (threadID: string) => liveBootstrap(thread({ thread_id: threadID, status: 'running' }))),
-    compactThreadContext: vi.fn(async (input) => liveBootstrap(thread({
-      thread_id: input.thread_id,
-      status: 'running',
-    }))),
     stopThread: vi.fn(async (threadID: string) => liveBootstrap(thread({ thread_id: threadID, status: 'canceled' }))),
     submitInput: vi.fn(async (input) => inputAdmissionReceipt(input.thread_id, input.prompt_id)),
-    submitApproval: vi.fn(async () => ({ ok: true, current_cursor: 1 })),
+    submitApproval: vi.fn(async (input) => approvalCommandResult(input.thread_id, input.interaction_id, input.approved)),
+    retryEffect: vi.fn(async () => undefined),
     modelSourceRecovery: {
       describe: (status) => `Desktop source is ${status.state}.`,
       localSettings: { label: 'Local Flower settings', run: vi.fn(async () => undefined) },
@@ -977,7 +1030,7 @@ export function clearFlowerSurfaceNotifications(): void {
 }
 
 const mountFlowerSurface = (
-  surfaceAdapter: FlowerSurfaceAdapter,
+  surfaceAdapter: TestFlowerSurfaceAdapter,
   props: Readonly<{
     focusThreadRequest?: FlowerThreadFocusRequest | null;
     settingsFocusRequest?: number;
@@ -1020,12 +1073,12 @@ export function renderSurface(configured = true): HTMLDivElement {
   return mountFlowerSurface(adapter(configured));
 }
 
-export function renderSurfaceWithAdapter(surfaceAdapter: FlowerSurfaceAdapter): HTMLDivElement {
+export function renderSurfaceWithAdapter(surfaceAdapter: TestFlowerSurfaceAdapter): HTMLDivElement {
   return mountFlowerSurface(surfaceAdapter);
 }
 
 export function renderSurfaceWithDraftCoordinator(
-  surfaceAdapter: FlowerSurfaceAdapter,
+  surfaceAdapter: TestFlowerSurfaceAdapter,
   draftCoordinator: FlowerComposerDraftCoordinator,
 ): HTMLDivElement {
   const runtime = document.createElement('div');
@@ -1054,7 +1107,7 @@ export function disposeRenderedSurface(runtime: HTMLDivElement): void {
 }
 
 export function renderSurfaceWithAdapterProps(
-  surfaceAdapter: FlowerSurfaceAdapter,
+  surfaceAdapter: TestFlowerSurfaceAdapter,
   props: Readonly<{
     focusThreadRequest?: FlowerThreadFocusRequest | null;
     settingsFocusRequest?: number;
@@ -1073,7 +1126,7 @@ export function renderSurfaceWithAdapterProps(
 }
 
 export function renderSurfaceWithCompanionController(
-  surfaceAdapter: FlowerSurfaceAdapter,
+  surfaceAdapter: TestFlowerSurfaceAdapter,
   initialOpen: boolean,
   companionCopy: FlowerThreadSwitcherCopy,
   onCompanionOpenRequest?: () => void,

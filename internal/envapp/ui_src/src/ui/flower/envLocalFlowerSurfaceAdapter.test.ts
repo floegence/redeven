@@ -3,10 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createEnvLocalFlowerSurfaceAdapter } from './envLocalFlowerSurfaceAdapter';
 import type {
   FlowerAttachmentStagingScope,
+  FlowerApprovalCommandResult,
   FlowerPermissionType,
   FlowerSurfaceAdapter,
 } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
-import { projectFlowerLiveBootstrap } from '../../../../../flower_ui/src/flowerLiveReducer';
 import { clearLocalAccessResumeToken, writeLocalAccessResumeToken } from '../services/localAccessAuth';
 
 vi.mock('../services/controlplaneApi', () => ({
@@ -76,7 +76,7 @@ function liveBootstrap(threadID: string, status = 'canceled') {
     title: 'Stopped thread',
     title_status: 'ready',
     model_id: 'default/gpt-4.1',
-    run_status: status,
+    status,
     permission_type: 'approval_required' as FlowerPermissionType,
     created_at_unix_ms: 1,
     updated_at_unix_ms: 2,
@@ -84,21 +84,42 @@ function liveBootstrap(threadID: string, status = 'canceled') {
     read_status: readStatus(status),
   };
   return {
-    schema_version: 1,
-    endpoint_id: 'env-a',
-    thread_id: threadID,
-    cursor: 3,
-    retained_from_seq: 1,
     thread,
-    timeline_messages: [],
-    live_state: {
-      thread_patch: {},
-      runs: {},
-      approval_actions: {},
-      input_requests: {},
+    current: {
+      thread_id: threadID,
+      view_version: 3,
+      activity: status === 'running' ? 'active' : 'idle',
+      ...(status === 'canceled' ? { last_outcome: 'cancelled' } : {}),
+      items: [],
+      queue: [],
+      interactions: [],
     },
-    read_status: thread.read_status,
-    generated_at_ms: 10_000,
+  };
+}
+
+function typedCommandResponse(
+  clientRequestID: string,
+  threadID: string,
+  turnID: string,
+  text = '',
+) {
+  return {
+    client_request_id: clientRequestID,
+    thread_id: threadID,
+    current: {
+      thread_id: threadID,
+      view_version: 1,
+      activity: 'active',
+      turn_id: turnID,
+      items: [{
+        id: `user:${clientRequestID}`,
+        turn_id: turnID,
+        kind: 'user',
+        text,
+      }],
+      queue: [],
+      interactions: [],
+    },
   };
 }
 
@@ -119,20 +140,20 @@ describe('Env local Flower surface adapter', () => {
 			'/_redeven_proxy/api/ai/threads/thread%2Fdelete/followups/followup%2Fmiddle',
 			expect.objectContaining({ method: 'DELETE' }),
 		);
-		expect(fetchMock).toHaveBeenNthCalledWith(2,
-			'/_redeven_proxy/api/ai/threads/thread%2Fdelete/live/bootstrap',
+			expect(fetchMock).toHaveBeenNthCalledWith(2,
+				'/_redeven_proxy/api/ai/threads/thread%2Fdelete',
 			expect.objectContaining({ method: 'GET' }),
 		);
 	});
 
-	it('does not retain the legacy live polling transport', async () => {
+	it('does not retain the legacy live polling transport', () => {
 		const adapter = createEnvLocalFlowerSurfaceAdapter({
 			envPublicID: 'env_a',
 			envLabel: 'Demo Env',
 			rpc: { ai: {} } as any,
 		});
 
-		await expect(adapter.listThreadLiveEvents('thread_live', 7, 25)).rejects.toThrow('polling is unavailable');
+		expect('listThreadLiveEvents' in adapter).toBe(false);
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
@@ -150,8 +171,7 @@ describe('Env local Flower surface adapter', () => {
 		});
 		const controller = new AbortController();
 		const iterator = adapter.connectLiveStream!({
-			thread_id: 'thread_idle', thread_generation: 1, thread_after_seq: 0,
-			summary_generation: 1, summary_after_seq: 0, signal: controller.signal,
+			signal: controller.signal,
 		})[Symbol.asyncIterator]();
 		let failure: unknown;
 		const pending = iterator.next().catch((error) => { failure = error; });
@@ -175,8 +195,7 @@ describe('Env local Flower surface adapter', () => {
 			envPublicID: 'env_a', envLabel: 'Demo Env', rpc: { ai: {} } as any,
 		});
 		const iterator = adapter.connectLiveStream!({
-			thread_id: 'thread_abort', thread_generation: 1, thread_after_seq: 0,
-			summary_generation: 1, summary_after_seq: 0, signal: controller.signal,
+			signal: controller.signal,
 		})[Symbol.asyncIterator]();
 		const pending = iterator.next();
 		await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
@@ -185,9 +204,9 @@ describe('Env local Flower surface adapter', () => {
 		expect(cancelled).toBe(true);
 	});
 
-	it('consumes one cancellable fetch-SSE stream with explicit cursors', async () => {
+	it('consumes one cancellable workspace fetch-SSE stream without replay cursors', async () => {
 		fetchMock.mockResolvedValue(new Response(
-			'data: {"schema_version":1,"kind":"ready","stream_generation":9,"thread_id":"thread_live","through_seq":7,"summary_through_seq":4}\n\n',
+			'data: {"schema_version":1,"kind":"ready","summaries":[]}\n\n',
 			{ status: 200, headers: { 'Content-Type': 'text/event-stream; charset=utf-8' } },
 		));
 		const adapter = createEnvLocalFlowerSurfaceAdapter({
@@ -198,19 +217,17 @@ describe('Env local Flower surface adapter', () => {
 		const controller = new AbortController();
 		const frames = [];
 		for await (const frame of adapter.connectLiveStream!({
-			thread_id: 'thread_live',
-			thread_generation: 9,
-			thread_after_seq: 7,
-			summary_generation: 9,
-			summary_after_seq: 4,
 			signal: controller.signal,
 		})) frames.push(frame);
 
-		expect(frames).toEqual([expect.objectContaining({ kind: 'ready', stream_generation: 9, through_seq: 7 })]);
+		expect(frames).toEqual([expect.objectContaining({ kind: 'ready', summaries: [] })]);
 		const url = String(fetchMock.mock.calls[0]?.[0]);
 		expect(url).toContain('/_redeven_proxy/api/ai/flower/stream?');
-		expect(url).toContain('thread_after_seq=7');
-		expect(url).toContain('summary_after_seq=4');
+		expect(url).not.toContain('thread_id=');
+		expect(url).not.toContain('thread_after_seq=');
+		expect(url).not.toContain('summary_after_seq=');
+		expect(url).not.toContain('thread_generation=');
+		expect(url).not.toContain('summary_generation=');
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
 
@@ -599,15 +616,17 @@ describe('Env local Flower surface adapter', () => {
         return jsonResponse({ current_model: 'default/gpt-5.4' });
       }
       if (url === '/_redeven_proxy/api/ai/turns' && init?.method === 'POST') {
-        const body = JSON.parse(String(init.body)) as { create: { client_request_id: string } };
+        const body = JSON.parse(String(init.body)) as {
+          create: { client_request_id: string };
+          input: { text?: string };
+        };
         const suffix = body.create.client_request_id;
-        return jsonResponse({
-          client_request_id: suffix,
-          thread_id: `thread_${suffix}`,
-          run_id: `run_${suffix}`,
-          turn_id: `turn_${suffix}`,
-          kind: 'start',
-        });
+        return jsonResponse(typedCommandResponse(
+          suffix,
+          `thread_${suffix}`,
+          `turn_${suffix}`,
+          body.input.text,
+        ));
       }
       throw new Error(`unexpected fetch: ${url}`);
     });
@@ -814,56 +833,24 @@ describe('Env local Flower surface adapter', () => {
     },
   );
 
-  it('maps live bootstrap context telemetry into the shared Flower surface state', async () => {
-    const bootstrap = liveBootstrap('thread_context', 'running');
-    bootstrap.live_state = {
-      ...bootstrap.live_state,
-      runs: { run_context: { run_id: 'run_context', status: 'running' } },
-      model_io: {
-        phase: 'streaming',
-        run_id: 'run_context',
-        updated_at_ms: 10_010,
+  it('maps typed current detail into the shared Flower surface state', async () => {
+    const bootstrap = {
+      ...liveBootstrap('thread_context', 'running'),
+      current: {
+        thread_id: 'thread_context',
+        view_version: 11,
+        activity: 'active' as const,
+        turn_id: 'turn_context',
+        items: [
+          { id: 'user:req-context', turn_id: 'turn_context', kind: 'user' as const, text: 'Inspect context' },
+          { id: 'assistant:turn-context', turn_id: 'turn_context', kind: 'assistant' as const, text: 'Working' },
+        ],
+        queue: [],
+        interactions: [],
       },
-      context_usage: {
-        run_id: 'run_context',
-        phase: 'projected_request',
-        input_tokens: 620,
-        context_window_tokens: 1000,
-        used_ratio: 0.62,
-        pressure_status: 'stable',
-        updated_at_ms: 10_011,
-      },
-      context_compactions: [{
-        operation_id: 'compact-context',
-        run_id: 'run_context',
-        phase: 'complete',
-        status: 'compacted',
-        tokens_before: 900,
-        tokens_after_estimate: 200,
-        updated_at_ms: 10_012,
-      }],
-      timeline_decorations: [{
-        decoration_id: 'context-compaction:compact-context',
-        kind: 'context_compaction',
-        anchor: {
-          target_kind: 'message',
-          message_id: 'assistant-context',
-          edge: 'after',
-        },
-        ordinal: 0,
-        compaction: {
-          operation_id: 'compact-context',
-          run_id: 'run_context',
-          phase: 'complete',
-          status: 'compacted',
-          tokens_before: 900,
-          tokens_after_estimate: 200,
-          updated_at_ms: 10_012,
-        },
-      }],
-    } as typeof bootstrap.live_state;
+    };
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
-      if (url === '/_redeven_proxy/api/ai/threads/thread_context/live/bootstrap' && init?.method === 'GET') {
+      if (url === '/_redeven_proxy/api/ai/threads/thread_context' && init?.method === 'GET') {
         return jsonResponse(bootstrap);
       }
       throw new Error(`unexpected fetch: ${url}`);
@@ -874,28 +861,20 @@ describe('Env local Flower surface adapter', () => {
       rpc: { ai: {} } as any,
     });
 
-    const mapped = projectFlowerLiveBootstrap(await adapter.loadThread('thread_context'));
+    const mapped = await adapter.loadThread('thread_context');
 
-    expect(mapped.active_run_id).toBe('run_context');
-    expect(mapped.model_io_status?.run_id).toBe('run_context');
-    expect(mapped.context_usage).toMatchObject({
-      run_id: 'run_context',
-      input_tokens: 620,
-      pressure_status: 'stable',
-    });
-    expect(mapped.context_compactions?.[0]).toMatchObject({
-      operation_id: 'compact-context',
-      status: 'compacted',
-    });
-    expect(mapped.timeline_decorations?.[0]).toMatchObject({
-      kind: 'context_compaction',
-      compaction: { operation_id: 'compact-context' },
-    });
+    expect(mapped.current.view_version).toBe(11);
+    expect(mapped.thread.status).toBe('running');
+    expect(mapped.thread.active_run_id).toBe('turn_context');
+    expect(mapped.thread.messages).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'user:req-context', role: 'user', content: 'Inspect context' }),
+      expect.objectContaining({ id: 'assistant:turn-context', role: 'assistant', content: 'Working' }),
+    ]));
   });
 
   it('stops a thread through RPC and reloads the live bootstrap', async () => {
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
-      if (url === '/_redeven_proxy/api/ai/threads/thread_1/live/bootstrap' && init?.method === 'GET') {
+      if (url === '/_redeven_proxy/api/ai/threads/thread_1' && init?.method === 'GET') {
         return jsonResponse(liveBootstrap('thread_1'));
       }
       throw new Error(`unexpected fetch: ${url}`);
@@ -915,7 +894,7 @@ describe('Env local Flower surface adapter', () => {
 
     expect(stopThread).toHaveBeenCalledWith({ threadId: 'thread_1' });
     expect(fetchMock).toHaveBeenCalledWith(
-      '/_redeven_proxy/api/ai/threads/thread_1/live/bootstrap',
+      '/_redeven_proxy/api/ai/threads/thread_1',
       expect.objectContaining({ method: 'GET' }),
     );
     expect(bootstrap.thread.thread_id).toBe('thread_1');
@@ -927,7 +906,7 @@ describe('Env local Flower surface adapter', () => {
       if (url === '/_redeven_proxy/api/ai/threads/thread_retry/retry' && init?.method === 'POST') {
         return jsonResponse({ ok: true });
       }
-      if (url === '/_redeven_proxy/api/ai/threads/thread_retry/live/bootstrap' && init?.method === 'GET') {
+      if (url === '/_redeven_proxy/api/ai/threads/thread_retry' && init?.method === 'GET') {
         return jsonResponse(liveBootstrap('thread_retry', 'running'));
       }
       throw new Error(`unexpected fetch: ${url}`);
@@ -945,7 +924,7 @@ describe('Env local Flower surface adapter', () => {
       expect.objectContaining({ method: 'POST', body: '{}' }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(2,
-      '/_redeven_proxy/api/ai/threads/thread_retry/live/bootstrap',
+      '/_redeven_proxy/api/ai/threads/thread_retry',
       expect.objectContaining({ method: 'GET' }),
     );
     expect(bootstrap.thread.status).toBe('running');
@@ -1001,10 +980,14 @@ describe('Env local Flower surface adapter', () => {
     });
   });
 
-  it('returns the approval decision receipt from the local API', async () => {
+  it('returns the typed current view from the local approval API', async () => {
+    const result: FlowerApprovalCommandResult = {
+      ok: true,
+      current: { thread_id: 'thread_receipt', view_version: 42, activity: 'active', interactions: [{ id: 'approval_receipt', kind: 'approval', resolved: true, approved: true }] },
+    };
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/ai/threads/thread_receipt/approvals' && init?.method === 'POST') {
-        return jsonResponse({ ok: true, current_cursor: 42 });
+        return jsonResponse(result);
       }
       throw new Error(`unexpected fetch: ${url}`);
     });
@@ -1016,63 +999,16 @@ describe('Env local Flower surface adapter', () => {
 
     const receipt = await adapter.submitApproval({
       thread_id: 'thread_receipt',
-      origin: 'main_tool',
-      run_id: 'run_receipt',
-      action_id: 'approval_receipt',
-      tool_id: 'tool_receipt',
+      interaction_id: 'approval_receipt',
       approved: true,
-      expected_seq: 40,
-      revision: 1,
-      version: 1,
-      surface_epoch: 1,
-      queue_generation: 1,
-      queue_revision: 1,
     });
 
-    expect(receipt).toEqual({ ok: true, current_cursor: 42 });
+    expect(receipt).toEqual(result);
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
       thread_id: 'thread_receipt',
-      action_id: 'approval_receipt',
+      interaction_id: 'approval_receipt',
       approved: true,
     });
-  });
-
-  it('compacts a thread through RPC and reloads the live bootstrap', async () => {
-    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
-      if (url === '/_redeven_proxy/api/ai/threads/thread_compact/live/bootstrap' && init?.method === 'GET') {
-        return jsonResponse(liveBootstrap('thread_compact', 'running'));
-      }
-      throw new Error(`unexpected fetch: ${url}`);
-    });
-    const compactThreadContext = vi.fn(async () => ({
-      requestId: 'manual-compact-1',
-      kind: 'accepted',
-    }));
-    const adapter = createEnvLocalFlowerSurfaceAdapter({
-      envPublicID: 'env_a',
-      envLabel: 'Demo Env',
-      rpc: {
-        ai: {
-          compactThreadContext,
-        },
-      } as any,
-    });
-
-    const bootstrap = await adapter.compactThreadContext({
-      thread_id: ' thread_compact ',
-      active_run_id: ' run_compact ',
-    });
-
-    expect(compactThreadContext).toHaveBeenCalledWith({
-      threadId: 'thread_compact',
-      activeRunId: 'run_compact',
-    });
-    expect(fetchMock).toHaveBeenCalledWith(
-      '/_redeven_proxy/api/ai/threads/thread_compact/live/bootstrap',
-      expect.objectContaining({ method: 'GET' }),
-    );
-    expect(bootstrap.thread.thread_id).toBe('thread_compact');
-    expect(bootstrap.thread.status).toBe('running');
   });
 
   it('maps connected Desktop models into the read-only Flower model source catalog', async () => {
@@ -1227,7 +1163,7 @@ describe('Env local Flower surface adapter', () => {
       if (url === '/_redeven_proxy/api/ai/threads/thread_upload/turns' && init?.method === 'POST') {
         turnBodies.push(JSON.parse(String(init.body)));
         turnHeaders.push(init.headers ?? {});
-        return jsonResponse({ run_id: 'run_upload', turn_id: 'turn_upload', kind: 'start' });
+        return jsonResponse(typedCommandResponse('client_upload', 'thread_upload', 'turn_upload', 'review notes'));
       }
       throw new Error(`unexpected fetch: ${url}`);
     });
@@ -1298,7 +1234,7 @@ describe('Env local Flower surface adapter', () => {
         });
       }
       if (url === '/_redeven_proxy/api/ai/threads/thread_upload/turns' && init?.method === 'POST') {
-        return jsonResponse({ run_id: 'run_upload', turn_id: 'turn_upload', kind: 'start' });
+        return jsonResponse(typedCommandResponse('client_upload', 'thread_upload', 'turn_upload'));
       }
       throw new Error(`unexpected fetch: ${url}`);
     });
@@ -1313,7 +1249,10 @@ describe('Env local Flower surface adapter', () => {
       staging_scope: stagingScope('thread_upload'),
       prompt: '',
       attachment_ids: ['upl_notes'],
-    })).resolves.toMatchObject({ thread_id: 'thread_upload', run_id: 'run_upload' });
+    })).resolves.toMatchObject({
+      thread_id: 'thread_upload',
+      current: { turn_id: 'turn_upload' },
+    });
     await expect(adapter.launchTurn({
       client_request_id: 'client_empty',
       thread_id: 'thread_upload',
@@ -1345,7 +1284,7 @@ describe('Env local Flower surface adapter', () => {
       }
       if (url === '/_redeven_proxy/api/ai/turns' && init?.method === 'POST') {
         rawBodies.push(String(init.body));
-        return jsonResponse({ client_request_id: 'client_reference', thread_id: 'thread_reference', run_id: 'run_reference', turn_id: 'turn_reference', kind: 'start' });
+        return jsonResponse(typedCommandResponse('client_reference', 'thread_reference', 'turn_reference'));
       }
       throw new Error(`unexpected fetch: ${url}`);
     });
@@ -1372,7 +1311,7 @@ describe('Env local Flower surface adapter', () => {
       context_action: contextAction,
     })).resolves.toMatchObject({
       thread_id: 'thread_reference',
-      run_id: 'run_reference',
+      current: { turn_id: 'turn_reference' },
     });
 
     expect(rawBodies).toHaveLength(1);
@@ -1390,6 +1329,34 @@ describe('Env local Flower surface adapter', () => {
       },
     });
     expect(subscribeThread).not.toHaveBeenCalled();
+  });
+
+  it('sends the stable client request id for an existing thread turn', async () => {
+    let body: Record<string, unknown> | undefined;
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/ai/threads/thread_existing/turns' && init?.method === 'POST') {
+        body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        return jsonResponse(typedCommandResponse('client_existing_send', 'thread_existing', 'turn_existing', 'hello'));
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    const adapter = createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: 'env_a',
+      envLabel: 'Demo Env',
+      rpc: { ai: {} } as any,
+    });
+
+    await adapter.launchTurn({
+      client_request_id: 'client_existing_send',
+      thread_id: 'thread_existing',
+      prompt: 'hello',
+    });
+
+    expect(body).toMatchObject({
+      client_request_id: 'client_existing_send',
+      thread_id: 'thread_existing',
+      input: { text: 'hello' },
+    });
   });
 
   it('passes reasoning selection through create thread and turn launch', async () => {
@@ -1429,7 +1396,12 @@ describe('Env local Flower surface adapter', () => {
       }
       if (url === '/_redeven_proxy/api/ai/turns' && init?.method === 'POST') {
         turnBodies.push(JSON.parse(String(init.body)));
-        return jsonResponse({ client_request_id: 'client_reasoning', thread_id: 'thread_reasoning', run_id: 'run_reasoning', turn_id: 'turn_reasoning', kind: 'start' });
+        return jsonResponse(typedCommandResponse(
+          'client_reasoning',
+          'thread_reasoning',
+          'turn_reasoning',
+          'reason about this',
+        ));
       }
       throw new Error(`unexpected fetch: ${url}`);
     });
@@ -1452,9 +1424,7 @@ describe('Env local Flower surface adapter', () => {
     });
 
     expect(receipt.thread_id).toBe('thread_reasoning');
-    expect(receipt.kind).toBe('start');
-    if (receipt.kind !== 'start') throw new Error('expected start receipt');
-    expect(receipt.turn_id).toBe('turn_reasoning');
+    expect(receipt.current.turn_id).toBe('turn_reasoning');
     expect(turnBodies[0]).toMatchObject({
       staging_scope_id: 'staging_client_reasoning',
       create: {
@@ -1474,7 +1444,7 @@ describe('Env local Flower surface adapter', () => {
     expect(subscribeThread).not.toHaveBeenCalled();
   });
 
-  it('rejects a receipt that changes the echoed client request identity', async () => {
+  it('rejects a current view that changes the echoed client request identity', async () => {
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/settings') {
         return jsonResponse({
@@ -1492,7 +1462,7 @@ describe('Env local Flower surface adapter', () => {
         return jsonResponse({ current_model: 'default/gpt-5.4' });
       }
       if (url === '/_redeven_proxy/api/ai/threads/thread_existing/turns' && init?.method === 'POST') {
-        return jsonResponse({ client_request_id: 'client_other', run_id: 'run_other', turn_id: 'turn_other', kind: 'start' });
+        return jsonResponse(typedCommandResponse('client_other', 'thread_existing', 'turn_other', 'send once'));
       }
       throw new Error(`unexpected fetch: ${url}`);
     });
@@ -1511,12 +1481,11 @@ describe('Env local Flower surface adapter', () => {
       thread_id: 'thread_existing',
       prompt: 'send once',
     })).rejects.toMatchObject({
-      message: 'Flower turn admission returned an invalid receipt.',
-      uncertain_admission: { client_request_id: 'client_existing', thread_id: 'thread_existing' },
+      message: 'Flower send returned an invalid current view.',
     });
   });
 
-  it('distinguishes definite HTTP rejection from unknown transport and receipt outcomes', async () => {
+  it('reports command rejection, transport failure, and invalid current views directly', async () => {
     let turnOutcome: 'definite' | 'transport' | 'malformed' | 'invalid_json' = 'definite';
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/settings') {
@@ -1569,9 +1538,7 @@ describe('Env local Flower surface adapter', () => {
       client_request_id: 'client_transport',
       thread_id: 'thread_existing',
       prompt: 'send once',
-    })).rejects.toMatchObject({
-      uncertain_admission: { client_request_id: 'client_transport', thread_id: 'thread_existing' },
-    });
+    })).rejects.toThrow('transport disconnected');
 
     turnOutcome = 'malformed';
     await expect(createAdapter().launchTurn({
@@ -1579,8 +1546,7 @@ describe('Env local Flower surface adapter', () => {
       thread_id: 'thread_existing',
       prompt: 'send once',
     })).rejects.toMatchObject({
-      message: 'Flower turn admission returned an invalid receipt.',
-      uncertain_admission: { client_request_id: 'client_malformed', thread_id: 'thread_existing' },
+      message: 'Flower send returned an invalid current view.',
     });
 
     turnOutcome = 'invalid_json';
@@ -1590,7 +1556,6 @@ describe('Env local Flower surface adapter', () => {
       prompt: 'send once',
     })).rejects.toMatchObject({
       code: 'INVALID_JSON_RESPONSE',
-      uncertain_admission: { client_request_id: 'client_invalid_json', thread_id: 'thread_existing' },
     });
   });
 
@@ -1617,7 +1582,12 @@ describe('Env local Flower surface adapter', () => {
       if (url === '/_redeven_proxy/api/ai/threads/thread_existing/turns' && init?.method === 'POST') {
         const body = JSON.parse(String(init.body));
         turnBodies.push(body);
-        return jsonResponse({ run_id: 'run_existing', turn_id: 'turn_existing', kind: 'start' });
+        return jsonResponse(typedCommandResponse(
+          'client_existing',
+          'thread_existing',
+          'turn_existing',
+          'continue existing thread',
+        ));
       }
       throw new Error(`unexpected fetch: ${url}`);
     });
@@ -1653,14 +1623,17 @@ describe('Env local Flower surface adapter', () => {
 	it('submits input responses through the HTTP admission path without waiting for RPC notifications', async () => {
 		const inputBodies: unknown[] = [];
 		fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
-			if (url === '/_redeven_proxy/api/ai/threads/thread_waiting/input_response' && init?.method === 'POST') {
-				inputBodies.push(JSON.parse(String(init.body ?? '{}')));
-				return jsonResponse({
-					run_id: 'run_continue',
-					turn_id: 'turn_continue',
-					kind: 'start',
-					consumed_waiting_prompt_id: 'prompt_1',
-				});
+				if (url === '/_redeven_proxy/api/ai/threads/thread_waiting/input_response' && init?.method === 'POST') {
+					inputBodies.push(JSON.parse(String(init.body ?? '{}')));
+					return jsonResponse({
+						kind: 'accepted',
+						consumed_waiting_prompt_id: 'prompt_1',
+						current: typedCommandResponse(
+							'input:prompt_1',
+							'thread_waiting',
+							'turn_continue',
+						).current,
+					});
 			}
 			throw new Error(`input admission must not perform another request: ${url}`);
 		});
@@ -1688,9 +1661,11 @@ describe('Env local Flower surface adapter', () => {
 
     expect(receipt).toEqual({
       thread_id: 'thread_waiting',
-      turn_id: 'turn_continue',
-      run_id: 'run_continue',
       consumed_prompt_id: 'prompt_1',
+      current: expect.objectContaining({
+        turn_id: 'turn_continue',
+        thread_id: 'thread_waiting',
+      }),
     });
 		expect(submitRequestUserInputResponse).not.toHaveBeenCalled();
 		expect(subscribeThread).not.toHaveBeenCalled();
@@ -1719,7 +1694,7 @@ describe('Env local Flower surface adapter', () => {
 			thread_id: 'thread_waiting',
 			prompt_id: 'prompt_1',
 			answers: { next: { choice_id: 'continue' } },
-		})).rejects.toThrow('Flower input response admission returned an invalid receipt.');
+		})).rejects.toThrow('Flower input response returned an invalid current view.');
 
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 		expect(submitRequestUserInputResponse).not.toHaveBeenCalled();
@@ -1732,7 +1707,7 @@ describe('Env local Flower surface adapter', () => {
 				patchBodies.push(JSON.parse(String(init.body ?? '{}')));
 				return jsonResponse({ thread: { thread_id: 'thread_reasoning', read_status: readStatus('idle') } });
 			}
-			if (url === '/_redeven_proxy/api/ai/threads/thread_reasoning/live/bootstrap' && init?.method === 'GET') {
+      if (url === '/_redeven_proxy/api/ai/threads/thread_reasoning' && init?.method === 'GET') {
 				return jsonResponse(liveBootstrap('thread_reasoning', 'idle'));
 			}
 			throw new Error(`unexpected fetch: ${url}`);
@@ -1755,13 +1730,13 @@ describe('Env local Flower surface adapter', () => {
 				patchBodies.push(JSON.parse(String(init.body ?? '{}')));
 				return jsonResponse({ thread: { thread_id: 'thread_permission', read_status: readStatus('running') } });
 			}
-			if (url === '/_redeven_proxy/api/ai/threads/thread_permission/live/bootstrap' && init?.method === 'GET') {
-				const bootstrap = liveBootstrap('thread_permission', 'running');
-				bootstrap.thread = {
-					...bootstrap.thread,
-					permission_type: 'full_access',
-				};
-				return jsonResponse(bootstrap);
+      if (url === '/_redeven_proxy/api/ai/threads/thread_permission' && init?.method === 'GET') {
+					const detail = liveBootstrap('thread_permission', 'running');
+					detail.thread = {
+						...detail.thread,
+						permission_type: 'full_access',
+					};
+					return jsonResponse(detail);
 			}
 			throw new Error(`unexpected fetch: ${url}`);
 		});
@@ -1784,13 +1759,13 @@ describe('Env local Flower surface adapter', () => {
         patchBodies.push(JSON.parse(String(init.body ?? '{}')));
         return jsonResponse({ thread: { thread_id: 'thread_model', read_status: readStatus('idle') } });
       }
-      if (url === '/_redeven_proxy/api/ai/threads/thread_model/live/bootstrap' && init?.method === 'GET') {
-        const bootstrap = liveBootstrap('thread_model', 'idle');
-        bootstrap.thread = {
-          ...bootstrap.thread,
+      if (url === '/_redeven_proxy/api/ai/threads/thread_model' && init?.method === 'GET') {
+        const detail = liveBootstrap('thread_model', 'idle');
+        detail.thread = {
+          ...detail.thread,
           model_id: 'default/gpt-5.4',
         };
-        return jsonResponse(bootstrap);
+        return jsonResponse(detail);
       }
       throw new Error(`unexpected fetch: ${url}`);
     });

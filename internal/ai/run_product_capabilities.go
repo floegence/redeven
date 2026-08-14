@@ -8,187 +8,38 @@ import (
 	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
+// runProductCapabilities contains product-owned catalog and resource access
+// only. Floret owns turn, interaction, effect and child-thread lifecycle.
 type runProductCapabilities struct {
 	currentSettings          func(context.Context) (*threadstore.ThreadSettings, error)
 	requireAuthorityWritable func(context.Context) error
-	permissionSnapshot       func(context.Context, string) (threadstore.PermissionSnapshotRecord, bool, error)
-	childPermissionSnapshot  func(context.Context, string, string, string) (threadstore.PermissionSnapshotRecord, bool, error)
-	insertPermissionSnapshot func(context.Context, threadstore.PermissionSnapshotRecord) error
-	bindPendingAdmission     func(context.Context, threadstore.PendingTurnAdmissionBinding) (threadstore.PendingTurnAdmissionReceipt, int64, error)
-	finalizedChildSnapshot   func(context.Context, string) (threadstore.ChildPermissionSnapshotRecord, bool, error)
-	getQueuedTurnOwnedUpload func(context.Context, string, string) (*threadstore.UploadRecord, error)
-	preparePublication       func(context.Context, threadstore.SubAgentPublicationOperation) error
-	publication              func(context.Context, string) (threadstore.SubAgentPublicationOperation, bool, error)
-	bindPublication          func(context.Context, string, threadstore.ChildPermissionSnapshotRecord, int64) (bool, error)
-	finalizePublication      func(context.Context, string, string, string, string, int64) (bool, error)
-	failPublication          func(context.Context, string, string, string, string, int64) (bool, error)
+	getThreadOwnedUpload     func(context.Context, string) (*threadstore.UploadRecord, error)
 }
 
-func bindRootRunProductCapabilities(store *threadstore.Store, endpointID string, threadID string, canonicalRunIDs ...string) (runProductCapabilities, error) {
+func bindRootRunProductCapabilities(store *threadstore.Store, endpointID string, threadID string, _ ...string) (runProductCapabilities, error) {
 	if store == nil {
 		return runProductCapabilities{}, errors.New("run product store is unavailable")
 	}
 	endpointID = strings.TrimSpace(endpointID)
 	threadID = strings.TrimSpace(threadID)
-	canonicalRunID := ""
-	if len(canonicalRunIDs) > 0 {
-		canonicalRunID = strings.TrimSpace(canonicalRunIDs[0])
-	}
 	if endpointID == "" || threadID == "" {
-		return runProductCapabilities{}, errors.New("root run product authority identity is incomplete")
+		return runProductCapabilities{}, errors.New("run product authority identity is incomplete")
 	}
-
-	capabilities := runProductCapabilities{
+	return runProductCapabilities{
 		currentSettings: func(ctx context.Context) (*threadstore.ThreadSettings, error) {
 			return store.GetThreadSettings(ctx, endpointID, threadID)
 		},
 		requireAuthorityWritable: func(ctx context.Context) error {
 			return store.RequireThreadSettingsWritable(ctx, endpointID, threadID)
 		},
-		permissionSnapshot: func(ctx context.Context, snapshotID string) (threadstore.PermissionSnapshotRecord, bool, error) {
-			record, ok, err := store.GetPermissionSnapshot(ctx, endpointID, strings.TrimSpace(snapshotID))
-			if err != nil || !ok {
-				return record, ok, err
-			}
-			if record.OwnerThreadID != threadID || strings.TrimSpace(record.OwnerRunID) == "" {
-				return threadstore.PermissionSnapshotRecord{}, false, errors.New("permission snapshot is outside the root run authority")
-			}
-			return record, true, nil
-		},
-		childPermissionSnapshot: func(ctx context.Context, snapshotID string, childThreadID string, childRunID string) (threadstore.PermissionSnapshotRecord, bool, error) {
-			childThreadID = strings.TrimSpace(childThreadID)
-			childRunID = strings.TrimSpace(childRunID)
-			child, ok, err := store.GetFinalizedChildPermissionSnapshotByThread(ctx, endpointID, childThreadID)
-			if err != nil || !ok {
-				return threadstore.PermissionSnapshotRecord{}, false, err
-			}
-			if child.ParentThreadID != threadID || child.ChildThreadID != childThreadID || child.ChildRunID != childRunID {
-				return threadstore.PermissionSnapshotRecord{}, false, errors.New("permission snapshot owner is outside the root run authority")
-			}
-			record, ok, err := store.GetPermissionSnapshot(ctx, endpointID, strings.TrimSpace(snapshotID))
-			if err != nil || !ok {
-				return record, ok, err
-			}
-			if record.OwnerThreadID != childThreadID || record.OwnerRunID != childRunID {
-				return threadstore.PermissionSnapshotRecord{}, false, errors.New("child permission snapshot owner mismatch")
-			}
-			return record, true, nil
-		},
-		insertPermissionSnapshot: func(ctx context.Context, record threadstore.PermissionSnapshotRecord) error {
-			ownerRunID := strings.TrimSpace(record.OwnerRunID)
-			if strings.TrimSpace(record.EndpointID) != endpointID || strings.TrimSpace(record.OwnerThreadID) != threadID || ownerRunID == "" || (canonicalRunID != "" && ownerRunID != canonicalRunID) {
-				return errors.New("permission snapshot write authority mismatch")
-			}
-			return store.InsertPermissionSnapshot(ctx, record)
-		},
-		bindPendingAdmission: func(ctx context.Context, binding threadstore.PendingTurnAdmissionBinding) (threadstore.PendingTurnAdmissionReceipt, int64, error) {
-			if strings.TrimSpace(binding.EndpointID) != endpointID || strings.TrimSpace(binding.ThreadID) != threadID {
-				return threadstore.PendingTurnAdmissionReceipt{}, 0, errors.New("pending admission write authority mismatch")
-			}
-			receipt, err := store.GetPendingTurnAdmissionReceipt(ctx, binding.QueueID)
-			if err != nil {
-				return threadstore.PendingTurnAdmissionReceipt{}, 0, err
-			}
-			binding.CommandFingerprint = receipt.CommandFingerprint
-			return store.BindPendingTurnAdmission(ctx, binding)
-		},
-		finalizedChildSnapshot: func(ctx context.Context, childThreadID string) (threadstore.ChildPermissionSnapshotRecord, bool, error) {
-			record, ok, err := store.GetFinalizedChildPermissionSnapshotByThread(ctx, endpointID, strings.TrimSpace(childThreadID))
-			if err != nil || !ok {
-				return record, ok, err
-			}
-			if record.ParentThreadID != threadID {
-				return threadstore.ChildPermissionSnapshotRecord{}, false, errors.New("child permission audit authority mismatch")
-			}
-			return record, true, nil
-		},
-		getQueuedTurnOwnedUpload: func(ctx context.Context, commandID string, uploadID string) (*threadstore.UploadRecord, error) {
-			return store.GetQueuedTurnOwnedUpload(ctx, endpointID, threadID, strings.TrimSpace(commandID), strings.TrimSpace(uploadID))
-		},
-		preparePublication: func(ctx context.Context, operation threadstore.SubAgentPublicationOperation) error {
-			parentRunID := strings.TrimSpace(operation.ParentRunID)
-			if strings.TrimSpace(operation.EndpointID) != endpointID || strings.TrimSpace(operation.ParentThreadID) != threadID || parentRunID == "" || (canonicalRunID != "" && parentRunID != canonicalRunID) {
-				return errors.New("SubAgent publication authority mismatch")
-			}
-			return store.PrepareSubAgentPublication(ctx, operation)
-		},
-		publication: func(ctx context.Context, publicationID string) (threadstore.SubAgentPublicationOperation, bool, error) {
-			operation, ok, err := store.GetSubAgentPublication(ctx, strings.TrimSpace(publicationID))
-			if err != nil || !ok {
-				return operation, ok, err
-			}
-			if operation.EndpointID != endpointID || operation.ParentThreadID != threadID || strings.TrimSpace(operation.ParentRunID) == "" || (canonicalRunID != "" && operation.ParentRunID != canonicalRunID) {
-				return threadstore.SubAgentPublicationOperation{}, false, errors.New("SubAgent publication authority mismatch")
-			}
-			return operation, true, nil
-		},
-		bindPublication: func(ctx context.Context, publicationID string, snapshot threadstore.ChildPermissionSnapshotRecord, committedAtUnixMs int64) (bool, error) {
-			if snapshot.EndpointID != endpointID || snapshot.ParentThreadID != threadID || strings.TrimSpace(snapshot.ParentRunID) == "" || (canonicalRunID != "" && snapshot.ParentRunID != canonicalRunID) {
-				return false, errors.New("SubAgent publication binding authority mismatch")
-			}
-			return store.BindAndFinalizeSubAgentPublication(ctx, publicationID, snapshot, committedAtUnixMs)
-		},
-		finalizePublication: func(ctx context.Context, publicationID string, childSnapshotID string, childThreadID string, childRunID string, committedAtUnixMs int64) (bool, error) {
-			operation, ok, err := store.GetSubAgentPublication(ctx, strings.TrimSpace(publicationID))
-			if err != nil || !ok {
-				return false, err
-			}
-			if operation.EndpointID != endpointID || operation.ParentThreadID != threadID || strings.TrimSpace(operation.ParentRunID) == "" || (canonicalRunID != "" && operation.ParentRunID != canonicalRunID) ||
-				operation.ChildSnapshotID != strings.TrimSpace(childSnapshotID) || operation.ChildThreadID != strings.TrimSpace(childThreadID) || operation.ChildRunID != strings.TrimSpace(childRunID) {
-				return false, errors.New("SubAgent publication finalization authority mismatch")
-			}
-			return store.FinalizeSubAgentPublication(ctx, publicationID, childSnapshotID, childThreadID, childRunID, committedAtUnixMs)
-		},
-		failPublication: func(ctx context.Context, publicationID string, childSnapshotID string, childThreadID string, childRunID string, failedAtUnixMs int64) (bool, error) {
-			operation, ok, err := store.GetSubAgentPublication(ctx, strings.TrimSpace(publicationID))
-			if err != nil || !ok {
-				return false, err
-			}
-			if operation.EndpointID != endpointID || operation.ParentThreadID != threadID || strings.TrimSpace(operation.ParentRunID) == "" || (canonicalRunID != "" && operation.ParentRunID != canonicalRunID) ||
-				operation.ChildSnapshotID != strings.TrimSpace(childSnapshotID) || operation.ChildThreadID != strings.TrimSpace(childThreadID) || operation.ChildRunID != strings.TrimSpace(childRunID) {
-				return false, errors.New("SubAgent publication failure authority mismatch")
-			}
-			return store.FailSubAgentPublication(ctx, publicationID, childSnapshotID, childThreadID, childRunID, failedAtUnixMs)
-		},
-	}
-	return capabilities, nil
-}
-
-func bindChildRunProductCapabilities(store *threadstore.Store, endpointID string, parentThreadID string, childThreadID string, childRunID string) (runProductCapabilities, error) {
-	if store == nil {
-		return runProductCapabilities{}, errors.New("child run product store is unavailable")
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	parentThreadID = strings.TrimSpace(parentThreadID)
-	childThreadID = strings.TrimSpace(childThreadID)
-	childRunID = strings.TrimSpace(childRunID)
-	if endpointID == "" || parentThreadID == "" || childThreadID == "" || childRunID == "" || parentThreadID == childThreadID || childThreadID == childRunID {
-		return runProductCapabilities{}, errors.New("child run product authority identity is incomplete")
-	}
-	return runProductCapabilities{
-		currentSettings: func(ctx context.Context) (*threadstore.ThreadSettings, error) {
-			return store.GetThreadSettings(ctx, endpointID, parentThreadID)
-		},
-		requireAuthorityWritable: func(ctx context.Context) error {
-			return store.RequireThreadSettingsWritable(ctx, endpointID, parentThreadID)
-		},
-		permissionSnapshot: func(ctx context.Context, snapshotID string) (threadstore.PermissionSnapshotRecord, bool, error) {
-			record, ok, err := store.GetPermissionSnapshot(ctx, endpointID, strings.TrimSpace(snapshotID))
-			if err != nil || !ok {
-				return record, ok, err
-			}
-			if record.OwnerThreadID != childThreadID || record.OwnerRunID != childRunID {
-				return threadstore.PermissionSnapshotRecord{}, false, errors.New("child permission snapshot owner authority mismatch")
-			}
-			return record, true, nil
-		},
-		insertPermissionSnapshot: func(ctx context.Context, record threadstore.PermissionSnapshotRecord) error {
-			if strings.TrimSpace(record.EndpointID) != endpointID || strings.TrimSpace(record.OwnerThreadID) != childThreadID || strings.TrimSpace(record.OwnerRunID) != childRunID {
-				return errors.New("child permission snapshot write authority mismatch")
-			}
-			return store.InsertPermissionSnapshot(ctx, record)
+		getThreadOwnedUpload: func(ctx context.Context, uploadID string) (*threadstore.UploadRecord, error) {
+			return store.GetThreadOwnedUpload(ctx, endpointID, threadID, strings.TrimSpace(uploadID))
 		},
 	}, nil
+}
+
+func bindChildRunProductCapabilities(store *threadstore.Store, endpointID string, parentThreadID string, _ string, _ string) (runProductCapabilities, error) {
+	return bindRootRunProductCapabilities(store, endpointID, parentThreadID)
 }
 
 func (c runProductCapabilities) currentThreadSettings(ctx context.Context) (*threadstore.ThreadSettings, error) {
@@ -205,65 +56,9 @@ func (c runProductCapabilities) requireThreadAuthorityWritable(ctx context.Conte
 	return c.requireAuthorityWritable(ctx)
 }
 
-func (c runProductCapabilities) loadPermissionSnapshot(ctx context.Context, snapshotID string) (threadstore.PermissionSnapshotRecord, bool, error) {
-	if c.permissionSnapshot == nil {
-		return threadstore.PermissionSnapshotRecord{}, false, errors.New("permission snapshot read capability is unavailable")
+func (c runProductCapabilities) loadThreadOwnedUpload(ctx context.Context, uploadID string) (*threadstore.UploadRecord, error) {
+	if c.getThreadOwnedUpload == nil {
+		return nil, errors.New("thread upload read capability is unavailable")
 	}
-	return c.permissionSnapshot(ctx, snapshotID)
-}
-
-func (c runProductCapabilities) loadChildPermissionSnapshot(ctx context.Context, snapshotID string, childThreadID string, childRunID string) (threadstore.PermissionSnapshotRecord, bool, error) {
-	if c.childPermissionSnapshot == nil {
-		return threadstore.PermissionSnapshotRecord{}, false, errors.New("child permission snapshot read capability is unavailable")
-	}
-	return c.childPermissionSnapshot(ctx, snapshotID, childThreadID, childRunID)
-}
-
-func (c runProductCapabilities) persistPermissionSnapshot(ctx context.Context, record threadstore.PermissionSnapshotRecord) error {
-	if c.insertPermissionSnapshot == nil {
-		return errors.New("permission snapshot write capability is unavailable")
-	}
-	return c.insertPermissionSnapshot(ctx, record)
-}
-
-func (c runProductCapabilities) bindCanonicalPendingAdmission(ctx context.Context, binding threadstore.PendingTurnAdmissionBinding) (threadstore.PendingTurnAdmissionReceipt, int64, error) {
-	if c.bindPendingAdmission == nil {
-		return threadstore.PendingTurnAdmissionReceipt{}, 0, errors.New("pending admission binding capability is unavailable")
-	}
-	return c.bindPendingAdmission(ctx, binding)
-}
-
-func (c runProductCapabilities) loadFinalizedChildSnapshot(ctx context.Context, childThreadID string) (threadstore.ChildPermissionSnapshotRecord, bool, error) {
-	if c.finalizedChildSnapshot == nil {
-		return threadstore.ChildPermissionSnapshotRecord{}, false, errors.New("child permission audit capability is unavailable")
-	}
-	return c.finalizedChildSnapshot(ctx, childThreadID)
-}
-
-func (c runProductCapabilities) loadQueuedTurnOwnedUpload(ctx context.Context, commandID string, uploadID string) (*threadstore.UploadRecord, error) {
-	if c.getQueuedTurnOwnedUpload == nil {
-		return nil, errors.New("queued upload read capability is unavailable")
-	}
-	return c.getQueuedTurnOwnedUpload(ctx, commandID, uploadID)
-}
-
-func (c runProductCapabilities) prepareSubAgentPublication(ctx context.Context, operation threadstore.SubAgentPublicationOperation) error {
-	if c.preparePublication == nil {
-		return errors.New("SubAgent publication capability is unavailable")
-	}
-	return c.preparePublication(ctx, operation)
-}
-
-func (c runProductCapabilities) loadSubAgentPublication(ctx context.Context, publicationID string) (threadstore.SubAgentPublicationOperation, bool, error) {
-	if c.publication == nil {
-		return threadstore.SubAgentPublicationOperation{}, false, errors.New("SubAgent publication read capability is unavailable")
-	}
-	return c.publication(ctx, publicationID)
-}
-
-func (c runProductCapabilities) bindSubAgentPublication(ctx context.Context, publicationID string, snapshot threadstore.ChildPermissionSnapshotRecord, committedAtUnixMs int64) (bool, error) {
-	if c.bindPublication == nil {
-		return false, errors.New("SubAgent publication binding capability is unavailable")
-	}
-	return c.bindPublication(ctx, publicationID, snapshot, committedAtUnixMs)
+	return c.getThreadOwnedUpload(ctx, uploadID)
 }

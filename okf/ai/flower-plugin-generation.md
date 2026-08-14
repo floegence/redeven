@@ -32,8 +32,8 @@ and approval gates allow the domain action. A plugin-generation handler may run
 already-approved local steps and call released ReDevPlugin adapters, but it
 must not perform its own approval wait, bypass Floret dispatch, mutate Flower
 activity rows directly, or convert plugin audit rows into Flower timeline
-state. Flower activity must come from Floret `ActivityTimeline` /
-`ThreadTurnProjection` and Redeven `ToolPresentationSpec`; plugin operations
+state. Flower activity must come from the Floret typed thread current view and
+Redeven `ToolPresentationSpec`; plugin operations
 and build diagnostics are detail lookup material keyed from approved activity or
 operation ids.
 
