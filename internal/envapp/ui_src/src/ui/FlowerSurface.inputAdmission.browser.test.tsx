@@ -72,6 +72,7 @@ describe('Flower structured input admission browser behavior', () => {
     (runtime.querySelector('[data-thread-id="thread-composer-icon-narrow"] button') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('.flower-composer textarea')));
     const composer = runtime.querySelector('.flower-composer') as HTMLElement;
+    await waitFor(() => composer.getAttribute('data-flower-companion-compact') === 'true');
     const flowerIcons = Array.from(composer.querySelectorAll('svg'))
       .filter((icon) => icon.querySelector('radialGradient'));
     expect(flowerIcons).toHaveLength(0);
