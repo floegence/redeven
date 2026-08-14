@@ -6,10 +6,13 @@ import {
   TerminalLiveErrorCode,
   TerminalLiveServerError,
   decodeAttach,
+  decodeActivate,
   decodeInput,
   decodeInputIntent,
   decodeResize,
+  encodeActivated,
   encodeAttached,
+  encodeControllerChanged,
   encodeResizeApplied,
   type TerminalByteStream,
 } from '@floegence/floeterm-terminal-web/live';
@@ -110,8 +113,10 @@ async function attach(bundle: ReturnType<typeof createRedevenTerminalLiveBundle>
   stream.push(encodeAttached({
     presentationSequence: 1n,
     geometryGeneration: 1n,
+    controllerEpoch: 1n,
     cols: 80,
     rows: 24,
+    isController: true,
   }));
   return await attaching;
 }
@@ -138,15 +143,19 @@ describe('terminal semantic live transport', () => {
     stream.push(encodeAttached({
       presentationSequence: 1n,
       geometryGeneration: 1n,
+      controllerEpoch: 1n,
       cols: 80,
       rows: 24,
+      isController: true,
     }));
     await expect(attaching).resolves.toEqual({
       presentationSequence: 1,
       geometryGeneration: 1,
       runtimeAttachGeneration: 1,
+      controllerEpoch: 1,
       cols: 80,
       rows: 24,
+      isController: true,
     });
 
     await bundle.transport.sendInput('session-1', 'aa');
@@ -196,6 +205,80 @@ describe('terminal semantic live transport', () => {
       runtimeAttachGeneration: 1,
       state: 'attached',
     }]);
+  });
+
+  it('activates an observer with its measured geometry before controller input', async () => {
+    const { rpc } = createRpcMock();
+    const stream = new FakeStream();
+    const bundle = createRedevenTerminalLiveBundle(
+      rpc,
+      () => ({ openStream: vi.fn().mockResolvedValue(stream) } as any),
+      'connection-1',
+    );
+    const controllers: unknown[] = [];
+    bundle.eventSource.onTerminalController('session-1', event => controllers.push(event));
+
+    const attaching = bundle.transport.attachWithPresentation('session-1', 46, 16);
+    await waitUntil(() => stream.writes.length === 1);
+    stream.push(encodeAttached({
+      presentationSequence: 1n,
+      geometryGeneration: 1n,
+      controllerEpoch: 7n,
+      cols: 46,
+      rows: 16,
+      isController: false,
+    }));
+    await expect(attaching).resolves.toEqual({
+      presentationSequence: 1,
+      geometryGeneration: 1,
+      runtimeAttachGeneration: 1,
+      controllerEpoch: 7,
+      cols: 46,
+      rows: 16,
+      isController: false,
+    });
+    expect(controllers).toEqual([{
+      sessionId: 'session-1',
+      epoch: 7,
+      isController: false,
+    }]);
+
+    const activating = bundle.transport.activate('session-1', 120, 40);
+    await waitUntil(() => stream.writes.length === 2);
+    const activation = decodeActivate(decodeSingleWrite(stream.writes[1]!));
+    expect(activation).toEqual({
+      sequence: 1n,
+      controllerEpoch: 7n,
+      cols: 120,
+      rows: 40,
+    });
+    stream.push(encodeActivated({
+      sequence: activation.sequence,
+      controllerEpoch: 8n,
+      geometryGeneration: 2n,
+      presentationSequence: 3n,
+      cols: 120,
+      rows: 40,
+    }));
+    await expect(activating).resolves.toEqual({
+      runtimeAttachGeneration: 1,
+      requested: { cols: 120, rows: 40 },
+      effective: { generation: 2, presentationSequence: 3, cols: 120, rows: 40 },
+      controller: { epoch: 8, isController: true },
+    });
+    expect(controllers.at(-1)).toEqual({
+      sessionId: 'session-1',
+      epoch: 8,
+      isController: true,
+    });
+
+    stream.push(encodeControllerChanged({ epoch: 9n, isController: false }));
+    await waitUntil(() => controllers.length === 3);
+    expect(controllers.at(-1)).toEqual({
+      sessionId: 'session-1',
+      epoch: 9,
+      isController: false,
+    });
   });
 
   it('binds semantic history and clear RPCs to the current connection generation', async () => {

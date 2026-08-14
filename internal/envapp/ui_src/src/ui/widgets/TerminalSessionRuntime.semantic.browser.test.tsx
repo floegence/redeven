@@ -12,7 +12,10 @@ import type {
   RedevenTerminalTransport,
 } from '../services/terminalTransport';
 import type { SemanticTerminalViewportHandle } from './semanticTerminalViewport';
-import { TerminalSessionRuntime } from './TerminalSessionRuntime';
+import {
+  TerminalSessionRuntime,
+  type TerminalSessionRuntimeStatus,
+} from './TerminalSessionRuntime';
 
 const SESSION = {
   id: 'semantic-session',
@@ -67,11 +70,17 @@ function historyPage(): SemanticHistoryPage {
   };
 }
 
-function harness() {
+function harness(options: Readonly<{
+  controller?: boolean;
+  autoFocus?: boolean;
+  attachSettlement?: Promise<void>;
+}> = {}) {
   let presentationHandler: ((value: unknown) => void) | null = null;
   let lifecycleHandler: ((event: Parameters<Parameters<RedevenTerminalEventSource['onTerminalLiveAttachmentLifecycle']>[1]>[0]) => void) | null = null;
   let geometryHandler: ((event: Parameters<Parameters<RedevenTerminalEventSource['onTerminalGeometry']>[1]>[0]) => void) | null = null;
+  let controllerHandler: ((event: Parameters<Parameters<RedevenTerminalEventSource['onTerminalController']>[1]>[0]) => void) | null = null;
   let viewport: SemanticTerminalViewportHandle | null = null;
+  const statuses: TerminalSessionRuntimeStatus[] = [];
   const [fontSize, setFontSize] = createSignal(14);
   const [fontFamily, setFontFamily] = createSignal('monospace');
   const [themeColors, setThemeColors] = createSignal<Record<string, string>>({
@@ -79,6 +88,7 @@ function harness() {
     foreground: '#eeeeee',
   });
   const [viewActive, setViewActive] = createSignal(true);
+  const [active, setActive] = createSignal(true);
   let geometryGeneration = 1;
   const sendInput = vi.fn(async () => undefined);
   const sendInputIntent = vi.fn(async (_sessionId: string, _intent: TerminalKeyInputIntent) => undefined);
@@ -106,24 +116,43 @@ function harness() {
       },
     };
   });
-  const transport: RedevenTerminalTransport = {
-    attach: async () => undefined,
-    attachWithPresentation: async (_sessionId, cols, rows) => {
-      queueMicrotask(() => lifecycleHandler?.({
-        sessionId: SESSION.id,
-        runtimeAttachGeneration: 1,
-        state: 'attached',
-      }));
-      return {
-        presentationSequence: 1,
-        geometryGeneration: 1,
+  const activate = vi.fn(async (_sessionId: string, cols: number, rows: number) => {
+    geometryGeneration += 1;
+    return {
+      runtimeAttachGeneration: 1,
+      requested: { cols, rows },
+      effective: {
+        generation: geometryGeneration,
+        presentationSequence: geometryGeneration,
         cols,
         rows,
-        runtimeAttachGeneration: 1,
-      };
-    },
+      },
+      controller: { epoch: 2, isController: true },
+    };
+  });
+  const attachWithPresentation = vi.fn(async (_sessionId: string, cols: number, rows: number) => {
+    await options.attachSettlement;
+    queueMicrotask(() => lifecycleHandler?.({
+      sessionId: SESSION.id,
+      runtimeAttachGeneration: 1,
+      state: 'attached',
+    }));
+    return {
+      presentationSequence: 1,
+      geometryGeneration: 1,
+      cols,
+      rows,
+      runtimeAttachGeneration: 1,
+      controllerEpoch: 1,
+      isController: options.controller ?? true,
+    };
+  });
+  const transport = {
+    attach: async () => undefined,
+    attachWithPresentation,
     resize: async () => undefined,
     resizeWithEffectiveGeometry,
+    activate,
     sendInput,
     sendInputIntent,
     semanticHistory,
@@ -131,7 +160,7 @@ function harness() {
     forgetSession: vi.fn(),
     syncConnectionEpoch: () => undefined,
     dispose: () => undefined,
-  };
+  } as RedevenTerminalTransport;
   const eventSource: RedevenTerminalEventSource = {
     onTerminalPresentation: (_sessionId, handler) => {
       presentationHandler = handler;
@@ -140,6 +169,10 @@ function harness() {
     onTerminalGeometry: (_sessionId, handler) => {
       geometryHandler = handler;
       return () => { if (geometryHandler === handler) geometryHandler = null; };
+    },
+    onTerminalController: (_sessionId, handler) => {
+      controllerHandler = handler;
+      return () => { if (controllerHandler === handler) controllerHandler = null; };
     },
     onTerminalLiveAttachmentLifecycle: (_sessionId, handler) => {
       lifecycleHandler = handler;
@@ -155,11 +188,11 @@ function harness() {
     <TerminalSessionRuntime
       session={SESSION}
       variant="panel"
-      active={() => true}
+      active={active}
       connected={() => true}
       protocolClient={() => transport}
       viewActive={viewActive}
-      autoFocus={() => false}
+      autoFocus={() => options.autoFocus ?? false}
       themeColors={themeColors}
       fontSize={fontSize}
       fontFamily={fontFamily}
@@ -172,8 +205,32 @@ function harness() {
       registerViewport={(_sessionId, next) => { viewport = next; }}
       registerSurfaceElement={() => undefined}
       registerActions={() => undefined}
+      onRuntimeStatus={(_sessionId, status) => statuses.push(status)}
     />
   ), root);
+  const runtimeElement = root.querySelector<HTMLElement>('[data-terminal-runtime-session]')!;
+  const semanticSurface = root.querySelector<HTMLElement>('[data-terminal-semantic-surface="true"]')!;
+  const semanticCanvas = root.querySelector<HTMLCanvasElement>('[data-terminal-semantic-canvas="true"]')!;
+  Object.assign(runtimeElement.style, {
+    position: 'relative',
+    width: '100%',
+    height: '100%',
+    overflow: 'hidden',
+  });
+  Object.assign(semanticSurface.style, {
+    position: 'absolute',
+    top: '8px',
+    left: '8px',
+    right: '0',
+    bottom: '0',
+    overflow: 'hidden',
+  });
+  Object.assign(semanticCanvas.style, {
+    position: 'absolute',
+    inset: '0',
+    width: '100%',
+    height: '100%',
+  });
 
   return {
     root,
@@ -181,10 +238,14 @@ function harness() {
     emitPresentation: (value: SemanticPresentation) => presentationHandler?.(value),
     emitGeometry: (value: Parameters<NonNullable<typeof geometryHandler>>[0]) => geometryHandler?.(value),
     semanticHistory,
+    attachWithPresentation,
     resizeWithEffectiveGeometry,
+    activate,
+    statuses,
     sendInput,
     sendInputIntent,
     setViewActive,
+    setActive,
     setFontSize,
     setFontFamily,
     setThemeColors,
@@ -263,6 +324,7 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
       bubbles: true,
       cancelable: true,
     }));
+    await vi.waitFor(() => expect(runtime.sendInputIntent).toHaveBeenCalledTimes(2));
     expect(runtime.sendInputIntent.mock.calls).toEqual([
       [SESSION.id, expect.objectContaining({ kind: 'key', code: 'Enter', action: 'press' })],
       [SESSION.id, expect.objectContaining({ kind: 'key', code: 'Enter', action: 'release' })],
@@ -334,6 +396,221 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     expect(writeText).toHaveBeenCalledWith('copy-target');
   });
 
+  it('keeps a same-cell click selection-free while preserving intentional drag selection', async () => {
+    const runtime = harness();
+    mounted.push(runtime);
+    runtime.emitPresentation(presentation(1, 'click-target'));
+    await vi.waitFor(() => expect(runtime.getViewport()).not.toBeNull());
+    await waitForPaint();
+
+    const canvas = runtime.root.querySelector<HTMLCanvasElement>('[data-terminal-semantic-canvas="true"]')!;
+    Object.defineProperties(canvas, {
+      setPointerCapture: { configurable: true, value: vi.fn() },
+      hasPointerCapture: { configurable: true, value: vi.fn(() => true) },
+      releasePointerCapture: { configurable: true, value: vi.fn() },
+    });
+    const bounds = canvas.getBoundingClientRect();
+    const pointer = (type: string, x: number, pointerId: number) => canvas.dispatchEvent(new PointerEvent(type, {
+      pointerId,
+      button: 0,
+      buttons: type === 'pointerup' ? 0 : 1,
+      clientX: x,
+      clientY: bounds.top + 4,
+      bubbles: true,
+      cancelable: true,
+    }));
+
+    pointer('pointerdown', bounds.left + 2, 8);
+    pointer('pointerup', bounds.left + 2, 8);
+    expect(runtime.getViewport()?.hasSelection()).toBe(false);
+    expect(runtime.getViewport()?.getSelectionText()).toBe('');
+
+    pointer('pointerdown', bounds.left + 2, 9);
+    pointer('pointermove', bounds.left + 20, 9);
+    pointer('pointerup', bounds.left + 20, 9);
+    expect(runtime.getViewport()?.getSelectionText()).toContain('click-target');
+  });
+
+  it('atomically activates an observer with its measured geometry before user input', async () => {
+    const runtime = harness({ controller: false });
+    mounted.push(runtime);
+    runtime.emitPresentation(presentation(1, 'observer'));
+    await vi.waitFor(() => expect(runtime.getViewport()).not.toBeNull());
+
+    let settleActivation!: () => void;
+    const activationSettlement = new Promise<void>((resolve) => {
+      settleActivation = resolve;
+    });
+    runtime.activate.mockImplementationOnce(async (_sessionId, cols, rows) => {
+      await activationSettlement;
+      return {
+        runtimeAttachGeneration: 1,
+        requested: { cols, rows },
+        effective: {
+          generation: 2,
+          presentationSequence: 2,
+          cols,
+          rows,
+        },
+        controller: { epoch: 2, isController: true },
+      };
+    });
+
+    const canvas = runtime.root.querySelector<HTMLCanvasElement>('[data-terminal-semantic-canvas="true"]')!;
+    const input = runtime.root.querySelector<HTMLTextAreaElement>('[data-terminal-input-bridge="semantic"]')!;
+    Object.defineProperties(canvas, {
+      setPointerCapture: { configurable: true, value: vi.fn() },
+      hasPointerCapture: { configurable: true, value: vi.fn(() => true) },
+      releasePointerCapture: { configurable: true, value: vi.fn() },
+    });
+    const bounds = canvas.getBoundingClientRect();
+    canvas.dispatchEvent(new PointerEvent('pointerdown', {
+      pointerId: 10,
+      button: 0,
+      buttons: 1,
+      clientX: bounds.left + 2,
+      clientY: bounds.top + 4,
+      bubbles: true,
+      cancelable: true,
+    }));
+
+    await vi.waitFor(() => expect(runtime.activate).toHaveBeenCalledOnce());
+    expect(document.activeElement).not.toBe(input);
+    expect(runtime.activate).toHaveBeenCalledWith(
+      SESSION.id,
+      expect.any(Number),
+      expect.any(Number),
+    );
+    input.value = 'x';
+    input.dispatchEvent(new InputEvent('input', {
+      inputType: 'insertText',
+      data: 'x',
+      bubbles: true,
+    }));
+    input.value = 'y';
+    input.dispatchEvent(new InputEvent('input', {
+      inputType: 'insertText',
+      data: 'y',
+      bubbles: true,
+    }));
+    await Promise.resolve();
+    expect(runtime.sendInput).not.toHaveBeenCalled();
+
+    settleActivation();
+    await vi.waitFor(() => expect(runtime.sendInput).toHaveBeenCalledTimes(2));
+    expect(runtime.sendInput.mock.calls).toEqual([
+      [SESSION.id, 'x'],
+      [SESSION.id, 'y'],
+    ]);
+    expect(document.activeElement).toBe(input);
+    const runtimeElement = runtime.root.querySelector<HTMLElement>('[data-terminal-runtime-session]')!;
+    expect(runtimeElement.dataset.terminalControllerEpoch).toBe('2');
+    expect(runtimeElement.dataset.terminalIsController).toBe('true');
+  });
+
+  it('measures controller geometry from the host content box instead of a workbench transform', async () => {
+    const runtime = harness({ controller: false });
+    mounted.push(runtime);
+    await vi.waitFor(() => expect(runtime.getViewport()).not.toBeNull());
+    const surface = runtime.root.querySelector<HTMLElement>('[data-terminal-semantic-surface="true"]')!;
+    const canvas = runtime.root.querySelector<HTMLCanvasElement>('[data-terminal-semantic-canvas="true"]')!;
+    surface.style.transformOrigin = 'top left';
+    surface.style.transform = 'scale(0.45)';
+    const cellWidth = Number(canvas.dataset.terminalCellWidth);
+    const cellHeight = Number(canvas.dataset.terminalCellHeight);
+    const expectedCols = Math.floor(surface.clientWidth / cellWidth);
+    const expectedRows = Math.floor(surface.clientHeight / cellHeight);
+    expect(surface.getBoundingClientRect().width).toBeLessThan(surface.clientWidth);
+
+    runtime.activate.mockClear();
+    await runtime.getViewport()!.activate();
+
+    expect(runtime.activate).toHaveBeenCalledWith(SESSION.id, expectedCols, expectedRows);
+  });
+
+  it('activates a selected view before exposing its input bridge as focused', async () => {
+    const runtime = harness({ controller: false, autoFocus: true });
+    mounted.push(runtime);
+    await vi.waitFor(() => expect(runtime.getViewport()).not.toBeNull());
+    const runtimeElement = runtime.root.querySelector<HTMLElement>('[data-terminal-runtime-session]')!;
+    await vi.waitFor(() => expect(runtimeElement.dataset.terminalControllerEpoch).toBe('1'));
+
+    let settleActivation!: () => void;
+    const activationSettlement = new Promise<void>((resolve) => {
+      settleActivation = resolve;
+    });
+    runtime.activate.mockImplementationOnce(async (_sessionId, cols, rows) => {
+      await activationSettlement;
+      return {
+        runtimeAttachGeneration: 1,
+        requested: { cols, rows },
+        effective: {
+          generation: 2,
+          presentationSequence: 2,
+          cols,
+          rows,
+        },
+        controller: { epoch: 2, isController: true },
+      };
+    });
+
+    const input = runtime.root.querySelector<HTMLTextAreaElement>('[data-terminal-input-bridge="semantic"]')!;
+    runtime.emitPresentation(presentation(1, 'selected-observer'));
+    await vi.waitFor(() => expect(runtime.activate).toHaveBeenCalledOnce());
+    expect(document.activeElement).not.toBe(input);
+
+    settleActivation();
+    await vi.waitFor(() => expect(document.activeElement).toBe(input));
+    expect(runtimeElement.dataset.terminalIsController).toBe('true');
+  });
+
+  it('shares one in-flight attachment across concurrent activation requests', async () => {
+    let settleAttach!: () => void;
+    const attachSettlement = new Promise<void>((resolve) => {
+      settleAttach = resolve;
+    });
+    const runtime = harness({ controller: false, attachSettlement });
+    mounted.push(runtime);
+    await vi.waitFor(() => expect(runtime.getViewport()).not.toBeNull());
+    await vi.waitFor(() => expect(runtime.attachWithPresentation).toHaveBeenCalledOnce());
+
+    const first = runtime.getViewport()!.activate();
+    const second = runtime.getViewport()!.activate();
+    await Promise.resolve();
+    expect(runtime.attachWithPresentation).toHaveBeenCalledOnce();
+    expect(runtime.activate).not.toHaveBeenCalled();
+
+    settleAttach();
+    await Promise.all([first, second]);
+    expect(runtime.attachWithPresentation).toHaveBeenCalledOnce();
+    expect(runtime.activate).toHaveBeenCalledOnce();
+  });
+
+  it('fails closed with the activation reason and never writes input after a rejected takeover', async () => {
+    const runtime = harness({ controller: false });
+    mounted.push(runtime);
+    await vi.waitFor(() => expect(runtime.getViewport()).not.toBeNull());
+    runtime.activate.mockRejectedValueOnce(new Error('stale terminal controller epoch'));
+
+    const input = runtime.root.querySelector<HTMLTextAreaElement>('[data-terminal-input-bridge="semantic"]')!;
+    input.value = 'must-not-write';
+    input.dispatchEvent(new InputEvent('input', {
+      inputType: 'insertText',
+      data: 'must-not-write',
+      bubbles: true,
+    }));
+
+    await vi.waitFor(() => expect(runtime.activate).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(runtime.statuses.at(-1)).toMatchObject({
+      state: 'blocking',
+      failureCode: 'terminal_activation_failed',
+      retryable: false,
+    }));
+    expect(runtime.sendInput).not.toHaveBeenCalled();
+    expect(runtime.root.querySelector('[data-terminal-semantic-error="true"]')?.textContent)
+      .toContain('stale terminal controller epoch');
+  });
+
   it('routes Ctrl+C to the native intent channel when the terminal has no selection', async () => {
     const runtime = harness();
     mounted.push(runtime);
@@ -357,6 +634,7 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
       cancelable: true,
     }));
 
+    await vi.waitFor(() => expect(runtime.sendInputIntent).toHaveBeenCalledTimes(2));
     expect(runtime.sendInputIntent.mock.calls).toEqual([
       [SESSION.id, expect.objectContaining({
         kind: 'key',
@@ -400,6 +678,139 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
 
     expect(runtime.sendInputIntent).not.toHaveBeenCalled();
     expect(runtime.sendInput).not.toHaveBeenCalled();
+  });
+
+  it('does not reclaim controller ownership when a hidden display mode receives a Presentation', async () => {
+    const runtime = harness({ controller: false, autoFocus: true });
+    mounted.push(runtime);
+    await vi.waitFor(() => expect(runtime.getViewport()).not.toBeNull());
+    runtime.setViewActive(false);
+    runtime.activate.mockClear();
+
+    runtime.emitPresentation(presentation(2, 'hidden-peer-update'));
+    await Promise.resolve();
+
+    expect(runtime.activate).not.toHaveBeenCalled();
+  });
+
+  it('never exposes a keep-mounted canvas with stale backing while its tab is inactive', async () => {
+    const runtime = harness();
+    mounted.push(runtime);
+    runtime.emitPresentation(presentation(1, 'switch-safe'));
+    await vi.waitFor(() => expect(runtime.getViewport()).not.toBeNull());
+    await waitForPaint();
+
+    const canvas = runtime.root.querySelector<HTMLCanvasElement>('[data-terminal-semantic-canvas="true"]')!;
+    runtime.setActive(false);
+    await vi.waitFor(() => expect(canvas.style.visibility).toBe('hidden'));
+
+    runtime.setActive(true);
+    await vi.waitFor(() => expect(canvas.style.visibility).toBe('visible'));
+    const bounds = canvas.getBoundingClientRect();
+    expect(canvas.width).toBe(Math.round(bounds.width * window.devicePixelRatio));
+    expect(canvas.height).toBe(Math.round(bounds.height * window.devicePixelRatio));
+    expect(runtime.root.querySelectorAll('[data-terminal-semantic-canvas="true"]')).toHaveLength(1);
+  });
+
+  it('keeps three zero-sized keep-mounted tabs paint-safe across fifty DPR-aware switches', async () => {
+    const runtimes = [harness(), harness(), harness()];
+    mounted.push(...runtimes);
+    runtimes.forEach((runtime, index) => runtime.emitPresentation(
+      presentation(index + 1, `tab-${index + 1}`),
+    ));
+    await vi.waitFor(() => runtimes.forEach((runtime) => expect(runtime.getViewport()).not.toBeNull()));
+    await waitForPaint();
+
+    const canvases = runtimes.map((runtime) => (
+      runtime.root.querySelector<HTMLCanvasElement>('[data-terminal-semantic-canvas="true"]')!
+    ));
+    const cellMetrics = canvases.map((canvas) => ({
+      width: canvas.dataset.terminalCellWidth,
+      height: canvas.dataset.terminalCellHeight,
+    }));
+    const originalDpr = window.devicePixelRatio;
+    try {
+      runtimes.forEach((runtime) => {
+        runtime.setActive(false);
+        runtime.root.style.width = '0px';
+        runtime.root.style.height = '0px';
+      });
+      await Promise.resolve();
+      for (let switchIndex = 0; switchIndex < 50; switchIndex += 1) {
+        const selected = switchIndex % runtimes.length;
+        const dpr = [1, 1.5, 2][switchIndex % 3]!;
+        Object.defineProperty(window, 'devicePixelRatio', { configurable: true, value: dpr });
+        runtimes.forEach((runtime, index) => {
+          if (index === selected) return;
+          runtime.setActive(false);
+          runtime.root.style.width = '0px';
+          runtime.root.style.height = '0px';
+        });
+        runtimes[selected]!.root.style.width = '900px';
+        runtimes[selected]!.root.style.height = '540px';
+        runtimes[selected]!.setActive(true);
+
+        await Promise.resolve();
+        const assertCommittedFrame = (requireVisible: boolean) => {
+          runtimes.forEach((runtime, index) => {
+            const canvas = canvases[index]!;
+            expect(runtime.root.querySelectorAll('[data-terminal-semantic-canvas="true"]')).toHaveLength(1);
+            expect(runtime.root.querySelector('[data-terminal-semantic-canvas="true"]')).toBe(canvas);
+            if (index !== selected) {
+              expect(canvas.style.visibility).toBe('hidden');
+              return;
+            }
+            const bounds = canvas.getBoundingClientRect();
+            expect(bounds.width).toBeGreaterThan(0);
+            expect(bounds.height).toBeGreaterThan(0);
+            if (requireVisible) {
+              expect(canvas.style.visibility, JSON.stringify({
+                switchIndex,
+                selected,
+                index,
+                dpr,
+                sessionActive: runtime.root.querySelector<HTMLElement>('[data-terminal-runtime-session]')
+                  ?.dataset.terminalSessionActive,
+                viewActive: runtime.root.querySelector<HTMLElement>('[data-terminal-runtime-session]')
+                  ?.dataset.terminalViewActive,
+                visibilityCommit: canvas.dataset.terminalVisibilityCommit,
+                semanticError: runtime.root.querySelector('[data-terminal-semantic-error="true"]')?.textContent,
+                rootRect: runtime.root.getBoundingClientRect().toJSON(),
+                rootStyle: {
+                  position: getComputedStyle(runtime.root).position,
+                  width: getComputedStyle(runtime.root).width,
+                  height: getComputedStyle(runtime.root).height,
+                },
+                hostClient: {
+                  width: canvas.parentElement?.clientWidth,
+                  height: canvas.parentElement?.clientHeight,
+                },
+                bounds: { width: bounds.width, height: bounds.height },
+                backing: { width: canvas.width, height: canvas.height },
+              })).toBe('visible');
+            } else {
+              expect(['hidden', 'visible']).toContain(canvas.style.visibility);
+              if (canvas.style.visibility === 'hidden') {
+                const surface = canvas.parentElement!;
+                expect(getComputedStyle(surface).backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+                return;
+              }
+            }
+            expect(canvas.width).toBe(Math.round(bounds.width * dpr));
+            expect(canvas.height).toBe(Math.round(bounds.height * dpr));
+            expect(canvas.dataset.terminalCellWidth).toBe(cellMetrics[index]!.width);
+            expect(canvas.dataset.terminalCellHeight).toBe(cellMetrics[index]!.height);
+          });
+        };
+        assertCommittedFrame(false);
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        assertCommittedFrame(false);
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        assertCommittedFrame(true);
+      }
+    } finally {
+      Object.defineProperty(window, 'devicePixelRatio', { configurable: true, value: originalDpr });
+    }
   });
 
   it('projects actor-owned semantic history without creating a browser parser', async () => {

@@ -198,6 +198,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   const [historyBusy, setHistoryBusy] = createSignal(false);
   const [presentationRevision, setPresentationRevision] = createSignal(0);
   const [geometryRevision, setGeometryRevision] = createSignal(0);
+  const [controllerRevision, setControllerRevision] = createSignal(0);
 
   let host: HTMLDivElement | null = null;
   let canvas: HTMLCanvasElement | null = null;
@@ -207,11 +208,14 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   let resizeObserver: ResizeObserver | null = null;
   let latestPresentation: SemanticPresentation | null = null;
   let latestEffectiveGeometry: EffectiveGeometry | null = null;
+  let controllerEpoch = 0;
+  let isController = false;
   let desiredSize: GridSize | null = null;
   let appliedSize: GridSize | null = null;
   let inFlightSize: GridSize | null = null;
   let resizeWork: Promise<void> | null = null;
   let attached = false;
+  let attachWork: Promise<void> | null = null;
   let runtimeAttachGeneration = 0;
   let attachmentOperation = 0;
   let disposed = false;
@@ -230,6 +234,10 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   let geometryRendererEpoch = 1;
   let geometryRequestEpoch = 0;
   let appliedTypography: Readonly<{ fontSize: number; fontFamily: string }> | null = null;
+  let desiredActivationSize: GridSize | null = null;
+  let activationWork: Promise<void> | null = null;
+  let interactionTail: Promise<void> = Promise.resolve();
+  let pendingInteractions = 0;
 
   const currentFrame = (): SemanticFrame | null => (
     historyProjected() ? historyPage()?.frame ?? null : latestPresentation?.frame ?? null
@@ -296,19 +304,20 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   };
 
   const measure = (): GridSize => {
-    const bounds = host?.getBoundingClientRect();
-    if (!bounds || bounds.width <= 0 || bounds.height <= 0) {
+    const width = host?.clientWidth ?? 0;
+    const height = host?.clientHeight ?? 0;
+    if (width <= 0 || height <= 0) {
       return appliedSize ?? desiredSize ?? { cols: 80, rows: 24 };
     }
     const metrics = cellMetrics();
     return {
       cols: Math.max(
         MIN_TERMINAL_COLS,
-        Math.min(MAX_TERMINAL_COLS, Math.floor(bounds.width / metrics.cellWidthCssPx)),
+        Math.min(MAX_TERMINAL_COLS, Math.floor(width / metrics.cellWidthCssPx)),
       ),
       rows: Math.max(
         MIN_TERMINAL_ROWS,
-        Math.min(MAX_TERMINAL_ROWS, Math.floor(bounds.height / metrics.cellHeightCssPx)),
+        Math.min(MAX_TERMINAL_ROWS, Math.floor(height / metrics.cellHeightCssPx)),
       ),
     };
   };
@@ -373,7 +382,23 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     publishGeometryPresentation(local, geometry);
   };
 
-  const attach = async (): Promise<void> => {
+  const acceptController = (controller: Readonly<{ epoch: number; isController: boolean }>) => {
+    if (controller.epoch < controllerEpoch) return;
+    if (controller.epoch === controllerEpoch && controller.isController !== isController) {
+      throw new Error('terminal controller ownership changed without advancing its epoch');
+    }
+    controllerEpoch = controller.epoch;
+    isController = controller.isController;
+    setControllerRevision((value) => value + 1);
+  };
+
+  const resetController = () => {
+    controllerEpoch = 0;
+    isController = false;
+    setControllerRevision((value) => value + 1);
+  };
+
+  const runAttach = async (): Promise<void> => {
     if (disposed || !props.connected()) return;
     const operation = ++attachmentOperation;
     const requested = desiredSize ?? measure();
@@ -391,6 +416,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       if (disposed || operation !== attachmentOperation) return;
       attached = true;
       runtimeAttachGeneration = result.runtimeAttachGeneration;
+      acceptController({ epoch: result.controllerEpoch, isController: result.isController });
       reconnectAttempt = 0;
       lastReconnectError = null;
       acceptEffectiveGeometry({
@@ -411,6 +437,15 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       failClosed(error, 'terminal_attach_failed');
       throw error;
     }
+  };
+
+  const attach = (): Promise<void> => {
+    if (attachWork) return attachWork;
+    const work = runAttach().finally(() => {
+      if (attachWork === work) attachWork = null;
+    });
+    attachWork = work;
+    return work;
   };
 
   const runResizeWork = async () => {
@@ -471,6 +506,75 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     await startResizeWork();
   };
 
+  const runActivationWork = async (): Promise<void> => {
+    while (!disposed && desiredActivationSize) {
+      const requested = desiredActivationSize;
+      desiredActivationSize = null;
+      if (!attached) {
+        desiredSize = requested;
+        await attach();
+      }
+      if (disposed) return;
+      if (!attached || runtimeAttachGeneration <= 0) {
+        throw new Error('terminal view activation requires a live attachment');
+      }
+      if (isController && sameGrid(appliedSize, requested)) continue;
+
+      const result = await props.transport.activate(
+        sessionId,
+        requested.cols,
+        requested.rows,
+      );
+      if (disposed) return;
+      if (result.runtimeAttachGeneration !== runtimeAttachGeneration) {
+        throw new Error('terminal view activation settled for a stale attachment generation');
+      }
+      if (!sameGrid(result.requested, requested)) {
+        throw new Error('terminal view activation changed the requested geometry');
+      }
+      if (!result.controller.isController) {
+        throw new Error('terminal view activation did not grant controller ownership');
+      }
+      acceptController(result.controller);
+      acceptEffectiveGeometry(result.effective, requested);
+      setRuntimeError('');
+      setStatus({ state: 'idle' });
+    }
+  };
+
+  const activateCurrentView = (): Promise<void> => {
+    if (disposed || !props.connected() || !props.viewActive() || !props.active()) {
+      return Promise.resolve();
+    }
+    desiredActivationSize = measure();
+    if (!activationWork) {
+      activationWork = runActivationWork()
+        .catch((error) => {
+          if (!disposed) failClosed(error, 'terminal_activation_failed');
+          throw error;
+        })
+        .finally(() => {
+          activationWork = null;
+          if (!disposed && desiredActivationSize) void activateCurrentView();
+        });
+    }
+    return activationWork;
+  };
+
+  const focusAfterActivation = (requireAutoFocus: boolean) => {
+    const canFocus = () => (
+      !disposed
+      && props.active()
+      && props.viewActive()
+      && (!requireAutoFocus || props.autoFocus())
+      && !renderer?.hasSelection()
+    );
+    if (!canFocus()) return;
+    void activateCurrentView().then(() => {
+      if (canFocus()) inputBridge?.focus({ preventScroll: true });
+    }).catch(() => undefined);
+  };
+
   const clearReconnectTimer = () => {
     if (reconnectTimer !== null) clearTimeout(reconnectTimer);
     reconnectTimer = null;
@@ -497,18 +601,38 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     }, delay);
   };
 
+  const dispatchInteraction = (send: () => Promise<void>) => {
+    const run = async () => {
+      if (!props.connected() || !props.viewActive() || !props.active()) return;
+      await activateCurrentView();
+      if (!props.connected() || !props.viewActive() || !props.active()) return;
+      try {
+        await send();
+      } catch (error) {
+        if (!disposed) failClosed(error, 'terminal_input_failed');
+        throw error;
+      }
+    };
+    if (pendingInteractions === 0 && isController && sameGrid(appliedSize, measure())) {
+      void send().catch((error) => failClosed(error, 'terminal_input_failed'));
+      return;
+    }
+    pendingInteractions += 1;
+    const next = interactionTail.then(run, run).finally(() => {
+      pendingInteractions -= 1;
+    });
+    interactionTail = next.catch(() => undefined);
+    void next.catch(() => undefined);
+  };
+
   const sendInput = (data: string) => {
     if (!data || !props.connected() || !props.viewActive() || !props.active()) return;
-    void props.transport.sendInput(sessionId, data).catch((error) => {
-      failClosed(error, 'terminal_input_failed');
-    });
+    dispatchInteraction(() => props.transport.sendInput(sessionId, data));
   };
 
   const sendInputIntent = (intent: TerminalKeyInputIntent) => {
     if (!props.connected() || !props.viewActive() || !props.active()) return;
-    void props.transport.sendInputIntent(sessionId, intent).catch((error) => {
-      failClosed(error, 'terminal_input_failed');
-    });
+    dispatchInteraction(() => props.transport.sendInputIntent(sessionId, intent));
   };
 
   const showLatestPresentation = () => {
@@ -667,6 +791,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   };
 
   const viewport: SemanticTerminalViewportHandle = {
+    activate: activateCurrentView,
     focus: (options) => inputBridge?.focus(options),
     forceResize: () => { void requestResize(); },
     setAppearance: (appearance: SemanticTerminalAppearance) => {
@@ -739,7 +864,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     focusIfInteractive: () => {
       if (!props.active() || !props.viewActive()) return 'not_interactive';
       if (renderer?.hasSelection()) return 'selection_active';
-      inputBridge?.focus({ preventScroll: true });
+      focusAfterActivation(false);
       return 'focused';
     },
   };
@@ -775,9 +900,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     if ((presentation.state.bell ?? 0) > lastBell) props.onBell?.(sessionId);
     lastBell = presentation.state.bell ?? lastBell;
     props.onInteractive?.(sessionId);
-    if (props.active() && props.viewActive() && props.autoFocus() && !renderer?.hasSelection()) {
-      inputBridge?.focus({ preventScroll: true });
-    }
+    focusAfterActivation(true);
   };
 
   onMount(() => {
@@ -787,6 +910,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     }
 
     renderer = new RendererSurface(canvas, (error) => failClosed(error, 'semantic_renderer_failed'));
+    renderer.setVisible(props.active() && props.viewActive());
     renderer.setPalette(resolvedPalette());
     applyTypography(props.fontSize(), props.fontFamily());
     inputBridge = new TerminalInputBridge({
@@ -823,6 +947,13 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         failClosed(error, 'semantic_geometry_invalid');
       }
     });
+    const unsubscribeController = props.eventSource.onTerminalController(sessionId, (event) => {
+      try {
+        acceptController(event);
+      } catch (error) {
+        failClosed(error, 'semantic_controller_invalid');
+      }
+    });
     const unsubscribeLifecycle = props.eventSource.onTerminalLiveAttachmentLifecycle(
       sessionId,
       (event) => {
@@ -836,6 +967,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         if (event.runtimeAttachGeneration !== runtimeAttachGeneration && runtimeAttachGeneration > 0) return;
         attached = false;
         runtimeAttachGeneration = 0;
+        resetController();
         appliedSize = null;
         latestEffectiveGeometry = null;
         props.onGeometryPresentation?.(sessionId, null);
@@ -876,6 +1008,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     onCleanup(() => {
       unsubscribePresentation();
       unsubscribeGeometry();
+      unsubscribeController();
       unsubscribeLifecycle();
       unsubscribeDeleted();
       unsubscribeName?.();
@@ -889,6 +1022,20 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
 
   createEffect(() => {
     renderer?.setPalette(resolvedPalette());
+  });
+
+  createEffect(() => {
+    const visible = props.active() && props.viewActive();
+    if (!renderer) return;
+    if (!visible) {
+      renderer.setVisible(false);
+      if (canvas) canvas.dataset.terminalVisibilityCommit = 'hidden';
+      return;
+    }
+    renderer.resize();
+    renderer.setVisible(true);
+    if (canvas) canvas.dataset.terminalVisibilityCommit = 'visible';
+    inputBridge?.syncGeometry();
   });
 
   createEffect(() => {
@@ -907,6 +1054,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         attachmentOperation += 1;
         attached = false;
         runtimeAttachGeneration = 0;
+        resetController();
         clearReconnectTimer();
       }
       lastProtocolClient = currentClient;
@@ -923,8 +1071,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
 
   createEffect(() => {
     if (!props.active() || !props.viewActive() || !props.autoFocus() || !ready()) return;
-    if (renderer?.hasSelection()) return;
-    inputBridge?.focus({ preventScroll: true });
+    focusAfterActivation(true);
   });
 
   onCleanup(() => {
@@ -956,6 +1103,10 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   const geometryTrace = () => {
     void geometryRevision();
     return latestEffectiveGeometry;
+  };
+  const controllerTrace = () => {
+    void controllerRevision();
+    return { epoch: controllerEpoch, isController };
   };
   const loadingMessage = createMemo(() => {
     if (loading() === 'attaching') return i18n.t('terminal.attaching');
@@ -993,6 +1144,8 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       class="h-full min-h-0 relative overflow-hidden"
       data-terminal-runtime-session={sessionId}
       data-terminal-renderer="semantic"
+      data-terminal-session-active={props.active() ? 'true' : 'false'}
+      data-terminal-view-active={props.viewActive() ? 'true' : 'false'}
       data-terminal-presentation-sequence={presentationTrace()?.sequence ?? ''}
       data-terminal-content-epoch={presentationTrace()?.state.contentEpoch ?? ''}
       data-terminal-frame-cols={presentationTrace()?.frame.width ?? ''}
@@ -1002,6 +1155,8 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       data-terminal-geometry-sequence={geometryTrace()?.presentationSequence ?? ''}
       data-terminal-geometry-cols={geometryTrace()?.cols ?? ''}
       data-terminal-geometry-rows={geometryTrace()?.rows ?? ''}
+      data-terminal-controller-epoch={controllerTrace().epoch || ''}
+      data-terminal-is-controller={controllerTrace().isController ? 'true' : 'false'}
       style={{
         'background-color': terminalBackground(),
         '--terminal-bottom-inset': `${props.bottomInsetPx()}px`,
@@ -1045,7 +1200,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
           onPointerDown={(event) => {
             if (event.button !== 0) return;
             event.preventDefault();
-            inputBridge?.focus({ preventScroll: true });
+            focusAfterActivation(false);
             event.currentTarget.setPointerCapture(event.pointerId);
             renderer?.beginSelection(event.clientX, event.clientY);
           }}

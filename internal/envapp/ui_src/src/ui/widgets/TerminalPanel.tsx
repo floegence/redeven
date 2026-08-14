@@ -1003,8 +1003,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const connected = () => protocol.status() === 'connected' && Boolean(protocol.session?.());
   const viewActive = () => view.active();
+  const displayModeSelected = () => env.viewMode() === (variant === 'workbench' ? 'workbench' : 'activity');
   const workbenchSelected = () => variant !== 'workbench' || props.workbenchSelected !== false;
-  const terminalFocusOwner = () => viewActive() && workbenchSelected();
+  const terminalFocusOwner = () => viewActive() && displayModeSelected() && workbenchSelected();
   const isEmbeddedWidget = Boolean(String(widgetId ?? '').trim());
   const permissionReady = () => env.env.state === 'ready';
   const canBrowseFiles = createMemo(() => connected() && permissionReady() && Boolean(env.env()?.permissions?.can_read));
@@ -2422,9 +2423,19 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   };
 
   const restoreTerminalSessionFocus = (intent: TerminalFocusRestoreIntent) => {
-    requestAnimationFrame(() => {
+    requestAnimationFrame(async () => {
       if (!terminalFocusOwner() || !shouldRestoreTerminalFocus()) return;
       if (activeSessionId() !== intent.sessionId || !focusOwnerMatchesRestoreIntent(intent)) return;
+      const viewport = viewportRegistry.get(intent.sessionId);
+      if (!viewport) return;
+      try {
+        await viewport.activate();
+      } catch {
+        // TerminalSessionRuntime already publishes the precise fail-closed status.
+        return;
+      }
+      if (!terminalFocusOwner() || activeSessionId() !== intent.sessionId) return;
+      if (!focusOwnerMatchesRestoreIntent(intent)) return;
       actionsRegistry.get(intent.sessionId)?.focusIfInteractive();
     });
   };
@@ -2476,6 +2487,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   createEffect(() => {
     const activationSeq = props.workbenchActivationSeq ?? 0;
+    void viewportRegistrySeq();
     if (variant !== 'workbench') return;
     if (activationSeq <= 0) return;
     if (!terminalFocusOwner()) return;
@@ -4388,6 +4400,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       ref={(n) => (rootEl = n)}
       tabIndex={-1}
       data-terminal-panel-variant={variant}
+      data-terminal-display-mode-selected={displayModeSelected() ? 'true' : 'false'}
+      data-terminal-workbench-selected={workbenchSelected() ? 'true' : 'false'}
       class="terminal-shared-geometry-container h-full min-h-0 flex flex-col outline-none"
       onKeyDown={handleRootKeyDown}
       onFocusIn={() => setPanelHasFocus(true)}
@@ -4657,7 +4671,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                               active={() => activeDisplaySessionId() === sessionId}
                               connected={connected}
                               protocolClient={() => protocol.session?.()}
-                              viewActive={viewActive}
+                              viewActive={() => viewActive() && displayModeSelected()}
                               autoFocus={shouldAutoFocus}
                               themeColors={terminalThemeColors}
                               fontSize={fontSize}

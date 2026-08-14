@@ -205,13 +205,14 @@ async function openEnvPage(context, entryURL) {
 
 async function selectSurface(page, surface) {
   if (surface === 'workbench') {
+    const tab = page.getByRole('tab', { name: 'Workbench', exact: true });
+    if (await tab.getAttribute('aria-selected') !== 'true') await tab.click();
     const panel = page.locator('[data-terminal-panel-variant="workbench"]:visible');
-    if (await panel.count()) return panel.last();
-    await page.getByRole('tab', { name: 'Workbench', exact: true }).click();
     await panel.last().waitFor({ state: 'visible', timeout: 15_000 });
     return panel.last();
   }
-  await page.getByRole('tab', { name: 'Activity', exact: true }).click();
+  const tab = page.getByRole('tab', { name: 'Activity', exact: true });
+  if (await tab.getAttribute('aria-selected') !== 'true') await tab.click();
   const panel = page.locator('[data-terminal-panel-variant="panel"]:visible');
   if (!(await panel.count())) {
     const terminalActivity = page.locator('nav[data-floe-shell-slot="activity-bar"] button').first();
@@ -266,7 +267,10 @@ async function runtimeTrace(runtime) {
       throw new Error('semantic terminal surface is incomplete');
     }
     const bounds = canvas.getBoundingClientRect();
-    const hostBounds = canvas.parentElement?.getBoundingClientRect() ?? bounds;
+    const host = canvas.parentElement;
+    const hostBounds = host?.getBoundingClientRect() ?? bounds;
+    const hostLayoutWidth = host?.clientWidth ?? canvas.clientWidth;
+    const hostLayoutHeight = host?.clientHeight ?? canvas.clientHeight;
     const inputBounds = input.getBoundingClientRect();
     const layoutWidth = canvas.clientWidth;
     const layoutHeight = canvas.clientHeight;
@@ -282,6 +286,14 @@ async function runtimeTrace(runtime) {
       geometry_sequence: numeric('data-terminal-geometry-sequence'),
       geometry_cols: numeric('data-terminal-geometry-cols'),
       geometry_rows: numeric('data-terminal-geometry-rows'),
+      controller_epoch: numeric('data-terminal-controller-epoch'),
+      is_controller: element.getAttribute('data-terminal-is-controller') === 'true',
+      session_active: element.getAttribute('data-terminal-session-active') === 'true',
+      view_active: element.getAttribute('data-terminal-view-active') === 'true',
+      visibility_commit: canvas.dataset.terminalVisibilityCommit ?? '',
+      semantic_error: element.querySelector('[data-terminal-semantic-error="true"]')?.textContent ?? '',
+      workbench_selected: element.closest('[data-terminal-panel-variant]')
+        ?.getAttribute('data-terminal-workbench-selected') === 'true',
       cell_width: Number(canvas.dataset.terminalCellWidth),
       cell_height: Number(canvas.dataset.terminalCellHeight),
       canvas_count: element.querySelectorAll('canvas').length,
@@ -296,6 +308,20 @@ async function runtimeTrace(runtime) {
       input_size: [inputBounds.width, inputBounds.height],
       dpr: globalThis.devicePixelRatio,
     };
+    trace.measured_cols = Math.max(2, Math.min(500, Math.floor(hostLayoutWidth / trace.cell_width)));
+    trace.measured_rows = Math.max(1, Math.min(200, Math.floor(hostLayoutHeight / trace.cell_height)));
+    const sessionID = element.getAttribute('data-terminal-runtime-session');
+    trace.peer_controllers = [...globalThis.document.querySelectorAll('[data-terminal-runtime-session]')]
+      .filter((peer) => peer.getAttribute('data-terminal-runtime-session') === sessionID)
+      .map((peer) => ({
+        variant: peer.closest('[data-terminal-panel-variant]')?.getAttribute('data-terminal-panel-variant') ?? '',
+        selected: peer.closest('[data-terminal-panel-variant]')
+          ?.getAttribute('data-terminal-workbench-selected') === 'true',
+        session_active: peer.getAttribute('data-terminal-session-active') === 'true',
+        view_active: peer.getAttribute('data-terminal-view-active') === 'true',
+        controller_epoch: Number(peer.getAttribute('data-terminal-controller-epoch')),
+        is_controller: peer.getAttribute('data-terminal-is-controller') === 'true',
+      }));
     if (trace.canvas_count !== 1 || trace.semantic_canvas_count !== 1 || trace.legacy_canvas_count !== 0) {
       throw new Error(`terminal must own one semantic canvas: ${JSON.stringify(trace)}`);
     }
@@ -326,16 +352,29 @@ async function runtimeTrace(runtime) {
 async function waitForTrace(runtime, predicate, timeoutMs = 15_000) {
   const deadline = Date.now() + timeoutMs;
   let last = null;
+  const transitions = [];
+  let previousTransition = '';
   while (Date.now() < deadline) {
     try {
       last = await runtimeTrace(runtime);
+      const transition = JSON.stringify({
+        sequence: last.sequence,
+        geometry: [last.geometry_cols, last.geometry_rows],
+        controller: [last.controller_epoch, last.is_controller],
+        active: [last.session_active, last.view_active, last.workbench_selected],
+        error: last.semantic_error,
+      });
+      if (transition !== previousTransition) {
+        transitions.push(JSON.parse(transition));
+        previousTransition = transition;
+      }
       if (predicate(last)) return last;
     } catch (error) {
       last = { error: error instanceof Error ? error.message : String(error) };
     }
     await delay(25);
   }
-  throw new Error(`semantic terminal trace did not converge: ${JSON.stringify(last)}`);
+  throw new Error(`semantic terminal trace did not converge: ${JSON.stringify({ last, transitions })}`);
 }
 
 async function waitForViewsToConverge(page, sessionID, minimumSequence = 1, timeoutMs = 15_000) {
@@ -395,7 +434,14 @@ async function activateSession(panel, sessionID) {
   await button.waitFor({ state: 'visible', timeout: 15_000 });
   if (await button.getAttribute('data-terminal-session-active') !== 'true') await button.click();
   const runtime = panel.locator(`[data-terminal-runtime-session="${sessionID}"]`).first();
-  await terminalInput(runtime, true);
+  const { canvas } = await terminalInput(runtime, true);
+  await canvas.click({ position: { x: 2, y: 2 } });
+  await waitForTrace(runtime, (trace) => (
+    trace.is_controller
+    && trace.controller_epoch > 0
+    && trace.geometry_cols === trace.measured_cols
+    && trace.geometry_rows === trace.measured_rows
+  ));
   return runtime;
 }
 
@@ -531,6 +577,87 @@ async function verifyRefresh(page, panel, sessionID) {
   return { before_sequence: before.sequence, after_sequence: after.sequence };
 }
 
+async function verifyTabSwitchPaintSafety(page, panel, primarySessionID) {
+  const created = [primarySessionID];
+  for (let index = 0; index < 2; index += 1) {
+    created.push((await createSession(page, panel)).sessionID);
+  }
+  await activateSession(panel, primarySessionID);
+  const identities = await panel.evaluate((root, sessionIDs) => {
+    const result = {};
+    sessionIDs.forEach((sessionID, index) => {
+      const runtime = root.querySelector(`[data-terminal-runtime-session="${sessionID}"]`);
+      const canvas = runtime?.querySelector('[data-terminal-semantic-canvas="true"]');
+      if (!(canvas instanceof globalThis.HTMLCanvasElement)) throw new Error(`missing semantic canvas for ${sessionID}`);
+      const identity = `carrier-tab-canvas-${index + 1}`;
+      canvas.dataset.terminalCarrierCanvasIdentity = identity;
+      result[sessionID] = {
+        identity,
+        cellWidth: canvas.dataset.terminalCellWidth,
+        cellHeight: canvas.dataset.terminalCellHeight,
+      };
+    });
+    return result;
+  }, created);
+
+  const samples = [];
+  for (let switchIndex = 0; switchIndex < 50; switchIndex += 1) {
+    const sessionID = created[switchIndex % created.length];
+    const button = panel.locator(`button[data-terminal-session-id="${sessionID}"]`).first();
+    await button.click();
+    const sample = await panel.evaluate(async (root, args) => {
+      const stages = [];
+      const collect = (stage) => {
+        const runtimes = [...root.querySelectorAll('[data-terminal-runtime-session]')];
+        const target = runtimes.find((runtime) => runtime.getAttribute('data-terminal-runtime-session') === args.sessionID);
+        if (!target) throw new Error(`missing switched terminal runtime ${args.sessionID}`);
+        const traces = runtimes.map((runtime) => {
+          const runtimeSessionID = runtime.getAttribute('data-terminal-runtime-session') ?? '';
+          const canvas = runtime.querySelector('[data-terminal-semantic-canvas="true"]');
+          if (!(canvas instanceof globalThis.HTMLCanvasElement)) throw new Error(`missing semantic canvas for ${runtimeSessionID}`);
+          const expected = args.identities[runtimeSessionID];
+          const visible = globalThis.getComputedStyle(canvas).visibility === 'visible'
+            && canvas.getBoundingClientRect().width > 0
+            && canvas.getBoundingClientRect().height > 0;
+          if (expected && (canvas.dataset.terminalCarrierCanvasIdentity !== expected.identity
+            || canvas.dataset.terminalCellWidth !== expected.cellWidth
+            || canvas.dataset.terminalCellHeight !== expected.cellHeight)) {
+            throw new Error(`terminal switch replaced its canvas or cell metrics: ${runtimeSessionID}`);
+          }
+          if (visible && (canvas.width !== Math.round(canvas.clientWidth * globalThis.devicePixelRatio)
+            || canvas.height !== Math.round(canvas.clientHeight * globalThis.devicePixelRatio))) {
+            throw new Error(`terminal switch exposed a stretched backing: ${runtimeSessionID}`);
+          }
+          return {
+            sessionID: runtimeSessionID,
+            active: runtime.getAttribute('data-terminal-session-active') === 'true',
+            visible,
+            backing: [canvas.width, canvas.height],
+            layout: [canvas.clientWidth, canvas.clientHeight],
+          };
+        });
+        stages.push({ stage, traces });
+      };
+      collect('immediate');
+      await Promise.resolve();
+      collect('microtask');
+      await new Promise((resolve) => globalThis.requestAnimationFrame(resolve));
+      collect('raf_1');
+      await new Promise((resolve) => globalThis.requestAnimationFrame(resolve));
+      collect('raf_2');
+      const settled = stages.at(-1)?.traces.find((trace) => trace.sessionID === args.sessionID);
+      if (!settled?.active || !settled.visible) {
+        throw new Error(`switched terminal did not commit visibly: ${JSON.stringify({ args, stages })}`);
+      }
+      return stages;
+    }, { sessionID, identities });
+    await activateSession(panel, sessionID);
+    samples.push({ switch_index: switchIndex + 1, session_id: sessionID, stages: sample });
+  }
+  await activateSession(panel, primarySessionID);
+  return { session_ids: created, switch_count: samples.length, identities, samples };
+}
+
 async function seedProductScenario({ context, entryURL, fixtureBytes, tempDir, maxResizeMs }) {
   const { page, problems } = await openEnvPage(context, entryURL);
   try {
@@ -560,6 +687,7 @@ async function seedProductScenario({ context, entryURL, fixtureBytes, tempDir, m
     const resizeRuntime = await activateSession(workbenchForResize, sessionID);
     const resizeDurationsMs = await verifyTopResize(page, resizeRuntime, maxResizeMs);
     const refresh = await verifyRefresh(page, workbenchForResize, sessionID);
+    const tabSwitches = await verifyTabSwitchPaintSafety(page, workbenchForResize, sessionID);
     const trace = await runtimeTrace(resizeRuntime);
     const canvas = await canvasEvidence(resizeRuntime.locator(semanticCanvasSelector));
     assertPageHealthy(problems);
@@ -572,6 +700,7 @@ async function seedProductScenario({ context, entryURL, fixtureBytes, tempDir, m
       controller_takeover_views: viewsAfterTakeover,
       top_resize_durations_ms: resizeDurationsMs,
       refresh,
+      tab_switches: tabSwitches,
       final_trace: trace,
       canvas,
       activity_runtime_present: await activityRuntime.count() === 1,

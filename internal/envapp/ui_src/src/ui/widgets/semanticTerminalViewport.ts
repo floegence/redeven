@@ -44,6 +44,7 @@ type SemanticTerminalLinkPoint = Readonly<{
 }>;
 
 export type SemanticTerminalViewportHandle = Readonly<{
+  activate(): Promise<void>;
   focus(options?: FocusOptions): void;
   forceResize(): void;
   setAppearance(appearance: SemanticTerminalAppearance): void;

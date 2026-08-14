@@ -42,6 +42,9 @@ test('keeps the supported terminal carriers explicit in the exact-main pre-push 
   assert.match(carrierSource, /terminal must own one semantic canvas/u);
   assert.match(carrierSource, /verifyAtomicClear/u);
   assert.match(carrierSource, /verifyTopResize/u);
+  assert.match(carrierSource, /verifyTabSwitchPaintSafety/u);
+  assert.match(carrierSource, /switchIndex < 50/u);
+  assert.match(carrierSource, /terminal switch exposed a stretched backing/u);
   assert.doesNotMatch(carrierSource, /TerminalCore|GhosttyCheckpoint/u);
   assert.match(carrierSource, /legacy_canvas_count/u);
 });
@@ -99,6 +102,9 @@ test('reports Chromium readback diagnostics without weakening renderer failures'
 test('checks every semantic frame boundary before visual sampling', () => {
   assert.match(carrierSource, /frame_cols !== trace\.geometry_cols/u);
   assert.match(carrierSource, /canvas_backing\[0\] !== Math\.round\(trace\.canvas_layout\[0\] \* trace\.dpr\)/u);
+  assert.match(carrierSource, /trace\.is_controller/u);
+  assert.match(carrierSource, /trace\.geometry_cols === trace\.measured_cols/u);
+  assert.match(carrierSource, /trace\.geometry_rows === trace\.measured_rows/u);
   assert.match(carrierSource, /transparent_pixels !== 0/u);
   assert.match(carrierSource, /waitForViewsToConverge/u);
 });
