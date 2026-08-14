@@ -560,15 +560,7 @@ func (a *Agent) runControlLoop(ctx context.Context) {
 		a.log.Error("control channel not started: system trust roots are unavailable")
 		return
 	}
-	handlers, err := flowersec.NewSessionHandlers(flowersec.SessionHandlerOptions{OnError: func(handlerErr error) {
-		if handlerErr != nil {
-			a.log.Warn("control channel handler failed", "error", handlerErr)
-		}
-	}})
-	if err != nil {
-		a.log.Error("control channel not started: create handlers", "error", err)
-		return
-	}
+	handlers := flowersec.NewRPCHandlers()
 	if err := handlers.HandleRPC(controlRPCTypeGrantServer, func(handlerCtx context.Context, payload json.RawMessage) (any, *flowersec.RPCError) {
 		a.handleGrantNotify(handlerCtx, payload)
 		return struct{}{}, nil
@@ -581,7 +573,7 @@ func (a *Agent) runControlLoop(ctx context.Context) {
 			TrustRoots:     trustRoots,
 			Origin:         strings.TrimSuffix(cfg.ControlplaneBaseURL, "/"),
 			ConnectTimeout: 15 * time.Second,
-			Handlers:       handlers,
+			RPCHandlers:    handlers,
 		},
 	})
 	if err != nil {
