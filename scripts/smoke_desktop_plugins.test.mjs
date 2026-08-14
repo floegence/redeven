@@ -84,8 +84,8 @@ test('isolated smoke configuration rejects shared Desktop paths and ports', () =
   }), /shared Desktop/u);
 });
 
-test('plugin smoke fails on a typed refresh failure and preserves its body', () => {
-  const refresh = {
+test('plugin smoke fails on a typed recovery failure and preserves its body', () => {
+  const recovery = {
     ok: true,
     data: {
       results: [{
@@ -95,15 +95,15 @@ test('plugin smoke fails on a typed refresh failure and preserves its body', () 
       }],
     },
   };
-  const result = assessPluginSmoke({ refresh, catalog: { plugins: [] }, panelInstalledCount: 0 });
+  const result = assessPluginSmoke({ recovery, catalog: { plugins: [] }, panelInstalledCount: 0 });
   assert.equal(result.ok, false);
-  assert.equal(result.failure, 'refresh_failed');
-  assert.deepEqual(result.refresh, refresh);
+  assert.equal(result.failure, 'recovery_failed');
+  assert.deepEqual(result.recovery, recovery);
 });
 
 test('plugin smoke fails when enabled catalog and Panel installed counts differ', () => {
   const result = assessPluginSmoke({
-    refresh: { ok: true, data: { results: [{ plugin_instance_id: 'catalog_containers', status: 'refreshed' }] } },
+    recovery: { ok: true, data: { results: [{ plugin_instance_id: 'catalog_containers', status: 'ready' }] } },
     catalog: { plugins: [{ plugin_instance_id: 'catalog_containers', enable_state: 'enabled' }] },
     panelInstalledCount: 0,
   });
@@ -114,7 +114,7 @@ test('plugin smoke fails when enabled catalog and Panel installed counts differ'
 
 test('plugin smoke rejects an empty catalog instead of passing without a real plugin', () => {
   const result = assessPluginSmoke({
-    refresh: { ok: true, data: { results: [] } },
+    recovery: { ok: true, data: { results: [] } },
     catalog: { plugins: [] },
     panelInstalledCount: 0,
   });
@@ -122,9 +122,9 @@ test('plugin smoke rejects an empty catalog instead of passing without a real pl
   assert.equal(result.failure, 'enabled_plugin_missing');
 });
 
-test('plugin smoke accepts converged refresh, matching Panel inventory, iframe, and RPC', () => {
+test('plugin smoke accepts converged recovery, matching Panel inventory, iframe, and RPC', () => {
   const result = assessPluginSmoke({
-    refresh: { ok: true, data: { results: [{ plugin_instance_id: 'catalog_containers', status: 'refreshed' }] } },
+    recovery: { ok: true, data: { results: [{ plugin_instance_id: 'catalog_containers', status: 'ready' }] } },
     catalog: { plugins: [{ plugin_instance_id: 'catalog_containers', enable_state: 'enabled' }] },
     panelInstalledCount: 1,
     surface: { ready: true, url: 'about:blank' },
@@ -157,7 +157,19 @@ test('Desktop smoke installs through Plugin Center only for the initial isolated
   assert.match(source, /config\.phase !== 'initial'/u);
   assert.match(source, /\[data-plugin-center-install\]/u);
   assert.match(source, /\[data-plugin-install-review-confirm\]/u);
+  assert.match(source, /installedPlugins\(catalog\)\.length > 0/u);
+  assert.match(source, /\[data-plugin-center-card-primary\]/u);
+  assert.match(source, /official plugin enable action/u);
   assert.match(source, /cold restart started without an enabled plugin/u);
+});
+
+test('Desktop smoke uses the current Host-owned recovery route', async () => {
+  const source = await import('node:fs/promises').then((fs) => fs.readFile(
+    new URL('./smoke_desktop_plugins.mjs', import.meta.url),
+    'utf8',
+  ));
+  assert.match(source, /runtime\/recover-enabled/u);
+  assert.doesNotMatch(source, /runtime\/refresh-enabled/u);
 });
 
 test('Desktop smoke records close button, Escape, backdrop, and final reopen evidence', async () => {
