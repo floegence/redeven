@@ -132,6 +132,7 @@ run_step "testing no-native terminal failure boundary" env GOWORK=off CGO_ENABLE
 run_step "testing Go packages serially with the native terminal engine" env GOWORK=off CGO_ENABLED=1 go test -tags floeterm_native -p 1 -count=1 ./...
 run_step "linting Go packages with the native terminal engine" env GOWORK=off CGO_ENABLED=1 golangci-lint run --build-tags floeterm_native ./...
 run_step "linting UI packages" ./scripts/lint_ui.sh
+run_step "building embedded assets" ./scripts/build_assets.sh
 run_step "testing complete UI packages" ./scripts/check_ui_tests.sh
 run_step "testing release note generation" ./scripts/test_generate_release_notes.sh
 run_step "checking Runtime compatibility source" ./scripts/check_runtime_compatibility_contract.sh --source-only
@@ -144,7 +145,6 @@ run_step "testing public installer runtime contract" node --test scripts/install
 run_step "testing ReDevPlugin release artifact verifier" ./scripts/check_redevplugin_release_artifacts.sh --self-test
 run_step "testing ReDevPlugin consumption gate" ./scripts/check_redevplugin_consumption_gate.sh --self-test
 run_step "testing ReDevPlugin artifact staging" ./scripts/stage_redevplugin_release_artifacts.sh --self-test
-run_step "building embedded assets" ./scripts/build_assets.sh
 run_step "checking ReDevPlugin integration" ./scripts/check_plugin_integration.sh --ci
 run_step "checking Gateway protocol contract" ./scripts/check_gateway_protocol_contract.sh
 run_step "checking Floret dependency boundary" ./scripts/check_floret_dependency_boundary.sh
