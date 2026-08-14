@@ -95,7 +95,7 @@ func TestRealBashIntegrationRunsUserPromptCommandOncePerPrompt(t *testing.T) {
 		if err := session.WriteData(":\n"); err != nil {
 			t.Fatalf("WriteData(prompt cycle %d) error = %v", cycle, err)
 		}
-		output := waitForHistoryContains(
+		waitForHistoryContains(
 			t,
 			session,
 			startSeq,
@@ -104,7 +104,7 @@ func TestRealBashIntegrationRunsUserPromptCommandOncePerPrompt(t *testing.T) {
 		)
 		waitForForegroundCommandAfterRevision(t, recorder, 5*time.Second, session.ID, startRevision, termgo.ForegroundCommandIdle, "")
 		time.Sleep(100 * time.Millisecond)
-		output = historyTextFromSequence(t, session, startSeq)
+		output := historyTextFromSequence(t, session, startSeq)
 		if count := strings.Count(output, userPromptMarker); count != beforeCount+1 {
 			t.Fatalf("prompt cycle %d user PROMPT_COMMAND count = %d, want %d; output=%q", cycle, count, beforeCount+1, output)
 		}
