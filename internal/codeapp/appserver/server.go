@@ -2699,6 +2699,17 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "plugin market is unavailable"})
 			return
 		}
+		query, queryErr := url.ParseQuery(r.URL.RawQuery)
+		generationValues := query["generation"]
+		if queryErr != nil || len(query) != 1 || len(generationValues) != 1 {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid plugin market generation"})
+			return
+		}
+		requestedGeneration, generationErr := strconv.ParseInt(generationValues[0], 10, 64)
+		if generationErr != nil || requestedGeneration < 0 || strconv.FormatInt(requestedGeneration, 10) != generationValues[0] {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid plugin market generation"})
+			return
+		}
 		pluginID := strings.TrimPrefix(r.URL.Path, "/_redeven_proxy/api/plugins/market/plugins/")
 		if !pluginmarketPluginIDPattern.MatchString(pluginID) {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid plugin id"})
@@ -2711,6 +2722,10 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		if generation < 0 {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "plugin market detail generation is unavailable"})
+			return
+		}
+		if generation != requestedGeneration {
+			writeJSON(w, http.StatusConflict, apiResp{OK: false, Error: "plugin market generation changed"})
 			return
 		}
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Meta: struct {

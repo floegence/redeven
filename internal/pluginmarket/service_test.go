@@ -92,12 +92,6 @@ const validLatestResponse = `{
         "key_id": "redeven_official_root_2026",
         "public_key": "2nZtMCZWoIVm4ivB7e64IjRsQqYnlSug1XTiAlH1C9Y="
       },
-      "signing_ledger": {
-        "log_id": "redeven_official_signing_log",
-        "algorithm": "ed25519",
-        "key_id": "redeven_official_ledger_2026",
-        "public_key": "CjQqXNS/mR2MgLwWPhTLee6G5ay1XQ4J/bIgw2djtQY="
-      },
       "files": [
         {
           "locator": "plugins/com.redeven.official/com.redeven.official.containers/4.0.0/package.redevplugin",

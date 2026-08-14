@@ -4,8 +4,8 @@ set -euo pipefail
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
 ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)
 REPOSITORY="floegence/redevplugin"
-ASSET_NAME="platform-package-publication-v1.json"
-ASSET_CONTENT_TYPE="application/vnd.floegence.redevplugin-platform-publication.v1+json"
+ASSET_NAME="platform-package-publication-v2.json"
+ASSET_CONTENT_TYPE="application/vnd.floegence.redevplugin-platform-publication.v2+json"
 
 usage() {
   cat <<'USAGE'

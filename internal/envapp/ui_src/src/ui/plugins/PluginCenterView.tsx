@@ -12,7 +12,7 @@ import type {
   ExternalPluginInspectionRequest,
   ExternalPluginSourcePreset,
   PluginCenterTab,
-  PluginInstallOperationProjection,
+  PluginInstallExecutionProjection,
   PluginInventoryItem,
   PluginInventoryProjection,
   PluginMarketDetail,
@@ -46,11 +46,11 @@ export type PluginCenterViewProps = {
   onClose?: () => void;
   onRefresh: () => Promise<unknown> | unknown;
   onCommand: (command: PluginLifecycleCommand, signal: AbortSignal) => Promise<unknown> | unknown;
-  installOperations?: readonly PluginInstallOperationProjection[];
+  installOperations?: readonly PluginInstallExecutionProjection[];
   onRetryInstall?: (pluginInstanceID: string) => Promise<unknown> | unknown;
   onInspectExternal?: (request: ExternalPluginInspectionRequest, signal: AbortSignal) => Promise<ExternalPluginInspection>;
   onCommitExternal?: (inspection: ExternalPluginInspection, signal: AbortSignal) => Promise<ExternalPluginCommitResult>;
-  onLoadMarketDetail?: (pluginID: string, signal?: AbortSignal) => Promise<PluginMarketDetail>;
+  onLoadMarketDetail?: (pluginID: string, generation: number, signal?: AbortSignal) => Promise<PluginMarketDetail>;
 };
 
 type PluginSourceFilter = 'all' | 'official' | 'external';
@@ -147,7 +147,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const installOperationByInstanceID = createMemo(() => new Map(
     (props.installOperations ?? []).map((operation) => [operation.pluginInstanceID, operation]),
   ));
-  const installOperationForItem = (item: PluginInventoryItem): PluginInstallOperationProjection | undefined => {
+  const installOperationForItem = (item: PluginInventoryItem): PluginInstallExecutionProjection | undefined => {
     const pluginInstanceID = item.pluginInstanceID ?? item.officialCatalog?.pluginInstanceID;
     if (!pluginInstanceID) return undefined;
     const authoritative = installOperationByInstanceID().get(pluginInstanceID);
@@ -156,30 +156,27 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       return authoritative ?? {
         pluginID: submitted.pluginID,
         pluginInstanceID,
-        requestID: '',
         observation: 'starting',
+        events: [],
       };
     }
     if (item.pluginInstanceID) return authoritative;
     if (!authoritative) return undefined;
     if (installOperationActive(authoritative)) return authoritative;
-    if (authoritative.observation === 'refresh_failed'
-      || authoritative.observation === 'activation_failed') return authoritative;
-    if (authoritative.operation?.status === 'failed'
-      && authoritative.operation.mutation_outcome === 'not_committed') {
-      return authoritative;
-    }
+    if (authoritative.observation === 'refresh_failed') return authoritative;
+    if (authoritative.execution?.status === 'failed') return authoritative;
     return undefined;
   };
-  const installOperationActive = (projection: PluginInstallOperationProjection): boolean => (
+  const installOperationActive = (projection: PluginInstallExecutionProjection): boolean => (
     projection.observation === 'starting'
     || projection.observation === 'reconnecting'
     || projection.observation === 'refreshing'
-    || projection.observation === 'activating'
     || (
       projection.observation === 'watching'
-      && projection.operation?.status !== 'succeeded'
-      && projection.operation?.status !== 'failed'
+      && projection.execution?.status !== 'completed'
+      && projection.execution?.status !== 'canceled'
+      && projection.execution?.status !== 'failed'
+      && projection.execution?.status !== 'orphaned'
     )
   );
   const installPending = createMemo(() => (
@@ -202,18 +199,12 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       || submitted.pluginID === item.pluginID
     )) return 'install';
     const operation = installOperationForItem(item);
-    return operation && (
-      installOperationActive(operation)
-      || operation.observation === 'activating'
-    ) ? 'install' : undefined;
+    return operation && installOperationActive(operation) ? 'install' : undefined;
   };
   const itemManagementPending = (item: PluginInventoryItem) => {
     if (pendingCommandTypeForItem(item)) return true;
     const operation = installOperationForItem(item);
-    return Boolean(operation && (
-      installOperationActive(operation)
-      || operation.observation === 'activating'
-    ));
+    return Boolean(operation && installOperationActive(operation));
   };
   createEffect(() => {
     const submitted = submittedInstallTarget();
@@ -225,9 +216,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       return;
     }
     const operation = installOperationByInstanceID().get(submitted.pluginInstanceID);
-    if (operation?.observation === 'failed'
-      || operation?.observation === 'activation_failed'
-      || operation?.operation?.status === 'failed') {
+    if (operation?.observation === 'failed' || operation?.execution?.status === 'failed') {
       setSubmittedInstallTarget(undefined);
     }
   });
@@ -258,11 +247,6 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   });
   const canManage = createMemo(() => props.canManagePlugins);
   const canOpenSurfaces = createMemo(() => props.canOpenPluginSurfaces);
-  const pluginRuntimeReady = (pluginInstanceID?: string) => {
-    if (!props.runtimeRecoveryByInstanceID) return true;
-    if (!pluginInstanceID) return false;
-    return props.runtimeRecoveryByInstanceID?.[pluginInstanceID]?.state === 'ready';
-  };
   const tabSelection = createUIFirstSelection<PluginCenterTab>({
     committed: activeTab,
     commit: setActiveTab,
@@ -372,7 +356,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     const controller = new AbortController();
     marketDetailController = controller;
     setMarketDetailState({ pluginID, loading: true });
-    void props.onLoadMarketDetail(pluginID, controller.signal).then((detail) => {
+    void props.onLoadMarketDetail(pluginID, marketGeneration, controller.signal).then((detail) => {
       if (marketDetailController !== controller) return;
       if (detail.generation === undefined || detail.generation !== marketGeneration) {
         setMarketDetailState({ pluginID, error: new Error('Plugin market generation changed'), loading: false });
@@ -538,7 +522,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
 
   const openItemSurface = (item: PluginInventoryItem, placement: 'activity' | 'workbench') => {
     const target = item.defaultLaunchTarget;
-    if (!target || !canOpenSurfaces() || !pluginRuntimeReady(target.pluginInstanceID)) return;
+    if (!target || !canOpenSurfaces()) return;
     void runCommand({
       type: 'open_surface',
       pluginID: target.pluginID,
@@ -632,7 +616,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
                   tab={activeTab()}
                   selected={selectedItem()?.inventoryKey === item.inventoryKey}
                   canManage={canManage()}
-                  canOpenSurfaces={canOpenSurfaces() && pluginRuntimeReady(item.pluginInstanceID)}
+                  canOpenSurfaces={canOpenSurfaces()}
                   runtimeRecovery={item.pluginInstanceID ? props.runtimeRecoveryByInstanceID?.[item.pluginInstanceID] : undefined}
                   onRetryRuntimeRecovery={item.pluginInstanceID ? () => props.onRetryRuntimeRecovery?.(item.pluginInstanceID) : undefined}
                   managementDisabled={loading() || itemManagementPending(item)}
@@ -711,7 +695,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
               permissionsRef={setPermissionsFocusTarget}
               onMobileBack={closeDetails}
               canManage={canManage()}
-              canOpenSurfaces={canOpenSurfaces() && pluginRuntimeReady(item.pluginInstanceID)}
+              canOpenSurfaces={canOpenSurfaces()}
               runtimeRecovery={item.pluginInstanceID ? props.runtimeRecoveryByInstanceID?.[item.pluginInstanceID] : undefined}
               managementPending={managementPending()}
               commandPendingType={pendingCommandTypeForItem(item)}
@@ -1164,7 +1148,7 @@ export function PluginCenterDetails(props: {
   runtimeRecovery?: PluginRuntimeRecoveryPresentation;
   managementPending: boolean;
   commandPendingType?: PluginPendingCommandType;
-  installOperation?: PluginInstallOperationProjection;
+  installOperation?: PluginInstallExecutionProjection;
   uninstallChoiceFor: string | null;
   onCommand: (command: PluginLifecycleCommand) => void;
   onAskUninstall: (pluginInstanceID: string) => void;
@@ -1778,7 +1762,7 @@ function PluginActions(props: {
   canOpenSurfaces: boolean;
   managementPending: boolean;
   commandPendingType?: PluginPendingCommandType;
-  installOperation?: PluginInstallOperationProjection;
+  installOperation?: PluginInstallExecutionProjection;
   onCommand: (command: PluginLifecycleCommand) => void;
   onAskUninstall: (pluginInstanceID: string) => void;
   onExternalInstall: (item: PluginInventoryItem) => void;

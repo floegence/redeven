@@ -352,13 +352,8 @@ func permissionsAllowAction(perms sessionPermissions, action host.ManagementActi
 		host.ManagementActionMintBridgeToken,
 		host.ManagementActionDisposeSurface,
 		host.ManagementActionReadSurfaceAsset,
-		host.ManagementActionReadSurfaceStream,
-		host.ManagementActionAcknowledgeSurfaceStream,
 		host.ManagementActionListIntents,
 		host.ManagementActionListPlugins,
-		host.ManagementActionGetReleaseInstall,
-		host.ManagementActionListReleaseInstalls,
-		host.ManagementActionQueryExternalPackageCommit,
 		host.ManagementActionListFeatures,
 		host.ManagementActionGetCompatibility,
 		host.ManagementActionListPermissionGrants,
@@ -366,8 +361,9 @@ func permissionsAllowAction(perms sessionPermissions, action host.ManagementActi
 		host.ManagementActionGetSecurityPolicy,
 		host.ManagementActionListSecurityPolicies,
 		host.ManagementActionListDiagnosticEvents,
-		host.ManagementActionListOperations,
-		host.ManagementActionGetOperation,
+		host.ManagementActionListExecutions,
+		host.ManagementActionGetExecution,
+		host.ManagementActionListExecutionEvents,
 		host.ManagementActionGetRuntimeHealth,
 		host.ManagementActionListRetainedData,
 		host.ManagementActionGetSettingsSchema,
@@ -377,8 +373,7 @@ func permissionsAllowAction(perms sessionPermissions, action host.ManagementActi
 		host.ManagementActionPrepareMethodConfirmation,
 		host.ManagementActionRejectSurfaceConfirmation,
 		host.ManagementActionInvokeIntent,
-		host.ManagementActionCancelSurfaceOperation,
-		host.ManagementActionCancelOperation:
+		host.ManagementActionCancelExecution:
 		return dataPlane
 	case host.ManagementActionMintConnectionGrant,
 		host.ManagementActionMintNetworkHandleGrant,
@@ -394,9 +389,8 @@ func permissionsAllowAction(perms sessionPermissions, action host.ManagementActi
 		return perms.write
 	case host.ManagementActionImportLocalPackage,
 		host.ManagementActionInstallReleaseRef,
-		host.ManagementActionStartReleaseInstall,
 		host.ManagementActionInspectExternalPackage,
-		host.ManagementActionCommitExternalPackage,
+		host.ManagementActionInstallInspectedPackage,
 		host.ManagementActionUpdateLocalPackage,
 		host.ManagementActionUpdateReleaseRef,
 		host.ManagementActionDowngradePlugin,
@@ -412,7 +406,7 @@ func permissionsAllowAction(perms sessionPermissions, action host.ManagementActi
 		host.ManagementActionDeleteSecretRef,
 		host.ManagementActionStartRuntime,
 		host.ManagementActionStopRuntime,
-		host.ManagementActionRefreshEnabledPlugins:
+		host.ManagementActionRecoverEnabledPlugins:
 		return perms.admin
 	default:
 		return false

@@ -8,14 +8,13 @@ timestamp: 2026-07-29T00:00:00Z
 # Summary
 
 Redeven owns Docker and Podman semantics, CLI execution, redacted DTOs, and risk
-projection; ReDevPlugin owns plugin identity, grants, confirmations, operation
-and stream handles, quotas, revocation, and audit. Production consumes signed
+projection; ReDevPlugin owns plugin identity, grants, confirmations, Executions,
+Events, quotas, revocation, and audit. Production consumes signed
 Containers `4.4.3`, `redeven.container_resources.v4@4.0.0`, and
 `redeven.capability.container_resources@3.0.0` through the latest-only market
-and immutable GitHub Release transport. The capability bundle is signed through
-the released ReDevPlugin publisher and remains one verified part of the
-complete release; market discovery or a capability signature alone cannot
-activate it.
+and immutable GitHub Release transport. The Host registers the v4 contract as a
+Redeven-versioned known contract generated from one canonical source; there is
+no independent capability publisher, provenance chain, or signing lifecycle.
 Unknown endpoints, stale plans, partial inventory, and unavailable terminal
 reconciliation fail closed.
 
@@ -23,22 +22,16 @@ reconciliation fail closed.
 
 ## Release authority
 
-The production artifact set under `spec/redevplugin/` contains only the signed
-v4 capability bundle and public verification anchors needed by the product.
-Plugin package, release metadata, root delegation, signing-ledger evidence,
-revocation, and source policy remain immutable GitHub Release assets. Startup
+The production artifact set under `spec/redevplugin/` contains only the generated
+v4 known-contract projection and public package-verification keys needed by the
+product. Plugin package, release metadata, root delegation, revocation, and
+source policy remain immutable GitHub Release assets. Startup
 freezes a validated market snapshot; ReDevPlugin verifies and downloads its
 complete release transport before registration. Redeven does not embed the
-plugin package or implement an alternate package, token, confirmation,
-operation, or stream protocol.
-
-The official capability bundle is stored under
-`spec/redevplugin/official-containers-capability-v4/`; its public signing
-exchange and complete output are verified with the released ReDevPlugin
-`0.7.27` CLI. The matching plugin still requires its own authorized package
-signatures, pin, root, source policy, revocation, ledger, and release metadata
-before Redeven may activate v4. Redeven must not create a substitute key or
-activate an unsigned or partially published contract.
+plugin package or implement an alternate package, token, confirmation, or
+Execution/Event protocol. The matching plugin still requires authorized package
+signatures, root, source policy, revocation, and release metadata before Redeven
+may activate v4; the known capability contract is not separate trust evidence.
 
 ## Endpoint and resource identity
 
@@ -59,18 +52,17 @@ display name, default state, reachability, engine version, engine type, and safe
 Podman mode metadata.
 
 Containers, images, volumes, Compose Projects, Pods, preflight requests,
-operations, streams, and terminal reconciliation all retain the exact engine
+Executions, Events, and terminal reconciliation all retain the exact engine
 and endpoint. Container list projection may expose a safe Compose Project or
 Pod relationship, but does not expose arbitrary label values or raw inspect
 JSON. Pod and container membership uses canonical IDs rather than name matching.
 
 ## Resource coverage
 
-The signed v2 adapter supports engine status, container list and inspect, start
-preflight, start, stop, restart, remove, bounded or following logs, and image
-pull. The immutable v3 candidate added typed creation, pause, unpause, kill,
-statistics, image management, and volume management. V4 makes the complete set
-endpoint-aware and adds endpoint discovery and health.
+The current v4 contract supports engine and endpoint status, typed container,
+image, volume, Compose Project, and Pod operations, bounded/following logs,
+preflights, cancellation, and endpoint-aware discovery. Older v2/v3 capability
+publisher artifacts are not runtime inputs or compatibility contracts.
 
 For Docker, v4 lists and inspects already-existing Compose Projects and can
 start, stop, restart, or bring down an exact project. Project configuration
@@ -120,16 +112,16 @@ identity errors.
 
 The Redeven integration bridge strictly decodes contract-declared inputs,
 projects contract-declared outputs, maps typed business failures, and completes
-ReDevPlugin-owned operation or stream sinks. Mutable methods register bounded
-in-flight business work under the Host operation ID. Cancellation validates the
-exact operation and target method. Integration close fences new work, cancels
+ReDevPlugin-owned Execution/Event sinks. Mutable methods register bounded
+in-flight business work under the Host Execution ID. Cancellation validates the
+exact Execution and target method. Integration close fences new work, cancels
 registered tasks, waits for completion, and records stable terminal results.
-The in-process task map is not a durable operation store, replay protocol,
+The in-process task map is not a durable Execution store, replay protocol,
 lifecycle authority, audit store, or token issuer.
 
 The v4 bridge and generated client are exercised against the source contract.
-Production registers the signed v4 capability only through the verified
-Containers `4.4.3` release selected by the production market snapshot.
+Production registers the generated known v4 contract and separately admits the
+verified Containers `4.4.3` package selected by the production market snapshot.
 Development follows the same published market and release path; Redeven does
 not build, embed, or trust an ephemeral Containers package. Missing or altered
 delivery evidence fails startup rather than falling back to another contract.
@@ -155,30 +147,28 @@ actions are disabled when inventory is stale, partial, or unavailable.
 
 # Boundaries
 
-- ReDevPlugin owns identity, permission, confirmation, operation, stream,
+- ReDevPlugin owns identity, permission, confirmation, Execution, Event,
   quota, audit, revocation, installation, and runtime lifecycle.
 - Redeven owns Docker and Podman discovery, explicit argv, business DTOs,
   preflight risk projection, resource reconciliation, and product UI.
-- The signed capability contract is wire authority; Redeven does not publish a
-  second schema or edit generated ReDevPlugin contracts in place.
-- Official package and capability artifacts come only from the authorized
-  signing flow. A signed capability without its matching verified plugin
-  release remains non-activatable.
+- The canonical Redeven capability contract is wire authority; the generated
+  Host projection must remain exact, and there is no second published schema.
+- Official plugin packages come only from the authorized package signing flow.
+  A known capability contract alone cannot activate a plugin.
 - Missing reusable platform behavior must be released upstream first; no local
   bridge shim, sibling checkout, copied protocol, or alternate runtime is
   allowed.
 
 # Evidence
 
-- `redeven:spec/capabilities/container-resources-v4.contract.json` - Defines the unsigned endpoint-aware v4 capability source.
-- `redeven:spec/redevplugin/candidate-containers-capability/capabilities/redeven.container_resources.v4/v4.0.0` - Contains deterministic generated candidate schema, client, compatibility metadata, and notices without an activatable signature pin.
-- `redeven:spec/redevplugin/official-containers-capability-v4` - Contains the public external-signing exchange and verified immutable v4 capability bundle consumed through the released ReDevPlugin `0.7.27` verifier.
-- `redeven:scripts/check_containers_v4_release_capability.sh` - Verifies the official v4 bundle, public signing exchange, source commit, generated client, and complete artifact inventory.
+- `redeven:spec/capabilities/container-resources-v4.contract.json` - Defines the canonical endpoint-aware v4 capability source.
+- `redeven:spec/redevplugin/known-containers-capability-v4.contract.json` - Provides the generated Host known-contract projection.
+- `redeven:scripts/check_containers_v4_release_capability.sh` - Verifies exact source/projection agreement and rejects retired publisher assets.
 - `redeven:internal/capabilities/containers/resources_v4.go` - Defines endpoint-aware business DTOs and adapter behavior.
 - `redeven:internal/capabilities/containers/resources_v4_cli.go` - Resolves opaque endpoints and constructs explicit Docker context and Podman connection commands.
 - `redeven:internal/capabilities/containers/resources_v4_test.go` - Proves opaque endpoint binding, Compose volume retention, Pod confirmation, and rootless projection.
-- `redeven:internal/redevpluginintegration/containers_capability_v4.go` - Dispatches v4 requests through ReDevPlugin-owned invocation, operation, and stream contexts.
+- `redeven:internal/redevpluginintegration/containers_capability_v4.go` - Dispatches v4 requests through ReDevPlugin-owned invocation and Execution/Event contexts.
 - `redeven:scripts/check_plugin_integration.sh` - Verifies the published ReDevPlugin package set and official capability release boundary.
 - `redeven:internal/pluginmarket/service.go` - Freezes the validated latest-only market snapshot with a last-known-good fallback.
-- `redeven:internal/redevpluginintegration/release_module.go` - Projects the market release into the exact signed remote transport and capability pin.
+- `redeven:internal/redevpluginintegration/release_module.go` - Projects the market release into the exact signed remote transport and selects the Host-known capability requirement.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginCatalog.ts` - Projects current Containers discovery without embedding package bytes or a fixed release version.

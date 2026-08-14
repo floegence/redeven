@@ -8,7 +8,7 @@ timestamp: 2026-07-25T00:00:00Z
 # Summary
 
 ReDevPlugin is an independently released plugin platform. Redeven consumes its
-coordinated `v0.7.27` Go, npm, Rust source-crate, and machine-contract artifacts;
+coordinated `v1.1.1` Go, npm, Rust source-crate, and machine-contract artifacts;
 it does not fork platform mechanics. Redeven owns authenticated session mapping,
 product source policy and review UX, UI placement, product runtime builds, and
 concrete business adapters. Missing or unverifiable upstream identity, lifecycle,
@@ -20,11 +20,11 @@ compatibility path or sibling-source fallback.
 ## Platform ownership
 
 ReDevPlugin owns package and manifest validation, canonical hashes, signature and
-trust assessment, staged external-package admission, registry and lifecycle
+trust assessment, process-local external-package inspection, registry and lifecycle
 state, permissions and confirmations, tokens and asset sessions, sandbox and
-bridge lifecycle, settings and intents, operations and streams, storage/network/
+bridge lifecycle, settings and intents, Executions and Events, storage/network/
 secret brokers, runtime supervision, Rust IPC, WASM execution, quotas,
-revocation, generated clients, stable errors, schemas, contract hashes, and
+revocation, the control database, generated clients, stable errors, schemas, contract hashes, and
 release metadata.
 
 Redeven maps an authenticated channel into ReDevPlugin session context, applies
@@ -36,22 +36,23 @@ Redeven business adapters only after ReDevPlugin has authorized the request.
 
 The dependency direction is one way. Redeven must not implement a second
 manifest or package parser, registry, lifecycle state machine, bridge, token
-issuer, asset session, broker, operation/stream protocol, runtime supervisor,
+issuer, asset session, broker, Execution/Event protocol, runtime supervisor,
 IPC implementation, WASM executor, package fetcher, signature state machine, or
-external-package receipt store.
+external-package inspection or receipt store.
 
 ## Published dependency set
 
-The current integration consumes the coordinated ReDevPlugin `v0.7.27` set:
+The current integration consumes the coordinated ReDevPlugin `v1.1.1` set:
 
-- `github.com/floegence/redevplugin v0.7.27`;
-- `@floegence/redevplugin-contracts@0.7.27` and
-  `@floegence/redevplugin-ui@0.7.27`;
-- the exact six `0.7.27` Rust source crates ending in `redevplugin-runtime`;
+- `github.com/floegence/redevplugin v1.1.1`;
+- `@floegence/redevplugin-contracts@1.1.1` and
+  `@floegence/redevplugin-ui@1.1.1`;
+- `redevplugin-runtime@1.1.1` and `redevplugin-worker-sdk@1.1.1` as the exact
+  public Rust source-crate boundary;
 - the released contract registry, package-set contract, contract hashes, and
-  attested `platform-package-publication-v1.json` registry readback, whose
+  attested `platform-package-publication-v2.json` registry readback, whose
   contract-set SHA-256 is
-  `ec166bdbcba88d5710bbbde37dcecc260bb95a3748e40632e81ef5e0d8e192d2`.
+  `9f65a530a7c8101c3ae51cb6239f3c15276f90ae09c1d36305df84a11c1afd65`.
 
 Redeven release tooling verifies the exact-one publication manifest against its
 tag, source commit, workflow, GitHub attestation, Go proxy and SumDB sums, npm
@@ -65,32 +66,25 @@ lockfiles, and third-party notices to carry its exact npm coordinates. A
 front-end package cannot be independently downgraded while the Host and runtime
 remain on a newer platform release.
 
-ReDevPlugin owns the durable `redevplugin.release_install_operation.v1`
-journal. Official release installation requests activation after commit and is
-observed through the released start/list/get/watch endpoints. The platform
+ReDevPlugin owns durable installation through its single control database.
+Official release installation is one public Execution with ordered Events,
+one cancellation identity, and one cursor. The platform
 activates a verified official release when its permissions are already
 approved, or returns an installed `needs_attention` record without silently
-granting missing permissions. The operation survives browser, Shell, transport,
-and Host observation loss; its fetch, download, hash, signature/ledger, commit,
+granting missing permissions. The Execution survives browser, Shell, transport,
+and Host observation loss; its fetch, download, hash, signature, commit,
 enable, retry, cache, failure, mutation, and byte-progress evidence remains
 platform state. Redeven may reconnect and refresh inventory, but must not create
-a local operation store, copy the state machine, invent progress, or cancel work
+a local execution store, copy the state machine, invent progress, or cancel work
 when a panel closes.
 
-Release trust refreshes, including activation-lease reconstruction after Host
-restart or activation-lease expiry, remain ReDevPlugin work. The `v0.7.27` Host
-reconstructs a process-local lease from the sealed registry binding and durable
-release-trust state without downloading release metadata, packages, or the
-complete capability artifact set. The seal binds the plugin instance,
-release identity, source/channel, package hashes, active fingerprint, trust-state
-digest, and root/policy/revocation epochs. When the authoritative state has
-legitimately advanced with compatible epochs, the platform revalidates through
-its trust service, atomically migrates the registry binding and sealed evidence,
-re-reads the durable result, and only then publishes a lease. Cancellation,
-tampering, expiry, fences, rollback, schema drift, revocation, and epoch mismatch
-fail closed before a lease or surface is published. Remote freshness remains a
-separate upstream trust lifecycle; Redeven must not inspect opaque evidence,
-duplicate trust decisions, or treat local recovery as fallback authorization.
+Enabled-plugin startup recovery remains ReDevPlugin work. The `v1.1.1` Host
+revalidates the installed package identity, SHA-256 hashes, Ed25519 status,
+revocation, grants, policy fences, runtime admission, and session scope before it
+publishes a runnable result. Invalid or revoked evidence, schema drift, tampering,
+and stale fences fail closed. Redeven consumes the Host `RecoverySnapshot` and
+`recoverEnabled` result and must not inspect opaque control state, duplicate trust
+decisions, or treat local presentation state as fallback authorization.
 
 The platform bounds each enabled-plugin recovery attempt to 15 seconds and
 reports deadline exhaustion as `recovery_timeout`, distinct from lifecycle
@@ -116,7 +110,7 @@ runtime, connectivity, secrets, capability, and external-package modules.
 ReDevPlugin-owned stores remain opaque below the selected owner-scoped
 generation. Redeven supplies session, authorization, web-security, trust,
 official release-source, observability, secret, external source, and business
-adapters; it never edits registry, staged inspection, receipt, token, lease,
+adapters; it never edits registry, inspection, token, lease,
 revoke-epoch, or plugin-data state directly.
 
 Redeven supplies the exact already-held Local Environment runtime lock and its
@@ -130,21 +124,24 @@ durable fence, or widen one access session into another owner scope.
 
 The external-package module may retrieve a package from a validated public HTTPS
 package URL or GitHub Release, or accept a bounded local `.redevplugin` upload.
-ReDevPlugin owns `inspect -> commit -> query`, immutable staged bytes, source
-provenance, signature assessment, execution approval, update eligibility,
-security-summary hashing, confirmation binding, owner-scoped receipts, and
-generated routes. Redeven owns whether these supported sources appear in the
+ReDevPlugin owns `inspect -> explicit confirmation -> install`, a process-local
+opaque inspection id with bounded TTL, source provenance, signature assessment,
+execution approval, update eligibility, security-summary hashing, exact
+owner/session binding, exact byte/hash revalidation, and the atomic Host install
+transaction. Inspection is not durable PluginRecord or control-database state,
+and the flow creates no durable receipt/query lifecycle. Redeven owns whether
+these supported sources appear in the
 product, the authenticated admin gate, keyring/revocation inputs, and the review
 presentation.
 
-Absent, unknown-signer, and temporarily unavailable signatures may cross commit
+Absent and unknown-signer signatures may cross installation
 only after explicit user confirmation. They never imply trust, permission, or
 automatic-update authority: the committed plugin is disabled, has zero grants,
-and is manual-update-only. Invalid or revoked signatures block commit and
+and is manual-update-only. Invalid or revoked signatures block install and
 execution. Signature evidence determines trust and automatic-update eligibility,
 not basic installation eligibility. The existing official signed-release module
 remains a stricter release-ref path; this feature does not add or weaken an
-official signing, ledger, or authorization process.
+official signing or authorization process.
 
 ## Surfaces and interaction ownership
 
@@ -166,6 +163,12 @@ affected authority, then the SDK tears down the shared scope for committed or
 unknown outcomes. Redeven must not issue a second close against those disposed
 slots or treat local disposal as the server-side revoke.
 
+Plugin Center cards, details, launchers, and placement commands consume the
+Host-projected `action_state` as their only lifecycle action authority. Redeven
+does not recompute `can_open` from trust, grants, policy, or recovery flags. A
+recovery presentation may explain or retry the Host snapshot, but it is not a
+second open gate and owns no catch-up identity state machine.
+
 ## Runtime and official capability
 
 On Linux, the runtime is exactly the `redevplugin-runtime` sibling of the
@@ -174,6 +177,8 @@ attested package set as a static PIE, then emits SBOM, provenance, notices, and
 signature evidence. The released ProcessManager owns launch, health, heartbeat,
 shutdown, leases, hostcalls, and restart. Darwin packages omit the runtime and
 worker execution. No target searches `PATH` or alternate runtime names.
+The expected runtime digest comes from the product release marker; startup must
+not hash the field binary and accept that value as its own trust anchor.
 
 Official Containers `4.4.3` is a signed manifest-v8 release-ref package over the
 `redeven.capability.container_resources@3.0.0` adapter. The latest-only market
@@ -189,7 +194,7 @@ backend code executes only through the released Rust runtime. Product routes,
 navigation, Activity/Workbench layout, inventory keys, session semantics, and
 concrete business access do not become manifest or platform schema fields.
 
-Flower may orchestrate released scaffold, validate, package, inspect, commit,
+Flower may orchestrate released scaffold, validate, package, inspect, confirm, install,
 enable, and open APIs. It must not write opaque state, mint tokens, manufacture
 trust, or grant storage/network/runtime authority.
 
@@ -200,7 +205,7 @@ committed. Unknown, corrupt, ambiguous, tampered, or future state blocks startup
 without mutation. Floret-owned state is outside this lifecycle.
 
 For an exact supported root copied across filesystem identities, Redeven may use
-the released read-only inspection and exact-plan recovery APIs from `v0.7.27`.
+the released read-only inspection and exact-plan recovery APIs from `v1.1.1`.
 The product presents the projected digests, counts, sizes, and retained-state
 facts, binds confirmation to one plan digest, and takes the normal Local
 Environment runtime lock. The released transaction retains the entire source as
@@ -213,7 +218,7 @@ archived authority or data, or recover unknown and unsupported state.
 - `redeven:go.mod:11` - Pins the released ReDevPlugin Go module.
 - `redeven:internal/envapp/ui_src/package.json:29` - Pins the released UI package.
 - `redeven:internal/redevpluginintegration/integration.go:240` - Constructs released Host modules, including external package admission.
-- `redeven:internal/redevpluginintegration/session_lifecycle_adapter.go:1` - Persists and migrates the released session-maintenance lifecycle under real runtime-lock authority.
+- `redeven:internal/redevpluginintegration/session_lifecycle.go:1` - Carries transient connection generation while Host owns durable teardown state.
 - `redeven:internal/agent/plugin_session_registry.go:1` - Owns process-local authenticated generation admission and exact access-session retirement.
 - `redeven:internal/localui/localui.go:1` - Binds Local UI access sessions, pending artifacts, credentials, and direct transports without persisting raw credentials.
 - `redeven:internal/redevpluginintegration/owner_scope_recovery.go:1` - Adapts the released copied-root inspection and recovery API without taking state ownership.

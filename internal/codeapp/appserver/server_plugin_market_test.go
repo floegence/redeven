@@ -16,7 +16,7 @@ import (
 )
 
 const pluginMarketCatalogPath = "/_redeven_proxy/api/plugins/market/catalog"
-const pluginMarketDetailPath = "/_redeven_proxy/api/plugins/market/plugins/com.example.plugin"
+const pluginMarketDetailPath = "/_redeven_proxy/api/plugins/market/plugins/com.example.plugin?generation=41"
 const pluginMarketIconDigest = "949adb221cd3e990ebe350947cc17d1b415d6175f99df98aeb5c47d70fb3cce1"
 const pluginMarketIconPath = "/_redeven_proxy/api/plugins/market/plugins/com.example.plugin/icon?sha256=" + pluginMarketIconDigest
 
@@ -141,7 +141,7 @@ func TestServerPluginMarketDetailReturnsManifestPresentation(t *testing.T) {
 		},
 	}
 	response := performPluginMarketRequest(server, func(request *http.Request) *http.Request {
-		request.URL.Path = pluginMarketDetailPath
+		request.URL.Path, request.URL.RawQuery, _ = strings.Cut(pluginMarketDetailPath, "?")
 		return WithLocalUIEnvRoute(request)
 	})
 	if response.Code != http.StatusOK {
@@ -159,6 +159,39 @@ func TestServerPluginMarketDetailReturnsManifestPresentation(t *testing.T) {
 	}
 	if !envelope.OK || envelope.Meta.Generation != 41 || envelope.Data.Presentation.DefaultLocale != "en-US" || envelope.Data.Presentation.Locales[0].Description[0] != "Example description." {
 		t.Fatalf("detail = %#v", envelope.Data)
+	}
+}
+
+func TestServerPluginMarketDetailRequiresMatchingGeneration(t *testing.T) {
+	t.Parallel()
+	cap := config.PermissionSet{Read: true}
+	tests := []struct {
+		name       string
+		path       string
+		generation int64
+		wantStatus int
+	}{
+		{name: "missing", path: strings.Split(pluginMarketDetailPath, "?")[0], generation: 41, wantStatus: http.StatusBadRequest},
+		{name: "duplicate", path: pluginMarketDetailPath + "&generation=41", generation: 41, wantStatus: http.StatusBadRequest},
+		{name: "invalid", path: strings.Replace(pluginMarketDetailPath, "41", "latest", 1), generation: 41, wantStatus: http.StatusBadRequest},
+		{name: "mismatch", path: pluginMarketDetailPath, generation: 42, wantStatus: http.StatusConflict},
+	}
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			server := &Server{
+				localPermissionCap: &cap,
+				pluginMarketDetail: func(_ context.Context, pluginID string) (pluginmarket.PluginDetail, int64, error) {
+					return pluginmarket.PluginDetail{PluginID: pluginID}, testCase.generation, nil
+				},
+			}
+			response := performPluginMarketRequest(server, func(request *http.Request) *http.Request {
+				request.URL.Path, request.URL.RawQuery, _ = strings.Cut(testCase.path, "?")
+				return WithLocalUIEnvRoute(request)
+			})
+			if response.Code != testCase.wantStatus {
+				t.Fatalf("status = %d, want %d; body=%s", response.Code, testCase.wantStatus, response.Body.String())
+			}
+		})
 	}
 }
 

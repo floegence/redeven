@@ -83,7 +83,7 @@ export function buildPluginPanelModel(
 ): PluginPanelModel {
   const tiles: PluginPanelTile[] = [
     { kind: 'open_center', id: 'plugin-center', label: 'Plugin Center' },
-    ...projection.items.filter((item) => Boolean(item.pluginInstanceID) && item.lifecycleState !== 'disabled').map((item): PluginPanelTile => ({
+    ...projection.items.filter((item) => Boolean(item.defaultLaunchTarget)).map((item): PluginPanelTile => ({
       kind: 'plugin',
       item,
       action: options.canOpenSurfaces && presentPlugin(item).canOpenActivity ? 'open_surface' : 'open_details',
@@ -158,7 +158,7 @@ function projectCatalogItem(
     trustBadge: installedTrustBadge(installed, catalogItem),
     pinned: installed.metadata?.pinned === 'true',
     lastOpenedAt: installed.metadata?.last_opened_at,
-    defaultLaunchTarget: canLaunchInstalledCatalogPlugin(installed, catalogItem, authorization)
+    defaultLaunchTarget: installed.action_state?.can_open === true
       ? {
           pluginID: installed.plugin_id,
           pluginInstanceID: installed.plugin_instance_id,
@@ -223,7 +223,7 @@ function projectInstalledItem(
     trustBadge: installedTrustBadgeForRecord(installed),
     pinned: installed.metadata?.pinned === 'true',
     lastOpenedAt: installed.metadata?.last_opened_at,
-    defaultLaunchTarget: lifecycleState === 'enabled' && !permissionAttention && launchSurface
+    defaultLaunchTarget: installed.action_state?.can_open === true && launchSurface
       ? {
           pluginID: installed.plugin_id,
           pluginInstanceID: installed.plugin_instance_id,
@@ -352,20 +352,6 @@ function installedLifecycleState(
     permission.requiredToOpen && (!permission.granted || permission.deniedByGrant || permission.blockedToOpen)
   ))) return 'needs_attention';
   return 'enabled';
-}
-
-function canLaunchInstalledCatalogPlugin(
-  installed: ReDevPluginRecord,
-  catalogItem: OfficialPluginCatalogItem,
-  authorization?: PluginAuthorizationInventory,
-): boolean {
-  if (catalogItem.rolloutState === 'revoked' || catalogItem.rolloutState === 'disabled') return false;
-  if (!isRunnableInstalledTrust(installed) || installed.enable_state !== 'enabled') return false;
-  if ((catalogItem.permissions?.length ?? 0) === 0
-    && authorizationNeedsPermissionAttention(authorization)) return false;
-  return !authorization?.permissions.some((permission) => (
-    permission.requiredToOpen && (!permission.granted || permission.deniedByGrant || permission.blockedToOpen)
-  ));
 }
 
 function installedTrustBadge(installed: ReDevPluginRecord, catalogItem: OfficialPluginCatalogItem): PluginInventoryItem['trustBadge'] {

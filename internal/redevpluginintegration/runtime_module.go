@@ -1,10 +1,11 @@
 package redevpluginintegration
 
 import (
+	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -15,7 +16,26 @@ import (
 	"github.com/floegence/redevplugin/pkg/version"
 )
 
-const officialRuntimeVersion = "0.7.27"
+const (
+	officialRuntimeVersion       = "1.1.1"
+	bundledRuntimeDescriptorName = ".redevplugin-release-artifacts-verified.json"
+)
+
+type bundledRuntimeReleaseDescriptor struct {
+	SchemaVersion       string `json:"schema_version"`
+	PlatformPublication struct {
+		PlatformVersion   string `json:"platform_version"`
+		ContractSetSHA256 string `json:"contract_set_sha256"`
+	} `json:"platform_publication"`
+	Runtime struct {
+		Target string `json:"target"`
+		Binary struct {
+			Path   string `json:"path"`
+			SHA256 string `json:"sha256"`
+			Size   int64  `json:"size"`
+		} `json:"binary"`
+	} `json:"runtime"`
+}
 
 type runtimeModuleDependencies struct {
 	Path          string
@@ -45,44 +65,12 @@ func newOfficialRuntimeModule(ctx context.Context, deps runtimeModuleDependencie
 		return nil, err
 	}
 
-	platformVersion, err := version.ParseSemVer(officialRuntimeVersion)
+	descriptor, err := BundledRuntimeDescriptor(filepath.Join(filepath.Dir(runtimePath), bundledRuntimeDescriptorName))
 	if err != nil {
 		return nil, err
 	}
-	target, err := host.ParseRuntimeAdmissionTarget(runtime.GOOS + "/" + runtime.GOARCH)
-	if err != nil {
-		return nil, err
-	}
-	rustIPC, err := host.ParseRustIPCVersion(version.RustIPCVersion)
-	if err != nil {
-		return nil, err
-	}
-	wasmABI, err := host.ParseWASMABIVersion(version.WASMABIVersion)
-	if err != nil {
-		return nil, err
-	}
-	contractSetSHA256, err := host.ParseSHA256Digest(version.ContractSetSHA256)
-	if err != nil {
-		return nil, err
-	}
-	binarySHA256Value, err := sha256File(runtimePath)
-	if err != nil {
-		return nil, err
-	}
-	binarySHA256, err := host.ParseSHA256Digest(binarySHA256Value)
-	if err != nil {
-		return nil, err
-	}
-	descriptor, err := host.NewRuntimeDescriptor(host.RuntimeDescriptorOptions{
-		PlatformVersion:   platformVersion,
-		Target:            target,
-		RustIPCVersion:    rustIPC,
-		WASMABIVersion:    wasmABI,
-		ContractSetSHA256: contractSetSHA256,
-		BinarySHA256:      binarySHA256,
-	})
-	if err != nil {
-		return nil, err
+	if descriptor.BinarySHA256().String() == "" {
+		return nil, errors.New("bundled runtime descriptor is incomplete")
 	}
 	binaryName, err := host.NewRuntimeBinaryName(filepath.Base(runtimePath))
 	if err != nil {
@@ -115,15 +103,56 @@ func newOfficialRuntimeModule(ctx context.Context, deps runtimeModuleDependencie
 	return module, nil
 }
 
-func sha256File(filename string) (string, error) {
-	file, err := os.Open(filename)
+func BundledRuntimeDescriptor(filename string) (host.RuntimeDescriptor, error) {
+	return bundledRuntimeDescriptor(filename, runtime.GOOS+"/"+runtime.GOARCH)
+}
+
+func bundledRuntimeDescriptor(filename, expectedTarget string) (host.RuntimeDescriptor, error) {
+	raw, err := os.ReadFile(filename)
 	if err != nil {
-		return "", err
+		return host.RuntimeDescriptor{}, err
 	}
-	defer file.Close()
-	hasher := sha256.New()
-	if _, err := io.Copy(hasher, file); err != nil {
-		return "", err
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	var release bundledRuntimeReleaseDescriptor
+	if err := decoder.Decode(&release); err != nil {
+		return host.RuntimeDescriptor{}, fmt.Errorf("decode bundled runtime descriptor: %w", err)
 	}
-	return hex.EncodeToString(hasher.Sum(nil)), nil
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return host.RuntimeDescriptor{}, errors.New("bundled runtime descriptor contains trailing data")
+	}
+	if release.SchemaVersion != "redeven.redevplugin_runtime_build.v1" ||
+		release.PlatformPublication.PlatformVersion != officialRuntimeVersion ||
+		release.Runtime.Target != expectedTarget ||
+		release.Runtime.Binary.Path != "redevplugin-runtime" || release.Runtime.Binary.Size <= 0 ||
+		release.PlatformPublication.ContractSetSHA256 != version.ContractSetSHA256 {
+		return host.RuntimeDescriptor{}, errors.New("bundled runtime descriptor identity is invalid")
+	}
+	platformVersion, err := version.ParseSemVer(release.PlatformPublication.PlatformVersion)
+	if err != nil {
+		return host.RuntimeDescriptor{}, err
+	}
+	target, err := host.ParseRuntimeAdmissionTarget(release.Runtime.Target)
+	if err != nil {
+		return host.RuntimeDescriptor{}, err
+	}
+	rustIPC, err := host.ParseRustIPCVersion(version.RustIPCVersion)
+	if err != nil {
+		return host.RuntimeDescriptor{}, err
+	}
+	wasmABI, err := host.ParseWASMABIVersion(version.WASMABIVersion)
+	if err != nil {
+		return host.RuntimeDescriptor{}, err
+	}
+	contractSetSHA256, err := host.ParseSHA256Digest(release.PlatformPublication.ContractSetSHA256)
+	if err != nil {
+		return host.RuntimeDescriptor{}, err
+	}
+	binarySHA256, err := host.ParseSHA256Digest(release.Runtime.Binary.SHA256)
+	if err != nil {
+		return host.RuntimeDescriptor{}, err
+	}
+	return host.NewRuntimeDescriptor(host.RuntimeDescriptorOptions{
+		PlatformVersion: platformVersion, Target: target, RustIPCVersion: rustIPC,
+		WASMABIVersion: wasmABI, ContractSetSHA256: contractSetSHA256, BinarySHA256: binarySHA256,
+	})
 }

@@ -105,7 +105,7 @@ Go tests that import their embed packages.
 
 ## ReDevPlugin dependency gate
 
-Redeven consumes only the coordinated ReDevPlugin `v0.7.27` package set. The
+Redeven consumes only the coordinated ReDevPlugin `v1.1.1` package set. The
 boundary guard rejects local sibling paths, Go workspaces/replacements, npm
 links, copied contracts or runtimes, Rust path overrides, and a second
 platform-core package tree. Local-wiring scans cover maintained source, scripts,
@@ -120,13 +120,14 @@ official anchor pins, release identity, complete locator mapping, and content
 digests without turning market metadata into trust.
 
 The upstream GitHub Release contains exactly one
-`platform-package-publication-v1.json` asset. The verifier binds it to the tag,
+`platform-package-publication-v2.json` asset. The verifier binds it to the tag,
 source commit, release workflow, and GitHub attestation, then independently
 reads back:
 
 - the Go module h1 and go.mod h1 from the public proxy and SumDB;
 - both npm package integrities and provenance subject SHA-512 values;
-- all six crates.io archive checksums and exact Cargo VCS source identities;
+- the `redevplugin-runtime` and `redevplugin-worker-sdk` crates.io archive
+  checksums and exact Cargo VCS source identities;
 - the package-set contract version, closed coordinate ordering, and contract-set
   hash.
 
@@ -136,7 +137,7 @@ before runtime construction.
 
 For Linux only, staging installs Rust 1.88.0 and the exact published
 `redevplugin-runtime` version with its packaged lockfile. Metadata comes from
-that crate and must resolve the exact six ReDevPlugin crates from crates.io.
+that crate and must not resolve another first-party runtime path dependency.
 The fixed product toolchain links a static PIE with no ELF interpreter or
 dynamic dependencies, matching the released Host admission profile. Redeven
 emits the binary, SPDX SBOM, resolved-package provenance, notices, and a
@@ -163,6 +164,9 @@ links, devices, privileged modes, sparse/PAX metadata, malformed trailers,
 trailing data, and oversized payloads. Darwin receipts carry explicit null
 runtime evidence.
 
+Host startup takes the expected runtime digest from this product release marker;
+it must not hash the field binary and accept that value as its own trust anchor.
+
 The release collector accepts exactly four package and four Desktop artifact
 directories, four Redeven archives, four Gateway archives, two DEBs, two RPMs,
 two DMGs, six target-bound receipts, and byte-identical shared metadata. Each
@@ -186,16 +190,16 @@ The focused plugin gate covers:
   explicit origin/CSRF/action policy, and stable observability;
 - signed official release-ref install/update and exact publisher/plugin/instance
   identity;
-- public HTTPS URL, GitHub Release, and local `.redevplugin` inspect-confirm-
-  commit admission, strict source provenance, signature assessment, disabled
-  zero-grant commit state, bounded query-only reconciliation, and no mutation
-  replay after an unknown or in-progress outcome;
+- public HTTPS URL, GitHub Release, and local `.redevplugin`
+  inspect-confirm-install admission, process-local TTL inspection identity,
+  strict source provenance, exact owner/session/bytes/hash revalidation,
+  disabled zero-grant install state, and no durable receipt/query lifecycle;
 - the market-selected Containers release through Redeven HTTP integration,
   including frozen snapshot identity, complete remote assets, signed release-ref
   install, and zero implicit grants;
 - runtime path/target/hash, ProcessManager health, persistent lease replay, and
-  Host storage/network/stream services;
-- the signed Containers capability, operation/cancellation/stream behavior, and
+  Host storage/network/Event services;
+- the Host-known Containers capability, Execution/cancellation/Event behavior, and
   domain-only container package boundary;
 - canonical AppServer route reservation/delegation and Local UI access checks;
 - generated UI lifecycle DTOs, management revisions, production Plugin entry,
@@ -223,7 +227,7 @@ the released durable four-hash fence and drain; Redeven awaits exact teardown
 acknowledgement before deleting identity and reconciles retained fences on
 restart.
 
-Workbench plugin interaction is releasable only through the `v0.6.24`
+Workbench plugin interaction is releasable only through the `v1.1.1`
 source/port-bound interaction ownership and exact-surface close contracts. The
 gate rejects overlays, pointer-event switching, copied interaction DTOs, a
 second bridge, session-wide close fallback, placement persistence before close,

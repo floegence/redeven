@@ -1,8 +1,7 @@
 import {
-  pluginMutationOutcome,
-  type PluginExternalPackageCommitResult,
+  type PluginExecution,
+  type PluginEvent,
   type PluginPlatformClient,
-  type PluginReleaseInstallOperation,
   type PluginRequestOptions,
 } from '@floegence/redevplugin-ui';
 
@@ -22,7 +21,6 @@ import type {
   PluginMarketDetail,
 } from './pluginTypes';
 
-const EXTERNAL_COMMIT_RECONCILIATION_TIMEOUT_MS = 60_000;
 const INVENTORY_MARKET_TIMEOUT_MS = 5_000;
 // Host enable includes worker preflight, data namespace initialization, and
 // surface publication. Keep this bounded, but allow a cold runtime to finish.
@@ -43,8 +41,6 @@ export function createPluginLifecycleAPI(
   const loadedInstalledIconURLs = new Set<string>();
   let disposed = false;
   const officialByPluginID = () => new Map(catalog.map((item) => [item.pluginID, item]));
-  const externalCommitQueryOnlyInspections = new Set<string>();
-
   const listInstalledPlugins = async (options: PluginRequestOptions = {}): Promise<ReDevPluginRecord[]> => {
     const result = await client.catalog(options);
     return result.plugins;
@@ -146,7 +142,7 @@ export function createPluginLifecycleAPI(
       ...projection,
       items: items.map((item) => (
         item.pluginInstanceID && (supplementalUnavailable || unavailablePluginIDs.has(item.pluginInstanceID))
-          ? { ...item, lifecycleState: 'needs_attention' as const, attentionReason: 'diagnostic_error' as const, defaultLaunchTarget: undefined }
+          ? { ...item, lifecycleState: 'needs_attention' as const, attentionReason: 'diagnostic_error' as const }
           : item
       )),
       marketUnavailable,
@@ -172,122 +168,65 @@ export function createPluginLifecycleAPI(
     }, options);
   };
 
-  const commitExternalPackage = async (
+  const installExternalPackage = async (
     inspection: ExternalPluginInspection,
     options: PluginRequestOptions = {},
-    onProgress?: (result: PluginExternalPackageCommitResult) => void,
   ): Promise<ExternalPluginCommitResult> => {
-    let result: PluginExternalPackageCommitResult;
-    if (externalCommitQueryOnlyInspections.has(inspection.inspection_id)) {
-      result = await client.queryExternalPackageCommit({
-        inspection_id: inspection.inspection_id,
-      }, options);
-    } else {
-      try {
-        result = await client.commitExternalPackage({
-          inspection_id: inspection.inspection_id,
-          confirmation_digest: inspection.confirmation_digest,
-        }, options);
-      } catch (error) {
-        if (pluginMutationOutcome(error) !== 'unknown') throw error;
-        externalCommitQueryOnlyInspections.add(inspection.inspection_id);
-        result = await client.queryExternalPackageCommit({
-          inspection_id: inspection.inspection_id,
-        }, options);
-      }
-    }
-    if (result.status === 'in_progress') {
-      externalCommitQueryOnlyInspections.add(inspection.inspection_id);
-    }
-    onProgress?.(result);
-    const reconciliationDeadline = Date.now() + EXTERNAL_COMMIT_RECONCILIATION_TIMEOUT_MS;
-    while (result.status === 'in_progress') {
-      const remaining = reconciliationDeadline - Date.now();
-      if (remaining <= 0) {
-        throw new Error('External package commit reconciliation timed out');
-      }
-      await waitForExternalCommitRetry(result.retry_after_ms, options.signal, remaining);
-      result = await client.queryExternalPackageCommit({
-        inspection_id: inspection.inspection_id,
-      }, options);
-      onProgress?.(result);
-    }
-    externalCommitQueryOnlyInspections.delete(inspection.inspection_id);
-    if (result.status === 'failed') {
-      throw new ExternalPackageInspectionTerminalError(
-        'The plugin host restarted before the installation completed. Inspect the package again.',
-      );
-    }
-    if (result.status === 'committed' && inspection.intent.action === 'install' && result.plugin?.plugin_instance_id) {
-      const committedResult = result as ExternalPluginCommitResult;
-      const requirements = await client.getPermissionRequirements({
-        plugin_instance_id: committedResult.plugin.plugin_instance_id,
-      }, options);
-      const enabled = await authorizeAndEnablePlugin(
-        committedResult.plugin.plugin_instance_id,
-        requirements.required_permissions,
-        options,
-      );
-      return {
-        ...committedResult,
-        plugin: {
-          ...enabled,
-          presentation: enabled.presentation ?? committedResult.plugin.presentation,
-        },
-      } as ExternalPluginCommitResult;
-    }
-    return result as ExternalPluginCommitResult;
+    return client.installInspectedPackage({
+      inspection_id: inspection.inspection_id,
+      expected_package_sha256: inspection.inspected_hashes.package_sha256,
+    }, options);
   };
 
   const installOfficialRelease = async (
     command: Extract<PluginManagementCommand, { type: 'install' }>,
     requestID: string,
     options: PluginRequestOptions = {},
-    onUpdate?: (operation: PluginReleaseInstallOperation) => void,
-  ): Promise<PluginReleaseInstallOperation> => {
+    onUpdate?: (execution: PluginExecution, events: readonly PluginEvent[]) => void,
+  ): Promise<PluginExecution> => {
     const official = requireOfficialPlugin(officialByPluginID(), command.pluginID);
     const approvedPermissionIDs = [...(command.approvedPermissionIDs ?? [])];
-    const operation = await client.startReleaseInstallOperation({
+    let execution = await client.startReleaseInstallExecution({
       request_id: requestID,
       plugin_instance_id: official.pluginInstanceID,
       release_ref: official.distribution.releaseRef,
       activate_after_install: true,
       ...(approvedPermissionIDs.length > 0 ? { approved_permission_ids: approvedPermissionIDs } : {}),
     }, options);
-    onUpdate?.(operation);
-    if (isReleaseInstallTerminal(operation)) return operation;
-    return client.watchReleaseInstallOperation(operation.operation_id, {
-      ...options,
-      onUpdate,
-    });
+    onUpdate?.(execution, []);
+    let cursor = execution.cursor;
+    while (!isExecutionTerminal(execution)) {
+      await waitForExecutionRetry(options.signal);
+      const eventList = await client.listExecutionEvents(execution.execution_id, { after_cursor: cursor }, options);
+      cursor = eventList.cursor;
+      execution = await client.getExecution(execution.execution_id, options);
+      onUpdate?.(execution, eventList.events);
+    }
+    return execution;
   };
 
-  const listReleaseInstallOperations = async (
+  const listReleaseInstallExecutions = async (
     options: PluginRequestOptions = {},
-  ): Promise<PluginReleaseInstallOperation[]> => (
-    (await client.listReleaseInstallOperations(options)).operations
+  ): Promise<PluginExecution[]> => (
+    (await client.listExecutions({ limit: 100 }, options)).executions
   );
 
-  const getReleaseInstallOperationByRequest = (
-    requestID: string,
+  const getReleaseInstallExecution = (
+    executionID: string,
     options: PluginRequestOptions = {},
-  ): Promise<PluginReleaseInstallOperation> => (
-    client.getReleaseInstallOperationByRequest(requestID, options)
+  ): Promise<PluginExecution> => (
+    client.getExecution(executionID, options)
   );
 
-  const watchReleaseInstallOperation = (
-    operationID: string,
+  const listReleaseInstallExecutionEvents = (
+    executionID: string,
+    cursor: number,
     options: PluginRequestOptions = {},
-    onUpdate?: (operation: PluginReleaseInstallOperation) => void,
-  ): Promise<PluginReleaseInstallOperation> => (
-    client.watchReleaseInstallOperation(operationID, {
-      ...options,
-      ...(onUpdate ? { onUpdate } : {}),
-    })
-  );
+  ) => client.listExecutionEvents(executionID, { after_cursor: cursor }, options);
 
-  const refreshEnabledRuntimeState = (options: PluginRequestOptions = {}) => (
-    client.refreshEnabledRuntimeState(options)
+  const recoverEnabled = (options: PluginRequestOptions = {}) => client.recoverEnabled(options);
+  const retryRecovery = (pluginInstanceID: string, options: PluginRequestOptions = {}) => (
+    client.retryRecovery(pluginInstanceID, options)
   );
 
   // The install confirmation is the user's authorization decision. The Host
@@ -426,12 +365,13 @@ export function createPluginLifecycleAPI(
     loadInventoryProjection,
     loadMarketDetail: loadPluginMarketDetail,
     inspectExternalPackage,
-    commitExternalPackage,
+    installExternalPackage,
     installOfficialRelease,
-    listReleaseInstallOperations,
-    getReleaseInstallOperationByRequest,
-    watchReleaseInstallOperation,
-    refreshEnabledRuntimeState,
+    listReleaseInstallExecutions,
+    getReleaseInstallExecution,
+    listReleaseInstallExecutionEvents,
+    recoverEnabled,
+    retryRecovery,
     authorizeAndEnablePlugin,
     execute,
     dispose,
@@ -489,8 +429,15 @@ async function withPostInstallMutationTimeout<T>(
   return withAbortTimeout(run, parentSignal, POST_INSTALL_MUTATION_TIMEOUT_MS, label);
 }
 
-function isReleaseInstallTerminal(operation: PluginReleaseInstallOperation): boolean {
-  return operation.status === 'succeeded' || operation.status === 'failed';
+function isExecutionTerminal(execution: PluginExecution): boolean {
+  return execution.status === 'completed'
+    || execution.status === 'canceled'
+    || execution.status === 'failed'
+    || execution.status === 'orphaned';
+}
+
+function waitForExecutionRetry(signal?: AbortSignal): Promise<void> {
+  return waitForAbortableDelay(250, signal);
 }
 
 async function loadPluginMarketSnapshot(signal?: AbortSignal): Promise<PluginMarketSnapshot> {
@@ -500,10 +447,11 @@ async function loadPluginMarketSnapshot(signal?: AbortSignal): Promise<PluginMar
   );
 }
 
-export async function loadPluginMarketDetail(pluginID: string, signal?: AbortSignal): Promise<PluginMarketDetail> {
+export async function loadPluginMarketDetail(pluginID: string, generation: number, signal?: AbortSignal): Promise<PluginMarketDetail> {
   if (!/^[a-z][a-z0-9._-]{0,127}$/.test(pluginID)) throw new Error('Invalid plugin id');
+  if (!Number.isSafeInteger(generation) || generation < 0) throw new Error('Invalid plugin market generation');
   const response = await fetchLocalApiJSONResponse<PluginMarketDetail>(
-    `/_redeven_proxy/api/plugins/market/plugins/${encodeURIComponent(pluginID)}`,
+    `/_redeven_proxy/api/plugins/market/plugins/${encodeURIComponent(pluginID)}?generation=${generation}`,
     await prepareLocalApiRequestInit({ signal }),
   );
   const meta = response.meta as { generation?: unknown } | undefined;
@@ -515,8 +463,8 @@ export async function loadPluginMarketDetail(pluginID: string, signal?: AbortSig
   };
 }
 
-function waitForExternalCommitRetry(delayMs: number, signal?: AbortSignal, remainingMs = 5_000): Promise<void> {
-  const boundedDelay = Math.min(5_000, Math.max(1, remainingMs), Math.max(100, Math.trunc(delayMs)));
+function waitForAbortableDelay(delayMs: number, signal?: AbortSignal): Promise<void> {
+  const boundedDelay = Math.min(5_000, Math.max(1, Math.trunc(delayMs)));
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
       reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -15,21 +14,13 @@ import (
 	"github.com/floegence/redeven/internal/diagnostics"
 	"github.com/floegence/redeven/internal/pluginmarket"
 	"github.com/floegence/redeven/internal/session"
-	"github.com/floegence/redevplugin/pkg/bridge"
 	"github.com/floegence/redevplugin/pkg/connectivity"
 	"github.com/floegence/redevplugin/pkg/externalsource"
 	"github.com/floegence/redevplugin/pkg/host"
 	"github.com/floegence/redevplugin/pkg/httpadapter"
-	"github.com/floegence/redevplugin/pkg/installstage"
 	rpobservability "github.com/floegence/redevplugin/pkg/observability"
-	"github.com/floegence/redevplugin/pkg/operation"
-	"github.com/floegence/redevplugin/pkg/plugindata"
 	"github.com/floegence/redevplugin/pkg/pluginpkg"
-	"github.com/floegence/redevplugin/pkg/registry"
 	"github.com/floegence/redevplugin/pkg/secrets"
-	"github.com/floegence/redevplugin/pkg/security"
-	"github.com/floegence/redevplugin/pkg/sessionscope"
-	"github.com/floegence/redevplugin/pkg/stream"
 )
 
 type Options struct {
@@ -44,15 +35,13 @@ type Options struct {
 	PluginMarket       *pluginmarket.Service
 	releaseTrustNow    func() time.Time
 	newReleaseModule   func(string) (*host.ReleaseModule, host.PluginReleaseRef, func() error, error)
-	newExternalFetcher func(*externalsource.StageStore) (host.ExternalPackageFetcher, error)
-	closeExternalStage func(*externalsource.StageStore) error
 }
 
 type Integration struct {
 	handler          http.Handler
 	host             *host.Host
 	capabilities     *containersCapabilityAdapter
-	sessionLifecycle *sessionLifecycleAdapter
+	runtimeAuthority *RuntimeProcessAuthority
 	marketSnapshot   *pluginmarket.Snapshot
 	marketService    *pluginmarket.Service
 	marketErr        error
@@ -93,48 +82,20 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		return nil, err
 	}
 	root := generation.Path
-	dbRoot := filepath.Join(root, "db")
-	if err := os.MkdirAll(dbRoot, 0o700); err != nil {
-		return nil, err
-	}
 
 	var closers []func() error
 	closeOnError := func() { _ = closeAll(closers) }
-	externalStage, err := externalsource.NewStageStore(filepath.Join(root, "external-package-stage"))
+	// Release assets have a short-lived fetch cache. Host-owned external package
+	// inspections are configured below and live only under external-inspections.
+	releaseStage, err := externalsource.NewStageStore(filepath.Join(root, "release-artifacts"))
 	if err != nil {
 		closeOnError()
 		return nil, err
 	}
-	// The Host owns pending inspection cleanup, so the shared stage closes only
-	// after Host.Close has revoked and removed all process-local inspections.
-	externalStageCloser := externalStage.Close
-	if opts.closeExternalStage != nil {
-		externalStageCloser = func() error { return opts.closeExternalStage(externalStage) }
-	}
-	closers = append(closers, externalStageCloser)
-	externalFetcher, err := externalsource.NewFetcher(externalsource.FetcherOptions{
-		Stage:    externalStage,
-		SourceID: "redeven.external-package",
+	closers = append(closers, releaseStage.Close)
+	releaseFetcher, err := externalsource.NewFetcher(externalsource.FetcherOptions{
+		Stage: releaseStage, SourceID: "redeven.official-release",
 	})
-	if err != nil {
-		closeOnError()
-		return nil, err
-	}
-	var externalPackageFetcher host.ExternalPackageFetcher = externalFetcher
-	if opts.newExternalFetcher != nil {
-		externalPackageFetcher, err = opts.newExternalFetcher(externalStage)
-		if err != nil {
-			closeOnError()
-			return nil, err
-		}
-	}
-	externalGitHubResolver, err := externalsource.NewGitHubRESTReleaseResolver(
-		externalsource.GitHubRESTReleaseClientOptions{
-			Token:     "",
-			UserAgent: "Redeven",
-		},
-		externalFetcher,
-	)
 	if err != nil {
 		closeOnError()
 		return nil, err
@@ -157,7 +118,7 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 					now = opts.releaseTrustNow
 				}
 				releaseModule, _, closeReleaseTrust, marketErr = newOfficialReleaseModuleWithClock(
-					ctx, filepath.Join(root, "trust"), release, externalFetcher, now,
+					ctx, filepath.Join(root, "trust"), release, releaseFetcher, now,
 				)
 			}
 			if marketErr == nil {
@@ -174,40 +135,7 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		closers = append(closers, closeReleaseTrust)
 	}
 
-	registryStore, err := registry.NewSQLiteStore(ctx, filepath.Join(dbRoot, "registry.sqlite"))
-	if err != nil {
-		closeOnError()
-		return nil, err
-	}
-	closers = append(closers, registryStore.Close)
-
-	sessionScopeStore, err := sessionscope.NewSQLiteStore(ctx, filepath.Join(dbRoot, "session_scopes.sqlite"), sessionscope.StoreOptions{})
-	if err != nil {
-		closeOnError()
-		return nil, err
-	}
-	closers = append(closers, sessionScopeStore.Close)
-	sessionScopes, err := sessionscope.NewCoordinator(sessionScopeStore)
-	if err != nil {
-		closeOnError()
-		return nil, err
-	}
-	sessionLifecycle, err := newSessionLifecycleAdapter(filepath.Join(dbRoot, "closed_sessions.json"), sessionLifecycleStartupAuthority{
-		runtime: opts.RuntimeAuthority, stateGenerationID: generation.Status.FreshGenerationID,
-	})
-	if err != nil {
-		closeOnError()
-		return nil, err
-	}
-
-	installStages, err := installstage.NewSQLiteStore(ctx, filepath.Join(dbRoot, "install_stage.sqlite"))
-	if err != nil {
-		closeOnError()
-		return nil, err
-	}
-	closers = append(closers, installStages.Close)
-
-	observabilityStore, err := rpobservability.NewSQLiteStore(ctx, filepath.Join(dbRoot, "observability.sqlite"))
+	observabilityStore, err := rpobservability.NewSQLiteStore(ctx, filepath.Join(root, "observability.sqlite"))
 	if err != nil {
 		closeOnError()
 		return nil, err
@@ -215,28 +143,7 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 	closers = append(closers, observabilityStore.Close)
 	observability := newObservabilityAdapter(observabilityStore, opts.Audit, opts.Diagnostics)
 
-	operationStore, err := operation.NewSQLiteStore(ctx, filepath.Join(dbRoot, "operations.sqlite"))
-	if err != nil {
-		closeOnError()
-		return nil, err
-	}
-	closers = append(closers, operationStore.Close)
-
-	confirmationIntents, err := security.NewSQLiteConfirmationIntentStore(ctx, filepath.Join(dbRoot, "confirmation_intents.sqlite"))
-	if err != nil {
-		closeOnError()
-		return nil, err
-	}
-	closers = append(closers, confirmationIntents.Close)
-
-	streamStore, err := stream.NewSQLiteStore(ctx, filepath.Join(dbRoot, "streams.sqlite"))
-	if err != nil {
-		closeOnError()
-		return nil, err
-	}
-	closers = append(closers, streamStore.CloseDatabase)
-
-	secretStore, err := secrets.NewSQLiteStore(ctx, filepath.Join(dbRoot, "secrets.sqlite"))
+	secretStore, err := secrets.NewSQLiteStore(ctx, filepath.Join(root, "secrets.sqlite"))
 	if err != nil {
 		closeOnError()
 		return nil, err
@@ -248,28 +155,18 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		closeOnError()
 		return nil, err
 	}
-	pluginData, err := plugindata.Open(ctx, filepath.Join(root, "storage"), registryStore)
-	if err != nil {
-		_ = assetStore.Close()
-		closeOnError()
-		return nil, err
-	}
-
 	sessions, err := newSessionAdapter(opts.ResolveSessionMeta, opts.PermissionPolicy)
 	if err != nil {
-		_ = pluginData.Close()
 		_ = assetStore.Close()
 		closeOnError()
 		return nil, err
 	}
 	capabilities, capabilityAdapter, err := newContainersCapabilityRegistry(opts.Containers, observability)
 	if err != nil {
-		_ = pluginData.Close()
 		_ = assetStore.Close()
 		closeOnError()
 		return nil, err
 	}
-	surfaceTokens := bridge.NewSurfaceTokenService(nil, bridge.SurfaceTokenOptions{})
 	connectivityBroker := connectivity.NewMemoryBroker()
 	networkExecutor := connectivity.NewExecutor(connectivity.ExecutorOptions{})
 	runtimeModule, err := newOfficialRuntimeModule(ctx, runtimeModuleDependencies{
@@ -278,31 +175,21 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 	})
 	if err != nil {
 		_ = capabilityAdapter.Close()
-		_ = pluginData.Close()
 		_ = assetStore.Close()
 		closeOnError()
 		return nil, err
 	}
 
 	h, err := host.Open(ctx, host.Config{
+		StateRoot: root,
 		Core: host.CoreAdapters{
 			Policy:               sessions,
 			Authorization:        sessions,
 			PackageTrustVerifier: packageTrustVerifier,
-			Registry:             registryStore,
 			Audit:                observability,
 			SecurityAudit:        observabilityStore,
 			Diagnostics:          observability,
-			SurfaceTokens:        surfaceTokens,
-			PluginData:           pluginData,
 			Assets:               assetStore,
-			InstallStages:        installStages,
-			Operations:           operationStore,
-			ConfirmationIntents:  confirmationIntents,
-			Streams:              streamStore,
-			SessionLifecycle:     sessionLifecycle,
-			SessionMaintenance:   sessionLifecycle,
-			SessionScopes:        sessionScopes,
 		},
 		Release: releaseModule,
 		Runtime: runtimeModule,
@@ -313,10 +200,9 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		Secrets:    &host.SecretsModule{Store: secretStore},
 		Capability: &host.CapabilityModule{Registry: capabilities},
 		ExternalPackage: &host.ExternalPackageModule{
-			StageStore:        externalStage,
-			PackageFetcher:    externalPackageFetcher,
-			GitHubResolver:    externalGitHubResolver,
 			SignatureAssessor: packageTrustVerifier,
+			SourceID:          "redeven.external-package",
+			GitHub:            externalsource.GitHubRESTReleaseClientOptions{UserAgent: "Redeven"},
 		},
 	})
 	if err != nil {
@@ -324,7 +210,6 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		if runtimeModule != nil && errors.As(err, &configErr) && configErr.RuntimeModuleDisposition() == host.RuntimeModuleCallerOwned {
 			_, _ = runtimeModule.Close(context.Background())
 		}
-		_ = pluginData.Close()
 		_ = assetStore.Close()
 		closeOnError()
 		return nil, err
@@ -340,7 +225,7 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		handler:          handler,
 		host:             h,
 		capabilities:     capabilityAdapter,
-		sessionLifecycle: sessionLifecycle,
+		runtimeAuthority: opts.RuntimeAuthority,
 		marketSnapshot:   marketSnapshot,
 		marketService:    opts.PluginMarket,
 		marketErr:        marketErr,
@@ -388,99 +273,78 @@ func (i *Integration) Handler() http.Handler {
 }
 
 func (i *Integration) PluginProcessGeneration() string {
-	if i == nil || i.sessionLifecycle == nil {
+	if i == nil || !i.runtimeAuthority.valid() {
 		return ""
 	}
-	if !i.sessionLifecycle.startupAuthority.runtime.valid() {
-		return ""
-	}
-	return i.sessionLifecycle.startupAuthority.runtime.processGeneration
+	return i.runtimeAuthority.ProcessGeneration()
 }
 
 func (i *Integration) BindActiveGeneration(ctx context.Context, generation PluginSessionGeneration) error {
-	if i == nil || i.sessionLifecycle == nil {
+	if i == nil || i.host == nil {
 		return errors.New("plugin session lifecycle is unavailable")
 	}
-	return i.sessionLifecycle.bindActiveGeneration(ctx, generation)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	_, err := validatePluginSessionGeneration(generation)
+	return err
 }
 
 func (i *Integration) RecordCloseContinuation(ctx context.Context, generation PluginSessionGeneration) error {
-	if i == nil || i.sessionLifecycle == nil {
-		return errors.New("plugin session lifecycle is unavailable")
-	}
-	return i.sessionLifecycle.recordCloseContinuation(ctx, generation)
+	return i.BindActiveGeneration(ctx, generation)
 }
 
 func (i *Integration) RecordTerminalIntent(ctx context.Context, generation PluginSessionGeneration) error {
-	if i == nil || i.sessionLifecycle == nil {
-		return errors.New("plugin session lifecycle is unavailable")
-	}
-	return i.sessionLifecycle.recordTerminalIntent(ctx, generation)
+	return i.BindActiveGeneration(ctx, generation)
 }
 
 func (i *Integration) DiscardFinalizedGeneration(ctx context.Context, generation PluginSessionGeneration) error {
-	if i == nil || i.sessionLifecycle == nil {
-		return errors.New("plugin session lifecycle is unavailable")
-	}
-	return i.sessionLifecycle.discardFinalizedGeneration(ctx, generation)
+	return i.BindActiveGeneration(ctx, generation)
 }
 
-// MaintainTerminalGeneration keeps the opaque teardown identity inside the
-// integration boundary while converging one exact terminal generation.
+// MaintainTerminalGeneration delegates the entire durable teardown lifecycle
+// to Host. Redeven retains only its in-process connection generation.
 func (i *Integration) MaintainTerminalGeneration(ctx context.Context, generation PluginSessionGeneration) error {
-	if i == nil || i.host == nil || i.sessionLifecycle == nil {
+	if i == nil || i.host == nil {
 		return errors.New("plugin session lifecycle is unavailable")
 	}
 	if _, err := validatePluginSessionGeneration(generation); err != nil {
 		return err
 	}
-	record, err := i.sessionLifecycle.InspectSessionScopeMaintenance(ctx, host.InspectSessionScopeMaintenanceRequest{
+	result, err := i.host.CloseAuthenticatedSessionScope(ctx, host.CloseAuthenticatedSessionScopeRequest{
 		Session: generation.Session,
 	})
 	if err != nil {
 		return err
 	}
-	if !record.TerminalEvidence {
-		return host.ErrSessionMaintenanceState
-	}
-	if record.Phase == "" {
-		closed, err := i.host.CloseAuthenticatedSessionScope(ctx, host.CloseAuthenticatedSessionScopeRequest{
-			Session: generation.Session,
-		})
-		if err != nil {
-			return err
-		}
-		if closed.Status == host.SessionScopeTeardownAbsent {
-			return host.ErrSessionMaintenanceState
-		}
-		record, err = i.sessionLifecycle.InspectSessionScopeMaintenance(ctx, host.InspectSessionScopeMaintenanceRequest{
-			Session: generation.Session,
-		})
-		if err != nil {
-			return err
-		}
-	}
-	resumed, err := i.host.ResumeClosedSessionScopeTeardown(ctx, host.ResumeClosedSessionScopeTeardownRequest{
-		Session:  generation.Session,
-		Identity: record.Identity,
-	})
-	if err != nil {
-		return err
-	}
-	if resumed.Status != host.SessionScopeTeardownComplete {
+	if result.Status == host.SessionScopeTeardownAbsent {
 		return nil
+	}
+	if result.Status != host.SessionScopeTeardownComplete {
+		result, err = i.host.ResumeClosedSessionScopeTeardown(ctx, host.ResumeClosedSessionScopeTeardownRequest{
+			Session: generation.Session, Identity: result.Identity,
+		})
+		if err != nil {
+			return err
+		}
+	}
+	if result.Status == host.SessionScopeTeardownAbsent {
+		return nil
+	}
+	if result.Status != host.SessionScopeTeardownComplete {
+		return host.ErrSessionMaintenanceState
 	}
 	finalized, err := i.host.FinalizeClosedSessionScope(ctx, host.FinalizeClosedSessionScopeRequest{
 		Session:  generation.Session,
-		Identity: record.Identity,
+		Identity: result.Identity,
 	})
 	if err != nil {
 		return err
 	}
-	if finalized.Status == host.SessionScopeFinalizationAbsent {
+	if finalized.Status != host.SessionScopeFinalized && finalized.Status != host.SessionScopeFinalizationAbsent {
 		return host.ErrSessionMaintenanceState
 	}
-	return i.sessionLifecycle.discardFinalizedGeneration(ctx, generation)
+	return nil
 }
 
 func (i *Integration) Close() error {

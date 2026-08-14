@@ -48,11 +48,11 @@ importers:
         specifier: 2.4.1
         version: 2.4.1
       '@floegence/redevplugin-contracts':
-        specifier: 0.7.27
-        version: 0.7.27
+        specifier: 1.1.1
+        version: 1.1.1
       '@floegence/redevplugin-ui':
-        specifier: 0.7.27
-        version: 0.7.27
+        specifier: 1.1.1
+        version: 1.1.1
       '@fontsource/iosevka':
         specifier: ^5.2.5
         version: 5.2.5
@@ -421,11 +421,14 @@ packages:
     resolution: {integrity: sha512-9TSgXjd14wz5I2h55qXmzMyXU+oPeiOxdDhImNMW+y9xjjOTmluGT9wp97XdnJu8X+uIJvTcJtEjrLgNqEyGAg==}
     engines: {node: '>=20.19.0'}
 
-  '@floegence/redevplugin-contracts@0.7.27':
-    resolution: {integrity: sha512-03GIMn+I06/pe///gfLJGKE8Y994sjjiq0pvY9BbdnvWXfpOIs16SkpwLmHMSV7ghLv2YIROIRsZbmGR5DJIpQ==}
+  '@floegence/ghostty-web@0.5.0-rc.0':
+    resolution: {integrity: sha512-4fRGcIdoIrIqQhbh3iFRha4jSW2NK/tWUSIHv8/5j8ZmzC0T0TTLqX+5GlQKxqPvZEBe21R4asD71v35vhKB2g==}
 
-  '@floegence/redevplugin-ui@0.7.27':
-    resolution: {integrity: sha512-UjcD6456sTJMa5bazLymGYPjLkSDD1wHF8z/+KiL0olQC+xv9Fe8sCB1fhVmWSzwGyTACL6CtN4tI0B48uWtFQ==}
+  '@floegence/redevplugin-contracts@1.1.1':
+    resolution: {integrity: sha512-EB3dT/MkEgaEyW2S81aShu9EW7CvkVeKN1QOB2QUMvDTD+mCjbaJyst1T3Ln+jc4u5utScGGbrqMk9ncwjeIPQ==}
+
+  '@floegence/redevplugin-ui@1.1.1':
+    resolution: {integrity: sha512-YfiFFRZnxLW27mqOdtHAW30mErovqcXhjvoxdUMSb85xsdYM1ea2kE50oBjKLuGDL5DxK7WXezUeTN6qVg2nXA==}
 
   '@fontsource/iosevka@5.2.5':
     resolution: {integrity: sha512-Zv/UHJodDug1LcnWv2u2+GPp3oWP3U6Xp16cJOsqqZQNsCu8sA/ttT331N0NypxBZ+7c8szlSRlYDcy9liZ8pw==}
@@ -2924,11 +2927,13 @@ snapshots:
       '@floegence/flowersec-node-native-linux-x64-gnu': 2.4.1
     optional: true
 
-  '@floegence/redevplugin-contracts@0.7.27': {}
+  '@floegence/ghostty-web@0.5.0-rc.0': {}
 
-  '@floegence/redevplugin-ui@0.7.27':
+  '@floegence/redevplugin-contracts@1.1.1': {}
+
+  '@floegence/redevplugin-ui@1.1.1':
     dependencies:
-      '@floegence/redevplugin-contracts': 0.7.27
+      '@floegence/redevplugin-contracts': 1.1.1
 
   '@fontsource/iosevka@5.2.5': {}
 

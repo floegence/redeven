@@ -5,7 +5,7 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
 ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)
 REPOSITORY="floegence/redevplugin"
 RUST_TOOLCHAIN="1.88.0"
-PUBLICATION_ASSET="platform-package-publication-v1.json"
+PUBLICATION_ASSET="platform-package-publication-v2.json"
 PUBLICATION_MARKER="platform-publication-verification-v1.json"
 RUNTIME_MARKER=".redevplugin-release-artifacts-verified.json"
 RUNTIME_NOTICES="REDEVPLUGIN_THIRD_PARTY_NOTICES.md"
@@ -209,7 +209,7 @@ staged="$tmpdir/published"
 mkdir -p "$staged"
 install -m 0644 "$publication" "$staged/$PUBLICATION_ASSET"
 install -m 0644 "$publication_verification" "$staged/$PUBLICATION_MARKER"
-install -m 0644 "$package_set" "$staged/platform-package-set-v1.json"
+install -m 0644 "$package_set" "$staged/platform-package-set-v3.json"
 install -m 0755 "$runtime" "$staged/redevplugin-runtime"
 for name in "$RUNTIME_MARKER" "$RUNTIME_NOTICES" "$RUNTIME_SBOM" "$RUNTIME_PROVENANCE" "$RUNTIME_SIGNATURE" "$RUNTIME_CERTIFICATE"; do
   install -m 0644 "$tmpdir/$name" "$staged/$name"

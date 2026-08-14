@@ -14,7 +14,7 @@ import {
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-export const publicationAssetName = 'platform-package-publication-v1.json';
+export const publicationAssetName = 'platform-package-publication-v2.json';
 export const runtimeMarkerName = '.redevplugin-release-artifacts-verified.json';
 export const runtimeNoticesName = 'REDEVPLUGIN_THIRD_PARTY_NOTICES.md';
 export const runtimeSBOMName = 'REDEVPLUGIN_RUNTIME.spdx.json';
@@ -35,17 +35,11 @@ const expectedNPM = Object.freeze([
   '@floegence/redevplugin-ui',
 ]);
 const expectedRust = Object.freeze([
-  ['redevplugin-contracts', 'contracts'],
-  ['redevplugin-ipc', 'ipc'],
-  ['redevplugin-wasm-abi', 'wasm_abi'],
-  ['redevplugin-target-classifier', 'target_classifier'],
-  ['redevplugin-worker-sdk', 'worker_sdk'],
   ['redevplugin-runtime', 'runtime'],
+  ['redevplugin-worker-sdk', 'worker_sdk'],
 ]);
 const expectedRuntimeRust = Object.freeze([
-  'redevplugin-ipc',
   'redevplugin-runtime',
-  'redevplugin-wasm-abi',
 ]);
 const markerFileNames = Object.freeze([
   runtimeNoticesName,
@@ -169,7 +163,7 @@ export function validatePackageSet(value) {
     'schema_version', 'platform_version', 'go_module', 'npm_packages', 'rust_crates',
     'contract_registry_version', 'contract_set_sha256',
   ], 'package set');
-  if (value.schema_version !== 'redevplugin.platform_package_set.v1') fail('package set schema is invalid');
+  if (value.schema_version !== 'redevplugin.platform_package_set.v3') fail('package set schema is invalid');
   semver(value.platform_version, 'package set platform version');
   digest(value.contract_set_sha256, 'package set contract digest');
   if (value.contract_registry_version !== 'contract-registry-v2') fail('package set registry version is invalid');
@@ -205,7 +199,7 @@ export function validatePublication(value, packageSet, { tag, sourceCommit } = {
     'schema_version', 'platform_version', 'source_commit', 'workflow', 'go_module',
     'npm_packages', 'rust_crates', 'contract_set_sha256',
   ], 'platform publication');
-  if (value.schema_version !== 'redevplugin.platform_package_publication.v1') fail('publication schema is invalid');
+  if (value.schema_version !== 'redevplugin.platform_package_publication.v2') fail('publication schema is invalid');
   if (value.platform_version !== packageSet.platform_version) fail('publication platform version mismatch');
   if (value.contract_set_sha256 !== packageSet.contract_set_sha256) fail('publication contract digest mismatch');
   commit(value.source_commit, 'publication source commit');
@@ -275,7 +269,7 @@ export function validatePublicationVerification(value, packageSet) {
     fail('publication verification schema is invalid');
   }
   const publication = {
-    schema_version: 'redevplugin.platform_package_publication.v1',
+    schema_version: 'redevplugin.platform_package_publication.v2',
     platform_version: value.platform_version,
     source_commit: value.source_commit,
     workflow: {
@@ -534,7 +528,7 @@ export function descriptor(pathname, name = path.basename(pathname)) {
 
 function publicationVerificationPackageSet(value) {
   return validatePackageSet({
-    schema_version: 'redevplugin.platform_package_set.v1',
+    schema_version: 'redevplugin.platform_package_set.v3',
     platform_version: value.platform_version,
     go_module: { module: value.go_module.module, version: value.go_module.version },
     npm_packages: value.npm_packages.map(({ name, version }) => ({ name, version })),

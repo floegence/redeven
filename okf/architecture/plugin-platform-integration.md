@@ -1,14 +1,14 @@
 ---
 type: Architecture Contract
 title: Plugin platform integration
-description: Redeven mounts ReDevPlugin v0.7.27 and adds authenticated host modules, copied-root recovery, market-backed official releases, external-source policy, localized plugin presentation, product placement, and business adapters.
+description: Redeven mounts ReDevPlugin v1.1.1 and adds authenticated host modules, copied-root recovery, market-backed official releases, external-source policy, localized plugin presentation, product placement, and business adapters.
 tags: [architecture, plugins, local-ui, redevplugin]
 timestamp: 2026-07-25T00:00:00Z
 quality_exception: Cross-domain host integration contract spanning identity, security, runtime, storage, routes, surfaces, and business adapters.
 ---
 # Summary
 
-Redeven integrates ReDevPlugin `v0.7.27` through one Go Host, one canonical HTTP
+Redeven integrates ReDevPlugin `v1.1.1` through one Go Host, one canonical HTTP
 namespace, one Env App `PluginPlatformClient`, one shared surface scope, and the
 released ProcessManager over a verified Redeven-built Linux runtime. Redeven
 adds authenticated session mapping, public-source admission policy, product
@@ -24,9 +24,9 @@ package, capability, runtime, or surface identity fails closed.
 `internal/redevpluginintegration` prepares the released owner-scoped generation,
 opens ReDevPlugin stores, and constructs the Host with core, official release,
 runtime, connectivity, secret, capability, and external-package modules. The
-external module uses the released stage store, bounded public HTTPS fetcher,
-GitHub Release resolver, and package signature assessor. Host close revokes and
-removes pending inspections before Redeven closes the shared stage store.
+external module uses the bounded public HTTPS fetcher, GitHub Release resolver,
+and package signature assessor. Inspections are process-local, opaque, and
+TTL-bounded; no Redeven or ReDevPlugin stage/receipt/query database is opened.
 
 AppServer mounts the released handler at `/_redevplugin/api/plugins`. It proves
 an Env-trusted route, binds the exact trusted origin in server-only context, and
@@ -35,7 +35,7 @@ translate to a second namespace, or serve a parallel package or bootstrap path.
 The same session adapter backs direct Host and mounted HTTP authorization.
 
 Persistent resources follow released `user` or `environment` scopes. Short-lived
-surfaces, operations, streams, handles, confirmations, and tokens bind the full
+surfaces, Executions, Events, handles, confirmations, and tokens bind the full
 active owner-session, owner-user, owner-environment, and channel audience.
 Session close uses the released durable four-hash coordinator and authentication
 state is removed only after exact drain acknowledgement.
@@ -59,27 +59,18 @@ No-password mode scopes the access session to one direct connection.
 For direct local transport, the Env App stages each credential against the exact
 channel id returned by the connect artifact. It does not publish that credential
 to ReDevPlugin request headers until the Flowersec direct handshake reports
-success for the same channel. Inventory loading and release-install operation
-resume are gated on this activation, so a reconnect or concurrent artifact
+success for the same channel. Inventory loading and release-install Execution
+observation are gated on this activation, so a reconnect or concurrent artifact
 cannot cause an unauthenticated request to be projected as an internal plugin
 failure. A handshake for an unknown channel leaves the credential unpublished
 and the original staged state untouched.
 
-The released lifecycle adapter persists the active process/session generation,
-phase, exact four-hash identity, close continuation, terminal claim, revision,
-and checksum in an atomically replaced generation. Startup accepts only the
-current lock authority, strictly migrates recognized v1 state while retaining its
-exact bytes, reconciles recoverable interrupted phases, and rejects symlinks,
-non-regular files, tampered journals, ambiguous fences, and future state without
-mutation. A post-rename durability failure poisons the adapter because the
-mutation outcome is unknown.
-
-Shutdown closes Local UI admission and hijacked transports before canceling
-Agent sessions. It then waits for request leases, session handlers, and tracked
-maintenance workers before closing the Host. A timeout leaves the durable
-continuation for the next startup and does not close the Host concurrently with a
-callback. Transient maintenance failures retry in the background while the
-runtime remains active.
+The Host owns durable session-scope teardown identity, phase, continuation,
+terminal claim, migration, and reconciliation in its control database. Redeven's
+`PluginSessionGeneration` is transient connection identity only; it cannot become
+a second durable lifecycle owner. Shutdown closes Local UI admission and hijacked
+transports before canceling Agent sessions, waits for request leases and session
+handlers, and then invokes the released idempotent Host teardown path.
 
 ## Copied owner-scope recovery
 
@@ -110,24 +101,17 @@ silently accepted or retried with broader authority.
 Production obtains the official Containers `4.4.3` release from the frozen
 latest-only market snapshot. The snapshot identifies the immutable GitHub
 Release and complete signed transport; it does not carry package bytes or grant
-trust. Redeven submits the released `release-install-operation.v1` request with
-the remote transport and requests post-commit activation for the verified
-official release. It observes the durable operation through its generated
-start/list/get/watch client. Publisher, plugin, version, hashes,
-root delegation, signing ledger, source policy, revocation evidence, host
-requirement, and capability pin must all match before ReDevPlugin changes the
-registry. Expired or incomplete evidence fails closed without falling back to
-external-package admission.
+trust. Redeven starts one released install Execution and observes ordered Events
+through the generated start/list/get/Event client. Publisher, plugin, version,
+SHA-256 hashes, Ed25519 root and package signatures, revocation evidence, source
+policy, host requirement, and the Host-registered known capability contract must
+all match before ReDevPlugin changes the registry. Invalid, revoked, or
+incomplete evidence fails closed without falling back to external admission.
 
-Host restart reconstructs an activation lease only from ReDevPlugin's sealed
-registry binding and exact current durable release-trust state. Normal restart
-recovery performs no remote release, package, capability, trust-document, or
-signing-ledger downloads. Any mismatch in release identity, source, package
-hashes, active fingerprint, trust-state digest, root/policy/revocation epochs,
-expiry, fence, schema, or clock floor fails closed before a lease or surface is
-published. Redeven observes and localizes that result instead of inspecting the
-opaque evidence, wrapping trust recovery, retrying a grant, or presenting a
-trust failure as permission denial.
+Host restart and explicit retry use the Host-owned recovery snapshot and
+`recoverEnabled` path. Redeven observes and localizes the authoritative result;
+it does not persist release trust, activation evidence, recovery identities, or
+a second grant/trust state machine.
 
 Administrators may also inspect packages from:
 
@@ -135,16 +119,16 @@ Administrators may also inspect packages from:
 - a public GitHub repository Release, with an optional exact tag;
 - a local `.redevplugin` upload.
 
-Every source uses the released `inspect -> commit -> query` transaction. The
-inspection binds immutable package bytes and source provenance to its owner,
-intent, security summary, signature assessment, execution approval, update
-eligibility, and confirmation digest. Commit must present the exact inspection
-id and digest. Once a commit has an unknown or in-progress outcome, every later
-attempt for that inspection is query-only until a committed or failed terminal
-result; bounded UI reconciliation never replays the mutation. Redeven neither
-parses packages nor manufactures provenance or trust state.
+Every source uses released `inspect -> explicit confirmation -> install`.
+Inspection returns a process-local opaque id with a bounded TTL and binds package
+bytes, source provenance, owner/session, intent, security summary, signature
+assessment, execution approval, update eligibility, and confirmation digest.
+Install presents the exact id and expected hash; the Host reopens and revalidates
+the exact bytes/hash and enters its single atomic control-database transaction.
+Redeven neither persists inspection/receipt/query state nor parses packages or
+manufactures provenance or trust state.
 
-Unsigned, unknown-signer, and temporarily unverifiable packages may be committed
+Unsigned, unknown-signer, and temporarily unverifiable packages may be installed
 after explicit confirmation. The installed record remains disabled, receives no
 permission grants, and is manual-update-only. Invalid or revoked signatures are
 blocked. A later update remains bound to the installed instance and current
@@ -159,15 +143,17 @@ user pin.
 ## Runtime and Containers
 
 The runtime module binds the canonical sibling executable, target, ReDevPlugin
-`0.7.27`, released Rust IPC and WASM ABI, exact product-build descriptor, lease
+`1.1.1`, released Rust IPC and WASM ABI, exact product-build descriptor, lease
 replay storage, and released limits. Linux runtime bytes are built with Rust
 1.88.0 from the attested package set and travel with SBOM, provenance, notices,
-and signature evidence. Missing, non-canonical, wrong-target, unsigned, or
-wrong-hash runtime evidence blocks startup. Darwin constructs no runtime module.
+and signature evidence. The expected binary digest comes from the product release
+marker; field binary bytes are never hashed and accepted as their own trust
+anchor. Missing, non-canonical, wrong-target, unsigned, or wrong-hash runtime
+evidence blocks startup. Darwin constructs no runtime module.
 
 The Containers adapter receives only ReDevPlugin-authorized calls. Reads, long
-operations, cancellation, and log streams use released capability, operation,
-and stream envelopes; Docker/Podman access stays in the product capability
+operations, cancellation, and log streams use the released Execution/Event
+envelope; Docker/Podman access stays in the product capability
 package. Installation and enablement do not imply resource access. The initial
 Containers surface requires an active `containers.read` grant, and the product
 shows that requirement before attempting to open the surface.
@@ -187,35 +173,27 @@ blind mutation retry.
 
 Official installation is product-observable but platform-owned. The Shell keeps
 one coordinator keyed by `plugin_instance_id`; it preserves the original
-`request_id`, reattaches to the same operation after panel close or transport
-loss, and renders the Host's trust fetch, release fetch, capability fetch,
-package download, hash, signature/ledger, commit, enable, and reconciliation
-phases. Byte progress is shown only when the Host reports bytes; retry attempt
+`request_id`, reattaches to the same Execution after panel close or transport
+loss, and renders ordered Host Events for release fetch, package download, hash,
+Ed25519 verification, commit, enable, and reconciliation. Byte progress is shown
+only when the Host reports bytes; retry attempt
 and verified cache-hit details remain explanatory diagnostics rather than
 invented percentages. A succeeded operation refreshes inventory and projects
 the authoritative enabled or `needs_attention` record; a refresh failure is
 shown as a separate recoverable state and never relabeled as an install failure.
 Only a confirmed terminal, retryable failure may create a new request. On Env
-App startup, only the newest operation for each plugin is eligible for
+App startup, only the newest Execution for each plugin is eligible for
 restoration: active work is always reattached, while a terminal failure remains
 visible for 24 hours so a restart does not erase its diagnosis. An older failure,
 a failure superseded by a later success, or an expired failure does not return as
 stale product state.
 
 Plugin runtime recovery starts from the explicit authenticated plugin-session
-ready transition; Env App does not insert a fixed timer between transport
-connection and recovery. Plugin Center inventory and navigation remain
-interactive while enabled plugins recover. Recovery state is projected by exact
-`plugin_instance_id` plus the installed package/manifest/entries identity: a recovering plugin may enter its target Host-owned
-single-flight open path, a failed plugin alone remains closed with its typed
-reason and explicit idempotent Retry action, and ready plugins remain openable.
-No aggregate recovery result becomes a global surface authorization gate.
-ReDevPlugin still validates the active lease, trust epochs, revocation, package
-identity, permissions, and session binding on every open and RPC boundary. A
-successful package update with the same instance id schedules one bounded
-catch-up recovery for the new package identity. A typed recovery failure is
-sticky for that connected client and cannot trigger an implicit retry; only an
-explicit Retry clears the failed-instance marker.
+ready transition; Env App does not insert a fixed timer. It requests the Host's
+idempotent `recoverEnabled` snapshot and presents per-instance state and explicit
+retry. The Host owns recovery identity, single-flight behavior, and the
+authoritative snapshot. Env App owns no failed-instance or catch-up state machine,
+and recovery presentation never becomes a second surface-open gate.
 
 Every opened surface receives the released `redevplugin.surface_context.v1`
 with a monotonic revision, semantic light/dark palette, language tag, and text
@@ -236,8 +214,9 @@ official signing key and exact registry-to-Host-verified hash agreement.
 External source provenance prevents an identity collision from borrowing
 historical official identity or update controls.
 
-Plugin Center cards, detail actions, and the application launcher consume one
-`presentPlugin` action projection. A disabled or blocked record never exposes a
+Plugin Center cards, detail actions, and the application launcher consume the
+Host `action_state` projection. Redeven does not derive open eligibility from
+trust, grants, policy, or recovery. A disabled or blocked record never exposes a
 surface launch action, even if an old launch target is still present; a runnable
 update may keep Activity and Workbench available while its primary action is
 review. The launcher omits disabled records, while cards keep enable and review
@@ -277,7 +256,7 @@ disposal alone is not revocation evidence.
 # Boundaries
 
 Canonical ownership is defined by [ReDevPlugin host integration boundary](redevplugin-boundary.md).
-This concept owns only Redeven's concrete `v0.6.24` assembly.
+This concept owns only Redeven's concrete `v1.1.1` assembly.
 
 Manifest surfaces remain `view|command|background` with semantic roles. Activity,
 Workbench, window, widget, inventory key, navigation, settings, and product layout
@@ -289,8 +268,8 @@ never become manifest fields.
 - `redeven:internal/redevpluginintegration/owner_scope_recovery.go:1` - Projects released copied-root inspection and exact-plan recovery without editing opaque state.
 - `redeven:cmd/redeven/plugin_state_recovery.go:1` - Requires the Local Environment lock and explicit retained-archive confirmation.
 - `redeven:desktop/src/main/pluginStateRecovery.ts:1` - Validates the bundled recovery command result and preserves stale-plan outcomes.
-- `redeven:internal/redevpluginintegration/external_package_test.go:24` - Exercises upload inspect, confirmed commit, query, disabled state, and staged-artifact cleanup.
-- `redeven:spec/redevplugin/artifacts.go:1` - Pins only official public release anchors and the signed v4 capability bundle.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/ExternalPluginInstallDialog.test.tsx:1` - Exercises inspect, explicit confirmation, Host install, and disabled zero-grant presentation.
+- `redeven:spec/redevplugin/artifacts.go:1` - Pins official package keys and loads the generated known v4 capability contract.
 - `redeven:internal/redevpluginintegration/session_adapter.go:340` - Maps read and admin external-package actions to explicit product permissions.
 - `redeven:internal/redevpluginintegration/runtime_module.go:1` - Configures the released runtime manager and fixed version.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:1` - Uses generated lifecycle, external-package, and permission-requirement APIs.

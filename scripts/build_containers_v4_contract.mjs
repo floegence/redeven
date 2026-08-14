@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const sourcePath = path.join(root, 'spec/capabilities/container-resources-v3.contract.json');
 const outputPath = path.join(root, 'spec/capabilities/container-resources-v4.contract.json');
+const hostProjectionPath = path.join(root, 'spec/redevplugin/known-containers-capability-v4.contract.json');
 const verify = process.argv.includes('--verify');
 
 const contract = JSON.parse(fs.readFileSync(sourcePath, 'utf8'));
@@ -22,11 +23,14 @@ addContainerGrouping(contract.methods.find((item) => item.name === 'containers.i
 
 const encoded = `${JSON.stringify(contract, null, 2)}\n`;
 if (verify) {
-  if (!fs.existsSync(outputPath) || fs.readFileSync(outputPath, 'utf8') !== encoded) {
-    throw new Error('container-resources-v4.contract.json is stale; run scripts/build_containers_v4_contract.mjs');
+  for (const target of [outputPath, hostProjectionPath]) {
+    if (!fs.existsSync(target) || fs.readFileSync(target, 'utf8') !== encoded) {
+      throw new Error(`${path.relative(root, target)} is stale; run scripts/build_containers_v4_contract.mjs`);
+    }
   }
 } else {
   fs.writeFileSync(outputPath, encoded);
+  fs.writeFileSync(hostProjectionPath, encoded);
 }
 
 function addEndpointIdentity(method) {

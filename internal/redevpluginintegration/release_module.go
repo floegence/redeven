@@ -1,14 +1,10 @@
 package redevpluginintegration
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"io"
-	"path/filepath"
-	"slices"
 	"time"
 
 	"github.com/floegence/redeven/internal/pluginmarket"
@@ -28,10 +24,9 @@ const (
 )
 
 type officialReleaseProvider struct {
-	releaseRef    host.PluginReleaseRef
-	transport     *remoterelease.AssetSet
-	capability    capabilitycontract.Bundle
-	artifactFiles map[string][]byte
+	releaseRef host.PluginReleaseRef
+	transport  *remoterelease.AssetSet
+	capability capabilitycontract.KnownContract
 }
 
 func newOfficialReleaseModuleWithClock(
@@ -48,16 +43,13 @@ func newOfficialReleaseModuleWithClock(
 	if err != nil {
 		return nil, host.PluginReleaseRef{}, nil, err
 	}
-	trust, store, err := newOfficialReleaseTrust(stateDir, provider, now)
+	trust, err := newOfficialReleaseTrust(provider)
 	if err != nil {
 		return nil, host.PluginReleaseRef{}, nil, err
 	}
 	return &host.ReleaseModule{
-		Trust:                       trust,
-		ReleaseArtifactResolver:     provider,
-		HostRequirements:            provider,
-		CapabilityContractArtifacts: provider,
-	}, provider.releaseRef, store.Close, nil
+		Trust: trust, ReleaseArtifactResolver: provider, HostRequirements: provider,
+	}, provider.releaseRef, nil, nil
 }
 
 func newOfficialReleaseProvider(release pluginmarket.LatestRelease, fetcher remoterelease.AssetFetcher) (*officialReleaseProvider, error) {
@@ -77,11 +69,7 @@ func newOfficialReleaseProvider(release pluginmarket.LatestRelease, fetcher remo
 	}
 	if release.PublisherReleaseRef.Root.Algorithm != "ed25519" ||
 		release.PublisherReleaseRef.Root.KeyID != anchors.Root.KeyID ||
-		release.PublisherReleaseRef.Root.PublicKey != encodePublicKey(anchors.Root.PublicKey) ||
-		release.PublisherReleaseRef.SigningLedger.Algorithm != "ed25519" ||
-		release.PublisherReleaseRef.SigningLedger.LogID != anchors.SigningLedgerLog ||
-		release.PublisherReleaseRef.SigningLedger.KeyID != anchors.SigningLedger.KeyID ||
-		release.PublisherReleaseRef.SigningLedger.PublicKey != encodePublicKey(anchors.SigningLedger.PublicKey) {
+		release.PublisherReleaseRef.Root.PublicKey != encodePublicKey(anchors.Root.PublicKey) {
 		return nil, errors.New("official Containers market trust anchors do not match Redeven pins")
 	}
 	transport, err := remoterelease.NewAssetSet(remoterelease.AssetSetOptions{
@@ -94,17 +82,12 @@ func newOfficialReleaseProvider(release pluginmarket.LatestRelease, fetcher remo
 	if err != nil {
 		return nil, fmt.Errorf("create official Containers remote transport: %w", err)
 	}
-	bundle, _, err := redevpluginartifacts.ContainersCapabilityBundle()
+	contract, err := redevpluginartifacts.ContainersCapabilityContract()
 	if err != nil {
 		return nil, fmt.Errorf("load official Containers capability: %w", err)
 	}
-	files := make(map[string][]byte, len(bundle.Files))
-	for ref, value := range bundle.Files {
-		files[ref] = slices.Clone(value)
-	}
 	return &officialReleaseProvider{
-		releaseRef: ref, transport: transport,
-		capability: bundle, artifactFiles: files,
+		releaseRef: ref, transport: transport, capability: contract,
 	}, nil
 }
 
@@ -112,69 +95,36 @@ func encodePublicKey(value []byte) string {
 	return base64.StdEncoding.EncodeToString(value)
 }
 
-func newOfficialReleaseTrust(stateDir string, provider *officialReleaseProvider, now func() time.Time) (*releasetrust.ServiceSet, *releaseTrustStore, error) {
+func newOfficialReleaseTrust(provider *officialReleaseProvider) (*releasetrust.ServiceSet, error) {
 	anchors, err := redevpluginartifacts.OfficialReleaseTrustAnchorSet()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	configuration, err := releasetrust.NewSourceConfiguration(anchors.SourceID, []string{officialReleaseChannel})
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	rootAnchor, err := releasetrust.NewEd25519TrustAnchor(anchors.Root.KeyID, anchors.Root.PublicKey)
 	if err != nil {
-		return nil, nil, err
-	}
-	store, err := openReleaseTrustStore(filepath.Join(stateDir, "release-trust.sqlite"))
-	if err != nil {
-		return nil, nil, err
-	}
-	closeOnError := func(err error) (*releasetrust.ServiceSet, *releaseTrustStore, error) {
-		_ = store.Close()
-		return nil, nil, err
-	}
-	trustedTime, err := newLocalTrustedTimeAdapter(store, filepath.Join(stateDir, "trusted-time"), now)
-	if err != nil {
-		return closeOnError(err)
-	}
-	timeAnchor, err := releasetrust.NewEd25519TrustAnchor(localTrustedTimeKeyID, trustedTime.PublicKey())
-	if err != nil {
-		return closeOnError(err)
-	}
-	timeRoot, err := releasetrust.NewTransparencyRoot(localTrustedTimeLogID, timeAnchor)
-	if err != nil {
-		return closeOnError(err)
-	}
-	ledgerAnchor, err := releasetrust.NewEd25519TrustAnchor(anchors.SigningLedger.KeyID, anchors.SigningLedger.PublicKey)
-	if err != nil {
-		return closeOnError(err)
-	}
-	ledgerRoot, err := releasetrust.NewPinnedSigningLedgerRoot(anchors.SigningLedgerLog, ledgerAnchor)
-	if err != nil {
-		return closeOnError(err)
+		return nil, err
 	}
 	options, err := releasetrust.NewReleaseTrustOptions(
-		configuration, rootAnchor, []releasetrust.TransparencyRoot{timeRoot}, ledgerRoot,
-		releasetrust.SourceRelativeLocatorPolicyV1,
+		configuration, rootAnchor, releasetrust.SourceRelativeLocatorPolicyV1,
 	)
 	if err != nil {
-		return closeOnError(err)
+		return nil, err
 	}
 	service, err := releasetrust.NewReleaseTrustService(options, releasetrust.ReleaseTrustAdapters{
-		Documents:   provider.transport,
-		Ledger:      provider.transport,
-		State:       store,
-		TrustedTime: trustedTime,
-		Monotonic:   store,
+		Documents: provider.transport,
 	})
 	if err != nil {
-		return closeOnError(err)
+		return nil, err
 	}
 	set, err := releasetrust.NewServiceSet(service)
 	if err != nil {
-		return closeOnError(err)
+		return nil, err
 	}
-	return set, store, nil
+	return set, nil
 }
 
 func (p *officialReleaseProvider) ResolveReleaseArtifact(ctx context.Context, req host.ReleaseArtifactResolveRequest) (host.ResolvedPackageArtifact, error) {
@@ -201,58 +151,10 @@ func (p *officialReleaseProvider) SelectHostRequirement(ctx context.Context, req
 		return host.HostRequirementSelection{}, officialReleaseVerificationError("host requirement is invalid")
 	}
 	required := requirement.RequiredCapabilityContracts[0]
-	if required.CapabilityID != containersCapabilityID || required.CapabilityVersion != containersCapabilityVersion || required.Contract != p.capability.Pin {
+	if required.CapabilityID != containersCapabilityID || required.CapabilityVersion != containersCapabilityVersion {
 		return host.HostRequirementSelection{}, officialReleaseVerificationError("host capability requirement is invalid")
 	}
 	return host.HostRequirementSelection{HostID: officialHostID}, nil
-}
-
-func (p *officialReleaseProvider) ResolveCapabilityContract(ctx context.Context, req host.CapabilityContractResolveRequest) (host.ResolvedCapabilityContractArtifact, error) {
-	if err := ctx.Err(); err != nil {
-		return host.ResolvedCapabilityContractArtifact{}, err
-	}
-	if p == nil || req.SourceID != officialReleaseSourceID || req.PluginPublisherID != officialPublisherID ||
-		req.Pin != p.capability.Pin {
-		return host.ResolvedCapabilityContractArtifact{}, officialReleaseVerificationError("capability contract is not declared")
-	}
-	return host.ResolvedCapabilityContractArtifact{Artifacts: &embeddedCapabilityArtifactSet{
-		pin: p.capability.Pin, files: cloneArtifactMap(p.artifactFiles),
-	}}, nil
-}
-
-type embeddedCapabilityArtifactSet struct {
-	pin   capabilitycontract.Pin
-	files map[string][]byte
-}
-
-func (set *embeddedCapabilityArtifactSet) OpenCapabilityContractArtifact(ctx context.Context, ref string) (host.ResolvedCapabilityContractFile, error) {
-	if err := ctx.Err(); err != nil {
-		return host.ResolvedCapabilityContractFile{}, err
-	}
-	value, ok := set.files[ref]
-	if !ok {
-		return host.ResolvedCapabilityContractFile{}, errors.New("embedded capability contract artifact is not declared")
-	}
-	mediaType := "application/json"
-	switch ref {
-	case set.pin.ArtifactRef:
-		mediaType = "application/schema+json"
-	case set.pin.GeneratedClientRef:
-		mediaType = "text/typescript"
-	}
-	return host.ResolvedCapabilityContractFile{
-		Reader: io.NopCloser(bytes.NewReader(value)), Size: int64(len(value)), MediaType: mediaType,
-		Origin:     host.CapabilityArtifactOriginHost,
-		FetchChain: []host.CapabilityArtifactFetchHop{},
-	}, nil
-}
-
-func cloneArtifactMap(values map[string][]byte) map[string][]byte {
-	cloned := make(map[string][]byte, len(values))
-	for ref, value := range values {
-		cloned[ref] = slices.Clone(value)
-	}
-	return cloned
 }
 
 func officialReleaseVerificationError(reason string) error {
@@ -261,5 +163,3 @@ func officialReleaseVerificationError(reason string) error {
 
 var _ host.ReleaseArtifactResolver = (*officialReleaseProvider)(nil)
 var _ host.HostRequirementPolicy = (*officialReleaseProvider)(nil)
-var _ host.CapabilityContractArtifactResolver = (*officialReleaseProvider)(nil)
-var _ host.CapabilityContractArtifactSet = (*embeddedCapabilityArtifactSet)(nil)
