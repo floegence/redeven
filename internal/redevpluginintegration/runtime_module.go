@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	officialRuntimeVersion       = "1.1.2"
+	officialRuntimeVersion       = "1.1.3"
 	bundledRuntimeDescriptorName = ".redevplugin-release-artifacts-verified.json"
 )
 

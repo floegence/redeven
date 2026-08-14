@@ -83,14 +83,11 @@ func OfficialSigningPublicKey() (ReleaseTrustPublicKey, error) {
 }
 
 func ContainersCapabilityContract() (capabilitycontract.KnownContract, error) {
-	var contract capabilitycontract.Contract
-	if err := readStrictJSON(
-		"known-containers-capability-v4.contract.json",
-		&contract,
-	); err != nil {
+	raw, err := artifactFS.ReadFile("known-containers-capability-v4.contract.json")
+	if err != nil {
 		return capabilitycontract.KnownContract{}, err
 	}
-	return capabilitycontract.NewKnownContract(contract)
+	return capabilitycontract.NewKnownContractFromArtifact(raw)
 }
 
 func readSigningPublicKey(name, expectedKeyID string) (ReleaseTrustPublicKey, error) {

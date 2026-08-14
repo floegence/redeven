@@ -11,8 +11,8 @@ import (
 )
 
 func TestOfficialRuntimeVersionMatchesReleasedPlatform(t *testing.T) {
-	if officialRuntimeVersion != "1.1.2" {
-		t.Fatalf("official runtime version = %q, want 1.1.2", officialRuntimeVersion)
+	if officialRuntimeVersion != "1.1.3" {
+		t.Fatalf("official runtime version = %q, want 1.1.3", officialRuntimeVersion)
 	}
 }
 
