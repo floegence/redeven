@@ -304,7 +304,7 @@ function builtPluginInstalledPlugin() {
 async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = false, acceptorFactory = createAcceptor } = {}) {
   let baseURL = '';
   let installedPlugin = null;
-  let releaseInstallOperation = null;
+  let releaseInstallExecution = null;
   let directArtifact = null;
   let acceptor = null;
   let acceptorFailure = null;
@@ -398,6 +398,10 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
         return;
       }
       if (requestURL.pathname === '/_redevplugin/api/plugins/security-policies/query') {
+        const body = await readJSONRequest(request);
+        if (JSON.stringify(body) !== '{}') {
+          throw new Error(`unexpected security policies request: ${JSON.stringify(body)}`);
+        }
         jsonResponse(response, { ok: true, data: { security_policies: [] } });
         return;
       }
@@ -420,7 +424,24 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
         });
         return;
       }
-      if (pluginInstallFlow && requestURL.pathname === '/_redevplugin/api/plugins/release-install-operations') {
+      if (requestURL.pathname === '/_redevplugin/api/plugins/runtime/recover-enabled') {
+        const body = await readJSONRequest(request);
+        if (JSON.stringify(body) !== '{}') {
+          throw new Error(`unexpected plugin recovery request: ${JSON.stringify(body)}`);
+        }
+        jsonResponse(response, { ok: true, data: { revision: 1, complete: true, results: [] } });
+        return;
+      }
+      if (pluginInstallFlow && requestURL.pathname === '/_redevplugin/api/plugins/executions/query') {
+        const body = await readJSONRequest(request);
+        const expected = { limit: 100 };
+        if (JSON.stringify(body) !== JSON.stringify(expected)) {
+          throw new Error(`unexpected plugin executions request: ${JSON.stringify({ expected, actual: body })}`);
+        }
+        jsonResponse(response, { ok: true, data: { executions: [] } });
+        return;
+      }
+      if (pluginInstallFlow && requestURL.pathname === '/_redevplugin/api/plugins/executions/release-installs') {
         const body = await readJSONRequest(request);
         const expected = {
           request_id: body.request_id,
@@ -432,44 +453,57 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
           || JSON.stringify(body) !== JSON.stringify(expected)) {
           throw new Error(`unexpected plugin release install request: ${JSON.stringify({ expected, actual: body })}`);
         }
-        releaseInstallOperation = {
-          request_id: body.request_id,
-          operation_id: 'release_install_built_renderer',
+        releaseInstallExecution = {
+          execution_id: 'release_install_built_renderer',
           plugin_instance_id: builtPluginInstanceID,
-          request_sha256: 'a'.repeat(64),
+          kind: 'operation',
           status: 'running',
-          phase: 'download_package',
-          progress: { kind: 'bytes', completed: 262144, total: 524288 },
-          attempt: 1,
-          retry_after_ms: 250,
-          mutation_outcome: 'not_committed',
-          activation: { status: 'pending' },
-          phase_diagnostics: [],
+          cursor: 1,
+          cancelable: true,
           created_at: '2026-08-05T08:00:00Z',
           updated_at: '2026-08-05T08:00:01Z',
         };
-        jsonResponse(response, { ok: true, data: releaseInstallOperation });
+        jsonResponse(response, { ok: true, data: releaseInstallExecution });
         return;
       }
       if (pluginInstallFlow
-        && requestURL.pathname === '/_redevplugin/api/plugins/release-install-operations/release_install_built_renderer') {
-        installedPlugin = builtPluginInstalledPlugin();
-        releaseInstallOperation = {
-          ...releaseInstallOperation,
-          status: 'succeeded',
-          phase: 'complete',
-          progress: { kind: 'items', completed: 1, total: 1 },
-          mutation_outcome: 'committed',
-          plugin_record: installedPlugin,
-          activation: {
-            status: 'needs_attention',
-            missing_permission_ids: ['containers.read'],
-            next_action: 'approve_permissions',
+        && requestURL.pathname === '/_redevplugin/api/plugins/executions/release_install_built_renderer/events/query') {
+        const body = await readJSONRequest(request);
+        const expected = { after_cursor: 1 };
+        if (JSON.stringify(body) !== JSON.stringify(expected)) {
+          throw new Error(`unexpected plugin execution events request: ${JSON.stringify({ expected, actual: body })}`);
+        }
+        jsonResponse(response, {
+          ok: true,
+          data: {
+            execution_id: 'release_install_built_renderer',
+            events: [{
+              execution_id: 'release_install_built_renderer',
+              sequence: 2,
+              kind: 'terminal',
+              payload: { status: 'completed' },
+            }],
+            cursor: 2,
           },
+        });
+        return;
+      }
+      if (pluginInstallFlow
+        && requestURL.pathname === '/_redevplugin/api/plugins/executions/release_install_built_renderer/query') {
+        const body = await readJSONRequest(request);
+        if (JSON.stringify(body) !== '{}') {
+          throw new Error(`unexpected plugin execution query: ${JSON.stringify(body)}`);
+        }
+        installedPlugin = builtPluginInstalledPlugin();
+        releaseInstallExecution = {
+          ...releaseInstallExecution,
+          status: 'completed',
+          cursor: 2,
+          cancelable: false,
           updated_at: '2026-08-05T08:00:02Z',
           terminal_at: '2026-08-05T08:00:02Z',
         };
-        jsonResponse(response, { ok: true, data: releaseInstallOperation });
+        jsonResponse(response, { ok: true, data: releaseInstallExecution });
         return;
       }
 
@@ -750,14 +784,14 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
 
   try {
     const entryURL = new URL(entryPath.slice(1), server.baseURL).toString();
-    const runtimeRefreshResponse = page.waitForResponse((response) => {
+    const runtimeRecoveryResponse = page.waitForResponse((response) => {
       const request = response.request();
       return request.method() === 'POST'
-        && new URL(request.url()).pathname === '/_redevplugin/api/plugins/runtime/refresh-enabled';
+        && new URL(request.url()).pathname === '/_redevplugin/api/plugins/runtime/recover-enabled';
     }, { timeout: 10_000 });
     await page.goto(entryURL, { waitUntil: 'load', timeout: 30_000 });
     await page.locator('#root > *').first().waitFor({ state: 'visible', timeout: 10_000 });
-    await runtimeRefreshResponse;
+    await runtimeRecoveryResponse;
 
     await page.getByRole('button', { name: 'Plugins', exact: true }).click();
     const pluginCenterAction = page.locator('[data-plugin-center-market-action]');
@@ -837,22 +871,15 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
         && /^[0-9a-f-]{36}$/u.test(request.payload.request_id)
         ? { ...request.payload, request_id: ':requestID' }
         : request.payload;
-      return {
-        ...request,
-        path: request.path.replace(
-          /\/release-install-operations\/by-request\/[0-9a-f-]{36}$/u,
-          '/release-install-operations/by-request/:requestID',
-        ),
-        payload,
-      };
+      return { ...request, payload };
     });
     const requiredPluginRequests = [
-      { method: 'POST', path: '/_redevplugin/api/plugins/runtime/refresh-enabled', payload: {} },
-      { method: 'GET', path: '/_redevplugin/api/plugins/release-install-operations', payload: null },
+      { method: 'POST', path: '/_redevplugin/api/plugins/runtime/recover-enabled', payload: {} },
+      { method: 'POST', path: '/_redevplugin/api/plugins/executions/query', payload: { limit: 100 } },
       { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query', payload: {} },
       {
         method: 'POST',
-        path: '/_redevplugin/api/plugins/release-install-operations',
+        path: '/_redevplugin/api/plugins/executions/release-installs',
         payload: {
           request_id: ':requestID',
           plugin_instance_id: builtPluginInstanceID,
@@ -861,40 +888,16 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
         },
       },
       {
-        method: 'GET',
-        path: '/_redevplugin/api/plugins/release-install-operations/release_install_built_renderer',
-        payload: null,
+        method: 'POST',
+        path: '/_redevplugin/api/plugins/executions/release_install_built_renderer/events/query',
+        payload: { after_cursor: 1 },
+      },
+      {
+        method: 'POST',
+        path: '/_redevplugin/api/plugins/executions/release_install_built_renderer/query',
+        payload: {},
       },
       { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query', payload: {} },
-      {
-        method: 'POST',
-        path: '/_redevplugin/api/plugins/permissions/requirements/query',
-        payload: { plugin_instance_id: builtPluginInstanceID },
-      },
-      {
-        method: 'POST',
-        path: '/_redevplugin/api/plugins/permissions/grant',
-        payload: {
-          plugin_instance_id: builtPluginInstanceID,
-          permission_id: 'containers.read',
-          expected_policy_revision: 1,
-          expected_management_revision: 1,
-          expected_revoke_epoch: 0,
-        },
-      },
-      { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query', payload: {} },
-      { method: 'POST', path: '/_redevplugin/api/plugins/permissions/query', payload: { active_only: true } },
-      { method: 'POST', path: '/_redevplugin/api/plugins/security-policies/query', payload: {} },
-      {
-        method: 'POST',
-        path: '/_redevplugin/api/plugins/permissions/requirements/query',
-        payload: { plugin_instance_id: builtPluginInstanceID },
-      },
-      {
-        method: 'GET',
-        path: '/_redevplugin/api/plugins/release-install-operations/by-request/:requestID',
-        payload: null,
-      },
     ];
     let requestCursor = 0;
     for (const requiredRequest of requiredPluginRequests) {
@@ -912,11 +915,14 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
       requestCursor = nextIndex + 1;
     }
     const exactlyOnceRequests = new Set([
-      'GET /_redevplugin/api/plugins/release-install-operations',
-      'POST /_redevplugin/api/plugins/release-install-operations',
-      'GET /_redevplugin/api/plugins/release-install-operations/release_install_built_renderer',
-      'POST /_redevplugin/api/plugins/permissions/grant',
-      'GET /_redevplugin/api/plugins/release-install-operations/by-request/:requestID',
+      'POST /_redevplugin/api/plugins/runtime/recover-enabled',
+      'POST /_redevplugin/api/plugins/executions/query',
+      'POST /_redevplugin/api/plugins/executions/release-installs',
+      'POST /_redevplugin/api/plugins/executions/release_install_built_renderer/events/query',
+      'POST /_redevplugin/api/plugins/executions/release_install_built_renderer/query',
+      'POST /_redevplugin/api/plugins/permissions/query',
+      'POST /_redevplugin/api/plugins/security-policies/query',
+      'POST /_redevplugin/api/plugins/permissions/requirements/query',
     ]);
     for (const requestIdentity of exactlyOnceRequests) {
       const count = normalizedPluginRequests.filter(
@@ -932,7 +938,7 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
       market_snapshot_loaded: true,
       installed_state: 'needs_attention_verified_after_permission_review',
       package_url: builtPluginPackageURL,
-      release_install_operation_called: true,
+      release_install_execution_called: true,
       request_count: pluginRequests.length,
     };
   } finally {
