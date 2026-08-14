@@ -591,7 +591,7 @@
               "ui",
               "workbench"
             ],
-            "summary": "Plugin UI embeds released ReDevPlugin sandbox surfaces in Redeven chrome.\nActivity opens Shell-root windows; Workbench opens `redeven.plugin` widgets. The\nActivity Bar Launcher provides stable categories, keyboard navigation, search,\nand exact inventory routing, while Plugin Center presents trust, lifecycle,\naccess, and launch state. External installs require explicit source review and\nHost install confirmation; fresh installs start disabled with zero grants. Updates require a\nside-effect-free, target-bound review and retain Host-managed state and grants\nwithout adding any. Redeven owns navigation, review, placement, and filters;\nReDevPlugin owns admission, sandbox and bridge lifecycle, confirmations, Events,\nand revocation. Failed exact-surface close remains retryable without wider\nauthority.",
+            "summary": "Plugin UI embeds released ReDevPlugin sandbox surfaces in Redeven chrome.\nActivity opens Shell-root windows; Workbench opens `redeven.plugin` widgets. The\nActivity Bar Launcher provides stable categories, keyboard navigation, search,\nand exact inventory routing, while Plugin Center presents trust, lifecycle,\naccess, and launch state. External installs require explicit source review and\nHost confirmation; fresh installs start disabled with zero grants. Updates require a\nside-effect-free, target-bound review and retain Host-managed state and grants\nwithout adding any. Redeven owns navigation, review, placement, and filters;\nReDevPlugin owns admission, sandbox and bridge lifecycle, confirmations, Events,\nand revocation. Failed exact-surface close remains retryable without wider\nauthority.",
             "section_count": 2
           },
           {
@@ -9509,8 +9509,8 @@
         "title": "Plugin surfaces",
         "type": "UI Contract"
       },
-      "body_length": 25628,
-      "summary": "Plugin UI embeds released ReDevPlugin sandbox surfaces in Redeven chrome.\nActivity opens Shell-root windows; Workbench opens `redeven.plugin` widgets. The\nActivity Bar Launcher provides stable categories, keyboard navigation, search,\nand exact inventory routing, while Plugin Center presents trust, lifecycle,\naccess, and launch state. External installs require explicit source review and\nHost install confirmation; fresh installs start disabled with zero grants. Updates require a\nside-effect-free, target-bound review and retain Host-managed state and grants\nwithout adding any. Redeven owns navigation, review, placement, and filters;\nReDevPlugin owns admission, sandbox and bridge lifecycle, confirmations, Events,\nand revocation. Failed exact-surface close remains retryable without wider\nauthority.",
+      "body_length": 25620,
+      "summary": "Plugin UI embeds released ReDevPlugin sandbox surfaces in Redeven chrome.\nActivity opens Shell-root windows; Workbench opens `redeven.plugin` widgets. The\nActivity Bar Launcher provides stable categories, keyboard navigation, search,\nand exact inventory routing, while Plugin Center presents trust, lifecycle,\naccess, and launch state. External installs require explicit source review and\nHost confirmation; fresh installs start disabled with zero grants. Updates require a\nside-effect-free, target-bound review and retain Host-managed state and grants\nwithout adding any. Redeven owns navigation, review, placement, and filters;\nReDevPlugin owns admission, sandbox and bridge lifecycle, confirmations, Events,\nand revocation. Failed exact-surface close remains retryable without wider\nauthority.",
       "sections": [
         {
           "id": "contract",
@@ -10251,5 +10251,5 @@
       ]
     }
   ],
-  "source_sha256": "842ab1403cf667c429048ebfb9ba995153f0e4c5d28ad1fc8b5ca7926cf6ae03"
+  "source_sha256": "e066f678d4ccfa28186896516d62017122d191c62e8f96538a7b6abed1bee5c7"
 }
