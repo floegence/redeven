@@ -212,8 +212,9 @@ The built renderer smoke requires the Plugins Activity entry, opens Plugin
 Center, consumes the frozen market projection, and submits the exact signed
 release-ref install command without opening an external package URL flow. It
 still verifies zero implicit grants, canonical ReDevPlugin envelopes,
-content-hashed JS/CSS/WASM, non-blank root output, and zero console, page,
-request, or HTTP failures. Offline projection keeps installed plugins visible
+content-hashed JS/CSS, absence of the removed browser terminal WASM artifact,
+non-blank root output, and zero console, page, request, or HTTP failures.
+Offline projection keeps installed plugins visible
 and reports one retryable catalog-unavailable state.
 
 Browser-facing reads use the released POST query contract and retain exact

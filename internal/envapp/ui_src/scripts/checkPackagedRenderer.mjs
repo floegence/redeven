@@ -18,7 +18,7 @@ const terminalAgentIconManifestPath = path.join(repoRoot, 'assets/terminal_agent
 const entryPath = '/_redeven_proxy/env/';
 const assetPrefix = `${entryPath}assets/`;
 const pluginMarketCatalogPath = '/_redeven_proxy/api/plugins/market/catalog';
-const hashedAssetPattern = /-[A-Za-z0-9_-]{8,}\.(?:css|js|wasm)$/;
+const hashedAssetPattern = /-[A-Za-z0-9_-]{8,}\.(?:css|js)$/;
 const builtPluginPackageHashes = Object.freeze({
   package_sha256: 'sha256:4dde36627e17753c4cf145f3baebd0223c9219a471be75d1c25d8e858f609f69',
   manifest_sha256: 'sha256:fe038b3c44bf44b8dcfd7c6e94ffe80ccee15daf258e0a11518e307ebf9e2312',
@@ -128,7 +128,6 @@ function contentType(filePath) {
     case '.json': return 'application/json; charset=utf-8';
     case '.png': return 'image/png';
     case '.svg': return 'image/svg+xml';
-    case '.wasm': return 'application/wasm';
     case '.woff': return 'font/woff';
     case '.woff2': return 'font/woff2';
     default: return 'application/octet-stream';
@@ -955,9 +954,10 @@ async function main() {
     }
   }
 
-  const wasmFile = (await readdir(path.join(distDir, 'assets'))).find((entry) => entry.endsWith('.wasm'));
-  if (!wasmFile || !hashedAssetPattern.test(wasmFile)) {
-    throw new Error('built Env App dist does not contain a content-hashed WASM renderer');
+  const distAssetFiles = await readdir(path.join(distDir, 'assets'));
+  const removedBrowserTerminalAssets = distAssetFiles.filter((entry) => entry.endsWith('.wasm'));
+  if (removedBrowserTerminalAssets.length > 0) {
+    throw new Error(`built Env App dist contains removed browser terminal WASM assets: ${removedBrowserTerminalAssets.join(', ')}`);
   }
   const expectedTerminalAgentIconFiles = await readExpectedTerminalAgentIconFiles();
   const terminalAgentIconFiles = (await readdir(path.join(distDir, 'agent-cli-icons')))
@@ -1064,16 +1064,6 @@ async function main() {
     ].join(',')).count();
     if (overlayCount !== 0) throw new Error(`framework error overlay count = ${overlayCount}`);
 
-    const wasmResult = await page.evaluate(async (wasmURL) => {
-      const response = await fetch(wasmURL);
-      const bytes = await response.arrayBuffer();
-      await WebAssembly.compile(bytes);
-      return { status: response.status, byteLength: bytes.byteLength };
-    }, new URL(`${assetPrefix.slice(1)}${wasmFile}`, server.baseURL).toString());
-    if (wasmResult.status !== 200 || wasmResult.byteLength === 0) {
-      throw new Error(`WASM renderer load failed: ${JSON.stringify(wasmResult)}`);
-    }
-
     const terminalAgentIconResults = await page.evaluate(async ({ iconFiles, iconPrefix }) => Promise.all(
       iconFiles.map(async (file) => {
         const response = await fetch(`${iconPrefix}${file}`);
@@ -1111,7 +1101,6 @@ async function main() {
     const loadedKinds = {
       css: Array.from(loadedAssets.keys()).filter((value) => value.endsWith('.css')),
       js: Array.from(loadedAssets.keys()).filter((value) => value.endsWith('.js')),
-      wasm: Array.from(loadedAssets.keys()).filter((value) => value.endsWith('.wasm')),
     };
     for (const [kind, assets] of Object.entries(loadedKinds)) {
       if (assets.length === 0) throw new Error(`no built-dist ${kind.toUpperCase()} asset completed successfully`);
@@ -1157,8 +1146,6 @@ async function main() {
       assets: {
         css: loadedKinds.css.map((value) => path.basename(value)),
         js: loadedKinds.js.map((value) => path.basename(value)),
-        wasm: loadedKinds.wasm.map((value) => path.basename(value)),
-        wasm_bytes: wasmResult.byteLength,
         terminal_agent_icons: {
           count: terminalAgentIconResults.length,
           files: terminalAgentIconResults.map((result) => result.file),

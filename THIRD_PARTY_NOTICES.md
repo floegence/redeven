@@ -1121,7 +1121,6 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | vfile | 6.0.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/vfile/v/6.0.3 |  |
 | vite-plugin-solid | 2.11.11 | MIT | Desktop shell | https://www.npmjs.com/package/vite-plugin-solid/v/2.11.11 |  |
 | vite-plugin-solid | 2.11.12 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/vite-plugin-solid/v/2.11.12 |  |
-| vite-plugin-wasm | 3.6.0 | MIT | Env App UI | https://www.npmjs.com/package/vite-plugin-wasm/v/3.6.0 |  |
 | vite | 7.3.5 | MIT | Code App UI | https://www.npmjs.com/package/vite/v/7.3.5 |  |
 | vite | 8.0.16 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/vite/v/8.0.16 |  |
 | vitefu | 1.1.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/vitefu/v/1.1.3 |  |

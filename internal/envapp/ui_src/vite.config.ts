@@ -1,7 +1,6 @@
 import path from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig, type Plugin } from 'vite';
-import wasm from 'vite-plugin-wasm';
 import solid from 'vite-plugin-solid';
 
 import { REDEVEN_ENV_APP_BASE_PATH } from './src/build/envAppBasePath';
@@ -36,7 +35,7 @@ function chunkModuleManifest(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [wasm(), solid(), tailwindcss(), chunkModuleManifest()],
+  plugins: [solid(), tailwindcss(), chunkModuleManifest()],
   resolve: {
     alias: [
       { find: /^@floegence\/floe-webapp-core\/(icons|layout|loading|ui)$/, replacement: path.resolve(__dirname, 'node_modules/@floegence/floe-webapp-core/dist/$1.js') },
