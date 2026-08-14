@@ -355,20 +355,23 @@ async function prepareSourceRuntimeUploadAsset(args: Readonly<{
       || new Date().toISOString().replace(/\.\d{3}Z$/u, 'Z');
     const commit = await readSourceRuntimeCommit(sourceRoot, args.signal);
     await buildSourceRuntimeAssets(buildSourceRoot, args.signal);
-    await runLocalCommand('go', [
+    const goBuildArgs = [
       'build',
+      '-tags',
+      'floeterm_native',
       '-trimpath',
       '-ldflags',
       `-s -w -X main.Version=${args.runtimeReleaseTag} -X main.Commit=${commit} -X main.BuildTime=${buildTime}`,
       '-o',
       binaryPath,
       `./cmd/${commandName}`,
-    ], {
+    ];
+    await runLocalCommand('go', goBuildArgs, {
       cwd: buildSourceRoot,
       env: {
         GOOS: args.platform.goos,
         GOARCH: args.platform.goarch,
-        CGO_ENABLED: '0',
+        CGO_ENABLED: '1',
       },
       signal: args.signal,
     });

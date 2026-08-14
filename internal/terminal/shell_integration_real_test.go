@@ -16,12 +16,6 @@ import (
 	termgo "github.com/floegence/floeterm/terminal-go"
 )
 
-const (
-	shellLifecycleReadyMarker = "\x1b]633;A\x07"
-	shellLifecycleStartMarker = "\x1b]633;B\x07"
-	shellLifecycleCwdPrefix   = "\x1b]633;P;Cwd="
-)
-
 func TestRealBashIntegrationPreservesDelimitedPromptCommand(t *testing.T) {
 	shellPath := "/bin/bash"
 	if _, err := os.Stat(shellPath); err != nil {
@@ -38,7 +32,7 @@ func TestRealBashIntegrationPreservesDelimitedPromptCommand(t *testing.T) {
 	}
 	t.Setenv("HOME", homeDir)
 
-	manager := newShellLifecycleTestManager(t, t.TempDir(), shellPath)
+	manager, recorder := newShellLifecycleTestManagerWithRecorder(t, t.TempDir(), shellPath)
 	t.Cleanup(manager.Cleanup)
 	session, err := manager.createSession("test", "")
 	if err != nil {
@@ -48,6 +42,7 @@ func TestRealBashIntegrationPreservesDelimitedPromptCommand(t *testing.T) {
 
 	time.Sleep(250 * time.Millisecond)
 	startSeq := nextHistorySequence(t, session)
+	startRevision := session.ToSessionInfo().ForegroundCommand.Revision
 	if err := session.WriteData("printf '__REDEVEN_PROMPT_COMMAND_OK__\\n'\n"); err != nil {
 		t.Fatalf("WriteData(prompt command probe) error = %v", err)
 	}
@@ -57,20 +52,13 @@ func TestRealBashIntegrationPreservesDelimitedPromptCommand(t *testing.T) {
 		session,
 		startSeq,
 		5*time.Second,
-		shellLifecycleStartMarker,
 		"__REDEVEN_PROMPT_COMMAND_OK__",
-		"\x1b]633;D;0\x07",
-		shellLifecycleReadyMarker,
 	)
+	waitForForegroundCommandAfterRevision(t, recorder, 5*time.Second, session.ID, startRevision, termgo.ForegroundCommandIdle, "")
 	if strings.Contains(output, "syntax error near unexpected token") {
 		t.Fatalf("Bash integration corrupted the user's PROMPT_COMMAND: %q", output)
 	}
-	assertContainsInOrder(t, output, []string{
-		shellLifecycleStartMarker,
-		"__REDEVEN_PROMPT_COMMAND_OK__",
-		"\x1b]633;D;0\x07",
-		shellLifecycleReadyMarker,
-	})
+	assertSemanticOutputOmitsControlSequences(t, output)
 }
 
 func TestRealBashIntegrationRunsUserPromptCommandOncePerPrompt(t *testing.T) {
@@ -90,7 +78,7 @@ func TestRealBashIntegrationRunsUserPromptCommandOncePerPrompt(t *testing.T) {
 	}
 	t.Setenv("HOME", homeDir)
 
-	manager := newShellLifecycleTestManager(t, t.TempDir(), shellPath)
+	manager, recorder := newShellLifecycleTestManagerWithRecorder(t, t.TempDir(), shellPath)
 	t.Cleanup(manager.Cleanup)
 	session, err := manager.createSession("test", "")
 	if err != nil {
@@ -100,7 +88,10 @@ func TestRealBashIntegrationRunsUserPromptCommandOncePerPrompt(t *testing.T) {
 	time.Sleep(250 * time.Millisecond)
 
 	for cycle := 1; cycle <= 2; cycle++ {
+		beforeOutput := historyTextFromSequence(t, session, 1)
+		beforeCount := strings.Count(beforeOutput, userPromptMarker)
 		startSeq := nextHistorySequence(t, session)
+		startRevision := session.ToSessionInfo().ForegroundCommand.Revision
 		if err := session.WriteData(":\n"); err != nil {
 			t.Fatalf("WriteData(prompt cycle %d) error = %v", cycle, err)
 		}
@@ -109,24 +100,19 @@ func TestRealBashIntegrationRunsUserPromptCommandOncePerPrompt(t *testing.T) {
 			session,
 			startSeq,
 			5*time.Second,
-			shellLifecycleStartMarker,
 			userPromptMarker,
-			"\x1b]633;D;0\x07",
-			shellLifecycleReadyMarker,
 		)
-		if count := strings.Count(output, userPromptMarker); count != 1 {
-			t.Fatalf("prompt cycle %d user PROMPT_COMMAND executions = %d, want 1; output=%q", cycle, count, output)
+		waitForForegroundCommandAfterRevision(t, recorder, 5*time.Second, session.ID, startRevision, termgo.ForegroundCommandIdle, "")
+		time.Sleep(100 * time.Millisecond)
+		output = historyTextFromSequence(t, session, startSeq)
+		if count := strings.Count(output, userPromptMarker); count != beforeCount+1 {
+			t.Fatalf("prompt cycle %d user PROMPT_COMMAND count = %d, want %d; output=%q", cycle, count, beforeCount+1, output)
 		}
-		assertContainsInOrder(t, output, []string{
-			shellLifecycleStartMarker,
-			userPromptMarker,
-			"\x1b]633;D;0\x07",
-			shellLifecycleReadyMarker,
-		})
+		assertSemanticOutputOmitsControlSequences(t, output)
 	}
 }
 
-func TestRealShellIntegrationEmitsLifecycleMarkersForBashAndZsh(t *testing.T) {
+func TestRealShellIntegrationAppliesLifecycleWithoutExposingControlBytes(t *testing.T) {
 	for _, shellPath := range []string{"/bin/bash", "/bin/zsh"} {
 		shellPath := shellPath
 		t.Run(filepath.Base(shellPath), func(t *testing.T) {
@@ -137,7 +123,7 @@ func TestRealShellIntegrationEmitsLifecycleMarkersForBashAndZsh(t *testing.T) {
 			t.Setenv("HOME", newIsolatedShellHome(t))
 
 			root := t.TempDir()
-			manager := newShellLifecycleTestManager(t, root, shellPath)
+			manager, recorder := newShellLifecycleTestManagerWithRecorder(t, root, shellPath)
 			t.Cleanup(func() {
 				manager.Cleanup()
 			})
@@ -151,6 +137,7 @@ func TestRealShellIntegrationEmitsLifecycleMarkersForBashAndZsh(t *testing.T) {
 			time.Sleep(250 * time.Millisecond)
 
 			successStartSeq := nextHistorySequence(t, session)
+			successStartRevision := session.ToSessionInfo().ForegroundCommand.Revision
 			if err := session.WriteData("printf '__REDEVEN_OK__\\n'\n"); err != nil {
 				t.Fatalf("WriteData(success) error = %v", err)
 			}
@@ -160,36 +147,22 @@ func TestRealShellIntegrationEmitsLifecycleMarkersForBashAndZsh(t *testing.T) {
 				session,
 				successStartSeq,
 				5*time.Second,
-				shellLifecycleStartMarker,
-				"\x1b]633;D;0\x07",
-				shellLifecycleReadyMarker,
 				"__REDEVEN_OK__",
 			)
-			assertContainsInOrder(t, successOutput, []string{
-				shellLifecycleStartMarker,
-				"\x1b]633;D;0\x07",
-				shellLifecycleReadyMarker,
-			})
+			waitForForegroundCommandAfterRevision(t, recorder, 5*time.Second, session.ID, successStartRevision, termgo.ForegroundCommandRunning, "printf")
+			waitForForegroundCommandAfterRevision(t, recorder, 5*time.Second, session.ID, successStartRevision, termgo.ForegroundCommandIdle, "")
+			assertSemanticOutputOmitsControlSequences(t, successOutput)
 
 			failureStartSeq := nextHistorySequence(t, session)
+			failureStartRevision := session.ToSessionInfo().ForegroundCommand.Revision
 			if err := session.WriteData("false\n"); err != nil {
 				t.Fatalf("WriteData(false) error = %v", err)
 			}
 
-			failureOutput := waitForHistoryContains(
-				t,
-				session,
-				failureStartSeq,
-				5*time.Second,
-				shellLifecycleStartMarker,
-				"\x1b]633;D;1\x07",
-				shellLifecycleReadyMarker,
-			)
-			assertContainsInOrder(t, failureOutput, []string{
-				shellLifecycleStartMarker,
-				"\x1b]633;D;1\x07",
-				shellLifecycleReadyMarker,
-			})
+			waitForForegroundCommandAfterRevision(t, recorder, 5*time.Second, session.ID, failureStartRevision, termgo.ForegroundCommandRunning, "false")
+			waitForForegroundCommandAfterRevision(t, recorder, 5*time.Second, session.ID, failureStartRevision, termgo.ForegroundCommandIdle, "")
+			failureOutput := waitForHistoryContains(t, session, failureStartSeq, 5*time.Second)
+			assertSemanticOutputOmitsControlSequences(t, failureOutput)
 		})
 	}
 }
@@ -285,6 +258,7 @@ func TestRealShellIntegrationEmitsCwdMarkersAndNameUpdatesForBashAndZsh(t *testi
 			time.Sleep(250 * time.Millisecond)
 
 			startSeq := nextHistorySequence(t, session)
+			startRevision := session.ToSessionInfo().ForegroundCommand.Revision
 			command := "cd " + shellSingleQuote(expectedChildDir) + " && printf '__REDEVEN_CD__\\n'\n"
 			if err := session.WriteData(command); err != nil {
 				t.Fatalf("WriteData(cd) error = %v", err)
@@ -295,18 +269,10 @@ func TestRealShellIntegrationEmitsCwdMarkersAndNameUpdatesForBashAndZsh(t *testi
 				session,
 				startSeq,
 				5*time.Second,
-				shellLifecycleStartMarker,
 				"__REDEVEN_CD__",
-				"\x1b]633;D;0\x07",
-				shellLifecycleCwdPrefix+expectedChildDir+"\x07",
-				shellLifecycleReadyMarker,
 			)
-			assertContainsInOrder(t, output, []string{
-				shellLifecycleStartMarker,
-				"\x1b]633;D;0\x07",
-				shellLifecycleCwdPrefix + expectedChildDir + "\x07",
-				shellLifecycleReadyMarker,
-			})
+			waitForForegroundCommandAfterRevision(t, recorder, 5*time.Second, session.ID, startRevision, termgo.ForegroundCommandIdle, "")
+			assertSemanticOutputOmitsControlSequences(t, output)
 			waitForNameUpdate(t, recorder, 5*time.Second, session.ID, filepath.Base(expectedChildDir), expectedChildDir)
 		})
 	}
@@ -447,16 +413,10 @@ func containsAll(output string, needles ...string) bool {
 	return true
 }
 
-func assertContainsInOrder(t *testing.T, output string, needles []string) {
+func assertSemanticOutputOmitsControlSequences(t *testing.T, output string) {
 	t.Helper()
-
-	searchFrom := 0
-	for _, needle := range needles {
-		index := strings.Index(output[searchFrom:], needle)
-		if index < 0 {
-			t.Fatalf("expected output to contain %q after offset %d; output=%q", needle, searchFrom, output)
-		}
-		searchFrom += index + len(needle)
+	if strings.Contains(output, "\x1b]") || strings.Contains(output, "\x1b[") {
+		t.Fatalf("semantic frame exposed terminal control bytes: %q", output)
 	}
 }
 
@@ -526,12 +486,26 @@ func waitForForegroundCommand(
 	displayName string,
 ) {
 	t.Helper()
+	waitForForegroundCommandAfterRevision(t, recorder, timeout, sessionID, 0, phase, displayName)
+}
+
+func waitForForegroundCommandAfterRevision(
+	t *testing.T,
+	recorder *shellEventRecorder,
+	timeout time.Duration,
+	sessionID string,
+	minimumRevision uint64,
+	phase termgo.ForegroundCommandPhase,
+	displayName string,
+) {
+	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		recorder.mu.Lock()
 		matched := false
 		for _, update := range recorder.commandUpdates {
-			if update.ID == sessionID && update.ForegroundCommand.Phase == phase && update.ForegroundCommand.DisplayName == displayName {
+			if update.ID == sessionID && update.ForegroundCommand.Revision > minimumRevision &&
+				update.ForegroundCommand.Phase == phase && update.ForegroundCommand.DisplayName == displayName {
 				matched = true
 				break
 			}
@@ -542,7 +516,7 @@ func waitForForegroundCommand(
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatalf("timeout waiting for foreground command session=%q phase=%q displayName=%q", sessionID, phase, displayName)
+	t.Fatalf("timeout waiting for foreground command session=%q revision>%d phase=%q displayName=%q", sessionID, minimumRevision, phase, displayName)
 }
 
 func waitForNameUpdate(t *testing.T, recorder *shellEventRecorder, timeout time.Duration, sessionID string, newName string, workingDir string) {

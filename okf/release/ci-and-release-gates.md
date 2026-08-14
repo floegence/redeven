@@ -53,6 +53,16 @@ sources and requires the local gate runtime to report the exact version. Build,
 test, Desktop, and release paths therefore cannot silently select an older Go
 patch release.
 
+Shipped Redeven Runtime binaries use cgo plus the `floeterm_native` tag so the
+published terminal-go Ghostty engine is present. The release matrix builds
+Linux amd64/arm64 and Darwin amd64/arm64 on matching native runners and never
+cross-builds a Darwin Runtime from Linux. The exact-main gate runs the full Go
+suite and golangci-lint with that tag, then separately proves that an untagged
+terminal live attachment fails closed rather than acting as a product fallback.
+A source-only contract test guards release, Desktop bundle, SSH source-build,
+and semantic carrier commands against reverting to `CGO_ENABLED=0` or omitting
+the native tag.
+
 The exact-main UI and renderer steps invoke the canonical headless browser and
 terminal carrier gates without a display server. Explicit headed runs are
 manual diagnostics and cannot replace exact-main evidence. Browser-mode and

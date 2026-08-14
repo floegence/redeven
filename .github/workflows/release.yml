@@ -52,10 +52,10 @@ jobs:
             runner: ubuntu-24.04-arm
           - goos: darwin
             goarch: amd64
-            runner: ubuntu-24.04
+            runner: macos-15-intel
           - goos: darwin
             goarch: arm64
-            runner: ubuntu-24.04
+            runner: macos-15
 
     steps:
       - name: Checkout
@@ -98,7 +98,7 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: 0
+          CGO_ENABLED: 1
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME}"
@@ -107,11 +107,13 @@ jobs:
 
           mkdir -p dist
           go build \
+            -tags floeterm_native \
             -trimpath \
             -ldflags "-s -w -X main.Version=${VERSION} -X main.Commit=${COMMIT} -X main.BuildTime=${BUILD_TIME}" \
             -o dist/redeven \
             ./cmd/redeven
           go build \
+            -tags floeterm_native \
             -trimpath \
             -ldflags "-s -w -X main.Version=${VERSION} -X main.Commit=${COMMIT} -X main.BuildTime=${BUILD_TIME}" \
             -o dist/redeven-gateway \

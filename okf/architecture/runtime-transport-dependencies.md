@@ -32,6 +32,14 @@ fall back to another transport.
 
 The released runtime dependency set includes Floeterm terminal-go v0.10.3 and Flowersec Go v2.3.10.
 
+Every shipped Redeven Runtime enables terminal-go's `floeterm_native` build tag
+with cgo. The published module carries the target-specific Ghostty static
+archive, generated adapter, public headers, and provenance for Darwin and Linux
+on amd64 and arm64. Release builds run on a matching native runner for each
+target; Desktop source builds and the exact-main semantic carrier use the same
+native build contract. Terminal-go's no-tag engine is retained only as a
+fail-closed boundary test and is never a shippable Runtime fallback.
+
 Redeven pins released `flowersec-go` and `terminal-go` versions in `go.mod`. The runtime consumes Flowersec Go v2.3.10 and the browser surfaces consume Flowersec Core v2.3.10 through published packages only. The agent owns connection and retry lifecycle through Flowersec's `ConnectionController` and `Connect` APIs, while Env App tunnel reconnects select the matching TypeScript policy. Local UI direct reconnects first resolve the hostname with `resolveLocalTransportSecurityPolicy` and permit plaintext only for canonical loopback authorities; non-loopback direct admission fails closed. When the public page uses plaintext `localhost`, Redeven maps its already validated listener identity to the actual same-port loopback IP authority before issuing the direct artifact, and uses that one authority for both the Flowersec candidate and upstream address. This is a product adapter to Flowersec v2.3.10's published IP-literal plaintext contract, not an alternate URL validator or a relaxation of that contract. The Docker Local UI integration client applies the same selection so its two-container network test proves the host-scoped admission boundary rather than unrestricted plaintext. Product code therefore does not depend on a permissive library default and cannot silently accept unrelated remote `ws://` transport.
 
 Flowersec proxy requests use the validated browser source and origin context; payload-provided external origins are ignored, and opaque origins do not become forwarded request metadata. The Go HTTP proxy returns the first 3xx response with its original `Location` instead of following redirects. Browser Service Worker streams use one outstanding `chunk_credit_v1` credit per pull when both sides advertise the capability, while legacy workers retain their previous behavior; cancellation wakes waiting consumers. The optional Yamux stream write queue budget defaults to 4 MiB and is released after each write so an exhausted stream can recover. Reconnect paths share the active promise for the same configuration, including during backoff, preventing duplicate connection attempts without adding a global scheduler.
