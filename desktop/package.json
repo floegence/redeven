@@ -21,7 +21,7 @@
     "node": ">=24.0.0"
   },
   "overrides": {
-    "@floegence/flowersec-core": "2.3.9",
+    "@floegence/flowersec-core": "2.3.10",
     "@babel/core": "^7.29.7",
     "@electron/asar": "^4.2.1",
     "@electron/universal": "^3.0.6",
@@ -47,7 +47,7 @@
       "esbuild"
     ],
     "overrides": {
-      "@floegence/flowersec-core": "2.3.9",
+      "@floegence/flowersec-core": "2.3.10",
       "@babel/core": "^7.29.7",
       "@electron/asar": "^4.2.1",
       "@electron/universal": "^3.0.6",
@@ -93,9 +93,9 @@
     "vitest": "^4.1.8"
   },
   "dependencies": {
-    "@floegence/floe-webapp-boot": "0.40.17",
-    "@floegence/floe-webapp-core": "0.40.17",
-    "@floegence/flowersec-core": "2.3.9",
+    "@floegence/floe-webapp-boot": "0.40.18",
+    "@floegence/floe-webapp-core": "0.40.18",
+    "@floegence/flowersec-core": "2.3.10",
     "qrcode-generator": "^2.0.4"
   }
 }

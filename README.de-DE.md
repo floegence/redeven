@@ -120,7 +120,7 @@ Redeven stellt Funktionen in den Vordergrund. Die Laufzeit bleibt dennoch die Ve
 
 - Die Laufzeit läuft auf dem Endpunkt und hält Klartextdaten dort.
 - Die Steuerungsebene stellt Bootstrap-Nutzdaten, Freigaben und unveränderliche Sitzungsmetadaten aus.
-- [Flowersec](https://github.com/floegence/flowersec) überträgt verschlüsselte Bytes zwischen Client und Endpunkt-Laufzeit. Die Browser-Integration nutzt die veröffentlichte API 2.3.9 und das Go-Modul `flowersec-go/v2@v2.3.9`.
+- [Flowersec](https://github.com/floegence/flowersec) überträgt verschlüsselte Bytes zwischen Client und Endpunkt-Laufzeit. Die Browser-Integration nutzt die veröffentlichte API 2.3.10 und das Go-Modul `flowersec-go/v2@v2.3.10`.
 - Wirksame Berechtigungen stammen aus serverseitig ausgestellten Sitzungsfreigaben und werden durch die lokale Berechtigungsrichtlinie begrenzt (`read`, `write`, `execute`, `admin`; keine Kategorie schließt eine andere ein).
 - Lokale Konfiguration, E2EE-Material, Audit-Logs und Diagnosedaten verbleiben im Zustandsverzeichnis des Endpunkts.
 - GitHub Releases bleiben die öffentliche Referenz für Binärdateien, Prüfsummen, Signaturen und OKF-Verifikationsdateien.
