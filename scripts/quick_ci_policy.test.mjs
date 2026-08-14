@@ -145,7 +145,10 @@ test("quick gate cannot hide work after a logging command", () => {
 });
 
 test("exact-main pre-push owns complete UI and browser coverage", () => {
-  assert.match(finalGate, /run_step "testing complete UI packages" \.\/scripts\/check_ui_tests\.sh/);
+  const buildAssetsOffset = finalGate.indexOf('run_step "building embedded assets" ./scripts/build_assets.sh');
+  const uiGateOffset = finalGate.indexOf('run_step "testing complete UI packages" ./scripts/check_ui_tests.sh');
+  assert.ok(buildAssetsOffset > 0, "exact-main must build embedded assets");
+  assert.ok(uiGateOffset > buildAssetsOffset, "exact-main must build current assets before the browser carrier");
   assert.match(finalGate, /run_step "checking Flower UI" \.\/scripts\/check_flower_ui\.sh --skip-browser/);
   assert.match(uiGate, /^\s*ui_pkg_run_pnpm test$/m);
   assert.match(uiGate, /^\s*ui_pkg_run_pnpm run test:browser$/m);

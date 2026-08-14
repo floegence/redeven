@@ -67,6 +67,9 @@ The exact-main UI and renderer steps invoke the canonical headless browser and
 terminal carrier gates without a display server. Explicit headed runs are
 manual diagnostics and cannot replace exact-main evidence. Browser-mode and
 runner-evidence semantics are owned by [Env App upstream web dependencies](../architecture/env-app-upstream-web-dependencies.md).
+The gate builds the embedded UI assets from the exact main source before those
+browser steps; an ignored or previously generated `internal/envapp/ui/dist`
+tree is never accepted as carrier input.
 
 The Desktop gate protects real Electron preload coverage from local process
 collisions. Every preload run uses a temporary real working directory and
