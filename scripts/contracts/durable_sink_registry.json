@@ -1663,7 +1663,7 @@
     },
     {
       "path": "internal/envapp/ui_src/src/ui/EnvAppShell.tsx",
-      "sha256": "80d3bfd34d287831c41d901e9c9a24e5bf45504c29627477065e0a19b9e925ea",
+      "sha256": "3954adad4fe81bd579b87cec20f345f8574e3cdd99fff4da26959e01f5777b7d",
       "sink_kinds": [
         "web_storage"
       ],
@@ -1728,7 +1728,7 @@
     },
     {
       "path": "internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx",
-      "sha256": "11181181782b420afc48d73576f2548102896f87598e5bc98f28cc17c9228301",
+      "sha256": "3d732c3861caa01756feb718b50fccd251eeda45fddcdd0f7530e4149687878a",
       "sink_kinds": [
         "web_storage"
       ],
