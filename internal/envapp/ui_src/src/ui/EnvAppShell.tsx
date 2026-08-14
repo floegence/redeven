@@ -549,7 +549,6 @@ export function EnvAppShell() {
   // activates the credential staged for that channel.
   const [pluginSessionReady, setPluginSessionReady] = createSignal(false);
   const [pluginRuntimeRecoveryComplete, setPluginRuntimeRecoveryComplete] = createSignal(false);
-  const [pluginRuntimeRecoveryState, setPluginRuntimeRecoveryState] = createSignal<'recovering' | 'failed' | 'ready'>('recovering');
   const [pluginRuntimeRecoveryByInstanceID, setPluginRuntimeRecoveryByInstanceID] = createSignal<Record<string, import('./plugins/pluginTypes').PluginRuntimeRecoveryPresentation>>({});
   const retiredPluginManagementRevisionByInstanceID = new Map<string, number>();
   const retirePluginManagementRevision = (pluginInstanceID: string, revision: number) => {
@@ -1240,13 +1239,11 @@ export function EnvAppShell() {
       pluginRuntimeRecoveryAbort = undefined;
       setPluginRuntimeRecoveryComplete(false);
       setPluginRuntimeRecoveryByInstanceID({});
-      setPluginRuntimeRecoveryState('recovering');
       return;
     }
     if (!canAdmin()) {
       setPluginRuntimeRecoveryComplete(true);
       setPluginRuntimeRecoveryByInstanceID({});
-      setPluginRuntimeRecoveryState('ready');
       return;
     }
     if (pluginRuntimeRecoveryClient === connectedClient) return;
@@ -1256,7 +1253,6 @@ export function EnvAppShell() {
     pluginRuntimeRecoveryAbort = controller;
     setPluginRuntimeRecoveryComplete(false);
     setPluginRuntimeRecoveryByInstanceID({});
-    setPluginRuntimeRecoveryState('recovering');
     void pluginLifecycle.recoverEnabled({ signal: controller.signal }).then((result) => {
       if (controller.signal.aborted || pluginRuntimeRecoveryClient !== connectedClient) return;
       const failures = result.results.filter((entry) => entry.status === 'failed');
@@ -1274,19 +1270,15 @@ export function EnvAppShell() {
       setPluginRuntimeRecoveryByInstanceID(recoveryByInstanceID);
       setPluginRuntimeRecoveryComplete(true);
       if (failures.length > 0) {
-        setPluginRuntimeRecoveryState('failed');
         notify.error(
           i18n.t('uiCopy.plugin.needsAttention'),
           failures.map((entry) => `${entry.plugin_instance_id}: ${entry.reason ?? 'unknown'}`).join('\n'),
         );
-      } else {
-        setPluginRuntimeRecoveryState('ready');
       }
     }).catch((error: unknown) => {
       if (controller.signal.aborted || pluginRuntimeRecoveryClient !== connectedClient) return;
       setPluginRuntimeRecoveryComplete(true);
       setPluginRuntimeRecoveryByInstanceID({});
-      setPluginRuntimeRecoveryState('failed');
       notify.error(i18n.t('uiCopy.plugin.needsAttention'), getErrorMessage(error));
     });
   });
