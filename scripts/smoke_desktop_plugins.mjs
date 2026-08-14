@@ -47,32 +47,32 @@ export function assertAttachSmokeConfiguration(config) {
   }
 }
 
-export function assessPluginSmoke({ refresh, catalog, panelInstalledCount, surface, rpc }) {
-  const results = Array.isArray(refresh?.data?.results) ? refresh.data.results : [];
-  if (!refresh?.ok || results.some((result) => result?.status === 'failed')) {
-    return { ok: false, failure: 'refresh_failed', refresh };
+export function assessPluginSmoke({ recovery, catalog, panelInstalledCount, surface, rpc }) {
+  const results = Array.isArray(recovery?.data?.results) ? recovery.data.results : [];
+  if (!recovery?.ok || results.some((result) => result?.status === 'failed')) {
+    return { ok: false, failure: 'recovery_failed', recovery };
   }
   const plugins = Array.isArray(catalog?.plugins) ? catalog.plugins : [];
   const catalogEnabledCount = plugins.filter((plugin) => plugin?.enable_state === 'enabled').length;
   if (catalogEnabledCount === 0) {
-    return { ok: false, failure: 'enabled_plugin_missing', refresh, catalogEnabledCount };
+    return { ok: false, failure: 'enabled_plugin_missing', recovery, catalogEnabledCount };
   }
   if (catalogEnabledCount !== Number(panelInstalledCount)) {
     return {
       ok: false,
       failure: 'inventory_count_mismatch',
-      refresh,
+      recovery,
       catalogEnabledCount,
       panelInstalledCount: Number(panelInstalledCount),
     };
   }
   if (catalogEnabledCount > 0 && !surface?.ready) {
-    return { ok: false, failure: 'surface_not_ready', refresh, catalogEnabledCount, panelInstalledCount };
+    return { ok: false, failure: 'surface_not_ready', recovery, catalogEnabledCount, panelInstalledCount };
   }
   if (catalogEnabledCount > 0 && !rpc?.ok) {
-    return { ok: false, failure: 'rpc_failed', refresh, catalogEnabledCount, panelInstalledCount, surface, rpc };
+    return { ok: false, failure: 'rpc_failed', recovery, catalogEnabledCount, panelInstalledCount, surface, rpc };
   }
-  return { ok: true, refresh, catalogEnabledCount, panelInstalledCount, surface, rpc };
+  return { ok: true, recovery, catalogEnabledCount, panelInstalledCount, surface, rpc };
 }
 
 export function browserPages(browser) {
@@ -146,6 +146,10 @@ function enabledPlugins(catalog) {
     : [];
 }
 
+function installedPlugins(catalog) {
+  return Array.isArray(catalog?.plugins) ? catalog.plugins : [];
+}
+
 async function ensureInitialEnabledPlugin(page, sessionHeaders, config, pluginResponses) {
   const queryCatalog = async () => {
     const response = await requestPluginJSON(
@@ -187,9 +191,25 @@ async function ensureInitialEnabledPlugin(page, sessionHeaders, config, pluginRe
     const response = await queryCatalog();
     if (response.status !== 200) return null;
     const catalog = response.body?.data ?? response.body;
-    return enabledPlugins(catalog).length > 0 ? catalog : null;
+    return installedPlugins(catalog).length > 0 ? catalog : null;
   }, 120_000, 'official plugin installation');
-  return { performed: true, enabledCount: enabledPlugins(installed).length };
+  if (enabledPlugins(installed).length === 0) {
+    const enable = page.locator('[data-plugin-center-card-primary]').filter({ visible: true }).first();
+    await waitFor(async () => (
+      await enable.count() > 0
+      && await enable.isVisible()
+      && await enable.isEnabled()
+      && /^(?:Enable|启用)$/u.test((await enable.textContent() ?? '').trim())
+    ), 30_000, 'official plugin enable action');
+    await enable.click();
+  }
+  const enabled = await waitFor(async () => {
+    const response = await queryCatalog();
+    if (response.status !== 200) return null;
+    const catalog = response.body?.data ?? response.body;
+    return enabledPlugins(catalog).length > 0 ? catalog : null;
+  }, 120_000, 'official plugin activation');
+  return { performed: true, enabledCount: enabledPlugins(enabled).length };
 }
 
 async function runBrowserSmoke(config) {
@@ -448,12 +468,12 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
   mark('panel_ready_ms');
 
   phase = 'inventory';
-  const refreshResponse = await waitFor(async () => {
-    const response = await requestPluginJSON(page, '/_redevplugin/api/plugins/runtime/refresh-enabled', {}, sessionHeaders);
+  const recoveryResponse = await waitFor(async () => {
+    const response = await requestPluginJSON(page, '/_redevplugin/api/plugins/runtime/recover-enabled', {}, sessionHeaders);
     return response.status === 200 ? response : null;
-  }, 30_000, 'refresh-enabled response');
-  const refreshEntry = { method: 'POST', pathname: '/_redevplugin/api/plugins/runtime/refresh-enabled', ...refreshResponse };
-  pluginResponses.push(refreshEntry);
+  }, 30_000, 'recover-enabled response');
+  const recoveryEntry = { method: 'POST', pathname: '/_redevplugin/api/plugins/runtime/recover-enabled', ...recoveryResponse };
+  pluginResponses.push(recoveryEntry);
   const catalogResponse = await waitFor(async () => {
     const response = await requestPluginJSON(page, '/_redevplugin/api/plugins/catalog/query', {}, sessionHeaders);
     return response.status === 200 ? response : null;
@@ -466,13 +486,13 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     panelText: (await page.locator('[data-plugin-launcher-grid]').innerText().catch(() => '')).slice(0, 4000),
     inventoryDebug: await inventoryDebug(),
   });
-  const refresh = refreshEntry.body;
+  const recovery = recoveryEntry.body;
   const catalog = catalogEntry.body?.data ?? catalogEntry.body;
   const enabledCount = Array.isArray(catalog?.plugins)
     ? catalog.plugins.filter((plugin) => plugin?.enable_state === 'enabled').length
     : 0;
   await fs.writeFile(path.join(config.reportRoot, `${config.phase}-catalog-checkpoint.json`), JSON.stringify({
-    refresh,
+    recovery,
     catalog,
     enabledCount,
     panelTiles: await page.locator('[data-plugin-panel-tile]:not([data-plugin-panel-tile="plugin-center"])').count(),
@@ -488,7 +508,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     await page.screenshot({ path: path.join(config.reportRoot, `${config.phase}-projection-failure.png`), fullPage: true });
     await fs.writeFile(path.join(config.reportRoot, `${config.phase}-projection-failure.html`), await page.content());
     await fs.writeFile(path.join(config.reportRoot, `${config.phase}-projection-diagnostics.json`), JSON.stringify({
-      refresh,
+      recovery,
       catalog,
       enabledCount,
       panelTiles: await page.locator('[data-plugin-panel-tile]').count(),
@@ -508,7 +528,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
   let surface = { ready: false };
   let rpc = { ok: false };
   const inventoryAssessment = assessPluginSmoke({
-    refresh,
+    recovery,
     catalog,
     panelInstalledCount,
     surface: { ready: true },
@@ -577,7 +597,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     mark('surface_ready_ms');
   }
 
-  const assessment = assessPluginSmoke({ refresh, catalog, panelInstalledCount, surface, rpc });
+  const assessment = assessPluginSmoke({ recovery, catalog, panelInstalledCount, surface, rpc });
   const summary = {
     schema_version: 1,
     mode: config.mode ?? 'isolated',
@@ -601,7 +621,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     pids: config.pids,
     timings,
     bootstrap,
-    refresh,
+    recovery,
     catalog,
     panel: {
       installed_count: panelInstalledCount,
