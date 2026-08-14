@@ -126,12 +126,10 @@ function createMockPage(params: {
 function mockPDFDocument(params: {
   pages: Array<ReturnType<typeof createMockPage>>;
 }) {
-  const destroy = vi.fn(async () => {});
   const loadingDestroy = vi.fn();
   const document = {
     numPages: params.pages.length,
     getPage: vi.fn(async (pageNumber: number) => params.pages[pageNumber - 1]?.page),
-    destroy,
   };
 
   loadPDFDocumentMock.mockReturnValue({
@@ -141,7 +139,6 @@ function mockPDFDocument(params: {
 
   return {
     document,
-    destroy,
     loadingDestroy,
   };
 }
@@ -315,7 +312,7 @@ describe('PdfPreviewPane', () => {
     await waitFor(() => (host.querySelector('.pdf-preview-pane__page-canvas') as HTMLCanvasElement | null)?.className.includes('opacity-100') ?? false, 'Rendered page did not settle');
   });
 
-  it('cancels in-flight rendering and destroys the loaded document on unmount', async () => {
+  it('cancels in-flight rendering and destroys the loading task on unmount', async () => {
     let releaseRender = () => {};
     const renderPromise = new Promise<void>((resolve) => {
       releaseRender = () => {
@@ -324,7 +321,7 @@ describe('PdfPreviewPane', () => {
     });
 
     const page = createMockPage({ width: 860, height: 1260, renderPromise });
-    const { destroy, loadingDestroy } = mockPDFDocument({ pages: [page] });
+    const { loadingDestroy } = mockPDFDocument({ pages: [page] });
 
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -344,7 +341,6 @@ describe('PdfPreviewPane', () => {
     await flushAsyncWork();
 
     expect(page.cancel).toHaveBeenCalledTimes(1);
-    expect(loadingDestroy).toHaveBeenCalled();
-    expect(destroy).toHaveBeenCalled();
+    expect(loadingDestroy).toHaveBeenCalledTimes(1);
   });
 });

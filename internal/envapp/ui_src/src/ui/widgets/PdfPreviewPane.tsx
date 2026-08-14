@@ -342,14 +342,7 @@ export function PdfPreviewPane(props: PdfPreviewPaneProps) {
       }
     }
 
-    const document = activeDocument;
     activeDocument = null;
-    if (document) {
-      try {
-        void document.destroy();
-      } catch {
-      }
-    }
 
     setDocumentLoading(false);
     setPageMetrics([]);
@@ -530,10 +523,6 @@ export function PdfPreviewPane(props: PdfPreviewPaneProps) {
         activeLoadingTask = loadingTask;
         const document = await loadingTask.promise;
         if (disposed || activeLoadingTask !== loadingTask) {
-          try {
-            void document.destroy();
-          } catch {
-          }
           return;
         }
 
