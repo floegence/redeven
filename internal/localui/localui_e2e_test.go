@@ -266,22 +266,22 @@ func TestServer_E2E_DesktopBridgeConsecutiveSessionsKeepTerminalRPCHandlers(t *t
 		if strings.TrimSpace(created.Session.ID) == "" {
 			t.Fatalf("terminal create RPC on Desktop bridge session %d returned no session ID", attempt)
 		}
-		var history struct {
-			FirstRetainedSequence  int64 `json:"first_retained_sequence"`
-			CoveredThroughSequence int64 `json:"covered_through_sequence"`
-			SnapshotEndSequence    int64 `json:"snapshot_end_sequence"`
-			HistoryGeneration      int64 `json:"history_generation"`
+		response.Sessions = nil
+		if err := current.RPC().Call(ctx, terminal.TypeID_TERMINAL_SESSION_LIST, &struct{}{}, &response); err != nil {
+			t.Fatalf("terminal list RPC after create on Desktop bridge session %d error = %v", attempt, err)
 		}
-		if err := current.RPC().Call(ctx, terminal.TypeID_TERMINAL_HISTORY, map[string]any{
-			"session_id": created.Session.ID,
-			"start_seq":  1,
-			"end_seq":    -1,
-		}, &history); err != nil {
-			t.Fatalf("terminal history RPC on Desktop bridge session %d error = %v", attempt, err)
+		createdVisible := false
+		for _, encoded := range response.Sessions {
+			var listed struct {
+				ID string `json:"id"`
+			}
+			if err := json.Unmarshal(encoded, &listed); err != nil {
+				t.Fatalf("decode terminal list entry on Desktop bridge session %d error = %v", attempt, err)
+			}
+			createdVisible = createdVisible || listed.ID == created.Session.ID
 		}
-		if history.HistoryGeneration <= 0 || history.FirstRetainedSequence < 0 || history.CoveredThroughSequence < 0 ||
-			history.CoveredThroughSequence > history.SnapshotEndSequence {
-			t.Fatalf("terminal history contract on Desktop bridge session %d = %+v", attempt, history)
+		if !createdVisible {
+			t.Fatalf("terminal created on Desktop bridge session %d was not returned by the still-registered list handler", attempt)
 		}
 		_ = current.Close()
 		assertDirectStateEventuallyEmpty(t, s)

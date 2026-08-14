@@ -262,8 +262,9 @@ build_go_command() {
     cd "$ROOT_DIR"
     GOOS="$goos" \
     GOARCH="$goarch" \
-    CGO_ENABLED="${CGO_ENABLED:-0}" \
+    CGO_ENABLED=1 \
     go build \
+      -tags floeterm_native \
       -trimpath \
       -ldflags "-s -w -X main.Version=${version} -X main.Commit=${commit} -X main.BuildTime=${build_time}" \
       -o "$output_path" \
