@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -28,18 +29,62 @@ const (
 	containerStateRoot  = "/root/.redeven-e2e"
 	containerRedeven    = "/usr/local/bin/redeven"
 	containerPlugin     = "/usr/local/bin/redevplugin-runtime"
+	containerDescriptor = "/usr/local/bin/.redevplugin-release-artifacts-verified.json"
 	managedRedeven      = containerStateRoot + "/runtime/managed/bin/redeven"
 	managedPlugin       = containerStateRoot + "/runtime/managed/bin/redevplugin-runtime"
+	managedDescriptor   = containerStateRoot + "/runtime/managed/bin/.redevplugin-release-artifacts-verified.json"
 	managedRuntimeStamp = containerStateRoot + "/runtime/managed/managed-runtime.stamp"
 	stagedUpgrade       = "/tmp/redeven-upgraded"
 	runtimeLockPath     = containerStateRoot + "/local-environment/agent.lock"
 	containerHelper     = "/tmp/redeven-e2e-client"
 	pluginRuntimeEnv    = "REDEVEN_DOCKER_E2E_REDEVPLUGIN_RUNTIME"
+	pluginDescriptorEnv = "REDEVEN_DOCKER_E2E_REDEVPLUGIN_DESCRIPTOR"
 	targetVersion       = "v9.9.9-e2e"
 	desktopOwnerID      = "redeven-docker-e2e-desktop-owner"
 	networkTestPort     = "23998"
 	networkTestPassword = "redeven-network-e2e-password"
 )
+
+func TestResolvePluginRuntimeFixtureRequiresSiblingDescriptor(t *testing.T) {
+	tempRoot := t.TempDir()
+	runtimePath := filepath.Join(tempRoot, "redevplugin-runtime")
+	descriptorPath := filepath.Join(tempRoot, ".redevplugin-release-artifacts-verified.json")
+	if err := os.WriteFile(runtimePath, []byte("runtime"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(descriptorPath, []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	runtimeFixture, descriptorFixture, err := resolvePluginRuntimeFixture(runtimePath, descriptorPath)
+	if err != nil {
+		t.Fatalf("resolve fixture: %v", err)
+	}
+	if runtimeFixture != runtimePath || descriptorFixture != descriptorPath {
+		t.Fatalf("resolved fixture = (%q, %q), want (%q, %q)", runtimeFixture, descriptorFixture, runtimePath, descriptorPath)
+	}
+
+	outsideDescriptor := filepath.Join(t.TempDir(), filepath.Base(descriptorPath))
+	if err := os.WriteFile(outsideDescriptor, []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := resolvePluginRuntimeFixture(runtimePath, outsideDescriptor); err == nil || !strings.Contains(err.Error(), "same directory") {
+		t.Fatalf("descriptor directory error = %v, want same-directory rejection", err)
+	}
+
+	symlinkRoot := t.TempDir()
+	symlinkRuntime := filepath.Join(symlinkRoot, "redevplugin-runtime")
+	if err := os.WriteFile(symlinkRuntime, []byte("runtime"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	symlinkPath := filepath.Join(symlinkRoot, filepath.Base(descriptorPath))
+	if err := os.Symlink(descriptorPath, symlinkPath); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := resolvePluginRuntimeFixture(symlinkRuntime, symlinkPath); err == nil || !strings.Contains(err.Error(), "regular file") {
+		t.Fatalf("descriptor symlink error = %v, want regular-file rejection", err)
+	}
+}
 
 type commandResult struct {
 	Stdout string
@@ -127,12 +172,13 @@ type pingResponse struct {
 }
 
 type fixture struct {
-	t             *testing.T
-	repoRoot      string
-	tempRoot      string
-	containerName string
-	goarch        string
-	pluginRuntime string
+	t                *testing.T
+	repoRoot         string
+	tempRoot         string
+	containerName    string
+	goarch           string
+	pluginRuntime    string
+	pluginDescriptor string
 }
 
 func TestDockerUbuntuDesktopRuntimeLifecycle(t *testing.T) {
@@ -316,28 +362,59 @@ func newFixture(t *testing.T) *fixture {
 	if err != nil {
 		t.Fatalf("resolve repo root: %v", err)
 	}
-	pluginRuntime := strings.TrimSpace(os.Getenv(pluginRuntimeEnv))
-	if pluginRuntime == "" {
-		t.Fatalf("%s is required; run scripts/check_docker_runtime_e2e.sh", pluginRuntimeEnv)
-	}
-	pluginRuntime, err = filepath.Abs(pluginRuntime)
+	pluginRuntime, pluginDescriptor, err := resolvePluginRuntimeFixture(
+		strings.TrimSpace(os.Getenv(pluginRuntimeEnv)),
+		strings.TrimSpace(os.Getenv(pluginDescriptorEnv)),
+	)
 	if err != nil {
-		t.Fatalf("resolve ReDevPlugin runtime path: %v", err)
-	}
-	info, err := os.Stat(pluginRuntime)
-	if err != nil {
-		t.Fatalf("stat ReDevPlugin runtime: %v", err)
-	}
-	if !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 {
-		t.Fatalf("ReDevPlugin runtime is not an executable regular file: %s", pluginRuntime)
+		t.Fatalf("resolve ReDevPlugin runtime fixture: %v; run scripts/check_docker_runtime_e2e.sh", err)
 	}
 	return &fixture{
-		t:             t,
-		repoRoot:      repoRoot,
-		tempRoot:      t.TempDir(),
-		containerName: fmt.Sprintf("redeven-e2e-%d", time.Now().UnixNano()),
-		pluginRuntime: pluginRuntime,
+		t:                t,
+		repoRoot:         repoRoot,
+		tempRoot:         t.TempDir(),
+		containerName:    fmt.Sprintf("redeven-e2e-%d", time.Now().UnixNano()),
+		pluginRuntime:    pluginRuntime,
+		pluginDescriptor: pluginDescriptor,
 	}
+}
+
+func resolvePluginRuntimeFixture(runtimePath, descriptorPath string) (string, string, error) {
+	if runtimePath == "" {
+		return "", "", fmt.Errorf("%s is required", pluginRuntimeEnv)
+	}
+	if descriptorPath == "" {
+		return "", "", fmt.Errorf("%s is required", pluginDescriptorEnv)
+	}
+	runtimePath, err := filepath.Abs(runtimePath)
+	if err != nil {
+		return "", "", fmt.Errorf("resolve ReDevPlugin runtime path: %w", err)
+	}
+	descriptorPath, err = filepath.Abs(descriptorPath)
+	if err != nil {
+		return "", "", fmt.Errorf("resolve ReDevPlugin descriptor path: %w", err)
+	}
+	if filepath.Dir(runtimePath) != filepath.Dir(descriptorPath) {
+		return "", "", errors.New("ReDevPlugin runtime and descriptor must be in the same directory")
+	}
+	if filepath.Base(descriptorPath) != filepath.Base(containerDescriptor) {
+		return "", "", fmt.Errorf("ReDevPlugin descriptor has unexpected name: %s", descriptorPath)
+	}
+	runtimeInfo, err := os.Lstat(runtimePath)
+	if err != nil {
+		return "", "", fmt.Errorf("stat ReDevPlugin runtime: %w", err)
+	}
+	if !runtimeInfo.Mode().IsRegular() || runtimeInfo.Mode().Perm()&0111 == 0 {
+		return "", "", fmt.Errorf("ReDevPlugin runtime is not an executable regular file: %s", runtimePath)
+	}
+	descriptorInfo, err := os.Lstat(descriptorPath)
+	if err != nil {
+		return "", "", fmt.Errorf("stat ReDevPlugin descriptor: %w", err)
+	}
+	if !descriptorInfo.Mode().IsRegular() {
+		return "", "", fmt.Errorf("ReDevPlugin descriptor is not a regular file: %s", descriptorPath)
+	}
+	return runtimePath, descriptorPath, nil
 }
 
 func (f *fixture) requireDocker(ctx context.Context) {
@@ -406,6 +483,9 @@ func (f *fixture) buildBinaries(ctx context.Context) {
 	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", f.pluginRuntime, f.containerName+":"+containerPlugin); err != nil {
 		f.t.Fatalf("copy ReDevPlugin runtime: %v", err)
 	}
+	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", f.pluginDescriptor, f.containerName+":"+containerDescriptor); err != nil {
+		f.t.Fatalf("copy ReDevPlugin descriptor: %v", err)
+	}
 	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", helperOut, f.containerName+":"+containerHelper); err != nil {
 		f.t.Fatalf("copy helper: %v", err)
 	}
@@ -416,11 +496,15 @@ func (f *fixture) buildBinaries(ctx context.Context) {
 	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", f.pluginRuntime, f.containerName+":"+managedPlugin); err != nil {
 		f.t.Fatalf("copy managed ReDevPlugin runtime: %v", err)
 	}
+	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", f.pluginDescriptor, f.containerName+":"+managedDescriptor); err != nil {
+		f.t.Fatalf("copy managed ReDevPlugin descriptor: %v", err)
+	}
 	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", upgradedRedevenOut, f.containerName+":"+stagedUpgrade); err != nil {
 		f.t.Fatalf("copy upgraded redeven: %v", err)
 	}
 	f.dockerExec(ctx, nil, "chown", "0:0", containerPlugin, managedPlugin)
 	f.dockerExec(ctx, nil, "chmod", "0755", containerRedeven, containerPlugin, managedRedeven, managedPlugin, stagedUpgrade, containerHelper)
+	f.dockerExec(ctx, nil, "chmod", "0644", containerDescriptor, managedDescriptor)
 }
 
 func (f *fixture) assertNetworkExposureStartFailures(ctx context.Context, passwordPath string) {
@@ -545,11 +629,19 @@ func (f *fixture) assertInventoryRequiresConfirmedTakeover(ctx context.Context) 
 			f.t.Fatalf("copy isolation ReDevPlugin runtime to %s: %v", path, err)
 		}
 	}
+	for _, path := range []string{containerDescriptor, managedDescriptor} {
+		if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", f.pluginDescriptor, isolationContainer+":"+path); err != nil {
+			f.t.Fatalf("copy isolation ReDevPlugin descriptor to %s: %v", path, err)
+		}
+	}
 	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "exec", "-i", isolationContainer, "chown", "0:0", containerPlugin, managedPlugin); err != nil {
 		f.t.Fatalf("set isolation ReDevPlugin runtime ownership: %v", err)
 	}
 	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "exec", "-i", isolationContainer, "chmod", "0755", containerRedeven, containerPlugin, managedRedeven, managedPlugin); err != nil {
 		f.t.Fatalf("prepare isolation runtime: %v", err)
+	}
+	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "exec", "-i", isolationContainer, "chmod", "0644", containerDescriptor, managedDescriptor); err != nil {
+		f.t.Fatalf("prepare isolation ReDevPlugin descriptor: %v", err)
 	}
 	if _, err := f.runHost(ctx, f.repoRoot, nil,
 		"docker", "exec", "-d",

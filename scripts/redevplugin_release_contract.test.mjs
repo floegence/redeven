@@ -10,6 +10,7 @@ import {
   createRuntimeEvidence,
   createRuntimeProvenance,
   parseStrictJSON,
+  projectRuntimeCargoMetadata,
   runtimeCertificateName,
   runtimeNoticesName,
   runtimeProvenanceName,
@@ -111,6 +112,49 @@ test('publication binds workflow, source, integrity, and all package coordinates
     mutate(candidate);
     assert.throws(() => validatePublication(candidate, packageSet, { tag: `v${version}` }));
   }
+});
+
+test('runtime Cargo metadata projection keeps the production closure and excludes dev-only packages', () => {
+  const source = 'registry+https://github.com/rust-lang/crates.io-index';
+  const runtimeID = `${source}#redevplugin-runtime@${version}`;
+  const serdeID = `${source}#serde@1.0.0`;
+  const buildID = `${source}#cc@1.0.0`;
+  const devID = `${source}#proptest@1.0.0`;
+  const pkg = (id, name) => ({ id, name, version: '1.0.0', source, license: 'MIT', targets: [{ ignored: true }] });
+  const metadata = {
+    packages: [
+      { ...pkg(runtimeID, 'redevplugin-runtime'), version },
+      pkg(serdeID, 'serde'),
+      pkg(buildID, 'cc'),
+      pkg(devID, 'proptest'),
+    ],
+    resolve: {
+      root: runtimeID,
+      nodes: [
+        {
+          id: runtimeID,
+          deps: [
+            { pkg: serdeID, dep_kinds: [{ kind: null, target: null }] },
+            { pkg: buildID, dep_kinds: [{ kind: 'build', target: null }] },
+            { pkg: devID, dep_kinds: [{ kind: 'dev', target: null }] },
+          ],
+        },
+        { id: serdeID, deps: [] },
+        { id: buildID, deps: [] },
+        { id: devID, deps: [] },
+      ],
+    },
+    workspace_members: [runtimeID],
+    target_directory: '/tmp/ignored',
+  };
+
+  assert.deepEqual(projectRuntimeCargoMetadata(metadata), {
+    packages: metadata.packages.slice(0, 3).map(({ id, name, version: packageVersion, source: packageSource, license }) => ({
+      id, name, version: packageVersion, source: packageSource, license,
+    })),
+    resolve: { root: runtimeID },
+    workspace_members: [runtimeID],
+  });
 });
 
 test('runtime provenance requires the exact crates.io package graph rooted at the runtime crate', () => {

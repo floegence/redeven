@@ -139,7 +139,9 @@ rustup run "$RUST_TOOLCHAIN" cargo metadata \
   --format-version 1 \
   --locked \
   --filter-platform "$rust_target" \
-  --manifest-path "$runtime_source/Cargo.toml" >"$tmpdir/cargo-metadata.json"
+  --manifest-path "$runtime_source/Cargo.toml" >"$tmpdir/cargo-metadata.raw.json"
+node "$SCRIPT_DIR/redevplugin_release_contract.mjs" project-runtime-cargo-metadata \
+  "$tmpdir/cargo-metadata.raw.json" "$tmpdir/cargo-metadata.json"
 
 runtime="$tmpdir/redevplugin-runtime"
 install -m 0755 "$install_root/bin/redevplugin-runtime" "$runtime"
