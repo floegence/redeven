@@ -3,8 +3,7 @@ import type { TerminalTransport } from '@floegence/floeterm-terminal-web/session
 import type { RedevenV1Rpc } from '../protocol/redeven_v1';
 
 // Session catalog metadata is independent from the per-view semantic live
-// transport. Browser history, raw replay, and checkpoint APIs deliberately do
-// not belong to this adapter.
+// attachment, which owns presentation, history, and terminal controls.
 export function createRedevenTerminalCatalogTransport(rpc: RedevenV1Rpc): TerminalTransport {
   return {
     listSessions: async () => {
