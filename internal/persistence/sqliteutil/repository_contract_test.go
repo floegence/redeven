@@ -17,12 +17,12 @@ func TestRedevenOwnedSQLiteOpeningsUseMigrationEngine(t *testing.T) {
 
 	root := repositoryRoot(t)
 	wantMigratingOpeners := map[string]struct{}{
-		"internal/ai/threadstore/store.go":                       {},
-		"internal/codeapp/registry/registry.go":                  {},
-		"internal/notes/service.go":                              {},
-		"internal/portforward/registry/registry.go":              {},
-		"internal/threadreadstate/store.go":                      {},
-		"internal/workbenchlayout/service.go":                    {},
+		"internal/ai/threadstore/store.go":          {},
+		"internal/codeapp/registry/registry.go":     {},
+		"internal/notes/service.go":                 {},
+		"internal/portforward/registry/registry.go": {},
+		"internal/threadreadstate/store.go":         {},
+		"internal/workbenchlayout/service.go":       {},
 	}
 	wantDirectOpeners := map[string]struct{}{
 		"internal/ai/threadstore/store.go":          {}, // Existing-only, read-only complete-schema preflight before writable product open.
