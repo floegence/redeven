@@ -3,22 +3,11 @@ import { publishDebugConsoleStructuredEvent } from './debugConsoleCapture';
 export type TerminalPerformanceStage =
   | 'catalog-start'
   | 'catalog-ready'
-  | 'terminal-module-ready'
-  | 'resources-ready'
   | 'sidebar-presented'
   | 'create-intent'
   | 'pending-row-painted'
   | 'create-ack'
-  | 'session-interactive'
-  | 'history-prefetch-start'
-  | 'history-prefetch-ready'
-  | 'history-prefetch-skipped'
-  | 'history-prefetch-evicted'
-  | 'prepared-history-hit'
-  | 'prepared-history-miss'
-  | 'prepared-history-rebased'
-  | 'warm-queue-paused'
-  | 'warm-queue-complete';
+  | 'session-interactive';
 
 export function pseudonymousTerminalSessionRef(sessionId: string): string {
   let hash = 2166136261;
