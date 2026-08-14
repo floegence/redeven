@@ -23,7 +23,7 @@ describe('terminal shared geometry presentation', () => {
       runtimeAttachGeneration: 7,
       effective: {
         generation: 3,
-        outputSequenceBoundary: 12,
+        presentationSequence: 12,
         cols: 80,
         rows: 24,
       },
@@ -57,7 +57,7 @@ describe('terminal shared geometry presentation', () => {
       requestEpoch: controller.getState().requestEpoch,
       requested: { cols: 120, rows: 40 },
       runtimeAttachGeneration: 1,
-      effective: { generation: 1, outputSequenceBoundary: 0, cols: 80, rows: 24 },
+      effective: { generation: 1, presentationSequence: 0, cols: 80, rows: 24 },
     })!;
     controller.noteAppliedEffective({ ...initial, rendererEpoch });
     vi.advanceTimersByTime(350);
@@ -69,12 +69,12 @@ describe('terminal shared geometry presentation', () => {
     expect(controller.acknowledgeResize(stale, {
       runtimeAttachGeneration: 1,
       requested: stale.requested,
-      effective: { generation: 2, outputSequenceBoundary: 1, cols: 80, rows: 24 },
+      effective: { generation: 2, presentationSequence: 1, cols: 80, rows: 24 },
     })).toBeNull();
     expect(controller.acknowledgeResize(current, {
       runtimeAttachGeneration: 1,
       requested: current.requested,
-      effective: { generation: 3, outputSequenceBoundary: 2, cols: 80, rows: 24 },
+      effective: { generation: 3, presentationSequence: 2, cols: 80, rows: 24 },
     })).not.toBeNull();
   });
 
@@ -91,7 +91,7 @@ describe('terminal shared geometry presentation', () => {
       requestEpoch: controller.getState().requestEpoch,
       requested: { cols: 120, rows: 40 },
       runtimeAttachGeneration: 1,
-      effective: { generation: 1, outputSequenceBoundary: 0, cols: 80, rows: 24 },
+      effective: { generation: 1, presentationSequence: 0, cols: 80, rows: 24 },
     })!;
     controller.noteAppliedEffective({ ...effective, rendererEpoch });
     vi.advanceTimersByTime(350);
@@ -116,12 +116,12 @@ describe('terminal shared geometry presentation', () => {
       requestEpoch: controller.getState().requestEpoch,
       requested: { cols: 120, rows: 40 },
       runtimeAttachGeneration: 1,
-      effective: { generation: 1, outputSequenceBoundary: 0, cols: 80, rows: 24 },
+      effective: { generation: 1, presentationSequence: 0, cols: 80, rows: 24 },
     })!;
     controller.noteAppliedEffective({ ...initial, rendererEpoch });
     vi.advanceTimersByTime(350);
 
-    const equal = { lifecycleEpoch, generation: 2, outputSequenceBoundary: 5, cols: 120, rows: 40 };
+    const equal = { lifecycleEpoch, generation: 2, presentationSequence: 5, cols: 120, rows: 40 };
     controller.noteKnownEffective(equal);
     expect(controller.getState().presentation?.effective.cols).toBe(80);
     controller.noteAppliedEffective({ ...equal, rendererEpoch });
@@ -145,7 +145,7 @@ describe('terminal shared geometry presentation', () => {
       requestEpoch: controller.getState().requestEpoch,
       requested: { cols: 120, rows: 40 },
       runtimeAttachGeneration: 2,
-      effective: { generation: 4, outputSequenceBoundary: 0, cols: 80, rows: 24 },
+      effective: { generation: 4, presentationSequence: 0, cols: 80, rows: 24 },
     })!;
     controller.noteAppliedEffective({ ...effective, rendererEpoch: firstRenderer });
     vi.advanceTimersByTime(350);
@@ -172,7 +172,7 @@ describe('terminal shared geometry presentation', () => {
       requestEpoch: controller.getState().requestEpoch,
       requested: { cols: 120, rows: 40 },
       runtimeAttachGeneration: 9,
-      effective: { generation: 1, outputSequenceBoundary: 0, cols: 80, rows: 24 },
+      effective: { generation: 1, presentationSequence: 0, cols: 80, rows: 24 },
     })!;
     controller.noteAppliedEffective({ ...effective, rendererEpoch });
     vi.advanceTimersByTime(350);
@@ -196,7 +196,7 @@ describe('terminal shared geometry presentation', () => {
       requestEpoch,
       requested: { cols: 120, rows: 40 },
       runtimeAttachGeneration: 5,
-      effective: { generation: 1, outputSequenceBoundary: 0, cols: 80, rows: 24 },
+      effective: { generation: 1, presentationSequence: 0, cols: 80, rows: 24 },
     });
 
     expect(effective).toMatchObject({ cols: 80, rows: 24 });
@@ -216,7 +216,7 @@ describe('terminal shared geometry presentation', () => {
     controller.noteKnownEffective({
       lifecycleEpoch,
       generation: 3,
-      outputSequenceBoundary: 8,
+      presentationSequence: 8,
       cols: 90,
       rows: 28,
     });
@@ -226,24 +226,24 @@ describe('terminal shared geometry presentation', () => {
       requestEpoch: controller.getState().requestEpoch,
       requested: { cols: 120, rows: 40 },
       runtimeAttachGeneration: 2,
-      effective: { generation: 2, outputSequenceBoundary: 4, cols: 80, rows: 24 },
+      effective: { generation: 2, presentationSequence: 4, cols: 80, rows: 24 },
     });
-    expect(attached).toMatchObject({ generation: 2, outputSequenceBoundary: 4, cols: 80, rows: 24 });
+    expect(attached).toMatchObject({ generation: 2, presentationSequence: 4, cols: 80, rows: 24 });
 
     const resize = controller.beginResize({ cols: 120, rows: 40 })!;
     controller.noteKnownEffective({
       lifecycleEpoch,
       generation: 4,
-      outputSequenceBoundary: 10,
+      presentationSequence: 10,
       cols: 88,
       rows: 27,
     });
     const acknowledged = controller.acknowledgeResize(resize, {
       runtimeAttachGeneration: 2,
       requested: { cols: 120, rows: 40 },
-      effective: { generation: 3, outputSequenceBoundary: 9, cols: 90, rows: 28 },
+      effective: { generation: 3, presentationSequence: 9, cols: 90, rows: 28 },
     });
-    expect(acknowledged).toMatchObject({ generation: 3, outputSequenceBoundary: 9, cols: 90, rows: 28 });
+    expect(acknowledged).toMatchObject({ generation: 3, presentationSequence: 9, cols: 90, rows: 28 });
     expect(controller.getState().knownEffective).toMatchObject({ generation: 4, cols: 88, rows: 27 });
   });
 
@@ -260,7 +260,7 @@ describe('terminal shared geometry presentation', () => {
       requestEpoch: controller.getState().requestEpoch,
       requested: { cols: 120, rows: 40 },
       runtimeAttachGeneration: 1,
-      effective: { generation: 1, outputSequenceBoundary: 0, cols: 80, rows: 24 },
+      effective: { generation: 1, presentationSequence: 0, cols: 80, rows: 24 },
     })!;
     controller.noteAppliedEffective({ ...effective, rendererEpoch });
     vi.advanceTimersByTime(350);
@@ -268,7 +268,7 @@ describe('terminal shared geometry presentation', () => {
     expect(controller.noteKnownEffective({
       lifecycleEpoch,
       generation: 1,
-      outputSequenceBoundary: 1,
+      presentationSequence: 1,
       cols: 81,
       rows: 24,
     })).toBe(false);

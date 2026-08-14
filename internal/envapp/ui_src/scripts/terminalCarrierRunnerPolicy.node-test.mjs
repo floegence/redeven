@@ -7,7 +7,7 @@ import {
   resolveTerminalCarrierBrowserMode,
 } from './terminalCarrierRunnerPolicy.mjs';
 
-const carrierSource = await readFile(new URL('./checkTerminalRecoveryCarrier.mjs', import.meta.url), 'utf8');
+const carrierSource = await readFile(new URL('./checkSemanticTerminalCarrier.mjs', import.meta.url), 'utf8');
 const ciSource = await readFile(new URL('../../../../.github/workflows/ci-check.yml', import.meta.url), 'utf8');
 const prePushSource = await readFile(new URL('../../../../scripts/check_renderer_e2e.sh', import.meta.url), 'utf8');
 const uiGateSource = await readFile(new URL('../../../../scripts/check_ui_tests.sh', import.meta.url), 'utf8');
@@ -36,12 +36,12 @@ test('keeps the supported terminal carriers explicit in the exact-main pre-push 
 
   assert.doesNotMatch(prePushSource, /--fixture-bytes 8388608/u);
   assert.doesNotMatch(releaseSource, /--fixture-bytes 8388608/u);
-  assert.match(
-    carrierSource,
-    /commandTitles\.every[\s\S]*?querySelector\('\[data-terminal-tab-status="spinner"\]'\) === null/u,
-  );
-  assert.match(carrierSource, /running_title_without_spinner: true/u);
-  assert.doesNotMatch(carrierSource, /running_title_and_spinner/u);
+  assert.match(carrierSource, /const semanticCanvasSelector = '\[data-terminal-semantic-canvas="true"\]'/u);
+  assert.match(carrierSource, /terminal must own one semantic canvas/u);
+  assert.match(carrierSource, /verifyAtomicClear/u);
+  assert.match(carrierSource, /verifyTopResize/u);
+  assert.doesNotMatch(carrierSource, /TerminalCore|GhosttyCheckpoint/u);
+  assert.match(carrierSource, /legacy_canvas_count/u);
 });
 
 test('defaults browser gates to headless while preserving explicit headed diagnostics', () => {
@@ -68,7 +68,7 @@ test('defaults browser gates to headless while preserving explicit headed diagno
   assert.match(browserConfigSource, /--disable-background-timer-throttling/u);
   assert.match(browserConfigSource, /--disable-renderer-backgrounding/u);
   assert.match(packageSource, /"test:browser:headed": "node scripts\/runVitestBrowser\.mjs --browser\.headless=false"/u);
-  assert.match(performanceSource, /checkTerminalRecoveryCarrier\.mjs'\),\s*'--headless'/u);
+  assert.match(performanceSource, /checkSemanticTerminalCarrier\.mjs'\),\s*'--headless'/u);
   assert.match(performanceSource, /browser_mode: fixedTerminalPerformanceBrowserMode/u);
   assert.doesNotMatch(prePushSource, /--headed|test:browser:headed/u);
   assert.doesNotMatch(uiGateSource, /--headed|test:browser:headed/u);
@@ -94,40 +94,32 @@ test('reports Chromium readback diagnostics without weakening renderer failures'
   assert.equal(classifyTerminalCarrierConsoleMessage({ type: 'log', text: 'ordinary output' }), 'ignore');
 });
 
-test('disables Readline bracketed paste before seeding byte-exact terminal fixtures', () => {
-  assert.match(carrierSource, /set enable-bracketed-paste off/u);
-  assert.match(carrierSource, /INPUTRC=/u);
+test('checks every semantic frame boundary before visual sampling', () => {
+  assert.match(carrierSource, /frame_cols !== trace\.geometry_cols/u);
+  assert.match(carrierSource, /canvas_backing\[0\] !== Math\.round\(trace\.canvas_layout\[0\] \* trace\.dpr\)/u);
+  assert.match(carrierSource, /transparent_pixels !== 0/u);
+  assert.match(carrierSource, /waitForViewsToConverge/u);
 });
 
-test('waits for the trace-scoped baseline render before visual sampling', () => {
-  assert.match(carrierSource, /startsWith\('redeven:terminal:baseline-rendered:'\)/u);
-  assert.match(carrierSource, /find\('baseline-rendered'\)/u);
-  assert.match(carrierSource, /entry\.name\.endsWith\(`:\$\{traceID\}`\)/u);
-  assert.match(carrierSource, /entry\.detail\?\.variant === start\.detail\?\.variant/u);
-  assert.match(carrierSource, /baseline\.startTime <= rendered\.startTime/u);
-  assert.match(carrierSource, /baseline_rendered_ms: rendered\.startTime - start\.startTime/u);
-});
-
-test('collects every shared prepared-history sample before enforcing the aggregate p95 limit', () => {
-  assert.match(carrierSource, /attach_ack_ms: workbenchRecovery\.attach_ack_ms/u);
-  assert.match(carrierSource, /baseline_parser_committed_ms: workbenchRecovery\.baseline_parser_committed_ms/u);
-  assert.match(carrierSource, /baseline_rendered_ms: workbenchRecovery\.baseline_rendered_ms/u);
-  const sharedSampleLoop = carrierSource.slice(
-    carrierSource.indexOf('const sharedPreparedHistorySamples = [];'),
-    carrierSource.indexOf('const sharedPreparedHistory = sharedPreparedHistorySamples[0];'),
-  );
-  assert.match(sharedSampleLoop, /carrierProgress\.sharedPreparedHistorySamples\.push\(completedSample\)/u);
-  assert.doesNotMatch(sharedSampleLoop, /assertTerminalCarrierInteractiveLimit/u);
+test('collects every semantic multi-view sample before enforcing the aggregate p95 limit', () => {
+  assert.match(carrierSource, /const multiViewSamples = \[\];/u);
+  assert.match(carrierSource, /carrierProgress\.multiViewSamples\.push\(sample\)/u);
   assert.match(
     carrierSource,
-    /const sharedPreparedHistoryP95Ms = assertTerminalCarrierP95Limit\(\{[\s\S]*?values: sharedPreparedHistorySamples\.map/u,
+    /const activityRuntime = await activateSession\(activity, sessionID\);[\s\S]*?const started = performance\.now\(\);[\s\S]*?const workbenchRuntime = await activateSession\(workbench, sessionID\);/u,
+  );
+  assert.match(
+    carrierSource,
+    /sendTerminalCommand\(page, `printf ok > \$\{shellQuote\(markerPath\)\}`, workbenchRuntime\)/u,
+  );
+  assert.match(
+    carrierSource,
+    /const multiViewP95Ms = assertTerminalCarrierP95Limit\(\{[\s\S]*?values: multiViewSamples\.map/u,
   );
 });
 
-test('rebuilds the real renderer on refresh and verifies focus does not corrupt replay', () => {
+test('keeps one real semantic renderer across refresh', () => {
   assert.match(carrierSource, /\[data-testid="terminal-sidebar-refresh"\]:visible/u);
-  assert.match(carrierSource, /refresh_attach_start_delta/u);
-  assert.match(carrierSource, /refresh_history_visual_match/u);
-  assert.match(carrierSource, /focus_history_visual_match/u);
-  assert.match(carrierSource, /await terminalInput\(page, refreshedRuntime\)/u);
+  assert.match(carrierSource, /if \(!preservedCanvas\) throw new Error\('refresh replaced the semantic canvas'\)/u);
+  assert.match(carrierSource, /presentation_sequence/u);
 });

@@ -2696,8 +2696,8 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
         throw error;
       }
     },
-    registerTerminalCore: (widgetId, sessionId, core) => {
-      terminalVisualCoordinator.registerCore(widgetId, sessionId, core);
+    registerTerminalViewport: (widgetId, sessionId, viewport) => {
+      terminalVisualCoordinator.registerViewport(widgetId, sessionId, viewport);
     },
     registerTerminalSurface: (widgetId, sessionId, surface) => {
       terminalVisualCoordinator.registerSurface(widgetId, sessionId, surface);

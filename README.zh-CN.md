@@ -34,7 +34,7 @@
 </p>
 
 <p align="center">
-  <a href="https://go.dev/"><img alt="Go 版本" src="https://img.shields.io/badge/Go-1.26.3-00ADD8?style=flat-square&logo=go"></a>
+  <a href="https://go.dev/"><img alt="Go 版本" src="https://img.shields.io/badge/Go-1.26.6-00ADD8?style=flat-square&logo=go"></a>
   <a href="https://nodejs.org/"><img alt="Node.js 版本" src="https://img.shields.io/badge/Node.js-24-339933?style=flat-square&logo=node.js"></a>
   <a href="okf/index.md"><img alt="OKF 知识库" src="https://img.shields.io/badge/Knowledge-OKF%20v0.1-6C3BFF?style=flat-square"></a>
   <a href="https://github.com/floegence/redeven/releases"><img alt="发行版本" src="https://img.shields.io/badge/Releases-GitHub-181717?style=flat-square&logo=github"></a>
@@ -149,7 +149,7 @@ Redeven 在 [OKF v0.1](okf/index.md) 中维护仓库知识。OKF 语料由当前
 
 ### 前置条件
 
-- Go `1.26.3`
+- Go `1.26.6`
 - Node.js `24`
 - npm
 - pnpm 或 Node.js `corepack`

@@ -172,8 +172,7 @@ try {
       '--config',
       'vitest.browser.config.ts',
       '--reporter=verbose',
-      'src/ui/pages/EnvTerminalPage.browser.test.tsx',
-      'src/ui/widgets/TerminalPanel.browser.test.tsx',
+      'src/ui/widgets/TerminalSessionRuntime.semantic.browser.test.tsx',
     ],
     { ...process.env, VITE_REDEVEN_FIXED_PERF_GATE: '1' },
   );
@@ -181,16 +180,16 @@ try {
 
   stage = 'carrier_performance';
   try {
-    run('terminal prepared-history performance', [
-      path.join(scriptDir, 'checkTerminalRecoveryCarrier.mjs'),
+    run('semantic terminal multi-view performance', [
+      path.join(scriptDir, 'checkSemanticTerminalCarrier.mjs'),
       '--headless',
       '--fixture-bytes',
       String(64 * 1024),
       '--max-interactive-ms',
       '150',
-      '--max-shared-prepared-p95-ms',
+      '--max-multi-view-p95-ms',
       '150',
-      '--shared-prepared-samples',
+      '--multi-view-samples',
       '20',
       '--reused-context-samples',
       '0',

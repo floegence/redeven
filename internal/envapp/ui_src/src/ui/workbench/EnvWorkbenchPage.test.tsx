@@ -2340,7 +2340,7 @@ describe('EnvWorkbenchPage', () => {
         });
         document.body.appendChild(surface);
         workbench.registerTerminalSurface(bodyProps.widgetId, 'session-1', surface);
-        workbench.registerTerminalCore(bodyProps.widgetId, 'session-1', { beginVisualSuspend } as any);
+        workbench.registerTerminalViewport(bodyProps.widgetId, 'session-1', { beginVisualSuspend } as any);
       });
       return null;
     };
@@ -2413,7 +2413,7 @@ describe('EnvWorkbenchPage', () => {
         });
         document.body.appendChild(surface);
         workbench.registerTerminalSurface(bodyProps.widgetId, 'session-1', surface);
-        workbench.registerTerminalCore(bodyProps.widgetId, 'session-1', { beginVisualSuspend } as any);
+        workbench.registerTerminalViewport(bodyProps.widgetId, 'session-1', { beginVisualSuspend } as any);
       });
       return null;
     };

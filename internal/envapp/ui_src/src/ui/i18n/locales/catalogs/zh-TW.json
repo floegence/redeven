@@ -2439,6 +2439,7 @@
     "initializing": "正在初始化終端...",
     "attaching": "正在附加終端機...",
     "loadingHistory": "正在載入歷史...",
+    "inputAria": "終端機輸入",
     "historyScrollbar": "終端機歷程",
     "loadingHistoryProgress": "正在載入歷史 {loaded} / {total}",
     "recoveringOutput": "正在恢復終端輸出...",

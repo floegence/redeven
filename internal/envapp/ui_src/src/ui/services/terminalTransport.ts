@@ -1,27 +1,20 @@
-import type {
-  TerminalDataChunk,
-  TerminalEventSource,
-  TerminalHistoryCheckpoint,
-  TerminalTransport,
-} from '@floegence/floeterm-terminal-web';
 import {
-  createTerminalLiveTransport,
+  validateHistoryPage,
+  type SemanticHistoryPage,
+  type SemanticHistoryRequest,
+} from '@floegence/floeterm-terminal-web/semantic';
+import {
+  createSemanticTerminalLiveTransport,
   TerminalLiveErrorCode,
   TerminalLiveServerError,
-  type TerminalLiveAttachResult,
-  type TerminalLiveEventSource,
-  type TerminalLiveResizeAppliedResult,
+  type SemanticTerminalLiveEventSource,
+  type SemanticTerminalLiveTransport,
+  type TerminalSemanticClearResult,
 } from '@floegence/floeterm-terminal-web/live';
 import type { Session } from '@floegence/flowersec-core';
 import { ProtocolNotConnectedError, RpcError } from '@floegence/floe-webapp-protocol';
 import type { RedevenV1Rpc } from '../protocol/redeven_v1';
 import type { TerminalNameUpdateEvent } from '../protocol/redeven_v1/sdk/terminal';
-import {
-  TERMINAL_HISTORY_DRAIN_MAX_PAGES,
-  createHistoryPageRequester,
-  type TerminalHistoryPage,
-  type TerminalHistoryPageOptions,
-} from './terminalCatalogTransport';
 
 export function createTerminalConnId(): string {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto
@@ -29,31 +22,15 @@ export function createTerminalConnId(): string {
     : `web_${Math.random().toString(16).slice(2)}_${Date.now().toString(16)}`;
 }
 
-export type TerminalSessionStats = { history: { totalBytes: number } };
-export type RedevenTerminalAttachResult = TerminalLiveAttachResult;
-export type RedevenTerminalResizeAppliedResult = TerminalLiveResizeAppliedResult;
-export type RedevenTerminalEventSource = Omit<TerminalLiveEventSource, 'onTerminalNameUpdate'> & Readonly<{
-  onTerminalNameUpdate?: (sessionId: string, handler: (event: TerminalNameUpdateEvent) => void) => () => void;
-}>;
-
-export type RedevenTerminalTransport = TerminalTransport & Readonly<{
-  attachWithHistoryBoundary(sessionId: string, cols: number, rows: number): Promise<RedevenTerminalAttachResult>;
-  resizeWithEffectiveGeometry(
+export type RedevenTerminalTransport = SemanticTerminalLiveTransport;
+export type RedevenTerminalEventSource = Omit<
+  SemanticTerminalLiveEventSource,
+  'onTerminalNameUpdate'
+> & Readonly<{
+  onTerminalNameUpdate?: (
     sessionId: string,
-    cols: number,
-    rows: number,
-  ): Promise<RedevenTerminalResizeAppliedResult>;
-  historyPage(
-    sessionId: string,
-    startSeq: number,
-    endSeq: number,
-    options?: TerminalHistoryPageOptions,
-  ): Promise<TerminalHistoryPage>;
-  commitHistoryCheckpoint(sessionId: string, checkpoint: TerminalHistoryCheckpoint): Promise<void>;
-  getSessionStats(sessionId: string): Promise<TerminalSessionStats>;
-  forgetSession(sessionId: string): void;
-  syncConnectionEpoch(key: object | null): void;
-  dispose(): void;
+    handler: (event: TerminalNameUpdateEvent) => void,
+  ) => () => void;
 }>;
 
 export type RedevenTerminalLiveBundle = Readonly<{
@@ -83,71 +60,40 @@ export function createRedevenTerminalLiveBundle(
   client: () => Session | null | undefined,
   connectionId: string,
 ): RedevenTerminalLiveBundle {
-  const requestHistoryPage = createHistoryPageRequester(rpc);
-  const controlEvents: TerminalEventSource = {
-    onTerminalData: () => {
-      throw new Error('terminal data is available only through terminal/live_v1');
-    },
-    onTerminalNameUpdate: (sessionId, handler) => rpc.terminal.onNameUpdate((event) => {
-      if (event.sessionId !== sessionId) return;
-      handler({ sessionId, newName: event.newName, workingDir: event.workingDir });
-    }),
-    onTerminalForegroundCommandUpdate: (sessionId, handler) => rpc.terminal.onForegroundCommandUpdate((event) => {
-      if (event.sessionId !== sessionId) return;
-      handler({ sessionId, foregroundCommand: event.foregroundCommand });
-    }),
-  };
-  const live = createTerminalLiveTransport({
+  const live = createSemanticTerminalLiveTransport({
     connectionId,
     openStream: async (kind, options) => {
       const current = client();
       if (!current) throw new ProtocolNotConnectedError();
-	  const stream = await current.openStream(kind, options);
-	  return {
-		read: () => stream.read(),
-		write: async (data: Uint8Array) => { await stream.write(data); },
-		close: () => stream.close(),
-		reset: () => stream.reset(),
-	  };
+      const stream = await current.openStream(kind, options);
+      return {
+        read: () => stream.read(),
+        write: async (data: Uint8Array) => { await stream.write(data); },
+        close: () => stream.close(),
+        reset: () => stream.reset(),
+      };
     },
     control: {
-      history: async (sessionId, startSeq, endSeq) => {
-        const chunks: TerminalDataChunk[] = [];
-        let cursor = startSeq;
-        for (let pageIndex = 0; pageIndex < TERMINAL_HISTORY_DRAIN_MAX_PAGES; pageIndex += 1) {
-          const page = await requestHistoryPage(sessionId, cursor, endSeq);
-          chunks.push(...page.chunks);
-          if (!page.hasMore) return chunks;
-          if (!Number.isSafeInteger(page.nextStartSeq) || page.nextStartSeq <= cursor) {
-            throw new Error('terminal history pagination returned an invalid cursor');
-          }
-          cursor = page.nextStartSeq;
-        }
-        throw new Error('terminal history pagination did not converge');
-      },
-      historyPage: async (sessionId, startSequence, endSequence, historyGeneration) => {
-        const page = await requestHistoryPage(sessionId, startSequence, endSequence, {
-          snapshotEndSequence: endSequence,
-          historyGeneration,
-        });
-        return {
-          chunks: page.chunks,
-          ...(page.checkpoint ? { checkpoint: page.checkpoint } : {}),
-          ...(page.deltaStartSequence !== undefined ? { deltaStartSequence: page.deltaStartSequence } : {}),
-          firstRetainedSequence: page.firstRetainedSequence,
-          nextStartSequence: page.nextStartSeq,
-          hasMore: page.hasMore,
-          coveredThroughSequence: page.coveredThroughSequence,
-          snapshotEndSequence: page.snapshotEndSequence,
-          historyGeneration: page.historyGeneration,
-          historyReset: page.historyReset,
-          historyTruncated: page.historyTruncated,
-          totalBytes: page.totalBytes,
-        };
-      },
-      clear: async (sessionId) => {
-        await rpc.terminal.clear({ sessionId });
-      },
+      semanticHistory: async (
+        sessionId: string,
+        currentConnectionId: string,
+        transportGeneration: number,
+        request: SemanticHistoryRequest,
+      ): Promise<SemanticHistoryPage> => validateHistoryPage(await rpc.terminal.semanticHistory({
+        sessionId,
+        connectionId: currentConnectionId,
+        transportGeneration,
+        ...request,
+      })),
+      clearSemanticContent: async (
+        sessionId: string,
+        currentConnectionId: string,
+        transportGeneration: number,
+      ): Promise<TerminalSemanticClearResult> => await rpc.terminal.semanticClear({
+        sessionId,
+        connectionId: currentConnectionId,
+        transportGeneration,
+      }),
       listSessions: async () => {
         const response = await rpc.terminal.listSessions();
         return Array.isArray(response?.sessions) ? response.sessions : [];
@@ -163,31 +109,27 @@ export function createRedevenTerminalLiveBundle(
         await rpc.terminal.deleteSession({ sessionId });
       },
     },
-    controlEvents,
+    controlEvents: {
+      onTerminalNameUpdate: (sessionId, handler) => rpc.terminal.onNameUpdate((event) => {
+        if (event.sessionId === sessionId) handler(event);
+      }),
+      onTerminalForegroundCommandUpdate: (sessionId, handler) => rpc.terminal.onForegroundCommandUpdate((event) => {
+        if (event.sessionId === sessionId) handler(event);
+      }),
+      onTerminalOutputActivityUpdate: (sessionId, handler) => rpc.terminal.onOutputActivityUpdate((event) => {
+        if (event.sessionId === sessionId) handler(event);
+      }),
+      onTerminalExecutionContextUpdate: (sessionId, handler) => rpc.terminal.onExecutionContextUpdate((event) => {
+        if (event.sessionId === sessionId) handler(event);
+      }),
+      onTerminalWorkStateUpdate: (sessionId, handler) => rpc.terminal.onWorkStateUpdate((event) => {
+        if (event.sessionId === sessionId) handler(event);
+      }),
+    },
   });
 
-  const transport: RedevenTerminalTransport = {
-    ...live.transport,
-    attachWithHistoryBoundary: async (sessionId, cols, rows) => live.transport.attachWithHistoryBoundary(sessionId, cols, rows),
-    historyPage: requestHistoryPage,
-    commitHistoryCheckpoint: async (sessionId, checkpoint) => {
-      const response = await rpc.terminal.commitHistoryCheckpoint({ sessionId, checkpoint });
-      if (!response.ok) throw new Error('terminal history checkpoint commit was not acknowledged');
-    },
-    getSessionStats: async (sessionId) => {
-      const response = await rpc.terminal.getSessionStats({ sessionId });
-      const totalBytes = Number(response?.history?.totalBytes ?? 0);
-      return { history: { totalBytes: Number.isFinite(totalBytes) && totalBytes > 0 ? totalBytes : 0 } };
-    },
-  };
   return {
-    transport,
-    eventSource: {
-      ...live.eventSource,
-      onTerminalNameUpdate: (sessionId, handler) => rpc.terminal.onNameUpdate((event) => {
-        if (event.sessionId !== sessionId) return;
-        handler(event);
-      }),
-    } as RedevenTerminalEventSource,
+    transport: live.transport,
+    eventSource: live.eventSource as RedevenTerminalEventSource,
   };
 }

@@ -2439,6 +2439,7 @@
     "initializing": "ターミナルを初期化しています...",
     "attaching": "ターミナルに接続しています...",
     "loadingHistory": "履歴をロード中...",
+    "inputAria": "ターミナル入力",
     "historyScrollbar": "ターミナル履歴",
     "loadingHistoryProgress": "履歴をロード中 {loaded} / {total}",
     "recoveringOutput": "ターミナル出力を復元しています...",

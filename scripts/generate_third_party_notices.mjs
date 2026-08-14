@@ -30,7 +30,7 @@ const floetermThemePackageRoot = path.join(
   'internal/envapp/ui_src/node_modules/@floegence/floeterm-terminal-web',
 );
 const floetermThemeArtifactContract = {
-  packageVersion: '0.14.1',
+  packageVersion: '0.15.4',
   files: {
     'THEME_PROVENANCE.json': '2b6b2d07297ace181564890b79e2c488e67f4747512b8adad08b4bd3ea8dfc06',
     'THEME_QUALITY_EVIDENCE.json': 'e9fdd068550001f555f1bb52ca475b68bc56a12c00da25f9ec28fe03dbdb9005',
@@ -44,7 +44,7 @@ const npmLicenseOverrides = new Map([
   ['@floegence/floe-webapp-boot', { license: 'MIT', note: 'License inherited from floegence/floe-webapp root LICENSE.' }],
   ['@floegence/floe-webapp-core', { license: 'MIT', note: 'License inherited from floegence/floe-webapp root LICENSE.' }],
   ['@floegence/floe-webapp-protocol', { license: 'MIT', note: 'License inherited from floegence/floe-webapp root LICENSE.' }],
-  ['@floegence/floeterm-terminal-web', { license: 'MIT', note: 'Built-in theme attribution and license texts are reproduced below from the verified 0.14.1 package.' }],
+  ['@floegence/floeterm-terminal-web', { license: 'MIT', note: 'Built-in theme attribution and license texts are reproduced below from the verified 0.15.4 package.' }],
   ['@floegence/redevplugin-ui', { license: 'MIT', note: 'License inherited from floegence/redevplugin root LICENSE.' }],
   ['khroma', { license: 'MIT', note: 'The published README declares MIT copyright for the package authors.' }],
 ]);

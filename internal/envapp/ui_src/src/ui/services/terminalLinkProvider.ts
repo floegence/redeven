@@ -1,4 +1,3 @@
-import type { TerminalCore, TerminalLinkProvider } from '@floegence/floeterm-terminal-web';
 import { expandHomeDisplayPath, normalizeAbsolutePath as normalizeAskFlowerAbsolutePath } from '../utils/askFlowerPath';
 
 export type TerminalResolvedLinkTarget = {
@@ -18,13 +17,6 @@ type terminal_link_match = {
   startIndex: number;
   endIndexExclusive: number;
   target: TerminalResolvedLinkTarget;
-};
-
-type terminal_link_provider_args = {
-  core: TerminalCore;
-  getContext: () => TerminalLinkContext;
-  onActivate: (target: TerminalResolvedLinkTarget, event: MouseEvent) => void | Promise<void>;
-  isEnabled?: () => boolean;
 };
 
 const TOKEN_RE = /[^\s]+/g;
@@ -265,63 +257,6 @@ function collectTerminalLinkMatches(lineText: string, context: TerminalLinkConte
   return matches;
 }
 
-function readTerminalBufferLine(core: TerminalCore, y: number): string {
-  const row = Math.floor(Number(y));
-  if (!Number.isFinite(row) || row < 0) {
-    return '';
-  }
-
-  try {
-    return core.readBufferLine(row);
-  } catch {
-    return '';
-  }
-}
-
-function isModifierClick(event: MouseEvent): boolean {
-  return Boolean(event.metaKey || event.ctrlKey);
-}
-
 export function collectTerminalLinkTargets(lineText: string, context: TerminalLinkContext): TerminalResolvedLinkTarget[] {
   return collectTerminalLinkMatches(lineText, context).map((match) => match.target);
-}
-
-export function createTerminalFileLinkProvider(args: terminal_link_provider_args): TerminalLinkProvider {
-  return {
-    provideLinks(y, callback) {
-      if (args.isEnabled && !args.isEnabled()) {
-        callback(undefined);
-        return;
-      }
-
-      const lineText = readTerminalBufferLine(args.core, y);
-      if (!lineText) {
-        callback(undefined);
-        return;
-      }
-
-      const matches = collectTerminalLinkMatches(lineText, args.getContext());
-      if (matches.length <= 0) {
-        callback(undefined);
-        return;
-      }
-
-      callback(matches.map((match) => ({
-        text: match.text,
-        range: {
-          start: { x: match.startIndex + 1, y },
-          end: { x: match.endIndexExclusive, y },
-        },
-        activate: (event: MouseEvent) => {
-          if (!isModifierClick(event)) {
-            return;
-          }
-
-          event.preventDefault();
-          event.stopPropagation();
-          void Promise.resolve(args.onActivate(match.target, event)).catch(() => undefined);
-        },
-      })));
-    },
-  };
 }

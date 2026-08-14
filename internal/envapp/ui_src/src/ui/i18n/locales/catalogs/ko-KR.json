@@ -2439,6 +2439,7 @@
     "initializing": "터미널 초기화 중...",
     "attaching": "터미널 연결 중...",
     "loadingHistory": "기록 로드 중...",
+    "inputAria": "터미널 입력",
     "historyScrollbar": "터미널 기록",
     "loadingHistoryProgress": "기록 로드 중 {loaded} / {total}",
     "recoveringOutput": "터미널 출력 복구 중...",

@@ -34,7 +34,7 @@
 </p>
 
 <p align="center">
-  <a href="https://go.dev/"><img alt="Go 버전" src="https://img.shields.io/badge/Go-1.26.3-00ADD8?style=flat-square&logo=go"></a>
+  <a href="https://go.dev/"><img alt="Go 버전" src="https://img.shields.io/badge/Go-1.26.6-00ADD8?style=flat-square&logo=go"></a>
   <a href="https://nodejs.org/"><img alt="Node.js 버전" src="https://img.shields.io/badge/Node.js-24-339933?style=flat-square&logo=node.js"></a>
   <a href="okf/index.md"><img alt="OKF 지식" src="https://img.shields.io/badge/Knowledge-OKF%20v0.1-6C3BFF?style=flat-square"></a>
   <a href="https://github.com/floegence/redeven/releases"><img alt="릴리스" src="https://img.shields.io/badge/Releases-GitHub-181717?style=flat-square&logo=github"></a>
@@ -149,7 +149,7 @@ Redeven은 관리되는 저장소 지식을 [OKF v0.1](okf/index.md)에 보관�
 
 ### 사전 요구 사항
 
-- Go `1.26.3`
+- Go `1.26.6`
 - Node.js `24`
 - npm
 - pnpm 또는 Node.js `corepack`

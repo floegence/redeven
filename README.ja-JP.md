@@ -34,7 +34,7 @@
 </p>
 
 <p align="center">
-  <a href="https://go.dev/"><img alt="Go バージョン" src="https://img.shields.io/badge/Go-1.26.3-00ADD8?style=flat-square&logo=go"></a>
+  <a href="https://go.dev/"><img alt="Go バージョン" src="https://img.shields.io/badge/Go-1.26.6-00ADD8?style=flat-square&logo=go"></a>
   <a href="https://nodejs.org/"><img alt="Node.js バージョン" src="https://img.shields.io/badge/Node.js-24-339933?style=flat-square&logo=node.js"></a>
   <a href="okf/index.md"><img alt="OKF ナレッジ" src="https://img.shields.io/badge/Knowledge-OKF%20v0.1-6C3BFF?style=flat-square"></a>
   <a href="https://github.com/floegence/redeven/releases"><img alt="リリース" src="https://img.shields.io/badge/Releases-GitHub-181717?style=flat-square&logo=github"></a>
@@ -149,7 +149,7 @@ Redeven は、保守対象のリポジトリ知識を [OKF v0.1](okf/index.md) �
 
 ### 前提条件
 
-- Go `1.26.3`
+- Go `1.26.6`
 - Node.js `24`
 - npm
 - pnpm または Node.js `corepack`

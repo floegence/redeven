@@ -2,13 +2,11 @@ package terminal
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -31,25 +29,11 @@ const (
 
 	TypeID_TERMINAL_SESSION_DELETE            uint32 = 2009
 	TypeID_TERMINAL_NAME_UPDATE               uint32 = 2010 // notify (agent -> client): session name/working dir changed
-	TypeID_TERMINAL_SESSION_STATS             uint32 = 2011 // history buffer stats (client -> agent)
 	TypeID_TERMINAL_SESSIONS_CHANGED          uint32 = 2012 // notify (agent -> client): terminal sessions list changed
 	TypeID_TERMINAL_FOREGROUND_COMMAND_UPDATE uint32 = 2013 // notify (agent -> client): shell-reported foreground command changed
 	TypeID_TERMINAL_OUTPUT_ACTIVITY_UPDATE    uint32 = 2014 // notify (agent -> client): foreground command output activity changed
 	TypeID_TERMINAL_EXECUTION_CONTEXT_UPDATE  uint32 = 2015 // notify (agent -> client): atomic location/application context changed
 	TypeID_TERMINAL_WORK_STATE_UPDATE         uint32 = 2016 // notify (agent -> client): semantic work state changed
-	TypeID_TERMINAL_HISTORY_CHECKPOINT_COMMIT uint32 = 2017 // validated checkpoint commit (client -> agent)
-)
-
-const (
-	defaultTerminalHistoryPageChunks = 2048
-	maxTerminalHistoryPageChunks     = 4096
-	defaultTerminalHistoryPageBytes  = 384 * 1024
-	maxTerminalHistoryPageBytes      = 512 * 1024
-	terminalHistoryBufferSize        = 2048
-	terminalHistoryBufferMaxChunks   = 65536
-	terminalHistoryBufferMaxBytes    = 8 * 1024 * 1024
-	terminalHistorySpoolSegmentBytes = 4 * 1024 * 1024
-	terminalHistorySpoolMaxBytes     = 512 * 1024 * 1024
 )
 
 var ErrSessionNotFound = errors.New("terminal session not found")
@@ -186,18 +170,12 @@ func (r fixedShellResolver) ResolveShellContext(ctx context.Context, logger term
 	return r.ResolveShell(logger), nil
 }
 
-func newTerminalGoManagerConfig(shell string, agentHomeAbs string, log *slog.Logger) termgo.ManagerConfig {
+func newTerminalGoManagerConfig(shell string, _ string, log *slog.Logger) termgo.ManagerConfig {
 	shellInitBaseDir := defaultRedevenShellInitBaseDir()
 	return termgo.ManagerConfig{
-		Logger:                      slogTerminalLogger{log: log},
-		EnvProvider:                 termgo.DefaultEnvProvider{},
-		ShellResolver:               fixedShellResolver{shell: shell},
-		HistoryBufferSize:           terminalHistoryBufferSize,
-		HistoryBufferMaxChunks:      terminalHistoryBufferMaxChunks,
-		HistoryBufferMaxBytes:       terminalHistoryBufferMaxBytes,
-		HistorySpoolRoot:            filepath.Join(agentHomeAbs, "terminal-history"),
-		HistorySpoolSegmentMaxBytes: terminalHistorySpoolSegmentBytes,
-		HistorySpoolMaxBytes:        terminalHistorySpoolMaxBytes,
+		Logger:        slogTerminalLogger{log: log},
+		EnvProvider:   termgo.DefaultEnvProvider{},
+		ShellResolver: fixedShellResolver{shell: shell},
 		ShellArgsProvider: termgo.DefaultShellArgsProvider{
 			ShellInitBaseDir:       shellInitBaseDir,
 			EnableCommandLifecycle: true,
@@ -300,8 +278,9 @@ func (m *Manager) RegisterWithAccessGate(r *sessionrpc.Router, meta *session.Met
 		return &terminalListResp{Sessions: out}, nil
 	})
 
-	// History
-	accessgate.RegisterTyped[terminalHistoryReq, terminalHistoryResp](r, TypeID_TERMINAL_HISTORY, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, req *terminalHistoryReq) (*terminalHistoryResp, error) {
+	// History is projected by the server-side Ghostty actor for the current
+	// attachment. No raw PTY replay or browser checkpoint participates.
+	accessgate.RegisterTyped[terminalSemanticHistoryReq, termgo.SemanticHistoryPage](r, TypeID_TERMINAL_HISTORY, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, req *terminalSemanticHistoryReq) (*termgo.SemanticHistoryPage, error) {
 		if err := requireProcessLaunchPermission(meta); err != nil {
 			return nil, err
 		}
@@ -312,8 +291,9 @@ func (m *Manager) RegisterWithAccessGate(r *sessionrpc.Router, meta *session.Met
 		if sessionID == "" {
 			return nil, &sessionrpc.Error{Code: 400, Message: "session_id is required"}
 		}
-		if req.HistoryGeneration < 0 {
-			return nil, &sessionrpc.Error{Code: 400, Message: "history_generation must be non-negative"}
+		connectionID := strings.TrimSpace(req.ConnectionID)
+		if connectionID == "" || req.TransportGeneration == 0 {
+			return nil, &sessionrpc.Error{Code: 400, Message: "current terminal attachment is required"}
 		}
 
 		if !m.sessionAvailableForInteraction(sessionID) {
@@ -325,37 +305,27 @@ func (m *Manager) RegisterWithAccessGate(r *sessionrpc.Router, meta *session.Met
 			return nil, &sessionrpc.Error{Code: 404, Message: "terminal session not found"}
 		}
 
-		page, err := sess.GetHistoryPage(normalizeTerminalHistoryPageOptions(req))
+		page, err := sess.ReadSemanticHistory(connectionID, req.TransportGeneration, termgo.SemanticHistoryRequest{
+			Anchor:    strings.TrimSpace(req.Anchor),
+			Direction: req.Direction,
+			Limit:     req.Limit,
+		})
 		if err != nil {
-			m.log.Warn("terminal history failed", "session_id", sessionID, "error", err)
-			return nil, &sessionrpc.Error{Code: 500, Message: "failed to read history"}
+			if errors.Is(err, termgo.ErrControllerTransport) {
+				return nil, &sessionrpc.Error{Code: 409, Message: "terminal attachment changed"}
+			}
+			if errors.Is(err, termgo.ErrSemanticHistoryAnchor) {
+				return nil, &sessionrpc.Error{Code: 409, Message: "terminal history anchor expired"}
+			}
+			m.log.Warn("terminal semantic history failed", "session_id", sessionID, "error", err)
+			return nil, &sessionrpc.Error{Code: 400, Message: "failed to read semantic history"}
 		}
-		return terminalHistoryRespFromPage(page), nil
+		return &page, nil
 	})
 
-	accessgate.RegisterTyped[terminalHistoryCheckpointCommitReq, terminalHistoryCheckpointCommitResp](r, TypeID_TERMINAL_HISTORY_CHECKPOINT_COMMIT, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, req *terminalHistoryCheckpointCommitReq) (*terminalHistoryCheckpointCommitResp, error) {
-		if err := requireProcessLaunchPermission(meta); err != nil {
-			return nil, err
-		}
-		if req == nil || strings.TrimSpace(req.SessionID) == "" {
-			return nil, &sessionrpc.Error{Code: 400, Message: "session_id is required"}
-		}
-		if !m.sessionAvailableForInteraction(req.SessionID) {
-			return nil, &sessionrpc.Error{Code: 404, Message: "terminal session not found"}
-		}
-		checkpoint, err := req.Checkpoint.toTerminalGo()
-		if err != nil {
-			return nil, &sessionrpc.Error{Code: 400, Message: "invalid terminal history checkpoint"}
-		}
-		if err := m.term.CommitSessionHistoryCheckpoint(req.SessionID, checkpoint); err != nil {
-			m.log.Warn("terminal history checkpoint rejected", "session_id", req.SessionID, "error", err)
-			return nil, &sessionrpc.Error{Code: 409, Message: "terminal history checkpoint rejected"}
-		}
-		return &terminalHistoryCheckpointCommitResp{OK: true}, nil
-	})
-
-	// Session stats (history buffer size, etc.)
-	accessgate.RegisterTyped[terminalStatsReq, terminalStatsResp](r, TypeID_TERMINAL_SESSION_STATS, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, req *terminalStatsReq) (*terminalStatsResp, error) {
+	// Clear is a semantic VT mutation owned by the same SessionActor as PTY
+	// output, input, resize, history, and presentation capture.
+	accessgate.RegisterTyped[terminalSemanticClearReq, terminalSemanticClearResp](r, TypeID_TERMINAL_CLEAR, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, req *terminalSemanticClearReq) (*terminalSemanticClearResp, error) {
 		if err := requireProcessLaunchPermission(meta); err != nil {
 			return nil, err
 		}
@@ -363,50 +333,38 @@ func (m *Manager) RegisterWithAccessGate(r *sessionrpc.Router, meta *session.Met
 			return nil, &sessionrpc.Error{Code: 400, Message: "invalid payload"}
 		}
 		sessionID := strings.TrimSpace(req.SessionID)
+		connectionID := strings.TrimSpace(req.ConnectionID)
 		if sessionID == "" {
 			return nil, &sessionrpc.Error{Code: 400, Message: "session_id is required"}
+		}
+		if connectionID == "" || req.TransportGeneration == 0 {
+			return nil, &sessionrpc.Error{Code: 400, Message: "current terminal attachment is required"}
 		}
 		if !m.sessionAvailableForInteraction(sessionID) {
 			return nil, &sessionrpc.Error{Code: 404, Message: "terminal session not found"}
 		}
-
 		sess, ok := m.term.GetSession(sessionID)
 		if !ok || sess == nil {
 			return nil, &sessionrpc.Error{Code: 404, Message: "terminal session not found"}
 		}
-
-		stats, err := sess.GetHistoryStats()
+		presentation, err := sess.ClearSemanticScreen(connectionID, "local", req.TransportGeneration)
 		if err != nil {
-			m.log.Warn("terminal stats failed", "session_id", sessionID, "error", err)
-			return nil, &sessionrpc.Error{Code: 500, Message: "failed to read stats"}
+			switch {
+			case errors.Is(err, termgo.ErrControllerTransport):
+				return nil, &sessionrpc.Error{Code: 409, Message: "terminal attachment changed"}
+			case errors.Is(err, termgo.ErrControllerPrincipal):
+				return nil, &sessionrpc.Error{Code: 403, Message: "terminal controller belongs to another principal"}
+			case errors.Is(err, termgo.ErrSemanticClearUnavailable):
+				return nil, &sessionrpc.Error{Code: 409, Message: "terminal clear is unavailable"}
+			default:
+				m.log.Error("terminal semantic clear failed closed", "session_id", sessionID, "error", err)
+				return nil, &sessionrpc.Error{Code: 500, Message: "failed to clear terminal content"}
+			}
 		}
-
-		return &terminalStatsResp{
-			History: terminalHistoryStats{
-				TotalBytes: stats.TotalBytes,
-			},
+		return &terminalSemanticClearResp{
+			PresentationSequence: presentation.Sequence,
+			ContentEpoch:         presentation.State.ContentEpoch,
 		}, nil
-	})
-
-	// Clear history
-	accessgate.RegisterTyped[terminalClearReq, terminalClearResp](r, TypeID_TERMINAL_CLEAR, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, req *terminalClearReq) (*terminalClearResp, error) {
-		if err := requireProcessLaunchPermission(meta); err != nil {
-			return nil, err
-		}
-		if req == nil {
-			return nil, &sessionrpc.Error{Code: 400, Message: "invalid payload"}
-		}
-		sessionID := strings.TrimSpace(req.SessionID)
-		if sessionID == "" {
-			return nil, &sessionrpc.Error{Code: 400, Message: "session_id is required"}
-		}
-		if !m.sessionAvailableForInteraction(sessionID) {
-			return nil, &sessionrpc.Error{Code: 404, Message: "terminal session not found"}
-		}
-		if err := m.term.ClearSessionHistory(sessionID); err != nil {
-			return nil, &sessionrpc.Error{Code: 404, Message: "terminal session not found"}
-		}
-		return &terminalClearResp{OK: true}, nil
 	})
 
 	// Delete session
@@ -925,12 +883,6 @@ var (
 	_ termgo.TerminalSemanticWorkStateEventHandler = (*eventHandler)(nil)
 )
 
-func (h *eventHandler) OnTerminalData(_ string, _ termgo.TerminalOutputEvent) {
-	if h == nil || h.m == nil {
-		return
-	}
-}
-
 func (h *eventHandler) OnTerminalNameChanged(sessionID string, oldName string, newName string, workingDir string) {
 	if h == nil || h.m == nil {
 		return
@@ -1265,189 +1217,24 @@ type terminalSessionsChangedPayload struct {
 	FailureMessage string `json:"failure_message,omitempty"`
 }
 
-type terminalHistoryReq struct {
-	SessionID         string `json:"session_id"`
-	StartSeq          int64  `json:"start_seq"`
-	EndSeq            int64  `json:"end_seq"`
-	HistoryGeneration int64  `json:"history_generation,omitempty"`
-	LimitChunks       int    `json:"limit_chunks,omitempty"`
-	MaxBytes          int    `json:"max_bytes,omitempty"`
+type terminalSemanticHistoryReq struct {
+	SessionID           string                          `json:"session_id"`
+	ConnectionID        string                          `json:"connection_id"`
+	TransportGeneration uint64                          `json:"transport_generation"`
+	Anchor              string                          `json:"anchor,omitempty"`
+	Direction           termgo.SemanticHistoryDirection `json:"direction"`
+	Limit               int                             `json:"limit"`
 }
 
-type terminalHistoryChunk struct {
-	Sequence           int64  `json:"sequence"`
-	TimestampMs        int64  `json:"timestamp_ms"`
-	DataB64            string `json:"data_b64"`
-	GeometryGeneration uint64 `json:"geometry_generation"`
-	Cols               int    `json:"cols"`
-	Rows               int    `json:"rows"`
+type terminalSemanticClearReq struct {
+	SessionID           string `json:"session_id"`
+	ConnectionID        string `json:"connection_id"`
+	TransportGeneration uint64 `json:"transport_generation"`
 }
 
-type terminalHistoryResp struct {
-	Chunks                 []terminalHistoryChunk     `json:"chunks"`
-	Checkpoint             *terminalHistoryCheckpoint `json:"checkpoint,omitempty"`
-	DeltaStartSequence     int64                      `json:"delta_start_sequence,omitempty"`
-	NextStartSeq           int64                      `json:"next_start_seq,omitempty"`
-	HasMore                bool                       `json:"has_more,omitempty"`
-	FirstSequence          int64                      `json:"first_sequence,omitempty"`
-	LastSequence           int64                      `json:"last_sequence,omitempty"`
-	FirstRetainedSequence  int64                      `json:"first_retained_sequence"`
-	CoveredThroughSequence int64                      `json:"covered_through_sequence"`
-	SnapshotEndSequence    int64                      `json:"snapshot_end_sequence"`
-	HistoryGeneration      int64                      `json:"history_generation"`
-	HistoryReset           bool                       `json:"history_reset"`
-	HistoryTruncated       bool                       `json:"history_truncated"`
-	CoveredBytes           int64                      `json:"covered_bytes,omitempty"`
-	TotalBytes             int64                      `json:"total_bytes,omitempty"`
-}
-
-type terminalHistoryCheckpoint struct {
-	FormatVersion          uint32 `json:"format_version"`
-	EngineID               string `json:"engine_id"`
-	CoveredThroughSequence int64  `json:"covered_through_sequence"`
-	GeometryGeneration     uint64 `json:"geometry_generation"`
-	ParserEpoch            uint64 `json:"parser_epoch"`
-	Cols                   int    `json:"cols"`
-	Rows                   int    `json:"rows"`
-	ChecksumSHA256         string `json:"checksum_sha256"`
-	StateDigestSHA256      string `json:"state_digest_sha256"`
-	DataB64                string `json:"data_b64"`
-}
-
-func terminalHistoryCheckpointFromGo(checkpoint *termgo.TerminalHistoryCheckpoint) *terminalHistoryCheckpoint {
-	if checkpoint == nil {
-		return nil
-	}
-	return &terminalHistoryCheckpoint{
-		FormatVersion:          checkpoint.FormatVersion,
-		EngineID:               checkpoint.EngineID,
-		CoveredThroughSequence: checkpoint.CoveredThroughSequence,
-		GeometryGeneration:     checkpoint.GeometryGeneration,
-		ParserEpoch:            checkpoint.ParserEpoch,
-		Cols:                   checkpoint.Cols,
-		Rows:                   checkpoint.Rows,
-		ChecksumSHA256:         checkpoint.ChecksumSHA256,
-		StateDigestSHA256:      checkpoint.StateDigestSHA256,
-		DataB64:                base64.StdEncoding.EncodeToString(checkpoint.Bytes),
-	}
-}
-
-func (checkpoint terminalHistoryCheckpoint) toTerminalGo() (termgo.TerminalHistoryCheckpoint, error) {
-	bytes, err := base64.StdEncoding.DecodeString(checkpoint.DataB64)
-	if err != nil {
-		return termgo.TerminalHistoryCheckpoint{}, err
-	}
-	return termgo.TerminalHistoryCheckpoint{
-		FormatVersion:          checkpoint.FormatVersion,
-		EngineID:               checkpoint.EngineID,
-		CoveredThroughSequence: checkpoint.CoveredThroughSequence,
-		GeometryGeneration:     checkpoint.GeometryGeneration,
-		ParserEpoch:            checkpoint.ParserEpoch,
-		Cols:                   checkpoint.Cols,
-		Rows:                   checkpoint.Rows,
-		ChecksumSHA256:         checkpoint.ChecksumSHA256,
-		StateDigestSHA256:      checkpoint.StateDigestSHA256,
-		Bytes:                  bytes,
-	}, nil
-}
-
-type terminalHistoryCheckpointCommitReq struct {
-	SessionID  string                    `json:"session_id"`
-	Checkpoint terminalHistoryCheckpoint `json:"checkpoint"`
-}
-
-type terminalHistoryCheckpointCommitResp struct {
-	OK bool `json:"ok"`
-}
-
-func normalizeTerminalHistoryPageOptions(req *terminalHistoryReq) termgo.HistoryPageOptions {
-	if req == nil {
-		return termgo.HistoryPageOptions{
-			LimitChunks: defaultTerminalHistoryPageChunks,
-			MaxBytes:    defaultTerminalHistoryPageBytes,
-		}
-	}
-
-	limitChunks := req.LimitChunks
-	if limitChunks <= 0 {
-		limitChunks = defaultTerminalHistoryPageChunks
-	}
-	if limitChunks > maxTerminalHistoryPageChunks {
-		limitChunks = maxTerminalHistoryPageChunks
-	}
-
-	maxBytes := req.MaxBytes
-	if maxBytes <= 0 {
-		maxBytes = defaultTerminalHistoryPageBytes
-	}
-	if maxBytes > maxTerminalHistoryPageBytes {
-		maxBytes = maxTerminalHistoryPageBytes
-	}
-
-	return termgo.HistoryPageOptions{
-		StartSeq:          req.StartSeq,
-		EndSeq:            req.EndSeq,
-		HistoryGeneration: req.HistoryGeneration,
-		LimitChunks:       limitChunks,
-		MaxBytes:          maxBytes,
-	}
-}
-
-func terminalHistoryRespFromPage(page termgo.HistoryPage) *terminalHistoryResp {
-	out := make([]terminalHistoryChunk, 0, len(page.Chunks))
-	for _, c := range page.Chunks {
-		out = append(out, terminalHistoryChunk{
-			Sequence:           c.Sequence,
-			TimestampMs:        c.Timestamp,
-			DataB64:            base64.StdEncoding.EncodeToString(c.Data),
-			GeometryGeneration: c.GeometryGeneration,
-			Cols:               c.Cols,
-			Rows:               c.Rows,
-		})
-	}
-
-	firstRetainedSequence := page.FirstRetainedSequence
-	if firstRetainedSequence == 0 && len(page.Chunks) == 0 && page.CoveredThroughSequence > 0 {
-		firstRetainedSequence = page.CoveredThroughSequence + 1
-	}
-
-	return &terminalHistoryResp{
-		Chunks:                 out,
-		Checkpoint:             terminalHistoryCheckpointFromGo(page.Checkpoint),
-		DeltaStartSequence:     page.DeltaStartSequence,
-		NextStartSeq:           page.NextStartSeq,
-		HasMore:                page.HasMore,
-		FirstSequence:          page.FirstSequence,
-		LastSequence:           page.LastSequence,
-		FirstRetainedSequence:  firstRetainedSequence,
-		CoveredThroughSequence: page.CoveredThroughSequence,
-		SnapshotEndSequence:    page.SnapshotEndSequence,
-		HistoryGeneration:      page.HistoryGeneration,
-		HistoryReset:           page.HistoryReset,
-		HistoryTruncated:       page.HistoryTruncated,
-		CoveredBytes:           page.CoveredBytes,
-		TotalBytes:             page.TotalBytes,
-	}
-}
-
-type terminalStatsReq struct {
-	SessionID string `json:"session_id"`
-}
-
-type terminalHistoryStats struct {
-	TotalBytes int64 `json:"total_bytes"`
-}
-
-type terminalStatsResp struct {
-	History terminalHistoryStats `json:"history"`
-}
-
-type terminalClearReq struct {
-	SessionID string `json:"session_id"`
-}
-
-type terminalClearResp struct {
-	OK bool `json:"ok"`
+type terminalSemanticClearResp struct {
+	PresentationSequence uint64 `json:"presentation_sequence"`
+	ContentEpoch         uint64 `json:"content_epoch"`
 }
 
 type terminalDeleteReq struct {

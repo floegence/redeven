@@ -1,4 +1,4 @@
-import type { TerminalCore } from '@floegence/floeterm-terminal-web';
+import type { SemanticTerminalViewportHandle } from '../widgets/semanticTerminalViewport';
 
 export type WorkbenchTerminalInteractionKind =
   | 'viewport_pan'
@@ -20,7 +20,7 @@ export type WorkbenchTerminalInteractionToken = Readonly<{
 type TerminalRegistration = {
   widgetId: string;
   sessionId: string;
-  core: TerminalCore | null;
+  viewport: SemanticTerminalViewportHandle | null;
   surface: HTMLDivElement | null;
 };
 
@@ -39,12 +39,16 @@ export function createWorkbenchTerminalVisualCoordinator() {
   let selectedWidgetId = '';
 
   const deleteIfDetached = (key: string, entry: TerminalRegistration) => {
-    if (!entry.core && !entry.surface) {
+    if (!entry.viewport && !entry.surface) {
       terminals.delete(key);
     }
   };
 
-  const registerCore = (widgetIdRaw: string, sessionIdRaw: string, core: TerminalCore | null) => {
+  const registerViewport = (
+    widgetIdRaw: string,
+    sessionIdRaw: string,
+    viewport: SemanticTerminalViewportHandle | null,
+  ) => {
     const widgetId = compact(widgetIdRaw);
     const sessionId = compact(sessionIdRaw);
     if (!widgetId || !sessionId) {
@@ -54,10 +58,10 @@ export function createWorkbenchTerminalVisualCoordinator() {
     const entry = terminals.get(key) ?? {
       widgetId,
       sessionId,
-      core: null,
+      viewport: null,
       surface: null,
     };
-    entry.core = core;
+    entry.viewport = viewport;
     terminals.set(key, entry);
     deleteIfDetached(key, entry);
   };
@@ -72,7 +76,7 @@ export function createWorkbenchTerminalVisualCoordinator() {
     const entry = terminals.get(key) ?? {
       widgetId,
       sessionId,
-      core: null,
+      viewport: null,
       surface: null,
     };
     entry.surface = surface;
@@ -118,7 +122,7 @@ export function createWorkbenchTerminalVisualCoordinator() {
     beginInteraction,
     dispose,
     getDiagnostics,
-    registerCore,
+    registerViewport,
     registerSurface,
     setSelectedWidgetId,
   };

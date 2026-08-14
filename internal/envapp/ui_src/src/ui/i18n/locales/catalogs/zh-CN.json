@@ -2439,6 +2439,7 @@
     "initializing": "正在初始化终端...",
     "attaching": "正在附加到终端...",
     "loadingHistory": "正在加载历史...",
+    "inputAria": "终端输入",
     "historyScrollbar": "终端历史记录",
     "loadingHistoryProgress": "正在加载历史 {loaded} / {total}",
     "recoveringOutput": "正在恢复终端输出...",

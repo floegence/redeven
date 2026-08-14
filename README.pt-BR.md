@@ -34,7 +34,7 @@
 </p>
 
 <p align="center">
-  <a href="https://go.dev/"><img alt="Versão do Go" src="https://img.shields.io/badge/Go-1.26.3-00ADD8?style=flat-square&logo=go"></a>
+  <a href="https://go.dev/"><img alt="Versão do Go" src="https://img.shields.io/badge/Go-1.26.6-00ADD8?style=flat-square&logo=go"></a>
   <a href="https://nodejs.org/"><img alt="Versão do Node.js" src="https://img.shields.io/badge/Node.js-24-339933?style=flat-square&logo=node.js"></a>
   <a href="okf/index.md"><img alt="Conhecimento OKF" src="https://img.shields.io/badge/Knowledge-OKF%20v0.1-6C3BFF?style=flat-square"></a>
   <a href="https://github.com/floegence/redeven/releases"><img alt="Versões publicadas" src="https://img.shields.io/badge/Releases-GitHub-181717?style=flat-square&logo=github"></a>
@@ -149,7 +149,7 @@ Compile, execute o lint e verifique o projeto a partir do código-fonte.
 
 ### Pré-requisitos
 
-- Go `1.26.3`
+- Go `1.26.6`
 - Node.js `24`
 - npm
 - pnpm ou Node.js `corepack`

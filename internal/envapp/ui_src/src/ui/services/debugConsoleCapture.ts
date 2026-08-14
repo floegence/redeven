@@ -489,32 +489,24 @@ function booleanValue(value: unknown): boolean | undefined {
 function projectTerminalHistoryRequest(payload: unknown): Record<string, unknown> {
   const record = objectRecord(payload);
   return {
-    start_sequence: finiteNumber(record.start_seq),
-    end_sequence: finiteNumber(record.end_seq),
-    history_generation: finiteNumber(record.history_generation),
-    limit_chunks: finiteNumber(record.limit_chunks),
-    max_bytes: finiteNumber(record.max_bytes),
+    transport_generation: finiteNumber(record.transport_generation),
+    direction: compact(record.direction) || undefined,
+    limit: finiteNumber(record.limit),
+    has_anchor: compact(record.anchor).length > 0,
   };
 }
 
 function projectTerminalHistoryResponse(response: unknown): Record<string, unknown> {
   const record = objectRecord(response);
-  const chunks = Array.isArray(record.chunks) ? record.chunks : [];
   return {
-    page_count: 1,
-    chunk_count: chunks.length,
-    next_start_sequence: finiteNumber(record.next_start_seq),
-    has_more: booleanValue(record.has_more),
-    first_sequence: finiteNumber(record.first_sequence),
-    last_sequence: finiteNumber(record.last_sequence),
-    covered_through_sequence: finiteNumber(record.covered_through_sequence),
-    snapshot_end_sequence: finiteNumber(record.snapshot_end_sequence),
-    first_retained_sequence: finiteNumber(record.first_retained_sequence),
-    history_generation: finiteNumber(record.history_generation),
-    history_reset: booleanValue(record.history_reset),
-    history_truncated: booleanValue(record.history_truncated),
-    covered_bytes: finiteNumber(record.covered_bytes),
-    total_bytes: finiteNumber(record.total_bytes),
+    revision: finiteNumber(record.revision),
+    offset: finiteNumber(record.offset),
+    total_rows: finiteNumber(record.totalRows),
+    screen_start_offset: finiteNumber(record.screenStartOffset),
+    has_previous: booleanValue(record.hasPrevious),
+    has_next: booleanValue(record.hasNext),
+    has_anchor: compact(record.anchor).length > 0,
+    has_frame: Boolean(record.frame && typeof record.frame === 'object'),
   };
 }
 
@@ -541,7 +533,7 @@ function projectTerminalCatalogResponse(operation: string, response: unknown): R
 }
 
 function projectProtocolPayload(operation: string, direction: 'request' | 'response', value: unknown): unknown {
-  if (operation === 'terminal.history') {
+  if (operation === 'terminal.semanticHistory') {
     return direction === 'request'
       ? projectTerminalHistoryRequest(value)
       : projectTerminalHistoryResponse(value);
@@ -555,7 +547,7 @@ function projectProtocolPayload(operation: string, direction: 'request' | 'respo
 }
 
 function terminalProtocolFailureMessage(operation: string): string | undefined {
-  if (operation === 'terminal.history') return 'Terminal history request failed';
+  if (operation === 'terminal.semanticHistory') return 'Terminal history request failed';
   return undefined;
 }
 

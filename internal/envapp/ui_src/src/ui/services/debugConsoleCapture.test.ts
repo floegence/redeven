@@ -90,66 +90,56 @@ describe('debugConsoleCapture', () => {
 
   it('projects terminal history to recovery metadata without retaining output chunks', async () => {
     const secret = 'terminal-history-secret-5e427';
-    const encodedSecret = btoa(secret);
     const events: any[] = [];
     const unsubscribe = subscribeDebugConsoleClientEvents((event) => events.push(event));
     setDebugConsoleCaptureEnabled(true);
 
     await captureDebugConsoleProtocolCall({
-      typeID: redevenV1TypeIds.terminal.history,
+      typeID: redevenV1TypeIds.terminal.semanticHistory,
       payload: {
         session_id: 'session-sensitive',
-        start_seq: 3,
-        end_seq: 12,
-        history_generation: 7,
-        limit_chunks: 256,
-        max_bytes: 393_216,
+        connection_id: 'connection-sensitive',
+        transport_generation: 7,
+        anchor: `anchor-${secret}`,
+        direction: 'backward',
+        limit: 256,
       },
       execute: async () => ({
-        chunks: [{ sequence: 3, timestamp_ms: 100, data_b64: encodedSecret }],
-        next_start_seq: 4,
-        has_more: true,
-        first_sequence: 3,
-        last_sequence: 3,
-        covered_through_sequence: 3,
-        snapshot_end_sequence: 12,
-        first_retained_sequence: 2,
-        history_generation: 7,
-        history_reset: false,
-        history_truncated: true,
-        covered_bytes: 29,
-        total_bytes: 256,
+        revision: 11,
+        anchor: `response-anchor-${secret}`,
+        firstAvailable: 'first',
+        lastAvailable: 'last',
+        screenStart: 'screen',
+        offset: 3,
+        totalRows: 256,
+        screenStartOffset: 224,
+        hasPrevious: true,
+        hasNext: false,
+        frame: { rows: [{ cells: [{ grapheme: secret }] }] },
       }),
     });
 
     expect(events).toHaveLength(1);
     expect(events[0]?.detail?.request?.payload).toEqual({
-      start_sequence: 3,
-      end_sequence: 12,
-      history_generation: 7,
-      limit_chunks: 256,
-      max_bytes: 393_216,
+      transport_generation: 7,
+      direction: 'backward',
+      limit: 256,
+      has_anchor: true,
     });
     expect(events[0]?.detail?.response?.payload).toEqual({
-      page_count: 1,
-      chunk_count: 1,
-      next_start_sequence: 4,
-      has_more: true,
-      first_sequence: 3,
-      last_sequence: 3,
-      covered_through_sequence: 3,
-      snapshot_end_sequence: 12,
-      first_retained_sequence: 2,
-      history_generation: 7,
-      history_reset: false,
-      history_truncated: true,
-      covered_bytes: 29,
-      total_bytes: 256,
+      revision: 11,
+      offset: 3,
+      total_rows: 256,
+      screen_start_offset: 224,
+      has_previous: true,
+      has_next: false,
+      has_anchor: true,
+      has_frame: true,
     });
     const serialized = JSON.stringify(events[0]);
     expect(serialized).not.toContain(secret);
-    expect(serialized).not.toContain(encodedSecret);
     expect(serialized).not.toContain('session-sensitive');
+    expect(serialized).not.toContain('connection-sensitive');
 
     unsubscribe();
   });
@@ -208,11 +198,13 @@ describe('debugConsoleCapture', () => {
     setDebugConsoleCaptureEnabled(true);
 
     await expect(captureDebugConsoleProtocolCall({
-      typeID: redevenV1TypeIds.terminal.history,
+      typeID: redevenV1TypeIds.terminal.semanticHistory,
       payload: {
         session_id: 'session-sensitive',
-        start_seq: 1,
-        end_seq: -1,
+        connection_id: 'connection-sensitive',
+        transport_generation: 3,
+        direction: 'end',
+        limit: 24,
       },
       execute: async () => {
         throw new Error(`history failed after ${secret} ${encodedSecret}`);

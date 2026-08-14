@@ -45,11 +45,9 @@ export function getRedevenTerminalSessionsCoordinator(opts: {
 
   const coordinator = createRedevenTerminalSessionsCoordinator({
     transport: opts.transport ?? {
-      attach: async () => { throw new Error('Terminal sessions coordinator transport is unavailable'); },
-      resize: async () => { throw new Error('Terminal sessions coordinator transport is unavailable'); },
-      sendInput: async () => { throw new Error('Terminal sessions coordinator transport is unavailable'); },
-      history: async () => { throw new Error('Terminal sessions coordinator transport is unavailable'); },
-      clear: async () => { throw new Error('Terminal sessions coordinator transport is unavailable'); },
+      listSessions: async () => {
+        throw new Error('Terminal sessions coordinator transport is unavailable');
+      },
     },
     logger: opts.logger,
     pollMs: opts.pollMs,

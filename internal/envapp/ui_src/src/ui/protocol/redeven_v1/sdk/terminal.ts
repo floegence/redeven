@@ -1,11 +1,14 @@
 import type {
   TerminalExecutionContextInfo,
   TerminalForegroundCommandInfo,
-  TerminalHistoryCheckpoint,
   TerminalOutputActivityInfo,
   TerminalSessionInfo as FloetermTerminalSessionInfo,
   TerminalWorkStateInfo,
 } from '@floegence/floeterm-terminal-web';
+import type {
+  SemanticHistoryDirection,
+  SemanticHistoryPage,
+} from '@floegence/floeterm-terminal-web/semantic';
 
 export type TerminalSessionInfo = FloetermTerminalSessionInfo & {
   localPathCapability?: {
@@ -22,57 +25,26 @@ export type TerminalSessionCreateResponse = {
   session: TerminalSessionInfo;
 };
 
-export type TerminalHistoryChunk = {
-  sequence: number;
-  timestampMs: number;
-  data: Uint8Array;
-  geometryGeneration?: number;
-  cols?: number;
-  rows?: number;
-};
-
-export type TerminalHistoryRequest = {
+export type TerminalSemanticHistoryRequest = {
   sessionId: string;
-  startSeq: number;
-  endSeq: number;
-  historyGeneration?: number;
-  limitChunks?: number;
-  maxBytes?: number;
+  connectionId: string;
+  transportGeneration: number;
+  anchor?: string;
+  direction: SemanticHistoryDirection;
+  limit: number;
 };
 
-export type TerminalHistoryResponse = {
-  chunks: TerminalHistoryChunk[];
-  checkpoint?: TerminalHistoryCheckpoint;
-  deltaStartSequence?: number;
-  nextStartSeq: number;
-  hasMore: boolean;
-  firstSequence: number;
-  lastSequence: number;
-  coveredThroughSequence?: number;
-  snapshotEndSequence?: number;
-  firstRetainedSequence?: number;
-  historyGeneration?: number;
-  historyReset: boolean;
-  historyTruncated: boolean;
-  coveredBytes: number;
-  totalBytes: number;
-};
+export type TerminalSemanticHistoryResponse = SemanticHistoryPage;
 
-export type TerminalHistoryCheckpointCommitRequest = {
+export type TerminalSemanticClearRequest = {
   sessionId: string;
-  checkpoint: TerminalHistoryCheckpoint;
+  connectionId: string;
+  transportGeneration: number;
 };
 
-export type TerminalHistoryCheckpointCommitResponse = {
-  ok: boolean;
-};
-
-export type TerminalClearRequest = {
-  sessionId: string;
-};
-
-export type TerminalClearResponse = {
-  ok: boolean;
+export type TerminalSemanticClearResponse = {
+  presentationSequence: number;
+  contentEpoch: number;
 };
 
 export type TerminalSessionDeleteRequest = {
@@ -81,16 +53,6 @@ export type TerminalSessionDeleteRequest = {
 
 export type TerminalSessionDeleteResponse = {
   ok: boolean;
-};
-
-export type TerminalSessionStatsRequest = {
-  sessionId: string;
-};
-
-export type TerminalSessionStatsResponse = {
-  history: {
-    totalBytes: number;
-  };
 };
 
 export type TerminalNameUpdateEvent = {

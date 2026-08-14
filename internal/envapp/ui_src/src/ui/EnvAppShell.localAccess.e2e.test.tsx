@@ -144,11 +144,6 @@ const pluginPlatformMocks = vi.hoisted(() => {
     createPluginSurfacePlacementCoordinator: vi.fn(() => coordinator),
   };
 });
-const terminalFeaturePreloadMocks = vi.hoisted(() => ({
-  preloadTerminalFeatureResources: vi.fn(async () => undefined),
-  scheduleTerminalFeaturePreload: vi.fn(() => () => undefined),
-}));
-
 const officialContainersCatalog = {
   pluginID: 'com.redeven.official.containers',
   publisherID: 'com.redeven.official',
@@ -890,8 +885,6 @@ vi.mock('./services/controlplaneApi', () => ({
   refreshLocalRuntime: refreshLocalRuntimeMock,
   unlockLocalAccess: unlockLocalAccessMock,
 }));
-vi.mock('./services/terminalFeaturePreload', () => terminalFeaturePreloadMocks);
-
 vi.mock('./accessResume', () => ({
   consumeAccessResumeTokenFromWindow: () => '',
 }));
@@ -1295,8 +1288,6 @@ beforeEach(async () => {
   pluginPlatformMocks.coordinator.closeAll.mockClear();
   pluginPlatformMocks.state.onMutationOutcomeUnknown = undefined;
   pluginPlatformMocks.coordinator.dispose.mockClear();
-  terminalFeaturePreloadMocks.preloadTerminalFeatureResources.mockClear();
-  terminalFeaturePreloadMocks.scheduleTerminalFeaturePreload.mockClear();
   pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection());
   getLocalRuntimeMock.mockResolvedValue({ mode: 'local', env_public_id: 'env_local', direct_ws_url: 'ws://localhost/_redeven_direct/ws' });
   refreshLocalRuntimeMock.mockResolvedValue({ mode: 'local', env_public_id: 'env_local', direct_ws_url: 'ws://localhost/_redeven_direct/ws' });
@@ -1528,8 +1519,6 @@ describe('EnvAppShell environment entry affordances', () => {
       (host.querySelector('[data-activity-id="files"]') as HTMLButtonElement | null)?.click();
       await flushUntil(() => Boolean(host.querySelector('[data-testid="mock-file-browser"]')));
       await flushUntil(() => !host.querySelector('[data-testid="mock-file-loading"]'));
-      terminalFeaturePreloadMocks.preloadTerminalFeatureResources.mockClear();
-
       const fileBrowser = host.querySelector('[data-testid="mock-file-browser"]') as HTMLElement;
       const pathInput = host.querySelector('[data-testid="mock-file-path"]') as HTMLInputElement;
       const filterInput = host.querySelector('[data-testid="mock-file-filter"]') as HTMLInputElement;
@@ -1553,13 +1542,6 @@ describe('EnvAppShell environment entry affordances', () => {
           expect(sidebarActiveTabValue).toBe('ai');
         } else {
           await flushUntil(() => sidebarActiveTabValue === target);
-        }
-
-        if (target === 'terminal') {
-          expect(terminalFeaturePreloadMocks.preloadTerminalFeatureResources).toHaveBeenCalledWith({ reason: 'intent' });
-          expect(terminalFeaturePreloadMocks.preloadTerminalFeatureResources.mock.invocationCallOrder.at(-1)).toBeLessThan(
-            setSidebarActiveTabMock.mock.invocationCallOrder.at(-1) ?? Number.POSITIVE_INFINITY,
-          );
         }
 
         expect(host.querySelector('[data-testid="mock-file-browser"]')).toBe(fileBrowser);
