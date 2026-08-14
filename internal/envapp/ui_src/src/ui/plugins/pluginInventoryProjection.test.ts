@@ -129,6 +129,30 @@ describe('v0.7.1 plugin inventory projection', () => {
     });
   });
 
+  it('uses the Host action state as the only launch authority', () => {
+    const blockedByHost = {
+      ...installedRecord(),
+      action_state: {
+        can_open: false,
+        can_enable: false,
+        can_disable: true,
+        can_uninstall: true,
+        blocked_reason: 'runtime_unavailable',
+        recovery_action: 'retry',
+      },
+    } as ReDevPluginRecord;
+    const projection = projectPluginInventory({
+      officialCatalog: [officialContainers],
+      installedPlugins: [blockedByHost],
+      permissionGrants: [readGrant],
+    });
+
+    const item = projection.items[0];
+    expect(item?.defaultLaunchTarget).toBeUndefined();
+    expect(buildPluginPanelModel(projection).tiles).toHaveLength(1);
+    expect(buildPluginCenterModel(projection).items[0]?.defaultLaunchTarget).toBeUndefined();
+  });
+
   it('uses an installed package icon URL without a market catalog', () => {
     const iconPath = 'ui/assets/containers-plugin.png';
     const iconDigest = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
