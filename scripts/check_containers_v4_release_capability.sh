@@ -20,6 +20,6 @@ do
   fi
 done
 
-GOWORK=off go test ./spec/redevplugin -run 'TestContainersCapabilityContract' -count=1
+GOWORK=off GOTOOLCHAIN=go1.26.6+auto go test ./spec/redevplugin -run 'TestContainersCapabilityContract' -count=1
 
 echo "Containers v4 known capability contract verified"
