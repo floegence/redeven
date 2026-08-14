@@ -118,7 +118,7 @@ const generatedContainersRecord: ReDevPluginRecord = {
   updated_at: '2026-07-04T10:01:00Z',
 };
 
-describe('v1.1.1 plugin lifecycle client integration', () => {
+describe('v1.1.2 plugin lifecycle client integration', () => {
   it('preloads an installed package icon before publishing the inventory projection', async () => {
     const { mocks } = createClientHarness();
     const iconDigest = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -267,7 +267,7 @@ describe('v1.1.1 plugin lifecycle client integration', () => {
       items: [expect.objectContaining({
         pluginID: 'com.redeven.official.containers',
         lifecycleState: 'not_installed',
-        officialCatalog: expect.objectContaining({ latestVersion: '4.4.3' }),
+        officialCatalog: expect.objectContaining({ latestVersion: '4.4.4' }),
       })],
     });
     expect(loadMarket).toHaveBeenCalledOnce();

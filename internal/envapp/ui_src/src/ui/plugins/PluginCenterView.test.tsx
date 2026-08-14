@@ -467,7 +467,7 @@ describe('PluginCenterView', () => {
         officialCatalog: OFFICIAL_PLUGIN_CATALOG_SEED[0],
       }],
     });
-    let generation = 5;
+    let generation = OFFICIAL_PLUGIN_CATALOG_SEED[0]!.marketGeneration!;
     const onLoadMarketDetail = vi.fn(async () => ({
       ...OFFICIAL_PLUGIN_MARKET_DETAIL,
       generation,
@@ -488,13 +488,13 @@ describe('PluginCenterView', () => {
     await vi.waitFor(() => expect(onLoadMarketDetail).toHaveBeenCalledTimes(1));
     await vi.waitFor(() => expect(mount.querySelector('[data-plugin-author-description]')).not.toBeNull());
 
-    generation = 6;
+    generation += 1;
     setCurrentProjection({
       items: [{
         ...containersPlugin,
         officialCatalog: {
           ...OFFICIAL_PLUGIN_CATALOG_SEED[0]!,
-          marketGeneration: 6,
+          marketGeneration: generation,
         },
       }],
     });
