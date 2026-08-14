@@ -459,6 +459,7 @@ describe('PluginCenterView', () => {
 
     await vi.waitFor(() => expect(onLoadMarketDetail).toHaveBeenCalledWith(
       'com.redeven.official.containers',
+      OFFICIAL_PLUGIN_CATALOG_SEED[0]!.marketGeneration,
       expect.any(AbortSignal),
     ));
     await vi.waitFor(() => expect(mount.querySelector('[data-plugin-author-description]')).not.toBeNull());
