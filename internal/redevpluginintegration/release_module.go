@@ -19,7 +19,7 @@ const (
 	officialReleaseSourceID   = "redeven_official"
 	officialReleaseChannel    = "stable"
 	officialHostID            = "redeven"
-	officialContainersVersion = "4.4.3"
+	officialContainersVersion = "4.4.4"
 	officialMinHostVersion    = "1.0.0"
 )
 
