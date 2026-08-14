@@ -2049,7 +2049,7 @@ describe('PluginCenterView', () => {
     expect(open?.disabled).toBe(true);
   });
 
-  it('opens a ready plugin while another enabled plugin is still recovering', () => {
+  it('keeps Host-authorized actions available while presenting recovery status', async () => {
     const onCommand = vi.fn();
     const enabledProjection = containersPermissionProjection(true);
     const containers = {
@@ -2099,16 +2099,21 @@ describe('PluginCenterView', () => {
     const readyOpen = mount.querySelector<HTMLButtonElement>('[data-plugin-center-card-primary="catalog:containers"]');
     const recoveringOpen = mount.querySelector<HTMLButtonElement>('[data-plugin-center-card-primary="catalog:database"]');
     expect(readyOpen?.disabled).toBe(false);
-    expect(recoveringOpen?.disabled).toBe(true);
+    expect(recoveringOpen?.disabled).toBe(false);
     expect(mount.querySelector('[data-plugin-runtime-recovery="recovering"]')?.textContent)
       .toContain('This plugin is still recovering.');
 
     readyOpen?.click();
+    await Promise.resolve();
     recoveringOpen?.click();
-    expect(onCommand).toHaveBeenCalledOnce();
+    expect(onCommand).toHaveBeenCalledTimes(2);
     expect(onCommand.mock.calls[0]?.[0]).toMatchObject({
       type: 'open_surface',
       pluginInstanceID: 'plugininst_containers',
+    });
+    expect(onCommand.mock.calls[1]?.[0]).toMatchObject({
+      type: 'open_surface',
+      pluginInstanceID: 'plugininst_database',
     });
   });
 
