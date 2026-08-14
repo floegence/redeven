@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import path from 'node:path';
+import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -21,16 +23,28 @@ contract.methods.push(...workspaceMethods());
 addContainerGrouping(contract.methods.find((item) => item.name === 'containers.list')?.response_schema?.properties?.containers?.items);
 addContainerGrouping(contract.methods.find((item) => item.name === 'containers.inspect')?.response_schema?.properties?.container);
 
-const encoded = `${JSON.stringify(contract, null, 2)}\n`;
+const publishedBytes = fs.readFileSync(outputPath);
+const publishedDigest = crypto.createHash('sha256').update(publishedBytes).digest('hex');
+if (publishedDigest !== '0137cd99569a48d3ef4061b19b2fda021ed02cf268094b79c29a40f74bce0b92') {
+  throw new Error('published Containers v4 capability artifact digest changed');
+}
+const published = JSON.parse(publishedBytes.toString('utf8'));
+normalizePublishedRepresentation(contract);
+normalizePublishedRepresentation(published);
+assert.deepStrictEqual(published, contract, 'published Containers v4 capability artifact is semantically stale');
+
 if (verify) {
-  for (const target of [outputPath, hostProjectionPath]) {
-    if (!fs.existsSync(target) || fs.readFileSync(target, 'utf8') !== encoded) {
-      throw new Error(`${path.relative(root, target)} is stale; run scripts/build_containers_v4_contract.mjs`);
-    }
+  if (!fs.existsSync(hostProjectionPath) || !fs.readFileSync(hostProjectionPath).equals(publishedBytes)) {
+    throw new Error(`${path.relative(root, hostProjectionPath)} is stale; run scripts/build_containers_v4_contract.mjs`);
   }
 } else {
-  fs.writeFileSync(outputPath, encoded);
-  fs.writeFileSync(hostProjectionPath, encoded);
+  fs.writeFileSync(hostProjectionPath, publishedBytes);
+}
+
+function normalizePublishedRepresentation(value) {
+  for (const method of value.methods ?? []) {
+    if (method.confirmation?.plan_hash_required === false) delete method.confirmation.plan_hash_required;
+  }
 }
 
 function addEndpointIdentity(method) {

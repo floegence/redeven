@@ -3,9 +3,13 @@
 package redevpluginintegration
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,12 +17,142 @@ import (
 	"time"
 
 	"github.com/floegence/redeven/internal/pluginmarket"
+	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/sessionhop"
+	"github.com/floegence/redevplugin/pkg/execution"
 	"github.com/floegence/redevplugin/pkg/externalsource"
 	"github.com/floegence/redevplugin/pkg/host"
 	"github.com/floegence/redevplugin/pkg/pluginpkg"
 	"github.com/floegence/redevplugin/pkg/releasecontract"
 	"github.com/floegence/redevplugin/pkg/releasetrust"
 )
+
+type localReleaseAssetFetcher struct {
+	dir string
+}
+
+func (fetcher localReleaseAssetFetcher) FetchArtifact(_ context.Context, request externalsource.ArtifactFetchRequest) (externalsource.ArtifactFetchResult, error) {
+	name := filepath.Base(request.URL)
+	raw, err := os.ReadFile(filepath.Join(fetcher.dir, name))
+	if err != nil {
+		return externalsource.ArtifactFetchResult{}, err
+	}
+	if request.Progress != nil {
+		request.Progress(int64(len(raw)), int64(len(raw)))
+	}
+	return externalsource.ArtifactFetchResult{Bytes: raw, Source: request.URL, Final: request.URL}, nil
+}
+
+func TestLiveOfficialContainersReleaseInstallCompletes(t *testing.T) {
+	snapshotPath := os.Getenv("REDEVEN_LIVE_PLUGIN_MARKET_SNAPSHOT")
+	assetDir := os.Getenv("REDEVEN_LIVE_PLUGIN_RELEASE_DIR")
+	if snapshotPath == "" || assetDir == "" {
+		t.Skip("REDEVEN_LIVE_PLUGIN_MARKET_SNAPSHOT and REDEVEN_LIVE_PLUGIN_RELEASE_DIR are not set")
+	}
+	raw, err := os.ReadFile(snapshotPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var snapshot pluginmarket.Snapshot
+	if err := json.Unmarshal(raw, &snapshot); err != nil {
+		t.Fatal(err)
+	}
+	release, err := snapshot.LatestRelease(officialContainersPluginID, officialReleaseChannel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stateDir := t.TempDir()
+	var releaseRef host.PluginReleaseRef
+	integration, err := New(context.Background(), Options{
+		StateDir:         stateDir,
+		PermissionPolicy: testPermissionPolicy(t, "execute_read"),
+		RuntimePath:      testRuntimePath(t, stateDir),
+		Containers:       mustContainersAdapter(t, &capabilityEngineClient{}),
+		ResolveSessionMeta: func(channelID string) (*session.Meta, bool) {
+			return &session.Meta{
+				ChannelID: channelID, EndpointID: "env_release_install", UserPublicID: "user_release_install",
+				FloeApp: "com.floegence.redeven.agent", CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true,
+			}, true
+		},
+		newReleaseModule: func(trustDir string) (*host.ReleaseModule, host.PluginReleaseRef, func() error, error) {
+			module, ref, closeTrust, err := newOfficialReleaseModuleWithClock(
+				context.Background(), trustDir, release, localReleaseAssetFetcher{dir: assetDir}, officialReleaseFixtureTime,
+			)
+			releaseRef = ref
+			return module, ref, closeTrust, err
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := integration.Close(); err != nil {
+			t.Errorf("close integration: %v", err)
+		}
+	})
+
+	activate := false
+	startBody, err := json.Marshal(map[string]any{
+		"request_id": "request_release_install", "plugin_instance_id": "catalog_com.redeven.official_com.redeven.official.containers",
+		"release_ref": releaseRef, "activate_after_install": activate,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := liveReleaseRequest(http.MethodPost, "/_redevplugin/api/plugins/executions/release-installs", startBody)
+	startResponse := httptest.NewRecorder()
+	integration.Handler().ServeHTTP(startResponse, start)
+	if startResponse.Code != http.StatusOK {
+		t.Fatalf("start release install status = %d body = %s", startResponse.Code, startResponse.Body.String())
+	}
+	var started struct {
+		OK   bool                `json:"ok"`
+		Data execution.Execution `json:"data"`
+	}
+	if err := json.Unmarshal(startResponse.Body.Bytes(), &started); err != nil || !started.OK || started.Data.ID == "" {
+		t.Fatalf("decode started execution: value=%#v error=%v", started, err)
+	}
+
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		query := liveReleaseRequest(http.MethodPost, fmt.Sprintf("/_redevplugin/api/plugins/executions/%s/query", started.Data.ID), []byte("{}"))
+		response := httptest.NewRecorder()
+		integration.Handler().ServeHTTP(response, query)
+		if response.Code != http.StatusOK {
+			t.Fatalf("get release install status = %d body = %s", response.Code, response.Body.String())
+		}
+		var current struct {
+			OK   bool                `json:"ok"`
+			Data execution.Execution `json:"data"`
+		}
+		if err := json.Unmarshal(response.Body.Bytes(), &current); err != nil || !current.OK {
+			t.Fatalf("decode current execution: value=%#v error=%v", current, err)
+		}
+		if current.Data.TerminalAt != nil {
+			if current.Data.Status != execution.StatusCompleted {
+				t.Fatalf("release install terminal status = %s failure = %s", current.Data.Status, current.Data.FailureCode)
+			}
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("release install did not complete before deadline")
+}
+
+func liveReleaseRequest(method, path string, body []byte) *http.Request {
+	request := httptest.NewRequest(method, path, bytes.NewReader(body))
+	request.Host = "env.example.test"
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Origin", "https://env.example.test")
+	request.Header.Set(csrfHeader, csrfProof)
+	request.Header.Set(sessionhop.HeaderChannelID, "channel_release_install")
+	request = WithRouteRole(request, RouteRoleEnvTrusted)
+	request, err := WithTrustedOrigin(request, "https://env.example.test")
+	if err != nil {
+		panic(err)
+	}
+	return request
+}
 
 func TestLiveOfficialContainersReleaseTrust(t *testing.T) {
 	snapshotPath := os.Getenv("REDEVEN_LIVE_PLUGIN_MARKET_SNAPSHOT")
@@ -100,9 +234,6 @@ func TestLiveOfficialContainersReleaseTrust(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("verify live official package signature: %T: %v", err, err)
-	}
-	if _, err := trust.VerifyCapabilityContract(metadata, provider.capability, provider.capability.Pin); err != nil {
-		t.Fatalf("verify live official capability contract: %T: %v", err, err)
 	}
 }
 

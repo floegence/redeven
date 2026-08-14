@@ -15,6 +15,7 @@ func TestContainersCapabilityContractPinsV4(t *testing.T) {
 	pin := contract.Pin
 	if pin.PublisherID != "com.redeven.official" ||
 		pin.ContractID != "redeven.container_resources.v4" || pin.ContractVersion != "4.0.0" ||
+		pin.ArtifactSHA256 != "0137cd99569a48d3ef4061b19b2fda021ed02cf268094b79c29a40f74bce0b92" ||
 		len(pin.ArtifactSHA256) != 64 || strings.Trim(pin.ArtifactSHA256, "0123456789abcdef") != "" {
 		t.Fatalf("capability pin = %#v", pin)
 	}

@@ -40,6 +40,18 @@ log() {
   echo "[INFO] $*"
 }
 
+run_focused_go_tests() {
+	local package=$1
+	local pattern=$2
+	local matches
+	matches=$(go test "$package" -list "$pattern")
+	if ! grep -Eq '^Test' <<<"$matches"; then
+		echo "focused Go test pattern matched no tests: $package $pattern" >&2
+		exit 1
+	fi
+	go test "$package" -run "$pattern" -count=1
+}
+
 require_embedded_assets() {
   local missing=()
   for dir in internal/envapp/ui/dist internal/codeapp/ui/dist; do
@@ -82,12 +94,10 @@ log "checking ReDevPlugin artifact staging fixture"
 
 log "checking AppServer and Local UI plugin route isolation and delegation"
 require_embedded_assets
-go test ./internal/codeapp/appserver \
-	-run 'TestServer_(ProxyOriginRouteMatrix|PluginManagementAPINamespaceReserved|PluginManagementAPIDelegatesToPluginPlatform|PluginNamespaceRouteMatrix|PluginNamespaceDelegatesToPluginPlatformForPluginOrigin|PluginOriginCannotAccessManagementSurfaces)$' \
-	-count=1
-go test ./internal/localui \
-	-run 'TestServer_(PluginManagementAPINamespaceReserved|PluginManagementAPIUsesAccessGateWhenPlatformEnabled|PluginNamespaceRouteMatrix|handlePluginNamespace_ForwardsWithoutEnvRouteOverride)$' \
-	-count=1
+run_focused_go_tests ./internal/codeapp/appserver \
+	'TestServer_(ProxyOriginRouteMatrix|PluginManagementAPIDelegatesToPluginPlatform|PluginPlatformRejectsMissingOrigin|PluginPlatformRejectsCodeSpaceOrigin|PluginPlatformPreservesCanonicalPath|LocalUIEnvRouteDelegatesPluginPlatform|PluginOriginCannotAccessManagementSurfaces)$'
+run_focused_go_tests ./internal/localui \
+	'TestServer_(PluginPlatformRoutesAreAbsentWithoutHandler|PluginManagementAPIRequiresAccessAndGenerationCredential|PluginManagementAPIRejectsCallerChannelWithoutCredential)$'
 
 log "checking ReDevPlugin session, security, runtime, and route adapters"
 go test ./internal/redevpluginintegration -count=1

@@ -41,7 +41,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | github.com/floegence/floeterm/terminal-go | v0.10.3 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.10.3 | Floegence first-party dependency. |
 | github.com/floegence/floret/v3 | v3.2.40 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v3@v3.2.40 | Detected from LICENSE. |
 | github.com/floegence/flowersec/flowersec-go/v2 | v2.4.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v2@v2.4.1 | Floegence first-party dependency. |
-| github.com/floegence/redevplugin | v1.1.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin@v1.1.2 | Floegence first-party dependency. |
+| github.com/floegence/redevplugin | v1.1.3 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin@v1.1.3 | Floegence first-party dependency. |
 | github.com/go-logr/logr | v1.4.2 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/go-logr/logr@v1.4.2 | Detected from LICENSE. |
 | github.com/go-logr/stdr | v1.2.2 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/go-logr/stdr@v1.2.2 | Detected from LICENSE. |
 | github.com/go-ole/go-ole | v1.2.6 | MIT | Runtime | https://pkg.go.dev/github.com/go-ole/go-ole@v1.2.6 | Detected from LICENSE. |
@@ -245,8 +245,8 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @floegence/flowersec-node-native-linux-arm64-gnu | 2.4.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-arm64-gnu/v/2.4.1 |  |
 | @floegence/flowersec-node-native-linux-x64-gnu | 2.4.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-linux-x64-gnu/v/2.4.1 |  |
 | @floegence/flowersec-node-native | 2.4.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native/v/2.4.1 |  |
-| @floegence/redevplugin-contracts | 1.1.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-contracts/v/1.1.2 |  |
-| @floegence/redevplugin-ui | 1.1.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/1.1.2 | License inherited from floegence/redevplugin root LICENSE. |
+| @floegence/redevplugin-contracts | 1.1.3 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-contracts/v/1.1.3 |  |
+| @floegence/redevplugin-ui | 1.1.3 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/1.1.3 | License inherited from floegence/redevplugin root LICENSE. |
 | @fontsource-variable/inter | 5.2.8 | OFL-1.1 | Desktop shell | https://www.npmjs.com/package/%40fontsource-variable%2Finter/v/5.2.8 |  |
 | @fontsource/iosevka | 5.2.5 | OFL-1.1 | Desktop shell, Env App UI | https://www.npmjs.com/package/%40fontsource%2Fiosevka/v/5.2.5 |  |
 | @humanfs/core | 0.19.1 | Apache-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40humanfs%2Fcore/v/0.19.1 |  |
