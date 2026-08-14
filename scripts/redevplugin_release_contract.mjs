@@ -538,6 +538,68 @@ function publicationVerificationPackageSet(value) {
   });
 }
 
+export function projectRuntimeCargoMetadata(metadata) {
+  if (!metadata || typeof metadata !== 'object' || !Array.isArray(metadata.packages)
+      || !metadata.resolve || typeof metadata.resolve !== 'object'
+      || typeof metadata.resolve.root !== 'string' || !Array.isArray(metadata.resolve.nodes)
+      || !Array.isArray(metadata.workspace_members)) {
+    fail('Cargo metadata is invalid');
+  }
+  if (metadata.workspace_members.length !== 1 || metadata.workspace_members[0] !== metadata.resolve.root) {
+    fail('Cargo metadata workspace root is invalid');
+  }
+
+  const packages = new Map();
+  for (const entry of metadata.packages) {
+    if (!entry || typeof entry !== 'object' || typeof entry.id !== 'string'
+        || typeof entry.name !== 'string' || typeof entry.version !== 'string'
+        || packages.has(entry.id)) {
+      fail('Cargo metadata package identity is invalid');
+    }
+    packages.set(entry.id, entry);
+  }
+  const nodes = new Map();
+  for (const node of metadata.resolve.nodes) {
+    if (!node || typeof node !== 'object' || typeof node.id !== 'string'
+        || !Array.isArray(node.deps) || nodes.has(node.id)) {
+      fail('Cargo metadata dependency node is invalid');
+    }
+    nodes.set(node.id, node);
+  }
+
+  const reachable = new Set([metadata.resolve.root]);
+  const pending = [metadata.resolve.root];
+  while (pending.length > 0) {
+    const id = pending.pop();
+    if (!packages.has(id) || !nodes.has(id)) fail('Cargo metadata production dependency is missing');
+    for (const dependency of nodes.get(id).deps) {
+      if (!dependency || typeof dependency.pkg !== 'string' || !Array.isArray(dependency.dep_kinds)
+          || dependency.dep_kinds.some((kind) => !kind || typeof kind !== 'object'
+            || (kind.kind !== null && kind.kind !== 'build' && kind.kind !== 'dev'))) {
+        fail('Cargo metadata dependency kind is invalid');
+      }
+      const production = dependency.dep_kinds.some(({ kind }) => kind === null || kind === 'build');
+      if (!production || reachable.has(dependency.pkg)) continue;
+      reachable.add(dependency.pkg);
+      pending.push(dependency.pkg);
+    }
+  }
+
+  return {
+    packages: metadata.packages
+      .filter(({ id }) => reachable.has(id))
+      .map(({ id, name, version, source, license }) => ({
+        id,
+        name,
+        version,
+        source: source ?? null,
+        license: license ?? null,
+      })),
+    resolve: { root: metadata.resolve.root },
+    workspace_members: [metadata.resolve.root],
+  };
+}
+
 function validateCargoMetadata(metadata, packageSet) {
   if (!metadata || typeof metadata !== 'object' || !Array.isArray(metadata.packages)
       || !metadata.resolve || typeof metadata.resolve !== 'object'
@@ -649,8 +711,8 @@ function fail(message) {
   throw new Error(message);
 }
 
-function readJSON(pathname, label) {
-  return parseStrictJSON(readFileSync(pathname), label);
+function readJSON(pathname, label, maximum) {
+  return parseStrictJSON(readFileSync(pathname), label, maximum);
 }
 
 function writeJSON(pathname, value) {
@@ -675,6 +737,12 @@ function required(options, name) {
 
 async function main(args) {
   const [command, ...rest] = args;
+  if (command === 'project-runtime-cargo-metadata' && rest.length === 2) {
+    const [input, output] = rest;
+    const metadata = readJSON(input, 'raw Cargo metadata', 8 * 1024 * 1024);
+    writeJSON(output, projectRuntimeCargoMetadata(metadata));
+    return;
+  }
   if (command === 'verify-publication' && rest.length === 3) {
     const [publicationPath, packageSetPath, tag] = rest;
     const publication = validatePublication(readJSON(publicationPath, 'platform publication'), readJSON(packageSetPath, 'package set'), { tag });
