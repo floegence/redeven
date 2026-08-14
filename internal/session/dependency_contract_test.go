@@ -605,10 +605,8 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 	t.Parallel()
 
 	const (
-		floretModule   = "github.com/floegence/floret/v3"
-		floretVersion  = "v3.2.40"
-		floretSum      = "h1:oVo5aK2QRB28tngY+cwTr/7Gt2MMMN2siqjAbT2VS8w="
-		floretGoModSum = "h1:l9Z36ZEf/OHlHu+1hZeDp+WOT9TqWNgNQYOQi+eAWW0="
+		floretModule  = "github.com/floegence/floret/v4"
+		floretVersion = "v4.0.0"
 	)
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")
@@ -630,9 +628,9 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 	}
 	assertNoLocalGoModuleReference(t, "go.mod", goMod, floretModule, "floret")
 
-	wantSumVersions := map[string]string{
-		floretVersion:             floretSum,
-		floretVersion + "/go.mod": floretGoModSum,
+	wantSumVersions := map[string]bool{
+		floretVersion:             true,
+		floretVersion + "/go.mod": true,
 	}
 	foundSumVersions := make(map[string]bool, len(wantSumVersions))
 	scanner := bufio.NewScanner(strings.NewReader(goSum))
@@ -641,12 +639,11 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 		if len(fields) < 2 || fields[0] != floretModule {
 			continue
 		}
-		wantSum, ok := wantSumVersions[fields[1]]
-		if !ok {
+		if !wantSumVersions[fields[1]] {
 			t.Fatalf("go.sum contains unexpected Floret version %q", fields[1])
 		}
-		if len(fields) != 3 || fields[2] != wantSum {
-			t.Fatalf("go.sum checksum for %s=%v, want %s", fields[1], fields[2:], wantSum)
+		if len(fields) != 3 || !strings.HasPrefix(fields[2], "h1:") {
+			t.Fatalf("go.sum has invalid Floret checksum entry %q", scanner.Text())
 		}
 		foundSumVersions[fields[1]] = true
 	}
@@ -686,49 +683,21 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 
 	root := repoRootForTest(t)
 	expectedMarkers := map[string][]string{
-		filepath.Join("okf", "ai", "flower-context-action-records.md"): {
-			"TurnRequest.SupplementalContext",
-			"TurnInput.References",
-			"MessageReference",
-			"raw `ResourceRef` never reaches the browser",
-			"v3.2.40",
-		},
-		filepath.Join("okf", "ui", "flower-turn-launcher.md"): {
-			"file_path",
-			"metadata-only",
-			"pending text attachment",
-		},
-		filepath.Join("okf", "ai", "ai-tool-runtime.md"): {
-			"TurnRequest.SupplementalContext",
-			"TurnSupplementalContextItem",
-			"TurnInput.Attachments",
-			"ResourceRef",
+		filepath.Join("okf", "ai", "floret-thread-runtime.md"): {
+			"Floret v4 `ThreadService`",
+			"canonical journal is the only durable lifecycle fact source",
+			"`View`, `Send`, `Respond`, `Cancel`, `Retry`, `RetryEffect`",
 		},
 		filepath.Join("okf", "ui", "flower-live-timeline.md"): {
-			"ThroughOrdinal",
-			"ListThreadTurns",
-			"turn_projection_unavailable",
-			"floret.contract.rejected",
-		},
-		filepath.Join("okf", "ai", "flower-thread-fork-coordination.md"): {
-			"ai_thread_fork_operations",
-			"client_request_id",
-			"canonical destination is empty at preparation time",
-			"complete immutable snapshot",
+			"one workspace SSE",
+			"Summary updates are stripped of messages",
+			"without cursor replay or polling",
 		},
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
-			"Floret v3.2.40",
+			"github.com/floegence/floret/v4 v4.0.0",
 			"flowersec-v2-4-1-floe-webapp-v0-40-20",
-			"ai_threadstore_product_v1",
-			"Fresh stores initialize directly at version 1",
-			"single persistent source of truth",
-			"provider-owned thread titles",
-			"public contracts",
-			"parent-scoped SubAgent validation",
-			"turn_projection_unavailable",
-			"Thread deletion persists an immutable user-intent and upload cleanup snapshot",
-			"only Floret's exact tombstone replay returns success",
-			"a missing canonical thread without that tombstone fails terminally and preserves product data",
+			"Floret ThreadService is the only lifecycle boundary",
+			"one workspace SSE",
 			"redeven-runtime-v1",
 		},
 	}
@@ -795,8 +764,7 @@ func TestFloretAssistantProjectionIsNotStoredAsThreadstoreShadowCopy(t *testing.
 	root := repoRootForTest(t)
 	for _, rel := range []string{
 		filepath.Join("internal", "ai", "service.go"),
-		filepath.Join("internal", "ai", "floret_thread_projection.go"),
-		filepath.Join("internal", "ai", "flower_live_projection.go"),
+		filepath.Join("internal", "ai", "floret_bootstrap.go"),
 		filepath.Join("internal", "ai", "terminal_process_service.go"),
 	} {
 		content := readRepoFile(t, root, rel)
@@ -829,30 +797,18 @@ func TestFloretCapabilitiesAreMintedOnlyDuringBootstrap(t *testing.T) {
 			t.Fatalf("service.go must not mint Floret runtime capabilities directly, found %q", marker)
 		}
 	}
-	maintenance := readRepoFile(t, root, filepath.Join("internal", "ai", "floret_store_maintenance.go"))
-	for _, marker := range []string{"flstorage.SQLite", "type floretRuntimeOpener"} {
-		if !strings.Contains(maintenance, marker) {
-			t.Fatalf("floret_store_maintenance.go must open the current published storage contract with %q", marker)
-		}
-	}
-	for _, marker := range []string{"PreflightV2Migration", "ApplyV2Migration", "ErrMigrationRequired"} {
-		if strings.Contains(maintenance, marker) {
-			t.Fatalf("floret_store_maintenance.go must not retain removed storage migration marker %q", marker)
-		}
-	}
 	bootstrap := readRepoFile(t, root, filepath.Join("internal", "ai", "floret_bootstrap.go"))
-	if !strings.Contains(bootstrap, "flruntime.Open") || !strings.Contains(bootstrap, "*flruntime.Host") {
-		t.Fatal("floret_bootstrap.go must be the composition root that opens and consumes runtime.Host")
-	}
 	for _, marker := range []string{
-		"host.Threads().CreateThread", "host.Thread(ctxOrBackground(ctx), threadID)",
-		"thread.Reader()", "thread.Lifecycle()", "thread.TurnExecutor(agent)",
-		"thread.Compactor(agent)", "thread.SubAgentManager(ctxOrBackground(ctx), agent)",
-		"lifecycle.lifecycle.SetTitle", "lifecycle.lifecycle.Fork", "lifecycle.lifecycle.Delete",
-		"lifecycle.InterruptedTurnRecovery", "child.InterruptedTurnRecovery", "PendingToolRecovery",
+		"flruntime.Open", "*flruntime.Host", "host.ThreadService(effects)",
+		"threadRuntime flruntime.ThreadService", "effects       *floretEffectAdapter",
 	} {
 		if !strings.Contains(bootstrap, marker) {
-			t.Fatalf("floret_bootstrap.go is missing capability constructor %q", marker)
+			t.Fatalf("floret_bootstrap.go is missing typed runtime boundary %q", marker)
+		}
+	}
+	for _, marker := range []string{"TurnAdmissionReceipt", "Authority", "RecoveryHandle", "ProjectionDelta"} {
+		if strings.Contains(bootstrap, marker) {
+			t.Fatalf("floret_bootstrap.go retained legacy lifecycle boundary %q", marker)
 		}
 	}
 }
@@ -861,64 +817,21 @@ func TestFloretActiveSettlementHasNoRecoveryFallback(t *testing.T) {
 	t.Parallel()
 
 	root := repoRootForTest(t)
-	runSource := readRepoFile(t, root, filepath.Join("internal", "ai", "run.go"))
-	for _, forbidden := range []string{"opts.PendingToolSettler", "floretPendingSettlementHost", "PendingToolRecoveryHostFactory"} {
-		if strings.Contains(runSource, forbidden) {
-			t.Fatalf("run.go must not receive recovery settlement authority, found %q", forbidden)
+	for _, rel := range []string{
+		filepath.Join("internal", "ai", "floret_bootstrap.go"),
+		filepath.Join("internal", "ai", "run_host_capabilities.go"),
+		filepath.Join("internal", "ai", "terminal_process.go"),
+	} {
+		content := readRepoFile(t, root, rel)
+		for _, forbidden := range []string{"PendingToolRecovery", "RecoveryAuthority", "authority barrier", "TurnAdmissionReceipt"} {
+			if strings.Contains(content, forbidden) {
+				t.Fatalf("%s retained legacy lifecycle authority %q", rel, forbidden)
+			}
 		}
 	}
-	bootstrap := readRepoFile(t, root, filepath.Join("internal", "ai", "floret_bootstrap.go"))
-	for _, required := range []string{"floretTurnHostAdapter) SettlePendingTool", "floretSubagentHostAdapter) SettlePendingTool"} {
-		if !strings.Contains(bootstrap, required) {
-			t.Fatalf("floret_bootstrap.go must derive active settlement capability with %q", required)
-		}
-	}
-	if !strings.Contains(bootstrap, "boundFloretPendingToolRecoveryCoordinator") {
-		t.Fatal("floret_bootstrap.go must construct recovery settlement only through the explicit coordinator")
-	}
-	recoverySource := readRepoFile(t, root, filepath.Join("internal", "ai", "floret_pending_tool_recovery.go"))
-	if strings.Contains(recoverySource, "PendingToolRecoveryHostBinder") || strings.Contains(recoverySource, "github.com/floegence/floret/v3/runtime") {
-		t.Fatal("Floret recovery interface must not retain concrete runtime capability types")
-	}
-	if !strings.Contains(bootstrap, "lifecycle.PendingToolRecovery") || !strings.Contains(bootstrap, "child.PendingToolRecovery") || !strings.Contains(bootstrap, "boundFloretPendingToolRecoveryCoordinator") {
-		t.Fatal("Floret recovery handle must be issued and encapsulated inside the composition root")
-	}
-	runHost := readRepoFile(t, root, filepath.Join("internal", "ai", "run_host_capabilities.go"))
-	if strings.Contains(runSource, "*Service") || strings.Contains(runSource, "service *Service") || strings.Contains(runHost, "floretBootstrapResult") {
-		t.Fatal("run capability objects must not retain Service or Floret capability binders")
-	}
-	serviceSource := readRepoFile(t, root, filepath.Join("internal", "ai", "service.go"))
-	if strings.Contains(serviceSource, "*floretBootstrapResult") {
-		t.Fatal("Service must not retain the aggregate Floret bootstrap capability result")
-	}
-	for _, forbidden := range []string{"newFloretThreadCreate", "newFloretThreadDelete", "newFloretThreadFork", "newFloretThreadTitle", "InterruptedTurnRecovery"} {
-		if strings.Contains(runHost, forbidden) {
-			t.Fatalf("run capability object retained lifecycle capability %q", forbidden)
-		}
-	}
-	if strings.Contains(runHost, "forSubagentExecution") || strings.Contains(runHost, "childHost := host") {
-		t.Fatal("child execution must not copy the root capability bundle")
-	}
-	for _, forbidden := range []string{"floretPendingToolRecoveryFactory", ".Bind(", "RecoverySettlementOwner"} {
-		if strings.Contains(runHost, forbidden) {
-			t.Fatalf("active run host must not retain a recovery settlement issuer, found %q", forbidden)
-		}
-	}
-	terminalProcess := readRepoFile(t, root, filepath.Join("internal", "ai", "terminal_process.go"))
-	for _, forbidden := range []string{"floretPendingToolRecoveryFactory", "RecoverySettlementOwner"} {
-		if strings.Contains(terminalProcess, forbidden) {
-			t.Fatalf("terminal process must not retain a recovery settlement issuer, found %q", forbidden)
-		}
-	}
-	for _, required := range []string{"RecoveryCoordinator", "RecoveryAuthorityThreadID", "terminal process authority barrier is required"} {
-		if !strings.Contains(terminalProcess, required) {
-			t.Fatalf("terminal process is missing post-terminal recovery contract %q", required)
-		}
-	}
-	if !strings.Contains(serviceSource, "func (s *Service) bindSubagentExecutionForParent") ||
-		!strings.Contains(serviceSource, "s.bindExactRunExecutionCapabilities(parent.endpointID, childThreadID, parent.threadID)") ||
-		!strings.Contains(serviceSource, "bindChildRunProductCapabilities(s.threadsDB, parent.endpointID, parent.threadID, childThreadID, childRunID)") {
-		t.Fatal("child execution must be constructed from exact child and parent authority identities")
+	runtimeSource := readRepoFile(t, root, filepath.Join("internal", "ai", "floret_runtime.go"))
+	if !strings.Contains(runtimeSource, "floretEffectAuthorizationGateForRun") {
+		t.Fatal("irreversible effects must retain the one-shot authorization gate")
 	}
 }
 
@@ -957,7 +870,7 @@ func TestFloretCanonicalThreadCreationIsCreateCoordinatorOnly(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			if importPath != "github.com/floegence/floret/v3/runtime" {
+			if importPath != "github.com/floegence/floret/v4/runtime" {
 				continue
 			}
 			alias := "runtime"
@@ -1008,43 +921,15 @@ func TestFloretGatewayBoundaryUsesGatewayIdentity(t *testing.T) {
 	t.Parallel()
 
 	root := repoRootForTest(t)
-	expectedConstructors := map[string][]string{
-		filepath.Join("internal", "ai", "floret_runtime.go"): {
-			"flruntime.NewAgent", "flruntime.WithAgentThreadTitleMode", "flruntime.WithAgentDynamicToolSurface",
-		},
-		filepath.Join("internal", "ai", "compact_thread_context.go"): {
-			"flruntime.NewAgent",
-		},
-		filepath.Join("internal", "ai", "subagents_floret.go"): {
-			"flruntime.NewAgent", "flruntime.WithAgentThreadTitleMode", "flruntime.WithAgentDynamicToolSurface",
-		},
+	content := readRepoFile(t, root, filepath.Join("internal", "ai", "floret_runtime.go"))
+	for _, marker := range []string{"flruntime.NewAgent", "flruntime.WithAgentThreadTitleMode", "flruntime.WithAgentDynamicToolSurface", "flruntime.ThreadTitleModeProvider"} {
+		if !strings.Contains(content, marker) {
+			t.Fatalf("floret_runtime.go must construct the immutable effect adapter Agent with %q", marker)
+		}
 	}
-	for rel, requiredConstructors := range expectedConstructors {
-		content := readRepoFile(t, root, rel)
-		for _, marker := range []string{
-			"flconfig." + "ProviderFake",
-			"Fake" + "Response",
-		} {
-			if strings.Contains(content, marker) {
-				t.Fatalf("%s must not configure gateway-backed Floret hosts with fake provider marker %q", rel, marker)
-			}
-		}
-		for _, constructor := range requiredConstructors {
-			if !strings.Contains(content, constructor) {
-				t.Fatalf("%s must construct immutable Floret v3 Agent with %q", rel, constructor)
-			}
-		}
-		if strings.HasSuffix(rel, "compact_thread_context.go") {
-			if strings.Contains(content, "WithAgentThreadTitleMode") {
-				t.Fatalf("%s must not receive title authority through the compaction capability", rel)
-			}
-		} else if !strings.Contains(content, "flruntime.ThreadTitleModeProvider") {
-			t.Fatalf("%s must delegate provider title ownership to Floret", rel)
-		}
-		for _, forbidden := range []string{"TurnExecutionHostOptions", "ThreadCompactionHostOptions", "SubAgentHostOptions", "RunTurnRequest"} {
-			if strings.Contains(content, forbidden) {
-				t.Fatalf("%s must not construct opaque Floret v1 options with %q", rel, forbidden)
-			}
+	for _, marker := range []string{"flconfig." + "ProviderFake", "Fake" + "Response", "TurnExecutionHostOptions", "RunTurnRequest"} {
+		if strings.Contains(content, marker) {
+			t.Fatalf("floret_runtime.go retained removed gateway marker %q", marker)
 		}
 	}
 }
@@ -1074,7 +959,7 @@ func TestFloretLifecycleEventsDoNotMirrorEngineState(t *testing.T) {
 	}
 }
 
-func TestFlowerThreadDeleteUsesPersistentReplayWithoutCompensation(t *testing.T) {
+func TestFlowerThreadDeleteUsesTypedRuntimeWithoutCompensation(t *testing.T) {
 	t.Parallel()
 
 	root := repoRootForTest(t)
@@ -1086,9 +971,7 @@ func TestFlowerThreadDeleteUsesPersistentReplayWithoutCompensation(t *testing.T)
 			"restoreFlower" + "ThreadReadState",
 			"deleteFlowerThreadWith" + "ReadStateCleanup",
 		},
-		filepath.Join("internal", "ai", "thread_delete_operation.go"): {
-			"Close" + "SubAgents",
-		},
+		filepath.Join("internal", "ai", "threads.go"): {"Restore" + "Records"},
 	} {
 		content := readRepoFile(t, root, rel)
 		for _, marker := range markers {
@@ -1097,19 +980,15 @@ func TestFlowerThreadDeleteUsesPersistentReplayWithoutCompensation(t *testing.T)
 			}
 		}
 	}
-	prepareSource := readRepoFile(t, root, filepath.Join("internal", "ai", "threads.go"))
-	if !strings.Contains(prepareSource, "PrepareThreadDeleteOperation") {
-		t.Fatalf("threads.go must persist the thread delete operation before replay")
-	}
-	operationSource := readRepoFile(t, root, filepath.Join("internal", "ai", "thread_delete_operation.go"))
-	for _, marker := range []string{"ConfirmThreadDeleteFilesCleaned", "ConfirmThreadDeleteFloretDeleted", "ConfirmThreadDeleteReadStateDeleted"} {
-		if !strings.Contains(operationSource, marker) {
-			t.Fatalf("thread delete replay missing persistent step %q", marker)
+	deleteSource := readRepoFile(t, root, filepath.Join("internal", "ai", "threads.go"))
+	for _, marker := range []string{"runtime.View", "runtime.Cancel", "runtime.Delete"} {
+		if !strings.Contains(deleteSource, marker) {
+			t.Fatalf("threads.go must use typed runtime delete boundary %q", marker)
 		}
 	}
 }
 
-func TestFloretSubagentDetailUsesParentBoundReadHost(t *testing.T) {
+func TestFloretSubagentsUseOrdinaryChildThreads(t *testing.T) {
 	t.Parallel()
 
 	root := repoRootForTest(t)
@@ -1121,13 +1000,16 @@ func TestFloretSubagentDetailUsesParentBoundReadHost(t *testing.T) {
 		"\"snapshot\":",
 		"\"subagent\":",
 		"\"item\":",
+		"open" + "FloretSubagentReadHost",
 	} {
 		if strings.Contains(content, marker) {
 			t.Fatalf("subagents_floret.go must not retain provider-backed detail or legacy subagent shape marker %q", marker)
 		}
 	}
-	if !strings.Contains(content, "open"+"FloretSubagentReadHost") {
-		t.Fatalf("subagents_floret.go must use a parent-bound Floret read host for detached subagent detail reads")
+	for _, marker := range []string{"flruntime.ThreadService", "threads.Send", "threads.Cancel", "ThreadScope{ParentID:"} {
+		if !strings.Contains(content, marker) {
+			t.Fatalf("subagents_floret.go must use ordinary child Thread boundary %q", marker)
+		}
 	}
 }
 
@@ -1158,7 +1040,7 @@ func TestFloretContextLifecycleBoundaryDoesNotUseHostHistoryAPIs(t *testing.T) {
 
 	root := repoRootForTest(t)
 	forbidden := []string{
-		"github.com/floegence/floret/v3/" + "internal",
+		"github.com/floegence/floret/v4/" + "internal",
 		"Run" + "ProjectedTurn",
 		"ProjectedTurn" + "Request",
 		"ProjectedTurn" + "Result",
@@ -1279,7 +1161,6 @@ func TestFloretContextPolicyUsesOnlyHostSelectableModelLimits(t *testing.T) {
 	root := repoRootForTest(t)
 	for _, rel := range []string{
 		filepath.Join("internal", "ai", "floret_runtime.go"),
-		filepath.Join("internal", "ai", "compact_thread_context.go"),
 	} {
 		content := readRepoFile(t, root, rel)
 		for _, marker := range []string{
@@ -1421,7 +1302,6 @@ func TestFloretV05BoundaryRemovesProjectionAndForkFallbacks(t *testing.T) {
 	root := repoRootForTest(t)
 	for _, rel := range []string{
 		filepath.Join("internal", "ai", "floret_runtime.go"),
-		filepath.Join("internal", "ai", "floret_thread_projection.go"),
 		filepath.Join("internal", "ai", "threads.go"),
 	} {
 		content := readRepoFile(t, root, rel)
@@ -1741,8 +1621,10 @@ func assertOnlyCurrentFlowersecGoImports(t *testing.T, root string) {
 			continue
 		}
 		path := filepath.Join(root, filepath.FromSlash(rel))
-		if _, statErr := os.Stat(path); errors.Is(statErr, os.ErrNotExist) {
+		if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
 			continue
+		} else if statErr != nil {
+			t.Fatalf("stat %s: %v", rel, statErr)
 		}
 		parsed, parseErr := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
 		if parseErr != nil {

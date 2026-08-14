@@ -1,12 +1,12 @@
 import type {
-  FlowerApprovalDecisionReceipt,
+  FlowerApprovalCommandResult,
   FlowerCanonicalReferenceOpenRequest,
-  FlowerCompactThreadContextInput,
   FlowerFileOpenRequest,
   FlowerLinkedContextPathOpenRequest,
   FlowerModelSourceRecovery,
   FlowerPermissionType,
   FlowerReasoningSelection,
+  FlowerRetryEffectRequest,
   FlowerResolveHandlerInput,
   FlowerRouterDecision,
   FlowerTurnLaunchInput,
@@ -27,18 +27,17 @@ import type {
   FlowerThreadDeleteOutcome,
   FlowerThreadReadStatus,
   FlowerThreadSnapshot,
-  FlowerLiveBootstrap,
-  FlowerLiveEventsResponse,
+  FlowerThreadView,
   FlowerLiveStreamConnectInput,
   FlowerLiveStreamEnvelope,
+  FlowerRuntimeCurrentView,
 } from './contracts/flowerSurfaceContracts';
 import {
   mapFlowerReadStatus,
-  mapFlowerLiveBootstrap,
-  mapFlowerLiveEvents,
   mapFlowerThread,
   type FlowerLiveThreadMapperOptions,
 } from './flowerLiveMapper';
+import { applyFlowerRuntimeCurrentView } from './runtimeCurrentView';
 
 type ThreadView = Readonly<{
   thread_id?: string;
@@ -93,30 +92,16 @@ export type FlowerThreadDeleteTransportOutcome = Readonly<
   | { kind: 'terminal_failure'; receipt: unknown }
 >;
 
-type RuntimeApprovalSubmitBase = Readonly<{
+type RuntimeApprovalSubmitInput = Readonly<{
   thread_id: string;
-  action_id: string;
+  interaction_id: string;
   approved: boolean;
-  expected_seq?: number;
-  revision: number;
-  version?: number;
-  surface_epoch?: number;
-  queue_generation: number;
-  queue_revision: number;
-  idempotency_key?: string;
-}>;
-
-type RuntimeApprovalSubmitInput = RuntimeApprovalSubmitBase & Readonly<{
-  origin: FlowerSubmitApprovalRequest['origin'];
-  run_id: string;
-  tool_id: string;
+  reject_all?: boolean;
 }>;
 
 export type FlowerRuntimeTransport = Readonly<{
   listThreads(): Promise<ListThreadsResponse>;
   loadThread(threadID: string): Promise<unknown>;
-  /** @deprecated Live product surfaces use connectLiveStream. */
-  listThreadLiveEvents(threadID: string, afterSeq: number, limit: number): Promise<unknown>;
   connectLiveStream?: (input: FlowerLiveStreamConnectInput) => AsyncIterable<unknown>;
   loadSubagentDetail(parentThreadID: string, childThreadID: string, afterOrdinal: number, limit: number): Promise<LoadSubagentDetailResponse>;
   readTerminalProcess?(runID: string, processID: string, input: { after_seq: number }): Promise<FlowerTerminalProcessSnapshot>;
@@ -124,9 +109,11 @@ export type FlowerRuntimeTransport = Readonly<{
   patchThread(threadID: string, input: ThreadPatchInput): Promise<LoadThreadResponse>;
   reorderQueuedTurns?(threadID: string, orderedQueueIDs: readonly string[]): Promise<unknown>;
   deleteQueuedTurn?(threadID: string, queueID: string): Promise<unknown>;
+  promoteQueuedTurn?(threadID: string, queueID: string): Promise<unknown>;
   forkThread(threadID: string, input: Readonly<{ client_request_id: string }>): Promise<LoadThreadResponse>;
   deleteThread?(threadID: string): Promise<FlowerThreadDeleteTransportOutcome>;
-  submitApproval(input: RuntimeApprovalSubmitInput): Promise<FlowerApprovalDecisionReceipt>;
+  submitApproval(input: RuntimeApprovalSubmitInput): Promise<FlowerApprovalCommandResult>;
+  retryEffect(input: FlowerRetryEffectRequest): Promise<unknown>;
 }>;
 
 export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
@@ -148,9 +135,8 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   loadStagedAttachmentPreview?: FlowerSurfaceAdapter['loadStagedAttachmentPreview'];
   previewStagedAttachment?: FlowerSurfaceAdapter['previewStagedAttachment'];
   launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerTurnLaunchReceipt>;
-  retryThread: (threadID: string) => Promise<FlowerLiveBootstrap>;
-  compactThreadContext: (input: FlowerCompactThreadContextInput) => Promise<FlowerLiveBootstrap>;
-  stopThread: (threadID: string) => Promise<FlowerLiveBootstrap>;
+  retryThread: (threadID: string) => Promise<unknown>;
+  stopThread: (threadID: string) => Promise<unknown>;
   submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerSubmitInputReceipt>;
   getWorkingDirectoryPathContext?: () => Promise<FlowerWorkingDirectoryPathContext>;
   listWorkingDirectoryEntries?: (input: FlowerWorkingDirectoryListInput) => Promise<readonly FlowerWorkingDirectoryEntry[]>;
@@ -173,48 +159,68 @@ function missingThreadIDMessage(options: RuntimeFlowerSurfaceAdapterOptions): st
 }
 
 function mapRuntimeThread(thread: ThreadView, options: RuntimeFlowerSurfaceAdapterOptions): FlowerThreadSnapshot {
-  return mapFlowerThread(thread, [], options.mapperOptions, thread.read_status);
+	const { waiting_prompt: _waitingPrompt, ...summary } = thread;
+	return mapFlowerThread(summary, [], options.mapperOptions, thread.read_status);
 }
 
-function mapRuntimeBootstrap(raw: unknown, options: RuntimeFlowerSurfaceAdapterOptions): FlowerLiveBootstrap {
-  return mapFlowerLiveBootstrap(raw, options.mapperOptions);
+function mapRuntimeSummaryThread(thread: ThreadView, options: RuntimeFlowerSurfaceAdapterOptions): FlowerThreadSnapshot {
+	const { waiting_prompt: _waitingPrompt, ...summary } = thread;
+	const updatedAt = Math.max(0, Math.floor(Number(thread.updated_at_unix_ms ?? 0)));
+  const lastMessageAt = Math.max(0, Math.floor(Number(thread.last_message_at_unix_ms ?? updatedAt)));
+  const activityRevision = Math.max(updatedAt, lastMessageAt);
+  const readStatus = thread.read_status ?? {
+    is_unread: false,
+    snapshot: {
+      activity_revision: activityRevision,
+      last_message_at_unix_ms: lastMessageAt,
+      activity_signature: '',
+    },
+    read_state: {
+      last_seen_activity_revision: activityRevision,
+      last_read_message_at_unix_ms: lastMessageAt,
+      last_seen_activity_signature: '',
+    },
+  };
+	return mapFlowerThread(summary, [], options.mapperOptions, readStatus);
 }
 
-function mapRuntimeEvents(raw: unknown): FlowerLiveEventsResponse {
-  return mapFlowerLiveEvents(raw);
+function mapRuntimeThreadView(raw: unknown, options: RuntimeFlowerSurfaceAdapterOptions): FlowerThreadView {
+  const value = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+  const current = value.current && typeof value.current === 'object'
+    ? value.current as FlowerRuntimeCurrentView
+    : undefined;
+  const productThread = value.thread && typeof value.thread === 'object'
+    ? value.thread as ThreadView
+    : undefined;
+  if (current && productThread) {
+    const base = mapRuntimeThread(productThread, options);
+    const thread = applyFlowerRuntimeCurrentView(base, current);
+    return { thread, current };
+  }
+  throw new Error('Flower thread detail requires product metadata and a typed current view.');
 }
 
-function mapRuntimeLiveStreamEnvelope(raw: unknown): FlowerLiveStreamEnvelope {
+function mapRuntimeLiveStreamEnvelope(raw: unknown, options: RuntimeFlowerSurfaceAdapterOptions): FlowerLiveStreamEnvelope {
   const value = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
   const kind = trim(value.kind);
-  if (kind !== 'ready' && kind !== 'summary.batch' && kind !== 'thread.batch' && kind !== 'viewer.read_state' && kind !== 'resync_required') {
+  if (kind !== 'ready' && kind !== 'summary.batch' && kind !== 'thread.batch' && kind !== 'viewer.read_state') {
     throw new Error('Flower live stream returned an unsupported envelope.');
   }
-  const streamGeneration = Math.floor(Number(value.stream_generation));
-  if (!Number.isSafeInteger(streamGeneration) || streamGeneration <= 0) {
-    throw new Error('Flower live stream returned an invalid generation.');
-  }
-  const mappedEvents = kind === 'summary.batch' || kind === 'thread.batch'
-    ? mapRuntimeEvents({
-        stream_generation: streamGeneration,
-        events: value.events,
-        next_cursor: value.through_seq,
-        retained_from_seq: value.retained_from_seq,
-      }).events
+  const summaries = Array.isArray(value.summaries)
+    ? value.summaries
+        .filter((thread): thread is ThreadView => Boolean(thread && typeof thread === 'object'))
+        .map((thread) => mapRuntimeSummaryThread(thread, options))
+    : undefined;
+  const current = value.current && typeof value.current === 'object'
+    ? value.current as FlowerRuntimeCurrentView
     : undefined;
   return {
     schema_version: Math.floor(Number(value.schema_version)),
     kind,
-    stream_generation: streamGeneration,
     ...(trim(value.thread_id) ? { thread_id: trim(value.thread_id) } : {}),
-    ...(Number.isSafeInteger(Number(value.from_seq)) ? { from_seq: Math.floor(Number(value.from_seq)) } : {}),
-    ...(Number.isSafeInteger(Number(value.through_seq)) ? { through_seq: Math.floor(Number(value.through_seq)) } : {}),
-    ...(Number.isSafeInteger(Number(value.retained_from_seq)) ? { retained_from_seq: Math.floor(Number(value.retained_from_seq)) } : {}),
-    ...(Number.isSafeInteger(Number(value.summary_through_seq)) ? { summary_through_seq: Math.floor(Number(value.summary_through_seq)) } : {}),
-    ...(Number.isSafeInteger(Number(value.summary_retained_from_seq)) ? { summary_retained_from_seq: Math.floor(Number(value.summary_retained_from_seq)) } : {}),
-    ...(mappedEvents ? { events: mappedEvents } : {}),
+    ...(summaries ? { summaries } : {}),
+    ...(current ? { current } : {}),
     ...(kind === 'viewer.read_state' ? { read_status: mapFlowerReadStatus(value.read_status) } : {}),
-    ...(trim(value.reason) ? { reason: trim(value.reason) } : {}),
   } as FlowerLiveStreamEnvelope;
 }
 
@@ -240,10 +246,10 @@ function mapThreadDeleteReceipt(outcome: FlowerThreadDeleteTransportOutcome): Fl
 }
 
 export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceAdapterOptions): FlowerSurfaceAdapter {
-  const loadThread = async (threadID: string): Promise<FlowerLiveBootstrap> => {
+  const loadThread = async (threadID: string): Promise<FlowerThreadView> => {
     const tid = trim(threadID);
     if (!tid) throw new Error(missingThreadIDMessage(options));
-    return mapRuntimeBootstrap(
+    return mapRuntimeThreadView(
       await options.transport.loadThread(tid),
       options,
     );
@@ -264,7 +270,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     return mapFlowerReadStatus(result.read_status);
   };
 
-  return {
+  const adapter: FlowerSurfaceAdapter = {
     runtime: options.runtime,
     canMutate: options.canMutate !== false,
     keepLiveWhenHidden: Boolean(options.transport.connectLiveStream),
@@ -276,17 +282,10 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
       return (result.threads ?? []).map((thread) => mapRuntimeThread(thread, options));
     },
     loadThread,
-    listThreadLiveEvents: async (threadID, afterSeq, limit = 100) => {
-      const tid = trim(threadID);
-      if (!tid) throw new Error(missingThreadIDMessage(options));
-      const cursor = Math.max(0, Math.floor(Number(afterSeq) || 0));
-      const pageLimit = Math.max(1, Math.min(200, Math.floor(Number(limit) || 100)));
-      return mapRuntimeEvents(await options.transport.listThreadLiveEvents(tid, cursor, pageLimit));
-    },
     ...(options.transport.connectLiveStream ? {
       connectLiveStream: async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<FlowerLiveStreamEnvelope> {
         for await (const envelope of options.transport.connectLiveStream!(input)) {
-          yield mapRuntimeLiveStreamEnvelope(envelope);
+          yield mapRuntimeLiveStreamEnvelope(envelope, options);
         }
       },
     } : {}),
@@ -364,6 +363,16 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
           return loadThread(tid);
         },
       } : {}),
+      ...(options.transport.promoteQueuedTurn ? {
+        promoteQueuedTurn: async (threadID: string, queueID: string) => {
+          const tid = trim(threadID);
+          const qid = trim(queueID);
+          if (!tid) throw new Error(missingThreadIDMessage(options));
+          if (!qid) throw new Error('Missing Flower queued turn id.');
+          await options.transport.promoteQueuedTurn!(tid, qid);
+          return loadThread(tid);
+        },
+      } : {}),
       forkThread: async (threadID: string, clientRequestID: string) => {
         const tid = trim(threadID);
         const requestID = trim(clientRequestID);
@@ -398,56 +407,39 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     retryThread: async (threadID) => {
       const tid = trim(threadID);
       if (!tid) throw new Error(missingThreadIDMessage(options));
-      return options.retryThread(tid);
+      await options.retryThread(tid);
+      return loadThread(tid);
     },
-    compactThreadContext: async (input) => {
+    retryEffect: async (input) => {
       const tid = trim(input.thread_id);
+      const effectAttemptID = trim(input.effect_attempt_id);
+      const toolCallID = trim(input.tool_call_id);
       if (!tid) throw new Error(missingThreadIDMessage(options));
-      return options.compactThreadContext({
+      if (!effectAttemptID || !toolCallID) throw new Error('Missing effect retry identity.');
+      await options.transport.retryEffect({
         thread_id: tid,
-        active_run_id: trim(input.active_run_id) || undefined,
+        effect_attempt_id: effectAttemptID,
+        tool_call_id: toolCallID,
+        acknowledge_unknown_risk: true,
       });
     },
     stopThread: async (threadID) => {
       const tid = trim(threadID);
       if (!tid) throw new Error(missingThreadIDMessage(options));
-      return options.stopThread(tid);
+      await options.stopThread(tid);
+      return loadThread(tid);
     },
     submitInput: options.submitInput,
     submitApproval: async (input: FlowerSubmitApprovalRequest) => {
       const tid = trim(input.thread_id);
       if (!tid) throw new Error(missingThreadIDMessage(options));
-      const origin = trim(input.origin) as FlowerSubmitApprovalRequest['origin'];
-      if (origin !== 'main_tool' && origin !== 'delegated_subagent' && origin !== 'control_confirm') {
-        throw new Error('Invalid approval origin.');
-      }
-      const revision = Number(input.revision);
-      if (!Number.isSafeInteger(revision) || revision <= 0) {
-        throw new Error('Invalid approval revision.');
-      }
-      const queueGeneration = Number(input.queue_generation);
-      const queueRevision = Number(input.queue_revision);
-      if (!Number.isSafeInteger(queueGeneration) || queueGeneration <= 0 ||
-        !Number.isSafeInteger(queueRevision) || queueRevision <= 0) {
-        throw new Error('Invalid approval queue authority.');
-      }
-      const common = {
-        thread_id: tid,
-        origin,
-        action_id: trim(input.action_id),
-        approved: Boolean(input.approved),
-        expected_seq: Math.max(0, Math.floor(Number(input.expected_seq ?? 0))) || undefined,
-        revision,
-        version: Math.max(0, Math.floor(Number(input.version ?? 0))) || undefined,
-        surface_epoch: Math.max(0, Math.floor(Number(input.surface_epoch ?? 0))) || undefined,
-        queue_generation: queueGeneration,
-        queue_revision: queueRevision,
-        ...(input.idempotency_key ? { idempotency_key: trim(input.idempotency_key) } : {}),
-      };
+      const interactionID = trim(input.interaction_id);
+      if (!interactionID) throw new Error('Missing approval interaction id.');
       return options.transport.submitApproval({
-        ...common,
-        run_id: trim(input.run_id),
-        tool_id: trim(input.tool_id),
+        thread_id: tid,
+        interaction_id: interactionID,
+        approved: Boolean(input.approved),
+        ...(input.reject_all ? { reject_all: true } : {}),
       });
     },
     ...(options.transport.readTerminalProcess ? {
@@ -474,4 +466,5 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     ...(options.openLinkedDirectoryBrowser ? { openLinkedDirectoryBrowser: options.openLinkedDirectoryBrowser } : {}),
     ...(options.modelSourceRecovery ? { modelSourceRecovery: options.modelSourceRecovery } : {}),
   };
+  return adapter;
 }

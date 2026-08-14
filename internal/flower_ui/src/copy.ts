@@ -265,7 +265,6 @@ export type FlowerSurfaceCopy = Readonly<{
     overLimit: (limit: number) => string;
     invalidText: string;
     restoreFailed: string;
-    compactBlocked: string;
     pendingDraft: string;
     modelSupportChecking: string;
     modelSupported: string;
@@ -302,10 +301,6 @@ export type FlowerSurfaceCopy = Readonly<{
     handlerRetry: string;
     send: string;
     stop: string;
-    compactContext: string;
-    compactChooseThread: string;
-    compactFinishInputRequest: string;
-    compactNeedsConversation: string;
     commandMenuLabel: string;
     composerMoreLabel: string;
     composerReferencesLabel: string;
@@ -316,9 +311,7 @@ export type FlowerSurfaceCopy = Readonly<{
     composerReferenceRemove: (path: string) => string;
     composerReferenceAdded: (path: string) => string;
     composerReferenceExists: (path: string) => string;
-    commandCompactContext: string;
     pendingSending: string;
-    pendingSubmission: string;
     pendingQueued: string;
     queuedSendNow: string;
     queuedDelete: string;
@@ -444,7 +437,6 @@ export type FlowerSurfaceCopy = Readonly<{
     inputRequestRetry?: string;
     inputRequestAnswerRequired?: string;
     inputRequestAnswerHidden?: string;
-    inputRequestSubmitting?: string;
     inputRequestPrevious?: string;
     inputRequestNext?: string;
     inputRequestComposerPlaceholder?: string;
@@ -498,7 +490,6 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     overLimit: (limit) => `Text longer than ${limit.toLocaleString()} characters will be sent as an attachment.`,
     invalidText: 'This text contains invalid Unicode and cannot be attached.',
     restoreFailed: 'Flower could not restore this text attachment.',
-    compactBlocked: 'Remove or send attachments and references before compacting context.',
     pendingDraft: 'Unsent draft preserved.',
     modelSupportChecking: 'Checking attachment support',
     modelSupported: 'Supports current attachments',
@@ -535,10 +526,6 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     handlerRetry: 'Retry',
     send: 'Send',
     stop: 'Stop',
-    compactContext: 'Compact context',
-    compactChooseThread: 'Choose a conversation before compacting context.',
-    compactFinishInputRequest: 'Finish the current input request before compacting context.',
-    compactNeedsConversation: 'There is no context to compact yet.',
     commandMenuLabel: 'Flower commands',
     composerMoreLabel: 'More input options',
     composerReferencesLabel: 'File and folder references',
@@ -549,9 +536,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     composerReferenceRemove: (path) => `Remove reference ${path}`,
     composerReferenceAdded: (path) => `${path} referenced.`,
     composerReferenceExists: (path) => `${path} is already referenced.`,
-    commandCompactContext: 'Compact current context',
     pendingSending: 'Sending',
-    pendingSubmission: 'Sending message...',
     pendingQueued: 'Queued',
     queuedSendNow: 'Send now',
     queuedDelete: 'Delete queued message',
@@ -691,7 +676,6 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     inputRequestRetry: 'Retry',
     inputRequestAnswerRequired: 'Answer the waiting prompt before continuing.',
     inputRequestAnswerHidden: 'Answer hidden',
-    inputRequestSubmitting: 'Submitting...',
     inputRequestPrevious: 'Previous question',
     inputRequestNext: 'Next question',
     inputRequestComposerPlaceholder: 'Reply to continue this conversation.',

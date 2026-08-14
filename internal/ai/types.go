@@ -14,7 +14,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/floegence/floret/v3/identity"
+	"github.com/floegence/floret/v4/identity"
+	flruntime "github.com/floegence/floret/v4/runtime"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/config"
 )
@@ -106,21 +107,19 @@ type RequestUserInputSecretAnswer struct {
 }
 
 type SubmitRequestUserInputResponseRequest struct {
-	ThreadID         string                   `json:"thread_id"`
-	Model            string                   `json:"model,omitempty"`
-	Response         RequestUserInputResponse `json:"response"`
-	Input            RunInput                 `json:"input"`
-	Options          RunOptions               `json:"options"`
-	ExpectedRunID    string                   `json:"expected_run_id,omitempty"`
-	SourceFollowupID string                   `json:"source_followup_id,omitempty"`
+	ThreadID      string                   `json:"thread_id"`
+	Model         string                   `json:"model,omitempty"`
+	Response      RequestUserInputResponse `json:"response"`
+	Input         RunInput                 `json:"input"`
+	Options       RunOptions               `json:"options"`
+	ExpectedRunID string                   `json:"expected_run_id,omitempty"`
 }
 
 type SubmitRequestUserInputResponseResponse struct {
-	RunID                   string `json:"run_id"`
-	TurnID                  string `json:"turn_id"`
-	Kind                    string `json:"kind"`
-	ConsumedWaitingPromptID string `json:"consumed_waiting_prompt_id,omitempty"`
-	AppliedPermissionType   string `json:"applied_permission_type,omitempty"`
+	Kind                    string               `json:"kind"`
+	ConsumedWaitingPromptID string               `json:"consumed_waiting_prompt_id,omitempty"`
+	AppliedPermissionType   string               `json:"applied_permission_type,omitempty"`
+	Current                 flruntime.ThreadView `json:"current"`
 }
 
 // --- HTTP API types (snake_case, stable) ---
@@ -157,8 +156,6 @@ type ThreadView struct {
 	ActiveRunID          string                       `json:"active_run_id,omitempty"`
 	ApprovalPending      *bool                        `json:"approval_pending,omitempty"`
 	ApprovalPendingCount int                          `json:"approval_pending_count,omitempty"`
-	ApprovalGeneration   int64                        `json:"approval_generation,omitempty"`
-	ApprovalRevision     int64                        `json:"approval_revision,omitempty"`
 	ReasoningSelection   config.AIReasoningSelection  `json:"reasoning_selection,omitempty"`
 	ReasoningCapability  config.AIReasoningCapability `json:"reasoning_capability,omitempty"`
 	PinnedAtUnixMs       int64                        `json:"pinned_at_unix_ms,omitempty"`
@@ -173,6 +170,14 @@ type ThreadView struct {
 type ListThreadsResponse struct {
 	Threads    []ThreadView `json:"threads"`
 	NextCursor string       `json:"next_cursor,omitempty"`
+}
+
+// FlowerThreadDetail joins Redeven-owned thread metadata with Floret's typed
+// current view. The two fields have distinct owners and are replaced atomically
+// by the detail endpoint; summary updates never write Current.
+type FlowerThreadDetail struct {
+	Thread  ThreadView           `json:"thread"`
+	Current flruntime.ThreadView `json:"current"`
 }
 
 type FlowerSubagentSummary struct {
@@ -361,10 +366,6 @@ type ListFollowupsResponse struct {
 	Drafts       []FollowupItemView `json:"drafts"`
 }
 
-type PatchFollowupRequest struct {
-	Text *string `json:"text,omitempty"`
-}
-
 type ReorderFollowupsRequest struct {
 	Lane               string   `json:"lane"`
 	OrderedFollowupIDs []string `json:"ordered_followup_ids"`
@@ -372,11 +373,20 @@ type ReorderFollowupsRequest struct {
 }
 
 type StopThreadResponse struct {
-	OK                 bool               `json:"ok"`
-	RecoveredFollowups []FollowupItemView `json:"recovered_followups,omitempty"`
+	OK bool `json:"ok"`
 }
 
 type RetryThreadContinuationResponse struct {
+	OK bool `json:"ok"`
+}
+
+type RetryThreadEffectRequest struct {
+	EffectAttemptID        string `json:"effect_attempt_id"`
+	ToolCallID             string `json:"tool_call_id"`
+	AcknowledgeUnknownRisk bool   `json:"acknowledge_unknown_risk"`
+}
+
+type RetryThreadEffectResponse struct {
 	OK bool `json:"ok"`
 }
 
@@ -631,15 +641,8 @@ type streamEventModelIOStatus struct {
 }
 
 type streamEventApprovalAction struct {
-	Type          string               `json:"type"`
-	Action        FlowerApprovalAction `json:"action"`
-	ApprovalQueue *FlowerApprovalQueue `json:"approvalQueue,omitempty"`
-}
-
-type streamEventApprovalQueue struct {
-	Type          string                 `json:"type"`
-	Actions       []FlowerApprovalAction `json:"actions"`
-	ApprovalQueue FlowerApprovalQueue    `json:"approvalQueue"`
+	Type   string               `json:"type"`
+	Action FlowerApprovalAction `json:"action"`
 }
 
 // RealtimeEventType defines the high-level AI event category sent over Flowersec RPC notify.
@@ -700,8 +703,6 @@ type RealtimeEvent struct {
 	ActiveRunID          string                       `json:"active_run_id,omitempty"`
 	ApprovalPending      *bool                        `json:"approval_pending,omitempty"`
 	ApprovalPendingCount int                          `json:"approval_pending_count,omitempty"`
-	ApprovalGeneration   int64                        `json:"approval_generation,omitempty"`
-	ApprovalRevision     int64                        `json:"approval_revision,omitempty"`
 	PermissionType       string                       `json:"permission_type,omitempty"`
 	QueuedTurnCount      int                          `json:"queued_turn_count,omitempty"`
 	QueuedTurns          []QueuedTurnView             `json:"queued_turns,omitempty"`

@@ -40,21 +40,16 @@ main() {
       src/ui/activityFlowerCompletionNotice.test.ts \
       src/ui/activityFlowerSummary.test.ts \
       src/ui/FlowerSurface.emptyStatePresentation.test.tsx \
-      src/ui/FlowerSurface.navigation.context.test.tsx \
-      src/ui/FlowerSurface.navigation.activity.test.tsx \
-      src/ui/FlowerSurface.navigation.launchSend.test.tsx \
+      src/ui/FlowerSurface.navigation.test.tsx \
       src/ui/FlowerSurface.composerReferences.test.tsx \
       src/ui/FlowerSurface.desktopModelSource.e2e.test.tsx \
-      src/ui/FlowerSurface.navigation.threads.test.tsx \
       src/ui/FlowerSurface.visibility.shared.test.tsx \
       src/ui/FlowerThreadCard.performance.test.tsx \
-      src/ui/FlowerSurface.threadDeletion.test.tsx \
       src/ui/FlowerThreadList.delete.test.tsx \
       src/ui/FlowerSurface.navigation.structuredInput.test.tsx \
       src/ui/FlowerSurface.canonicalReferences.test.tsx \
       src/ui/flower/FlowerChatContextChips.test.tsx \
       src/ui/flower/FlowerAttachmentLane.test.tsx \
-      src/ui/flower/FlowerTurnProjectionUnavailable.test.tsx \
       src/ui/flower/activityDisclosure.test.ts \
       src/ui/flower/SubagentDetailWindow.test.tsx \
       src/ui/flower/envLocalFlowerSurfaceAdapter.test.ts \
@@ -75,7 +70,10 @@ main() {
     ui_pkg_log ""
     ui_pkg_log "Flower UI: shared timeline projection contracts..."
     ui_pkg_run_pnpm exec vitest run --root "$ROOT_DIR" --config "$dir/vite.config.ts" --environment=node --maxWorkers=2 --testTimeout=10000 \
-      internal/flower_ui/src/flowerLiveProjection.test.ts \
+      internal/flower_ui/src/threadCache.test.ts \
+      internal/flower_ui/src/transportOutbox.test.ts \
+      internal/flower_ui/src/runtimeCurrentView.test.ts \
+      internal/flower_ui/src/approvalAction.test.ts \
       internal/flower_ui/src/attachments/flowerAttachmentModel.test.ts \
       internal/flower_ui/src/attachments/createFlowerAttachmentController.test.ts \
       internal/flower_ui/src/composer/createFlowerComposerDraftCoordinator.test.ts \
@@ -122,12 +120,11 @@ main() {
       ui_pkg_run_pnpm run test:browser -- \
         src/ui/EnvAppShell.flowerCompanion.browser.test.tsx \
         src/ui/flowerCompanionTailMotion.browser.test.tsx \
-        src/ui/FlowerSurface.pendingSubmission.browser.test.tsx \
+        src/ui/FlowerSurface.finalArchitecture.browser.test.tsx \
         src/ui/FlowerSurface.canonicalReferences.browser.test.tsx \
+        src/ui/FlowerSurface.composerAttachments.browser.test.tsx \
         src/ui/FlowerSurface.composerReferences.browser.test.tsx \
-        src/ui/FlowerSurface.approvalRefresh.browser.test.tsx \
-        src/ui/FlowerSurface.activityDisclosure.browser.test.tsx \
-        src/ui/FlowerSurface.inputAdmission.browser.test.tsx \
+        src/ui/FlowerSurface.decisionSurface.browser.test.tsx \
         src/ui/FlowerSurface.setupGuide.browser.test.tsx \
         src/ui/widgets/FlowerTurnLauncherWindow.browser.test.tsx \
         src/ui/widgets/TerminalSessionRuntime.semantic.browser.test.tsx \

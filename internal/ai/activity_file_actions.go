@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/floegence/floret/v3/observation"
-	fltools "github.com/floegence/floret/v3/tools"
+	"github.com/floegence/floret/v4/observation"
+	fltools "github.com/floegence/floret/v4/tools"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -80,10 +80,7 @@ func (s *Service) rawFlowerActionMessageValues(ctx context.Context, endpointID s
 	if endpointID == "" || threadID == "" {
 		return nil, errors.New("invalid request")
 	}
-	s.mu.Lock()
-	state := s.flowerLiveMaterializedStateLocked(endpointID, threadID)
-	s.mu.Unlock()
-	messages, err := s.buildFlowerTimelineMessages(ctx, endpointID, threadID, state)
+	messages, err := s.buildCanonicalFlowerTimelineMessages(ctx, endpointID, threadID)
 	if err != nil {
 		return nil, err
 	}

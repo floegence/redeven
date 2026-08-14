@@ -1254,8 +1254,9 @@ describe('main routing', () => {
     expect(routeSrc).toContain("methods: ['DELETE'], allowsQuery: runtimeFlowerDeleteQuery");
     expect(routeSrc).not.toContain("methods: ['GET', 'PATCH', 'DELETE']");
     expect(routeSrc).not.toContain("'/_redeven_proxy/api/ai/runs'");
-    expect(routeSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/live\\/bootstrap$/u");
-    expect(routeSrc).toContain("{ path: '/_redeven_proxy/api/ai/flower/stream', methods: ['GET'], allowsQuery: runtimeFlowerStreamQuery }");
+    expect(routeSrc).not.toContain('live\\/bootstrap');
+    expect(routeSrc).toContain("{ path: '/_redeven_proxy/api/ai/flower/stream', methods: ['GET'] }");
+    expect(routeSrc).not.toContain('runtimeFlowerStreamQuery');
     expect(routeSrc).not.toContain('live\\/events');
     expect(routeSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/subagents\\/[^/]+\\/detail$/u");
     expect(routeSrc).toContain('runtimeFlowerSubagentDetailQuery');
@@ -1266,7 +1267,11 @@ describe('main routing', () => {
     expect(routeSrc).not.toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/live$/u");
     expect(routeSrc).not.toContain('live\\/updates');
     expect(routeSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/approvals$/u");
-    expect(routeSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/context\\/compact$/u");
+    expect(routeSrc).not.toContain('context\\/compact');
+    expect(routeSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/followups\\/order$/u");
+    expect(routeSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/followups\\/[^/]+$/u");
+    expect(routeSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/retry$/u");
+    expect(routeSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/retry_effect$/u");
     expect(routeSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/cancel$/u");
     expect(routeSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/runs\\/[^/]+\\/terminal\\/[^/]+\\/read$/u");
 	expect(routeSrc).toContain('runtimeFlowerTerminalReadQuery');

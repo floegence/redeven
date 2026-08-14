@@ -3,7 +3,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type {
-  FlowerLiveBootstrap,
+  FlowerThreadView,
   FlowerThreadSnapshot,
   FlowerTurnLaunchInput,
 } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
@@ -203,7 +203,11 @@ describe('FlowerSurface navigation structured input', () => {
         },
       ],
     });
-    const submitInput = vi.fn(async () => inputAdmissionReceipt(continuedThread.thread_id, waitingThread.input_request!.prompt_id));
+    const submitInput = vi.fn(async () => ({
+      thread_id: continuedThread.thread_id,
+      consumed_prompt_id: waitingThread.input_request!.prompt_id,
+      current: liveBootstrap(continuedThread, 2).current,
+    }));
     const loadThread = vi.fn(async () => liveBootstrap(loadThread.mock.calls.length === 1 ? waitingThread : continuedThread));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
@@ -232,7 +236,7 @@ describe('FlowerSurface navigation structured input', () => {
       },
     });
     expect(runtime.querySelector('[data-flower-input-request-prompt]')).toBeNull();
-    expect(loadThread).toHaveBeenCalledTimes(2);
+    expect(loadThread).toHaveBeenCalledTimes(1);
     expect(runtime.querySelector('[data-thread-id="thread-submit-input"]')).not.toBeNull();
   });
 
@@ -315,7 +319,7 @@ describe('FlowerSurface navigation structured input', () => {
     expect(runtime.querySelector('.flower-input-request-choice-selected')?.textContent).toContain('Production');
   });
 
-  it('clears waiting prompts when a summary-only refresh reports a terminal thread', async () => {
+  it('keeps waiting detail until a terminal current view replaces it', async () => {
     const detailedThread = thread({
       thread_id: 'thread-waiting-summary-refresh',
       title: 'Waiting survives refresh',
@@ -334,12 +338,13 @@ describe('FlowerSurface navigation structured input', () => {
     };
     let listSnapshot: readonly FlowerThreadSnapshot[] = [detailedThread];
     let delayedDetailReloadStarted = false;
+    const terminalDetail = deferred<FlowerThreadView>();
     const loadThread = vi.fn(() => {
       if (loadThread.mock.calls.length === 1) {
         return Promise.resolve(liveBootstrap(detailedThread));
       }
       delayedDetailReloadStarted = true;
-      return new Promise<FlowerLiveBootstrap>(() => undefined);
+      return terminalDetail.promise;
     });
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
@@ -355,7 +360,10 @@ describe('FlowerSurface navigation structured input', () => {
     (runtime.querySelector('.flower-thread-refresh-button') as HTMLButtonElement).click();
     await waitFor(() => delayedDetailReloadStarted);
 
-    expect(runtime.querySelector('[data-flower-input-request-prompt]')).toBeNull();
+    expect(runtime.querySelector('[data-flower-input-request-prompt]')).not.toBeNull();
+
+    terminalDetail.resolve(liveBootstrap(summaryOnlyThread, 2));
+    await waitFor(() => runtime.querySelector('[data-flower-input-request-prompt]') === null);
   });
 
   it('ignores stale input requests when the thread is no longer waiting for user input', async () => {
@@ -401,7 +409,7 @@ describe('FlowerSurface navigation structured input', () => {
     expect(submitInput).not.toHaveBeenCalled();
   });
 
-  it('preserves loaded details for non-selected threads during summary-only list refreshes', async () => {
+  it('preserves cached details for non-selected threads during summary-only list refreshes', async () => {
     const detailedThread = thread({
       thread_id: 'thread-background',
       title: 'Background detail',
@@ -430,11 +438,11 @@ describe('FlowerSurface navigation structured input', () => {
       error: undefined,
     };
     let listSnapshot: readonly FlowerThreadSnapshot[] = [selectedThread, detailedThread];
-    let backgroundReloadStarted = false;
+    let backgroundLoads = 0;
     const loadThread = vi.fn((threadID: string) => {
       if (threadID === 'thread-background') {
-        backgroundReloadStarted = true;
-        return new Promise<FlowerLiveBootstrap>(() => undefined);
+        backgroundLoads += 1;
+        return Promise.resolve(liveBootstrap(detailedThread));
       }
       return Promise.resolve(liveBootstrap(selectedThread));
     });
@@ -446,15 +454,18 @@ describe('FlowerSurface navigation structured input', () => {
 
     await waitFor(() => threadOrder(runtime).includes('thread-background'));
 
+    (runtime.querySelector('[data-thread-id="thread-background"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.textContent?.includes('Background preview remains available.') ?? false);
     (runtime.querySelector('[data-thread-id="thread-selected"] button') as HTMLButtonElement).click();
     await waitFor(() => runtime.querySelector('.flower-thread-card-active')?.getAttribute('data-thread-id') === 'thread-selected');
     listSnapshot = [selectedThread, summaryOnlyBackground];
     (runtime.querySelector('.flower-thread-refresh-button') as HTMLButtonElement).click();
     await flush();
     (runtime.querySelector('[data-thread-id="thread-background"] button') as HTMLButtonElement).click();
-    await waitFor(() => backgroundReloadStarted);
+    await waitFor(() => runtime.querySelector('.flower-thread-card-active')?.getAttribute('data-thread-id') === 'thread-background');
 
     expect(runtime.textContent).toContain('Background preview remains available.');
+    expect(backgroundLoads).toBe(1);
   });
 
   it('shows a loading state instead of the empty state while first-loading a summary-only thread', async () => {
@@ -472,7 +483,7 @@ describe('FlowerSurface navigation structured input', () => {
       listThreads: vi.fn(async () => [summaryThread]),
       loadThread: vi.fn(() => {
         loadStarted = true;
-        return new Promise<FlowerLiveBootstrap>(() => undefined);
+        return new Promise<FlowerThreadView>(() => undefined);
       }),
     });
 

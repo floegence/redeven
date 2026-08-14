@@ -1,57 +1,25 @@
 ---
 type: UI Contract
-title: Flower live timeline
-description: Canonical navigation and ownership boundary for Flower timeline presentation.
-tags: [ai, flower, live, ui]
-timestamp: 2026-07-18T00:00:00Z
+title: Flower live current state
+description: One workspace stream, typed current views, and bounded browser caches.
+tags: [ui, flower, live, threads]
+timestamp: 2026-08-14T00:00:00Z
 ---
 # Summary
 
-Flower presents Floret-owned conversation and execution state. Focused contracts own timeline ordering, model navigation, terminal activity, approval context, and subagent detail. A per-thread ThreadStore is the single client-side selection and revision boundary: bootstrap and live updates feed it, summary-only updates preserve loaded messages, stale responses are discarded, and revision gaps request resynchronization. Rendering signals are projections rather than a second canonical source.
+Flower uses one workspace SSE for every thread. The stream carries a baseline of summaries, summary replacements, active-thread current views, and viewer read state. Selecting a thread changes only `ThreadCache.selectedId`; it never reconnects transport or cancels background execution. Disconnect recovery refreshes summaries and the selected typed view without cursor replay or polling.
 
 # Contract
 
-## Mechanism
+`ThreadCache` owns selected ID, summary map, and a bounded LRU of typed detail views. Summary updates are stripped of messages and interaction detail and can never overwrite a cached view. Only a detail GET or `LiveCurrent` update replaces detail, and older view versions are ignored.
 
-This concept is the stable overview for the subject. Detailed contracts are maintained in the focused concepts below:
+`LiveTransport` owns the single connection and a process-local `connectionEpoch`. Every reconnect invalidates callbacks from the prior connection. Normal network failures reconnect quietly with bounded backoff; authorization failure is terminal and visible. There is no browser event log, cursor, generation graph, replay endpoint, retention-gap reducer, polling loop, or per-selection SSE.
 
-- [Flower timeline ordering](flower-timeline-ordering.md)
-- [Flower model and navigation presentation](flower-model-navigation.md)
-- [Flower terminal activity presentation](flower-terminal-activity.md)
-- [Flower approval and context state](flower-approval-context.md)
-- [Flower subagent detail presentation](flower-subagent-detail.md)
-
-The focused timeline contract preserves Floret `ThroughOrdinal` and `ListThreadTurns` ordering, maps a valid non-renderable turn to `turn_projection_unavailable`, and records rejected public contracts as `floret.contract.rejected`; the detailed rules live in [Flower timeline ordering](flower-timeline-ordering.md).
-
-# Boundaries
-
-Flower must not reconstruct canonical execution, approval, context, read, or child state from transcript text, audit rows, previews, timestamps, or local heuristics. Full timeline replacement is reserved for explicit resynchronization, snapshot recovery, and terminal settlement finalization.
-
-Realtime observation uses the Redeven Flower live hub and a single fetch-SSE connection per authorized surface. The hub performs canonical projection, privacy sanitization, deduplication, coalescing, and JSON encoding once, then fans out immutable batches to independent observer queues. Summary and selected-thread cursors carry explicit stream generations; a retention gap, generation reset, service restart, or slow-observer overflow emits one `resync_required` envelope and closes that observer. Flower keeps full detail for eight recent threads, retains all summary rows, and reboots an evicted selection from canonical bootstrap without clearing its separate composer or attachment state. Canonical batches exclude private read state; `viewer.read_state` is delivered only to connections for the same user. Hidden pages cancel their reader, and healthy heartbeats do not create application polling requests.
-
-A provider continuation failure after settled tool activity has one compact
-error surface. Settled declined tools remain quiet canonical activity, and the
-only action is `Retry reply`. The action invokes the thread retry adapter and
-applies the returned canonical bootstrap; it never launches a new user turn or
-submits an approval. While the request is active, duplicate clicks are ignored.
-A transport failure keeps the same single error surface retryable, while a
-successful retry replaces it through normal canonical live/bootstrap
-reconciliation. Provider configuration failures that are not continuation
-failures retain their settings action.
-
-An empty failed retry projection remains observable only while it is the latest
-unrecovered continuation. Once a later canonical retry references that turn,
-Flower omits the superseded projection-unavailable decoration and renders the
-later retry outcome. Canonical retry turns remain intact in Floret; this rule
-only prevents a recovered failure from leaving a second persistent error face.
+Canonical terminal updates and reconnect baselines converge the current view. Background running, waiting_user, waiting_approval, and completed summaries update without pointer or focus events. A missing detail may show a local loading state, but it never clears the rail or cached transcript.
 
 # Evidence
 
-- `redeven:internal/ai/flower_live_projection.go:79` - Live bootstrap builds `timeline_messages` before returning the thread snapshot.
-- `redeven:internal/flower_ui/src/FlowerSurface.tsx:128` - Flower recognizes `model_io.updated` as a model-status presentation boundary.
-- `redeven:internal/envapp/ui_src/src/ui/chat/blocks/ShellBlock.tsx:377` - The terminal shell block builds process read, write, and terminate URLs from run and process ids.
-- `redeven:internal/flower_ui/src/flowerLiveReducer.ts:407` - `context.usage.updated` is applied as thread presentation state.
-- `redeven:internal/flower_ui/src/FlowerSurface.visibility.test.tsx` - Verifies the single retry action, retry request failure, and preservation of declined activity without launching a user turn or approval.
-- `redeven:internal/ai/flower_live_stream.go:1` - The live hub shares immutable encoded batches, bounds retention and observer queues, and emits explicit resynchronization envelopes.
-- `redeven:internal/flower_ui/src/FlowerSurface.tsx:3890` - Flower consumes one cancellable SSE stream and applies at most one render commit per animation frame.
-- `redeven:internal/ai/subagents_floret.go:2096` - Redeven lists parent subagents through Floret host or maintenance host APIs.
+- `redeven:internal/ai/flower_live_stream.go` - Workspace baseline and current-state stream.
+- `redeven:internal/flower_ui/src/liveTransport.ts` - Single connection and epoch fencing.
+- `redeven:internal/flower_ui/src/threadCache.ts` - Summary/detail separation and bounded view cache.
+- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Selection, current-view application, and quiet reconnect integration.

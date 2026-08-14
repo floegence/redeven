@@ -16,8 +16,6 @@ func TestAIThreadActionHTTPStatusMapsStopOutcome(t *testing.T) {
 		err  error
 		want int
 	}{
-		{name: "pending", err: fmt.Errorf("%w: waiting for terminal proof", ai.ErrThreadStopPending), want: http.StatusConflict},
-		{name: "unavailable", err: fmt.Errorf("%w: canonical owner missing", ai.ErrThreadStopUnavailable), want: http.StatusServiceUnavailable},
 		{name: "continuation retry unavailable", err: fmt.Errorf("%w: latest turn is not retryable", ai.ErrThreadContinuationRetryUnavailable), want: http.StatusConflict},
 	}
 	for _, tc := range tests {

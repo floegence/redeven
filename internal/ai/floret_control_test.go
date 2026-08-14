@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	flruntime "github.com/floegence/floret/v3/runtime"
-	fltools "github.com/floegence/floret/v3/tools"
+	flruntime "github.com/floegence/floret/v4/runtime"
+	fltools "github.com/floegence/floret/v4/tools"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
 
@@ -151,9 +151,11 @@ func TestFloretControlProjector_InvalidAskUserFailsWithoutContinueSignal(t *test
 				"header":"Branch",
 				"question":"Which branch should I inspect?",
 				"is_secret":false,
-				"response_mode":"write"
+				"response_mode":"select"
 			}],
-			"required_from_user":["Name the branch to inspect."]
+			"reason_code":"user_decision_required",
+			"required_from_user":["Name the branch to inspect."],
+			"evidence_refs":[]
 		}`,
 	})
 	if err == nil {

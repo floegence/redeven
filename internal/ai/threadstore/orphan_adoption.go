@@ -11,39 +11,6 @@ import (
 
 var ErrCanonicalThreadSettingsConflict = errors.New("canonical thread settings conflict")
 
-func (s *Store) ListPendingCanonicalRootOwnershipClaims(ctx context.Context) ([]string, error) {
-	if s == nil || s.db == nil {
-		return nil, errors.New("store not initialized")
-	}
-	rows, err := s.db.QueryContext(operationContext(ctx), `
-SELECT canonical_thread_id
-FROM ai_thread_create_operations
-WHERE canonical_thread_id <> '' AND stage NOT IN (?, ?)
-UNION
-SELECT destination_thread_id
-FROM ai_thread_fork_operations
-WHERE destination_thread_id <> '' AND stage NOT IN (?, ?)
-ORDER BY 1
-`, ThreadCreateStageCompleted, ThreadCreateStageFailed, string(ForkStageCompleted), string(ForkStageFailed))
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var claims []string
-	for rows.Next() {
-		var threadID string
-		if err := rows.Scan(&threadID); err != nil {
-			return nil, err
-		}
-		threadID = strings.TrimSpace(threadID)
-		if threadID == "" {
-			return nil, errors.New("pending canonical root ownership claim has an empty thread id")
-		}
-		claims = append(claims, threadID)
-	}
-	return claims, rows.Err()
-}
-
 func (s *Store) GetThreadSettingsByCanonicalThreadID(ctx context.Context, threadID string) (*ThreadSettings, error) {
 	if s == nil || s.db == nil {
 		return nil, errors.New("store not initialized")
@@ -53,7 +20,7 @@ func (s *Store) GetThreadSettingsByCanonicalThreadID(ctx context.Context, thread
 		return nil, errors.New("missing canonical thread id")
 	}
 	var settings ThreadSettings
-	err := scanThreadRow(s.db.QueryRowContext(operationContext(ctx), fmt.Sprintf(`SELECT %s FROM ai_thread_settings WHERE thread_id = ? ORDER BY endpoint_id LIMIT 1`, threadSelectColumnsSQL), threadID), &settings)
+	err := scanThreadRow(s.db.QueryRowContext(ctxOrBackground(ctx), fmt.Sprintf(`SELECT %s FROM ai_thread_settings WHERE thread_id = ? ORDER BY endpoint_id LIMIT 1`, threadSelectColumnsSQL), threadID), &settings)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -64,8 +31,9 @@ func (s *Store) AdoptCanonicalRootSettings(ctx context.Context, settings ThreadS
 	if s == nil || s.db == nil {
 		return errors.New("store not initialized")
 	}
-	ctx = operationContext(ctx)
+	ctx = ctxOrBackground(ctx)
 	settings.ThreadID = strings.TrimSpace(settings.ThreadID)
+	settings.ParentThreadID = strings.TrimSpace(settings.ParentThreadID)
 	settings.EndpointID = strings.TrimSpace(settings.EndpointID)
 	settings.NamespacePublicID = strings.TrimSpace(settings.NamespacePublicID)
 	settings.ModelID = strings.TrimSpace(settings.ModelID)
@@ -102,10 +70,10 @@ func (s *Store) AdoptCanonicalRootSettings(ctx context.Context, settings ThreadS
 	}
 	now := time.Now().UnixMilli()
 	_, err = tx.ExecContext(ctx, `INSERT INTO ai_thread_settings(
-		thread_id, endpoint_id, namespace_public_id, model_id, reasoning_selection_json, permission_type, working_dir,
-		pinned_at_unix_ms, queue_revision, created_by_user_public_id, created_by_user_email,
+		thread_id, parent_thread_id, endpoint_id, namespace_public_id, model_id, reasoning_selection_json, permission_type, working_dir,
+		pinned_at_unix_ms, created_by_user_public_id, created_by_user_email,
 		updated_by_user_public_id, updated_by_user_email, settings_created_at_unix_ms, settings_updated_at_unix_ms
-	) VALUES(?, ?, ?, ?, '', ?, ?, 0, 0, ?, ?, ?, ?, ?, ?)`, settings.ThreadID, settings.EndpointID,
+	) VALUES(?, ?, ?, ?, ?, '', ?, ?, 0, ?, ?, ?, ?, ?, ?)`, settings.ThreadID, settings.ParentThreadID, settings.EndpointID,
 		settings.NamespacePublicID, settings.ModelID, settings.PermissionType, settings.WorkingDir,
 		settings.CreatedByUserPublicID, settings.CreatedByUserEmail, settings.UpdatedByUserPublicID,
 		settings.UpdatedByUserEmail, now, now)

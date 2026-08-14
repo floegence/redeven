@@ -1,7 +1,4 @@
 import type {
-  AIActiveRun,
-  AICompactThreadContextRequest,
-  AICompactThreadContextResponse,
   AIFollowupAttachment,
   AIFollowupItem,
   AIListMessagesRequest,
@@ -18,17 +15,11 @@ import type {
   AIRequestUserInputChoice,
   AIRequestUserInputPrompt,
   AIRequestUserInputQuestion,
-  AISubscribeSummaryResponse,
-  AISubscribeThreadRequest,
-  AISubscribeThreadResponse,
   AITimelineMessageItem,
   AIThreadRunStatus,
   AIPermissionType,
 } from '../sdk/ai';
 import type {
-  wire_ai_active_run,
-  wire_ai_compact_thread_context_req,
-  wire_ai_compact_thread_context_resp,
   wire_ai_event_notify,
   wire_ai_followup_attachment,
   wire_ai_followup_item,
@@ -40,9 +31,6 @@ import type {
   wire_ai_submit_request_user_input_response_resp,
   wire_ai_stop_thread_req,
   wire_ai_stop_thread_resp,
-  wire_ai_subscribe_summary_resp,
-  wire_ai_subscribe_thread_req,
-  wire_ai_subscribe_thread_resp,
   wire_ai_timeline_message_item,
   wire_ai_request_user_input_action,
   wire_ai_request_user_input_answer,
@@ -51,13 +39,6 @@ import type {
   wire_ai_waiting_prompt,
 } from '../wire/ai';
 import { serializeFlowerReasoningSelection } from '../../../../../../../flower_ui/src/reasoning';
-
-function toAIActiveRun(raw: wire_ai_active_run): AIActiveRun {
-  return {
-    threadId: String(raw?.thread_id ?? '').trim(),
-    runId: String(raw?.run_id ?? '').trim(),
-  };
-}
 
 function normalizePermissionType(raw: unknown): AIPermissionType | undefined {
   const value = String(raw ?? '').trim().toLowerCase();
@@ -223,13 +204,11 @@ export function toWireAISendUserTurnRequest(req: AISendUserTurnRequest): wire_ai
     },
     expected_run_id: req.expectedRunId?.trim() ? String(req.expectedRunId).trim() : undefined,
     queue_after_waiting_user: Boolean(req.queueAfterWaitingUser),
-    source_followup_id: req.sourceFollowupId?.trim() ? String(req.sourceFollowupId).trim() : undefined,
   };
 }
 
 export function fromWireAISendUserTurnResponse(resp: wire_ai_send_user_turn_resp): AISendUserTurnResponse {
   return {
-    admissionId: String(resp?.admission_id ?? '').trim() || undefined,
     runId: String(resp?.run_id ?? '').trim(),
     turnId: String(resp?.turn_id ?? '').trim(),
     kind: String(resp?.kind ?? '').trim(),
@@ -237,21 +216,6 @@ export function fromWireAISendUserTurnResponse(resp: wire_ai_send_user_turn_resp
     queuePosition: typeof resp?.queue_position === 'number' ? resp.queue_position : undefined,
     consumedWaitingPromptId:
       String(resp?.consumed_waiting_prompt_id ?? '').trim() || undefined,
-  };
-}
-
-export function toWireAICompactThreadContextRequest(req: AICompactThreadContextRequest): wire_ai_compact_thread_context_req {
-  return {
-    thread_id: String(req.threadId ?? '').trim(),
-    active_run_id: req.activeRunId?.trim() ? String(req.activeRunId).trim() : undefined,
-  };
-}
-
-export function fromWireAICompactThreadContextResponse(resp: wire_ai_compact_thread_context_resp): AICompactThreadContextResponse {
-  return {
-    requestId: String(resp?.request_id ?? '').trim() || undefined,
-    kind: String(resp?.kind ?? '').trim(),
-    errorCode: String(resp?.error_code ?? '').trim() || undefined,
   };
 }
 
@@ -288,7 +252,6 @@ export function toWireAISubmitRequestUserInputResponseRequest(req: AISubmitReque
       ...(reasoningSelection ? { reasoning_selection: reasoningSelection } : {}),
     },
     expected_run_id: req.expectedRunId?.trim() ? String(req.expectedRunId).trim() : undefined,
-    source_followup_id: req.sourceFollowupId?.trim() ? String(req.sourceFollowupId).trim() : undefined,
   };
 }
 
@@ -300,25 +263,6 @@ export function fromWireAISubmitRequestUserInputResponseResponse(resp: wire_ai_s
     consumedWaitingPromptId: String(resp?.consumed_waiting_prompt_id ?? '').trim() || undefined,
   };
 }
-
-export function fromWireAISubscribeSummaryResponse(resp: wire_ai_subscribe_summary_resp): AISubscribeSummaryResponse {
-  const activeRuns = Array.isArray(resp?.active_runs) ? resp.active_runs.map(toAIActiveRun) : [];
-  return {
-    activeRuns: activeRuns.filter((it) => !!it.threadId && !!it.runId),
-  };
-}
-
-export function toWireAISubscribeThreadRequest(req: AISubscribeThreadRequest): wire_ai_subscribe_thread_req {
-  return {
-    thread_id: String(req.threadId ?? '').trim(),
-  };
-}
-
-export function fromWireAISubscribeThreadResponse(resp: wire_ai_subscribe_thread_resp): AISubscribeThreadResponse {
-  const runId = String(resp?.run_id ?? '').trim();
-  return { runId: runId ? runId : undefined };
-}
-
 
 export function toWireAIStopThreadRequest(req: AIStopThreadRequest): wire_ai_stop_thread_req {
   return {

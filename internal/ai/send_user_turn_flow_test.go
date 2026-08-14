@@ -1,516 +1,16 @@
 package ai
 
 import (
-	"context"
-	"database/sql"
 	"encoding/json"
-	"errors"
-	"io"
-	"log/slog"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/floegence/floret/v4/identity"
+	flruntime "github.com/floegence/floret/v4/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
-	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
-	"github.com/floegence/redeven/internal/sessionrpc"
 )
-
-func newSendTurnTestService(t *testing.T) *Service {
-	t.Helper()
-	return newSendTurnTestServiceAt(t, t.TempDir(), t.TempDir())
-}
-
-func awaitCanonicalTurnAdmissionForTest(t *testing.T, svc *Service, response SendUserTurnResponse) SendUserTurnResponse {
-	t.Helper()
-	if response.Kind == "start" && response.TurnID != "" && response.RunID != "" {
-		return response
-	}
-	if svc == nil || response.AdmissionID == "" {
-		t.Fatalf("response has no canonical or pending admission identity: %#v", response)
-	}
-	deadline := time.Now().Add(5 * time.Second)
-	var last threadstore.PendingTurnAdmissionReceipt
-	var lastErr error
-	for time.Now().Before(deadline) {
-		last, lastErr = svc.threadsDB.GetPendingTurnAdmissionReceipt(t.Context(), response.AdmissionID)
-		if lastErr == nil && last.Stage == threadstore.PendingTurnAdmissionStageSettled && last.TurnID != "" && last.RunID != "" {
-			response.TurnID = last.TurnID
-			response.RunID = last.RunID
-			response.Kind = "start"
-			return response
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatalf("canonical admission did not settle: response=%#v receipt=%#v err=%v", response, last, lastErr)
-	return SendUserTurnResponse{}
-}
-
-func readCanonicalThreadTurnIDsForTest(t *testing.T, svc *Service, ctx context.Context, threadID string) map[string]struct{} {
-	t.Helper()
-	host, err := svc.openFloretThreadReadHost(ctx, threadID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	turns, err := listAllFloretThreadTurns(ctx, host, threadID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	ids := make(map[string]struct{}, len(turns))
-	for _, turn := range turns {
-		ids[strings.TrimSpace(string(turn.TurnID))] = struct{}{}
-	}
-	return ids
-}
-
-func newSendTurnTestServiceAt(t *testing.T, stateDir string, agentHomeDir string) *Service {
-	t.Helper()
-	cfg := &config.AIConfig{
-		CurrentModelID: "openai/gpt-5-mini",
-		Providers: []config.AIProvider{{
-			ID: "openai", Name: "OpenAI", Type: "openai", BaseURL: "https://api.openai.com/v1",
-			Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}, {ModelName: "gpt-4o-mini"}},
-		}},
-	}
-	svc, err := NewService(Options{
-		Logger:   slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelDebug})),
-		StateDir: stateDir, AgentHomeDir: agentHomeDir, Shell: "/bin/bash", Config: cfg,
-		PersistOpTimeout: 2 * time.Second, RunMaxWallTime: 2 * time.Second, RunIdleTimeout: time.Second,
-		ResolveProviderAPIKey: func(string) (string, bool, error) { return "", false, nil },
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = svc.Close() })
-	return svc
-}
-
-func TestRunInputRejectsLegacyMessageIdentityField(t *testing.T) {
-	t.Parallel()
-
-	var input RunInput
-	err := json.Unmarshal([]byte(`{"message_id":"legacy_message","text":"must fail","attachments":[]}`), &input)
-	if err == nil || !strings.Contains(err.Error(), `unknown field "message_id"`) {
-		t.Fatalf("json.Unmarshal error=%v, want rejected legacy message_id", err)
-	}
-}
-
-func TestInlineTurnTextAdmissionUsesUnicodeCodePointsWithoutTrimming(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name    string
-		text    string
-		wantErr bool
-	}{
-		{name: "49,999 ascii", text: strings.Repeat("a", 49_999)},
-		{name: "50,000 ascii", text: strings.Repeat("a", 50_000)},
-		{name: "50,001 ascii", text: strings.Repeat("a", 50_001), wantErr: true},
-		{name: "50,001 whitespace", text: strings.Repeat(" ", 50_001), wantErr: true},
-		{name: "50,001 CRLF code points", text: strings.Repeat("\r\n", 25_000) + "x", wantErr: true},
-		{name: "50,000 emoji", text: strings.Repeat("😀", 50_000)},
-		{name: "50,001 emoji", text: strings.Repeat("😀", 50_001), wantErr: true},
-	}
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			err := validateInlineTurnText(testCase.text)
-			if testCase.wantErr {
-				if !errors.Is(err, ErrLongTextAttachmentRequired) || err.Error() != LongTextAttachmentRequiredErrorCode {
-					t.Fatalf("error=%v, want stable %q", err, LongTextAttachmentRequiredErrorCode)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatalf("validateInlineTurnText: %v", err)
-			}
-		})
-	}
-}
-
-func TestSendUserTurnRejectsLongInlineTextBeforeAdmissionSideEffects(t *testing.T) {
-	t.Parallel()
-
-	svc := newSendTurnTestService(t)
-	meta := testSendTurnMeta()
-	thread, err := svc.CreateThread(t.Context(), meta, "long inline", "", "", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{
-		ThreadID: thread.ThreadID,
-		Input:    RunInput{TurnID: "turn_long_inline", Text: strings.Repeat("\n", 50_001)},
-	})
-	if !errors.Is(err, ErrLongTextAttachmentRequired) || err.Error() != LongTextAttachmentRequiredErrorCode {
-		t.Fatalf("SendUserTurn error=%v, want %q", err, LongTextAttachmentRequiredErrorCode)
-	}
-	queued, countErr := svc.threadsDB.CountFollowupsByLane(t.Context(), meta.EndpointID, thread.ThreadID, threadstore.FollowupLaneQueued)
-	if countErr != nil || queued != 0 || svc.HasActiveThreadForEndpoint(meta.EndpointID, thread.ThreadID) {
-		t.Fatalf("rejected admission side effects: queued=%d active=%t err=%v", queued, svc.HasActiveThreadForEndpoint(meta.EndpointID, thread.ThreadID), countErr)
-	}
-}
-
-func TestSendUserTurnRejectsClientTurnIDWithoutAdmissionSideEffects(t *testing.T) {
-	t.Parallel()
-
-	svc := newSendTurnTestService(t)
-	meta := testSendTurnMeta()
-	ctx := context.Background()
-	thread, err := svc.CreateThread(ctx, meta, "invalid turn identity", "", "", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
-		ThreadID: thread.ThreadID,
-		Input:    RunInput{TurnID: "invalid turn id", Text: "must not be admitted"},
-	})
-	if err == nil || !strings.Contains(err.Error(), "turn_id must be omitted") {
-		t.Fatalf("SendUserTurn error=%v, want client turn identity rejection", err)
-	}
-	queued, err := svc.threadsDB.CountFollowupsByLane(ctx, meta.EndpointID, thread.ThreadID, threadstore.FollowupLaneQueued)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if queued != 0 {
-		t.Fatalf("queued turns=%d, want 0", queued)
-	}
-	turnIDs := readCanonicalThreadTurnIDsForTest(t, svc, ctx, thread.ThreadID)
-	if len(turnIDs) != 0 {
-		t.Fatalf("canonical turns=%v, want none", turnIDs)
-	}
-	if svc.HasActiveThreadForEndpoint(meta.EndpointID, thread.ThreadID) {
-		t.Fatal("invalid turn registered an active run")
-	}
-}
-
-func TestAdmissionRPCDecodersRejectLegacyAndInvalidTurnIdentityWithoutSideEffects(t *testing.T) {
-	t.Parallel()
-
-	svc := newSendTurnTestService(t)
-	meta := testSendTurnMeta()
-	ctx := context.Background()
-	thread, err := svc.CreateThread(ctx, meta, "rpc decoder boundary", "", "", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	router := sessionrpc.NewRouter()
-	svc.RegisterRPC(router, meta, nil)
-	client := newTestRPCPeer(router)
-
-	callInvalid := func(typeID uint32, payload string) {
-		t.Helper()
-		_, rpcErr, err := callTestRPC(ctx, client, typeID, []byte(payload))
-		if err != nil {
-			t.Fatalf("Call type_id=%d: %v", typeID, err)
-		}
-		if rpcErr == nil || rpcErr.Code != 400 {
-			t.Fatalf("Call type_id=%d rpc error=%#v, want code 400", typeID, rpcErr)
-		}
-	}
-	assertState := func(wantCanonicalTurns int) {
-		t.Helper()
-		queued, err := svc.threadsDB.CountFollowupsByLane(ctx, meta.EndpointID, thread.ThreadID, threadstore.FollowupLaneQueued)
-		if err != nil {
-			t.Fatal(err)
-		}
-		turns := readCanonicalThreadTurnIDsForTest(t, svc, ctx, thread.ThreadID)
-		if queued != 0 || len(turns) != wantCanonicalTurns || svc.HasActiveThreadForEndpoint(meta.EndpointID, thread.ThreadID) {
-			t.Fatalf("admission side effects: queued=%d canonical=%v active=%v", queued, turns, svc.HasActiveThreadForEndpoint(meta.EndpointID, thread.ThreadID))
-		}
-	}
-
-	callInvalid(TypeID_AI_SEND_USER_TURN, `{"thread_id":"`+thread.ThreadID+`","input":{"message_id":"legacy","text":"must fail","attachments":[]},"options":{}}`)
-	callInvalid(TypeID_AI_SEND_USER_TURN, `{"thread_id":"`+thread.ThreadID+`","input":{"turn_id":"invalid turn id","text":"must fail","attachments":[]},"options":{}}`)
-	longPayload, err := json.Marshal(map[string]any{
-		"thread_id": thread.ThreadID,
-		"input":     map[string]any{"text": strings.Repeat("😀", 50_001), "attachments": []any{}},
-		"options":   map[string]any{},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, rpcErr, err := callTestRPC(ctx, client, TypeID_AI_SEND_USER_TURN, longPayload)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if rpcErr == nil || rpcErr.Code != 400 || rpcErr.Message != LongTextAttachmentRequiredErrorCode {
-		t.Fatalf("long text rpc error=%#v, want code=400 message=%q", rpcErr, LongTextAttachmentRequiredErrorCode)
-	}
-	assertState(0)
-
-	prompt := testSingleQuestionPrompt("turn_rpc_waiting", "tool_rpc_waiting", "question_1", "Continue?", nil)
-	seedWaitingUserPrompt(t, svc, ctx, meta, thread.ThreadID, prompt)
-	response := `"response":{"prompt_id":"` + prompt.PromptID + `","answers":{"question_1":{"text":"continue"}}}`
-	callInvalid(TypeID_AI_SUBMIT_REQUEST_USER_INPUT_RESPONSE, `{"thread_id":"`+thread.ThreadID+`",`+response+`,"input":{"message_id":"legacy","text":"continue","attachments":[]},"options":{}}`)
-	callInvalid(TypeID_AI_SUBMIT_REQUEST_USER_INPUT_RESPONSE, `{"thread_id":"`+thread.ThreadID+`",`+response+`,"input":{"turn_id":"invalid turn id","text":"continue","attachments":[]},"options":{}}`)
-	assertState(1)
-}
-
-func TestSendUserTurnReturnsAcceptedTurnAndRunIdentity(t *testing.T) {
-	svc := newRealtimeTestService(t, 2*time.Second)
-	meta := testSendTurnMeta()
-	ctx := context.Background()
-	thread, err := svc.CreateThread(ctx, meta, "turn receipt", "", "", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	response, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
-		ThreadID: thread.ThreadID,
-		Input:    RunInput{Text: "start"},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	response = awaitCanonicalTurnAdmissionForTest(t, svc, response)
-	if response.Kind != "start" || strings.TrimSpace(response.TurnID) == "" || strings.TrimSpace(response.RunID) == "" {
-		t.Fatalf("response=%#v, want exact start receipt", response)
-	}
-	bootstrap, err := svc.GetFlowerThreadLiveBootstrap(ctx, meta, thread.ThreadID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	canonicalUserIndex := -1
-	for index, message := range bootstrap.TimelineMessages {
-		if message.Role == "user" && message.TurnID == response.TurnID && message.RunID == response.RunID && message.MessageID != response.TurnID {
-			canonicalUserIndex = index
-			break
-		}
-	}
-	if canonicalUserIndex < 0 {
-		t.Fatalf("start receipt returned before canonical user timeline: %#v", bootstrap.TimelineMessages)
-	}
-	var events *FlowerLiveEventsResponse
-	replacementIndex := -1
-	assistantIndex := -1
-	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline) && replacementIndex < 0; {
-		events, err = svc.ListFlowerThreadLiveEvents(ctx, meta, thread.ThreadID, 0, 100)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for index, event := range events.Events {
-			if event.Kind == FlowerLiveTimelineReplaced && replacementIndex < 0 {
-				replacementIndex = index
-			}
-			if event.Kind == FlowerLiveMessageStarted && assistantIndex < 0 {
-				assistantIndex = index
-			}
-		}
-		if replacementIndex < 0 {
-			time.Sleep(10 * time.Millisecond)
-		}
-	}
-	if replacementIndex < 0 || (assistantIndex >= 0 && replacementIndex >= assistantIndex) {
-		t.Fatalf("live event order replacement=%d assistant=%d events=%#v", replacementIndex, assistantIndex, events)
-	}
-	queued, err := svc.threadsDB.CountFollowupsByLane(ctx, meta.EndpointID, thread.ThreadID, threadstore.FollowupLaneQueued)
-	if err != nil || queued != 0 {
-		t.Fatalf("admitted command remains queued: count=%d err=%v", queued, err)
-	}
-}
-
-func TestQueuedSecondTurnTransitionsFromServerSnapshotToCanonicalFloretRow(t *testing.T) {
-	svc := newRealtimeTestService(t, 50*time.Millisecond)
-	meta := testSendTurnMeta()
-	ctx := context.Background()
-	thread, err := svc.CreateThread(ctx, meta, "queued admission handoff", "", "", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	first, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
-		ThreadID: thread.ThreadID,
-		Model:    "openai/gpt-5-mini",
-		Input:    RunInput{Text: "run long enough to queue the next turn"},
-	})
-	if err != nil {
-		t.Fatalf("first turn response=%#v err=%v", first, err)
-	}
-	first = awaitCanonicalTurnAdmissionForTest(t, svc, first)
-	if first.Kind != "start" {
-		t.Fatalf("first turn response=%#v err=%v", first, err)
-	}
-	second, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
-		ThreadID: thread.ThreadID,
-		Model:    "openai/gpt-5-mini",
-		Input:    RunInput{Text: "continue after the first turn"},
-	})
-	if err != nil || second.Kind != "queued" || second.TurnID != "" || second.RunID != "" || strings.TrimSpace(second.QueueID) == "" {
-		t.Fatalf("second turn response=%#v err=%v", second, err)
-	}
-	svc.mu.Lock()
-	firstExecutionKey := strings.TrimSpace(svc.activeRunByTh[runThreadKey(meta.EndpointID, thread.ThreadID)])
-	firstRun := svc.runs[firstExecutionKey]
-	svc.mu.Unlock()
-
-	queuedView, err := svc.GetThread(ctx, meta, thread.ThreadID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if queuedView == nil || len(queuedView.QueuedTurns) != 1 || queuedView.QueuedTurns[0].QueueID != second.QueueID || queuedView.QueuedTurns[0].Text != "continue after the first turn" {
-		t.Fatalf("queued thread snapshot=%#v", queuedView)
-	}
-
-	var admittedBootstrap *FlowerLiveBootstrapResponse
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		bootstrap, readErr := svc.GetFlowerThreadLiveBootstrap(ctx, meta, thread.ThreadID)
-		if readErr != nil {
-			t.Fatal(readErr)
-		}
-		userRows := 0
-		receipt, receiptErr := svc.threadsDB.GetPendingTurnAdmissionReceipt(ctx, second.QueueID)
-		if receiptErr != nil || strings.TrimSpace(receipt.TurnID) == "" || strings.TrimSpace(receipt.RunID) == "" {
-			time.Sleep(10 * time.Millisecond)
-			continue
-		}
-		for _, message := range bootstrap.TimelineMessages {
-			if message.Role == "user" && message.TurnID == receipt.TurnID && message.RunID == receipt.RunID {
-				userRows++
-			}
-		}
-		if userRows != 1 || len(bootstrap.Thread.QueuedTurns) != 0 {
-			time.Sleep(10 * time.Millisecond)
-			continue
-		}
-		admittedBootstrap = bootstrap
-		break
-	}
-	if admittedBootstrap == nil {
-		actor := svc.threadMgr.Get(meta.EndpointID, thread.ThreadID)
-		drainErr := actor.handleMaybeStartQueuedTurn(ctx)
-		snapshot, latest, snapshotErr := svc.readCanonicalThreadState(ctx, thread.ThreadID)
-		waitingPrompt, waitingErr := requestUserInputPromptFromFloretTurn(latest)
-		receipt, receiptErr := svc.threadsDB.GetPendingTurnAdmissionReceipt(ctx, second.QueueID)
-		stored, storedErr := svc.threadsDB.GetQueuedTurn(ctx, meta.EndpointID, thread.ThreadID, second.QueueID)
-		svc.mu.Lock()
-		executionKey := strings.TrimSpace(svc.activeRunByTh[runThreadKey(meta.EndpointID, thread.ThreadID)])
-		active := svc.runs[executionKey]
-		svc.mu.Unlock()
-		var contractErr error
-		if firstRun != nil {
-			contractErr = firstRun.floretContractError()
-		}
-		failureCode, failureMessage := "", ""
-		if latest != nil && latest.Failure != nil {
-			failureCode = string(latest.Failure.Code)
-			failureMessage = latest.Failure.Message
-		}
-		t.Fatalf("canonical bootstrap was not captured: drain_err=%v snapshot=%#v latest_status=%q failure_code=%q failure_message=%q snapshot_err=%v waiting=%#v waiting_err=%v suppressed=%t receipt=%#v receipt_err=%v queued=%#v queued_err=%v first_execution_key=%q execution_key=%q active=%t contract_err=%v", drainErr, snapshot, latest.Status, failureCode, failureMessage, snapshotErr, waitingPrompt, waitingErr, svc.isQueuedDrainSuppressed(meta.EndpointID, thread.ThreadID), receipt, receiptErr, stored, storedErr, firstExecutionKey, executionKey, active != nil, contractErr)
-	}
-	if stored, getErr := svc.threadsDB.GetQueuedTurn(ctx, meta.EndpointID, thread.ThreadID, second.QueueID); !errors.Is(getErr, sql.ErrNoRows) || stored != nil {
-		t.Fatalf("admitted queued command remains stored: %#v err=%v", stored, getErr)
-	}
-}
-
-func TestGetThreadSerializesOwnedEmptyQueuedTurns(t *testing.T) {
-	t.Parallel()
-
-	svc := newSendTurnTestService(t)
-	meta := testSendTurnMeta()
-	thread, err := svc.CreateThread(context.Background(), meta, "empty queue", "", "", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	view, err := svc.GetThread(context.Background(), meta, thread.ThreadID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	raw, err := json.Marshal(view)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(raw), `"queued_turns":[]`) {
-		t.Fatalf("thread detail does not own an explicit empty queue: %s", raw)
-	}
-}
-
-func TestStartupRecoveryPreservesUnadmittedInFlightCommandForExactReplay(t *testing.T) {
-	stateDir := t.TempDir()
-	agentHomeDir := t.TempDir()
-	meta := testSendTurnMeta()
-	ctx := context.Background()
-	first := newSendTurnTestServiceAt(t, stateDir, agentHomeDir)
-	thread, err := first.CreateThread(ctx, meta, "recover in-flight admission", "", "", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	command := createPendingCommandForTest(t, first, meta, thread.ThreadID, "command-crash-before-admission", "", "")
-	if err := first.Close(); err != nil {
-		t.Fatal(err)
-	}
-
-	restarted := newSendTurnTestServiceAt(t, stateDir, agentHomeDir)
-	stored, err := restarted.threadsDB.GetQueuedTurn(ctx, meta.EndpointID, thread.ThreadID, command.QueueID)
-	if err != nil || stored == nil || stored.AdmissionState != threadstore.PendingTurnAdmissionInFlight || stored.TurnID != "" || stored.RunID != "" {
-		t.Fatalf("recovered command=%#v err=%v, want stable unbound in-flight admission", stored, err)
-	}
-	receipt, err := restarted.threadsDB.GetPendingTurnAdmissionReceipt(ctx, command.QueueID)
-	if err != nil || receipt.Stage != threadstore.PendingTurnAdmissionStageInFlight || receipt.LogicalRequestID != command.QueueID || receipt.TurnID != "" || receipt.RunID != "" {
-		t.Fatalf("recovered receipt=%#v err=%v, want stable exact-replay identity", receipt, err)
-	}
-}
-
-func TestStartupRecoveryFailsBeforeWakeWhenAdmissionReceiptIdentityIsInvalid(t *testing.T) {
-	stateDir := t.TempDir()
-	agentHomeDir := t.TempDir()
-	svc := newSendTurnTestServiceAt(t, stateDir, agentHomeDir)
-	meta := testSendTurnMeta()
-	ctx := context.Background()
-	thread, err := svc.CreateThread(ctx, meta, "fail closed admission recovery", "", "", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	command := createPendingCommandForTest(t, svc, meta, thread.ThreadID, "command-release-failure", "", "")
-	raw, err := sql.Open("sqlite", filepath.Join(stateDir, "ai", "threads.sqlite"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := raw.ExecContext(ctx, `
-UPDATE ai_turn_admission_receipts
-SET logical_request_id = 'different-request'
-WHERE queue_id = ?
-`, command.QueueID); err != nil {
-		t.Fatal(err)
-	}
-	if err := raw.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := svc.Close(); err != nil {
-		t.Fatal(err)
-	}
-	restarted, err := NewService(Options{
-		Logger:   slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelDebug})),
-		StateDir: stateDir, AgentHomeDir: agentHomeDir, Shell: "/bin/bash", Config: svc.cfg,
-		PersistOpTimeout: 2 * time.Second, RunMaxWallTime: 2 * time.Second, RunIdleTimeout: time.Second,
-		ResolveProviderAPIKey: func(string) (string, bool, error) { return "", false, nil },
-	})
-	if err != nil || restarted == nil {
-		if restarted != nil {
-			_ = restarted.Close()
-		}
-		t.Fatalf("startup should remain available while preserving malformed queued recovery: service=%v err=%v", restarted != nil, err)
-	}
-	defer restarted.Close()
-	verificationDB, openErr := sql.Open("sqlite", filepath.Join(stateDir, "ai", "threads.sqlite"))
-	if openErr != nil {
-		t.Fatal(openErr)
-	}
-	defer verificationDB.Close()
-	var admissionState string
-	if err := verificationDB.QueryRowContext(ctx, `
-SELECT admission_state
-FROM ai_queued_turns
-WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ?
-`, meta.EndpointID, thread.ThreadID, command.QueueID).Scan(&admissionState); err != nil {
-		t.Fatal(err)
-	}
-	if admissionState != threadstore.PendingTurnAdmissionInFlight {
-		t.Fatalf("failed release admission state=%q, want in_flight", admissionState)
-	}
-}
 
 func testSendTurnMeta() *session.Meta {
 	return &session.Meta{
@@ -520,19 +20,160 @@ func testSendTurnMeta() *session.Meta {
 	}
 }
 
-func createPendingCommandForTest(t *testing.T, svc *Service, meta *session.Meta, threadID, commandID, turnID, runID string) threadstore.QueuedTurn {
-	t.Helper()
-	record, _, _, err := svc.threadsDB.CreateFollowup(context.Background(), threadstore.QueuedTurn{
-		QueueID: commandID, EndpointID: meta.EndpointID, ThreadID: threadID, ChannelID: meta.ChannelID,
-		Lane: threadstore.FollowupLaneQueued, ModelID: "openai/gpt-5-mini",
-		TextContent: "pending prompt", AttachmentsJSON: "[]", OptionsJSON: "{}", SessionMetaJSON: "{}",
-		CreatedByUserPublicID: meta.UserPublicID, CreatedByUserEmail: meta.UserEmail,
+func TestRunInputRejectsLegacyMessageIdentityField(t *testing.T) {
+	var input RunInput
+	err := json.Unmarshal([]byte(`{"message_id":"legacy_message","text":"must fail","attachments":[]}`), &input)
+	if err == nil || !strings.Contains(err.Error(), `unknown field "message_id"`) {
+		t.Fatalf("json.Unmarshal error=%v, want rejected legacy message_id", err)
+	}
+}
+
+func TestSendUserTurnReturnsImmediateTypedCurrent(t *testing.T) {
+	svc := newRealtimeTestService(t, 2*time.Second)
+	meta := testSendTurnMeta()
+	thread, err := svc.CreateThread(t.Context(), meta, "typed acceptance", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	startedAt := time.Now()
+	response, err := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{
+		ClientRequestID: "request-immediate-current", ThreadID: thread.ThreadID,
+		Input: RunInput{Text: "start"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.threadsDB.BeginPendingTurnAdmission(context.Background(), meta.EndpointID, threadID, record.QueueID, record.QueueID); err != nil {
+	if elapsed := time.Since(startedAt); elapsed >= 500*time.Millisecond {
+		t.Fatalf("typed send elapsed %s, want below 500ms", elapsed)
+	}
+	if response.Kind != "start" || response.ClientRequestID != "request-immediate-current" || response.TurnID == "" {
+		t.Fatalf("typed response=%#v", response)
+	}
+	if response.Current.Activity != flruntime.ThreadActivityActive || response.Current.TurnID.String() != response.TurnID || len(response.Current.Items) != 1 || response.Current.Items[0].Kind != flruntime.ThreadItemUser {
+		t.Fatalf("command current=%#v, want immediate canonical user/running view", response.Current)
+	}
+}
+
+func TestTypedStopSucceedsWithoutLegacyHandler(t *testing.T) {
+	svc := newRealtimeTestService(t, 5*time.Second)
+	meta := testSendTurnMeta()
+	thread, err := svc.CreateThread(t.Context(), meta, "handler-free stop", "", "", "")
+	if err != nil {
 		t.Fatal(err)
 	}
-	return record
+	if _, err := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{
+		ClientRequestID: "request-handler-free-stop", ThreadID: thread.ThreadID,
+		Input: RunInput{Text: "start then stop"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	stop, err := svc.StopThread(t.Context(), meta, thread.ThreadID)
+	if err != nil || !stop.OK {
+		t.Fatalf("typed stop=%#v err=%v", stop, err)
+	}
+	second, err := svc.StopThread(t.Context(), meta, thread.ThreadID)
+	if err != nil || !second.OK {
+		t.Fatalf("idempotent typed stop=%#v err=%v", second, err)
+	}
+}
+
+func TestTypedSendPublishesRunningBeforeEffectPreparation(t *testing.T) {
+	svc := newRealtimeTestService(t, 5*time.Second)
+	meta := testSendTurnMeta()
+	thread, err := svc.CreateThread(t.Context(), meta, "slow preparation", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	preparationStarted := make(chan struct{})
+	releasePreparation := make(chan struct{})
+	svc.toolTargetPolicyForRun = func(*session.Meta, threadstore.ThreadSettings, *threadstore.FlowerThreadRouting) ToolTargetPolicy {
+		close(preparationStarted)
+		<-releasePreparation
+		return ToolTargetPolicy{}
+	}
+	t.Cleanup(func() {
+		select {
+		case <-releasePreparation:
+		default:
+			close(releasePreparation)
+		}
+	})
+	startedAt := time.Now()
+	response, err := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{
+		ClientRequestID: "request-slow-preparation", ThreadID: thread.ThreadID,
+		Input: RunInput{Text: "accept before preparing effects"},
+	})
+	if err != nil || response.TurnID == "" {
+		t.Fatalf("typed send=%#v err=%v", response, err)
+	}
+	if elapsed := time.Since(startedAt); elapsed >= 500*time.Millisecond {
+		t.Fatalf("typed Send elapsed=%s, want below 500ms", elapsed)
+	}
+	view, err := svc.threadRuntime.View(t.Context(), identity.ThreadID(thread.ThreadID))
+	if err != nil || view.Activity != flruntime.ThreadActivityActive {
+		t.Fatalf("runtime view=%#v err=%v", view, err)
+	}
+	select {
+	case <-preparationStarted:
+	case <-time.After(time.Second):
+		t.Fatal("effect preparation did not start asynchronously")
+	}
+	close(releasePreparation)
+}
+
+func TestTypedActiveThreadQueuesOnlyInRuntimeView(t *testing.T) {
+	svc := newRealtimeTestService(t, 250*time.Millisecond)
+	meta := testSendTurnMeta()
+	thread, err := svc.CreateThread(t.Context(), meta, "typed queue", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first, err := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{ClientRequestID: "request-first", ThreadID: thread.ThreadID, Input: RunInput{Text: "first"}}); err != nil || first.Kind != "start" {
+		t.Fatalf("first=%#v err=%v", first, err)
+	}
+	second, err := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{ClientRequestID: "request-second", ThreadID: thread.ThreadID, Input: RunInput{Text: "second"}})
+	if err != nil || second.Kind != "queued" || second.QueueID != "queue:request-second" {
+		t.Fatalf("second=%#v err=%v", second, err)
+	}
+	view, err := svc.threadRuntime.View(t.Context(), identity.ThreadID(thread.ThreadID))
+	if err != nil || len(view.Queue) != 1 || view.Queue[0].RequestKey != "request-second" {
+		t.Fatalf("runtime queue=%#v err=%v", view.Queue, err)
+	}
+}
+
+func TestConcurrentTypedSendDeduplicatesRequest(t *testing.T) {
+	svc := newRealtimeTestService(t, 250*time.Millisecond)
+	meta := testSendTurnMeta()
+	thread, err := svc.CreateThread(t.Context(), meta, "typed dedupe", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := make(chan struct{})
+	results := make(chan SendUserTurnResponse, 2)
+	errs := make(chan error, 2)
+	for range 2 {
+		go func() {
+			<-start
+			response, sendErr := svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{ClientRequestID: "request-same", ThreadID: thread.ThreadID, Input: RunInput{Text: "same"}})
+			results <- response
+			errs <- sendErr
+		}()
+	}
+	close(start)
+	var first SendUserTurnResponse
+	for index := range 2 {
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
+		response := <-results
+		if index == 0 {
+			first = response
+		} else if response.TurnID != first.TurnID || response.Kind != first.Kind {
+			t.Fatalf("deduplicated responses differ: first=%#v second=%#v", first, response)
+		}
+	}
+	view, err := svc.threadRuntime.View(t.Context(), identity.ThreadID(thread.ThreadID))
+	if err != nil || len(view.Items) != 1 {
+		t.Fatalf("canonical items=%#v err=%v", view.Items, err)
+	}
 }

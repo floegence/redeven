@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"log/slog"
-	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
@@ -96,14 +95,13 @@ func TestE2E_OpenAICompatibleBaseURL_StreamText(t *testing.T) {
 	token := "E2E_OK_" + strings.ReplaceAll(strings.ToLower(th.ThreadID), "-", "_")
 	prompt := "Reply with exactly this token and nothing else: " + token
 
-	rr := httptest.NewRecorder()
-	if err := svc.StartRun(ctx, &meta, "run_e2e_1", RunStartRequest{
+	if _, err := runTypedTurnForTest(t, ctx, svc, &meta, "run_e2e_1", RunStartRequest{
 		ThreadID: th.ThreadID,
 		Model:    "openai/" + modelName,
 		Input:    RunInput{Text: prompt},
 		Options:  RunOptions{},
-	}, rr); err != nil {
-		t.Fatalf("StartRun: %v", err)
+	}); err != nil {
+		t.Fatalf("typed Send: %v", err)
 	}
 
 	view, err := svc.GetThread(ctx, &meta, th.ThreadID)

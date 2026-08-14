@@ -29,6 +29,7 @@ import type {
   FlowerSubmitInputReceipt,
   FlowerTurnLaunchInput,
   FlowerTurnLaunchReceipt,
+  FlowerRuntimeCurrentView,
   FlowerSettingsDraft,
   FlowerSettingsSnapshot,
   FlowerSurfaceAdapter,
@@ -37,7 +38,6 @@ import type {
   FlowerAttachmentStagingScope,
   FlowerStagedAttachment,
   FlowerStagedLongTextReadResult,
-  FlowerLiveBootstrap,
   FlowerLiveStreamConnectInput,
   FlowerTerminalProcessSnapshot,
   FlowerThreadReadStatus,
@@ -48,9 +48,7 @@ import type {
 } from '../../../../internal/flower_ui/src/contracts/flowerSurfaceContracts';
 import {
   createFlowerClientRequestID,
-  flowerTurnAdmissionUncertainIdentity,
-  flowerTurnAdmissionUncertainFailure,
-} from '../../../../internal/flower_ui/src/flowerTurnAdmission';
+} from '../../../../internal/flower_ui/src/flowerRequestIdentity';
 import type {
   AgentSettingsResponse,
   AIConfig,
@@ -59,7 +57,6 @@ import type {
 import { requireAskFlowerContextActionEnvelope } from '../../../../internal/envapp/ui_src/src/ui/contextActions/protocol';
 import {
   mapFlowerThread,
-  mapFlowerLiveBootstrap,
 } from '../../../../internal/flower_ui/src/flowerLiveMapper';
 import {
   createRuntimeFlowerSurfaceAdapter,
@@ -117,18 +114,13 @@ type ThreadView = Readonly<{
 type SendTurnResponse = Readonly<{
   client_request_id?: string;
   thread_id?: string;
-  run_id?: string;
-  turn_id?: string;
-  queue_id?: string;
-  admission_id?: string;
-  kind?: string;
+  current?: FlowerRuntimeCurrentView;
 }>;
 
 type SubmitInputResponse = Readonly<{
-  run_id?: string;
-  turn_id?: string;
-  kind?: string;
-  consumed_waiting_prompt_id?: string;
+	  kind?: string;
+	  consumed_waiting_prompt_id?: string;
+	  current?: FlowerSubmitInputReceipt['current'];
 }>;
 
 type LoadThreadResponse = Readonly<{
@@ -517,12 +509,6 @@ async function loadModels(bridge: DesktopSettingsBridge): Promise<ModelsResponse
   return runtimeJSON<ModelsResponse>(bridge, 'GET', '/_redeven_proxy/api/ai/models');
 }
 
-async function loadRuntimeFlowerThread(bridge: DesktopSettingsBridge, threadID: string): Promise<FlowerLiveBootstrap> {
-  const tid = trim(threadID);
-  if (!tid) throw new Error('Missing thread id.');
-  return mapRuntimeFlowerLiveBootstrap(await runtimeJSON<unknown>(bridge, 'GET', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/live/bootstrap`));
-}
-
 function localEnvironmentLiveMapperOptions() {
   return {
     runtimeID: LOCAL_ENVIRONMENT_RUNTIME_ID,
@@ -531,10 +517,6 @@ function localEnvironmentLiveMapperOptions() {
     targetLabels: [LOCAL_ENVIRONMENT_LABEL],
     originEnvPublicID: 'local-environment',
   };
-}
-
-function mapRuntimeFlowerLiveBootstrap(raw: unknown): FlowerLiveBootstrap {
-  return mapFlowerLiveBootstrap(raw, localEnvironmentLiveMapperOptions());
 }
 
 type RuntimeStagedAttachment = Readonly<{
@@ -734,7 +716,6 @@ export async function launchLocalEnvironmentFlowerTurn(
       : '/_redeven_proxy/api/ai/turns';
     const response = await runtimeJSON<SendTurnResponse>(bridge, 'POST', endpoint, {
       ...(existingThreadID ? { thread_id: existingThreadID } : {}),
-      ...(trim(input.source_followup_id) ? { source_followup_id: trim(input.source_followup_id) } : {}),
       ...(stagingScope ? { staging_scope_id: stagingScope.staging_scope_id } : {}),
       ...(modelID ? { model: modelID } : {}),
       input: {
@@ -750,43 +731,19 @@ export async function launchLocalEnvironmentFlowerTurn(
     }, stagingScope);
     const responseClientRequestID = trim(response.client_request_id);
     const responseThreadID = trim(response.thread_id) || existingThreadID;
-    const turnID = trim(response.turn_id);
-    const runID = trim(response.run_id);
-    const queueID = trim(response.queue_id);
-    const admissionID = trim(response.admission_id);
-    const kind = trim(response.kind);
     const clientIdentityValid = existingThreadID
       ? !responseClientRequestID || responseClientRequestID === clientRequestID
       : responseClientRequestID === clientRequestID;
-    const receiptValid = Boolean(responseThreadID && clientIdentityValid) && (
-      (kind === 'start' && Boolean(turnID && runID) && !queueID)
-      || (kind === 'admitting' && Boolean(admissionID) && !turnID && !runID && !queueID)
-      || (kind === 'queued' && Boolean(queueID) && !turnID && !runID)
-    );
-    if (!receiptValid) {
-      throw flowerTurnAdmissionUncertainFailure(
-        new Error('Flower turn admission returned an invalid receipt.'),
-        clientRequestID,
-        { ...(responseThreadID ? { thread_id: responseThreadID } : {}) },
-      );
+    if (!responseThreadID || !clientIdentityValid || !response.current || trim(response.current.thread_id) !== responseThreadID) {
+      throw new Error('Flower send returned an invalid current view.');
     }
-    if (kind === 'admitting') {
-      return { client_request_id: clientRequestID, thread_id: responseThreadID, admission_id: admissionID, kind };
-    }
-    return kind === 'start'
-      ? { client_request_id: clientRequestID, thread_id: responseThreadID, turn_id: turnID, run_id: runID, kind }
-      : { client_request_id: clientRequestID, thread_id: responseThreadID, queue_id: queueID, kind: 'queued' };
+    return { client_request_id: clientRequestID, thread_id: responseThreadID, current: response.current };
   } catch (error) {
     if (error instanceof RuntimeFlowerResponseError && error.failureKind !== 'transport_unknown'
       && error.code !== 'runtime_flower_invalid_json') {
       throw error;
     }
-    if (flowerTurnAdmissionUncertainIdentity(error)) {
-      throw error;
-    }
-    throw flowerTurnAdmissionUncertainFailure(error, clientRequestID, {
-      ...(existingThreadID ? { thread_id: existingThreadID } : {}),
-    });
+    throw error;
   }
 }
 
@@ -804,19 +761,9 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
     },
     transport: {
       listThreads: () => runtimeJSON(bridge, 'GET', '/_redeven_proxy/api/ai/threads?limit=200'),
-      loadThread: (threadID) => runtimeJSON(bridge, 'GET', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/live/bootstrap`),
-      listThreadLiveEvents: async () => {
-        throw new Error('Flower live polling is unavailable.');
-      },
+		loadThread: (threadID) => runtimeJSON(bridge, 'GET', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}`),
       connectLiveStream: async function* (input: FlowerLiveStreamConnectInput): AsyncIterable<unknown> {
-        const params = new URLSearchParams({
-          thread_id: input.thread_id,
-          thread_generation: String(input.thread_generation),
-          thread_after_seq: String(input.thread_after_seq),
-          summary_generation: String(input.summary_generation),
-          summary_after_seq: String(input.summary_after_seq),
-        });
-        const path = `/_redeven_proxy/api/ai/flower/stream?${params.toString()}`;
+        const path = '/_redeven_proxy/api/ai/flower/stream';
         const streamID = `flower-${globalThis.crypto.randomUUID()}`;
         const streamController = new AbortController();
         const abort = () => streamController.abort(input.signal.reason);
@@ -905,7 +852,12 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
           throw error;
         }
       },
-      submitApproval: (body) => runtimeJSON(bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(body.thread_id)}/approvals`, body),
+		submitApproval: (body) => runtimeJSON(bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(body.thread_id)}/approvals`, body),
+		retryEffect: (body) => runtimeJSON(bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(body.thread_id)}/retry_effect`, {
+			effect_attempt_id: body.effect_attempt_id,
+			tool_call_id: body.tool_call_id,
+			acknowledge_unknown_risk: true,
+		}),
     },
     mapperOptions: localEnvironmentLiveMapperOptions(),
     loadSettings: () => loadSettingsSnapshot(bridge),
@@ -991,29 +943,13 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
     retryThread: async (threadID) => {
       const tid = trim(threadID);
       if (!tid) throw new Error('Missing thread id.');
-      await runtimeJSON<unknown>(bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/retry`, {});
-      return loadRuntimeFlowerThread(bridge, tid);
-    },
+		await runtimeJSON<unknown>(bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/retry`, {});
+	},
     stopThread: async (threadID) => {
       const tid = trim(threadID);
       if (!tid) throw new Error('Missing thread id.');
-      await runtimeJSON<unknown>(bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/cancel`, {});
-      return loadRuntimeFlowerThread(bridge, tid);
-    },
-    compactThreadContext: async (input) => {
-      const tid = trim(input.thread_id);
-      if (!tid) throw new Error('Missing thread id.');
-      await runtimeJSON<unknown>(
-        bridge,
-        'POST',
-        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/context/compact`,
-        {
-          thread_id: tid,
-          active_run_id: trim(input.active_run_id) || undefined,
-        },
-      );
-      return loadRuntimeFlowerThread(bridge, tid);
-    },
+		await runtimeJSON<unknown>(bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/cancel`, {});
+	},
     submitInput: async (input) => {
       const tid = trim(input.thread_id);
       const promptID = trim(input.prompt_id);
@@ -1039,20 +975,20 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
           ...(serializeFlowerReasoningSelection(input.reasoning_selection) ? { reasoning_selection: serializeFlowerReasoningSelection(input.reasoning_selection) } : {}),
         },
       });
-      if (
-        !trim(response.turn_id)
-        || !trim(response.run_id)
-        || trim(response.kind) !== 'start'
-        || trim(response.consumed_waiting_prompt_id) !== promptID
-      ) {
-        throw new Error('Flower input response admission returned an invalid receipt.');
-      }
-      return {
-        thread_id: tid,
-        turn_id: trim(response.turn_id),
-        run_id: trim(response.run_id),
-        consumed_prompt_id: promptID,
-      } satisfies FlowerSubmitInputReceipt;
+		if (
+			trim(response.kind) !== 'accepted'
+			|| trim(response.consumed_waiting_prompt_id) !== promptID
+			|| !response.current
+			|| trim(response.current.thread_id) !== tid
+			|| Number(response.current.view_version) <= 0
+		) {
+			throw new Error('Flower input response returned an invalid current view.');
+		}
+		return {
+			thread_id: tid,
+			consumed_prompt_id: promptID,
+			current: response.current,
+		} satisfies FlowerSubmitInputReceipt;
     },
     missingThreadID: 'Missing thread id.',
     failedToCreateThread: 'Failed to create Flower chat.',

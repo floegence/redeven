@@ -9,7 +9,7 @@ import (
 
 const (
 	threadstoreSchemaKind           = "ai_threadstore_product_v1"
-	threadstoreCurrentSchemaVersion = 1
+	threadstoreCurrentSchemaVersion = 2
 )
 
 // CurrentSchemaVersion returns the product-only threadstore schema version.
@@ -21,10 +21,13 @@ func threadstoreSchemaSpec() sqliteutil.Spec {
 	return sqliteutil.Spec{
 		Kind:           threadstoreSchemaKind,
 		CurrentVersion: threadstoreCurrentSchemaVersion,
-		MinimumVersion: threadstoreCurrentSchemaVersion,
+		MinimumVersion: 1,
 		Pragmas:        []string{`PRAGMA journal_mode=WAL;`, `PRAGMA busy_timeout=3000;`, `PRAGMA auto_vacuum=INCREMENTAL;`},
 		Initialize:     createThreadstoreSchema,
-		Verify:         verifyThreadstoreSchema,
+		Migrations: []sqliteutil.Migration{
+			{FromVersion: 1, ToVersion: 2, Apply: migrateThreadstoreV1ToV2},
+		},
+		Verify: verifyThreadstoreSchema,
 	}
 }
 
@@ -32,6 +35,7 @@ func createThreadstoreSchema(tx *sql.Tx) error {
 	if _, err := tx.Exec(`
 CREATE TABLE ai_thread_settings (
   thread_id TEXT PRIMARY KEY,
+  parent_thread_id TEXT NOT NULL DEFAULT '',
   endpoint_id TEXT NOT NULL,
   namespace_public_id TEXT NOT NULL DEFAULT '',
   model_id TEXT NOT NULL DEFAULT '',
@@ -39,7 +43,6 @@ CREATE TABLE ai_thread_settings (
   permission_type TEXT NOT NULL DEFAULT 'approval_required',
   working_dir TEXT NOT NULL DEFAULT '',
   pinned_at_unix_ms INTEGER NOT NULL DEFAULT 0,
-  queue_revision INTEGER NOT NULL DEFAULT 0,
   created_by_user_public_id TEXT NOT NULL DEFAULT '',
   created_by_user_email TEXT NOT NULL DEFAULT '',
   updated_by_user_public_id TEXT NOT NULL DEFAULT '',
@@ -53,16 +56,11 @@ CREATE INDEX idx_ai_thread_settings_endpoint_pinned_created ON ai_thread_setting
 		return err
 	}
 	builders := []func(*sql.Tx) error{
-		createPendingTurnCommandsTableTx,
+		createPendingInputImportsTableTx,
 		createProviderCapabilitiesTableTx,
 		createUploadTablesTx,
 		createUploadStagingScopesTableTx,
 		createFlowerThreadRoutingTableTx,
-		createPermissionSnapshotTablesTx,
-		createSubAgentPublicationOperationsTableTx,
-		createThreadCreateOperationsTableTx,
-		createThreadForkOperationsTableTx,
-		createThreadDeleteOperationsTableTx,
 	}
 	for _, build := range builders {
 		if err := build(tx); err != nil {
@@ -72,57 +70,55 @@ CREATE INDEX idx_ai_thread_settings_endpoint_pinned_created ON ai_thread_setting
 	return nil
 }
 
-func createPendingTurnCommandsTableTx(tx *sql.Tx) error {
+func createPendingInputImportsTableTx(tx *sql.Tx) error {
 	_, err := tx.Exec(`
-CREATE TABLE ai_queued_turns (
-  queue_id TEXT PRIMARY KEY,
+CREATE TABLE ai_pending_input_imports (
+  request_id TEXT PRIMARY KEY,
   endpoint_id TEXT NOT NULL,
   thread_id TEXT NOT NULL,
-  channel_id TEXT NOT NULL DEFAULT '',
-  lane TEXT NOT NULL DEFAULT 'queued',
-  sort_index INTEGER NOT NULL DEFAULT 0,
-  turn_id TEXT NOT NULL DEFAULT '',
-  run_id TEXT NOT NULL DEFAULT '',
   model_id TEXT NOT NULL DEFAULT '',
   text_content TEXT NOT NULL DEFAULT '',
   attachments_json TEXT NOT NULL DEFAULT '[]',
   context_action_json TEXT NOT NULL DEFAULT '',
   options_json TEXT NOT NULL DEFAULT '{}',
   session_meta_json TEXT NOT NULL DEFAULT '{}',
-  created_by_user_public_id TEXT NOT NULL DEFAULT '',
-  created_by_user_email TEXT NOT NULL DEFAULT '',
   created_at_unix_ms INTEGER NOT NULL,
-  updated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
-  admission_state TEXT NOT NULL DEFAULT 'ready' CHECK(admission_state IN ('ready', 'in_flight'))
+  imported_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  error_message TEXT NOT NULL DEFAULT ''
 );
-CREATE INDEX idx_ai_queued_turns_thread_created ON ai_queued_turns(endpoint_id, thread_id, created_at_unix_ms ASC, queue_id ASC);
-CREATE INDEX idx_ai_queued_turns_thread_lane_sort ON ai_queued_turns(endpoint_id, thread_id, lane, sort_index ASC, queue_id ASC);
-CREATE UNIQUE INDEX idx_ai_queued_turns_canonical_turn ON ai_queued_turns(endpoint_id, thread_id, turn_id) WHERE turn_id <> '';
-CREATE UNIQUE INDEX idx_ai_queued_turns_canonical_run ON ai_queued_turns(run_id) WHERE run_id <> '';
-CREATE TABLE ai_turn_admission_receipts (
-  queue_id TEXT PRIMARY KEY,
-  endpoint_id TEXT NOT NULL,
-  thread_id TEXT NOT NULL,
-  logical_request_id TEXT NOT NULL,
-  command_fingerprint TEXT NOT NULL CHECK(length(command_fingerprint) = 64),
-  turn_id TEXT NOT NULL DEFAULT '',
-  run_id TEXT NOT NULL DEFAULT '',
-  entry_id TEXT NOT NULL DEFAULT '',
-  permission_snapshot_id TEXT NOT NULL DEFAULT '',
-  permission_snapshot_hash TEXT NOT NULL DEFAULT '',
-  stage TEXT NOT NULL CHECK(stage IN ('in_flight', 'settled')),
-  created_at_unix_ms INTEGER NOT NULL,
-  updated_at_unix_ms INTEGER NOT NULL,
-  UNIQUE(endpoint_id, logical_request_id),
-  CHECK((stage = 'in_flight' AND turn_id = '' AND run_id = '' AND entry_id = '' AND permission_snapshot_id = '' AND permission_snapshot_hash = '') OR
-        (stage = 'settled' AND turn_id <> '' AND run_id <> '' AND entry_id <> '' AND permission_snapshot_id <> '' AND permission_snapshot_hash <> ''))
-);
-CREATE INDEX idx_ai_turn_admission_receipts_thread_stage ON ai_turn_admission_receipts(endpoint_id, thread_id, stage, updated_at_unix_ms);
-CREATE UNIQUE INDEX idx_ai_turn_admission_receipts_turn ON ai_turn_admission_receipts(turn_id) WHERE turn_id <> '';
-CREATE UNIQUE INDEX idx_ai_turn_admission_receipts_run ON ai_turn_admission_receipts(run_id) WHERE run_id <> '';
-CREATE UNIQUE INDEX idx_ai_turn_admission_receipts_entry ON ai_turn_admission_receipts(entry_id) WHERE entry_id <> '';
+CREATE INDEX idx_ai_pending_input_imports_pending ON ai_pending_input_imports(imported_at_unix_ms, endpoint_id, thread_id, created_at_unix_ms, request_id);
 `)
 	return err
+}
+
+func migrateThreadstoreV1ToV2(tx *sql.Tx) error {
+	if err := createPendingInputImportsTableTx(tx); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`
+ALTER TABLE ai_thread_settings ADD COLUMN parent_thread_id TEXT NOT NULL DEFAULT '';
+INSERT INTO ai_pending_input_imports(
+  request_id, endpoint_id, thread_id, model_id, text_content, attachments_json,
+  context_action_json, options_json, session_meta_json, created_at_unix_ms
+)
+SELECT queue_id, endpoint_id, thread_id, model_id, text_content, attachments_json,
+       context_action_json, options_json, session_meta_json, created_at_unix_ms
+FROM ai_queued_turns
+ORDER BY endpoint_id, thread_id, created_at_unix_ms, queue_id;
+DROP TRIGGER IF EXISTS trg_ai_thread_settings_reject_retired_id;
+DROP TABLE ai_turn_admission_receipts;
+DROP TABLE ai_queued_turns;
+DROP TABLE ai_thread_create_operations;
+DROP TABLE ai_thread_fork_operations;
+DROP TABLE ai_thread_delete_operations;
+DROP TABLE ai_subagent_publication_operations;
+DROP TABLE ai_child_permission_snapshots;
+DROP TABLE ai_permission_snapshots;
+ALTER TABLE ai_thread_settings DROP COLUMN queue_revision;
+`); err != nil {
+		return err
+	}
+	return verifyProductSchemaVersion(tx, 2)
 }
 
 func createProviderCapabilitiesTableTx(tx *sql.Tx) error {
@@ -231,175 +227,6 @@ CREATE TABLE ai_flower_thread_routing (
   active_target_ids_json TEXT NOT NULL DEFAULT '[]',
   PRIMARY KEY(endpoint_id, thread_id)
 );
-`)
-	return err
-}
-
-func createPermissionSnapshotTablesTx(tx *sql.Tx) error {
-	_, err := tx.Exec(`
-CREATE TABLE ai_permission_snapshots (
-  snapshot_id TEXT PRIMARY KEY,
-  endpoint_id TEXT NOT NULL,
-  owner_thread_id TEXT NOT NULL DEFAULT '',
-  owner_run_id TEXT NOT NULL DEFAULT '',
-  permission_type TEXT NOT NULL DEFAULT 'approval_required',
-  snapshot_json TEXT NOT NULL DEFAULT '{}',
-  snapshot_hash TEXT NOT NULL DEFAULT '',
-  registry_hash TEXT NOT NULL DEFAULT '',
-  schema_hash TEXT NOT NULL DEFAULT '',
-  presentation_hash TEXT NOT NULL DEFAULT '',
-  created_at_unix_ms INTEGER NOT NULL DEFAULT 0
-);
-CREATE INDEX idx_ai_permission_snapshots_owner ON ai_permission_snapshots(endpoint_id, owner_thread_id, owner_run_id);
-CREATE TABLE ai_child_permission_snapshots (
-  child_snapshot_id TEXT PRIMARY KEY,
-  endpoint_id TEXT NOT NULL,
-  parent_snapshot_id TEXT NOT NULL DEFAULT '',
-  spawn_tool_call_id TEXT NOT NULL DEFAULT '',
-  parent_thread_id TEXT NOT NULL DEFAULT '',
-  parent_run_id TEXT NOT NULL DEFAULT '',
-  child_thread_id TEXT NOT NULL DEFAULT '',
-  child_run_id TEXT NOT NULL DEFAULT '',
-  state TEXT NOT NULL DEFAULT 'provisional',
-  snapshot_json TEXT NOT NULL DEFAULT '{}',
-  snapshot_hash TEXT NOT NULL DEFAULT '',
-  registry_hash TEXT NOT NULL DEFAULT '',
-  schema_hash TEXT NOT NULL DEFAULT '',
-  presentation_hash TEXT NOT NULL DEFAULT '',
-  created_at_unix_ms INTEGER NOT NULL DEFAULT 0,
-  finalized_at_unix_ms INTEGER NOT NULL DEFAULT 0
-);
-CREATE UNIQUE INDEX idx_ai_child_permission_snapshots_spawn ON ai_child_permission_snapshots(endpoint_id, spawn_tool_call_id);
-CREATE INDEX idx_ai_child_permission_snapshots_parent ON ai_child_permission_snapshots(endpoint_id, parent_thread_id, parent_run_id);
-CREATE INDEX idx_ai_child_permission_snapshots_child ON ai_child_permission_snapshots(endpoint_id, child_thread_id);
-`)
-	return err
-}
-
-func createSubAgentPublicationOperationsTableTx(tx *sql.Tx) error {
-	_, err := tx.Exec(`
-CREATE TABLE ai_subagent_publication_operations (
-  publication_id TEXT PRIMARY KEY,
-  endpoint_id TEXT NOT NULL,
-  parent_thread_id TEXT NOT NULL,
-  parent_turn_id TEXT NOT NULL,
-  parent_run_id TEXT NOT NULL,
-  parent_snapshot_id TEXT NOT NULL,
-  spawn_tool_call_id TEXT NOT NULL,
-  child_thread_id TEXT NOT NULL DEFAULT '',
-  child_run_id TEXT NOT NULL DEFAULT '',
-  child_snapshot_id TEXT NOT NULL DEFAULT '',
-  request_json TEXT NOT NULL,
-  request_hash TEXT NOT NULL,
-  session_meta_json TEXT NOT NULL,
-  model_id TEXT NOT NULL,
-  reasoning_selection_json TEXT NOT NULL DEFAULT '',
-  state TEXT NOT NULL CHECK(state IN ('pending', 'committed', 'failed')),
-  created_at_unix_ms INTEGER NOT NULL,
-  committed_at_unix_ms INTEGER NOT NULL DEFAULT 0,
-  failed_at_unix_ms INTEGER NOT NULL DEFAULT 0,
-  CHECK((child_thread_id = '' AND child_run_id = '' AND child_snapshot_id = '') OR
-        (child_thread_id <> '' AND child_run_id <> '' AND child_snapshot_id <> ''))
-);
-CREATE UNIQUE INDEX idx_ai_subagent_publication_spawn ON ai_subagent_publication_operations(endpoint_id, spawn_tool_call_id);
-CREATE UNIQUE INDEX idx_ai_subagent_publication_child_thread ON ai_subagent_publication_operations(child_thread_id) WHERE child_thread_id <> '';
-CREATE UNIQUE INDEX idx_ai_subagent_publication_child_run ON ai_subagent_publication_operations(child_run_id) WHERE child_run_id <> '';
-CREATE UNIQUE INDEX idx_ai_subagent_publication_child_snapshot ON ai_subagent_publication_operations(child_snapshot_id) WHERE child_snapshot_id <> '';
-CREATE INDEX idx_ai_subagent_publication_pending ON ai_subagent_publication_operations(state, created_at_unix_ms ASC, publication_id ASC);
-`)
-	return err
-}
-
-func createThreadForkOperationsTableTx(tx *sql.Tx) error {
-	_, err := tx.Exec(`
-CREATE TABLE ai_thread_fork_operations (
-  operation_id TEXT PRIMARY KEY,
-  endpoint_id TEXT NOT NULL,
-  client_request_id TEXT NOT NULL,
-  logical_request_id TEXT NOT NULL,
-  title_logical_request_id TEXT NOT NULL,
-  source_thread_id TEXT NOT NULL,
-  destination_thread_id TEXT NOT NULL DEFAULT '',
-  request_fingerprint TEXT NOT NULL,
-  stage TEXT NOT NULL CHECK(stage IN ('prepared', 'floret_forked', 'product_materialized', 'title_applied', 'title_skipped', 'completed', 'failed')),
-  snapshot_schema_version INTEGER NOT NULL,
-  snapshot_json TEXT NOT NULL,
-  retry_count INTEGER NOT NULL DEFAULT 0,
-  error_code TEXT NOT NULL DEFAULT '',
-  error_message TEXT NOT NULL DEFAULT '',
-  source_broadcasted_at_unix_ms INTEGER NOT NULL DEFAULT 0,
-  destination_broadcasted_at_unix_ms INTEGER NOT NULL DEFAULT 0,
-  created_at_unix_ms INTEGER NOT NULL,
-  updated_at_unix_ms INTEGER NOT NULL
-, snapshot_fingerprint TEXT NOT NULL DEFAULT '');
-CREATE INDEX idx_ai_thread_fork_operations_stage_updated ON ai_thread_fork_operations(stage, updated_at_unix_ms ASC, operation_id ASC);
-CREATE INDEX idx_ai_thread_fork_operations_source ON ai_thread_fork_operations(endpoint_id, source_thread_id, created_at_unix_ms DESC);
-CREATE UNIQUE INDEX idx_ai_thread_fork_operations_destination ON ai_thread_fork_operations(destination_thread_id) WHERE destination_thread_id <> '';
-CREATE UNIQUE INDEX idx_ai_thread_fork_operations_client_request ON ai_thread_fork_operations(endpoint_id, client_request_id);
-CREATE UNIQUE INDEX idx_ai_thread_fork_operations_logical_request ON ai_thread_fork_operations(logical_request_id);
-`)
-	return err
-}
-
-func createThreadCreateOperationsTableTx(tx *sql.Tx) error {
-	_, err := tx.Exec(`
-CREATE TABLE ai_thread_create_operations (
-  operation_id TEXT PRIMARY KEY,
-  endpoint_id TEXT NOT NULL,
-  client_request_id TEXT NOT NULL,
-  logical_request_id TEXT NOT NULL,
-  title_logical_request_id TEXT NOT NULL,
-  canonical_thread_id TEXT NOT NULL DEFAULT '',
-  request_fingerprint TEXT NOT NULL,
-  stage TEXT NOT NULL CHECK(stage IN ('prepared', 'floret_created', 'product_materialized', 'title_applied', 'title_skipped', 'completed', 'failed')),
-  snapshot_schema_version INTEGER NOT NULL,
-  snapshot_json TEXT NOT NULL,
-  retry_count INTEGER NOT NULL DEFAULT 0,
-  error_code TEXT NOT NULL DEFAULT '',
-  error_message TEXT NOT NULL DEFAULT '',
-  created_at_unix_ms INTEGER NOT NULL,
-  updated_at_unix_ms INTEGER NOT NULL
-);
-CREATE INDEX idx_ai_thread_create_operations_stage_updated ON ai_thread_create_operations(stage, updated_at_unix_ms ASC, operation_id ASC);
-CREATE UNIQUE INDEX idx_ai_thread_create_operations_client_request ON ai_thread_create_operations(endpoint_id, client_request_id);
-CREATE UNIQUE INDEX idx_ai_thread_create_operations_logical_request ON ai_thread_create_operations(logical_request_id);
-CREATE UNIQUE INDEX idx_ai_thread_create_operations_canonical_thread ON ai_thread_create_operations(canonical_thread_id) WHERE canonical_thread_id <> '';
-`)
-	return err
-}
-
-func createThreadDeleteOperationsTableTx(tx *sql.Tx) error {
-	_, err := tx.Exec(`
-CREATE TABLE ai_thread_delete_operations (
-  operation_id TEXT PRIMARY KEY,
-  endpoint_id TEXT NOT NULL,
-  thread_id TEXT NOT NULL,
-  status TEXT NOT NULL CHECK(status IN ('pending', 'committed', 'failed')),
-  snapshot_schema_version INTEGER NOT NULL,
-  snapshot_json TEXT NOT NULL,
-  read_state_required INTEGER NOT NULL DEFAULT 0 CHECK(read_state_required IN (0, 1)),
-  product_data_deleted_at_unix_ms INTEGER NOT NULL DEFAULT 0,
-  files_cleaned_at_unix_ms INTEGER NOT NULL DEFAULT 0,
-  floret_deleted_at_unix_ms INTEGER NOT NULL DEFAULT 0,
-  read_state_deleted_at_unix_ms INTEGER NOT NULL DEFAULT 0,
-  retry_count INTEGER NOT NULL DEFAULT 0,
-  error_code TEXT NOT NULL DEFAULT '',
-  error_message TEXT NOT NULL DEFAULT '',
-  created_at_unix_ms INTEGER NOT NULL,
-  updated_at_unix_ms INTEGER NOT NULL,
-  committed_at_unix_ms INTEGER NOT NULL DEFAULT 0, snapshot_fingerprint TEXT NOT NULL DEFAULT '',
-  UNIQUE(endpoint_id, thread_id)
-);
-CREATE INDEX idx_ai_thread_delete_operations_status_updated ON ai_thread_delete_operations(status, updated_at_unix_ms ASC, operation_id ASC);
-CREATE TRIGGER trg_ai_thread_settings_reject_retired_id
-BEFORE INSERT ON ai_thread_settings
-WHEN EXISTS (
-  SELECT 1 FROM ai_thread_delete_operations op
-  WHERE op.endpoint_id = NEW.endpoint_id AND op.thread_id = NEW.thread_id
-)
-BEGIN
-  SELECT RAISE(ABORT, 'thread id retired');
-END;
 `)
 	return err
 }

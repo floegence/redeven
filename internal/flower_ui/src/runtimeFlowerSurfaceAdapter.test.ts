@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type {
-  FlowerLiveBootstrap,
+  FlowerApprovalCommandResult,
+  FlowerThreadView,
   FlowerRouterDecision,
   FlowerSettingsDraft,
   FlowerSettingsSnapshot,
@@ -40,6 +41,18 @@ function settingsSnapshot(): FlowerSettingsSnapshot {
       providers: [],
     },
     provider_secrets: [],
+  };
+}
+
+function approvalResult(threadID: string, interactionID = 'approval-1', approved = true, version = 1): FlowerApprovalCommandResult {
+  return {
+    ok: true,
+    current: {
+      thread_id: threadID,
+      view_version: version,
+      activity: 'active',
+      interactions: [{ id: interactionID, kind: 'approval', resolved: true, approved }],
+    },
   };
 }
 
@@ -86,7 +99,6 @@ function adapterOptions(
     loadThread: vi.fn(async () => {
       throw new Error('loadThread should not be called.');
     }),
-    listThreadLiveEvents: vi.fn(async () => ({ events: [] })),
     loadSubagentDetail: vi.fn(async () => ({ detail: undefined })),
     readTerminalProcess: vi.fn(async () => ({
       process_id: 'tp_default',
@@ -101,7 +113,8 @@ function adapterOptions(
     markThreadRead: vi.fn(async () => ({ read_status: readStatus() })),
     patchThread: vi.fn(async () => ({ thread: undefined })),
     forkThread: vi.fn(async () => ({ thread: undefined })),
-    submitApproval: vi.fn(async () => ({ ok: true, current_cursor: 1 })),
+	    submitApproval: vi.fn(async (input) => approvalResult(input.thread_id, input.interaction_id, input.approved)),
+	    retryEffect: vi.fn(async () => undefined),
     ...transportOverrides,
   };
   return {
@@ -130,9 +143,6 @@ function adapterOptions(
     retryThread: vi.fn(async () => {
       throw new Error('retryThread should not be called.');
     }),
-    compactThreadContext: vi.fn(async () => {
-      throw new Error('compactThreadContext should not be called.');
-    }),
     stopThread: vi.fn(async () => {
       throw new Error('stopThread should not be called.');
     }),
@@ -144,14 +154,46 @@ function adapterOptions(
 }
 
 describe('runtime Flower surface adapter read state', () => {
+	it('loads product metadata and typed current view without polling', async () => {
+		const loadThread = vi.fn(async () => ({
+			thread: {
+				thread_id: 'thread_detail',
+				title: 'Detail',
+				title_status: 'ready',
+				model_id: 'default/gpt-5',
+				permission_type: 'approval_required',
+				working_dir: '/workspace',
+				queued_turn_count: 0,
+				run_status: 'running',
+				created_at_unix_ms: 1,
+				updated_at_unix_ms: 2,
+				last_message_at_unix_ms: 2,
+				read_status: readStatus(),
+			},
+				current: {
+					thread_id: 'thread_detail',
+					view_version: 7,
+				activity: 'active',
+				items: [{ id: 'user:req-1', kind: 'user', text: 'hello' }],
+			},
+		}));
+		const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ loadThread }));
+
+		const detail = await adapter.loadThread('thread_detail');
+
+		expect(detail.thread.thread_id).toBe('thread_detail');
+			expect(detail.current.view_version).toBe(7);
+		expect(detail.thread.messages).toEqual(expect.arrayContaining([
+			expect.objectContaining({ id: 'user:req-1', role: 'user', content: 'hello' }),
+		]));
+		expect(detail).not.toHaveProperty('cursor');
+		expect(detail).not.toHaveProperty('stream_generation');
+		expect(detail).not.toHaveProperty('live_state');
+	});
+
 	it('trims and forwards canonical continuation retries', async () => {
-		const expected = {
-			schema_version: 1,
-			endpoint_id: 'runtime_1',
-			thread_id: 'thread_1',
-			stream_generation: 1,
-			cursor: 1,
-			retained_from_seq: 1,
+		const retryThread = vi.fn(async () => undefined);
+		const loadThread = vi.fn(async () => ({
 			thread: {
 				thread_id: 'thread_1',
 				title: 'Retry',
@@ -160,24 +202,22 @@ describe('runtime Flower surface adapter read state', () => {
 				permission_type: 'approval_required',
 				working_dir: '/workspace',
 				queued_turn_count: 0,
-				created_at_ms: 1,
-				updated_at_ms: 1,
-				status: 'failed',
-				source_label: 'Runtime',
-				target_labels: [],
-				messages: [],
+				run_status: 'failed',
+				created_at_unix_ms: 1,
+				updated_at_unix_ms: 1,
+				last_message_at_unix_ms: 1,
 				read_status: readStatus(),
 			},
-			timeline_messages: [],
-			live_state: { thread_patch: {}, runs: {}, approval_actions: {}, input_requests: {} },
-			read_status: readStatus(),
-			generated_at_ms: 1,
-        } as FlowerLiveBootstrap;
-		const retryThread = vi.fn(async () => expected);
-		const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({}, { retryThread }));
+			current: { thread_id: 'thread_1', view_version: 1 },
+		}));
+		const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ loadThread }, { retryThread }));
 
-		await expect(adapter.retryThread(' thread_1 ')).resolves.toBe(expected);
+		await expect(adapter.retryThread(' thread_1 ')).resolves.toMatchObject({
+			current: { view_version: 1 },
+			thread: { thread_id: 'thread_1', title: 'Retry' },
+		});
 		expect(retryThread).toHaveBeenCalledWith('thread_1');
+		expect(loadThread).toHaveBeenCalledWith('thread_1');
 		await expect(adapter.retryThread('  ')).rejects.toThrow();
 	});
 
@@ -202,13 +242,7 @@ describe('runtime Flower surface adapter read state', () => {
 	it('deletes one canonical queued turn and reconciles from the thread bootstrap', async () => {
 		const deleteQueuedTurn = vi.fn(async () => undefined);
 		const loadThread = vi.fn(async () => ({
-			schema_version: 1,
-			endpoint_id: 'runtime_1',
-			thread_id: 'thread_1',
-			stream_generation: 1,
-			cursor: 4,
-			retained_from_seq: 1,
-			thread: {
+				thread: {
 				thread_id: 'thread_1',
 				title: 'Queue',
 				title_status: 'ready',
@@ -221,74 +255,111 @@ describe('runtime Flower surface adapter read state', () => {
 				updated_at_unix_ms: 2,
 				last_message_at_unix_ms: 2,
 				read_status: readStatus(),
-			},
-			timeline_messages: [],
-			live_state: { thread_patch: {}, runs: {}, approval_actions: {}, input_requests: {} },
-			read_status: readStatus(),
-			generated_at_ms: 2,
-		}));
+				},
+				current: { thread: { id: 'thread_1' }, version: 4 },
+			}));
 		const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ deleteQueuedTurn, loadThread }));
 
 		const result = await adapter.deleteQueuedTurn?.(' thread_1 ', ' followup_middle ');
 
 		expect(deleteQueuedTurn).toHaveBeenCalledWith('thread_1', 'followup_middle');
 		expect(loadThread).toHaveBeenCalledWith('thread_1');
-		expect(result?.thread_id).toBe('thread_1');
+		expect(result?.thread.thread_id).toBe('thread_1');
 	});
 
-	it('maps the published SSE transport into typed Flower envelopes', async () => {
-		const connectLiveStream = vi.fn(async function* () {
+		it('maps the published SSE transport into typed Flower envelopes', async () => {
+			const connectLiveStream = vi.fn(async function* () {
 				yield {
-				schema_version: 1,
-				kind: 'thread.batch',
-				stream_generation: 7,
-				thread_id: 'thread_stream',
-				from_seq: 3,
-				through_seq: 3,
-				retained_from_seq: 1,
-				events: [{
 					schema_version: 1,
-					seq: 3,
-					endpoint_id: 'env_1',
-					thread_id: 'thread_stream',
-					at_unix_ms: 10,
-					kind: 'thread.patched',
-					payload: { patch: { title: 'Streaming' } },
-				}],
+					kind: 'ready',
+					summaries: [{
+						thread_id: 'thread_stream',
+						title: 'Streaming',
+						title_status: 'ready',
+						model_id: 'default/gpt-5',
+						permission_type: 'approval_required',
+						working_dir: '/workspace',
+						queued_turn_count: 0,
+						run_status: 'running',
+						created_at_unix_ms: 1,
+						updated_at_unix_ms: 2,
+						last_message_at_unix_ms: 2,
+						read_status: readStatus(),
+					}],
 				};
 				yield {
 					schema_version: 1,
-					kind: 'viewer.read_state',
-					stream_generation: 7,
+					kind: 'thread.batch',
 					thread_id: 'thread_stream',
+					current: {
+						thread: { id: 'thread_stream', title: 'Streaming' },
+						version: 3,
+						activity: 'active',
+					},
+				};
+					yield {
+						schema_version: 1,
+						kind: 'viewer.read_state',
+						thread_id: 'thread_stream',
 					read_status: readStatus(),
 				};
 		});
 		const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ connectLiveStream }));
 		const controller = new AbortController();
-		const frames = [];
-		for await (const frame of adapter.connectLiveStream!({
-			thread_id: 'thread_stream',
-			thread_generation: 7,
-			thread_after_seq: 2,
-			summary_generation: 7,
-			summary_after_seq: 0,
-			signal: controller.signal,
-		})) frames.push(frame);
+			const frames = [];
+			for await (const frame of adapter.connectLiveStream!({
+				signal: controller.signal,
+			})) frames.push(frame);
 
-			expect(frames).toHaveLength(2);
-		expect(frames[0]).toMatchObject({
-			kind: 'thread.batch',
-			stream_generation: 7,
-			through_seq: 3,
-			events: [{ kind: 'thread.patched', seq: 3 }],
+				expect(frames).toHaveLength(3);
+			expect(frames[0]).toMatchObject({
+				kind: 'ready',
+				summaries: [{ thread_id: 'thread_stream', messages: [] }],
 			});
 			expect(frames[1]).toMatchObject({
-				kind: 'viewer.read_state',
-				stream_generation: 7,
-				thread_id: 'thread_stream',
+				kind: 'thread.batch',
+				current: { thread: { id: 'thread_stream', title: 'Streaming' }, version: 3, activity: 'active' },
+				});
+				expect(frames[2]).toMatchObject({
+					kind: 'viewer.read_state',
+					thread_id: 'thread_stream',
 				read_status: { is_unread: false },
 			});
+	});
+
+	it('maps summary-only SSE frames without requiring viewer read state', async () => {
+		const connectLiveStream = vi.fn(async function* () {
+			yield {
+				schema_version: 1,
+				kind: 'ready',
+				summaries: [{
+					thread_id: 'thread_failed',
+					title: '',
+					title_status: 'failed',
+					model_id: 'deepseek/chat',
+					permission_type: 'approval_required',
+					working_dir: '/workspace',
+					queued_turn_count: 0,
+					run_status: 'failed',
+					run_updated_at_unix_ms: 20,
+					run_error_code: 'floret_turn_failed',
+					run_error: 'provider rejected the request',
+					waiting_prompt: { prompt_id: 'legacy-summary-detail-must-not-be-read' },
+					created_at_unix_ms: 10,
+					updated_at_unix_ms: 20,
+					last_message_at_unix_ms: 20,
+				}],
+			};
+		});
+		const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ connectLiveStream }));
+		const frames = [];
+		for await (const frame of adapter.connectLiveStream!({ signal: new AbortController().signal })) frames.push(frame);
+
+		expect(frames).toHaveLength(1);
+		expect(frames[0]).toMatchObject({
+			kind: 'ready',
+			summaries: [{ thread_id: 'thread_failed', status: 'failed', messages: [], read_status: { is_unread: false } }],
+		});
 	});
   it('keeps thread-list summaries transcript-free even when preview fields are present', async () => {
     const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({
@@ -513,68 +584,10 @@ describe('runtime Flower surface adapter read state', () => {
 	  expect(readTerminalProcess).not.toHaveBeenCalled();
 	});
 
-  it('passes compact context requests through without creating a user turn', async () => {
-    const bootstrap = {
-      schema_version: 1,
-      endpoint_id: 'runtime_1',
-      thread_id: 'thread_1',
-      cursor: 4,
-      retained_from_seq: 1,
-      thread: {
-        thread_id: 'thread_1',
-        title: 'Running thread',
-        run_status: 'running',
-        model_id: 'default/gpt-5',
-        created_at_unix_ms: 1,
-        updated_at_unix_ms: 2,
-        read_status: readStatus(),
-      },
-      timeline_messages: [],
-      live_state: {
-        thread_patch: {},
-        runs: {},
-        approval_actions: {},
-        input_requests: {},
-      },
-      read_status: readStatus(),
-      generated_at_ms: 10,
-    };
-    const compactThreadContext = vi.fn(async () => bootstrap as never);
-    const launchTurn = vi.fn(async () => {
-      throw new Error('launchTurn should not be called.');
-    });
-    const stopThread = vi.fn(async () => {
-      throw new Error('stopThread should not be called.');
-    });
-    const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({}, {
-      compactThreadContext,
-      launchTurn,
-      stopThread,
-    }));
-
-    const result = await adapter.compactThreadContext({
-      thread_id: ' thread_1 ',
-      active_run_id: ' run_1 ',
-    });
-
-    expect(result.thread.thread_id).toBe('thread_1');
-    expect(compactThreadContext).toHaveBeenCalledWith({
-      thread_id: 'thread_1',
-      active_run_id: 'run_1',
-    });
-    expect(launchTurn).not.toHaveBeenCalled();
-    expect(stopThread).not.toHaveBeenCalled();
-  });
-
   it('patches thread permission type and reloads the thread', async () => {
     const patchThread = vi.fn(async () => ({ thread: { thread_id: 'thread_permission', read_status: readStatus() } }));
     const loadThread = vi.fn(async () => ({
-      schema_version: 1,
-      endpoint_id: 'runtime_1',
-      thread_id: 'thread_permission',
-      cursor: 5,
-      retained_from_seq: 1,
-      thread: {
+	      thread: {
         thread_id: 'thread_permission',
         title: 'Permission thread',
         title_status: 'ready',
@@ -584,17 +597,9 @@ describe('runtime Flower surface adapter read state', () => {
         created_at_unix_ms: 1,
         updated_at_unix_ms: 2,
         read_status: readStatus(),
-      },
-      timeline_messages: [],
-      live_state: {
-        thread_patch: {},
-        runs: {},
-        approval_actions: {},
-        input_requests: {},
-      },
-      read_status: readStatus(),
-      generated_at_ms: 10,
-    }));
+	      },
+	      current: { thread: { id: 'thread_permission' }, version: 5 },
+	    }));
     const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({
       patchThread,
       loadThread,
@@ -607,95 +612,31 @@ describe('runtime Flower surface adapter read state', () => {
     expect(result?.thread.permission_type).toBe('full_access');
   });
 
-  it('submits main tool approvals with run and tool identity', async () => {
-    const submitApproval = vi.fn(async () => ({ ok: true, current_cursor: 13 }));
+  it('submits approvals with typed thread and interaction identity', async () => {
+    const result = approvalResult('thread_1', 'action_1', true, 13);
+    const submitApproval = vi.fn(async () => result);
     const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ submitApproval }));
 
     const receipt = await adapter.submitApproval({
       thread_id: ' thread_1 ',
-      origin: ' main_tool ' as 'main_tool',
-      run_id: ' run_1 ',
-      action_id: ' action_1 ',
-      tool_id: ' tool_1 ',
+      interaction_id: ' action_1 ',
       approved: true,
-      expected_seq: 12.9,
-      revision: 2,
-      queue_generation: 4,
-      queue_revision: 5,
     });
 
     expect(submitApproval).toHaveBeenCalledWith({
       thread_id: 'thread_1',
-      origin: 'main_tool',
-      run_id: 'run_1',
-      action_id: 'action_1',
-      tool_id: 'tool_1',
+      interaction_id: 'action_1',
       approved: true,
-      expected_seq: 12,
-      revision: 2,
-      version: undefined,
-      surface_epoch: undefined,
-      queue_generation: 4,
-      queue_revision: 5,
     });
-    expect(receipt).toEqual({ ok: true, current_cursor: 13 });
+    expect(receipt).toEqual(result);
   });
 
-  it('submits delegated approvals with canonical run and tool identity', async () => {
-    const submitApproval = vi.fn(async () => ({ ok: true, current_cursor: 14 }));
+  it('rejects missing typed approval identity before transport', async () => {
+    const submitApproval = vi.fn(async () => approvalResult('thread_1'));
     const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ submitApproval }));
 
-    const receipt = await adapter.submitApproval({
-      thread_id: ' thread_1 ',
-      origin: 'delegated_subagent',
-      action_id: ' action_delegated ',
-      run_id: ' run_child ',
-      tool_id: ' tool_child ',
-      approved: false,
-      revision: 3,
-      version: 3,
-      surface_epoch: 5,
-      queue_generation: 6,
-      queue_revision: 7,
-      idempotency_key: ' idem-1 ',
-    });
-
-    expect(submitApproval).toHaveBeenCalledWith({
-      thread_id: 'thread_1',
-      origin: 'delegated_subagent',
-      action_id: 'action_delegated',
-      run_id: 'run_child',
-      tool_id: 'tool_child',
-      approved: false,
-      expected_seq: undefined,
-      revision: 3,
-      version: 3,
-      surface_epoch: 5,
-      queue_generation: 6,
-      queue_revision: 7,
-      idempotency_key: 'idem-1',
-    });
-    expect(receipt).toEqual({ ok: true, current_cursor: 14 });
-  });
-
-  it('rejects missing approval authority before transport', async () => {
-    const submitApproval = vi.fn(async () => ({ ok: true, current_cursor: 14 }));
-    const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ submitApproval }));
-    const base = {
-      thread_id: 'thread_1',
-      origin: 'main_tool' as const,
-      action_id: 'action_1',
-      run_id: 'run_1',
-      tool_id: 'tool_1',
-      approved: true,
-      revision: 1,
-      queue_generation: 1,
-      queue_revision: 1,
-    };
-
-    await expect(adapter.submitApproval({ ...base, origin: '' as 'main_tool' })).rejects.toThrow(/origin/i);
-    await expect(adapter.submitApproval({ ...base, revision: 0 })).rejects.toThrow(/revision/i);
-    await expect(adapter.submitApproval({ ...base, queue_revision: 1.5 })).rejects.toThrow(/queue/i);
+    await expect(adapter.submitApproval({ thread_id: '', interaction_id: 'action_1', approved: true })).rejects.toThrow(/thread/i);
+    await expect(adapter.submitApproval({ thread_id: 'thread_1', interaction_id: '', approved: true })).rejects.toThrow(/interaction/i);
     expect(submitApproval).not.toHaveBeenCalled();
   });
 

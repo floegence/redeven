@@ -77,7 +77,6 @@ describe('FlowerSurface markdown rendering boundary', () => {
     const headerRowIndex = src.indexOf('flower-chat-header-row');
     const dockIndex = src.indexOf('flower-chat-bottom-dock-track flower-chat-bottom-dock-track', timelineListIndex);
     const statusLaneIndex = src.indexOf('flower-model-status-lane', dockIndex);
-    const commandMenuIndex = src.indexOf('flower-composer-command-menu', statusLaneIndex);
     const composerAnchorIndex = src.indexOf('flower-composer-anchor', statusLaneIndex);
     const composerIndex = src.indexOf('flower-composer flower-chat-input-floating');
     const composerActionsIndex = src.indexOf('flower-composer-actions');
@@ -91,8 +90,8 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(dockIndex).toBeGreaterThan(timelineListIndex);
     expect(statusLaneIndex).toBeGreaterThan(dockIndex);
     expect(composerAnchorIndex).toBeGreaterThan(statusLaneIndex);
-    expect(commandMenuIndex).toBeGreaterThan(statusLaneIndex);
-    expect(commandMenuIndex).toBeLessThan(composerIndex);
+    expect(src).not.toContain('flower-composer-command-menu');
+    expect(src).not.toContain('manualCompactThread');
     expect(composerIndex).toBeGreaterThan(composerAnchorIndex);
     expect(composerActionsIndex).toBeGreaterThan(composerIndex);
     expect(compactContextIndicatorIndex).toBeGreaterThanOrEqual(0);
@@ -111,8 +110,7 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).toContain('DEFAULT_FLOWER_SURFACE_COPY.chat.modelStatus');
     expect(src).toContain('data-text={base}');
     expect(src).toContain('class="flower-composer-anchor"');
-    expect(src).toContain('onClick={() => void executeCompactContextCommand()}');
-    expect(src).toContain('const executeCompactContextCommand = async () => {');
+    expect(src).not.toContain('executeCompactContextCommand');
     expect(src).not.toContain('contextIndicator()');
     expect(src).not.toContain('selectedThreadThinking');
     expect(src).not.toContain('thinkingIndicator');

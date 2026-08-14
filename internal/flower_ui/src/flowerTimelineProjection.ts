@@ -65,11 +65,6 @@ export type FlowerTimelineEntry =
     decoration: Extract<FlowerTimelineDecoration, { kind: 'context_compaction' }>;
   }>
   | Readonly<{
-    type: 'turn_projection_unavailable';
-    key: string;
-    decoration: Extract<FlowerTimelineDecoration, { kind: 'turn_projection_unavailable' }>;
-  }>
-  | Readonly<{
     type: 'error';
     key: string;
     error: FlowerThreadError;
@@ -280,36 +275,20 @@ function decorationSortKey(decoration: FlowerTimelineDecoration): string {
   ].join(':');
 }
 
-type FlowerTimelineDecorationEntry = Extract<FlowerTimelineEntry, { type: 'context_compaction' | 'turn_projection_unavailable' }>;
+type FlowerTimelineDecorationEntry = Extract<FlowerTimelineEntry, { type: 'context_compaction' }>;
 
 function timelineDecorationEntry(decoration: FlowerTimelineDecoration): FlowerTimelineDecorationEntry {
   if (!trimString(decoration.decoration_id)) {
     throw new Error('Flower contract error: timeline decoration requires decoration_id.');
   }
-  switch (decoration.kind) {
-    case 'context_compaction':
-      if (!trimString(decoration.compaction.operation_id)) {
-        throw new Error('Flower contract error: context compaction decoration requires compaction payload.');
-      }
-      return {
-        type: 'context_compaction',
-        key: `timeline-decoration:${decoration.decoration_id}`,
-        decoration,
-      };
-    case 'turn_projection_unavailable':
-      if (
-        !trimString(decoration.projection_unavailable.turn_id)
-        || !trimString(decoration.projection_unavailable.run_id)
-        || !trimString(decoration.projection_unavailable.expected_message_id)
-      ) {
-        throw new Error('Flower contract error: unavailable projection decoration requires projection payload.');
-      }
-      return {
-        type: 'turn_projection_unavailable',
-        key: `timeline-decoration:${decoration.decoration_id}`,
-        decoration,
-      };
+  if (!trimString(decoration.compaction.operation_id)) {
+    throw new Error('Flower contract error: context compaction decoration requires compaction payload.');
   }
+  return {
+    type: 'context_compaction',
+    key: `timeline-decoration:${decoration.decoration_id}`,
+    decoration,
+  };
 }
 
 function timelineAnchorKey(decoration: FlowerTimelineDecoration): string {

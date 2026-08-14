@@ -7,11 +7,6 @@ export type AIRealtimeEventType = 'stream_event' | 'thread_state' | 'thread_summ
 export type AIThreadRunStatus = 'idle' | 'accepted' | 'running' | 'waiting_approval' | 'recovering' | 'finalizing' | 'waiting_user' | 'success' | 'failed' | 'canceled' | 'timed_out';
 export type AIPermissionType = 'readonly' | 'approval_required' | 'full_access';
 
-export type AIActiveRun = {
-  threadId: string;
-  runId: string;
-};
-
 export type AIRequestUserInputAction = {
   type: string;
 };
@@ -78,28 +73,15 @@ export type AISendUserTurnRequest = {
   };
   expectedRunId?: string;
   queueAfterWaitingUser?: boolean;
-  sourceFollowupId?: string;
 };
 
 export type AISendUserTurnResponse = {
-  admissionId?: string;
   runId: string;
   turnId: string;
   kind: string;
   queueId?: string;
   queuePosition?: number;
   consumedWaitingPromptId?: string;
-};
-
-export type AICompactThreadContextRequest = {
-  threadId: string;
-  activeRunId?: string;
-};
-
-export type AICompactThreadContextResponse = {
-  requestId?: string;
-  kind: string;
-  errorCode?: string;
 };
 
 export type AISubmitRequestUserInputResponseRequest = {
@@ -120,7 +102,6 @@ export type AISubmitRequestUserInputResponseRequest = {
     reasoningSelection?: FlowerReasoningSelection;
   };
   expectedRunId?: string;
-  sourceFollowupId?: string;
 };
 
 export type AISubmitRequestUserInputResponseResponse = {
@@ -128,18 +109,6 @@ export type AISubmitRequestUserInputResponseResponse = {
   turnId: string;
   kind: string;
   consumedWaitingPromptId?: string;
-};
-
-export type AISubscribeSummaryResponse = {
-  activeRuns: AIActiveRun[];
-};
-
-export type AISubscribeThreadRequest = {
-  threadId: string;
-};
-
-export type AISubscribeThreadResponse = {
-  runId?: string;
 };
 
 export type AIFollowupAttachment = {

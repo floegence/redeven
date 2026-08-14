@@ -2,145 +2,13 @@
   "schema_kind": "ai_threadstore_product_v1",
   "versions": [
     {
-      "version": 1,
+      "version": 2,
       "sqlite_master": [
         {
           "type": "index",
-          "name": "idx_ai_child_permission_snapshots_child",
-          "table_name": "ai_child_permission_snapshots",
-          "sql": "CREATE INDEX idx_ai_child_permission_snapshots_child ON ai_child_permission_snapshots(endpoint_id, child_thread_id)"
-        },
-        {
-          "type": "index",
-          "name": "idx_ai_child_permission_snapshots_parent",
-          "table_name": "ai_child_permission_snapshots",
-          "sql": "CREATE INDEX idx_ai_child_permission_snapshots_parent ON ai_child_permission_snapshots(endpoint_id, parent_thread_id, parent_run_id)"
-        },
-        {
-          "type": "index",
-          "name": "idx_ai_child_permission_snapshots_spawn",
-          "table_name": "ai_child_permission_snapshots",
-          "sql": "CREATE UNIQUE INDEX idx_ai_child_permission_snapshots_spawn ON ai_child_permission_snapshots(endpoint_id, spawn_tool_call_id)"
-        },
-        {
-          "type": "index",
-          "name": "idx_ai_permission_snapshots_owner",
-          "table_name": "ai_permission_snapshots",
-          "sql": "CREATE INDEX idx_ai_permission_snapshots_owner ON ai_permission_snapshots(endpoint_id, owner_thread_id, owner_run_id)"
-        },
-        {
-          "type": "index",
-          "name": "idx_ai_queued_turns_canonical_run",
-          "table_name": "ai_queued_turns",
-          "sql": "CREATE UNIQUE INDEX idx_ai_queued_turns_canonical_run ON ai_queued_turns(run_id) WHERE run_id \u003c\u003e ''"
-        },
-        {
-          "type": "index",
-          "name": "idx_ai_queued_turns_canonical_turn",
-          "table_name": "ai_queued_turns",
-          "sql": "CREATE UNIQUE INDEX idx_ai_queued_turns_canonical_turn ON ai_queued_turns(endpoint_id, thread_id, turn_id) WHERE turn_id \u003c\u003e ''"
-        },
-        {
-          "type": "index",
-          "name": "idx_ai_queued_turns_thread_created",
-          "table_name": "ai_queued_turns",
-          "sql": "CREATE INDEX idx_ai_queued_turns_thread_created ON ai_queued_turns(endpoint_id, thread_id, created_at_unix_ms ASC, queue_id ASC)"
-        },
-        {
-          "type": "index",
-          "name": "idx_ai_queued_turns_thread_lane_sort",
-          "table_name": "ai_queued_turns",
-          "sql": "CREATE INDEX idx_ai_queued_turns_thread_lane_sort ON ai_queued_turns(endpoint_id, thread_id, lane, sort_index ASC, queue_id ASC)"
-        },
-        {
-          "type": "index",
-          "name": "idx_ai_subagent_publication_child_run",
-          "table_name": "ai_subagent_publication_operations",
-          "sql": "CREATE UNIQUE INDEX idx_ai_subagent_publication_child_run ON ai_subagent_publication_operations(child_run_id) WHERE child_run_id \u003c\u003e ''"
-        },
-        {
-          "type": "index",
-          "name": "idx_ai_subagent_publication_child_snapshot",
-          "table_name": "ai_subagent_publication_operations",
-          "sql": "CREATE UNIQUE INDEX idx_ai_subagent_publication_child_snapshot ON ai_subagent_publication_operations(child_snapshot_id) WHERE child_snapshot_id \u003c\u003e ''"
-        },
-        {
-          "type": "index",
-          "name": "idx_ai_subagent_publication_child_thread",
-          "table_name": "ai_subagent_publication_operations",
-          "sql": "CREATE UNIQUE INDEX idx_ai_subagent_publication_child_thread ON ai_subagent_publication_operations(child_thread_id) WHERE child_thread_id \u003c\u003e ''"
-        },
-        {
-          "type": "index",
-          "name": "idx_ai_subagent_publication_pending",
-          "table_name": "ai_subagent_publication_operations",
-          "sql": "CREATE INDEX idx_ai_subagent_publication_pending ON ai_subagent_publication_operations(state, created_at_unix_ms ASC, publication_id ASC)"
-        },
-        {
-          "type": "index",
-          "name": "idx_ai_subagent_publication_spawn",
-          "table_name": "ai_subagent_publication_operations",
-          "sql": "CREATE UNIQUE INDEX idx_ai_subagent_publication_spawn ON ai_subagent_publication_operations(endpoint_id, spawn_tool_call_id)"
-        },
-        {
-          "type": "index",
-          "name": "idx_ai_thread_create_operations_canonical_thread",
-          "table_name": "ai_thread_create_operations",
-          "sql": "CREATE UNIQUE INDEX idx_ai_thread_create_operations_canonical_thread ON ai_thread_create_operations(canonical_thread_id) WHERE canonical_thread_id \u003c\u003e ''"
-        },
-        {
-          "type": "index",
-          "name": "idx_ai_thread_create_operations_client_request",
-          "table_name": "ai_thread_create_operations",
-          "sql": "CREATE UNIQUE INDEX idx_ai_thread_create_operations_client_request ON ai_thread_create_operations(endpoint_id, client_request_id)"
-        },
-        {
-          "type": "index",
-          "name": "idx_ai_thread_create_operations_logical_request",
-          "table_name": "ai_thread_create_operations",
-          "sql": "CREATE UNIQUE INDEX idx_ai_thread_create_operations_logical_request ON ai_thread_create_operations(logical_request_id)"
-        },
-        {
-          "type": "index",
-          "name": "idx_ai_thread_create_operations_stage_updated",
-          "table_name": "ai_thread_create_operations",
-          "sql": "CREATE INDEX idx_ai_thread_create_operations_stage_updated ON ai_thread_create_operations(stage, updated_at_unix_ms ASC, operation_id ASC)"
-        },
-        {
-          "type": "index",
-          "name": "idx_ai_thread_delete_operations_status_updated",
-          "table_name": "ai_thread_delete_operations",
-          "sql": "CREATE INDEX idx_ai_thread_delete_operations_status_updated ON ai_thread_delete_operations(status, updated_at_unix_ms ASC, operation_id ASC)"
-        },
-        {
-          "type": "index",
-          "name": "idx_ai_thread_fork_operations_client_request",
-          "table_name": "ai_thread_fork_operations",
-          "sql": "CREATE UNIQUE INDEX idx_ai_thread_fork_operations_client_request ON ai_thread_fork_operations(endpoint_id, client_request_id)"
-        },
-        {
-          "type": "index",
-          "name": "idx_ai_thread_fork_operations_destination",
-          "table_name": "ai_thread_fork_operations",
-          "sql": "CREATE UNIQUE INDEX idx_ai_thread_fork_operations_destination ON ai_thread_fork_operations(destination_thread_id) WHERE destination_thread_id \u003c\u003e ''"
-        },
-        {
-          "type": "index",
-          "name": "idx_ai_thread_fork_operations_logical_request",
-          "table_name": "ai_thread_fork_operations",
-          "sql": "CREATE UNIQUE INDEX idx_ai_thread_fork_operations_logical_request ON ai_thread_fork_operations(logical_request_id)"
-        },
-        {
-          "type": "index",
-          "name": "idx_ai_thread_fork_operations_source",
-          "table_name": "ai_thread_fork_operations",
-          "sql": "CREATE INDEX idx_ai_thread_fork_operations_source ON ai_thread_fork_operations(endpoint_id, source_thread_id, created_at_unix_ms DESC)"
-        },
-        {
-          "type": "index",
-          "name": "idx_ai_thread_fork_operations_stage_updated",
-          "table_name": "ai_thread_fork_operations",
-          "sql": "CREATE INDEX idx_ai_thread_fork_operations_stage_updated ON ai_thread_fork_operations(stage, updated_at_unix_ms ASC, operation_id ASC)"
+          "name": "idx_ai_pending_input_imports_pending",
+          "table_name": "ai_pending_input_imports",
+          "sql": "CREATE INDEX idx_ai_pending_input_imports_pending ON ai_pending_input_imports(imported_at_unix_ms, endpoint_id, thread_id, created_at_unix_ms, request_id)"
         },
         {
           "type": "index",
@@ -153,30 +21,6 @@
           "name": "idx_ai_thread_settings_endpoint_updated",
           "table_name": "ai_thread_settings",
           "sql": "CREATE INDEX idx_ai_thread_settings_endpoint_updated ON ai_thread_settings(endpoint_id, settings_updated_at_unix_ms DESC, thread_id DESC)"
-        },
-        {
-          "type": "index",
-          "name": "idx_ai_turn_admission_receipts_entry",
-          "table_name": "ai_turn_admission_receipts",
-          "sql": "CREATE UNIQUE INDEX idx_ai_turn_admission_receipts_entry ON ai_turn_admission_receipts(entry_id) WHERE entry_id \u003c\u003e ''"
-        },
-        {
-          "type": "index",
-          "name": "idx_ai_turn_admission_receipts_run",
-          "table_name": "ai_turn_admission_receipts",
-          "sql": "CREATE UNIQUE INDEX idx_ai_turn_admission_receipts_run ON ai_turn_admission_receipts(run_id) WHERE run_id \u003c\u003e ''"
-        },
-        {
-          "type": "index",
-          "name": "idx_ai_turn_admission_receipts_thread_stage",
-          "table_name": "ai_turn_admission_receipts",
-          "sql": "CREATE INDEX idx_ai_turn_admission_receipts_thread_stage ON ai_turn_admission_receipts(endpoint_id, thread_id, stage, updated_at_unix_ms)"
-        },
-        {
-          "type": "index",
-          "name": "idx_ai_turn_admission_receipts_turn",
-          "table_name": "ai_turn_admission_receipts",
-          "sql": "CREATE UNIQUE INDEX idx_ai_turn_admission_receipts_turn ON ai_turn_admission_receipts(turn_id) WHERE turn_id \u003c\u003e ''"
         },
         {
           "type": "index",
@@ -228,74 +72,20 @@
         },
         {
           "type": "index",
-          "name": "sqlite_autoindex_ai_child_permission_snapshots_1",
-          "table_name": "ai_child_permission_snapshots",
-          "sql": ""
-        },
-        {
-          "type": "index",
           "name": "sqlite_autoindex_ai_flower_thread_routing_1",
           "table_name": "ai_flower_thread_routing",
           "sql": ""
         },
         {
           "type": "index",
-          "name": "sqlite_autoindex_ai_permission_snapshots_1",
-          "table_name": "ai_permission_snapshots",
-          "sql": ""
-        },
-        {
-          "type": "index",
-          "name": "sqlite_autoindex_ai_queued_turns_1",
-          "table_name": "ai_queued_turns",
-          "sql": ""
-        },
-        {
-          "type": "index",
-          "name": "sqlite_autoindex_ai_subagent_publication_operations_1",
-          "table_name": "ai_subagent_publication_operations",
-          "sql": ""
-        },
-        {
-          "type": "index",
-          "name": "sqlite_autoindex_ai_thread_create_operations_1",
-          "table_name": "ai_thread_create_operations",
-          "sql": ""
-        },
-        {
-          "type": "index",
-          "name": "sqlite_autoindex_ai_thread_delete_operations_1",
-          "table_name": "ai_thread_delete_operations",
-          "sql": ""
-        },
-        {
-          "type": "index",
-          "name": "sqlite_autoindex_ai_thread_delete_operations_2",
-          "table_name": "ai_thread_delete_operations",
-          "sql": ""
-        },
-        {
-          "type": "index",
-          "name": "sqlite_autoindex_ai_thread_fork_operations_1",
-          "table_name": "ai_thread_fork_operations",
+          "name": "sqlite_autoindex_ai_pending_input_imports_1",
+          "table_name": "ai_pending_input_imports",
           "sql": ""
         },
         {
           "type": "index",
           "name": "sqlite_autoindex_ai_thread_settings_1",
           "table_name": "ai_thread_settings",
-          "sql": ""
-        },
-        {
-          "type": "index",
-          "name": "sqlite_autoindex_ai_turn_admission_receipts_1",
-          "table_name": "ai_turn_admission_receipts",
-          "sql": ""
-        },
-        {
-          "type": "index",
-          "name": "sqlite_autoindex_ai_turn_admission_receipts_2",
-          "table_name": "ai_turn_admission_receipts",
           "sql": ""
         },
         {
@@ -336,63 +126,21 @@
         },
         {
           "type": "table",
-          "name": "ai_child_permission_snapshots",
-          "table_name": "ai_child_permission_snapshots",
-          "sql": "CREATE TABLE ai_child_permission_snapshots ( child_snapshot_id TEXT PRIMARY KEY, endpoint_id TEXT NOT NULL, parent_snapshot_id TEXT NOT NULL DEFAULT '', spawn_tool_call_id TEXT NOT NULL DEFAULT '', parent_thread_id TEXT NOT NULL DEFAULT '', parent_run_id TEXT NOT NULL DEFAULT '', child_thread_id TEXT NOT NULL DEFAULT '', child_run_id TEXT NOT NULL DEFAULT '', state TEXT NOT NULL DEFAULT 'provisional', snapshot_json TEXT NOT NULL DEFAULT '{}', snapshot_hash TEXT NOT NULL DEFAULT '', registry_hash TEXT NOT NULL DEFAULT '', schema_hash TEXT NOT NULL DEFAULT '', presentation_hash TEXT NOT NULL DEFAULT '', created_at_unix_ms INTEGER NOT NULL DEFAULT 0, finalized_at_unix_ms INTEGER NOT NULL DEFAULT 0 )"
-        },
-        {
-          "type": "table",
           "name": "ai_flower_thread_routing",
           "table_name": "ai_flower_thread_routing",
           "sql": "CREATE TABLE ai_flower_thread_routing ( endpoint_id TEXT NOT NULL, thread_id TEXT NOT NULL, updated_at_unix_ms INTEGER NOT NULL DEFAULT 0, home_runtime_id TEXT NOT NULL DEFAULT '', home_runtime_kind TEXT NOT NULL DEFAULT '', origin_env_public_id TEXT NOT NULL DEFAULT '', primary_target_id TEXT NOT NULL DEFAULT '', active_target_ids_json TEXT NOT NULL DEFAULT '[]', PRIMARY KEY(endpoint_id, thread_id) )"
         },
         {
           "type": "table",
-          "name": "ai_permission_snapshots",
-          "table_name": "ai_permission_snapshots",
-          "sql": "CREATE TABLE ai_permission_snapshots ( snapshot_id TEXT PRIMARY KEY, endpoint_id TEXT NOT NULL, owner_thread_id TEXT NOT NULL DEFAULT '', owner_run_id TEXT NOT NULL DEFAULT '', permission_type TEXT NOT NULL DEFAULT 'approval_required', snapshot_json TEXT NOT NULL DEFAULT '{}', snapshot_hash TEXT NOT NULL DEFAULT '', registry_hash TEXT NOT NULL DEFAULT '', schema_hash TEXT NOT NULL DEFAULT '', presentation_hash TEXT NOT NULL DEFAULT '', created_at_unix_ms INTEGER NOT NULL DEFAULT 0 )"
-        },
-        {
-          "type": "table",
-          "name": "ai_queued_turns",
-          "table_name": "ai_queued_turns",
-          "sql": "CREATE TABLE ai_queued_turns ( queue_id TEXT PRIMARY KEY, endpoint_id TEXT NOT NULL, thread_id TEXT NOT NULL, channel_id TEXT NOT NULL DEFAULT '', lane TEXT NOT NULL DEFAULT 'queued', sort_index INTEGER NOT NULL DEFAULT 0, turn_id TEXT NOT NULL DEFAULT '', run_id TEXT NOT NULL DEFAULT '', model_id TEXT NOT NULL DEFAULT '', text_content TEXT NOT NULL DEFAULT '', attachments_json TEXT NOT NULL DEFAULT '[]', context_action_json TEXT NOT NULL DEFAULT '', options_json TEXT NOT NULL DEFAULT '{}', session_meta_json TEXT NOT NULL DEFAULT '{}', created_by_user_public_id TEXT NOT NULL DEFAULT '', created_by_user_email TEXT NOT NULL DEFAULT '', created_at_unix_ms INTEGER NOT NULL, updated_at_unix_ms INTEGER NOT NULL DEFAULT 0, admission_state TEXT NOT NULL DEFAULT 'ready' CHECK(admission_state IN ('ready', 'in_flight')) )"
-        },
-        {
-          "type": "table",
-          "name": "ai_subagent_publication_operations",
-          "table_name": "ai_subagent_publication_operations",
-          "sql": "CREATE TABLE ai_subagent_publication_operations ( publication_id TEXT PRIMARY KEY, endpoint_id TEXT NOT NULL, parent_thread_id TEXT NOT NULL, parent_turn_id TEXT NOT NULL, parent_run_id TEXT NOT NULL, parent_snapshot_id TEXT NOT NULL, spawn_tool_call_id TEXT NOT NULL, child_thread_id TEXT NOT NULL DEFAULT '', child_run_id TEXT NOT NULL DEFAULT '', child_snapshot_id TEXT NOT NULL DEFAULT '', request_json TEXT NOT NULL, request_hash TEXT NOT NULL, session_meta_json TEXT NOT NULL, model_id TEXT NOT NULL, reasoning_selection_json TEXT NOT NULL DEFAULT '', state TEXT NOT NULL CHECK(state IN ('pending', 'committed', 'failed')), created_at_unix_ms INTEGER NOT NULL, committed_at_unix_ms INTEGER NOT NULL DEFAULT 0, failed_at_unix_ms INTEGER NOT NULL DEFAULT 0, CHECK((child_thread_id = '' AND child_run_id = '' AND child_snapshot_id = '') OR (child_thread_id \u003c\u003e '' AND child_run_id \u003c\u003e '' AND child_snapshot_id \u003c\u003e '')) )"
-        },
-        {
-          "type": "table",
-          "name": "ai_thread_create_operations",
-          "table_name": "ai_thread_create_operations",
-          "sql": "CREATE TABLE ai_thread_create_operations ( operation_id TEXT PRIMARY KEY, endpoint_id TEXT NOT NULL, client_request_id TEXT NOT NULL, logical_request_id TEXT NOT NULL, title_logical_request_id TEXT NOT NULL, canonical_thread_id TEXT NOT NULL DEFAULT '', request_fingerprint TEXT NOT NULL, stage TEXT NOT NULL CHECK(stage IN ('prepared', 'floret_created', 'product_materialized', 'title_applied', 'title_skipped', 'completed', 'failed')), snapshot_schema_version INTEGER NOT NULL, snapshot_json TEXT NOT NULL, retry_count INTEGER NOT NULL DEFAULT 0, error_code TEXT NOT NULL DEFAULT '', error_message TEXT NOT NULL DEFAULT '', created_at_unix_ms INTEGER NOT NULL, updated_at_unix_ms INTEGER NOT NULL )"
-        },
-        {
-          "type": "table",
-          "name": "ai_thread_delete_operations",
-          "table_name": "ai_thread_delete_operations",
-          "sql": "CREATE TABLE ai_thread_delete_operations ( operation_id TEXT PRIMARY KEY, endpoint_id TEXT NOT NULL, thread_id TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('pending', 'committed', 'failed')), snapshot_schema_version INTEGER NOT NULL, snapshot_json TEXT NOT NULL, read_state_required INTEGER NOT NULL DEFAULT 0 CHECK(read_state_required IN (0, 1)), product_data_deleted_at_unix_ms INTEGER NOT NULL DEFAULT 0, files_cleaned_at_unix_ms INTEGER NOT NULL DEFAULT 0, floret_deleted_at_unix_ms INTEGER NOT NULL DEFAULT 0, read_state_deleted_at_unix_ms INTEGER NOT NULL DEFAULT 0, retry_count INTEGER NOT NULL DEFAULT 0, error_code TEXT NOT NULL DEFAULT '', error_message TEXT NOT NULL DEFAULT '', created_at_unix_ms INTEGER NOT NULL, updated_at_unix_ms INTEGER NOT NULL, committed_at_unix_ms INTEGER NOT NULL DEFAULT 0, snapshot_fingerprint TEXT NOT NULL DEFAULT '', UNIQUE(endpoint_id, thread_id) )"
-        },
-        {
-          "type": "table",
-          "name": "ai_thread_fork_operations",
-          "table_name": "ai_thread_fork_operations",
-          "sql": "CREATE TABLE ai_thread_fork_operations ( operation_id TEXT PRIMARY KEY, endpoint_id TEXT NOT NULL, client_request_id TEXT NOT NULL, logical_request_id TEXT NOT NULL, title_logical_request_id TEXT NOT NULL, source_thread_id TEXT NOT NULL, destination_thread_id TEXT NOT NULL DEFAULT '', request_fingerprint TEXT NOT NULL, stage TEXT NOT NULL CHECK(stage IN ('prepared', 'floret_forked', 'product_materialized', 'title_applied', 'title_skipped', 'completed', 'failed')), snapshot_schema_version INTEGER NOT NULL, snapshot_json TEXT NOT NULL, retry_count INTEGER NOT NULL DEFAULT 0, error_code TEXT NOT NULL DEFAULT '', error_message TEXT NOT NULL DEFAULT '', source_broadcasted_at_unix_ms INTEGER NOT NULL DEFAULT 0, destination_broadcasted_at_unix_ms INTEGER NOT NULL DEFAULT 0, created_at_unix_ms INTEGER NOT NULL, updated_at_unix_ms INTEGER NOT NULL , snapshot_fingerprint TEXT NOT NULL DEFAULT '')"
+          "name": "ai_pending_input_imports",
+          "table_name": "ai_pending_input_imports",
+          "sql": "CREATE TABLE ai_pending_input_imports ( request_id TEXT PRIMARY KEY, endpoint_id TEXT NOT NULL, thread_id TEXT NOT NULL, model_id TEXT NOT NULL DEFAULT '', text_content TEXT NOT NULL DEFAULT '', attachments_json TEXT NOT NULL DEFAULT '[]', context_action_json TEXT NOT NULL DEFAULT '', options_json TEXT NOT NULL DEFAULT '{}', session_meta_json TEXT NOT NULL DEFAULT '{}', created_at_unix_ms INTEGER NOT NULL, imported_at_unix_ms INTEGER NOT NULL DEFAULT 0, error_message TEXT NOT NULL DEFAULT '' )"
         },
         {
           "type": "table",
           "name": "ai_thread_settings",
           "table_name": "ai_thread_settings",
-          "sql": "CREATE TABLE ai_thread_settings ( thread_id TEXT PRIMARY KEY, endpoint_id TEXT NOT NULL, namespace_public_id TEXT NOT NULL DEFAULT '', model_id TEXT NOT NULL DEFAULT '', reasoning_selection_json TEXT NOT NULL DEFAULT '', permission_type TEXT NOT NULL DEFAULT 'approval_required', working_dir TEXT NOT NULL DEFAULT '', pinned_at_unix_ms INTEGER NOT NULL DEFAULT 0, queue_revision INTEGER NOT NULL DEFAULT 0, created_by_user_public_id TEXT NOT NULL DEFAULT '', created_by_user_email TEXT NOT NULL DEFAULT '', updated_by_user_public_id TEXT NOT NULL DEFAULT '', updated_by_user_email TEXT NOT NULL DEFAULT '', settings_created_at_unix_ms INTEGER NOT NULL, settings_updated_at_unix_ms INTEGER NOT NULL )"
-        },
-        {
-          "type": "table",
-          "name": "ai_turn_admission_receipts",
-          "table_name": "ai_turn_admission_receipts",
-          "sql": "CREATE TABLE ai_turn_admission_receipts ( queue_id TEXT PRIMARY KEY, endpoint_id TEXT NOT NULL, thread_id TEXT NOT NULL, logical_request_id TEXT NOT NULL, command_fingerprint TEXT NOT NULL CHECK(length(command_fingerprint) = 64), turn_id TEXT NOT NULL DEFAULT '', run_id TEXT NOT NULL DEFAULT '', entry_id TEXT NOT NULL DEFAULT '', permission_snapshot_id TEXT NOT NULL DEFAULT '', permission_snapshot_hash TEXT NOT NULL DEFAULT '', stage TEXT NOT NULL CHECK(stage IN ('in_flight', 'settled')), created_at_unix_ms INTEGER NOT NULL, updated_at_unix_ms INTEGER NOT NULL, UNIQUE(endpoint_id, logical_request_id), CHECK((stage = 'in_flight' AND turn_id = '' AND run_id = '' AND entry_id = '' AND permission_snapshot_id = '' AND permission_snapshot_hash = '') OR (stage = 'settled' AND turn_id \u003c\u003e '' AND run_id \u003c\u003e '' AND entry_id \u003c\u003e '' AND permission_snapshot_id \u003c\u003e '' AND permission_snapshot_hash \u003c\u003e '')) )"
+          "sql": "CREATE TABLE ai_thread_settings ( thread_id TEXT PRIMARY KEY, parent_thread_id TEXT NOT NULL DEFAULT '', endpoint_id TEXT NOT NULL, namespace_public_id TEXT NOT NULL DEFAULT '', model_id TEXT NOT NULL DEFAULT '', reasoning_selection_json TEXT NOT NULL DEFAULT '', permission_type TEXT NOT NULL DEFAULT 'approval_required', working_dir TEXT NOT NULL DEFAULT '', pinned_at_unix_ms INTEGER NOT NULL DEFAULT 0, created_by_user_public_id TEXT NOT NULL DEFAULT '', created_by_user_email TEXT NOT NULL DEFAULT '', updated_by_user_public_id TEXT NOT NULL DEFAULT '', updated_by_user_email TEXT NOT NULL DEFAULT '', settings_created_at_unix_ms INTEGER NOT NULL, settings_updated_at_unix_ms INTEGER NOT NULL )"
         },
         {
           "type": "table",
@@ -429,12 +177,6 @@
           "name": "sqlite_sequence",
           "table_name": "sqlite_sequence",
           "sql": "CREATE TABLE sqlite_sequence(name,seq)"
-        },
-        {
-          "type": "trigger",
-          "name": "trg_ai_thread_settings_reject_retired_id",
-          "table_name": "ai_thread_settings",
-          "sql": "CREATE TRIGGER trg_ai_thread_settings_reject_retired_id BEFORE INSERT ON ai_thread_settings WHEN EXISTS ( SELECT 1 FROM ai_thread_delete_operations op WHERE op.endpoint_id = NEW.endpoint_id AND op.thread_id = NEW.thread_id ) BEGIN SELECT RAISE(ABORT, 'thread id retired'); END"
         }
       ],
       "tables": [
@@ -497,185 +239,6 @@
             }
           ],
           "index_list": null
-        },
-        {
-          "name": "ai_child_permission_snapshots",
-          "table_xinfo": [
-            {
-              "cid": 0,
-              "name": "child_snapshot_id",
-              "type": "TEXT",
-              "not_null": 0,
-              "default_value": "",
-              "primary_key": 1,
-              "hidden": 0
-            },
-            {
-              "cid": 1,
-              "name": "endpoint_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 2,
-              "name": "parent_snapshot_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 3,
-              "name": "spawn_tool_call_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 4,
-              "name": "parent_thread_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 5,
-              "name": "parent_run_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 6,
-              "name": "child_thread_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 7,
-              "name": "child_run_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 8,
-              "name": "state",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "'provisional'",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 9,
-              "name": "snapshot_json",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "'{}'",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 10,
-              "name": "snapshot_hash",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 11,
-              "name": "registry_hash",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 12,
-              "name": "schema_hash",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 13,
-              "name": "presentation_hash",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 14,
-              "name": "created_at_unix_ms",
-              "type": "INTEGER",
-              "not_null": 1,
-              "default_value": "0",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 15,
-              "name": "finalized_at_unix_ms",
-              "type": "INTEGER",
-              "not_null": 1,
-              "default_value": "0",
-              "primary_key": 0,
-              "hidden": 0
-            }
-          ],
-          "index_list": [
-            {
-              "sequence": 0,
-              "name": "idx_ai_child_permission_snapshots_child",
-              "unique": 0,
-              "origin": "c",
-              "partial": 0
-            },
-            {
-              "sequence": 1,
-              "name": "idx_ai_child_permission_snapshots_parent",
-              "unique": 0,
-              "origin": "c",
-              "partial": 0
-            },
-            {
-              "sequence": 2,
-              "name": "idx_ai_child_permission_snapshots_spawn",
-              "unique": 1,
-              "origin": "c",
-              "partial": 0
-            },
-            {
-              "sequence": 3,
-              "name": "sqlite_autoindex_ai_child_permission_snapshots_1",
-              "unique": 1,
-              "origin": "pk",
-              "partial": 0
-            }
-          ]
         },
         {
           "name": "ai_flower_thread_routing",
@@ -764,131 +327,11 @@
           ]
         },
         {
-          "name": "ai_permission_snapshots",
+          "name": "ai_pending_input_imports",
           "table_xinfo": [
             {
               "cid": 0,
-              "name": "snapshot_id",
-              "type": "TEXT",
-              "not_null": 0,
-              "default_value": "",
-              "primary_key": 1,
-              "hidden": 0
-            },
-            {
-              "cid": 1,
-              "name": "endpoint_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 2,
-              "name": "owner_thread_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 3,
-              "name": "owner_run_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 4,
-              "name": "permission_type",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "'approval_required'",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 5,
-              "name": "snapshot_json",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "'{}'",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 6,
-              "name": "snapshot_hash",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 7,
-              "name": "registry_hash",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 8,
-              "name": "schema_hash",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 9,
-              "name": "presentation_hash",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 10,
-              "name": "created_at_unix_ms",
-              "type": "INTEGER",
-              "not_null": 1,
-              "default_value": "0",
-              "primary_key": 0,
-              "hidden": 0
-            }
-          ],
-          "index_list": [
-            {
-              "sequence": 0,
-              "name": "idx_ai_permission_snapshots_owner",
-              "unique": 0,
-              "origin": "c",
-              "partial": 0
-            },
-            {
-              "sequence": 1,
-              "name": "sqlite_autoindex_ai_permission_snapshots_1",
-              "unique": 1,
-              "origin": "pk",
-              "partial": 0
-            }
-          ]
-        },
-        {
-          "name": "ai_queued_turns",
-          "table_xinfo": [
-            {
-              "cid": 0,
-              "name": "queue_id",
+              "name": "request_id",
               "type": "TEXT",
               "not_null": 0,
               "default_value": "",
@@ -915,51 +358,6 @@
             },
             {
               "cid": 3,
-              "name": "channel_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 4,
-              "name": "lane",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "'queued'",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 5,
-              "name": "sort_index",
-              "type": "INTEGER",
-              "not_null": 1,
-              "default_value": "0",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 6,
-              "name": "turn_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 7,
-              "name": "run_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 8,
               "name": "model_id",
               "type": "TEXT",
               "not_null": 1,
@@ -968,7 +366,7 @@
               "hidden": 0
             },
             {
-              "cid": 9,
+              "cid": 4,
               "name": "text_content",
               "type": "TEXT",
               "not_null": 1,
@@ -977,7 +375,7 @@
               "hidden": 0
             },
             {
-              "cid": 10,
+              "cid": 5,
               "name": "attachments_json",
               "type": "TEXT",
               "not_null": 1,
@@ -986,7 +384,7 @@
               "hidden": 0
             },
             {
-              "cid": 11,
+              "cid": 6,
               "name": "context_action_json",
               "type": "TEXT",
               "not_null": 1,
@@ -995,7 +393,7 @@
               "hidden": 0
             },
             {
-              "cid": 12,
+              "cid": 7,
               "name": "options_json",
               "type": "TEXT",
               "not_null": 1,
@@ -1004,7 +402,7 @@
               "hidden": 0
             },
             {
-              "cid": 13,
+              "cid": 8,
               "name": "session_meta_json",
               "type": "TEXT",
               "not_null": 1,
@@ -1013,25 +411,7 @@
               "hidden": 0
             },
             {
-              "cid": 14,
-              "name": "created_by_user_public_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 15,
-              "name": "created_by_user_email",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 16,
+              "cid": 9,
               "name": "created_at_unix_ms",
               "type": "INTEGER",
               "not_null": 1,
@@ -1040,378 +420,8 @@
               "hidden": 0
             },
             {
-              "cid": 17,
-              "name": "updated_at_unix_ms",
-              "type": "INTEGER",
-              "not_null": 1,
-              "default_value": "0",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 18,
-              "name": "admission_state",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "'ready'",
-              "primary_key": 0,
-              "hidden": 0
-            }
-          ],
-          "index_list": [
-            {
-              "sequence": 0,
-              "name": "idx_ai_queued_turns_canonical_run",
-              "unique": 1,
-              "origin": "c",
-              "partial": 1
-            },
-            {
-              "sequence": 1,
-              "name": "idx_ai_queued_turns_canonical_turn",
-              "unique": 1,
-              "origin": "c",
-              "partial": 1
-            },
-            {
-              "sequence": 3,
-              "name": "idx_ai_queued_turns_thread_created",
-              "unique": 0,
-              "origin": "c",
-              "partial": 0
-            },
-            {
-              "sequence": 2,
-              "name": "idx_ai_queued_turns_thread_lane_sort",
-              "unique": 0,
-              "origin": "c",
-              "partial": 0
-            },
-            {
-              "sequence": 4,
-              "name": "sqlite_autoindex_ai_queued_turns_1",
-              "unique": 1,
-              "origin": "pk",
-              "partial": 0
-            }
-          ]
-        },
-        {
-          "name": "ai_subagent_publication_operations",
-          "table_xinfo": [
-            {
-              "cid": 0,
-              "name": "publication_id",
-              "type": "TEXT",
-              "not_null": 0,
-              "default_value": "",
-              "primary_key": 1,
-              "hidden": 0
-            },
-            {
-              "cid": 1,
-              "name": "endpoint_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 2,
-              "name": "parent_thread_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 3,
-              "name": "parent_turn_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 4,
-              "name": "parent_run_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 5,
-              "name": "parent_snapshot_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 6,
-              "name": "spawn_tool_call_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 7,
-              "name": "child_thread_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 8,
-              "name": "child_run_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 9,
-              "name": "child_snapshot_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
               "cid": 10,
-              "name": "request_json",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 11,
-              "name": "request_hash",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 12,
-              "name": "session_meta_json",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 13,
-              "name": "model_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 14,
-              "name": "reasoning_selection_json",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 15,
-              "name": "state",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 16,
-              "name": "created_at_unix_ms",
-              "type": "INTEGER",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 17,
-              "name": "committed_at_unix_ms",
-              "type": "INTEGER",
-              "not_null": 1,
-              "default_value": "0",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 18,
-              "name": "failed_at_unix_ms",
-              "type": "INTEGER",
-              "not_null": 1,
-              "default_value": "0",
-              "primary_key": 0,
-              "hidden": 0
-            }
-          ],
-          "index_list": [
-            {
-              "sequence": 2,
-              "name": "idx_ai_subagent_publication_child_run",
-              "unique": 1,
-              "origin": "c",
-              "partial": 1
-            },
-            {
-              "sequence": 1,
-              "name": "idx_ai_subagent_publication_child_snapshot",
-              "unique": 1,
-              "origin": "c",
-              "partial": 1
-            },
-            {
-              "sequence": 3,
-              "name": "idx_ai_subagent_publication_child_thread",
-              "unique": 1,
-              "origin": "c",
-              "partial": 1
-            },
-            {
-              "sequence": 0,
-              "name": "idx_ai_subagent_publication_pending",
-              "unique": 0,
-              "origin": "c",
-              "partial": 0
-            },
-            {
-              "sequence": 4,
-              "name": "idx_ai_subagent_publication_spawn",
-              "unique": 1,
-              "origin": "c",
-              "partial": 0
-            },
-            {
-              "sequence": 5,
-              "name": "sqlite_autoindex_ai_subagent_publication_operations_1",
-              "unique": 1,
-              "origin": "pk",
-              "partial": 0
-            }
-          ]
-        },
-        {
-          "name": "ai_thread_create_operations",
-          "table_xinfo": [
-            {
-              "cid": 0,
-              "name": "operation_id",
-              "type": "TEXT",
-              "not_null": 0,
-              "default_value": "",
-              "primary_key": 1,
-              "hidden": 0
-            },
-            {
-              "cid": 1,
-              "name": "endpoint_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 2,
-              "name": "client_request_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 3,
-              "name": "logical_request_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 4,
-              "name": "title_logical_request_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 5,
-              "name": "canonical_thread_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 6,
-              "name": "request_fingerprint",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 7,
-              "name": "stage",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 8,
-              "name": "snapshot_schema_version",
-              "type": "INTEGER",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 9,
-              "name": "snapshot_json",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 10,
-              "name": "retry_count",
+              "name": "imported_at_unix_ms",
               "type": "INTEGER",
               "not_null": 1,
               "default_value": "0",
@@ -1420,483 +430,25 @@
             },
             {
               "cid": 11,
-              "name": "error_code",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 12,
               "name": "error_message",
               "type": "TEXT",
               "not_null": 1,
               "default_value": "''",
               "primary_key": 0,
               "hidden": 0
-            },
-            {
-              "cid": 13,
-              "name": "created_at_unix_ms",
-              "type": "INTEGER",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 14,
-              "name": "updated_at_unix_ms",
-              "type": "INTEGER",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
             }
           ],
           "index_list": [
             {
               "sequence": 0,
-              "name": "idx_ai_thread_create_operations_canonical_thread",
-              "unique": 1,
-              "origin": "c",
-              "partial": 1
-            },
-            {
-              "sequence": 2,
-              "name": "idx_ai_thread_create_operations_client_request",
-              "unique": 1,
+              "name": "idx_ai_pending_input_imports_pending",
+              "unique": 0,
               "origin": "c",
               "partial": 0
             },
             {
               "sequence": 1,
-              "name": "idx_ai_thread_create_operations_logical_request",
-              "unique": 1,
-              "origin": "c",
-              "partial": 0
-            },
-            {
-              "sequence": 3,
-              "name": "idx_ai_thread_create_operations_stage_updated",
-              "unique": 0,
-              "origin": "c",
-              "partial": 0
-            },
-            {
-              "sequence": 4,
-              "name": "sqlite_autoindex_ai_thread_create_operations_1",
-              "unique": 1,
-              "origin": "pk",
-              "partial": 0
-            }
-          ]
-        },
-        {
-          "name": "ai_thread_delete_operations",
-          "table_xinfo": [
-            {
-              "cid": 0,
-              "name": "operation_id",
-              "type": "TEXT",
-              "not_null": 0,
-              "default_value": "",
-              "primary_key": 1,
-              "hidden": 0
-            },
-            {
-              "cid": 1,
-              "name": "endpoint_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 2,
-              "name": "thread_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 3,
-              "name": "status",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 4,
-              "name": "snapshot_schema_version",
-              "type": "INTEGER",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 5,
-              "name": "snapshot_json",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 6,
-              "name": "read_state_required",
-              "type": "INTEGER",
-              "not_null": 1,
-              "default_value": "0",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 7,
-              "name": "product_data_deleted_at_unix_ms",
-              "type": "INTEGER",
-              "not_null": 1,
-              "default_value": "0",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 8,
-              "name": "files_cleaned_at_unix_ms",
-              "type": "INTEGER",
-              "not_null": 1,
-              "default_value": "0",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 9,
-              "name": "floret_deleted_at_unix_ms",
-              "type": "INTEGER",
-              "not_null": 1,
-              "default_value": "0",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 10,
-              "name": "read_state_deleted_at_unix_ms",
-              "type": "INTEGER",
-              "not_null": 1,
-              "default_value": "0",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 11,
-              "name": "retry_count",
-              "type": "INTEGER",
-              "not_null": 1,
-              "default_value": "0",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 12,
-              "name": "error_code",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 13,
-              "name": "error_message",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 14,
-              "name": "created_at_unix_ms",
-              "type": "INTEGER",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 15,
-              "name": "updated_at_unix_ms",
-              "type": "INTEGER",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 16,
-              "name": "committed_at_unix_ms",
-              "type": "INTEGER",
-              "not_null": 1,
-              "default_value": "0",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 17,
-              "name": "snapshot_fingerprint",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            }
-          ],
-          "index_list": [
-            {
-              "sequence": 0,
-              "name": "idx_ai_thread_delete_operations_status_updated",
-              "unique": 0,
-              "origin": "c",
-              "partial": 0
-            },
-            {
-              "sequence": 2,
-              "name": "sqlite_autoindex_ai_thread_delete_operations_1",
-              "unique": 1,
-              "origin": "pk",
-              "partial": 0
-            },
-            {
-              "sequence": 1,
-              "name": "sqlite_autoindex_ai_thread_delete_operations_2",
-              "unique": 1,
-              "origin": "u",
-              "partial": 0
-            }
-          ]
-        },
-        {
-          "name": "ai_thread_fork_operations",
-          "table_xinfo": [
-            {
-              "cid": 0,
-              "name": "operation_id",
-              "type": "TEXT",
-              "not_null": 0,
-              "default_value": "",
-              "primary_key": 1,
-              "hidden": 0
-            },
-            {
-              "cid": 1,
-              "name": "endpoint_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 2,
-              "name": "client_request_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 3,
-              "name": "logical_request_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 4,
-              "name": "title_logical_request_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 5,
-              "name": "source_thread_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 6,
-              "name": "destination_thread_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 7,
-              "name": "request_fingerprint",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 8,
-              "name": "stage",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 9,
-              "name": "snapshot_schema_version",
-              "type": "INTEGER",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 10,
-              "name": "snapshot_json",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 11,
-              "name": "retry_count",
-              "type": "INTEGER",
-              "not_null": 1,
-              "default_value": "0",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 12,
-              "name": "error_code",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 13,
-              "name": "error_message",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 14,
-              "name": "source_broadcasted_at_unix_ms",
-              "type": "INTEGER",
-              "not_null": 1,
-              "default_value": "0",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 15,
-              "name": "destination_broadcasted_at_unix_ms",
-              "type": "INTEGER",
-              "not_null": 1,
-              "default_value": "0",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 16,
-              "name": "created_at_unix_ms",
-              "type": "INTEGER",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 17,
-              "name": "updated_at_unix_ms",
-              "type": "INTEGER",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 18,
-              "name": "snapshot_fingerprint",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            }
-          ],
-          "index_list": [
-            {
-              "sequence": 1,
-              "name": "idx_ai_thread_fork_operations_client_request",
-              "unique": 1,
-              "origin": "c",
-              "partial": 0
-            },
-            {
-              "sequence": 2,
-              "name": "idx_ai_thread_fork_operations_destination",
-              "unique": 1,
-              "origin": "c",
-              "partial": 1
-            },
-            {
-              "sequence": 0,
-              "name": "idx_ai_thread_fork_operations_logical_request",
-              "unique": 1,
-              "origin": "c",
-              "partial": 0
-            },
-            {
-              "sequence": 3,
-              "name": "idx_ai_thread_fork_operations_source",
-              "unique": 0,
-              "origin": "c",
-              "partial": 0
-            },
-            {
-              "sequence": 4,
-              "name": "idx_ai_thread_fork_operations_stage_updated",
-              "unique": 0,
-              "origin": "c",
-              "partial": 0
-            },
-            {
-              "sequence": 5,
-              "name": "sqlite_autoindex_ai_thread_fork_operations_1",
+              "name": "sqlite_autoindex_ai_pending_input_imports_1",
               "unique": 1,
               "origin": "pk",
               "partial": 0
@@ -1917,6 +469,15 @@
             },
             {
               "cid": 1,
+              "name": "parent_thread_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 2,
               "name": "endpoint_id",
               "type": "TEXT",
               "not_null": 1,
@@ -1925,7 +486,7 @@
               "hidden": 0
             },
             {
-              "cid": 2,
+              "cid": 3,
               "name": "namespace_public_id",
               "type": "TEXT",
               "not_null": 1,
@@ -1934,7 +495,7 @@
               "hidden": 0
             },
             {
-              "cid": 3,
+              "cid": 4,
               "name": "model_id",
               "type": "TEXT",
               "not_null": 1,
@@ -1943,7 +504,7 @@
               "hidden": 0
             },
             {
-              "cid": 4,
+              "cid": 5,
               "name": "reasoning_selection_json",
               "type": "TEXT",
               "not_null": 1,
@@ -1952,7 +513,7 @@
               "hidden": 0
             },
             {
-              "cid": 5,
+              "cid": 6,
               "name": "permission_type",
               "type": "TEXT",
               "not_null": 1,
@@ -1961,7 +522,7 @@
               "hidden": 0
             },
             {
-              "cid": 6,
+              "cid": 7,
               "name": "working_dir",
               "type": "TEXT",
               "not_null": 1,
@@ -1970,17 +531,8 @@
               "hidden": 0
             },
             {
-              "cid": 7,
-              "name": "pinned_at_unix_ms",
-              "type": "INTEGER",
-              "not_null": 1,
-              "default_value": "0",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
               "cid": 8,
-              "name": "queue_revision",
+              "name": "pinned_at_unix_ms",
               "type": "INTEGER",
               "not_null": 1,
               "default_value": "0",
@@ -2062,172 +614,6 @@
               "name": "sqlite_autoindex_ai_thread_settings_1",
               "unique": 1,
               "origin": "pk",
-              "partial": 0
-            }
-          ]
-        },
-        {
-          "name": "ai_turn_admission_receipts",
-          "table_xinfo": [
-            {
-              "cid": 0,
-              "name": "queue_id",
-              "type": "TEXT",
-              "not_null": 0,
-              "default_value": "",
-              "primary_key": 1,
-              "hidden": 0
-            },
-            {
-              "cid": 1,
-              "name": "endpoint_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 2,
-              "name": "thread_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 3,
-              "name": "logical_request_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 4,
-              "name": "command_fingerprint",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 5,
-              "name": "turn_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 6,
-              "name": "run_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 7,
-              "name": "entry_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 8,
-              "name": "permission_snapshot_id",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 9,
-              "name": "permission_snapshot_hash",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "''",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 10,
-              "name": "stage",
-              "type": "TEXT",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 11,
-              "name": "created_at_unix_ms",
-              "type": "INTEGER",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            },
-            {
-              "cid": 12,
-              "name": "updated_at_unix_ms",
-              "type": "INTEGER",
-              "not_null": 1,
-              "default_value": "",
-              "primary_key": 0,
-              "hidden": 0
-            }
-          ],
-          "index_list": [
-            {
-              "sequence": 0,
-              "name": "idx_ai_turn_admission_receipts_entry",
-              "unique": 1,
-              "origin": "c",
-              "partial": 1
-            },
-            {
-              "sequence": 1,
-              "name": "idx_ai_turn_admission_receipts_run",
-              "unique": 1,
-              "origin": "c",
-              "partial": 1
-            },
-            {
-              "sequence": 3,
-              "name": "idx_ai_turn_admission_receipts_thread_stage",
-              "unique": 0,
-              "origin": "c",
-              "partial": 0
-            },
-            {
-              "sequence": 2,
-              "name": "idx_ai_turn_admission_receipts_turn",
-              "unique": 1,
-              "origin": "c",
-              "partial": 1
-            },
-            {
-              "sequence": 5,
-              "name": "sqlite_autoindex_ai_turn_admission_receipts_1",
-              "unique": 1,
-              "origin": "pk",
-              "partial": 0
-            },
-            {
-              "sequence": 4,
-              "name": "sqlite_autoindex_ai_turn_admission_receipts_2",
-              "unique": 1,
-              "origin": "u",
               "partial": 0
             }
           ]
@@ -2790,171 +1176,26 @@
       ],
       "indexes": [
         {
-          "name": "idx_ai_child_permission_snapshots_child",
+          "name": "idx_ai_pending_input_imports_pending",
           "index_xinfo": [
             {
               "sequence": 0,
-              "cid": 1,
-              "name": "endpoint_id",
+              "cid": 10,
+              "name": "imported_at_unix_ms",
               "desc": 0,
               "collation": "BINARY",
               "key": 1
             },
             {
               "sequence": 1,
-              "cid": 6,
-              "name": "child_thread_id",
+              "cid": 1,
+              "name": "endpoint_id",
               "desc": 0,
               "collation": "BINARY",
               "key": 1
             },
             {
               "sequence": 2,
-              "cid": -1,
-              "name": "",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 0
-            }
-          ]
-        },
-        {
-          "name": "idx_ai_child_permission_snapshots_parent",
-          "index_xinfo": [
-            {
-              "sequence": 0,
-              "cid": 1,
-              "name": "endpoint_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 1,
-              "cid": 4,
-              "name": "parent_thread_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 2,
-              "cid": 5,
-              "name": "parent_run_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 3,
-              "cid": -1,
-              "name": "",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 0
-            }
-          ]
-        },
-        {
-          "name": "idx_ai_child_permission_snapshots_spawn",
-          "index_xinfo": [
-            {
-              "sequence": 0,
-              "cid": 1,
-              "name": "endpoint_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 1,
-              "cid": 3,
-              "name": "spawn_tool_call_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 2,
-              "cid": -1,
-              "name": "",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 0
-            }
-          ]
-        },
-        {
-          "name": "idx_ai_permission_snapshots_owner",
-          "index_xinfo": [
-            {
-              "sequence": 0,
-              "cid": 1,
-              "name": "endpoint_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 1,
-              "cid": 2,
-              "name": "owner_thread_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 2,
-              "cid": 3,
-              "name": "owner_run_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 3,
-              "cid": -1,
-              "name": "",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 0
-            }
-          ]
-        },
-        {
-          "name": "idx_ai_queued_turns_canonical_run",
-          "index_xinfo": [
-            {
-              "sequence": 0,
-              "cid": 7,
-              "name": "run_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 1,
-              "cid": -1,
-              "name": "",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 0
-            }
-          ]
-        },
-        {
-          "name": "idx_ai_queued_turns_canonical_turn",
-          "index_xinfo": [
-            {
-              "sequence": 0,
-              "cid": 1,
-              "name": "endpoint_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 1,
               "cid": 2,
               "name": "thread_id",
               "desc": 0,
@@ -2962,107 +1203,17 @@
               "key": 1
             },
             {
-              "sequence": 2,
-              "cid": 6,
-              "name": "turn_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
               "sequence": 3,
-              "cid": -1,
-              "name": "",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 0
-            }
-          ]
-        },
-        {
-          "name": "idx_ai_queued_turns_thread_created",
-          "index_xinfo": [
-            {
-              "sequence": 0,
-              "cid": 1,
-              "name": "endpoint_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 1,
-              "cid": 2,
-              "name": "thread_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 2,
-              "cid": 16,
+              "cid": 9,
               "name": "created_at_unix_ms",
               "desc": 0,
               "collation": "BINARY",
               "key": 1
             },
             {
-              "sequence": 3,
-              "cid": 0,
-              "name": "queue_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 4,
-              "cid": -1,
-              "name": "",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 0
-            }
-          ]
-        },
-        {
-          "name": "idx_ai_queued_turns_thread_lane_sort",
-          "index_xinfo": [
-            {
-              "sequence": 0,
-              "cid": 1,
-              "name": "endpoint_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 1,
-              "cid": 2,
-              "name": "thread_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 2,
-              "cid": 4,
-              "name": "lane",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 3,
-              "cid": 5,
-              "name": "sort_index",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
               "sequence": 4,
               "cid": 0,
-              "name": "queue_id",
+              "name": "request_id",
               "desc": 0,
               "collation": "BINARY",
               "key": 1
@@ -3078,430 +1229,11 @@
           ]
         },
         {
-          "name": "idx_ai_subagent_publication_child_run",
-          "index_xinfo": [
-            {
-              "sequence": 0,
-              "cid": 8,
-              "name": "child_run_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 1,
-              "cid": -1,
-              "name": "",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 0
-            }
-          ]
-        },
-        {
-          "name": "idx_ai_subagent_publication_child_snapshot",
-          "index_xinfo": [
-            {
-              "sequence": 0,
-              "cid": 9,
-              "name": "child_snapshot_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 1,
-              "cid": -1,
-              "name": "",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 0
-            }
-          ]
-        },
-        {
-          "name": "idx_ai_subagent_publication_child_thread",
-          "index_xinfo": [
-            {
-              "sequence": 0,
-              "cid": 7,
-              "name": "child_thread_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 1,
-              "cid": -1,
-              "name": "",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 0
-            }
-          ]
-        },
-        {
-          "name": "idx_ai_subagent_publication_pending",
-          "index_xinfo": [
-            {
-              "sequence": 0,
-              "cid": 15,
-              "name": "state",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 1,
-              "cid": 16,
-              "name": "created_at_unix_ms",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 2,
-              "cid": 0,
-              "name": "publication_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 3,
-              "cid": -1,
-              "name": "",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 0
-            }
-          ]
-        },
-        {
-          "name": "idx_ai_subagent_publication_spawn",
-          "index_xinfo": [
-            {
-              "sequence": 0,
-              "cid": 1,
-              "name": "endpoint_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 1,
-              "cid": 6,
-              "name": "spawn_tool_call_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 2,
-              "cid": -1,
-              "name": "",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 0
-            }
-          ]
-        },
-        {
-          "name": "idx_ai_thread_create_operations_canonical_thread",
-          "index_xinfo": [
-            {
-              "sequence": 0,
-              "cid": 5,
-              "name": "canonical_thread_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 1,
-              "cid": -1,
-              "name": "",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 0
-            }
-          ]
-        },
-        {
-          "name": "idx_ai_thread_create_operations_client_request",
-          "index_xinfo": [
-            {
-              "sequence": 0,
-              "cid": 1,
-              "name": "endpoint_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 1,
-              "cid": 2,
-              "name": "client_request_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 2,
-              "cid": -1,
-              "name": "",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 0
-            }
-          ]
-        },
-        {
-          "name": "idx_ai_thread_create_operations_logical_request",
-          "index_xinfo": [
-            {
-              "sequence": 0,
-              "cid": 3,
-              "name": "logical_request_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 1,
-              "cid": -1,
-              "name": "",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 0
-            }
-          ]
-        },
-        {
-          "name": "idx_ai_thread_create_operations_stage_updated",
-          "index_xinfo": [
-            {
-              "sequence": 0,
-              "cid": 7,
-              "name": "stage",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 1,
-              "cid": 14,
-              "name": "updated_at_unix_ms",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 2,
-              "cid": 0,
-              "name": "operation_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 3,
-              "cid": -1,
-              "name": "",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 0
-            }
-          ]
-        },
-        {
-          "name": "idx_ai_thread_delete_operations_status_updated",
-          "index_xinfo": [
-            {
-              "sequence": 0,
-              "cid": 3,
-              "name": "status",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 1,
-              "cid": 15,
-              "name": "updated_at_unix_ms",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 2,
-              "cid": 0,
-              "name": "operation_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 3,
-              "cid": -1,
-              "name": "",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 0
-            }
-          ]
-        },
-        {
-          "name": "idx_ai_thread_fork_operations_client_request",
-          "index_xinfo": [
-            {
-              "sequence": 0,
-              "cid": 1,
-              "name": "endpoint_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 1,
-              "cid": 2,
-              "name": "client_request_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 2,
-              "cid": -1,
-              "name": "",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 0
-            }
-          ]
-        },
-        {
-          "name": "idx_ai_thread_fork_operations_destination",
-          "index_xinfo": [
-            {
-              "sequence": 0,
-              "cid": 6,
-              "name": "destination_thread_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 1,
-              "cid": -1,
-              "name": "",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 0
-            }
-          ]
-        },
-        {
-          "name": "idx_ai_thread_fork_operations_logical_request",
-          "index_xinfo": [
-            {
-              "sequence": 0,
-              "cid": 3,
-              "name": "logical_request_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 1,
-              "cid": -1,
-              "name": "",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 0
-            }
-          ]
-        },
-        {
-          "name": "idx_ai_thread_fork_operations_source",
-          "index_xinfo": [
-            {
-              "sequence": 0,
-              "cid": 1,
-              "name": "endpoint_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 1,
-              "cid": 5,
-              "name": "source_thread_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 2,
-              "cid": 16,
-              "name": "created_at_unix_ms",
-              "desc": 1,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 3,
-              "cid": -1,
-              "name": "",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 0
-            }
-          ]
-        },
-        {
-          "name": "idx_ai_thread_fork_operations_stage_updated",
-          "index_xinfo": [
-            {
-              "sequence": 0,
-              "cid": 8,
-              "name": "stage",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 1,
-              "cid": 17,
-              "name": "updated_at_unix_ms",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 2,
-              "cid": 0,
-              "name": "operation_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 3,
-              "cid": -1,
-              "name": "",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 0
-            }
-          ]
-        },
-        {
           "name": "idx_ai_thread_settings_endpoint_pinned_created",
           "index_xinfo": [
             {
               "sequence": 0,
-              "cid": 1,
+              "cid": 2,
               "name": "endpoint_id",
               "desc": 0,
               "collation": "BINARY",
@@ -3509,7 +1241,7 @@
             },
             {
               "sequence": 1,
-              "cid": 7,
+              "cid": 8,
               "name": "pinned_at_unix_ms",
               "desc": 1,
               "collation": "BINARY",
@@ -3546,7 +1278,7 @@
           "index_xinfo": [
             {
               "sequence": 0,
-              "cid": 1,
+              "cid": 2,
               "name": "endpoint_id",
               "desc": 0,
               "collation": "BINARY",
@@ -3570,114 +1302,6 @@
             },
             {
               "sequence": 3,
-              "cid": -1,
-              "name": "",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 0
-            }
-          ]
-        },
-        {
-          "name": "idx_ai_turn_admission_receipts_entry",
-          "index_xinfo": [
-            {
-              "sequence": 0,
-              "cid": 7,
-              "name": "entry_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 1,
-              "cid": -1,
-              "name": "",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 0
-            }
-          ]
-        },
-        {
-          "name": "idx_ai_turn_admission_receipts_run",
-          "index_xinfo": [
-            {
-              "sequence": 0,
-              "cid": 6,
-              "name": "run_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 1,
-              "cid": -1,
-              "name": "",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 0
-            }
-          ]
-        },
-        {
-          "name": "idx_ai_turn_admission_receipts_thread_stage",
-          "index_xinfo": [
-            {
-              "sequence": 0,
-              "cid": 1,
-              "name": "endpoint_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 1,
-              "cid": 2,
-              "name": "thread_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 2,
-              "cid": 10,
-              "name": "stage",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 3,
-              "cid": 12,
-              "name": "updated_at_unix_ms",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 4,
-              "cid": -1,
-              "name": "",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 0
-            }
-          ]
-        },
-        {
-          "name": "idx_ai_turn_admission_receipts_turn",
-          "index_xinfo": [
-            {
-              "sequence": 0,
-              "cid": 5,
-              "name": "turn_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 1,
               "cid": -1,
               "name": "",
               "desc": 0,
@@ -3975,27 +1599,6 @@
           ]
         },
         {
-          "name": "sqlite_autoindex_ai_child_permission_snapshots_1",
-          "index_xinfo": [
-            {
-              "sequence": 0,
-              "cid": 0,
-              "name": "child_snapshot_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 1,
-              "cid": -1,
-              "name": "",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 0
-            }
-          ]
-        },
-        {
           "name": "sqlite_autoindex_ai_flower_thread_routing_1",
           "index_xinfo": [
             {
@@ -4025,146 +1628,12 @@
           ]
         },
         {
-          "name": "sqlite_autoindex_ai_permission_snapshots_1",
+          "name": "sqlite_autoindex_ai_pending_input_imports_1",
           "index_xinfo": [
             {
               "sequence": 0,
               "cid": 0,
-              "name": "snapshot_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 1,
-              "cid": -1,
-              "name": "",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 0
-            }
-          ]
-        },
-        {
-          "name": "sqlite_autoindex_ai_queued_turns_1",
-          "index_xinfo": [
-            {
-              "sequence": 0,
-              "cid": 0,
-              "name": "queue_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 1,
-              "cid": -1,
-              "name": "",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 0
-            }
-          ]
-        },
-        {
-          "name": "sqlite_autoindex_ai_subagent_publication_operations_1",
-          "index_xinfo": [
-            {
-              "sequence": 0,
-              "cid": 0,
-              "name": "publication_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 1,
-              "cid": -1,
-              "name": "",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 0
-            }
-          ]
-        },
-        {
-          "name": "sqlite_autoindex_ai_thread_create_operations_1",
-          "index_xinfo": [
-            {
-              "sequence": 0,
-              "cid": 0,
-              "name": "operation_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 1,
-              "cid": -1,
-              "name": "",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 0
-            }
-          ]
-        },
-        {
-          "name": "sqlite_autoindex_ai_thread_delete_operations_1",
-          "index_xinfo": [
-            {
-              "sequence": 0,
-              "cid": 0,
-              "name": "operation_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 1,
-              "cid": -1,
-              "name": "",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 0
-            }
-          ]
-        },
-        {
-          "name": "sqlite_autoindex_ai_thread_delete_operations_2",
-          "index_xinfo": [
-            {
-              "sequence": 0,
-              "cid": 1,
-              "name": "endpoint_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 1,
-              "cid": 2,
-              "name": "thread_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 2,
-              "cid": -1,
-              "name": "",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 0
-            }
-          ]
-        },
-        {
-          "name": "sqlite_autoindex_ai_thread_fork_operations_1",
-          "index_xinfo": [
-            {
-              "sequence": 0,
-              "cid": 0,
-              "name": "operation_id",
+              "name": "request_id",
               "desc": 0,
               "collation": "BINARY",
               "key": 1
@@ -4192,56 +1661,6 @@
             },
             {
               "sequence": 1,
-              "cid": -1,
-              "name": "",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 0
-            }
-          ]
-        },
-        {
-          "name": "sqlite_autoindex_ai_turn_admission_receipts_1",
-          "index_xinfo": [
-            {
-              "sequence": 0,
-              "cid": 0,
-              "name": "queue_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 1,
-              "cid": -1,
-              "name": "",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 0
-            }
-          ]
-        },
-        {
-          "name": "sqlite_autoindex_ai_turn_admission_receipts_2",
-          "index_xinfo": [
-            {
-              "sequence": 0,
-              "cid": 1,
-              "name": "endpoint_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 1,
-              "cid": 3,
-              "name": "logical_request_id",
-              "desc": 0,
-              "collation": "BINARY",
-              "key": 1
-            },
-            {
-              "sequence": 2,
               "cid": -1,
               "name": "",
               "desc": 0,

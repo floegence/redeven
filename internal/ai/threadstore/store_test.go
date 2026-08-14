@@ -14,16 +14,9 @@ func TestStoreSchemaContainsOnlyProductThreadState(t *testing.T) {
 	store := openStoreForTest(t)
 	wantTables := []string{
 		"__redeven_db_meta",
-		"ai_child_permission_snapshots",
 		"ai_flower_thread_routing",
-		"ai_permission_snapshots",
-		"ai_queued_turns",
-		"ai_subagent_publication_operations",
-		"ai_thread_create_operations",
-		"ai_thread_delete_operations",
-		"ai_thread_fork_operations",
+		"ai_pending_input_imports",
 		"ai_thread_settings",
-		"ai_turn_admission_receipts",
 		"ai_upload_attempts",
 		"ai_upload_refs",
 		"ai_upload_staging_scopes",
@@ -46,9 +39,9 @@ ORDER BY name
 		"endpoint_id",
 		"model_id",
 		"namespace_public_id",
+		"parent_thread_id",
 		"permission_type",
 		"pinned_at_unix_ms",
-		"queue_revision",
 		"reasoning_selection_json",
 		"settings_created_at_unix_ms",
 		"settings_updated_at_unix_ms",
@@ -64,10 +57,6 @@ ORDER BY name
 `)
 	if err := exactSchemaNamesError("ai_thread_settings columns", gotThreadSettingsColumns, wantThreadSettingsColumns); err != nil {
 		t.Fatal(err)
-	}
-
-	if count := countRowsForTest(t, store.db, `SELECT COUNT(1) FROM pragma_table_info('ai_thread_fork_operations') WHERE name = 'floret_result_json'`); count != 0 {
-		t.Fatal("fork operation persists a Floret result shadow")
 	}
 }
 
@@ -152,85 +141,6 @@ func exactSchemaNamesError(label string, got []string, want []string) error {
 		return nil
 	}
 	return fmt.Errorf("%s mismatch: got=%v want=%v", label, got, want)
-}
-
-func TestStoreThreadMetadataAndPendingCommandRoundTrip(t *testing.T) {
-	store := openStoreForTest(t)
-	ctx := context.Background()
-	thread := ThreadSettings{
-		ThreadID: "th_1", EndpointID: "env_1", NamespacePublicID: "ns_1",
-		ModelID: "openai/gpt-5", ReasoningSelectionJSON: `{"effort":"high"}`,
-		PermissionType: "approval_required", WorkingDir: "/workspace",
-		CreatedByUserPublicID: "user_1", UpdatedByUserPublicID: "user_1",
-		SettingsCreatedAtUnixMs: 10, SettingsUpdatedAtUnixMs: 10,
-	}
-	if err := store.CreateThreadSettings(ctx, thread); err != nil {
-		t.Fatal(err)
-	}
-	record, position, revision, err := store.CreateFollowup(ctx, QueuedTurn{
-		QueueID: "cmd_1", EndpointID: "env_1", ThreadID: "th_1", ChannelID: "ch_1",
-		Lane: FollowupLaneQueued, ModelID: "openai/gpt-5",
-		TextContent: "not admitted yet", AttachmentsJSON: "[]", OptionsJSON: "{}", SessionMetaJSON: "{}",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if position != 1 || revision != 1 || record.TurnID != "" || record.RunID != "" {
-		t.Fatalf("unexpected pending command: %#v position=%d revision=%d", record, position, revision)
-	}
-	loaded, err := store.GetThreadSettings(ctx, "env_1", "th_1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if loaded == nil || loaded.ModelID != "openai/gpt-5" || loaded.QueueRevision != 1 {
-		t.Fatalf("unexpected thread metadata: %#v", loaded)
-	}
-	commands, err := store.ListFollowupsByLane(ctx, "env_1", "th_1", FollowupLaneQueued, 10)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(commands) != 1 || commands[0].TextContent != "not admitted yet" || commands[0].TurnID != "" || commands[0].RunID != "" {
-		t.Fatalf("unexpected pending commands: %#v", commands)
-	}
-}
-
-func TestListFollowupsByLaneAfterPagesZeroSortIndexesByQueueID(t *testing.T) {
-	store := openStoreForTest(t)
-	ctx := t.Context()
-	const endpointID = "env_keyset"
-	const threadID = "thread_keyset"
-	if err := store.CreateThreadSettings(ctx, ThreadSettings{EndpointID: endpointID, ThreadID: threadID, PermissionType: "approval_required"}); err != nil {
-		t.Fatal(err)
-	}
-	for index := 0; index < 501; index++ {
-		if _, _, _, err := store.CreateFollowup(ctx, QueuedTurn{
-			QueueID: fmt.Sprintf("queue_%04d", index), EndpointID: endpointID, ThreadID: threadID,
-			ChannelID: "channel_keyset", Lane: FollowupLaneQueued,
-			AttachmentsJSON: "[]", OptionsJSON: "{}", SessionMetaJSON: "{}",
-		}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if _, err := store.db.ExecContext(ctx, `UPDATE ai_queued_turns SET sort_index = 0 WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
-		t.Fatal(err)
-	}
-	first, err := store.ListFollowupsByLaneAfter(ctx, endpointID, threadID, FollowupLaneQueued, 0, "", 500)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(first) != 500 || first[0].QueueID != "queue_0000" || first[499].QueueID != "queue_0499" {
-		t.Fatalf("first page bounds=%#v ... %#v count=%d", first[0], first[len(first)-1], len(first))
-	}
-	second, err := store.ListFollowupsByLaneAfter(ctx, endpointID, threadID, FollowupLaneQueued, first[499].SortIndex, first[499].QueueID, 500)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(second) != 1 || second[0].QueueID != "queue_0500" || second[0].SortIndex != 0 {
-		t.Fatalf("second page=%#v", second)
-	}
-	if _, err := store.ListFollowupsByLaneAfter(ctx, endpointID, threadID, FollowupLaneQueued, 1, "", 10); err == nil {
-		t.Fatal("positive sort cursor without queue identity was accepted")
-	}
 }
 
 func TestStoreThreadMetadataUpdatesDoNotCreateConversationState(t *testing.T) {

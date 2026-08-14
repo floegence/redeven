@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-	"unicode/utf8"
 )
 
 var (
@@ -24,9 +23,8 @@ const (
 	UploadStateLive     = "live"
 	UploadStateDeleting = "deleting"
 
-	UploadRefKindThread     = "thread"
-	UploadRefKindQueuedTurn = "queued_turn"
-	UploadRefKindStaging    = "staging"
+	UploadRefKindThread  = "thread"
+	UploadRefKindStaging = "staging"
 
 	UploadOwnerScopeUser = "user"
 
@@ -37,14 +35,14 @@ const (
 	UploadAttemptComplete  = "complete"
 	UploadAttemptFailed    = "failed"
 
-	UploadStagedOwnerItemLimit      = 100
-	UploadStagedOwnerByteLimit      = int64(100 << 20)
-	UploadLiveOwnerItemLimit        = 1000
-	UploadLiveOwnerByteLimit        = int64(1 << 30)
-	UploadLiveThreadItemLimit       = 1000
-	UploadLiveThreadByteLimit       = int64(250 << 20)
-	AttachmentAdmissionMaxCount     = 10
-	AttachmentAdmissionMaxTurnBytes = int64(25 << 20)
+	UploadStagedOwnerItemLimit        = 100
+	UploadStagedOwnerByteLimit        = int64(100 << 20)
+	UploadLiveOwnerItemLimit          = 1000
+	UploadLiveOwnerByteLimit          = int64(1 << 30)
+	UploadLiveThreadItemLimit         = 1000
+	UploadLiveThreadByteLimit         = int64(250 << 20)
+	AttachmentClaimPolicyMaxCount     = 10
+	AttachmentClaimPolicyMaxTurnBytes = int64(25 << 20)
 
 	sqliteAutoVacuumNone        = 0
 	sqliteAutoVacuumFull        = 1
@@ -113,18 +111,6 @@ type UploadRefRecord struct {
 	CreatedAtUnixMs int64  `json:"created_at_unix_ms"`
 }
 
-type FollowupDeleteResourcesResult struct {
-	Revision        int64
-	UploadsToDelete []UploadRecord
-}
-
-type FollowupReplacementResult struct {
-	Queued          QueuedTurn
-	Position        int
-	Revision        int64
-	UploadsToDelete []UploadRecord
-}
-
 type SQLitePageStats struct {
 	PageSize       int64
 	PageCount      int64
@@ -155,8 +141,6 @@ func normalizeUploadState(state string) string {
 
 func normalizeUploadRefKind(kind string) string {
 	switch strings.ToLower(strings.TrimSpace(kind)) {
-	case UploadRefKindQueuedTurn:
-		return UploadRefKindQueuedTurn
 	case UploadRefKindThread:
 		return UploadRefKindThread
 	case UploadRefKindStaging:
@@ -641,10 +625,6 @@ func (s *Store) GetThreadOwnedUpload(ctx context.Context, endpointID string, thr
 	return s.getOwnedUpload(ctx, endpointID, threadID, UploadRefKindThread, threadID, uploadID)
 }
 
-func (s *Store) GetQueuedTurnOwnedUpload(ctx context.Context, endpointID string, threadID string, queueID string, uploadID string) (*UploadRecord, error) {
-	return s.getOwnedUpload(ctx, endpointID, threadID, UploadRefKindQueuedTurn, queueID, uploadID)
-}
-
 func (s *Store) getOwnedUpload(ctx context.Context, endpointID string, threadID string, refKind string, refID string, uploadID string) (*UploadRecord, error) {
 	if s == nil || s.db == nil {
 		return nil, errors.New("store not initialized")
@@ -710,7 +690,7 @@ func (s *Store) BindUploadsToRef(ctx context.Context, endpointID string, threadI
 	return tx.Commit()
 }
 
-type AttachmentAdmission struct {
+type AttachmentClaimPolicy struct {
 	OwnerUserHash      string
 	CapabilityRevision string
 	MaxCount           int
@@ -719,10 +699,10 @@ type AttachmentAdmission struct {
 	Routes             map[string]string
 }
 
-func validateAttachmentAdmissionTx(ctx context.Context, tx *sql.Tx, endpointID string, uploadIDs []string, admission AttachmentAdmission) error {
+func validateAttachmentClaimPolicyTx(ctx context.Context, tx *sql.Tx, endpointID string, uploadIDs []string, admission AttachmentClaimPolicy) error {
 	admission.OwnerUserHash = strings.ToLower(strings.TrimSpace(admission.OwnerUserHash))
 	admission.CapabilityRevision = strings.ToLower(strings.TrimSpace(admission.CapabilityRevision))
-	if admission.MaxCount != AttachmentAdmissionMaxCount || admission.MaxTurnBytes != AttachmentAdmissionMaxTurnBytes ||
+	if admission.MaxCount != AttachmentClaimPolicyMaxCount || admission.MaxTurnBytes != AttachmentClaimPolicyMaxTurnBytes ||
 		len(admission.OwnerUserHash) != sha256.Size*2 || len(admission.CapabilityRevision) != sha256.Size*2 {
 		return errors.New("invalid attachment admission capability")
 	}
@@ -756,259 +736,6 @@ WHERE endpoint_id = ? AND upload_id = ? AND owner_scope_kind = ? AND owner_user_
 		}
 	}
 	return nil
-}
-
-func (s *Store) CreateFollowupWithUploadRefs(ctx context.Context, rec QueuedTurn, uploadIDs []string, claimedAtUnixMs int64) (QueuedTurn, int, int64, error) {
-	return s.createFollowupWithUploadRefs(ctx, rec, uploadIDs, claimedAtUnixMs, nil)
-}
-
-func (s *Store) CreateFollowupWithAttachmentAdmission(ctx context.Context, rec QueuedTurn, uploadIDs []string, claimedAtUnixMs int64, admission AttachmentAdmission) (QueuedTurn, int, int64, error) {
-	return s.createFollowupWithUploadRefs(ctx, rec, uploadIDs, claimedAtUnixMs, &admission)
-}
-
-func (s *Store) createFollowupWithUploadRefs(ctx context.Context, rec QueuedTurn, uploadIDs []string, claimedAtUnixMs int64, attachmentAdmission *AttachmentAdmission) (QueuedTurn, int, int64, error) {
-	if s == nil || s.db == nil {
-		return QueuedTurn{}, 0, 0, errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	rec.QueueID = strings.TrimSpace(rec.QueueID)
-	rec.EndpointID = strings.TrimSpace(rec.EndpointID)
-	rec.ThreadID = strings.TrimSpace(rec.ThreadID)
-	rec.ChannelID = strings.TrimSpace(rec.ChannelID)
-	lane, err := parseFollowupLane(rec.Lane)
-	if err != nil {
-		return QueuedTurn{}, 0, 0, err
-	}
-	rec.Lane = lane
-	rec.TurnID = strings.TrimSpace(rec.TurnID)
-	rec.RunID = strings.TrimSpace(rec.RunID)
-	rec.ModelID = strings.TrimSpace(rec.ModelID)
-	if !utf8.ValidString(rec.TextContent) {
-		return QueuedTurn{}, 0, 0, errors.New("invalid text content")
-	}
-	rec.AttachmentsJSON = strings.TrimSpace(rec.AttachmentsJSON)
-	rec.ContextActionJSON = strings.TrimSpace(rec.ContextActionJSON)
-	rec.OptionsJSON = strings.TrimSpace(rec.OptionsJSON)
-	rec.SessionMetaJSON = strings.TrimSpace(rec.SessionMetaJSON)
-	rec.CreatedByUserPublicID = strings.TrimSpace(rec.CreatedByUserPublicID)
-	rec.CreatedByUserEmail = strings.TrimSpace(rec.CreatedByUserEmail)
-	uploadIDs = dedupeNonEmptyStrings(uploadIDs)
-	if rec.QueueID == "" || rec.EndpointID == "" || rec.ThreadID == "" || rec.ChannelID == "" || rec.TurnID != "" || rec.RunID != "" {
-		return QueuedTurn{}, 0, 0, errors.New("invalid request")
-	}
-	if rec.AttachmentsJSON == "" {
-		rec.AttachmentsJSON = "[]"
-	}
-	if rec.OptionsJSON == "" {
-		rec.OptionsJSON = "{}"
-	}
-	if rec.SessionMetaJSON == "" {
-		rec.SessionMetaJSON = "{}"
-	}
-	now := time.Now().UnixMilli()
-	if rec.CreatedAtUnixMs <= 0 {
-		rec.CreatedAtUnixMs = now
-	}
-	if rec.UpdatedAtUnixMs <= 0 {
-		rec.UpdatedAtUnixMs = rec.CreatedAtUnixMs
-	}
-	if claimedAtUnixMs <= 0 {
-		claimedAtUnixMs = rec.CreatedAtUnixMs
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return QueuedTurn{}, 0, 0, err
-	}
-	defer func() { _ = tx.Rollback() }()
-	if attachmentAdmission != nil {
-		if err := validateAttachmentAdmissionTx(ctx, tx, rec.EndpointID, uploadIDs, *attachmentAdmission); err != nil {
-			return QueuedTurn{}, 0, 0, err
-		}
-	}
-	queued, position, revision, err := createFollowupTx(ctx, tx, rec)
-	if err != nil {
-		return QueuedTurn{}, 0, 0, err
-	}
-	if err := bindUploadsToRefTx(ctx, tx, rec.EndpointID, rec.ThreadID, UploadRefKindQueuedTurn, queued.QueueID, uploadIDs, claimedAtUnixMs, "", "", ""); err != nil {
-		return QueuedTurn{}, 0, 0, err
-	}
-	if err := tx.Commit(); err != nil {
-		return QueuedTurn{}, 0, 0, err
-	}
-	return queued, position, revision, nil
-}
-
-func (s *Store) ReplaceFollowupWithUploadRefs(ctx context.Context, sourceFollowupID string, rec QueuedTurn, uploadIDs []string, claimedAtUnixMs int64) (FollowupReplacementResult, error) {
-	return s.replaceFollowupWithUploadRefs(ctx, sourceFollowupID, rec, uploadIDs, claimedAtUnixMs, nil, nil)
-}
-
-func (s *Store) ReplaceFollowupWithAttachmentAdmission(ctx context.Context, sourceFollowupID string, rec QueuedTurn, uploadIDs []string, claimedAtUnixMs int64, admission AttachmentAdmission) (FollowupReplacementResult, error) {
-	return s.replaceFollowupWithUploadRefs(ctx, sourceFollowupID, rec, uploadIDs, claimedAtUnixMs, &admission, nil)
-}
-
-func (s *Store) ReplaceFollowupFromStaging(ctx context.Context, sourceFollowupID string, rec QueuedTurn, uploadIDs []string, claimedAtUnixMs int64, admission AttachmentAdmission, scope UploadStagingScope) (FollowupReplacementResult, error) {
-	return s.replaceFollowupWithUploadRefs(ctx, sourceFollowupID, rec, uploadIDs, claimedAtUnixMs, &admission, &scope)
-}
-
-func (s *Store) replaceFollowupWithUploadRefs(ctx context.Context, sourceFollowupID string, rec QueuedTurn, uploadIDs []string, claimedAtUnixMs int64, attachmentAdmission *AttachmentAdmission, stagingScope *UploadStagingScope) (FollowupReplacementResult, error) {
-	if s == nil || s.db == nil {
-		return FollowupReplacementResult{}, errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	sourceFollowupID = strings.TrimSpace(sourceFollowupID)
-	rec.QueueID = strings.TrimSpace(rec.QueueID)
-	rec.EndpointID = strings.TrimSpace(rec.EndpointID)
-	rec.ThreadID = strings.TrimSpace(rec.ThreadID)
-	rec.ChannelID = strings.TrimSpace(rec.ChannelID)
-	lane, err := parseFollowupLane(rec.Lane)
-	if err != nil {
-		return FollowupReplacementResult{}, err
-	}
-	rec.Lane = lane
-	rec.AdmissionState = PendingTurnAdmissionReady
-	rec.TurnID = strings.TrimSpace(rec.TurnID)
-	rec.RunID = strings.TrimSpace(rec.RunID)
-	rec.ModelID = strings.TrimSpace(rec.ModelID)
-	rec.TextContent = strings.TrimSpace(rec.TextContent)
-	rec.AttachmentsJSON = strings.TrimSpace(rec.AttachmentsJSON)
-	rec.ContextActionJSON = strings.TrimSpace(rec.ContextActionJSON)
-	rec.OptionsJSON = strings.TrimSpace(rec.OptionsJSON)
-	rec.SessionMetaJSON = strings.TrimSpace(rec.SessionMetaJSON)
-	rec.CreatedByUserPublicID = strings.TrimSpace(rec.CreatedByUserPublicID)
-	rec.CreatedByUserEmail = strings.TrimSpace(rec.CreatedByUserEmail)
-	uploadIDs = dedupeNonEmptyStrings(uploadIDs)
-	if sourceFollowupID == "" || rec.QueueID == "" || rec.QueueID == sourceFollowupID || rec.EndpointID == "" || rec.ThreadID == "" || rec.ChannelID == "" || rec.TurnID == "" || rec.RunID == "" {
-		return FollowupReplacementResult{}, errors.New("invalid followup replacement request")
-	}
-	if rec.AttachmentsJSON == "" {
-		rec.AttachmentsJSON = "[]"
-	}
-	if rec.OptionsJSON == "" {
-		rec.OptionsJSON = "{}"
-	}
-	if rec.SessionMetaJSON == "" {
-		rec.SessionMetaJSON = "{}"
-	}
-	now := time.Now().UnixMilli()
-	if rec.CreatedAtUnixMs <= 0 {
-		rec.CreatedAtUnixMs = now
-	}
-	if rec.UpdatedAtUnixMs <= 0 {
-		rec.UpdatedAtUnixMs = rec.CreatedAtUnixMs
-	}
-	if claimedAtUnixMs <= 0 {
-		claimedAtUnixMs = rec.CreatedAtUnixMs
-	}
-
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return FollowupReplacementResult{}, err
-	}
-	defer func() { _ = tx.Rollback() }()
-	if stagingScope != nil {
-		*stagingScope = normalizeUploadStagingScope(*stagingScope)
-		if stagingScope.EndpointID != rec.EndpointID || stagingScope.TargetID != rec.ThreadID {
-			return FollowupReplacementResult{}, errors.New("upload staging target changed")
-		}
-		if err := requireUploadStagingScopeActiveTx(ctx, tx, *stagingScope, time.Now().UnixMilli()); err != nil {
-			return FollowupReplacementResult{}, err
-		}
-	}
-	if attachmentAdmission != nil {
-		if err := validateAttachmentAdmissionTx(ctx, tx, rec.EndpointID, uploadIDs, *attachmentAdmission); err != nil {
-			return FollowupReplacementResult{}, err
-		}
-	}
-	if err := requireThreadWritableTx(ctx, tx, rec.EndpointID, rec.ThreadID); err != nil {
-		return FollowupReplacementResult{}, err
-	}
-	var sourceLane, sourceAdmissionState string
-	var sourceSortIndex int64
-	err = tx.QueryRowContext(ctx, `
-SELECT lane, admission_state, sort_index
-FROM ai_queued_turns
-WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ?
-`, rec.EndpointID, rec.ThreadID, sourceFollowupID).Scan(&sourceLane, &sourceAdmissionState, &sourceSortIndex)
-	if errors.Is(err, sql.ErrNoRows) {
-		return FollowupReplacementResult{}, fmt.Errorf("%w: source followup %q is missing", ErrFollowupReplacementConflict, sourceFollowupID)
-	}
-	if err != nil {
-		return FollowupReplacementResult{}, err
-	}
-	sourceLane, err = parseFollowupLane(sourceLane)
-	if err != nil {
-		return FollowupReplacementResult{}, err
-	}
-	sourceAdmissionState, err = parsePendingTurnAdmissionState(sourceAdmissionState)
-	if err != nil {
-		return FollowupReplacementResult{}, err
-	}
-	if sourceAdmissionState != PendingTurnAdmissionReady {
-		return FollowupReplacementResult{}, fmt.Errorf("%w: source followup %q is not mutable", ErrFollowupReplacementConflict, sourceFollowupID)
-	}
-	if sourceLane == rec.Lane && sourceSortIndex > 0 {
-		rec.SortIndex = sourceSortIndex
-	} else {
-		rec.SortIndex, err = getNextFollowupSortIndexTx(ctx, tx, rec.EndpointID, rec.ThreadID, rec.Lane)
-		if err != nil {
-			return FollowupReplacementResult{}, err
-		}
-	}
-	_, err = tx.ExecContext(ctx, `
-INSERT INTO ai_queued_turns(
-  queue_id, endpoint_id, thread_id, channel_id, lane, admission_state, sort_index, turn_id, run_id, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json,
-  created_by_user_public_id, created_by_user_email, created_at_unix_ms, updated_at_unix_ms
-)
-VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`, rec.QueueID, rec.EndpointID, rec.ThreadID, rec.ChannelID, rec.Lane, rec.AdmissionState, rec.SortIndex, rec.TurnID, rec.RunID, rec.ModelID, rec.TextContent, rec.AttachmentsJSON, rec.ContextActionJSON, rec.OptionsJSON, rec.SessionMetaJSON,
-		rec.CreatedByUserPublicID, rec.CreatedByUserEmail, rec.CreatedAtUnixMs, rec.UpdatedAtUnixMs)
-	if err != nil {
-		if isUniqueConstraintError(err) {
-			return FollowupReplacementResult{}, fmt.Errorf("%w: destination identity already exists", ErrFollowupReplacementConflict)
-		}
-		return FollowupReplacementResult{}, err
-	}
-	ownerUserHash := ""
-	sourceRefID := ""
-	sourceRefKind := ""
-	if stagingScope != nil {
-		ownerUserHash = stagingScope.OwnerUserHash
-		sourceRefKind = UploadRefKindStaging
-		sourceRefID = stagingUploadRefID(ownerUserHash, stagingScope.StagingScopeID)
-	}
-	if err := bindUploadsToRefTx(ctx, tx, rec.EndpointID, rec.ThreadID, UploadRefKindQueuedTurn, rec.QueueID, uploadIDs, claimedAtUnixMs, sourceRefKind, sourceRefID, ownerUserHash); err != nil {
-		return FollowupReplacementResult{}, err
-	}
-	deleted, err := tx.ExecContext(ctx, `
-DELETE FROM ai_queued_turns
-WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ? AND admission_state = ?
-`, rec.EndpointID, rec.ThreadID, sourceFollowupID, PendingTurnAdmissionReady)
-	if err != nil {
-		return FollowupReplacementResult{}, err
-	}
-	if affected, _ := deleted.RowsAffected(); affected != 1 {
-		return FollowupReplacementResult{}, fmt.Errorf("%w: source followup changed during replacement", ErrFollowupReplacementConflict)
-	}
-	uploadsToDelete, err := prepareUploadCleanupForRefTx(ctx, tx, rec.EndpointID, rec.ThreadID, UploadRefKindQueuedTurn, sourceFollowupID, now)
-	if err != nil {
-		return FollowupReplacementResult{}, err
-	}
-	position, err := followupPositionTx(ctx, tx, rec.EndpointID, rec.ThreadID, rec.Lane, rec.QueueID, rec.SortIndex)
-	if err != nil {
-		return FollowupReplacementResult{}, err
-	}
-	revision, err := bumpThreadFollowupsRevisionTx(ctx, tx, rec.EndpointID, rec.ThreadID)
-	if err != nil {
-		return FollowupReplacementResult{}, err
-	}
-	if err := tx.Commit(); err != nil {
-		return FollowupReplacementResult{}, err
-	}
-	return FollowupReplacementResult{Queued: rec, Position: position, Revision: revision, UploadsToDelete: uploadsToDelete}, nil
 }
 
 func bindUploadsToRefTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, refKind string, refID string, uploadIDs []string, claimedAtUnixMs int64, sourceRefKind string, sourceRefID string, expectedOwnerUserHash string) error {
@@ -1068,8 +795,8 @@ WHERE endpoint_id = ? AND upload_id = ? AND ref_kind = ? AND ref_id = ?
 			var threadAlreadyOwns int
 			if err := tx.QueryRowContext(ctx, `
 SELECT COUNT(1) FROM ai_upload_refs
-			WHERE endpoint_id = ? AND thread_id = ? AND upload_id = ? AND ref_kind IN (?, ?)
-		`, endpointID, threadID, uploadID, UploadRefKindQueuedTurn, UploadRefKindThread).Scan(&threadAlreadyOwns); err != nil {
+			WHERE endpoint_id = ? AND thread_id = ? AND upload_id = ? AND ref_kind = ?
+		`, endpointID, threadID, uploadID, UploadRefKindThread).Scan(&threadAlreadyOwns); err != nil {
 				return err
 			}
 			if threadAlreadyOwns == 0 {
@@ -1140,9 +867,9 @@ SELECT COUNT(1), COALESCE(SUM(size_bytes), 0)
 FROM ai_uploads u
 WHERE u.endpoint_id = ? AND u.state = ? AND u.upload_id IN (
   SELECT DISTINCT r.upload_id FROM ai_upload_refs r
-	  WHERE r.endpoint_id = ? AND r.thread_id = ? AND r.ref_kind IN (?, ?)
+	  WHERE r.endpoint_id = ? AND r.thread_id = ? AND r.ref_kind = ?
 	)
-	`, endpointID, UploadStateLive, endpointID, threadID, UploadRefKindQueuedTurn, UploadRefKindThread).Scan(&count, &bytes); err != nil {
+	`, endpointID, UploadStateLive, endpointID, threadID, UploadRefKindThread).Scan(&count, &bytes); err != nil {
 			return err
 		}
 	default:
@@ -1155,59 +882,6 @@ WHERE u.endpoint_id = ? AND u.state = ? AND u.upload_id IN (
 		return &UploadQuotaError{Scope: scope, Metric: "bytes", Limit: byteLimit}
 	}
 	return nil
-}
-
-func (s *Store) DeleteFollowupResources(ctx context.Context, endpointID string, threadID string, followupID string) (FollowupDeleteResourcesResult, error) {
-	if s == nil || s.db == nil {
-		return FollowupDeleteResourcesResult{}, errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	followupID = strings.TrimSpace(followupID)
-	if endpointID == "" || threadID == "" || followupID == "" {
-		return FollowupDeleteResourcesResult{}, errors.New("invalid request")
-	}
-	now := time.Now().UnixMilli()
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return FollowupDeleteResourcesResult{}, err
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := requireThreadWritableTx(ctx, tx, endpointID, threadID); err != nil {
-		return FollowupDeleteResourcesResult{}, err
-	}
-	if err := requireFollowupMutableTx(ctx, tx, endpointID, threadID, followupID); err != nil {
-		return FollowupDeleteResourcesResult{}, err
-	}
-	res, err := tx.ExecContext(ctx, `
-DELETE FROM ai_queued_turns
-WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ?
-`, endpointID, threadID, followupID)
-	if err != nil {
-		return FollowupDeleteResourcesResult{}, err
-	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return FollowupDeleteResourcesResult{}, sql.ErrNoRows
-	}
-	uploadsToDelete, err := prepareUploadCleanupForRefTx(ctx, tx, endpointID, threadID, UploadRefKindQueuedTurn, followupID, now)
-	if err != nil {
-		return FollowupDeleteResourcesResult{}, err
-	}
-	revision, err := bumpThreadFollowupsRevisionTx(ctx, tx, endpointID, threadID)
-	if err != nil {
-		return FollowupDeleteResourcesResult{}, err
-	}
-	if err := tx.Commit(); err != nil {
-		return FollowupDeleteResourcesResult{}, err
-	}
-	return FollowupDeleteResourcesResult{
-		Revision:        revision,
-		UploadsToDelete: uploadsToDelete,
-	}, nil
 }
 
 func prepareUploadCleanupForThreadTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, deleteAfterUnixMs int64) ([]UploadRecord, error) {

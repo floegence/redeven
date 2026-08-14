@@ -18,12 +18,10 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/floegence/floret/v3/identity"
-	"github.com/floegence/floret/v3/observation"
-	flruntime "github.com/floegence/floret/v3/runtime"
-	fltools "github.com/floegence/floret/v3/tools"
+	"github.com/floegence/floret/v4/observation"
+	flruntime "github.com/floegence/floret/v4/runtime"
+	fltools "github.com/floegence/floret/v4/tools"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
-	"github.com/floegence/redeven/internal/ai/threadstore"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/filesystemscope"
@@ -64,17 +62,15 @@ type runOptions struct {
 	ToolApprovalTimeout time.Duration
 	StreamWriteTimeout  time.Duration
 
-	UploadsDir            string
-	ProductCapabilities   runProductCapabilities
-	FloretTurnOpener      floretTurnRunnerOpener
-	FloretCompactorOpener floretCompactorOpener
-	FloretSubagentOpener  floretSubagentManagerOpener
-	EffectAuthorizations  *floretEffectAuthorizationRegistry
-	PersistOpTimeout      time.Duration
+	UploadsDir           string
+	ProductCapabilities  runProductCapabilities
+	FloretThreadRuntime  flruntime.ThreadService
+	TypedAdmission       func(string, string)
+	EffectAuthorizations *floretEffectAuthorizationRegistry
+	PersistOpTimeout     time.Duration
 
-	OnStreamEvent func(any)
-	Writer        http.ResponseWriter
-
+	OnStreamEvent               func(any)
+	Writer                      http.ResponseWriter
 	SubagentDepth               int
 	AllowSubagentDelegate       bool
 	ToolAllowlist               []string
@@ -123,14 +119,12 @@ type run struct {
 	settlementRunID    string
 	settlementTurnID   string
 
-	maxWallTime             time.Duration
-	idleTimeout             time.Duration
-	toolApprovalTO          time.Duration
-	activityCh              chan struct{}
-	doneCh                  chan struct{}
-	doneOnce                sync.Once
-	muStopFinalization      sync.Mutex
-	stopFinalizationAttempt *stopFinalizationAttempt
+	maxWallTime    time.Duration
+	idleTimeout    time.Duration
+	toolApprovalTO time.Duration
+	activityCh     chan struct{}
+	doneCh         chan struct{}
+	doneOnce       sync.Once
 
 	muCancel                 sync.Mutex
 	cancelReason             string // "canceled"|"timed_out"|""
@@ -145,22 +139,14 @@ type run struct {
 	nextExecutionAdmissionID uint64
 	executionAdmissions      map[uint64]context.CancelCauseFunc
 	detached                 atomic.Bool // hard-canceled: stop emitting realtime events and skip thread state updates
-	awaitFloretAdmission     atomic.Bool
-	floretAdmitted           atomic.Bool
 	floretRunTurnStarted     atomic.Bool
-	floretPresentationReady  atomic.Bool
-	admissionOnce            sync.Once
-	admissionMu              sync.Mutex
-	admissionOutcome         userTurnAdmissionOutcome
-	admissionDone            chan struct{}
 	busyCount                atomic.Int32
 	runtimeToolCalls         atomic.Int64
 	runtimeTokens            atomic.Int64
 	uploadsDir               string
 	product                  runProductCapabilities
-	floretTurnOpener         floretTurnRunnerOpener
-	floretCompactorOpener    floretCompactorOpener
-	floretSubagentOpener     floretSubagentManagerOpener
+	threadRuntime            flruntime.ThreadService
+	toolRuntimeState         *floretToolRuntimeState
 	effectAuthorizations     *floretEffectAuthorizationRegistry
 	persistOpTimeout         time.Duration
 
@@ -168,12 +154,8 @@ type run struct {
 	w             http.ResponseWriter
 	stream        *ndjsonStream
 
-	mu                      sync.Mutex
-	toolApprovals           map[string]*toolApprovalRequest
-	floretHost              floretActiveRunHost
-	settlementOwnerResolver func() floretPendingToolSettler
-	floretAuthorityBarrier  *floretAuthorityBarrier
-
+	mu                  sync.Mutex
+	toolApprovals       map[string]*toolApprovalRequest
 	muLifecycle         sync.Mutex
 	lastLifecyclePhase  string
 	lastLifecycleAt     time.Time
@@ -201,14 +183,10 @@ type run struct {
 	activityFileActionSeq    int64
 	waitingPrompt            *RequestUserInputPrompt
 
-	muFloretProjection         sync.Mutex
-	floretProjectionOrdinal    map[string]int64
-	floretProjectionByKey      map[string]flruntime.ThreadTurnProjection
-	floretProjectionDeltaByKey map[string]flruntime.ThreadTurnProjection
-	muFloretIdentity           sync.Mutex
-	floretEventIdentity        floretRuntimeEventIdentity
-	muFloretContract           sync.Mutex
-	floretContractErr          error
+	muFloretIdentity    sync.Mutex
+	floretEventIdentity floretRuntimeEventIdentity
+	muFloretContract    sync.Mutex
+	floretContractErr   error
 
 	muPendingCommand         sync.Mutex
 	pendingCommandID         string
@@ -220,8 +198,6 @@ type run struct {
 	currentReasoning   config.AIReasoningSelection
 
 	muManualCompaction       sync.Mutex
-	pendingManualCompaction  *flruntime.ManualCompactionRequest
-	activeManualCompactionID string
 	contextCompactionAnchors map[string]FlowerTimelineAnchor
 
 	webSearchToolEnabled      bool
@@ -235,7 +211,6 @@ type run struct {
 	allowSubagentDelegate       bool
 	toolAllowlist               map[string]struct{}
 	noUserInteraction           bool
-	subagentParentAuthority     *subagentParentAuthority
 	permissionSnapshot          PermissionSnapshot
 	dynamicSurfaceConfig        runToolSurfaceConfig
 	toolTargetPolicy            ToolTargetPolicy
@@ -319,72 +294,11 @@ func (r *run) observeFloretCanonicalIdentity(runID, threadID, turnID string) err
 		}
 		return nil
 	}
-	if r.awaitFloretAdmission.Load() {
-		return errors.New("Floret canonical identity must cross the durable admission boundary")
-	}
 	r.floretEventIdentity = floretRuntimeEventIdentity{configured: true, checkRunID: true, runID: runID, threadID: threadID, turnID: turnID}
-	r.id, r.turnID, r.messageID = runID, turnID, turnID
-	r.settlementRunID, r.settlementThreadID, r.settlementTurnID = runID, threadID, turnID
-	return nil
-}
-
-func (r *run) bindFloretCanonicalAdmission(runID, threadID, turnID, entryID string) error {
-	if r == nil {
-		return errors.New("Floret canonical admission owner is unavailable")
-	}
-	runID, threadID, turnID, entryID = strings.TrimSpace(runID), strings.TrimSpace(threadID), strings.TrimSpace(turnID), strings.TrimSpace(entryID)
-	if runID == "" || threadID == "" || turnID == "" || entryID == "" || threadID != strings.TrimSpace(r.threadID) {
-		return errors.New("Floret canonical admission identity is incomplete or bound to another thread")
-	}
-	r.muFloretIdentity.Lock()
-	identity := r.floretEventIdentity
-	r.muFloretIdentity.Unlock()
-	if identity.configured {
-		return r.bindFloretCanonicalIdentity(runID, threadID, turnID)
-	}
-	r.muPendingCommand.Lock()
-	commandID := strings.TrimSpace(r.pendingCommandID)
-	uploadIDs := append([]string(nil), r.canonicalAttachmentIDs...)
-	r.muPendingCommand.Unlock()
-	if commandID == "" {
-		if r.awaitFloretAdmission.Load() {
-			return errors.New("canonical user admission requires a pending command")
-		}
-		return r.observeFloretCanonicalIdentity(runID, threadID, turnID)
-	}
-	snapshot := r.currentPermissionSnapshot()
-	record, err := permissionSnapshotRecordForCanonicalOwner(snapshot, r.endpointID, threadID, runID, time.Now().UnixMilli())
-	if err != nil {
-		return err
-	}
-	ctx, cancel := persistContextForRun(r)
-	defer cancel()
-	_, _, err = r.product.bindCanonicalPendingAdmission(ctx, threadstore.PendingTurnAdmissionBinding{
-		QueueID: commandID, EndpointID: r.endpointID, ThreadID: threadID, LogicalRequestID: commandID,
-		TurnID: turnID, RunID: runID, EntryID: entryID, PermissionSnapshot: record, UploadIDs: uploadIDs,
-		AdmittedAtUnixMs: time.Now().UnixMilli(),
-	})
-	if err != nil {
-		return err
-	}
-	snapshot = permissionSnapshotWithOwnerIdentity(snapshot, r.endpointID, threadID, runID)
-	r.setPermissionState(snapshot.PermissionType, snapshot)
-	r.muFloretIdentity.Lock()
-	defer r.muFloretIdentity.Unlock()
-	if r.floretEventIdentity.configured {
-		if r.floretEventIdentity.runID != runID || r.floretEventIdentity.threadID != threadID || r.floretEventIdentity.turnID != turnID {
-			return errors.New("Floret canonical identity changed after durable admission")
-		}
-	} else {
-		r.floretEventIdentity = floretRuntimeEventIdentity{configured: true, checkRunID: true, runID: runID, threadID: threadID, turnID: turnID}
-		r.id = runID
-		r.turnID = turnID
-		r.messageID = turnID
+	if r.threadRuntime == nil {
+		r.id, r.turnID, r.messageID = runID, turnID, turnID
 		r.settlementRunID, r.settlementThreadID, r.settlementTurnID = runID, threadID, turnID
 	}
-	r.muPendingCommand.Lock()
-	r.pendingCommandReconciled = true
-	r.muPendingCommand.Unlock()
 	return nil
 }
 
@@ -475,9 +389,7 @@ func newRun(opts runOptions) *run {
 		settlementTurnID:            strings.TrimSpace(opts.TurnID),
 		uploadsDir:                  strings.TrimSpace(opts.UploadsDir),
 		product:                     opts.ProductCapabilities,
-		floretTurnOpener:            opts.FloretTurnOpener,
-		floretCompactorOpener:       opts.FloretCompactorOpener,
-		floretSubagentOpener:        opts.FloretSubagentOpener,
+		threadRuntime:               opts.FloretThreadRuntime,
 		effectAuthorizations:        effectAuthorizations,
 		persistOpTimeout:            opts.PersistOpTimeout,
 		onStreamEvent:               opts.OnStreamEvent,
@@ -487,9 +399,7 @@ func newRun(opts runOptions) *run {
 		idleTimeout:                 opts.IdleTimeout,
 		toolApprovalTO:              opts.ToolApprovalTimeout,
 		doneCh:                      make(chan struct{}),
-		floretAuthorityBarrier:      newFloretAuthorityBarrier(),
 		executionAdmissions:         make(map[uint64]context.CancelCauseFunc),
-		admissionDone:               make(chan struct{}),
 		lifecycleMinEmitGap:         600 * time.Millisecond,
 		collectedWebSources:         make(map[string]SourceRef),
 		collectedWebSourceOrder:     make([]string, 0, 8),
@@ -609,39 +519,6 @@ func (r *run) isWaitingProductApproval() bool {
 	return false
 }
 
-const floretApprovalWatchdogReadTimeout = 2 * time.Second
-
-func (r *run) isWaitingFloretApproval(ctx context.Context) (bool, error) {
-	if r == nil {
-		return false, nil
-	}
-	host := r.activeFloretHost()
-	if host == nil {
-		return false, nil
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	readTimeout := floretApprovalWatchdogReadTimeout
-	if r.idleTimeout > 0 && r.idleTimeout < readTimeout {
-		readTimeout = r.idleTimeout
-	}
-	readCtx, cancel := context.WithTimeout(ctx, readTimeout)
-	defer cancel()
-	queue, err := host.ReadApprovalQueue(readCtx)
-	if err != nil {
-		return false, fmt.Errorf("read canonical Floret approval queue: %w", err)
-	}
-	if err := queue.Validate(); err != nil {
-		return false, fmt.Errorf("validate canonical Floret approval queue: %w", err)
-	}
-	rootThreadID := strings.TrimSpace(r.host.authorityThreadID)
-	if rootThreadID != "" && strings.TrimSpace(string(queue.RootThreadID)) != rootThreadID {
-		return false, errors.New("canonical Floret approval queue root identity mismatch")
-	}
-	return len(queue.Items) > 0, nil
-}
-
 func (r *run) runIdleWatchdog(ctx context.Context) {
 	if r == nil || ctx == nil || r.idleTimeout <= 0 || r.activityCh == nil {
 		return
@@ -666,18 +543,6 @@ func (r *run) runIdleWatchdog(ctx context.Context) {
 			// Waiting for the user is not an "idle" run. Product confirmations retain
 			// their own timeout, and the run's max wall time bounds every approval wait.
 			if r.isWaitingProductApproval() || r.isBusy() {
-				idleTimer.Reset(r.idleTimeout)
-				continue
-			}
-			waitingFloretApproval, err := r.isWaitingFloretApproval(ctx)
-			if err != nil {
-				if r.log != nil {
-					r.log.Warn("canonical Floret approval queue unavailable during idle check", "run_id", r.id, "error", err)
-				}
-				idleTimer.Reset(r.idleTimeout)
-				continue
-			}
-			if waitingFloretApproval {
 				idleTimer.Reset(r.idleTimeout)
 				continue
 			}
@@ -890,115 +755,6 @@ func (r *run) getFinalizationReason() string {
 	return v
 }
 
-func (r *run) EnqueueManualCompaction(ctx context.Context, request flruntime.ManualCompactionRequest) (flruntime.ManualCompactionRequest, error) {
-	if r == nil {
-		return flruntime.ManualCompactionRequest{}, errors.New("nil run")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if strings.TrimSpace(request.RequestID) == "" {
-		return flruntime.ManualCompactionRequest{}, errors.New("missing manual compaction request id")
-	}
-	if strings.TrimSpace(request.Source) == "" {
-		request.Source = "slash_command"
-	}
-	if request.RequestedAt.IsZero() {
-		request.RequestedAt = time.Now()
-	}
-	select {
-	case <-ctx.Done():
-		return flruntime.ManualCompactionRequest{}, ctx.Err()
-	case <-r.doneCh:
-		return flruntime.ManualCompactionRequest{}, ErrRunChanged
-	default:
-	}
-	if r.isDetached() {
-		return flruntime.ManualCompactionRequest{}, ErrRunChanged
-	}
-	r.muManualCompaction.Lock()
-	if r.pendingManualCompaction != nil {
-		r.muManualCompaction.Unlock()
-		return *r.pendingManualCompaction, ErrCompactAlreadyPending
-	}
-	if strings.TrimSpace(r.activeManualCompactionID) != "" {
-		r.muManualCompaction.Unlock()
-		return flruntime.ManualCompactionRequest{}, ErrCompactAlreadyPending
-	}
-	r.muManualCompaction.Unlock()
-
-	anchor := r.captureFlowerTimelineAnchor()
-	if !validFlowerTimelineAnchor(anchor) {
-		return flruntime.ManualCompactionRequest{}, ErrNoCompactableContext
-	}
-
-	r.muManualCompaction.Lock()
-	defer r.muManualCompaction.Unlock()
-	if r.pendingManualCompaction != nil {
-		return *r.pendingManualCompaction, ErrCompactAlreadyPending
-	}
-	if strings.TrimSpace(r.activeManualCompactionID) != "" {
-		return flruntime.ManualCompactionRequest{}, ErrCompactAlreadyPending
-	}
-	pending := request
-	requestID := strings.TrimSpace(pending.RequestID)
-	if r.contextCompactionAnchors == nil {
-		r.contextCompactionAnchors = make(map[string]FlowerTimelineAnchor)
-	}
-	r.contextCompactionAnchors[requestID] = anchor
-	r.pendingManualCompaction = &pending
-	r.touchActivity()
-	return pending, nil
-}
-
-func (r *run) PollManualCompaction(ctx context.Context, _ flruntime.ManualCompactionPollRequest) (flruntime.ManualCompactionRequest, bool, error) {
-	if r == nil {
-		return flruntime.ManualCompactionRequest{}, false, nil
-	}
-	if ctx != nil {
-		select {
-		case <-ctx.Done():
-			return flruntime.ManualCompactionRequest{}, false, ctx.Err()
-		default:
-		}
-	}
-	r.muManualCompaction.Lock()
-	defer r.muManualCompaction.Unlock()
-	if r.pendingManualCompaction == nil || strings.TrimSpace(r.activeManualCompactionID) != "" {
-		return flruntime.ManualCompactionRequest{}, false, nil
-	}
-	manual := *r.pendingManualCompaction
-	r.pendingManualCompaction = nil
-	requestID := strings.TrimSpace(manual.RequestID)
-	r.activeManualCompactionID = requestID
-	return manual, true, nil
-}
-
-func (r *run) finishManualCompaction(requestID string) {
-	if r == nil {
-		return
-	}
-	requestID = strings.TrimSpace(requestID)
-	if requestID == "" {
-		return
-	}
-	r.muManualCompaction.Lock()
-	defer r.muManualCompaction.Unlock()
-	if strings.TrimSpace(r.activeManualCompactionID) == requestID {
-		r.activeManualCompactionID = ""
-	}
-}
-
-func (r *run) clearManualCompactionRequests() {
-	if r == nil {
-		return
-	}
-	r.muManualCompaction.Lock()
-	defer r.muManualCompaction.Unlock()
-	r.pendingManualCompaction = nil
-	r.activeManualCompactionID = ""
-}
-
 func (r *run) recordRuntimeToolCall() {
 	if r == nil {
 		return
@@ -1051,10 +807,7 @@ func (r *run) isDetached() bool {
 }
 
 func (r *run) acceptsPresentationUpdates() bool {
-	if r == nil || r.isDetached() {
-		return false
-	}
-	return !r.awaitFloretAdmission.Load() || r.floretPresentationReady.Load()
+	return r != nil && !r.isDetached()
 }
 
 func (r *run) acceptsEngineResultProjection() bool {
@@ -1068,12 +821,6 @@ func (r *run) sendStreamEvent(ev any) {
 
 	r.touchActivity()
 	if !r.acceptsPresentationUpdates() {
-		// A detached run still owns the Floret event sink until cancellation
-		// settles. Canonical queue replacements must reach the thread live
-		// materializer so canceled approvals cannot remain visible.
-		if _, ok := ev.(streamEventApprovalQueue); ok && r.isDetached() && r.onStreamEvent != nil {
-			r.onStreamEvent(ev)
-		}
 		return
 	}
 	if r.onStreamEvent != nil {
@@ -1284,72 +1031,6 @@ func (r *run) persistTimeout() time.Duration {
 	return 10 * time.Second
 }
 
-func (r *run) setPendingTurnCommand(commandID string) {
-	if r == nil {
-		return
-	}
-	r.muPendingCommand.Lock()
-	r.pendingCommandID = strings.TrimSpace(commandID)
-	r.pendingCommandReconciled = false
-	r.muPendingCommand.Unlock()
-}
-
-func (r *run) completeUserTurnAdmission(err error) {
-	if r == nil || r.admissionDone == nil {
-		return
-	}
-	canonicalRunID, _, canonicalTurnID := r.floretCanonicalIdentity()
-	outcome := userTurnAdmissionOutcome{TurnID: canonicalTurnID, RunID: canonicalRunID, err: err}
-	if err == nil && (outcome.TurnID == "" || outcome.RunID == "") {
-		outcome.err = errors.New("canonical admission identity is unavailable")
-	}
-	r.admissionOnce.Do(func() {
-		r.admissionMu.Lock()
-		r.admissionOutcome = outcome
-		r.admissionMu.Unlock()
-		close(r.admissionDone)
-	})
-}
-
-func (r *run) completeUserTurnAdmissionAfterExecution(runErr error) {
-	if r == nil {
-		return
-	}
-	if r.floretAdmitted.Load() {
-		r.completeUserTurnAdmission(nil)
-		return
-	}
-	if runErr == nil {
-		runErr = errors.New("execution ended before canonical user admission")
-	}
-	r.completeUserTurnAdmission(fmt.Errorf("%w: %v", ErrUserTurnNotAdmitted, runErr))
-}
-
-func (r *run) waitForUserTurnAdmission(ctx context.Context) (admittedUserTurn, error) {
-	if r == nil || r.admissionDone == nil {
-		return admittedUserTurn{}, errors.New("run admission signal is unavailable")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	select {
-	case <-ctx.Done():
-		return admittedUserTurn{}, ctx.Err()
-	case <-r.admissionDone:
-		r.admissionMu.Lock()
-		outcome := r.admissionOutcome
-		r.admissionMu.Unlock()
-		if outcome.err != nil {
-			return admittedUserTurn{}, outcome.err
-		}
-		canonicalRunID, _, canonicalTurnID := r.floretCanonicalIdentity()
-		if outcome.TurnID == "" || outcome.RunID == "" || outcome.TurnID != canonicalTurnID || outcome.RunID != canonicalRunID {
-			return admittedUserTurn{}, errors.New("run admission outcome identity mismatch")
-		}
-		return admittedUserTurn{TurnID: outcome.TurnID, RunID: outcome.RunID}, nil
-	}
-}
-
 func (r *run) recordRunDiagnostic(eventType string, streamKind RealtimeStreamKind, payload map[string]any) {
 	if r == nil {
 		return
@@ -1511,159 +1192,6 @@ func (r *run) approveTool(toolID string, approved bool) error {
 		r.mu.Unlock()
 		return ErrRunChanged
 	}
-}
-
-func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
-	defer r.markDone()
-	if r == nil {
-		return errors.New("nil run")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	r.setFinalizationReason("")
-	startedAt := time.Now()
-	runStartPayload := map[string]any{
-		"model": strings.TrimSpace(req.Model),
-	}
-	r.recordRunDiagnostic("run.start", RealtimeStreamKindLifecycle, runStartPayload)
-	defer func() {
-		endReason := strings.TrimSpace(r.getEndReason())
-		if endReason == "" {
-			if retErr != nil {
-				endReason = "error"
-			} else {
-				endReason = "complete"
-			}
-		}
-		state := RunStateFailed
-		errCode := strings.TrimSpace(r.getRunErrorCode())
-		if errCode == "" {
-			errCode = string(aitools.ErrorCodeUnknown)
-		}
-		errMsg := strings.TrimSpace(errorString(retErr))
-		eventType := "run.error"
-		finalizationReason := strings.TrimSpace(r.getFinalizationReason())
-		finalizationClass := classifyFinalizationReason(finalizationReason)
-		switch endReason {
-		case "complete":
-			switch finalizationClass {
-			case finalizationClassSuccess:
-				state = RunStateSuccess
-				errCode = ""
-				errMsg = ""
-				eventType = "run.end"
-			case finalizationClassWaitingUser:
-				state = RunStateWaitingUser
-				errCode = ""
-				errMsg = ""
-				eventType = "run.end"
-			default:
-				state = RunStateFailed
-				if errMsg == "" {
-					errMsg = "Run ended without a recognized finalization reason."
-				}
-				eventType = "run.error"
-			}
-		case "canceled":
-			state = RunStateCanceled
-			errCode = ""
-			errMsg = ""
-			eventType = "run.end"
-		case "timed_out":
-			state = RunStateTimedOut
-			if errCode == string(aitools.ErrorCodeUnknown) {
-				errCode = string(aitools.ErrorCodeTimeout)
-			}
-			if errMsg == "" {
-				errMsg = "Timed out"
-			}
-		case "disconnected":
-			state = RunStateFailed
-			if errMsg == "" {
-				errMsg = "Disconnected"
-			}
-		case "error":
-			state = RunStateFailed
-		}
-		r.clearManualCompactionRequests()
-		r.recordRunDiagnostic(eventType, RealtimeStreamKindLifecycle, map[string]any{
-			"state":               string(state),
-			"error_code":          errCode,
-			"error":               errMsg,
-			"finalization_reason": finalizationReason,
-			"finalization_class":  finalizationClass,
-		})
-		r.debug("ai.run.end",
-			"end_reason", endReason,
-			"finalization_reason", finalizationReason,
-			"finalization_class", finalizationClass,
-			"cancel_reason", strings.TrimSpace(r.getCancelReason()),
-			"duration_ms", time.Since(startedAt).Milliseconds(),
-			"state", string(state),
-			"error", sanitizeLogText(errMsg, 256),
-		)
-	}()
-	ctx, cancel := context.WithCancel(ctx)
-	r.muCancel.Lock()
-	r.cancelFn = cancel
-	alreadyCanceled := r.cancelRequested
-	r.muCancel.Unlock()
-	if alreadyCanceled {
-		cancel()
-	}
-	defer r.cancel()
-	if r.stream != nil {
-		defer r.stream.close()
-	}
-
-	execCtx := ctx
-	var cancelMaxWall context.CancelFunc
-	if r.maxWallTime > 0 {
-		execCtx, cancelMaxWall = context.WithTimeout(execCtx, r.maxWallTime)
-		defer cancelMaxWall()
-	}
-	if r.idleTimeout > 0 && r.activityCh != nil {
-		r.touchActivity()
-		go r.runIdleWatchdog(execCtx)
-	}
-
-	r.emitLifecyclePhase("planning", nil)
-
-	modelID := strings.TrimSpace(req.Model)
-	r.currentModelID = modelID
-	providerID, _, ok := strings.Cut(modelID, "/")
-	providerID = strings.TrimSpace(providerID)
-	workingDirAbs, rootErr := r.workingDirAbs()
-	if rootErr != nil {
-		return r.failRun("AI working directory not configured", rootErr)
-	}
-	taskObjective := strings.TrimSpace(req.Objective)
-	if taskObjective == "" {
-		taskObjective = strings.TrimSpace(req.Input.Text)
-	}
-	r.debug("ai.run.start",
-		"model", modelID,
-		"attachment_count", len(req.Input.Attachments),
-		"input_chars", utf8.RuneCountInString(strings.TrimSpace(req.Input.Text)),
-		"objective_chars", utf8.RuneCountInString(strings.TrimSpace(taskObjective)),
-		"working_dir_abs", sanitizeLogText(workingDirAbs, 200),
-	)
-	resolved, err := r.resolveModelGatewayForModel(modelID, providerID, ok)
-	if err != nil {
-		code := runErrorCodeProviderModelUnavailable
-		if errors.Is(err, ErrNotConfigured) {
-			code = runErrorCodeProviderUnreachable
-		}
-		if errors.Is(err, errModelGatewayMissingKey) {
-			code = runErrorCodeProviderMissingKey
-		}
-		return r.failRunWithCode(code, "", err)
-	}
-	if strings.TrimSpace(resolved.userMessage) != "" {
-		return r.failRunWithCode(runErrorCodeProviderMissingKey, resolved.userMessage, resolved.err)
-	}
-	return r.runFloretHostedTurn(execCtx, req, resolved.provider, resolved.apiKey, strings.TrimSpace(taskObjective), resolved.adapterOverride)
 }
 
 var errModelGatewayMissingKey = errors.New("missing provider key")
@@ -2325,8 +1853,6 @@ type floretToolExecutionAuthorization struct {
 	epoch             string
 	decision          ApprovalDecisionKind
 	approvalSatisfied bool
-	authorityThreadID string
-	subagentForkMode  flruntime.SubAgentForkMode
 }
 
 type floretToolExecutionAuthorizationContextKey struct{}
@@ -2352,8 +1878,6 @@ func contextWithFloretToolExecutionAuthorization(
 		epoch:             permissionSurfaceEpoch(snapshot),
 		decision:          decision,
 		approvalSatisfied: approvalSatisfied,
-		authorityThreadID: strings.TrimSpace(hostContext[floretToolHostContextAuthorityThreadIDKey]),
-		subagentForkMode:  flruntime.SubAgentForkMode(strings.TrimSpace(hostContext[subagentToolHostContextForkModeKey])),
 	})
 }
 
@@ -4346,7 +3870,7 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 		ToolName: "terminal.exec",
 		Args:     cloneAnyMap(args),
 	}
-	_, authorization, err := r.authorizeToolExecutionFromSnapshot(ctx, toolID, "terminal.exec")
+	_, _, err := r.authorizeToolExecutionFromSnapshot(ctx, toolID, "terminal.exec")
 	if err != nil {
 		return outcome, aitools.ClassifyError(aitools.Invocation{ToolName: "terminal.exec", Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, err)
 	}
@@ -4383,22 +3907,9 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 	if terminalHost == nil {
 		return outcome, &aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: "terminal process manager unavailable", Retryable: true}
 	}
-	settlementOwner, err := r.pendingToolSettlementOwner(ctx)
-	if err != nil {
-		return outcome, &aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: "terminal process settlement owner unavailable: " + err.Error(), Retryable: false}
-	}
 	processID, err := newTerminalProcessID()
 	if err != nil {
 		return outcome, aitools.ClassifyError(aitools.Invocation{ToolName: "terminal.exec", Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, err)
-	}
-	settlementTarget := flruntime.PendingToolSettlementTarget{
-		ThreadID:        identity.ThreadID(strings.TrimSpace(r.settlementThreadID)),
-		TurnID:          identity.TurnID(strings.TrimSpace(r.settlementTurnID)),
-		RunID:           identity.RunID(strings.TrimSpace(r.settlementRunID)),
-		ToolCallID:      strings.TrimSpace(toolID),
-		ToolName:        "terminal.exec",
-		Handle:          processID,
-		EffectAttemptID: authorization.effectAttemptID,
 	}
 	shell := strings.TrimSpace(r.shell)
 	if shell == "" {
@@ -4410,22 +3921,18 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 	defer endBusy()
 
 	startRequest := terminalProcessStartRequest{
-		ProcessID:             processID,
-		EndpointID:            strings.TrimSpace(r.endpointID),
-		ThreadID:              strings.TrimSpace(r.threadID),
-		RunID:                 strings.TrimSpace(r.id),
-		TurnID:                strings.TrimSpace(r.turnID),
-		ActiveSettlementOwner: settlementOwner,
-		SettlementTarget:      settlementTarget,
-		Finalize:              terminalHost.Finalize,
-		ToolID:                strings.TrimSpace(toolID),
-		ToolName:              "terminal.exec",
-		Command:               parsed.Command,
-		Stdin:                 parsed.Stdin,
-		CwdAbs:                cwdAbs,
-		Shell:                 shell,
-		Env:                   prependRedevenBinToEnv(processenv.Current()),
-		AuthorityBarrier:      r.floretAuthorityBarrier,
+		ProcessID:  processID,
+		EndpointID: strings.TrimSpace(r.endpointID),
+		ThreadID:   strings.TrimSpace(r.threadID),
+		RunID:      strings.TrimSpace(r.id),
+		TurnID:     strings.TrimSpace(r.turnID),
+		ToolID:     strings.TrimSpace(toolID),
+		ToolName:   "terminal.exec",
+		Command:    parsed.Command,
+		Stdin:      parsed.Stdin,
+		CwdAbs:     cwdAbs,
+		Shell:      shell,
+		Env:        prependRedevenBinToEnv(processenv.Current()),
 	}
 	r.muExecution.Lock()
 	if r.executionClosed {
@@ -4445,17 +3952,7 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 	result := terminalProcessResultPayload(snapshot)
 	outcome.Result = result
 	if snapshot.Status == terminalProcessStatusRunning {
-		snapshot = proc.MarkPending()
-		result = terminalProcessResultPayload(snapshot)
-		outcome.Result = result
-		outcome.Pending = &PendingToolResult{
-			Handle:      snapshot.ProcessID,
-			Summary:     "Terminal process is running",
-			Instruction: "Use this handle value as process_id for terminal.read, terminal.write, or terminal.terminate.",
-			Metadata: map[string]string{
-				"process_id": snapshot.ProcessID,
-			},
-		}
+		outcome.Success = true
 		return outcome, nil
 	}
 	if snapshot.Status == terminalProcessStatusCanceled {

@@ -3,7 +3,6 @@
 import { Show, createContext, createEffect, createSignal, useContext } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { flowerTurnAdmissionUncertainFailure } from '../../../../flower_ui/src/flowerTurnAdmission';
 
 const EnvContextMock = createContext({} as any);
 const FilePreviewContextMock = createContext({} as any);
@@ -1097,39 +1096,6 @@ describe('EnvAppShell desktop floating surfaces', () => {
       expect(host.querySelector('[data-testid="env-ai-page"]')).toBe(flowerSurface);
       expect(host.querySelector('[data-testid="activity-flower-focused-thread"]')?.textContent).toBe('thread-launched');
       expect(envAIPageMountSequence).toBe(1);
-    } finally {
-      dispose();
-    }
-  });
-
-  it('hands off an uncertain admission without leaving a retryable launcher draft', async () => {
-    desktopViewMode = 'activity';
-    flowerLaunchTurnMock.mockRejectedValueOnce(flowerTurnAdmissionUncertainFailure(
-      new Error('Admission response was lost.'),
-      'client-uncertain-launcher',
-      { thread_id: 'thread-uncertain-launcher', turn_id: 'turn-uncertain-launcher' },
-    ));
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-
-    const { EnvAppShell } = await import('./EnvAppShell');
-    const dispose = render(() => <EnvAppShell />, host);
-
-    try {
-      await flushAsync();
-      await flushAsync();
-
-      (host.querySelector('[data-testid="activity-open-flower-launcher"]') as HTMLButtonElement).click();
-      await flushAsync();
-      (host.querySelector('[data-testid="flower-turn-launcher-send"]') as HTMLButtonElement).click();
-      await flushAsync();
-
-      expect(flowerLaunchTurnMock).toHaveBeenCalledTimes(1);
-      expect(host.querySelector('[data-testid="flower-turn-launcher"]')).toBeNull();
-      expect(host.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation')).toBe('expanded');
-      expect(host.querySelector('[data-testid="activity-flower-focused-thread"]')?.textContent).toBe('thread-uncertain-launcher');
-      expect(host.querySelector('[data-testid="env-ai-focused-thread"]')?.textContent).toBe('');
-      expect(setSidebarActiveTabMock).not.toHaveBeenCalledWith('ai', expect.anything());
     } finally {
       dispose();
     }

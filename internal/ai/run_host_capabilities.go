@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	flruntime "github.com/floegence/floret/v3/runtime"
+	"github.com/floegence/floret/v4/identity"
 	"github.com/floegence/redeven/internal/config"
 )
 
@@ -13,18 +13,14 @@ import (
 // exact root-thread runtime. It intentionally contains no Service, Floret
 // bootstrap, lifecycle coordinator, or capability binder.
 type runHostCapabilities struct {
-	authorityThreadID                     string
-	broadcastThreadState                  func(string, string, string, string)
-	broadcastThreadSummary                func() error
-	replaceLiveDraftWithCanonicalTimeline func(context.Context, string, string, string, string) error
-	lastVisibleTimelineAnchor             func(context.Context) (FlowerTimelineAnchor, error)
-	releasePendingTurnCommandAdmission    func(context.Context, string, string, string, string) error
-	lockEffectAuthority                   func(threadEffectJoin) (func(), error)
-	resolveRunModel                       func(context.Context, *config.AIConfig, string, string, *run) (resolvedRunModel, error)
-	subagentRuntime                       func() *floretSubagentRuntime
-	publishSubagentsPatch                 func(context.Context)
-	openLiveAttachment                    func(context.Context, UploadOwner, string) (openedCanonicalAttachment, error)
-	terminal                              runTerminalHost
+	authorityThreadID         string
+	broadcastThreadState      func(string, string, string, string)
+	broadcastThreadSummary    func() error
+	lastVisibleTimelineAnchor func(context.Context) (FlowerTimelineAnchor, error)
+	resolveRunModel           func(context.Context, *config.AIConfig, string, string, *run) (resolvedRunModel, error)
+	publishSubagentsPatch     func(context.Context)
+	openLiveAttachment        func(context.Context, UploadOwner, string) (openedCanonicalAttachment, error)
+	terminal                  runTerminalHost
 }
 
 func (s *Service) bindRunHostCapabilities(endpointID string, threadID string) (runHostCapabilities, error) {
@@ -36,32 +32,25 @@ func (s *Service) bindRunHostCapabilities(endpointID string, threadID string) (r
 	if endpointID == "" || threadID == "" {
 		return runHostCapabilities{}, errors.New("run host authority identity is incomplete")
 	}
-	if s.threadMgr == nil {
-		return runHostCapabilities{}, errors.New("run lifecycle authority is unavailable")
-	}
 	host, err := s.bindExactRunExecutionCapabilities(endpointID, threadID, threadID)
 	if err != nil {
 		return runHostCapabilities{}, err
 	}
 	host.broadcastThreadState = func(runID string, status string, errCode string, runErr string) {
-		s.broadcastThreadState(endpointID, threadID, runID, status, errCode, runErr)
+		if s.threadRuntime == nil {
+			return
+		}
+		if current, err := s.threadRuntime.View(context.Background(), identity.ThreadID(threadID)); err == nil {
+			s.publishFlowerRuntimeCurrent(endpointID, current)
+		}
 	}
 	host.broadcastThreadSummary = func() error {
-		return s.broadcastThreadSummaryChecked(endpointID, threadID)
-	}
-	host.replaceLiveDraftWithCanonicalTimeline = func(ctx context.Context, runID string, turnID string, messageID string, reason string) error {
-		return s.replaceFlowerLiveDraftWithCanonicalTimeline(ctx, endpointID, threadID, runID, turnID, messageID, reason)
+		return s.broadcastThreadSummary(endpointID, threadID)
 	}
 	host.lastVisibleTimelineAnchor = func(ctx context.Context) (FlowerTimelineAnchor, error) {
-		return s.lastVisibleFlowerTimelineAnchor(ctx, endpointID, threadID)
-	}
-	host.releasePendingTurnCommandAdmission = func(ctx context.Context, commandID string, turnID string, runID string, targetLane string) error {
-		return s.releasePendingTurnCommandAdmission(ctx, endpointID, threadID, commandID, turnID, runID, targetLane)
+		return FlowerTimelineAnchor{}, nil
 	}
 	host.resolveRunModel = s.resolveRunModel
-	host.subagentRuntime = func() *floretSubagentRuntime {
-		return s.subagentRuntimeForParent(endpointID, threadID)
-	}
 	host.publishSubagentsPatch = func(ctx context.Context) {
 		s.publishFlowerSubagentsPatch(ctx, endpointID, threadID)
 	}
@@ -79,8 +68,8 @@ func (s *Service) bindRunHostCapabilities(endpointID string, threadID string) (r
 // the permission authority but cannot derive another child or mutate root
 // admission and presentation state.
 func (s *Service) bindExactRunExecutionCapabilities(endpointID string, executionThreadID string, effectAuthorityThreadID string) (runHostCapabilities, error) {
-	if s == nil || s.threadMgr == nil {
-		return runHostCapabilities{}, errors.New("run lifecycle authority is unavailable")
+	if s == nil {
+		return runHostCapabilities{}, errors.New("run effect adapter is unavailable")
 	}
 	endpointID = strings.TrimSpace(endpointID)
 	executionThreadID = strings.TrimSpace(executionThreadID)
@@ -88,26 +77,21 @@ func (s *Service) bindExactRunExecutionCapabilities(endpointID string, execution
 	if endpointID == "" || executionThreadID == "" || effectAuthorityThreadID == "" {
 		return runHostCapabilities{}, errors.New("run execution authority identity is incomplete")
 	}
-	if s.pendingToolRecovery == nil {
-		return runHostCapabilities{}, errors.New("Floret pending tool recovery coordinator is unavailable")
-	}
+	s.mu.Lock()
+	terminalProcesses := s.terminalProcesses
+	s.mu.Unlock()
 	terminal, err := newBoundRunTerminalHost(
-		s.terminalProcesses,
+		terminalProcesses,
 		endpointID,
 		executionThreadID,
 		effectAuthorityThreadID,
-		s.pendingToolRecovery,
-		s.finalizeTerminalProcess,
 	)
 	if err != nil {
 		return runHostCapabilities{}, err
 	}
 	return runHostCapabilities{
 		authorityThreadID: effectAuthorityThreadID,
-		lockEffectAuthority: func(join threadEffectJoin) (func(), error) {
-			return s.threadMgr.lockThreadEffect(endpointID, effectAuthorityThreadID, executionThreadID, join)
-		},
-		terminal: terminal,
+		terminal:          terminal,
 	}, nil
 }
 
@@ -115,7 +99,6 @@ type runTerminalHost interface {
 	Start(terminalProcessStartRequest) (*terminalProcess, error)
 	Get(string) (*terminalProcess, error)
 	ProcessesForRun(string) []*terminalProcess
-	Finalize(context.Context, floretPendingToolSettler, flruntime.PendingToolSettlementTarget, terminalProcessSnapshot) error
 }
 
 type boundRunTerminalHost struct {
@@ -123,8 +106,6 @@ type boundRunTerminalHost struct {
 	endpointID        string
 	threadID          string
 	authorityThreadID string
-	recovery          floretPendingToolRecoveryCoordinator
-	finalize          terminalProcessFinalizeFunc
 }
 
 func newBoundRunTerminalHost(
@@ -132,10 +113,8 @@ func newBoundRunTerminalHost(
 	endpointID string,
 	threadID string,
 	authorityThreadID string,
-	recovery floretPendingToolRecoveryCoordinator,
-	finalize terminalProcessFinalizeFunc,
 ) (runTerminalHost, error) {
-	if manager == nil || recovery == nil || finalize == nil {
+	if manager == nil {
 		return nil, errors.New("terminal process authority is unavailable")
 	}
 	endpointID = strings.TrimSpace(endpointID)
@@ -146,7 +125,7 @@ func newBoundRunTerminalHost(
 	}
 	return boundRunTerminalHost{
 		manager: manager, endpointID: endpointID, threadID: threadID,
-		authorityThreadID: authorityThreadID, recovery: recovery, finalize: finalize,
+		authorityThreadID: authorityThreadID,
 	}, nil
 }
 
@@ -154,8 +133,6 @@ func (h boundRunTerminalHost) Start(req terminalProcessStartRequest) (*terminalP
 	if strings.TrimSpace(req.EndpointID) != h.endpointID || strings.TrimSpace(req.ThreadID) != h.threadID {
 		return nil, errors.New("terminal process start authority mismatch")
 	}
-	req.RecoveryCoordinator = h.recovery
-	req.RecoveryAuthorityThreadID = h.authorityThreadID
 	return h.manager.Start(req)
 }
 
@@ -173,11 +150,4 @@ func (h boundRunTerminalHost) Get(processID string) (*terminalProcess, error) {
 
 func (h boundRunTerminalHost) ProcessesForRun(runID string) []*terminalProcess {
 	return h.manager.ProcessesForRun(h.endpointID, h.threadID, strings.TrimSpace(runID))
-}
-
-func (h boundRunTerminalHost) Finalize(ctx context.Context, owner floretPendingToolSettler, target flruntime.PendingToolSettlementTarget, snapshot terminalProcessSnapshot) error {
-	if strings.TrimSpace(snapshot.EndpointID) != h.endpointID || strings.TrimSpace(snapshot.ThreadID) != h.threadID {
-		return errors.New("terminal process finalize authority mismatch")
-	}
-	return h.finalize(ctx, owner, target, snapshot)
 }

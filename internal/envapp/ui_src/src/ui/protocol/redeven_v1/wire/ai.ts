@@ -69,28 +69,15 @@ export type wire_ai_send_user_turn_req = {
   };
   expected_run_id?: string;
   queue_after_waiting_user?: boolean;
-  source_followup_id?: string;
 };
 
 export type wire_ai_send_user_turn_resp = {
-  admission_id?: string;
   run_id: string;
   turn_id: string;
   kind: string;
   queue_id?: string;
   queue_position?: number;
   consumed_waiting_prompt_id?: string;
-};
-
-export type wire_ai_compact_thread_context_req = {
-  thread_id: string;
-  active_run_id?: string;
-};
-
-export type wire_ai_compact_thread_context_resp = {
-  request_id?: string;
-  kind: string;
-  error_code?: string;
 };
 
 export type wire_ai_submit_request_user_input_response_req = {
@@ -107,7 +94,6 @@ export type wire_ai_submit_request_user_input_response_req = {
     reasoning_selection?: FlowerReasoningSelection;
   };
   expected_run_id?: string;
-  source_followup_id?: string;
 };
 
 export type wire_ai_submit_request_user_input_response_resp = {
@@ -115,25 +101,6 @@ export type wire_ai_submit_request_user_input_response_resp = {
   turn_id: string;
   kind: string;
   consumed_waiting_prompt_id?: string;
-};
-
-export type wire_ai_active_run = {
-  thread_id: string;
-  run_id: string;
-};
-
-export type wire_ai_subscribe_summary_req = Record<string, never>;
-
-export type wire_ai_subscribe_summary_resp = {
-  active_runs: wire_ai_active_run[];
-};
-
-export type wire_ai_subscribe_thread_req = {
-  thread_id: string;
-};
-
-export type wire_ai_subscribe_thread_resp = {
-  run_id?: string;
 };
 
 export type wire_ai_event_notify = {

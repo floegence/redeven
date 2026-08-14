@@ -85,15 +85,15 @@ func (s *Service) normalizeInputAttachments(ctx context.Context, owner UploadOwn
 	return input, infoByID, uniqueStrings(uploadIDs), nil
 }
 
-func (s *Service) prepareInputAttachmentAdmission(
+func (s *Service) prepareInputAttachmentClaimPolicy(
 	ctx context.Context,
 	owner UploadOwner,
 	stagingScope *threadstore.UploadStagingScope,
 	modelID string,
 	input RunInput,
-) (RunInput, []string, threadstore.AttachmentAdmission, error) {
-	contract := threadstore.AttachmentAdmission{OwnerUserHash: owner.OwnerUserHash}
-	if len(input.Attachments) > threadstore.AttachmentAdmissionMaxCount {
+) (RunInput, []string, threadstore.AttachmentClaimPolicy, error) {
+	contract := threadstore.AttachmentClaimPolicy{OwnerUserHash: owner.OwnerUserHash}
+	if len(input.Attachments) > threadstore.AttachmentClaimPolicyMaxCount {
 		return input, nil, contract, errors.New("attachment count exceeds turn limit")
 	}
 	seen := make(map[string]struct{}, len(input.Attachments))
@@ -128,7 +128,7 @@ func (s *Service) prepareInputAttachmentAdmission(
 	for _, route := range capability.MediaTypes {
 		contract.Routes[strings.ToLower(strings.TrimSpace(route.MediaType))] = strings.TrimSpace(route.Mode)
 	}
-	if capability.MaxCount != threadstore.AttachmentAdmissionMaxCount || capability.MaxTurnBytes != threadstore.AttachmentAdmissionMaxTurnBytes {
+	if capability.MaxCount != threadstore.AttachmentClaimPolicyMaxCount || capability.MaxTurnBytes != threadstore.AttachmentClaimPolicyMaxTurnBytes {
 		return input, nil, contract, errors.New("invalid attachment admission capability")
 	}
 	if len(uploadIDs) == 0 {
@@ -504,22 +504,6 @@ func (s *Service) runBackgroundMaintenance(reason string) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), uploadCleanupSweepTimeout)
 	defer cancel()
-	creates, createErr := s.replayPendingThreadCreateOperations(ctx)
-	if createErr != nil {
-		if s.log != nil {
-			s.log.Warn("ai thread create replay failed", "reason", reason, "error", createErr)
-		}
-	} else if creates > 0 && s.log != nil {
-		s.log.Info("ai thread create replay completed", "reason", reason, "count", creates)
-	}
-	deletes, deleteErr := s.replayPendingThreadDeletes(ctx, threadDeleteReplayBatchSize)
-	if deleteErr != nil {
-		if s.log != nil {
-			s.log.Warn("ai thread delete replay failed", "reason", reason, "error", deleteErr)
-		}
-	} else if deletes > 0 && s.log != nil {
-		s.log.Info("ai thread delete replay completed", "reason", reason, "count", deletes)
-	}
 	expiredScopes, expiredScopeErr := s.sweepExpiredUploadStagingScopes(ctx)
 	if expiredScopeErr != nil {
 		if s.log != nil {
@@ -543,22 +527,6 @@ func (s *Service) runBackgroundMaintenance(reason string) {
 		}
 	} else if orphans > 0 && s.log != nil {
 		s.log.Info("ai upload orphan recovery reclaimed artifacts", "reason", reason, "count", orphans)
-	}
-	forks, forkErr := s.replayPendingThreadForkOperations(ctx)
-	if forkErr != nil {
-		if s.log != nil {
-			s.log.Warn("ai thread fork replay failed", "reason", reason, "error", forkErr)
-		}
-	} else if forks > 0 && s.log != nil {
-		s.log.Info("ai thread fork replay completed", "reason", reason, "count", forks)
-	}
-	broadcasts, broadcastErr := s.publishUnbroadcastThreadForkOperations(ctx)
-	if broadcastErr != nil {
-		if s.log != nil {
-			s.log.Warn("ai thread fork broadcast recovery failed", "reason", reason, "error", broadcastErr)
-		}
-	} else if broadcasts > 0 && s.log != nil {
-		s.log.Info("ai thread fork broadcast recovery completed", "reason", reason, "count", broadcasts)
 	}
 }
 

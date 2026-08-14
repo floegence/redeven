@@ -3,7 +3,6 @@ package appserver
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/base32"
 	"encoding/json"
 	"errors"
@@ -21,9 +20,9 @@ import (
 	"testing/fstest"
 	"time"
 
-	"github.com/floegence/floret/v3/identity"
-	flprovider "github.com/floegence/floret/v3/provider"
-	flruntime "github.com/floegence/floret/v3/runtime"
+	"github.com/floegence/floret/v4/identity"
+	flprovider "github.com/floegence/floret/v4/provider"
+	flruntime "github.com/floegence/floret/v4/runtime"
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/auditlog"
 	"github.com/floegence/redeven/internal/codeapp/codeserver"
@@ -2644,6 +2643,7 @@ func TestServer_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 		StateDir:     stateDir,
 		AgentHomeDir: t.TempDir(),
 		Shell:        "/bin/sh",
+		Config:       appserverTestAIConfig(),
 	}
 	aiSvc, err := ai.NewService(aiOptions)
 	if err != nil {
@@ -2655,20 +2655,22 @@ func TestServer_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 
 	metaByChannel := map[string]session.Meta{
 		"ch_test_ai_read_state_user_1": {
-			EndpointID:   "env_read_state",
-			UserPublicID: "user_1",
-			UserEmail:    "user1@example.com",
-			CanRead:      true,
-			CanWrite:     true,
-			CanExecute:   true,
+			EndpointID:        "env_read_state",
+			NamespacePublicID: "ns_read_state",
+			UserPublicID:      "user_1",
+			UserEmail:         "user1@example.com",
+			CanRead:           true,
+			CanWrite:          true,
+			CanExecute:        true,
 		},
 		"ch_test_ai_read_state_user_2": {
-			EndpointID:   "env_read_state",
-			UserPublicID: "user_2",
-			UserEmail:    "user2@example.com",
-			CanRead:      true,
-			CanWrite:     true,
-			CanExecute:   true,
+			EndpointID:        "env_read_state",
+			NamespacePublicID: "ns_read_state",
+			UserPublicID:      "user_2",
+			UserEmail:         "user2@example.com",
+			CanRead:           true,
+			CanWrite:          true,
+			CanExecute:        true,
 		},
 	}
 
@@ -2966,12 +2968,13 @@ func TestServer_AILegacyThreadLiveEventsRouteIsRemoved(t *testing.T) {
 	}
 	channelID := "ch_test_ai_live_events_read"
 	meta := session.Meta{
-		EndpointID:   "env_live_events_read",
-		UserPublicID: "user_live_events_read",
-		UserEmail:    "live-events-read@example.com",
-		CanRead:      true,
-		CanWrite:     true,
-		CanExecute:   true,
+		EndpointID:        "env_live_events_read",
+		NamespacePublicID: "ns_live_events_read",
+		UserPublicID:      "user_live_events_read",
+		UserEmail:         "live-events-read@example.com",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
 	}
 	cfgPath := writeTestConfig(t)
 	store := openTestThreadReadStateStore(t)
@@ -2980,6 +2983,7 @@ func TestServer_AILegacyThreadLiveEventsRouteIsRemoved(t *testing.T) {
 		StateDir:     stateDir,
 		AgentHomeDir: t.TempDir(),
 		Shell:        "/bin/sh",
+		Config:       appserverTestAIConfig(),
 	})
 	if err != nil {
 		t.Fatalf("ai.NewService: %v", err)
@@ -3027,18 +3031,20 @@ func TestServer_AIThreadForkDecodesBodyStrictly(t *testing.T) {
 	}
 	channelID := "ch_test_ai_thread_fork"
 	meta := session.Meta{
-		EndpointID:   "env_fork",
-		UserPublicID: "user_1",
-		UserEmail:    "user1@example.com",
-		CanRead:      true,
-		CanWrite:     true,
-		CanExecute:   true,
+		EndpointID:        "env_fork",
+		NamespacePublicID: "ns_fork",
+		UserPublicID:      "user_1",
+		UserEmail:         "user1@example.com",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
 	}
 	stateDir := t.TempDir()
 	aiSvc, err := ai.NewService(ai.Options{
 		StateDir:     stateDir,
 		AgentHomeDir: t.TempDir(),
 		Shell:        "/bin/sh",
+		Config:       appserverTestAIConfig(),
 	})
 	if err != nil {
 		t.Fatalf("ai.NewService: %v", err)
@@ -3161,6 +3167,7 @@ func TestServer_AIThreadDeleteRemovesReadStateForAllUsers(t *testing.T) {
 		StateDir:               stateDir,
 		AgentHomeDir:           t.TempDir(),
 		Shell:                  "/bin/sh",
+		Config:                 appserverTestAIConfig(),
 		FlowerReadStateCleaner: store,
 	})
 	if err != nil {
@@ -3176,20 +3183,22 @@ func TestServer_AIThreadDeleteRemovesReadStateForAllUsers(t *testing.T) {
 
 	metaByChannel := map[string]session.Meta{
 		"ch_test_ai_delete_cleanup_user_1": {
-			EndpointID:   "env_delete_cleanup",
-			UserPublicID: "user_1",
-			UserEmail:    "user1@example.com",
-			CanRead:      true,
-			CanWrite:     true,
-			CanExecute:   true,
+			EndpointID:        "env_delete_cleanup",
+			NamespacePublicID: "ns_delete_cleanup",
+			UserPublicID:      "user_1",
+			UserEmail:         "user1@example.com",
+			CanRead:           true,
+			CanWrite:          true,
+			CanExecute:        true,
 		},
 		"ch_test_ai_delete_cleanup_user_2": {
-			EndpointID:   "env_delete_cleanup",
-			UserPublicID: "user_2",
-			UserEmail:    "user2@example.com",
-			CanRead:      true,
-			CanWrite:     true,
-			CanExecute:   true,
+			EndpointID:        "env_delete_cleanup",
+			NamespacePublicID: "ns_delete_cleanup",
+			UserPublicID:      "user_2",
+			UserEmail:         "user2@example.com",
+			CanRead:           true,
+			CanWrite:          true,
+			CanExecute:        true,
 		},
 	}
 	resolveMeta := func(channelID string) (*session.Meta, bool) {
@@ -3264,7 +3273,7 @@ func TestServer_AIThreadDeleteRemovesReadStateForAllUsers(t *testing.T) {
 	}
 }
 
-func TestServer_AIThreadDeleteReturnsAcceptedForPersistedPendingOperation(t *testing.T) {
+func TestServer_AIThreadDeleteDoesNotWaitForReadStateCleanup(t *testing.T) {
 	t.Parallel()
 
 	dist := fstest.MapFS{
@@ -3277,6 +3286,7 @@ func TestServer_AIThreadDeleteReturnsAcceptedForPersistedPendingOperation(t *tes
 		StateDir:               stateDir,
 		AgentHomeDir:           t.TempDir(),
 		Shell:                  "/bin/sh",
+		Config:                 appserverTestAIConfig(),
 		FlowerReadStateCleaner: &failingFlowerReadStateCleaner{err: errors.New("temporary read-state cleanup failure")},
 	})
 	if err != nil {
@@ -3287,7 +3297,7 @@ func TestServer_AIThreadDeleteReturnsAcceptedForPersistedPendingOperation(t *tes
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = aiSvc.Close() })
-	meta := session.Meta{EndpointID: "env_delete_pending", UserPublicID: "user_1", CanRead: true, CanWrite: true, CanExecute: true}
+	meta := session.Meta{EndpointID: "env_delete_pending", NamespacePublicID: "ns_delete_pending", UserPublicID: "user_1", CanRead: true, CanWrite: true, CanExecute: true}
 	thread, err := aiSvc.CreateThread(context.Background(), &meta, "Pending delete", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
@@ -3319,73 +3329,27 @@ func TestServer_AIThreadDeleteReturnsAcceptedForPersistedPendingOperation(t *tes
 	if invalidQuery.Code != http.StatusBadRequest || !strings.Contains(invalidQuery.Body.String(), "invalid_thread_delete_query") {
 		t.Fatalf("invalid force query status=%d body=%s", invalidQuery.Code, invalidQuery.Body.String())
 	}
-	first := performServerRequest(srv, http.MethodDelete, deletePath, envOriginWithChannel(channelID), "")
-	if first.Code != http.StatusAccepted {
-		t.Fatalf("first DELETE status=%d body=%s", first.Code, first.Body.String())
+	response := performServerRequest(srv, http.MethodDelete, deletePath, envOriginWithChannel(channelID), "")
+	if response.Code != http.StatusOK {
+		t.Fatalf("DELETE status=%d body=%s", response.Code, response.Body.String())
 	}
-	var firstBody struct {
+	var body struct {
 		Data ai.ThreadDeleteResult `json:"data"`
 	}
-	if err := json.Unmarshal(first.Body.Bytes(), &firstBody); err != nil {
-		t.Fatalf("decode first DELETE: %v", err)
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode DELETE: %v", err)
 	}
-	if firstBody.Data.OperationID == "" || firstBody.Data.Status != ai.ThreadDeleteStatusPending || !firstBody.Data.IntentPersisted {
-		t.Fatalf("first DELETE body=%s", first.Body.String())
+	if body.Data.OperationID == "" || body.Data.Status != ai.ThreadDeleteStatusCommitted || !body.Data.IntentPersisted {
+		t.Fatalf("DELETE body=%s", response.Body.String())
 	}
 	auditEntries, err := auditStore.List(1)
-	if err != nil || len(auditEntries) != 1 || auditEntries[0].Status != "accepted" {
-		t.Fatalf("pending delete audit=%+v err=%v", auditEntries, err)
-	}
-
-	second := performServerRequest(srv, http.MethodDelete, deletePath, envOriginWithChannel(channelID), "")
-	if second.Code != http.StatusAccepted {
-		t.Fatalf("second DELETE status=%d body=%s", second.Code, second.Body.String())
-	}
-	var secondBody struct {
-		Data ai.ThreadDeleteResult `json:"data"`
-	}
-	if err := json.Unmarshal(second.Body.Bytes(), &secondBody); err != nil {
-		t.Fatalf("decode second DELETE: %v", err)
-	}
-	if secondBody.Data.OperationID != firstBody.Data.OperationID || secondBody.Data.Status != ai.ThreadDeleteStatusPending {
-		t.Fatalf("second DELETE body=%s, want stable operation %s", second.Body.String(), firstBody.Data.OperationID)
-	}
-
-	raw, err := sql.Open("sqlite", filepath.Join(stateDir, "ai", "threads.sqlite"))
-	if err != nil {
-		t.Fatalf("open threadstore for snapshot corruption: %v", err)
-	}
-	if _, err := raw.Exec(`UPDATE ai_thread_delete_operations SET snapshot_json = '{' WHERE operation_id = ?`, firstBody.Data.OperationID); err != nil {
-		_ = raw.Close()
-		t.Fatalf("corrupt delete snapshot: %v", err)
-	}
-	if err := raw.Close(); err != nil {
-		t.Fatalf("close threadstore corruption handle: %v", err)
-	}
-
-	failedResponse := performServerRequest(srv, http.MethodDelete, deletePath, envOriginWithChannel(channelID), "")
-	if failedResponse.Code != http.StatusInternalServerError {
-		t.Fatalf("failed DELETE status=%d body=%s", failedResponse.Code, failedResponse.Body.String())
-	}
-	var failedBody struct {
-		OK        bool                  `json:"ok"`
-		ErrorCode string                `json:"error_code"`
-		Data      ai.ThreadDeleteResult `json:"data"`
-	}
-	if err := json.Unmarshal(failedResponse.Body.Bytes(), &failedBody); err != nil {
-		t.Fatalf("decode failed DELETE: %v", err)
-	}
-	if failedBody.OK || failedBody.ErrorCode != "AI_THREAD_DELETE_OPERATION_FAILED" || failedBody.Data.OperationID != firstBody.Data.OperationID || failedBody.Data.Status != ai.ThreadDeleteStatusFailed || !failedBody.Data.IntentPersisted {
-		t.Fatalf("failed DELETE body=%s, want failed operation %s", failedResponse.Body.String(), firstBody.Data.OperationID)
-	}
-	auditEntries, err = auditStore.List(1)
-	if err != nil || len(auditEntries) != 1 || auditEntries[0].Status != "failure" {
-		t.Fatalf("failed delete audit=%+v err=%v", auditEntries, err)
+	if err != nil || len(auditEntries) != 1 || auditEntries[0].Status != "success" {
+		t.Fatalf("delete audit=%+v err=%v", auditEntries, err)
 	}
 
 	missing := performServerRequest(srv, http.MethodDelete, "/_redeven_proxy/api/ai/threads/thread_missing_delete_operation", envOriginWithChannel(channelID), "")
 	if missing.Code != http.StatusNotFound {
-		t.Fatalf("missing DELETE status=%d body=%s", missing.Code, missing.Body.String())
+		t.Fatalf("second DELETE status=%d body=%s", missing.Code, missing.Body.String())
 	}
 
 	detail := performServerRequest(srv, http.MethodGet, deletePath, envOriginWithChannel(channelID), "")

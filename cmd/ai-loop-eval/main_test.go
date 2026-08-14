@@ -3,7 +3,48 @@ package main
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/floegence/floret/v4/identity"
+	"github.com/floegence/floret/v4/observation"
+	flruntime "github.com/floegence/floret/v4/runtime"
 )
+
+func TestObserveTypedTurnUsesInteractionAndTurnScopedToolState(t *testing.T) {
+	t.Parallel()
+
+	turnID := identity.TurnID("turn_eval_1")
+	current := flruntime.ThreadView{
+		Thread:   flruntime.ThreadSnapshot{ID: identity.ThreadID("thread_eval")},
+		Version:  3,
+		Activity: flruntime.ThreadActivityActive,
+		TurnID:   turnID,
+		Interactions: []flruntime.ThreadInteraction{{
+			ID: "interaction_approval", Kind: flruntime.ThreadInteractionApproval,
+		}},
+		Items: []flruntime.ThreadItem{
+			{ID: "tool_current", TurnID: turnID, Kind: flruntime.ThreadItemTool, Activity: &observation.ActivityItem{ToolID: "tool_current", ToolName: "terminal.exec", Status: observation.ActivityStatusWaiting, RequiresApproval: true}},
+			{ID: "tool_previous", TurnID: identity.TurnID("turn_old"), Kind: flruntime.ThreadItemTool, Activity: &observation.ActivityItem{ToolID: "tool_previous", ToolName: "terminal.exec", Status: observation.ActivityStatusSuccess}},
+		},
+	}
+
+	observation := observeTypedTurn(current, turnID)
+	if observation.Terminal {
+		t.Fatal("active turn was reported terminal")
+	}
+	if len(observation.PendingApprovals) != 1 || observation.PendingApprovals[0] != "interaction_approval" {
+		t.Fatalf("pending approvals=%v", observation.PendingApprovals)
+	}
+	if observation.ToolCallCount != 1 || observation.ToolErrorCount != 0 {
+		t.Fatalf("tool counts=(%d,%d), want current turn only", observation.ToolCallCount, observation.ToolErrorCount)
+	}
+
+	current.Activity = flruntime.ThreadActivityIdle
+	current.Outcome = flruntime.TurnOutcomeCompleted
+	observation = observeTypedTurn(current, turnID)
+	if !observation.Terminal || observation.RunError != "" {
+		t.Fatalf("completed observation=%+v", observation)
+	}
+}
 
 func TestMatchesRequirement_WithAlternatives(t *testing.T) {
 	t.Parallel()
@@ -42,31 +83,6 @@ func TestRenderTaskTurns_ReplacesWorkspacePlaceholder(t *testing.T) {
 	}
 	if turns[1] != "continue in /tmp/run" {
 		t.Fatalf("turns[1]=%q", turns[1])
-	}
-}
-
-func TestStreamMonitorConsumesSnakeCaseActivityTimelineItems(t *testing.T) {
-	t.Parallel()
-
-	monitor := newStreamMonitor(nil, nil, "thread_1", "run_1", nil, func() {})
-	monitor.consumeBlock(map[string]any{
-		"type": "activity-timeline",
-		"items": []any{
-			map[string]any{
-				"item_id":           "tool_1",
-				"tool_id":           "tool_1",
-				"tool_name":         "terminal.exec",
-				"kind":              "tool",
-				"status":            "success",
-				"severity":          "quiet",
-				"needs_attention":   false,
-				"requires_approval": false,
-			},
-		},
-	})
-
-	if got := monitor.toolSigCounter["terminal.exec|{}"]; got != 1 {
-		t.Fatalf("tool signature count=%d, want 1", got)
 	}
 }
 

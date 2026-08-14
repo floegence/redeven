@@ -12,14 +12,14 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/floegence/floret/v3/identity"
-	flprovider "github.com/floegence/floret/v3/provider"
-	flruntime "github.com/floegence/floret/v3/runtime"
+	"github.com/floegence/floret/v4/identity"
+	flprovider "github.com/floegence/floret/v4/provider"
+	flruntime "github.com/floegence/floret/v4/runtime"
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/session"
 )
 
-func TestServer_AIThreadLiveBootstrapProjectsCanonicalReferencesWithoutHostSecrets(t *testing.T) {
+func TestServer_AIThreadDetailProjectsCanonicalReferencesWithoutHostSecrets(t *testing.T) {
 	t.Parallel()
 
 	const sentinelPath = "/private/workspace/secret/main.ts"
@@ -28,18 +28,20 @@ func TestServer_AIThreadLiveBootstrapProjectsCanonicalReferencesWithoutHostSecre
 	logger := slog.New(slog.NewJSONHandler(logs, nil))
 	stateDir := t.TempDir()
 	meta := session.Meta{
-		EndpointID:   "env_reference_projection",
-		UserPublicID: "user_reference_projection",
-		UserEmail:    "reference-projection@example.com",
-		CanRead:      true,
-		CanWrite:     true,
-		CanExecute:   true,
+		EndpointID:        "env_reference_projection",
+		NamespacePublicID: "ns_reference_projection",
+		UserPublicID:      "user_reference_projection",
+		UserEmail:         "reference-projection@example.com",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
 	}
 	aiOptions := ai.Options{
 		Logger:       logger,
 		StateDir:     stateDir,
 		AgentHomeDir: t.TempDir(),
 		Shell:        "/bin/sh",
+		Config:       appserverTestAIConfig(),
 	}
 	aiSvc, err := ai.NewService(aiOptions)
 	if err != nil {
@@ -73,9 +75,9 @@ func TestServer_AIThreadLiveBootstrapProjectsCanonicalReferencesWithoutHostSecre
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	rr := performServerRequest(srv, http.MethodGet, "/_redeven_proxy/api/ai/threads/"+url.PathEscape(thread.ThreadID)+"/live/bootstrap", envOriginWithChannel(channelID), "")
+	rr := performServerRequest(srv, http.MethodGet, "/_redeven_proxy/api/ai/threads/"+url.PathEscape(thread.ThreadID), envOriginWithChannel(channelID), "")
 	if rr.Code != http.StatusOK {
-		t.Fatalf("live bootstrap status=%d body=%s", rr.Code, rr.Body.String())
+		t.Fatalf("thread detail status=%d body=%s", rr.Code, rr.Body.String())
 	}
 	body := rr.Body.String()
 	for _, forbidden := range []string{sentinelPath, sentinelLocator, "resource_ref", "context_action"} {
@@ -90,30 +92,22 @@ func TestServer_AIThreadLiveBootstrapProjectsCanonicalReferencesWithoutHostSecre
 	var response struct {
 		OK   bool `json:"ok"`
 		Data struct {
-			TimelineMessages []struct {
-				Role       string           `json:"role"`
-				References []map[string]any `json:"references"`
-			} `json:"timeline_messages"`
+			Current struct {
+				Items []struct {
+					Kind string `json:"kind"`
+					Text string `json:"text"`
+				} `json:"items"`
+			} `json:"current"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
-		t.Fatalf("unmarshal live bootstrap: %v", err)
+		t.Fatalf("unmarshal thread detail: %v", err)
 	}
-	if !response.OK || len(response.Data.TimelineMessages) != 2 {
-		t.Fatalf("bootstrap response=%#v, want canonical user and assistant messages", response)
+	if !response.OK || len(response.Data.Current.Items) < 2 {
+		t.Fatalf("thread detail response=%#v, want canonical user and assistant items", response)
 	}
-	references := response.Data.TimelineMessages[0].References
-	if response.Data.TimelineMessages[0].Role != "user" || len(references) != 2 {
-		t.Fatalf("user timeline message=%#v, want two canonical references", response.Data.TimelineMessages[0])
-	}
-	if references[0]["kind"] != "file" || references[0]["label"] != "main.ts" {
-		t.Fatalf("file reference=%#v", references[0])
-	}
-	if _, found := references[0]["text"]; found {
-		t.Fatalf("file reference exposed text=%#v", references[0])
-	}
-	if references[1]["kind"] != "text" || references[1]["text"] != "visible excerpt" || references[1]["truncated"] != true {
-		t.Fatalf("text reference=%#v", references[1])
+	if response.Data.Current.Items[0].Kind != "user" || response.Data.Current.Items[1].Kind != "assistant" || response.Data.Current.Items[1].Text != "canonical response" {
+		t.Fatalf("typed current items=%#v", response.Data.Current.Items)
 	}
 }
 

@@ -436,25 +436,6 @@ func TestExtractSQLTablesSupportsSQLiteInsertConflictActions(t *testing.T) {
 	}
 }
 
-func TestThreadstoreBoundaryManifestRejectsReceiptConsumerOutsideClosedSet(t *testing.T) {
-	table := ThreadstoreTableContract{
-		Table: "ai_turn_admission_receipts", Columns: []string{"queue_id"}, Owner: "redeven", Authority: "coordination_operation", DataClass: "coordination receipt",
-		AllowedPurpose: "coordinate admission", AllowedLookupKeys: []string{"queue_id"}, Consumers: []string{"turn admission coordinator"},
-		RetentionOrDeletion: "retry window", CanonicalIdentity: "integrity only", APIUIVisibility: "not exposed",
-		LifecycleProhibition: "must not provide Agent lifecycle inventory, timeline, status, or search",
-	}
-	query := ThreadstoreQueryContract{
-		ID: "threadstore.0ea12aa5ec35d13c", Path: "internal/ai/threadstore/admission_receipt.go", Function: "Store.GetPendingTurnAdmissionReceipt", Method: "QueryRowContext",
-		SQLSHA256: strings.Repeat("a", 64), Tables: []string{"ai_turn_admission_receipts"}, LookupKeys: []string{"queue_id"}, ReadColumns: []string{"queue_id"},
-		Action: "read", Consumer: "Store.GetPendingTurnAdmissionReceipt", ConsumerKind: "product_operation",
-	}
-	manifest := ThreadstoreBoundaryManifest{Version: ThreadstoreBoundaryManifestVersion, Tables: []ThreadstoreTableContract{table}, Queries: []ThreadstoreQueryContract{query}}
-	issues := ValidateThreadstoreBoundaryManifest(manifest, map[string][]string{"ai_turn_admission_receipts": {"queue_id"}}, nil, nil, []ThreadstoreQueryContract{query})
-	if !issuesContain(issues, "use is (read, product_operation), want (read, startup_recovery)") {
-		t.Fatalf("receipt consumer drift was accepted: %v", issues)
-	}
-}
-
 func issuesContain(issues []string, fragment string) bool {
 	for _, issue := range issues {
 		if strings.Contains(issue, fragment) {

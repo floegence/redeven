@@ -8,8 +8,8 @@ import (
 	"sync"
 	"testing"
 
-	flprovider "github.com/floegence/floret/v3/provider"
-	flruntime "github.com/floegence/floret/v3/runtime"
+	flprovider "github.com/floegence/floret/v4/provider"
+	flruntime "github.com/floegence/floret/v4/runtime"
 )
 
 type recordingPreparedGateway struct {

@@ -1,6 +1,7 @@
 package appserver
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"net/http"
@@ -102,16 +103,28 @@ func TestServer_AI_Permissions_AllowReadsAndProtectMutations(t *testing.T) {
 			t.Fatalf("GET %s unexpectedly denied: %s", path, rr.Body.String())
 		}
 	}
+	assertStreamingReadAllowed := func(path string) {
+		t.Helper()
+		ctx, cancel := context.WithCancel(context.Background())
+		req := httptest.NewRequest(http.MethodGet, path, nil).WithContext(ctx)
+		req.Header.Set("Origin", envOrigin)
+		rr := &cancelOnFlushResponseWriter{header: make(http.Header), cancel: cancel}
+		srv.serveHTTP(rr, req)
+		if rr.status == http.StatusForbidden {
+			t.Fatalf("GET %s unexpectedly denied: %s", path, rr.body.String())
+		}
+		if rr.status != http.StatusOK || !strings.Contains(rr.body.String(), `"kind":"ready"`) {
+			t.Fatalf("GET %s status=%d body=%s", path, rr.status, rr.body.String())
+		}
+	}
 
 	// Flower observation is read-only. Business mutations retain the full
 	// read/write/execute boundary.
 	assertForbidden(http.MethodGet, "/_redeven_proxy/api/ai/models")
 	assertReadAllowed("/_redeven_proxy/api/ai/threads")
 	assertReadAllowed("/_redeven_proxy/api/ai/threads/th_test")
-	assertReadAllowed("/_redeven_proxy/api/ai/threads/th_test/todos")
 	assertReadAllowed("/_redeven_proxy/api/ai/threads/th_test/messages")
-	assertReadAllowed("/_redeven_proxy/api/ai/threads/th_test/live/bootstrap")
-	assertReadAllowed("/_redeven_proxy/api/ai/flower/stream")
+	assertStreamingReadAllowed("/_redeven_proxy/api/ai/flower/stream")
 	assertForbidden(http.MethodPost, "/_redeven_proxy/api/ai/threads")
 	assertForbidden(http.MethodPatch, "/_redeven_proxy/api/ai/threads/th_test")
 	assertForbidden(http.MethodDelete, "/_redeven_proxy/api/ai/threads/th_test")

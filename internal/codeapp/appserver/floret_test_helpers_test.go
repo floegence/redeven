@@ -4,14 +4,26 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
-	flconfig "github.com/floegence/floret/v3/config"
-	"github.com/floegence/floret/v3/identity"
-	flprovider "github.com/floegence/floret/v3/provider"
-	flruntime "github.com/floegence/floret/v3/runtime"
-	flstorage "github.com/floegence/floret/v3/storage"
+	flconfig "github.com/floegence/floret/v4/config"
+	"github.com/floegence/floret/v4/identity"
+	flprovider "github.com/floegence/floret/v4/provider"
+	flruntime "github.com/floegence/floret/v4/runtime"
+	flstorage "github.com/floegence/floret/v4/storage"
 	"github.com/floegence/redeven/internal/ai"
+	redevenconfig "github.com/floegence/redeven/internal/config"
 )
+
+func appserverTestAIConfig() *redevenconfig.AIConfig {
+	return &redevenconfig.AIConfig{
+		CurrentModelID: "openai/gpt-5-mini",
+		Providers: []redevenconfig.AIProvider{{
+			ID: "openai", Name: "OpenAI", Type: "openai", BaseURL: "https://api.openai.com/v1",
+			Models: []redevenconfig.AIProviderModel{{ModelName: "gpt-5-mini"}},
+		}},
+	}
+}
 
 type staticAIServiceProvider struct {
 	service *ai.Service
@@ -112,7 +124,7 @@ func newAppserverTestFloretAgent(t *testing.T, gateway flprovider.Gateway) *flru
 	return agent
 }
 
-func runAppserverTestFloretTurn(t *testing.T, path string, threadID identity.ThreadID, gateway flprovider.Gateway, request appserverTestFloretTurnRequest) flruntime.ThreadTurnSnapshot {
+func runAppserverTestFloretTurn(t *testing.T, path string, threadID identity.ThreadID, gateway flprovider.Gateway, request appserverTestFloretTurnRequest) flruntime.ThreadView {
 	t.Helper()
 	host, err := flruntime.Open(context.Background(), flruntime.Options{
 		Storage:  flstorage.SQLite(path),
@@ -122,30 +134,27 @@ func runAppserverTestFloretTurn(t *testing.T, path string, threadID identity.Thr
 		t.Fatalf("runtime.Open: %v", err)
 	}
 	defer func() { _ = host.Shutdown(context.Background()) }()
-	thread, err := host.Thread(context.Background(), threadID)
+	service, err := host.ThreadService(flruntime.AgentFactoryFunc(func(context.Context, flruntime.AgentRequest) (*flruntime.Agent, error) {
+		return newAppserverTestFloretAgent(t, gateway), nil
+	}))
 	if err != nil {
-		t.Fatalf("Host.Thread: %v", err)
+		t.Fatalf("Host.ThreadService: %v", err)
 	}
-	executor, err := thread.TurnExecutor(newAppserverTestFloretAgent(t, gateway))
-	if err != nil {
-		t.Fatalf("Thread.TurnExecutor: %v", err)
-	}
-	started, err := executor.StartTurn(context.Background(), flruntime.StartTurnCommand{
-		LogicalRequestID:    identity.LogicalRequestID("fixture_" + string(request.TurnID)),
-		UserMessage:         request.Input,
-		SupplementalContext: request.SupplementalContext,
-		Signals:             request.Signals,
+	_, err = service.Send(context.Background(), flruntime.SendInput{
+		ThreadID: threadID, Input: request.Input, RequestKey: flruntime.RequestKey("fixture_" + string(request.TurnID)),
 	})
 	if err != nil {
-		t.Fatalf("TurnExecutor.StartTurn: %v", err)
+		t.Fatalf("ThreadService.Send: %v", err)
 	}
-	reader, err := thread.Reader()
-	if err != nil {
-		t.Fatalf("Thread.Reader: %v", err)
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		view, viewErr := service.View(context.Background(), threadID)
+		if viewErr == nil && (len(view.Interactions) > 0 || view.Activity == flruntime.ThreadActivityIdle) {
+			return view
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
-	result, err := reader.ReadTurn(context.Background(), started.TurnID)
-	if err != nil {
-		t.Fatalf("ThreadReader.ReadTurn: %v", err)
-	}
-	return result
+	view, err := service.View(context.Background(), threadID)
+	t.Fatalf("typed thread fixture did not converge: view=%#v err=%v", view, err)
+	return flruntime.ThreadView{}
 }

@@ -93,14 +93,12 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 	if err != nil {
 		t.Fatalf("SendUserTurn response=%#v err=%v", start, err)
 	}
-	start = awaitCanonicalTurnAdmissionForTest(t, svc, start)
 	if start.Kind != "start" {
 		t.Fatalf("SendUserTurn response=%#v err=%v", start, err)
 	}
 
 	waiting := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(view *ThreadView) bool {
-		return strings.TrimSpace(view.RunStatus) == "waiting_user" && view.WaitingPrompt != nil &&
-			!svc.HasActiveThreadForEndpoint(meta.EndpointID, thread.ThreadID)
+		return strings.TrimSpace(view.RunStatus) == "waiting_user" && view.WaitingPrompt != nil
 	})
 	prompt := waiting.WaitingPrompt
 	if prompt == nil || len(prompt.Questions) != 1 || prompt.Questions[0].ID != "target" {
@@ -115,22 +113,22 @@ func TestRedevenHostedRunAskUserWaitsAndResumesWithoutAuthorityCorruption(t *tes
 		Input:   RunInput{Text: "production"},
 		Options: RunOptions{PermissionType: config.AIPermissionFullAccess},
 	})
-	if err != nil || response.Kind != "start" || response.ConsumedWaitingPromptID != prompt.PromptID {
+	if err != nil || response.Kind != "accepted" || response.ConsumedWaitingPromptID != prompt.PromptID {
 		t.Fatalf("SubmitRequestUserInputResponse response=%#v err=%v", response, err)
 	}
 
 	completed := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(view *ThreadView) bool {
-		return !svc.HasActiveThreadForEndpoint(meta.EndpointID, thread.ThreadID) && strings.TrimSpace(view.RunStatus) == "success"
+		return strings.TrimSpace(view.RunStatus) == "success"
 	})
 	if completed.WaitingPrompt != nil || strings.TrimSpace(completed.RunError) != "" {
 		t.Fatalf("completed thread retained waiting/error state: %#v", completed)
 	}
-	bootstrap, err := svc.GetFlowerThreadLiveBootstrap(context.Background(), meta, thread.ThreadID)
+	bootstrap, err := svc.GetFlowerThreadDetail(context.Background(), meta, thread.ThreadID)
 	if err != nil {
-		t.Fatalf("GetFlowerThreadLiveBootstrap: %v", err)
+		t.Fatalf("GetFlowerThreadDetail: %v", err)
 	}
-	if len(bootstrap.TimelineMessages) == 0 || !strings.Contains(strings.ToLower(bootstrap.Thread.Title), "clarify") {
-		t.Fatalf("canonical bootstrap=%#v, want resumed timeline and provider title", bootstrap)
+	if len(bootstrap.Current.Items) == 0 || !strings.Contains(strings.ToLower(bootstrap.Thread.LastMessagePreview), "accepted") {
+		t.Fatalf("canonical bootstrap=%#v, want resumed timeline", bootstrap)
 	}
 	if mainCalls.Load() != 2 {
 		t.Fatalf("main provider calls=%d, want waiting and resumed calls", mainCalls.Load())
@@ -221,8 +219,7 @@ func TestSubmitRequestUserInputResponseRPCReturnsAdmissionReceiptBeforeProviderC
 		t.Fatalf("SendUserTurn: %v", err)
 	}
 	waiting := waitForAskUserIntegrationThread(t, svc, meta, thread.ThreadID, func(view *ThreadView) bool {
-		return strings.TrimSpace(view.RunStatus) == "waiting_user" && view.WaitingPrompt != nil &&
-			!svc.HasActiveThreadForEndpoint(meta.EndpointID, thread.ThreadID)
+		return strings.TrimSpace(view.RunStatus) == "waiting_user" && view.WaitingPrompt != nil
 	})
 	prompt := waiting.WaitingPrompt
 
@@ -278,10 +275,10 @@ func TestSubmitRequestUserInputResponseRPCReturnsAdmissionReceiptBeforeProviderC
 	}
 	select {
 	case result := <-submitted:
-		if result.err != nil || result.response.Kind != "start" ||
+		if result.err != nil || result.response.Kind != "accepted" ||
 			result.response.ConsumedWaitingPromptID != prompt.PromptID ||
-			strings.TrimSpace(result.response.RunID) == "" || strings.TrimSpace(result.response.TurnID) == "" {
-			t.Fatalf("admission receipt=%#v err=%v", result.response, result.err)
+			result.response.Current.ThreadID.String() != thread.ThreadID || result.response.Current.ViewVersion <= 0 {
+			t.Fatalf("command result=%#v err=%v", result.response, result.err)
 		}
 	case <-time.After(250 * time.Millisecond):
 		t.Fatal("structured response waited for provider execution after canonical admission")

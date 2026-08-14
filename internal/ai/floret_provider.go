@@ -9,10 +9,10 @@ import (
 	"strings"
 	"sync"
 
-	flconfig "github.com/floegence/floret/v3/config"
-	flprovider "github.com/floegence/floret/v3/provider"
-	flruntime "github.com/floegence/floret/v3/runtime"
-	fltools "github.com/floegence/floret/v3/tools"
+	flconfig "github.com/floegence/floret/v4/config"
+	flprovider "github.com/floegence/floret/v4/provider"
+	flruntime "github.com/floegence/floret/v4/runtime"
+	fltools "github.com/floegence/floret/v4/tools"
 	"github.com/floegence/redeven/internal/config"
 )
 

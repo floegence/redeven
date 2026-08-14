@@ -278,13 +278,13 @@ func TestIntegrationServiceOpenAIContinuationPersistsInFloretAndResumes(t *testi
 		t.Fatalf("CreateThread: %v", err)
 	}
 	for index, input := range []string{"hello", "hello again"} {
-		if err := svc.StartRun(ctx, &meta, fmt.Sprintf("run_continuation_%d", index+1), RunStartRequest{
+		if _, err := runTypedTurnForTest(t, ctx, svc, &meta, fmt.Sprintf("run_continuation_%d", index+1), RunStartRequest{
 			ThreadID: thread.ThreadID,
 			Model:    "openai/gpt-5-mini",
 			Input:    RunInput{Text: input},
 			Options:  RunOptions{},
-		}, httptest.NewRecorder()); err != nil {
-			t.Fatalf("StartRun %d: %v", index+1, err)
+		}); err != nil {
+			t.Fatalf("typed Send %d: %v", index+1, err)
 		}
 	}
 
@@ -312,22 +312,22 @@ func TestIntegrationServiceRejectedOpenAIContinuationFailsWithoutReplay(t *testi
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
-	if err := svc.StartRun(ctx, &meta, "run_replay_1", RunStartRequest{
+	if _, err := runTypedTurnForTest(t, ctx, svc, &meta, "run_replay_1", RunStartRequest{
 		ThreadID: thread.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Input:    RunInput{Text: "hello"},
 		Options:  RunOptions{},
-	}, httptest.NewRecorder()); err != nil {
-		t.Fatalf("StartRun first: %v", err)
+	}); err != nil {
+		t.Fatalf("typed Send first: %v", err)
 	}
-	err = svc.StartRun(ctx, &meta, "run_replay_2", RunStartRequest{
+	_, err = runTypedTurnForTest(t, ctx, svc, &meta, "run_replay_2", RunStartRequest{
 		ThreadID: thread.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Input:    RunInput{Text: "hello again"},
 		Options:  RunOptions{},
-	}, httptest.NewRecorder())
+	})
 	if err == nil || !strings.Contains(err.Error(), "previous_response_id") {
-		t.Fatalf("StartRun second error=%v, want rejected continuation", err)
+		t.Fatalf("typed Send second error=%v, want rejected continuation", err)
 	}
 
 	previousIDs, issuedResponseIDs := mock.snapshot()

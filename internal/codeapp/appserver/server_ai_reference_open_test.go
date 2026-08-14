@@ -14,9 +14,9 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/floegence/floret/v3/identity"
-	flprovider "github.com/floegence/floret/v3/provider"
-	flruntime "github.com/floegence/floret/v3/runtime"
+	"github.com/floegence/floret/v4/identity"
+	flprovider "github.com/floegence/floret/v4/provider"
+	flruntime "github.com/floegence/floret/v4/runtime"
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	redevenconfig "github.com/floegence/redeven/internal/config"
@@ -63,11 +63,11 @@ func TestServer_AIReferenceOpenTargetAcceptsOnlyCanonicalIdentity(t *testing.T) 
 		t.Fatal(err)
 	}
 	meta := session.Meta{
-		EndpointID: "env_reference_open", UserPublicID: "user_reference_open", UserEmail: "reference-open@example.com",
+		EndpointID: "env_reference_open", NamespacePublicID: "ns_reference_open", UserPublicID: "user_reference_open", UserEmail: "reference-open@example.com",
 		CanRead: true,
 	}
 	aiOptions := ai.Options{
-		Logger: logger, StateDir: stateDir, AgentHomeDir: home, FilesystemScope: scope, Shell: "/bin/sh",
+		Logger: logger, StateDir: stateDir, AgentHomeDir: home, FilesystemScope: scope, Shell: "/bin/sh", Config: appserverTestAIConfig(),
 	}
 	aiSvc, err := ai.NewService(aiOptions)
 	if err != nil {
@@ -75,7 +75,7 @@ func TestServer_AIReferenceOpenTargetAcceptsOnlyCanonicalIdentity(t *testing.T) 
 	}
 	t.Cleanup(func() { _ = aiSvc.Close() })
 	thread, err := aiSvc.CreateThread(context.Background(), &session.Meta{
-		EndpointID: meta.EndpointID, UserPublicID: meta.UserPublicID, UserEmail: meta.UserEmail,
+		EndpointID: meta.EndpointID, NamespacePublicID: meta.NamespacePublicID, UserPublicID: meta.UserPublicID, UserEmail: meta.UserEmail,
 		CanRead: true, CanWrite: true, CanExecute: true,
 	}, "Reference open", "", "", "")
 	if err != nil {
@@ -171,11 +171,11 @@ func TestServer_AIReferenceOpenTargetRejectsCanonicalReferenceAfterTargetChanges
 		t.Fatal(err)
 	}
 	meta := session.Meta{
-		EndpointID: "env_reference_target_change", UserPublicID: "user_reference_target_change",
+		EndpointID: "env_reference_target_change", NamespacePublicID: "ns_reference_target_change", UserPublicID: "user_reference_target_change",
 		UserEmail: "reference-target-change@example.com", CanRead: true,
 	}
 	aiOptions := ai.Options{
-		Logger: logger, StateDir: stateDir, AgentHomeDir: home, FilesystemScope: scope, Shell: "/bin/sh",
+		Logger: logger, StateDir: stateDir, AgentHomeDir: home, FilesystemScope: scope, Shell: "/bin/sh", Config: appserverTestAIConfig(),
 		ToolTargetPolicy: ai.ToolTargetPolicy{
 			Mode: ai.ToolTargetModeExplicitTarget, AllowedTargetIDs: []string{"target_before", "target_after"},
 		},
@@ -196,7 +196,7 @@ func TestServer_AIReferenceOpenTargetRejectsCanonicalReferenceAfterTargetChanges
 	}
 	t.Cleanup(func() { _ = aiSvc.Close() })
 	thread, err := aiSvc.CreateThread(context.Background(), &session.Meta{
-		EndpointID: meta.EndpointID, UserPublicID: meta.UserPublicID, UserEmail: meta.UserEmail,
+		EndpointID: meta.EndpointID, NamespacePublicID: meta.NamespacePublicID, UserPublicID: meta.UserPublicID, UserEmail: meta.UserEmail,
 		CanRead: true, CanWrite: true, CanExecute: true,
 	}, "Target-bound reference", "", "", "")
 	if err != nil {

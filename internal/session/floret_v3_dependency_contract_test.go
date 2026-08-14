@@ -13,7 +13,7 @@ import (
 	"golang.org/x/mod/modfile"
 )
 
-func TestFloretDependencyIsExactPublishedV3(t *testing.T) {
+func TestFloretDependencyIsExactPublishedV4(t *testing.T) {
 	t.Parallel()
 
 	root := repoRootForTest(t)
@@ -25,8 +25,8 @@ func TestFloretDependencyIsExactPublishedV3(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const path = "github.com/floegence/floret/v3"
-	const version = "v3.2.40"
+	const path = "github.com/floegence/floret/v4"
+	const version = "v4.0.0"
 	found := false
 	for _, requirement := range module.Require {
 		if requirement.Mod.Path == path {
@@ -79,7 +79,7 @@ func TestFloretDependencyIsExactPublishedV3(t *testing.T) {
 			if unquoteErr != nil {
 				return unquoteErr
 			}
-			if path == "github.com/floegence/floret" || strings.HasPrefix(path, "github.com/floegence/floret/") && !strings.HasPrefix(path, "github.com/floegence/floret/v3/") {
+			if path == "github.com/floegence/floret" || strings.HasPrefix(path, "github.com/floegence/floret/") && !strings.HasPrefix(path, "github.com/floegence/floret/v4/") {
 				relative, _ := filepath.Rel(root, filePath)
 				t.Fatalf("%s imports the v1 Floret module path %q", relative, path)
 			}

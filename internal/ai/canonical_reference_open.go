@@ -12,8 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/floegence/floret/v3/identity"
-	flruntime "github.com/floegence/floret/v3/runtime"
+	"github.com/floegence/floret/v4/identity"
+	flruntime "github.com/floegence/floret/v4/runtime"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -92,21 +92,14 @@ func (s *Service) ResolveFlowerCanonicalReferenceOpenTarget(ctx context.Context,
 		return FlowerCanonicalReferenceOpenTarget{}, ErrFlowerCanonicalReferenceNotFound
 	}
 
-	host, err := s.openFloretThreadReadHost(ctxOrBackground(ctx), threadID)
+	current, err := s.threadRuntime.View(ctxOrBackground(ctx), identity.ThreadID(threadID))
 	if err != nil {
 		if errors.Is(err, flruntime.ErrThreadNotFound) || errors.Is(err, flruntime.ErrThreadDeleted) {
 			return FlowerCanonicalReferenceOpenTarget{}, ErrFlowerCanonicalReferenceNotFound
 		}
 		return FlowerCanonicalReferenceOpenTarget{}, ErrFlowerCanonicalReferenceUnavailable
 	}
-	turn, err := host.ReadThreadTurn(ctxOrBackground(ctx), identity.TurnID(turnID))
-	if errors.Is(err, flruntime.ErrTurnNotFound) {
-		return FlowerCanonicalReferenceOpenTarget{}, ErrFlowerCanonicalReferenceNotFound
-	}
-	if err != nil {
-		return FlowerCanonicalReferenceOpenTarget{}, ErrFlowerCanonicalReferenceUnavailable
-	}
-	reference, ok := exactFlowerCanonicalReference(turn, referenceID)
+	reference, ok := exactFlowerCanonicalReference(current.Items, turnID, referenceID)
 	if !ok {
 		return FlowerCanonicalReferenceOpenTarget{}, ErrFlowerCanonicalReferenceNotFound
 	}
@@ -176,10 +169,15 @@ func (s *Service) ResolveFlowerCanonicalReferenceOpenTarget(ctx context.Context,
 	}, nil
 }
 
-func exactFlowerCanonicalReference(turn flruntime.ThreadTurnSnapshot, referenceID string) (flruntime.MessageReference, bool) {
-	for _, reference := range turn.UserReferences {
-		if strings.TrimSpace(reference.ReferenceID) == referenceID {
-			return reference, true
+func exactFlowerCanonicalReference(items []flruntime.ThreadItem, turnID, referenceID string) (flruntime.MessageReference, bool) {
+	for _, item := range items {
+		if item.Kind != flruntime.ThreadItemUser || item.TurnID.String() != strings.TrimSpace(turnID) {
+			continue
+		}
+		for _, reference := range item.References {
+			if strings.TrimSpace(reference.ReferenceID) == strings.TrimSpace(referenceID) {
+				return reference, true
+			}
 		}
 	}
 	return flruntime.MessageReference{}, false

@@ -62,13 +62,10 @@ export const redevenV1TypeIds = {
   },
   ai: {
     sendUserTurn: 6001,
-    subscribeSummary: 6003,
     event: 6004,
     listMessages: 6006,
-    subscribeThread: 6009,
     stopThread: 6011,
     submitRequestUserInputResponse: 6012,
-    compactThreadContext: 6013,
   },
   sessions: {
     listActive: 5001,

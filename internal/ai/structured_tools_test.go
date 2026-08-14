@@ -360,7 +360,9 @@ func TestToolFileEdit_ReplacesExactMatchAndRejectsAmbiguousMatch(t *testing.T) {
 	if out.ChangeType != "update" || !strings.Contains(out.UnifiedDiff, "-alpha") || !strings.Contains(out.UnifiedDiff, "+omega") {
 		t.Fatalf("unexpected mutation result=%+v", out)
 	}
-	if out.DisplayName != "edit.txt" || canonicalPath(out.FilePath) != canonicalPath(target) {
+	actualPath, _ := filepath.EvalSymlinks(out.FilePath)
+	wantPath, _ := filepath.EvalSymlinks(target)
+	if out.DisplayName != "edit.txt" || actualPath != wantPath {
 		t.Fatalf("mutation path metadata=%+v", out)
 	}
 	got, err := os.ReadFile(target)

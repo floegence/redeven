@@ -30,11 +30,8 @@ import { FlowerChatContextPreview } from './chat/FlowerChatContextPreview';
 import { parseChatContextAction, parseChatMessageReferences } from './chat/flowerChatContextModel';
 import {
   createFlowerClientRequestID,
-  flowerTurnAdmissionUncertainFailure,
-  flowerTurnAdmissionUncertainIdentity,
-} from './flowerTurnAdmission';
+} from './flowerRequestIdentity';
 import { FlowerContextCompactionDivider } from './chat/FlowerContextCompactionDivider';
-import { FlowerTurnProjectionUnavailable } from './chat/FlowerTurnProjectionUnavailable';
 import { FlowerComposerContextIndicator } from './chat/FlowerComposerContextIndicator';
 import type { FlowerComposerContextUsageFreshness } from './chat/flowerContextPresentation';
 import { FlowerEmptyState } from './chat/FlowerEmptyState';
@@ -57,6 +54,7 @@ import type {
   FlowerSurfaceAdapter,
   FlowerTerminalProcessSnapshot,
   FlowerTurnLaunchFailure,
+  FlowerTurnLaunchInput,
   FlowerTurnLaunchReceipt,
   FlowerRouterDecision,
   FlowerThreadActivitySnapshot,
@@ -70,7 +68,7 @@ import type {
   FlowerTimelineAnchor,
   FlowerTimelineDecoration,
   FlowerActivityStatus,
-  FlowerLiveBootstrap,
+  FlowerThreadView,
   FlowerLiveStreamEnvelope,
   FlowerAttachmentCapability,
   FlowerAttachmentStagingScope,
@@ -103,7 +101,6 @@ import {
 } from './flowerSubagentProjection';
 import { projectSubagentDetailThread } from './flowerSubagentDetailThread';
 import { formatFlowerCurrentModelLabel } from './flowerModelLabel';
-import { FLOWER_COMPACT_CONTEXT_COMMAND, parseFlowerSlashCommand } from './flowerSlashCommands';
 import {
   pendingApprovalCommandForActivityItem,
   presentFlowerActivityItem,
@@ -135,9 +132,10 @@ import { FlowerShellCommandHighlight } from './shellCommandHighlight';
 import { FlowerThreadList, type FlowerThreadMenuAction } from './threads/FlowerThreadList';
 import { FlowerThreadSwitcher, type FlowerThreadSwitcherCopy } from './threads/FlowerThreadSwitcher';
 import { SubagentDetailWindow } from './SubagentDetailWindow';
-import { applyFlowerLiveEvent, projectFlowerLiveBootstrap } from './flowerLiveReducer';
-import { createThreadStore } from './threadStore';
-import { flowerThreadReadSnapshotKey, mergeFlowerThreadListRefresh, sameThreadSnapshot } from './flowerThreadListRefresh';
+import { createThreadCache } from './threadCache';
+import { createTransportOutbox, restoreTransportOutbox, type TransportOutbox } from './transportOutbox';
+import { createLiveTransport } from './liveTransport';
+import { flowerThreadReadSnapshotKey, sameThreadSnapshot } from './flowerThreadListRefresh';
 import { FlowerProviderBrandIcon, flowerModelSupportsImage, formatFlowerTokenCount } from './settings/providerCatalog';
 import { FlowerReasoningControl } from './ReasoningControl';
 import {
@@ -167,12 +165,7 @@ import {
   CONTEXT_ACTION_SCHEMA_VERSION,
   type ContextActionEnvelope,
 } from './contextActionWire';
-import {
-  approvalDecisionProjection,
-  flowerComposerApprovalAction,
-  optimisticApprovalDecisionProjection,
-  type ApprovalDecisionHandoff,
-} from './approvalDecisionHandoff';
+import { flowerComposerApprovalAction } from './approvalAction';
 import { FlowerWorkingDirPickerDialog } from './filePicker/FlowerWorkingDirPickerDialog';
 import {
   projectFlowerCompanionPresence,
@@ -182,6 +175,7 @@ import {
   type FlowerCompanionThreadListItem,
 } from './flowerCompanionPresence';
 import { createDirectoryPickerDataSource } from './filePicker/createDirectoryPickerDataSource';
+import { applyFlowerRuntimeCurrentView } from './runtimeCurrentView';
 import { toPickerTreeAbsolutePath, toPickerTreePath } from './filePicker/directoryPickerTree';
 import { basenameFromAbsolutePath, normalizeAbsolutePath } from './filePicker/path';
 import {
@@ -193,7 +187,6 @@ import {
 } from './reasoning';
 
 type FlowerSurfacePanel = 'chat' | 'settings';
-const FLOWER_WARM_THREAD_DETAIL_LIMIT = 8;
 type UnavailableFlowerModelSourceStatus = Exclude<FlowerModelSourceStatus, { state: 'ready' }>;
 type FlowerModelSourceRecoveryActionID = 'local_settings' | 'runtime_settings' | 'connection_center';
 type FlowerInputDraft = Readonly<{
@@ -219,7 +212,6 @@ type FlowerMessageAttachmentPreviewTarget = Readonly<{
   mimeType: string;
   url: string;
 }>;
-
 function messageHasUserRejectedTool(message: FlowerChatMessage): boolean {
   return (message.blocks ?? []).some((block) => (
     block.type === 'activity-timeline'
@@ -246,14 +238,6 @@ function latestThreadFailureIsUserRejectedTool(thread: FlowerThreadSnapshot | nu
   return latestFailedMessage ? messageHasUserRejectedTool(latestFailedMessage) : false;
 }
 
-type FlowerConsumedInputAdmission = Readonly<{
-  promptID: string;
-  answerLabel: string;
-  phase: 'submitting' | 'admitted';
-  operationID: number;
-  turnID?: string;
-  runID?: string;
-}>;
 type FlowerComposerContextUsageModel = Readonly<{
   usage: FlowerContextUsage;
   freshness: FlowerComposerContextUsageFreshness;
@@ -274,94 +258,13 @@ type PendingModelPatch = Readonly<{
   requested: string;
   previous: string;
 }>;
-type PendingContextCompactionDecoration = Readonly<{
-  thread_id: string;
-  started_at_ms: number;
-  known_operation_ids: readonly string[];
-  decoration: Extract<FlowerTimelineDecoration, { kind: 'context_compaction' }>;
-}>;
-type FlowerPendingSubmission = Readonly<{
-  clientRequestID: string;
-  sessionKey: string;
-  threadID?: string;
-  sourceQueueID?: string;
-  prompt: string;
-  attachmentNames: readonly string[];
-  referenceLabels: readonly string[];
-  phase: 'preparing' | 'admitting' | 'awaiting_projection';
-  canonicalKind?: 'start' | 'queued' | 'admitting';
-  canonicalID?: string;
-  startedAtMS: number;
-}>;
-type FlowerPendingSubmissionEvent =
-  | Readonly<{ kind: 'begin'; submission: FlowerPendingSubmission }>
-  | Readonly<{ kind: 'admission_started'; clientRequestID: string }>
-  | Readonly<{ kind: 'admission_uncertain'; clientRequestID: string; threadID?: string }>
-  | Readonly<{
-    kind: 'admission_accepted';
-    clientRequestID: string;
-    threadID: string;
-    canonicalKind: 'start' | 'queued' | 'admitting';
-    canonicalID: string;
-  }>
-  | Readonly<{ kind: 'projection_observed'; clientRequestID: string }>
-  | Readonly<{ kind: 'stop_confirmed'; clientRequestID: string }>
-  | Readonly<{ kind: 'admission_failed'; clientRequestID: string }>
-  | Readonly<{ kind: 'submission_finished_without_receipt'; clientRequestID: string }>
-  | Readonly<{ kind: 'new_conversation' }>
-  | Readonly<{ kind: 'thread_selected'; threadID: string }>;
 type FlowerQueuedTurnReorderState = Readonly<{
   threadID: string;
   draggedQueueID: string;
   originalQueueIDs: readonly string[];
   orderedQueueIDs: readonly string[];
-  phase: 'dragging' | 'saving';
+  phase: 'dragging';
 }>;
-type FlowerQueuedTurnDeleteState = Readonly<{
-  threadID: string;
-  queueID: string;
-}>;
-
-function transitionFlowerPendingSubmission(
-  current: FlowerPendingSubmission | null,
-  event: FlowerPendingSubmissionEvent,
-): FlowerPendingSubmission | null {
-  switch (event.kind) {
-    case 'begin':
-      return event.submission;
-    case 'admission_started':
-      return current?.clientRequestID === event.clientRequestID
-        ? { ...current, phase: 'admitting' }
-        : current;
-    case 'admission_uncertain':
-      return current?.clientRequestID === event.clientRequestID
-        ? {
-          ...current,
-          ...(event.threadID ? { threadID: event.threadID } : {}),
-          phase: 'awaiting_projection',
-        }
-        : current;
-    case 'admission_accepted':
-      return current?.clientRequestID === event.clientRequestID
-        ? {
-          ...current,
-          threadID: event.threadID,
-          phase: 'awaiting_projection',
-          canonicalKind: event.canonicalKind,
-          canonicalID: event.canonicalID,
-        }
-        : current;
-    case 'projection_observed':
-    case 'stop_confirmed':
-    case 'admission_failed':
-    case 'submission_finished_without_receipt':
-      return current?.clientRequestID === event.clientRequestID ? null : current;
-    case 'new_conversation':
-      return null;
-    case 'thread_selected':
-      return current?.threadID === event.threadID ? current : null;
-  }
-}
 
 function sameQueuedTurnIDs(left: readonly string[], right: readonly string[]): boolean {
   return left.length === right.length && left.every((queueID) => right.includes(queueID));
@@ -384,7 +287,6 @@ function moveQueuedTurnID(
     ...remaining.slice(insertionIndex),
   ];
 }
-const APPROVAL_DECISION_RESYNC_MS = 1500;
 type FlowerHandlerResolutionState =
   | Readonly<{ status: 'starting' }>
   | Readonly<{ status: 'resolving'; decision: FlowerRouterDecision | null }>
@@ -398,7 +300,6 @@ export type FlowerSurfaceWarmupState = Readonly<{
   phaseLabel?: string;
   modelLabel?: string;
 }>;
-type FlowerApprovalSubmittingState = 'approve' | 'reject';
 type FlowerFloatingPoint = Readonly<{
   x: number;
   y: number;
@@ -434,15 +335,13 @@ const THREAD_RAIL_WIDTH_DEFAULT = 272;
 const THREAD_RAIL_WIDTH_MIN = 220;
 const THREAD_RAIL_WIDTH_MAX = 380;
 const SIDEBAR_STABLE_LIVE_STATUSES = new Set<FlowerThreadStatus>(['running']);
-const COMPOSER_STOP_THREAD_STATUSES = new Set<FlowerThreadStatus>(['running', 'waiting_approval']);
+const COMPOSER_STOP_THREAD_STATUSES = new Set<FlowerThreadStatus>(['running', 'waiting_approval', 'waiting_user']);
 const PENDING_NEW_THREAD_ID = '__new_thread__';
 const FLOWER_PERMISSION_TYPES: readonly FlowerPermissionType[] = ['readonly', 'approval_required', 'full_access'];
 const FLOWER_COMPOSER_CONTROL_ORDER: readonly FlowerComposerControlID[] = ['working_dir', 'permission', 'model_reasoning', 'read_only'];
 const FLOWER_COMPOSER_CONTROL_OVERFLOW_ORDER: readonly FlowerComposerControlID[] = ['working_dir', 'model_reasoning', 'read_only', 'permission'];
 const FLOWER_COMPOSER_CONTROL_GAP_PX = 6;
 const MESSAGE_COPY_RESET_MS = 1600;
-const FLOWER_COMPOSER_COMMAND_MENU_ID = 'flower-composer-command-menu';
-const FLOWER_COMPOSER_COMPACT_COMMAND_OPTION_ID = 'flower-composer-command-compact-context';
 const FLOWER_COMPOSER_REFERENCE_MENU_ID = 'flower-composer-reference-menu';
 const FLOWER_COMPOSER_REFERENCE_OPTION_PREFIX = 'flower-composer-reference-option-';
 const FLOWER_COMPOSER_REFERENCE_MENU_FALLBACK_HEIGHT = 240;
@@ -719,41 +618,14 @@ function flowerApprovalRequest(
   thread: FlowerThreadSnapshot,
   action: FlowerApprovalAction,
   approved: boolean,
+  rejectAll = false,
 ): FlowerSubmitApprovalRequest {
-  const queueGeneration = thread.approval_queue?.generation ?? action.queue_generation ?? 0;
-  const queueRevision = thread.approval_queue?.revision ?? 0;
   return {
     thread_id: thread.thread_id,
-    origin: action.origin,
-    run_id: action.run_id,
-    action_id: action.action_id,
-    tool_id: action.tool_id,
+    interaction_id: action.action_id,
     approved,
-    ...(action.expected_seq ? { expected_seq: action.expected_seq } : {}),
-    revision: action.revision,
-    ...(action.version ? { version: action.version } : {}),
-    ...(action.surface_epoch ? { surface_epoch: action.surface_epoch } : {}),
-    queue_generation: queueGeneration,
-    queue_revision: queueRevision,
-    idempotency_key: `${action.action_id}:${approved ? 'approve' : 'reject'}:${action.revision}:${queueGeneration}:${queueRevision}`,
+    ...(rejectAll ? { reject_all: true } : {}),
   };
-}
-
-function retryableApprovalAction(
-  thread: FlowerThreadSnapshot | null,
-  actionID: string,
-  options: Readonly<{ allowNonPrimary?: boolean }> = {},
-): FlowerApprovalAction | null {
-  if (!thread) return null;
-  const pending = (thread.approval_actions ?? []).filter((action) => action.status === 'pending' && action.state === 'requested');
-  const action = pending.find((candidate) => candidate.action_id === actionID) ?? null;
-  if (!action || (!action.can_approve && !options.allowNonPrimary)) return null;
-  if (options.allowNonPrimary) return action;
-  const currentActionID = trimString(thread.approval_queue?.current_action_id);
-  if (currentActionID) return currentActionID === actionID ? action : null;
-  const primary = action.surface_role === 'primary_action'
-    || (!action.surface_role && !thread.approval_queue && pending.length === 1);
-  return primary ? action : null;
 }
 
 function clampThreadRailWidth(width: number): number {
@@ -1029,32 +901,28 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [saveError, setSaveError] = createSignal('');
   const [savedAt, setSavedAt] = createSignal<number | null>(null);
   const [snapshot, setSnapshot] = createSignal<FlowerSettingsSnapshot | null>(null);
-  const [threads, setThreads] = createSignal<readonly FlowerThreadSnapshot[]>([]);
-  // One per-thread store owns selection/revision fencing for the Phase 1
-  // adapter. Existing signals remain as a rendering compatibility boundary.
-  const threadStore = createThreadStore();
-  const [selectedThreadID, setSelectedThreadID] = createSignal('');
-  const [selectedThreadDetailID, setSelectedThreadDetailID] = createSignal('');
-  const [sidebarActiveThreadID, setSidebarActiveThreadID] = createSignal('');
-  const [composerSessionDrafts, setComposerSessionDrafts] = createSignal<Record<string, FlowerComposerSessionDraft>>({});
-  const [consumedInputAdmissions, setConsumedInputAdmissions] = createSignal<Record<string, FlowerConsumedInputAdmission>>({});
-  let inputAdmissionOperationSequence = 0;
-  const [chatRunning, setChatRunning] = createSignal(false);
-  const [pendingSubmission, setPendingSubmission] = createSignal<FlowerPendingSubmission | null>(null);
-  const [deferredStopClientRequestID, setDeferredStopClientRequestID] = createSignal('');
+	const [threadCache, setThreadCache] = createSignal(createThreadCache());
+  const [transportOutbox, setTransportOutbox] = createSignal(createTransportOutbox());
+	const liveTransport = createLiveTransport<FlowerLiveStreamEnvelope>();
+	const outboxResendInFlight = new Set<string>();
+	onMount(() => {
+		void restoreTransportOutbox().then((restored) => {
+			setTransportOutbox((current) => {
+				let merged = restored;
+				for (const entry of current.entries.values()) merged = merged.put(entry);
+				return merged;
+			});
+		}).catch(() => undefined);
+	});
+	const threads = createMemo<readonly FlowerThreadSnapshot[]>(() => [...threadCache().summaries.values()]);
+	const selectedThreadID = createMemo(() => threadCache().selectedId ?? '');
+	const setSelectedThreadID = (threadID: string) => {
+		setThreadCache((cache) => cache.select(trimString(threadID) || null));
+	};
   const [queuedTurnReorder, setQueuedTurnReorder] = createSignal<FlowerQueuedTurnReorderState | null>(null);
-  const [queuedTurnPromotingID, setQueuedTurnPromotingID] = createSignal('');
-  const [queuedTurnDelete, setQueuedTurnDelete] = createSignal<FlowerQueuedTurnDeleteState | null>(null);
   // Reactive state updates are batched. Keep a synchronous guard as well so
   // Enter repeat and a same-tick click cannot admit the same draft twice.
-  let launchChatTurnInFlight = false;
-  const transitionPendingSubmission = (event: FlowerPendingSubmissionEvent) => {
-    setPendingSubmission((current) => transitionFlowerPendingSubmission(current, event));
-  };
-  const [threadStopping, setThreadStopping] = createSignal(false);
-  const [continuationRetryingThreadID, setContinuationRetryingThreadID] = createSignal('');
-  const [compactSubmitting, setCompactSubmitting] = createSignal(false);
-  const [pendingContextCompaction, setPendingContextCompaction] = createSignal<PendingContextCompactionDecoration | null>(null);
+  const launchChatTurnInFlight = new Set<string>();
   const [settingsSaving, setSettingsSaving] = createSignal(false);
   const [modelSourceRefreshing, setModelSourceRefreshing] = createSignal(false);
   const [threadsRefreshing, setThreadsRefreshing] = createSignal(false);
@@ -1104,18 +972,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   createEffect(on(
     () => selectedThreadID(),
     (next) => {
-      setSidebarActiveThreadID(next);
       setContextSnapshotPreview(null);
       clearWorkingDirectoryCopyConfirmation();
     },
     { defer: false },
   ));
-  const setSelectedThreadWithDetail = (threadID: string) => {
-    const tid = trimString(threadID);
-    setSelectedThreadID(tid);
-    setSelectedThreadDetailID(tid);
-    setSidebarActiveThreadID(tid);
-  };
+	const setSelectedThreadWithDetail = (threadID: string) => {
+		const tid = trimString(threadID);
+		setSelectedThreadID(tid);
+	};
 
   const [isComposing, setIsComposing] = createSignal(false);
   const [composerSelection, setComposerSelection] = createSignal({ start: 0, end: 0 });
@@ -1145,7 +1010,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [deleteTarget, setDeleteTarget] = createSignal<Readonly<{ item: FlowerThreadListItem; restore?: HTMLElement }> | null>(null);
   const [deleteSubmitting, setDeleteSubmitting] = createSignal(false);
   const [deleteError, setDeleteError] = createSignal('');
-  const [loadingThreadID, setLoadingThreadID] = createSignal('');
   const [selectedThreadTailReveal, setSelectedThreadTailReveal] = createSignal<SelectedThreadTailReveal | null>(null);
   const [threadRailWidth, setThreadRailWidth] = createSignal(THREAD_RAIL_WIDTH_DEFAULT);
   const [threadRailResizing, setThreadRailResizing] = createSignal(false);
@@ -1158,8 +1022,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [engagementBootstrapReady, setEngagementBootstrapReady] = createSignal(foregroundEngagementRequested());
   const [openActivityRuns, setOpenActivityRuns] = createSignal<Record<string, boolean>>({});
   const [activityClockNow, setActivityClockNow] = createSignal(Date.now());
-  const [approvalSubmitting, setApprovalSubmitting] = createSignal<Record<string, FlowerApprovalSubmittingState>>({});
-  const [approvalDecisionHandoff, setApprovalDecisionHandoff] = createSignal<ApprovalDecisionHandoff | null>(null);
   const [approvalQueueAnnouncement, setApprovalQueueAnnouncement] = createSignal('');
   const [copiedMessageAction, setCopiedMessageAction] = createSignal('');
   const [copiedApprovalAction, setCopiedApprovalAction] = createSignal('');
@@ -1181,7 +1043,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [subagentDetailOpenedRevision, setSubagentDetailOpenedRevision] = createSignal(0);
   let threadLoadSequence = 0;
   let engagementBootstrapSequence = 0;
-  let threadLocalMutationRevision = 0;
   let threadsRefreshSequence = 0;
   let startedFocusThreadRequestID = '';
   let startedFocusComposerRequest = 0;
@@ -1244,19 +1105,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let threadSelectionContentTimer: number | undefined;
   let composerFocusToken = 0;
   let composerFocusOwner: Element | null = null;
-  let approvalDecisionResyncTimer: number | undefined;
   const [composerFocusRevision, setComposerFocusRevision] = createSignal(0);
-  const threadBootstrapRequests = new Map<string, Promise<FlowerLiveBootstrap>>();
-  const loadedThreadIDs = new Set<string>();
+  const threadBootstrapRequests = new Map<string, Promise<FlowerThreadView>>();
   const locallyReadSnapshots = new Map<string, string>();
   const persistingReadThreadIDs = new Set<string>();
   const pendingReadPersistenceSnapshots = new Map<string, FlowerThreadActivitySnapshot>();
-  const liveCursors = new Map<string, number>();
-  const liveStreamGenerations = new Map<string, number>();
-  const liveSummaryThreadCursors = new Map<string, number>();
-  let liveSummaryCursor = 0;
-  let liveSummaryGeneration = 1;
-  let liveSummaryRefreshTimer: number | undefined;
   let threadsRefreshRequest: Promise<boolean> | null = null;
   const retiredThreadIDs = new Set<string>();
   let copiedMessageResetTimer: number | undefined;
@@ -1341,7 +1194,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       threadSelectionContentTimer = window.setTimeout(() => {
         threadSelectionContentTimer = undefined;
         if (threadSelectionTransaction !== transaction) return;
-        if (selectedThreadDetailID() !== transaction.value) return;
+		if (!threadCache().views.has(transaction.value)) return;
         emitThreadSelectionEvent(transaction, 'content_presented');
         threadSelectionTransaction = null;
       }, 0);
@@ -1375,8 +1228,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       presentedSelectionTimer = window.setTimeout(() => {
         presentedSelectionTimer = undefined;
         if (!effectiveEngagement() || sidePanel() !== 'chat') return;
-        if (sequence !== threadLoadSequence || selectedThreadID() !== tid || selectedThreadDetailID() !== tid) return;
-        if (loadingThreadID() === tid || threadLoadError()) return;
+			if (sequence !== threadLoadSequence || selectedThreadID() !== tid || !threadCache().views.has(tid)) return;
+        if (threadLoadError()) return;
         setPresentedSelection({ threadID: tid, sequence });
       }, 0);
     });
@@ -1395,16 +1248,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   createEffect(on(
     () => [
       selectedThreadID(),
-      selectedThreadDetailID(),
-      loadingThreadID(),
+			threadCache().views.has(selectedThreadID()),
       threadLoadError(),
       sidePanel(),
       effectiveEngagement(),
     ] as const,
-    ([threadID, detailID, loadingID, error, , engaged]) => {
+			([threadID, detailReady, error, , engaged]) => {
       cancelPresentedSelectionSchedule();
       setPresentedSelection(null);
-      if (!engaged || !threadID || detailID !== threadID || loadingID === threadID || error) return;
+				if (!engaged || !threadID || !detailReady || error) return;
       schedulePresentedSelection(threadID, threadLoadSequence);
     },
     { defer: false },
@@ -1491,11 +1343,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setSelectedThreadTailReveal(null);
   };
 
-  const selectedThread = createMemo(() => {
-    const detailID = trimString(selectedThreadDetailID());
-    if (!detailID) return null;
-    return threads().find((thread) => thread.thread_id === detailID) ?? null;
-  });
+	const selectedThread = createMemo(() => {
+		const threadID = trimString(selectedThreadID());
+		if (!threadID) return null;
+		return threadCache().views.get(threadID)?.thread ?? null;
+	});
   const selectedCanonicalQueuedTurns = createMemo<readonly FlowerQueuedTurn[]>(() => {
     const thread = selectedThread();
     return thread && trimString(thread.thread_id) === trimString(selectedThreadID())
@@ -1504,21 +1356,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
   const selectedQueuedTurns = createMemo<readonly FlowerQueuedTurn[]>(() => {
     const canonical = selectedCanonicalQueuedTurns();
-    const promotingID = trimString(queuedTurnPromotingID());
-    const deletingID = queuedTurnDelete()?.threadID === selectedThreadID()
-      ? trimString(queuedTurnDelete()?.queueID)
-      : '';
-    const visibleCanonical = promotingID || deletingID
-      ? canonical.filter((turn) => {
-        const queueID = trimString(turn.queue_id);
-        return queueID !== promotingID && queueID !== deletingID;
-      })
-      : canonical;
     const reorder = queuedTurnReorder();
-    if (!reorder || reorder.threadID !== selectedThreadID()) return visibleCanonical;
-    const canonicalIDs = visibleCanonical.map((turn) => trimString(turn.queue_id));
-    if (!sameQueuedTurnIDs(canonicalIDs, reorder.orderedQueueIDs)) return visibleCanonical;
-    const byID = new Map(visibleCanonical.map((turn) => [trimString(turn.queue_id), turn] as const));
+    if (!reorder || reorder.threadID !== selectedThreadID()) return canonical;
+    const canonicalIDs = canonical.map((turn) => trimString(turn.queue_id));
+    if (!sameQueuedTurnIDs(canonicalIDs, reorder.orderedQueueIDs)) return canonical;
+    const byID = new Map(canonical.map((turn) => [trimString(turn.queue_id), turn] as const));
     return reorder.orderedQueueIDs.map((queueID) => byID.get(queueID)).filter((turn): turn is FlowerQueuedTurn => Boolean(turn));
   });
   createEffect(() => {
@@ -1529,81 +1371,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       setQueuedTurnReorder(null);
     }
   });
-  const pendingSubmissionHasCanonicalProjection = (
-    pending: FlowerPendingSubmission,
-    thread: FlowerThreadSnapshot | null,
-  ): boolean => {
-    if (!thread) return false;
-    const sourceQueueID = trimString(pending.sourceQueueID);
-    if (sourceQueueID && thread.messages.some((message) => (
-      message.role === 'user'
-      && trimString(message.logical_request_id) === sourceQueueID
-    ))) return true;
-    if (!pending.canonicalID) return false;
-    if (pending.canonicalKind === 'queued') {
-      return (thread.queued_turns ?? []).some((turn) => trimString(turn.queue_id) === pending.canonicalID);
-    }
-    if (pending.canonicalKind === 'admitting') {
-      return thread.messages.some((message) => (
-        message.role === 'user'
-        && trimString(message.logical_request_id) === trimString(pending.canonicalID)
-      ));
-    }
-    return thread.messages.some((message) => trimString(message.turn_id) === pending.canonicalID);
-  };
-  const pendingSubmissionIsQueued = (pending: FlowerPendingSubmission): boolean => (
-    !pending.sourceQueueID && pending.canonicalKind === 'queued'
-  );
-  const queuedPendingSubmission = createMemo<FlowerPendingSubmission | null>(() => {
-    const pending = pendingSubmission();
-    if (
-      !pending
-      || !pending.threadID
-      || trimString(pending.threadID) !== trimString(selectedThreadID())
-      || !pendingSubmissionIsQueued(pending)
-      || pendingSubmissionHasCanonicalProjection(pending, selectedThread())
-    ) return null;
-    return pending;
-  });
-  createEffect(() => {
-    const pending = pendingSubmission();
-    if (!pending?.threadID) return;
-    const thread = threads().find((candidate) => candidate.thread_id === pending.threadID);
-    if (!thread) return;
-    if (pendingSubmissionHasCanonicalProjection(pending, thread)) {
-      transitionPendingSubmission({ kind: 'projection_observed', clientRequestID: pending.clientRequestID });
-      if (pending.sourceQueueID) setQueuedTurnPromotingID('');
-    }
-  });
-  createEffect(() => {
-    const promotingID = queuedTurnPromotingID();
-    const pending = pendingSubmission();
-    if (promotingID && (!pending?.sourceQueueID || pending.threadID !== selectedThreadID())) {
-      setQueuedTurnPromotingID('');
-    }
-  });
   const selectedThreadLiveStatus = createMemo(() => selectedThread()?.status ?? 'idle');
-  const pendingAdmissionCanStop = createMemo(() => {
-    if (!chatRunning()) return false;
-    const pending = pendingSubmission();
-    if (!pending || pending.sourceQueueID || pendingSubmissionIsQueued(pending)) return false;
-    const selectedID = trimString(selectedThreadID());
-    if (pending.threadID) return trimString(pending.threadID) === selectedID;
-    return !selectedID && pending.sessionKey === PENDING_NEW_THREAD_ID;
-  });
-  const deferredStopPending = createMemo(() => {
-    const requestID = trimString(deferredStopClientRequestID());
-    return Boolean(requestID && requestID === trimString(pendingSubmission()?.clientRequestID));
-  });
-  const selectedThreadHasRunningContextCompaction = createMemo(() => {
-    const thread = selectedThread();
-    if (!thread) return false;
-    return (thread.context_compactions ?? []).some((compaction) => compaction.status === 'compacting')
-      || (thread.timeline_decorations ?? []).some((decoration) => (
-        decoration.kind === 'context_compaction'
-        && decoration.compaction.status === 'compacting'
-      ));
-  });
   const surfaceReadOnly = createMemo(() => props.adapter.canMutate === false);
   const selectedThreadReadOnlyReason = createMemo(() => trimString(selectedThread()?.read_only_reason));
   const selectedThreadReadOnly = createMemo(() => surfaceReadOnly() || selectedThreadLiveStatus() === 'read_only' || Boolean(selectedThreadReadOnlyReason()));
@@ -1613,51 +1381,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const visibleInputRequest = (thread: FlowerThreadSnapshot | null | undefined): FlowerInputRequest | null => (
     thread?.status === 'waiting_user' ? thread.input_request ?? null : null
   );
-  const threadHasLoadedDetail = (thread: FlowerThreadSnapshot): boolean => (
-    thread.messages.length > 0
-    || thread.queued_turns !== undefined
-    || visibleInputRequest(thread) !== null
-    || (thread.approval_actions?.length ?? 0) > 0
-    || thread.error != null
-  );
   const selectedInputRequest = createMemo(() => {
     const thread = selectedThread();
-    const request = visibleInputRequest(thread);
-    if (!thread || !request) return null;
-    const admission = consumedInputAdmissions()[trimString(thread.thread_id)];
-    return admission?.promptID === trimString(request.prompt_id) ? null : request;
-  });
-  const selectedInputAdmissionHandoff = createMemo(() => (
-    consumedInputAdmissions()[trimString(selectedThreadID())] ?? null
-  ));
-  const inputSubmitting = createMemo(() => {
-    const threadID = trimString(selectedThreadID());
-    const admission = consumedInputAdmissions()[threadID];
-    return admission?.phase === 'submitting';
-  });
-  createEffect(() => {
-    const thread = selectedThread();
-    if (!thread) return;
-    const threadID = trimString(thread.thread_id);
-    const admission = consumedInputAdmissions()[threadID];
-    if (!admission) return;
-    // The prompt disappearing is not proof that this admission was projected.
-    // A subsequent waiting_user prompt may arrive before the admitted user turn;
-    // keep the local handoff until the receipt's exact canonical turn is visible.
-    const canonicalHasAdmission = thread.messages.some((message) => (
-      trimString(message.turn_id) === trimString(admission.turnID)
-      && message.role === 'user'
-    ));
-    if (!canonicalHasAdmission) return;
-    setConsumedInputAdmissions((current) => {
-      if (current[threadID] !== admission) return current;
-      const next = { ...current };
-      delete next[threadID];
-      return next;
-    });
+    return visibleInputRequest(thread);
   });
   const selectedThreadCanStop = createMemo(() => (
-    !selectedThreadReadOnly() && !selectedInputRequest() && COMPOSER_STOP_THREAD_STATUSES.has(selectedThreadLiveStatus())
+    !selectedThreadReadOnly() && COMPOSER_STOP_THREAD_STATUSES.has(selectedThreadLiveStatus())
   ));
   const selectedThreadHasContent = createMemo(() => {
     const thread = selectedThread();
@@ -1674,7 +1403,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const approvalActionIsDelegated = (action: FlowerApprovalAction): boolean => action.origin === 'delegated_subagent';
   const approvalActionIsPrimarySurface = (action: FlowerApprovalAction): boolean => (
     action.surface_role === 'primary_action'
-    || (!action.surface_role && !selectedThread()?.approval_queue && selectedApprovalActions().length === 1)
+    || !action.surface_role
   );
   const approvalActionCanDecide = (action: FlowerApprovalAction): boolean => (
     action.can_approve
@@ -1689,18 +1418,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return selectedApprovalActions().filter((action) => (
       action.origin === composerAction.origin
       && action.run_id === composerAction.run_id
-      && action.queue_generation === composerAction.queue_generation
       && action.batch_size === composerAction.batch_size
     ));
   });
-  const selectedApprovalDecisionHandoff = createMemo(() => {
-    const handoff = approvalDecisionHandoff();
-    return handoff && handoff.threadID === selectedThreadID() ? handoff : null;
-  });
-  const selectedComposerApprovalDisplayAction = createMemo(() => {
-    const action = selectedComposerApprovalAction();
-    return action && selectedApprovalDecisionHandoff()?.actionID !== action.action_id ? action : null;
-  });
+  const selectedComposerApprovalDisplayAction = selectedComposerApprovalAction;
   const bottomActionMode = createMemo<'chat' | 'input_request' | 'approval'>(() => {
     if (selectedComposerApprovalDisplayAction()) return 'approval';
     if (selectedInputRequest()) return 'input_request';
@@ -1708,9 +1429,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
   createEffect(() => {
     const actionID = trimString(selectedComposerApprovalDisplayAction()?.action_id);
-    const queue = selectedThread()?.approval_queue;
     if (actionID && actionID !== previousComposerApprovalActionID) {
-      setApprovalQueueAnnouncement(queue && queue.total > 0 ? `Approval ${queue.current_position} of ${queue.total}` : 'Next approval');
+      const position = selectedApprovalActions().findIndex((action) => trimString(action.action_id) === actionID);
+      setApprovalQueueAnnouncement(selectedApprovalActions().length > 1
+        ? `Approval ${Math.max(0, position) + 1} of ${selectedApprovalActions().length}`
+        : 'Next approval');
       requestTranscriptAnimationFrame(() => {
         const approvalSurface = composerApprovalCardRef;
         if (!approvalSurface?.isConnected) return;
@@ -1730,144 +1453,92 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       && trimString(action.action_id) !== composerActionID
     ));
   });
-  const clearApprovalDecisionResyncTimer = () => {
-    if (approvalDecisionResyncTimer !== undefined) {
-      window.clearTimeout(approvalDecisionResyncTimer);
-      approvalDecisionResyncTimer = undefined;
-    }
-  };
-  const clearApprovalSubmittingAction = (actionID: string) => {
-    setApprovalSubmitting((current) => {
-      if (!current[actionID]) return current;
-      const next = { ...current };
-      delete next[actionID];
-      return next;
-    });
-  };
-  const cancelApprovalDecisionHandoff = (actionID: string) => {
-    const current = untrack(approvalDecisionHandoff);
-    if (!current || current.actionID !== actionID) return;
-    clearApprovalDecisionResyncTimer();
-    batch(() => {
-      setApprovalDecisionHandoff(null);
-      clearApprovalSubmittingAction(actionID);
-    });
-  };
-  const settleApprovalDecisionHandoff = (threadID: string, actionID: string) => {
-    const current = untrack(approvalDecisionHandoff);
-    if (!current || current.threadID !== threadID || current.actionID !== actionID) return;
-    clearApprovalDecisionResyncTimer();
-    batch(() => {
-      setApprovalDecisionHandoff(null);
-      clearApprovalSubmittingAction(actionID);
-    });
-  };
-  const reconcileApprovalDecisionHandoff = (
-    thread: FlowerThreadSnapshot,
-    streamGeneration: unknown,
-    cursor: unknown,
-  ) => {
-    const handoff = untrack(approvalDecisionHandoff);
-    if (!handoff || handoff.threadID !== thread.thread_id) return;
-    const projection = approvalDecisionProjection(thread, handoff.actionID);
-    if (projection.kind === 'current_action' || projection.kind === 'waiting') return;
-    const generation = liveStreamGenerationValue(streamGeneration);
-    const currentCursor = liveCursorValue(cursor);
-    const targetReached = handoff.phase === 'submitting'
-      || generation > handoff.submittedStreamGeneration
-      || (generation === handoff.submittedStreamGeneration && currentCursor >= liveCursorValue(handoff.targetCursor));
-    if (!targetReached) return;
-    settleApprovalDecisionHandoff(thread.thread_id, handoff.actionID);
-  };
-  const scheduleApprovalDecisionResync = (threadID: string, actionID: string) => {
-    clearApprovalDecisionResyncTimer();
-    approvalDecisionResyncTimer = window.setTimeout(() => {
-      approvalDecisionResyncTimer = undefined;
-      const current = untrack(approvalDecisionHandoff);
-      if (!current || current.threadID !== threadID || current.actionID !== actionID) return;
-      void reloadSelectedThread(threadID, threadLoadSequence, 'user_action').catch((error) => {
-        if (selectedThreadDetailMatches(threadID)) {
-          notifyComposerError(getErrorMessage(error));
-        }
-      });
-    }, APPROVAL_DECISION_RESYNC_MS);
-  };
-  const registerApprovalDecisionReceipt = (
-    threadID: string,
-    actionID: string,
-    currentCursor: unknown,
-  ) => {
-    const current = untrack(approvalDecisionHandoff);
-    if (!current || current.threadID !== threadID || current.actionID !== actionID) return;
-    const targetCursor = liveCursorValue(currentCursor);
-    clearApprovalDecisionResyncTimer();
-    setApprovalDecisionHandoff({ ...current, phase: 'awaiting_projection', targetCursor });
-    const thread = threads().find((candidate) => candidate.thread_id === threadID);
-    if (thread) {
-      reconcileApprovalDecisionHandoff(
-        thread,
-        liveStreamGenerations.get(threadID),
-        liveCursors.get(threadID),
-      );
-    }
-    if (untrack(approvalDecisionHandoff)?.actionID === actionID) {
-      scheduleApprovalDecisionResync(threadID, actionID);
-    }
-  };
-  onCleanup(() => {
-    clearApprovalDecisionResyncTimer();
-  });
-  const pendingContextCompactionVisible = (thread: FlowerThreadSnapshot | null, pending: PendingContextCompactionDecoration | null): boolean => {
-    if (!pending) return false;
-    if (!thread || trimString(thread.thread_id) !== trimString(pending.thread_id)) return true;
-    const pendingOperationID = trimString(pending.decoration.compaction.operation_id);
-    const knownOperationIDs = new Set(pending.known_operation_ids.map(trimString).filter(Boolean));
-    const isConfirmedCompaction = (compaction: { operation_id?: string; updated_at_ms?: number }) => {
-      const operationID = trimString(compaction.operation_id);
-      if (pendingOperationID !== '' && operationID === pendingOperationID) return true;
-      const status = trimString((compaction as { status?: string }).status);
-      if (operationID !== '') {
-        if (operationID.startsWith('local:')) return false;
-        if (!knownOperationIDs.has(operationID)) return true;
-        return status === 'compacting';
-      }
-      return Number(compaction.updated_at_ms ?? 0) >= pending.started_at_ms;
-    };
-    if ((thread.context_compactions ?? []).some(isConfirmedCompaction)) return false;
-    return !(thread.timeline_decorations ?? []).some((decoration) => (
-      decoration.kind === 'context_compaction'
-      && isConfirmedCompaction(decoration.compaction)
-    ));
-  };
-  const pendingContextCompactionForSelectedThread = createMemo(() => {
-    const pending = pendingContextCompaction();
-    return pending?.thread_id === selectedThreadID() ? pending : null;
-  });
-  const pendingContextCompactionVisibleForSelectedThread = createMemo(() => (
-    pendingContextCompactionVisible(selectedThread(), pendingContextCompactionForSelectedThread())
-  ));
-  const selectedThreadDetailPending = createMemo(() => {
-    const threadID = trimString(selectedThreadID());
-    return Boolean(threadID && selectedThreadDetailID() !== threadID);
+	const selectedThreadDetailPending = createMemo(() => {
+		const threadID = trimString(selectedThreadID());
+		return Boolean(threadID && !threadCache().views.has(threadID));
   });
   const selectedThreadLoading = createMemo(() => (
     selectedThreadDetailPending()
-    || (trimString(loadingThreadID()) !== '' && loadingThreadID() === selectedThreadID())
   ));
   const currentComposerSessionKey = createMemo(() => trimString(selectedThreadID()) || PENDING_NEW_THREAD_ID);
-  const visiblePendingSubmission = createMemo(() => {
-    const pending = pendingSubmission();
-    if (!pending) return null;
-    const threadID = trimString(selectedThreadID());
-    if (pending.threadID) {
-      if (pending.threadID !== threadID) return null;
-      if (pendingSubmissionIsQueued(pending)) return null;
-      if (pendingSubmissionHasCanonicalProjection(pending, selectedThread())) return null;
-      return pending;
-    }
-    return !threadID && pending.sessionKey === PENDING_NEW_THREAD_ID ? pending : null;
+	const attachmentControllers = new Map<string, FlowerAttachmentController>();
+	const attachmentControllerUnsubscribers = new Map<string, () => void>();
+	const draftSessions = new Map<string, FlowerComposerDraftSession>();
+	const draftSessionSnapshots = new Map<string, () => FlowerComposerDraftSnapshot>();
+	const draftSessionUnsubscribers = new Map<string, () => void>();
+	const hydratedDraftSessionRevisions = new Map<string, number>();
+	const draftSessionFor = (rawSessionKey: string): FlowerComposerDraftSession => {
+		const sessionKey = trimString(rawSessionKey) || PENDING_NEW_THREAD_ID;
+		const existing = draftSessions.get(sessionKey);
+		if (existing) return existing;
+		const session = draftCoordinator.open(sessionKey);
+		draftSessions.set(sessionKey, session);
+		const [draftSnapshot, setDraftSnapshot] = createSignal(session.snapshot(), { equals: false });
+		draftSessionSnapshots.set(sessionKey, draftSnapshot);
+		draftSessionUnsubscribers.set(sessionKey, session.subscribe((next) => setDraftSnapshot(() => next)));
+		return session;
+	};
+	const reactiveDraftSnapshotFor = (rawSessionKey: string): FlowerComposerDraftSnapshot => {
+		const sessionKey = trimString(rawSessionKey) || PENDING_NEW_THREAD_ID;
+		draftSessionFor(sessionKey);
+		const draftSnapshot = draftSessionSnapshots.get(sessionKey);
+		if (!draftSnapshot) throw new Error('Flower composer draft session snapshot is unavailable.');
+		return draftSnapshot();
+	};
+	const visibleTransportOutbox = createMemo(() => (
+	    transportOutbox().forThread(currentComposerSessionKey())
+	  ));
+	const [outboxRetryTick, setOutboxRetryTick] = createSignal(0);
+	const outboxRetryAttempts = new Map<string, number>();
+	const outboxRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+	createEffect(() => {
+		outboxRetryTick();
+		if (!props.adapter.launchTurn) return;
+		for (const entry of transportOutbox().entries.values()) {
+			if (outboxResendInFlight.has(entry.requestId)) continue;
+			if ((entry.input.attachment_ids?.length ?? 0) > 0 && !trimString(entry.input.staging_scope?.capability)) continue;
+			outboxResendInFlight.add(entry.requestId);
+			void props.adapter.launchTurn(entry.input).then((receipt) => {
+				outboxRetryAttempts.delete(entry.requestId);
+				const retryTimer = outboxRetryTimers.get(entry.requestId);
+				if (retryTimer !== undefined) clearTimeout(retryTimer);
+				outboxRetryTimers.delete(entry.requestId);
+				setTransportOutbox((outbox) => outbox.assignThread(entry.requestId, receipt.thread_id));
+				applyRuntimeCurrent(receipt.current);
+				setTransportOutbox((outbox) => outbox.confirm(receipt.current));
+				if (entry.threadId === PENDING_NEW_THREAD_ID && !selectedThreadID()) setSelectedThreadWithDetail(receipt.thread_id);
+			}).catch(() => {
+				const attempt = (outboxRetryAttempts.get(entry.requestId) ?? 0) + 1;
+				outboxRetryAttempts.set(entry.requestId, attempt);
+				if (outboxRetryTimers.has(entry.requestId)) return;
+				const delay = Math.min(10_000, 250 * 2 ** Math.min(attempt - 1, 5));
+				outboxRetryTimers.set(entry.requestId, setTimeout(() => {
+					outboxRetryTimers.delete(entry.requestId);
+					setOutboxRetryTick((tick) => tick + 1);
+				}, delay));
+			}).finally(() => {
+				outboxResendInFlight.delete(entry.requestId);
+			});
+		}
+	});
+	onCleanup(() => {
+		for (const timer of outboxRetryTimers.values()) clearTimeout(timer);
+		outboxRetryTimers.clear();
+	});
+  const composerSessionDraftFromValue = (value: FlowerComposerDraftValue): FlowerComposerSessionDraft => ({
+    chatDraft: value.text,
+    references: value.references,
+    inputPromptSignature: value.input_prompt_signature ?? '',
+    inputDrafts: { ...(value.input_drafts ?? {}) },
+    activeInputQuestionID: value.active_input_question_id ?? '',
+    modelIDOverride: value.model_id,
+    permissionTypeOverride: value.permission_type,
+    reasoningOverride: value.reasoning_selection,
+    workingDirDraft: value.working_dir,
   });
-  const currentComposerSessionDraft = createMemo(() => composerSessionDrafts()[currentComposerSessionKey()] ?? emptyFlowerComposerSessionDraft());
+  const currentComposerSessionDraft = createMemo(() => (
+    composerSessionDraftFromValue(reactiveDraftSnapshotFor(currentComposerSessionKey()).value)
+  ));
   const defaultComposerPermissionType = createMemo<FlowerPermissionType>(() => snapshot()?.defaults.permission_type ?? 'approval_required');
   const selectedThreadPermissionType = createMemo<FlowerPermissionType>(() => selectedThread()?.permission_type ?? defaultComposerPermissionType());
   const composerPermissionType = createMemo<FlowerPermissionType>(() => {
@@ -1880,7 +1551,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (selectedThreadDetailPending()) return false;
     if (selectedThreadReadOnly()) return false;
     if (selectedInputRequest()) return false;
-    if (selectedThreadHasRunningContextCompaction()) return false;
     const status = selectedThreadLiveStatus();
     return status !== 'running' && status !== 'waiting_approval' && status !== 'waiting_user';
   });
@@ -1897,19 +1567,30 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ));
   const updateComposerSessionDraft = (sessionKey: string, updater: (draft: FlowerComposerSessionDraft) => FlowerComposerSessionDraft) => {
     const key = trimString(sessionKey) || PENDING_NEW_THREAD_ID;
-    setComposerSessionDrafts((current) => {
-      if (key !== PENDING_NEW_THREAD_ID && retiredThreadIDs.has(key)) return current;
-      const previous = current[key] ?? emptyFlowerComposerSessionDraft();
+    if (key !== PENDING_NEW_THREAD_ID && retiredThreadIDs.has(key)) return;
+    draftSessionFor(key).mutate((value) => {
+      const previous = composerSessionDraftFromValue(value);
       const next = updater(previous);
-      if (sameFlowerComposerSessionDraft(previous, next)) return current;
-      return { ...current, [key]: next };
+      if (sameFlowerComposerSessionDraft(previous, next)) return value;
+      return {
+        ...value,
+        text: next.chatDraft,
+        references: next.references,
+        input_prompt_signature: next.inputPromptSignature || undefined,
+        input_drafts: next.inputDrafts,
+        active_input_question_id: next.activeInputQuestionID || undefined,
+        model_id: next.modelIDOverride,
+        permission_type: next.permissionTypeOverride,
+        reasoning_selection: next.reasoningOverride,
+        working_dir: next.workingDirDraft,
+      };
     });
   };
   const updateCurrentComposerSessionDraft = (updater: (draft: FlowerComposerSessionDraft) => FlowerComposerSessionDraft) => {
     updateComposerSessionDraft(currentComposerSessionKey(), updater);
   };
   const draftSubmissionActive = (value: FlowerComposerDraftValue): boolean => (
-    value.mode === 'preparing_long_text_submission' || value.mode === 'admission_in_flight'
+    value.mode === 'preparing_long_text_submission'
   );
   const updateComposerSessionText = (rawSessionKey: string, text: string) => {
     const sessionKey = trimString(rawSessionKey) || PENDING_NEW_THREAD_ID;
@@ -1921,12 +1602,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       draft.text === text ? draft : { ...draft, text }
     ));
   };
-  const attachmentControllers = new Map<string, FlowerAttachmentController>();
-  const attachmentControllerUnsubscribers = new Map<string, () => void>();
-  const draftSessions = new Map<string, FlowerComposerDraftSession>();
-  const draftSessionSnapshots = new Map<string, () => FlowerComposerDraftSnapshot>();
-  const draftSessionUnsubscribers = new Map<string, () => void>();
-  const hydratedDraftSessionRevisions = new Map<string, number>();
   type ComposerAttachmentIntent =
     | Readonly<{ kind: 'add'; files: readonly File[]; source: 'file' | 'paste' | 'drop' }>
     | Readonly<{ kind: 'reselect'; localID: string; file: File }>;
@@ -1969,35 +1644,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const sessionKey = trimString(rawSessionKey) || PENDING_NEW_THREAD_ID;
     draftCoordinator.releaseAttachmentStagingScope(sessionKey);
   };
-  const draftSessionFor = (rawSessionKey: string): FlowerComposerDraftSession => {
-    const sessionKey = trimString(rawSessionKey) || PENDING_NEW_THREAD_ID;
-    const existing = draftSessions.get(sessionKey);
-    if (existing) return existing;
-    const session = draftCoordinator.open(sessionKey);
-    draftSessions.set(sessionKey, session);
-    const [snapshot, setSnapshot] = createSignal(session.snapshot(), { equals: false });
-    draftSessionSnapshots.set(sessionKey, snapshot);
-    draftSessionUnsubscribers.set(sessionKey, session.subscribe((next) => setSnapshot(() => next)));
-    return session;
-  };
-  const reactiveDraftSnapshotFor = (rawSessionKey: string): FlowerComposerDraftSnapshot => {
-    const sessionKey = trimString(rawSessionKey) || PENDING_NEW_THREAD_ID;
-    draftSessionFor(sessionKey);
-    const snapshot = draftSessionSnapshots.get(sessionKey);
-    if (!snapshot) throw new Error('Flower composer draft session snapshot is unavailable.');
-    return snapshot();
-  };
   const currentAttachmentController = (): FlowerAttachmentController => attachmentControllerFor(currentComposerSessionKey());
   const currentAttachmentSnapshot = createMemo<FlowerAttachmentControllerSnapshot>(() => {
     attachmentStateRevision();
     return currentAttachmentController().snapshot();
   });
-  const composerSharedOperationActive = createMemo(() => Boolean(
-    draftSubmissionActive(reactiveDraftSnapshotFor(currentComposerSessionKey()).value),
-  ));
   const composerPermissionInteractive = createMemo(() => (
-    !composerSharedOperationActive()
-    && !selectedThreadDetailPending()
+    !selectedThreadDetailPending()
     && !selectedThreadReadOnly()
     && (!selectedThreadID() || typeof props.adapter.setThreadPermissionType === 'function')
   ));
@@ -2145,8 +1798,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     for (const session of draftSessions.values()) {
       const snapshot = session.snapshot();
       if (
-        (snapshot.value.mode === 'preparing_long_text_submission' || snapshot.value.mode === 'admission_in_flight')
-        && snapshot.value.admission_started !== true
+        snapshot.value.mode === 'preparing_long_text_submission'
       ) {
         session.mutate((value) => ({
           ...value,
@@ -2154,18 +1806,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             ? 'over_limit_editing'
             : 'ordinary',
           client_request_id: undefined,
-          admission_started: undefined,
         }));
       }
     }
   });
-  const selectedThreadDetailMatches = (threadID: string): boolean => {
-    const tid = trimString(threadID);
-    return Boolean(tid && selectedThreadID() === tid && selectedThreadDetailID() === tid);
-  };
-  const composerSessionStillCurrent = (sessionKey: string): boolean => {
-    const key = trimString(sessionKey) || PENDING_NEW_THREAD_ID;
-    if (key === PENDING_NEW_THREAD_ID) return !selectedThreadID() && !selectedThreadDetailID();
+	const selectedThreadDetailMatches = (threadID: string): boolean => {
+		const tid = trimString(threadID);
+		return Boolean(tid && selectedThreadID() === tid && threadCache().views.has(tid));
+	};
+	const composerSessionStillCurrent = (sessionKey: string): boolean => {
+		const key = trimString(sessionKey) || PENDING_NEW_THREAD_ID;
+		if (key === PENDING_NEW_THREAD_ID) return !selectedThreadID();
     return selectedThreadDetailMatches(key);
   };
   const setSelectedThreadWithDetailIfSessionCurrent = (sessionKey: string, threadID: string): boolean => {
@@ -2179,7 +1830,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const ordinaryComposerBlocked = Boolean(selectedInputRequest())
       || Boolean(selectedComposerApprovalDisplayAction())
       || selectedThreadReadOnly()
-      || selectedThreadDetailPending()
       || surfaceWarmupActive();
     if (longTextPreparing() && ordinaryComposerBlocked) cancelActiveLongTextSubmission?.();
   });
@@ -2211,13 +1861,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const canPickWorkingDirectory = createMemo(() => (
     !selectedThreadID()
     && workingDirectoryPickerAvailable()
-    && !composerSharedOperationActive()
-    && !chatRunning()
     && !surfaceWarmupActive()
   ));
   const workingDirectoryChipInteractive = createMemo(() => (
-    !composerSharedOperationActive()
-    && !selectedThreadDetailPending()
+    !selectedThreadDetailPending()
     && (selectedThreadID() ? displayedWorkingDirectory() !== '' : canPickWorkingDirectory())
   ));
   const workingDirectoryChipTitle = createMemo(() => {
@@ -2350,39 +1997,27 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const applyThreadPermissionLocally = (threadID: string, permissionType: FlowerPermissionType) => {
     const tid = trimString(threadID);
     if (!tid || retiredThreadIDs.has(tid)) return;
-    setThreads((current) => {
-      let changed = false;
-      const next = current.map((thread) => {
-        if (thread.thread_id !== tid || thread.permission_type === permissionType) return thread;
-        changed = true;
-        return {
-          ...thread,
-          permission_type: permissionType,
-          updated_at_ms: Math.max(Number(thread.updated_at_ms ?? 0), Date.now()),
-        };
-      });
-      if (changed) threadLocalMutationRevision += 1;
-      return changed ? next : current;
-    });
+    setThreadCache((cache) => cache.updateThread(tid, (thread) => {
+      if (thread.permission_type === permissionType) return thread;
+      return {
+        ...thread,
+        permission_type: permissionType,
+        updated_at_ms: Math.max(Number(thread.updated_at_ms ?? 0), Date.now()),
+      };
+    }));
   };
   const applyThreadModelLocally = (threadID: string, modelID: string) => {
     const tid = trimString(threadID);
     const mid = trimString(modelID);
     if (!tid || !mid || retiredThreadIDs.has(tid)) return;
-    setThreads((current) => {
-      let changed = false;
-      const next = current.map((thread) => {
-        if (thread.thread_id !== tid || thread.model_id === mid) return thread;
-        changed = true;
-        return {
-          ...thread,
-          model_id: mid,
-          updated_at_ms: Math.max(Number(thread.updated_at_ms ?? 0), Date.now()),
-        };
-      });
-      if (changed) threadLocalMutationRevision += 1;
-      return changed ? next : current;
-    });
+    setThreadCache((cache) => cache.updateThread(tid, (thread) => {
+      if (thread.model_id === mid) return thread;
+      return {
+        ...thread,
+        model_id: mid,
+        updated_at_ms: Math.max(Number(thread.updated_at_ms ?? 0), Date.now()),
+      };
+    }));
   };
   const applyPersistedDefaultModelLocally = (modelID: string) => {
     const mid = trimString(modelID);
@@ -2400,24 +2035,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const applyThreadReasoningLocally = (threadID: string, selection: FlowerReasoningSelection | undefined) => {
     const tid = trimString(threadID);
     if (!tid || retiredThreadIDs.has(tid)) return;
-    setThreads((current) => {
-      let changed = false;
-      const next = current.map((thread) => {
-        if (thread.thread_id !== tid) return thread;
-        if (sameFlowerReasoningSelection(thread.reasoning_selection, selection)) return thread;
-        changed = true;
-        return {
-          ...thread,
-          reasoning_selection: selection,
-          updated_at_ms: Math.max(Number(thread.updated_at_ms ?? 0), Date.now()),
-        };
-      });
-      if (changed) threadLocalMutationRevision += 1;
-      return changed ? next : current;
-    });
+    setThreadCache((cache) => cache.updateThread(tid, (thread) => {
+      if (sameFlowerReasoningSelection(thread.reasoning_selection, selection)) return thread;
+      return {
+        ...thread,
+        reasoning_selection: selection,
+        updated_at_ms: Math.max(Number(thread.updated_at_ms ?? 0), Date.now()),
+      };
+    }));
   };
   const updateComposerModelID = async (modelID: string) => {
-    if (composerSharedOperationActive()) return;
     const mid = trimString(modelID);
     if (!mid) return;
     const option = modelSelectOptions().find((item) => item.id === mid);
@@ -2488,7 +2115,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
   const updateComposerReasoningSelection = async (selection: FlowerReasoningSelection | undefined) => {
-    if (composerSharedOperationActive()) return;
     const normalized = serializeFlowerReasoningSelection(selection);
     const threadID = trimString(selectedThreadID());
     if (!threadID || selectedInputRequest()) {
@@ -2660,53 +2286,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return presentRunError(error);
   });
   const threadItemCache = new Map<string, { item: ReturnType<typeof projectFlowerThreadListItem>; sig: string }>();
-  const liveCursorValue = (value: unknown): number => Math.max(0, Math.floor(Number(value ?? 0)));
-  const liveStreamGenerationValue = (value: unknown): number => {
-    const generation = Math.floor(Number(value ?? 1));
-    return Number.isFinite(generation) && generation > 0 ? generation : 1;
-  };
-  const setLivePosition = (threadID: string, streamGeneration: unknown, cursor: unknown) => {
-    const tid = trimString(threadID);
-    if (!tid) return;
-    const nextGeneration = liveStreamGenerationValue(streamGeneration);
-    const currentGeneration = liveStreamGenerationValue(liveStreamGenerations.get(tid));
-    const nextCursor = liveCursorValue(cursor);
-    if (nextGeneration > currentGeneration) {
-      liveStreamGenerations.set(tid, nextGeneration);
-      liveCursors.set(tid, nextCursor);
-      return;
-    }
-    if (nextGeneration === currentGeneration) {
-      liveStreamGenerations.set(tid, nextGeneration);
-      liveCursors.set(tid, Math.max(liveCursorValue(liveCursors.get(tid)), nextCursor));
-    }
-  };
-  type LiveBootstrapApplyReason = 'initial_load' | 'user_action' | 'resync_reload' | 'background_refresh' | 'stop_confirmation';
-  const liveBootstrapIsCurrent = (
-    live: FlowerLiveBootstrap,
-    reason: LiveBootstrapApplyReason,
-    expectedRunID = '',
-  ): boolean => {
-    const tid = trimString(live.thread_id || live.thread.thread_id);
-    if (!tid) return true;
-    const incomingGeneration = liveStreamGenerationValue(live.stream_generation);
-    const currentGeneration = liveStreamGenerationValue(liveStreamGenerations.get(tid));
-    if (incomingGeneration > currentGeneration) return true;
-    if (incomingGeneration < currentGeneration) return false;
-    const incomingCursor = liveCursorValue(live.cursor);
-    const currentCursor = liveCursorValue(liveCursors.get(tid));
-    if (
-      reason === 'stop_confirmation'
-      && incomingCursor < currentCursor
-      && expectedRunID
-      && (live.thread.status === 'canceled' || live.thread.status === 'success' || live.thread.status === 'failed')
-      && trimString(live.live_state.thread_patch?.active_run_id) === expectedRunID
-    ) {
-      return true;
-    }
-    if (reason === 'resync_reload') return incomingCursor >= currentCursor;
-    return incomingCursor >= currentCursor;
-  };
+  type LiveBootstrapApplyReason = 'initial_load' | 'user_action' | 'background_refresh' | 'stop_confirmation';
   const readStatusWithUnread = (thread: FlowerThreadSnapshot, isUnread: boolean): FlowerThreadSnapshot => (
     thread.read_status.is_unread === isUnread
       ? thread
@@ -2727,9 +2307,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const applyThreadReadStatus = (threadID: string, readStatus: FlowerThreadReadStatus) => {
     const tid = trimString(threadID);
     if (!tid || retiredThreadIDs.has(tid)) return;
-    setThreads((items) => items.map((thread) => (
-      thread.thread_id === tid ? threadWithReadStatus(thread, readStatus) : thread
-    )));
+    setThreadCache((cache) => cache.updateThread(tid, (thread) => threadWithReadStatus(thread, readStatus)));
   };
   const threadItemSignature = (t: FlowerThreadSnapshot): string => {
     const visibleThread = threadWithLocalReadVisibility(t);
@@ -2790,65 +2368,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (signature === lastSidebarListSignature) return;
     lastSidebarListSignature = signature;
     setSidebarListItems(items);
-  });
-  const localAdmissionThreadItems = createMemo<readonly FlowerThreadListItem[]>(() => {
-    const items = sidebarListItems();
-    const pending = pendingSubmission();
-    if (!pending || pending.phase === 'preparing' || pendingSubmissionIsQueued(pending)) return items;
-    const pendingThreadID = trimString(pending.threadID);
-    const buildPendingItem = (threadID: string): FlowerThreadListItem => {
-      const startedAtMS = Math.max(1, pending.startedAtMS);
-      const activitySignature = `local-admission:${pending.clientRequestID}`;
-      return {
-        thread_id: threadID,
-        title: copy().threadList.untitled,
-        title_status: 'pending',
-        model_id: selectedComposerModelID(),
-        working_dir: draftWorkingDirectory(),
-        pinned: false,
-        created_at_ms: startedAtMS,
-        updated_at_ms: startedAtMS,
-        preview: pending.prompt,
-        status: 'running',
-        source_label: '',
-        target_labels: [],
-        admission_pending: true,
-        read_status: {
-          is_unread: false,
-          snapshot: {
-            activity_revision: 0,
-            last_message_at_unix_ms: startedAtMS,
-            activity_signature: activitySignature,
-          },
-          read_state: {
-            last_seen_activity_revision: 0,
-            last_read_message_at_unix_ms: startedAtMS,
-            last_seen_activity_signature: activitySignature,
-          },
-        },
-      };
-    };
-    if (pendingThreadID) {
-      const matched = items.some((item) => item.thread_id === pendingThreadID);
-      const projected = items.map((item) => item.thread_id === pendingThreadID
-        ? { ...item, status: 'running' as const, admission_pending: true }
-        : item);
-      return matched || pending.sessionKey !== PENDING_NEW_THREAD_ID
-        ? projected
-        : [buildPendingItem(pendingThreadID), ...projected];
-    }
-    if (pending.sessionKey !== PENDING_NEW_THREAD_ID) return items;
-    return [buildPendingItem(PENDING_NEW_THREAD_ID), ...items];
-  });
-  const visibleSidebarActiveThreadID = createMemo(() => {
-    const pending = pendingSubmission();
-    return pending
-      && pending.phase !== 'preparing'
-      && pending.canonicalKind !== 'queued'
-      && !pending.threadID
-      && pending.sessionKey === PENDING_NEW_THREAD_ID
-      ? PENDING_NEW_THREAD_ID
-      : sidebarActiveThreadID();
   });
   const [companionLiveThread, setCompanionLiveThread] = createSignal<FlowerThreadSnapshot | null>(null);
   const [companionLiveRunGeneration] = createSignal(0);
@@ -3213,14 +2732,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return threadID ? pending.threadID === threadID : pending.threadID === PENDING_NEW_THREAD_ID;
   });
   const composerModelInteractive = createMemo(() => (
-    !composerSharedOperationActive()
-    && selectedThreadPreferenceEditable()
+    selectedThreadPreferenceEditable()
     && modelSelectOptions().length > 0
     && (!selectedThreadID() || typeof props.adapter.setThreadModel === 'function')
   ));
   const composerReasoningInteractive = createMemo(() => (
-    !composerSharedOperationActive()
-    && composerReasoningEnabled()
+    composerReasoningEnabled()
     && (selectedInputRequest() ? !selectedThreadReadOnly() : selectedThreadPreferenceEditable())
     && (!selectedThreadID() || selectedInputRequest() || typeof props.adapter.setThreadReasoningSelection === 'function')
   ));
@@ -3581,113 +3098,36 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const upsertThread = (thread: FlowerThreadSnapshot) => {
     if (retiredThreadIDs.has(trimString(thread.thread_id))) return;
-    setThreads((current) => {
-      const existingIndex = current.findIndex((item) => item.thread_id === thread.thread_id);
-      if (existingIndex < 0) {
-        threadLocalMutationRevision += 1;
-        return [thread, ...current];
-      }
-      if (sameThreadSnapshot(current[existingIndex], thread)) {
-        return current;
-      }
-      const next = [...current];
-      next[existingIndex] = thread;
-      threadLocalMutationRevision += 1;
-      return next;
-    });
-  };
-  const stripThreadDetail = (thread: FlowerThreadSnapshot): FlowerThreadSnapshot => {
-    const summary = { ...thread, messages: [] as readonly FlowerChatMessage[] };
-    delete summary.queued_turns;
-    delete summary.model_io_status;
-    delete summary.context_usage;
-    delete summary.context_compactions;
-    delete summary.timeline_decorations;
-    delete summary.subagents;
-    delete summary.approval_actions;
-    delete summary.approval_queue;
-    delete summary.input_request;
-    delete summary.error;
-    return summary;
-  };
-  const evictThreadDetail = (threadID: string) => {
-    const tid = trimString(threadID);
-    if (!tid || !loadedThreadIDs.delete(tid)) return;
-    liveCursors.delete(tid);
-    liveStreamGenerations.delete(tid);
-    setThreads((current) => {
-      let changed = false;
-      const next = current.map((thread) => {
-        if (thread.thread_id !== tid) return thread;
-        changed = true;
-        return stripThreadDetail(thread);
-      });
-      if (changed) threadLocalMutationRevision += 1;
-      return changed ? next : current;
-    });
-  };
-  const rememberThreadDetail = (threadID: string) => {
-    const tid = trimString(threadID);
-    if (!tid) return;
-    loadedThreadIDs.delete(tid);
-    loadedThreadIDs.add(tid);
-    while (loadedThreadIDs.size > FLOWER_WARM_THREAD_DETAIL_LIMIT) {
-      const selectedID = trimString(selectedThreadID());
-      const evictedID = [...loadedThreadIDs].find((candidate) => candidate !== tid && candidate !== selectedID);
-      if (!evictedID) return;
-      evictThreadDetail(evictedID);
-    }
+    const existing = threadCache().summaries.get(thread.thread_id);
+    if (existing && sameThreadSnapshot(existing, thread)) return;
+    setThreadCache((cache) => cache.replaceSummary(thread));
   };
   const applyOptimisticPinnedState = (threadID: string, pinned: boolean) => {
     const tid = trimString(threadID);
     if (!tid || retiredThreadIDs.has(tid)) return;
-    setThreads((items) => items.map((thread) => (
-      thread.thread_id === tid
-        ? {
-            ...thread,
-            ...(pinned ? { pinned_at_ms: Date.now() } : { pinned_at_ms: undefined }),
-          }
-        : thread
-    )));
-    threadLocalMutationRevision += 1;
+    setThreadCache((cache) => cache.updateThread(tid, (thread) => ({
+      ...thread,
+      ...(pinned ? { pinned_at_ms: Date.now() } : { pinned_at_ms: undefined }),
+    })));
   };
   const applyLiveBootstrap = (
-    live: FlowerLiveBootstrap,
-    reason: LiveBootstrapApplyReason = 'background_refresh',
-    expectedRunID = '',
+    live: FlowerThreadView,
+    _reason: LiveBootstrapApplyReason = 'background_refresh',
+    _expectedRunID = '',
   ): FlowerThreadSnapshot => {
-    const projectedThread = projectFlowerLiveBootstrap(live);
-    threadStore.applySnapshot(projectedThread, live.cursor);
-    const previousThread = threads().find((item) => item.thread_id === projectedThread.thread_id);
-    // A bootstrap with messages=[] is a summary/read-after-admission boundary,
-    // not an instruction to erase detail already rendered for this thread.
-    // Keep the loaded timeline while newer waiting/terminal state converges.
-    const thread = projectedThread.messages.length === 0 && (previousThread?.messages.length ?? 0) > 0
-      ? { ...projectedThread, messages: previousThread!.messages }
-      : projectedThread;
+    const thread: FlowerThreadSnapshot = {
+      ...live.thread,
+    };
+    const previousThread = threads().find((item) => item.thread_id === thread.thread_id);
     if (retiredThreadIDs.has(trimString(thread.thread_id))) {
       return threads().find((item) => item.thread_id === thread.thread_id) ?? thread;
     }
-    if (!liveBootstrapIsCurrent(live, reason, expectedRunID)) {
-      return threads().find((item) => item.thread_id === thread.thread_id) ?? thread;
-    }
     const previous = previousThread;
-    setLivePosition(thread.thread_id, live.stream_generation, live.cursor);
-    upsertThread(thread);
-    rememberThreadDetail(thread.thread_id);
-    setConsumedInputAdmissions((current) => {
-      const admission = current[thread.thread_id];
-      if (!admission) return current;
-      const canonicalHasAdmission = thread.messages.some((message) => (
-        trimString(message.turn_id) === trimString(admission.turnID)
-        && message.role === 'user'
-      ));
-      if (!canonicalHasAdmission) return current;
-      const next = { ...current };
-      delete next[thread.thread_id];
-      return next;
-    });
-    reconcileApprovalDecisionHandoff(thread, live.stream_generation, live.cursor);
+    setThreadCache((cache) => cache.replaceView({
+      thread,
+      version: Math.max(1, Math.floor(Number(live.current.view_version) || 0)),
+      connectionEpoch: liveTransport.connectionEpoch(),
+    }));
     if (
       previous
       && previous.model_id !== thread.model_id
@@ -3702,8 +3142,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     props.adapter.reorderQueuedTurns
     && !selectedThreadReadOnly()
     && selectedCanonicalQueuedTurns().length > 1
-    && queuedTurnReorder()?.phase !== 'saving'
-    && !queuedTurnDelete()
   );
   const beginQueuedTurnDrag = (event: DragEvent & { currentTarget: HTMLDivElement }, queueID: string) => {
     if (!queuedTurnReorderEnabled()) {
@@ -3772,14 +3210,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return;
     }
     const sequence = ++queuedTurnReorderSequence;
-    setQueuedTurnReorder({ ...reorder, phase: 'saving' });
+    setQueuedTurnReorder(null);
     void props.adapter.reorderQueuedTurns(reorder.threadID, reorder.orderedQueueIDs).then((live) => {
       if (sequence !== queuedTurnReorderSequence) return;
       applyLiveBootstrap(live, 'user_action');
-      setQueuedTurnReorder(null);
     }).catch((error) => {
       if (sequence !== queuedTurnReorderSequence) return;
-      setQueuedTurnReorder(null);
       notifyThreadActionError(getErrorMessage(error));
     });
   };
@@ -3793,12 +3229,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       !props.adapter.deleteQueuedTurn
       || !threadID
       || !queueID
-      || queuedTurnDelete()
-      || queuedTurnPromotingID()
-      || queuedTurnReorder()?.phase === 'saving'
     ) return;
     setQueuedTurnReorder(null);
-    setQueuedTurnDelete({ threadID, queueID });
     try {
       applyLiveBootstrap(await props.adapter.deleteQueuedTurn(threadID, queueID), 'user_action');
     } catch (error) {
@@ -3808,74 +3240,28 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         // The existing live stream remains the canonical recovery path.
       }
       notifyThreadActionError(getErrorMessage(error));
-    } finally {
-      const deleting = queuedTurnDelete();
-      if (deleting?.threadID === threadID && deleting.queueID === queueID) setQueuedTurnDelete(null);
     }
   };
   const queuedTurnPromotionBlocked = createMemo(() => {
-    if (selectedThreadReadOnly() || selectedThreadHasRunningContextCompaction()) return true;
+    if (selectedThreadReadOnly()) return true;
     const status = selectedThreadLiveStatus();
     return status === 'running' || status === 'waiting_approval' || status === 'waiting_user';
   });
   const promoteQueuedTurn = async (turn: FlowerQueuedTurn): Promise<void> => {
     const threadID = trimString(selectedThreadID());
     const queueID = trimString(turn.queue_id);
-    if (!threadID || !queueID || queuedTurnPromotionBlocked() || queuedTurnPromotingID()) return;
-    const clientRequestID = createFlowerClientRequestID();
-    setQueuedTurnPromotingID(queueID);
-    transitionPendingSubmission({
-      kind: 'begin',
-      submission: {
-        clientRequestID,
-        sessionKey: threadID,
-        threadID,
-        sourceQueueID: queueID,
-        prompt: turn.prompt,
-        attachmentNames: (turn.attachments ?? []).map((attachment) => trimString(attachment.name)).filter(Boolean),
-        referenceLabels: [],
-        phase: 'preparing',
-        startedAtMS: Date.now(),
-      },
-    });
+    if (!props.adapter.promoteQueuedTurn || !threadID || !queueID || queuedTurnPromotionBlocked()) return;
     transcriptScroll.startFollowing();
     scrollTranscriptToBottom({ smooth: false });
     requestTranscriptAnimationFrame(() => scrollTranscriptToBottom({ smooth: false }));
     try {
-      const receipt = await props.adapter.launchTurn({
-        client_request_id: clientRequestID,
-        thread_id: threadID,
-        prompt: turn.prompt,
-        ...(turn.attachments?.length ? { attachment_ids: turn.attachments.map((attachment) => trimString(attachment.attachment_id)).filter(Boolean) } : {}),
-        ...(turn.context_action ? { context_action: turn.context_action } : {}),
-        source_followup_id: queueID,
-      });
-      if (trimString(receipt.thread_id) !== threadID) {
-        throw new Error('Flower queued turn admission returned a different conversation.');
-      }
-      if (receipt.kind === 'start' || receipt.kind === 'admitting') {
-        transitionPendingSubmission({
-          kind: 'admission_accepted',
-          clientRequestID,
-          threadID,
-          canonicalKind: receipt.kind,
-          canonicalID: receipt.kind === 'start' ? receipt.turn_id : receipt.admission_id,
-        });
-      } else {
-        transitionPendingSubmission({ kind: 'admission_started', clientRequestID });
-      }
-      void reloadSelectedThread(threadID, threadLoadSequence, 'user_action').catch(() => undefined);
+	  applyLiveBootstrap(await props.adapter.promoteQueuedTurn(threadID, queueID), 'user_action');
       requestComposerFocus();
     } catch (error) {
-      transitionPendingSubmission({ kind: 'admission_failed', clientRequestID });
       notifyThreadActionError(getErrorMessage(error));
-    } finally {
-      if (queuedTurnPromotingID() === queueID && pendingSubmission()?.clientRequestID !== clientRequestID) {
-        setQueuedTurnPromotingID('');
-      }
     }
   };
-  const loadThreadBootstrap = (threadID: string, force = false): Promise<FlowerLiveBootstrap> => {
+  const loadThreadBootstrap = (threadID: string, force = false): Promise<FlowerThreadView> => {
     const tid = trimString(threadID);
     const existing = force ? undefined : threadBootstrapRequests.get(tid);
     if (existing) return existing;
@@ -3894,12 +3280,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ): Promise<FlowerThreadSnapshot | null> => {
     const tid = trimString(threadID);
     if (!tid || retiredThreadIDs.has(tid)) return null;
-    const live = await loadThreadBootstrap(tid, reason === 'user_action' || reason === 'resync_reload');
-    if (retiredThreadIDs.has(tid) || sequence !== threadLoadSequence || selectedThreadID() !== tid) {
-      const projected = projectFlowerLiveBootstrap(live);
-      return threads().find((item) => item.thread_id === tid) ?? projected;
-    }
+    const live = await loadThreadBootstrap(tid, reason === 'user_action');
     const thread = applyLiveBootstrap(live, reason);
+    if (retiredThreadIDs.has(tid) || sequence !== threadLoadSequence || selectedThreadID() !== tid) {
+      return thread;
+    }
     if (thread.read_status.is_unread) {
       persistThreadRead(tid, thread.read_status.snapshot, sequence);
     }
@@ -3948,8 +3333,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       && sidePanel() === 'chat'
       && sequence === threadLoadSequence
       && selectedThreadID() === tid
-      && selectedThreadDetailID() === tid
-      && loadingThreadID() !== tid
+			&& threadCache().views.has(tid)
       && !loadError()
       && !threadLoadError()
       && presented?.threadID === tid
@@ -4163,8 +3547,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     cancelPresentedSelectionSchedule();
     setPresentedSelection(null);
     const existing = threads().find((thread) => thread.thread_id === tid) ?? null;
-    const detailAvailable = Boolean(existing && (loadedThreadIDs.has(tid) || threadHasLoadedDetail(existing)));
-    const detailWarm = Boolean(existing && loadedThreadIDs.has(tid));
+    const detailAvailable = threadCache().views.has(tid);
+    const detailWarm = detailAvailable;
     transcriptScroll.startFollowing();
     beginSelectedThreadTailReveal(tid, sequence);
     // Commit the rail selection immediately. When detail is not cached, keep
@@ -4173,11 +3557,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     // transcript while the request is pending. The sequence fence below
     // prevents a late A response from committing over B.
     setSelectedThreadID(tid);
-    threadStore.selectThread(tid);
-    if (detailAvailable) {
-      setSelectedThreadDetailID(tid);
-      setSidebarActiveThreadID(tid);
-      scheduleThreadSelectionContentPresented(tid);
+	if (detailAvailable) {
+		scheduleThreadSelectionContentPresented(tid);
     }
     scheduleSelectedThreadTailReveal(tid, sequence);
     setThreadLoadError('');
@@ -4186,7 +3567,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       persistThreadRead(tid, existing.read_status.snapshot, sequence);
     }
     if (detailWarm) {
-      rememberThreadDetail(tid);
       requestComposerFocus(focusOwner);
       if (revalidateWarmDetail) {
         void reloadSelectedThread(tid, sequence, 'background_refresh').catch((error) => {
@@ -4197,20 +3577,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
       return;
     }
-    setLoadingThreadID(tid);
     try {
       const live = await loadThreadBootstrap(tid, true);
+      const thread = applyLiveBootstrap(live, 'initial_load');
       if (sequence !== threadLoadSequence || selectedThreadID() !== tid) {
-        if (loadingThreadID() === tid) setLoadingThreadID('');
         return;
       }
-      const thread = applyLiveBootstrap(live, 'initial_load');
       if (thread.read_status.is_unread) {
         persistThreadRead(tid, thread.read_status.snapshot, sequence);
       }
       setSelectedThreadWithDetail(thread.thread_id);
       scheduleThreadSelectionContentPresented(thread.thread_id);
-      setLoadingThreadID('');
       setTranscriptLayoutRevision((revision) => revision + 1);
       if (selectedThreadTailRevealIsCurrent(thread.thread_id, sequence)) {
         scheduleSelectedThreadTailReveal(thread.thread_id, sequence);
@@ -4220,10 +3597,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       requestComposerFocus(focusOwner);
     } catch (error) {
       if (sequence !== threadLoadSequence || selectedThreadID() !== tid) {
-        if (loadingThreadID() === tid) setLoadingThreadID('');
         return;
       }
-      if (loadingThreadID() === tid) setLoadingThreadID('');
       if (selectedThreadTailRevealIsCurrent(tid, sequence)) {
         cancelSelectedThreadTailReveal();
       }
@@ -4282,7 +3657,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const performThreadsRefresh = async (): Promise<boolean> => {
     const refreshSequence = ++threadsRefreshSequence;
-    const startedMutationRevision = threadLocalMutationRevision;
     setThreadsRefreshing(true);
     try {
       const next = (await props.adapter.listThreads()).filter((thread) => !retiredThreadIDs.has(trimString(thread.thread_id)));
@@ -4293,50 +3667,26 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const selectedID = selectedThreadID();
       const previousSelected = threads().find((thread) => thread.thread_id === selectedID) ?? null;
       const selectedSummary = next.find((thread) => thread.thread_id === selectedID) ?? null;
-      const selectedDetailCurrent = !selectedID || selectedThreadDetailID() === selectedID;
+		const selectedDetailCurrent = !selectedID || threadCache().views.has(selectedID);
       const pendingSelectedMissing = Boolean(selectedID && !selectedSummary && !selectedDetailCurrent);
       if (pendingSelectedMissing) {
         cancelDeferredThreadSelection();
         cancelThreadSelectionTransaction();
         closeSubagentOverlays();
         setSelectedThreadID('');
-        setSelectedThreadDetailID('');
-        setSidebarActiveThreadID('');
       }
       if (selectedID && selectedDetailCurrent && selectedSummary?.read_status.is_unread) {
         persistThreadRead(selectedID, selectedSummary.read_status.snapshot, threadLoadSequence);
       }
-      let mergedThreads: readonly FlowerThreadSnapshot[] = [];
-      setThreads((current) => {
-        const currentWithoutRetired = current.some((thread) => retiredThreadIDs.has(trimString(thread.thread_id)))
-          ? current.filter((thread) => !retiredThreadIDs.has(trimString(thread.thread_id)))
-          : current;
-        mergedThreads = mergeFlowerThreadListRefresh(
-          currentWithoutRetired,
-          next,
-          {
-            selectedThreadID: pendingSelectedMissing ? '' : selectedID,
-            preserveMissingCurrentThreads: startedMutationRevision !== threadLocalMutationRevision && !pendingSelectedMissing,
-            sameThreadSnapshot,
-          },
-        );
-        if (mergedThreads.some((thread) => retiredThreadIDs.has(trimString(thread.thread_id)))) {
-          mergedThreads = mergedThreads.filter((thread) => !retiredThreadIDs.has(trimString(thread.thread_id)));
-        }
-        return mergedThreads;
-      });
-      const mergedSelected = mergedThreads.find((thread) => thread.thread_id === selectedID) ?? null;
-      setSelectedThreadID((current) => {
-        if (current && !mergedThreads.some((thread) => thread.thread_id === current)) {
-          cancelDeferredThreadSelection();
-          cancelThreadSelectionTransaction();
-          closeSubagentOverlays();
-          setSelectedThreadDetailID('');
-          setSidebarActiveThreadID('');
-          return '';
-        }
-        return current;
-      });
+      setThreadCache((cache) => cache.replaceSummaries(next));
+      const mergedSelected = selectedSummary;
+		const currentSelection = selectedThreadID();
+		if (currentSelection && !next.some((thread) => thread.thread_id === currentSelection) && !threadCache().views.has(currentSelection)) {
+			cancelDeferredThreadSelection();
+			cancelThreadSelectionTransaction();
+			closeSubagentOverlays();
+			setSelectedThreadID('');
+		}
       if (
         effectiveEngagement()
         && selectedID
@@ -4377,18 +3727,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     );
     return request;
   };
-  const scheduleLiveSummaryRefresh = () => {
-    if (liveSummaryRefreshTimer !== undefined) return;
-    if (typeof window === 'undefined') {
-      void refreshThreads();
-      return;
-    }
-    liveSummaryRefreshTimer = window.setTimeout(() => {
-      liveSummaryRefreshTimer = undefined;
-      void refreshThreads();
-    }, 500);
-  };
-
   const loadSurface = async () => {
     try {
       const next = await props.adapter.loadSettings();
@@ -4477,24 +3815,72 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     scheduleComposerFocus();
   });
 
-  const applyFlowerLiveStreamEnvelope = async (
-    envelope: FlowerLiveStreamEnvelope,
-    selectedID: string,
-    sequence: number,
-  ): Promise<'continue' | 'resync'> => {
-    if (envelope.kind === 'ready') {
-      // Ready advertises server high-water marks; only applied replay batches advance local cursors.
-      return 'continue';
+  const applyRuntimeCurrent = (current: FlowerTurnLaunchReceipt['current'], connectionEpoch = liveTransport.connectionEpoch()): boolean => {
+    const threadID = trimString(current.thread_id);
+    if (!threadID || retiredThreadIDs.has(threadID)) return false;
+    const now = Date.now();
+    const base = threadCache().views.get(threadID)?.thread ?? threadCache().summaries.get(threadID) ?? {
+      thread_id: threadID,
+      title: copy().threadList.untitled,
+      title_status: 'pending',
+      model_id: selectedComposerModelID(),
+      working_dir: draftWorkingDirectory(),
+      created_at_ms: now,
+      updated_at_ms: now,
+      status: 'idle' as const,
+      source_label: props.adapter.runtime.display_name,
+      target_labels: [],
+      messages: [],
+      read_status: {
+        is_unread: false,
+        snapshot: {
+          activity_revision: 0,
+          last_message_at_unix_ms: now,
+          activity_signature: `current:${threadID}:${current.view_version}`,
+        },
+        read_state: {
+          last_seen_activity_revision: 0,
+          last_read_message_at_unix_ms: now,
+          last_seen_activity_signature: `current:${threadID}:${current.view_version}`,
+        },
+      },
+    } satisfies FlowerThreadSnapshot;
+    const projected = applyFlowerRuntimeCurrentView(base, current);
+    setThreadCache((cache) => cache.replaceView({
+      thread: projected,
+      version: Math.max(1, Math.floor(Number(current.view_version) || 0)),
+      connectionEpoch,
+    }));
+    setTransportOutbox((outbox) => outbox.confirm(current));
+    if (threadID === selectedThreadID()) {
+      setTranscriptLayoutRevision((revision) => revision + 1);
     }
-    if (envelope.kind === 'resync_required') {
-      liveSummaryCursor = 0;
-      liveSummaryThreadCursors.clear();
-      liveSummaryGeneration = liveStreamGenerationValue(envelope.stream_generation);
-      await refreshThreads();
-      if (selectedThreadID() === selectedID && sequence === threadLoadSequence) {
-        await reloadSelectedThread(selectedID, sequence, 'resync_reload');
+    return true;
+  };
+
+  const applyFlowerLiveStreamEnvelope = (
+    envelope: FlowerLiveStreamEnvelope,
+    connectionEpoch: number,
+  ): void => {
+    if (envelope.kind === 'ready') {
+      for (const summary of envelope.summaries ?? []) {
+        if (retiredThreadIDs.has(summary.thread_id)) continue;
+        setThreadCache((cache) => {
+          const readStatus = cache.summaries.get(summary.thread_id)?.read_status
+            ?? cache.views.get(summary.thread_id)?.thread.read_status
+            ?? summary.read_status;
+          return cache.replaceSummary({ ...summary, read_status: readStatus });
+        });
       }
-      return 'resync';
+      const selectedID = selectedThreadID();
+      if (selectedID) {
+        void reloadSelectedThread(selectedID, threadLoadSequence, 'background_refresh').catch(() => undefined);
+      }
+      return;
+    }
+    if (envelope.current) {
+      applyRuntimeCurrent(envelope.current, connectionEpoch);
+      return;
     }
     if (envelope.kind === 'viewer.read_state') {
       const threadID = trimString(envelope.thread_id);
@@ -4502,168 +3888,25 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         clearLocalReadVisibility(threadID);
         applyThreadReadStatus(threadID, envelope.read_status);
       }
-      return 'continue';
     }
-    const events = envelope.events ?? [];
-    if (events.length === 0) {
-      if (envelope.kind === 'summary.batch') {
-        liveSummaryCursor = Math.max(liveSummaryCursor, liveCursorValue(envelope.through_seq));
-      }
-      return 'continue';
-    }
-    const summaryEnvelope = envelope.kind === 'summary.batch';
-    if (!summaryEnvelope) {
-      await yieldLiveEventRenderFrame();
-      if (sequence !== threadLoadSequence || selectedThreadID() !== selectedID || !documentVisible()) {
-        return 'continue';
-      }
-    }
-    const projected = new Map<string, FlowerThreadSnapshot>();
-    const advancesThreadCursor = envelope.kind === 'thread.batch';
-    let shouldRefreshSummaries = false;
-    let shouldResyncSelectedThread = false;
-    let shouldScrollTail = false;
-    let nextReadSnapshot: FlowerThreadActivitySnapshot | null = null;
-    for (const event of events) {
-      const threadID = trimString(event.thread_id);
-      if (!threadID || retiredThreadIDs.has(threadID)) continue;
-      const current = projected.get(threadID) ?? threads().find((thread) => thread.thread_id === threadID) ?? null;
-      if (!current) {
-        shouldRefreshSummaries = true;
-        continue;
-      }
-      const currentCursor = summaryEnvelope
-        ? liveCursorValue(liveSummaryThreadCursors.get(threadID))
-        : liveCursorValue(liveCursors.get(threadID));
-      const result = applyFlowerLiveEvent(current, currentCursor, event);
-      if (result.resyncRequired) {
-        if (threadID === selectedID && envelope.kind === 'thread.batch') {
-          shouldResyncSelectedThread = true;
-        } else {
-          shouldRefreshSummaries = true;
-        }
-        continue;
-      }
-      projected.set(threadID, result.thread);
-      if (threadID === selectedID) {
-        threadStore.applySnapshot(result.thread, result.cursor);
-      }
-      // Summary replay has its own cursor. Its events retain their originating
-      // thread sequence for identity, but must not consume detail replay.
-      if (advancesThreadCursor) {
-        setLivePosition(threadID, envelope.stream_generation, result.cursor);
-      } else if (summaryEnvelope) {
-        liveSummaryThreadCursors.set(threadID, result.cursor);
-      }
-      if (threadID === selectedID) {
-        shouldScrollTail ||= Boolean(result.tailKey && result.tailLength > 0) || event.kind === 'timeline.replaced';
-        if (result.thread.read_status.is_unread) {
-          nextReadSnapshot = result.thread.read_status.snapshot;
-        }
-      }
-    }
-    batch(() => {
-      for (const thread of projected.values()) upsertThread(thread);
-    });
-    for (const thread of projected.values()) {
-      reconcileApprovalDecisionHandoff(
-        thread,
-        liveStreamGenerations.get(thread.thread_id),
-        liveCursors.get(thread.thread_id),
-      );
-    }
-    if (shouldScrollTail) scheduleTranscriptTailScroll();
-    if (nextReadSnapshot) persistThreadRead(selectedID, nextReadSnapshot, sequence);
-    if (envelope.kind === 'summary.batch') {
-      liveSummaryGeneration = liveStreamGenerationValue(envelope.stream_generation);
-      liveSummaryCursor = Math.max(liveSummaryCursor, liveCursorValue(envelope.through_seq));
-    }
-    if (shouldRefreshSummaries) scheduleLiveSummaryRefresh();
-    if (shouldResyncSelectedThread && selectedThreadID() === selectedID && sequence === threadLoadSequence) {
-      // A detail event can be valid on the server but not safely applicable to
-      // the current client draft (for example, an activity timeline arriving
-      // immediately after an approval decision). Replace the draft from the
-      // canonical bootstrap before continuing the live cursor.
-      await reloadSelectedThread(selectedID, sequence, 'resync_reload');
-      return 'resync';
-    }
-    return 'continue';
   };
 
   createEffect(() => {
     const connect = props.adapter.connectLiveStream;
-    const threadID = selectedThreadID();
-    const visible = documentVisible();
     const keepLiveWhenHidden = props.adapter.keepLiveWhenHidden === true;
-    if (!connect || !threadID || (!visible && !keepLiveWhenHidden)) return;
-    const controller = new AbortController();
-    let disposed = false;
-    let reconnectAttempt = 0;
-    const waitForReconnect = async (delayMs: number) => new Promise<void>((resolve) => {
-      const timer = window.setTimeout(resolve, delayMs);
-      controller.signal.addEventListener('abort', () => {
-        window.clearTimeout(timer);
-        resolve();
-      }, { once: true });
+    // Desktop owns one workspace stream for the lifetime of the surface. Do
+    // not subscribe this effect to document visibility when the transport is
+    // explicitly allowed to remain live in the background.
+    const visible = keepLiveWhenHidden ? true : documentVisible();
+    if (!connect || (!visible && !keepLiveWhenHidden)) return;
+    const stop = liveTransport.start({
+      connect,
+      onCurrent: (envelope, connectionEpoch) => applyFlowerLiveStreamEnvelope(envelope, connectionEpoch),
+      onTerminalError: (error) => setThreadLoadError(getErrorMessage(error)),
     });
-    const run = async () => {
-      while (
-        !disposed
-        && !controller.signal.aborted
-        && selectedThreadID() === threadID
-        && (keepLiveWhenHidden || documentVisible())
-      ) {
-        const readyStartedAt = Date.now();
-        try {
-          for await (const envelope of connect({
-            thread_id: threadID,
-            thread_generation: liveStreamGenerationValue(liveStreamGenerations.get(threadID)),
-            thread_after_seq: liveCursorValue(liveCursors.get(threadID)),
-            summary_generation: liveSummaryGeneration,
-            summary_after_seq: liveSummaryCursor,
-            signal: controller.signal,
-          })) {
-            if (disposed || controller.signal.aborted) return;
-            const outcome = await applyFlowerLiveStreamEnvelope(envelope, threadID, threadLoadSequence);
-            if (outcome === 'resync') break;
-          }
-          if (Date.now() - readyStartedAt >= 30_000) reconnectAttempt = 0;
-        } catch (error) {
-          if (disposed || controller.signal.aborted) return;
-          const status = Number((error as { status?: unknown })?.status ?? 0);
-          if (status === 401 || status === 403) {
-            setThreadLoadError(getErrorMessage(error));
-            return;
-          }
-          if (status === 429) {
-            const retryAfterSeconds = Number((error as { retryAfter?: unknown })?.retryAfter ?? 0);
-            if (Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0) {
-              await waitForReconnect(Math.min(30_000, retryAfterSeconds * 1000));
-              continue;
-            }
-          }
-        }
-        const baseDelays = [250, 500, 1_000, 2_000, 4_000, 10_000] as const;
-        const base = baseDelays[Math.min(reconnectAttempt, baseDelays.length - 1)];
-        reconnectAttempt += 1;
-        const jittered = Math.round(base * (0.8 + Math.random() * 0.4));
-        await waitForReconnect(jittered);
-      }
-    };
-    void run();
-    onCleanup(() => {
-      disposed = true;
-      controller.abort();
-    });
+    onCleanup(stop);
   });
 
-  createEffect(() => {
-    const pending = pendingContextCompactionForSelectedThread();
-    if (!pending) return;
-    if (!pendingContextCompactionVisibleForSelectedThread()) {
-      setPendingContextCompaction(null);
-    }
-  });
 
   createEffect(() => {
     const request = selectedInputRequest();
@@ -4874,10 +4117,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       notifyComposerError(copy().chat.configureProviderBeforeChat);
       return;
     }
-    if (selectedThreadDetailPending()) {
-      notifyComposerError(copy().chat.threadLoading);
-      return;
-    }
     if (selectedThreadReadOnly()) {
       notifyComposerError(selectedThreadReadOnlyDisplay());
       return;
@@ -4892,7 +4131,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const clientRequestID = operation.session.snapshot().value.client_request_id || createFlowerClientRequestID();
     const operationMode = inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT
       ? 'preparing_long_text_submission' as const
-      : 'admission_in_flight' as const;
+      : 'ordinary' as const;
     const selectedID = trimString(selectedThreadID());
     const frozenModelID = selectedComposerModelID();
     const frozenPermissionType = composerPermissionType();
@@ -4907,7 +4146,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           text: promptInput,
           mode: operationMode,
           client_request_id: clientRequestID,
-          admission_started: false,
           model_id: frozenModelID,
           permission_type: frozenPermissionType,
           reasoning_selection: frozenReasoningSelection,
@@ -4935,25 +4173,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const launchModelID = frozenDraft.model_id ?? frozenModelID;
     const draftPermissionType = !selectedID ? frozenDraft.permission_type : undefined;
     const draftWorkingDir = !selectedID ? frozenDraft.working_dir ?? '' : '';
-    const launchContextCurrent = () => (
-      composerDraftOperationCurrent(operation)
-      && trimString(selectedThreadID()) === selectedID
-      && selectedComposerModelID() === launchModelID
-    );
-    const ordinaryTurnContextCurrent = () => (
-      !selectedInputRequest()
-      && !selectedComposerApprovalDisplayAction()
-      && !selectedThreadReadOnly()
-      && !selectedThreadDetailPending()
-      && !surfaceWarmupActive()
-    );
     let cancelRequested = false;
-    const submissionCurrent = () => (
-      !cancelRequested
-      && launchContextCurrent()
-      && ordinaryTurnContextCurrent()
-      && operation.session.snapshot().value.client_request_id === clientRequestID
-    );
+    // Transport ownership is request-scoped. Once the immutable request has
+    // been captured below, later edits to this thread's composer must not
+    // cancel the request or become owned by its eventual response.
+    const submissionCurrent = () => !cancelRequested && composerDraftOperationActive(operation);
     let preparedLongTextLocalID = '';
     let consumedAttachmentLocalIDs: readonly string[] = [];
     const attachmentItemsForSubmission = (snapshot: FlowerAttachmentControllerSnapshot) => snapshot.items.filter((item) => (
@@ -4970,8 +4194,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const remainingAttachments = flowerComposerDraftAttachments(launchController.snapshot().items);
       const canonicalSessionKey = trimString(sessionKeys[0]);
       if (
-        remainingAttachments.length > 0
-        && launchSessionKey === PENDING_NEW_THREAD_ID
+        launchSessionKey === PENDING_NEW_THREAD_ID
         && canonicalSessionKey
         && canonicalSessionKey !== launchSessionKey
       ) {
@@ -4985,12 +4208,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (composerDraftOperationActive(operation)) {
         for (const sessionKey of acceptedSessionKeys) draftSessionFor(sessionKey).mutate((value) => ({
           ...value,
-          text: '',
+          text: sessionKey === retainedSessionKey && value.text !== frozenDraft.text ? value.text : '',
           attachments: sessionKey === retainedSessionKey ? remainingAttachments : [],
-          references: [],
+          references: sessionKey === retainedSessionKey ? value.references : [],
           mode: 'ordinary',
           client_request_id: undefined,
-          admission_started: undefined,
           prepared_long_text_local_id: undefined,
           prepared_long_text_attachment_id: undefined,
         }));
@@ -4998,8 +4220,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       for (const sessionKey of acceptedSessionKeys) {
         updateComposerSessionDraft(sessionKey, (draft) => ({
           ...draft,
-          chatDraft: '',
-          references: [],
+          chatDraft: sessionKey === retainedSessionKey && draft.chatDraft !== frozenDraft.text ? draft.chatDraft : '',
+          references: sessionKey === retainedSessionKey ? draft.references : [],
           inputPromptSignature: '',
           inputDrafts: {},
           activeInputQuestionID: '',
@@ -5008,23 +4230,22 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
     };
     let preserveClientRequestID = false;
-    let retainPendingSubmission = false;
-    transitionPendingSubmission({
-      kind: 'begin',
-      submission: {
-        clientRequestID,
-        sessionKey: launchSessionKey,
-        ...(selectedID ? { threadID: selectedID } : {}),
-        prompt: promptInput,
-        attachmentNames: frozenDraft.attachments
-          .filter((attachment) => frozenAttachmentLocalIDs.has(attachment.local_id))
-          .map((attachment) => attachment.name),
-        referenceLabels: frozenDraft.references.map((reference) => reference.label || reference.path),
-        phase: 'preparing',
-        startedAtMS: Date.now(),
-      },
-    });
-    setChatRunning(true);
+    if (inspection.codePoints <= FLOWER_INLINE_TEXT_CODE_POINT_LIMIT) {
+      operation.session.mutate((value) => value.client_request_id === clientRequestID
+        ? {
+          ...value,
+          text: '',
+          references: [],
+          mode: 'ordinary',
+          client_request_id: undefined,
+        }
+        : value);
+      updateComposerSessionDraft(launchSessionKey, (draft) => ({
+        ...draft,
+        chatDraft: '',
+        references: [],
+      }));
+    }
     try {
       let attachmentSnapshot = launchController.snapshot();
       let attachmentItems = attachmentItemsForSubmission(attachmentSnapshot);
@@ -5094,7 +4315,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           value.client_request_id === clientRequestID
             ? {
               ...value,
-              mode: 'admission_in_flight',
+              mode: 'ordinary',
               attachments: attachmentItems.map((item) => ({
                 local_id: item.local_id,
                 source: item.source,
@@ -5139,6 +4360,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (!submissionCurrent()) return;
       transcriptScroll.startFollowing();
       let receipt: FlowerTurnLaunchReceipt;
+      let originalCommandFenced = false;
       try {
         const decision = currentHandlerDecision() ?? await resolveHandlerDecision();
         if (!submissionCurrent()) return;
@@ -5150,18 +4372,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           return;
         }
         if (!submissionCurrent()) return;
-        const admission = operation.session.mutate((value) => (
-          value.client_request_id === clientRequestID
-            ? { ...value, admission_started: true }
-            : value
-        ));
-        if (
-          admission.kind !== 'committed'
-          || admission.snapshot.value.client_request_id !== clientRequestID
-          || admission.snapshot.value.admission_started !== true
-          || !submissionCurrent()
-        ) return;
-        transitionPendingSubmission({ kind: 'admission_started', clientRequestID });
+        if (!submissionCurrent()) return;
         const contextAction: ContextActionEnvelope | undefined = frozenReferences.length > 0
           ? {
             schema_version: CONTEXT_ACTION_SCHEMA_VERSION,
@@ -5177,7 +4388,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             presentation: { label: copy().chat.titleFallback, priority: 100 },
           }
           : undefined;
-        const returnedReceipt = await props.adapter.launchTurn({
+        const launchInput: FlowerTurnLaunchInput = {
           client_request_id: clientRequestID,
           thread_id: selectedID || undefined,
           ...(launchStagingScope ? { staging_scope: launchStagingScope } : {}),
@@ -5189,79 +4400,51 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           ...(!selectedID && draftModelID ? { model_id: draftModelID } : {}),
           ...(!selectedID && draftReasoningSelection ? { reasoning_selection: draftReasoningSelection } : {}),
           ...(!selectedID && draftWorkingDir ? { working_dir: draftWorkingDir } : {}),
-        });
+        };
+        // Fence before publishing the outbox entry because Solid effects may
+        // observe the new entry synchronously.
+        outboxResendInFlight.add(clientRequestID);
+        originalCommandFenced = true;
+        setTransportOutbox((outbox) => outbox.put({
+          requestId: clientRequestID,
+          threadId: selectedID || PENDING_NEW_THREAD_ID,
+          input: launchInput,
+          attachmentLabels: readyItems.map((attachment) => attachment.name),
+          createdAtMs: Date.now(),
+        }));
+        // The original command and recovery resend share one request-id fence.
+        // Otherwise persisting the outbox entry can immediately trigger a
+        // duplicate send before this command has returned its current view.
+        const returnedReceipt = await props.adapter.launchTurn(launchInput);
         if (trimString(returnedReceipt.client_request_id) !== clientRequestID) {
-          throw flowerTurnAdmissionUncertainFailure(
-            new Error('Flower turn admission returned a different client request identity.'),
-            clientRequestID,
-            {
-              thread_id: returnedReceipt.thread_id,
-              ...(returnedReceipt.kind === 'queued'
-                ? { queue_id: returnedReceipt.queue_id }
-                : returnedReceipt.kind === 'admitting'
-                ? { admission_id: returnedReceipt.admission_id }
-                : { turn_id: returnedReceipt.turn_id }),
-            },
-          );
+          throw new Error('Flower send returned a different client request identity.');
         }
         receipt = returnedReceipt;
       } catch (error) {
+        if (originalCommandFenced) {
+          outboxResendInFlight.delete(clientRequestID);
+          originalCommandFenced = false;
+        }
         const failure = error as FlowerTurnLaunchFailure;
         if (failure.fresh_decision) {
           setHandlerState(handlerStateFromDecision(failure.fresh_decision));
         }
-        const uncertain = flowerTurnAdmissionUncertainIdentity(failure);
-        if (uncertain) {
+        const failureKind = error && typeof error === 'object'
+          ? (error as { failureKind?: unknown }).failureKind
+          : undefined;
+        const transportFailure = typeof failureKind === 'string' && trimString(failureKind) === 'transport_unknown';
+        if (transportFailure) {
           preserveClientRequestID = true;
-          retainPendingSubmission = true;
-          if (uncertain.client_request_id !== clientRequestID) {
-            throw new Error('Flower turn admission returned a different client request identity.');
-          }
-          const uncertainSessionKey = trimString(uncertain.thread_id);
-          transitionPendingSubmission({
-            kind: 'admission_uncertain',
-            clientRequestID,
-            ...(uncertainSessionKey ? { threadID: uncertainSessionKey } : {}),
-          });
-          if (uncertainSessionKey && uncertainSessionKey !== launchSessionKey) {
-            const sourceSnapshot = operation.session.snapshot();
-            if (launchSessionKey === PENDING_NEW_THREAD_ID) {
-              draftCoordinator.moveScope(launchSessionKey, uncertainSessionKey);
-            }
-            const uncertainSession = draftSessionFor(uncertainSessionKey);
-            uncertainSession.mutate((value) => ({
-              ...value,
-              text: promptInput,
-              attachments: sourceSnapshot.value.attachments,
-              references: sourceSnapshot.value.references,
-              mode: inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT ? 'over_limit_editing' : 'ordinary',
-              client_request_id: clientRequestID,
-              admission_started: undefined,
-              prepared_long_text_local_id: sourceSnapshot.value.prepared_long_text_local_id,
-              prepared_long_text_attachment_id: sourceSnapshot.value.prepared_long_text_attachment_id,
-            }));
-            updateComposerSessionDraft(uncertainSessionKey, (draft) => ({
-              ...draft,
-              chatDraft: promptInput,
-              references: sourceSnapshot.value.references,
-            }));
-          }
-          const selectionCurrent = uncertainSessionKey
-            ? setSelectedThreadWithDetailIfSessionCurrent(launchSessionKey, uncertainSessionKey)
-            : false;
-          if (selectionCurrent) {
-            setThreadLoadError(getErrorMessage(error));
-            returnToChat();
-            await refreshSelectedThread(uncertainSessionKey);
-          } else if (composerSessionStillCurrent(launchSessionKey)) {
+          setOutboxRetryTick((tick) => tick + 1);
+          if (composerSessionStillCurrent(launchSessionKey)) {
             notifyComposerError(getErrorMessage(error));
             operation.session.mutate((value) => value.client_request_id === clientRequestID
-              ? { ...value, mode: inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT ? 'over_limit_editing' : 'ordinary', admission_started: undefined }
+              ? { ...value, mode: inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT ? 'over_limit_editing' : 'ordinary' }
               : value);
           }
           return;
         }
-        transitionPendingSubmission({ kind: 'admission_failed', clientRequestID });
+        setTransportOutbox((outbox) => outbox.drop(clientRequestID));
         if (composerSessionStillCurrent(launchSessionKey)) {
           notifyComposerError(getErrorMessage(error));
         }
@@ -5272,9 +4455,26 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             releaseAttachmentStagingScope(launchSessionKey);
             operation.session.mutate((value) => ({
               ...value,
+              text: value.text || promptInput,
+              references: value.references.length > 0 ? value.references : frozenDraft.references,
               mode: inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT ? 'over_limit_editing' : 'ordinary',
               client_request_id: undefined,
-              admission_started: undefined,
+              prepared_long_text_local_id: undefined,
+              prepared_long_text_attachment_id: undefined,
+            }));
+          }
+          if (composerSessionStillCurrent(launchSessionKey) && currentComposerSessionDraft().chatDraft === '') {
+            updateComposerSessionDraft(launchSessionKey, (draft) => ({
+              ...draft,
+              chatDraft: promptInput,
+              references: draft.references.length > 0 ? draft.references : frozenDraft.references,
+            }));
+            operation.session.mutate((value) => ({
+              ...value,
+              text: value.text || promptInput,
+              references: value.references.length > 0 ? value.references : frozenDraft.references,
+              mode: inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT ? 'over_limit_editing' : 'ordinary',
+              client_request_id: undefined,
               prepared_long_text_local_id: undefined,
               prepared_long_text_attachment_id: undefined,
             }));
@@ -5282,22 +4482,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }
         return;
       }
-      retainPendingSubmission = true;
-      transitionPendingSubmission({
-        kind: 'admission_accepted',
-        clientRequestID,
-        threadID: receipt.thread_id,
-        canonicalKind: receipt.kind,
-        canonicalID: receipt.kind === 'queued'
-          ? receipt.queue_id
-          : receipt.kind === 'admitting'
-          ? receipt.admission_id
-          : receipt.turn_id,
-      });
-      const stopAfterAdmission = deferredStopClientRequestID() === clientRequestID;
-      if (stopAfterAdmission) setDeferredStopClientRequestID('');
+      setTransportOutbox((outbox) => outbox.assignThread(clientRequestID, receipt.thread_id));
+      applyRuntimeCurrent(receipt.current);
+      if (originalCommandFenced) {
+        outboxResendInFlight.delete(clientRequestID);
+        originalCommandFenced = false;
+      }
       clearAcceptedComposerDraft(receipt.thread_id);
-      if (launchController.snapshot().items.length === 0) {
+      if (launchSessionKey === PENDING_NEW_THREAD_ID) {
+        releaseAttachmentStagingScope(receipt.thread_id);
+      } else if (launchController.snapshot().items.length === 0) {
         releaseAttachmentStagingScope(launchSessionKey);
       }
       const selectionCurrent = setSelectedThreadWithDetailIfSessionCurrent(launchSessionKey, receipt.thread_id);
@@ -5305,51 +4499,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         setLoadError('');
         returnToChat();
       }
-      if (stopAfterAdmission && receipt.kind !== 'queued') {
-        setThreadStopping(true);
-        const expectedRunID = trimString(selectedThread()?.active_run_id);
-        try {
-          const live = await props.adapter.stopThread(receipt.thread_id);
-          const stopped = applyLiveBootstrap(live, 'stop_confirmation', expectedRunID);
-          // Stop can win before admission is projected. End only the matching
-          // optimistic row; any later canonical projection remains authoritative.
-          transitionPendingSubmission({ kind: 'stop_confirmed', clientRequestID });
-          if (selectedThreadDetailMatches(receipt.thread_id)) {
-            setSelectedThreadWithDetail(stopped.thread_id);
-            setLoadError('');
-            returnToChat();
-          }
-        } catch (error) {
-          if (selectedThreadID() === receipt.thread_id) {
-            notifyStopError(getErrorMessage(error));
-          }
-        } finally {
-          setThreadStopping(false);
-        }
-      } else if (selectionCurrent) {
-        void reloadSelectedThread(receipt.thread_id, threadLoadSequence, 'background_refresh').catch((error) => {
-          if (selectedThreadDetailMatches(receipt.thread_id)) {
-            setThreadLoadError(getErrorMessage(error));
-          }
-        });
-      }
     } finally {
       if (cancelActiveLongTextSubmission === cancelLongTextSubmission) cancelActiveLongTextSubmission = null;
       setLongTextPreparing(false);
-      setChatRunning(false);
-      if (!retainPendingSubmission) {
-        transitionPendingSubmission({ kind: 'submission_finished_without_receipt', clientRequestID });
-        if (deferredStopClientRequestID() === clientRequestID) setDeferredStopClientRequestID('');
-      }
       if (composerDraftOperationActive(operation)) {
         const shared = operation.session.snapshot();
-        if (!preserveClientRequestID && shared.value.client_request_id === clientRequestID && shared.value.admission_started !== true) {
+        if (!preserveClientRequestID && shared.value.client_request_id === clientRequestID) {
           releaseAttachmentStagingScope(launchSessionKey);
           operation.session.mutate((value) => ({
             ...value,
             mode: inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT ? 'over_limit_editing' : 'ordinary',
             client_request_id: undefined,
-            admission_started: undefined,
             prepared_long_text_local_id: undefined,
             prepared_long_text_attachment_id: undefined,
           }));
@@ -5375,17 +4535,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return thread;
   };
 
+  const stopThreadInFlight = new Set<string>();
   const stopSelectedThreadFromComposer = async (): Promise<void> => {
-    if (threadStopping()) return;
-    if (chatRunning()) {
-      const pending = pendingSubmission();
-      if (pendingAdmissionCanStop() && pending) {
-        setDeferredStopClientRequestID(pending.clientRequestID);
-      }
-      return;
-    }
     const stoppingThreadID = trimString(selectedThread()?.thread_id);
-    setThreadStopping(true);
+    if (!stoppingThreadID || stopThreadInFlight.has(stoppingThreadID)) return;
+    stopThreadInFlight.add(stoppingThreadID);
     try {
       await stopSelectedThread();
       if (selectedThreadDetailMatches(stoppingThreadID)) {
@@ -5396,195 +4550,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         notifyStopError(getErrorMessage(error));
       }
     } finally {
-      setThreadStopping(false);
-    }
-  };
-
-  const contextCompactionOperationIDs = (thread: FlowerThreadSnapshot): readonly string[] => {
-    const operationIDs = new Set<string>();
-    for (const compaction of thread.context_compactions ?? []) {
-      const operationID = trimString(compaction.operation_id);
-      if (operationID && !operationID.startsWith('local:')) operationIDs.add(operationID);
-    }
-    for (const decoration of thread.timeline_decorations ?? []) {
-      if (decoration.kind !== 'context_compaction') continue;
-      const operationID = trimString(decoration.compaction.operation_id);
-      if (operationID && !operationID.startsWith('local:')) operationIDs.add(operationID);
-    }
-    return [...operationIDs];
-  };
-
-  const localPendingCompactionAnchor = (thread: FlowerThreadSnapshot): FlowerTimelineAnchor | null => {
-    for (let messageIndex = thread.messages.length - 1; messageIndex >= 0; messageIndex -= 1) {
-      const message = thread.messages[messageIndex];
-      const messageID = trimString(message.id);
-      if (!messageID) continue;
-      const blocks = message.blocks ?? [];
-      for (let blockIndex = blocks.length - 1; blockIndex >= 0; blockIndex -= 1) {
-        const block = blocks[blockIndex];
-        if (block.type === 'activity-timeline') {
-          for (let itemIndex = block.items.length - 1; itemIndex >= 0; itemIndex -= 1) {
-            const itemID = trimString(block.items[itemIndex]?.item_id);
-            if (itemID) {
-              return {
-                target_kind: 'activity_item',
-                message_id: messageID,
-                block_index: blockIndex,
-                activity_item_id: itemID,
-                edge: 'after',
-              };
-            }
-          }
-          continue;
-        }
-        if ((block.type === 'markdown' || block.type === 'text' || block.type === 'thinking') && trimString(block.content)) {
-          return {
-            target_kind: 'block',
-            message_id: messageID,
-            block_index: blockIndex,
-            edge: 'after',
-          };
-        }
-      }
-      if (trimString(message.content)) {
-        return {
-          target_kind: 'message',
-          message_id: messageID,
-          edge: 'after',
-        };
-      }
-    }
-    return null;
-  };
-
-  const nextLocalCompactionOrdinal = (thread: FlowerThreadSnapshot, anchor: FlowerTimelineAnchor): number => {
-    let ordinal = -1;
-    for (const decoration of thread.timeline_decorations ?? []) {
-      if (decoration.kind !== 'context_compaction') continue;
-      const decorationAnchor = decoration.anchor;
-      if (
-        trimString(decorationAnchor.target_kind) !== trimString(anchor.target_kind)
-        || trimString(decorationAnchor.message_id) !== trimString(anchor.message_id)
-        || Math.floor(Number(decorationAnchor.block_index ?? -1)) !== Math.floor(Number(anchor.block_index ?? -1))
-        || trimString(decorationAnchor.activity_item_id) !== trimString(anchor.activity_item_id)
-        || trimString(decorationAnchor.edge) !== trimString(anchor.edge)
-      ) {
-        continue;
-      }
-      ordinal = Math.max(ordinal, Math.max(0, Math.floor(Number(decoration.ordinal ?? 0))));
-    }
-    return ordinal + 1;
-  };
-
-  const localPendingCompaction = (thread: FlowerThreadSnapshot, startedAtMs: number): PendingContextCompactionDecoration => {
-    const threadID = trimString(thread.thread_id);
-    const anchor = localPendingCompactionAnchor(thread);
-    const operationID = `local:${threadID}:${startedAtMs}`;
-    return {
-      thread_id: threadID,
-      started_at_ms: startedAtMs,
-      known_operation_ids: contextCompactionOperationIDs(thread),
-      decoration: {
-        decoration_id: `local-context-compaction:${threadID}:${startedAtMs}`,
-        kind: 'context_compaction',
-        ordinal: anchor ? nextLocalCompactionOrdinal(thread, anchor) : 0,
-        anchor: anchor ?? {
-          target_kind: 'message',
-          message_id: `local:${threadID}`,
-          edge: 'after',
-        },
-        compaction: {
-          operation_id: operationID,
-          phase: 'start',
-          status: 'compacting',
-          updated_at_ms: startedAtMs,
-        },
-      },
-    };
-  };
-
-  const revealPendingCompactionDivider = () => {
-    transcriptScroll.startFollowing();
-    scrollTranscriptToBottom({ smooth: false });
-    requestTranscriptAnimationFrame(() => scrollTranscriptToBottom({ smooth: false }));
-  };
-
-  const compactSelectedThreadContext = async () => {
-    if (!snapshot()) {
-      notifyComposerError(copy().chat.loadingSettings);
-      return;
-    }
-    if (!readyForChat()) {
-      notifyComposerError(copy().chat.configureProviderBeforeChat);
-      return;
-    }
-    if (!handlerAllowsSubmitIntent()) {
-      const state = handlerState();
-      notifyComposerError('message' in state ? state.message : copy().chat.handlerStillStarting);
-      return;
-    }
-    const thread = selectedThread();
-    if (selectedThreadDetailPending()) {
-      notifyComposerError(copy().chat.threadLoading);
-      return;
-    }
-    if (!thread) {
-      notifyComposerError(copy().chat.compactChooseThread);
-      return;
-    }
-    const threadID = trimString(thread.thread_id);
-    if (!threadID) {
-      notifyComposerError(copy().chat.compactChooseThread);
-      return;
-    }
-    if (selectedThreadReadOnly()) {
-      notifyComposerError(selectedThreadReadOnlyDisplay());
-      return;
-    }
-    if (selectedInputRequest()) {
-      notifyComposerError(copy().chat.compactFinishInputRequest);
-      return;
-    }
-    if (!selectedThreadHasContent()) {
-      notifyComposerError(copy().chat.compactNeedsConversation);
-      return;
-    }
-    if (compactSubmitting()) return;
-    const activeRunID = COMPOSER_STOP_THREAD_STATUSES.has(selectedThreadLiveStatus())
-      ? trimString(thread?.active_run_id)
-      : '';
-    setCompactSubmitting(true);
-    setPendingContextCompaction(localPendingCompaction(thread, Date.now()));
-    updateComposerSessionText(threadID, '');
-    requestComposerFocus();
-    revealPendingCompactionDivider();
-    try {
-      const live = await props.adapter.compactThreadContext({
-        thread_id: threadID,
-        active_run_id: activeRunID || undefined,
-      });
-      const updated = applyLiveBootstrap(live);
-      const selectionCurrent = selectedThreadDetailMatches(threadID);
-      if (selectionCurrent) {
-        setSelectedThreadWithDetail(updated.thread_id);
-      }
-      updateComposerSessionText(threadID, '');
-      if (selectionCurrent) {
-        setLoadError('');
-        returnToChat();
-        revealPendingCompactionDivider();
-        await refreshSelectedThread(updated.thread_id);
-      }
-    } catch (error) {
-      setPendingContextCompaction((pending) => (
-        pending?.thread_id === threadID ? null : pending
-      ));
-      updateComposerSessionText(threadID, FLOWER_COMPACT_CONTEXT_COMMAND);
-      if (selectedThreadDetailMatches(threadID)) {
-        notifyComposerError(getErrorMessage(error));
-      }
-    } finally {
-      setCompactSubmitting(false);
+      stopThreadInFlight.delete(stoppingThreadID);
     }
   };
 
@@ -5601,45 +4567,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       await submitInputRequest();
       return;
     }
-    if (pendingAdmissionCanStop() && !promptOverLimit && !prompt && !composerHasAttachments() && !composerHasReferences()) {
-      await stopSelectedThreadFromComposer();
-      return;
-    }
-    const command = parseFlowerSlashCommand(prompt);
-    if (command.kind === 'invalid') {
-      notifyComposerError(command.message);
-      return;
-    }
-    if (command.kind === 'suggest') {
-      if (composerHasAttachments() || composerHasReferences()) {
-        notifyComposerError(attachmentCopy().compactBlocked);
-        return;
-      }
-      await compactSelectedThreadContext();
-      return;
-    }
-    if (command.kind === 'intent') {
-      if (composerHasAttachments() || composerHasReferences()) {
-        notifyComposerError(attachmentCopy().compactBlocked);
-        return;
-      }
-      await compactSelectedThreadContext();
-      return;
-    }
     if (selectedThreadCanStop() && !promptOverLimit && !prompt && !composerHasAttachments() && !composerHasReferences()) {
       await stopSelectedThreadFromComposer();
       return;
     }
-    if (chatRunning() || composerSharedOperationActive()) {
-      if (longTextPreparing()) cancelActiveLongTextSubmission?.();
-      return;
-    }
-    if (launchChatTurnInFlight) return;
-    launchChatTurnInFlight = true;
+    const sessionKey = currentComposerSessionKey();
+    if (launchChatTurnInFlight.has(sessionKey)) return;
+    launchChatTurnInFlight.add(sessionKey);
     try {
       await launchChatTurn(promptInput);
     } finally {
-      launchChatTurnInFlight = false;
+      launchChatTurnInFlight.delete(sessionKey);
     }
   };
 
@@ -5654,10 +4592,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     transcriptScroll.startFollowing();
     cancelSelectedThreadTailReveal();
     closeSubagentOverlays();
-    transitionPendingSubmission({ kind: 'new_conversation' });
-    setSelectedThreadID('');
-    setSelectedThreadDetailID('');
-    setSidebarActiveThreadID('');
+		setSelectedThreadID('');
     setThreadLoadError('');
     requestComposerFocus();
     void resolveHandlerDecision();
@@ -5668,30 +4603,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const tid = trimString(threadID);
     if (!tid || retiredThreadIDs.has(tid)) return;
 
-    const retiringSelected = selectedThreadID() === tid
-      || selectedThreadDetailID() === tid
-      || sidebarActiveThreadID() === tid;
+	const retiringSelected = selectedThreadID() === tid;
     retiredThreadIDs.add(tid);
     threadsRefreshSequence += 1;
-    threadLocalMutationRevision += 1;
     if (retiringSelected) engagementBootstrapSequence += 1;
 
-    loadedThreadIDs.delete(tid);
     threadBootstrapRequests.delete(tid);
     locallyReadSnapshots.delete(tid);
     persistingReadThreadIDs.delete(tid);
     pendingReadPersistenceSnapshots.delete(tid);
-    liveCursors.delete(tid);
-    liveStreamGenerations.delete(tid);
     releaseAttachmentStagingScope(tid);
 
-    setThreads((current) => current.filter((thread) => thread.thread_id !== tid));
-    setComposerSessionDrafts((current) => {
-      if (!(tid in current)) return current;
-      const next = { ...current };
-      delete next[tid];
-      return next;
-    });
+    setThreadCache((cache) => cache.evict(tid));
+    draftSessionFor(tid).clear();
     setCompanionTerminalOverrides((current) => {
       if (!current.has(tid)) return current;
       const next = new Map(current);
@@ -5700,10 +4624,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
     setCompanionLiveThread((current) => current?.thread_id === tid ? null : current);
     setCompanionTerminalTransition((current) => current?.thread_id === tid ? undefined : current);
-    setPendingContextCompaction((current) => current?.thread_id === tid ? null : current);
     setPendingPermissionPatch((current) => current?.threadID === tid ? null : current);
     setPendingModelPatch((current) => current?.threadID === tid ? null : current);
-    setLoadingThreadID((current) => current === tid ? '' : current);
 
     if (retiringSelected) {
       startCompose();
@@ -5803,9 +4725,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     transcriptScroll.startFollowing();
     closeSubagentOverlays();
-    transitionPendingSubmission({ kind: 'thread_selected', threadID: tid });
     setSelectedThreadID(tid);
-    setSidebarActiveThreadID(tid);
     scheduleThreadSelectionAfterPaint(tid);
   };
 
@@ -5830,10 +4750,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const measureTranscriptNearBottomAfterLayout = () => transcriptScroll.measureAfterLayout();
   const scheduleTranscriptTailScroll = () => transcriptScroll.scheduleTailScroll();
   onCleanup(() => {
-    if (liveSummaryRefreshTimer !== undefined) {
-      window.clearTimeout(liveSummaryRefreshTimer);
-      liveSummaryRefreshTimer = undefined;
-    }
     cancelDeferredThreadSelection();
     cancelThreadSelectionTransaction();
     cancelPresentedSelectionSchedule();
@@ -6043,15 +4959,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
 
   const visibleTimelineEntries = createMemo((): readonly FlowerTimelineEntry[] => {
-    const thread = selectedThread();
-    const pending = pendingContextCompactionForSelectedThread();
-    const entries = pending && pendingContextCompactionVisibleForSelectedThread() && thread
-      ? [...buildFlowerTimelineEntries({
-        ...thread,
-        timeline_decorations: [...(thread.timeline_decorations ?? []), pending.decoration],
-      })]
-      : [...selectedTimelineEntries()];
-    return entries.filter((entry) => entry.type !== 'queued_turn');
+    return selectedTimelineEntries().filter((entry) => entry.type !== 'queued_turn');
   });
   const visibleTimelineEntryKeys = createMemo(() => visibleTimelineEntries().map((entry) => entry.key));
   const visibleTimelineEntriesByKey = createMemo(() => new Map(visibleTimelineEntries().map((entry) => [entry.key, entry] as const)));
@@ -6062,14 +4970,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return false;
     }
     return event.key === 'Enter' && !event.shiftKey;
-  };
-
-  const executeCompactContextCommand = async () => {
-    if (composerHasAttachments() || composerHasReferences()) {
-      notifyComposerError(attachmentCopy().compactBlocked);
-      return;
-    }
-    await compactSelectedThreadContext();
   };
 
   const handleComposerKeyDown = (event: KeyboardEvent) => {
@@ -6127,23 +5027,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }
       }
     }
-    const command = composerSlashCommand();
-    if (!selectedInputRequest() && command.kind === 'suggest') {
-      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-        event.preventDefault();
-        return;
-      }
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        updateComposerText('');
-        return;
-      }
-      if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && !isComposing()) {
-        event.preventDefault();
-        void executeCompactContextCommand();
-        return;
-      }
-    }
     if (shouldSubmitOnEnterKeydown(event)) {
       event.preventDefault();
       void submitChat();
@@ -6190,19 +5073,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const attachments = (turn.attachments ?? []).map((attachment) => trimString(attachment.name)).filter(Boolean);
     return attachments.join(', ') || copy().chat.pendingQueued;
   };
-  const queuedPendingDisplayLabel = (pending: FlowerPendingSubmission): string => (
-    trimString(pending.prompt)
-      || pending.attachmentNames.map(trimString).filter(Boolean).join(', ')
-      || copy().chat.pendingQueued
-  );
-
   const queuedTurnsDock = () => (
-    <Show when={selectedQueuedTurns().length > 0 || queuedPendingSubmission()}>
+    <Show when={selectedQueuedTurns().length > 0}>
       <div
         class="flower-queued-turn-dock"
         role="list"
         aria-label={copy().chat.pendingQueued}
-        aria-busy={queuedTurnReorder()?.phase === 'saving' ? 'true' : undefined}
         onDragOver={previewQueuedTurnDropAtEnd}
         onDrop={commitQueuedTurnReorder}
       >
@@ -6219,7 +5095,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 draggable={queuedTurnReorderEnabled()}
                 data-flower-queued-turn-dock-id={queueID()}
                 data-flower-queued-turn-dragging={dragging() && queuedTurnReorder()?.phase === 'dragging' ? 'true' : undefined}
-                data-flower-queued-turn-saving={queuedTurnReorder()?.phase === 'saving' ? 'true' : undefined}
                 onDragStart={(event) => beginQueuedTurnDrag(event, queueID())}
                 onDragOver={(event) => previewQueuedTurnDrop(event, queueID())}
                 onDrop={(event) => {
@@ -6247,8 +5122,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   <button
                     type="button"
                     class="flower-queued-turn-action flower-queued-turn-send"
-                    disabled={queuedTurnPromotionBlocked() || Boolean(queuedTurnPromotingID()) || Boolean(queuedTurnDelete())}
-                    aria-busy={queuedTurnPromotingID() === queueID() ? 'true' : undefined}
+                    disabled={queuedTurnPromotionBlocked()}
                     aria-label={copy().chat.queuedSendNow}
                     title={copy().chat.queuedSendNow}
                     onClick={(event) => {
@@ -6262,7 +5136,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     <button
                       type="button"
                       class="flower-queued-turn-action flower-queued-turn-delete"
-                      disabled={Boolean(queuedTurnPromotingID()) || Boolean(queuedTurnDelete()) || queuedTurnReorder()?.phase === 'saving'}
                       aria-label={copy().chat.queuedDelete}
                       title={copy().chat.queuedDelete}
                       data-flower-queued-turn-delete={queueID()}
@@ -6279,20 +5152,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             );
           }}
         </For>
-        <Show when={queuedPendingSubmission()}>
-          {(pending) => (
-            <div
-              class="flower-queued-turn-item flower-queued-turn-item-pending"
-              role="listitem"
-              aria-label={`${copy().chat.pendingSending}: ${queuedPendingDisplayLabel(pending())}`}
-              data-flower-queued-turn-pending="true"
-            >
-              <Clock class="flower-queued-turn-handle" aria-hidden="true" />
-              <span class="flower-queued-turn-label">{queuedPendingDisplayLabel(pending())}</span>
-              <span class="flower-queued-turn-state">{copy().chat.pendingSending}</span>
-            </div>
-          )}
-        </Show>
       </div>
     </Show>
   );
@@ -6406,14 +5265,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       || code === 'provider_stream_interrupted';
     const retryContinuation = async () => {
       const threadID = trimString(selectedThreadID());
-      if (!threadID || continuationRetryingThreadID() === threadID) return;
-      setContinuationRetryingThreadID(threadID);
+      if (!threadID) return;
       try {
         applyLiveBootstrap(await props.adapter.retryThread(threadID), 'user_action');
       } catch {
         // The canonical failed snapshot remains the single retryable error surface.
-      } finally {
-        setContinuationRetryingThreadID((current) => (current === threadID ? '' : current));
       }
     };
     const action = () => continuationFailure()
@@ -6422,7 +5278,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           size="sm"
           variant="outline"
           icon={Refresh}
-          disabled={continuationRetryingThreadID() === trimString(selectedThreadID())}
           onClick={() => void retryContinuation()}
         >
           {copy().chat.retryReply}
@@ -6458,7 +5313,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       | 'inputRequestRetry'
       | 'inputRequestAnswerRequired'
       | 'inputRequestAnswerHidden'
-      | 'inputRequestSubmitting'
       | 'inputRequestPrevious'
       | 'inputRequestNext'
       | 'inputRequestComposerPlaceholder'
@@ -6670,8 +5524,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     && !selectedThreadDetailPending()
     && !selectedThreadReadOnly()
     && !surfaceWarmupActive()
-    && !composerSharedOperationActive()
-    && !chatRunning()
     && !longTextPreparing()
   ));
   const composerCanQueueAttachmentIntent = createMemo(() => (
@@ -7017,10 +5869,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const composerTextValue = createMemo(() => {
     if (!selectedInputRequest()) {
-      const pending = visiblePendingSubmission();
-      return pending && (pending.phase !== 'awaiting_projection' || Boolean(pending.canonicalID))
-        ? ''
-        : currentComposerSessionDraft().chatDraft;
+      return currentComposerSessionDraft().chatDraft;
     }
     const question = activeInputQuestion();
     return question ? questionDraft(question.id).text ?? '' : '';
@@ -7066,7 +5915,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ));
 
   const composerPlaceholder = createMemo(() => {
-    if (selectedThreadDetailPending()) return copy().chat.threadLoading;
     if (selectedThreadReadOnly()) return selectedThreadReadOnlyDisplay();
     if (surfaceWarmupActive() && !selectedInputRequest()) return copy().chat.warmupComposerPlaceholder;
     if (!selectedInputRequest()) return copy().chat.placeholder;
@@ -7080,14 +5928,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
 
   const composerTextareaDisabled = createMemo(() => {
-    if (composerSharedOperationActive()) return true;
-    if (selectedComposerApprovalDisplayAction()) return true;
-    if (selectedThreadDetailPending()) return true;
     if (selectedThreadReadOnly()) return true;
-    if (chatRunning()) return true;
     if (!selectedInputRequest()) return false;
     const question = activeInputQuestion();
-    return inputSubmitting() || !question || !activeInputQuestionUsesTextEditor();
+    return !question || !activeInputQuestionUsesTextEditor();
   });
 
   const composerTextareaReadOnly = createMemo(() => (
@@ -7465,53 +6309,31 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const composerChatDraftText = createMemo(() => trimString(currentComposerSessionDraft().chatDraft));
   const composerChatDraftHasRawText = createMemo(() => currentComposerSessionDraft().chatDraft.length > 0);
-  const composerSlashCommand = createMemo(() => (selectedInputRequest() || selectedComposerApprovalDisplayAction()) ? { kind: 'none' as const } : parseFlowerSlashCommand(composerChatDraftText()));
-  const composerCommandMenuVisible = createMemo(() => (
-    !composerReferenceMenuVisible()
-    && !selectedComposerApprovalDisplayAction()
-    && !selectedInputRequest()
-    && composerSlashCommand().kind === 'suggest'
-  ));
-  const composerPrimaryActionIsCommand = createMemo(() => composerSlashCommand().kind === 'intent');
   const composerPrimaryActionIsStop = createMemo(() => (
     longTextPreparing()
-    || pendingAdmissionCanStop()
     || (selectedThreadCanStop() && !composerTextOverLimit() && !composerChatDraftText() && !composerHasAttachments() && !composerHasReferences())
   ));
-  type ComposerPrimaryAction = 'send' | 'stop' | 'compact' | 'cancel_long_text';
+  type ComposerPrimaryAction = 'send' | 'stop' | 'cancel_long_text';
   const composerPrimaryActionKind = createMemo<ComposerPrimaryAction>(() => (
     longTextPreparing()
       ? 'cancel_long_text'
       : composerPrimaryActionIsStop()
       ? 'stop'
-      : composerPrimaryActionIsCommand()
-        ? 'compact'
-        : 'send'
+      : 'send'
   ));
-  const composerPrimaryActionIcon = createMemo(() => composerPrimaryActionIsStop() ? FlowerStopIcon : composerPrimaryActionIsCommand() ? Clock : ArrowUp);
-  const composerPrimaryActionLabel = createMemo(() => composerPrimaryActionIsStop() ? copy().chat.stop : composerPrimaryActionIsCommand() ? copy().chat.compactContext : copy().chat.send);
+  const composerPrimaryActionIcon = createMemo(() => composerPrimaryActionIsStop() ? FlowerStopIcon : ArrowUp);
+  const composerPrimaryActionLabel = createMemo(() => composerPrimaryActionIsStop() ? copy().chat.stop : copy().chat.send);
   const composerPrimaryActionDisabled = createMemo(() => {
     if (composerReferenceMutationCount() > 0) return true;
-    if (selectedComposerApprovalDisplayAction()) return true;
-    if (selectedThreadDetailPending()) return true;
-    if (composerSharedOperationActive() && !chatRunning()) return true;
     if (longTextPreparing()) return false;
-    if (threadStopping()) return true;
-    if (chatRunning()) return !pendingAdmissionCanStop() || deferredStopPending();
     if (selectedThreadReadOnly()) return true;
-    if (composerSlashCommand().kind === 'invalid') return true;
-    if (composerPrimaryActionIsCommand()) {
-      return composerHasAttachments() || composerHasReferences() || compactSubmitting() || !readyForChat() || !!selectedInputRequest() || !selectedThreadID() || !selectedThreadHasContent();
-    }
     if (composerHasSubmissionBlockingAttachments()) return true;
     if (composerTextOverLimit() && !currentAttachmentSnapshot().capability?.supports_long_text) return true;
     if (selectedThreadCanStop() && !composerTextOverLimit() && !composerHasAttachments() && !composerHasReferences()) return false;
     const hasSendableText = composerTextOverLimit() ? composerChatDraftHasRawText() : Boolean(composerChatDraftText());
     return !readyForChat() || !handlerAllowsSubmitIntent() || (!hasSendableText && !composerHasReadyAttachments() && !composerHasReferences());
   });
-  const composerPrimaryActionLoading = createMemo(() => (
-    threadStopping() || deferredStopPending() || (chatRunning() && !longTextPreparing() && !pendingAdmissionCanStop()) || (composerPrimaryActionIsCommand() && compactSubmitting())
-  ));
+  const composerPrimaryActionLoading = createMemo(() => false);
 
   let capturedComposerPrimaryAction: ComposerPrimaryAction | undefined;
   const captureComposerPrimaryAction = () => {
@@ -7527,9 +6349,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return;
       case 'stop':
         void stopSelectedThreadFromComposer();
-        return;
-      case 'compact':
-        void executeCompactContextCommand();
         return;
       default:
         void submitChat();
@@ -7582,28 +6401,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     const focusOwner = typeof document === 'undefined' ? null : document.activeElement;
     const promptID = trimString(request.prompt_id);
-    const operationID = ++inputAdmissionOperationSequence;
     const submittedDraft = currentComposerSessionDraft();
-    const containsSecretAnswer = request.questions.some((question) => question.is_secret === true);
-    const answerLabel = containsSecretAnswer ? chatCopyValue('inputRequestAnswerHidden', 'Answer hidden') : request.questions.map((question) => {
-      const answer = answers[question.id];
-      if (trimString(answer?.text)) return trimString(answer?.text);
-      const choice = question.choices?.find((candidate) => candidate.choice_id === trimString(answer?.choice_id));
-      return trimString(choice?.label) || trimString(answer?.choice_id);
-    }).filter(Boolean).join('; ');
-    batch(() => {
-      setConsumedInputAdmissions((current) => ({
-        ...current,
-        [threadID]: { promptID, answerLabel, phase: 'submitting', operationID },
-      }));
-      updateComposerSessionDraft(threadID, (draft) => ({
-        ...draft,
-        inputPromptSignature: '',
-        inputDrafts: {},
-        activeInputQuestionID: '',
-        reasoningOverride: undefined,
-      }));
-    });
     try {
       const reasoningSelection = serializeFlowerReasoningSelection(
         composerReasoningEnabled() ? composerReasoningOverride() ?? selectedWaitingReasoningSelection() : undefined,
@@ -7617,57 +6415,31 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (
         trimString(receipt.thread_id) !== threadID
         || trimString(receipt.consumed_prompt_id) !== trimString(request.prompt_id)
-        || !trimString(receipt.turn_id)
-        || !trimString(receipt.run_id)
+        || trimString(receipt.current.thread_id) !== threadID
       ) {
-        throw new Error('Flower input response admission returned an invalid receipt.');
+        throw new Error('Flower input response returned an invalid current view.');
       }
-      setConsumedInputAdmissions((current) => {
-        const admission = current[threadID];
-        if (!admission || admission.operationID !== operationID) return current;
-        return {
-          ...current,
-          [threadID]: {
-            ...admission,
-            phase: 'admitted',
-            turnID: trimString(receipt.turn_id),
-            runID: trimString(receipt.run_id),
-          },
-        };
+      const base = threadCache().views.get(threadID)?.thread ?? thread;
+      const projected = applyFlowerRuntimeCurrentView(base, receipt.current);
+      batch(() => {
+        setThreadCache((cache) => cache.replaceView({
+          thread: projected,
+          version: receipt.current.view_version,
+          connectionEpoch: liveTransport.connectionEpoch(),
+        }));
+        updateComposerSessionDraft(threadID, (draft) => ({
+          ...draft,
+          inputPromptSignature: '',
+          inputDrafts: {},
+          activeInputQuestionID: '',
+          reasoningOverride: undefined,
+        }));
       });
-      const selectionCurrent = selectedThreadDetailMatches(threadID);
-      if (selectionCurrent) {
+      if (selectedThreadDetailMatches(threadID)) {
         requestComposerFocus(focusOwner);
       }
-      const selectionSequence = threadLoadSequence;
-      try {
-        const live = await loadThreadBootstrap(threadID, true);
-        if (consumedInputAdmissions()[threadID]?.operationID !== operationID) return;
-        applyLiveBootstrap(live, selectionCurrent && selectionSequence === threadLoadSequence && selectedThreadDetailMatches(threadID)
-          ? 'user_action'
-          : 'background_refresh');
-      } catch {
-        // The admitted handoff remains visible while live replay reconnects.
-      }
     } catch (error) {
-      const operationStillCurrent = consumedInputAdmissions()[threadID]?.operationID === operationID;
-      batch(() => {
-        setConsumedInputAdmissions((current) => {
-          if (current[threadID]?.operationID !== operationID) return current;
-          const next = { ...current };
-          delete next[threadID];
-          return next;
-        });
-        if (operationStillCurrent) {
-          updateComposerSessionDraft(threadID, (draft) => ({
-            ...draft,
-            inputPromptSignature: submittedDraft.inputPromptSignature,
-            inputDrafts: submittedDraft.inputDrafts,
-            activeInputQuestionID: submittedDraft.activeInputQuestionID,
-            reasoningOverride: submittedDraft.reasoningOverride,
-          }));
-        }
-      });
+      updateComposerSessionDraft(threadID, () => submittedDraft);
       if (selectedThreadDetailMatches(threadID)) {
         notifyComposerError(getErrorMessage(error));
       }
@@ -7680,140 +6452,36 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     options: Readonly<{ allowNonPrimary?: boolean; suppressHandoff?: boolean }> = {},
   ) => {
     const allowNonPrimary = options.allowNonPrimary === true;
-    const suppressHandoff = options.suppressHandoff === true;
     let thread: FlowerThreadSnapshot | null = null;
-    let started = false;
-    let alreadySubmitting = false;
     batch(() => {
       thread = selectedThread();
-      alreadySubmitting = approvalSubmitting()[action.action_id] !== undefined;
       const currentAction = flowerComposerApprovalAction(thread);
       if (
-        alreadySubmitting
-        || selectedThreadDetailPending()
+        selectedThreadDetailPending()
         || selectedThreadReadOnly()
         || !thread
         || (!allowNonPrimary && currentAction?.action_id !== action.action_id)
       ) {
+		thread = null;
         return;
       }
       const threadID = trimString(thread.thread_id);
       if (!threadID) return;
-      clearApprovalDecisionResyncTimer();
-      if (!suppressHandoff) {
-        setApprovalDecisionHandoff({
-          threadID,
-          actionID: action.action_id,
-          decision: approved ? 'approve' : 'reject',
-          phase: 'submitting',
-          submittedStreamGeneration: liveStreamGenerationValue(liveStreamGenerations.get(threadID)),
-        });
-        setThreads((current) => current.map((candidate) => (
-          candidate.thread_id === threadID
-            ? optimisticApprovalDecisionProjection(candidate, action, approved, Date.now())
-            : candidate
-        )));
-        threadLocalMutationRevision += 1;
-      }
-      setApprovalSubmitting((current) => ({ ...current, [action.action_id]: approved ? 'approve' : 'reject' }));
       setApprovalQueueAnnouncement(copy().chat.toolApprovalSubmitting);
-      started = true;
     });
     const submittedThread = thread as FlowerThreadSnapshot | null;
-    if (!started || !submittedThread) {
-      if (!alreadySubmitting) notifyComposerError(copy().chat.toolApprovalUnavailable);
+    if (!submittedThread) {
+      notifyComposerError(copy().chat.toolApprovalUnavailable);
       return;
     }
     const threadID = trimString(submittedThread.thread_id);
-    const reloadCanonicalThread = async (): Promise<FlowerThreadSnapshot | null> => {
-      if (!selectedThreadDetailMatches(threadID)) {
-        // A decision can fail after the observer moved to another thread. Read
-        // the canonical snapshot for reconciliation without changing the
-        // currently selected surface. The per-thread cache may be updated;
-        // selection will present it with its normal generation fence.
-        const live = await loadThreadBootstrap(threadID, true);
-        return applyLiveBootstrap(live, 'user_action');
-      }
-      return reloadSelectedThread(threadID, threadLoadSequence, 'user_action');
-    };
-    const reloadAfterFailedDecision = async (error: unknown) => {
-      try {
-        const refreshed = await reloadCanonicalThread();
-        if (retryableApprovalAction(refreshed, action.action_id, { allowNonPrimary })) {
-          cancelApprovalDecisionHandoff(action.action_id);
-          if (selectedThreadDetailMatches(threadID)) {
-            notifyComposerError(getErrorMessage(error));
-          }
-        } else if (refreshed) {
-          settleApprovalDecisionHandoff(threadID, action.action_id);
-        }
-        return refreshed;
-      } catch (reloadError) {
-        if (selectedThreadDetailMatches(threadID)) {
-          notifyComposerError(getErrorMessage(reloadError));
-        }
-        scheduleApprovalDecisionResync(threadID, action.action_id);
-        return null;
-      }
-    };
     try {
-      const receipt = await props.adapter.submitApproval(flowerApprovalRequest(submittedThread, action, approved));
-      registerApprovalDecisionReceipt(threadID, action.action_id, receipt?.current_cursor);
-      if (suppressHandoff) clearApprovalSubmittingAction(action.action_id);
-      return;
+      const result = await props.adapter.submitApproval(flowerApprovalRequest(submittedThread, action, approved));
+      applyRuntimeCurrent(result.current);
     } catch (error) {
-      if (!isFlowerApprovalConflict(error)) {
-        await reloadAfterFailedDecision(error);
-        return;
+      if (selectedThreadDetailMatches(threadID) && !isFlowerApprovalConflict(error)) {
+        notifyComposerError(getErrorMessage(error));
       }
-
-      let refreshed: FlowerThreadSnapshot | null = null;
-      try {
-        refreshed = await reloadCanonicalThread();
-      } catch (reloadError) {
-        if (selectedThreadDetailMatches(threadID)) {
-          notifyComposerError(getErrorMessage(reloadError));
-        }
-        return;
-      }
-      if (!selectedThreadDetailMatches(threadID)) return;
-      const retryAction = retryableApprovalAction(refreshed, action.action_id, { allowNonPrimary });
-      if (!retryAction || !refreshed) return;
-
-      const retryHandoff = untrack(approvalDecisionHandoff);
-      if (!suppressHandoff && retryHandoff?.actionID === action.action_id) {
-        setApprovalDecisionHandoff({
-          ...retryHandoff,
-          phase: 'submitting',
-          submittedStreamGeneration: liveStreamGenerationValue(liveStreamGenerations.get(threadID)),
-          targetCursor: undefined,
-        });
-      }
-      try {
-        const receipt = await props.adapter.submitApproval(flowerApprovalRequest(refreshed, retryAction, approved));
-        registerApprovalDecisionReceipt(threadID, action.action_id, receipt?.current_cursor);
-        if (suppressHandoff) clearApprovalSubmittingAction(action.action_id);
-      } catch (retryError) {
-        if (isFlowerApprovalConflict(retryError)) {
-          let finalSnapshot: FlowerThreadSnapshot | null = null;
-          try {
-            finalSnapshot = await reloadCanonicalThread();
-          } catch (reloadError) {
-            if (selectedThreadDetailMatches(threadID)) {
-              notifyComposerError(getErrorMessage(reloadError));
-            }
-            return;
-          }
-          if (retryableApprovalAction(finalSnapshot, action.action_id, { allowNonPrimary })) {
-            cancelApprovalDecisionHandoff(action.action_id);
-          }
-          return;
-        }
-        await reloadAfterFailedDecision(retryError);
-        return;
-      }
-    } finally {
-      if (suppressHandoff) clearApprovalSubmittingAction(action.action_id);
     }
   };
 
@@ -7846,6 +6514,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     const threadID = trimString(thread.thread_id);
     const pendingActionIDs = pending.map((action) => action.action_id);
+    const firstAction = pending[0];
+    if (firstAction) {
+      try {
+        const result = await props.adapter.submitApproval(flowerApprovalRequest(thread, firstAction, false, true));
+        applyRuntimeCurrent(result.current);
+        return;
+      } catch (error) {
+        if (selectedThreadDetailMatches(threadID) && !isFlowerApprovalConflict(error)) {
+          notifyComposerError(getErrorMessage(error));
+        }
+      }
+    }
     setApprovalQueueAnnouncement(copy().chat.toolApprovalSubmitting);
     for (let index = 0; index < pendingActionIDs.length; index += 1) {
       const actionID = pendingActionIDs[index]!;
@@ -7856,18 +6536,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         && candidate.status === 'pending'
       ));
       if (!action) continue;
-      if (approvalSubmitting()[action.action_id] !== undefined) continue;
       await submitApprovalAction(action, false, {
         allowNonPrimary: true,
         suppressHandoff: index > 0,
       });
-      if (index + 1 >= pendingActionIDs.length || !selectedThreadDetailMatches(threadID)) continue;
-      try {
-        await reloadSelectedThread(threadID, threadLoadSequence, 'user_action');
-      } catch (error) {
-        if (selectedThreadDetailMatches(threadID)) notifyComposerError(getErrorMessage(error));
-        return;
-      }
     }
   };
 
@@ -7948,7 +6620,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                               )}
                               aria-checked={selectedChoiceID() === choice.choice_id}
                               data-flower-input-answer-kind="choice"
-                              disabled={inputSubmitting()}
                               onClick={() => selectInputChoice(question, choice)}
                               onKeyDown={(event) => {
                                 if (event.key !== ' ') return;
@@ -7973,7 +6644,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                             )}
                             aria-checked={customSelected()}
                             data-flower-input-answer-kind="custom"
-                            disabled={inputSubmitting()}
                             onClick={() => selectInputCustomAnswer(question)}
                             onKeyDown={(event) => {
                               if (event.key !== ' ') return;
@@ -8005,7 +6675,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                       activeInputQuestion()?.id === question.id && 'flower-input-request-text-target-active',
                     )}
                     aria-selected={activeInputQuestion()?.id === question.id}
-                    disabled={inputSubmitting()}
                     onClick={() => updateCurrentComposerSessionDraft((draft) => (draft.activeInputQuestionID === question.id ? draft : { ...draft, activeInputQuestionID: question.id }))}
                   >
                     {question.write_label || question.header}
@@ -8021,7 +6690,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 class="flower-input-request-navigation-button"
                 aria-label={chatCopyValue('inputRequestPrevious', 'Previous question')}
                 title={chatCopyValue('inputRequestPrevious', 'Previous question')}
-                disabled={inputSubmitting() || inputRequestQuestionIndex() <= 0}
+                disabled={inputRequestQuestionIndex() <= 0}
                 onClick={() => setActiveInputQuestionByOffset(-1)}
               >
                 <ChevronLeft class="h-4 w-4" aria-hidden="true" />
@@ -8034,7 +6703,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 class="flower-input-request-navigation-button"
                 aria-label={chatCopyValue('inputRequestNext', 'Next question')}
                 title={chatCopyValue('inputRequestNext', 'Next question')}
-                disabled={inputSubmitting() || inputRequestQuestionIndex() >= inputRequest().questions.length - 1}
+                disabled={inputRequestQuestionIndex() >= inputRequest().questions.length - 1}
                 onClick={() => setActiveInputQuestionByOffset(1)}
               >
                 <ChevronRight class="h-4 w-4" aria-hidden="true" />
@@ -8123,14 +6792,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     action: Accessor<FlowerApprovalAction>,
     options: Readonly<{ surface?: 'history' | 'composer'; includeBatchRejection?: boolean }> = {},
   ) => {
-    const busy = () => approvalSubmitting()[actionID];
     const canDecide = () => approvalActionCanDecide(action());
-    const disabled = () => busy() !== undefined || !canDecide();
+    const disabled = () => !canDecide();
     const composerSurface = options.surface === 'composer';
     const queueProgress = createMemo(() => {
-      const queue = selectedThread()?.approval_queue;
-      return composerSurface && queue && queue.total > 1
-        ? `${queue.current_position} / ${queue.total}`
+      const actions = selectedApprovalActions();
+      const position = actions.findIndex((candidate) => candidate.action_id === action().action_id);
+      return composerSurface && actions.length > 1
+        ? `${Math.max(0, position) + 1} / ${actions.length}`
         : '';
     });
     const descriptionID = `flower-approval-description-${actionID}`;
@@ -8227,7 +6896,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   variant="outline"
                   size="sm"
                   class="flower-composer-approval-decision flower-approval-action-pill flower-approval-reject-batch"
-                  disabled={selectedApprovalBatchActions().some((candidate) => approvalSubmitting()[candidate.action_id] !== undefined)}
                   aria-label={copy().chat.toolApprovalRejectBatchAction(selectedApprovalBatchActions().length)}
                   onClick={() => void submitApprovalBatchRejection()}
                 >
@@ -8239,8 +6907,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 size="sm"
                 class={composerSurface ? 'flower-composer-approval-decision flower-approval-action-pill' : undefined}
                 disabled={disabled()}
-                loading={busy() === 'reject'}
-                aria-busy={busy() === 'reject' ? 'true' : undefined}
                 aria-label={copy().chat.toolApprovalRejectAction(actionLabel(), subtaskLabel())}
                 aria-describedby={describedBy() || undefined}
                 onClick={() => void submitApprovalAction(action(), false)}
@@ -8252,8 +6918,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 size="sm"
                 class={composerSurface ? 'flower-composer-approval-decision flower-approval-action-pill' : undefined}
                 disabled={disabled()}
-                loading={busy() === 'approve'}
-                aria-busy={busy() === 'approve' ? 'true' : undefined}
                 aria-label={copy().chat.toolApprovalApproveAction(actionLabel(), subtaskLabel())}
                 aria-describedby={describedBy() || undefined}
                 onClick={() => void submitApprovalAction(action(), true)}
@@ -8435,7 +7099,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (selectedThreadDetailPending()) return;
     if (!action.can_browse_directory || !trimString(action.action_id) || !props.adapter.openFileBrowser) return;
     void props.adapter.openFileBrowser({
-      thread_id: trimString(selectedThreadDetailID()) || undefined,
+		thread_id: trimString(selectedThreadID()) || undefined,
       message_id: messageID,
       block_index: blockIndex,
       item_id: itemID,
@@ -8449,7 +7113,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (selectedThreadDetailPending()) return;
     if (!action.can_preview || !trimString(action.action_id) || !props.adapter.openFilePreview) return;
     void props.adapter.openFilePreview({
-      thread_id: trimString(selectedThreadDetailID()) || undefined,
+		thread_id: trimString(selectedThreadID()) || undefined,
       message_id: messageID,
       block_index: blockIndex,
       item_id: itemID,
@@ -9226,6 +7890,22 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         : null;
     });
     const displayStatus = createMemo(() => item().status);
+    const effectRetry = createMemo(() => item().effect_retry);
+    const retryUnknownEffect = async () => {
+      const threadID = trimString(selectedThreadID());
+      const retry = effectRetry();
+      if (!threadID || !retry) return;
+      try {
+        await props.adapter.retryEffect({
+          thread_id: threadID,
+          effect_attempt_id: retry.effect_attempt_id,
+          tool_call_id: retry.tool_call_id,
+          acknowledge_unknown_risk: true,
+        });
+      } catch (error) {
+        notifyThreadActionError(getErrorMessage(error));
+      }
+    };
     const controlError = createMemo(() => (
       item().kind === 'control'
       && trimString(item().metadata?.control_error_code) === 'control_error'
@@ -9283,6 +7963,21 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             rowFileAction(),
             rowAttachmentPreviewTarget(),
           )}
+          <Show when={effectRetry()}>
+            <button
+              type="button"
+              class="flower-activity-file-action-button"
+              aria-label={copy().chat.retryReply}
+              title={copy().chat.retryReply}
+              data-flower-effect-retry
+              onClick={(event) => {
+                event.stopPropagation();
+                void retryUnknownEffect();
+              }}
+            >
+              <Refresh class="h-3.5 w-3.5" />
+            </button>
+          </Show>
         </div>
         <Show when={disclosure.mounted() && expandable()}>
           <div
@@ -9321,7 +8016,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                             <TerminalOutputBlock
                               context={() => ({
                                 ownerThreadID: trimString(selectedThreadID()),
-                                renderThreadID: trimString(timeline().thread_id) || trimString(selectedThreadDetailID()) || trimString(selectedThreadID()),
+								renderThreadID: trimString(timeline().thread_id) || trimString(selectedThreadID()),
                                 runID: trimString(timeline().run_id),
                                 turnID: trimString(timeline().turn_id),
                                 messageID: messageID(),
@@ -9935,68 +8630,32 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     );
   }
 
-  const pendingSubmissionEntry = (submission: Accessor<FlowerPendingSubmission>) => {
-    const contextLabels = createMemo(() => [
-      ...submission().attachmentNames,
-      ...submission().referenceLabels,
-    ]);
+  const transportOutboxEntry = (submission: Accessor<ReturnType<TransportOutbox['forThread']>[number]>) => {
+    const contextLabels = createMemo(() => submission().attachmentLabels);
     return (
       <div
-        class="flower-message-row flower-message-row-user flower-pending-submission-row"
-        data-flower-pending-submission-id={submission().clientRequestID}
-        data-flower-pending-submission-phase={submission().phase}
+        class="flower-message-row flower-message-row-user"
+        data-flower-transport-outbox-id={submission().requestId}
       >
         <div class="flower-message-block-stack flower-message-block-stack-user">
-          <div class="flower-message-bubble flower-message-bubble-framed flower-message-bubble-user flower-pending-submission-bubble">
-            <Show when={submission().prompt}>
-              <span class="flower-message-plain-text">{submission().prompt}</span>
+          <div class="flower-message-bubble flower-message-bubble-framed flower-message-bubble-user">
+            <Show when={submission().input.prompt}>
+              <span class="flower-message-plain-text">{submission().input.prompt}</span>
             </Show>
             <Show when={contextLabels().length > 0}>
-              <div class="flower-pending-submission-context">
+              <div class="flower-transport-outbox-context">
                 <For each={contextLabels()}>{(label) => <span>{label}</span>}</For>
               </div>
             </Show>
-          </div>
-          <div
-            class="flower-message-action-row flower-message-action-row-user flower-pending-submission-meta"
-            role="status"
-            aria-live="polite"
-            aria-atomic="true"
-          >
-            <span class="flower-pending-submission-state">{copy().chat.pendingSubmission}</span>
           </div>
         </div>
       </div>
     );
   };
 
-  const inputAdmissionHandoffEntry = (admission: Accessor<FlowerConsumedInputAdmission>) => (
-    <div
-      class="flower-message-row flower-message-row-user flower-input-admission-handoff-row"
-      data-flower-input-admission-handoff
-      data-flower-input-admission-phase={admission().phase}
-      role="status"
-      aria-live="polite"
-    >
-      <div class="flower-message-block-stack flower-message-block-stack-user">
-        <div class="flower-message-bubble flower-message-bubble-framed flower-message-bubble-user">
-          <span class="flower-message-plain-text">{admission().answerLabel}</span>
-        </div>
-        <div class="flower-message-action-row flower-message-action-row-user flower-input-admission-handoff-meta">
-          {chatCopyValue('inputRequestAnswered', 'Answered')}
-        </div>
-      </div>
-    </div>
-  );
-
   const compactionDividerEntry = (entry: Accessor<Extract<FlowerTimelineEntry, { type: 'context_compaction' }>>) => {
     const decoration = createMemo(() => entry().decoration);
     return <FlowerContextCompactionDivider decoration={decoration()} copy={copy()} />;
-  };
-
-  const projectionUnavailableEntry = (entry: Accessor<Extract<FlowerTimelineEntry, { type: 'turn_projection_unavailable' }>>) => {
-    const decoration = createMemo(() => entry().decoration);
-    return <FlowerTurnProjectionUnavailable decoration={decoration()} copy={copy()} />;
   };
 
   const inputRequestEntry = (entry: Accessor<FlowerTimelineEntry>) => {
@@ -10041,8 +8700,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return queuedTurnEntry(() => entry() as Extract<FlowerTimelineEntry, { type: 'queued_turn' }>);
       case 'context_compaction':
         return compactionDividerEntry(() => entry() as Extract<FlowerTimelineEntry, { type: 'context_compaction' }>);
-      case 'turn_projection_unavailable':
-        return projectionUnavailableEntry(() => entry() as Extract<FlowerTimelineEntry, { type: 'turn_projection_unavailable' }>);
       case 'input_request':
         return inputRequestEntry(entry);
       case 'error':
@@ -10908,6 +9565,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const chatPanel = () => (
     <div class="flower-chat-shell flower-chat-shell">
+      <Show when={presentation() === 'companion' && companionCollapsed()}>
+        <div class="flower-companion-collapsed-switcher">
+          {companionHeaderIdentity()}
+        </div>
+      </Show>
       <div
         class="flower-chat-header flower-chat-header border-b border-border/80 backdrop-blur-md"
         aria-hidden={companionCollapsed() ? 'true' : undefined}
@@ -11013,7 +9675,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               {(message) => errorNotice(copy().chat.threadLoadErrorTitle, message())}
             </Show>
             <Show
-              when={selectedThreadHasContent() || selectedThreadHasModelStatus() || visiblePendingSubmission() || selectedInputAdmissionHandoff()}
+              when={selectedThreadHasContent() || selectedThreadHasModelStatus() || visibleTransportOutbox().length > 0}
                 fallback={selectedThreadLoading()
                   ? threadLoadingState()
                   : warmupCanReplaceTranscript()
@@ -11037,12 +9699,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   );
                 }}
               </For>
-              <Show when={visiblePendingSubmission()}>
-                {(submission) => pendingSubmissionEntry(submission)}
-              </Show>
-              <Show when={selectedInputAdmissionHandoff()}>
-                {(admission) => inputAdmissionHandoffEntry(admission)}
-              </Show>
+              <For each={visibleTransportOutbox()}>{(submission) => transportOutboxEntry(() => submission)}</For>
               {threadLevelApprovalPanel()}
             </Show>
           </div>
@@ -11072,37 +9729,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             </div>
             <div class="flower-composer-anchor">
               {composerReferenceMenu()}
-              <Show when={composerCommandMenuVisible()}>
-                <div
-                  id={FLOWER_COMPOSER_COMMAND_MENU_ID}
-                  class="flower-composer-command-menu"
-                  role="listbox"
-                  aria-label={copy().chat.commandMenuLabel}
-                  aria-activedescendant={FLOWER_COMPOSER_COMPACT_COMMAND_OPTION_ID}
-                >
-                  <button
-                    id={FLOWER_COMPOSER_COMPACT_COMMAND_OPTION_ID}
-                    type="button"
-                    role="option"
-                    aria-selected="true"
-                    class="flower-composer-command-item"
-                    onClick={() => void executeCompactContextCommand()}
-                  >
-                    <Clock class="h-3.5 w-3.5" />
-                    <span class="flower-composer-command-token">{FLOWER_COMPACT_CONTEXT_COMMAND}</span>
-                    <span class="flower-composer-command-description">{copy().chat.commandCompactContext}</span>
-                  </button>
-                </div>
-              </Show>
               {queuedTurnsDock()}
               <div
                 class={cn(
                   'flower-composer flower-chat-input-floating chat-input-container p-3',
                   bottomActionMode() !== 'chat' && 'flower-decision-surface',
                 )}
-                inert={composerSharedOperationActive()}
-                aria-busy={chatRunning() || composerSharedOperationActive() || composerReferenceMutationCount() > 0 ? 'true' : undefined}
-                data-flower-turn-submitting={chatRunning() || composerSharedOperationActive() ? 'true' : undefined}
+                aria-busy={composerReferenceMutationCount() > 0 ? 'true' : undefined}
                 data-flower-bottom-mode={bottomActionMode()}
                 data-flower-companion-compact={companionCompactComposer() ? 'true' : undefined}
                 data-flower-attachment-drag={attachmentDragActive() ? 'true' : undefined}
@@ -11349,13 +9982,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     {attachmentCopy().overLimit(FLOWER_INLINE_TEXT_CODE_POINT_LIMIT)}
                   </div>
                 </Show>
-                <Show
-                  when={trimString(selectedComposerApprovalDisplayAction()?.action_id)}
-                  keyed
-                  fallback={(
-                    <>
-                      {inputRequestPrompt(selectedInputRequest(), { surface: 'composer' })}
-                      <Show when={!selectedInputRequest() || activeInputQuestionUsesTextEditor()}>
+                <Show when={trimString(selectedComposerApprovalDisplayAction()?.action_id)} keyed>
+                  {(actionID) => (
+                    <div class="flower-composer-approval-body">
+                      <span class="flower-visually-hidden" role="status" aria-live="polite" aria-atomic="true">{approvalQueueAnnouncement()}</span>
+                      {approvalActionCard(actionID, () => selectedComposerApprovalDisplayAction()!, {
+                        surface: 'composer',
+                        includeBatchRejection: true,
+                      })}
+                    </div>
+                  )}
+                </Show>
+                {inputRequestPrompt(selectedInputRequest(), { surface: 'composer' })}
+                <Show when={!selectedInputRequest() || activeInputQuestionUsesTextEditor()}>
                       <Show
                         when={activeInputQuestionIsSecret()}
                         fallback={(
@@ -11375,19 +10014,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                             data-flower-input-custom-answer={selectedInputRequest() && questionMode(activeInputQuestion()!) === 'select_or_write' ? 'true' : undefined}
                             aria-autocomplete={composerReferenceEditingAllowed() ? 'list' : undefined}
                             aria-haspopup="listbox"
-                            aria-expanded={composerReferenceMenuVisible() || composerCommandMenuVisible() ? 'true' : undefined}
+                            aria-expanded={composerReferenceMenuVisible() ? 'true' : undefined}
                             aria-controls={composerReferenceMenuVisible()
                               ? FLOWER_COMPOSER_REFERENCE_MENU_ID
-                              : composerCommandMenuVisible()
-                                ? FLOWER_COMPOSER_COMMAND_MENU_ID
                               : companionCollapsed()
                                 ? props.companionRegionID
                                 : undefined}
                             aria-activedescendant={composerReferenceMenuVisible()
                               ? composerReferenceActiveOptionID()
-                              : composerCommandMenuVisible()
-                                ? FLOWER_COMPOSER_COMPACT_COMMAND_OPTION_ID
-                                : undefined}
+                              : undefined}
                             aria-describedby={companionCollapsed() ? companionDescriptionID() : undefined}
                             onFocus={(event) => {
                               setComposerFocused(true);
@@ -11432,9 +10067,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                           readOnly={composerTextareaReadOnly()}
                           aria-haspopup="listbox"
                           data-flower-input-custom-answer={selectedInputRequest() && questionMode(activeInputQuestion()!) === 'select_or_write' ? 'true' : undefined}
-                          aria-expanded={composerCommandMenuVisible() ? 'true' : undefined}
-                          aria-controls={composerCommandMenuVisible() ? FLOWER_COMPOSER_COMMAND_MENU_ID : undefined}
-                          aria-activedescendant={composerCommandMenuVisible() ? FLOWER_COMPOSER_COMPACT_COMMAND_OPTION_ID : undefined}
                           onInput={(event) => updateComposerText(event.currentTarget.value)}
                           onCompositionStart={() => setIsComposing(true)}
                           onCompositionEnd={(event) => {
@@ -11444,19 +10076,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                           onKeyDown={handleComposerKeyDown}
                         />
                       </Show>
-                      </Show>
-                    </>
-                  )}
-                >
-                  {(actionID) => (
-                    <div class="flower-composer-approval-body">
-                      <span class="flower-visually-hidden" role="status" aria-live="polite" aria-atomic="true">{approvalQueueAnnouncement()}</span>
-                      {approvalActionCard(actionID, () => selectedComposerApprovalDisplayAction()!, {
-                        surface: 'composer',
-                        includeBatchRejection: true,
-                      })}
-                    </div>
-                  )}
                 </Show>
                 <Show when={bottomActionMode() === 'input_request'}>
                   <div class="flower-decision-actions flower-input-request-actions">
@@ -11466,20 +10085,27 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                       </span>
                     </Show>
                     <Button
+                      variant="secondary"
+                      icon={FlowerStopIcon}
+                      size="icon"
+                      class="flower-composer-stop rounded-full"
+                      aria-label={copy().chat.stop}
+                      title={copy().chat.stop}
+                      disabled={!selectedThreadCanStop()}
+                      onClick={() => void stopSelectedThreadFromComposer()}
+                    />
+                    <Button
                       variant="primary"
                       icon={ArrowUp}
                       class="flower-composer-continue"
-                      disabled={selectedThreadReadOnly() || inputSubmitting() || !inputRequestReadyToSubmit()}
-                      loading={inputSubmitting()}
+                      disabled={selectedThreadReadOnly() || !inputRequestReadyToSubmit()}
                       onClick={() => void submitChat()}
                     >
-                      {inputSubmitting()
-                        ? chatCopyValue('inputRequestSubmitting', 'Submitting...')
-                        : chatCopyValue('inputRequestSubmit', 'Continue')}
+                      {chatCopyValue('inputRequestSubmit', 'Continue')}
                     </Button>
                   </div>
                 </Show>
-                <Show when={bottomActionMode() === 'chat'}>
+                <Show when={bottomActionMode() !== 'input_request'}>
                 <div class="flower-composer-footer">
                   <Show
                     when={!needsSetup()}
@@ -11542,7 +10168,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                             class="flower-composer-attachment-button"
                             aria-label={composerCanAddAttachments() ? attachmentCopy().add : attachmentCopy().unavailable}
                             title={composerCanAddAttachments() ? attachmentCopy().add : attachmentCopy().unavailable}
-                            disabled={composerSharedOperationActive() || !composerCanAddAttachments()}
+                            disabled={!composerCanAddAttachments()}
                             onClick={() => {
                               attachmentPickerSessionKey = currentComposerSessionKey();
                               attachmentReselectTarget = null;
@@ -11627,17 +10253,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           </button>
         </div>
         <FlowerThreadList
-          items={localAdmissionThreadItems()}
-          activeThreadID={visibleSidebarActiveThreadID()}
+          items={sidebarListItems()}
+          activeThreadID={selectedThreadID()}
           query={historyFilter()}
           refreshing={threadsRefreshing()}
           warmup={surfaceWarmupActive()}
           copy={copy().threadList}
           onQueryChange={setHistoryFilter}
           onRefresh={() => void refreshThreads()}
-          onSelect={(threadID) => {
-            if (threadID !== PENDING_NEW_THREAD_ID) selectThread(threadID);
-          }}
+          onSelect={selectThread}
           canFork={!!props.adapter.forkThread}
           canRename={!!props.adapter.renameThread}
           canPin={!!props.adapter.setThreadPinned}

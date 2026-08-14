@@ -348,21 +348,13 @@ func TestIntegration_ModelGateway_OpenAI_IdentityQuestionCompletesWithNaturalSto
 	}
 
 	runID := "run_test_model_gateway_sdk_identity_1"
-	rr := httptest.NewRecorder()
-	if err := svc.StartRun(ctx, &meta, runID, RunStartRequest{
+	if _, err := runTypedTurnForTest(t, ctx, svc, &meta, runID, RunStartRequest{
 		ThreadID: th.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Input:    RunInput{Text: "你是谁"},
 		Options:  RunOptions{},
-	}, rr); err != nil {
-		t.Fatalf("StartRun: %v", err)
-	}
-
-	if !strings.Contains(rr.Body.String(), token) {
-		t.Fatalf("NDJSON stream missing token %q, body=%q", token, rr.Body.String())
-	}
-	if !strings.Contains(rr.Body.String(), `"type":"message-end"`) {
-		t.Fatalf("NDJSON stream missing message-end, body=%q", rr.Body.String())
+	}); err != nil {
+		t.Fatalf("typed Send: %v", err)
 	}
 
 	view, err := svc.GetThread(ctx, &meta, th.ThreadID)
@@ -463,18 +455,13 @@ func TestIntegration_ModelGateway_OpenAI_ResponsesStream_GPT4o_Succeeds(t *testi
 		t.Fatalf("CreateThread: %v", err)
 	}
 
-	rr := httptest.NewRecorder()
-	if err := svc.StartRun(ctx, &meta, "run_test_model_gateway_sdk_2", RunStartRequest{
+	if _, err := runTypedTurnForTest(t, ctx, svc, &meta, "run_test_model_gateway_sdk_2", RunStartRequest{
 		ThreadID: th.ThreadID,
 		Model:    "openai/gpt-4o-mini",
 		Input:    RunInput{Text: "hello"},
 		Options:  RunOptions{},
-	}, rr); err != nil {
-		t.Fatalf("StartRun: %v", err)
-	}
-
-	if !strings.Contains(rr.Body.String(), token) {
-		t.Fatalf("NDJSON stream missing token %q, body=%q", token, rr.Body.String())
+	}); err != nil {
+		t.Fatalf("typed Send: %v", err)
 	}
 
 	view, err := svc.GetThread(ctx, &meta, th.ThreadID)

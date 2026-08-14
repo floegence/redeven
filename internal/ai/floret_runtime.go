@@ -9,37 +9,29 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 
-	flconfig "github.com/floegence/floret/v3/config"
-	"github.com/floegence/floret/v3/identity"
-	"github.com/floegence/floret/v3/observation"
-	flprovider "github.com/floegence/floret/v3/provider"
-	flruntime "github.com/floegence/floret/v3/runtime"
+	flconfig "github.com/floegence/floret/v4/config"
+	"github.com/floegence/floret/v4/identity"
+	flprovider "github.com/floegence/floret/v4/provider"
+	flruntime "github.com/floegence/floret/v4/runtime"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/config"
 )
 
-func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerCfg config.AIProvider, apiKey string, taskObjective string, adapterOverride ...ModelGateway) error {
+type floretHostedPreparation struct {
+	agent             *flruntime.Agent
+	completionPolicy  flruntime.TurnCompletionPolicy
+	controlSpec       flruntime.TurnSignalSpec
+	labels            flruntime.RunLabels
+	contextProjection floretContextProjection
+	turnInput         flruntime.TurnInput
+}
+
+func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, providerCfg config.AIProvider, apiKey string, taskObjective string, adapterOverride ...ModelGateway) (floretHostedPreparation, error) {
 	if r == nil {
-		return errors.New("nil run")
+		return floretHostedPreparation{}, errors.New("nil run")
 	}
-	// A run canceled before RunTurn admission never owns canonical Floret
-	// authority, but Stop still needs a one-way proof that this execution path
-	// has finished attempting to acquire it. Once RunTurn starts, only its exact
-	// validated terminal result may publish a successful authority release.
-	authorityReleasePublished := false
-	defer func() {
-		if authorityReleasePublished {
-			return
-		}
-		if r.floretRunTurnStarted.Load() {
-			r.floretAuthorityBarrier.release(errors.New("Floret RunTurn exited without an exact terminal authority proof"))
-			return
-		}
-		r.floretAuthorityBarrier.release(nil)
-	}()
 	providerType := strings.ToLower(strings.TrimSpace(providerCfg.Type))
 	_, modelName, ok := strings.Cut(strings.TrimSpace(req.Model), "/")
 	if !ok {
@@ -47,7 +39,7 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	}
 	modelName = strings.TrimSpace(modelName)
 	if modelName == "" {
-		return r.failRun("Invalid model id", fmt.Errorf("invalid model id %q", strings.TrimSpace(req.Model)))
+		return floretHostedPreparation{}, r.failRun("Invalid model id", fmt.Errorf("invalid model id %q", strings.TrimSpace(req.Model)))
 	}
 
 	capability := contextmodel.NormalizeCapability(req.ModelCapability)
@@ -75,7 +67,7 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		var err error
 		adapter, err = newProviderAdapter(providerType, strings.TrimSpace(providerCfg.BaseURL), strings.TrimSpace(apiKey), providerCfg.StrictToolSchema)
 		if err != nil {
-			return r.failRun("Failed to initialize provider adapter", err)
+			return floretHostedPreparation{}, r.failRun("Failed to initialize provider adapter", err)
 		}
 	}
 
@@ -94,17 +86,8 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		"provider_base_url": strings.TrimSpace(providerCfg.BaseURL),
 		"model":             modelName,
 	})
-	state := newTodoRuntimeState()
-	if source, hydrated := r.hydrateTodoRuntimeState(ctx, &state); hydrated {
-		r.recordRunDiagnostic("todo.hydrated", RealtimeStreamKindLifecycle, map[string]any{
-			"source":           source,
-			"todo_total_count": state.TodoTotalCount,
-			"todo_open_count":  state.TodoOpenCount,
-			"todo_in_progress": state.TodoInProgressCount,
-			"todo_version":     state.TodoSnapshotVersion,
-		})
-	}
-	sharedState := newFloretToolRuntimeState(state)
+	sharedState := newFloretToolRuntimeState(newTodoRuntimeState())
+	r.toolRuntimeState = sharedState
 	r.ensureSkillManager()
 
 	contextWindow := modelGatewayDefaultContextWindowTokens
@@ -116,7 +99,7 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	r.dynamicSurfaceConfig = surfaceConfig
 	initialSurface, err := r.prepareRunToolSurface(ctx, surfaceConfig)
 	if err != nil {
-		return r.failRun("Failed to initialize dynamic tool surface", err)
+		return floretHostedPreparation{}, r.failRun("Failed to initialize dynamic tool surface", err)
 	}
 	req.Options.PermissionType = permissionTypeString(initialSurface.PermissionType)
 	r.recordRunDiagnostic("floret.host_turn.start", RealtimeStreamKindLifecycle, map[string]any{
@@ -153,19 +136,16 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	completionPolicy := flruntime.TurnCompletionNaturalStop
 	controlSpec, err := newFloretControlSpec(r, sharedState, initialSurface.ControlTools, taskComplexity)
 	if err != nil {
-		return r.failRun("Failed to initialize Floret control tools", err)
+		return floretHostedPreparation{}, r.failRun("Failed to initialize Floret control tools", err)
 	}
 	labels := flruntime.RunLabels{Correlation: map[string]string{
 		"thread_id":  strings.TrimSpace(r.threadID),
 		"turn_id":    strings.TrimSpace(r.turnID),
 		"message_id": strings.TrimSpace(r.messageID),
 	}, Host: initialSurface.HostContext}
-	if r.floretTurnOpener == nil {
-		return r.failRun("Failed to initialize Floret host", errors.New("floret turn opener not ready"))
-	}
 	gatewayIdentity, err := redevenFloretGatewayIdentity(providerCfg.ID, providerType, providerCfg.BaseURL, capability.WireModelName, flProvider.stateCompatibilityRoute())
 	if err != nil {
-		return r.failRun("Failed to initialize Floret model identity", err)
+		return floretHostedPreparation{}, r.failRun("Failed to initialize Floret model identity", err)
 	}
 	var contextProjection floretContextProjection
 	var turnInput flruntime.TurnInput
@@ -173,15 +153,15 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	if req.Retry == nil {
 		contextProjection, err = floretContextProjectionForInputWithAuthority(req.Input, r.canonicalReferenceAuthority)
 		if err != nil {
-			return r.failRun("Failed to prepare linked context", err)
+			return floretHostedPreparation{}, r.failRun("Failed to prepare linked context", err)
 		}
 		turnInput, err = r.floretTurnInput(ctx, req.Input, contextProjection.References)
 		if err != nil {
-			return r.failRun("Failed to prepare message attachments", err)
+			return floretHostedPreparation{}, r.failRun("Failed to prepare message attachments", err)
 		}
 		turnInput, frozenAttachments, err = r.preflightFloretTurnAttachments(ctx, turnInput, flProvider)
 		if err != nil {
-			return r.failRun("Failed to validate message attachments", err)
+			return floretHostedPreparation{}, r.failRun("Failed to validate message attachments", err)
 		}
 	}
 	attachmentResolver := r.floretAttachmentResolver(frozenAttachments, flProvider)
@@ -189,292 +169,40 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		return attachmentResolver(ctx, runtimeAttachmentFromProvider(attachment))
 	}
 	flProvider.identity = gatewayIdentity
-	agent, err := flruntime.NewAgent(
-		redevenFloretAgentConfig(initialSurface.SystemPrompt, floretModelContextPolicy(contextWindow, req.Options.MaxOutputTokens), req.Options.ReasoningSelection),
-		flProvider,
-		flruntime.WithAgentTools(initialSurface.FloretToolItems...),
+	agent, err := buildFloretThreadAgent(r, initialSurface, contextWindow, req.Options, flProvider, toolSurfaceProvider)
+	if err != nil {
+		return floretHostedPreparation{}, r.failRun("Failed to initialize Floret host", err)
+	}
+	return floretHostedPreparation{
+		agent: agent, completionPolicy: completionPolicy, controlSpec: controlSpec,
+		labels: labels, contextProjection: contextProjection, turnInput: turnInput,
+	}, nil
+}
+
+// buildFloretThreadAgent is the Redeven effect adapter boundary. It assembles
+// provider, tools, authorization and observation capabilities; it does not
+// admit a turn, register a run, wait for a receipt, or publish a projection.
+// ThreadRuntime owns those lifecycle decisions after this function returns.
+func buildFloretThreadAgent(
+	r *run,
+	surface runToolSurface,
+	contextWindow int,
+	options RunOptions,
+	provider *floretProviderAdapter,
+	toolSurfaceProvider flruntime.ToolSurfaceProvider,
+) (*flruntime.Agent, error) {
+	if r == nil || provider == nil {
+		return nil, errors.New("Floret effect adapter requires a run and provider")
+	}
+	return flruntime.NewAgent(
+		redevenFloretAgentConfig(surface.SystemPrompt, floretModelContextPolicy(contextWindow, options.MaxOutputTokens), options.ReasoningSelection),
+		provider,
+		flruntime.WithAgentTools(surface.FloretToolItems...),
 		flruntime.WithAgentEffectAuthorization(floretEffectAuthorizationGateForRun(r)),
 		flruntime.WithAgentEventSink(floretEventSink{run: r}),
 		flruntime.WithAgentDynamicToolSurface(toolSurfaceProvider),
 		flruntime.WithAgentThreadTitleMode(flruntime.ThreadTitleModeProvider),
-		flruntime.WithAgentManualCompactions(r),
 		flruntime.WithAgentLoopLimits(flruntime.LoopLimits{NoProgressLimit: 2, DuplicateToolLimit: 3}),
-	)
-	if err != nil {
-		return r.failRun("Failed to initialize Floret host", err)
-	}
-	host, err := r.floretTurnOpener(ctx, agent)
-	if err != nil {
-		return r.failRun("Failed to initialize Floret host", err)
-	}
-	var turnHost floretTurnHost = host
-	r.setActiveFloretHost(turnHost)
-	defer r.setActiveFloretHost(nil)
-	r.emitLifecyclePhase("executing", map[string]any{"engine": "floret"})
-	r.floretRunTurnStarted.Store(true)
-	var logicalRequestID identity.LogicalRequestID
-	var startResult flruntime.StartTurnResult
-	if req.Retry != nil {
-		logicalRequestID = req.Retry.LogicalRequestID
-		if _, parseErr := identity.ParseLogicalRequestID(logicalRequestID.String()); parseErr != nil {
-			return r.failRun("Failed to prepare Floret retry request", parseErr)
-		}
-		r.floretPresentationReady.Store(true)
-		retried, retryErr := turnHost.RetryTurn(ctx, flruntime.RetryTurnCommand{
-			LogicalRequestID: logicalRequestID,
-			Reason:           strings.TrimSpace(req.Retry.Reason),
-			Labels:           labels,
-		})
-		err = retryErr
-		startResult = flruntime.StartTurnResult{ThreadID: retried.ThreadID, TurnID: retried.TurnID, RunID: retried.RunID}
-	} else {
-		var logicalRequestErr error
-		logicalRequestID, logicalRequestErr = r.floretTurnLogicalRequestID()
-		if logicalRequestErr != nil {
-			return r.failRun("Failed to prepare Floret turn request", logicalRequestErr)
-		}
-		startCommand := flruntime.StartTurnCommand{
-			LogicalRequestID: logicalRequestID,
-			UserMessage:      turnInput,
-			Labels:           labels,
-			Completion:       completionPolicy,
-			Signals:          controlSpec,
-			Limits: flruntime.TurnLimits{
-				MaxToolCalls:           modelGatewayHardMaxToolCalls,
-				MaxInputTokens:         int64(req.Options.MaxInputTokens),
-				MaxCostUSD:             req.Options.MaxCostUSD,
-				MaxLengthContinuations: 2,
-			},
-			Reasoning: req.Options.ReasoningSelection,
-		}
-		admission, admissionErr := turnHost.AdmitTurn(ctx, startCommand)
-		if admissionErr != nil {
-			return r.failRun("Floret turn admission failed", admissionErr)
-		}
-		if r.awaitFloretAdmission.Load() {
-			if bindErr := r.bindFloretCanonicalAdmissionReceipt(logicalRequestID, admission, turnInput); bindErr != nil {
-				r.rejectFloretContract("turn_admission", bindErr)
-				return r.failRun("Floret turn admission binding failed", bindErr)
-			}
-			r.floretAdmitted.Store(true)
-			if err := r.publishCanonicalUserAdmission(); err != nil {
-				r.completeUserTurnAdmission(nil)
-				r.rejectFloretContract("turn_admission", err)
-				return r.failRun("Floret turn admission presentation failed", err)
-			}
-			r.floretPresentationReady.Store(true)
-			r.completeUserTurnAdmission(nil)
-		}
-		startResult, err = turnHost.ExecuteAdmission(ctx, admission.Receipt, flruntime.ExecutionContext{
-			SupplementalContext: contextProjection.Items,
-			SignalProjector:     controlSpec.Project,
-		})
-	}
-	var snapshot flruntime.ThreadTurnSnapshot
-	var snapshotErr error
-	if startResult.TurnID != "" {
-		readCtx, readCancel := context.WithTimeout(context.Background(), r.persistTimeout())
-		snapshot, snapshotErr = turnHost.ReadTurn(readCtx, startResult.TurnID)
-		readCancel()
-	}
-	if startResult.RunID != "" || startResult.ThreadID != "" || startResult.TurnID != "" {
-		var bindErr error
-		identity := r.floretRuntimeEventIdentitySnapshot()
-		if req.Retry != nil {
-			bindErr = r.observeFloretCanonicalIdentity(string(startResult.RunID), string(startResult.ThreadID), string(startResult.TurnID))
-		} else if r.awaitFloretAdmission.Load() && !identity.configured && startResult.Receipt.Replayed && startResult.Receipt.Committed {
-			bindErr = r.bindFloretCanonicalAdmissionReplay(logicalRequestID, startResult, snapshot, snapshotErr, turnInput)
-		} else {
-			bindErr = r.bindFloretCanonicalIdentity(string(startResult.RunID), string(startResult.ThreadID), string(startResult.TurnID))
-		}
-		if bindErr != nil {
-			r.rejectFloretContract("start_turn_identity", bindErr)
-		}
-	}
-	result := floretTurnResultFromSnapshot(startResult.ThreadID, snapshot)
-	authorityErr := validateFloretAuthorityRelease(r, startResult, snapshot, snapshotErr)
-	r.floretAuthorityBarrier.release(authorityErr)
-	authorityReleasePublished = true
-	if contractErr := r.floretContractError(); contractErr != nil {
-		if r.isDetached() {
-			return nil
-		}
-		return r.failRunWithCode(runErrorCodeFloretEngineFailed, "", contractErr)
-	}
-	if authorityErr != nil && result.Status == "" {
-		if r.isDetached() {
-			return nil
-		}
-		return r.failRunWithCode(runErrorCodeFloretEngineFailed, "", errors.Join(err, authorityErr))
-	}
-	projectionUnavailable := false
-	if result.Status != "" {
-		projectionUnavailable = result.ProjectionAvailability == flruntime.TurnProjectionAvailabilityUnavailable
-		if projectionErr := result.Validate(); projectionErr != nil {
-			r.rejectFloretContract("turn_projection_outcome", projectionErr)
-			if r.isDetached() {
-				return nil
-			}
-			return r.failRunWithCode(runErrorCodeFloretEngineFailed, "", projectionErr)
-		}
-	}
-	if projectionUnavailable {
-		r.recordRunDiagnostic("floret.projection.unavailable", RealtimeStreamKindLifecycle, map[string]any{
-			"source": "run_turn",
-			"error":  sanitizeLogText(result.ProjectionError, 240),
-		})
-	}
-	if result.Status.IsTerminal() && r.host.replaceLiveDraftWithCanonicalTimeline != nil {
-		if replaceErr := r.host.replaceLiveDraftWithCanonicalTimeline(context.Background(), r.id, r.turnID, r.messageID, "terminal_projection"); replaceErr != nil {
-			r.recordRunDiagnostic("flower.timeline.replace_failed", RealtimeStreamKindLifecycle, map[string]any{"error": replaceErr.Error()})
-		}
-	}
-	if reason := r.floretParentTerminalSubagentCloseReason(ctx, result, err); reason != "" {
-		if closeErr := r.closeParentTerminalSubagents(context.Background(), reason); closeErr != nil {
-			if r.log != nil {
-				r.log.Warn("ai: close parent terminal subagents failed", "run_id", r.id, "thread_id", r.threadID, "reason", reason, "error", closeErr)
-			}
-			r.recordRunDiagnostic("subagent.parent_terminal_close_failed", RealtimeStreamKindLifecycle, map[string]any{
-				"reason": reason,
-				"error":  closeErr.Error(),
-			})
-		}
-	}
-	_, cleanupErr := r.cleanupRunTerminalProcesses()
-	if cleanupErr != nil {
-		if r.log != nil {
-			r.log.Warn("ai: cleanup run terminal processes failed", "run_id", r.id, "thread_id", r.threadID, "error", cleanupErr)
-		}
-		r.recordRunDiagnostic("terminal.cleanup_failed", RealtimeStreamKindLifecycle, map[string]any{
-			"error": cleanupErr.Error(),
-		})
-	}
-	if subagentCleanupErr := r.cleanupSubagentTerminalProcesses(context.Background()); subagentCleanupErr != nil {
-		if r.log != nil {
-			r.log.Warn("ai: cleanup subagent terminal processes failed", "run_id", r.id, "thread_id", r.threadID, "error", subagentCleanupErr)
-		}
-		r.recordRunDiagnostic("subagent.terminal_cleanup_failed", RealtimeStreamKindLifecycle, map[string]any{
-			"error": subagentCleanupErr.Error(),
-		})
-	}
-	if err != nil && result.Status == "" {
-		if r.isDetached() {
-			return nil
-		}
-		if cancelReason := strings.TrimSpace(r.getCancelReason()); cancelReason == "canceled" || cancelReason == "timed_out" {
-			return r.projectFloretCancelledResult(ctx, int(result.Metrics.Steps))
-		}
-		return r.failRunWithCode(classifyRunFailureCode(err, runErrorCodeFloretEngineFailed), "", err)
-	}
-	if err != nil {
-		switch result.Status {
-		case flruntime.TurnStatusFailed:
-			// Floret's typed canonical failure remains authoritative. The returned
-			// error may wrap the same failure but must not replace its stable code.
-		case flruntime.TurnStatusCancelled:
-			// Cancellation keeps its product lifecycle projection below.
-		default:
-			if r.isDetached() {
-				return nil
-			}
-			return r.failRunWithCode(classifyRunFailureCode(err, runErrorCodeFloretEngineFailed), "", err)
-		}
-	}
-	if result.Status == flruntime.TurnStatusCompleted || result.Status == flruntime.TurnStatusWaiting {
-		if !r.acceptsEngineResultProjection() {
-			return nil
-		}
-		if result.Projection != nil {
-			r.applyFloretThreadProjection(*result.Projection)
-		}
-	}
-	if result.Status == flruntime.TurnStatusCancelled {
-		if r.isDetached() {
-			if result.Projection != nil {
-				r.applyFloretThreadProjectionInternal(*result.Projection, false, true)
-			}
-			return nil
-		}
-		if result.Projection != nil {
-			r.applyFloretThreadProjection(*result.Projection)
-		}
-	}
-	if r.acceptsEngineResultProjection() {
-		r.recordRuntimeTurnUsage(flowerUsageFromFloret(result.Metrics.ProviderUsage), 0)
-	}
-	return r.projectFloretResult(ctx, result, req)
-}
-
-func (r *run) bindFloretCanonicalAdmissionReplay(
-	logicalRequestID identity.LogicalRequestID,
-	result flruntime.StartTurnResult,
-	snapshot flruntime.ThreadTurnSnapshot,
-	snapshotErr error,
-	expected flruntime.TurnInput,
-) error {
-	if r == nil {
-		return errors.New("Floret admission replay owner is unavailable")
-	}
-	receipt := result.Receipt
-	if !receipt.Replayed || !receipt.Committed || receipt.Revision <= 0 ||
-		strings.TrimSpace(receipt.LogicalRequestID.String()) == "" || receipt.LogicalRequestID != logicalRequestID ||
-		receipt.ThreadID == "" || receipt.TurnID == "" || receipt.RunID == "" ||
-		receipt.ThreadID != result.ThreadID || receipt.TurnID != result.TurnID || receipt.RunID != result.RunID {
-		return errors.New("Floret committed replay receipt identity is invalid")
-	}
-	if result.ThreadID != identity.ThreadID(strings.TrimSpace(r.threadID)) {
-		return errors.New("Floret committed replay is bound to another thread")
-	}
-	if snapshotErr != nil {
-		return fmt.Errorf("read exact Floret turn for committed replay: %w", snapshotErr)
-	}
-	if err := snapshot.Validate(); err != nil {
-		return fmt.Errorf("validate exact Floret turn for committed replay: %w", err)
-	}
-	if snapshot.TurnID != result.TurnID || snapshot.RunID != result.RunID ||
-		snapshot.RetrySource != nil || snapshot.UserMessageOrigin != flruntime.ThreadUserMessageOriginUser ||
-		strings.TrimSpace(snapshot.UserEntryID) == "" {
-		return errors.New("Floret committed replay exact turn identity is invalid")
-	}
-	if snapshot.UserInput != expected.Text || !reflect.DeepEqual(snapshot.UserAttachments, expected.Attachments) ||
-		!reflect.DeepEqual(snapshot.UserReferences, expected.References) {
-		return errors.New("Floret committed replay command fingerprint evidence differs from the frozen command")
-	}
-	return r.bindFloretCanonicalAdmission(
-		string(result.RunID),
-		string(result.ThreadID),
-		string(result.TurnID),
-		snapshot.UserEntryID,
-	)
-}
-
-func (r *run) bindFloretCanonicalAdmissionReceipt(
-	logicalRequestID identity.LogicalRequestID,
-	result flruntime.AdmitTurnResult,
-	expected flruntime.TurnInput,
-) error {
-	if r == nil {
-		return errors.New("Floret admission receipt owner is unavailable")
-	}
-	receipt := result.Receipt
-	if strings.TrimSpace(receipt.LogicalRequestID.String()) == "" || receipt.LogicalRequestID != logicalRequestID ||
-		receipt.ThreadID == "" || receipt.TurnID == "" || receipt.RunID == "" ||
-		receipt.UserEntryID == "" || receipt.Revision <= 0 ||
-		receipt.ThreadID != result.ThreadID || receipt.TurnID != result.TurnID ||
-		receipt.RunID != result.RunID || receipt.UserEntryID != result.UserEntryID {
-		return errors.New("Floret admission receipt identity is invalid")
-	}
-	if receipt.ThreadID != identity.ThreadID(strings.TrimSpace(r.threadID)) {
-		return errors.New("Floret admission receipt is bound to another thread")
-	}
-	if strings.TrimSpace(expected.Text) == "" && len(expected.Attachments) == 0 && len(expected.References) == 0 {
-		return errors.New("Floret admission receipt command evidence is empty")
-	}
-	return r.bindFloretCanonicalAdmission(
-		string(receipt.RunID),
-		string(receipt.ThreadID),
-		string(receipt.TurnID),
-		receipt.UserEntryID,
 	)
 }
 
@@ -498,65 +226,6 @@ func (r *run) floretTurnLogicalRequestID() (identity.LogicalRequestID, error) {
 		return "", fmt.Errorf("invalid Floret logical request identity: %w", err)
 	}
 	return parsed, nil
-}
-
-func floretTurnResultFromSnapshot(threadID identity.ThreadID, snapshot flruntime.ThreadTurnSnapshot) flruntime.TurnResult {
-	if threadID == "" || snapshot.TurnID == "" || snapshot.RunID == "" {
-		return flruntime.TurnResult{}
-	}
-	projection := snapshot.Projection
-	result := flruntime.TurnResult{
-		ThreadID: threadID, TurnID: snapshot.TurnID, RunID: snapshot.RunID, Status: snapshot.Status, Failure: snapshot.Failure,
-		ProjectionAvailability: flruntime.TurnProjectionAvailabilityReady, Projection: &projection,
-		ActivityTimeline: observation.ActivityTimeline{
-			SchemaVersion: observation.ActivityTimelineSchemaVersion,
-			ThreadID:      threadID, TurnID: snapshot.TurnID, RunID: snapshot.RunID, TraceID: identity.TraceID(snapshot.RunID),
-			Summary: observation.ActivitySummary{Status: observation.ActivityStatusSuccess, Severity: observation.ActivitySeverityQuiet},
-		},
-	}
-	if snapshot.Status == flruntime.TurnStatusFailed {
-		result.ActivityTimeline.Summary.Status = observation.ActivityStatusError
-		result.ActivityTimeline.Summary.Severity = observation.ActivitySeverityError
-	} else if snapshot.Status == flruntime.TurnStatusCancelled || snapshot.Status == flruntime.TurnStatusInterrupted {
-		result.ActivityTimeline.Summary.Status = observation.ActivityStatusCanceled
-		result.ActivityTimeline.Summary.Severity = observation.ActivitySeverityWarning
-	}
-	for index := len(snapshot.ControlSignals) - 1; index >= 0; index-- {
-		signal := snapshot.ControlSignals[index]
-		if signal.Disposition != string(flruntime.SignalWaiting) && signal.Disposition != string(flruntime.SignalTerminal) {
-			continue
-		}
-		result.Signal = &flruntime.TurnSignal{
-			Disposition: flruntime.SignalDisposition(signal.Disposition), Name: signal.Name, CallID: signal.CallID,
-			Payload: cloneAnyMap(signal.Payload), OutputText: signal.Text, ArgsHash: signal.ArgsHash,
-		}
-		break
-	}
-	return result
-}
-
-func validateFloretAuthorityRelease(r *run, start flruntime.StartTurnResult, snapshot flruntime.ThreadTurnSnapshot, readErr error) error {
-	if r == nil {
-		return errors.New("Floret authority release run is unavailable")
-	}
-	if readErr != nil {
-		return fmt.Errorf("read exact Floret terminal turn: %w", readErr)
-	}
-	if strings.TrimSpace(string(start.ThreadID)) == "" || strings.TrimSpace(string(start.TurnID)) == "" || strings.TrimSpace(string(start.RunID)) == "" {
-		return errors.New("Floret StartTurn did not return complete canonical identity")
-	}
-	if err := snapshot.Validate(); err != nil {
-		return fmt.Errorf("Floret authority release snapshot is invalid: %w", err)
-	}
-	canonicalRunID, canonicalThreadID, canonicalTurnID := r.floretCanonicalIdentity()
-	if string(start.ThreadID) != canonicalThreadID || string(start.TurnID) != canonicalTurnID || string(start.RunID) != canonicalRunID ||
-		snapshot.TurnID != start.TurnID || snapshot.RunID != start.RunID {
-		return errors.New("Floret authority release identity does not match exact run")
-	}
-	if !snapshot.Status.IsTerminal() {
-		return fmt.Errorf("Floret authority release status %q is not terminal", snapshot.Status)
-	}
-	return nil
 }
 
 func (r *run) floretParentTerminalSubagentCloseReason(ctx context.Context, result flruntime.TurnResult, runErr error) string {
@@ -615,26 +284,31 @@ func (r *run) closeParentTerminalSubagents(ctx context.Context, reason string) e
 	if !ok || runtime == nil {
 		return nil
 	}
-	host := runtime.currentHost()
-	if host == nil {
-		return nil
-	}
-	result, err := closeSubagentsWithHost(closeCtx, host, threadID, reason, strings.TrimSpace(r.turnID))
+	snapshots, err := runtime.snapshots(closeCtx)
 	if err != nil {
 		return err
 	}
-	if r.subagentRuntime != nil {
-		if runtime, ok := r.subagentRuntime.(*floretSubagentRuntime); ok {
-			snapshots := make([]subagentSnapshot, 0, len(result))
-			for _, snapshot := range result {
-				snapshots = append(snapshots, subagentSnapshotFromFloret(snapshot))
-			}
-			runtime.refreshSubagentsPatch(closeCtx, snapshots...)
+	closedCount := 0
+	for _, snapshot := range snapshots {
+		if isSubagentTerminalStatus(snapshot.Status) {
+			continue
 		}
+		_, _, threads, boundaryErr := runtime.boundaries()
+		if boundaryErr != nil {
+			return boundaryErr
+		}
+		if _, cancelErr := threads.Cancel(closeCtx, flruntime.CancelInput{
+			ThreadID:   identity.ThreadID(snapshot.ThreadID),
+			RequestKey: flruntime.RequestKey(subagentCloseOperationID(threadID, snapshot.ThreadID, reason, strings.TrimSpace(r.turnID))),
+		}); cancelErr != nil {
+			return cancelErr
+		}
+		closedCount++
 	}
+	runtime.refreshSubagentsPatch(closeCtx)
 	r.recordRunDiagnostic("subagent.parent_terminal_close", RealtimeStreamKindLifecycle, map[string]any{
 		"reason":       reason,
-		"closed_count": len(result),
+		"closed_count": closedCount,
 	})
 	return nil
 }

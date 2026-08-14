@@ -1,0 +1,61 @@
+import { describe, expect, it } from 'vitest';
+
+import { createTransportOutbox } from './transportOutbox';
+
+describe('TransportOutbox', () => {
+  it('keeps only raw input until the typed current view confirms its request id', () => {
+    let outbox = createTransportOutbox().put({
+      requestId: 'request-1',
+      threadId: 'thread-a',
+      input: { client_request_id: 'request-1', thread_id: 'thread-a', prompt: 'hello' },
+      attachmentLabels: ['notes.md'],
+      createdAtMs: 10,
+    });
+
+    expect(outbox.entries.get('request-1')?.input.prompt).toBe('hello');
+    outbox = outbox.confirm({
+      thread_id: 'thread-a',
+      view_version: 2,
+      items: [{ id: 'user:request-1', kind: 'user', text: 'hello' }],
+    });
+    expect(outbox.entries.has('request-1')).toBe(false);
+  });
+
+  it('moves a new-thread request to the canonical thread without changing its identity', () => {
+    const pending = createTransportOutbox().put({
+      requestId: 'req-new',
+      threadId: '__new_thread__',
+      input: { client_request_id: 'req-new', prompt: 'hello' },
+      attachmentLabels: [],
+      createdAtMs: 1,
+    });
+
+    const assigned = pending.assignThread('req-new', 'thread-created');
+
+    expect(assigned.forThread('__new_thread__')).toEqual([]);
+    expect(assigned.forThread('thread-created')).toEqual([
+      expect.objectContaining({ requestId: 'req-new', input: expect.objectContaining({ prompt: 'hello' }) }),
+    ]);
+  });
+
+  it('confirms a busy send from the canonical queue without modeling queue state', () => {
+    let outbox = createTransportOutbox().put({
+      requestId: 'request-queued', threadId: 'thread-a', input: { client_request_id: 'request-queued', thread_id: 'thread-a', prompt: 'later' }, attachmentLabels: [], createdAtMs: 10,
+    });
+    outbox = outbox.confirm({
+      thread_id: 'thread-a', view_version: 3,
+      queue: [{ request_key: 'request-queued', input: { text: 'later' } }],
+    });
+    expect(outbox.entries.size).toBe(0);
+  });
+
+  it('keeps requests partitioned by thread and drops only explicit failures', () => {
+    let outbox = createTransportOutbox()
+      .put({ requestId: 'a', threadId: 'thread-a', input: { client_request_id: 'a', thread_id: 'thread-a', prompt: 'A' }, attachmentLabels: [], createdAtMs: 1 })
+      .put({ requestId: 'b', threadId: 'thread-b', input: { client_request_id: 'b', thread_id: 'thread-b', prompt: 'B' }, attachmentLabels: [], createdAtMs: 2 });
+    outbox = outbox.drop('a');
+    expect([...outbox.entries.keys()]).toEqual(['b']);
+    expect(outbox.forThread('thread-a')).toEqual([]);
+    expect(outbox.forThread('thread-b').map((entry) => entry.requestId)).toEqual(['b']);
+  });
+});

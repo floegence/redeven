@@ -566,9 +566,6 @@ func (s *Service) SaveUpload(ctx context.Context, req SaveUploadRequest) (*Uploa
 		if errors.Is(err, threadstore.ErrUploadQuotaExceeded) {
 			return fail(UploadErrorQuotaExceeded, false, err)
 		}
-		if errors.Is(err, threadstore.ErrThreadIDRetired) {
-			return fail(UploadErrorNotFound, false, err)
-		}
 		return fail(UploadErrorStoreUnavailable, true, errors.New("failed to commit upload metadata"))
 	}
 	return uploadResponseFromRecord(&rec), nil
@@ -639,9 +636,6 @@ func (s *Service) completeRenamedUploadAttempt(
 	if err := db.CompleteUploadAttemptToStaging(ctx, attempt, rec, scope); err != nil {
 		if errors.Is(err, threadstore.ErrUploadQuotaExceeded) {
 			return failInterrupted(UploadErrorQuotaExceeded, false, err)
-		}
-		if errors.Is(err, threadstore.ErrThreadIDRetired) {
-			return failInterrupted(UploadErrorNotFound, false, err)
 		}
 		return nil, NewUploadError(UploadErrorStoreUnavailable, true, errors.New("failed to recover interrupted upload metadata"))
 	}
@@ -717,7 +711,9 @@ func (s *Service) OpenQueuedUpload(ctx context.Context, owner UploadOwner, threa
 	if dir == "" || db == nil {
 		return nil, NewUploadError(UploadErrorStoreUnavailable, true, errors.New("attachment store is unavailable"))
 	}
-	rec, err := db.GetQueuedTurnOwnedUpload(ctxOrBackground(ctx), owner.EndpointID, threadID, queueID, uploadID)
+	// Queue ownership is canonical in Floret; Redeven only verifies the
+	// thread-scoped upload reference for this compatibility download route.
+	rec, err := db.GetThreadOwnedUpload(ctxOrBackground(ctx), owner.EndpointID, threadID, uploadID)
 	if err != nil || rec == nil || rec.State != threadstore.UploadStateLive {
 		return nil, NewUploadError(UploadErrorNotFound, false, errors.New("attachment not found"))
 	}
