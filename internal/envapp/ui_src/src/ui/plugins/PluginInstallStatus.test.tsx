@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import { render } from 'solid-js/web';
 import type { PluginExecution } from '@floegence/redevplugin-ui';
 import { describe, expect, it, vi } from 'vitest';

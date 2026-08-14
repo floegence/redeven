@@ -236,11 +236,10 @@ describe('PluginPanel', () => {
     expect(dialog.querySelector('[data-plugin-center-market-action]')).not.toBeNull();
   });
 
-  it('keeps an enabled plugin visible when runtime recovery needs attention', () => {
+  it('keeps a Host-authorized plugin visible when runtime recovery needs attention', () => {
     const recoveryFailure = pluginItem({
       lifecycleState: 'needs_attention',
       attentionReason: 'diagnostic_error',
-      defaultLaunchTarget: undefined,
     });
     const model = buildPluginPanelModel({ items: [recoveryFailure] });
 
@@ -288,9 +287,15 @@ describe('PluginPanel', () => {
     expect(onOpenPluginDetails).not.toHaveBeenCalled();
   });
 
-  it('hides disabled plugins from the application launcher', () => {
+  it('hides plugins without a Host-authorized launch target', () => {
     mountPanel({
-      model: buildPluginPanelModel({ items: [pluginItem({ lifecycleState: 'disabled', attentionReason: 'disabled' })] }),
+      model: buildPluginPanelModel({
+        items: [pluginItem({
+          lifecycleState: 'disabled',
+          attentionReason: 'disabled',
+          defaultLaunchTarget: undefined,
+        })],
+      }),
     });
 
     expect(document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]')).toBeNull();
