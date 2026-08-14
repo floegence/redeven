@@ -166,3 +166,12 @@ test('unlocked packaged renderer opens Plugin Center through the empty launcher 
   assert.match(pluginInstallCheck, /exactlyOnceRequests/u);
   assert.doesNotMatch(pluginInstallCheck, /JSON\.stringify\(normalizedPluginRequests\)\s*!==/u);
 });
+
+test('unlocked packaged renderer exercises current Host recovery and Execution Event routes only', () => {
+  assert.match(packagedRendererSource, /\/_redevplugin\/api\/plugins\/runtime\/recover-enabled/u);
+  assert.match(packagedRendererSource, /\/_redevplugin\/api\/plugins\/executions\/release-installs/u);
+  assert.match(packagedRendererSource, /\/executions\/release_install_built_renderer\/query/u);
+  assert.match(packagedRendererSource, /\/executions\/release_install_built_renderer\/events\/query/u);
+  assert.doesNotMatch(packagedRendererSource, /runtime\/refresh-enabled/u);
+  assert.doesNotMatch(packagedRendererSource, /release-install-operations/u);
+});
