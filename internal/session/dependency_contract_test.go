@@ -718,7 +718,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 		},
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
 			"Floret v3.2.40",
-			"flowersec-v2-3-9-sdk-contracts",
+			"flowersec-v2-4-1-floe-webapp-v0-40-19",
 			"ai_threadstore_product_v1",
 			"Fresh stores initialize directly at version 1",
 			"single persistent source of truth",
