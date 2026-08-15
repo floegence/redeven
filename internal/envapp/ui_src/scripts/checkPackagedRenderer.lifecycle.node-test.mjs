@@ -225,7 +225,7 @@ test('locked packaged renderer verifies the access gate without opening privileg
   assert.doesNotMatch(packagedRendererSource, /pluginEntryCount/u);
 });
 
-test('unlocked packaged renderer uses the Flowersec 2.4.1 WebSocket Acceptor contract', () => {
+test('unlocked packaged renderer uses the Flowersec 2.4.2 WebSocket Acceptor contract', () => {
   assert.match(packagedRendererSource, /listeners: \[\{[\s\S]*?carrier: 'websocket',[\s\S]*?path: 'direct'/u);
   assert.match(packagedRendererSource, /acceptor\.addresses\(\)\[0\]/u);
   assert.doesNotMatch(packagedRendererSource, /acceptor\.address\(\)/u);
