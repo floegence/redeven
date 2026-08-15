@@ -161,7 +161,7 @@ test('Desktop smoke installs through Plugin Center only for the initial isolated
   assert.match(source, /installedPlugins\(catalog\)\.length > 0/u);
   assert.doesNotMatch(source, /\[data-plugin-center-card-primary\]/u);
   assert.doesNotMatch(source, /official plugin enable action/u);
-  assert.match(source, /official plugin installation did not finish enabled/u);
+  assert.match(source, /official plugin activation/u);
   assert.match(source, /cold restart started without an enabled plugin/u);
 });
 
