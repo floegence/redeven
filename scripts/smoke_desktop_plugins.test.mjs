@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   assertAttachSmokeConfiguration,
+  assertExtensionIOEvidence,
   assertIsolatedSmokeConfiguration,
   assessPluginSmoke,
   browserPages,
@@ -10,6 +11,76 @@ import {
   releaseRefFromInstalledPlugin,
   waitFor,
 } from './smoke_desktop_plugins.mjs';
+
+const completeIOEvidence = {
+  linux_target: {
+    os: 'linux',
+    arch: 'arm64',
+    container_id: '0123456789abcdef',
+    commit: '89ba888e68078fb77eeb29ed55e510a52382a338',
+    runtime_pid: 41,
+    local_ui_pid: 17,
+    state_root: '/smoke/state',
+  },
+  v9: {
+    manifest_schema: 'redevplugin.manifest.v9',
+    enabled_after_install: true,
+    fs: {
+      bytes: 64 * 1024 * 1024,
+      sha256: 'a'.repeat(64),
+      list: true,
+      stat: true,
+      rename: true,
+      watch: true,
+      remove: true,
+    },
+    http: { download_bytes: 64 * 1024 * 1024, upload_bytes: 64 * 1024 * 1024, sha256: 'b'.repeat(64) },
+    websocket: { messages: 100 },
+    tcp: { exchanges: 100 },
+    udp: { datagrams: 100 },
+  },
+  frozen_v1_1_4: {
+    package: 'worker.redevplugin',
+    expected_sha256: 'c'.repeat(64),
+    observed_sha256: 'c'.repeat(64),
+    rpc_ok: true,
+  },
+  revoke: {
+    disabled: true,
+    pending_rpc_rejected: true,
+    http_closed: true,
+    websocket_closed: true,
+    tcp_closed: true,
+    revoked_resources: 4,
+  },
+};
+
+test('Desktop smoke accepts complete Linux v9 I/O, frozen v1.1.4, and revoke evidence', () => {
+  assert.doesNotThrow(() => assertExtensionIOEvidence(completeIOEvidence));
+});
+
+test('Desktop smoke rejects partial protocol or revoke coverage', () => {
+  assert.throws(() => assertExtensionIOEvidence({
+    ...completeIOEvidence,
+    v9: { ...completeIOEvidence.v9, udp: { datagrams: 99 } },
+  }), /UDP/u);
+  assert.throws(() => assertExtensionIOEvidence({
+    ...completeIOEvidence,
+    revoke: { ...completeIOEvidence.revoke, websocket_closed: false },
+  }), /revoke/u);
+});
+
+test('Desktop smoke launches a task-owned Linux target and opens it through the Desktop preload bridge', async () => {
+  const [shellSource, browserSource] = await Promise.all([
+    import('node:fs/promises').then((fs) => fs.readFile(new URL('./smoke_desktop_plugins.sh', import.meta.url), 'utf8')),
+    import('node:fs/promises').then((fs) => fs.readFile(new URL('./smoke_desktop_plugins.mjs', import.meta.url), 'utf8')),
+  ]);
+  assert.match(shellSource, /docker run/u);
+  assert.match(shellSource, /linux\/arm64/u);
+  assert.match(shellSource, /REDEVEN_DESKTOP_AUTO_START_RUNTIME=0/u);
+  assert.match(browserSource, /redevenDesktopLauncher\.performAction/u);
+  assert.match(browserSource, /kind: 'open_remote_environment'/u);
+});
 
 test('attach smoke accepts the shared dev Desktop ports with verified provenance', () => {
   assert.doesNotThrow(() => assertAttachSmokeConfiguration({
