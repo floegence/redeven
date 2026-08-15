@@ -23,6 +23,7 @@ import type {
   FlowerPermissionType,
   FlowerSubagentSummary,
 } from './contracts/flowerSurfaceContracts';
+import { canonicalFlowerThreadSnapshotTitle } from './flowerThreadTitle';
 import {
   normalizeFlowerReasoningCapability,
   normalizeFlowerReasoningSelection,
@@ -1013,7 +1014,7 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
   const approvalPendingCount = record.approval_pending_count === undefined
     ? undefined
     : nonNegativeInteger(record.approval_pending_count, 'thread.approval_pending_count');
-  return {
+  const thread: FlowerThreadSnapshot = {
     thread_id: threadID,
     title: trim(record.title),
     title_status: titleStatus(record.title_status, record.title),
@@ -1046,4 +1047,5 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
     ...(errorMessage ? { error: { message: errorMessage, ...(errorCode ? { code: errorCode } : {}) } } : {}),
     read_status: mapFlowerReadStatus(readStatusRaw ?? record.read_status),
   };
+  return { ...thread, title: canonicalFlowerThreadSnapshotTitle(thread) };
 }

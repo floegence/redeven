@@ -83,6 +83,7 @@ import type {
   FlowerWorkingDirectoryPathContext,
 } from './contracts/flowerSurfaceContracts';
 import { projectFlowerThreadListItem, trimString } from './flowerSurfaceModel';
+import { canonicalFlowerThreadSnapshotTitle } from './flowerThreadTitle';
 import { projectFlowerCompanionLiveTail, type FlowerCompanionProgressKind } from './flowerCompanionLiveTail';
 import { FlowerCompanionTailMotionController } from './flowerCompanionTailMotion';
 import {
@@ -1387,6 +1388,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 		if (!threadID) return null;
 		return threadCache().views.get(threadID)?.thread ?? null;
 	});
+	const selectedThreadTitle = createMemo(() => {
+		const threadID = trimString(selectedThreadID());
+		if (!threadID) return copy().chat.titleFallback;
+		return canonicalFlowerThreadSnapshotTitle(threadCache().summaries.get(threadID))
+			|| canonicalFlowerThreadSnapshotTitle(threadCache().views.get(threadID)?.thread);
+	});
   const selectedCanonicalQueuedTurns = createMemo<readonly FlowerQueuedTurn[]>(() => {
     const thread = selectedThread();
     return thread && trimString(thread.thread_id) === trimString(selectedThreadID())
@@ -2358,7 +2365,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return [
       t.thread_id,
       t.status,
-      t.title,
+		canonicalFlowerThreadSnapshotTitle(t),
       String(Number(t.pinned_at_ms ?? 0) > 0),
       String(Number(t.pinned_at_ms ?? 0)),
       String(t.created_at_ms),
@@ -2388,16 +2395,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ].join('\x1f');
   const threadItems = createMemo(() => {
     localReadVisibilityRevision();
-    return threads().map((t) => {
+		return threads().flatMap((t) => {
       const visibleThread = threadWithLocalReadVisibility(t);
       const sig = threadItemSignature(t);
       const cached = threadItemCache.get(t.thread_id);
       if (cached && cached.sig === sig) {
-        return cached.item;
+			return cached.item.title ? [cached.item] : [];
       }
       const item = projectFlowerThreadListItem(visibleThread);
       threadItemCache.set(t.thread_id, { item, sig });
-      return item;
+			return item.title ? [item] : [];
     });
   });
   // Stable sidebar list items: only updates when sidebar-visible fields change.
@@ -3792,7 +3799,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const now = Date.now();
     const base = threadCache().views.get(threadID)?.thread ?? threadCache().summaries.get(threadID) ?? {
       thread_id: threadID,
-      title: copy().threadList.untitled,
+		title: '',
       title_status: 'pending',
       model_id: selectedComposerModelID(),
       working_dir: draftWorkingDirectory(),
@@ -3833,7 +3840,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     envelope: FlowerLiveStreamEnvelope,
     connectionEpoch: number,
   ): void => {
-    if (envelope.kind === 'ready') {
+		if (envelope.kind === 'ready' || envelope.kind === 'summary.batch') {
       for (const summary of envelope.summaries ?? []) {
         if (retiredThreadIDs.has(summary.thread_id)) continue;
         setThreadCache((cache) => {
@@ -3843,8 +3850,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           return cache.replaceSummary({ ...summary, read_status: readStatus });
         });
       }
-      const selectedID = selectedThreadID();
-      if (selectedID) {
+			const selectedID = selectedThreadID();
+			if (envelope.kind === 'ready' && selectedID) {
         void reloadSelectedThread(selectedID, threadLoadSequence, 'background_refresh').catch(() => undefined);
       }
       return;
@@ -4622,7 +4629,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
 
-  const deleteTargetTitle = () => trimString(deleteTarget()?.item.title) || copy().threadList.untitled;
+	const deleteTargetTitle = () => trimString(deleteTarget()?.item.title);
   const deleteTargetHasActiveWork = () => {
     const item = deleteTarget()?.item;
     if (!item) return false;
@@ -9520,7 +9527,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }}
       >
         <FlowerIcon class="h-4 w-4 shrink-0 text-primary" />
-        <span class="truncate">{selectedThread()?.title || copy().chat.titleFallback}</span>
+		<span class="truncate">{selectedThreadTitle()}</span>
         <ChevronDown class="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
       </button>
       <Show when={threadSwitcherOpen() && props.companionCopy}>
@@ -9646,7 +9653,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               <div class="flex min-w-0 items-center gap-3">
                 <FlowerIcon class="h-5 w-5 text-primary" />
                 <div class="flower-chat-header-identity min-w-0">
-                  <div class="flower-chat-header-title truncate">{selectedThread()?.title || copy().chat.titleFallback}</div>
+				  <div class="flower-chat-header-title truncate">{selectedThreadTitle()}</div>
                 </div>
               </div>
             )}

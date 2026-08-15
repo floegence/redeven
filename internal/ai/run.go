@@ -19,6 +19,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/floegence/floret/v4/observation"
+	flprovider "github.com/floegence/floret/v4/provider"
 	flruntime "github.com/floegence/floret/v4/runtime"
 	fltools "github.com/floegence/floret/v4/tools"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
@@ -500,12 +501,14 @@ func (r *run) beginExecutionAdmission(ctx context.Context) (context.Context, fun
 	return admittedContext, release, nil
 }
 
-func (r *run) admitFloretProviderRequest(ctx context.Context) (context.Context, func(), error) {
+func (r *run) admitFloretProviderRequest(ctx context.Context, request flprovider.Request) (context.Context, func(), error) {
 	if err := r.floretContractError(); err != nil {
 		return nil, nil, err
 	}
-	if err := r.ensureCanonicalPermissionSnapshotPersisted(ctx); err != nil {
-		return nil, nil, err
+	if request.LogicalRequestID != "thread_title" || len(request.Tools) != 0 || len(request.HostedTools) != 0 {
+		if err := r.ensureCanonicalPermissionSnapshotPersisted(ctx); err != nil {
+			return nil, nil, err
+		}
 	}
 	return r.beginExecutionAdmission(ctx)
 }

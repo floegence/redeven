@@ -88,6 +88,32 @@ describe('FlowerSurface navigation', () => {
     expect(runtime.querySelector('.flower-chat-header-title')?.textContent).toBe('Deploy plan');
   });
 
+	it('replaces the visible fallback title from a canonical summary event without an empty flash', async () => {
+		const fallback = thread({ thread_id: 'thread-title-live', title: 'Review runtime', title_status: 'pending' });
+		const provider = thread({ ...fallback, title: 'Runtime review', title_status: 'ready', updated_at_ms: fallback.updated_at_ms + 1 });
+		const publishProviderTitle = deferred<void>();
+		const runtime = renderSurfaceWithAdapter({
+			...adapter(true),
+			listThreads: vi.fn(async () => [fallback]),
+			loadThread: vi.fn(async () => liveBootstrap(fallback)),
+			connectLiveStream: async function* ({ signal }) {
+				yield { schema_version: 1, kind: 'ready' as const, summaries: [fallback] };
+				await publishProviderTitle.promise;
+				yield { schema_version: 1, kind: 'summary.batch' as const, summaries: [provider] };
+				await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
+			},
+		});
+
+		await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-title-live"] button')));
+		(runtime.querySelector('[data-thread-id="thread-title-live"] button') as HTMLButtonElement).click();
+		await waitFor(() => runtime.querySelector('.flower-chat-header-title')?.textContent === 'Review runtime');
+		expect(runtime.textContent).not.toContain('Untitled chat');
+
+		publishProviderTitle.resolve(undefined);
+		await waitFor(() => runtime.querySelector('.flower-chat-header-title')?.textContent === 'Runtime review');
+		expect(runtime.textContent).not.toContain('Untitled chat');
+	});
+
   it('marks a reply interrupted by a runtime restart without showing an error card', async () => {
     const interruptedThread = thread({
       status: 'canceled',

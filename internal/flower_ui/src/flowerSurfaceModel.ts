@@ -2,6 +2,7 @@ import type {
   FlowerThreadListItem,
   FlowerThreadSnapshot,
 } from './contracts/flowerSurfaceContracts';
+import { canonicalFlowerThreadSnapshotTitle } from './flowerThreadTitle';
 
 export function trimString(value: string | null | undefined): string {
   return String(value ?? '').trim();
@@ -19,7 +20,7 @@ export function projectFlowerThreadListItem(thread: FlowerThreadSnapshot): Flowe
   const lastMessage = [...thread.messages].reverse().map(messagePreviewText).find(Boolean);
   return {
     thread_id: thread.thread_id,
-    title: thread.title,
+    title: canonicalFlowerThreadSnapshotTitle(thread),
     title_status: thread.title_status,
     model_id: thread.model_id,
     working_dir: thread.working_dir,

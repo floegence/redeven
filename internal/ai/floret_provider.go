@@ -104,12 +104,10 @@ func withFloretAttachmentToolRead(enabled bool) floretProviderAdapterOption {
 	}
 }
 
-func withFloretRequestAdmission(admit func(context.Context) (context.Context, func(), error)) floretProviderAdapterOption {
+func withFloretRequestAdmission(admit func(context.Context, flprovider.Request) (context.Context, func(), error)) floretProviderAdapterOption {
 	return func(adapter *floretProviderAdapter) {
 		if adapter != nil && admit != nil {
-			adapter.admitRequest = func(ctx context.Context, _ flprovider.Request) (context.Context, func(), error) {
-				return admit(ctx)
-			}
+			adapter.admitRequest = admit
 		}
 	}
 }
