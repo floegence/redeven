@@ -413,6 +413,9 @@ func waitForStartupRetry(ctx context.Context, delay time.Duration) bool {
 }
 
 func (c *aiReadinessController) finishFailure(err error) {
+	if c == nil {
+		return
+	}
 	snapshot := appserver.AIReadinessSnapshot{
 		State:      appserver.AIReadinessBlocked,
 		ReasonCode: appserver.AIServiceStartupErrorReasonCode,
@@ -434,7 +437,7 @@ func (c *aiReadinessController) finishFailure(err error) {
 	} else {
 		snapshot.RetryReason = "service_construction_failed"
 	}
-	if c != nil && c.opts.Logger != nil && err != nil {
+	if c.opts.Logger != nil && err != nil {
 		cause := err
 		if startupErr != nil && startupErr.Unwrap() != nil {
 			cause = startupErr.Unwrap()
