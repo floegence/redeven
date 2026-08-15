@@ -561,7 +561,9 @@ async function verifyAtomicClear(page, panel, sessionID, tempDir) {
 
 async function seedHistory(page, panel, runtime, fixtureBytes, tempDir) {
   const lineCount = Math.max(64, Math.ceil(fixtureBytes / 64));
-  const searchLineIndex = Math.min(512, lineCount - 1);
+  // Keep the search oracle inside bounded scrollback while leaving it well
+  // above the live viewport for every carrier fixture size.
+  const searchLineIndex = Math.max(0, lineCount - 256);
   const searchMarker = `semantic-history-${String(searchLineIndex).padStart(6, '0')}`;
   const marker = path.join(tempDir, 'semantic-history-seeded');
   const before = await waitForTrace(runtime, () => true);
