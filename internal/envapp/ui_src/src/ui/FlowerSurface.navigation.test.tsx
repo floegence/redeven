@@ -544,6 +544,7 @@ describe('FlowerSurface navigation', () => {
       loadThread: vi.fn(async () => liveBootstrap(visibleThread)),
       connectLiveStream: async function* ({ signal }) {
         await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
+		yield* [];
       },
     });
 

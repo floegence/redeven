@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   fromWireAIEventNotify,
-  fromWireAIListMessagesResponse,
   toWireAISubmitRequestUserInputResponseRequest,
   toWireAISendUserTurnRequest,
 } from './ai';
