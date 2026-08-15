@@ -9,6 +9,8 @@ import {
 
 import {
   getThemeColors,
+  HistorySearchController,
+  HistoryViewportController,
   presentationAdvances,
   RendererSurface,
   SEMANTIC_CELL_HEIGHT_CSS_PX,
@@ -17,8 +19,11 @@ import {
   TerminalInputBridge,
   validatePresentation,
   type SemanticFrame,
-  type SemanticHistoryPage,
   type SemanticHistoryRequest,
+  type SemanticHistorySearchMatch,
+  type SemanticHistorySearchResult,
+  type SemanticHistoryViewport,
+  type HistoryViewportState,
   type SemanticPresentation,
   type SemanticTerminalCellMetrics,
   type SemanticTerminalPalette,
@@ -58,8 +63,6 @@ const MIN_TERMINAL_COLS = 2;
 const MIN_TERMINAL_ROWS = 1;
 const MAX_TERMINAL_COLS = 500;
 const MAX_TERMINAL_ROWS = 200;
-const SEMANTIC_HISTORY_PAGE_LIMIT = 200;
-const SEMANTIC_HISTORY_MAX_PAGE_CELLS = 1024;
 const RECONNECT_DELAYS_MS = [100, 300, 900] as const;
 
 export function shouldPublishTerminalOutputCoverage(
@@ -83,13 +86,6 @@ function frameLines(frame: SemanticFrame | null): string[] {
 
 function frameText(frame: SemanticFrame | null): string {
   return frameLines(frame).join('\n').replace(/\n+$/, '');
-}
-
-function semanticHistoryPageLimit(frame: SemanticFrame): number {
-  return Math.max(1, Math.min(
-    SEMANTIC_HISTORY_PAGE_LIMIT,
-    Math.floor(SEMANTIC_HISTORY_MAX_PAGE_CELLS / Math.max(1, frame.width)),
-  ));
 }
 
 function auxiliaryTerminalErrorDetail(error: unknown): string {
@@ -201,19 +197,13 @@ export type TerminalSessionRuntimeProps = Readonly<{
   requestPreparedHistory?: (sessionId: string) => Promise<unknown>;
 }>;
 
-type SearchMatch = Readonly<{
-  page: SemanticHistoryPage;
-  frame: SemanticFrame;
-  line: number;
-}>;
-
 export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   const i18n = useI18n();
   const sessionId = String(props.session.id ?? '').trim();
   const [loading, setLoading] = createSignal<SessionLoadingState>('initializing');
   const [ready, setReady] = createSignal(false);
   const [runtimeError, setRuntimeError] = createSignal('');
-  const [historyPage, setHistoryPage] = createSignal<SemanticHistoryPage | null>(null);
+  const [historyViewport, setHistoryViewport] = createSignal<SemanticHistoryViewport | null>(null);
   const [historyProjected, setHistoryProjected] = createSignal(false);
   const [historyBusy, setHistoryBusy] = createSignal(false);
   const [historyError, setHistoryError] = createSignal(false);
@@ -233,6 +223,8 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   let canvas: HTMLCanvasElement | null = null;
   let inputElement: HTMLTextAreaElement | null = null;
   let renderer: RendererSurface | null = null;
+  let historyController: HistoryViewportController | null = null;
+  let historySearchController: HistorySearchController | null = null;
   let inputBridge: TerminalInputBridge | null = null;
   let resizeObserver: ResizeObserver | null = null;
   let latestPresentation: SemanticPresentation | null = null;
@@ -252,15 +244,14 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   let reconnectAttempt = 0;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let lastReconnectError: Error | null = null;
-  let historyRequestEpoch = 0;
   let searchRequestEpoch = 0;
+  let historyRequestEpoch = 0;
   let searchQuery = '';
-  let searchMatches: SearchMatch[] = [];
+  let searchMatches: SemanticHistorySearchMatch[] = [];
   let searchIndex = -1;
   let searchState: SemanticTerminalSearchResult['state'] = 'idle';
   let searchCallback: ((result: SemanticTerminalSearchResult) => void) | null = null;
   let retryHistoryRequest: (() => void) | null = null;
-  let pendingHistoryDirection: 'forward' | 'backward' | null = null;
   let lastBell = 0;
   let geometryLifecycleEpoch = 0;
   let geometryRendererEpoch = 1;
@@ -272,7 +263,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   let pendingInteractions = 0;
 
   const currentFrame = (): SemanticFrame | null => (
-    historyProjected() ? historyPage()?.frame ?? null : latestPresentation?.frame ?? null
+    historyProjected() ? historyViewport()?.frame ?? null : latestPresentation?.frame ?? null
   );
 
   const historySummary = createMemo(() => {
@@ -307,11 +298,11 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   const historyMaximum = createMemo(() => Math.max(0, historySummary().screenStartOffset));
   const historyCurrent = createMemo(() => (
     historyProjected()
-      ? Math.min(historyMaximum(), historyPage()?.offset ?? historyMaximum())
+      ? Math.min(historyMaximum(), historyViewport()?.offset ?? historyMaximum())
       : historyMaximum()
   ));
   const historyThumbSize = createMemo(() => {
-    const totalRows = historyPage()?.totalRows ?? historySummary().totalRows;
+    const totalRows = historyViewport()?.totalRows ?? historySummary().totalRows;
     const visibleRows = currentFrame()?.height ?? 0;
     if (totalRows <= 0 || visibleRows <= 0) return 100;
     return Math.max(8, Math.min(100, visibleRows / totalRows * 100));
@@ -447,6 +438,8 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       if (disposed || operation !== attachmentOperation) return;
       attached = true;
       runtimeAttachGeneration = result.runtimeAttachGeneration;
+      historyController?.setTransportGeneration(runtimeAttachGeneration);
+      historySearchController?.setTransportGeneration(runtimeAttachGeneration);
       acceptController({ epoch: result.controllerEpoch, isController: result.isController });
       reconnectAttempt = 0;
       lastReconnectError = null;
@@ -464,6 +457,8 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       if (disposed || operation !== attachmentOperation) return;
       attached = false;
       runtimeAttachGeneration = 0;
+      historyController?.setTransportGeneration(null);
+      historySearchController?.setTransportGeneration(null);
       lastReconnectError = error instanceof Error ? error : new Error(String(error));
       failClosed(error, 'terminal_attach_failed');
       throw error;
@@ -677,11 +672,53 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
 
   const resetSearch = () => {
     searchRequestEpoch += 1;
+    historySearchController?.reset();
     searchQuery = '';
     searchMatches = [];
     searchIndex = -1;
     searchState = 'idle';
     publishSearchResult();
+  };
+
+  const applyHistoryState = (state: HistoryViewportState) => {
+    const viewport = historyController?.getViewport() ?? null;
+    setHistoryViewport(viewport);
+    setHistoryProjected(state.browsing);
+    setHistoryBusy(state.busy);
+    setHistoryError(state.error !== null);
+    setHistoryErrorDetail(state.error ? auxiliaryTerminalErrorDetail(state.error) : '');
+    if (!state.busy && state.error === null) retryHistoryRequest = null;
+  };
+
+  const requestHistoryViewport = async (
+    request: SemanticHistoryRequest,
+  ): Promise<SemanticHistoryViewport> => {
+    const traceEpoch = historyRequestEpoch;
+    setHistoryRequestTrace((previous) => ({
+      ...previous,
+      count: previous.count + 1,
+      direction: request.direction,
+      state: 'pending',
+      revision: 0,
+      offset: request.offset ?? 0,
+    }));
+    try {
+      const viewport = await props.transport.semanticHistory(sessionId, request);
+      if (traceEpoch === historyRequestEpoch) {
+        setHistoryRequestTrace((previous) => ({
+          ...previous,
+          state: 'settled',
+          revision: viewport.revision,
+          offset: viewport.offset,
+        }));
+      }
+      return viewport;
+    } catch (error) {
+      if (traceEpoch === historyRequestEpoch) {
+        setHistoryRequestTrace((previous) => ({ ...previous, state: 'error' }));
+      }
+      throw error;
+    }
   };
 
   const showLatestPresentation = () => {
@@ -697,162 +734,59 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     }));
     setHistoryError(false);
     setHistoryErrorDetail('');
-    setHistoryProjected(false);
-    setHistoryPage(null);
-    renderer?.project(null);
+    historyController?.showLatest();
   };
 
-  const queryHistory = async (
-    direction: SemanticHistoryRequest['direction'],
-    project: boolean,
-    retry: () => void,
-    anchorOverride?: string,
-  ): Promise<SemanticHistoryPage | null> => {
-    const presentation = latestPresentation;
-    if (!presentation) return null;
-    const current = historyPage();
-    if ((direction === 'forward' || direction === 'backward') && !current) return null;
-    const requestEpoch = ++historyRequestEpoch;
-    setHistoryRequestTrace((previous) => ({
-      ...previous,
-      count: previous.count + 1,
-      direction,
-      state: 'pending',
-      revision: 0,
-      offset: 0,
-    }));
-    try {
-      const page = await props.transport.semanticHistory(sessionId, {
-        ...(direction === 'forward' || direction === 'backward'
-          ? { anchor: anchorOverride ?? current!.anchor }
-          : {}),
-        direction,
-        limit: Math.min(semanticHistoryPageLimit(presentation.frame), presentation.frame.height),
-      });
-      if (requestEpoch !== historyRequestEpoch) return null;
-      setHistoryRequestTrace((previous) => ({
-        ...previous,
-        state: 'settled',
-        revision: page.revision,
-        offset: page.offset,
-      }));
-      retryHistoryRequest = null;
-      setHistoryError(false);
-      setHistoryErrorDetail('');
-      setHistoryPage(page);
-      if (project && page.offset < page.screenStartOffset) {
-        setHistoryProjected(true);
-        renderer?.project(page.frame);
-      } else {
-        setHistoryProjected(false);
-        renderer?.project(null);
-      }
-      return page;
-    } catch (error) {
-      if (requestEpoch !== historyRequestEpoch) return null;
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        setHistoryRequestTrace((previous) => ({ ...previous, state: 'idle' }));
-        return null;
-      }
-      setHistoryRequestTrace((previous) => ({ ...previous, state: 'error' }));
-      retryHistoryRequest = retry;
-      setHistoryError(true);
-      setHistoryErrorDetail(auxiliaryTerminalErrorDetail(error));
-      setHistoryProjected(false);
-      setHistoryPage(null);
-      renderer?.project(null);
-      return null;
-    }
+  const runHistoryIntent = (intent: () => void) => {
+    retryHistoryRequest = () => runHistoryIntent(intent);
+    setHistoryError(false);
+    setHistoryErrorDetail('');
+    intent();
   };
 
-  const projectHistoryStart = () => {
-    void queryHistory('start', true, projectHistoryStart);
-  };
-
-  const scrollHistory = async (direction: 'forward' | 'backward') => {
-    if (!latestPresentation) return;
-    if (historyBusy()) {
-      pendingHistoryDirection = direction;
-      return;
-    }
+  const projectHistoryOffset = (offset: number) => {
     resetSearch();
-    if (direction === 'forward' && !historyProjected()) return;
-    setHistoryBusy(true);
-    try {
-      let current = historyPage();
-      if (!current) {
-        current = await queryHistory('end', false, () => { void scrollHistory(direction); });
-      }
-      if (!current) return;
-      if (direction === 'backward' && !current.hasPrevious) return;
-      if (direction === 'forward' && !current.hasNext) {
-        showLatestPresentation();
-        return;
-      }
-      await queryHistory(
-        direction,
-        true,
-        () => { void scrollHistory(direction); },
-        direction === 'backward' && !historyProjected() ? current.screenStart : undefined,
-      );
-    } finally {
-      setHistoryBusy(false);
-      const pending = pendingHistoryDirection;
-      pendingHistoryDirection = null;
-      if (pending) queueMicrotask(() => { void scrollHistory(pending); });
-    }
+    runHistoryIntent(() => historyController?.showOffset(offset));
   };
 
-  const scanHistory = async (query: string, requestEpoch: number) => {
-    const presentation = latestPresentation;
-    if (!presentation) return;
-    const normalized = query.toLocaleLowerCase();
-    const matches: SearchMatch[] = [];
-    const pageLimit = semanticHistoryPageLimit(presentation.frame);
-    let page = await props.transport.semanticHistory(sessionId, {
-      direction: 'start',
-      limit: pageLimit,
-    });
-    let pageRevision = page.revision;
-    // The server may lower the requested page size to stay below its RPC
-    // transport budget. One-row progress is the strict lower bound.
-    const maxPages = page.totalRows + 1;
-    for (let pageIndex = 0; pageIndex < maxPages; pageIndex += 1) {
-      if (requestEpoch !== searchRequestEpoch) return;
-      if (page.revision < pageRevision) {
-        throw new Error('terminal history revision regressed while searching');
-      }
-      pageRevision = page.revision;
-      frameLines(page.frame).forEach((line, lineIndex) => {
-        if (line.toLocaleLowerCase().includes(normalized)) {
-          matches.push({ page, frame: page.frame, line: lineIndex });
-        }
-      });
-      if (!page.hasNext) break;
-      const previousOffset = page.offset;
-      const nextPage = await props.transport.semanticHistory(sessionId, {
-        anchor: page.anchor,
-        direction: 'forward',
-        limit: pageLimit,
-      });
-      if (nextPage.offset <= previousOffset) {
-        throw new Error('terminal history offset did not advance while searching');
-      }
-      page = nextPage;
-    }
-    if (requestEpoch !== searchRequestEpoch) return;
-    searchMatches = matches;
-    searchIndex = matches.length > 0 ? 0 : -1;
+  const scrollHistoryByRows = (rows: number) => {
+    if (!latestPresentation || rows === 0) return;
+    resetSearch();
+    runHistoryIntent(() => historyController?.scrollByRows(rows));
+  };
+
+  const projectSearchMatch = async (requestEpoch: number) => {
+    const controller = historySearchController;
+    const match = searchMatches[searchIndex];
+    if (!controller || !match) return;
+    const result = await controller.resolveMatch(match);
+    if (disposed || requestEpoch !== searchRequestEpoch) return;
+    if (result) historyController?.showViewport(result);
+    else historyController?.showLatest();
+  };
+
+  const applySearchResult = async (
+    result: SemanticHistorySearchResult,
+    requestEpoch: number,
+  ) => {
+    if (disposed || requestEpoch !== searchRequestEpoch) return;
+    searchMatches = [...result.matches];
+    searchIndex = searchMatches.length > 0 ? 0 : -1;
     searchState = 'ready';
-    if (searchIndex >= 0) {
-      setHistoryPage(matches[searchIndex]!.page);
-      setHistoryProjected(true);
-      renderer?.project(matches[searchIndex]!.frame);
-    } else {
-      setHistoryPage(null);
-      setHistoryProjected(false);
-      renderer?.project(null);
-    }
+    publishSearchResult();
+    if (searchIndex >= 0) await projectSearchMatch(requestEpoch);
+    else historyController?.showLatest();
+  };
+
+  const failSearch = (error: unknown, requestEpoch: number) => {
+    if (
+      disposed
+      || requestEpoch !== searchRequestEpoch
+      || (error instanceof DOMException && error.name === 'AbortError')
+    ) return;
+    searchMatches = [];
+    searchIndex = -1;
+    searchState = 'error';
     publishSearchResult();
   };
 
@@ -863,39 +797,27 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       return;
     }
     if (normalized !== searchQuery || searchState === 'error') {
-      historyRequestEpoch += 1;
-      pendingHistoryDirection = null;
-      setHistoryProjected(false);
-      setHistoryPage(null);
-      renderer?.project(null);
       searchQuery = normalized;
       searchMatches = [];
       searchIndex = -1;
       searchState = 'searching';
       publishSearchResult();
       const requestEpoch = ++searchRequestEpoch;
-      void scanHistory(normalized, requestEpoch).catch((error) => {
-        if (
-          requestEpoch === searchRequestEpoch
-          && !(error instanceof DOMException && error.name === 'AbortError')
-        ) {
-          searchMatches = [];
-          searchIndex = -1;
-          searchState = 'error';
-          setHistoryProjected(false);
-          setHistoryPage(null);
-          renderer?.project(null);
-          publishSearchResult();
-        }
-      });
+      const controller = historySearchController;
+      if (!controller) {
+        failSearch(new Error('terminal history search is unavailable'), requestEpoch);
+        return;
+      }
+      void controller.search(normalized)
+        .then((result) => applySearchResult(result, requestEpoch))
+        .catch((error) => failSearch(error, requestEpoch));
       return;
     }
     if (searchMatches.length === 0) return;
     searchIndex = (searchIndex + delta + searchMatches.length) % searchMatches.length;
-    setHistoryPage(searchMatches[searchIndex]!.page);
-    setHistoryProjected(true);
-    renderer?.project(searchMatches[searchIndex]!.frame);
     publishSearchResult();
+    const requestEpoch = searchRequestEpoch;
+    void projectSearchMatch(requestEpoch).catch((error) => failSearch(error, requestEpoch));
   };
 
   const copySelection = async (
@@ -950,7 +872,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       const frame = currentFrame();
       if (!frame) return '';
       const firstRow = historyProjected()
-        ? historyPage()?.offset ?? 0
+        ? historyViewport()?.offset ?? 0
         : frame.history.screenStartOffset;
       const localRow = row - firstRow;
       const text = frame.rows[localRow]?.cells.map((cell) => cell.text).join('') ?? '';
@@ -965,7 +887,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       getScrollbackLength: () => latestPresentation?.frame.history.screenStartOffset ?? 0,
       scrollLines: (lines) => {
         if (lines === 0) return;
-        void scrollHistory(lines > 0 ? 'forward' : 'backward');
+        scrollHistoryByRows(lines);
       },
       sendAlternateScreenInput: sendInput,
     }),
@@ -988,6 +910,8 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       showLatestPresentation();
       attached = false;
       runtimeAttachGeneration = 0;
+      historyController?.setTransportGeneration(null);
+      historySearchController?.setTransportGeneration(null);
       props.transport.forgetSession(sessionId);
       await attach();
     },
@@ -1014,10 +938,19 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         || (previous.state.contentEpoch ?? 0) !== (presentation.state.contentEpoch ?? 0)
       )
     ) {
-      showLatestPresentation();
+      historyRequestEpoch += 1;
+      setHistoryRequestTrace((previous) => ({
+        ...previous,
+        direction: '',
+        state: 'idle',
+        revision: 0,
+        offset: 0,
+      }));
+      resetSearch();
     }
     latestPresentation = presentation;
-    renderer?.apply(presentation);
+    historyController?.apply(presentation);
+    historySearchController?.apply(presentation);
     inputBridge?.syncGeometry();
     setPresentationRevision((value) => value + 1);
     setReady(true);
@@ -1045,6 +978,14 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     renderer.setVisible(props.active() && props.viewActive());
     renderer.setPalette(resolvedPalette());
     applyTypography(props.fontSize(), props.fontFamily());
+    historyController = new HistoryViewportController({
+      renderer,
+      request: requestHistoryViewport,
+      onState: applyHistoryState,
+    });
+    historySearchController = new HistorySearchController({ request: requestHistoryViewport });
+    if (runtimeAttachGeneration > 0) historyController.setTransportGeneration(runtimeAttachGeneration);
+    if (runtimeAttachGeneration > 0) historySearchController.setTransportGeneration(runtimeAttachGeneration);
     inputBridge = new TerminalInputBridge({
       inputHost: canvas,
       inputElement,
@@ -1092,6 +1033,8 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         if (event.state === 'attached') {
           attached = true;
           runtimeAttachGeneration = event.runtimeAttachGeneration;
+          historyController?.setTransportGeneration(runtimeAttachGeneration);
+          historySearchController?.setTransportGeneration(runtimeAttachGeneration);
           reconnectAttempt = 0;
           clearReconnectTimer();
           return;
@@ -1100,6 +1043,8 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         showLatestPresentation();
         attached = false;
         runtimeAttachGeneration = 0;
+        historyController?.setTransportGeneration(null);
+        historySearchController?.setTransportGeneration(null);
         resetController();
         appliedSize = null;
         latestEffectiveGeometry = null;
@@ -1160,6 +1105,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   createEffect(() => {
     const visible = props.active() && props.viewActive();
     if (!renderer) return;
+    historyController?.setVisible(visible);
     if (!visible) {
       renderer.setVisible(false);
       if (canvas) canvas.dataset.terminalVisibilityCommit = 'hidden';
@@ -1188,6 +1134,8 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         showLatestPresentation();
         attached = false;
         runtimeAttachGeneration = 0;
+        historyController?.setTransportGeneration(null);
+        historySearchController?.setTransportGeneration(null);
         resetController();
         clearReconnectTimer();
       }
@@ -1211,12 +1159,15 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   onCleanup(() => {
     disposed = true;
     attachmentOperation += 1;
-    historyRequestEpoch += 1;
     searchRequestEpoch += 1;
     clearReconnectTimer();
     lastReconnectError = null;
     inputBridge?.dispose();
     inputBridge = null;
+    historyController?.dispose();
+    historyController = null;
+    historySearchController?.dispose();
+    historySearchController = null;
     renderer?.dispose();
     renderer = null;
     appliedTypography = null;
@@ -1294,7 +1245,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       data-terminal-is-controller={controllerTrace().isController ? 'true' : 'false'}
       data-terminal-history-projected={historyProjected() ? 'true' : 'false'}
       data-terminal-history-busy={historyBusy() ? 'true' : 'false'}
-      data-terminal-history-offset={historyPage()?.offset ?? ''}
+      data-terminal-history-offset={historyViewport()?.offset ?? ''}
       data-terminal-history-request-count={historyRequestTrace().count}
       data-terminal-history-request-direction={historyRequestTrace().direction}
       data-terminal-history-request-state={historyRequestTrace().state}
@@ -1327,7 +1278,10 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
           if (latestPresentation?.frame.bufferKind === 'alternate') return;
           if (event.deltaY === 0) return;
           event.preventDefault();
-          void scrollHistory(event.deltaY > 0 ? 'forward' : 'backward');
+          resetSearch();
+          const delta = event.deltaY;
+          const deltaMode = event.deltaMode;
+          runHistoryIntent(() => historyController?.handleWheel(delta, deltaMode));
         }}
         style={{
           bottom: 'var(--terminal-bottom-inset)',
@@ -1392,11 +1346,16 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
           class="absolute right-0 top-0 bottom-0 w-3"
           onPointerDown={(event) => {
             const bounds = event.currentTarget.getBoundingClientRect();
-            const ratio = Math.max(0, Math.min(1, (event.clientY - bounds.top) / Math.max(1, bounds.height)));
-            if (ratio <= 0.25) projectHistoryStart();
-            else if (ratio >= 0.75) showLatestPresentation();
-            else if (ratio < 0.5) void scrollHistory('backward');
-            else void scrollHistory('forward');
+            const maximum = historyMaximum();
+            const target = event.clientY <= bounds.top + 1
+              ? 0
+              : event.clientY >= bounds.bottom - 1
+                ? maximum
+                : Math.round(
+                    Math.max(0, Math.min(1, (event.clientY - bounds.top) / Math.max(1, bounds.height)))
+                    * maximum,
+                  );
+            projectHistoryOffset(target);
           }}
           style={{ background: `color-mix(in srgb, ${terminalForeground()} 8%, transparent)` }}
         >

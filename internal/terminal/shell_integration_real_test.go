@@ -4,6 +4,7 @@ package terminal
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"os"
@@ -387,17 +388,43 @@ func historyTextFromSequence(t *testing.T, session *termgo.Session, fromSeq uint
 	if !ok || presentation.Sequence < fromSeq {
 		return ""
 	}
-	page, err := session.ReadSemanticHistory("shell-integration", 1, termgo.SemanticHistoryRequest{
-		Direction: termgo.HistoryEnd,
-		Limit:     termgo.MaxSemanticHistoryRows,
+	chunk, err := session.ReadSemanticHistory("shell-integration", 1, termgo.SemanticHistoryRequest{
+		Direction:    termgo.HistoryEnd,
+		ViewportRows: presentation.Geometry.Rows,
 	})
 	if err != nil {
 		t.Fatalf("ReadSemanticHistory() error = %v", err)
 	}
+	payload := append([]byte(nil), chunk.Payload...)
+	for chunk.Continuation != "" {
+		chunk, err = session.ReadSemanticHistory("shell-integration", 1, termgo.SemanticHistoryRequest{
+			Continuation: chunk.Continuation,
+		})
+		if err != nil {
+			t.Fatalf("ReadSemanticHistory(continuation) error = %v", err)
+		}
+		payload = append(payload, chunk.Payload...)
+	}
+	var snapshot struct {
+		Version int `json:"v"`
+		Frame   struct {
+			Rows [][][]json.RawMessage `json:"rows"`
+		} `json:"frame"`
+	}
+	if err := json.Unmarshal(payload, &snapshot); err != nil || snapshot.Version != 1 {
+		t.Fatalf("decode semantic history snapshot: version=%d error=%v", snapshot.Version, err)
+	}
 	var builder strings.Builder
-	for _, row := range page.Frame.Rows {
-		for _, cell := range row.Cells {
-			builder.WriteString(cell.Text)
+	for _, row := range snapshot.Frame.Rows {
+		for _, cell := range row {
+			if len(cell) == 0 {
+				continue
+			}
+			var text string
+			if err := json.Unmarshal(cell[0], &text); err != nil {
+				t.Fatalf("decode semantic history cell: %v", err)
+			}
+			builder.WriteString(text)
 		}
 		builder.WriteByte('\n')
 	}

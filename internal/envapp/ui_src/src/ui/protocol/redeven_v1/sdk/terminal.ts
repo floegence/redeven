@@ -6,8 +6,8 @@ import type {
   TerminalWorkStateInfo,
 } from '@floegence/floeterm-terminal-web';
 import type {
-  SemanticHistoryDirection,
-  SemanticHistoryPage,
+  SemanticHistoryChunk,
+  SemanticHistoryChunkRequest,
 } from '@floegence/floeterm-terminal-web/semantic';
 
 export type TerminalSessionInfo = FloetermTerminalSessionInfo & {
@@ -29,12 +29,9 @@ export type TerminalSemanticHistoryRequest = {
   sessionId: string;
   connectionId: string;
   transportGeneration: number;
-  anchor?: string;
-  direction: SemanticHistoryDirection;
-  limit: number;
-};
+} & SemanticHistoryChunkRequest;
 
-export type TerminalSemanticHistoryResponse = SemanticHistoryPage;
+export type TerminalSemanticHistoryResponse = SemanticHistoryChunk;
 
 export type TerminalSemanticClearRequest = {
   sessionId: string;

@@ -30,7 +30,7 @@ fall back to another transport.
 
 ## Mechanism
 
-The released runtime dependency set includes Floeterm terminal-go v0.10.5 and Flowersec Go v2.4.2.
+The released runtime dependency set includes Floeterm terminal-go v0.11.1 and Flowersec Go v2.4.2.
 
 Every shipped Redeven Runtime enables terminal-go's `floeterm_native` build tag
 with cgo. The published module carries the target-specific Ghostty static
@@ -50,7 +50,7 @@ The control Direct session replaces record-level keepalive writes with acknowled
 
 The runtime wraps `termgo.NewManager` so one terminal-go `SessionActor` owns each PTY, native Ghostty VT, canonical geometry, controller epoch, input encoding, semantic history, clear/reset, and atomic Presentation. Redeven supplies product permission and visibility admission, session metadata projection, and lifecycle integration; it does not parse terminal bytes or keep another history. Shell integration reports authenticated or explicit legacy command lifecycle, output activity, execution context, and semantic work as revisioned display metadata. The private bootstrap nonce never reaches arguments, environment, shared files, logs, output, live subscribers, or terminal-web. Those snapshots are not filesystem or authorization boundaries. Bash preserves a valid user `PROMPT_COMMAND` as its own syntax unit, Zsh installs both hook arrays transactionally, and unsupported shells remain explicit legacy sources.
 
-Realtime terminal traffic uses only Floeterm `terminal/live_v1` on a Flowersec named Yamux stream. Attach, structured input, acknowledged resize, atomic Presentations, geometry, session close, and structured errors use Floeterm framing. Redeven does not register legacy live RPC ids 2003 through 2006, keep per-RPC attachment routing, enqueue JSON/Base64 output, or silently drop events. Catalog, semantic history, actor-owned clear, delete, and lifecycle/name/foreground-command/output-activity/execution-context/work-state controls remain bounded RPC operations. History and clear bind to the current connection, transport generation, attachment, and process permission; stale generations have zero effect.
+Realtime terminal traffic uses only Floeterm `terminal/live_v1` on a Flowersec named Yamux stream. Attach, structured input, acknowledged resize, atomic Presentations, geometry, session close, and structured errors use Floeterm framing. Redeven does not register legacy live RPC ids 2003 through 2006, keep per-RPC attachment routing, enqueue JSON/Base64 output, or silently drop events. Catalog, semantic history, actor-owned clear, delete, and lifecycle/name/foreground-command/output-activity/execution-context/work-state controls remain bounded RPC operations. History requests separate scroll distance, canonical viewport rows, and compact transport chunks. A direct target offset is fenced by the server snapshot identity; every continuation remains on the same browse or search lane and is assembled before projection. History and clear bind to the current connection, transport generation, attachment, and process permission; stale generations have zero effect.
 
 Every live stream owns one attachment and is removed when the stream ends. Multiple browser pages and simultaneously visible Activity and Workbench views may attach to one session. All receive the same advancing Presentation. Only the current controller attachment may write input or propose canonical geometry. A selected or directly interacted same-principal view sends an explicit activation with the grid measured from its untransformed host layout content box and the current controller epoch; terminal-go atomically transfers ownership, applies that grid, and captures the matching Presentation before Redeven focuses the input bridge or admits ordered input. The outer display mode and selected Workbench widget gate interaction, while observer resize only records local intent and cannot steal control. Stale generations, stale epochs, and cross-principal activation have zero effect. Resize success means terminal-go applied the geometry and emitted a matching Presentation, not that Redeven replayed a stored frame. Disconnect opens a new named stream; ordinary resize never detaches or auto-reattaches.
 
@@ -60,7 +60,7 @@ Semantic terminal verification is layered and automated without starting Redeven
 
 For every product carrier sample, refresh forgets only the view attachment, preserves the existing semantic canvas, and requires a new current Presentation even when geometry is unchanged. The carrier then proves real input still reaches the PTY. This is the Runtime/PTTY/browser boundary rather than a mocked renderer lifecycle.
 
-Redeven consumes terminal-web v0.15.7. Each mounted view uses one `RendererSurface` and one `TerminalInputBridge` over complete semantic Presentations and transport-bounded history pages. Host bounds, DPR, view-local palette, typography, selection, IME anchor, and semantic history projection are browser concerns; PTY state, frame geometry, cursor, inverse cells, grapheme width, hyperlinks, graphics, and history remain terminal-go facts. Hidden keep-mounted views fence their canvas until a render commit matches current host bounds and DPR, preventing browser scaling of an old backing store. The browser has no Ghostty WebAssembly, TerminalCore, checkpoint worker, Beamterm renderer, or raw replay fallback.
+Redeven consumes terminal-web v0.16.1. Each mounted view uses one `RendererSurface`, one `TerminalInputBridge`, one `HistoryViewportController`, and one isolated `HistorySearchController` over complete semantic Presentations and atomic history viewports. Host bounds, DPR, view-local palette, typography, selection, IME anchor, bounded semantic-frame cache, and history projection are browser concerns; PTY state, frame geometry, cursor, inverse cells, grapheme width, hyperlinks, graphics, snapshots, and history remain terminal-go facts. Hidden keep-mounted views fence their canvas until a render commit matches current host bounds and DPR, preventing browser scaling of an old backing store. The browser has no Ghostty WebAssembly, TerminalCore, checkpoint worker, Beamterm renderer, raw replay fallback, or Redeven-owned history state machine.
 
 The production carrier records runtime, surface, CSS canvas, client, and backing-store dimensions immediately after refresh and again after focus. Overflow fixtures may exceed the 8 MiB ring-buffer cap; they must recover the retained tail, preserve the stable renderer geometry after focus, and accept subsequent PTY input.
 
@@ -68,18 +68,7 @@ The production carrier records runtime, surface, CSS canvas, client, and backing
 
 Env App hydrates one terminal session catalog after protocol connection, environment readiness, and process permission. The catalog owns canonical session metadata, notification convergence, connection epoch, permission clearing, stale-on-disconnect state, and bounded early latest values. It remains renderer-free and does not warm browser VT state. Activity and Workbench consume the same catalog while each mounted view owns only its attachment, semantic canvas, palette, focus, selection, and local history projection. Permission loss clears catalog and local-path capability immediately and prevents stale notifications from restoring them.
 
-History is requested only by a mounted semantic Runtime when its user scrolls or
-searches outside the latest Presentation. Each request is bound to the current
-connection, transport generation, attachment, session, and content epoch. The
-returned page is an owned immutable semantic frame and may be projected only
-while those identities still match; a newer live Presentation or clear/reset
-invalidates the local page. The browser keeps no shared prepared-history cache,
-background warmup queue, raw-byte replay, parser snapshot, or second scrollback
-authority. Dormant sessions therefore remain catalog metadata only, while
-Activity and Workbench views may independently crop or project pages without
-changing the PTY, canonical geometry, controller, or another view. Diagnostics
-retain aggregate phase and field-presence facts only and never record session
-identifiers, paths, remote identity, commands, or terminal content.
+History is requested only by a mounted semantic Runtime when its user scrolls or searches outside the latest Presentation. Each request is bound to the current connection, transport generation, attachment, session, content epoch, geometry generation, lane, and snapshot frontier. The actor captures one complete canonical viewport at one cut; compact chunks are reassembled and validated before one atomic projection. Ordinary live output updates the latest Presentation and total-row summary without replacing the immutable visible history viewport. Clear/reset, geometry or content-epoch change, detach, permission loss, and structural snapshot failure return the view to the latest complete Presentation. Each view keeps a bounded semantic-frame cache only; hidden views stop prefetch and are preferred for eviction. The browser keeps no shared prepared-history cache, background warmup queue, raw-byte replay, parser snapshot, or second scrollback authority. Activity and Workbench views may independently browse and search without changing the PTY, canonical geometry, controller, or another view. Diagnostics retain aggregate phase and field-presence facts only and never record session identifiers, paths, remote identity, commands, or terminal content.
 
 # Boundaries
 
@@ -105,7 +94,7 @@ Compatibility depends on these published transport and terminal interfaces stayi
 - `redeven:tests/docker_runtime_e2e/testclient/main.go:67` - Docker Local UI verification explicitly allows plaintext only for loopback.
 - `redeven:internal/runtimeproxy/runtimeproxy.go:15` - Redeven declares the three embedding-policy response headers blocked by its product adapter.
 - `redeven:internal/runtimeservice/compatibility_contract.json:2` - Local UI exposure requires compatibility epoch 8 and a matched v0.10.0 Desktop and Runtime pair.
-- `redeven:internal/terminal/manager_test.go:313` - Deterministic history fixtures verify exact pagination and replay across retained-size classes.
+- `redeven:internal/terminal/semantic_history_rpc_test.go` - Deterministic fixtures verify viewport requests, continuation chunks, direct targets, lane isolation, generation fencing, and RPC payload budgets.
 - `redeven:internal/envapp/ui_src/scripts/terminalCarrierRunnerPolicy.node-test.mjs:1` - Carrier policy fixes automatic headless ownership, explicit diagnostics, and display-server independence.
 - `redeven:scripts/check_renderer_e2e.sh:1` - The exact-main renderer gate runs the 64 KiB and 448 KiB process carrier classes.
 
