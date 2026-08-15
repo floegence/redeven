@@ -9634,11 +9634,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const chatPanel = () => (
     <div class="flower-chat-shell flower-chat-shell">
-      <Show when={presentation() === 'companion' && companionCollapsed()}>
-        <div class="flower-companion-collapsed-switcher">
-          {companionHeaderIdentity()}
-        </div>
-      </Show>
       <div
         class="flower-chat-header flower-chat-header border-b border-border/80 backdrop-blur-md"
         aria-hidden={companionCollapsed() ? 'true' : undefined}

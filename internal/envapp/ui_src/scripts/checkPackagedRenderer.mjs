@@ -683,8 +683,9 @@ async function verifyBuiltFlowerLifecycle(browser, tls) {
     const product = page.locator('#redeven-activity-flower-product');
     const surface = page.locator('#redeven-flower-surface');
     const composer = page.locator('.flower-composer textarea');
-    await surface.waitFor({ state: 'attached', timeout: 15_000 });
-    await composer.waitFor({ state: 'attached', timeout: 15_000 });
+    await companion.waitFor({ state: 'visible', timeout: 15_000 });
+    await surface.waitFor({ state: 'visible', timeout: 15_000 });
+    await composer.waitFor({ state: 'visible', timeout: 15_000 });
 
     for (const [name, locator] of Object.entries({ companion, product, surface, composer })) {
       const count = await locator.count();
