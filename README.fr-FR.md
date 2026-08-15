@@ -120,7 +120,7 @@ Redeven met les fonctionnalités au premier plan, mais l'environnement d'exécut
 
 - L'environnement d'exécution réside sur le point de terminaison et y conserve les données en clair.
 - Le plan de contrôle émet les charges utiles d'initialisation, les autorisations et les métadonnées de session immuables.
-- [Flowersec](https://github.com/floegence/flowersec) transporte des octets chiffrés entre le client et l'environnement d'exécution du point de terminaison. L'intégration navigateur utilise l'API publiée 2.4.1 et le module Go `flowersec-go/v2@v2.4.1`.
+- [Flowersec](https://github.com/floegence/flowersec) transporte des octets chiffrés entre le client et l'environnement d'exécution du point de terminaison. L'intégration navigateur utilise l'API publiée 2.4.2 et le module Go `flowersec-go/v2@v2.4.2`.
 - Les permissions effectives proviennent des autorisations de session émises par le serveur, limitées par la politique locale (`read`, `write`, `execute`, `admin` ; aucune catégorie n'en implique une autre).
 - La configuration locale, le matériel E2EE, les journaux d'audit et les diagnostics restent dans le répertoire d'état du point de terminaison.
 - GitHub Releases demeure la référence publique pour les binaires, sommes de contrôle, signatures et ressources de vérification OKF.
