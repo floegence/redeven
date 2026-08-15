@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/floegence/floret/v4/identity"
-	flruntime "github.com/floegence/floret/v4/runtime"
 )
 
 // broadcastThreadSummary publishes one product summary derived from the
@@ -32,15 +31,10 @@ func (s *Service) broadcastThreadSummary(endpointID, threadID string) error {
 	if err != nil {
 		return err
 	}
-	var title string
-	if summaries, listErr := s.threadRuntime.List(context.Background(), flruntime.ThreadScope{}); listErr == nil {
-		for _, summary := range summaries {
-			if summary.ID.String() == threadID {
-				title = summary.Title
-				break
-			}
-		}
+	summary, err := threadSummaryFromRuntime(context.Background(), s.threadRuntime, identity.ThreadID(threadID))
+	if err != nil {
+		return err
 	}
-	s.publishFlowerLiveSummary(endpointID, threadViewFromRuntimeCurrent(*settings, current, title))
+	s.publishFlowerLiveSummary(endpointID, threadViewFromRuntimeCurrent(*settings, current, summary))
 	return nil
 }

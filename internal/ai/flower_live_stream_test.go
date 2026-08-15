@@ -117,6 +117,9 @@ func TestFlowerWorkspaceSummaryFrameContainsSnapshotNotProjectionEvent(t *testin
 	if envelope.Summaries[0].ThreadID != thread.ThreadID {
 		t.Fatalf("summary thread=%q, want %q", envelope.Summaries[0].ThreadID, thread.ThreadID)
 	}
+	if got := envelope.Summaries[0]; got.Title != "Summary snapshot" || got.TitleStatus != string(flruntime.ThreadTitleStatusReady) {
+		t.Fatalf("summary title projection = (%q, %q), want (%q, %q)", got.Title, got.TitleStatus, "Summary snapshot", flruntime.ThreadTitleStatusReady)
+	}
 	if envelope.Current != nil {
 		t.Fatalf("summary frame mixed detail/projection state: %s", frame.Data)
 	}

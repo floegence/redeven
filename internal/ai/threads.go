@@ -609,11 +609,28 @@ func (s *Service) CreateThreadWithOptions(ctx context.Context, meta *session.Met
 			return nil, err
 		}
 	}
-	view := threadViewFromRuntimeCurrent(t, current, title)
+	summary, err := threadSummaryFromRuntime(ctxOrBackground(ctx), runtime, current.ThreadID)
+	if err != nil {
+		return nil, err
+	}
+	view := threadViewFromRuntimeCurrent(t, current, summary)
 	return &view, nil
 }
 
-func threadViewFromRuntimeCurrent(settings threadstore.ThreadSettings, current flruntime.ThreadView, title string) ThreadView {
+func threadSummaryFromRuntime(ctx context.Context, runtime flruntime.ThreadService, threadID identity.ThreadID) (flruntime.ThreadSummary, error) {
+	summaries, err := runtime.List(ctxOrBackground(ctx), flruntime.ThreadScope{})
+	if err != nil {
+		return flruntime.ThreadSummary{}, err
+	}
+	for _, summary := range summaries {
+		if summary.ID == threadID {
+			return summary, nil
+		}
+	}
+	return flruntime.ThreadSummary{}, fmt.Errorf("canonical Floret summary is missing for thread %q", threadID)
+}
+
+func threadViewFromRuntimeCurrent(settings threadstore.ThreadSettings, current flruntime.ThreadView, summary flruntime.ThreadSummary) ThreadView {
 	runStatus := string(RunStateIdle)
 	if current.Activity == flruntime.ThreadActivityActive {
 		switch {
@@ -633,7 +650,7 @@ func threadViewFromRuntimeCurrent(settings threadstore.ThreadSettings, current f
 		}
 	}
 	return ThreadView{
-		ThreadID: current.ThreadID.String(), Title: strings.TrimSpace(title), ModelID: settings.ModelID,
+		ThreadID: current.ThreadID.String(), Title: strings.TrimSpace(summary.Title), TitleStatus: strings.TrimSpace(string(summary.TitleStatus)), ModelID: settings.ModelID,
 		PermissionType: settings.PermissionType, WorkingDir: settings.WorkingDir,
 		QueuedTurnCount: len(current.Queue), RunStatus: runStatus,
 		ApprovalPendingCount: current.Attention.ApprovalCount, ActiveRunID: current.TurnID.String(),
@@ -820,7 +837,11 @@ func (s *Service) ForkThreadWithOptions(ctx context.Context, meta *session.Meta,
 			return nil, err
 		}
 	}
-	view := threadViewFromRuntimeCurrent(forked, current, title)
+	summary, err := threadSummaryFromRuntime(ctxOrBackground(ctx), runtime, current.ThreadID)
+	if err != nil {
+		return nil, err
+	}
+	view := threadViewFromRuntimeCurrent(forked, current, summary)
 	return &view, nil
 }
 
