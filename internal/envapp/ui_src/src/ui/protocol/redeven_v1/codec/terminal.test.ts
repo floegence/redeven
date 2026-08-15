@@ -27,10 +27,16 @@ describe('terminal codec', () => {
       session_id: 'session-1',
       connection_id: 'view-1',
       transport_generation: 7,
-      anchor: undefined,
       direction: 'end',
       limit: 24,
     });
+    expect(Object.hasOwn(toWireTerminalSemanticHistoryRequest({
+      sessionId: 'session-1',
+      connectionId: 'view-1',
+      transportGeneration: 7,
+      direction: 'start',
+      limit: 24,
+    }), 'anchor')).toBe(false);
     const response = fromWireTerminalSemanticHistoryResponse({
       revision: 3,
       anchor: 'anchor',

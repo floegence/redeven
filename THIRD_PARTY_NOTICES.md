@@ -38,7 +38,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | github.com/dustin/go-humanize | v1.0.1 | MIT | Runtime | https://pkg.go.dev/github.com/dustin/go-humanize@v1.0.1 | Detected from LICENSE. |
 | github.com/ebitengine/purego | v0.9.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/ebitengine/purego@v0.9.1 | Detected from LICENSE. |
 | github.com/felixge/httpsnoop | v1.0.4 | MIT | Runtime | https://pkg.go.dev/github.com/felixge/httpsnoop@v1.0.4 | Detected from LICENSE.txt. |
-| github.com/floegence/floeterm/terminal-go | v0.10.4 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.10.4 | Floegence first-party dependency. |
+| github.com/floegence/floeterm/terminal-go | v0.10.5 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.10.5 | Floegence first-party dependency. |
 | github.com/floegence/floret/v3 | v3.2.40 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v3@v3.2.40 | Detected from LICENSE. |
 | github.com/floegence/flowersec/flowersec-go/v2 | v2.4.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v2@v2.4.1 | Floegence first-party dependency. |
 | github.com/floegence/redevplugin | v1.1.3 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin@v1.1.3 | Floegence first-party dependency. |
@@ -95,16 +95,16 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | go.opentelemetry.io/otel/trace | v1.24.0 | Apache-2.0 | Runtime | https://pkg.go.dev/go.opentelemetry.io/otel/trace@v1.24.0 | Detected from LICENSE. |
 | go.uber.org/mock | v0.5.2 | Apache-2.0 | Runtime | https://pkg.go.dev/go.uber.org/mock@v0.5.2 | Detected from LICENSE. |
 | golang.org/x/crypto | v0.54.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/crypto@v0.54.0 | Detected from LICENSE. |
-| golang.org/x/image | v0.44.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/image@v0.44.0 | Detected from LICENSE. |
+| golang.org/x/image | v0.45.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/image@v0.45.0 | Detected from LICENSE. |
 | golang.org/x/mod | v0.38.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/mod@v0.38.0 | Detected from LICENSE. |
 | golang.org/x/net | v0.57.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/net@v0.57.0 | Detected from LICENSE. |
 | golang.org/x/oauth2 | v0.30.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/oauth2@v0.30.0 | Detected from LICENSE. |
 | golang.org/x/sync | v0.22.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/sync@v0.22.0 | Detected from LICENSE. |
 | golang.org/x/sys | v0.47.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/sys@v0.47.0 | Detected from LICENSE. |
 | golang.org/x/term | v0.45.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/term@v0.45.0 | Detected from LICENSE. |
-| golang.org/x/text | v0.40.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/text@v0.40.0 | Detected from LICENSE. |
+| golang.org/x/text | v0.41.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/text@v0.41.0 | Detected from LICENSE. |
 | golang.org/x/time | v0.5.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/time@v0.5.0 | Detected from LICENSE. |
-| golang.org/x/tools | v0.47.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/tools@v0.47.0 | Detected from LICENSE. |
+| golang.org/x/tools | v0.48.0 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/tools@v0.48.0 | Detected from LICENSE. |
 | golang.org/x/xerrors | v0.0.0-20191204190536-9bdfabe68543 | BSD-style | Runtime | https://pkg.go.dev/golang.org/x/xerrors@v0.0.0-20191204190536-9bdfabe68543 | Detected from LICENSE. |
 | google.golang.org/api | v0.189.0 | BSD-style | Runtime | https://pkg.go.dev/google.golang.org/api@v0.189.0 | Detected from LICENSE. |
 | google.golang.org/genproto/googleapis/rpc | v0.0.0-20240722135656-d784300faade | Apache-2.0 | Runtime | https://pkg.go.dev/google.golang.org/genproto/googleapis/rpc@v0.0.0-20240722135656-d784300faade | Detected from LICENSE. |
@@ -238,7 +238,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @floegence/floe-webapp-boot | 0.40.20 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.40.20 | License inherited from floegence/floe-webapp root LICENSE. |
 | @floegence/floe-webapp-core | 0.40.20 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.40.20 | License inherited from floegence/floe-webapp root LICENSE. |
 | @floegence/floe-webapp-protocol | 0.40.20 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.40.20 | License inherited from floegence/floe-webapp root LICENSE. |
-| @floegence/floeterm-terminal-web | 0.15.5 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.15.5 | Built-in theme attribution and license texts are reproduced below from the verified 0.15.5 package. |
+| @floegence/floeterm-terminal-web | 0.15.7 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.15.7 | Built-in theme attribution and license texts are reproduced below from the verified 0.15.7 package. |
 | @floegence/flowersec-core | 2.4.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/2.4.1 |  |
 | @floegence/flowersec-node-native-darwin-arm64 | 2.4.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-arm64/v/2.4.1 |  |
 | @floegence/flowersec-node-native-darwin-x64 | 2.4.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-node-native-darwin-x64/v/2.4.1 |  |
@@ -1236,7 +1236,7 @@ SOFTWARE.
 
 ## Floeterm Built-in Theme Notices
 
-Redeven embeds the built-in terminal theme catalog from `@floegence/floeterm-terminal-web@0.15.5`. The following attribution and license texts are reproduced in Redeven's distributed root notice from the installed registry package. Notice generation verifies the upstream provenance, quality evidence, notice, and license artifacts against these fixed SHA-256 values before emitting this section:
+Redeven embeds the built-in terminal theme catalog from `@floegence/floeterm-terminal-web@0.15.7`. The following attribution and license texts are reproduced in Redeven's distributed root notice from the installed registry package. Notice generation verifies the upstream provenance, quality evidence, notice, and license artifacts against these fixed SHA-256 values before emitting this section:
 
 - `2b6b2d07297ace181564890b79e2c488e67f4747512b8adad08b4bd3ea8dfc06`
 - `e9fdd068550001f555f1bb52ca475b68bc56a12c00da25f9ec28fe03dbdb9005`
