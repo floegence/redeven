@@ -2548,16 +2548,6 @@ html.dark .flower-component-shell {
     width: auto;
   }
 
-  .flower-composer-approval-banner {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .flower-composer-approval-queue {
-    align-self: flex-start;
-    white-space: normal;
-  }
-
   .flower-model-stack {
     flex: 1 1 auto;
     overflow: visible;
@@ -6479,6 +6469,8 @@ html.dark .flower-component-shell {
 }
 
 .flower-composer {
+  container-name: flower-bottom-composer;
+  container-type: inline-size;
   border: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
   border-radius: 1rem;
   border-color: color-mix(in srgb, var(--redeven-stroke-overlay, var(--border)) 72%, transparent);
@@ -7084,6 +7076,7 @@ button.flower-attachment-preview-trigger:disabled {
 .flower-composer-stop-thread {
   width: 2.25rem;
   height: 2.25rem;
+  flex: 0 0 auto;
   padding: 0;
 }
 
@@ -7129,10 +7122,10 @@ button.flower-attachment-preview-trigger:disabled {
   cursor: not-allowed;
 }
 
-@media (max-width: 520px) {
+@container flower-bottom-composer (max-width: 520px) {
   .flower-approval-surface .flower-composer-approval-actions {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr)) 2.25rem;
   }
 
   .flower-approval-surface .flower-composer-approval-decision {
