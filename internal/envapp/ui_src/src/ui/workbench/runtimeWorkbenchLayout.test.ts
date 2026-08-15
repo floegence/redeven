@@ -812,6 +812,40 @@ describe('runtimeWorkbenchLayout', () => {
     });
   });
 
+  it('keeps v4 filters unchanged when only the layout lock changes', () => {
+    const hydrated = sanitizePersistedWorkbenchLocalState({
+      version: 4,
+      locked: true,
+      filters: {
+        'redeven.files': false,
+        'redeven.terminal': true,
+      },
+      theme: 'default',
+      mode: 'work',
+      activeTool: 'select',
+    }, widgetDefinitions as any);
+    const unlocked = derivePersistedWorkbenchLocalState({
+      version: 1,
+      widgets: [],
+      viewport: { x: 0, y: 0, scale: 1 },
+      locked: false,
+      filters: hydrated.filters,
+      selectedWidgetId: null,
+      theme: hydrated.theme,
+      mode: hydrated.mode,
+      activeTool: hydrated.activeTool,
+    } as any);
+    const relocked = derivePersistedWorkbenchLocalState({
+      ...unlocked,
+      locked: true,
+    } as any);
+
+    expect(unlocked.filters).toEqual(hydrated.filters);
+    expect(relocked.filters).toEqual(hydrated.filters);
+    expect(unlocked.filters['redeven.files']).toBe(false);
+    expect(relocked.filters['redeven.files']).toBe(false);
+  });
+
   it('preserves upstream layered filter ids in local state normalization', () => {
     const sanitized = sanitizePersistedWorkbenchLocalState({
       filters: {
