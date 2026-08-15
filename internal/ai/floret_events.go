@@ -411,46 +411,6 @@ func (r *run) captureAssistantDraftTimelineAnchor() FlowerTimelineAnchor {
 	return FlowerTimelineAnchor{}
 }
 
-func lastVisibleFlowerTimelineAnchorFromTimeline(timeline []FlowerTimelineMessage) FlowerTimelineAnchor {
-	for messageIndex := len(timeline) - 1; messageIndex >= 0; messageIndex-- {
-		message := timeline[messageIndex]
-		messageID := strings.TrimSpace(message.MessageID)
-		if messageID == "" {
-			continue
-		}
-		for blockIndex := len(message.Blocks) - 1; blockIndex >= 0; blockIndex-- {
-			block := message.Blocks[blockIndex]
-			if itemID, ok := lastVisibleActivityItemID(block); ok {
-				index := blockIndex
-				return FlowerTimelineAnchor{
-					TargetKind:     "activity_item",
-					MessageID:      messageID,
-					BlockIndex:     &index,
-					ActivityItemID: itemID,
-					Edge:           "after",
-				}
-			}
-			if flowerBlockHasVisibleContent(block) {
-				index := blockIndex
-				return FlowerTimelineAnchor{
-					TargetKind: "block",
-					MessageID:  messageID,
-					BlockIndex: &index,
-					Edge:       "after",
-				}
-			}
-		}
-		if strings.TrimSpace(message.Content) != "" {
-			return FlowerTimelineAnchor{
-				TargetKind: "message",
-				MessageID:  messageID,
-				Edge:       "after",
-			}
-		}
-	}
-	return FlowerTimelineAnchor{}
-}
-
 func lastVisibleActivityItemID(block any) (string, bool) {
 	timeline, ok := activityTimelineFromAny(block)
 	if !ok || len(timeline.Items) == 0 {

@@ -146,10 +146,6 @@ func configureFloretRuntime(host *flruntime.Host) (*floretBootstrapResult, error
 	}, nil
 }
 
-func newFloretBootstrapResult(host *flruntime.Host) (*floretBootstrapResult, error) {
-	return configureFloretRuntime(host)
-}
-
 func openFloretRuntime(ctx context.Context, storePath string, progress func(FloretStoreStartupPhase)) (*floretBootstrapResult, error) {
 	return openFloretRuntimeWith(ctx, storePath, progress, flruntime.Open)
 }

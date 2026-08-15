@@ -303,28 +303,6 @@ func TestServiceListModelsUsesDesktopModelSourceWithoutRemoteConfig(t *testing.T
 	}
 }
 
-func testDesktopModelSourceCapability(modelID string) *contextmodel.ModelCapability {
-	capability := contextmodel.ModelCapability{
-		ProviderID:                     DesktopModelSourceProviderType,
-		ProviderType:                   DesktopModelSourceProviderType,
-		ResolverVersion:                3,
-		ModelName:                      modelID,
-		WireModelName:                  modelID,
-		SupportsTools:                  true,
-		SupportsStrictJSONSchema:       false,
-		SupportsImageInput:             false,
-		SupportsFileInput:              false,
-		SupportsReasoningTokens:        true,
-		ReasoningCapability:            config.AIReasoningCapabilityForModel("deepseek", "deepseek-v4-pro"),
-		SupportsAskUserQuestionBatches: false,
-		MaxContextTokens:               950_000,
-		MaxOutputTokens:                384_000,
-		PreferredToolSchemaMode:        "relaxed_json",
-	}
-	capability = sanitizeDesktopModelSourceCapability(modelID, capability)
-	return &capability
-}
-
 func TestServiceListModelsDoesNotFallbackToFirstDesktopModel(t *testing.T) {
 	t.Parallel()
 

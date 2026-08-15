@@ -69,18 +69,6 @@ func resolveRunCapabilityContract(r *run, tools []ToolDef, signals []ToolDef, su
 	return contract
 }
 
-func (c runCapabilityContract) allowsSignal(name string) bool {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return false
-	}
-	if len(c.allowedSignalSet) == 0 {
-		return false
-	}
-	_, ok := c.allowedSignalSet[name]
-	return ok
-}
-
 func (c runCapabilityContract) eventPayload() map[string]any {
 	return map[string]any{
 		"allow_user_interaction":             c.AllowUserInteraction,

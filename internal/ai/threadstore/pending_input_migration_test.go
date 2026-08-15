@@ -42,7 +42,7 @@ func createReviewedV1DatabaseForTest(t *testing.T, path string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	for _, objectType := range []string{"table", "trigger"} {
 		for _, object := range snapshot.Objects {
 			if object.Type != objectType || strings.TrimSpace(object.SQL) == "" || strings.HasPrefix(object.Name, "sqlite_") {

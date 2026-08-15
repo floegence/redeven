@@ -226,11 +226,6 @@ func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Met
 	return finish(response, nil)
 }
 
-func queuedInputIs(view flruntime.ThreadView, requestKey string) bool {
-	_, ok := queuedInputFor(view, requestKey)
-	return ok
-}
-
 func queuedInputFor(view flruntime.ThreadView, requestKey string) (flruntime.QueuedInput, bool) {
 	for _, queued := range view.Queue {
 		if queued.RequestKey == requestKey {
@@ -336,10 +331,6 @@ func (s *Service) SubmitRequestUserInputResponse(ctx context.Context, meta *sess
 		return SubmitRequestUserInputResponseResponse{}, err
 	}
 	return SubmitRequestUserInputResponseResponse{Kind: "accepted", ConsumedWaitingPromptID: promptID, Current: publicFloretThreadView(result)}, nil
-}
-
-func (s *Service) prepareUserTurn(ctx context.Context, meta *session.Meta, endpointID string, threadID string, modelID string, input RunInput, stagingScopeID string, stagingCapability string) (preparedUserTurn, RunInput, error) {
-	return s.prepareUserTurnForTarget(ctx, meta, endpointID, threadID, modelID, input, stagingScopeID, stagingCapability)
 }
 
 func (s *Service) prepareUserTurnForTarget(ctx context.Context, meta *session.Meta, endpointID string, targetID string, modelID string, input RunInput, stagingScopeID string, stagingCapability string) (preparedUserTurn, RunInput, error) {

@@ -1,9 +1,7 @@
 package ai
 
 import (
-	"encoding/json"
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/floegence/redeven/internal/config"
@@ -207,10 +205,6 @@ func buildCanonicalRequestUserInputQuestion(question RequestUserInputQuestion) (
 	return out, true
 }
 
-func requestUserInputQuestionFromRecord(record map[string]any) (RequestUserInputQuestion, bool) {
-	return strictRequestUserInputQuestionFromRecord(record)
-}
-
 func requestUserInputQuestionFromModelRecord(record map[string]any) (RequestUserInputQuestion, string, bool) {
 	question, ok := strictRequestUserInputQuestionFromRecord(record)
 	if !ok {
@@ -409,43 +403,6 @@ func strictRequestUserInputQuestionFromRecord(record map[string]any) (RequestUse
 	})
 }
 
-func strictRequestUserInputPrompt(prompt *RequestUserInputPrompt) *RequestUserInputPrompt {
-	if prompt == nil {
-		return nil
-	}
-	out := *prompt
-	out.PromptID = strings.TrimSpace(out.PromptID)
-	out.MessageID = strings.TrimSpace(out.MessageID)
-	out.ToolID = strings.TrimSpace(out.ToolID)
-	out.ToolName = strings.TrimSpace(out.ToolName)
-	if out.PromptID == "" || out.MessageID == "" || out.ToolID == "" || out.ToolName == "" {
-		return nil
-	}
-	out.ReasonCode = normalizeAskUserReasonCode(out.ReasonCode)
-	out.RequiredFromUser = normalizeRequestUserInputStringList(out.RequiredFromUser, 8, 200)
-	out.EvidenceRefs = normalizeRequestUserInputStringList(out.EvidenceRefs, 12, 120)
-	out.Questions = make([]RequestUserInputQuestion, 0, len(prompt.Questions))
-	seenIDs := map[string]struct{}{}
-	for _, question := range prompt.Questions {
-		next, ok := strictRequestUserInputQuestion(question)
-		if !ok {
-			return nil
-		}
-		key := strings.ToLower(next.ID)
-		if _, ok := seenIDs[key]; ok {
-			return nil
-		}
-		seenIDs[key] = struct{}{}
-		out.Questions = append(out.Questions, next)
-	}
-	if len(out.Questions) == 0 {
-		return nil
-	}
-	out.ContainsSecret = requestUserInputPromptContainsSecret(out)
-	out.PublicSummary = formatRequestUserInputAssistantSummary(out)
-	return &out
-}
-
 func normalizeRequestUserInputActions(actions []RequestUserInputAction) []RequestUserInputAction {
 	if len(actions) == 0 {
 		return nil
@@ -625,186 +582,6 @@ func requestUserInputPromptContainsSecret(prompt RequestUserInputPrompt) bool {
 	return false
 }
 
-func parseRequestUserInputPromptJSON(raw string) *RequestUserInputPrompt {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil
-	}
-	var payload struct {
-		PromptID           string                      `json:"prompt_id"`
-		MessageID          string                      `json:"message_id"`
-		ToolID             string                      `json:"tool_id"`
-		ToolName           string                      `json:"tool_name"`
-		ReasonCode         string                      `json:"reason_code"`
-		ReasoningSelection config.AIReasoningSelection `json:"reasoning_selection"`
-		RequiredFromUser   []string                    `json:"required_from_user"`
-		EvidenceRefs       []string                    `json:"evidence_refs"`
-		Questions          []map[string]any            `json:"questions"`
-		PublicSummary      string                      `json:"public_summary"`
-		ContainsSecret     bool                        `json:"contains_secret"`
-	}
-	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
-		return nil
-	}
-	questions := make([]RequestUserInputQuestion, 0, len(payload.Questions))
-	for _, item := range payload.Questions {
-		question, ok := strictRequestUserInputQuestionFromRecord(item)
-		if !ok {
-			return nil
-		}
-		questions = append(questions, question)
-	}
-	return strictRequestUserInputPrompt(&RequestUserInputPrompt{
-		PromptID:           payload.PromptID,
-		MessageID:          payload.MessageID,
-		ToolID:             payload.ToolID,
-		ToolName:           payload.ToolName,
-		ReasonCode:         payload.ReasonCode,
-		ReasoningSelection: payload.ReasoningSelection,
-		RequiredFromUser:   payload.RequiredFromUser,
-		EvidenceRefs:       payload.EvidenceRefs,
-		Questions:          questions,
-		PublicSummary:      payload.PublicSummary,
-		ContainsSecret:     payload.ContainsSecret,
-	})
-}
-
-func normalizeRequestUserInputAnswer(answer RequestUserInputAnswer) RequestUserInputAnswer {
-	return RequestUserInputAnswer{
-		ChoiceID: truncateRunes(strings.TrimSpace(answer.ChoiceID), 64),
-		Text:     truncateRunes(strings.TrimSpace(answer.Text), 2000),
-	}
-}
-
-func normalizeRequestUserInputResponse(raw *RequestUserInputResponse) *RequestUserInputResponse {
-	if raw == nil {
-		return nil
-	}
-	promptID := strings.TrimSpace(raw.PromptID)
-	if promptID == "" {
-		return nil
-	}
-	answers := make(map[string]RequestUserInputAnswer, len(raw.Answers))
-	keys := make([]string, 0, len(raw.Answers))
-	for questionID, answer := range raw.Answers {
-		questionID = truncateRunes(strings.TrimSpace(questionID), 80)
-		if questionID == "" {
-			continue
-		}
-		normalized := normalizeRequestUserInputAnswer(answer)
-		if normalized.ChoiceID == "" && normalized.Text == "" {
-			continue
-		}
-		answers[questionID] = normalized
-		keys = append(keys, questionID)
-	}
-	if len(answers) == 0 {
-		return nil
-	}
-	sort.Strings(keys)
-	out := &RequestUserInputResponse{
-		PromptID: promptID,
-		Answers:  make(map[string]RequestUserInputAnswer, len(keys)),
-	}
-	for _, key := range keys {
-		out.Answers[key] = answers[key]
-	}
-	return out
-}
-
-func requestUserInputChoiceByID(question *RequestUserInputQuestion, choiceID string) (*RequestUserInputChoice, bool) {
-	if question == nil {
-		return nil, false
-	}
-	choiceID = strings.TrimSpace(choiceID)
-	if choiceID == "" {
-		return nil, false
-	}
-	for i := range question.Choices {
-		if strings.TrimSpace(question.Choices[i].ChoiceID) == choiceID {
-			choice := question.Choices[i]
-			return &choice, true
-		}
-	}
-	return nil, false
-}
-
-func normalizeRequestUserInputAnswerForQuestion(question *RequestUserInputQuestion, answer RequestUserInputAnswer) RequestUserInputAnswer {
-	answer = normalizeRequestUserInputAnswer(answer)
-	if question == nil {
-		return answer
-	}
-	switch normalizeRequestUserInputResponseMode(question.ResponseMode) {
-	case requestUserInputResponseModeWrite:
-		answer.ChoiceID = ""
-		return answer
-	case requestUserInputResponseModeSelectText:
-		if choice, ok := requestUserInputChoiceByID(question, answer.ChoiceID); ok && choice != nil {
-			answer.ChoiceID = choice.ChoiceID
-			return answer
-		}
-		if answer.Text != "" {
-			answer.ChoiceID = ""
-		}
-		return answer
-	default:
-		if choice, ok := requestUserInputChoiceByID(question, answer.ChoiceID); ok && choice != nil {
-			answer.ChoiceID = choice.ChoiceID
-			answer.Text = ""
-		}
-		return answer
-	}
-}
-
-func validateRequestUserInputResponse(prompt *RequestUserInputPrompt, response *RequestUserInputResponse) (*RequestUserInputResponse, error) {
-	prompt = normalizeRequestUserInputPrompt(prompt)
-	response = normalizeRequestUserInputResponse(response)
-	if prompt == nil || response == nil {
-		return nil, ErrWaitingPromptChanged
-	}
-	if strings.TrimSpace(prompt.PromptID) != strings.TrimSpace(response.PromptID) {
-		return nil, ErrWaitingPromptChanged
-	}
-	normalizedAnswers := make(map[string]RequestUserInputAnswer, len(prompt.Questions))
-	for _, question := range prompt.Questions {
-		answer, exists := response.Answers[question.ID]
-		if !exists {
-			return nil, ErrWaitingPromptChanged
-		}
-		answer = normalizeRequestUserInputAnswerForQuestion(&question, answer)
-		switch normalizeRequestUserInputResponseMode(question.ResponseMode) {
-		case requestUserInputResponseModeWrite:
-			if answer.Text == "" {
-				return nil, ErrWaitingPromptChanged
-			}
-			answer.ChoiceID = ""
-		case requestUserInputResponseModeSelectText:
-			if answer.ChoiceID != "" {
-				if answer.Text != "" {
-					return nil, ErrWaitingPromptChanged
-				}
-				if _, ok := requestUserInputChoiceByID(&question, answer.ChoiceID); !ok {
-					return nil, ErrWaitingPromptChanged
-				}
-			} else if answer.Text == "" {
-				return nil, ErrWaitingPromptChanged
-			}
-		default:
-			if answer.Text != "" {
-				return nil, ErrWaitingPromptChanged
-			}
-			if _, ok := requestUserInputChoiceByID(&question, answer.ChoiceID); !ok {
-				return nil, ErrWaitingPromptChanged
-			}
-		}
-		normalizedAnswers[question.ID] = answer
-	}
-	return &RequestUserInputResponse{
-		PromptID: response.PromptID,
-		Answers:  normalizedAnswers,
-	}, nil
-}
-
 func formatRequestUserInputAssistantSummary(prompt RequestUserInputPrompt) string {
 	questions := normalizeRequestUserInputQuestions(prompt.Questions)
 	if len(questions) == 0 {
@@ -831,83 +608,6 @@ func formatRequestUserInputAssistantSummary(prompt RequestUserInputPrompt) strin
 		return ""
 	}
 	return truncateRunes(fmt.Sprintf("Input requested (%d questions): %s", len(prompt.Questions), strings.Join(items, "; ")), 240)
-}
-
-func buildRequestUserInputResponseRecord(prompt RequestUserInputPrompt, response RequestUserInputResponse) (RequestUserInputResponseRecord, []RequestUserInputSecretAnswer, error) {
-	promptPtr := normalizeRequestUserInputPrompt(&prompt)
-	responsePtr, err := validateRequestUserInputResponse(promptPtr, &response)
-	if err != nil {
-		return RequestUserInputResponseRecord{}, nil, err
-	}
-	prompt = *promptPtr
-	response = *responsePtr
-
-	record := RequestUserInputResponseRecord{
-		PromptID:   prompt.PromptID,
-		ToolID:     prompt.ToolID,
-		ReasonCode: prompt.ReasonCode,
-	}
-	secrets := make([]RequestUserInputSecretAnswer, 0, len(prompt.Questions))
-	summaries := make([]string, 0, len(prompt.Questions))
-	for _, question := range prompt.Questions {
-		answer := response.Answers[question.ID]
-		resolved := RequestUserInputResolvedQuestion{
-			QuestionID: question.ID,
-			Header:     question.Header,
-			Question:   question.Question,
-		}
-		choice, ok := requestUserInputChoiceByID(&question, answer.ChoiceID)
-		if ok && choice != nil {
-			resolved.SelectedChoiceID = choice.ChoiceID
-			resolved.SelectedChoiceLabel = choice.Label
-		}
-		if question.IsSecret {
-			record.ContainsSecret = true
-			resolved.ContainsSecret = true
-			if answer.Text != "" {
-				secrets = append(secrets, RequestUserInputSecretAnswer{
-					QuestionID: question.ID,
-					Text:       answer.Text,
-				})
-			}
-			secretLabel := resolved.SelectedChoiceLabel
-			resolved.PublicSummary = formatQuestionPublicSummary(question, secretLabel, "", true)
-		} else {
-			resolved.Text = answer.Text
-			resolved.PublicSummary = formatQuestionPublicSummary(question, resolved.SelectedChoiceLabel, resolved.Text, false)
-		}
-		record.Responses = append(record.Responses, resolved)
-		if summary := strings.TrimSpace(resolved.PublicSummary); summary != "" {
-			summaries = append(summaries, summary)
-		}
-	}
-	record.PublicSummary = truncateRunes(strings.Join(summaries, " "), 600)
-	return record, secrets, nil
-}
-
-func formatQuestionPublicSummary(question RequestUserInputQuestion, selectedChoiceLabel string, text string, containsSecret bool) string {
-	label := strings.TrimSpace(selectedChoiceLabel)
-	header := strings.TrimSpace(question.Header)
-	if header == "" {
-		header = strings.TrimSpace(question.Question)
-	}
-	if containsSecret {
-		if label != "" {
-			return truncateRunes(header+": "+label+".", 240)
-		}
-		return truncateRunes(header+": secret provided.", 240)
-	}
-	values := make([]string, 0, 2)
-	if label != "" {
-		values = append(values, label)
-	}
-	if text = strings.TrimSpace(text); text != "" {
-		values = append(values, text)
-	}
-	if len(values) == 0 {
-		return truncateRunes(header+": answered.", 240)
-	}
-	return truncateRunes(header+": "+strings.Join(values, "; ")+".", 240)
 }
 
 func minInt(a int, b int) int {

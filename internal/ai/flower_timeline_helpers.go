@@ -1,8 +1,6 @@
 package ai
 
 import (
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,124 +8,6 @@ import (
 
 	flruntime "github.com/floegence/floret/v4/runtime"
 )
-
-func (r *run) snapshotControlConfirmationApproval(toolID string) (FlowerApprovalAction, bool) {
-	if r == nil || strings.TrimSpace(toolID) == "" {
-		return FlowerApprovalAction{}, false
-	}
-	toolID = strings.TrimSpace(toolID)
-	r.mu.Lock()
-	approval := r.toolApprovals[toolID]
-	if approval == nil || approval.resolved {
-		r.mu.Unlock()
-		return FlowerApprovalAction{}, false
-	}
-	action := r.controlConfirmationApprovalActionLocked(toolID, approval)
-	r.mu.Unlock()
-	return action, true
-}
-
-func (r *run) controlConfirmationApprovalActionLocked(toolID string, approval *toolApprovalRequest) FlowerApprovalAction {
-	runID, _, turnID := r.floretCanonicalIdentity()
-	toolName := strings.TrimSpace(approval.toolName)
-	if toolName == "" {
-		toolName = "tool"
-	}
-	command := strings.TrimSpace(approval.command)
-	cwd := strings.TrimSpace(approval.cwd)
-	targets := append([]FlowerSafeTarget(nil), approval.targets...)
-	return FlowerApprovalAction{
-		ActionID: flowerApprovalActionID(runID, toolID), Origin: FlowerApprovalOriginControlConfirm,
-		RunID: runID, TurnID: turnID, ToolID: toolID, ToolName: toolName,
-		State: FlowerApprovalStateRequested, Status: FlowerApprovalStatusPending,
-		RequestedAtMs: approval.requestedAtMs, ExpiresAtMs: approval.expiresAtMs,
-		CanApprove: true, BatchIndex: 0, BatchSize: 1,
-		Summary: FlowerApprovalSummary{
-			Label:       toolApprovalDisplayLabel(toolName, toolApprovalPresentationArgs(toolName, command, cwd, targets)),
-			Description: toolApprovalDescription(approval), Command: command, Cwd: cwd,
-			Effects: toolApprovalSummaryEffects(toolName, approval), Flags: append([]string(nil), approval.flags...), Targets: targets,
-		},
-	}
-}
-
-func flowerApprovalActionID(runID string, toolID string) string {
-	sum := sha256.Sum256([]byte(strings.TrimSpace(runID) + "\x00" + strings.TrimSpace(toolID)))
-	return "appr_" + base64.RawURLEncoding.EncodeToString(sum[:18])
-}
-
-func toolApprovalDescription(approval *toolApprovalRequest) string {
-	if approval != nil {
-		for _, target := range approval.targets {
-			if label := strings.TrimSpace(target.Label); label != "" {
-				return "Review access to " + label + " before this tool runs."
-			}
-		}
-	}
-	return "Review this tool before it runs."
-}
-
-func toolApprovalSummaryEffects(toolName string, approval *toolApprovalRequest) []string {
-	if approval != nil && len(approval.effects) > 0 {
-		return append([]string(nil), approval.effects...)
-	}
-	switch strings.TrimSpace(toolName) {
-	case "terminal.exec":
-		return []string{"shell"}
-	case "file.edit", "file.write", "apply_patch":
-		return []string{"write"}
-	case "web.search":
-		return []string{"network"}
-	default:
-		return []string{"tool"}
-	}
-}
-
-func toolApprovalDisplayLabel(toolName string, args map[string]any) string {
-	fallback := strings.TrimSpace(toolName)
-	if fallback == "" {
-		fallback = "Tool approval"
-	}
-	activity := floretActivityForToolCall(toolName, args)
-	if activity != nil && strings.TrimSpace(activity.Label) != "" {
-		return strings.TrimSpace(activity.Label)
-	}
-	return fallback
-}
-
-func toolApprovalPresentationArgs(toolName string, command string, cwd string, targets []FlowerSafeTarget) map[string]any {
-	args := map[string]any{}
-	if strings.TrimSpace(toolName) == "terminal.exec" {
-		if command = strings.TrimSpace(command); command != "" {
-			args["command"] = command
-		}
-		if cwd = strings.TrimSpace(cwd); cwd != "" {
-			args["cwd"] = cwd
-		}
-	}
-	for _, target := range targets {
-		if strings.TrimSpace(target.Kind) == "file" && strings.TrimSpace(target.Label) != "" {
-			args["file_path"] = strings.TrimSpace(target.Label)
-			break
-		}
-	}
-	if len(args) == 0 {
-		return nil
-	}
-	return args
-}
-
-func cloneQueuedTurnViews(in []QueuedTurnView) []QueuedTurnView {
-	if in == nil {
-		return nil
-	}
-	out := make([]QueuedTurnView, len(in))
-	for index, item := range in {
-		out[index] = item
-		out[index].Attachments = append([]FlowerAttachmentView(nil), item.Attachments...)
-		out[index].ContextAction = normalizeContextActionEnvelope(item.ContextAction)
-	}
-	return out
-}
 
 func flowerTimelineMessageFromRaw(threadID string, canonicalTurnID string, runID string, messageID string, raw json.RawMessage) (FlowerTimelineMessage, bool, error) {
 	var record struct {

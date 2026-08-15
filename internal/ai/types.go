@@ -614,11 +614,6 @@ type streamEventModelIOStatus struct {
 	UpdatedAtMs int64  `json:"updatedAtMs,omitempty"`
 }
 
-type streamEventApprovalAction struct {
-	Type   string               `json:"type"`
-	Action FlowerApprovalAction `json:"action"`
-}
-
 // RealtimeEventType defines the high-level AI event category sent over Flowersec RPC notify.
 type RealtimeEventType string
 

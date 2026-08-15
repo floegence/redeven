@@ -25,11 +25,6 @@ type persistedThinkingBlock struct {
 	Duration int64  `json:"duration,omitempty"`
 }
 
-type persistedTextBlock struct {
-	Type    string `json:"type"` // "text"
-	Content string `json:"content"`
-}
-
 type persistedImageBlock struct {
 	Type string `json:"type"` // "image"
 	Src  string `json:"src"`

@@ -258,20 +258,6 @@ func nonNegativeInt64(v int64) int64 {
 	return v
 }
 
-func isUniqueConstraintError(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := strings.ToLower(strings.TrimSpace(err.Error()))
-	if msg == "" {
-		return false
-	}
-	if strings.Contains(msg, "unique constraint failed") {
-		return true
-	}
-	return strings.Contains(msg, "constraint failed") && strings.Contains(msg, "unique")
-}
-
 func (s *Store) ListThreadSettings(ctx context.Context, endpointID string, limit int, cursor ThreadsCursor) ([]ThreadSettings, string, error) {
 	if s == nil || s.db == nil {
 		return nil, "", errors.New("store not initialized")
@@ -454,18 +440,6 @@ WHERE endpoint_id = ? AND thread_id = ?
 		return nil, err
 	}
 	return &t, nil
-}
-
-func (s *Store) getThreadTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string) (*ThreadSettings, error) {
-	var thread ThreadSettings
-	err := scanThreadRow(tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT %s FROM ai_thread_settings WHERE endpoint_id = ? AND thread_id = ?`, threadSelectColumnsSQL), endpointID, threadID), &thread)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &thread, nil
 }
 
 func (s *Store) CreateThreadSettings(ctx context.Context, t ThreadSettings) error {
@@ -753,25 +727,4 @@ func canonicalPermissionType(permissionType string) (string, error) {
 	default:
 		return "", fmt.Errorf("invalid thread permission type %q", permissionType)
 	}
-}
-
-func boolToInt(v bool) int {
-	if v {
-		return 1
-	}
-	return 0
-}
-
-func truncateRunes(s string, max int) string {
-	if max <= 0 {
-		return ""
-	}
-	n := 0
-	for i := range s {
-		if n >= max {
-			return strings.TrimSpace(s[:i])
-		}
-		n++
-	}
-	return strings.TrimSpace(s)
 }

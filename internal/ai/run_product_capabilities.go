@@ -38,22 +38,11 @@ func bindRootRunProductCapabilities(store *threadstore.Store, endpointID string,
 	}, nil
 }
 
-func bindChildRunProductCapabilities(store *threadstore.Store, endpointID string, parentThreadID string, _ string, _ string) (runProductCapabilities, error) {
-	return bindRootRunProductCapabilities(store, endpointID, parentThreadID)
-}
-
 func (c runProductCapabilities) currentThreadSettings(ctx context.Context) (*threadstore.ThreadSettings, error) {
 	if c.currentSettings == nil {
 		return nil, errors.New("thread settings capability is unavailable")
 	}
 	return c.currentSettings(ctx)
-}
-
-func (c runProductCapabilities) requireThreadAuthorityWritable(ctx context.Context) error {
-	if c.requireAuthorityWritable == nil {
-		return errors.New("thread write authority is unavailable")
-	}
-	return c.requireAuthorityWritable(ctx)
 }
 
 func (c runProductCapabilities) loadThreadOwnedUpload(ctx context.Context, uploadID string) (*threadstore.UploadRecord, error) {

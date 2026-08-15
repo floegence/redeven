@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/floegence/floret/v4/identity"
-	flruntime "github.com/floegence/floret/v4/runtime"
 	flprovider "github.com/floegence/floret/v4/provider"
+	flruntime "github.com/floegence/floret/v4/runtime"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -52,14 +52,6 @@ func containsString(values []string, target string) bool {
 		}
 	}
 	return false
-}
-
-func timelineTestMeta(endpointID string) *session.Meta {
-	return &session.Meta{
-		EndpointID: endpointID, NamespacePublicID: "ns", ChannelID: "ch",
-		UserPublicID: "user", UserEmail: "user@example.com",
-		CanRead: true, CanWrite: true, CanExecute: true,
-	}
 }
 
 func newFlowerLiveMemoryTestService() *Service {
