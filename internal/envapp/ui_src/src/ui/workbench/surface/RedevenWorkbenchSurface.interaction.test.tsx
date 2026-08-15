@@ -41,6 +41,55 @@ const widgetDefinitions: readonly WorkbenchWidgetDefinition[] = [
   },
 ];
 
+const visibilityWidgetDefinitions: readonly WorkbenchWidgetDefinition[] = [
+  'redeven.filtered',
+  'redeven.visible',
+  'redeven.default-visible',
+].map((type) => ({
+  type,
+  label: type,
+  icon: () => null,
+  body: () => <div>{type}</div>,
+  defaultTitle: type,
+  defaultSize: { width: 320, height: 220 },
+  renderMode: 'projected_surface' as const,
+}));
+
+function createVisibilityWorkbenchState(locked: boolean): WorkbenchState {
+  return {
+    version: 1,
+    widgets: visibilityWidgetDefinitions.map((definition, index) => ({
+      id: `widget-${definition.type.slice('redeven.'.length)}`,
+      type: definition.type,
+      title: definition.label,
+      x: 40 + (index * 340),
+      y: 40,
+      width: 320,
+      height: 220,
+      z_index: index + 1,
+      created_at_unix_ms: index + 1,
+    })),
+    viewport: { x: 0, y: 0, scale: 1 },
+    locked,
+    filters: {
+      'redeven.filtered': false,
+      'redeven.visible': true,
+    },
+    selectedWidgetId: null,
+    theme: 'default',
+  };
+}
+
+function readWorkbenchWidgetIds(
+  host: ParentNode,
+  selector = '[data-redeven-workbench-widget-id]',
+): string[] {
+  return Array.from(host.querySelectorAll<HTMLElement>(selector))
+    .map((element) => element.dataset.redevenWorkbenchWidgetId ?? '')
+    .filter(Boolean)
+    .sort();
+}
+
 function createWorkbenchState(): WorkbenchState {
   return {
     version: 1,
@@ -202,6 +251,53 @@ describe('RedevenWorkbenchSurface interaction contract', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     document.body.innerHTML = '';
+  });
+
+  it('keeps the visible projected widget set independent from lock changes', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    let setWorkbenchState!: (updater: (state: WorkbenchState) => WorkbenchState) => void;
+
+    render(() => {
+      const [state, setState] = createSignal(createVisibilityWorkbenchState(true));
+      setWorkbenchState = setState;
+      return (
+        <RedevenWorkbenchSurface
+          state={state}
+          setState={setState}
+          widgetDefinitions={visibilityWidgetDefinitions}
+          filterBarWidgetTypes={[]}
+          enableKeyboard={false}
+        />
+      );
+    }, host);
+
+    const assertVisibility = () => {
+      expect(
+        readWorkbenchWidgetIds(
+          host,
+          '.is-filtered-out[data-redeven-workbench-widget-id]',
+        ),
+      ).toEqual(['widget-filtered']);
+      expect(
+        readWorkbenchWidgetIds(host).filter((id) => (
+          !host
+            .querySelector(`[data-redeven-workbench-widget-id="${id}"]`)
+            ?.classList.contains('is-filtered-out')
+        )),
+      ).toEqual(['widget-default-visible', 'widget-visible']);
+    };
+
+    await flushWorkbenchInteraction();
+    assertVisibility();
+
+    setWorkbenchState((state) => ({ ...state, locked: false }));
+    await flushWorkbenchInteraction();
+    assertVisibility();
+
+    setWorkbenchState((state) => ({ ...state, locked: true }));
+    await flushWorkbenchInteraction();
+    assertVisibility();
   });
 
   it('hands authority back to the canvas on blank-background clicks', async () => {
