@@ -528,7 +528,7 @@ The intended dependency shape is library consumption, not source sharing:
 - Redeven contributes product policy and concrete adapters around those
   imports; it does not become a source tree for ReDevPlugin implementation.
 
-For the current `v1.1.3` baseline, Redeven accepts only ReDevPlugin
+For the current `v1.1.4` baseline, Redeven accepts only ReDevPlugin
 manifest v8, release metadata v8, `plugin-ui-v7`, and `bridge-v7`. Older
 manifest or release metadata state is not migrated, rewritten, or given a
 synthetic presentation; reads fail closed while the original bytes remain
@@ -559,7 +559,7 @@ version, package hash, manifest hash, and entries hash exactly match the
 current signed market release, Redeven may reuse that release's bounded icon
 URL; any mismatch falls back to the generic placeholder, so a later market
 generation cannot replace an older installed package's icon. ReDevPlugin
-`v1.1.3` exposes the owner/session-protected installed-icon metadata needed by
+`v1.1.4` exposes the owner/session-protected installed-icon metadata needed by
 the host, so Redeven must not parse package bytes or invent a second icon
 transport.
 
@@ -663,8 +663,13 @@ The current released platform contract also fixes the host-integration shape:
   only after explicit confirmation; invalid or revoked signatures fail closed.
   Install rebinds the exact owner/session, reopens and revalidates the exact bytes
   and hash, then enters the same atomic Host/control-database install transaction.
-  The external plugin starts disabled with zero grants and remains
-  manual-update-only unless released trust evidence makes it eligible. Signature
+  A fresh external install enables in that same Host-owned transaction when the
+  confirmation supplies every required permission allowed by policy. Missing
+  approval remains disabled with an explicit `needs_attention` result; invalid,
+  revoked, incompatible, or policy-blocked packages remain fail closed. Updates
+  preserve the prior enabled or user-disabled intent and never add grants merely
+  because package bytes changed. Packages without released trust evidence remain
+  manual-update-only. Signature
   status determines trust and automatic-update eligibility, not basic install
   eligibility. Redeven must not add a second package parser, fetcher, trust-state
   machine, durable inspection/receipt/query store, or signing flow; the existing

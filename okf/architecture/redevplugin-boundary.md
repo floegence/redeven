@@ -8,7 +8,7 @@ timestamp: 2026-07-25T00:00:00Z
 # Summary
 
 ReDevPlugin is an independently released plugin platform. Redeven consumes its
-coordinated `v1.1.3` Go, npm, Rust source-crate, and machine-contract artifacts;
+coordinated `v1.1.4` Go, npm, Rust source-crate, and machine-contract artifacts;
 it does not fork platform mechanics. Redeven owns authenticated session mapping,
 product source policy and review UX, UI placement, product runtime builds, and
 concrete business adapters. Missing or unverifiable upstream identity, lifecycle,
@@ -42,17 +42,17 @@ external-package inspection or receipt store.
 
 ## Published dependency set
 
-The current integration consumes the coordinated ReDevPlugin `v1.1.3` set:
+The current integration consumes the coordinated ReDevPlugin `v1.1.4` set:
 
-- `github.com/floegence/redevplugin v1.1.3`;
-- `@floegence/redevplugin-contracts@1.1.3` and
-  `@floegence/redevplugin-ui@1.1.3`;
-- `redevplugin-runtime@1.1.3` and `redevplugin-worker-sdk@1.1.3` as the exact
+- `github.com/floegence/redevplugin v1.1.4`;
+- `@floegence/redevplugin-contracts@1.1.4` and
+  `@floegence/redevplugin-ui@1.1.4`;
+- `redevplugin-runtime@1.1.4` and `redevplugin-worker-sdk@1.1.4` as the exact
   public Rust source-crate boundary;
 - the released contract registry, package-set contract, contract hashes, and
   attested `platform-package-publication-v2.json` registry readback, whose
   contract-set SHA-256 is
-  `66902d15b794f9f5c49299c1112d0648394df66f417a78254a91d1b999f43a0a`.
+  `a17fd29f24bf6742e50657103830f4040725a64482a17b03146c376667d4e95e`.
 
 Redeven release tooling verifies the exact-one publication manifest against its
 tag, source commit, workflow, GitHub attestation, Go proxy and SumDB sums, npm
@@ -78,7 +78,7 @@ platform state. Redeven may reconnect and refresh inventory, but must not create
 a local execution store, copy the state machine, invent progress, or cancel work
 when a panel closes.
 
-Enabled-plugin startup recovery remains ReDevPlugin work. The `v1.1.3` Host
+Enabled-plugin startup recovery remains ReDevPlugin work. The `v1.1.4` Host
 revalidates the installed package identity, SHA-256 hashes, Ed25519 status,
 revocation, grants, policy fences, runtime admission, and session scope before it
 publishes a runnable result. Invalid or revoked evidence, schema drift, tampering,
@@ -205,7 +205,7 @@ committed. Unknown, corrupt, ambiguous, tampered, or future state blocks startup
 without mutation. Floret-owned state is outside this lifecycle.
 
 For an exact supported root copied across filesystem identities, Redeven may use
-the released read-only inspection and exact-plan recovery APIs from `v1.1.3`.
+the released read-only inspection and exact-plan recovery APIs from `v1.1.4`.
 The product presents the projected digests, counts, sizes, and retained-state
 facts, binds confirmation to one plan digest, and takes the normal Local
 Environment runtime lock. The released transaction retains the entire source as

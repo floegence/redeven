@@ -3402,6 +3402,7 @@ export function EnvAppShell() {
             await pluginInstallCoordinator?.resume();
           }}
           onCommand={handlePluginCenterCommand}
+          onInspectOfficial={(item, signal) => pluginLifecycle.inspectOfficialRelease(item.pluginID, { signal })}
           onInspectExternal={(request, signal) => pluginLifecycle.inspectExternalPackage(request, { signal })}
           onCommitExternal={commitExternalPluginPackage}
           onLoadMarketDetail={pluginLifecycle.loadMarketDetail}

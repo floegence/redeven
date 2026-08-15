@@ -42,6 +42,18 @@ function createClientHarness() {
       required_permissions: [],
       contracts: [],
     })),
+    inspectReleasePackage: vi.fn(async () => ({
+      plugin_instance_id: officialContainers.pluginInstanceID,
+      release_ref: OFFICIAL_CONTAINERS_RELEASE_REF,
+      inspected_hashes: OFFICIAL_CONTAINERS_RELEASE_REF.expected_hashes,
+      presentation: generatedContainersRecord.presentation,
+      presentation_sha256: 'sha256:' + 'a'.repeat(64),
+      security_summary: {
+        summary_sha256: 'sha256:' + 'b'.repeat(64),
+        permissions: [{ permission_id: 'containers.read', methods: ['containers.list'] }],
+        methods: [], capability_contracts: [], workers: [], network: [], storage: [], secret_refs: [], core_actions: [], intents: [], surfaces: [],
+      },
+    })),
     inspectExternalPackage: vi.fn(async () => ({})),
     inspectUploadedExternalPackage: vi.fn(async () => ({})),
     installInspectedPackage: vi.fn(async () => ({})),
@@ -118,7 +130,7 @@ const generatedContainersRecord: ReDevPluginRecord = {
   updated_at: '2026-07-04T10:01:00Z',
 };
 
-describe('v1.1.3 plugin lifecycle client integration', () => {
+describe('v1.1.4 plugin lifecycle client integration', () => {
   it('preloads an installed package icon before publishing the inventory projection', async () => {
     const { mocks } = createClientHarness();
     const iconDigest = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -398,6 +410,22 @@ describe('v1.1.3 plugin lifecycle client integration', () => {
     });
   });
 
+  it('inspects the exact official release before installation review', async () => {
+    const { lifecycle, mocks } = createClientHarness();
+
+    await expect(lifecycle.inspectOfficialRelease(officialContainers.pluginID)).resolves.toMatchObject({
+      plugin_instance_id: officialContainers.pluginInstanceID,
+      security_summary: {
+        permissions: [{ permission_id: 'containers.read' }],
+      },
+    });
+
+    expect(mocks.inspectReleasePackage).toHaveBeenCalledWith({
+      plugin_instance_id: officialContainers.pluginInstanceID,
+      release_ref: OFFICIAL_CONTAINERS_RELEASE_REF,
+    }, {});
+  });
+
   it('returns an already terminal release installation execution', async () => {
     const { lifecycle, mocks } = createClientHarness();
     mocks.startReleaseInstallExecution.mockResolvedValueOnce(releaseInstallExecution({
@@ -602,7 +630,7 @@ describe('v1.1.3 plugin lifecycle client integration', () => {
     expect(mocks.inspectExternalPackage).not.toHaveBeenCalled();
   });
 
-  it('installs an inspection only with its opaque id and exact inspected package digest', async () => {
+  it('installs a fresh inspection with its exact digest and the confirmed activation intent', async () => {
     const { lifecycle, mocks } = createClientHarness();
     const inspection = {
       inspection_id: 'inspection_external_12345678',
@@ -612,11 +640,44 @@ describe('v1.1.3 plugin lifecycle client integration', () => {
         entries_sha256: '2'.repeat(64),
       },
       intent: { action: 'install' as const },
+      security_summary: {
+        permissions: [
+          { permission_id: 'containers.read', methods: ['containers.list'] },
+          { permission_id: 'containers.execute', methods: ['containers.start'] },
+        ],
+      },
     };
     const installed = { plugin: { plugin_instance_id: 'plugini_external_12345678' } };
     mocks.installInspectedPackage.mockResolvedValue(installed);
 
     await expect(lifecycle.installExternalPackage(inspection as never)).resolves.toBe(installed);
+
+    expect(mocks.installInspectedPackage).toHaveBeenCalledWith({
+      inspection_id: inspection.inspection_id,
+      expected_package_sha256: inspection.inspected_hashes.package_sha256,
+      activate_after_install: true,
+      approved_permission_ids: ['containers.read', 'containers.execute'],
+    }, {});
+  });
+
+  it('commits an external update without changing its enable intent or adding grants', async () => {
+    const { lifecycle, mocks } = createClientHarness();
+    const inspection = {
+      inspection_id: 'inspection_external_update_12345678',
+      inspected_hashes: {
+        package_sha256: '684a09cfd858448baa7d52c3d30932d7684a09cfd858448baa7d52c3d30932d7',
+      },
+      intent: {
+        action: 'update' as const,
+        plugin_instance_id: 'plugini_external_12345678',
+        expected_management_revision: 9,
+      },
+      security_summary: {
+        permissions: [{ permission_id: 'workspace.read', methods: ['workspace.list'] }],
+      },
+    };
+
+    await lifecycle.installExternalPackage(inspection as never);
 
     expect(mocks.installInspectedPackage).toHaveBeenCalledWith({
       inspection_id: inspection.inspection_id,

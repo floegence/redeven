@@ -186,7 +186,7 @@ function externalCommitForCenter(source: ExternalPluginInspection): ExternalPlug
       execution_approval: { ...source.execution_approval, state: 'user_approved' },
       update_eligibility: source.update_eligibility,
       security_summary: source.security_summary,
-      enable_state: 'disabled',
+      enable_state: 'enabled',
       policy_revision: 1,
       management_revision: 1,
       revoke_epoch: 0,
@@ -210,6 +210,7 @@ function externalCommitForCenter(source: ExternalPluginInspection): ExternalPlug
       installed_at: '2026-07-27T10:01:00Z',
       updated_at: '2026-07-27T10:01:00Z',
     },
+    activation: { status: 'enabled' },
     signature_assessment: source.signature_assessment,
     source_provenance: source.source_provenance,
     execution_approval: { ...source.execution_approval, state: 'user_approved' },
@@ -227,6 +228,23 @@ describe('PluginCenterView', () => {
       <PluginCenterView
         projection={{ items: [containersPlugin] }}
         loading={false}
+        onInspectOfficial={vi.fn(async () => ({
+          plugin_instance_id: containersPlugin.officialCatalog.pluginInstanceID,
+          release_ref: OFFICIAL_CONTAINERS_RELEASE_REF,
+          inspected_hashes: OFFICIAL_CONTAINERS_RELEASE_REF.expected_hashes,
+          presentation: {
+            default_locale: 'en-US',
+            locales: [{
+              locale: 'en-US', plugin_name: 'Containers', summary: 'Manage containers.',
+              description: [], highlights: [], keywords: [], surfaces: [], settings: [],
+            }],
+          },
+          presentation_sha256: 'sha256:' + 'a'.repeat(64),
+          security_summary: {
+            summary_sha256: 'sha256:' + 'b'.repeat(64),
+            permissions: [], methods: [], capability_contracts: [], workers: [], network: [], storage: [], secret_refs: [], core_actions: [], intents: [], surfaces: [],
+          },
+        }))}
         onCommand={onCommand}
         onRefresh={vi.fn()}
         canManagePlugins
@@ -240,7 +258,7 @@ describe('PluginCenterView', () => {
     expect(install.textContent).toContain('Install');
     expect(install.closest('article')?.querySelector('.h-12.w-12')).not.toBeNull();
     install.click();
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(document.querySelector('[data-plugin-install-review-dialog]')).not.toBeNull();
     expect(onCommand).not.toHaveBeenCalled();
     (document.querySelector('[data-plugin-install-review-confirm]') as HTMLButtonElement).click();
@@ -1244,6 +1262,24 @@ describe('PluginCenterView', () => {
   it('installs an official catalog item through its signed release reference flow', async () => {
     const onCommand = vi.fn();
     const onInspectExternal = vi.fn();
+    const onInspectOfficial = vi.fn(async () => ({
+      plugin_instance_id: containersPlugin.officialCatalog.pluginInstanceID,
+      release_ref: OFFICIAL_CONTAINERS_RELEASE_REF,
+      inspected_hashes: OFFICIAL_CONTAINERS_RELEASE_REF.expected_hashes,
+      presentation: {
+        default_locale: 'en-US',
+        locales: [{
+          locale: 'en-US', plugin_name: 'Containers', summary: 'Manage containers.',
+          description: [], highlights: [], keywords: [], surfaces: [], settings: [],
+        }],
+      },
+      presentation_sha256: 'sha256:' + 'a'.repeat(64),
+      security_summary: {
+        summary_sha256: 'sha256:' + 'b'.repeat(64),
+        permissions: [{ permission_id: 'containers.read', methods: ['containers.list'] }],
+        methods: [], capability_contracts: [], workers: [], network: [], storage: [], secret_refs: [], core_actions: [], intents: [], surfaces: [],
+      },
+    }));
     const mount = document.createElement('div');
     document.body.append(mount);
 
@@ -1253,6 +1289,7 @@ describe('PluginCenterView', () => {
         loading={false}
         error={null}
         onCommand={onCommand}
+        onInspectOfficial={onInspectOfficial}
         onInspectExternal={onInspectExternal}
         onRefresh={vi.fn()}
         canManagePlugins
@@ -1266,8 +1303,10 @@ describe('PluginCenterView', () => {
     expect(install.textContent).toContain('Install');
     expect(containersPlugin.officialCatalog.distribution.releaseRef).toBe(OFFICIAL_CONTAINERS_RELEASE_REF);
     install.click();
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onInspectOfficial).toHaveBeenCalledWith(containersPlugin, expect.any(AbortSignal));
     expect(document.querySelector('[data-plugin-install-review-dialog]')).not.toBeNull();
+    expect(document.querySelector('[data-plugin-install-permission="containers.read"]')).not.toBeNull();
     expect(onCommand).not.toHaveBeenCalled();
     (document.querySelector('[data-plugin-install-review-confirm]') as HTMLButtonElement).click();
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -1275,6 +1314,7 @@ describe('PluginCenterView', () => {
       type: 'install',
       pluginID: 'com.redeven.official.containers',
       source: 'official_catalog',
+      approvedPermissionIDs: ['containers.read'],
     }, expect.any(AbortSignal));
     expect(onInspectExternal).not.toHaveBeenCalled();
     expect(document.querySelector('[data-external-plugin-dialog]')).toBeNull();

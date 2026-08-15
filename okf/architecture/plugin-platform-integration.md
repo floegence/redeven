@@ -1,14 +1,14 @@
 ---
 type: Architecture Contract
 title: Plugin platform integration
-description: Redeven mounts ReDevPlugin v1.1.3 and adds authenticated host modules, copied-root recovery, market-backed official releases, external-source policy, localized plugin presentation, product placement, and business adapters.
+description: Redeven mounts ReDevPlugin v1.1.4 and adds authenticated host modules, copied-root recovery, market-backed official releases, external-source policy, localized plugin presentation, product placement, and business adapters.
 tags: [architecture, plugins, local-ui, redevplugin]
 timestamp: 2026-07-25T00:00:00Z
 quality_exception: Cross-domain host integration contract spanning identity, security, runtime, storage, routes, surfaces, and business adapters.
 ---
 # Summary
 
-Redeven integrates ReDevPlugin `v1.1.3` through one Go Host, one canonical HTTP
+Redeven integrates ReDevPlugin `v1.1.4` through one Go Host, one canonical HTTP
 namespace, one Env App `PluginPlatformClient`, one shared surface scope, and the
 released ProcessManager over a verified Redeven-built Linux runtime. Redeven
 adds authenticated session mapping, public-source admission policy, product
@@ -129,9 +129,11 @@ Redeven neither persists inspection/receipt/query state nor parses packages or
 manufactures provenance or trust state.
 
 Unsigned, unknown-signer, and temporarily unverifiable packages may be installed
-after explicit confirmation. The installed record remains disabled, receives no
-permission grants, and is manual-update-only. Invalid or revoked signatures are
-blocked. A later update remains bound to the installed instance and current
+after explicit confirmation and remain manual-update-only. A fresh install
+enables in the same Host transaction when that confirmation approves every
+required permission allowed by policy; otherwise it finishes disabled with an
+explicit permission or policy attention result. Invalid or revoked signatures
+are blocked. A later update remains bound to the installed instance and current
 management revision. GitHub updates may reuse the stored public repository
 identity; package-URL updates require the administrator to enter the URL again,
 and upload updates require a new file selection. Redeven never reconstructs a
@@ -143,7 +145,7 @@ user pin.
 ## Runtime and Containers
 
 The runtime module binds the canonical sibling executable, target, ReDevPlugin
-`1.1.3`, runtime-internal IPC and WASM ABI contracts, exact product-build descriptor, lease
+`1.1.4`, runtime-internal IPC and WASM ABI contracts, exact product-build descriptor, lease
 replay storage, and released limits. Linux runtime bytes are built with Rust
 1.88.0 from the attested package set and travel with SBOM, provenance, notices,
 and signature evidence. The expected binary digest comes from the product release
@@ -256,7 +258,7 @@ disposal alone is not revocation evidence.
 # Boundaries
 
 Canonical ownership is defined by [ReDevPlugin host integration boundary](redevplugin-boundary.md).
-This concept owns only Redeven's concrete `v1.1.3` assembly.
+This concept owns only Redeven's concrete `v1.1.4` assembly.
 
 Manifest surfaces remain `view|command|background` with semantic roles. Activity,
 Workbench, window, widget, inventory key, navigation, settings, and product layout
