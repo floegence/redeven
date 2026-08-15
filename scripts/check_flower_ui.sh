@@ -86,6 +86,7 @@ main() {
       internal/flower_ui/src/flowerSubagentDetailThread.test.ts \
       internal/flower_ui/src/flowerSubagentProjection.test.ts \
       internal/flower_ui/src/flowerThreadListRefresh.test.ts \
+	  internal/flower_ui/src/flowerThreadTitle.test.ts \
       internal/flower_ui/src/flowerCompanionPresence.test.ts \
       internal/flower_ui/src/flowerCompanionLiveTail.test.ts \
       internal/flower_ui/src/flowerCompanionTailMotion.test.ts \

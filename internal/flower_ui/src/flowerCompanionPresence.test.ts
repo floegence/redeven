@@ -129,9 +129,8 @@ describe('projectFlowerCompanionPresence', () => {
         progress_kind: 'tool',
       }),
     ], true)).toMatchObject({
-      priority_thread_title: 'Verify responsive behavior',
-      priority_thread_progress: 'Running tools...',
-      priority_thread_progress_kind: 'tool',
+      priority_thread_title: 'Pending title',
+      priority_thread_progress: 'Preparing...',
     });
   });
 
@@ -163,8 +162,6 @@ describe('projectFlowerCompanionPresence', () => {
   });
 
   it.each([
-    ['pending', 'Pending title'],
-    ['failed', 'Failed title'],
     ['unset', 'Unset title'],
     ['ready', '   '],
   ] as const)('omits a non-canonical %s thread title', (titleStatus, title) => {
@@ -192,11 +189,11 @@ describe('projectFlowerCompanionPresence', () => {
     expect(projectFlowerCompanionPresence(threads, true)).toMatchObject({
       priority_status: 'running',
       priority_count: 3,
-      priority_thread_title: 'Review responsive behavior',
+      priority_thread_title: 'Pending title',
       running_count: 3,
       queued_count: 1,
     });
-    expect(selectFlowerCompanionPriorityThread(threads)?.thread_id).toBe('running-canonical');
+		expect(selectFlowerCompanionPriorityThread(threads)?.thread_id).toBe('running-pending');
   });
 
   it('selects running work instead of letting attention hide live progress', () => {

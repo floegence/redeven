@@ -157,8 +157,8 @@ describe('runtime Flower surface adapter read state', () => {
 		const loadThread = vi.fn(async () => ({
 			thread: {
 				thread_id: 'thread_detail',
-				title: 'Detail',
-				title_status: 'ready',
+				title: '',
+				title_status: 'failed',
 				model_id: 'default/gpt-5',
 				permission_type: 'approval_required',
 				working_dir: '/workspace',
@@ -181,6 +181,7 @@ describe('runtime Flower surface adapter read state', () => {
 		const detail = await adapter.loadThread('thread_detail');
 
 		expect(detail.thread.thread_id).toBe('thread_detail');
+		expect(detail.thread.title).toBe('hello');
 			expect(detail.current.view_version).toBe(7);
 		expect(detail.thread.messages).toEqual(expect.arrayContaining([
 			expect.objectContaining({ id: 'user:req-1', role: 'user', content: 'hello' }),

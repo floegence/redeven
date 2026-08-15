@@ -102,6 +102,13 @@ func TestPublishedFloretApprovalCurrentPresentsTerminalCommand(t *testing.T) {
 	if len(current.Interactions) != 1 || current.Interactions[0].Approval == nil {
 		t.Fatalf("current did not reach waiting approval: %#v", current)
 	}
+	summaries, err := service.List(t.Context(), flruntime.ThreadScope{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(summaries) != 1 || summaries[0].Title != "run curl" || summaries[0].TitleStatus != flruntime.ThreadTitleStatusReady {
+		t.Fatalf("waiting approval summary title = %#v", summaries)
+	}
 	approval := current.Interactions[0].Approval
 	if approval.Command != command || strings.Contains(approval.Command, `{"command"`) {
 		t.Fatalf("canonical approval command=%q, want %q", approval.Command, command)

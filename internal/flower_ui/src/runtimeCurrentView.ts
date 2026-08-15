@@ -9,6 +9,7 @@ import type {
   FlowerThreadSnapshot,
 } from './contracts/flowerSurfaceContracts';
 import { mapFlowerActivityItem } from './flowerLiveMapper';
+import { canonicalFlowerThreadSnapshotTitle } from './flowerThreadTitle';
 
 type ResolvedApprovalState = Exclude<FlowerActivityApprovalState, 'requested'>;
 
@@ -317,7 +318,7 @@ export function applyFlowerRuntimeCurrentView(
     prompt: String(queued.input?.text ?? ''),
     created_at_ms: base.updated_at_ms,
   }));
-  return {
+  const projected: FlowerThreadSnapshot = {
     ...base,
     updated_at_ms: base.updated_at_ms,
     status,
@@ -331,4 +332,5 @@ export function applyFlowerRuntimeCurrentView(
     messages,
     error: undefined,
   };
+  return { ...projected, title: canonicalFlowerThreadSnapshotTitle(projected) };
 }

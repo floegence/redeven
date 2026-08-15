@@ -40,6 +40,10 @@ function thread(overrides: Partial<FlowerThreadListItem> = {}): FlowerThreadList
 }
 
 describe('groupFlowerThreadItems', () => {
+	it('omits legacy empty-title summaries instead of rendering an untitled row', () => {
+		expect(filterFlowerThreadItems([thread({ thread_id: 'legacy-empty', title: '' })], '')).toEqual([]);
+	});
+
   it('keeps pinned conversations in a dedicated newest-pinned group', () => {
     vi.setSystemTime(new Date('2026-06-12T10:00:00Z'));
     const groups = groupFlowerThreadItems([

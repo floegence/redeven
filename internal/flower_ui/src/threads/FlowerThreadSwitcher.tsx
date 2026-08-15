@@ -265,7 +265,7 @@ export const FlowerThreadSwitcher: Component<FlowerThreadSwitcherProps> = (props
                             )}
                             aria-hidden="true"
                           />
-                          <span class="min-w-0 flex-1 truncate text-xs">{item.title.trim() || props.copy.threadList.untitled}</span>
+                          <span class="min-w-0 flex-1 truncate text-xs">{item.title.trim()}</span>
                           <span class="max-w-[42%] shrink-0 truncate text-[10px] font-normal text-muted-foreground">
                             {rowMeta(item, group.kind)}
                           </span>

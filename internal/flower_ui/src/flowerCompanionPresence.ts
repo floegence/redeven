@@ -1,5 +1,6 @@
 import type { FlowerThreadListItem } from './contracts/flowerSurfaceContracts';
 import type { FlowerCompanionProgressKind } from './flowerCompanionLiveTail';
+import { canonicalFlowerThreadTitle } from './flowerThreadTitle';
 
 export type FlowerCompanionThreadListItem = FlowerThreadListItem & Readonly<{
   queued_turn_count?: number;
@@ -75,9 +76,8 @@ function priorityCountKey(thread: FlowerCompanionThreadListItem): CountKey | nul
 }
 
 function canonicalThreadTitle(thread: FlowerCompanionThreadListItem): string | undefined {
-  if (thread.title_status !== 'ready') return undefined;
-  const title = thread.title.trim();
-  return title || undefined;
+	const title = canonicalFlowerThreadTitle(thread);
+	return title || undefined;
 }
 
 export function selectFlowerCompanionPriorityThread(

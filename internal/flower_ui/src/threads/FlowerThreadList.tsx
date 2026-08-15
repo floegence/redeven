@@ -59,7 +59,7 @@ export type FlowerThreadCardProps = Readonly<{
 
 export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
   const copy = () => props.copy ?? DEFAULT_FLOWER_SURFACE_COPY.threadList;
-  const title = () => props.item.title.trim() || copy().untitled;
+  const title = () => props.item.title.trim();
   const indicator = createMemo(() => flowerThreadIndicator(props.item, props.active, copy()));
   const itemCanRename = createMemo(() => canRenameThreadItem(props.item));
   const itemCanPin = createMemo(() => canPinThreadItem(props.item));
@@ -294,7 +294,7 @@ const FlowerThreadContextMenu: Component<FlowerThreadContextMenuProps> = (props)
         role="menu"
         tabIndex={-1}
         class="flower-thread-context-menu"
-        aria-label={props.copy.contextMenuLabel(props.item.title || props.copy.untitled)}
+		aria-label={props.copy.contextMenuLabel(props.item.title.trim())}
       >
         {itemButton('copy_thread_id', props.copy.copyThreadID, <Copy class="h-3.5 w-3.5" />)}
         {itemButton('fork', props.copy.fork, <GitBranch class="h-3.5 w-3.5" />, !props.canFork || !canForkThreadItem(props.item))}

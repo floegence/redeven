@@ -21,6 +21,15 @@ One `ThreadRuntime` plus mutex owns each active thread. Provider and tool I/O ru
 
 Child agents are ordinary child threads with parent identity and independent runtime ownership. No product-owned SubAgent lifecycle, recovery handle, or publication state may become a second authority.
 
+The first accepted canonical user message and its fallback title commit in the
+same Floret boundary. Pending or failed automatic-title work keeps that
+fallback; provider success or an explicit host rename is the only replacement.
+Redeven sends Floret's tool-free `thread_title` provider request through the
+run lifetime admission without requiring the main turn's canonical permission
+owner, because the title request cannot dispatch tools. Ordinary provider
+requests, including any request with tool definitions, still require the
+canonical permission snapshot before model dispatch.
+
 ## Redeven adapter
 
 Redeven keeps one typed adapter over the published Floret v4 module. HTTP and RPC handlers perform product authorization, ResourceRef and attachment resolution, DTO mapping, and a typed call. They do not wait for provider work, register a legacy run handler, observe a receipt, acquire an authority barrier, or persist a lifecycle projection.

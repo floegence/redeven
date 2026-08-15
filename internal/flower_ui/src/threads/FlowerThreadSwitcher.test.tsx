@@ -164,6 +164,14 @@ function renderSwitcher(items: readonly FlowerCompanionThreadListItem[]) {
 }
 
 describe('groupFlowerThreadSwitcherItems', () => {
+	it('omits legacy empty-title summaries instead of rendering an untitled row', () => {
+		const groups = groupFlowerThreadSwitcherItems([
+			thread({ thread_id: 'legacy-empty', title: '' }),
+		], '', threadListCopy);
+
+		expect(groups).toEqual([]);
+	});
+
   it('uses one highest-value group per thread and keeps the compact group order', () => {
     const duplicateAttention = thread({ thread_id: 'attention', title: 'Approval', status: 'waiting_approval', pinned: true });
     const groups = groupFlowerThreadSwitcherItems([
