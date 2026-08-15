@@ -208,6 +208,27 @@ describe('AIReadinessBoundary', () => {
     }
   });
 
+  it('presents automatic recovery as progress instead of an unavailable error', async () => {
+    vi.useFakeTimers();
+    try {
+      const fixture = mount(snapshot('temporarily_blocked', {
+        state: 'recovering',
+        retryable: true,
+        safe_to_retry: true,
+        trace_id: 'ai-start-1',
+        startup_phase: 'recovering',
+        retry_reason: 'temporary_store_open',
+      }));
+      await vi.advanceTimersByTimeAsync(150);
+      expect(fixture.host.textContent).toContain('Agent data is temporarily in use');
+      expect(fixture.host.textContent).not.toContain('Agent data is unavailable');
+      expect(fixture.host.textContent).not.toContain('Check again');
+      fixture.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('routes update and environment-access actions without exposing the Flower child', () => {
     const update = mount(snapshot('update_required', { retryable: false, safe_to_retry: false }));
     buttonWithText(update.host, 'Open runtime updates').click();

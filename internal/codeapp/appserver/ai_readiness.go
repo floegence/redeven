@@ -18,6 +18,7 @@ const (
 	AIReadinessInspecting  AIReadinessState = "inspecting"
 	AIReadinessMigrating   AIReadinessState = "migrating"
 	AIReadinessVerifying   AIReadinessState = "verifying"
+	AIReadinessRecovering  AIReadinessState = "recovering"
 	AIReadinessReady       AIReadinessState = "ready"
 	AIReadinessDegraded    AIReadinessState = "degraded"
 	AIReadinessBlocked     AIReadinessState = "blocked"
@@ -38,13 +39,16 @@ var (
 // AIReadinessSnapshot contains only Redeven-owned, sanitized availability
 // facts. It must never contain Floret Store or Agent snapshots.
 type AIReadinessSnapshot struct {
-	State       AIReadinessState `json:"state"`
-	ReasonCode  string           `json:"reason_code,omitempty"`
-	Retryable   bool             `json:"retryable"`
-	SafeToRetry bool             `json:"safe_to_retry"`
-	Committed   bool             `json:"committed"`
-	RolledBack  bool             `json:"rolled_back"`
-	IssueCount  int              `json:"issue_count,omitempty"`
+	State        AIReadinessState `json:"state"`
+	ReasonCode   string           `json:"reason_code,omitempty"`
+	Retryable    bool             `json:"retryable"`
+	SafeToRetry  bool             `json:"safe_to_retry"`
+	Committed    bool             `json:"committed"`
+	RolledBack   bool             `json:"rolled_back"`
+	IssueCount   int              `json:"issue_count,omitempty"`
+	TraceID      string           `json:"trace_id,omitempty"`
+	StartupPhase string           `json:"startup_phase,omitempty"`
+	RetryReason  string           `json:"retry_reason,omitempty"`
 }
 
 // AIServiceStartupOptions contains the Redeven-owned inputs that may change
@@ -145,7 +149,19 @@ func (g *Server) aiReadinessSnapshot() AIReadinessSnapshot {
 func sanitizeAIReadinessSnapshot(snapshot AIReadinessSnapshot) AIReadinessSnapshot {
 	switch snapshot.State {
 	case AIReadinessUnavailable, AIReadinessInspecting, AIReadinessMigrating, AIReadinessVerifying:
-		return AIReadinessSnapshot{State: snapshot.State}
+		return sanitizeAIReadinessDiagnostics(AIReadinessSnapshot{
+			State: snapshot.State, TraceID: snapshot.TraceID, StartupPhase: snapshot.StartupPhase,
+		})
+	case AIReadinessRecovering:
+		if !knownAIReadinessReasonCode(snapshot.ReasonCode) || !snapshot.Retryable || !snapshot.SafeToRetry ||
+			snapshot.Committed || snapshot.RolledBack || snapshot.IssueCount != 0 {
+			return AIReadinessSnapshot{State: AIReadinessBlocked, ReasonCode: AIReadinessContractErrorReasonCode}
+		}
+		return sanitizeAIReadinessDiagnostics(AIReadinessSnapshot{
+			State: snapshot.State, ReasonCode: strings.TrimSpace(snapshot.ReasonCode),
+			Retryable: snapshot.Retryable, SafeToRetry: snapshot.SafeToRetry,
+			TraceID: snapshot.TraceID, StartupPhase: snapshot.StartupPhase, RetryReason: snapshot.RetryReason,
+		})
 	case AIReadinessReady:
 		return AIReadinessSnapshot{State: AIReadinessReady}
 	case AIReadinessDegraded:
@@ -155,14 +171,43 @@ func sanitizeAIReadinessSnapshot(snapshot AIReadinessSnapshot) AIReadinessSnapsh
 		}
 		return AIReadinessSnapshot{State: AIReadinessDegraded, ReasonCode: AIHostThreadSettingsMissingReasonCode, IssueCount: snapshot.IssueCount}
 	case AIReadinessBlocked:
-		if !knownAIReadinessReasonCode(snapshot.ReasonCode) {
+		if !knownAIReadinessReasonCode(snapshot.ReasonCode) || (snapshot.SafeToRetry && !snapshot.Retryable) {
 			return AIReadinessSnapshot{State: AIReadinessBlocked, ReasonCode: AIReadinessContractErrorReasonCode}
 		}
 		snapshot.ReasonCode = strings.TrimSpace(snapshot.ReasonCode)
-		return snapshot
+		return sanitizeAIReadinessDiagnostics(snapshot)
 	default:
 		return AIReadinessSnapshot{State: AIReadinessBlocked, ReasonCode: AIReadinessContractErrorReasonCode}
 	}
+}
+
+func sanitizeAIReadinessDiagnostics(snapshot AIReadinessSnapshot) AIReadinessSnapshot {
+	var ok bool
+	if snapshot.TraceID, ok = sanitizeAIReadinessToken(snapshot.TraceID, 128); !ok {
+		return AIReadinessSnapshot{State: AIReadinessBlocked, ReasonCode: AIReadinessContractErrorReasonCode}
+	}
+	if snapshot.StartupPhase, ok = sanitizeAIReadinessToken(snapshot.StartupPhase, 64); !ok {
+		return AIReadinessSnapshot{State: AIReadinessBlocked, ReasonCode: AIReadinessContractErrorReasonCode}
+	}
+	if snapshot.RetryReason, ok = sanitizeAIReadinessToken(snapshot.RetryReason, 128); !ok {
+		return AIReadinessSnapshot{State: AIReadinessBlocked, ReasonCode: AIReadinessContractErrorReasonCode}
+	}
+	return snapshot
+}
+
+func sanitizeAIReadinessToken(value string, maxLength int) (string, bool) {
+	value = strings.TrimSpace(value)
+	if len(value) > maxLength {
+		return "", false
+	}
+	for _, char := range value {
+		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') ||
+			(char >= '0' && char <= '9') || char == '-' || char == '_' || char == '.' {
+			continue
+		}
+		return "", false
+	}
+	return value, true
 }
 
 func knownAIReadinessReasonCode(code string) bool {

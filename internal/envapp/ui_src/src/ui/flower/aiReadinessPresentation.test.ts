@@ -74,6 +74,7 @@ describe('createAIReadinessPresentation', () => {
     ['inspecting', 'busy', 'Checking Agent data'],
     ['migrating', 'busy', 'Updating Agent data'],
     ['verifying', 'busy', 'Verifying Agent data'],
+    ['recovering', 'busy', 'Agent data is temporarily in use'],
     ['ready', 'ready', 'Ready'],
   ] as const)('maps %s to the %s presentation mode', (state, mode, title) => {
     const projection = createAIReadinessPresentation({

@@ -383,6 +383,13 @@ func TestSanitizeAIReadinessSnapshotRejectsUnknownContractValues(t *testing.T) {
 			in:   AIReadinessSnapshot{State: AIReadinessBlocked, ReasonCode: " environment_permission_error ", Retryable: true},
 			want: AIReadinessSnapshot{State: AIReadinessBlocked, ReasonCode: "environment_permission_error", Retryable: true},
 		},
+		{
+			name: "diagnostics reject path-shaped values",
+			in: AIReadinessSnapshot{
+				State: AIReadinessBlocked, ReasonCode: "store_io_error", TraceID: "/private/agent.sqlite",
+			},
+			want: AIReadinessSnapshot{State: AIReadinessBlocked, ReasonCode: AIReadinessContractErrorReasonCode},
+		},
 	}
 
 	for _, tt := range tests {
@@ -391,6 +398,24 @@ func TestSanitizeAIReadinessSnapshotRejectsUnknownContractValues(t *testing.T) {
 				t.Fatalf("sanitized snapshot = %#v, want %#v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestSanitizeAIReadinessSnapshotPreservesRecoveringState(t *testing.T) {
+	got := sanitizeAIReadinessSnapshot(AIReadinessSnapshot{
+		State: AIReadinessRecovering, ReasonCode: "temporarily_blocked", Retryable: true, SafeToRetry: true,
+	})
+	if got.State != AIReadinessRecovering {
+		t.Fatalf("recovering state = %#v, want preserved recovering state", got)
+	}
+}
+
+func TestSanitizeAIReadinessSnapshotPreservesSafeTransientDiagnostics(t *testing.T) {
+	got := sanitizeAIReadinessSnapshot(AIReadinessSnapshot{
+		State: AIReadinessInspecting, TraceID: "ai-start-3", StartupPhase: "inspecting",
+	})
+	if got.State != AIReadinessInspecting || got.TraceID != "ai-start-3" || got.StartupPhase != "inspecting" {
+		t.Fatalf("inspecting snapshot = %#v, want safe transient diagnostics", got)
 	}
 }
 

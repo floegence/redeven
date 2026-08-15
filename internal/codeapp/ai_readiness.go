@@ -3,8 +3,11 @@ package codeapp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/codeapp/appserver"
@@ -46,7 +49,14 @@ type aiReadinessController struct {
 	closeOnce   sync.Once
 	closeDone   chan struct{}
 	closeResult error
+
+	maxStartupRetries int
+	startupRetryDelay func(int) time.Duration
+	startupTraceID    string
+	startupPhase      string
 }
+
+var readinessTraceSequence uint64
 
 func newAIReadinessController(parent context.Context, opts ai.Options, create aiServiceFactory, closeService aiServiceCloser) *aiReadinessController {
 	if create == nil {
@@ -66,8 +76,10 @@ func newAIReadinessController(parent context.Context, opts ai.Options, create ai
 	ctx, cancel := context.WithCancel(parent)
 	controller := &aiReadinessController{
 		ctx: ctx, cancel: cancel, opts: opts, optsRevision: 1, scopeRevision: filesystemScopeRevision(opts.FilesystemScope), create: create, close: closeService,
-		snapshot:  appserver.AIReadinessSnapshot{State: appserver.AIReadinessUnavailable},
-		closeDone: make(chan struct{}),
+		snapshot:          appserver.AIReadinessSnapshot{State: appserver.AIReadinessUnavailable},
+		closeDone:         make(chan struct{}),
+		maxStartupRetries: 5,
+		startupRetryDelay: defaultStartupRetryDelay,
 	}
 	controller.reconcile = func(ctx context.Context, service *ai.Service) (int, error) {
 		return service.ReconcileCanonicalRootOwnership(ctx)
@@ -78,6 +90,26 @@ func newAIReadinessController(parent context.Context, opts ai.Options, create ai
 		_ = controller.Close()
 	}()
 	return controller
+}
+
+func defaultStartupRetryDelay(attempt int) time.Duration {
+	if attempt < 1 {
+		attempt = 1
+	}
+	base := 250 * time.Millisecond
+	for i := 1; i < attempt && base < 3*time.Second; i++ {
+		base *= 2
+	}
+	if base > 3*time.Second {
+		base = 3 * time.Second
+	}
+	// A small time-based jitter prevents multiple runtimes recovering in lockstep.
+	jitter := time.Duration(time.Now().UnixNano() % int64(base/4+1))
+	return base + jitter
+}
+
+func newReadinessTraceID() string {
+	return fmt.Sprintf("ai-start-%x", atomic.AddUint64(&readinessTraceSequence, 1))
 }
 
 func (c *aiReadinessController) Start() {
@@ -205,6 +237,8 @@ func (c *aiReadinessController) startAttempt() error {
 		}
 	}
 	c.snapshot = appserver.AIReadinessSnapshot{State: appserver.AIReadinessUnavailable}
+	c.startupTraceID = newReadinessTraceID()
+	c.startupPhase = ""
 	c.workers.Add(1)
 	c.mu.Unlock()
 
@@ -226,6 +260,7 @@ func (c *aiReadinessController) runAttempt(previous *aiServiceGeneration) {
 		}
 	}
 
+	retryAttempt := 0
 	for {
 		c.setTransientState(appserver.AIReadinessInspecting)
 		c.mu.Lock()
@@ -235,6 +270,20 @@ func (c *aiReadinessController) runAttempt(previous *aiServiceGeneration) {
 
 		service, err := c.create(c.ctx, opts)
 		if err != nil {
+			var startupErr *ai.FloretStoreStartupError
+			if errors.As(err, &startupErr) && isAutomaticStartupRecovery(startupErr) && retryAttempt < c.maxStartupRetries {
+				retryAttempt++
+				delay := c.startupRetryDelay(retryAttempt)
+				c.setRecovering(startupErr)
+				c.logStartupRetry(startupErr, retryAttempt, delay)
+				if !waitForStartupRetry(c.ctx, delay) {
+					c.mu.Lock()
+					c.running = false
+					c.mu.Unlock()
+					return
+				}
+				continue
+			}
 			c.finishFailure(err)
 			return
 		}
@@ -273,6 +322,13 @@ func (c *aiReadinessController) runAttempt(previous *aiServiceGeneration) {
 	}
 }
 
+func isAutomaticStartupRecovery(startupErr *ai.FloretStoreStartupError) bool {
+	if startupErr == nil || !startupErr.Retryable || !startupErr.SafeToRetry {
+		return false
+	}
+	return startupErr.Class == ai.FloretStoreStartupTemporarilyBlocked
+}
+
 func (c *aiReadinessController) observeStoreStartupPhase(phase ai.FloretStoreStartupPhase) {
 	var state appserver.AIReadinessState
 	switch phase {
@@ -280,6 +336,8 @@ func (c *aiReadinessController) observeStoreStartupPhase(phase ai.FloretStoreSta
 		state = appserver.AIReadinessVerifying
 	case ai.FloretStoreStartupInspecting:
 		state = appserver.AIReadinessInspecting
+	case ai.FloretStoreStartupRecovering:
+		state = appserver.AIReadinessRecovering
 	default:
 		return
 	}
@@ -292,22 +350,102 @@ func (c *aiReadinessController) setTransientState(state appserver.AIReadinessSta
 	if c.closed || !c.running {
 		return
 	}
-	c.snapshot = appserver.AIReadinessSnapshot{State: state}
+	c.startupPhase = string(state)
+	c.snapshot = appserver.AIReadinessSnapshot{
+		State: state, TraceID: c.startupTraceID, StartupPhase: c.startupPhase,
+	}
+}
+
+func (c *aiReadinessController) setRecovering(startupErr *ai.FloretStoreStartupError) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed || !c.running {
+		return
+	}
+	c.startupPhase = string(ai.FloretStoreStartupRecovering)
+	snapshot := appserver.AIReadinessSnapshot{
+		State: appserver.AIReadinessRecovering, TraceID: c.startupTraceID,
+		StartupPhase: string(ai.FloretStoreStartupRecovering), RetryReason: "temporary_store_open",
+	}
+	if startupErr != nil {
+		snapshot.ReasonCode = string(startupErr.Class)
+		snapshot.Retryable = startupErr.Retryable
+		snapshot.SafeToRetry = startupErr.SafeToRetry
+	}
+	c.snapshot = snapshot
+}
+
+func (c *aiReadinessController) logStartupRetry(startupErr *ai.FloretStoreStartupError, attempt int, delay time.Duration) {
+	if c == nil || c.opts.Logger == nil || startupErr == nil {
+		return
+	}
+	c.mu.Lock()
+	traceID := c.startupTraceID
+	c.mu.Unlock()
+	c.opts.Logger.Warn("ai: service startup recovering",
+		"trace_id", traceID,
+		"startup_phase", ai.FloretStoreStartupRecovering,
+		"classification", startupErr.Class,
+		"retry_reason", "temporary_store_open",
+		"retry_attempt", attempt,
+		"retry_delay", delay,
+		"error", startupErr.Unwrap(),
+	)
+}
+
+func waitForStartupRetry(ctx context.Context, delay time.Duration) bool {
+	if delay <= 0 {
+		select {
+		case <-ctx.Done():
+			return false
+		default:
+			return true
+		}
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }
 
 func (c *aiReadinessController) finishFailure(err error) {
-	if c != nil && c.opts.Logger != nil && err != nil {
-		c.opts.Logger.Error("ai: service startup failed", "error", err)
-	}
 	snapshot := appserver.AIReadinessSnapshot{
 		State:      appserver.AIReadinessBlocked,
 		ReasonCode: appserver.AIServiceStartupErrorReasonCode,
 	}
+	c.mu.Lock()
+	snapshot.TraceID = c.startupTraceID
+	snapshot.StartupPhase = c.startupPhase
+	c.mu.Unlock()
 	var startupErr *ai.FloretStoreStartupError
 	if errors.As(err, &startupErr) {
 		snapshot.ReasonCode = string(startupErr.Class)
 		snapshot.Retryable = startupErr.Retryable
 		snapshot.SafeToRetry = startupErr.SafeToRetry
+		if isAutomaticStartupRecovery(startupErr) {
+			snapshot.RetryReason = "retry_window_exhausted"
+		} else {
+			snapshot.RetryReason = "non_retryable_startup_error"
+		}
+	} else {
+		snapshot.RetryReason = "service_construction_failed"
+	}
+	if c != nil && c.opts.Logger != nil && err != nil {
+		cause := err
+		if startupErr != nil && startupErr.Unwrap() != nil {
+			cause = startupErr.Unwrap()
+		}
+		c.opts.Logger.Error("ai: service startup failed",
+			"trace_id", snapshot.TraceID,
+			"startup_phase", snapshot.StartupPhase,
+			"classification", snapshot.ReasonCode,
+			"retry_reason", snapshot.RetryReason,
+			"error", cause,
+		)
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
