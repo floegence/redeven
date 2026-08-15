@@ -10,6 +10,20 @@ quality_exception: Cross-placement runtime process contract spanning identity, r
 
 Redeven Desktop governs Local, SSH-hosted, and container-hosted Env Runtime processes through one process inventory contract. Stop, Restart, and Update do not infer liveness from a saved PID, a current state directory, an in-memory ready record, or a status command exit code. Desktop development launches may additionally bind Electron user-data, session-data, cache, and temp roots to an explicit task-owned namespace so a second checkout can run without contending for the shared profile lock. Gateway service processes remain outside this inventory and retain their independent lifecycle.
 
+`scripts/dev_desktop.sh` derives one stable profile root from the canonical
+checkout path and uses it for the runtime state, Electron user data, cache, and
+temporary files. It also supplies a loopback-only development Local UI bind and
+derives a stable, non-overlapping Local UI/CDP/inspector port window from the
+same checkout identity before checking port ownership. Explicit per-port
+environment overrides remain available. The script never
+falls back to `~/.redeven`; using that user profile requires both an explicit
+`REDEVEN_STATE_ROOT` and `REDEVEN_DEV_ALLOW_USER_STATE_ROOT=1`. The opt-in is
+reported prominently and never copies a database, Provider configuration, or
+secret into the isolated profile. Process shutdown is scoped to the exact
+checkout Desktop working directory. Runtime shutdown additionally requires the
+same bundled executable root and state root, so a development command cannot
+stop another checkout or user runtime by name.
+
 # Contract
 
 ## Inventory identity
@@ -82,6 +96,8 @@ No additional boundary is declared for this concept.
 - `redeven:desktop/src/main/main.ts:9580` - Product lifecycle progress becomes non-cancelable when the core SSH launcher enters the signal phase.
 - `redeven:tests/docker_runtime_e2e/docker_runtime_e2e_test.go:430` - Docker E2E proves container-scoped reconciliation does not terminate a matching process in another namespace.
 - `redeven:desktop/src/main/runtimeLifecycleCoordinator.ts:64` - Physical lifecycle identity requires normalized state root, host authority, placement, and concrete container identity.
+- `redeven:scripts/dev_desktop.sh:1` - Derives the stable checkout profile, validates loopback development ports, and scopes stop inventory to one checkout and state root.
+- `redeven:scripts/dev_desktop_process_inventory_test.sh:1` - Proves profile isolation, stable restart identity, explicit user-profile opt-in, port collision rejection, and cross-checkout process exclusion.
 - `redeven:desktop/src/main/launcherOperations.ts:291` - Launcher operation creation rejects replacement of an active same-key attempt.
 - `redeven:desktop/src/main/runtimeProcessInventory.ts:230` - The shared Desktop planner separates hard identity blocks from digest-bound takeover confirmation.
 - `redeven:desktop/src/main/statePaths.ts:8` - Desktop resolves explicit task-owned temp, user-data, and cache roots without fallback when isolation is requested.

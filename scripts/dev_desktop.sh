@@ -9,8 +9,9 @@ DESKTOP_DIR="$ROOT_DIR/desktop"
 source "$SCRIPT_DIR/ui_package_common.sh"
 
 OPEN_DEVTOOLS="${REDEVEN_DESKTOP_OPEN_DEVTOOLS:-1}"
-REMOTE_DEBUGGING_PORT="${REDEVEN_DESKTOP_REMOTE_DEBUGGING_PORT:-9222}"
-INSPECT_PORT="${REDEVEN_DESKTOP_INSPECT_PORT:-9230}"
+REMOTE_DEBUGGING_PORT="${REDEVEN_DESKTOP_REMOTE_DEBUGGING_PORT:-}"
+INSPECT_PORT="${REDEVEN_DESKTOP_INSPECT_PORT:-}"
+LOCAL_UI_BIND="${REDEVEN_DESKTOP_LOCAL_UI_BIND:-}"
 STOP_EXISTING=1
 STOP_ONLY=0
 DRY_RUN=0
@@ -19,6 +20,9 @@ STOP_TIMEOUT_SECONDS="${REDEVEN_DESKTOP_STOP_TIMEOUT_SECONDS:-8}"
 ELECTRON_ARGS=()
 ELECTRON_DEBUG_ARGS=()
 COLLECTED_PIDS=()
+DEVELOPMENT_STATE_ROOT=""
+DEVELOPMENT_OWNER=""
+DEVELOPMENT_PORT_BASE=""
 
 usage() {
   cat <<'USAGE'
@@ -35,16 +39,20 @@ Options:
   --stop-runtimes           Also stop Redeven runtime processes (interrupts active work).
   --stop-timeout <seconds>  Seconds to wait before force-stopping processes (default: 8).
   --remote-debugging-port <port|0>
-                            Electron Chrome DevTools Protocol port (default: 9222, 0 disables).
-  --inspect-port <port|0>   Electron main-process inspector port (default: 9230, 0 disables).
+                            Electron Chrome DevTools Protocol port (checkout-derived default, 0 disables).
+  --inspect-port <port|0>   Electron main-process inspector port (checkout-derived default, 0 disables).
   --dry-run                 Print the stop/start actions without changing processes.
   -h, --help                Show this help.
 
 Environment:
   REDEVEN_DESKTOP_OPEN_DEVTOOLS=0|1
   REDEVEN_DESKTOP_AUTO_START_RUNTIME=0|1 (default: 1 for this development launch)
-  REDEVEN_DESKTOP_REMOTE_DEBUGGING_PORT=<port|0>
-  REDEVEN_DESKTOP_INSPECT_PORT=<port|0>
+  REDEVEN_DESKTOP_REMOTE_DEBUGGING_PORT=<port|0> (overrides checkout-derived default)
+  REDEVEN_DESKTOP_INSPECT_PORT=<port|0> (overrides checkout-derived default)
+  REDEVEN_DESKTOP_LOCAL_UI_BIND=<loopback-host:port> (overrides checkout-derived default)
+  REDEVEN_STATE_ROOT=<absolute isolated profile root>
+  REDEVEN_DEV_STATE_BASE=<absolute parent for the stable checkout profile>
+  REDEVEN_DEV_ALLOW_USER_STATE_ROOT=1 (required to explicitly use ~/.redeven)
   REDEVEN_DESKTOP_TEMP_ROOT=<absolute task-owned temporary directory>
   REDEVEN_DESKTOP_STOP_TIMEOUT_SECONDS=<seconds>
   REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG=<vX.Y.Z|v0.0.0-dev>
@@ -101,6 +109,96 @@ validate_debug_port() {
   esac
   if [ "$value" -lt 1 ] || [ "$value" -gt 65535 ]; then
     die_usage "$label must be between 1 and 65535, or 0 to disable it"
+  fi
+}
+
+resolve_absolute_path() {
+  local candidate="$1"
+  node -e '
+    const fs = require("node:fs");
+    const path = require("node:path");
+    let cursor = path.resolve(process.argv[1]);
+    const suffix = [];
+    while (!fs.existsSync(cursor)) {
+      const parent = path.dirname(cursor);
+      if (parent === cursor) break;
+      suffix.unshift(path.basename(cursor));
+      cursor = parent;
+    }
+    const canonicalParent = fs.realpathSync.native(cursor);
+    process.stdout.write(path.join(canonicalParent, ...suffix));
+  ' "$candidate"
+}
+
+resolve_development_state_root() {
+  local checkout_name checkout_checksum port_window state_base explicit_root user_state_root uses_user_state_root
+
+  if ! command -v node >/dev/null 2>&1; then
+    ui_pkg_die "node not found (install Node.js 24+)"
+  fi
+  checkout_name="$(printf '%s' "$(basename "$ROOT_DIR")" | tr -cs '[:alnum:]_.-' '-')"
+  checkout_checksum="$(printf '%s' "$ROOT_DIR" | cksum | awk '{print $1}')"
+  DEVELOPMENT_OWNER="${checkout_name}-${checkout_checksum}"
+  port_window=$((checkout_checksum % 6000))
+  DEVELOPMENT_PORT_BASE=$((24000 + port_window * 4))
+  LOCAL_UI_BIND="${LOCAL_UI_BIND:-localhost:$DEVELOPMENT_PORT_BASE}"
+  REMOTE_DEBUGGING_PORT="${REMOTE_DEBUGGING_PORT:-$((DEVELOPMENT_PORT_BASE + 1))}"
+  INSPECT_PORT="${INSPECT_PORT:-$((DEVELOPMENT_PORT_BASE + 2))}"
+  explicit_root="${REDEVEN_STATE_ROOT:-}"
+  if [ -n "$explicit_root" ]; then
+    case "$explicit_root" in
+      /*) ;;
+      *) ui_pkg_die "REDEVEN_STATE_ROOT must be an absolute path for a development launch" ;;
+    esac
+    DEVELOPMENT_STATE_ROOT="$(resolve_absolute_path "$explicit_root")"
+  else
+    state_base="${REDEVEN_DEV_STATE_BASE:-${HOME:?HOME is required}/.redeven-dev}"
+    case "$state_base" in
+      /*) ;;
+      *) ui_pkg_die "REDEVEN_DEV_STATE_BASE must be an absolute path" ;;
+    esac
+    DEVELOPMENT_STATE_ROOT="$(resolve_absolute_path "$state_base/$DEVELOPMENT_OWNER")"
+  fi
+
+  user_state_root="$(resolve_absolute_path "${HOME:?HOME is required}/.redeven")"
+  case "$DEVELOPMENT_STATE_ROOT/" in
+    "$user_state_root"/*) uses_user_state_root=1 ;;
+    *) uses_user_state_root=0 ;;
+  esac
+  if [ "$uses_user_state_root" -eq 1 ]; then
+    if ! is_enabled "${REDEVEN_DEV_ALLOW_USER_STATE_ROOT:-0}"; then
+      ui_pkg_die "development launch refuses the user state root; use an isolated REDEVEN_STATE_ROOT, or set REDEVEN_DEV_ALLOW_USER_STATE_ROOT=1 for an explicit high-risk opt-in"
+    fi
+    ui_pkg_log "WARNING: development launch explicitly uses the user state root: $DEVELOPMENT_STATE_ROOT"
+  fi
+
+  export REDEVEN_STATE_ROOT="$DEVELOPMENT_STATE_ROOT"
+  export REDEVEN_DESKTOP_LOCAL_UI_BIND="$LOCAL_UI_BIND"
+  export REDEVEN_DESKTOP_USER_DATA_ROOT="${REDEVEN_DESKTOP_USER_DATA_ROOT:-$DEVELOPMENT_STATE_ROOT/desktop/user-data}"
+  export REDEVEN_DESKTOP_CACHE_ROOT="${REDEVEN_DESKTOP_CACHE_ROOT:-$DEVELOPMENT_STATE_ROOT/desktop/cache}"
+  export REDEVEN_DESKTOP_TEMP_ROOT="${REDEVEN_DESKTOP_TEMP_ROOT:-$DEVELOPMENT_STATE_ROOT/desktop/temp}"
+}
+
+validate_local_ui_bind() {
+  local port
+  case "$LOCAL_UI_BIND" in
+    localhost:*|127.0.0.1:*|'[::1]':*) ;;
+    *) die_usage "REDEVEN_DESKTOP_LOCAL_UI_BIND must use localhost, 127.0.0.1, or [::1]" ;;
+  esac
+  port="${LOCAL_UI_BIND##*:}"
+  validate_debug_port "REDEVEN_DESKTOP_LOCAL_UI_BIND port" "$port"
+  if debug_port_disabled "$port"; then
+    die_usage "REDEVEN_DESKTOP_LOCAL_UI_BIND must use a stable non-zero development port"
+  fi
+  if ! debug_port_disabled "$REMOTE_DEBUGGING_PORT" && [ "$port" = "$REMOTE_DEBUGGING_PORT" ]; then
+    die_usage "Local UI and CDP ports must be different"
+  fi
+  if ! debug_port_disabled "$INSPECT_PORT" && [ "$port" = "$INSPECT_PORT" ]; then
+    die_usage "Local UI and inspector ports must be different"
+  fi
+  if ! debug_port_disabled "$REMOTE_DEBUGGING_PORT" && ! debug_port_disabled "$INSPECT_PORT" \
+    && [ "$REMOTE_DEBUGGING_PORT" = "$INSPECT_PORT" ]; then
+    die_usage "CDP and inspector ports must be different"
   fi
 }
 
@@ -196,19 +294,6 @@ reset_collected_pids() {
   COLLECTED_PIDS=()
 }
 
-collect_pids_by_pattern() {
-  local pattern="$1"
-  local pid
-
-  if ! command -v pgrep >/dev/null 2>&1; then
-    return 0
-  fi
-
-  while IFS= read -r pid; do
-    add_pid "$pid"
-  done < <(pgrep -f "$pattern" 2>/dev/null || true)
-}
-
 process_cwd() {
   local pid="$1"
   if ! command -v lsof >/dev/null 2>&1; then
@@ -217,25 +302,9 @@ process_cwd() {
   lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -n 1
 }
 
-cwd_looks_like_redeven_desktop() {
+cwd_is_current_desktop() {
   local cwd="$1"
-  local checkout_root
-
-  if [ "$cwd" = "$DESKTOP_DIR" ]; then
-    return 0
-  fi
-  case "$cwd" in
-    */desktop)
-      ;;
-    *)
-      return 1
-      ;;
-  esac
-
-  checkout_root="${cwd%/desktop}"
-  [ -e "$checkout_root/.git" ] || return 1
-  [ -f "$cwd/package.json" ] || return 1
-  grep -Eq '"name"[[:space:]]*:[[:space:]]*"@floegence/redeven-desktop"' "$cwd/package.json"
+  [ "$cwd" = "$DESKTOP_DIR" ]
 }
 
 collect_pids_by_pattern_and_desktop_cwd() {
@@ -253,39 +322,73 @@ collect_pids_by_pattern_and_desktop_cwd() {
         ;;
     esac
     cwd="$(process_cwd "$pid" || true)"
-    if [ -n "$cwd" ] && cwd_looks_like_redeven_desktop "$cwd"; then
+    if [ -n "$cwd" ] && cwd_is_current_desktop "$cwd"; then
       add_pid "$pid"
     fi
   done < <(pgrep -f "$pattern" 2>/dev/null || true)
 }
 
-request_macos_desktop_quit() {
-  if [ "$(uname -s)" != "Darwin" ] || ! command -v osascript >/dev/null 2>&1; then
-    return 0
-  fi
-
-  if [ "$DRY_RUN" -eq 1 ]; then
-    ui_pkg_log "Would ask macOS to quit Redeven Desktop if it is running."
-    return 0
-  fi
-
-  osascript -e 'if application id "com.floegence.redeven.desktop" is running then tell application id "com.floegence.redeven.desktop" to quit' >/dev/null 2>&1 || true
-  osascript -e 'if application "Redeven Desktop" is running then tell application "Redeven Desktop" to quit' >/dev/null 2>&1 || true
-  sleep 1
-}
-
 collect_desktop_pids() {
   reset_collected_pids
-  collect_pids_by_pattern 'Redeven Desktop(\.app|$|[[:space:]])'
-  collect_pids_by_pattern 'com\.floegence\.redeven\.desktop'
   collect_pids_by_pattern_and_desktop_cwd 'Electron'
   collect_pids_by_pattern_and_desktop_cwd 'electron([[:space:]]|$)'
   collect_pids_by_pattern_and_desktop_cwd 'npm.*run.*start'
 }
 
+process_command() {
+  ps -p "$1" -o command= 2>/dev/null || true
+}
+
+process_is_current_development_runtime() {
+  local pid="$1" command
+  command="$(process_command "$pid")"
+  [ -n "$command" ] || return 1
+  case "$command" in
+    *"$DESKTOP_DIR/.bundle/"*"redeven run "*) ;;
+    *) return 1 ;;
+  esac
+  case "$command" in
+    *"--state-root $DEVELOPMENT_STATE_ROOT"*|*"--state-root=$DEVELOPMENT_STATE_ROOT"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 collect_runtime_pids() {
+  local pid
   reset_collected_pids
-  collect_pids_by_pattern 'redeven[[:space:]]run[[:space:]]'
+  if ! command -v pgrep >/dev/null 2>&1; then
+    return 0
+  fi
+  while IFS= read -r pid; do
+    if process_is_current_development_runtime "$pid"; then
+      add_pid "$pid"
+    fi
+  done < <(pgrep -f 'redeven[[:space:]]run[[:space:]]' 2>/dev/null || true)
+}
+
+ensure_port_available() {
+  local label="$1" port="$2" allow_current_runtime="$3" pid
+  if debug_port_disabled "$port"; then
+    return 0
+  fi
+  if ! command -v lsof >/dev/null 2>&1; then
+    ui_pkg_die "lsof is required to verify that the $label port is available"
+  fi
+  while IFS= read -r pid; do
+    [ -n "$pid" ] || continue
+    if [ "$allow_current_runtime" -eq 1 ] && process_is_current_development_runtime "$pid"; then
+      ui_pkg_log "$label port $port is owned by this checkout's runtime (pid $pid); Desktop will reuse that owner."
+      continue
+    fi
+    ui_pkg_die "$label port $port is already in use by pid $pid; choose an unused development port"
+  done < <(lsof -nP -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null | sort -u || true)
+}
+
+verify_development_ports() {
+  local local_ui_port="${LOCAL_UI_BIND##*:}"
+  ensure_port_available "Local UI" "$local_ui_port" 1
+  ensure_port_available "CDP" "$REMOTE_DEBUGGING_PORT" 0
+  ensure_port_available "main-process inspector" "$INSPECT_PORT" 0
 }
 
 pid_exists() {
@@ -351,8 +454,7 @@ stop_existing_processes() {
     return 0
   fi
 
-  ui_pkg_log "Stopping any existing Redeven Desktop process before launch..."
-  request_macos_desktop_quit
+  ui_pkg_log "Stopping existing Redeven Desktop processes owned by this checkout before launch..."
   collect_desktop_pids
   terminate_collected_pids "Redeven Desktop"
   if [ "$STOP_RUNTIMES" -eq 1 ]; then
@@ -362,6 +464,24 @@ stop_existing_processes() {
   else
     ui_pkg_log "Leaving existing Redeven runtime processes running."
   fi
+}
+
+log_development_configuration() {
+  ui_pkg_log "Development checkout owner: $DEVELOPMENT_OWNER ($ROOT_DIR)"
+  ui_pkg_log "Development state root: $DEVELOPMENT_STATE_ROOT"
+  ui_pkg_log "Development Local UI: $LOCAL_UI_BIND"
+  if debug_port_disabled "$REMOTE_DEBUGGING_PORT"; then
+    ui_pkg_log "Development CDP port: disabled"
+  else
+    ui_pkg_log "Development CDP port: $REMOTE_DEBUGGING_PORT"
+  fi
+  if debug_port_disabled "$INSPECT_PORT"; then
+    ui_pkg_log "Development inspect port: disabled"
+  else
+    ui_pkg_log "Development inspect port: $INSPECT_PORT"
+  fi
+  ui_pkg_log "Development runtime owner scope: checkout=$ROOT_DIR state-root=$DEVELOPMENT_STATE_ROOT"
+  ui_pkg_log "The isolated profile does not copy providers, secrets, or databases. Configure a Provider in this development profile before using Flower."
 }
 
 ensure_desktop_workspace() {
@@ -431,6 +551,8 @@ start_desktop() {
     fi
     export REDEVEN_DESKTOP_OPEN_DEVTOOLS="$OPEN_DEVTOOLS"
     export REDEVEN_DESKTOP_AUTO_START_RUNTIME="${REDEVEN_DESKTOP_AUTO_START_RUNTIME:-1}"
+    export REDEVEN_STATE_ROOT="$DEVELOPMENT_STATE_ROOT"
+    export REDEVEN_DESKTOP_LOCAL_UI_BIND="$LOCAL_UI_BIND"
     if [ -n "$ssh_runtime_release_tag" ]; then
       export REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG="$ssh_runtime_release_tag"
       export REDEVEN_DESKTOP_BUNDLE_VERSION="${REDEVEN_DESKTOP_BUNDLE_VERSION:-$ssh_runtime_release_tag}"
@@ -506,14 +628,18 @@ parse_args() {
 
 main() {
   parse_args "$@"
+  resolve_development_state_root
   validate_stop_timeout
   validate_debug_port "--remote-debugging-port" "$REMOTE_DEBUGGING_PORT"
   validate_debug_port "--inspect-port" "$INSPECT_PORT"
+  validate_local_ui_bind
   build_electron_debug_args
+  log_development_configuration
   stop_existing_processes
   if [ "$STOP_ONLY" -eq 1 ]; then
     return 0
   fi
+  verify_development_ports
   ensure_desktop_workspace
   start_desktop
 }

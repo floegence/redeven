@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
+	"syscall"
 
 	flruntime "github.com/floegence/floret/v4/runtime"
 	flstorage "github.com/floegence/floret/v4/storage"
@@ -18,6 +20,7 @@ type FloretStoreStartupPhase string
 const (
 	FloretStoreStartupInspecting FloretStoreStartupPhase = "inspecting"
 	FloretStoreStartupVerifying  FloretStoreStartupPhase = "verifying"
+	FloretStoreStartupRecovering FloretStoreStartupPhase = "recovering"
 )
 
 const (
@@ -89,13 +92,45 @@ func classifyFloretStorageOpenError(err error) error {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return floretStoreStartupError(FloretStoreStartupCancelled, true, true, err)
 	}
+	if errors.Is(err, flruntime.ErrAuthorityCorrupt) {
+		return floretStoreStartupError(FloretStoreStartupIntegrityError, false, false, err)
+	}
 	if errors.Is(err, flstoragespi.ErrInvalidArgument) {
 		return floretStoreStartupError(FloretStoreStartupUnsupportedStore, false, false, err)
 	}
 	if errors.Is(err, flstoragespi.ErrConflict) {
 		return floretStoreStartupError(FloretStoreStartupTemporarilyBlocked, true, true, err)
 	}
-	return floretStoreStartupError(FloretStoreStartupIOError, true, true, err)
+	if isTemporaryFloretStorageError(err) {
+		return floretStoreStartupError(FloretStoreStartupTemporarilyBlocked, true, true, err)
+	}
+	if errors.Is(err, os.ErrPermission) || os.IsPermission(err) {
+		return floretStoreStartupError(FloretStoreStartupEnvironmentPermissionError, false, false, err)
+	}
+	return floretStoreStartupError(FloretStoreStartupIOError, false, false, err)
+}
+
+func isTemporaryFloretStorageError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, syscall.EAGAIN) || errors.Is(err, syscall.EWOULDBLOCK) {
+		return true
+	}
+	message := strings.ToLower(err.Error())
+	for _, marker := range []string{
+		"database is locked",
+		"database is busy",
+		"sqlite_busy",
+		"sqlite_locked",
+		"resource temporarily unavailable",
+		"temporarily unavailable",
+	} {
+		if strings.Contains(message, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func floretStoreStartupError(class FloretStoreStartupClass, retryable, safeToRetry bool, cause error) error {

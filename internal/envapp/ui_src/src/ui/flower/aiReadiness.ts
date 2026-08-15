@@ -7,6 +7,7 @@ export type AIReadinessState =
   | 'inspecting'
   | 'migrating'
   | 'verifying'
+  | 'recovering'
   | 'ready'
   | 'degraded'
   | 'blocked';
@@ -35,6 +36,9 @@ export type AIReadinessSnapshot = Readonly<{
   committed: boolean;
   rolled_back: boolean;
   issue_count?: number;
+  trace_id?: string;
+  startup_phase?: string;
+  retry_reason?: string;
 }>;
 
 export type AIReadinessController = Readonly<{
@@ -77,6 +81,7 @@ const readinessStates = new Set<AIReadinessState>([
   'inspecting',
   'migrating',
   'verifying',
+  'recovering',
   'ready',
   'degraded',
   'blocked',
@@ -139,6 +144,14 @@ function stableSnapshot(state: Exclude<AIReadinessState, 'blocked'>): AIReadines
   return Object.freeze({ ...unavailableSnapshot, state });
 }
 
+function optionalDiagnostic(value: unknown, maxLength: number): string | undefined | null {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  if (normalized.length > maxLength || (normalized && !/^[A-Za-z0-9._-]+$/u.test(normalized))) return null;
+  return normalized || undefined;
+}
+
 /** Normalizes the complete, sanitized Redeven readiness wire contract. */
 export function normalizeAIReadinessSnapshot(value: unknown): AIReadinessSnapshot {
   if (!isRecord(value) || !hasBooleanFacts(value)) return contractErrorSnapshot;
@@ -158,6 +171,10 @@ export function normalizeAIReadinessSnapshot(value: unknown): AIReadinessSnapsho
 
   const issueCount = value.issue_count === undefined ? 0 : value.issue_count;
   if (!Number.isSafeInteger(issueCount) || (issueCount as number) < 0) return contractErrorSnapshot;
+  const traceID = optionalDiagnostic(value.trace_id, 128);
+  const startupPhase = optionalDiagnostic(value.startup_phase, 64);
+  const retryReason = optionalDiagnostic(value.retry_reason, 128);
+  if (traceID === null || startupPhase === null || retryReason === null) return contractErrorSnapshot;
 
   if (state === 'degraded') {
     if (reasonCode !== 'host_thread_settings_missing' || issueCount === 0
@@ -172,11 +189,33 @@ export function normalizeAIReadinessSnapshot(value: unknown): AIReadinessSnapsho
     });
   }
 
+  if (state === 'recovering') {
+    if (!reasonCode || !readinessReasonCodes.has(reasonCode as AIReadinessReasonCode)
+      || !value.retryable || !value.safe_to_retry || value.committed || value.rolled_back || issueCount !== 0) {
+      return contractErrorSnapshot;
+    }
+    return Object.freeze({
+      ...unavailableSnapshot,
+      state: 'recovering',
+      reason_code: (reasonCode ?? '') as AIReadinessReasonCode | '',
+      retryable: value.retryable,
+      safe_to_retry: value.safe_to_retry,
+      ...(traceID ? { trace_id: traceID } : {}),
+      ...(startupPhase ? { startup_phase: startupPhase } : {}),
+      ...(retryReason ? { retry_reason: retryReason } : {}),
+    });
+  }
+
   if (state !== 'blocked') {
     if (reasonCode || issueCount !== 0 || value.retryable || value.safe_to_retry || value.committed || value.rolled_back) {
       return contractErrorSnapshot;
     }
-    return stableSnapshot(state as Exclude<AIReadinessState, 'blocked'>);
+    if (state === 'ready') return stableSnapshot('ready');
+    return Object.freeze({
+      ...stableSnapshot(state as Exclude<AIReadinessState, 'blocked'>),
+      ...(traceID ? { trace_id: traceID } : {}),
+      ...(startupPhase ? { startup_phase: startupPhase } : {}),
+    });
   }
 
   if (!readinessReasonCodes.has(reasonCode as AIReadinessReasonCode)) return contractErrorSnapshot;
@@ -190,6 +229,9 @@ export function normalizeAIReadinessSnapshot(value: unknown): AIReadinessSnapsho
     safe_to_retry: value.safe_to_retry,
     committed: value.committed,
     rolled_back: value.rolled_back,
+    ...(traceID ? { trace_id: traceID } : {}),
+    ...(startupPhase ? { startup_phase: startupPhase } : {}),
+    ...(retryReason ? { retry_reason: retryReason } : {}),
   });
 }
 
@@ -220,7 +262,8 @@ function shouldPoll(snapshot: AIReadinessSnapshot): boolean {
   return snapshot.state === 'unavailable'
     || snapshot.state === 'inspecting'
     || snapshot.state === 'migrating'
-    || snapshot.state === 'verifying';
+    || snapshot.state === 'verifying'
+    || snapshot.state === 'recovering';
 }
 
 export function createAIReadinessController(args: CreateAIReadinessControllerArgs = {}): AIReadinessController {

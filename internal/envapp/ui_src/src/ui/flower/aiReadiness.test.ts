@@ -78,6 +78,53 @@ class TestVisibilitySource {
 }
 
 describe('AI readiness model', () => {
+  it('preserves safe diagnostics while startup is inspecting', () => {
+    expect(normalizeAIReadinessSnapshot({
+      state: 'inspecting',
+      reason_code: '',
+      retryable: false,
+      safe_to_retry: false,
+      committed: false,
+      rolled_back: false,
+      trace_id: 'ai-start-3',
+      startup_phase: 'inspecting',
+    })).toEqual({
+      state: 'inspecting',
+      reason_code: '',
+      retryable: false,
+      safe_to_retry: false,
+      committed: false,
+      rolled_back: false,
+      trace_id: 'ai-start-3',
+      startup_phase: 'inspecting',
+    });
+  });
+
+  it('preserves safe recovering diagnostics without exposing raw storage details', () => {
+    expect(normalizeAIReadinessSnapshot({
+      state: 'recovering',
+      reason_code: 'temporarily_blocked',
+      retryable: true,
+      safe_to_retry: true,
+      committed: false,
+      rolled_back: false,
+      trace_id: 'ai-start-2a',
+      startup_phase: 'recovering',
+      retry_reason: 'temporary_store_open',
+      raw_path: '/private/agent.sqlite',
+    })).toEqual({
+      state: 'recovering',
+      reason_code: 'temporarily_blocked',
+      retryable: true,
+      safe_to_retry: true,
+      committed: false,
+      rolled_back: false,
+      trace_id: 'ai-start-2a',
+      startup_phase: 'recovering',
+      retry_reason: 'temporary_store_open',
+    });
+  });
+
   it('accepts only a counted host-settings degraded state', () => {
     expect(normalizeAIReadinessSnapshot({
       state: 'degraded', reason_code: 'host_thread_settings_missing', issue_count: 2,

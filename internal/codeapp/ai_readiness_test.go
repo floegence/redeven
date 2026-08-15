@@ -92,6 +92,7 @@ func TestAIReadinessControllerSerializesAttemptsAndSanitizesFailures(t *testing.
 		}
 		return nil, errors.New("secret path and raw startup detail")
 	}, nil)
+	controller.maxStartupRetries = 0
 	controller.Start()
 	waitForAIReadinessState(t, controller, appserver.AIReadinessInspecting)
 	if err := controller.RetryAIReadiness(); !errors.Is(err, appserver.ErrAIRetryInProgress) {
@@ -113,6 +114,104 @@ func TestAIReadinessControllerSerializesAttemptsAndSanitizesFailures(t *testing.
 		t.Fatalf("generic failure snapshot = %#v", snapshot)
 	}
 	_ = controller.Close()
+}
+
+func TestAIReadinessControllerAutomaticallyRecoversTransientStoreFailure(t *testing.T) {
+	var calls atomic.Int32
+	allowFirstAttempt := make(chan struct{})
+	controller := newAIReadinessController(context.Background(), ai.Options{}, func(context.Context, ai.Options) (*ai.Service, error) {
+		call := calls.Add(1)
+		if call == 1 {
+			<-allowFirstAttempt
+		}
+		if call < 3 {
+			return nil, &ai.FloretStoreStartupError{
+				Class: ai.FloretStoreStartupTemporarilyBlocked, Retryable: true, SafeToRetry: true,
+			}
+		}
+		return new(ai.Service), nil
+	}, nil)
+	controller.startupRetryDelay = func(int) time.Duration { return 20 * time.Millisecond }
+	controller.maxStartupRetries = 3
+	controller.Start()
+	waitForAIReadinessState(t, controller, appserver.AIReadinessInspecting)
+	inspecting := controller.AIReadiness()
+	if inspecting.TraceID == "" || inspecting.StartupPhase != string(ai.FloretStoreStartupInspecting) {
+		t.Fatalf("inspecting diagnostics = %#v, want trace and startup phase", inspecting)
+	}
+	close(allowFirstAttempt)
+	waitForAIReadinessState(t, controller, appserver.AIReadinessRecovering)
+	waitForAIReadinessState(t, controller, appserver.AIReadinessReady)
+	if got := calls.Load(); got != 3 {
+		t.Fatalf("startup attempts = %d, want 3", got)
+	}
+	if err := controller.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+}
+
+func TestAIReadinessControllerBoundsAndCancelsTransientRecovery(t *testing.T) {
+	t.Run("authority corruption is never retried", func(t *testing.T) {
+		var calls atomic.Int32
+		controller := newAIReadinessController(context.Background(), ai.Options{}, func(context.Context, ai.Options) (*ai.Service, error) {
+			calls.Add(1)
+			return nil, &ai.FloretStoreStartupError{
+				Class: ai.FloretStoreStartupIntegrityError, Retryable: false, SafeToRetry: false,
+			}
+		}, nil)
+		controller.startupRetryDelay = func(int) time.Duration { return 0 }
+		controller.Start()
+		waitForAIReadinessState(t, controller, appserver.AIReadinessBlocked)
+		if got := calls.Load(); got != 1 {
+			t.Fatalf("authority corruption startup attempts = %d, want 1", got)
+		}
+		snapshot := controller.AIReadiness()
+		if snapshot.ReasonCode != string(ai.FloretStoreStartupIntegrityError) || snapshot.Retryable || snapshot.SafeToRetry {
+			t.Fatalf("authority corruption snapshot = %#v", snapshot)
+		}
+		_ = controller.Close()
+	})
+
+	t.Run("retry window", func(t *testing.T) {
+		var calls atomic.Int32
+		controller := newAIReadinessController(context.Background(), ai.Options{}, func(context.Context, ai.Options) (*ai.Service, error) {
+			calls.Add(1)
+			return nil, &ai.FloretStoreStartupError{
+				Class: ai.FloretStoreStartupTemporarilyBlocked, Retryable: true, SafeToRetry: true,
+			}
+		}, nil)
+		controller.startupRetryDelay = func(int) time.Duration { return 0 }
+		controller.maxStartupRetries = 2
+		controller.Start()
+		waitForAIReadinessState(t, controller, appserver.AIReadinessBlocked)
+		if got := calls.Load(); got != 3 {
+			t.Fatalf("startup attempts = %d, want initial plus two retries", got)
+		}
+		_ = controller.Close()
+	})
+
+	t.Run("parent cancellation", func(t *testing.T) {
+		parent, cancel := context.WithCancel(context.Background())
+		var calls atomic.Int32
+		controller := newAIReadinessController(parent, ai.Options{}, func(context.Context, ai.Options) (*ai.Service, error) {
+			calls.Add(1)
+			return nil, &ai.FloretStoreStartupError{
+				Class: ai.FloretStoreStartupTemporarilyBlocked, Retryable: true, SafeToRetry: true,
+			}
+		}, nil)
+		controller.startupRetryDelay = func(int) time.Duration { return time.Hour }
+		controller.Start()
+		waitForAIReadinessState(t, controller, appserver.AIReadinessRecovering)
+		cancel()
+		select {
+		case <-controller.closeDone:
+		case <-time.After(time.Second):
+			t.Fatal("controller did not cancel recovery")
+		}
+		if got := calls.Load(); got != 1 {
+			t.Fatalf("startup attempts after cancellation = %d, want 1", got)
+		}
+	})
 }
 
 func TestAIReadinessControllerClosesLateStartupResult(t *testing.T) {

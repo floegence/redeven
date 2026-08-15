@@ -245,6 +245,25 @@ describe('desktopLaunch', () => {
     }));
   });
 
+  it('uses the development Local UI bind override without changing saved production settings', () => {
+    const environment = testLocalEnvironment({
+      access: testLocalAccess({
+        local_ui_bind: 'localhost:23998',
+      }),
+    });
+
+    const plan = buildDesktopRuntimeLaunchPlan(environment, {
+      HOME: '/Users/tester',
+      REDEVEN_STATE_ROOT: '/tmp/redeven-dev-checkout',
+      REDEVEN_DESKTOP_LOCAL_UI_BIND: 'localhost:24147',
+    });
+
+    expect(plan.args).toContain('localhost:24147');
+    expect(plan.args).not.toContain('localhost:23998');
+    expect(plan.state_layout.stateRoot).toBe('/tmp/redeven-dev-checkout');
+    expect(environment.local_hosting?.access.local_ui_bind).toBe('localhost:23998');
+  });
+
   it('omits a stale configured-but-empty loopback password from the runtime envelope', () => {
     const environment = testLocalEnvironment({
       access: testLocalAccess({

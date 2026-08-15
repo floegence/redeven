@@ -7,6 +7,7 @@ import (
 
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/lockfile"
+	"github.com/floegence/redeven/internal/runtimeservice"
 )
 
 func TestWriteAndReadAgentLockMetadata(t *testing.T) {
@@ -50,6 +51,9 @@ func TestWriteAndReadAgentLockMetadata(t *testing.T) {
 	}
 	if got.InstanceID != "rt_test" {
 		t.Fatalf("InstanceID = %q", got.InstanceID)
+	}
+	if got.PID != os.Getpid() || got.StartedAtUnixMS <= 0 || got.ProtocolVersion != runtimeservice.ProtocolVersion {
+		t.Fatalf("lock owner identity = %#v", got)
 	}
 	if got.DesktopOwnerID != "desktop-owner-test" {
 		t.Fatalf("DesktopOwnerID = %q", got.DesktopOwnerID)

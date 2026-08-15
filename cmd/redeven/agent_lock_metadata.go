@@ -9,6 +9,7 @@ import (
 
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/lockfile"
+	"github.com/floegence/redeven/internal/runtimeservice"
 )
 
 type agentLockMetadata struct {
@@ -16,6 +17,7 @@ type agentLockMetadata struct {
 	Mode                     string `json:"mode,omitempty"`
 	InstanceID               string `json:"instance_id,omitempty"`
 	StartedAtUnixMS          int64  `json:"started_at_unix_ms,omitempty"`
+	ProtocolVersion          string `json:"protocol_version,omitempty"`
 	RuntimeVersion           string `json:"runtime_version,omitempty"`
 	RuntimeCommit            string `json:"runtime_commit,omitempty"`
 	BinaryPath               string `json:"binary_path,omitempty"`
@@ -39,6 +41,7 @@ func newAgentLockMetadata(mode string, instanceID string, desktopManaged bool, d
 		Mode:                     strings.TrimSpace(mode),
 		InstanceID:               strings.TrimSpace(instanceID),
 		StartedAtUnixMS:          timeNowUnixMS(),
+		ProtocolVersion:          runtimeservice.ProtocolVersion,
 		RuntimeVersion:           Version,
 		RuntimeCommit:            Commit,
 		BinaryPath:               binaryPath,
@@ -80,6 +83,7 @@ func readAgentLockMetadata(path string) (*agentLockMetadata, error) {
 	metadata.Mode = strings.TrimSpace(metadata.Mode)
 	metadata.InstanceID = strings.TrimSpace(metadata.InstanceID)
 	metadata.RuntimeVersion = strings.TrimSpace(metadata.RuntimeVersion)
+	metadata.ProtocolVersion = strings.TrimSpace(metadata.ProtocolVersion)
 	metadata.RuntimeCommit = strings.TrimSpace(metadata.RuntimeCommit)
 	metadata.BinaryPath = strings.TrimSpace(metadata.BinaryPath)
 	metadata.DesktopOwnerID = strings.TrimSpace(metadata.DesktopOwnerID)

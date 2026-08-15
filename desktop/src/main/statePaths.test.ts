@@ -36,6 +36,16 @@ describe('statePaths', () => {
     expect(() => defaultLocalEnvironmentStateLayout({}, () => '')).toThrow('user home directory is unavailable');
   });
 
+  it('gives an explicit development state root priority over the user profile fallback', () => {
+    expect(defaultLocalEnvironmentStateLayout({
+      HOME: '/Users/tester',
+      REDEVEN_STATE_ROOT: '/tmp/redeven-dev-checkout',
+    }, () => '/ignored')).toEqual(expect.objectContaining({
+      stateRoot: '/tmp/redeven-dev-checkout',
+      stateDir: '/tmp/redeven-dev-checkout/local-environment',
+    }));
+  });
+
   it('resolves an explicit task-owned Desktop temp root without falling back to the system temp directory', () => {
     expect(resolveConfiguredDesktopTempRoot({
       REDEVEN_DESKTOP_TEMP_ROOT: '/tmp/redeven-plugin-e2e/runtime-data',

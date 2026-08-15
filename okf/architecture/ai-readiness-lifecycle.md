@@ -10,7 +10,7 @@ timestamp: 2026-07-25T00:00:00Z
 - Authority: Floret remains the only authority for durable Agent lifecycle and Store facts; Redeven owns only current-process AI availability and product presentation.
 - Outcome: Code App, Settings, Notes, Workbench, terminal, files, and Codex start and remain usable when AI startup is inspecting, migrating, verifying, or blocked.
 - Invariants: one controller owns AI service construction, retry serialization, generation publication, request leases, draining, and close; each AI request uses one generation for its complete lifetime.
-- Failure boundary: a blocked generation returns one typed unavailable envelope, never publishes partial runtime authority, never repairs Store data, and never turns readiness into durable Agent state.
+- Failure boundary: a blocked generation returns one typed unavailable envelope, never publishes partial runtime authority, never repairs Store data, and never turns readiness into durable Agent state. Short-lived storage contention remains a bounded recovering state instead of being presented as unavailable.
 
 # Contract
 
@@ -18,7 +18,7 @@ timestamp: 2026-07-25T00:00:00Z
 
 The Code App composition layer owns the only AI readiness controller. Its
 closed state set is `unavailable`, `inspecting`, `migrating`, `verifying`,
-`ready`, and `blocked`. Store inspection, automatic domain migration, and
+`recovering`, `ready`, and `blocked`. Store inspection, automatic domain migration, and
 verification occur only inside the single published Floret `runtime.Open` call
 that creates the actual Host retained by the new service generation. Redeven
 reports `inspecting` before that call and `verifying` after it returns while
@@ -115,9 +115,14 @@ recovery generation.
 
 Transient inspection waits briefly before presenting progress, does not invent
 a percentage, and shows the next bounded check without announcing a countdown
-every second. Automatic retries are limited to typed safe temporary or I/O
-failures, require current product admin authority, slow down while the document
-is hidden, and reset their allowance only after that blocked episode settles.
+every second. A typed busy or temporary I/O failure enters `recovering`; the
+readiness controller retries with bounded exponential backoff and jitter, honors
+cancellation, and publishes `blocked` only after the retry window is exhausted.
+The existing process-level `agent.lock` remains the single state-root owner
+coordination boundary, so a second runtime attaches or reports an owner conflict
+instead of opening an empty Store. Client-side automatic retries remain limited
+to typed safe failures, require current product admin authority, slow down while
+the document is hidden, and reset their allowance only after that blocked episode settles.
 Manual retry is single-flight and is offered only when the current user and the
 mapped reason policy allow a new generation. Update and environment-access actions route
 to Redeven-owned Settings. No force, reset, repair, ignore, or backend mutation
@@ -125,8 +130,10 @@ action exists. Returning to `ready` reveals the same Flower DOM and restores the
 previous valid target without a success notification.
 
 Displayed diagnostics and clipboard output iterate the same projection of the
-six sanitized readiness fields. The projection maps reason codes to localized
-copy and never includes a raw reason, path, schema or SQL detail, credential,
+sanitized readiness fields. Readiness responses may carry a bounded trace id,
+startup phase, and retry reason for structured support diagnostics. The
+projection maps reason codes to localized copy and never includes a raw reason,
+path, schema or SQL detail, credential,
 message, provider state, or tool output. Unknown states, reasons, and
 contradictory retry, commit, or rollback facts become one non-retryable contract
 failure. Settings groups the Floret backend separately from Redeven product stores
@@ -146,7 +153,12 @@ callers receive only scoped leases.
 
 Unavailable presentation cannot infer corruption, compatibility, or retry
 safety from error strings. It must use the typed startup projection and fail
-closed for unknown outcomes. Readiness history is not recovery authority.
+closed for unknown outcomes. Only narrow SQLite busy/locked and temporary
+resource signals may be mapped to safe automatic recovery; permission, schema,
+integrity, and unknown I/O failures remain non-retryable and preserve the
+upstream-owned file unchanged. Floret `runtime.ErrAuthorityCorrupt` is an
+integrity failure, never a busy condition, even when SQLite's physical
+integrity check succeeds. Readiness history is not recovery authority.
 
 # Evidence
 

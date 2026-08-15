@@ -11,6 +11,7 @@ import { canonicalLocalUIBind, isLoopbackOnlyBind, parseLocalUIBind } from './lo
 
 export const DESKTOP_OWNER_ID_ENV_NAME = 'REDEVEN_DESKTOP_OWNER_ID';
 export const DESKTOP_AUTO_START_RUNTIME_ENV_NAME = 'REDEVEN_DESKTOP_AUTO_START_RUNTIME';
+export const DESKTOP_LOCAL_UI_BIND_ENV_NAME = 'REDEVEN_DESKTOP_LOCAL_UI_BIND';
 export { RUNTIME_SECRET_ENV_NAMES } from './desktopProcessEnvironment';
 
 const STARTUP_SECRETS_MAX_BYTES = 64 * 1024;
@@ -145,11 +146,12 @@ function buildDesktopRuntimePlan(
   }>,
 ): DesktopRuntimeLaunchPlan {
   const stateLayout = resolveDesktopLocalEnvironmentStateLayout(environment, baseEnv);
+  const developmentLocalUIBind = String(baseEnv[DESKTOP_LOCAL_UI_BIND_ENV_NAME] ?? '').trim();
   const env = buildDesktopRuntimeEnvironment(environment, baseEnv, {
     desktopOwnerID: options?.desktopOwnerID,
   });
   const args = buildDesktopRuntimeArgs(environment, {
-    localUIBind: options?.localUIBind,
+    localUIBind: options?.localUIBind ?? (developmentLocalUIBind || undefined),
     bootstrap: options?.bootstrap,
     stateRoot: stateLayout.stateRoot,
   });

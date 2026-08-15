@@ -97,6 +97,8 @@ function stateCopy(snapshot: AIReadinessSnapshot): Readonly<{
         return { title: 'aiReadiness.states.migratingTitle', description: 'aiReadiness.states.migratingDescription', tone: 'neutral' };
       case 'verifying':
         return { title: 'aiReadiness.states.verifyingTitle', description: 'aiReadiness.states.verifyingDescription', tone: 'neutral' };
+      case 'recovering':
+        return { title: 'aiReadiness.states.busyTitle', description: 'aiReadiness.states.busyDescription', tone: 'neutral' };
       case 'ready':
         return { title: 'common.status.ready', description: 'aiReadiness.data.unopened', tone: 'neutral' };
       case 'unavailable':
