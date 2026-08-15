@@ -606,7 +606,7 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 
 	const (
 		floretModule  = "github.com/floegence/floret/v4"
-		floretVersion = "v4.0.0"
+		floretVersion = "v4.0.1"
 	)
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")
@@ -694,7 +694,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"without cursor replay or polling",
 		},
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
-			"github.com/floegence/floret/v4 v4.0.0",
+			"github.com/floegence/floret/v4 v4.0.1",
 			"flowersec-v2-4-1-floe-webapp-v0-40-20",
 			"Floret ThreadService is the only lifecycle boundary",
 			"one workspace SSE",
