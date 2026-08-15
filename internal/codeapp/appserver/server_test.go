@@ -248,6 +248,17 @@ func (c *failingFlowerReadStateCleaner) RetireFlowerThreadReadState(context.Cont
 	return c.err
 }
 
+type notifyingFlowerReadStateCleaner struct {
+	store  *threadreadstate.Store
+	result chan error
+}
+
+func (c *notifyingFlowerReadStateCleaner) RetireFlowerThreadReadState(ctx context.Context, endpointID string, threadID string) error {
+	err := c.store.RetireFlowerThreadReadState(ctx, endpointID, threadID)
+	c.result <- err
+	return err
+}
+
 func performServerRequest(srv *Server, method string, path string, origin string, body string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, path, bytes.NewBufferString(body))
 	if origin != "" {
@@ -3162,13 +3173,14 @@ func TestServer_AIThreadDeleteRemovesReadStateForAllUsers(t *testing.T) {
 
 	cfgPath := writeTestConfig(t)
 	store := openTestThreadReadStateStore(t)
+	cleaner := &notifyingFlowerReadStateCleaner{store: store, result: make(chan error, 1)}
 	stateDir := t.TempDir()
 	aiSvc, err := ai.NewService(ai.Options{
 		StateDir:               stateDir,
 		AgentHomeDir:           t.TempDir(),
 		Shell:                  "/bin/sh",
 		Config:                 appserverTestAIConfig(),
-		FlowerReadStateCleaner: store,
+		FlowerReadStateCleaner: cleaner,
 	})
 	if err != nil {
 		t.Fatalf("ai.NewService: %v", err)
@@ -3261,6 +3273,14 @@ func TestServer_AIThreadDeleteRemovesReadStateForAllUsers(t *testing.T) {
 	auditEntries, err := auditStore.List(1)
 	if err != nil || len(auditEntries) != 1 || auditEntries[0].Action != "ai_thread_delete" || auditEntries[0].Status != "success" {
 		t.Fatalf("delete audit=%+v err=%v", auditEntries, err)
+	}
+	select {
+	case err := <-cleaner.result:
+		if err != nil {
+			t.Fatalf("retire Flower read state: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for asynchronous Flower read-state retirement")
 	}
 
 	_, err = store.EnsureFlower(context.Background(), creatorMeta.EndpointID, creatorMeta.UserPublicID, map[string]threadreadstate.FlowerSnapshot{
