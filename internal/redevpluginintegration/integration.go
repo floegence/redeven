@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -14,27 +15,29 @@ import (
 	"github.com/floegence/redeven/internal/diagnostics"
 	"github.com/floegence/redeven/internal/pluginmarket"
 	"github.com/floegence/redeven/internal/session"
-	"github.com/floegence/redevplugin/pkg/connectivity"
-	"github.com/floegence/redevplugin/pkg/externalsource"
-	"github.com/floegence/redevplugin/pkg/host"
-	"github.com/floegence/redevplugin/pkg/httpadapter"
-	rpobservability "github.com/floegence/redevplugin/pkg/observability"
-	"github.com/floegence/redevplugin/pkg/pluginpkg"
-	"github.com/floegence/redevplugin/pkg/secrets"
+	"github.com/floegence/redevplugin/v2/pkg/connectivity"
+	"github.com/floegence/redevplugin/v2/pkg/externalsource"
+	"github.com/floegence/redevplugin/v2/pkg/host"
+	"github.com/floegence/redevplugin/v2/pkg/httpadapter"
+	rpobservability "github.com/floegence/redevplugin/v2/pkg/observability"
+	"github.com/floegence/redevplugin/v2/pkg/pluginpkg"
+	"github.com/floegence/redevplugin/v2/pkg/secrets"
 )
 
 type Options struct {
-	StateDir           string
-	PermissionPolicy   *config.PermissionPolicy
-	RuntimePath        string
-	ResolveSessionMeta func(channelID string) (*session.Meta, bool)
-	Audit              *auditlog.Store
-	Diagnostics        *diagnostics.Store
-	Containers         *containers.Adapter
-	RuntimeAuthority   *RuntimeProcessAuthority
-	PluginMarket       *pluginmarket.Service
-	releaseTrustNow    func() time.Time
-	newReleaseModule   func(string) (*host.ReleaseModule, host.PluginReleaseRef, func() error, error)
+	StateDir             string
+	AgentHomeDir         string
+	ResolveWorkspacePath workspacePathResolver
+	PermissionPolicy     *config.PermissionPolicy
+	RuntimePath          string
+	ResolveSessionMeta   func(channelID string) (*session.Meta, bool)
+	Audit                *auditlog.Store
+	Diagnostics          *diagnostics.Store
+	Containers           *containers.Adapter
+	RuntimeAuthority     *RuntimeProcessAuthority
+	PluginMarket         *pluginmarket.Service
+	releaseTrustNow      func() time.Time
+	newReleaseModule     func(string) (*host.ReleaseModule, host.PluginReleaseRef, func() error, error)
 }
 
 type Integration struct {
@@ -62,6 +65,12 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 	}
 	if opts.ResolveSessionMeta == nil {
 		return nil, errors.New("missing ResolveSessionMeta")
+	}
+	if strings.TrimSpace(opts.AgentHomeDir) == "" {
+		opts.AgentHomeDir, err = os.UserHomeDir()
+		if err != nil {
+			return nil, err
+		}
 	}
 	if opts.PermissionPolicy == nil {
 		return nil, errors.New("missing permission policy")
@@ -161,6 +170,12 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		closeOnError()
 		return nil, err
 	}
+	ioModule, err := newIOModule(opts.AgentHomeDir, sessions.resolver.cache, opts.ResolveWorkspacePath)
+	if err != nil {
+		_ = assetStore.Close()
+		closeOnError()
+		return nil, err
+	}
 	capabilities, capabilityAdapter, err := newContainersCapabilityRegistry(opts.Containers, observability)
 	if err != nil {
 		_ = assetStore.Close()
@@ -193,6 +208,7 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		},
 		Release: releaseModule,
 		Runtime: runtimeModule,
+		IO:      ioModule,
 		Connectivity: &host.ConnectivityModule{
 			Broker:          connectivityBroker,
 			NetworkExecutor: networkExecutor,

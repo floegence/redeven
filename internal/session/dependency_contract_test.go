@@ -15,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	redevplugincontracts "github.com/floegence/redevplugin/pkg/contracts"
+	redevplugincontracts "github.com/floegence/redevplugin/v2/pkg/contracts"
 	"golang.org/x/mod/modfile"
 	"gopkg.in/yaml.v3"
 )

@@ -48,11 +48,11 @@ importers:
         specifier: 2.5.2
         version: 2.5.2
       '@floegence/redevplugin-contracts':
-        specifier: 1.1.4
-        version: 1.1.4
+        specifier: 2.0.2
+        version: 2.0.2
       '@floegence/redevplugin-ui':
-        specifier: 1.1.4
-        version: 1.1.4
+        specifier: 2.0.2
+        version: 2.0.2
       '@fontsource/iosevka':
         specifier: ^5.2.5
         version: 5.2.5
@@ -421,11 +421,11 @@ packages:
     resolution: {integrity: sha512-ZKK/pndLfPdzhNM4SUFfRaa8vl5tmz5V56rFC5puVsKYdACotXvbDp8YP7zUBJqjlZ64RMWQJzClEqwFBYlQoQ==}
     engines: {node: '>=20.19.0'}
 
-  '@floegence/redevplugin-contracts@1.1.4':
-    resolution: {integrity: sha512-61e9uSW6/Dif5/Q3Fb2NTUs6gUw5JuJwfgn3N13ZA2HssUhRUfaLPHIqI3WkKpfcDCVEJxS0jR+TnOJOfqk6cQ==}
+  '@floegence/redevplugin-contracts@2.0.2':
+    resolution: {integrity: sha512-T7/Ig53wzLDzD4NflYLCFPZvAvEclk4wjXTe3JUAgLara6Wze0WVy8RSUn44NhgXIfQ4Uw5rtccKBPaOWJ2SuA==}
 
-  '@floegence/redevplugin-ui@1.1.4':
-    resolution: {integrity: sha512-X5PRzbh8vyBPR6+zwkzBxnDNiA/14C9tUmfnrmWCppGotdCg6CB4+5VqJNQtMtcqX+w9L0EKFVT3VsQU1ih7LA==}
+  '@floegence/redevplugin-ui@2.0.2':
+    resolution: {integrity: sha512-chGp1XWJqHy9oPirITo6gt4CHcx2VkffnGtDz+qKCUcWICMiPLohttA3wiUxHaLb5CRVJKhX2XlzLp5YnynRRA==}
 
   '@fontsource/iosevka@5.2.5':
     resolution: {integrity: sha512-Zv/UHJodDug1LcnWv2u2+GPp3oWP3U6Xp16cJOsqqZQNsCu8sA/ttT331N0NypxBZ+7c8szlSRlYDcy9liZ8pw==}
@@ -2924,11 +2924,11 @@ snapshots:
       '@floegence/flowersec-node-native-linux-x64-gnu': 2.5.2
     optional: true
 
-  '@floegence/redevplugin-contracts@1.1.4': {}
+  '@floegence/redevplugin-contracts@2.0.2': {}
 
-  '@floegence/redevplugin-ui@1.1.4':
+  '@floegence/redevplugin-ui@2.0.2':
     dependencies:
-      '@floegence/redevplugin-contracts': 1.1.4
+      '@floegence/redevplugin-contracts': 2.0.2
 
   '@fontsource/iosevka@5.2.5': {}
 

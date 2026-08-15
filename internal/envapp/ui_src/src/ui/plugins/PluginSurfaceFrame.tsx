@@ -207,12 +207,6 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
       class="flex h-full min-h-0 flex-col bg-background text-foreground"
     >
       <div class="relative min-h-0 flex-1 bg-muted/20">
-        <Show when={loadState() === 'opening'}>
-          <div role="status" aria-live="polite" class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background px-6 text-center text-sm text-muted-foreground animate-in fade-in duration-150 motion-reduce:animate-none">
-            <Loader2 class="h-5 w-5 animate-spin motion-reduce:animate-none" />
-            <span>{i18n.t('uiCopy.plugin.openingSurface')}</span>
-          </div>
-        </Show>
         <Show when={loadState() === 'closing'}>
           <div role="status" aria-live="polite" class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background px-6 text-center text-sm text-muted-foreground animate-in fade-in duration-150 motion-reduce:animate-none">
             <Loader2 class="h-5 w-5 animate-spin motion-reduce:animate-none" />
@@ -248,7 +242,7 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
           data-plugin-surface-stage
           class={cn(
             'h-full min-h-0 w-full bg-background transition-opacity duration-200 ease-out [&>iframe]:block [&>iframe]:h-full [&>iframe]:w-full [&>iframe]:border-0 motion-reduce:transition-none',
-            loadState() === 'ready' ? 'opacity-100' : 'opacity-0',
+            loadState() === 'error' ? 'opacity-0' : 'opacity-100',
           )}
         />
       </div>

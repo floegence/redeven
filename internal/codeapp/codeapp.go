@@ -313,7 +313,15 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	}
 
 	pluginIntegration, err := redevpluginintegration.New(ctx, redevpluginintegration.Options{
-		StateDir:           stateAbs,
+		StateDir:     stateAbs,
+		AgentHomeDir: agentHomeDir,
+		ResolveWorkspacePath: func(ctx context.Context, codeSpaceID string) (string, bool, error) {
+			space, err := reg.GetSpace(ctx, codeSpaceID)
+			if err != nil || space == nil {
+				return "", false, err
+			}
+			return space.WorkspacePath, true, nil
+		},
 		PermissionPolicy:   opts.PermissionPolicy,
 		RuntimePath:        strings.TrimSpace(opts.ReDevPluginRuntimePath),
 		ResolveSessionMeta: resolvePluginPlatformSessionMeta(opts),

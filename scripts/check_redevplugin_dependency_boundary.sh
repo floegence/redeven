@@ -78,7 +78,7 @@ check_go_module_boundary() {
   fi
 
   if rg -q --pcre2 '"github\.com/floegence/redevplugin(/[^"]*)?"' --glob '*.go' .; then
-    if ! rg -q --pcre2 '^\s*github\.com/floegence/redevplugin\s+v[0-9]+\.[0-9]+\.[0-9]+' go.mod; then
+    if ! rg -q --pcre2 '^\s*github\.com/floegence/redevplugin(?:/v[2-9][0-9]*)?\s+v[0-9]+\.[0-9]+\.[0-9]+' go.mod; then
       fail "Go source imports ReDevPlugin but go.mod does not require a published semver module."
     fi
   fi

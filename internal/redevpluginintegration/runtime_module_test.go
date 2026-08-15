@@ -7,14 +7,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/floegence/redevplugin/pkg/contracts"
-	"github.com/floegence/redevplugin/pkg/version"
+	"github.com/floegence/redevplugin/v2/pkg/contracts"
+	"github.com/floegence/redevplugin/v2/pkg/version"
 )
 
 func TestOfficialRuntimeVersionMatchesReleasedPlatform(t *testing.T) {
 	want := contracts.PackageSet().PlatformVersion
-	if want != "1.1.4" {
-		t.Fatalf("released package-set version = %q, want 1.1.4", want)
+	if want != "2.0.2" {
+		t.Fatalf("released package-set version = %q, want 2.0.2", want)
 	}
 	if officialRuntimeVersion != want {
 		t.Fatalf("official runtime version = %q, want package-set version %q", officialRuntimeVersion, want)

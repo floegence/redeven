@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/floegence/redevplugin/pkg/ownerscope"
+	"github.com/floegence/redevplugin/v2/pkg/ownerscope"
 )
 
 func TestPrepareOwnerScopeGenerationProjectsEligibleCopiedRootWithoutMutation(t *testing.T) {

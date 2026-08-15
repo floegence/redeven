@@ -11,9 +11,9 @@ import (
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/sessionhop"
-	"github.com/floegence/redevplugin/pkg/host"
-	"github.com/floegence/redevplugin/pkg/manifest"
-	"github.com/floegence/redevplugin/pkg/sessionctx"
+	"github.com/floegence/redevplugin/v2/pkg/host"
+	"github.com/floegence/redevplugin/v2/pkg/manifest"
+	"github.com/floegence/redevplugin/v2/pkg/sessionctx"
 )
 
 type sessionPermissions struct {
@@ -121,6 +121,7 @@ func (a *sessionAdapter) Authorize(ctx context.Context, req host.AuthorizationRe
 type resolvedSession struct {
 	context     sessionctx.Context
 	permissions sessionPermissions
+	codeSpaceID string
 }
 
 type sessionPermissionCache struct {
@@ -242,13 +243,18 @@ func (r *sessionResolver) resolvedSessionFromMeta(expectedChannelID string, meta
 	userID := strings.TrimSpace(meta.UserPublicID)
 	cap := r.permissionPolicy.ResolveCap(userID, meta.FloeApp)
 	return resolvedSession{
-		context: sessionContext,
+		context: func() sessionctx.Context {
+			sessionContext.CanRead = meta.CanRead && cap.Read
+			sessionContext.CanWrite = meta.CanWrite && cap.Write
+			return sessionContext
+		}(),
 		permissions: sessionPermissions{
 			read:    meta.CanRead && cap.Read,
 			write:   meta.CanWrite && cap.Write,
 			execute: meta.CanExecute && cap.Execute,
 			admin:   meta.CanAdmin,
 		},
+		codeSpaceID: strings.TrimSpace(meta.CodeSpaceID),
 	}, nil
 }
 

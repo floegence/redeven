@@ -74,7 +74,7 @@ func TestFileSystemAdapterDoesNotInventEnvUIWorkspace(t *testing.T) {
 		Plugin:  host.PluginRef{PluginID: "com.example.io", PluginInstanceID: "plugini_io"},
 		MountID: "workspace",
 	})
-	if !errors.Is(err, errMountUnavailable) {
+	if !errors.Is(err, host.ErrMountUnavailable) {
 		t.Fatalf("ResolveMount(workspace) error = %v, want MOUNT_UNAVAILABLE", err)
 	}
 	if lookupCalled {
