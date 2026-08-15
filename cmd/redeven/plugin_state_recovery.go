@@ -12,7 +12,7 @@ import (
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/lockfile"
 	"github.com/floegence/redeven/internal/redevpluginintegration"
-	"github.com/floegence/redevplugin/pkg/ownerscope"
+	"github.com/floegence/redevplugin/v2/pkg/ownerscope"
 )
 
 const pluginStateRecoverySchemaVersion = "redeven.plugin_state_recovery.v1"

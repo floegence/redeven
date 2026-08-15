@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/floegence/redeven/internal/capabilities/containers"
-	"github.com/floegence/redevplugin/pkg/capability"
-	"github.com/floegence/redevplugin/pkg/mutation"
+	"github.com/floegence/redevplugin/v2/pkg/capability"
+	"github.com/floegence/redevplugin/v2/pkg/mutation"
 )
 
 type imageArguments struct {

@@ -42,6 +42,8 @@ github.com/aws/aws-sdk-go-v2/service/sts v1.30.3 h1:ZsDKRLXGWHk8WdtyYMoGNO7bTudr
 github.com/aws/aws-sdk-go-v2/service/sts v1.30.3/go.mod h1:zwySh8fpFyXp9yOr/KVzxOl8SRqgf/IDw5aUt9UKFcQ=
 github.com/aws/smithy-go v1.20.3 h1:ryHwveWzPV5BIof6fyDvor6V3iUL7nTfiTKXHiW05nE=
 github.com/aws/smithy-go v1.20.3/go.mod h1:krry+ya/rV9RDcV/Q16kpu6ypI4K2czasz0NC3qS14E=
+github.com/coder/websocket v1.8.15 h1:6B2JPeOGlpff2Uz6vOEH1Vzpi0iUz20A+lPVhPHtNUA=
+github.com/coder/websocket v1.8.15/go.mod h1:NX3SzP+inril6yawo5CQXx8+fk145lPDC6pumgx0mVg=
 github.com/creack/pty v1.1.24 h1:bJrF4RRfyJnbTJqzRLHzcGaZK1NeM5kTC9jGgovnR1s=
 github.com/creack/pty v1.1.24/go.mod h1:08sCNb52WyoAwi2QDyzUCTgcvVFhUzewun7wtTfvcwE=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
@@ -60,8 +62,8 @@ github.com/floegence/floret/v4 v4.0.11 h1:xbkRKqg1UGMPTNtsTUBI7CqJBjdQnFGd7953Gp
 github.com/floegence/floret/v4 v4.0.11/go.mod h1:m+DABWdcBY9k00zBZaPwNqNhueEBG6KampyMUtJpxG8=
 github.com/floegence/flowersec/flowersec-go/v2 v2.5.2 h1:RZYbPbWdY+2uTjDllpEwzCDsYmFjLFBgBG9lHUPF2WE=
 github.com/floegence/flowersec/flowersec-go/v2 v2.5.2/go.mod h1:ckIsgP/gYpsNSth3BUFbJ0qGx6YDBnqHIKgourW/eKE=
-github.com/floegence/redevplugin v1.1.4 h1:RGl1GfO4OCnca2MT/3TazAB1sfZ73I0oyBrb/PQI9CM=
-github.com/floegence/redevplugin v1.1.4/go.mod h1:5DkFy1HdsnmM6Mhp2mJ26IYQWrE9GNaXNTTr2sjmGes=
+github.com/floegence/redevplugin/v2 v2.0.2 h1:W/VnFaAmJA5d27W54vcii49xMs1s6sYBPXi6ocpItC0=
+github.com/floegence/redevplugin/v2 v2.0.2/go.mod h1:XqVjxMDEo/j9r3y72+SZqbPppL3HTAevcZ4BhBVQiAw=
 github.com/go-logr/logr v1.4.2 h1:6pFjapn8bFcIbiKo3XT4j/BhANplGihG6tvd+8rYgrY=
 github.com/go-logr/logr v1.4.2/go.mod h1:9T104GzyrTigFIr8wt5mBrctHMim0Nb2HLGrmQ40KvY=
 github.com/go-logr/stdr v1.2.2 h1:hSWxHoqTgW2S2qGc0LTAI563KZ5YKYRhT3MFKZMbjag=

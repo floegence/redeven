@@ -7,7 +7,7 @@ import (
 
 	"github.com/floegence/redeven/internal/lockfile"
 	"github.com/floegence/redeven/internal/session"
-	"github.com/floegence/redevplugin/pkg/sessionctx"
+	"github.com/floegence/redevplugin/v2/pkg/sessionctx"
 )
 
 const maximumSessionGenerationValueSize = 256

@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"os"
 
-	"github.com/floegence/redevplugin/pkg/contracts"
+	"github.com/floegence/redevplugin/v2/pkg/contracts"
 )
 
 func main() {

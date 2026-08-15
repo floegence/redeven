@@ -56,7 +56,7 @@ function installedRecord(overrides: Partial<ReDevPluginRecord> = {}): ReDevPlugi
     management_revision: 7,
     revoke_epoch: 0,
     manifest: {
-      schema_version: 'redevplugin.manifest.v8',
+      schema_version: 'redevplugin.manifest.v9',
       publisher: {
         publisher_id: officialContainers.publisherID,
         display_name: officialContainers.publisher,
@@ -65,14 +65,10 @@ function installedRecord(overrides: Partial<ReDevPluginRecord> = {}): ReDevPlugi
         plugin_id: officialContainers.pluginID,
         display_name: officialContainers.displayName,
         version: officialContainers.stableVersion,
-        api_version: 'plugin-v1',
-        min_runtime_version: '0.6.5',
-        ui_protocol_version: 'plugin-ui-v7',
       },
-      presentation: {
-        default_locale: 'en-US', summary: 'Containers plugin', description: ['Containers plugin.'], highlights: [], keywords: ['containers'], localizations: [],
-        icon: { path: iconPath },
-      },
+      api: { surface: 1, worker: 1 },
+      permissions: [],
+      presentation: { locales: { default: 'en-US' }, icon: { path: iconPath } },
       surfaces: [
         {
           surface_id: officialContainers.defaultSurfaceID,
@@ -82,6 +78,8 @@ function installedRecord(overrides: Partial<ReDevPluginRecord> = {}): ReDevPlugi
           entry: 'ui/index.html',
         },
       ],
+      workers: [],
+      methods: [],
     },
     package_entries: marketIcon ? [{
       path: iconPath,

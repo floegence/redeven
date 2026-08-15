@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/floegence/redevplugin/pkg/ownerscope"
+	"github.com/floegence/redevplugin/v2/pkg/ownerscope"
 )
 
 type OwnerScopeRecoveryPlan struct {

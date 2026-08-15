@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/floegence/redeven/internal/capabilities/containers"
-	"github.com/floegence/redevplugin/pkg/capability"
-	"github.com/floegence/redevplugin/pkg/capabilitycontract"
-	"github.com/floegence/redevplugin/pkg/mutation"
+	"github.com/floegence/redevplugin/v2/pkg/capability"
+	"github.com/floegence/redevplugin/v2/pkg/capabilitycontract"
+	"github.com/floegence/redevplugin/v2/pkg/mutation"
 )
 
 func TestContainersStatsWatchStreamsCandidateEventAndCancels(t *testing.T) {

@@ -19,12 +19,12 @@ import (
 	"github.com/floegence/redeven/internal/pluginmarket"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/sessionhop"
-	"github.com/floegence/redevplugin/pkg/execution"
-	"github.com/floegence/redevplugin/pkg/externalsource"
-	"github.com/floegence/redevplugin/pkg/host"
-	"github.com/floegence/redevplugin/pkg/pluginpkg"
-	"github.com/floegence/redevplugin/pkg/releasecontract"
-	"github.com/floegence/redevplugin/pkg/releasetrust"
+	"github.com/floegence/redevplugin/v2/pkg/execution"
+	"github.com/floegence/redevplugin/v2/pkg/externalsource"
+	"github.com/floegence/redevplugin/v2/pkg/host"
+	"github.com/floegence/redevplugin/v2/pkg/pluginpkg"
+	"github.com/floegence/redevplugin/v2/pkg/releasecontract"
+	"github.com/floegence/redevplugin/v2/pkg/releasetrust"
 )
 
 type localReleaseAssetFetcher struct {

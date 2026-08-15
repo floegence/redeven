@@ -16,14 +16,14 @@ import (
 	"github.com/floegence/redeven/internal/diagnostics"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/sessionhop"
-	"github.com/floegence/redevplugin/pkg/host"
-	"github.com/floegence/redevplugin/pkg/manifest"
-	"github.com/floegence/redevplugin/pkg/observability"
-	"github.com/floegence/redevplugin/pkg/ownerscope"
-	"github.com/floegence/redevplugin/pkg/pluginpkg"
-	"github.com/floegence/redevplugin/pkg/registry"
-	"github.com/floegence/redevplugin/pkg/sessionctx"
-	"github.com/floegence/redevplugin/pkg/websecurity"
+	"github.com/floegence/redevplugin/v2/pkg/host"
+	"github.com/floegence/redevplugin/v2/pkg/manifest"
+	"github.com/floegence/redevplugin/v2/pkg/observability"
+	"github.com/floegence/redevplugin/v2/pkg/ownerscope"
+	"github.com/floegence/redevplugin/v2/pkg/pluginpkg"
+	"github.com/floegence/redevplugin/v2/pkg/registry"
+	"github.com/floegence/redevplugin/v2/pkg/sessionctx"
+	"github.com/floegence/redevplugin/v2/pkg/websecurity"
 )
 
 func TestSessionAdapterDerivesIdentityAndPermissionsFromAuthenticatedSession(t *testing.T) {

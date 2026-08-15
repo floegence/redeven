@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/floegence/redevplugin/pkg/host"
-	"github.com/floegence/redevplugin/pkg/sessionctx"
-	"github.com/floegence/redevplugin/pkg/websecurity"
+	"github.com/floegence/redevplugin/v2/pkg/host"
+	"github.com/floegence/redevplugin/v2/pkg/sessionctx"
+	"github.com/floegence/redevplugin/v2/pkg/websecurity"
 )
 
 const (

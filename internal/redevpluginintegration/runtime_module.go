@@ -12,9 +12,9 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/floegence/redevplugin/pkg/contracts"
-	"github.com/floegence/redevplugin/pkg/host"
-	"github.com/floegence/redevplugin/pkg/version"
+	"github.com/floegence/redevplugin/v2/pkg/contracts"
+	"github.com/floegence/redevplugin/v2/pkg/host"
+	"github.com/floegence/redevplugin/v2/pkg/version"
 )
 
 const bundledRuntimeDescriptorName = ".redevplugin-release-artifacts-verified.json"

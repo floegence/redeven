@@ -10,8 +10,8 @@ import (
 
 	"github.com/floegence/redeven/internal/pluginmarket"
 	redevpluginartifacts "github.com/floegence/redeven/spec/redevplugin"
-	"github.com/floegence/redevplugin/pkg/externalsource"
-	"github.com/floegence/redevplugin/pkg/host"
+	"github.com/floegence/redevplugin/v2/pkg/externalsource"
+	"github.com/floegence/redevplugin/v2/pkg/host"
 )
 
 func officialReleaseFixtureTime() time.Time {
