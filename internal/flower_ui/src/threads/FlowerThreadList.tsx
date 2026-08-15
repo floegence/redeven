@@ -82,7 +82,7 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
       data-flower-thread-action-required={indicator().actionRequired ? 'true' : 'false'}
       onContextMenu={(event) => props.onContextMenu?.(event, props.item)}
       class={cn(
-        'flower-thread-card group relative w-full cursor-pointer rounded-lg border',
+        'flower-thread-card group relative w-full cursor-pointer rounded-lg',
         props.active && 'flower-thread-card-active',
       )}
     >

@@ -85,21 +85,17 @@ describe('Flower bottom companion visual contract', () => {
     }
   });
 
-  it('removes inherited glow while retaining one shared accessible focus rule', () => {
+  it('keeps composer geometry and treatment unchanged when its editor receives focus', () => {
     const rules = companionRules(readCompanionCss());
     const dockGlowRule = findRule(rules, '.flower-chat-bottom-dock::before');
     const composerRule = findRule(rules, ') .flower-composer');
-    const focusRule = findRule(rules, '.flower-composer:focus-within');
+    const focusRule = rules.find((rule) => rule.selectors.includes('.flower-composer:focus-within'));
 
     expect(dockGlowRule.body).toBe('box-shadow: none;');
     expect(composerRule.body).toContain('backdrop-filter: none;');
     expect(composerRule.body).toContain('var(--redeven-surface-shadow-source)');
     expect(composerRule.body).not.toContain('var(--foreground)');
-    expect(focusRule.selectors).toContain('.flower-composer:focus-within');
-    expect(focusRule.selectors).not.toContain('data-flower-approval-handoff');
-    expect(focusRule.body).toContain('0 0 0 2px color-mix(in srgb, var(--ring) 72%');
-    expect(focusRule.body).toContain('var(--redeven-surface-shadow-source)');
-    expect(focusRule.body).not.toContain('var(--foreground)');
+    expect(focusRule).toBeUndefined();
   });
 
   it('softens the empty-state aura only inside active dark drawers', () => {

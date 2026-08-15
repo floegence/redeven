@@ -118,6 +118,7 @@ describe('Flower activity running sheen', () => {
     const disclosureRule = cssRule(css, '.flower-activity-inline-details');
     const clipRule = cssRule(css, '.flower-activity-inline-details-clip');
     const contentRule = cssRule(css, '.flower-activity-inline-details-content');
+    const terminalContentRule = cssRule(css, '.flower-activity-inline-details-content-terminal');
 
     expect(disclosureRule).toContain('height: 0');
     expect(disclosureRule).toContain('overflow: hidden');
@@ -132,7 +133,10 @@ describe('Flower activity running sheen', () => {
     expect(contentRule).toContain('overflow: auto');
     expect(contentRule).toContain('content-visibility: auto');
     expect(contentRule).toContain('contain-intrinsic-size: auto 12rem');
+    expect(contentRule).toContain('border-left: 1px solid');
     expect(contentRule).toContain('padding: 0.125rem 0 0.25rem 0.625rem');
+    expect(terminalContentRule).toContain('border-left: 0');
+    expect(terminalContentRule).toContain('padding-left: 0');
   });
 
   it('animates only the subagent badge ring when a subagent is running', () => {

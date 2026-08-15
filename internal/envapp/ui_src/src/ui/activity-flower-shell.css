@@ -138,17 +138,6 @@ html.dark .flower-activity-companion {
   backdrop-filter: none;
 }
 
-.flower-activity-companion:is(
-  [data-companion-phase='expanding'],
-  [data-companion-phase='expanded'],
-  [data-companion-phase='collapsing']
-) .flower-composer:focus-within {
-  border-color: color-mix(in srgb, var(--flower-companion-border) 82%, transparent);
-  box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--ring) 72%, transparent),
-    0 2px 8px -4px color-mix(in srgb, var(--redeven-surface-shadow-source) 36%, transparent);
-}
-
 html.dark .flower-activity-companion:is(
   [data-companion-phase='expanding'],
   [data-companion-phase='expanded'],

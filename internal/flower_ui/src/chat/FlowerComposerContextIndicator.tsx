@@ -45,9 +45,7 @@ export function FlowerComposerContextIndicator(props: {
         style={progressStyle()}
         onFocus={() => setTooltipOpen(true)}
         onBlur={() => setTooltipOpen(false)}
-      >
-        <span class="flower-composer-context-percent">{view().percentLabel}</span>
-      </div>
+      />
       <div
         id={tooltipID}
         role="tooltip"
