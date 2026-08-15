@@ -65,8 +65,6 @@ import type {
   FlowerChatMessage,
   FlowerQueuedTurn,
   FlowerContextUsage,
-  FlowerTimelineAnchor,
-  FlowerTimelineDecoration,
   FlowerActivityStatus,
   FlowerThreadView,
   FlowerLiveStreamEnvelope,
@@ -135,7 +133,7 @@ import { SubagentDetailWindow } from './SubagentDetailWindow';
 import { createThreadCache } from './threadCache';
 import { createTransportOutbox, restoreTransportOutbox, type TransportOutbox } from './transportOutbox';
 import { createLiveTransport } from './liveTransport';
-import { flowerThreadReadSnapshotKey, sameThreadSnapshot } from './flowerThreadListRefresh';
+import { flowerThreadReadSnapshotKey } from './flowerThreadListRefresh';
 import { FlowerProviderBrandIcon, flowerModelSupportsImage, formatFlowerTokenCount } from './settings/providerCatalog';
 import { FlowerReasoningControl } from './ReasoningControl';
 import {
@@ -377,16 +375,6 @@ function flowerComposerDraftAttachments(
     ...(item.staged ? { staged: item.staged } : {}),
   }));
 }
-function emptyFlowerComposerSessionDraft(): FlowerComposerSessionDraft {
-  return {
-    chatDraft: '',
-    references: [],
-    inputPromptSignature: '',
-    inputDrafts: {},
-    activeInputQuestionID: '',
-  };
-}
-
 function sameFlowerInputDrafts(left: Record<string, FlowerInputDraft>, right: Record<string, FlowerInputDraft>): boolean {
   const leftKeys = Object.keys(left);
   const rightKeys = Object.keys(right);
@@ -970,7 +958,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   createEffect(on(
     () => selectedThreadID(),
-    (next) => {
+    () => {
       setContextSnapshotPreview(null);
       clearWorkingDirectoryCopyConfirmation();
     },
@@ -3029,12 +3017,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return requestPromise;
   };
 
-  const upsertThread = (thread: FlowerThreadSnapshot) => {
-    if (retiredThreadIDs.has(trimString(thread.thread_id))) return;
-    const existing = threadCache().summaries.get(thread.thread_id);
-    if (existing && sameThreadSnapshot(existing, thread)) return;
-    setThreadCache((cache) => cache.replaceSummary(thread));
-  };
   const applyOptimisticPinnedState = (threadID: string, pinned: boolean) => {
     const tid = trimString(threadID);
     if (!tid || retiredThreadIDs.has(tid)) return;
@@ -4686,15 +4668,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     clearWorkingDirectoryCopyTimer();
   });
 
-  const yieldAnimationFrame = async () => {
-    if (typeof window === 'undefined') return;
-    await new Promise<void>((resolve) => {
-      window.requestAnimationFrame(() => resolve());
-    });
-  };
-  const yieldLiveEventRenderFrame = async () => {
-    await yieldAnimationFrame();
-  };
   const selectedTimelineEntries = createMemo(() => buildFlowerTimelineEntries(selectedThread()));
   createEffect(() => {
     const preview = contextSnapshotPreview();
@@ -6319,7 +6292,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return;
     }
     const focusOwner = typeof document === 'undefined' ? null : document.activeElement;
-    const promptID = trimString(request.prompt_id);
     const submittedDraft = currentComposerSessionDraft();
     try {
       const reasoningSelection = serializeFlowerReasoningSelection(

@@ -16,8 +16,6 @@ import type {
   FlowerContextUsage,
   FlowerTimelineAnchor,
   FlowerTimelineDecoration,
-  FlowerModelIOPhase,
-  FlowerModelIOStatus,
   FlowerThreadReadStatus,
   FlowerThreadSnapshot,
   FlowerThreadStatus,
@@ -53,10 +51,6 @@ function plainRecordValue(value: unknown): JsonRecord | null {
 
 function isPresent<T>(value: T | null | undefined): value is T {
   return value != null;
-}
-
-function hasOwn(record: JsonRecord, key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(record, key);
 }
 
 function trim(value: unknown): string {
@@ -152,42 +146,6 @@ function nonNegativeInteger(raw: unknown, field: string): number {
 function integerOrZero(raw: unknown): number {
   const value = Number(raw ?? 0);
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
-}
-
-function positiveIntegerOrOne(raw: unknown): number {
-  const value = Number(raw ?? 1);
-  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 1;
-}
-
-function modelIOPhase(raw: unknown): FlowerModelIOPhase | null {
-  switch (trim(raw)) {
-    case 'preparing':
-      return 'preparing';
-    case 'waiting_response':
-      return 'waiting_response';
-    case 'streaming':
-      return 'streaming';
-    case 'retrying':
-      return 'retrying';
-    case 'finalizing':
-      return 'finalizing';
-    default:
-      return null;
-  }
-}
-
-function mapModelIOStatus(raw: unknown): FlowerModelIOStatus | null {
-  const record = recordValue(raw);
-  if (!record) return null;
-  const phase = modelIOPhase(record.phase);
-  if (!phase) return null;
-  const stepIndex = integerOrZero(record.step_index);
-  return {
-    phase,
-    ...(trim(record.run_id) ? { run_id: trim(record.run_id) } : {}),
-    ...(stepIndex > 0 ? { step_index: stepIndex } : {}),
-    updated_at_ms: integerOrZero(record.updated_at_ms ?? record.updated_at_unix_ms),
-  };
 }
 
 function clampRatio(raw: unknown): number | undefined {
@@ -377,11 +335,6 @@ function mapContextCompactions(raw: unknown): readonly FlowerContextCompaction[]
   return compactions.length > 0 ? compactions : undefined;
 }
 
-function mapContextCompactionsSnapshot(raw: unknown): readonly FlowerContextCompaction[] | undefined {
-  if (!Array.isArray(raw)) return undefined;
-  return raw.map(mapContextCompaction).filter(isPresent);
-}
-
 function mapTimelineDecorations(raw: unknown): readonly FlowerTimelineDecoration[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   const decorations = raw.map((value) => {
@@ -392,17 +345,6 @@ function mapTimelineDecorations(raw: unknown): readonly FlowerTimelineDecoration
     return decoration;
   });
   return decorations.length > 0 ? decorations : undefined;
-}
-
-function mapTimelineDecorationsSnapshot(raw: unknown): readonly FlowerTimelineDecoration[] | undefined {
-  if (!Array.isArray(raw)) return undefined;
-  return raw.map((value) => {
-    const decoration = mapTimelineDecoration(value);
-    if (!decoration) {
-      throw new Error('Flower contract error: timeline_decorations requires valid decoration payloads.');
-    }
-    return decoration;
-  });
 }
 
 function stringRecord(raw: unknown): Readonly<Record<string, string>> | undefined {
