@@ -23,6 +23,21 @@ describe('applyFlowerRuntimeCurrentView', () => {
     expect(result.messages.map((message) => message.content)).toEqual(['hello', 'working']);
   });
 
+  it('keeps typed thinking and assistant drafts in the active turn', () => {
+    const current: FlowerRuntimeCurrentView = {
+      thread_id: 'thread-a', view_version: 8, activity: 'active', turn_id: 'turn-a',
+      thinking_draft: 'Inspecting files', assistant_draft: 'Working answer',
+    };
+
+    const result = applyFlowerRuntimeCurrentView(summary(), current);
+
+    expect(result.status).toBe('running');
+    expect(result.messages).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'thinking:turn-a', status: 'streaming', blocks: [{ type: 'thinking', content: 'Inspecting files' }] }),
+      expect.objectContaining({ id: 'draft:turn-a', content: 'Working answer', status: 'streaming' }),
+    ]));
+  });
+
   it('prioritizes waiting input over approval and running', () => {
     const current: FlowerRuntimeCurrentView = {
       thread_id: 'thread-a', view_version: 8, activity: 'active',
@@ -65,6 +80,87 @@ describe('applyFlowerRuntimeCurrentView', () => {
     expect(result.status).toBe('success');
     expect(result.error).toBeUndefined();
     expect(result.messages[0]?.blocks?.[0]).toMatchObject({ items: [{ status: 'declined', severity: 'quiet', approval_state: 'rejected' }] });
+  });
+
+  it('preserves validated typed activity presentation and target metadata', () => {
+    const current: FlowerRuntimeCurrentView = {
+      thread_id: 'thread-a', view_version: 10, last_outcome: 'completed', turn_id: 'turn-a',
+      items: [{
+        id: 'tool-a', turn_id: 'turn-a', kind: 'tool',
+        activity: {
+          item_id: 'tool-a', tool_id: 'call-a', tool_name: 'terminal.exec', kind: 'tool',
+          status: 'success', severity: 'normal', needs_attention: false, requires_approval: false,
+          presentation: {
+            label: 'printf hello', description: 'Command completed', renderer: 'terminal',
+            chips: [{ kind: 'status', label: 'done', tone: 'positive' }],
+            target_refs: [{ kind: 'process', label: 'shell', uri: 'process://shell', line: 0 }],
+            payload: { command: 'printf hello', exit_code: 0 },
+          },
+          metadata: { source: 'runtime' },
+        },
+      }],
+    };
+
+    const result = applyFlowerRuntimeCurrentView(summary(), current);
+
+    expect(result.messages[0]?.blocks?.[0]).toMatchObject({
+      items: [{
+        item_id: 'tool-a', tool_id: 'call-a', tool_name: 'terminal.exec',
+        label: 'printf hello', description: 'Command completed', renderer: 'terminal',
+        chips: [{ kind: 'status', label: 'done', tone: 'positive' }],
+        target_refs: [{ kind: 'process', label: 'shell', uri: 'process://shell', line: 0 }],
+        payload: { command: 'printf hello', exit_code: 0 },
+        metadata: { source: 'runtime' },
+      }],
+    });
+  });
+
+  it('projects typed file-action target references into view-local action controls', () => {
+    const current: FlowerRuntimeCurrentView = {
+      thread_id: 'thread-a', view_version: 11, last_outcome: 'completed', turn_id: 'turn-a',
+      items: [{
+        id: 'tool-entry-a', turn_id: 'turn-a', kind: 'tool',
+        activity: {
+          item_id: 'tool-a', tool_id: 'call-a', tool_name: 'file.read', kind: 'tool',
+          status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
+          presentation: {
+            label: 'app.ts', renderer: 'file',
+            target_refs: [{ kind: 'file_action:read_app', label: 'app.ts' }],
+            payload: { operation: 'read', display_name: 'app.ts', file_action_id: 'read_app' },
+          },
+        },
+      }],
+    };
+
+    const result = applyFlowerRuntimeCurrentView(summary(), current);
+
+    expect(result.messages[0]).toMatchObject({ id: 'tool-entry-a' });
+    expect(result.messages[0]?.blocks?.[0]).toMatchObject({
+      file_actions: {
+        read_app: { action_id: 'read_app', display_name: 'app.ts', can_preview: true, can_browse_directory: true },
+      },
+    });
+  });
+
+  it('rejects malformed presentation fields from typed activity items', () => {
+    const current: FlowerRuntimeCurrentView = {
+      thread_id: 'thread-a', view_version: 11, last_outcome: 'completed', turn_id: 'turn-a',
+      items: [{
+        id: 'tool-a', turn_id: 'turn-a', kind: 'tool',
+        activity: {
+          item_id: 'tool-a', kind: 'tool', status: 'success', severity: 'quiet',
+          needs_attention: false, requires_approval: false,
+          presentation: {
+            label: 'read app.ts', renderer: 'file',
+            target_refs: [{ kind: 'file', label: 'app.ts', line: '12' }],
+          },
+        },
+      }],
+    };
+
+    expect(() => applyFlowerRuntimeCurrentView(summary(), current)).toThrow(
+      'Flower contract error: activity_item.presentation.target_refs[0].line must be a non-negative integer.',
+    );
   });
 
   it('replaces pending approval and input state from typed interactions', () => {

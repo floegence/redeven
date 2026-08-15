@@ -6,6 +6,7 @@ import type {
   FlowerRuntimeCurrentView,
   FlowerThreadSnapshot,
 } from './contracts/flowerSurfaceContracts';
+import { mapFlowerActivityItem } from './flowerLiveMapper';
 
 function trim(value: unknown): string {
   return String(value ?? '').trim();
@@ -39,21 +40,11 @@ function itemReferences(item: FlowerRuntimeCurrentItem): FlowerChatMessage['refe
 }
 
 function activityItem(raw: Readonly<Record<string, unknown>>, effectRetry?: FlowerActivityItem['effect_retry']): FlowerActivityItem {
-  return {
-    item_id: trim(raw.item_id),
-    ...(trim(raw.tool_id) ? { tool_id: trim(raw.tool_id) } : {}),
-    ...(trim(raw.tool_name) ? { tool_name: trim(raw.tool_name) } : {}),
-    kind: (trim(raw.kind) || 'tool') as FlowerActivityItem['kind'],
-    status: (trim(raw.status) || 'pending') as FlowerActivityItem['status'],
-    severity: (trim(raw.severity) || 'quiet') as FlowerActivityItem['severity'],
-    needs_attention: Boolean(raw.needs_attention),
-    requires_approval: Boolean(raw.requires_approval),
-    ...(trim(raw.approval_state) ? { approval_state: trim(raw.approval_state) as FlowerActivityItem['approval_state'] } : {}),
-    ...(Number(raw.started_at_unix_ms ?? 0) > 0 ? { started_at_unix_ms: Math.floor(Number(raw.started_at_unix_ms)) } : {}),
-    ...(Number(raw.ended_at_unix_ms ?? 0) > 0 ? { ended_at_unix_ms: Math.floor(Number(raw.ended_at_unix_ms)) } : {}),
-    ...(raw.metadata && typeof raw.metadata === 'object' ? { metadata: raw.metadata as Readonly<Record<string, string>> } : {}),
-    ...(effectRetry ? { effect_retry: effectRetry } : {}),
-  };
+  const mapped = mapFlowerActivityItem(raw);
+  if (!mapped) {
+    throw new Error('Flower contract error: typed current tool item requires an activity item identity.');
+  }
+  return effectRetry ? { ...mapped, effect_retry: effectRetry } : mapped;
 }
 
 function activityBlock(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentView, item: FlowerRuntimeCurrentItem): FlowerActivityTimelineBlock {
@@ -68,6 +59,18 @@ function activityBlock(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentVie
     effect_attempt_id: trim(retry.effect_attempt_id),
     tool_call_id: trim(retry.tool_call_id),
   } : undefined);
+  const fileActions = Object.fromEntries((activity.target_refs ?? []).flatMap((target) => {
+    const actionID = trim(target.kind).startsWith('file_action:')
+      ? trim(target.kind).slice('file_action:'.length)
+      : '';
+    if (!actionID) return [];
+    return [[actionID, {
+      action_id: actionID,
+      display_name: trim(target.label) || actionID,
+      can_preview: true,
+      can_browse_directory: true,
+    }]];
+  }));
   return {
     type: 'activity-timeline',
     schema_version: 1,
@@ -82,6 +85,7 @@ function activityBlock(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentVie
       counts: { [activity.status]: 1 },
     },
     items: [activity],
+    ...(Object.keys(fileActions).length > 0 ? { file_actions: fileActions } : {}),
   };
 }
 
@@ -143,6 +147,14 @@ function runtimeMessages(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentV
     });
   }
   const assistantDraft = String(view.assistant_draft ?? '');
+  const thinkingDraft = String(view.thinking_draft ?? '');
+  if (thinkingDraft) {
+    messages.push({
+      id: `thinking:${trim(view.turn_id) || base.thread_id}`, thread_id: base.thread_id, turn_id: trim(view.turn_id),
+      role: 'assistant', content: '', status: 'streaming', created_at_ms: base.updated_at_ms,
+      blocks: [{ type: 'thinking', content: thinkingDraft }], live: true,
+    });
+  }
   if (assistantDraft) {
     messages.push({
       id: `draft:${trim(view.turn_id) || base.thread_id}`, thread_id: base.thread_id, turn_id: trim(view.turn_id),
@@ -197,6 +209,20 @@ function runtimeInputRequest(
     candidate.kind === 'input' && !candidate.resolved && candidate.input
   ));
   if (!interaction?.input) return undefined;
+  if (!trim(interaction.id)) {
+    throw new Error('Flower contract error: typed current input interaction requires an id.');
+  }
+  if (!trim(interaction.turn_id) && !trim(view.turn_id)) {
+    throw new Error('Flower contract error: typed current input interaction requires a turn id.');
+  }
+  if (interaction.input.questions.length === 0) {
+    throw new Error('Flower contract error: typed current input interaction requires at least one question.');
+  }
+  for (const question of interaction.input.questions) {
+    if (!trim(question.id) || !trim(question.prompt) || !trim(question.kind)) {
+      throw new Error('Flower contract error: typed current input question requires id, prompt, and kind.');
+    }
+  }
   const reasonCode = interaction.input.questions
     .map((question) => trim(question.kind))
     .find(Boolean);
