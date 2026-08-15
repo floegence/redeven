@@ -87,7 +87,7 @@ async function flushAsync(): Promise<void> {
 }
 
 describe('PluginSurfaceBody', () => {
-  it('opens through the shared placement coordinator and waits for the SDK first-commit boundary', async () => {
+  it('opens through the shared placement coordinator without exposing internal readiness loading', async () => {
     const mount = document.createElement('div');
     document.body.append(mount);
     const host = createHost();
@@ -108,7 +108,9 @@ describe('PluginSurfaceBody', () => {
       />
     ), mount);
 
-    expect(mount.textContent).toContain('Opening plugin surface');
+    expect(mount.textContent).not.toContain('Opening plugin surface');
+    expect(mount.querySelector('[role="status"]')).toBeNull();
+    expect(mount.querySelector('[data-plugin-surface-stage]')?.className).toContain('opacity-100');
     expect(coordinator.open).toHaveBeenCalledWith(
       expect.anything(),
       {
