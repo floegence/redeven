@@ -289,10 +289,8 @@ async function ensureInitialEnabledPlugin(page, sessionHeaders, config, pluginRe
     const catalog = response.body?.data ?? response.body;
     return installedPlugins(catalog).length > 0 ? catalog : null;
   }, 120_000, 'official plugin installation');
-  if (enabledPlugins(installed).length === 0) {
-    throw new Error('official plugin installation did not finish enabled');
-  }
   const enabled = await waitFor(async () => {
+    if (enabledPlugins(installed).length > 0) return installed;
     const response = await queryCatalog();
     if (response.status !== 200) return null;
     const catalog = response.body?.data ?? response.body;
