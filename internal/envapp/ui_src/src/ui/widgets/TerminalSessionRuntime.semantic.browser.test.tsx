@@ -1152,6 +1152,161 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     expect(runtime.getViewport()?.getVisibleScreenText()).toContain('middle-viewport-needle');
   });
 
+  it('projects every same-line search occurrence and marks only the active one on Canvas', async () => {
+    const runtime = harness();
+    mounted.push(runtime);
+    runtime.emitPresentation(presentation(1, 'live-search-decoration'));
+    await vi.waitFor(() => expect(runtime.getViewport()).not.toBeNull());
+    await waitForHistoryAttachment(runtime);
+
+    const repeatedSource = searchViewport({ offset: 0, text: '' });
+    const repeated = {
+      ...repeatedSource,
+      frame: {
+        ...repeatedSource.frame,
+        cursor: { ...repeatedSource.frame.cursor, visible: false },
+      },
+    };
+    const marker = 'MARK MARK';
+    repeated.frame.rows[0]!.cells = marker.split('').map((text) => ({ text, width: 1 }))
+      .concat(Array.from({ length: repeated.cols - marker.length }, () => ({ text: '', width: 1 })));
+    const other = searchViewport({ offset: 16, text: 'other-history-line' });
+    runtime.semanticHistory
+      .mockResolvedValueOnce(repeated)
+      .mockResolvedValueOnce(other)
+      .mockResolvedValueOnce(repeated);
+
+    const results: Array<{ resultIndex: number; resultCount: number; state: string }> = [];
+    runtime.getViewport()?.setSearchResultsCallback((result) => results.push(result));
+    runtime.getViewport()?.findNext('mark');
+
+    await vi.waitFor(() => expect(results.at(-1)).toMatchObject({ state: 'ready', resultCount: 2 }));
+    await waitForPaint();
+    const canvas = runtime.root.querySelector<HTMLCanvasElement>('[data-terminal-semantic-canvas="true"]')!;
+    const context = canvas.getContext('2d')!;
+    const scaleX = canvas.width / Math.max(1, canvas.clientWidth);
+    const scaleY = canvas.height / Math.max(1, canvas.clientHeight);
+    const sample = (column: number) => Array.from(context.getImageData(
+      Math.floor((column * 9 + 1) * scaleX),
+      Math.floor(2 * scaleY),
+      1,
+      1,
+    ).data);
+    const blank = sample(12);
+    const active = sample(0);
+    const ordinary = sample(5);
+    expect(active).not.toEqual(blank);
+    expect(ordinary).not.toEqual(blank);
+    expect(active).not.toEqual(ordinary);
+
+    const callsBeforeNext = runtime.semanticHistory.mock.calls.length;
+    runtime.getViewport()?.findNext('mark');
+    await waitForPaint();
+    expect(runtime.semanticHistory).toHaveBeenCalledTimes(callsBeforeNext);
+    expect(sample(0)).not.toEqual(active);
+    expect(sample(5)).not.toEqual(blank);
+
+    const ordinaryAfterNext = sample(0);
+    const activeAfterNext = sample(5);
+    runtime.emitPresentation(presentation(2, 'live-while-history-search-remains-projected'));
+    await waitForPaint();
+    expect(sample(0)).toEqual(ordinaryAfterNext);
+    expect(sample(5)).toEqual(activeAfterNext);
+
+    runtime.getViewport()?.clearSearch();
+    await waitForPaint();
+    expect(sample(0)).toEqual(sample(12));
+    expect(sample(5)).toEqual(sample(12));
+  });
+
+  it('drops stale live search decoration when a newer Presentation replaces the match', async () => {
+    const runtime = harness();
+    mounted.push(runtime);
+    runtime.emitPresentation(presentation(1, 'MARK live'));
+    await vi.waitFor(() => expect(runtime.getViewport()).not.toBeNull());
+    await waitForHistoryAttachment(runtime);
+    runtime.semanticHistory.mockResolvedValueOnce(searchViewport({
+      offset: 0,
+      text: 'history without the query',
+      totalRows: 24,
+      screenStartOffset: 0,
+    }));
+
+    const results: Array<{ resultCount: number; state: string }> = [];
+    runtime.getViewport()?.setSearchResultsCallback((result) => results.push(result));
+    runtime.getViewport()?.findNext('mark');
+    await vi.waitFor(() => expect(results.at(-1)).toMatchObject({ state: 'ready', resultCount: 1 }));
+    await waitForPaint();
+
+    const canvas = runtime.root.querySelector<HTMLCanvasElement>('[data-terminal-semantic-canvas="true"]')!;
+    const context = canvas.getContext('2d')!;
+    const scaleX = canvas.width / Math.max(1, canvas.clientWidth);
+    const scaleY = canvas.height / Math.max(1, canvas.clientHeight);
+    const sample = (column: number) => Array.from(context.getImageData(
+      Math.floor((column * 9 + 1) * scaleX),
+      Math.floor(2 * scaleY),
+      1,
+      1,
+    ).data);
+    expect(sample(0)).not.toEqual(sample(12));
+
+    runtime.emitPresentation(presentation(2, 'gone'));
+    await waitForPaint();
+    expect(sample(0)).toEqual(sample(12));
+    expect(results.at(-1)).toMatchObject({ state: 'ready', resultCount: 1 });
+  });
+
+  it('clears the previous decoration while a replacement query is pending and finds no result', async () => {
+    const runtime = harness();
+    mounted.push(runtime);
+    runtime.emitPresentation(presentation(1, 'MARK live'));
+    await vi.waitFor(() => expect(runtime.getViewport()).not.toBeNull());
+    await waitForHistoryAttachment(runtime);
+    runtime.semanticHistory.mockResolvedValueOnce(searchViewport({
+      offset: 0,
+      text: 'history without the query',
+      totalRows: 24,
+      screenStartOffset: 0,
+    }));
+
+    const results: Array<{ resultCount: number; state: string }> = [];
+    runtime.getViewport()?.setSearchResultsCallback((result) => results.push(result));
+    runtime.getViewport()?.findNext('mark');
+    await vi.waitFor(() => expect(results.at(-1)).toMatchObject({ state: 'ready', resultCount: 1 }));
+    await waitForPaint();
+
+    const canvas = runtime.root.querySelector<HTMLCanvasElement>('[data-terminal-semantic-canvas="true"]')!;
+    const context = canvas.getContext('2d')!;
+    const scaleX = canvas.width / Math.max(1, canvas.clientWidth);
+    const scaleY = canvas.height / Math.max(1, canvas.clientHeight);
+    const sample = (column: number) => Array.from(context.getImageData(
+      Math.floor((column * 9 + 1) * scaleX),
+      Math.floor(2 * scaleY),
+      1,
+      1,
+    ).data);
+    expect(sample(0)).not.toEqual(sample(12));
+
+    let resolveNoResult!: (page: SemanticHistoryViewport) => void;
+    runtime.semanticHistory.mockReturnValueOnce(new Promise<SemanticHistoryViewport>((resolve) => {
+      resolveNoResult = resolve;
+    }));
+    runtime.getViewport()?.findNext('absent');
+    await waitForPaint();
+    expect(results.at(-1)).toMatchObject({ state: 'searching', resultCount: 0 });
+    expect(sample(0)).toEqual(sample(12));
+
+    resolveNoResult(searchViewport({
+      offset: 0,
+      text: 'history without the replacement query',
+      totalRows: 24,
+      screenStartOffset: 0,
+    }));
+    await vi.waitFor(() => expect(results.at(-1)).toMatchObject({ state: 'ready', resultCount: 0 }));
+    await waitForPaint();
+    expect(sample(0)).toEqual(sample(12));
+  });
+
   it('fails a non-advancing history scan locally without replacing the live presentation', async () => {
     const runtime = harness();
     mounted.push(runtime);

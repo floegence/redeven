@@ -317,21 +317,21 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 			"\"@floegence/floe-webapp-boot\": \"0.40.21\"",
 			"\"@floegence/floe-webapp-core\": \"0.40.21\"",
 			"\"@floegence/floe-webapp-protocol\": \"0.40.21\"",
-			"\"@floegence/floeterm-terminal-web\": \"0.16.1\"",
+			"\"@floegence/floeterm-terminal-web\": \"0.16.2\"",
 			"\"@floegence/flowersec-core\": \"2.4.2\"",
 		},
 		"internal/envapp/ui_src/package-lock.json": {
 			"floe-webapp-boot-0.40.21.tgz",
 			"floe-webapp-core-0.40.21.tgz",
 			"floe-webapp-protocol-0.40.21.tgz",
-			"floeterm-terminal-web-0.16.1.tgz",
+			"floeterm-terminal-web-0.16.2.tgz",
 			"flowersec-core-2.4.2.tgz",
 		},
 		"internal/envapp/ui_src/pnpm-lock.yaml": {
 			"@floegence/floe-webapp-boot@0.40.21",
 			"@floegence/floe-webapp-core@0.40.21",
 			"@floegence/floe-webapp-protocol@0.40.21",
-			"@floegence/floeterm-terminal-web@0.16.1",
+			"@floegence/floeterm-terminal-web@0.16.2",
 			"@floegence/flowersec-core@2.4.2",
 		},
 		"internal/codeapp/ui_src/package.json": {
@@ -344,7 +344,7 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 			"@floegence/floe-webapp-boot | 0.40.21",
 			"@floegence/floe-webapp-core | 0.40.21",
 			"@floegence/floe-webapp-protocol | 0.40.21",
-			"@floegence/floeterm-terminal-web | 0.16.1",
+			"@floegence/floeterm-terminal-web | 0.16.2",
 			"@floegence/flowersec-core | 2.4.2",
 		},
 		"okf/architecture/runtime-transport-dependencies.md": {
@@ -353,7 +353,7 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 			"Flowersec Core v2.4.2",
 		},
 		"okf/architecture/env-app-upstream-web-dependencies.md": {
-			"terminal-web v0.16.1",
+			"terminal-web v0.16.2",
 			"semantic Presentation",
 			"Floe Webapp Boot, Core, and Protocol v0.40.21",
 			"Flowersec Core v2.4.2",

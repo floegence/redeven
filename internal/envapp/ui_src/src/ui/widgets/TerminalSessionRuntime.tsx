@@ -13,6 +13,8 @@ import {
   HistoryViewportController,
   presentationAdvances,
   RendererSurface,
+  semanticHistoryRowMatches,
+  semanticHistorySearchDecorationsForViewport,
   SEMANTIC_CELL_HEIGHT_CSS_PX,
   SEMANTIC_CELL_WIDTH_CSS_PX,
   SEMANTIC_TERMINAL_FONT_FAMILY,
@@ -670,9 +672,52 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     });
   }
 
+  const projectSearchDecorations = (
+    frame: SemanticFrame,
+    viewportOffset: number,
+    validateCurrentContent = false,
+  ) => {
+    const activeMatchId = searchMatches[searchIndex]?.matchId ?? null;
+    let decorations = semanticHistorySearchDecorationsForViewport(
+      searchMatches,
+      viewportOffset,
+      frame.height,
+      activeMatchId,
+    );
+    if (validateCurrentContent && searchQuery) {
+      const validSpans = new Map<number, Set<string>>();
+      decorations = decorations.filter((decoration) => {
+        let spans = validSpans.get(decoration.row);
+        if (!spans) {
+          spans = new Set(semanticHistoryRowMatches(frame, decoration.row, searchQuery)
+            .map((span) => `${span.startColumn}:${span.endColumnExclusive}`));
+          validSpans.set(decoration.row, spans);
+        }
+        return spans.has(`${decoration.startColumn}:${decoration.endColumnExclusive}`);
+      });
+    }
+    renderer?.setSearchDecorations(decorations);
+  };
+
+  const refreshVisibleSearchDecorations = () => {
+    const viewport = historyController?.getViewport();
+    if (viewport) {
+      projectSearchDecorations(viewport.frame, viewport.offset);
+      return;
+    }
+    if (latestPresentation) {
+      projectSearchDecorations(
+        latestPresentation.frame,
+        latestPresentation.frame.history.screenStartOffset,
+        true,
+      );
+    }
+  };
+
   const resetSearch = () => {
     searchRequestEpoch += 1;
     historySearchController?.reset();
+    renderer?.clearSearchDecorations();
     searchQuery = '';
     searchMatches = [];
     searchIndex = -1;
@@ -761,8 +806,19 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     if (!controller || !match) return;
     const result = await controller.resolveMatch(match);
     if (disposed || requestEpoch !== searchRequestEpoch) return;
-    if (result) historyController?.showViewport(result);
-    else historyController?.showLatest();
+    if (result) {
+      historyController?.showViewport(result);
+      projectSearchDecorations(result.frame, result.offset);
+      return;
+    }
+    historyController?.showLatest();
+    if (latestPresentation) {
+      projectSearchDecorations(
+        latestPresentation.frame,
+        latestPresentation.frame.history.screenStartOffset,
+        true,
+      );
+    }
   };
 
   const applySearchResult = async (
@@ -787,6 +843,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     searchMatches = [];
     searchIndex = -1;
     searchState = 'error';
+    renderer?.clearSearchDecorations();
     publishSearchResult();
   };
 
@@ -801,6 +858,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       searchMatches = [];
       searchIndex = -1;
       searchState = 'searching';
+      renderer?.clearSearchDecorations();
       publishSearchResult();
       const requestEpoch = ++searchRequestEpoch;
       const controller = historySearchController;
@@ -816,6 +874,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     if (searchMatches.length === 0) return;
     searchIndex = (searchIndex + delta + searchMatches.length) % searchMatches.length;
     publishSearchResult();
+    refreshVisibleSearchDecorations();
     const requestEpoch = searchRequestEpoch;
     void projectSearchMatch(requestEpoch).catch((error) => failSearch(error, requestEpoch));
   };
@@ -951,6 +1010,13 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     latestPresentation = presentation;
     historyController?.apply(presentation);
     historySearchController?.apply(presentation);
+    if (!historyProjected() && searchMatches.length > 0) {
+      projectSearchDecorations(
+        presentation.frame,
+        presentation.frame.history.screenStartOffset,
+        true,
+      );
+    }
     inputBridge?.syncGeometry();
     setPresentationRevision((value) => value + 1);
     setReady(true);
@@ -1031,6 +1097,12 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       sessionId,
       (event) => {
         if (event.state === 'attached') {
+          if (
+            runtimeAttachGeneration > 0
+            && runtimeAttachGeneration !== event.runtimeAttachGeneration
+          ) {
+            resetSearch();
+          }
           attached = true;
           runtimeAttachGeneration = event.runtimeAttachGeneration;
           historyController?.setTransportGeneration(runtimeAttachGeneration);
