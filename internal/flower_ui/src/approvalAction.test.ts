@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { FlowerApprovalAction, FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
-import { flowerComposerApprovalAction } from './approvalAction';
+import { flowerDisplayApprovalAction } from './approvalAction';
 
 const action = (overrides: Partial<FlowerApprovalAction> = {}): FlowerApprovalAction => ({
   action_id: 'approval-1', origin: 'main_tool', run_id: 'turn-1', tool_id: 'tool-1', tool_name: 'terminal.exec',
@@ -16,10 +16,18 @@ const thread = (actions: readonly FlowerApprovalAction[]): FlowerThreadSnapshot 
   read_status: { is_unread: false, snapshot: { activity_revision: 1, last_message_at_unix_ms: 1, activity_signature: 'a' }, read_state: { last_seen_activity_revision: 1, last_read_message_at_unix_ms: 1, last_seen_activity_signature: 'a' } },
 });
 
-describe('flowerComposerApprovalAction', () => {
-  it('selects only the actionable current item from the server view', () => {
+describe('flowerDisplayApprovalAction', () => {
+  it('selects only the primary current item from the server view', () => {
     const locator = action({ action_id: 'approval-2', tool_id: 'tool-2', surface_role: 'locator', can_approve: false });
-    expect(flowerComposerApprovalAction(thread([action(), locator]))?.action_id).toBe('approval-1');
-    expect(flowerComposerApprovalAction(thread([locator]))).toBeNull();
+    expect(flowerDisplayApprovalAction(thread([action(), locator]))?.action_id).toBe('approval-1');
+    expect(flowerDisplayApprovalAction(thread([locator]))).toBeNull();
+  });
+
+  it('keeps a non-actionable primary approval visible for the decision surface', () => {
+    const readOnly = action({ can_approve: false, read_only_reason: 'This adapter is read-only.' });
+    expect(flowerDisplayApprovalAction(thread([readOnly]))).toMatchObject({
+      action_id: 'approval-1',
+      can_approve: false,
+    });
   });
 });
