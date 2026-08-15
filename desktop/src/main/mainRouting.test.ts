@@ -1268,8 +1268,10 @@ describe('main routing', () => {
     expect(routeSrc).not.toContain('live\\/updates');
     expect(routeSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/approvals$/u");
     expect(routeSrc).not.toContain('context\\/compact');
-    expect(routeSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/followups\\/order$/u");
-    expect(routeSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/followups\\/[^/]+$/u");
+    expect(routeSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/queue\\/order$/u");
+    expect(routeSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/queue\\/[^/]+$/u");
+    expect(routeSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/queue\\/[^/]+\\/promote$/u");
+    expect(routeSrc).not.toContain('followups');
     expect(routeSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/retry$/u");
     expect(routeSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/retry_effect$/u");
     expect(routeSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/cancel$/u");

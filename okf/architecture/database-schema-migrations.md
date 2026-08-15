@@ -29,12 +29,14 @@ registry, thread read state, Notes, Workbench layout, and release-trust state
 before returning the product service. The AI product threadstore opens inside
 the isolated AI readiness generation, so its failure blocks Agent surfaces
 without preventing unrelated Code App capabilities from starting. Its current
-`ai_threadstore_product_v1` version 1 is a one-time user-approved pre-launch
-baseline with no historical migration paths: missing or empty storage initializes
-directly, the exact current reviewed shape reopens, and every prior, unknown,
-future, or drifted shape is rejected read-only. After this baseline is
-distributed, all later versions must retain the same kind and add contiguous
-automatic migrations. Other product stores retain their existing supported
+`ai_threadstore_product_v1` is currently version 2. The exact reviewed version 1
+shape upgrades automatically through the contiguous v1-to-v2 migration: stable
+queued request ids move into migration-only pending-input staging, retired
+lifecycle tables are removed, product settings are rebuilt in the reviewed v2
+shape, metadata advances, and the whole target is verified before commit. Missing
+or empty storage initializes directly at v2. Unknown, future, unsupported, or
+drifted shapes are rejected read-only. All later versions retain the same kind
+and append contiguous automatic migrations. Other product stores retain their existing supported
 migration histories. Their individual migration tests
 remain responsible for historical shape validation and preservation of their
 domain records. The shared engine rejects incomplete migration chains,
@@ -53,7 +55,7 @@ gate and in-memory canonical-schema verification.
 
 ## Upstream-owned schemas
 
-Floret v3 owns Agent journal storage and its schema lifecycle. Redeven supplies
+Floret v4 owns the canonical Thread journal and its schema lifecycle. Redeven supplies
 the configured path to the published runtime startup API and consumes its typed
 readiness result. Floret owns inspection, migration, verification, exact open,
 and conflict classification; Redeven does not query, patch, version, migrate,
@@ -87,7 +89,8 @@ opens an upstream database directly to manufacture a cross-store transaction.
 - `redeven:internal/persistence/sqliteutil/repository_contract_test.go:14` - Locks the reviewed Redeven, direct, and Floret SQLite opening inventories.
 - `redeven:internal/codeapp/codeapp.go:156` - Opens product stores during service composition before returning the Code App service.
 - `redeven:okf/architecture/ai-readiness-lifecycle.md:1` - Defines isolated AI startup and generation failure behavior.
-- `redeven:internal/ai/threadstore/store.go` - Performs the existing-only read-only current-v1 gate before writable product open.
-- `redeven:internal/ai/floret_store_maintenance.go` - Adapts published Floret v3 startup and readiness contracts without direct storage access.
+- `redeven:internal/ai/threadstore/store.go` - Verifies exact supported historical or current product shape before writable open.
+- `redeven:internal/ai/threadstore/schema.go` - Defines current v2 and the atomic reviewed v1-to-v2 migration.
+- `redeven:internal/ai/floret_bootstrap.go` - Opens the published Floret v4 runtime without direct storage access.
 - `redeven:scripts/check_floret_dependency_boundary.sh:118` - Rejects Redeven access to Floret-owned storage schemas and raw SQL.
 - `redeven:okf/ai/flower-storage-ownership-and-migrations.md:1` - Defines the specialized cross-owner Flower product migration.

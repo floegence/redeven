@@ -58,7 +58,6 @@ export type AISendUserTurnRequest = {
   threadId: string;
   model?: string;
   input: {
-    turnId?: string;
     text: string;
     attachments: Array<{
       name: string;
@@ -71,8 +70,6 @@ export type AISendUserTurnRequest = {
     permissionType?: AIPermissionType;
     reasoningSelection?: FlowerReasoningSelection;
   };
-  expectedRunId?: string;
-  queueAfterWaitingUser?: boolean;
 };
 
 export type AISendUserTurnResponse = {
@@ -81,7 +78,6 @@ export type AISendUserTurnResponse = {
   kind: string;
   queueId?: string;
   queuePosition?: number;
-  consumedWaitingPromptId?: string;
 };
 
 export type AISubmitRequestUserInputResponseRequest = {
@@ -89,7 +85,6 @@ export type AISubmitRequestUserInputResponseRequest = {
   model?: string;
   response: AIRequestUserInputResponse;
   input: {
-    turnId?: string;
     text: string;
     attachments: Array<{
       name: string;
@@ -101,7 +96,6 @@ export type AISubmitRequestUserInputResponseRequest = {
     permissionType?: AIPermissionType;
     reasoningSelection?: FlowerReasoningSelection;
   };
-  expectedRunId?: string;
 };
 
 export type AISubmitRequestUserInputResponseResponse = {
@@ -111,31 +105,12 @@ export type AISubmitRequestUserInputResponseResponse = {
   consumedWaitingPromptId?: string;
 };
 
-export type AIFollowupAttachment = {
-  name: string;
-  mimeType?: string;
-  url?: string;
-};
-
-export type AIFollowupItem = {
-  followupId: string;
-  lane: 'queued' | 'draft';
-  turnId: string;
-  text: string;
-  modelId?: string;
-  permissionType?: AIPermissionType;
-  position: number;
-  createdAtUnixMs: number;
-  attachments?: AIFollowupAttachment[];
-};
-
 export type AIStopThreadRequest = {
   threadId: string;
 };
 
 export type AIStopThreadResponse = {
   ok: boolean;
-  recoveredFollowups?: AIFollowupItem[];
 };
 
 export type AITimelineMessageItem = {

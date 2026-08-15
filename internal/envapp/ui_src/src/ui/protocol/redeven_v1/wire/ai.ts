@@ -58,7 +58,6 @@ export type wire_ai_send_user_turn_req = {
   thread_id: string;
   model?: string;
   input: {
-    turn_id?: string;
     text: string;
     attachments: wire_ai_attachment[];
     context_action?: ContextActionEnvelope;
@@ -67,8 +66,6 @@ export type wire_ai_send_user_turn_req = {
     permission_type?: string;
     reasoning_selection?: FlowerReasoningSelection;
   };
-  expected_run_id?: string;
-  queue_after_waiting_user?: boolean;
 };
 
 export type wire_ai_send_user_turn_resp = {
@@ -77,7 +74,6 @@ export type wire_ai_send_user_turn_resp = {
   kind: string;
   queue_id?: string;
   queue_position?: number;
-  consumed_waiting_prompt_id?: string;
 };
 
 export type wire_ai_submit_request_user_input_response_req = {
@@ -85,7 +81,6 @@ export type wire_ai_submit_request_user_input_response_req = {
   model?: string;
   response: wire_ai_request_user_input_response;
   input: {
-    turn_id?: string;
     text: string;
     attachments: wire_ai_attachment[];
   };
@@ -93,7 +88,6 @@ export type wire_ai_submit_request_user_input_response_req = {
     permission_type?: string;
     reasoning_selection?: FlowerReasoningSelection;
   };
-  expected_run_id?: string;
 };
 
 export type wire_ai_submit_request_user_input_response_resp = {
@@ -129,31 +123,12 @@ export type wire_ai_event_notify = {
   queued_turn_count?: number;
 };
 
-export type wire_ai_followup_attachment = {
-  name: string;
-  mime_type?: string;
-  url?: string;
-};
-
-export type wire_ai_followup_item = {
-  followup_id: string;
-  lane: string;
-  turn_id: string;
-  text: string;
-  model_id?: string;
-  permission_type?: string;
-  position: number;
-  created_at_unix_ms: number;
-  attachments?: wire_ai_followup_attachment[];
-};
-
 export type wire_ai_stop_thread_req = {
   thread_id: string;
 };
 
 export type wire_ai_stop_thread_resp = {
   ok: boolean;
-  recovered_followups?: wire_ai_followup_item[];
 };
 
 export type wire_ai_list_messages_req = {

@@ -12,7 +12,6 @@ describe('Redeven v1 AI codec', () => {
       threadId: 'th_1',
       model: 'openai/gpt-5.5',
       input: {
-        turnId: 'turn_1',
         text: 'Review this directory',
         attachments: [],
         contextAction: {
@@ -56,7 +55,6 @@ describe('Redeven v1 AI codec', () => {
         source_env_public_id: 'env_a',
       },
     });
-    expect(req.input.turn_id).toBe('turn_1');
     expect(JSON.stringify(req.input.context_action)).not.toContain('can_write');
     expect(JSON.stringify(req.input.context_action)).not.toContain('grant');
     expect(req.options?.permission_type).toBe('approval_required');

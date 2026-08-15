@@ -225,6 +225,9 @@ func scanThreadstoreSQLFile(rel, path string, knownColumns map[string]struct{}) 
 				Action:   queryAction(sqlText, selector.Sel.Name),
 				Consumer: functionName,
 			}
+			if functionName == "migrateThreadstoreV1ToV2" {
+				query.Action = "schema"
+			}
 			if ordinalBySemanticKey[semanticKey] > 1 {
 				query.ID += fmt.Sprintf(".%d", ordinalBySemanticKey[semanticKey])
 			}
@@ -409,6 +412,7 @@ func LoadReviewedThreadstorePhysicalSchema(path string) (map[string][]string, ma
 	}
 	var source struct {
 		Versions []struct {
+			Version int `json:"version"`
 			Objects []struct {
 				Type      string `json:"type"`
 				Name      string `json:"name"`
@@ -425,19 +429,25 @@ func LoadReviewedThreadstorePhysicalSchema(path string) (map[string][]string, ma
 	if err := json.Unmarshal(body, &source); err != nil {
 		return nil, nil, nil, fmt.Errorf("decode reviewed threadstore physical schema: %w", err)
 	}
-	if len(source.Versions) != 1 {
-		return nil, nil, nil, fmt.Errorf("reviewed threadstore physical schema has %d versions, want 1", len(source.Versions))
+	if len(source.Versions) == 0 {
+		return nil, nil, nil, errors.New("reviewed threadstore physical schema has no versions")
 	}
+	for index, version := range source.Versions {
+		if version.Version != index+1 {
+			return nil, nil, nil, fmt.Errorf("reviewed threadstore physical schema version[%d]=%d, want contiguous %d", index, version.Version, index+1)
+		}
+	}
+	current := source.Versions[len(source.Versions)-1]
 	columns := map[string][]string{}
 	indexes := map[string]string{}
 	triggers := map[string]string{}
-	for _, table := range source.Versions[0].Tables {
+	for _, table := range current.Tables {
 		for _, column := range table.Columns {
 			columns[table.Name] = append(columns[table.Name], column.Name)
 		}
 		columns[table.Name] = uniqueSorted(columns[table.Name])
 	}
-	for _, object := range source.Versions[0].Objects {
+	for _, object := range current.Objects {
 		switch object.Type {
 		case "index":
 			indexes[object.Name] = object.TableName
@@ -579,7 +589,8 @@ func isReviewedV1MigrationTable(query ThreadstoreQueryContract, table string) bo
 		"ai_thread_create_operations",
 		"ai_thread_delete_operations",
 		"ai_thread_fork_operations",
-		"ai_turn_admission_receipts":
+		"ai_turn_admission_receipts",
+		"ai_thread_settings_v2":
 		return true
 	default:
 		return false
@@ -598,11 +609,6 @@ func RefreshThreadstoreQueries(existing ThreadstoreBoundaryManifest, scanned []T
 		if old, ok := previous[query.ID]; ok {
 			if old.DynamicReview != "" {
 				query.DynamicReview = old.DynamicReview
-			}
-			query.Action = old.Action
-			query.Consumer = old.Consumer
-			if old.ConsumerKind != "" {
-				query.ConsumerKind = old.ConsumerKind
 			}
 		}
 		existing.Queries = append(existing.Queries, query)

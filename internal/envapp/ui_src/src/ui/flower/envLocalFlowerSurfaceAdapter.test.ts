@@ -124,7 +124,7 @@ function typedCommandResponse(
 }
 
 describe('Env local Flower surface adapter', () => {
-	it('deletes a canonical queued turn through the existing followup route before reloading detail', async () => {
+	it('deletes a canonical queued turn through the queue route before reloading detail', async () => {
 		fetchMock
 			.mockResolvedValueOnce(jsonResponse({ ok: true }))
 			.mockResolvedValueOnce(jsonResponse(liveBootstrap('thread/delete', 'running')));
@@ -134,10 +134,10 @@ describe('Env local Flower surface adapter', () => {
 			rpc: { ai: {} } as any,
 		});
 
-		await adapter.deleteQueuedTurn?.('thread/delete', 'followup/middle');
+		await adapter.deleteQueuedTurn?.('thread/delete', 'queue/middle');
 
 		expect(fetchMock).toHaveBeenNthCalledWith(1,
-			'/_redeven_proxy/api/ai/threads/thread%2Fdelete/followups/followup%2Fmiddle',
+			'/_redeven_proxy/api/ai/threads/thread%2Fdelete/queue/queue%2Fmiddle',
 			expect.objectContaining({ method: 'DELETE' }),
 		);
 			expect(fetchMock).toHaveBeenNthCalledWith(2,
@@ -930,54 +930,19 @@ describe('Env local Flower surface adapter', () => {
     expect(bootstrap.thread.status).toBe('running');
   });
 
-  it('deletes a thread with force and validates the accepted receipt', async () => {
-    fetchMock.mockResolvedValue(jsonResponse({
-      operation_id: 'delete_operation_1',
-      status: 'pending',
-      intent_persisted: true,
-    }));
+  it('deletes a thread with force through the synchronous contract', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({ ok: true }));
     const adapter = createEnvLocalFlowerSurfaceAdapter({
       envPublicID: 'env_a',
       envLabel: 'Demo Env',
       rpc: { ai: {} } as any,
     });
 
-    await expect(adapter.deleteThread?.('thread /1')).resolves.toEqual({ status: 'pending' });
+    await expect(adapter.deleteThread?.('thread /1')).resolves.toBeUndefined();
     expect(fetchMock).toHaveBeenCalledWith(
       '/_redeven_proxy/api/ai/threads/thread%20%2F1?force=true',
       expect.objectContaining({ method: 'DELETE' }),
     );
-  });
-
-  it('accepts only a complete terminal delete receipt from the fixed machine error', async () => {
-    const validReceipt = {
-      operation_id: 'delete_operation_1',
-      status: 'failed',
-      intent_persisted: true,
-    };
-    fetchMock.mockResolvedValue(errorResponse('AI_THREAD_DELETE_OPERATION_FAILED', validReceipt));
-    const adapter = createEnvLocalFlowerSurfaceAdapter({
-      envPublicID: 'env_a',
-      envLabel: 'Demo Env',
-      rpc: { ai: {} } as any,
-    });
-
-    await expect(adapter.deleteThread?.('thread_1')).resolves.toEqual({ status: 'failed' });
-
-    fetchMock.mockResolvedValue(errorResponse('AI_THREAD_DELETE_OPERATION_FAILED', {
-      ...validReceipt,
-      intent_persisted: false,
-    }));
-    await expect(adapter.deleteThread?.('thread_1')).rejects.toThrow('Flower thread delete returned an invalid receipt.');
-
-    fetchMock.mockResolvedValue(errorResponse('AI_THREAD_DELETE_OPERATION_FAILED', undefined));
-    await expect(adapter.deleteThread?.('thread_1')).rejects.toThrow('Flower thread delete returned an invalid receipt.');
-
-    fetchMock.mockResolvedValue(errorResponse('UNKNOWN_DELETE_ERROR', validReceipt));
-    await expect(adapter.deleteThread?.('thread_1')).rejects.toMatchObject({
-      code: 'UNKNOWN_DELETE_ERROR',
-      data: validReceipt,
-    });
   });
 
   it('returns the typed current view from the local approval API', async () => {

@@ -344,11 +344,7 @@ func (s *Service) GetThread(ctx context.Context, meta *session.Meta, threadID st
 	}
 	view.QueuedTurns = make([]QueuedTurnView, 0, len(current.Queue))
 	for _, queued := range current.Queue {
-		followup := queuedInputFollowupView(queued, len(view.QueuedTurns)+1)
-		view.QueuedTurns = append(view.QueuedTurns, QueuedTurnView{
-			QueueID: followup.FollowupID, Text: followup.Text, CreatedAtUnixMs: followup.CreatedAtUnixMs,
-			Attachments: followup.Attachments,
-		})
+		view.QueuedTurns = append(view.QueuedTurns, queuedInputView(queued))
 	}
 	applyThreadRuntimeSummary(&view, current)
 	return &view, nil
@@ -1075,34 +1071,20 @@ func (s *Service) CancelThread(meta *session.Meta, threadID string) error {
 	return err
 }
 
-type ThreadDeleteStatus string
-
-const (
-	ThreadDeleteStatusPending   ThreadDeleteStatus = "pending"
-	ThreadDeleteStatusCommitted ThreadDeleteStatus = "committed"
-	ThreadDeleteStatusFailed    ThreadDeleteStatus = "failed"
-)
-
-type ThreadDeleteResult struct {
-	OperationID     string             `json:"operation_id"`
-	Status          ThreadDeleteStatus `json:"status"`
-	IntentPersisted bool               `json:"intent_persisted"`
-}
-
-func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID string, force bool) (ThreadDeleteResult, error) {
+func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID string, force bool) error {
 	if s == nil {
-		return ThreadDeleteResult{}, errors.New("nil service")
+		return errors.New("nil service")
 	}
 	if err := requireRWX(meta); err != nil {
-		return ThreadDeleteResult{}, err
+		return err
 	}
 	threadID = strings.TrimSpace(threadID)
 	if threadID == "" {
-		return ThreadDeleteResult{}, errors.New("missing thread_id")
+		return errors.New("missing thread_id")
 	}
 	endpointID := strings.TrimSpace(meta.EndpointID)
 	if endpointID == "" {
-		return ThreadDeleteResult{}, errors.New("invalid request")
+		return errors.New("invalid request")
 	}
 
 	s.mu.Lock()
@@ -1110,42 +1092,42 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 	readStateCleaner := s.flowerReadStateCleaner
 	s.mu.Unlock()
 	if db == nil {
-		return ThreadDeleteResult{}, errors.New("threads store not ready")
+		return errors.New("threads store not ready")
 	}
 	settings, err := db.GetThreadSettings(ctxOrBackground(ctx), endpointID, threadID)
 	if err != nil {
-		return ThreadDeleteResult{}, err
+		return err
 	}
 	if settings == nil {
-		return ThreadDeleteResult{}, sql.ErrNoRows
+		return nil
 	}
 	runtime, err := s.typedFloretRuntime()
 	if err != nil {
-		return ThreadDeleteResult{}, err
+		return err
 	}
 	view, err := runtime.View(ctxOrBackground(ctx), identity.ThreadID(threadID))
-	if err != nil {
-		return ThreadDeleteResult{}, err
+	canonicalDeleted := errors.Is(err, flruntime.ErrThreadNotFound) || errors.Is(err, flruntime.ErrThreadDeleted)
+	if err != nil && !canonicalDeleted {
+		return err
 	}
-	if view.Activity == flruntime.ThreadActivityActive && !force {
-		return ThreadDeleteResult{}, ErrThreadBusy
+	if !canonicalDeleted && view.Activity == flruntime.ThreadActivityActive && !force {
+		return ErrThreadBusy
 	}
-	requestID, err := newProductRequestID("delete_")
-	if err != nil {
-		return ThreadDeleteResult{}, err
-	}
-	if force {
+	requestKey := flruntime.RequestKey("delete:" + threadID)
+	if !canonicalDeleted && force {
 		_, _ = runtime.Cancel(ctxOrBackground(ctx), flruntime.CancelInput{
-			ThreadID: identity.ThreadID(threadID), RequestKey: flruntime.RequestKey(requestID + ":cancel"),
+			ThreadID: identity.ThreadID(threadID), RequestKey: flruntime.RequestKey("delete-cancel:" + threadID),
 		})
 	}
-	if err := runtime.Delete(ctxOrBackground(ctx), flruntime.DeleteThreadInput{
-		ThreadID: identity.ThreadID(threadID), RequestKey: flruntime.RequestKey(requestID),
-	}); err != nil {
-		return ThreadDeleteResult{}, err
+	if !canonicalDeleted {
+		if err := runtime.Delete(ctxOrBackground(ctx), flruntime.DeleteThreadInput{
+			ThreadID: identity.ThreadID(threadID), RequestKey: requestKey,
+		}); err != nil && !errors.Is(err, flruntime.ErrThreadNotFound) && !errors.Is(err, flruntime.ErrThreadDeleted) {
+			return err
+		}
 	}
 	if err := db.DeleteThreadProductData(ctxOrBackground(ctx), endpointID, threadID); err != nil {
-		return ThreadDeleteResult{}, err
+		return err
 	}
 	if readStateCleaner != nil {
 		go func() {
@@ -1155,7 +1137,7 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 		}()
 	}
 	s.scheduleThreadstoreCompaction("thread_delete")
-	return ThreadDeleteResult{OperationID: requestID, Status: ThreadDeleteStatusCommitted, IntentPersisted: true}, nil
+	return nil
 }
 
 func (s *Service) ListThreadMessages(ctx context.Context, meta *session.Meta, threadID string, limit int, beforeID int64) (*ListThreadMessagesResponse, error) {

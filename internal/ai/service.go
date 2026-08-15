@@ -310,6 +310,10 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 	}
 	svc.typedSendOps = make(map[string]*typedSendOperation)
 	svc.floretEffects.bind(svc)
+	if err := svc.importPendingInputs(ctx); err != nil {
+		closeServiceBeforeMaintenance(svc)
+		return nil, fmt.Errorf("import pending inputs: %w", err)
+	}
 	svc.startFlowerRuntimeViewPump()
 	uploadRecoveryCtx, cancelUploadRecovery := context.WithTimeout(ctx, persistTO)
 	interruptedUploads, uploadRecoveryErr := svc.interruptUploadAttemptsFromPreviousProcess(uploadRecoveryCtx)
@@ -1210,9 +1214,6 @@ func (s *Service) prepareThreadEffect(meta *session.Meta, executionKey string, r
 	threadID := strings.TrimSpace(req.ThreadID)
 	if executionKey == "" || threadID == "" {
 		return nil, errors.New("invalid thread effect identity")
-	}
-	if strings.TrimSpace(req.Input.TurnID) != "" {
-		return nil, errors.New("turn_id must be omitted before canonical admission")
 	}
 	contextAction, err := normalizeAskFlowerContextActionEnvelope(req.Input.ContextAction)
 	if err != nil {

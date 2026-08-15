@@ -127,13 +127,12 @@ describe('bootstrapDesktopSettingsBridge', () => {
     const result = {
       ok: false as const,
       error: {
-        code: 'AI_THREAD_DELETE_OPERATION_FAILED',
+        code: 'AI_THREAD_DELETE_FAILED',
         message: 'Thread delete failed.',
         status: 500,
         data: {
-          operation_id: 'delete_operation_1',
-          status: 'failed',
-          intent_persisted: true,
+          stage: 'product_cleanup',
+          retryable: true,
         },
       },
       failureKind: 'response' as const,

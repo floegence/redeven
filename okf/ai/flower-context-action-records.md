@@ -32,11 +32,11 @@ Context actions and references do not alter working directory, target permission
 
 - `redeven:internal/ai/context_action.go:101` - Canonical JSON encoding preserves the typed queued context fields.
 - `redeven:internal/ai/context_action.go:185` - Normalization rejects damaged or unsupported context-action shapes before admission.
-- `redeven:internal/ai/queued_turns.go:262` - Queued context actions decode through the strict validator.
+- `redeven:internal/ai/pending_input_import.go` - Migration-only queued context actions decode through the strict validator.
 - `redeven:internal/ai/context_action_floret.go:43` - One mapper produces Floret message references and current-turn supplemental items.
 - `redeven:internal/ai/canonical_reference_authority.go:42` - Server-derived target authority accepts only canonical identities and the documented local alias before canonicalization.
-- `redeven:internal/ai/floret_runtime.go:165` - References and supplemental context are prepared together before Floret admission.
-- `redeven:internal/ai/floret_runtime.go:205` - The same admission request carries both canonical turn input and turn-only supplemental context.
+- `redeven:internal/ai/context_action_floret.go` - References and supplemental context are prepared together before typed Floret `Send`.
+- `redeven:internal/ai/send_user_turn.go` - The typed command carries canonical user input and turn-only supplemental context.
 - `redeven:internal/ai/floret_timeline_messages.go:261` - Canonical user messages are built from Floret input, attachments, and references.
 - `redeven:internal/ai/floret_timeline_messages.go:306` - Public reference projection excludes opaque `ResourceRef` and file-system path data.
 - `redeven:internal/flower_ui/src/flowerLiveMapper.ts:929` - Flower strictly maps ordered canonical references without accepting `ResourceRef`.

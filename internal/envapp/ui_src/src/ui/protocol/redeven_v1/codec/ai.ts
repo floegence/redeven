@@ -1,6 +1,4 @@
 import type {
-  AIFollowupAttachment,
-  AIFollowupItem,
   AIListMessagesRequest,
   AIListMessagesResponse,
   AIRealtimeEvent,
@@ -21,8 +19,6 @@ import type {
 } from '../sdk/ai';
 import type {
   wire_ai_event_notify,
-  wire_ai_followup_attachment,
-  wire_ai_followup_item,
   wire_ai_list_messages_req,
   wire_ai_list_messages_resp,
   wire_ai_send_user_turn_req,
@@ -52,41 +48,6 @@ function normalizeAskUserResponseMode(raw: unknown): 'select' | 'write' | 'selec
   return undefined;
 }
 
-
-function fromWireAIFollowupAttachment(raw: wire_ai_followup_attachment): AIFollowupAttachment | null {
-  const name = String(raw?.name ?? '').trim();
-  if (!name) return null;
-  const mimeType = String(raw?.mime_type ?? '').trim();
-  const url = String(raw?.url ?? '').trim();
-  return {
-    name,
-    mimeType: mimeType || undefined,
-    url: url || undefined,
-  };
-}
-
-function fromWireAIFollowupItem(raw: wire_ai_followup_item): AIFollowupItem | null {
-  const followupId = String(raw?.followup_id ?? '').trim();
-  const lane = String(raw?.lane ?? '').trim().toLowerCase();
-  const turnId = String(raw?.turn_id ?? '').trim();
-  if (!followupId || (lane !== 'queued' && lane !== 'draft') || !turnId) {
-    return null;
-  }
-  const attachments = Array.isArray(raw?.attachments)
-    ? raw.attachments.map(fromWireAIFollowupAttachment).filter(Boolean) as AIFollowupAttachment[]
-    : [];
-  return {
-    followupId,
-    lane,
-    turnId,
-    text: String(raw?.text ?? ''),
-    modelId: String(raw?.model_id ?? '').trim() || undefined,
-    permissionType: normalizePermissionType(raw?.permission_type),
-    position: Math.max(1, Math.floor(Number(raw?.position ?? 0) || 0)),
-    createdAtUnixMs: Math.max(0, Math.floor(Number(raw?.created_at_unix_ms ?? 0) || 0)),
-    attachments: attachments.length > 0 ? attachments : undefined,
-  };
-}
 
 function fromWireAIRequestUserInputAction(raw: wire_ai_request_user_input_action): AIRequestUserInputAction | null {
   const type = String(raw?.type ?? '').trim().toLowerCase();
@@ -185,7 +146,6 @@ export function toWireAISendUserTurnRequest(req: AISendUserTurnRequest): wire_ai
     thread_id: String(req.threadId ?? '').trim(),
     model: req.model?.trim() ? req.model.trim() : undefined,
     input: {
-      turn_id: req.input?.turnId?.trim() ? String(req.input.turnId).trim() : undefined,
       text: String(req.input?.text ?? ''),
       attachments: Array.isArray(req.input?.attachments)
         ? req.input.attachments
@@ -202,8 +162,6 @@ export function toWireAISendUserTurnRequest(req: AISendUserTurnRequest): wire_ai
       permission_type: req.options?.permissionType ? String(req.options.permissionType).trim() : undefined,
       ...(reasoningSelection ? { reasoning_selection: reasoningSelection } : {}),
     },
-    expected_run_id: req.expectedRunId?.trim() ? String(req.expectedRunId).trim() : undefined,
-    queue_after_waiting_user: Boolean(req.queueAfterWaitingUser),
   };
 }
 
@@ -214,8 +172,6 @@ export function fromWireAISendUserTurnResponse(resp: wire_ai_send_user_turn_resp
     kind: String(resp?.kind ?? '').trim(),
     queueId: String(resp?.queue_id ?? '').trim() || undefined,
     queuePosition: typeof resp?.queue_position === 'number' ? resp.queue_position : undefined,
-    consumedWaitingPromptId:
-      String(resp?.consumed_waiting_prompt_id ?? '').trim() || undefined,
   };
 }
 
@@ -235,7 +191,6 @@ export function toWireAISubmitRequestUserInputResponseRequest(req: AISubmitReque
       answers,
     },
     input: {
-      turn_id: req.input?.turnId?.trim() ? String(req.input.turnId).trim() : undefined,
       text: String(req.input?.text ?? ''),
       attachments: Array.isArray(req.input?.attachments)
         ? req.input.attachments
@@ -251,7 +206,6 @@ export function toWireAISubmitRequestUserInputResponseRequest(req: AISubmitReque
       permission_type: req.options?.permissionType ? String(req.options.permissionType).trim() : undefined,
       ...(reasoningSelection ? { reasoning_selection: reasoningSelection } : {}),
     },
-    expected_run_id: req.expectedRunId?.trim() ? String(req.expectedRunId).trim() : undefined,
   };
 }
 
@@ -271,12 +225,8 @@ export function toWireAIStopThreadRequest(req: AIStopThreadRequest): wire_ai_sto
 }
 
 export function fromWireAIStopThreadResponse(resp: wire_ai_stop_thread_resp): AIStopThreadResponse {
-  const recoveredFollowups = Array.isArray(resp?.recovered_followups)
-    ? resp.recovered_followups.map(fromWireAIFollowupItem).filter(Boolean) as AIFollowupItem[]
-    : [];
   return {
     ok: Boolean(resp?.ok ?? false),
-    recoveredFollowups: recoveredFollowups.length > 0 ? recoveredFollowups : undefined,
   };
 }
 

@@ -60,7 +60,6 @@ import {
 } from '../../../../internal/flower_ui/src/flowerLiveMapper';
 import {
   createRuntimeFlowerSurfaceAdapter,
-  FLOWER_THREAD_DELETE_OPERATION_FAILED_CODE,
 } from '../../../../internal/flower_ui/src/runtimeFlowerSurfaceAdapter';
 import {
   normalizeFlowerReasoningCapability,
@@ -819,13 +818,18 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       reorderQueuedTurns: (threadID, orderedQueueIDs) => runtimeJSON(
         bridge,
         'PATCH',
-        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/followups/order`,
-        { lane: 'queued', ordered_followup_ids: orderedQueueIDs },
+        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/queue/order`,
+        { ordered_queue_ids: orderedQueueIDs },
       ),
       deleteQueuedTurn: (threadID, queueID) => runtimeJSON(
         bridge,
         'DELETE',
-        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/followups/${encodeURIComponent(queueID)}`,
+        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/queue/${encodeURIComponent(queueID)}`,
+      ),
+      promoteQueuedTurn: (threadID, queueID) => runtimeJSON(
+        bridge,
+        'POST',
+        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/queue/${encodeURIComponent(queueID)}/promote`,
       ),
       forkThread: (threadID, body) => runtimeJSON<LoadThreadResponse>(
         bridge,
@@ -834,23 +838,11 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
         body,
       ),
       deleteThread: async (threadID) => {
-        try {
-          return {
-            kind: 'success' as const,
-            receipt: await runtimeJSON<unknown>(
-              bridge,
-              'DELETE',
-              `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}?force=true`,
-            ),
-          };
-        } catch (error) {
-          if (error instanceof RuntimeFlowerResponseError &&
-            error.failureKind === 'response' &&
-            error.code === FLOWER_THREAD_DELETE_OPERATION_FAILED_CODE) {
-            return { kind: 'terminal_failure' as const, receipt: error.data };
-          }
-          throw error;
-        }
+        await runtimeJSON<unknown>(
+          bridge,
+          'DELETE',
+          `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}?force=true`,
+        );
       },
 		submitApproval: (body) => runtimeJSON(bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(body.thread_id)}/approvals`, body),
 		retryEffect: (body) => runtimeJSON(bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(body.thread_id)}/retry_effect`, {

@@ -129,6 +129,31 @@ func TestServerAIInitialTurnCreateIsIdempotentAndCanonicallyReadable(t *testing.
 		t.Fatalf("unknown thread status=%d body=%s", unknownResponse.Code, unknownResponse.Body.String())
 	}
 
+	legacyFields := []string{
+		`"expected_run_id":"run_legacy"`,
+		`"queue_after_waiting_user":true`,
+		`"input":{"turn_id":"turn_legacy","text":"legacy","attachments":[]}`,
+	}
+	for _, legacyField := range legacyFields {
+		input := `"input":{"text":"legacy","attachments":[]}`
+		if strings.HasPrefix(legacyField, `"input"`) {
+			input = legacyField
+			legacyField = ""
+		}
+		legacyPayload := `{"thread_id":"` + first.ThreadID + `",` + input + `,"options":{}`
+		if legacyField != "" {
+			legacyPayload += `,` + legacyField
+		}
+		legacyPayload += `}`
+		legacyRequest := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/threads/"+first.ThreadID+"/turns", bytes.NewBufferString(legacyPayload))
+		legacyRequest.Header.Set("Origin", origin)
+		legacyResponse := httptest.NewRecorder()
+		server.serveHTTP(legacyResponse, legacyRequest)
+		if legacyResponse.Code != http.StatusBadRequest || !strings.Contains(legacyResponse.Body.String(), "invalid json") {
+			t.Fatalf("legacy send field payload=%s status=%d body=%s, want strict unknown-field rejection", legacyPayload, legacyResponse.Code, legacyResponse.Body.String())
+		}
+	}
+
 	attachmentClientRequestID := "create_initial_http_attachment_223456789012345678901236"
 	owner, err := ai.NewUploadOwner(meta.EndpointID, meta.UserPublicID, meta.ChannelID)
 	if err != nil {

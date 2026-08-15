@@ -34,33 +34,29 @@ type typedSendOperation struct {
 }
 
 type SendUserTurnRequest struct {
-	ClientRequestID       string               `json:"client_request_id,omitempty"`
-	ThreadID              string               `json:"thread_id"`
-	Create                *CreateThreadRequest `json:"create,omitempty"`
-	StagingScopeID        string               `json:"staging_scope_id,omitempty"`
-	StagingCapability     string               `json:"-"`
-	Model                 string               `json:"model,omitempty"`
-	Input                 RunInput             `json:"input"`
-	Options               RunOptions           `json:"options"`
-	ExpectedRunID         string               `json:"expected_run_id,omitempty"`
-	QueueAfterWaitingUser bool                 `json:"queue_after_waiting_user,omitempty"`
+	ClientRequestID   string               `json:"client_request_id,omitempty"`
+	ThreadID          string               `json:"thread_id"`
+	Create            *CreateThreadRequest `json:"create,omitempty"`
+	StagingScopeID    string               `json:"staging_scope_id,omitempty"`
+	StagingCapability string               `json:"-"`
+	Model             string               `json:"model,omitempty"`
+	Input             RunInput             `json:"input"`
+	Options           RunOptions           `json:"options"`
 }
 
 type SendUserTurnResponse struct {
-	ClientRequestID         string               `json:"client_request_id,omitempty"`
-	ThreadID                string               `json:"thread_id,omitempty"`
-	RunID                   string               `json:"run_id"`
-	TurnID                  string               `json:"turn_id"`
-	Kind                    string               `json:"kind"` // "start" | "queued" | "admitting"
-	QueueID                 string               `json:"queue_id,omitempty"`
-	QueuePosition           int                  `json:"queue_position,omitempty"`
-	ConsumedWaitingPromptID string               `json:"consumed_waiting_prompt_id,omitempty"`
-	AppliedPermissionType   string               `json:"applied_permission_type,omitempty"`
-	Current                 flruntime.ThreadView `json:"current"`
+	ClientRequestID       string               `json:"client_request_id,omitempty"`
+	ThreadID              string               `json:"thread_id,omitempty"`
+	RunID                 string               `json:"run_id"`
+	TurnID                string               `json:"turn_id"`
+	Kind                  string               `json:"kind"` // "start" | "queued"
+	QueueID               string               `json:"queue_id,omitempty"`
+	QueuePosition         int                  `json:"queue_position,omitempty"`
+	AppliedPermissionType string               `json:"applied_permission_type,omitempty"`
+	Current               flruntime.ThreadView `json:"current"`
 }
 
 type preparedUserTurn struct {
-	TurnID                string
 	CreatedAtUnixMs       int64
 	UploadIDs             []string
 	OwnerUserHash         string
@@ -90,9 +86,6 @@ func (s *Service) SendUserTurn(ctx context.Context, meta *session.Meta, req Send
 	}
 	if err := validateInlineTurnText(req.Input.Text); err != nil {
 		return SendUserTurnResponse{}, err
-	}
-	if strings.TrimSpace(req.Input.TurnID) != "" {
-		return SendUserTurnResponse{}, errors.New("turn_id must be omitted before canonical admission")
 	}
 	endpointID := strings.TrimSpace(meta.EndpointID)
 	threadID := strings.TrimSpace(req.ThreadID)
@@ -297,9 +290,6 @@ func (s *Service) SubmitRequestUserInputResponse(ctx context.Context, meta *sess
 	if endpointID == "" || threadID == "" {
 		return SubmitRequestUserInputResponseResponse{}, errors.New("invalid request")
 	}
-	if strings.TrimSpace(req.Input.TurnID) != "" {
-		return SubmitRequestUserInputResponseResponse{}, errors.New("turn_id must be omitted before canonical admission")
-	}
 	typed, err := s.typedFloretRuntime()
 	if err != nil {
 		return SubmitRequestUserInputResponseResponse{}, err
@@ -349,10 +339,10 @@ func (s *Service) SubmitRequestUserInputResponse(ctx context.Context, meta *sess
 }
 
 func (s *Service) prepareUserTurn(ctx context.Context, meta *session.Meta, endpointID string, threadID string, modelID string, input RunInput, stagingScopeID string, stagingCapability string) (preparedUserTurn, RunInput, error) {
-	return s.prepareUserTurnForTarget(ctx, meta, endpointID, threadID, modelID, input, stagingScopeID, stagingCapability, false)
+	return s.prepareUserTurnForTarget(ctx, meta, endpointID, threadID, modelID, input, stagingScopeID, stagingCapability)
 }
 
-func (s *Service) prepareUserTurnForTarget(ctx context.Context, meta *session.Meta, endpointID string, targetID string, modelID string, input RunInput, stagingScopeID string, stagingCapability string, allocateClientTurnID bool) (preparedUserTurn, RunInput, error) {
+func (s *Service) prepareUserTurnForTarget(ctx context.Context, meta *session.Meta, endpointID string, targetID string, modelID string, input RunInput, stagingScopeID string, stagingCapability string) (preparedUserTurn, RunInput, error) {
 	if s == nil {
 		return preparedUserTurn{}, input, errors.New("nil service")
 	}
@@ -368,13 +358,6 @@ func (s *Service) prepareUserTurnForTarget(ctx context.Context, meta *session.Me
 		return preparedUserTurn{}, input, err
 	}
 
-	turnID := ""
-	var err error
-	if allocateClientTurnID {
-		return preparedUserTurn{}, input, errors.New("client turn identity allocation is unsupported")
-	} else if strings.TrimSpace(input.TurnID) != "" {
-		return preparedUserTurn{}, input, errors.New("turn_id must be omitted before canonical admission")
-	}
 	owner, err := NewUploadOwner(endpointID, meta.UserPublicID, meta.ChannelID)
 	if err != nil {
 		return preparedUserTurn{}, input, err
@@ -396,7 +379,7 @@ func (s *Service) prepareUserTurnForTarget(ctx context.Context, meta *session.Me
 		return preparedUserTurn{}, input, err
 	}
 	return preparedUserTurn{
-		TurnID: turnID, CreatedAtUnixMs: time.Now().UnixMilli(), UploadIDs: uploadIDs,
+		CreatedAtUnixMs: time.Now().UnixMilli(), UploadIDs: uploadIDs,
 		OwnerUserHash: owner.OwnerUserHash, StagingScope: stagingScope, AttachmentClaimPolicy: attachmentPolicy,
 	}, input, nil
 }

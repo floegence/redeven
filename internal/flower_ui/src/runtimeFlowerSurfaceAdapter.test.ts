@@ -433,44 +433,12 @@ describe('runtime Flower surface adapter read state', () => {
     expect(snapshot.model_profile?.current_model_id).toBe('default/gpt-5.4');
   });
 
-  it.each([
-    ['pending', 'pending'],
-    ['committed', 'committed'],
-  ] as const)('validates and hides the %s delete receipt identity', async (status, expectedStatus) => {
-    const deleteThread = vi.fn(async () => ({
-      kind: 'success' as const,
-      receipt: { operation_id: 'delete_operation_1', status, intent_persisted: true },
-    }));
+  it('forwards synchronous thread deletion without a lifecycle receipt', async () => {
+    const deleteThread = vi.fn(async () => undefined);
     const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ deleteThread }));
 
-    await expect(adapter.deleteThread?.(' thread_1 ')).resolves.toEqual({ status: expectedStatus });
+    await expect(adapter.deleteThread?.(' thread_1 ')).resolves.toBeUndefined();
     expect(deleteThread).toHaveBeenCalledWith('thread_1');
-  });
-
-  it('accepts failed receipts only from the terminal failure channel', async () => {
-    const receipt = { operation_id: 'delete_operation_1', status: 'failed', intent_persisted: true };
-    const terminal = createRuntimeFlowerSurfaceAdapter(adapterOptions({
-      deleteThread: vi.fn(async () => ({ kind: 'terminal_failure' as const, receipt })),
-    }));
-    const success = createRuntimeFlowerSurfaceAdapter(adapterOptions({
-      deleteThread: vi.fn(async () => ({ kind: 'success' as const, receipt })),
-    }));
-
-    await expect(terminal.deleteThread?.('thread_1')).resolves.toEqual({ status: 'failed' });
-    await expect(success.deleteThread?.('thread_1')).rejects.toThrow('Flower thread delete returned an invalid receipt.');
-  });
-
-  it.each([
-    null,
-    { operation_id: '', status: 'pending', intent_persisted: true },
-    { operation_id: 'delete_operation_1', status: 'unknown', intent_persisted: true },
-    { operation_id: 'delete_operation_1', status: 'committed', intent_persisted: false },
-  ])('rejects malformed delete receipts without inferring durable intent', async (receipt) => {
-    const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({
-      deleteThread: vi.fn(async () => ({ kind: 'success' as const, receipt })),
-    }));
-
-    await expect(adapter.deleteThread?.('thread_1')).rejects.toThrow('Flower thread delete returned an invalid receipt.');
   });
 
   it('returns read_status from markThreadRead without reloading the thread', async () => {

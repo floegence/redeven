@@ -324,7 +324,7 @@ func TestAIUserTurnDecoderAcceptsCurrentFlowerPayloadAndRejectsRemovedDraftShape
   "thread_id":"th_123456789012345678901234",
   "staging_scope_id":"ustg_scope",
   "model":"openai/test",
-  "input":{"turn_id":"turn_123","text":"hello","attachments":[{"attachment_id":"upl_123"}]},
+  "input":{"text":"hello","attachments":[{"attachment_id":"upl_123"}]},
   "options":{"permission_type":"approval_required"},
   "create":{"title":"","model_id":"openai/test","permission_type":"approval_required"}
 }`
@@ -332,8 +332,12 @@ func TestAIUserTurnDecoderAcceptsCurrentFlowerPayloadAndRejectsRemovedDraftShape
 	if err != nil {
 		t.Fatalf("current Flower payload decoded as invalid json: %v", err)
 	}
-	if decoded.Create == nil || decoded.Create.ModelID != "openai/test" || decoded.StagingScopeID != "ustg_scope" || decoded.Input.TurnID != "turn_123" {
+	if decoded.Create == nil || decoded.Create.ModelID != "openai/test" || decoded.StagingScopeID != "ustg_scope" {
 		t.Fatalf("decoded payload=%#v", decoded)
+	}
+	removedTurnID := `{"thread_id":"th_123456789012345678901234","input":{"turn_id":"turn_123","text":"hello","attachments":[]},"options":{}}`
+	if _, err := decodeAIUserTurnRequest(strings.NewReader(removedTurnID)); err == nil {
+		t.Fatal("removed client turn_id was accepted")
 	}
 	legacy := `{"thread_id":"th_123456789012345678901234","draft_id":"draft_1","expected_draft_revision":1,"input":{"text":"hello","attachments":[]},"options":{}}`
 	if _, err := decodeAIUserTurnRequest(strings.NewReader(legacy)); err == nil {
