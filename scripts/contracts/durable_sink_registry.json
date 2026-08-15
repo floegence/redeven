@@ -1728,7 +1728,7 @@
     },
     {
       "path": "internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx",
-      "sha256": "f47d1541873928657b50d4b962aec81b78a349106f577f7b72a4d5646f9c840c",
+      "sha256": "1d2ceef252170a7c02e61f67a805d3b9be5b59011042023f4ab10d096535d929",
       "sink_kinds": [
         "web_storage"
       ],
