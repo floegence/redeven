@@ -1,7 +1,7 @@
 import {
-  validateHistoryPage,
-  type SemanticHistoryPage,
-  type SemanticHistoryRequest,
+  validateHistoryChunk,
+  type SemanticHistoryChunk,
+  type SemanticHistoryChunkRequest,
 } from '@floegence/floeterm-terminal-web/semantic';
 import {
   createSemanticTerminalLiveTransport,
@@ -78,8 +78,8 @@ export function createRedevenTerminalLiveBundle(
         sessionId: string,
         currentConnectionId: string,
         transportGeneration: number,
-        request: SemanticHistoryRequest,
-      ): Promise<SemanticHistoryPage> => validateHistoryPage(await rpc.terminal.semanticHistory({
+        request: SemanticHistoryChunkRequest,
+      ): Promise<SemanticHistoryChunk> => validateHistoryChunk(await rpc.terminal.semanticHistory({
         sessionId,
         connectionId: currentConnectionId,
         transportGeneration,

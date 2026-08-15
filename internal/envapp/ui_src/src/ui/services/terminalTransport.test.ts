@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { createHash } from 'node:crypto';
 import { ProtocolNotConnectedError, RpcError } from '@floegence/floe-webapp-protocol';
 import {
   StreamKind,
@@ -72,22 +73,53 @@ const semanticFrame = {
   graphics: { generation: 0, images: [], placements: [] },
 };
 
+const historyPayload = new TextEncoder().encode(JSON.stringify({
+  v: 1,
+  frame: {
+    width: semanticFrame.width,
+    height: semanticFrame.height,
+    bufferKind: semanticFrame.bufferKind,
+    cursor: semanticFrame.cursor,
+    history: semanticFrame.history,
+    graphics: semanticFrame.graphics,
+    styles: [['default', 'default', false, false, false, false]],
+    rows: semanticFrame.rows.map((row) => row.cells.map((cell) => [cell.text, cell.width, 0, null])),
+  },
+}));
+const historyPayloadSHA256 = createHash('sha256').update(historyPayload).digest('hex');
+
+function semanticHistoryChunk(transportGeneration = 1) {
+  return {
+    snapshotId: 'snapshot',
+    chunkIndex: 0,
+    chunkCount: 1,
+    payloadBytes: historyPayload.byteLength,
+    payloadSha256: historyPayloadSHA256,
+    payload: Buffer.from(historyPayload).toString('base64'),
+    revision: 1,
+    transportGeneration,
+    contentEpoch: 0,
+    geometryGeneration: 1,
+    cols: 80,
+    rows: 24,
+    anchor: 'anchor',
+    firstAvailable: 'first',
+    lastAvailable: 'last',
+    screenStart: 'screen',
+    offset: 0,
+    totalRows: 24,
+    screenStartOffset: 0,
+    hasPrevious: false,
+    hasNext: false,
+  };
+}
+
 const createRpcMock = () => {
   let nameHandler: ((event: any) => void) | undefined;
   const terminal = {
-    semanticHistory: vi.fn().mockResolvedValue({
-      revision: 1,
-      anchor: 'anchor',
-      firstAvailable: 'first',
-      lastAvailable: 'last',
-      screenStart: 'screen',
-      offset: 0,
-      totalRows: 24,
-      screenStartOffset: 0,
-      hasPrevious: false,
-      hasNext: false,
-      frame: semanticFrame,
-    }),
+    semanticHistory: vi.fn().mockImplementation(async (request) => (
+      semanticHistoryChunk(request.transportGeneration)
+    )),
     semanticClear: vi.fn().mockResolvedValue({ presentationSequence: 3, contentEpoch: 2 }),
     listSessions: vi.fn().mockResolvedValue({ sessions: [] }),
     createSession: vi.fn(),
@@ -291,13 +323,14 @@ describe('terminal semantic live transport', () => {
     );
     await attach(bundle, stream);
 
-    await bundle.transport.semanticHistory('session-1', { direction: 'end', limit: 24 });
+    await bundle.transport.semanticHistory('session-1', { direction: 'end', viewportRows: 24 });
     expect(rpc.terminal.semanticHistory).toHaveBeenCalledWith({
       sessionId: 'session-1',
       connectionId: 'connection-1',
       transportGeneration: 1,
+      lane: 'viewport',
       direction: 'end',
-      limit: 24,
+      viewportRows: 24,
     });
     await expect(bundle.transport.clearSemanticContent?.('session-1')).resolves.toEqual({
       presentationSequence: 3,
@@ -323,7 +356,7 @@ describe('terminal semantic live transport', () => {
 
     await expect(bundle.transport.semanticHistory('session-1', {
       direction: 'end',
-      limit: 24,
+      viewportRows: 24,
     })).rejects.toThrow();
   });
 

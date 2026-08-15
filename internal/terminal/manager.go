@@ -35,25 +35,13 @@ const (
 	TypeID_TERMINAL_EXECUTION_CONTEXT_UPDATE  uint32 = 2015 // notify (agent -> client): atomic location/application context changed
 	TypeID_TERMINAL_WORK_STATE_UPDATE         uint32 = 2016 // notify (agent -> client): semantic work state changed
 
-	terminalSemanticHistoryMaxPageCells     = 1024
 	terminalSemanticHistoryRPCPayloadBudget = 96 * 1024
 )
 
 var ErrSessionNotFound = errors.New("terminal session not found")
 
-func terminalSemanticHistoryRPCLimit(requested, cols int) (int, error) {
-	if requested <= 0 || requested > termgo.MaxSemanticHistoryRows {
-		return 0, &sessionrpc.Error{Code: 400, Message: "invalid terminal history page limit"}
-	}
-	if cols <= 0 {
-		return 0, &sessionrpc.Error{Code: 409, Message: "terminal geometry is unavailable"}
-	}
-	maxRows := max(1, terminalSemanticHistoryMaxPageCells/cols)
-	return min(requested, maxRows), nil
-}
-
-func terminalSemanticHistoryRPCPayloadSize(page termgo.SemanticHistoryPage) (int, error) {
-	encoded, err := json.Marshal(page)
+func terminalSemanticHistoryRPCPayloadSize(chunk termgo.SemanticHistoryChunk) (int, error) {
+	encoded, err := json.Marshal(chunk)
 	if err != nil {
 		return 0, &sessionrpc.Error{Code: 500, Message: "failed to encode semantic history"}
 	}
@@ -305,7 +293,7 @@ func (m *Manager) RegisterWithAccessGate(r *sessionrpc.Router, meta *session.Met
 
 	// History is projected by the server-side Ghostty actor for the current
 	// attachment. No raw PTY replay or browser checkpoint participates.
-	accessgate.RegisterTyped[terminalSemanticHistoryReq, termgo.SemanticHistoryPage](r, TypeID_TERMINAL_HISTORY, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, req *terminalSemanticHistoryReq) (*termgo.SemanticHistoryPage, error) {
+	accessgate.RegisterTyped[terminalSemanticHistoryReq, termgo.SemanticHistoryChunk](r, TypeID_TERMINAL_HISTORY, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, req *terminalSemanticHistoryReq) (*termgo.SemanticHistoryChunk, error) {
 		if err := requireProcessLaunchPermission(meta); err != nil {
 			return nil, err
 		}
@@ -322,9 +310,12 @@ func (m *Manager) RegisterWithAccessGate(r *sessionrpc.Router, meta *session.Met
 		}
 		m.log.Debug("terminal semantic history request received",
 			"transport_generation", req.TransportGeneration,
+			"lane", req.Lane,
 			"direction", req.Direction,
-			"requested_limit", req.Limit,
+			"viewport_rows", req.ViewportRows,
+			"scroll_delta_rows", req.ScrollDeltaRows,
 			"has_anchor", strings.TrimSpace(req.Anchor) != "",
+			"has_continuation", strings.TrimSpace(req.Continuation) != "",
 		)
 
 		if !m.sessionAvailableForInteraction(sessionID) {
@@ -335,27 +326,26 @@ func (m *Manager) RegisterWithAccessGate(r *sessionrpc.Router, meta *session.Met
 		if !ok || sess == nil {
 			return nil, &sessionrpc.Error{Code: 404, Message: "terminal session not found"}
 		}
-		presentation, ok := sess.LatestPresentation()
-		if !ok {
-			return nil, &sessionrpc.Error{Code: 409, Message: "terminal presentation is unavailable"}
-		}
-		effectiveLimit, err := terminalSemanticHistoryRPCLimit(req.Limit, presentation.Frame.Width)
-		if err != nil {
-			return nil, err
-		}
-
-		page, err := sess.ReadSemanticHistory(connectionID, req.TransportGeneration, termgo.SemanticHistoryRequest{
-			Anchor:    strings.TrimSpace(req.Anchor),
-			Direction: req.Direction,
-			Limit:     effectiveLimit,
+		chunk, err := sess.ReadSemanticHistory(connectionID, req.TransportGeneration, termgo.SemanticHistoryRequest{
+			Continuation:    strings.TrimSpace(req.Continuation),
+			Lane:            req.Lane,
+			Anchor:          strings.TrimSpace(req.Anchor),
+			SnapshotID:      strings.TrimSpace(req.SnapshotID),
+			Direction:       req.Direction,
+			Offset:          req.Offset,
+			ScrollDeltaRows: req.ScrollDeltaRows,
+			TargetOffset:    req.TargetOffset,
+			ViewportRows:    req.ViewportRows,
 		})
 		if err != nil {
 			m.log.Warn("terminal semantic history request failed",
 				"transport_generation", req.TransportGeneration,
+				"lane", req.Lane,
 				"direction", req.Direction,
-				"requested_limit", req.Limit,
-				"effective_limit", effectiveLimit,
+				"viewport_rows", req.ViewportRows,
+				"scroll_delta_rows", req.ScrollDeltaRows,
 				"has_anchor", strings.TrimSpace(req.Anchor) != "",
+				"has_continuation", strings.TrimSpace(req.Continuation) != "",
 				"error", err,
 			)
 			if errors.Is(err, termgo.ErrControllerTransport) {
@@ -364,15 +354,19 @@ func (m *Manager) RegisterWithAccessGate(r *sessionrpc.Router, meta *session.Met
 			if errors.Is(err, termgo.ErrSemanticHistoryAnchor) {
 				return nil, &sessionrpc.Error{Code: 409, Message: "terminal history anchor expired"}
 			}
+			if errors.Is(err, termgo.ErrSemanticHistorySuperseded) {
+				return nil, &sessionrpc.Error{Code: 412, Message: "terminal history snapshot was superseded"}
+			}
 			return nil, &sessionrpc.Error{Code: 400, Message: "failed to read semantic history"}
 		}
-		payloadBytes, payloadErr := terminalSemanticHistoryRPCPayloadSize(page)
+		payloadBytes, payloadErr := terminalSemanticHistoryRPCPayloadSize(chunk)
 		if payloadErr != nil {
 			m.log.Warn("terminal semantic history response exceeds RPC budget",
 				"transport_generation", req.TransportGeneration,
+				"lane", req.Lane,
 				"direction", req.Direction,
-				"requested_limit", req.Limit,
-				"effective_limit", effectiveLimit,
+				"viewport_rows", req.ViewportRows,
+				"scroll_delta_rows", req.ScrollDeltaRows,
 				"payload_bytes", payloadBytes,
 				"budget_bytes", terminalSemanticHistoryRPCPayloadBudget,
 				"error", payloadErr,
@@ -381,16 +375,18 @@ func (m *Manager) RegisterWithAccessGate(r *sessionrpc.Router, meta *session.Met
 		}
 		m.log.Debug("terminal semantic history response prepared",
 			"transport_generation", req.TransportGeneration,
+			"lane", req.Lane,
 			"direction", req.Direction,
-			"requested_limit", req.Limit,
-			"effective_limit", effectiveLimit,
 			"payload_bytes", payloadBytes,
-			"offset", page.Offset,
-			"total_rows", page.TotalRows,
-			"has_previous", page.HasPrevious,
-			"has_next", page.HasNext,
+			"snapshot_id", chunk.SnapshotID,
+			"chunk_index", chunk.ChunkIndex,
+			"chunk_count", chunk.ChunkCount,
+			"offset", chunk.Offset,
+			"total_rows", chunk.TotalRows,
+			"has_previous", chunk.HasPrevious,
+			"has_next", chunk.HasNext,
 		)
-		return &page, nil
+		return &chunk, nil
 	})
 
 	// Clear is a semantic VT mutation owned by the same SessionActor as PTY
@@ -1291,9 +1287,15 @@ type terminalSemanticHistoryReq struct {
 	SessionID           string                          `json:"session_id"`
 	ConnectionID        string                          `json:"connection_id"`
 	TransportGeneration uint64                          `json:"transport_generation"`
+	Continuation        string                          `json:"continuation,omitempty"`
+	Lane                termgo.SemanticHistoryLane      `json:"lane,omitempty"`
 	Anchor              string                          `json:"anchor,omitempty"`
-	Direction           termgo.SemanticHistoryDirection `json:"direction"`
-	Limit               int                             `json:"limit"`
+	SnapshotID          string                          `json:"snapshot_id,omitempty"`
+	Direction           termgo.SemanticHistoryDirection `json:"direction,omitempty"`
+	Offset              int                             `json:"offset,omitempty"`
+	ScrollDeltaRows     int                             `json:"scroll_delta_rows,omitempty"`
+	TargetOffset        *int                            `json:"target_offset,omitempty"`
+	ViewportRows        int                             `json:"viewport_rows,omitempty"`
 }
 
 type terminalSemanticClearReq struct {

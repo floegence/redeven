@@ -16,29 +16,59 @@ import {
 } from './terminal';
 
 describe('terminal codec', () => {
-  it('preserves semantic history pages and the attachment-bound request for feature validation', () => {
+  it('preserves semantic history chunks and the attachment-bound viewport request', () => {
     expect(toWireTerminalSemanticHistoryRequest({
       sessionId: 'session-1',
       connectionId: 'view-1',
       transportGeneration: 7,
-      direction: 'end',
-      limit: 24,
+      lane: 'search',
+      anchor: 'search-anchor',
+      snapshotId: 'snapshot-1',
+      direction: 'forward',
+      offset: 12,
+      scrollDeltaRows: 4,
+      targetOffset: 1200000,
+      viewportRows: 24,
     })).toEqual({
       session_id: 'session-1',
       connection_id: 'view-1',
       transport_generation: 7,
-      direction: 'end',
-      limit: 24,
+      lane: 'search',
+      anchor: 'search-anchor',
+      snapshot_id: 'snapshot-1',
+      direction: 'forward',
+      offset: 12,
+      scroll_delta_rows: 4,
+      target_offset: 1200000,
+      viewport_rows: 24,
     });
-    expect(Object.hasOwn(toWireTerminalSemanticHistoryRequest({
+    expect(toWireTerminalSemanticHistoryRequest({
       sessionId: 'session-1',
       connectionId: 'view-1',
       transportGeneration: 7,
-      direction: 'start',
-      limit: 24,
-    }), 'anchor')).toBe(false);
+      lane: 'viewport',
+      continuation: 'hc-snapshot-1',
+    })).toEqual({
+      session_id: 'session-1',
+      connection_id: 'view-1',
+      transport_generation: 7,
+      lane: 'viewport',
+      continuation: 'hc-snapshot-1',
+    });
     const response = fromWireTerminalSemanticHistoryResponse({
+      snapshotId: 'snapshot',
+      lane: 'search',
+      chunkIndex: 0,
+      chunkCount: 1,
+      payloadBytes: 3,
+      payloadSha256: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      payload: 'AQID',
       revision: 3,
+      transportGeneration: 7,
+      contentEpoch: 1,
+      geometryGeneration: 2,
+      cols: 2,
+      rows: 1,
       anchor: 'anchor',
       firstAvailable: 'first',
       lastAvailable: 'last',
@@ -48,18 +78,11 @@ describe('terminal codec', () => {
       screenStartOffset: 41,
       hasPrevious: true,
       hasNext: false,
-      frame: {
-        width: 2,
-        height: 1,
-        bufferKind: 'normal',
-        rows: [{ cells: [{ text: '中', width: 2 }, { text: '', width: 0 }] }],
-        cursor: { x: 0, y: 0, visible: true, shape: 'block', blinking: false },
-        history: { revision: 3, totalRows: 42, screenStartOffset: 41 },
-        graphics: { generation: 0, images: [], placements: [] },
-      },
     });
     expect(response.totalRows).toBe(42);
-    expect(response.frame.rows[0]?.cells[0]).toMatchObject({ text: '中', width: 2 });
+    expect(response.snapshotId).toBe('snapshot');
+    expect(response.lane).toBe('search');
+    expect(response.payload).toBe('AQID');
   });
 
   it('accepts only a real semantic clear actor cut', () => {

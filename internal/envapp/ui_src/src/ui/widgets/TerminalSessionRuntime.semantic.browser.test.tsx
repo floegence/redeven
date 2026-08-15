@@ -3,8 +3,8 @@ import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   SemanticFrame,
-  SemanticHistoryPage,
   SemanticHistoryRequest,
+  SemanticHistoryViewport,
   SemanticPresentation,
   TerminalKeyInputIntent,
 } from '@floegence/floeterm-terminal-web/semantic';
@@ -45,30 +45,76 @@ function frame(text: string, width = 80, height = 24, historyOffset = 0): Semant
   };
 }
 
-function presentation(sequence: number, text: string, width = 80, height = 24): SemanticPresentation {
+function presentation(
+  sequence: number,
+  text: string,
+  width = 80,
+  height = 24,
+  geometryGeneration = 1,
+): SemanticPresentation {
   const semanticFrame = frame(text, width, height, 40);
   return {
     sequence,
-    geometry: { generation: sequence, cols: width, rows: height },
+    geometry: { generation: geometryGeneration, cols: width, rows: height },
     state: { sequence, contentEpoch: 1 },
     frame: { ...semanticFrame, history: { ...semanticFrame.history, revision: sequence } },
   };
 }
 
-function historyPage(): SemanticHistoryPage {
+function historyViewport(options: Readonly<{
+  offset?: number;
+  text?: string;
+  width?: number;
+  height?: number;
+  totalRows?: number;
+  screenStartOffset?: number;
+  revision?: number;
+  geometryGeneration?: number;
+  contentEpoch?: number;
+  transportGeneration?: number;
+  lane?: 'viewport' | 'search';
+  anchor?: string;
+  snapshotId?: string;
+}> = {}): SemanticHistoryViewport {
+  const offset = options.offset ?? 0;
+  const width = options.width ?? 80;
+  const height = options.height ?? 24;
+  const totalRows = options.totalRows ?? 64;
+  const screenStartOffset = options.screenStartOffset ?? Math.max(0, totalRows - height);
+  const revision = options.revision ?? 1;
+  const semanticFrame = frame(options.text ?? 'old-history-marker', width, height, offset);
   return {
-    revision: 1,
-    anchor: 'history-anchor',
+    snapshotId: options.snapshotId ?? `snapshot-${options.lane ?? 'viewport'}-${revision}`,
+    lane: options.lane ?? 'viewport',
+    revision,
+    transportGeneration: options.transportGeneration ?? 1,
+    contentEpoch: options.contentEpoch ?? 1,
+    geometryGeneration: options.geometryGeneration ?? 1,
+    cols: width,
+    rows: height,
+    anchor: options.anchor ?? `history-anchor-${options.lane ?? 'viewport'}`,
     firstAvailable: 'first',
     lastAvailable: 'last',
     screenStart: 'screen',
-    offset: 0,
-    totalRows: 64,
-    screenStartOffset: 40,
-    hasPrevious: false,
-    hasNext: true,
-    frame: frame('old-history-marker', 80, 24, 0),
+    offset,
+    totalRows,
+    screenStartOffset,
+    hasPrevious: offset > 0,
+    hasNext: offset < screenStartOffset,
+    frame: {
+      ...semanticFrame,
+      history: { revision, totalRows, screenStartOffset },
+    },
   };
+}
+
+function searchViewport(options: Parameters<typeof historyViewport>[0] = {}): SemanticHistoryViewport {
+  return historyViewport({
+    ...options,
+    lane: 'search',
+    anchor: options.anchor ?? 'history-anchor-search',
+    snapshotId: options.snapshotId ?? 'snapshot-search-1',
+  });
 }
 
 function harness(options: Readonly<{
@@ -91,19 +137,30 @@ function harness(options: Readonly<{
   const [viewActive, setViewActive] = createSignal(true);
   const [active, setActive] = createSignal(true);
   let geometryGeneration = 1;
+  let latestWidth = 80;
   const sendInput = vi.fn(async () => undefined);
   const sendInputIntent = vi.fn(async (_sessionId: string, _intent: TerminalKeyInputIntent) => undefined);
-  const semanticHistory = vi.fn(async (_sessionId: string, request: SemanticHistoryRequest) => (
-    request.direction === 'end'
-      ? {
-          ...historyPage(),
-          offset: 40,
-          hasPrevious: true,
-          hasNext: false,
-          frame: frame('current-history-edge', 80, 24, 40),
-        }
-      : historyPage()
-  ));
+  const semanticHistory = vi.fn(async (_sessionId: string, request: SemanticHistoryRequest) => {
+    const screenStartOffset = 40;
+    const currentOffset = request.direction === 'start'
+      ? 0
+      : request.direction === 'end'
+        ? screenStartOffset
+        : request.offset ?? screenStartOffset;
+    const delta = request.scrollDeltaRows ?? request.viewportRows;
+    const offset = request.direction === 'backward'
+      ? Math.max(0, currentOffset - delta)
+      : request.direction === 'forward'
+        ? Math.min(screenStartOffset, currentOffset + delta)
+        : currentOffset;
+    return historyViewport({
+      offset,
+      width: latestWidth,
+      height: request.viewportRows,
+      text: offset === screenStartOffset ? 'current-history-edge' : 'old-history-marker',
+      lane: request.lane ?? 'viewport',
+    });
+  });
   const resizeWithEffectiveGeometry = vi.fn(async (_sessionId: string, cols: number, rows: number) => {
     geometryGeneration += 1;
     return {
@@ -236,7 +293,10 @@ function harness(options: Readonly<{
   return {
     root,
     getViewport: () => viewport,
-    emitPresentation: (value: SemanticPresentation) => presentationHandler?.(value),
+    emitPresentation: (value: SemanticPresentation) => {
+      latestWidth = value.geometry.cols;
+      presentationHandler?.(value);
+    },
     emitGeometry: (value: Parameters<NonNullable<typeof geometryHandler>>[0]) => geometryHandler?.(value),
     emitController: (value: Parameters<NonNullable<typeof controllerHandler>>[0]) => controllerHandler?.(value),
     semanticHistory,
@@ -253,6 +313,11 @@ function harness(options: Readonly<{
     setThemeColors,
     dispose: () => { dispose(); root.remove(); },
   };
+}
+
+async function waitForHistoryAttachment(runtime: ReturnType<typeof harness>): Promise<void> {
+  await vi.waitFor(() => expect(runtime.root.querySelector('[data-terminal-runtime-session]')
+    ?.getAttribute('data-terminal-controller-epoch')).toBe('1'));
 }
 
 async function waitForPaint(): Promise<void> {
@@ -921,58 +986,109 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     mounted.push(runtime);
     runtime.emitPresentation(presentation(1, 'current'));
     await vi.waitFor(() => expect(runtime.getViewport()).not.toBeNull());
+    await waitForHistoryAttachment(runtime);
 
     const surface = runtime.root.querySelector<HTMLElement>('[data-terminal-semantic-surface="true"]')!;
     surface.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: -120 }));
-    await vi.waitFor(() => expect(runtime.semanticHistory).toHaveBeenCalledTimes(2));
-    expect(runtime.semanticHistory.mock.calls.map((call) => call[1].direction)).toEqual(['end', 'backward']);
-    expect(runtime.semanticHistory.mock.calls[1]?.[1]).toMatchObject({ anchor: 'screen' });
+    await vi.waitFor(() => expect(runtime.semanticHistory).toHaveBeenCalledTimes(3));
+    expect(runtime.semanticHistory.mock.calls.map((call) => call[1].direction)).toEqual(['end', 'backward', 'backward']);
+    expect(runtime.semanticHistory.mock.calls[1]?.[1]).toMatchObject({ anchor: 'history-anchor-viewport' });
     expect(runtime.getViewport()?.getVisibleScreenText()).toContain('old-history-marker');
     expect(runtime.root.querySelectorAll('canvas')).toHaveLength(1);
     expect(runtime.root.querySelector('[data-floeterm-scrollbar]')?.getAttribute('data-visible')).toBe('true');
   });
 
-  it('uses the screen-start capability when the transport page is shorter than the live viewport', async () => {
+  it('projects only complete canonical history viewports', async () => {
     const runtime = harness();
     mounted.push(runtime);
-    runtime.emitPresentation(presentation(1, 'wide-live', 500, 24));
+    runtime.emitPresentation(presentation(1, 'wide-live', 103, 37));
     await vi.waitFor(() => expect(runtime.getViewport()).not.toBeNull());
-    const shortFrame = (text: string, offset: number) => ({
-      ...frame(text, 500, 4, offset),
-      history: { revision: 1, totalRows: 64, screenStartOffset: 40 },
-    });
+    await waitForHistoryAttachment(runtime);
     runtime.semanticHistory
-      .mockResolvedValueOnce({
-        ...historyPage(),
-        anchor: 'end-anchor',
-        screenStart: 'screen-anchor',
-        offset: 60,
-        hasPrevious: true,
-        hasNext: false,
-        frame: shortFrame('current-edge', 60),
-      })
-      .mockResolvedValueOnce({
-        ...historyPage(),
-        anchor: 'previous-anchor',
-        screenStart: 'screen-anchor',
-        offset: 36,
-        hasPrevious: true,
-        hasNext: true,
-        frame: shortFrame('short-history-marker', 36),
-      });
+      .mockResolvedValueOnce(historyViewport({
+        offset: 37,
+        width: 103,
+        height: 37,
+        totalRows: 74,
+        screenStartOffset: 37,
+        text: 'current-edge',
+      }))
+      .mockResolvedValueOnce(historyViewport({
+        offset: 31,
+        width: 103,
+        height: 37,
+        totalRows: 74,
+        screenStartOffset: 37,
+        text: 'full-history-marker',
+      }));
 
     const surface = runtime.root.querySelector<HTMLElement>('[data-terminal-semantic-surface="true"]')!;
     surface.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: -120 }));
 
-    await vi.waitFor(() => expect(runtime.semanticHistory).toHaveBeenCalledTimes(2));
-    expect(runtime.semanticHistory.mock.calls.map((call) => call[1].limit)).toEqual([2, 2]);
+    await vi.waitFor(() => expect(runtime.semanticHistory).toHaveBeenCalledTimes(3));
+    expect(runtime.semanticHistory.mock.calls.map((call) => call[1].viewportRows)).toEqual([37, 37, 37]);
+    expect(runtime.semanticHistory.mock.calls.every((call) => !('limit' in call[1]))).toBe(true);
     expect(runtime.semanticHistory.mock.calls[1]?.[1]).toMatchObject({
       direction: 'backward',
-      anchor: 'screen-anchor',
+      anchor: 'history-anchor-viewport',
     });
-    expect(runtime.getViewport()?.getVisibleScreenText()).toContain('short-history-marker');
+    expect(runtime.getViewport()?.getTerminalInfo()).toMatchObject({ cols: 103, rows: 37 });
+    expect(runtime.getViewport()?.getVisibleScreenText()).toContain('full-history-marker');
     expect(runtime.root.querySelector('[data-terminal-runtime-session]')?.getAttribute('data-terminal-history-projected')).toBe('true');
     expect(runtime.statuses.some((status) => status.state === 'blocking')).toBe(false);
+  });
+
+  it('seeks a million-row history rail directly and keeps the latest target under latency', async () => {
+    const runtime = harness();
+    mounted.push(runtime);
+    const screenStartOffset = 1_000_000;
+    const live = presentation(1, 'million-row-live');
+    runtime.emitPresentation({
+      ...live,
+      frame: {
+        ...live.frame,
+        history: { revision: 1, totalRows: screenStartOffset + 24, screenStartOffset },
+      },
+    });
+    await vi.waitFor(() => expect(runtime.getViewport()).not.toBeNull());
+    await waitForHistoryAttachment(runtime);
+    runtime.semanticHistory.mockImplementation(async (_sessionId, request) => {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      const offset = request.direction === 'end'
+        ? screenStartOffset
+        : request.targetOffset ?? request.offset ?? 0;
+      return historyViewport({
+        offset,
+        totalRows: screenStartOffset + 24,
+        screenStartOffset,
+        anchor: 'million-row-frontier',
+        snapshotId: 'million-row-snapshot',
+      });
+    });
+
+    const scrollbar = runtime.root.querySelector<HTMLElement>('[data-floeterm-scrollbar]')!;
+    scrollbar.getBoundingClientRect = () => ({
+      x: 0, y: 0, top: 0, left: 0, right: 12, bottom: 100,
+      width: 12, height: 100, toJSON: () => ({}),
+    });
+    scrollbar.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientY: 25 }));
+    scrollbar.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, clientY: 75 }));
+
+    await vi.waitFor(() => expect(runtime.root.querySelector('[data-terminal-runtime-session]')
+      ?.getAttribute('data-terminal-history-offset')).toBe('750000'), { timeout: 3_000 });
+    expect(runtime.semanticHistory.mock.calls.length).toBeLessThanOrEqual(3);
+    expect(runtime.semanticHistory.mock.calls[0]?.[1]).toMatchObject({
+      lane: 'viewport', direction: 'end', viewportRows: 24,
+    });
+    expect(runtime.semanticHistory.mock.calls[1]?.[1]).toMatchObject({
+      lane: 'viewport',
+      direction: 'backward',
+      offset: screenStartOffset,
+      targetOffset: 750_000,
+      viewportRows: 24,
+    });
+    expect(runtime.semanticHistory.mock.calls.some((call) => call[1].scrollDeltaRows === 0)).toBe(false);
+    expect(runtime.getViewport()?.getVisibleScreenText()).toContain('old-history-marker');
   });
 
   it('searches actor-owned history and keeps touch projection view-local', async () => {
@@ -980,22 +1096,16 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     mounted.push(runtime);
     runtime.emitPresentation(presentation(1, 'current'));
     await vi.waitFor(() => expect(runtime.getViewport()).not.toBeNull());
+    await waitForHistoryAttachment(runtime);
 
-    const firstPage = historyPage();
-    const nextPage = {
-      ...historyPage(),
-      anchor: 'next-history-anchor',
-      offset: 24,
-      hasPrevious: true,
-      hasNext: false,
-      frame: frame('newer-history', 80, 24, 24),
-    };
+    const firstPage = searchViewport();
+    const nextPage = searchViewport({ offset: 16, text: 'newer-history' });
     runtime.semanticHistory
       .mockResolvedValueOnce(firstPage)
       .mockResolvedValueOnce(nextPage)
-      .mockResolvedValueOnce(nextPage);
+      .mockResolvedValueOnce(firstPage);
 
-    const results: Array<{ resultIndex: number; resultCount: number }> = [];
+    const results: Array<{ resultIndex: number; resultCount: number; state: string }> = [];
     runtime.getViewport()?.setSearchResultsCallback((result) => results.push(result));
     runtime.getViewport()?.findNext('old-history-marker');
     await vi.waitFor(() => expect(results.at(-1)?.resultCount).toBeGreaterThan(0));
@@ -1007,45 +1117,39 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     expect(runtime.getViewport()?.getPresentation()?.sequence).toBe(1);
   });
 
-  it('searches every server-bounded history page instead of assuming the requested page height', async () => {
+  it('searches complete server-owned viewports through the isolated search lane', async () => {
     const runtime = harness();
     mounted.push(runtime);
     runtime.emitPresentation(presentation(1, 'current'));
     await vi.waitFor(() => expect(runtime.getViewport()).not.toBeNull());
+    await waitForHistoryAttachment(runtime);
 
-    const boundedPage = (offset: number, text: string, hasNext: boolean): SemanticHistoryPage => {
-      const semanticFrame = frame(text, 80, 1, 2);
-      return {
-        revision: 1,
-        anchor: `page-${offset}`,
-        firstAvailable: 'first',
-        lastAvailable: 'last',
-        screenStart: 'screen',
-        offset,
-        totalRows: 3,
-        screenStartOffset: 2,
-        hasPrevious: offset > 0,
-        hasNext,
-        frame: semanticFrame,
-      };
-    };
+    const boundedViewport = (offset: number, text: string) => searchViewport({
+      offset,
+      text,
+      totalRows: 72,
+      screenStartOffset: 48,
+      anchor: 'search-frontier',
+    });
     runtime.semanticHistory
-      .mockResolvedValueOnce(boundedPage(0, 'first-page', true))
-      .mockResolvedValueOnce(boundedPage(1, 'middle-page', true))
-      .mockResolvedValueOnce(boundedPage(2, 'last-page-needle', false));
+      .mockResolvedValueOnce(boundedViewport(0, 'first-viewport'))
+      .mockResolvedValueOnce(boundedViewport(24, 'middle-viewport-needle'));
 
     const results: Array<{ state: string; resultCount: number }> = [];
     runtime.getViewport()?.setSearchResultsCallback((result) => results.push(result));
-    runtime.getViewport()?.findNext('last-page-needle');
+    runtime.getViewport()?.findNext('middle-viewport-needle');
 
     await vi.waitFor(() => expect(results.at(-1)).toMatchObject({ state: 'ready', resultCount: 1 }));
-    expect(runtime.semanticHistory).toHaveBeenCalledTimes(3);
+    expect(runtime.semanticHistory).toHaveBeenCalledTimes(2);
     expect(runtime.semanticHistory.mock.calls.map((call) => call[1].direction)).toEqual([
       'start',
       'forward',
-      'forward',
     ]);
-    expect(runtime.getViewport()?.getVisibleScreenText()).toContain('last-page-needle');
+    expect(runtime.semanticHistory.mock.calls.map((call) => call[1].lane)).toEqual([
+      'search',
+      'search',
+    ]);
+    expect(runtime.getViewport()?.getVisibleScreenText()).toContain('middle-viewport-needle');
   });
 
   it('fails a non-advancing history scan locally without replacing the live presentation', async () => {
@@ -1053,9 +1157,10 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     mounted.push(runtime);
     runtime.emitPresentation(presentation(1, 'live-before-stalled-search'));
     await vi.waitFor(() => expect(runtime.getViewport()).not.toBeNull());
+    await waitForHistoryAttachment(runtime);
 
     const stalledPage = {
-      ...historyPage(),
+      ...searchViewport(),
       offset: 0,
       hasPrevious: false,
       hasNext: true,
@@ -1090,12 +1195,13 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
       mounted.push(runtime);
       runtime.emitPresentation(presentation(1, 'live-before-search-error'));
       await vi.waitFor(() => expect(runtime.getViewport()).not.toBeNull());
+      await waitForHistoryAttachment(runtime);
 
       if (failurePoint === 'first page') {
         runtime.semanticHistory.mockRejectedValueOnce(new Error('RPC transport error'));
       } else {
         runtime.semanticHistory
-          .mockResolvedValueOnce(historyPage())
+          .mockResolvedValueOnce(searchViewport())
           .mockRejectedValueOnce(new Error('RPC transport error'));
       }
 
@@ -1131,11 +1237,9 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
       expect(runtime.getViewport()?.getVisibleScreenText()).toContain('live-after-search-error');
       runtime.setFontSize(15);
       await vi.waitFor(() => expect(runtime.resizeWithEffectiveGeometry).toHaveBeenCalled());
-      runtime.semanticHistory.mockImplementation(async () => ({
-        ...historyPage(),
+      runtime.semanticHistory.mockImplementation(async (_sessionId, request) => searchViewport({
         revision: 2,
-        hasNext: false,
-        frame: { ...historyPage().frame, history: { revision: 2, totalRows: 64, screenStartOffset: 40 } },
+        offset: request.targetOffset ?? 0,
       }));
 
       runtime.getViewport()?.findNext('old-history-marker');
@@ -1153,8 +1257,9 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     mounted.push(runtime);
     runtime.emitPresentation(presentation(1, 'live-before-late-search'));
     await vi.waitFor(() => expect(runtime.getViewport()).not.toBeNull());
-    let resolvePage!: (page: SemanticHistoryPage) => void;
-    runtime.semanticHistory.mockReturnValueOnce(new Promise<SemanticHistoryPage>((resolve) => {
+    await waitForHistoryAttachment(runtime);
+    let resolvePage!: (page: SemanticHistoryViewport) => void;
+    runtime.semanticHistory.mockReturnValueOnce(new Promise<SemanticHistoryViewport>((resolve) => {
       resolvePage = resolve;
     }));
     const results: Array<{
@@ -1165,7 +1270,7 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     runtime.getViewport()?.findNext('old-history-marker');
     await vi.waitFor(() => expect(results.at(-1)?.state).toBe('searching'));
     runtime.emitPresentation(presentation(2, 'newer-live-search-frame'));
-    resolvePage({ ...historyPage(), hasNext: false });
+    resolvePage(searchViewport({ offset: 16 }));
 
     await vi.waitFor(() => expect(results.at(-1)).toMatchObject({ state: 'ready', resultCount: 1 }));
     expect(runtime.getViewport()?.getVisibleScreenText()).toContain('old-history-marker');
@@ -1179,8 +1284,9 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     mounted.push(runtime);
     runtime.emitPresentation(presentation(1, 'live-before-search-resize'));
     await vi.waitFor(() => expect(runtime.getViewport()).not.toBeNull());
-    let resolvePage!: (page: SemanticHistoryPage) => void;
-    runtime.semanticHistory.mockReturnValueOnce(new Promise<SemanticHistoryPage>((resolve) => {
+    await waitForHistoryAttachment(runtime);
+    let resolvePage!: (page: SemanticHistoryViewport) => void;
+    runtime.semanticHistory.mockReturnValueOnce(new Promise<SemanticHistoryViewport>((resolve) => {
       resolvePage = resolve;
     }));
     const results: Array<{
@@ -1191,9 +1297,9 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     runtime.getViewport()?.findNext('old-history-marker');
     await vi.waitFor(() => expect(results.at(-1)?.state).toBe('searching'));
 
-    runtime.emitPresentation(presentation(2, 'resized-live-frame', 100, 24));
-    expect(results.at(-1)).toMatchObject({ state: 'idle', resultCount: 0 });
-    resolvePage({ ...historyPage(), hasNext: false });
+    runtime.emitPresentation(presentation(2, 'resized-live-frame', 100, 24, 2));
+    await vi.waitFor(() => expect(results.at(-1)).toMatchObject({ state: 'idle', resultCount: 0 }));
+    resolvePage({ ...searchViewport(), hasNext: false });
     await Promise.resolve();
 
     expect(results.at(-1)).toMatchObject({ state: 'idle', resultCount: 0 });
@@ -1207,6 +1313,7 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     mounted.push(runtime);
     runtime.emitPresentation(presentation(1, 'live-before-history-error'));
     await vi.waitFor(() => expect(runtime.getViewport()).not.toBeNull());
+    await waitForHistoryAttachment(runtime);
     runtime.semanticHistory.mockRejectedValueOnce(new Error('RPC transport error'));
 
     const surface = runtime.root.querySelector<HTMLElement>('[data-terminal-semantic-surface="true"]')!;
@@ -1224,7 +1331,7 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     expect(runtime.getViewport()?.getVisibleScreenText()).toContain('live-after-history-error');
     runtime.semanticHistory
       .mockResolvedValueOnce({
-        ...historyPage(),
+        ...historyViewport(),
         revision: 2,
         offset: 40,
         hasPrevious: true,
@@ -1232,9 +1339,9 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
         frame: { ...frame('current-history-edge', 80, 24, 40), history: { revision: 2, totalRows: 64, screenStartOffset: 40 } },
       })
       .mockResolvedValueOnce({
-        ...historyPage(),
+        ...historyViewport(),
         revision: 2,
-        frame: { ...historyPage().frame, history: { revision: 2, totalRows: 64, screenStartOffset: 40 } },
+        frame: { ...historyViewport().frame, history: { revision: 2, totalRows: 64, screenStartOffset: 40 } },
       });
 
     runtime.root.querySelector<HTMLButtonElement>('[data-terminal-semantic-history-retry]')?.click();
@@ -1248,9 +1355,10 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     mounted.push(runtime);
     runtime.emitPresentation(presentation(1, 'live-before-paged-error'));
     await vi.waitFor(() => expect(runtime.getViewport()).not.toBeNull());
+    await waitForHistoryAttachment(runtime);
     runtime.semanticHistory
       .mockResolvedValueOnce({
-        ...historyPage(),
+        ...historyViewport(),
         offset: 40,
         hasPrevious: true,
         hasNext: false,
@@ -1269,7 +1377,7 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     expect(runtime.statuses.some((status) => status.state === 'blocking')).toBe(false);
 
     runtime.root.querySelector<HTMLButtonElement>('[data-terminal-semantic-history-retry]')?.click();
-    await vi.waitFor(() => expect(runtime.semanticHistory).toHaveBeenCalledTimes(4));
+    await vi.waitFor(() => expect(runtime.semanticHistory.mock.calls.length).toBeGreaterThanOrEqual(4));
     expect(runtime.getViewport()?.getVisibleScreenText()).toContain('old-history-marker');
   });
 
@@ -1278,13 +1386,14 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     mounted.push(runtime);
     runtime.emitPresentation(presentation(1, 'live-before-trackpad-burst'));
     await vi.waitFor(() => expect(runtime.getViewport()).not.toBeNull());
-    let resolveEnd!: (page: SemanticHistoryPage) => void;
-    let resolveBackward!: (page: SemanticHistoryPage) => void;
+    await waitForHistoryAttachment(runtime);
+    let resolveEnd!: (page: SemanticHistoryViewport) => void;
+    let resolveBackward!: (page: SemanticHistoryViewport) => void;
     runtime.semanticHistory
-      .mockReturnValueOnce(new Promise<SemanticHistoryPage>((resolve) => { resolveEnd = resolve; }))
-      .mockReturnValueOnce(new Promise<SemanticHistoryPage>((resolve) => { resolveBackward = resolve; }))
+      .mockReturnValueOnce(new Promise<SemanticHistoryViewport>((resolve) => { resolveEnd = resolve; }))
+      .mockReturnValueOnce(new Promise<SemanticHistoryViewport>((resolve) => { resolveBackward = resolve; }))
       .mockResolvedValueOnce({
-        ...historyPage(),
+        ...historyViewport(),
         offset: 40,
         hasPrevious: true,
         hasNext: false,
@@ -1299,7 +1408,7 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     surface.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: -80 }));
     surface.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 160 }));
     resolveEnd({
-      ...historyPage(),
+      ...historyViewport(),
       offset: 40,
       hasPrevious: true,
       hasNext: false,
@@ -1307,21 +1416,20 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     });
     await vi.waitFor(() => expect(runtime.semanticHistory).toHaveBeenCalledTimes(2));
     resolveBackward({
-      ...historyPage(),
+      ...historyViewport(),
       offset: 16,
       hasPrevious: true,
       hasNext: true,
       frame: frame('older-trackpad-page', 80, 24, 16),
     });
 
-    await vi.waitFor(() => expect(runtime.semanticHistory).toHaveBeenCalledTimes(3));
+    await vi.waitFor(() => expect(runtime.semanticHistory).toHaveBeenCalledTimes(2));
     await vi.waitFor(() => expect(runtime.root.querySelector('[data-terminal-runtime-session]')?.getAttribute('data-terminal-history-busy')).toBe('false'));
     expect(runtime.semanticHistory.mock.calls.map((call) => call[1].direction)).toEqual([
       'end',
       'backward',
-      'forward',
     ]);
-    expect(runtime.root.querySelector('[data-terminal-runtime-session]')?.getAttribute('data-terminal-history-request-direction')).toBe('forward');
+    expect(runtime.root.querySelector('[data-terminal-runtime-session]')?.getAttribute('data-terminal-history-request-direction')).toBe('backward');
     expect(runtime.root.querySelector('[data-terminal-runtime-session]')?.getAttribute('data-terminal-history-request-state')).toBe('settled');
     expect(runtime.root.querySelector('[data-terminal-runtime-session]')?.getAttribute('data-terminal-history-projected')).toBe('false');
     expect(runtime.getViewport()?.getVisibleScreenText()).toContain('live-before-trackpad-burst');
@@ -1333,16 +1441,17 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     mounted.push(runtime);
     runtime.emitPresentation(presentation(1, 'live-before-late-page'));
     await vi.waitFor(() => expect(runtime.getViewport()).not.toBeNull());
-    let resolvePage!: (page: SemanticHistoryPage) => void;
+    await waitForHistoryAttachment(runtime);
+    let resolvePage!: (page: SemanticHistoryViewport) => void;
     runtime.semanticHistory
       .mockResolvedValueOnce({
-        ...historyPage(),
+        ...historyViewport(),
         offset: 40,
         hasPrevious: true,
         hasNext: false,
         frame: frame('current-history-edge', 80, 24, 40),
       })
-      .mockReturnValueOnce(new Promise<SemanticHistoryPage>((resolve) => {
+      .mockReturnValueOnce(new Promise<SemanticHistoryViewport>((resolve) => {
         resolvePage = resolve;
       }));
 
@@ -1350,7 +1459,7 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     surface.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: -120 }));
     await vi.waitFor(() => expect(runtime.semanticHistory).toHaveBeenCalledTimes(2));
     runtime.emitPresentation(presentation(2, 'newer-live-frame'));
-    resolvePage(historyPage());
+    resolvePage(historyViewport());
 
     await vi.waitFor(() => expect(runtime.root.querySelector('[data-terminal-runtime-session]')?.getAttribute('data-terminal-history-busy')).toBe('false'));
     expect(runtime.root.querySelector('[data-terminal-runtime-session]')?.getAttribute('data-terminal-history-projected')).toBe('true');
@@ -1364,24 +1473,25 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     mounted.push(runtime);
     runtime.emitPresentation(presentation(1, 'live-before-late-page'));
     await vi.waitFor(() => expect(runtime.getViewport()).not.toBeNull());
-    let resolvePage!: (page: SemanticHistoryPage) => void;
+    await waitForHistoryAttachment(runtime);
+    let resolvePage!: (page: SemanticHistoryViewport) => void;
     runtime.semanticHistory
       .mockResolvedValueOnce({
-        ...historyPage(),
+        ...historyViewport(),
         offset: 40,
         hasPrevious: true,
         hasNext: false,
         frame: frame('current-history-edge', 80, 24, 40),
       })
-      .mockReturnValueOnce(new Promise<SemanticHistoryPage>((resolve) => {
+      .mockReturnValueOnce(new Promise<SemanticHistoryViewport>((resolve) => {
         resolvePage = resolve;
       }));
 
     const surface = runtime.root.querySelector<HTMLElement>('[data-terminal-semantic-surface="true"]')!;
     surface.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: -120 }));
     await vi.waitFor(() => expect(runtime.semanticHistory).toHaveBeenCalledTimes(2));
-    runtime.emitPresentation(presentation(2, 'resized-live-frame', 81, 24));
-    resolvePage(historyPage());
+    runtime.emitPresentation(presentation(2, 'resized-live-frame', 81, 24, 2));
+    resolvePage(historyViewport());
 
     await vi.waitFor(() => expect(runtime.root.querySelector('[data-terminal-runtime-session]')?.getAttribute('data-terminal-history-busy')).toBe('false'));
     expect(runtime.root.querySelector('[data-terminal-runtime-session]')?.getAttribute('data-terminal-history-projected')).toBe('false');

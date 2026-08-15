@@ -215,9 +215,21 @@ export function toWireTerminalSemanticHistoryRequest(req: TerminalSemanticHistor
     session_id: req.sessionId,
     connection_id: req.connectionId,
     transport_generation: req.transportGeneration,
-    ...(req.anchor === undefined ? {} : { anchor: req.anchor }),
-    direction: req.direction,
-    limit: req.limit,
+    ...('continuation' in req
+      ? {
+          continuation: req.continuation,
+          ...(req.lane === undefined ? {} : { lane: req.lane }),
+        }
+      : {
+          ...(req.lane === undefined ? {} : { lane: req.lane }),
+          ...(req.anchor === undefined ? {} : { anchor: req.anchor }),
+          ...(req.snapshotId === undefined ? {} : { snapshot_id: req.snapshotId }),
+          direction: req.direction,
+          ...(req.offset === undefined ? {} : { offset: req.offset }),
+          ...(req.scrollDeltaRows === undefined ? {} : { scroll_delta_rows: req.scrollDeltaRows }),
+          ...(req.targetOffset === undefined ? {} : { target_offset: req.targetOffset }),
+          viewport_rows: req.viewportRows,
+        }),
   };
 }
 
