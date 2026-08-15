@@ -226,6 +226,29 @@ function builtPluginPresentationCatalog() {
   };
 }
 
+function builtPluginReleaseInspection() {
+  return {
+    plugin_instance_id: builtPluginInstanceID,
+    release_ref: builtPluginReleaseRef,
+    inspected_hashes: builtPluginPackageHashes,
+    presentation: builtPluginPresentationCatalog(),
+    presentation_sha256: builtPluginPresentationSHA256,
+    security_summary: {
+      summary_sha256: `sha256:${'2'.repeat(64)}`,
+      permissions: [{ permission_id: 'containers.read', methods: ['containers.list'] }],
+      methods: [],
+      capability_contracts: [],
+      workers: [],
+      network: [],
+      storage: [],
+      secret_refs: [],
+      core_actions: [],
+      intents: [],
+      surfaces: [],
+    },
+  };
+}
+
 function builtPluginMarketDetail() {
   const presentation = builtPluginPresentationCatalog();
   return {
@@ -262,7 +285,13 @@ function builtPluginInstalledPlugin() {
     entries_hash: builtPluginPackageHashes.entries_sha256,
     trust_state: 'verified',
     trust_assessment: { trust_state: 'verified', verified_hashes: builtPluginPackageHashes },
-    enable_state: 'disabled',
+    enable_state: 'enabled',
+    action_state: {
+      can_open: true,
+      can_enable: false,
+      can_disable: true,
+      can_uninstall: true,
+    },
     policy_revision: 1,
     management_revision: 1,
     revoke_epoch: 0,
@@ -394,7 +423,17 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
         if (JSON.stringify(body) !== JSON.stringify(expected)) {
           throw new Error(`unexpected active permissions request: ${JSON.stringify({ expected, actual: body })}`);
         }
-        jsonResponse(response, { ok: true, data: { permissions: [] } });
+        jsonResponse(response, {
+          ok: true,
+          data: {
+            permissions: installedPlugin ? [{
+              plugin_instance_id: builtPluginInstanceID,
+              permission_id: 'containers.read',
+              effect: 'grant',
+              granted_at: '2026-08-05T08:00:02Z',
+            }] : [],
+          },
+        });
         return;
       }
       if (requestURL.pathname === '/_redevplugin/api/plugins/security-policies/query') {
@@ -432,6 +471,18 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
         jsonResponse(response, { ok: true, data: { revision: 1, complete: true, results: [] } });
         return;
       }
+      if (pluginInstallFlow && requestURL.pathname === '/_redevplugin/api/plugins/release-packages/inspect') {
+        const body = await readJSONRequest(request);
+        const expected = {
+          plugin_instance_id: builtPluginInstanceID,
+          release_ref: builtPluginReleaseRef,
+        };
+        if (request.method !== 'POST' || JSON.stringify(body) !== JSON.stringify(expected)) {
+          throw new Error(`unexpected plugin release inspection request: ${JSON.stringify({ expected, actual: body })}`);
+        }
+        jsonResponse(response, { ok: true, data: builtPluginReleaseInspection() });
+        return;
+      }
       if (pluginInstallFlow && requestURL.pathname === '/_redevplugin/api/plugins/executions/query') {
         const body = await readJSONRequest(request);
         const expected = { limit: 100 };
@@ -448,6 +499,7 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
           plugin_instance_id: builtPluginInstanceID,
           release_ref: builtPluginReleaseRef,
           activate_after_install: true,
+          approved_permission_ids: ['containers.read'],
         };
         if (!/^[0-9a-f-]{36}$/u.test(body.request_id)
           || JSON.stringify(body) !== JSON.stringify(expected)) {
@@ -856,7 +908,7 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
         pageErrors,
       })}`, { cause: error });
     }
-    await installedPluginItem.getByText('Needs attention', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
+    await installedPluginItem.getByText('Enabled', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
     await installedPluginItem.press('Enter');
     const installedDetails = pluginCenter.locator('[data-plugin-center-details]');
     await installedDetails.getByText('Official', { exact: true }).first().waitFor({ state: 'visible', timeout: 10_000 });
@@ -874,9 +926,17 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
       return { ...request, payload };
     });
     const requiredPluginRequests = [
+      { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query', payload: {} },
       { method: 'POST', path: '/_redevplugin/api/plugins/runtime/recover-enabled', payload: {} },
       { method: 'POST', path: '/_redevplugin/api/plugins/executions/query', payload: { limit: 100 } },
-      { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query', payload: {} },
+      {
+        method: 'POST',
+        path: '/_redevplugin/api/plugins/release-packages/inspect',
+        payload: {
+          plugin_instance_id: builtPluginInstanceID,
+          release_ref: builtPluginReleaseRef,
+        },
+      },
       {
         method: 'POST',
         path: '/_redevplugin/api/plugins/executions/release-installs',
@@ -885,6 +945,7 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
           plugin_instance_id: builtPluginInstanceID,
           release_ref: builtPluginReleaseRef,
           activate_after_install: true,
+          approved_permission_ids: ['containers.read'],
         },
       },
       {
@@ -917,6 +978,7 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
     const exactlyOnceRequests = new Set([
       'POST /_redevplugin/api/plugins/runtime/recover-enabled',
       'POST /_redevplugin/api/plugins/executions/query',
+      'POST /_redevplugin/api/plugins/release-packages/inspect',
       'POST /_redevplugin/api/plugins/executions/release-installs',
       'POST /_redevplugin/api/plugins/executions/release_install_built_renderer/events/query',
       'POST /_redevplugin/api/plugins/executions/release_install_built_renderer/query',
@@ -936,7 +998,7 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
 
     return {
       market_snapshot_loaded: true,
-      installed_state: 'needs_attention_verified_after_permission_review',
+      installed_state: 'enabled_verified_after_permission_review',
       package_url: builtPluginPackageURL,
       release_install_execution_called: true,
       request_count: pluginRequests.length,
