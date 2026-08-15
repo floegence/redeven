@@ -61,14 +61,16 @@ test('attach shell never launches, installs, restarts, or stops the existing Des
   assert.match(attachFunction, /runtime_open_readiness.*openable/u);
 });
 
-test('attach browser smoke opens the Panel before waiting for a current session credential', async () => {
+test('browser smoke waits for session inventory before first Panel open', async () => {
   const source = await import('node:fs/promises').then((fs) => fs.readFile(
     new URL('./smoke_desktop_plugins.mjs', import.meta.url),
     'utf8',
   ));
-  const panelOpen = source.indexOf("await visiblePluginTrigger().click();");
   const sessionWait = source.indexOf("}, 30_000, 'plugin session credential');");
-  assert.ok(panelOpen > 0 && sessionWait > panelOpen);
+  const inventoryReady = source.indexOf("'session inventory prefetch'");
+  const panelPhase = source.indexOf("phase = 'panel_open';", sessionWait);
+  const panelOpen = source.indexOf("await visiblePluginTrigger().click();", panelPhase);
+  assert.ok(inventoryReady > 0 && sessionWait > inventoryReady && panelOpen > sessionWait);
   assert.match(source, /config\.mode === 'attach'[\s\S]*?aria-expanded[\s\S]*?state: 'detached'/u);
 });
 
@@ -226,6 +228,24 @@ test('Desktop smoke records close button, Escape, backdrop, and final reopen evi
   assert.match(source, /panelDismissal\.backdrop/u);
   assert.match(source, /panelDismissal\.final_reopen/u);
   assert.match(source, /waitFor\(\{ state: 'detached', timeout: 10_000 \}\)/u);
+});
+
+test('Desktop smoke reopens the Panel five times without a visible loading state or inventory reload', async () => {
+  const source = await import('node:fs/promises').then((fs) => fs.readFile(
+    new URL('./smoke_desktop_plugins.mjs', import.meta.url),
+    'utf8',
+  ));
+  assert.match(source, /for \(let index = 0; index < 5; index \+= 1\)/u);
+  assert.match(source, /Loading plugins\|正在加载插件/u);
+  assert.match(source, /catalogQueryCountBefore/u);
+  assert.match(source, /catalogQueryCountAfter/u);
+  assert.match(source, /catalogQueryCountAfter !== catalogQueryCountBefore/u);
+  assert.match(source, /open_duration_ms/u);
+  assert.match(source, /tile_keys/u);
+  assert.match(source, /inventory_refresh_count/u);
+  assert.match(source, /background refresh pending/u);
+  assert.match(source, /page\.route\('\*\*\/_redevplugin\/api\/plugins\/catalog\/query'/u);
+  assert.match(source, /background_refresh_tile_keys/u);
 });
 
 test('Desktop smoke discovers Electron windows across every CDP browser context', () => {

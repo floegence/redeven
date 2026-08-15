@@ -250,6 +250,7 @@ async function expectScreenshotHasPixelVariance(): Promise<void> {
 function mountPanel(mobile: boolean, model: PluginPanelModel = panelModel): Readonly<{
   host: HTMLElement;
   trigger: () => HTMLButtonElement | undefined;
+  setOpen: (open: boolean) => void;
 }> {
   const host = fixedHost();
   const [trigger, setTrigger] = createSignal<HTMLButtonElement>();
@@ -280,7 +281,7 @@ function mountPanel(mobile: boolean, model: PluginPanelModel = panelModel): Read
       />
     </>
   ), host));
-  return { host, trigger };
+  return { host, trigger, setOpen };
 }
 
 function mountPluginCenter(): HTMLElement {
@@ -675,6 +676,26 @@ describe('plugin management browser geometry and interaction', () => {
     lastAction.focus();
     await userEvent.tab();
     expect(dialog.contains(document.activeElement)).toBe(true);
+  });
+
+  it('reopens the Plugin Switcher repeatedly with an immediately available tile and no visible loading state', async () => {
+    await page.viewport(1440, 900);
+    const mounted = mountPanel(false);
+    await settle();
+
+    for (let index = 0; index < 5; index += 1) {
+      mounted.setOpen(false);
+      await settle();
+      mounted.setOpen(true);
+      await settle();
+
+      const tile = document.querySelector<HTMLButtonElement>('[data-plugin-panel-tile="instance:containers"]');
+      expect(tile).not.toBeNull();
+      expect(tile?.textContent).toContain('Containers');
+      expect(getComputedStyle(tile!).opacity).not.toBe('0');
+      expect(document.body.textContent).not.toContain('Loading plugins...');
+      expect(document.querySelector('[role="status"]')).toBeNull();
+    }
   });
 
   it.each([

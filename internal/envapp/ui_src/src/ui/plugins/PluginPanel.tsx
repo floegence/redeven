@@ -409,15 +409,10 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
                   {props.model.errorMessage}
                 </div>
               </Show>
-              <Show when={props.model.loading}>
-                <div role="status" class="mb-2 rounded-md bg-muted px-3 py-2 text-xs leading-4 text-muted-foreground">
-                  {i18n.t('uiCopy.plugin.loadingOfficial')}
-                </div>
-              </Show>
-
               <ul
                 ref={gridRef}
                 data-plugin-launcher-grid
+                aria-busy={props.model.loading}
                 class={cn('grid', isWorkbenchPopup() ? 'grid-cols-4 gap-1.5' : 'grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5')}
               >
                 <For each={visibleTiles()}>

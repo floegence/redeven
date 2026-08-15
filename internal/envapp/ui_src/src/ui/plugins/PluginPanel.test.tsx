@@ -114,6 +114,36 @@ function mountPanel(props: Partial<Parameters<typeof PluginPanel>[0]> = {}) {
 }
 
 describe('PluginPanel', () => {
+  it('keeps the last-known-good tiles visible during a background refresh without a visible loading banner', async () => {
+    const [loading, setLoading] = createSignal(false);
+    const item = pluginItem();
+    const model = () => ({ ...panelModel(item), loading: loading() });
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginPanel open model={model()} onClose={vi.fn()} onOpenCenter={vi.fn()} onOpenPluginDetails={vi.fn()} onOpenPluginSurface={vi.fn()} />
+    ), mount);
+
+    const tileBefore = document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]');
+    expect(tileBefore).not.toBeNull();
+    setLoading(true);
+    await Promise.resolve();
+
+    expect(document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]')).not.toBeNull();
+    expect(document.querySelector('[data-plugin-launcher-grid]')?.textContent).toContain('Containers');
+    expect(document.querySelector('[role="status"]')).toBeNull();
+    expect(document.body.textContent).not.toContain('Loading plugins...');
+  });
+
+  it('keeps the initial pending layout stable without exposing loading or an empty state', () => {
+    mountPanel({ model: { loading: true, tiles: [{ kind: 'open_center', id: 'plugin-center', label: 'Plugin Center' }] } });
+
+    const dialog = document.querySelector('[role="dialog"]')!;
+    expect(dialog.querySelector('[role="status"]')).toBeNull();
+    expect(dialog.textContent).not.toContain('Loading plugins...');
+    expect(dialog.textContent).not.toContain('No installed plugins yet.');
+  });
+
   it('keeps the popup mounted while it closes downward', async () => {
     vi.useFakeTimers();
     const [open, setOpen] = createSignal(true);

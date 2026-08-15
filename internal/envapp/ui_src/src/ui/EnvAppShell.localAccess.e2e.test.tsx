@@ -257,15 +257,18 @@ const connectMock = vi.fn(async (_config: Record<string, unknown>) => {
   protocolStatus = 'connected';
   protocolClient = { id: 'client-1' };
   protocolError = null;
+  notifyProtocolStateChange();
 });
 const reconnectMock = vi.fn(async (_config?: Record<string, unknown>) => {
   protocolStatus = 'connected';
   protocolClient = { id: 'client-2' };
   protocolError = null;
+  notifyProtocolStateChange();
 });
 const disconnectMock = vi.fn(() => {
   protocolStatus = 'disconnected';
   protocolClient = null;
+  notifyProtocolStateChange();
 });
 const accessStatusMock = vi.fn(async () => ({ passwordRequired: true, unlocked: resumeCalls.length > 0 }));
 const accessResumeMock = vi.fn(async ({ token }: { token: string }) => {
@@ -1756,34 +1759,257 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
-  it('re-fetches an empty inventory once after the local plugin session becomes ready', async () => {
+  it('prefetches plugin inventory for the ready session and does not reload it across repeated Panel toggles', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('enabled'));
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushUntil(() => (
+        pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 1
+        && Boolean(pluginPanelState.lastProps)
+      ), 40);
+      expect(pluginPanelState.lastProps.open).toBe(false);
+      expect(pluginPanelState.lastProps.model.tiles).toContainEqual(
+        expect.objectContaining({
+          kind: 'plugin',
+          item: expect.objectContaining({ pluginID: officialContainersCatalog.pluginID }),
+        }),
+      );
+
+      const trigger = host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement;
+      for (let index = 0; index < 5; index += 1) {
+        trigger.click();
+        await flushAsync();
+        expect(pluginPanelState.lastProps.open).toBe(true);
+        expect(pluginPanelState.lastProps.model.tiles).toContainEqual(
+          expect.objectContaining({
+            kind: 'plugin',
+            item: expect.objectContaining({ pluginID: officialContainersCatalog.pluginID }),
+          }),
+        );
+        trigger.click();
+        await flushAsync();
+        expect(pluginPanelState.lastProps.open).toBe(false);
+      }
+
+      expect(pluginLifecycleMocks.loadInventoryProjection).toHaveBeenCalledTimes(1);
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('aborts a superseded inventory request and never projects the previous session into the next one', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    const requestSignals: AbortSignal[] = [];
+    let resolveFirst!: (projection: PluginInventoryProjection) => void;
+    pluginLifecycleMocks.loadInventoryProjection
+      .mockImplementationOnce(({ signal }: { signal?: AbortSignal } = {}) => {
+        if (signal) requestSignals.push(signal);
+        return new Promise<PluginInventoryProjection>((resolve) => { resolveFirst = resolve; });
+      })
+      .mockImplementationOnce(async ({ signal }: { signal?: AbortSignal } = {}) => {
+        if (signal) requestSignals.push(signal);
+        return {
+          ...officialContainersProjection('enabled'),
+          items: officialContainersProjection('enabled').items.map((item) => ({
+            ...item,
+            displayName: 'Containers in replacement session',
+          })),
+        };
+      });
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 1, 40);
+      protocolClient = { id: 'client-replaced-for-inventory' };
+      notifyProtocolStateChange();
+      await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 2, 40);
+
+      expect(requestSignals).toHaveLength(2);
+      expect(requestSignals[0]?.aborted).toBe(true);
+      await flushUntil(() => pluginPanelState.lastProps?.model?.tiles?.some(
+        (tile: any) => tile.kind === 'plugin' && tile.item?.displayName === 'Containers in replacement session',
+      ), 40);
+      resolveFirst(officialContainersProjection('enabled'));
+      await flushAsync();
+      expect(pluginPanelState.lastProps.model.tiles).toContainEqual(
+        expect.objectContaining({
+          kind: 'plugin',
+          item: expect.objectContaining({ displayName: 'Containers in replacement session' }),
+        }),
+      );
+      expect(pluginPanelState.lastProps.model.tiles).not.toContainEqual(
+        expect.objectContaining({
+          kind: 'plugin',
+          item: expect.objectContaining({ displayName: 'Containers' }),
+        }),
+      );
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('keeps the last successful inventory during a pending or failed background refresh', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    let rejectRefresh!: (error: Error) => void;
+    pluginLifecycleMocks.loadInventoryProjection
+      .mockResolvedValueOnce(officialContainersProjection('enabled'))
+      .mockImplementationOnce(() => new Promise<PluginInventoryProjection>((_resolve, reject) => {
+        rejectRefresh = reject;
+      }));
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushUntil(() => pluginPanelState.lastProps?.model?.tiles?.some(
+        (tile: any) => tile.kind === 'plugin' && tile.item?.pluginID === officialContainersCatalog.pluginID,
+      ), 40);
+      await pluginPanelState.lastProps.onOpenCenter();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps), 40);
+
+      const refresh = pluginCenterViewState.lastProps.onRefresh();
+      await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 2, 40);
+      expect(pluginPanelState.lastProps.model.loading).toBe(false);
+      expect(pluginPanelState.lastProps.model.errorMessage).toBeUndefined();
+      expect(pluginPanelState.lastProps.model.tiles).toContainEqual(
+        expect.objectContaining({
+          kind: 'plugin',
+          item: expect.objectContaining({ pluginID: officialContainersCatalog.pluginID }),
+        }),
+      );
+
+      rejectRefresh(new Error('temporary inventory failure'));
+      await refresh;
+      expect(pluginPanelState.lastProps.model.errorMessage).toBeUndefined();
+      expect(pluginPanelState.lastProps.model.tiles).toContainEqual(
+        expect.objectContaining({
+          kind: 'plugin',
+          item: expect.objectContaining({ pluginID: officialContainersCatalog.pluginID }),
+        }),
+      );
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('keeps the mounted Panel tile stable while the session owner refreshes in the background', async () => {
+    pluginPanelState.renderActual = true;
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    let resolveRefresh!: (projection: PluginInventoryProjection) => void;
+    pluginLifecycleMocks.loadInventoryProjection
+      .mockResolvedValueOnce(officialContainersProjection('enabled'))
+      .mockImplementationOnce(() => new Promise<PluginInventoryProjection>((resolve) => {
+        resolveRefresh = resolve;
+      }));
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 1, 40);
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement).click();
+      await flushUntil(() => Boolean(document.querySelector('[data-plugin-panel-tile="instance:plugini_redeven_official_containers"]')), 40);
+      const tileBefore = document.querySelector('[data-plugin-panel-tile="instance:plugini_redeven_official_containers"]');
+
+      pluginPlatformMocks.state.onMutationOutcomeUnknown?.();
+      await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 2, 40);
+      expect(document.querySelector('[data-plugin-panel-tile="instance:plugini_redeven_official_containers"]')).toBe(tileBefore);
+      expect(document.body.textContent).not.toContain('Loading plugins...');
+      expect(document.querySelector('[role="status"]')).toBeNull();
+
+      resolveRefresh(officialContainersProjection('enabled'));
+      await flushAsync();
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('shows a retryable error only when the session has no successful inventory snapshot', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockRejectedValue(new Error('inventory unavailable'));
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushUntil(() => pluginPanelState.lastProps?.model?.errorMessage === 'inventory unavailable', 40);
+      expect(pluginPanelState.lastProps.model.loading).toBe(false);
+      expect(pluginPanelState.lastProps.model.tiles.filter((tile: any) => tile.kind === 'plugin')).toHaveLength(0);
+      await pluginPanelState.lastProps.onOpenCenter();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps), 40);
+      expect(pluginCenterViewState.lastProps.error).toEqual(expect.objectContaining({ message: 'inventory unavailable' }));
+      expect(pluginCenterViewState.lastProps.onRefresh).toEqual(expect.any(Function));
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('refreshes the session inventory exactly once after a lifecycle mutation', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     pluginLifecycleMocks.loadInventoryProjection
-      .mockResolvedValueOnce({ items: [], marketUnavailable: false })
-      .mockResolvedValueOnce(officialContainersProjection('enabled'));
+      .mockResolvedValueOnce(officialContainersProjection('enabled'))
+      .mockResolvedValueOnce(officialContainersProjection('disabled'));
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 1, 40);
+      await pluginPanelState.lastProps.onOpenCenter();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onCommand), 40);
+      await pluginCenterViewState.lastProps.onCommand({
+        type: 'disable',
+        pluginInstanceID: officialContainersCatalog.pluginInstanceID,
+        expectedManagementRevision: 11,
+      }, new AbortController().signal);
+
+      expect(pluginLifecycleMocks.execute).toHaveBeenCalledTimes(1);
+      expect(pluginLifecycleMocks.loadInventoryProjection).toHaveBeenCalledTimes(2);
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('accepts a successful empty inventory without polling or coupling a retry to Panel open', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue({ items: [], marketUnavailable: false });
     window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
     const host = document.createElement('div');
     document.body.appendChild(host);
     const { EnvAppShell } = await import('./EnvAppShell');
     const dispose = render(() => <EnvAppShell />, host);
     try {
-      await flushAsync();
+      await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 1, 40);
       (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
-      await flushUntil(() => (
-        pluginLifecycleMocks.loadInventoryProjection.mock.calls.length >= 2
-        && pluginPanelState.lastProps?.model?.tiles?.some(
-          (tile: any) => tile.kind === 'plugin' && tile.item?.pluginID === officialContainersCatalog.pluginID,
-        )
-      ), 40);
-      expect(pluginLifecycleMocks.loadInventoryProjection).toHaveBeenCalledTimes(2);
+      await flushAsync();
+      expect(pluginLifecycleMocks.loadInventoryProjection).toHaveBeenCalledTimes(1);
       const pluginTiles = pluginPanelState.lastProps.model.tiles.filter((tile: any) => tile.kind === 'plugin');
-      expect(pluginTiles).toHaveLength(1);
-      expect(pluginTiles[0].item).toMatchObject({
-        pluginID: officialContainersCatalog.pluginID,
-        pluginInstanceID: officialContainersCatalog.pluginInstanceID,
-        lifecycleState: 'enabled',
-      });
+      expect(pluginTiles).toHaveLength(0);
       expect(pluginPanelState.lastProps.model.tiles).not.toContainEqual(
         expect.objectContaining({ kind: 'empty' }),
       );
