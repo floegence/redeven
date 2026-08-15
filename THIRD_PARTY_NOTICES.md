@@ -39,7 +39,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | github.com/ebitengine/purego | v0.9.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/ebitengine/purego@v0.9.1 | Detected from LICENSE. |
 | github.com/felixge/httpsnoop | v1.0.4 | MIT | Runtime | https://pkg.go.dev/github.com/felixge/httpsnoop@v1.0.4 | Detected from LICENSE.txt. |
 | github.com/floegence/floeterm/terminal-go | v0.10.5 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.10.5 | Floegence first-party dependency. |
-| github.com/floegence/floret/v4 | v4.0.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v4@v4.0.0 | Detected from LICENSE. |
+| github.com/floegence/floret/v4 | v4.0.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret/v4@v4.0.1 | Detected from LICENSE. |
 | github.com/floegence/flowersec/flowersec-go/v2 | v2.4.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go/v2@v2.4.1 | Floegence first-party dependency. |
 | github.com/floegence/redevplugin | v1.1.4 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin@v1.1.4 | Floegence first-party dependency. |
 | github.com/go-logr/logr | v1.4.2 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/go-logr/logr@v1.4.2 | Detected from LICENSE. |
