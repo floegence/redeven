@@ -22,8 +22,8 @@ require_source() {
 }
 
 echo "[INFO] checking published Floret v4 dependency"
-rg -q '^\s*github\.com/floegence/floret/v4 v4\.0\.1$' go.mod \
-  || fail "go.mod must consume github.com/floegence/floret/v4 v4.0.1"
+rg -q '^\s*github\.com/floegence/floret/v4 v4\.0\.3$' go.mod \
+  || fail "go.mod must consume github.com/floegence/floret/v4 v4.0.3"
 if rg -n '^replace .*floegence/floret|github\.com/floegence/floret/v4\s*=>' go.mod; then
   fail "Floret must not use a Go module replacement"
 fi
