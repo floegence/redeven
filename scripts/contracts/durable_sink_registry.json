@@ -762,40 +762,6 @@
       "review_note": "Stores or invokes only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
     },
     {
-      "path": "internal/ai/threadstore/followups.go",
-      "sha256": "dd4dfed31dfdb24e940a99359e3c098174f4b3a1bebbd20ee4a5102c24db7b0a",
-      "sink_kinds": [
-        "sqlite"
-      ],
-      "review_status": "reviewed",
-      "owner": "redeven threadstore",
-      "authority": "product_coordination",
-      "data_classes": [
-        "host thread settings",
-        "unadmitted commands",
-        "product routing",
-        "resource claims",
-        "cross-store operation intent",
-        "permission audit"
-      ],
-      "tables": [
-        "ai_queued_turns",
-        "ai_thread_delete_operations",
-        "ai_thread_fork_operations",
-        "ai_thread_settings",
-        "ai_turn_admission_receipts",
-        "expression:`\nSELECT thread_id, COUNT(1)\nFROM ai_queued_turns\nWHERE endpoint_id = ? AND lane = ? AND thread_id IN (` + placeholders + `)\nGROUP BY thread_id\n`",
-        "expression:query"
-      ],
-      "codecs": [
-        "encoding/json.Marshal"
-      ],
-      "dtos": [
-        "command{\n\tQueueID:\tstrings.TrimSpace(rec.QueueID), EndpointID: strings.TrimSpace(rec.EndpointID), ThreadID: strings.TrimSpace(rec.ThreadID),\n\tChannelID:\tstrings.TrimSpace(rec.ChannelID), ModelID: strings.TrimSpace(rec.ModelID), TextContent: rec.TextContent,\n\tAttachmentsJSON:\tstrings.TrimSpace(rec.AttachmentsJSON), ContextActionJSON: strings.TrimSpace(rec.ContextActionJSON),\n\tOptionsJSON:\tstrings.TrimSpace(rec.OptionsJSON), SessionMetaJSON: strings.TrimSpace(rec.SessionMetaJSON),\n\tCreatedByUserPublicID:\tstrings.TrimSpace(rec.CreatedByUserPublicID), CreatedByUserEmail: strings.TrimSpace(rec.CreatedByUserEmail),\n}"
-      ],
-      "review_note": "Stores only Redeven-owned product settings, resources, audit, unadmitted commands, and coordination intent; Floret remains canonical after admission."
-    },
-    {
       "path": "internal/ai/threadstore/fork_operation.go",
       "sha256": "f5b2337cc534280bf44cac265b35a10cacf734881c976a2d00ea9c5e7cc9b21f",
       "sink_kinds": [

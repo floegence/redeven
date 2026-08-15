@@ -30,7 +30,7 @@ Every initial, queued, follow-up, replacement, RPC, and service admission path r
 
 Redeven derives one model-scoped capability snapshot from the selected provider route and model modalities. The revision binds the exact MIME route matrix and product limits. A native image or file route is advertised only when the provider adapter can render and conservatively estimate that complete request. Strict UTF-8 text may instead use the bounded `attachment.read` host tool. Binary, image, and PDF content never use the text fallback.
 
-Floret v3.2.40 receives only canonical descriptors and owns their durable association, replay, fork, retry, SubAgent, and prompt-cache identity. A known-Turn attachment read uses one identity-bound exact turn read and never falls back to history pages; only typed not-found is absence, while authority, storage, and corruption failures remain unavailable errors. An unknown-Turn attachment lookup may scan canonical turn pages because the provider locator lacks source Turn identity; it never consults a Redeven message table. Redeven opens and hashes bytes after Floret selects the exact request and before provider dispatch through the prepared-request contract. The prepared request freezes the fully rendered provider payload, estimate, and fingerprint, is consumed at most once, and is closed on every non-stream path. Historical reads repeat canonical membership and byte-integrity checks rather than trusting admission-time state.
+Floret v4 receives canonical attachment descriptors through typed `Send` and owns their durable association with the accepted user item, queue intent, retry lineage, and child Thread. A known-Turn attachment read uses one identity-bound exact typed view and never falls back to product history; only typed not-found is absence, while storage and corruption failures remain unavailable errors. Redeven opens and hashes bytes after Floret identifies the exact canonical input and before provider dispatch. The effect adapter freezes the rendered provider request for one attempt and closes it on every non-stream path. Historical reads repeat canonical membership and byte-integrity checks rather than trusting acceptance-time state.
 
 # Boundaries
 
@@ -46,7 +46,7 @@ Redeven does not inspect or migrate Floret storage, persist message ordering, ex
 - `redeven:internal/ai/floret_attachments.go` - Canonical descriptors and post-admission byte validation bridge Redeven resources into Floret requests.
 - `redeven:internal/ai/floret_provider.go` - Prepared provider requests freeze rendered attachment payloads and conservative estimates.
 - `redeven:internal/codeapp/appserver/server.go` - Authenticated upload, capability, download, range, restore, and delete routes expose stable envelopes.
-- `redeven:internal/ai/threadstore/thread_create_operation_test.go` - First-release staging target rebinding and atomic create materialization are covered transactionally.
+- `redeven:internal/ai/send_user_turn_flow_test.go` - Typed send and queue acceptance retain stable attachment command identity.
 - `redeven:internal/codeapp/appserver/server_ai_uploads_test.go` - Preview tests pin the closed inline media set, forced download fallback, and sandbox CSP.
 - `redeven:desktop/src/shared/runtimeFlowerAttachmentIPC.ts` - Desktop validates ordered binary attachment operations without JSON or base64 payloads.
 - `redeven:internal/envapp/ui_src/src/ui/services/localApi.ts` - Env App uses authenticated multipart XHR with progress and cancellation.

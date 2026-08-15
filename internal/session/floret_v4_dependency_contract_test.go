@@ -90,3 +90,43 @@ func TestFloretDependencyIsExactPublishedV4(t *testing.T) {
 		t.Fatalf("scan Go imports: %v", err)
 	}
 }
+
+func TestCurrentSourceAndOKFDoNotNameTheRetiredFloretContract(t *testing.T) {
+	t.Parallel()
+	root := repoRootForTest(t)
+	forbidden := []string{"Floret " + "v3", "v3." + "2.40"}
+	for _, relativeRoot := range []string{"internal", "okf"} {
+		err := filepath.WalkDir(filepath.Join(root, relativeRoot), func(filePath string, entry fs.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if entry.IsDir() {
+				if entry.Name() == "dist" || entry.Name() == "node_modules" {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if filepath.ToSlash(filePath) == filepath.ToSlash(filepath.Join(root, "okf", "log.md")) {
+				return nil
+			}
+			ext := strings.ToLower(filepath.Ext(filePath))
+			if ext != ".go" && ext != ".ts" && ext != ".tsx" && ext != ".md" {
+				return nil
+			}
+			body, err := os.ReadFile(filePath)
+			if err != nil {
+				return err
+			}
+			for _, token := range forbidden {
+				if strings.Contains(string(body), token) {
+					relative, _ := filepath.Rel(root, filePath)
+					t.Fatalf("%s names retired current Floret contract %q", relative, token)
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}

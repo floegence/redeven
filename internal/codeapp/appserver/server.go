@@ -5267,7 +5267,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error(), ErrorCode: "invalid_thread_delete_query"})
 				return
 			}
-			result, err := aiSvc.DeleteThread(r.Context(), meta, threadID, force)
+			err = aiSvc.DeleteThread(r.Context(), meta, threadID, force)
 			if err != nil {
 				status := http.StatusBadRequest
 				if errors.Is(err, ai.ErrThreadBusy) {
@@ -5275,57 +5275,15 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				} else if errors.Is(err, sql.ErrNoRows) {
 					status = http.StatusNotFound
 				}
-				auditFields := map[string]any{"thread_id": threadID}
-				var responseData interface{}
-				if result.OperationID != "" {
-					auditFields["operation_id"] = result.OperationID
-					auditFields["status"] = result.Status
-					responseData = result
-				}
-				g.appendAudit(meta, "ai_thread_delete", "failure", auditFields, err)
-				errorCode := ""
-				writeJSON(w, status, apiResp{OK: false, Error: err.Error(), ErrorCode: errorCode, Data: responseData})
-				return
-			}
-			status := http.StatusInternalServerError
-			switch result.Status {
-			case ai.ThreadDeleteStatusCommitted:
-				status = http.StatusOK
-			case ai.ThreadDeleteStatusPending:
-				status = http.StatusAccepted
-			case ai.ThreadDeleteStatusFailed:
-			}
-			auditOutcome := "success"
-			if status == http.StatusAccepted {
-				auditOutcome = "accepted"
-			} else if status >= http.StatusInternalServerError {
-				auditOutcome = "failure"
-			}
-			g.appendAudit(meta, "ai_thread_delete", auditOutcome, map[string]any{"thread_id": threadID, "operation_id": result.OperationID, "status": result.Status}, nil)
-			writeJSON(w, status, apiResp{OK: status < http.StatusInternalServerError, Data: result})
-			return
-
-		case action == "followups" && r.Method == http.MethodGet && len(parts) == 2:
-			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
-			if !ok {
-				return
-			}
-			if !g.requireAIService(w, aiSvc) {
-				return
-			}
-			out, err := aiSvc.ListFollowups(r.Context(), meta, threadID, 100)
-			if err != nil {
-				status := http.StatusBadRequest
-				if errors.Is(err, sql.ErrNoRows) {
-					status = http.StatusNotFound
-				}
+				g.appendAudit(meta, "ai_thread_delete", "failure", map[string]any{"thread_id": threadID}, err)
 				writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
 				return
 			}
-			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
+			g.appendAudit(meta, "ai_thread_delete", "success", map[string]any{"thread_id": threadID}, nil)
+			writeJSON(w, http.StatusOK, apiResp{OK: true})
 			return
 
-		case action == "followups" && r.Method == http.MethodPatch && len(parts) == 3 && strings.TrimSpace(parts[2]) == "order":
+		case action == "queue" && r.Method == http.MethodPatch && len(parts) == 3 && strings.TrimSpace(parts[2]) == "order":
 			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 			if !ok {
 				return
@@ -5335,7 +5293,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			}
 			dec := json.NewDecoder(r.Body)
 			dec.DisallowUnknownFields()
-			var body ai.ReorderFollowupsRequest
+			var body ai.ReorderQueueRequest
 			if err := dec.Decode(&body); err != nil {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
 				return
@@ -5344,7 +5302,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
 				return
 			}
-			if err := aiSvc.ReorderFollowups(r.Context(), meta, threadID, body); err != nil {
+			if err := aiSvc.ReorderQueue(r.Context(), meta, threadID, body); err != nil {
 				status := http.StatusBadRequest
 				writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
 				return
@@ -5352,7 +5310,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, apiResp{OK: true})
 			return
 
-		case action == "followups" && r.Method == http.MethodPost && len(parts) == 4 && strings.TrimSpace(parts[3]) == "promote":
+		case action == "queue" && r.Method == http.MethodPost && len(parts) == 4 && strings.TrimSpace(parts[3]) == "promote":
 			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 			if !ok {
 				return
@@ -5360,12 +5318,12 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			if !g.requireAIService(w, aiSvc) {
 				return
 			}
-			followupID := strings.TrimSpace(parts[2])
-			if followupID == "" {
+			queueID := strings.TrimSpace(parts[2])
+			if queueID == "" {
 				writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 				return
 			}
-			view, err := aiSvc.PromoteFollowup(r.Context(), meta, threadID, followupID)
+			view, err := aiSvc.PromoteQueuedInput(r.Context(), meta, threadID, queueID)
 			if err != nil {
 				status := http.StatusBadRequest
 				if errors.Is(err, sql.ErrNoRows) {
@@ -5377,7 +5335,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusAccepted, apiResp{OK: true, Data: view})
 			return
 
-		case action == "followups" && r.Method == http.MethodDelete && len(parts) == 3:
+		case action == "queue" && r.Method == http.MethodDelete && len(parts) == 3:
 			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 			if !ok {
 				return
@@ -5385,12 +5343,12 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			if !g.requireAIService(w, aiSvc) {
 				return
 			}
-			followupID := strings.TrimSpace(parts[2])
-			if followupID == "" {
+			queueID := strings.TrimSpace(parts[2])
+			if queueID == "" {
 				writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 				return
 			}
-			if err := aiSvc.DeleteFollowup(r.Context(), meta, threadID, followupID); err != nil {
+			if err := aiSvc.DeleteQueuedInput(r.Context(), meta, threadID, queueID); err != nil {
 				status := http.StatusBadRequest
 				if errors.Is(err, sql.ErrNoRows) {
 					status = http.StatusNotFound

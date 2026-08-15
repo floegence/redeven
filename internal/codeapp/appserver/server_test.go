@@ -3255,6 +3255,9 @@ func TestServer_AIThreadDeleteRemovesReadStateForAllUsers(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("DELETE /api/ai/threads/:id status=%d body=%s", rr.Code, rr.Body.String())
 	}
+	if got := strings.TrimSpace(rr.Body.String()); got != `{"ok":true}` {
+		t.Fatalf("DELETE /api/ai/threads/:id body=%s, want exact ok response", got)
+	}
 	auditEntries, err := auditStore.List(1)
 	if err != nil || len(auditEntries) != 1 || auditEntries[0].Action != "ai_thread_delete" || auditEntries[0].Status != "success" {
 		t.Fatalf("delete audit=%+v err=%v", auditEntries, err)
@@ -3333,14 +3336,8 @@ func TestServer_AIThreadDeleteDoesNotWaitForReadStateCleanup(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("DELETE status=%d body=%s", response.Code, response.Body.String())
 	}
-	var body struct {
-		Data ai.ThreadDeleteResult `json:"data"`
-	}
-	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
-		t.Fatalf("decode DELETE: %v", err)
-	}
-	if body.Data.OperationID == "" || body.Data.Status != ai.ThreadDeleteStatusCommitted || !body.Data.IntentPersisted {
-		t.Fatalf("DELETE body=%s", response.Body.String())
+	if got := strings.TrimSpace(response.Body.String()); got != `{"ok":true}` {
+		t.Fatalf("DELETE body=%s, want exact ok response", got)
 	}
 	auditEntries, err := auditStore.List(1)
 	if err != nil || len(auditEntries) != 1 || auditEntries[0].Status != "success" {
@@ -3348,7 +3345,7 @@ func TestServer_AIThreadDeleteDoesNotWaitForReadStateCleanup(t *testing.T) {
 	}
 
 	missing := performServerRequest(srv, http.MethodDelete, "/_redeven_proxy/api/ai/threads/thread_missing_delete_operation", envOriginWithChannel(channelID), "")
-	if missing.Code != http.StatusNotFound {
+	if missing.Code != http.StatusOK {
 		t.Fatalf("second DELETE status=%d body=%s", missing.Code, missing.Body.String())
 	}
 

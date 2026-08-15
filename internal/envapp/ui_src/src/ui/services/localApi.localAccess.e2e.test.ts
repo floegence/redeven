@@ -211,24 +211,23 @@ describe('localApi access credentials', () => {
     vi.doMock('./controlplaneApi', () => ({
       getLocalRuntime: vi.fn(async () => null),
     }));
-    const receipt = {
-      operation_id: 'delete_operation_1',
-      status: 'failed',
-      intent_persisted: true,
+    const details = {
+      interaction_id: 'approval_1',
+      current_state: 'resolved',
     };
     const fetchMock = vi.fn(async () => flatAppserverErrorResponse(
-      'thread delete failed',
-      500,
-      'AI_THREAD_DELETE_OPERATION_FAILED',
-      receipt,
+      'interaction changed',
+      409,
+      'AI_APPROVAL_CONFLICT',
+      details,
     ));
     vi.stubGlobal('fetch', fetchMock);
 
     const mod = await import('./localApi');
     await expect(mod.fetchLocalApiJSON('/api/test/error-data', { method: 'DELETE' })).rejects.toMatchObject({
       name: 'LocalApiError',
-      code: 'AI_THREAD_DELETE_OPERATION_FAILED',
-      data: receipt,
+      code: 'AI_APPROVAL_CONFLICT',
+      data: details,
     });
   });
 

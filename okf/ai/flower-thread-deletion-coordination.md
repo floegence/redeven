@@ -1,62 +1,33 @@
 ---
 type: AI Persistence Contract
 title: Flower thread deletion coordination
-description: Durable delete intent retires product access, removes the canonical Floret thread before host resources, and replays one serialized cleanup path.
+description: Synchronous, idempotent convergence across Floret canonical deletion and Redeven product cleanup.
 tags: [ai, threads, persistence, deletion, floret]
-timestamp: 2026-07-22T00:00:00Z
+timestamp: 2026-08-15T00:00:00Z
 ---
 # Summary
 
-- Authority: Floret deletes the canonical Agent thread tree; Redeven deletes host settings, queue/routing/read state, upload ownership, audit-linked product rows, and physical upload files.
-- Outcome: one stable delete operation records user intent, immediately retires product visibility, and replays the same ordered steps after any crash.
-- Invariants: resources remain owned while Floret deletion is unconfirmed, every replay uses one per-thread executor, and no compensation restores deleted canonical or product data.
-- Failure boundary: transient external failures keep the operation pending; invalid durable snapshots or canonical identity failures become terminally failed and block every startup until repaired.
+Floret owns canonical thread deletion and Redeven owns product settings, routing, read state, and attachment claims. One authenticated DELETE request performs those two owner operations in that order and returns success only after both complete. The operation is synchronous, idempotent, and retryable; it does not claim cross-database atomicity or persist a second lifecycle receipt.
 
 # Contract
 
-`PrepareThreadDeleteOperation` runs under the thread lifecycle gate. It first exhaustively keyset-pages queued commands and exact-reads each known `TurnID` through Floret `ReadThreadTurn`. Admitted commands settle, `ErrTurnNotFound` leaves the command unchanged, and every other read or settlement error blocks durable delete intent. It then verifies settings and non-forced activity and persists one fingerprinted snapshot of product cleanup ids and read-state requirements. Preparation deletes nothing. Force deletion stops active work only after intent is durable, so prepare failure has no runtime side effects. Run and compaction admission use the same gate and recheck writability.
+The service first reads Redeven product settings. An absent product row is already converged and returns success. For an existing product row, the service reads the typed Floret `ThreadView`; an active thread requires `force=true`, which requests typed cancellation before deletion. Without force, active work returns the busy result without changing either owner.
 
-Persisted delete intent is also the write fence for every canonical thread-scoped staging and admission path. In the same SQLite write transaction that would complete an upload into a bound staging scope, freeze a command, transfer staging ownership to that command, or settle a claim, Redeven rechecks that the exact Floret-assigned ThreadID remains writable. Once intent exists, each path fails closed with the retired-thread result and commits no late attachment row, claim, or command. New-conversation staging remains bound to its product `client_request_id` target until Floret creates the canonical thread, so it is outside any existing thread's deletion fence; create materialization atomically rebinds that target and rechecks the canonical destination.
+Canonical deletion runs before product cleanup. Floret typed deleted or not-found results mean canonical deletion has already converged, so Redeven continues its own cleanup. This is required when an earlier request deleted Floret successfully but product cleanup failed. Other Floret errors stop the request and preserve Redeven product data.
 
-Delete snapshots accept only strict schema-v1 single-value JSON plus the stored full-payload fingerprint. Unknown fields, trailing values, unsupported schema, invalid cleanup ids, read-state mismatch, or fingerprint drift marks the operation failed before any Floret delete call. Replay never reconstructs a damaged snapshot from current product state.
+After canonical deletion, one Redeven transaction releases attachment claims and removes thread settings, pending-input migration staging, and routing rows. Read-state retirement is best-effort asynchronous presentation cleanup and cannot change the canonical deletion result. A product cleanup failure is returned directly; retrying the same DELETE observes the Floret tombstone/not-found result and resumes product cleanup without creating an operation row.
 
-Replay has one fixed order:
-
-1. Retire the endpoint/thread key in the current-process Flower live buffer. The shared Service lock removes retained events and rejects later append/list exposure; startup replay rebuilds this idempotent fence.
-2. Call Floret `ThreadDeleteHost.DeleteThread` for the canonical parent thread tree and durably confirm only a `nil` result. Floret's exact tombstone replay returns `nil`; `ErrThreadNotFound` means no live root and no tombstone, so Redeven marks the operation terminally failed and preserves all product data.
-3. In one Redeven transaction, mark the captured uploads for deletion, remove thread-scoped settings, queue, routing, transfer/handoff, permission audit ownership, and resource refs, and confirm product-data deletion.
-4. Retire the Flower read-state identity and its user rows transactionally, preventing later reseeding, then confirm it.
-5. Delete physical upload files, finalize upload rows, and confirm file cleanup.
-
-The operation commits only after every confirmation is durable. Explicit DELETE, startup recovery, and periodic maintenance all enter the per-thread lifecycle gate, reread and validate the exact operation identity, and advance only pending work. Committed and failed operations repeat no side effects. No SQLite transaction spans a Floret, read-state, or filesystem call.
-
-Floret failure leaves settings and resource ownership intact. Typed canonical identity or invariant errors are terminal; busy, closing, stale authority, cancellation, store closure, committed cleanup, and unclassified transient errors remain pending. Redeven never classifies a Floret error by message text.
-
-Startup rejects any failed delete, then scans all pending pages before building interrupted-turn targets. Replay failure or unremoved canonical/product state fails closed; every restart checks terminal failures again. Operations past product deletion may retry read-state or file cleanup without becoming recovery targets.
-
-Once intent is durable, Redeven excludes the endpoint/thread from SQL list pagination and rejects detail access before opening a Floret reader. This product projection is not a canonical deletion conclusion. The Flower surface adds the id to a non-persistent retirement set before clearing presentation state, so stale list, detail, live, or mutation responses cannot reinsert it.
-
-The authenticated DELETE endpoint accepts only an absent query or one exact `force=true|false` pair. Its durable receipt always includes the stable operation id, status, and `intent_persisted=true`: committed is HTTP 200, retryable pending is HTTP 202 with audit outcome `accepted`, busy without force is HTTP 409, an unknown identity before intent is HTTP 404, and a terminal operation is HTTP 500 with `AI_THREAD_DELETE_OPERATION_FAILED`. Flower always sends `force=true` after one destructive confirmation. A 200 result reports completion; 202 retires the conversation while explaining that cleanup continues in the background; a structured terminal receipt also retires it but reports that local data needs repair and restart. Failures without a durable receipt preserve the dialog, selection, and connection-local composer value.
+The HTTP boundary accepts only an absent query or one exact `force=true|false` pair. Success is HTTP 200 with `{"ok":true}`. Busy without force is HTTP 409. Other failures use the normal product error envelope and preserve the Flower dialog and current selection. Flower sends `force=true` after destructive confirmation, retires the local cache entry only after HTTP success, and has no pending, committed, failed, operation-id, or durable-intent UI state.
 
 # Boundaries
 
-Delete never queries or edits Floret tables, never stores a canonical Agent projection, never enumerates children in Redeven, never uses SubAgent close operations as a data-deletion substitute, never restores removed rows, never rebuilds a snapshot from current state, never treats absence as proof for an unrecorded step, and never uses a row-only read-state deletion that permits later reseeding.
-
-The Service live fence is endpoint/thread scoped and protects only in-memory presentation; it stores no Floret state and proves no canonical result. Calls that start after retirement cannot expose or append retained payload. The set ends with the Service, while startup reconstructs it from pending durable intent before recovery is exposed.
+Redeven never opens or edits Floret tables, never restores a deleted canonical thread, never reports asynchronous deletion progress, and never fabricates an atomic transaction across the two owners. Retry convergence is based only on typed Floret deletion/not-found errors and the current Redeven catalog row, not error text, polling, or a recovery projection.
 
 # Evidence
 
-- `redeven:internal/ai/threadstore/thread_delete_operation.go:117` - Preparation records intent without deleting settings or resources.
-- `redeven:internal/ai/thread_delete_operation.go:135` - The serialized replay executor rereads the operation and advances its fixed cleanup order.
-- `redeven:internal/ai/threads.go:985` - The authenticated service operation prepares intent before entering the serialized replay executor.
-- `redeven:internal/ai/threadstore/store.go:255` - Product list pagination excludes durable delete intent in SQL.
-- `redeven:internal/ai/threadstore/thread_delete_operation.go:201` - Product deletion requires durable Floret confirmation.
-- `redeven:internal/ai/threadstore/upload_staging.go` - Staging completion, frozen-command claim transfer, and release transactions retain exact bound ThreadID identity.
-- `redeven:internal/ai/threadstore/uploads.go` - Upload ownership transitions reject a retired thread in their write transaction.
-- `redeven:internal/ai/threadstore/thread_delete_operation_test.go:133` - Store tests verify that durable delete intent freezes thread-scoped upload, staging, queue, routing, and admission writes.
-- `redeven:internal/ai/thread_delete_operation_test.go:446` - Restart tests cover every durable step and Floret failure retention.
-- `redeven:internal/ai/threadstore/thread_delete_operation_test.go:302` - Store tests cover intent and confirmation order through final commit.
-- `redeven:internal/codeapp/appserver/server_test.go:3316` - API tests cover strict force parsing, durable pending receipts, and accepted audit outcomes.
-- `redeven:internal/flower_ui/src/FlowerSurface.tsx:4300` - The surface retirement fence clears product presentation and rejects stale responses.
-- `redeven:internal/ai/flower_live_projection.go:1115` - Live retirement shares the Service lock with list and append access.
-- `redeven:internal/ai/flower_live_memory_test.go:72` - Focused tests cover endpoint isolation, retirement ordering, detached responses, late append rejection, and concurrent access.
+- `redeven:internal/ai/threads.go` - Performs typed canonical delete followed by idempotent product cleanup.
+- `redeven:internal/ai/threadstore/catalog_mutation.go` - Removes only Redeven-owned thread product data in one transaction.
+- `redeven:internal/ai/thread_delete_v4_test.go` - Covers product cleanup failure after canonical deletion and successful retry convergence.
+- `redeven:internal/codeapp/appserver/server.go` - Exposes the synchronous DELETE response and strict force query.
+- `redeven:internal/codeapp/appserver/server_test.go` - Covers success, idempotent absence, read-state retirement, and force parsing.
+- `redeven:internal/flower_ui/src/runtimeFlowerSurfaceAdapter.ts` - Maps deletion to `Promise<void>` without lifecycle receipts.

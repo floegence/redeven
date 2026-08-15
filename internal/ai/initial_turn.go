@@ -15,7 +15,7 @@ const (
 	initialTurnPhaseLookupFrozenState     = "lookup_frozen_state"
 	initialTurnPhasePrepareAtomic         = "prepare_atomic"
 	initialTurnPhaseResumeCanonicalCreate = "resume_canonical_create"
-	initialTurnPhaseStartAdmission        = "start_admission"
+	initialTurnPhaseStartCommand          = "start_command"
 )
 
 func (s *Service) sendInitialUserTurn(ctx context.Context, meta *session.Meta, req SendUserTurnRequest) (SendUserTurnResponse, error) {
@@ -32,9 +32,6 @@ func (s *Service) sendInitialUserTurn(ctx context.Context, meta *session.Meta, r
 	}
 	if !validUploadStagingTargetID(clientRequestID) {
 		return fail(initialTurnPhaseLookupFrozenState, errors.New("invalid client_request_id"))
-	}
-	if strings.TrimSpace(req.Input.TurnID) != "" {
-		return fail(initialTurnPhaseLookupFrozenState, errors.New("turn_id must be omitted before canonical admission"))
 	}
 	create := *req.Create
 	settings, err := s.buildThreadCreateSettings(ctxOrBackground(ctx), meta, create)
@@ -71,12 +68,12 @@ func (s *Service) sendInitialUserTurn(ctx context.Context, meta *session.Meta, r
 		return fail(initialTurnPhaseResumeCanonicalCreate, errors.New("created thread identity is missing"))
 	}
 	if replay, found, replayErr := s.typedSendLookup(ctxOrBackground(ctx), thread.ThreadID, clientRequestID); replayErr != nil {
-		return fail(initialTurnPhaseStartAdmission, replayErr)
+		return fail(initialTurnPhaseStartCommand, replayErr)
 	} else if found {
 		replay.AppliedPermissionType = settings.PermissionType
 		return replay, nil
 	}
-	prepared, normalizedInput, err := s.prepareUserTurnForTarget(ctxOrBackground(ctx), meta, settings.EndpointID, clientRequestID, req.Model, req.Input, req.StagingScopeID, req.StagingCapability, false)
+	prepared, normalizedInput, err := s.prepareUserTurnForTarget(ctxOrBackground(ctx), meta, settings.EndpointID, clientRequestID, req.Model, req.Input, req.StagingScopeID, req.StagingCapability)
 	if err != nil {
 		return fail(initialTurnPhasePrepareAtomic, err)
 	}
@@ -103,7 +100,7 @@ func (s *Service) sendInitialUserTurn(ctx context.Context, meta *session.Meta, r
 		err = errors.New("floret thread runtime not ready")
 	}
 	if err != nil {
-		return fail(initialTurnPhaseStartAdmission, err)
+		return fail(initialTurnPhaseStartCommand, err)
 	}
 	response.AppliedPermissionType = settings.PermissionType
 	return response, nil

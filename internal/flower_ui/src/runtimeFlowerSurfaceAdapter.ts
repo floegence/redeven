@@ -24,7 +24,6 @@ import type {
   FlowerSurfaceRuntimeDescriptor,
   FlowerTerminalProcessSnapshot,
   FlowerThreadActivitySnapshot,
-  FlowerThreadDeleteOutcome,
   FlowerThreadReadStatus,
   FlowerThreadSnapshot,
   FlowerThreadView,
@@ -78,19 +77,7 @@ type ThreadPatchInput = Readonly<{
   reasoning_selection?: FlowerReasoningSelection | null;
 }>;
 
-type ThreadDeleteReceipt = Readonly<{
-  operation_id?: unknown;
-  status?: unknown;
-  intent_persisted?: unknown;
-}>;
-
-export const FLOWER_THREAD_DELETE_OPERATION_FAILED_CODE = 'AI_THREAD_DELETE_OPERATION_FAILED';
 export const FLOWER_LIVE_EVENT_WAIT_MS = 10_000;
-
-export type FlowerThreadDeleteTransportOutcome = Readonly<
-  | { kind: 'success'; receipt: unknown }
-  | { kind: 'terminal_failure'; receipt: unknown }
->;
 
 type RuntimeApprovalSubmitInput = Readonly<{
   thread_id: string;
@@ -111,7 +98,7 @@ export type FlowerRuntimeTransport = Readonly<{
   deleteQueuedTurn?(threadID: string, queueID: string): Promise<unknown>;
   promoteQueuedTurn?(threadID: string, queueID: string): Promise<unknown>;
   forkThread(threadID: string, input: Readonly<{ client_request_id: string }>): Promise<LoadThreadResponse>;
-  deleteThread?(threadID: string): Promise<FlowerThreadDeleteTransportOutcome>;
+  deleteThread?(threadID: string): Promise<void>;
   submitApproval(input: RuntimeApprovalSubmitInput): Promise<FlowerApprovalCommandResult>;
   retryEffect(input: FlowerRetryEffectRequest): Promise<unknown>;
 }>;
@@ -227,22 +214,6 @@ function mapRuntimeLiveStreamEnvelope(raw: unknown, options: RuntimeFlowerSurfac
 function mapSubagentDetail(raw: LoadSubagentDetailResponse): FlowerSubagentDetail {
   if (!raw.detail) throw new Error('Missing subagent detail.');
   return raw.detail;
-}
-
-function mapThreadDeleteReceipt(outcome: FlowerThreadDeleteTransportOutcome): FlowerThreadDeleteOutcome {
-  const receipt = outcome?.receipt && typeof outcome.receipt === 'object'
-    ? outcome.receipt as ThreadDeleteReceipt
-    : null;
-  const operationID = trim(receipt?.operation_id);
-  const status = trim(receipt?.status);
-  const validStatus = outcome?.kind === 'success'
-    ? status === 'pending' || status === 'committed'
-    : outcome?.kind === 'terminal_failure' && status === 'failed';
-  if (!operationID || receipt?.intent_persisted !== true ||
-    !validStatus) {
-    throw new Error('Flower thread delete returned an invalid receipt.');
-  }
-  return { status: status as FlowerThreadDeleteOutcome['status'] };
 }
 
 export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceAdapterOptions): FlowerSurfaceAdapter {
@@ -391,7 +362,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
       deleteThread: async (threadID) => {
         const tid = trim(threadID);
         if (!tid) throw new Error(missingThreadIDMessage(options));
-        return mapThreadDeleteReceipt(await options.transport.deleteThread!(tid));
+        await options.transport.deleteThread!(tid);
       },
     } : {}),
     resolveHandler: options.resolveHandler,

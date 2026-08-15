@@ -170,7 +170,6 @@ import { FlowerWorkingDirPickerDialog } from './filePicker/FlowerWorkingDirPicke
 import {
   projectFlowerCompanionPresence,
   type FlowerCompanionPriorityStatus,
-  type FlowerCompanionTerminalTransition,
   type FlowerCompanionPresenceProjection,
   type FlowerCompanionThreadListItem,
 } from './flowerCompanionPresence';
@@ -2369,15 +2368,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     lastSidebarListSignature = signature;
     setSidebarListItems(items);
   });
-  const [companionLiveThread, setCompanionLiveThread] = createSignal<FlowerThreadSnapshot | null>(null);
-  const [companionLiveRunGeneration] = createSignal(0);
-  const [companionTerminalTransition, setCompanionTerminalTransition] = createSignal<FlowerCompanionTerminalTransition>();
-  const [companionTerminalOverrides, setCompanionTerminalOverrides] = createSignal<ReadonlyMap<string, Readonly<{
-    thread: FlowerThreadSnapshot;
-    runID: string;
-    runGeneration: number;
-  }>>>(new Map());
-  const companionBaseThreadItems = createMemo<readonly FlowerCompanionThreadListItem[]>(() => {
+  const companionThreadItems = createMemo<readonly FlowerCompanionThreadListItem[]>(() => {
     const threadStateByID = new Map(threads().map((thread) => [thread.thread_id, thread] as const));
     return sidebarListItems().map((item) => {
       const thread = threadStateByID.get(item.thread_id);
@@ -2394,69 +2385,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       };
     });
   });
-  const overlayCompanionThreadItem = (
-    item: FlowerCompanionThreadListItem,
-    thread: FlowerThreadSnapshot,
-    runGeneration?: number,
-  ): FlowerCompanionThreadListItem => {
-    const liveTail = projectFlowerCompanionLiveTail(thread, modelStatusLabel);
-    const liveItem = projectFlowerThreadListItem(threadWithLocalReadVisibility(thread));
-    const {
-      progress_text: _staleProgressText,
-      progress_kind: _staleProgressKind,
-      progress_identity: _staleProgressIdentity,
-      ...baseItem
-    } = item;
-    return {
-      ...baseItem,
-      ...liveItem,
-      queued_turn_count: thread.queued_turn_count ?? thread.queued_turns?.length ?? 0,
-      ...(thread.active_run_id ? { active_run_id: thread.active_run_id } : {}),
-      ...(runGeneration !== undefined ? { run_generation: runGeneration } : {}),
-      ...(liveTail ? {
-        progress_text: liveTail.text,
-        progress_kind: liveTail.kind,
-        progress_identity: liveTail.identity,
-      } : {}),
-    };
-  };
-  const companionPriorityThreadItems = createMemo<readonly FlowerCompanionThreadListItem[]>(() => {
-    const overrides = companionTerminalOverrides();
-    if (overrides.size === 0) return companionBaseThreadItems();
-    return companionBaseThreadItems().map((item) => {
-      const override = overrides.get(item.thread_id);
-      return override ? overlayCompanionThreadItem(item, override.thread, override.runGeneration) : item;
-    });
-  });
-  const companionThreadItems = createMemo<readonly FlowerCompanionThreadListItem[]>(() => {
-    const liveThread = companionLiveThread();
-    if (!liveThread) return companionPriorityThreadItems();
-    return companionPriorityThreadItems().map((item) => {
-      if (item.thread_id !== liveThread.thread_id) return item;
-      return overlayCompanionThreadItem(item, liveThread, companionLiveRunGeneration());
-    });
-  });
-  createEffect(() => {
-    const baseThreads = new Map(threads().map((thread) => [thread.thread_id, thread] as const));
-    const current = companionTerminalOverrides();
-    if (current.size === 0) return;
-    let next: Map<string, Readonly<{ thread: FlowerThreadSnapshot; runID: string; runGeneration: number }>> | null = null;
-    for (const [threadID, override] of current) {
-      const baseThread = baseThreads.get(threadID);
-      const baseStillTrailsOverride = baseThread?.status === 'running'
-        && trimString(baseThread.active_run_id) === override.runID;
-      if (baseStillTrailsOverride) continue;
-      next ??= new Map(current);
-      next.delete(threadID);
-    }
-    if (next) setCompanionTerminalOverrides(next);
-  });
   let lastCompanionPresenceSignature = '';
   createEffect(() => {
     const presence = projectFlowerCompanionPresence(
       companionThreadItems(),
       !loadError(),
-      companionTerminalTransition(),
     );
     const signature = JSON.stringify(presence);
     if (signature === lastCompanionPresenceSignature) return;
@@ -4616,14 +4549,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
     setThreadCache((cache) => cache.evict(tid));
     draftSessionFor(tid).clear();
-    setCompanionTerminalOverrides((current) => {
-      if (!current.has(tid)) return current;
-      const next = new Map(current);
-      next.delete(tid);
-      return next;
-    });
-    setCompanionLiveThread((current) => current?.thread_id === tid ? null : current);
-    setCompanionTerminalTransition((current) => current?.thread_id === tid ? undefined : current);
     setPendingPermissionPatch((current) => current?.threadID === tid ? null : current);
     setPendingModelPatch((current) => current?.threadID === tid ? null : current);
 
@@ -4645,16 +4570,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setDeleteError('');
     setThreadActionBusy({ threadID, action: 'delete' });
     try {
-      const outcome = await props.adapter.deleteThread(threadID);
+      await props.adapter.deleteThread(threadID);
       retireThreadLocally(threadID);
       setDeleteTarget(null);
-      if (outcome.status === 'committed') {
-        notifySuccess(copy().threadList.deleteCommittedNotification);
-      } else if (outcome.status === 'pending') {
-        notify({ tone: 'info', message: copy().threadList.deletePendingNotification });
-      } else {
-        notifyThreadActionError(copy().threadList.deleteFailedNotification);
-      }
+      notifySuccess(copy().threadList.deleteCommittedNotification);
     } catch (error) {
       setDeleteError(getErrorMessage(error));
     } finally {

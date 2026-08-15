@@ -45,7 +45,7 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 	if canonicalUserEntry {
 		err := r.observeFloretCanonicalIdentity(string(ev.RunID), string(ev.ThreadID), string(ev.TurnID))
 		if err != nil {
-			r.rejectFloretContract("turn_admission", err)
+			r.rejectFloretContract("thread_runtime_event", err)
 			return
 		}
 	} else if !isTitleEvent {

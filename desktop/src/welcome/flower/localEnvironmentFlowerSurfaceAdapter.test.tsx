@@ -807,11 +807,11 @@ describe('Local Environment Flower surface adapter', () => {
     expect(calls[0].body).toEqual({});
   });
 
-  it('deletes one queued turn through Desktop IPC and reloads canonical detail', async () => {
+  it('manages queued inputs through Desktop IPC and reloads canonical detail', async () => {
     const calls: RuntimeFlowerRequest[] = [];
     const bridge = bridgeFor((request) => {
       calls.push(request);
-      if (request.path === '/_redeven_proxy/api/ai/threads/thread%20%2F1/followups/followup%20%2F2') return { ok: true };
+      if (request.path.startsWith('/_redeven_proxy/api/ai/threads/thread%20%2F1/queue/')) return { ok: true };
       if (request.path === '/_redeven_proxy/api/ai/threads/thread%20%2F1') {
         return detailView({ thread_id: 'thread /1', queued_turn_count: 0, queued_turns: [] }, {
           thread_id: 'thread /1', view_version: 6,
@@ -821,72 +821,56 @@ describe('Local Environment Flower surface adapter', () => {
     });
     const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
 
-    const bootstrap = await adapter.deleteQueuedTurn?.('thread /1', 'followup /2');
+    await adapter.reorderQueuedTurns?.('thread /1', ['queue /2', 'queue /3']);
+    await adapter.deleteQueuedTurn?.('thread /1', 'queue /2');
+    const bootstrap = await adapter.promoteQueuedTurn?.('thread /1', 'queue /3');
 
     expect(bootstrap?.thread.queued_turns).toEqual([]);
     expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([
-      'DELETE /_redeven_proxy/api/ai/threads/thread%20%2F1/followups/followup%20%2F2',
+      'PATCH /_redeven_proxy/api/ai/threads/thread%20%2F1/queue/order',
+      'GET /_redeven_proxy/api/ai/threads/thread%20%2F1',
+      'DELETE /_redeven_proxy/api/ai/threads/thread%20%2F1/queue/queue%20%2F2',
+      'GET /_redeven_proxy/api/ai/threads/thread%20%2F1',
+      'POST /_redeven_proxy/api/ai/threads/thread%20%2F1/queue/queue%20%2F3/promote',
       'GET /_redeven_proxy/api/ai/threads/thread%20%2F1',
     ]);
+    expect(calls[0].body).toEqual({ ordered_queue_ids: ['queue /2', 'queue /3'] });
   });
 
   it('deletes threads through the force-only runtime endpoint', async () => {
     const calls: RuntimeFlowerRequest[] = [];
     const bridge = bridgeFor((request) => {
       calls.push(request);
-      return {
-        operation_id: 'delete_operation_1',
-        status: 'committed',
-        intent_persisted: true,
-      };
+      return { ok: true };
     });
     const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
 
-    await expect(adapter.deleteThread?.('thread /1')).resolves.toEqual({ status: 'committed' });
+    await expect(adapter.deleteThread?.('thread /1')).resolves.toBeUndefined();
     expect(calls).toEqual([{
       method: 'DELETE',
       path: '/_redeven_proxy/api/ai/threads/thread%20%2F1?force=true',
     }]);
   });
 
-  it('accepts only response-scoped terminal delete receipts with the fixed machine error', async () => {
-    const validReceipt = {
-      operation_id: 'delete_operation_1',
-      status: 'failed',
-      intent_persisted: true,
-    };
-    const bridgeForFailure = (code: string, data: unknown, failureKind: 'response' | 'local' = 'response'): DesktopSettingsBridge => ({
+  it('propagates synchronous thread deletion failures', async () => {
+    const diagnostic = { stage: 'product_cleanup', retryable: true };
+    const bridgeForFailure: DesktopSettingsBridge = {
       ...attachmentBridgeStubs(),
       save: vi.fn(async () => ({ ok: true as const, snapshot: {} as never })),
       requestRuntimeFlower: vi.fn(async () => ({
         ok: false as const,
-        error: { code, message: 'Thread delete failed.', status: 500, data },
-        failureKind,
+        error: { code: 'AI_THREAD_DELETE_FAILED', message: 'Thread delete failed.', status: 500, data: diagnostic },
+        failureKind: 'response' as const,
       })),
       cancel: vi.fn(),
-    });
+    };
 
     await expect(createLocalEnvironmentFlowerSurfaceAdapter(
-      bridgeForFailure('AI_THREAD_DELETE_OPERATION_FAILED', validReceipt),
-    ).deleteThread?.('thread-1')).resolves.toEqual({ status: 'failed' });
-
-    await expect(createLocalEnvironmentFlowerSurfaceAdapter(
-      bridgeForFailure('AI_THREAD_DELETE_OPERATION_FAILED', { ...validReceipt, operation_id: '' }),
-    ).deleteThread?.('thread-1')).rejects.toThrow('Flower thread delete returned an invalid receipt.');
-
-    await expect(createLocalEnvironmentFlowerSurfaceAdapter(
-      bridgeForFailure('AI_THREAD_DELETE_OPERATION_FAILED', undefined),
-    ).deleteThread?.('thread-1')).rejects.toThrow('Flower thread delete returned an invalid receipt.');
-
-    await expect(createLocalEnvironmentFlowerSurfaceAdapter(
-      bridgeForFailure('UNKNOWN_DELETE_ERROR', validReceipt),
-    ).deleteThread?.('thread-1')).rejects.toMatchObject({ code: 'UNKNOWN_DELETE_ERROR', data: validReceipt });
-
-    await expect(createLocalEnvironmentFlowerSurfaceAdapter(
-      bridgeForFailure('AI_THREAD_DELETE_OPERATION_FAILED', validReceipt, 'local'),
+      bridgeForFailure,
     ).deleteThread?.('thread-1')).rejects.toMatchObject({
-      code: 'AI_THREAD_DELETE_OPERATION_FAILED',
-      failureKind: 'local',
+      code: 'AI_THREAD_DELETE_FAILED',
+      data: diagnostic,
+      failureKind: 'response',
     });
   });
 

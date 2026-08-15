@@ -37,7 +37,6 @@ import type { FlowerCanonicalReferenceNavigationTarget } from './linkedContextNa
 import { requireAskFlowerContextActionEnvelope } from '../contextActions/protocol';
 import {
   createRuntimeFlowerSurfaceAdapter,
-  FLOWER_THREAD_DELETE_OPERATION_FAILED_CODE,
 } from '../../../../../flower_ui/src/runtimeFlowerSurfaceAdapter';
 import {
   createFlowerClientRequestID,
@@ -763,18 +762,18 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         body: JSON.stringify(body),
       }),
       reorderQueuedTurns: (threadID, orderedQueueIDs) => fetchLocalApiJSON(
-        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/followups/order`,
+		`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/queue/order`,
         {
           method: 'PATCH',
-          body: JSON.stringify({ lane: 'queued', ordered_followup_ids: orderedQueueIDs }),
+		  body: JSON.stringify({ ordered_queue_ids: orderedQueueIDs }),
         },
       ),
       deleteQueuedTurn: (threadID, queueID) => fetchLocalApiJSON(
-        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/followups/${encodeURIComponent(queueID)}`,
+		`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/queue/${encodeURIComponent(queueID)}`,
         { method: 'DELETE' },
       ),
       promoteQueuedTurn: (threadID, queueID) => fetchLocalApiJSON(
-        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/followups/${encodeURIComponent(queueID)}/promote`,
+		`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/queue/${encodeURIComponent(queueID)}/promote`,
         { method: 'POST' },
       ),
       forkThread: (threadID, body) => fetchLocalApiJSON<LoadThreadResponse>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/fork`, {
@@ -782,19 +781,9 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         body: JSON.stringify(body),
       }),
       deleteThread: async (threadID) => {
-        try {
-          return {
-            kind: 'success' as const,
-            receipt: await fetchLocalApiJSON<unknown>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}?force=true`, {
-              method: 'DELETE',
-            }),
-          };
-        } catch (error) {
-          if (error instanceof LocalApiError && error.code === FLOWER_THREAD_DELETE_OPERATION_FAILED_CODE) {
-            return { kind: 'terminal_failure' as const, receipt: error.data };
-          }
-          throw error;
-        }
+        await fetchLocalApiJSON<unknown>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}?force=true`, {
+          method: 'DELETE',
+        });
       },
       submitApproval: (body) => fetchLocalApiJSON<FlowerApprovalCommandResult>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(body.thread_id)}/approvals`, {
         method: 'POST',

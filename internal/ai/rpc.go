@@ -24,34 +24,30 @@ const (
 )
 
 type aiSendUserTurnReq struct {
-	ClientRequestID       string     `json:"client_request_id,omitempty"`
-	ThreadID              string     `json:"thread_id"`
-	Model                 string     `json:"model,omitempty"`
-	Input                 RunInput   `json:"input"`
-	Options               RunOptions `json:"options"`
-	ExpectedRunID         string     `json:"expected_run_id,omitempty"`
-	QueueAfterWaitingUser bool       `json:"queue_after_waiting_user,omitempty"`
+	ClientRequestID string     `json:"client_request_id,omitempty"`
+	ThreadID        string     `json:"thread_id"`
+	Model           string     `json:"model,omitempty"`
+	Input           RunInput   `json:"input"`
+	Options         RunOptions `json:"options"`
 }
 
 type aiSendUserTurnResp struct {
-	ClientRequestID         string               `json:"client_request_id,omitempty"`
-	RunID                   string               `json:"run_id"`
-	TurnID                  string               `json:"turn_id"`
-	Kind                    string               `json:"kind"`
-	QueueID                 string               `json:"queue_id,omitempty"`
-	QueuePosition           int                  `json:"queue_position,omitempty"`
-	ConsumedWaitingPromptID string               `json:"consumed_waiting_prompt_id,omitempty"`
-	AppliedPermissionType   string               `json:"applied_permission_type,omitempty"`
-	Current                 flruntime.ThreadView `json:"current"`
+	ClientRequestID       string               `json:"client_request_id,omitempty"`
+	RunID                 string               `json:"run_id"`
+	TurnID                string               `json:"turn_id"`
+	Kind                  string               `json:"kind"`
+	QueueID               string               `json:"queue_id,omitempty"`
+	QueuePosition         int                  `json:"queue_position,omitempty"`
+	AppliedPermissionType string               `json:"applied_permission_type,omitempty"`
+	Current               flruntime.ThreadView `json:"current"`
 }
 
 type aiSubmitRequestUserInputResponseReq struct {
-	ThreadID      string                   `json:"thread_id"`
-	Model         string                   `json:"model,omitempty"`
-	Response      RequestUserInputResponse `json:"response"`
-	Input         RunInput                 `json:"input"`
-	Options       RunOptions               `json:"options"`
-	ExpectedRunID string                   `json:"expected_run_id,omitempty"`
+	ThreadID string                   `json:"thread_id"`
+	Model    string                   `json:"model,omitempty"`
+	Response RequestUserInputResponse `json:"response"`
+	Input    RunInput                 `json:"input"`
+	Options  RunOptions               `json:"options"`
 }
 
 type aiSubmitRequestUserInputResponseResp struct {
@@ -115,9 +111,6 @@ func RegisterRPCServiceProviderWithAccessGate(r *sessionrpc.Router, meta *sessio
 		if req == nil {
 			return nil, &sessionrpc.Error{Code: 400, Message: "invalid payload"}
 		}
-		if strings.TrimSpace(req.Input.TurnID) != "" {
-			return nil, &sessionrpc.Error{Code: 400, Message: "turn_id must be omitted before canonical admission"}
-		}
 		service, leaseCtx, release, acquireErr := acquireRPCService(ctx, acquire)
 		if acquireErr != nil {
 			return nil, acquireErr
@@ -127,27 +120,24 @@ func RegisterRPCServiceProviderWithAccessGate(r *sessionrpc.Router, meta *sessio
 			return nil, &sessionrpc.Error{Code: 503, Message: "ai not configured"}
 		}
 		resp, err := service.SendUserTurn(leaseCtx, meta, SendUserTurnRequest{
-			ClientRequestID:       strings.TrimSpace(req.ClientRequestID),
-			ThreadID:              strings.TrimSpace(req.ThreadID),
-			Model:                 strings.TrimSpace(req.Model),
-			Input:                 req.Input,
-			Options:               req.Options,
-			ExpectedRunID:         strings.TrimSpace(req.ExpectedRunID),
-			QueueAfterWaitingUser: req.QueueAfterWaitingUser,
+			ClientRequestID: strings.TrimSpace(req.ClientRequestID),
+			ThreadID:        strings.TrimSpace(req.ThreadID),
+			Model:           strings.TrimSpace(req.Model),
+			Input:           req.Input,
+			Options:         req.Options,
 		})
 		if err != nil {
 			return nil, toAIRPCError(err)
 		}
 		return &aiSendUserTurnResp{
-			ClientRequestID:         strings.TrimSpace(resp.ClientRequestID),
-			RunID:                   strings.TrimSpace(resp.RunID),
-			TurnID:                  strings.TrimSpace(resp.TurnID),
-			Kind:                    strings.TrimSpace(resp.Kind),
-			QueueID:                 strings.TrimSpace(resp.QueueID),
-			QueuePosition:           resp.QueuePosition,
-			ConsumedWaitingPromptID: strings.TrimSpace(resp.ConsumedWaitingPromptID),
-			AppliedPermissionType:   strings.TrimSpace(resp.AppliedPermissionType),
-			Current:                 resp.Current,
+			ClientRequestID:       strings.TrimSpace(resp.ClientRequestID),
+			RunID:                 strings.TrimSpace(resp.RunID),
+			TurnID:                strings.TrimSpace(resp.TurnID),
+			Kind:                  strings.TrimSpace(resp.Kind),
+			QueueID:               strings.TrimSpace(resp.QueueID),
+			QueuePosition:         resp.QueuePosition,
+			AppliedPermissionType: strings.TrimSpace(resp.AppliedPermissionType),
+			Current:               resp.Current,
 		}, nil
 	})
 
@@ -158,9 +148,6 @@ func RegisterRPCServiceProviderWithAccessGate(r *sessionrpc.Router, meta *sessio
 		if req == nil {
 			return nil, &sessionrpc.Error{Code: 400, Message: "invalid payload"}
 		}
-		if strings.TrimSpace(req.Input.TurnID) != "" {
-			return nil, &sessionrpc.Error{Code: 400, Message: "turn_id must be omitted before canonical admission"}
-		}
 		service, leaseCtx, release, acquireErr := acquireRPCService(ctx, acquire)
 		if acquireErr != nil {
 			return nil, acquireErr
@@ -170,12 +157,11 @@ func RegisterRPCServiceProviderWithAccessGate(r *sessionrpc.Router, meta *sessio
 			return nil, &sessionrpc.Error{Code: 503, Message: "ai not configured"}
 		}
 		resp, err := service.SubmitRequestUserInputResponse(leaseCtx, meta, SubmitRequestUserInputResponseRequest{
-			ThreadID:      strings.TrimSpace(req.ThreadID),
-			Model:         strings.TrimSpace(req.Model),
-			Response:      req.Response,
-			Input:         req.Input,
-			Options:       req.Options,
-			ExpectedRunID: strings.TrimSpace(req.ExpectedRunID),
+			ThreadID: strings.TrimSpace(req.ThreadID),
+			Model:    strings.TrimSpace(req.Model),
+			Response: req.Response,
+			Input:    req.Input,
+			Options:  req.Options,
 		})
 		if err != nil {
 			return nil, toAIRPCError(err)

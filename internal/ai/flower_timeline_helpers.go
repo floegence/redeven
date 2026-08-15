@@ -123,7 +123,7 @@ func cloneQueuedTurnViews(in []QueuedTurnView) []QueuedTurnView {
 	out := make([]QueuedTurnView, len(in))
 	for index, item := range in {
 		out[index] = item
-		out[index].Attachments = append([]FollowupAttachmentView(nil), item.Attachments...)
+		out[index].Attachments = append([]FlowerAttachmentView(nil), item.Attachments...)
 		out[index].ContextAction = normalizeContextActionEnvelope(item.ContextAction)
 	}
 	return out

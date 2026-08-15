@@ -107,12 +107,11 @@ type RequestUserInputSecretAnswer struct {
 }
 
 type SubmitRequestUserInputResponseRequest struct {
-	ThreadID      string                   `json:"thread_id"`
-	Model         string                   `json:"model,omitempty"`
-	Response      RequestUserInputResponse `json:"response"`
-	Input         RunInput                 `json:"input"`
-	Options       RunOptions               `json:"options"`
-	ExpectedRunID string                   `json:"expected_run_id,omitempty"`
+	ThreadID string                   `json:"thread_id"`
+	Model    string                   `json:"model,omitempty"`
+	Response RequestUserInputResponse `json:"response"`
+	Input    RunInput                 `json:"input"`
+	Options  RunOptions               `json:"options"`
 }
 
 type SubmitRequestUserInputResponseResponse struct {
@@ -199,10 +198,10 @@ type FlowerSubagentSummary struct {
 }
 
 type FlowerSubagentDetailMessage struct {
-	Role        string                   `json:"role,omitempty"`
-	Text        string                   `json:"text,omitempty"`
-	Preview     string                   `json:"preview,omitempty"`
-	Attachments []FollowupAttachmentView `json:"attachments,omitempty"`
+	Role        string                 `json:"role,omitempty"`
+	Text        string                 `json:"text,omitempty"`
+	Preview     string                 `json:"preview,omitempty"`
+	Attachments []FlowerAttachmentView `json:"attachments,omitempty"`
 }
 
 type FlowerSubagentToolCallView struct {
@@ -327,7 +326,7 @@ type ListThreadMessagesResponse struct {
 	TotalReturned       int                        `json:"total_returned,omitempty"`
 }
 
-type FollowupAttachmentView struct {
+type FlowerAttachmentView struct {
 	AttachmentID      string `json:"attachment_id"`
 	Name              string `json:"name"`
 	MimeType          string `json:"mime_type"`
@@ -338,38 +337,16 @@ type FollowupAttachmentView struct {
 	URL               string `json:"url,omitempty"`
 }
 
-type FollowupItemView struct {
-	FollowupID      string                   `json:"followup_id"`
-	Lane            string                   `json:"lane"`
-	TurnID          string                   `json:"turn_id,omitempty"`
-	Text            string                   `json:"text"`
-	ModelID         string                   `json:"model_id,omitempty"`
-	PermissionType  string                   `json:"permission_type,omitempty"`
-	Position        int                      `json:"position"`
-	CreatedAtUnixMs int64                    `json:"created_at_unix_ms"`
-	Attachments     []FollowupAttachmentView `json:"attachments,omitempty"`
-	ContextAction   *ContextActionEnvelope   `json:"context_action,omitempty"`
-}
-
 type QueuedTurnView struct {
-	QueueID         string                   `json:"queue_id"`
-	Text            string                   `json:"text"`
-	CreatedAtUnixMs int64                    `json:"created_at_unix_ms"`
-	Attachments     []FollowupAttachmentView `json:"attachments,omitempty"`
-	ContextAction   *ContextActionEnvelope   `json:"context_action,omitempty"`
+	QueueID         string                 `json:"queue_id"`
+	Text            string                 `json:"text"`
+	CreatedAtUnixMs int64                  `json:"created_at_unix_ms"`
+	Attachments     []FlowerAttachmentView `json:"attachments,omitempty"`
+	ContextAction   *ContextActionEnvelope `json:"context_action,omitempty"`
 }
 
-type ListFollowupsResponse struct {
-	Revision     int64              `json:"revision"`
-	PausedReason string             `json:"paused_reason,omitempty"`
-	Queued       []FollowupItemView `json:"queued"`
-	Drafts       []FollowupItemView `json:"drafts"`
-}
-
-type ReorderFollowupsRequest struct {
-	Lane               string   `json:"lane"`
-	OrderedFollowupIDs []string `json:"ordered_followup_ids"`
-	ExpectedRevision   *int64   `json:"expected_revision,omitempty"`
+type ReorderQueueRequest struct {
+	OrderedQueueIDs []string `json:"ordered_queue_ids"`
 }
 
 type StopThreadResponse struct {
@@ -421,9 +398,6 @@ type FloretContinuationRetry struct {
 }
 
 type RunInput struct {
-	// TurnID is populated only from Floret canonical admission. Clients must
-	// omit it when submitting a new user command.
-	TurnID             string                          `json:"turn_id,omitempty"`
 	Text               string                          `json:"text"`
 	Attachments        []RunAttachmentIn               `json:"attachments"`
 	ContextAction      *ContextActionEnvelope          `json:"context_action,omitempty"`

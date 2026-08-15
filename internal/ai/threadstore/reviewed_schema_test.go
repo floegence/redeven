@@ -133,6 +133,10 @@ func TestThreadstoreBoundaryManifestCoversExactSchemaAndProductionSQL(t *testing
 
 func buildReviewedSchemaManifestForTest(t *testing.T) reviewedSchemaManifest {
 	t.Helper()
+	var existing reviewedSchemaManifest
+	if err := json.Unmarshal(reviewedSchemaManifestJSON, &existing); err != nil {
+		t.Fatal(err)
+	}
 	path := filepath.Join(t.TempDir(), "current.sqlite")
 	db := createReviewedSchemaDatabaseForTest(t, path)
 	tx, err := db.Begin()
@@ -145,7 +149,14 @@ func buildReviewedSchemaManifestForTest(t *testing.T) reviewedSchemaManifest {
 	if err != nil {
 		t.Fatalf("inspect current schema: %v", err)
 	}
-	return reviewedSchemaManifest{SchemaKind: threadstoreSchemaKind, Versions: []reviewedSchemaSnapshot{snapshot}}
+	versions := make([]reviewedSchemaSnapshot, 0, len(existing.Versions)+1)
+	for _, historical := range existing.Versions {
+		if historical.Version < threadstoreCurrentSchemaVersion {
+			versions = append(versions, historical)
+		}
+	}
+	versions = append(versions, snapshot)
+	return reviewedSchemaManifest{SchemaKind: threadstoreSchemaKind, Versions: versions}
 }
 
 func createReviewedSchemaDatabaseForTest(t *testing.T, path string) *sql.DB {

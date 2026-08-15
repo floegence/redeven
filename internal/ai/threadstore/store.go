@@ -99,10 +99,10 @@ func preflightCurrentThreadstore(path string) error {
 	if version > threadstoreCurrentSchemaVersion {
 		return &sqliteutil.DatabaseTooNewError{Kind: kind, Version: version, CurrentVersion: threadstoreCurrentSchemaVersion}
 	}
-	if version < threadstoreCurrentSchemaVersion {
-		return &sqliteutil.DatabaseTooOldError{Kind: kind, Version: version, MinimumVersion: threadstoreCurrentSchemaVersion}
+	if version < threadstoreSchemaSpec().MinimumVersion {
+		return &sqliteutil.DatabaseTooOldError{Kind: kind, Version: version, MinimumVersion: threadstoreSchemaSpec().MinimumVersion}
 	}
-	expected, err := reviewedProductSchemaContract(threadstoreCurrentSchemaVersion)
+	expected, err := reviewedProductSchemaContract(version)
 	if err != nil {
 		return err
 	}

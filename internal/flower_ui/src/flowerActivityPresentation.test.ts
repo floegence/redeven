@@ -778,7 +778,7 @@ describe('presentFlowerActivityItem', () => {
     });
   });
 
-  it('renders the published Floret v3 todo items payload', () => {
+  it('renders the published Floret v4 todo items payload', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'write_todos',
       renderer: 'todos',

@@ -96,7 +96,6 @@ func migrateThreadstoreV1ToV2(tx *sql.Tx) error {
 		return err
 	}
 	if _, err := tx.Exec(`
-ALTER TABLE ai_thread_settings ADD COLUMN parent_thread_id TEXT NOT NULL DEFAULT '';
 INSERT INTO ai_pending_input_imports(
   request_id, endpoint_id, thread_id, model_id, text_content, attachments_json,
   context_action_json, options_json, session_meta_json, created_at_unix_ms
@@ -105,7 +104,35 @@ SELECT queue_id, endpoint_id, thread_id, model_id, text_content, attachments_jso
        context_action_json, options_json, session_meta_json, created_at_unix_ms
 FROM ai_queued_turns
 ORDER BY endpoint_id, thread_id, created_at_unix_ms, queue_id;
+CREATE TEMP TABLE ai_thread_settings_v2 AS
+SELECT thread_id, '' AS parent_thread_id, endpoint_id, namespace_public_id, model_id,
+       reasoning_selection_json, permission_type, working_dir, pinned_at_unix_ms,
+       created_by_user_public_id, created_by_user_email, updated_by_user_public_id,
+       updated_by_user_email, settings_created_at_unix_ms, settings_updated_at_unix_ms
+FROM ai_thread_settings;
 DROP TRIGGER IF EXISTS trg_ai_thread_settings_reject_retired_id;
+DROP TABLE ai_thread_settings;
+CREATE TABLE ai_thread_settings (
+  thread_id TEXT PRIMARY KEY,
+  parent_thread_id TEXT NOT NULL DEFAULT '',
+  endpoint_id TEXT NOT NULL,
+  namespace_public_id TEXT NOT NULL DEFAULT '',
+  model_id TEXT NOT NULL DEFAULT '',
+  reasoning_selection_json TEXT NOT NULL DEFAULT '',
+  permission_type TEXT NOT NULL DEFAULT 'approval_required',
+  working_dir TEXT NOT NULL DEFAULT '',
+  pinned_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  created_by_user_public_id TEXT NOT NULL DEFAULT '',
+  created_by_user_email TEXT NOT NULL DEFAULT '',
+  updated_by_user_public_id TEXT NOT NULL DEFAULT '',
+  updated_by_user_email TEXT NOT NULL DEFAULT '',
+  settings_created_at_unix_ms INTEGER NOT NULL,
+  settings_updated_at_unix_ms INTEGER NOT NULL
+);
+INSERT INTO ai_thread_settings SELECT * FROM ai_thread_settings_v2;
+DROP TABLE ai_thread_settings_v2;
+CREATE INDEX idx_ai_thread_settings_endpoint_updated ON ai_thread_settings(endpoint_id, settings_updated_at_unix_ms DESC, thread_id DESC);
+CREATE INDEX idx_ai_thread_settings_endpoint_pinned_created ON ai_thread_settings(endpoint_id, pinned_at_unix_ms DESC, settings_created_at_unix_ms DESC, thread_id ASC);
 DROP TABLE ai_turn_admission_receipts;
 DROP TABLE ai_queued_turns;
 DROP TABLE ai_thread_create_operations;
@@ -114,7 +141,6 @@ DROP TABLE ai_thread_delete_operations;
 DROP TABLE ai_subagent_publication_operations;
 DROP TABLE ai_child_permission_snapshots;
 DROP TABLE ai_permission_snapshots;
-ALTER TABLE ai_thread_settings DROP COLUMN queue_revision;
 `); err != nil {
 		return err
 	}

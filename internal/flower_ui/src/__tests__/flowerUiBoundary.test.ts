@@ -131,6 +131,21 @@ describe('shared Flower UI boundary', () => {
     expect(cssSrc).not.toContain('flower-component-nav-item');
   });
 
+  it('derives companion presence only from the canonical thread cache', () => {
+    const surfaceSrc = readText(path.join(flowerRoot, 'FlowerSurface.tsx'));
+    for (const token of [
+      'companionLiveThread',
+      'companionLiveRunGeneration',
+      'companionTerminalTransition',
+      'companionTerminalOverrides',
+      'overlayCompanionThreadItem',
+    ]) {
+      expect(surfaceSrc).not.toContain(token);
+    }
+    expect(surfaceSrc).toContain('const companionThreadItems = createMemo');
+    expect(surfaceSrc).toContain('const threadStateByID = new Map(threads()');
+  });
+
   it('keeps turn launching separate from the chat surface and removes draft injection contracts', () => {
     const surfaceSrc = readText(path.join(flowerRoot, 'FlowerSurface.tsx'));
     const contractsSrc = readText(path.join(flowerRoot, 'contracts', 'flowerSurfaceContracts.ts'));
