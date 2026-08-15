@@ -85,7 +85,7 @@ function titleStatus(raw: unknown, title: unknown): FlowerTitleStatus {
     case 'failed': return 'failed';
     case 'pending': return 'pending';
   }
-  throw new Error(`Flower contract error: title_status must be empty, pending, ready, or failed; received ${trim(raw) || '<empty>'}.`);
+  throw new Error(`Flower contract error: title_status may be empty only when title is empty; otherwise it must be pending, ready, or failed; received ${trim(raw) || '<empty>'}.`);
 }
 
 function positiveInteger(raw: unknown): number | undefined {
