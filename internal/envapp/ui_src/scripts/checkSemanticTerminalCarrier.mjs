@@ -63,6 +63,18 @@ async function dispatchTerminalWheel(canvas, deltaY) {
   if (!handled) throw new Error(`terminal wheel event was not handled: deltaY=${deltaY}`);
 }
 
+async function dispatchTerminalWheelBurst(canvas, deltas) {
+  const handled = await canvas.evaluate((element, values) => values.map((delta) => {
+    const event = new globalThis.WheelEvent('wheel', { deltaY: delta, bubbles: true, cancelable: true });
+    element.dispatchEvent(event);
+    return event.defaultPrevented;
+  }), deltas);
+  const unhandled = handled.findIndex((value) => !value);
+  if (unhandled !== -1) {
+    throw new Error(`terminal wheel event was not handled: index=${unhandled} deltaY=${deltas[unhandled]}`);
+  }
+}
+
 async function showLatestHistory(runtime) {
   const scrollbar = runtime.locator('[data-floeterm-scrollbar][data-visible="true"]');
   await scrollbar.evaluate((element) => {
@@ -632,9 +644,7 @@ async function seedHistory(page, panel, runtime, fixtureBytes, tempDir) {
   }
 
   const beforeBurst = await runtimeTrace(runtime);
-  for (const deltaY of [-80, -160, 120, -240, 300, -120]) {
-    await dispatchTerminalWheel(canvas, deltaY);
-  }
+  await dispatchTerminalWheelBurst(canvas, [-80, -160, 120, -240, 300, -120]);
   const afterBurst = await waitForTrace(runtime, (trace) => (
     !trace.history_busy
     && trace.history_projected
