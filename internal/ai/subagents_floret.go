@@ -93,10 +93,6 @@ type floretSubagentRuntime struct {
 	closed  bool
 }
 
-func newFloretSubagentRuntime(parent *run) *floretSubagentRuntime {
-	return &floretSubagentRuntime{parent: parent}
-}
-
 func newServiceFloretSubagentRuntime(service *Service, parent *run) *floretSubagentRuntime {
 	return &floretSubagentRuntime{service: service, parent: parent}
 }
@@ -110,15 +106,6 @@ func (runtime *floretSubagentRuntime) attachParentRun(parent *run) {
 	if !runtime.closed {
 		runtime.parent = parent
 	}
-}
-
-func (runtime *floretSubagentRuntime) parentRun() *run {
-	if runtime == nil {
-		return nil
-	}
-	runtime.mu.Lock()
-	defer runtime.mu.Unlock()
-	return runtime.parent
 }
 
 func (runtime *floretSubagentRuntime) boundaries() (*Service, *run, flruntime.ThreadService, error) {
@@ -557,7 +544,7 @@ func (runtime *floretSubagentRuntime) snapshotForView(ctx context.Context, view 
 }
 
 func subagentSnapshotFromThread(summary flruntime.ThreadSummary, view flruntime.ThreadView) subagentSnapshot {
-	status := subagentStatusQueued
+	var status string
 	closed := false
 	switch {
 	case view.Attention.InputCount > 0 || view.Attention.ApprovalCount > 0:
@@ -601,7 +588,7 @@ func subagentSnapshotFromThread(summary flruntime.ThreadSummary, view flruntime.
 func (runtime *floretSubagentRuntime) publishParent(ctx context.Context) {
 	service, parent, _, err := runtime.boundaries()
 	if err == nil {
-		service.broadcastThreadSummary(parent.endpointID, parent.threadID)
+		_ = service.broadcastThreadSummary(parent.endpointID, parent.threadID)
 	}
 }
 
@@ -614,15 +601,6 @@ func (runtime *floretSubagentRuntime) release() {
 	runtime.parent = nil
 	runtime.service = nil
 	runtime.mu.Unlock()
-}
-
-func (runtime *floretSubagentRuntime) closeAllExisting(ctx context.Context) error {
-	_, err := runtime.closeAll(ctx, "runtime_close", nil)
-	return err
-}
-
-func (runtime *floretSubagentRuntime) refreshSubagentsPatch(ctx context.Context, _ ...subagentSnapshot) {
-	runtime.publishParent(ctx)
 }
 
 func (service *Service) ListFlowerSubagents(ctx context.Context, meta *session.Meta, parentThreadID string) ([]FlowerSubagentSummary, error) {
@@ -678,7 +656,7 @@ func flowerSubagentSummaryFromSnapshot(snapshot subagentSnapshot) FlowerSubagent
 
 func (service *Service) publishFlowerSubagentsPatch(ctx context.Context, endpointID, parentThreadID string) {
 	if service != nil {
-		service.broadcastThreadSummary(strings.TrimSpace(endpointID), strings.TrimSpace(parentThreadID))
+		_ = service.broadcastThreadSummary(strings.TrimSpace(endpointID), strings.TrimSpace(parentThreadID))
 	}
 }
 

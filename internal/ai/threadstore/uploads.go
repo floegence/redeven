@@ -901,67 +901,12 @@ WHERE endpoint_id = ? AND thread_id = ?
 	return collectUnreferencedUploadsTx(ctx, tx, endpointID, uploadIDs, deleteAfterUnixMs)
 }
 
-func prepareUploadCleanupForRefTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, refKind string, refID string, deleteAfterUnixMs int64) ([]UploadRecord, error) {
-	refKind = normalizeUploadRefKind(refKind)
-	refID = strings.TrimSpace(refID)
-	if refKind == "" || refID == "" {
-		return nil, errors.New("invalid upload reference")
-	}
-	uploadIDs, err := listUploadIDsForRefTx(ctx, tx, endpointID, threadID, refKind, refID)
-	if err != nil {
-		return nil, err
-	}
-	if len(uploadIDs) == 0 {
-		return nil, nil
-	}
-	if _, err := tx.ExecContext(ctx, `
-DELETE FROM ai_upload_refs
-WHERE endpoint_id = ? AND thread_id = ? AND ref_kind = ? AND ref_id = ?
-`, endpointID, threadID, refKind, refID); err != nil {
-		return nil, err
-	}
-	return collectUnreferencedUploadsTx(ctx, tx, endpointID, uploadIDs, deleteAfterUnixMs)
-}
-
 func listUploadIDsForThreadTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string) ([]string, error) {
 	rows, err := tx.QueryContext(ctx, `
 SELECT DISTINCT upload_id
 FROM ai_upload_refs
 WHERE endpoint_id = ? AND thread_id = ?
 `, endpointID, threadID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := make([]string, 0)
-	for rows.Next() {
-		var uploadID string
-		if err := rows.Scan(&uploadID); err != nil {
-			return nil, err
-		}
-		uploadID = strings.TrimSpace(uploadID)
-		if uploadID == "" {
-			continue
-		}
-		out = append(out, uploadID)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func listUploadIDsForRefTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, refKind string, refID string) ([]string, error) {
-	refKind = normalizeUploadRefKind(refKind)
-	refID = strings.TrimSpace(refID)
-	if refKind == "" || refID == "" {
-		return nil, errors.New("invalid upload reference")
-	}
-	rows, err := tx.QueryContext(ctx, `
-SELECT DISTINCT upload_id
-FROM ai_upload_refs
-WHERE endpoint_id = ? AND thread_id = ? AND ref_kind = ? AND ref_id = ?
-`, endpointID, threadID, refKind, refID)
 	if err != nil {
 		return nil, err
 	}

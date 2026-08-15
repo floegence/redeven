@@ -41,20 +41,6 @@ func newActivityTimelineBlockWithPublicIdentity(timeline observation.ActivityTim
 	}
 }
 
-func (r *run) newActivityTimelineBlock(timeline observation.ActivityTimeline, fileActions map[string]FlowerActivityFileAction) ActivityTimelineBlock {
-	publicIdentity := activityTimelinePublicIdentity{}
-	if r != nil {
-		runID, threadID, turnID := r.floretCanonicalIdentity()
-		publicIdentity = activityTimelinePublicIdentity{
-			RunID:    runID,
-			ThreadID: threadID,
-			TurnID:   turnID,
-			TraceID:  runID,
-		}
-	}
-	return newActivityTimelineBlockWithPublicIdentity(timeline, fileActions, publicIdentity)
-}
-
 func publicActivityTimelineForBlock(timeline observation.ActivityTimeline, publicIdentity activityTimelinePublicIdentity) observation.ActivityTimeline {
 	timeline.RunID = identity.RunID(strings.TrimSpace(publicIdentity.RunID))
 	timeline.ThreadID = identity.ThreadID(strings.TrimSpace(publicIdentity.ThreadID))
@@ -102,40 +88,6 @@ func cloneFlowerActivityFileActions(in map[string]FlowerActivityFileAction) map[
 		return nil
 	}
 	return out
-}
-
-func (r *run) activityTimelineFileActions(timeline observation.ActivityTimeline) map[string]FlowerActivityFileAction {
-	if r == nil || len(timeline.Items) == 0 {
-		return nil
-	}
-	r.muAssistant.Lock()
-	defer r.muAssistant.Unlock()
-	if len(r.activityFileActions) == 0 {
-		return nil
-	}
-	out := map[string]FlowerActivityFileAction{}
-	addAction := func(actionID string) {
-		actionID = strings.TrimSpace(actionID)
-		if actionID == "" {
-			return
-		}
-		action, ok := r.activityFileActions[actionID]
-		if !ok {
-			return
-		}
-		out[actionID] = action
-	}
-	for _, item := range timeline.Items {
-		if item.Presentation == nil {
-			continue
-		}
-		for _, target := range item.Presentation.TargetRefs {
-			if actionID, ok := strings.CutPrefix(strings.TrimSpace(target.Kind), "file_action:"); ok {
-				addAction(actionID)
-			}
-		}
-	}
-	return cloneFlowerActivityFileActions(out)
 }
 
 func (r *run) recordFloretActivityEvent(ev flruntime.Event) {
@@ -188,18 +140,6 @@ func modelIOEndsBeforeActivity(eventType observation.EventType) bool {
 	default:
 		return false
 	}
-}
-
-func activityTimelineBlockFromValue(value any) (ActivityTimelineBlock, bool) {
-	switch block := value.(type) {
-	case ActivityTimelineBlock:
-		return block, true
-	case *ActivityTimelineBlock:
-		if block != nil {
-			return *block, true
-		}
-	}
-	return ActivityTimelineBlock{}, false
 }
 
 func isActivityObservationEvent(eventType observation.EventType) bool {

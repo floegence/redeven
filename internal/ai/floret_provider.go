@@ -81,23 +81,6 @@ func (p *floretProviderAdapter) Capabilities() flprovider.Capabilities {
 	return floretModelGatewayCapabilities(p.controls.ReasoningCapability)
 }
 
-func withDisabledFloretCoreControlTools(names ...string) floretProviderAdapterOption {
-	return func(adapter *floretProviderAdapter) {
-		if adapter == nil {
-			return
-		}
-		if adapter.disabledCoreControlTools == nil {
-			adapter.disabledCoreControlTools = map[string]struct{}{}
-		}
-		for _, name := range names {
-			name = strings.TrimSpace(name)
-			if name != "" {
-				adapter.disabledCoreControlTools[name] = struct{}{}
-			}
-		}
-	}
-}
-
 func withFloretAttachmentResolver(resolver func(context.Context, flruntime.MessageAttachment) (ContentPart, error), supportsImageInput bool, supportsFileInput bool) floretProviderAdapterOption {
 	return func(adapter *floretProviderAdapter) {
 		if adapter == nil {
@@ -121,31 +104,12 @@ func withFloretAttachmentToolRead(enabled bool) floretProviderAdapterOption {
 	}
 }
 
-func withFloretRequestAttachmentResolver(resolver func(context.Context, flprovider.Request, flprovider.Attachment) (ContentPart, error), supportsImageInput bool, supportsFileInput bool) floretProviderAdapterOption {
-	return func(adapter *floretProviderAdapter) {
-		if adapter == nil {
-			return
-		}
-		adapter.requestAttachmentResolver = resolver
-		adapter.supportsImageInput = supportsImageInput
-		adapter.supportsFileInput = supportsFileInput
-	}
-}
-
 func withFloretRequestAdmission(admit func(context.Context) (context.Context, func(), error)) floretProviderAdapterOption {
 	return func(adapter *floretProviderAdapter) {
 		if adapter != nil && admit != nil {
 			adapter.admitRequest = func(ctx context.Context, _ flprovider.Request) (context.Context, func(), error) {
 				return admit(ctx)
 			}
-		}
-	}
-}
-
-func withFloretProviderRequestAdmission(admit func(context.Context, flprovider.Request) (context.Context, func(), error)) floretProviderAdapterOption {
-	return func(adapter *floretProviderAdapter) {
-		if adapter != nil {
-			adapter.admitRequest = admit
 		}
 	}
 }
@@ -525,10 +489,6 @@ func sendFloretProviderEvent(ctx context.Context, out chan<- flprovider.Event, e
 	}
 }
 
-func (p *floretProviderAdapter) floretMessagesToFlower(ctx context.Context, messages []flprovider.Message) ([]Message, error) {
-	return p.floretMessagesToFlowerWithResolver(ctx, messages, p.attachmentResolver)
-}
-
 func (p *floretProviderAdapter) floretMessagesToFlowerWithResolver(ctx context.Context, messages []flprovider.Message, resolver func(context.Context, flprovider.Attachment) (ContentPart, error)) ([]Message, error) {
 	out := make([]Message, 0, len(messages))
 	for i, msg := range messages {
@@ -659,18 +619,6 @@ func flowerProviderStateToFloret(state *ModelGatewayState) (*flprovider.State, e
 	return &flprovider.State{Kind: kind, ID: id, Attributes: cloneStringMap(state.Attributes)}, nil
 }
 
-func floretProviderStateToFlower(state *flprovider.State) *ModelGatewayState {
-	if state == nil {
-		return nil
-	}
-	kind := strings.TrimSpace(state.Kind)
-	id := strings.TrimSpace(state.ID)
-	if kind == "" || id == "" {
-		return nil
-	}
-	return &ModelGatewayState{Kind: kind, ID: id, Attributes: cloneStringMap(state.Attributes)}
-}
-
 func floretUsageFromFlower(usage TurnUsage) flprovider.Usage {
 	out := flprovider.Usage{
 		InputTokens:     usage.InputTokens,
@@ -678,15 +626,6 @@ func floretUsageFromFlower(usage TurnUsage) flprovider.Usage {
 		ReasoningTokens: usage.ReasoningTokens,
 	}
 	return normalizeFloretUsage(out)
-}
-
-func flowerUsageFromFloret(usage flprovider.Usage) TurnUsage {
-	usage = normalizeFloretUsage(usage)
-	return TurnUsage{
-		InputTokens:     usage.InputTokens,
-		OutputTokens:    usage.OutputTokens,
-		ReasoningTokens: usage.ReasoningTokens,
-	}
 }
 
 func cloneFloretModelState(state *flprovider.State) *flprovider.State {

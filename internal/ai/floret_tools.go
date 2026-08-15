@@ -171,14 +171,6 @@ func buildFloretTools(r *run, activeTools []ToolDef, state *floretToolRuntimeSta
 	return items, nil
 }
 
-func buildFloretToolRegistry(r *run, activeTools []ToolDef, state *floretToolRuntimeState) (*fltools.Registry, error) {
-	items, err := buildFloretTools(r, activeTools, state)
-	if err != nil {
-		return nil, err
-	}
-	return fltools.NewRegistryE(items...)
-}
-
 func validateFloretToolPermissionHostContext(hostContext map[string]string, snapshot PermissionSnapshot) error {
 	wantID := strings.TrimSpace(snapshot.SnapshotID)
 	wantEpoch := permissionSurfaceEpoch(snapshot)
@@ -256,33 +248,6 @@ func requireFloretRunIdentity(label string, runID string, threadID string, turnI
 
 func floretIdentityMismatchError(label string, field string, got string, want string) error {
 	return fmt.Errorf("floret %s %s identity mismatch: got %q, want %q", label, field, got, want)
-}
-
-func validateStoredPermissionSnapshotHashes(label string, registryHash string, schemaHash string, presentationHash string, snapshot PermissionSnapshot) error {
-	if strings.TrimSpace(snapshot.RegistryHash) != strings.TrimSpace(registryHash) {
-		return fmt.Errorf("%s permission snapshot registry hash mismatch", label)
-	}
-	if strings.TrimSpace(snapshot.SchemaHash) != strings.TrimSpace(schemaHash) {
-		return fmt.Errorf("%s permission snapshot schema hash mismatch", label)
-	}
-	if strings.TrimSpace(snapshot.PresentationHash) != strings.TrimSpace(presentationHash) {
-		return fmt.Errorf("%s permission snapshot presentation hash mismatch", label)
-	}
-	return nil
-}
-
-func mapKeys(in map[string]struct{}) []string {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(in))
-	for key := range in {
-		key = strings.TrimSpace(key)
-		if key != "" {
-			out = append(out, key)
-		}
-	}
-	return out
 }
 
 func floretHostLabelsForRun(r *run) map[string]string {

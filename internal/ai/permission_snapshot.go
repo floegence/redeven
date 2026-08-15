@@ -96,26 +96,6 @@ func (r *run) ensureCanonicalPermissionSnapshotPersisted(_ context.Context) erro
 	return nil
 }
 
-func (r *run) commitPermissionSnapshot(snapshot PermissionSnapshot) error {
-	if r == nil {
-		return errors.New("missing permission snapshot owner")
-	}
-	if !permissionSnapshotActive(snapshot) || strings.TrimSpace(snapshot.SnapshotHash) == "" {
-		return errors.New("permission snapshot is empty")
-	}
-	r.setPermissionState(snapshot.PermissionType, snapshot)
-	return nil
-}
-
-func (r *run) setPermissionType(permissionType FlowerPermissionType) {
-	if r == nil {
-		return
-	}
-	r.muPermission.Lock()
-	r.permissionType = permissionType
-	r.muPermission.Unlock()
-}
-
 func (r *run) setPermissionState(permissionType FlowerPermissionType, snapshot PermissionSnapshot) {
 	if r == nil {
 		return

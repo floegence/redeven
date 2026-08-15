@@ -179,24 +179,6 @@ func (r *run) withAuthorizedFloretEffect(ctx context.Context, req flruntime.Effe
 	return dispatchErr
 }
 
-func passiveSubagentEffectRequest(req flruntime.EffectAuthorizationRequest) bool {
-	if strings.TrimSpace(req.ToolName) != "subagents" {
-		return false
-	}
-	for _, resource := range req.Resources {
-		if strings.TrimSpace(resource.Kind) != "subagent" {
-			continue
-		}
-		switch strings.TrimSpace(resource.Value) {
-		case subagentActionList, subagentActionInspect:
-			return true
-		default:
-			return false
-		}
-	}
-	return false
-}
-
 func validateFloretEffectAuthorizationRequest(req flruntime.EffectAuthorizationRequest) error {
 	if strings.TrimSpace(req.EffectAttemptID) == "" || strings.TrimSpace(req.RequestFingerprint) == "" ||
 		strings.TrimSpace(string(req.ThreadID)) == "" || strings.TrimSpace(string(req.TurnID)) == "" ||

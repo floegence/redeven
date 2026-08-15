@@ -13,7 +13,6 @@ import (
 
 	anthropic "github.com/anthropics/anthropic-sdk-go"
 	aoption "github.com/anthropics/anthropic-sdk-go/option"
-	"github.com/floegence/floret/v4/observation"
 	"github.com/floegence/redeven/internal/config"
 	openai "github.com/openai/openai-go"
 	ooption "github.com/openai/openai-go/option"
@@ -2581,18 +2580,6 @@ func isProviderToolCallReferenceError(err error) bool {
 	return strings.Contains(msg, "not found")
 }
 
-func appendLimited(in []string, value string, limit int) []string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return in
-	}
-	in = append(in, value)
-	if limit > 0 && len(in) > limit {
-		return append([]string(nil), in[len(in)-limit:]...)
-	}
-	return in
-}
-
 func buildAssistantHistoryMessage(text string, reasoning string, calls []ToolCall) (Message, bool) {
 	parts := make([]ContentPart, 0, len(calls)+2)
 	if txt := strings.TrimSpace(text); txt != "" {
@@ -2760,30 +2747,6 @@ func normalizeAskUserOptions(options []string) []string {
 		return nil
 	}
 	return out
-}
-
-func (r *run) failReplyFinish(step int, finishReason string, finalizationReason string, errMsg string) error {
-	if r == nil {
-		return errors.New(strings.TrimSpace(errMsg))
-	}
-	normalizedFinishReason := normalizeReplyFinishReason(finishReason)
-	r.recordRunDiagnostic("reply.finish_rejected", RealtimeStreamKindLifecycle, map[string]any{
-		"step_index":    step,
-		"finish_reason": normalizedFinishReason,
-		"finish_class":  string(classifyReplyFinish(normalizedFinishReason)),
-	})
-	if strings.TrimSpace(finalizationReason) != "" {
-		r.setFinalizationReason(finalizationReason)
-	}
-	return r.failRun(errMsg, fmt.Errorf("provider returned finish_reason=%q", normalizedFinishReason))
-}
-
-func finalizationReasonForAskUserSource(source string) string {
-	source = strings.TrimSpace(source)
-	if source == "model_signal" {
-		return "ask_user_waiting_model"
-	}
-	return ""
 }
 
 func validateAskUserSignal(signal askUserSignal) string {
@@ -3061,139 +3024,6 @@ func joinToolAndSignalNames(tools []string, signals []string) string {
 	}
 	sort.Strings(names)
 	return strings.Join(names, ",")
-}
-
-func (r *run) waitForTaskCompleteConfirm(ctx context.Context, resultText string) (bool, error) {
-	if r == nil {
-		return false, errors.New("nil run")
-	}
-	toolID, err := newToolID()
-	if err != nil {
-		return false, err
-	}
-	r.recordObservationActivityEvent(observation.Event{
-		Type:       observation.EventTypeToolApprovalRequested,
-		ToolID:     toolID,
-		ToolName:   "task_complete",
-		ObservedAt: time.Now(),
-		Metadata: map[string]any{
-			"approval_id": toolID,
-		},
-	})
-
-	ch := make(chan bool, 1)
-	promoted := make(chan struct{})
-	r.mu.Lock()
-	r.toolApprovals[toolID] = &toolApprovalRequest{
-		decision:      ch,
-		promoted:      promoted,
-		toolName:      "task_complete",
-		requestedAtMs: time.Now().UnixMilli(),
-	}
-	r.mu.Unlock()
-	r.promoteToolApproval(toolID)
-	r.publishControlConfirmationRequested(toolID)
-	defer func() {
-		r.mu.Lock()
-		delete(r.toolApprovals, toolID)
-		r.mu.Unlock()
-	}()
-	select {
-	case <-promoted:
-	case <-ctx.Done():
-		r.publishToolApprovalResolved(toolID, FlowerApprovalStateCanceled, ctx.Err().Error())
-		return false, ctx.Err()
-	}
-
-	timeout := r.toolApprovalTO
-	if timeout <= 0 {
-		timeout = 10 * time.Minute
-	}
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-	select {
-	case approved := <-ch:
-		if approved {
-			r.recordObservationActivityEvent(observation.Event{
-				Type:       observation.EventTypeToolApprovalApproved,
-				ToolID:     toolID,
-				ToolName:   "task_complete",
-				ObservedAt: time.Now(),
-				Metadata: map[string]any{
-					"approval_id": toolID,
-				},
-			})
-			return true, nil
-		}
-		r.recordObservationActivityEvent(observation.Event{
-			Type:       observation.EventTypeToolApprovalRejected,
-			ToolID:     toolID,
-			ToolName:   "task_complete",
-			Error:      "Rejected by user",
-			ObservedAt: time.Now(),
-			Metadata: map[string]any{
-				"approval_id": toolID,
-			},
-		})
-		return false, nil
-	case <-ctx.Done():
-		r.publishToolApprovalResolved(toolID, FlowerApprovalStateCanceled, ctx.Err().Error())
-		return false, ctx.Err()
-	case <-timer.C:
-		r.recordObservationActivityEvent(observation.Event{
-			Type:       observation.EventTypeToolApprovalTimedOut,
-			ToolID:     toolID,
-			ToolName:   "task_complete",
-			Error:      "Approval timed out",
-			ObservedAt: time.Now(),
-			Metadata: map[string]any{
-				"approval_id": toolID,
-			},
-		})
-		r.publishToolApprovalResolved(toolID, FlowerApprovalStateTimedOut, "approval timed out")
-		return false, errors.New("approval timed out")
-	}
-}
-
-func (r *run) persistAskUserWaitingPrompt(signal askUserSignal, _ string, toolID string) (string, int) {
-	if r == nil {
-		return "", 0
-	}
-	signal = normalizeAskUserSignal(signal)
-	questions := normalizeRequestUserInputQuestions(signal.Questions)
-	if len(questions) == 0 {
-		return "", 0
-	}
-	question := strings.TrimSpace(signal.Question)
-	if question == "" {
-		question = strings.TrimSpace(questions[0].Question)
-	}
-	if question == "" {
-		return "", 0
-	}
-	toolID = strings.TrimSpace(toolID)
-	if toolID == "" {
-		id, err := newToolID()
-		if err != nil {
-			return "", 0
-		}
-		toolID = id
-	}
-	prompt := normalizeRequestUserInputPrompt(&RequestUserInputPrompt{
-		MessageID:          strings.TrimSpace(r.messageID),
-		ToolID:             toolID,
-		ToolName:           "ask_user",
-		ReasonCode:         signal.ReasonCode,
-		ReasoningSelection: r.currentReasoning,
-		RequiredFromUser:   append([]string(nil), signal.RequiredFromUser...),
-		EvidenceRefs:       append([]string(nil), signal.EvidenceRefs...),
-		Questions:          questions,
-	})
-	if prompt == nil {
-		return "", 0
-	}
-	r.setWaitingPrompt(prompt)
-	return toolID, len(questions)
 }
 
 func requestUserInputQuestionChoiceCount(questions []RequestUserInputQuestion) int {

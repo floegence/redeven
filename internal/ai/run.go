@@ -119,18 +119,10 @@ type run struct {
 	settlementRunID    string
 	settlementTurnID   string
 
-	maxWallTime    time.Duration
-	idleTimeout    time.Duration
-	toolApprovalTO time.Duration
-	activityCh     chan struct{}
-	doneCh         chan struct{}
-	doneOnce       sync.Once
+	idleTimeout time.Duration
+	activityCh  chan struct{}
 
 	muCancel                 sync.Mutex
-	cancelReason             string // "canceled"|"timed_out"|""
-	endReason                string // "complete"|"canceled"|"timed_out"|"disconnected"|"error"
-	runErrorCode             string
-	cancelRequested          bool
 	cancelFn                 context.CancelFunc
 	muExecution              sync.Mutex
 	executionClosed          bool
@@ -139,23 +131,19 @@ type run struct {
 	nextExecutionAdmissionID uint64
 	executionAdmissions      map[uint64]context.CancelCauseFunc
 	detached                 atomic.Bool // hard-canceled: stop emitting realtime events and skip thread state updates
-	floretRunTurnStarted     atomic.Bool
 	busyCount                atomic.Int32
 	runtimeToolCalls         atomic.Int64
-	runtimeTokens            atomic.Int64
 	uploadsDir               string
 	product                  runProductCapabilities
 	threadRuntime            flruntime.ThreadService
 	toolRuntimeState         *floretToolRuntimeState
 	effectAuthorizations     *floretEffectAuthorizationRegistry
-	persistOpTimeout         time.Duration
 
 	onStreamEvent func(any)
 	w             http.ResponseWriter
 	stream        *ndjsonStream
 
 	mu                  sync.Mutex
-	toolApprovals       map[string]*toolApprovalRequest
 	muLifecycle         sync.Mutex
 	lastLifecyclePhase  string
 	lastLifecycleAt     time.Time
@@ -188,10 +176,9 @@ type run struct {
 	muFloretContract    sync.Mutex
 	floretContractErr   error
 
-	muPendingCommand         sync.Mutex
-	pendingCommandID         string
-	pendingCommandReconciled bool
-	canonicalAttachmentIDs   []string
+	muPendingCommand       sync.Mutex
+	pendingCommandID       string
+	canonicalAttachmentIDs []string
 
 	finalizationReason string
 	currentModelID     string
@@ -253,31 +240,6 @@ func (r *run) floretCanonicalIdentity() (string, string, string) {
 	return r.floretEventIdentity.runID, r.floretEventIdentity.threadID, r.floretEventIdentity.turnID
 }
 
-func (r *run) canonicalRunTurnIdentity() (string, string) {
-	runID, _, turnID := r.floretCanonicalIdentity()
-	return runID, turnID
-}
-
-func (r *run) bindFloretCanonicalIdentity(runID, threadID, turnID string) error {
-	if r == nil {
-		return errors.New("Floret canonical identity owner is unavailable")
-	}
-	runID, threadID, turnID = strings.TrimSpace(runID), strings.TrimSpace(threadID), strings.TrimSpace(turnID)
-	if runID == "" || threadID == "" || turnID == "" || threadID != strings.TrimSpace(r.threadID) {
-		return errors.New("Floret canonical identity is incomplete or bound to another thread")
-	}
-	r.muFloretIdentity.Lock()
-	defer r.muFloretIdentity.Unlock()
-	identity := r.floretEventIdentity
-	if !identity.configured {
-		return errors.New("Floret canonical identity has not crossed the durable admission boundary")
-	}
-	if identity.runID != runID || identity.threadID != threadID || identity.turnID != turnID {
-		return errors.New("Floret canonical identity changed during execution")
-	}
-	return nil
-}
-
 func (r *run) observeFloretCanonicalIdentity(runID, threadID, turnID string) error {
 	if r == nil {
 		return errors.New("Floret canonical identity owner is unavailable")
@@ -321,21 +283,6 @@ type assistantMarkdownUpdate struct {
 	index int
 	start bool
 	block persistedMarkdownBlock
-}
-
-type toolApprovalRequest struct {
-	decision      chan bool
-	promoted      chan struct{}
-	promotedOnce  sync.Once
-	toolName      string
-	command       string
-	cwd           string
-	effects       []string
-	flags         []string
-	targets       []FlowerSafeTarget
-	requestedAtMs int64
-	expiresAtMs   int64
-	resolved      bool
 }
 
 func newRun(opts runOptions) *run {
@@ -391,14 +338,9 @@ func newRun(opts runOptions) *run {
 		product:                     opts.ProductCapabilities,
 		threadRuntime:               opts.FloretThreadRuntime,
 		effectAuthorizations:        effectAuthorizations,
-		persistOpTimeout:            opts.PersistOpTimeout,
 		onStreamEvent:               opts.OnStreamEvent,
 		w:                           opts.Writer,
-		toolApprovals:               make(map[string]*toolApprovalRequest),
-		maxWallTime:                 opts.MaxWallTime,
 		idleTimeout:                 opts.IdleTimeout,
-		toolApprovalTO:              opts.ToolApprovalTimeout,
-		doneCh:                      make(chan struct{}),
 		executionAdmissions:         make(map[uint64]context.CancelCauseFunc),
 		lifecycleMinEmitGap:         600 * time.Millisecond,
 		collectedWebSources:         make(map[string]SourceRef),
@@ -498,126 +440,6 @@ func (r *run) beginBusy() func() {
 	}
 }
 
-func (r *run) isBusy() bool {
-	if r == nil {
-		return false
-	}
-	return r.busyCount.Load() > 0
-}
-
-func (r *run) isWaitingProductApproval() bool {
-	if r == nil {
-		return false
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for _, approval := range r.toolApprovals {
-		if approval != nil && !approval.resolved {
-			return true
-		}
-	}
-	return false
-}
-
-func (r *run) runIdleWatchdog(ctx context.Context) {
-	if r == nil || ctx == nil || r.idleTimeout <= 0 || r.activityCh == nil {
-		return
-	}
-	idleTimer := time.NewTimer(r.idleTimeout)
-	defer idleTimer.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-r.doneCh:
-			return
-		case <-r.activityCh:
-			if !idleTimer.Stop() {
-				select {
-				case <-idleTimer.C:
-				default:
-				}
-			}
-			idleTimer.Reset(r.idleTimeout)
-		case <-idleTimer.C:
-			// Waiting for the user is not an "idle" run. Product confirmations retain
-			// their own timeout, and the run's max wall time bounds every approval wait.
-			if r.isWaitingProductApproval() || r.isBusy() {
-				idleTimer.Reset(r.idleTimeout)
-				continue
-			}
-			r.requestCancel("timed_out")
-			return
-		}
-	}
-}
-
-func (r *run) requestCancel(reason string) {
-	if r == nil {
-		return
-	}
-	reason = strings.TrimSpace(reason)
-	r.muCancel.Lock()
-	if reason != "" && r.cancelReason == "" {
-		r.cancelReason = reason
-	}
-	if reason == "canceled" || reason == "timed_out" {
-		if r.endReason == "" {
-			r.endReason = reason
-		}
-		if r.finalizationReason == "" {
-			r.finalizationReason = reason
-		}
-	}
-	alreadyRequested := r.cancelRequested
-	r.cancelRequested = true
-	cancelFn := r.cancelFn
-	r.muCancel.Unlock()
-	if alreadyRequested || cancelFn == nil {
-		return
-	}
-
-	// Cancel is a hard instruction:
-	// - signal: cancel context immediately to stop new sampling/tool dispatch
-	// - grace/force: re-signal after a short delay in case something is stuck
-	cancelFn()
-	go func() {
-		timer := time.NewTimer(500 * time.Millisecond)
-		defer timer.Stop()
-		select {
-		case <-r.doneCh:
-			return
-		case <-timer.C:
-			cancelFn()
-		}
-	}()
-}
-
-func (r *run) closeExecution() {
-	if r == nil {
-		return
-	}
-	r.muExecution.Lock()
-	if r.executionClosed {
-		r.muExecution.Unlock()
-		return
-	}
-	r.executionClosed = true
-	cancel := r.executionCancel
-	admissionCancels := make([]context.CancelCauseFunc, 0, len(r.executionAdmissions))
-	for id, admissionCancel := range r.executionAdmissions {
-		admissionCancels = append(admissionCancels, admissionCancel)
-		delete(r.executionAdmissions, id)
-	}
-	r.muExecution.Unlock()
-	if cancel != nil {
-		cancel(ErrRunExecutionClosed)
-	}
-	for _, admissionCancel := range admissionCancels {
-		admissionCancel(ErrRunExecutionClosed)
-	}
-}
-
 func (r *run) requireExecutionOpen() error {
 	if r == nil {
 		return ErrRunExecutionClosed
@@ -688,54 +510,6 @@ func (r *run) admitFloretProviderRequest(ctx context.Context) (context.Context, 
 	return r.beginExecutionAdmission(ctx)
 }
 
-func (r *run) getCancelReason() string {
-	if r == nil {
-		return ""
-	}
-	r.muCancel.Lock()
-	v := strings.TrimSpace(r.cancelReason)
-	r.muCancel.Unlock()
-	return v
-}
-
-func (r *run) setEndReason(reason string) {
-	if r == nil {
-		return
-	}
-	r.muCancel.Lock()
-	r.endReason = strings.TrimSpace(reason)
-	r.muCancel.Unlock()
-}
-
-func (r *run) setRunErrorCode(code string) {
-	if r == nil {
-		return
-	}
-	r.muCancel.Lock()
-	r.runErrorCode = strings.TrimSpace(code)
-	r.muCancel.Unlock()
-}
-
-func (r *run) getRunErrorCode() string {
-	if r == nil {
-		return ""
-	}
-	r.muCancel.Lock()
-	v := strings.TrimSpace(r.runErrorCode)
-	r.muCancel.Unlock()
-	return v
-}
-
-func (r *run) getEndReason() string {
-	if r == nil {
-		return ""
-	}
-	r.muCancel.Lock()
-	v := strings.TrimSpace(r.endReason)
-	r.muCancel.Unlock()
-	return v
-}
-
 func (r *run) setFinalizationReason(reason string) {
 	if r == nil {
 		return
@@ -760,36 +534,6 @@ func (r *run) recordRuntimeToolCall() {
 		return
 	}
 	r.runtimeToolCalls.Add(1)
-}
-
-func (r *run) recordRuntimeTurnUsage(usage TurnUsage, estimateTokens int) {
-	if r == nil {
-		return
-	}
-	total := usage.InputTokens + usage.OutputTokens + usage.ReasoningTokens
-	if total <= 0 && estimateTokens > 0 {
-		total = int64(estimateTokens)
-	}
-	if total <= 0 {
-		return
-	}
-	r.runtimeTokens.Add(total)
-}
-
-func (r *run) cancel() {
-	if r == nil {
-		return
-	}
-
-	r.muCancel.Lock()
-	r.cancelRequested = true
-	cancelFn := r.cancelFn
-	r.muCancel.Unlock()
-
-	if cancelFn != nil {
-		cancelFn()
-	}
-
 }
 
 func (r *run) markDetached() {
@@ -914,15 +658,6 @@ func isActivityTimelineBlockValue(value any) bool {
 	}
 }
 
-func (r *run) markDone() {
-	if r == nil || r.doneCh == nil {
-		return
-	}
-	r.doneOnce.Do(func() {
-		close(r.doneCh)
-	})
-}
-
 func (r *run) debug(event string, attrs ...any) {
 	if r == nil || r.log == nil {
 		return
@@ -1012,23 +747,6 @@ func (r *run) emitLifecyclePhase(raw string, diag map[string]any) {
 		Phase:     phase,
 		Diag:      eventDiag,
 	})
-}
-
-func errorString(err error) string {
-	if err == nil {
-		return ""
-	}
-	return strings.TrimSpace(err.Error())
-}
-
-func (r *run) persistTimeout() time.Duration {
-	if r == nil {
-		return 0
-	}
-	if r.persistOpTimeout > 0 {
-		return r.persistOpTimeout
-	}
-	return 10 * time.Second
 }
 
 func (r *run) recordRunDiagnostic(eventType string, streamKind RealtimeStreamKind, payload map[string]any) {
@@ -1161,37 +879,6 @@ func previewAnyForLog(v any, maxRunes int) string {
 		return sanitizeLogText(fmt.Sprintf("<marshal_error:%v>", err), maxRunes)
 	}
 	return sanitizeLogText(string(b), maxRunes)
-}
-
-func (r *run) approveTool(toolID string, approved bool) error {
-	if r == nil {
-		return errors.New("nil run")
-	}
-	toolID = strings.TrimSpace(toolID)
-	if toolID == "" {
-		return errors.New("missing tool_id")
-	}
-	r.promoteToolApproval(toolID)
-
-	r.mu.Lock()
-	approval := r.toolApprovals[toolID]
-	if approval == nil || approval.decision == nil {
-		r.mu.Unlock()
-		return errors.New("tool not pending approval")
-	}
-	if approval.resolved {
-		r.mu.Unlock()
-		return ErrRunChanged
-	}
-	select {
-	case approval.decision <- approved:
-		approval.resolved = true
-		r.mu.Unlock()
-		return nil
-	default:
-		r.mu.Unlock()
-		return ErrRunChanged
-	}
 }
 
 var errModelGatewayMissingKey = errors.New("missing provider key")
@@ -1680,9 +1367,6 @@ func (r *run) failRunWithCode(code string, errMsg string, cause error) error {
 	if code == "" {
 		code = classifyRunFailureCode(cause, "")
 	}
-	if code != "" {
-		r.setRunErrorCode(code)
-	}
 	msg := strings.TrimSpace(errMsg)
 	if msg == "" && cause != nil {
 		msg = strings.TrimSpace(cause.Error())
@@ -1697,7 +1381,6 @@ func (r *run) failRunWithCode(code string, errMsg string, cause error) error {
 		r.setFinalizationReason("error")
 	}
 	r.sendStreamEvent(streamEventError{Type: "error", MessageID: r.messageID, Error: msg})
-	r.setEndReason("error")
 	r.emitLifecyclePhase("ended", map[string]any{"reason": "error"})
 	r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
 
@@ -1705,40 +1388,6 @@ func (r *run) failRunWithCode(code string, errMsg string, cause error) error {
 		return cause
 	}
 	return errors.New(msg)
-}
-
-func (r *run) finalizeIfContextCanceled(ctx context.Context) bool {
-	if r == nil || ctx == nil {
-		return false
-	}
-	ctxErr := ctx.Err()
-	if ctxErr == nil {
-		return false
-	}
-	reason := "disconnected"
-	switch r.getCancelReason() {
-	case "canceled":
-		reason = "canceled"
-		r.setFinalizationReason("canceled")
-		r.setEndReason("canceled")
-	case "timed_out":
-		reason = "timed_out"
-		r.setFinalizationReason("timed_out")
-		r.setEndReason("timed_out")
-	default:
-		if errors.Is(ctxErr, context.DeadlineExceeded) {
-			reason = "timed_out"
-			r.setFinalizationReason("timed_out")
-			r.setEndReason("timed_out")
-		} else {
-			r.setFinalizationReason("disconnected")
-			r.setEndReason("disconnected")
-		}
-	}
-	r.debug("ai.run.context_canceled_before_send", "reason", reason)
-	r.emitLifecyclePhase("ended", map[string]any{"reason": reason})
-	r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
-	return true
 }
 
 func isMutatingInvocation(toolName string, args map[string]any) bool {
@@ -2276,53 +1925,6 @@ func toAnySlice(value any) []any {
 	default:
 		return nil
 	}
-}
-
-func extractStringListFromAny(value any) []string {
-	items := toAnySlice(value)
-	if len(items) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(items))
-	for _, item := range items {
-		text, ok := item.(string)
-		if !ok {
-			continue
-		}
-		text = strings.TrimSpace(text)
-		if text == "" {
-			continue
-		}
-		out = append(out, text)
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-func parseAskUserQuestionsAny(value any) []RequestUserInputQuestion {
-	switch v := value.(type) {
-	case []RequestUserInputQuestion:
-		return normalizeRequestUserInputQuestions(append([]RequestUserInputQuestion(nil), v...))
-	}
-	items := toAnySlice(value)
-	if len(items) == 0 {
-		return nil
-	}
-	questions := make([]RequestUserInputQuestion, 0, len(items))
-	for _, item := range items {
-		record, ok := item.(map[string]any)
-		if !ok || record == nil {
-			continue
-		}
-		question, ok := requestUserInputQuestionFromRecord(record)
-		if !ok {
-			continue
-		}
-		questions = append(questions, question)
-	}
-	return normalizeRequestUserInputQuestions(questions)
 }
 
 func parseWebSearchResult(result any) (websearch.SearchResult, bool) {

@@ -129,23 +129,6 @@ func (r *InMemoryToolRegistry) Snapshot() []ToolDef {
 	return out
 }
 
-func (r *InMemoryToolRegistry) resolve(name string) (ToolDef, ToolHandler, bool) {
-	if r == nil {
-		return ToolDef{}, nil, false
-	}
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return ToolDef{}, nil, false
-	}
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	item, ok := r.tools[name]
-	if !ok {
-		return ToolDef{}, nil, false
-	}
-	return item.def, item.handler, true
-}
-
 type DefaultPermissionToolFilter struct{}
 
 func (f DefaultPermissionToolFilter) FilterTools(permissionType FlowerPermissionType, all []ToolDef) []ToolDef {

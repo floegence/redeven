@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -758,15 +757,6 @@ func payloadString(payload map[string]any, key string) string {
 	return value
 }
 
-func canonicalToolStatusFailed(status string) bool {
-	switch normalizeName(status) {
-	case "error", "failed", "canceled", "cancelled", "timed_out", "timeout", "aborted":
-		return true
-	default:
-		return false
-	}
-}
-
 type todoSnapshot struct {
 	Version         int64
 	UpdatedAtUnixMs int64
@@ -1044,53 +1034,6 @@ func anyToString(v any) string {
 	default:
 		return ""
 	}
-}
-
-func anyToBool(v any) bool {
-	switch x := v.(type) {
-	case bool:
-		return x
-	case string:
-		x = strings.TrimSpace(strings.ToLower(x))
-		return x == "true" || x == "1" || x == "yes"
-	case float64:
-		return x != 0
-	default:
-		return false
-	}
-}
-
-func anyToInt64(v any) int64 {
-	switch x := v.(type) {
-	case int:
-		return int64(x)
-	case int64:
-		return x
-	case float64:
-		if math.IsNaN(x) || math.IsInf(x, 0) {
-			return 0
-		}
-		return int64(x)
-	case json.Number:
-		value, _ := x.Int64()
-		return value
-	case string:
-		value, _ := strconv.ParseInt(strings.TrimSpace(x), 10, 64)
-		return value
-	default:
-		return 0
-	}
-}
-
-func compactJSON(v any) string {
-	if v == nil {
-		return "{}"
-	}
-	b, err := json.Marshal(v)
-	if err != nil {
-		return "{}"
-	}
-	return string(b)
 }
 
 func normalizeText(text string) string {

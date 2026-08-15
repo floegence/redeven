@@ -708,23 +708,6 @@ func (p *terminalProcess) managerProcessEnded() {
 	p.manager.mu.Unlock()
 }
 
-func (p *terminalProcess) finalizePendingForRunEnd(ctx context.Context) (bool, error) {
-	if p == nil {
-		return false, nil
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	p.mu.Lock()
-	if p.status != terminalProcessStatusRunning {
-		p.mu.Unlock()
-		return false, nil
-	}
-	p.mu.Unlock()
-	_, err := p.Terminate(ctx)
-	return true, err
-}
-
 func (p *terminalProcess) snapshotLocked(maxBytes int64) terminalProcessSnapshot {
 	if p == nil {
 		return terminalProcessSnapshot{}

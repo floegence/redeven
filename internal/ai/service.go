@@ -13,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/floegence/floret/v4/identity"
 	flruntime "github.com/floegence/floret/v4/runtime"
 	contextadapter "github.com/floegence/redeven/internal/ai/context/adapter"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
@@ -441,33 +440,6 @@ func (s *Service) Close() error {
 		threadCloseErr = ts.Close()
 	}
 	return errors.Join(terminalCloseErr, floretCloseErr, threadCloseErr)
-}
-
-func (s *Service) closeThreadSubagents(ctx context.Context, endpointID string, threadID string, timeout time.Duration) error {
-	if s == nil || s.threadRuntime == nil {
-		return errors.New("nil service")
-	}
-	if runThreadKey(endpointID, threadID) == "" {
-		return errors.New("invalid thread identity")
-	}
-	if timeout <= 0 {
-		timeout = defaultPersistOpTimeout
-	}
-	closeCtx, cancel := context.WithTimeout(ctxOrBackground(ctx), timeout)
-	defer cancel()
-	parentID := identity.ThreadID(strings.TrimSpace(threadID))
-	children, err := s.threadRuntime.List(closeCtx, flruntime.ThreadScope{ParentID: &parentID})
-	if err != nil {
-		return err
-	}
-	for _, child := range children {
-		if _, err := s.threadRuntime.Cancel(closeCtx, flruntime.CancelInput{
-			ThreadID: child.ID, RequestKey: flruntime.RequestKey("parent-close:" + parentID.String() + ":" + child.ID.String()),
-		}); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func (s *Service) typedFloretRuntime() (flruntime.ThreadService, error) {
@@ -1175,14 +1147,6 @@ func NewRunID() (string, error) {
 		return "", err
 	}
 	return "run_" + base64.RawURLEncoding.EncodeToString(b), nil
-}
-
-func newMessageID() (string, error) {
-	b := make([]byte, 18)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return "m_ai_" + base64.RawURLEncoding.EncodeToString(b), nil
 }
 
 func newToolID() (string, error) {
