@@ -105,8 +105,8 @@ func TestBuildOpenAIInput_EncodesFunctionCallAndOutput(t *testing.T) {
 			Content: []ContentPart{{
 				Type:       "tool_call",
 				ToolCallID: "call_1",
-				ToolName:   "terminal.exec",
-				ArgsJSON:   `{"command":"pwd","cwd":"/tmp"}`,
+				ToolName:   "terminal.read",
+				ArgsJSON:   `{"process_id":"proc-1","description":"Read command output","after_seq":0}`,
 			}},
 		},
 		{
@@ -119,7 +119,14 @@ func TestBuildOpenAIInput_EncodesFunctionCallAndOutput(t *testing.T) {
 		},
 	}
 
-	items, instructions := buildOpenAIInput(msgs)
+	aliases, err := newOpenAIProviderToolAliases([]ToolDef{{Name: "terminal.read"}})
+	if err != nil {
+		t.Fatalf("newOpenAIProviderToolAliases: %v", err)
+	}
+	items, instructions, err := buildOpenAIInput(msgs, aliases)
+	if err != nil {
+		t.Fatalf("buildOpenAIInput: %v", err)
+	}
 	if instructions != "" {
 		t.Fatalf("instructions=%q, want empty", instructions)
 	}
@@ -132,11 +139,11 @@ func TestBuildOpenAIInput_EncodesFunctionCallAndOutput(t *testing.T) {
 	if items[0].OfFunctionCall.CallID != "call_1" {
 		t.Fatalf("function_call call_id=%q, want call_1", items[0].OfFunctionCall.CallID)
 	}
-	if items[0].OfFunctionCall.Name != "terminal_exec" {
-		t.Fatalf("function_call name=%q, want terminal_exec", items[0].OfFunctionCall.Name)
+	if items[0].OfFunctionCall.Name != "terminal_read" {
+		t.Fatalf("function_call name=%q, want terminal_read", items[0].OfFunctionCall.Name)
 	}
-	if items[0].OfFunctionCall.Arguments != `{"command":"pwd","cwd":"/tmp"}` {
-		t.Fatalf("function_call arguments=%q, want %q", items[0].OfFunctionCall.Arguments, `{"command":"pwd","cwd":"/tmp"}`)
+	if items[0].OfFunctionCall.Arguments != `{"process_id":"proc-1","description":"Read command output","after_seq":0}` {
+		t.Fatalf("function_call arguments=%q", items[0].OfFunctionCall.Arguments)
 	}
 	if items[1].OfFunctionCallOutput == nil {
 		t.Fatalf("second item must be function_call_output")
@@ -159,7 +166,10 @@ func TestBuildOpenAIInput_AssistantHistoryUsesOutputText(t *testing.T) {
 		},
 	}
 
-	items, _ := buildOpenAIInput(msgs)
+	items, _, err := buildOpenAIInput(msgs, providerToolAliases{})
+	if err != nil {
+		t.Fatalf("buildOpenAIInput: %v", err)
+	}
 	if len(items) != 1 {
 		t.Fatalf("items=%d, want 1", len(items))
 	}
@@ -189,7 +199,14 @@ func TestBuildOpenAIInput_AssistantMixedTurnPreservesTextAndFunctionCall(t *test
 		},
 	}
 
-	items, _ := buildOpenAIInput(msgs)
+	aliases, err := newOpenAIProviderToolAliases([]ToolDef{{Name: "terminal.exec"}})
+	if err != nil {
+		t.Fatalf("newOpenAIProviderToolAliases: %v", err)
+	}
+	items, _, err := buildOpenAIInput(msgs, aliases)
+	if err != nil {
+		t.Fatalf("buildOpenAIInput: %v", err)
+	}
 	if len(items) != 2 {
 		t.Fatalf("items=%d, want 2", len(items))
 	}

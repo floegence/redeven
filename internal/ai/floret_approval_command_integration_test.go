@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -111,5 +112,107 @@ func TestPublishedFloretApprovalCurrentPresentsTerminalCommand(t *testing.T) {
 	}
 	if _, err := service.Cancel(t.Context(), flruntime.CancelInput{ThreadID: created.ThreadID, RequestKey: "cancel-approval-command"}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestPublishedFloretSchemaCorrectionDoesNotCreateToolRow(t *testing.T) {
+	var terminalRead ToolDef
+	for _, candidate := range builtInToolDefinitions() {
+		if candidate.Name == "terminal.read" {
+			terminalRead = candidate
+			break
+		}
+	}
+	if terminalRead.Name == "" {
+		t.Fatal("missing Redeven terminal.read definition")
+	}
+	presentation, err := floretToolDefinitionForSnapshot(
+		terminalRead,
+		buildPermissionSnapshot(FlowerPermissionFullAccess, []ToolDef{terminalRead}, nil),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var called atomic.Bool
+	tool := fltools.Define[map[string]any](presentation, nil, nil, func(context.Context, fltools.Invocation[map[string]any]) (fltools.Result, error) {
+		called.Store(true)
+		return fltools.Result{Text: "unexpected execution"}, nil
+	})
+	gateway := florettest.NewScriptedGateway(
+		flprovider.Identity{Provider: "test", Model: "schema-correction", StateCompatibilityKey: "test:schema-correction:v1"},
+		flprovider.Capabilities{Reasoning: flprovider.ReasoningUnsupported},
+		florettest.Step{Events: []flprovider.Event{
+			{Type: flprovider.EventToolCalls, ToolCalls: []flprovider.ToolCall{{
+				ID: "terminal-read-invalid", Name: "terminal.read", Args: `{"process_id":"proc-1","after_seq":0}`,
+			}}},
+			{Type: flprovider.EventDone, Reason: "tool_calls"},
+		}},
+		florettest.Step{Events: []flprovider.Event{
+			{Type: flprovider.EventDelta, Text: "Recovered after validation correction."},
+			{Type: flprovider.EventDone, Reason: "stop"},
+		}},
+	)
+	agent, err := flruntime.NewAgent(flconfig.AgentConfig{
+		Profile:      flconfig.AgentProfile{ID: "schema-correction", Name: "Schema Correction"},
+		SystemPrompt: "Test internal schema correction.",
+		Context:      flconfig.ContextPolicy{ContextWindowTokens: flconfig.DefaultContextWindowTokens},
+	}, gateway,
+		flruntime.WithAgentTools(tool),
+		flruntime.WithAgentEffectAuthorization(flruntime.EffectAuthorizationGateFunc(func(ctx context.Context, request flruntime.EffectAuthorizationRequest, effect flruntime.AuthorizedEffect) (flruntime.EffectDispatchResult, error) {
+			return effect(ctx, flruntime.EffectAuthorizationProof{
+				EffectAttemptID: request.EffectAttemptID, RequestFingerprint: request.RequestFingerprint,
+				ThreadID: request.ThreadID, TurnID: request.TurnID, RunID: request.RunID, ToolCallID: request.ToolCallID,
+				PolicyRevision: "test-policy", AuditReference: "test-audit", AuditHash: "test-audit-hash", AuthorizedAt: time.Now().UTC(),
+			})
+		})),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	host, err := flruntime.Open(t.Context(), flruntime.Options{Storage: storage.Memory()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = host.Shutdown(context.Background()) })
+	service, err := host.ThreadService(flruntime.AgentFactoryFunc(func(context.Context, flruntime.AgentRequest) (*flruntime.Agent, error) {
+		return agent, nil
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := service.Create(t.Context(), flruntime.CreateThreadInput{RequestKey: "create-schema-correction"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Send(t.Context(), flruntime.SendInput{
+		ThreadID: created.ThreadID, Input: flruntime.UserInput{Text: "read output"}, RequestKey: "send-schema-correction",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	var current flruntime.ThreadView
+	for time.Now().Before(deadline) {
+		current, err = service.View(t.Context(), created.ThreadID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if current.Activity == flruntime.ThreadActivityIdle && current.LastOutcome != nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if current.Activity != flruntime.ThreadActivityIdle || current.LastOutcome == nil {
+		t.Fatalf("current did not complete: %#v", current)
+	}
+	if called.Load() {
+		t.Fatal("schema-invalid terminal.read handler ran")
+	}
+	for _, view := range []flruntime.ThreadView{current, publicFloretThreadView(current)} {
+		for _, item := range view.Items {
+			if item.Kind == flruntime.ThreadItemTool || item.Activity != nil && item.Activity.ToolID == "terminal-read-invalid" {
+				t.Fatalf("schema correction leaked as tool row: item=%#v activity=%#v", item, item.Activity)
+			}
+		}
 	}
 }

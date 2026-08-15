@@ -28,7 +28,11 @@ func TestBuildOpenAITools_RespectsStrictFlag(t *testing.T) {
 		},
 	}
 
-	toolsStrict, _ := buildOpenAITools(defs, true)
+	aliases, err := newOpenAIProviderToolAliases(defs)
+	if err != nil {
+		t.Fatalf("newOpenAIProviderToolAliases: %v", err)
+	}
+	toolsStrict := buildOpenAITools(defs, true, aliases)
 	if len(toolsStrict) != 1 || toolsStrict[0].OfFunction == nil {
 		t.Fatalf("expected one function tool in strict mode")
 	}
@@ -36,7 +40,7 @@ func TestBuildOpenAITools_RespectsStrictFlag(t *testing.T) {
 		t.Fatalf("expected strict=true for strict mode")
 	}
 
-	toolsCompat, _ := buildOpenAITools(defs, false)
+	toolsCompat := buildOpenAITools(defs, false, aliases)
 	if len(toolsCompat) != 1 || toolsCompat[0].OfFunction == nil {
 		t.Fatalf("expected one function tool in compatible mode")
 	}
@@ -168,30 +172,63 @@ func TestResolveProviderWebSearchCapability_CuratedNativeProviders(t *testing.T)
 	}
 }
 
-func TestSanitizeProviderToolName_WebSearchAvoidsHostedCollision(t *testing.T) {
+func TestOpenAIWireToolName_WebSearchAvoidsHostedCollision(t *testing.T) {
 	t.Parallel()
 
-	if got := sanitizeProviderToolName("web.search"); got != "web_search_tool" {
-		t.Fatalf("sanitizeProviderToolName(web.search)=%q, want web_search_tool", got)
+	if got := openAIWireToolName("web.search"); got != "web_search_tool" {
+		t.Fatalf("openAIWireToolName(web.search)=%q, want web_search_tool", got)
 	}
-	if got := sanitizeProviderToolName("terminal.exec"); got != "terminal_exec" {
-		t.Fatalf("sanitizeProviderToolName(terminal.exec)=%q, want terminal_exec", got)
+	if got := openAIWireToolName("terminal.read"); got != "terminal_read" {
+		t.Fatalf("openAIWireToolName(terminal.read)=%q, want terminal_read", got)
 	}
 }
 
 func TestCanonicalProviderToolName_OnlyMapsRegisteredAliases(t *testing.T) {
 	t.Parallel()
 
-	aliases := map[string]string{"file_read": "file.read"}
+	aliases, err := newOpenAIProviderToolAliases([]ToolDef{{Name: "file.read"}})
+	if err != nil {
+		t.Fatalf("newOpenAIProviderToolAliases: %v", err)
+	}
 	if got := canonicalProviderToolName("file_read", aliases); got != "file.read" {
 		t.Fatalf("canonicalProviderToolName(file_read)=%q, want file.read", got)
 	}
-	if got := canonicalProviderToolName("terminal_exec", aliases); got != "terminal_exec" {
-		t.Fatalf("canonicalProviderToolName(terminal_exec)=%q, want terminal_exec", got)
+	if got := canonicalProviderToolName("terminal_read", aliases); got != "" {
+		t.Fatalf("canonicalProviderToolName(terminal_read)=%q, want empty unregistered name", got)
 	}
 }
 
-func TestOpenAICompatibleResponses_WebSearchToolAliasRoundTrip(t *testing.T) {
+func TestOpenAIProviderToolAliases_RejectCollision(t *testing.T) {
+	t.Parallel()
+
+	_, err := newOpenAIProviderToolAliases([]ToolDef{{Name: "file.read"}, {Name: "file_read"}})
+	if err == nil || !strings.Contains(err.Error(), "collides") {
+		t.Fatalf("collision error=%v", err)
+	}
+}
+
+func TestOpenAIProviderToolAliases_RejectNonCanonicalTerminalName(t *testing.T) {
+	t.Parallel()
+
+	_, err := newOpenAIProviderToolAliases([]ToolDef{{Name: "terminal_read"}})
+	if err == nil || !strings.Contains(err.Error(), "not canonical") {
+		t.Fatalf("canonical-name error=%v", err)
+	}
+}
+
+func TestBuildAnthropicTools_PreservesCanonicalDottedName(t *testing.T) {
+	t.Parallel()
+
+	tools := buildAnthropicTools([]ToolDef{{Name: "terminal.read", InputSchema: json.RawMessage(`{"type":"object"}`)}})
+	if len(tools) != 1 || tools[0].OfTool == nil {
+		t.Fatalf("tools=%#v", tools)
+	}
+	if got := strings.TrimSpace(tools[0].OfTool.Name); got != "terminal.read" {
+		t.Fatalf("tool name=%q, want terminal.read", got)
+	}
+}
+
+func TestOpenAICompatibleResponses_TerminalReadToolAliasRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -210,7 +247,7 @@ func TestOpenAICompatibleResponses_WebSearchToolAliasRoundTrip(t *testing.T) {
 		writeOpenAISSEJSON(w, f, map[string]any{
 			"type": "response.created",
 			"response": map[string]any{
-				"id":         "resp_web_search_alias",
+				"id":         "resp_terminal_read_alias",
 				"created_at": time.Now().Unix(),
 				"model":      "gpt-5-mini",
 			},
@@ -220,10 +257,10 @@ func TestOpenAICompatibleResponses_WebSearchToolAliasRoundTrip(t *testing.T) {
 			"output_index": 0,
 			"item": map[string]any{
 				"type":      "function_call",
-				"id":        "fc_web_search_alias",
-				"call_id":   "call_web_search_alias",
-				"name":      "web_search_tool",
-				"arguments": `{"query":"hello","provider":"dummy","count":1}`,
+				"id":        "fc_terminal_read_alias",
+				"call_id":   "call_terminal_read_alias",
+				"name":      "terminal_read",
+				"arguments": `{"process_id":"proc-1","description":"Read curl output","after_seq":0}`,
 			},
 		})
 		writeOpenAISSEJSON(w, f, map[string]any{
@@ -231,16 +268,16 @@ func TestOpenAICompatibleResponses_WebSearchToolAliasRoundTrip(t *testing.T) {
 			"output_index": 0,
 			"item": map[string]any{
 				"type":      "function_call",
-				"id":        "fc_web_search_alias",
-				"call_id":   "call_web_search_alias",
-				"name":      "web_search_tool",
-				"arguments": `{"query":"hello","provider":"dummy","count":1}`,
+				"id":        "fc_terminal_read_alias",
+				"call_id":   "call_terminal_read_alias",
+				"name":      "terminal_read",
+				"arguments": `{"process_id":"proc-1","description":"Read curl output","after_seq":0}`,
 			},
 		})
 		writeOpenAISSEJSON(w, f, map[string]any{
 			"type": "response.completed",
 			"response": map[string]any{
-				"id":     "resp_web_search_alias",
+				"id":     "resp_terminal_read_alias",
 				"model":  "gpt-5-mini",
 				"status": "completed",
 				"usage": map[string]any{
@@ -254,25 +291,92 @@ func TestOpenAICompatibleResponses_WebSearchToolAliasRoundTrip(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	adapter, err := newProviderAdapter("openai_compatible", strings.TrimSuffix(srv.URL, "/")+"/v1", "sk-test", nil)
+	adapter, err := newProviderAdapter("openai", strings.TrimSuffix(srv.URL, "/")+"/v1", "sk-test", nil)
 	if err != nil {
 		t.Fatalf("newProviderAdapter: %v", err)
 	}
+	events := []StreamEvent{}
 	res, err := adapter.StreamTurn(context.Background(), ModelGatewayRequest{
 		Model:    "gpt-5-mini",
-		Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "search"}}}},
+		Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "read"}}}},
 		Tools: []ToolDef{
-			{Name: "web.search", InputSchema: json.RawMessage(`{"type":"object"}`)},
+			{Name: "terminal.read", InputSchema: json.RawMessage(`{"type":"object"}`)},
 		},
-	}, nil)
+	}, func(event StreamEvent) {
+		if event.ToolCall != nil {
+			events = append(events, event)
+		}
+	})
 	if err != nil {
 		t.Fatalf("StreamTurn: %v", err)
 	}
 	if len(res.ToolCalls) != 1 {
 		t.Fatalf("tool calls=%d, want 1", len(res.ToolCalls))
 	}
-	if got := strings.TrimSpace(res.ToolCalls[0].Name); got != "web.search" {
-		t.Fatalf("tool name=%q, want web.search", got)
+	if got := strings.TrimSpace(res.ToolCalls[0].Name); got != "terminal.read" {
+		t.Fatalf("tool name=%q, want terminal.read", got)
+	}
+	if len(events) == 0 {
+		t.Fatal("missing streamed tool call events")
+	}
+	seenTypes := map[StreamEventType]bool{}
+	for _, event := range events {
+		seenTypes[event.Type] = true
+		if got := strings.TrimSpace(event.ToolCall.Name); got != "terminal.read" {
+			t.Fatalf("streamed tool name=%q, want terminal.read", got)
+		}
+	}
+	for _, eventType := range []StreamEventType{StreamEventToolCallStart, StreamEventToolCallDelta, StreamEventToolCallEnd} {
+		if !seenTypes[eventType] {
+			t.Fatalf("missing streamed event type %q: %#v", eventType, events)
+		}
+	}
+}
+
+func TestOpenAICompatibleChat_RejectsUnregisteredWireToolName(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		f := w.(http.Flusher)
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"id": "chatcmpl_unknown_alias", "object": "chat.completion.chunk", "created": time.Now().Unix(), "model": "compat-model",
+			"choices": []any{map[string]any{"index": 0, "finish_reason": nil, "delta": map[string]any{
+				"role": "assistant", "tool_calls": []any{map[string]any{
+					"index": 0, "id": "call_unknown_alias", "type": "function",
+					"function": map[string]any{"name": "terminal_read", "arguments": `{"process_id":"proc-1"}`},
+				}},
+			}}},
+		})
+		writeOpenAISSEJSON(w, f, map[string]any{
+			"id": "chatcmpl_unknown_alias", "object": "chat.completion.chunk", "created": time.Now().Unix(), "model": "compat-model",
+			"choices": []any{map[string]any{"index": 0, "finish_reason": "tool_calls", "delta": map[string]any{}}},
+		})
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+		f.Flush()
+	}))
+	t.Cleanup(srv.Close)
+
+	adapter, err := newProviderAdapter("openai_compatible", strings.TrimSuffix(srv.URL, "/")+"/v1", "sk-test", nil)
+	if err != nil {
+		t.Fatalf("newProviderAdapter: %v", err)
+	}
+	events := []StreamEvent{}
+	_, err = adapter.StreamTurn(context.Background(), ModelGatewayRequest{
+		Model:    "compat-model",
+		Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "run"}}}},
+		Tools:    []ToolDef{{Name: "terminal.exec", InputSchema: json.RawMessage(`{"type":"object"}`)}},
+	}, func(event StreamEvent) {
+		if event.ToolCall != nil {
+			events = append(events, event)
+		}
+	})
+	if err == nil || !strings.Contains(err.Error(), `unregistered tool name "terminal_read"`) {
+		t.Fatalf("StreamTurn error=%v", err)
+	}
+	if len(events) != 0 {
+		t.Fatalf("unregistered alias leaked stream events: %#v", events)
 	}
 }
 

@@ -56,12 +56,25 @@ func TestBuildOpenAIChatMessagesWithCapability_GatesReasoningReplay(t *testing.T
 		{Type: "reasoning", Text: "inspect first"},
 		{Type: "tool_call", ToolCallID: "call_1", ToolName: "terminal.exec", ArgsJSON: `{"cmd":"pwd"}`},
 	}}}
+	aliases, err := newOpenAIProviderToolAliases([]ToolDef{{Name: "terminal.exec"}})
+	if err != nil {
+		t.Fatalf("newOpenAIProviderToolAliases: %v", err)
+	}
 
-	withReplay := buildOpenAIChatMessagesWithCapability(messages, config.AIReasoningCapability{
+	withReplay, err := buildOpenAIChatMessagesWithCapability(messages, config.AIReasoningCapability{
 		Kind: "toggle", HistoryReplayRequirements: []string{"reasoning_content"},
-	})
-	withoutCapability := buildOpenAIChatMessagesWithCapability(messages, config.AIReasoningCapability{})
-	withoutReplay := buildOpenAIChatMessagesWithCapability(messages, config.AIReasoningCapability{Kind: "none"})
+	}, aliases)
+	if err != nil {
+		t.Fatalf("build messages with replay: %v", err)
+	}
+	withoutCapability, err := buildOpenAIChatMessagesWithCapability(messages, config.AIReasoningCapability{}, aliases)
+	if err != nil {
+		t.Fatalf("build messages without capability: %v", err)
+	}
+	withoutReplay, err := buildOpenAIChatMessagesWithCapability(messages, config.AIReasoningCapability{Kind: "none"}, aliases)
+	if err != nil {
+		t.Fatalf("build messages without replay: %v", err)
+	}
 	assertReasoningContent := func(label string, encoded any, want bool) {
 		t.Helper()
 		raw, err := json.Marshal(encoded)

@@ -1,5 +1,13 @@
 # Redeven OKF Update Log
 
+## 2026-08-15
+* **Canonical provider tool names**: Tool definitions, Floret history, current
+  views, and Flower use dotted canonical names such as `terminal.read`.
+  OpenAI-compatible transports use a single collision-detecting bidirectional
+  alias table only at the wire boundary, while Anthropic receives dotted names
+  directly. Published Floret v4.0.3 keeps schema-invalid calls inside provider
+  correction and out of canonical and user-visible tool timelines.
+
 ## 2026-08-12
 * **Control error presentation**: Upgraded to published Floret v3.2.40 so a
   malformed provider control signal retains its assistant prefix, control-call
