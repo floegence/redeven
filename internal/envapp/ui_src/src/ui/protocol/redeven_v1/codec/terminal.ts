@@ -193,9 +193,11 @@ function toTerminalSessionInfo(s: wire_terminal_session_info): TerminalSessionIn
 }
 
 export function toWireTerminalSessionCreateRequest(req: TerminalSessionCreateRequest): wire_terminal_session_create_req {
+  const name = req.name?.trim();
+  const workingDir = req.workingDir?.trim();
   return {
-    name: req.name?.trim() ? req.name.trim() : undefined,
-    working_dir: req.workingDir?.trim() ? req.workingDir.trim() : undefined,
+    ...(name ? { name } : {}),
+    ...(workingDir ? { working_dir: workingDir } : {}),
   };
 }
 
@@ -213,7 +215,7 @@ export function toWireTerminalSemanticHistoryRequest(req: TerminalSemanticHistor
     session_id: req.sessionId,
     connection_id: req.connectionId,
     transport_generation: req.transportGeneration,
-    anchor: req.anchor,
+    ...(req.anchor === undefined ? {} : { anchor: req.anchor }),
     direction: req.direction,
     limit: req.limit,
   };

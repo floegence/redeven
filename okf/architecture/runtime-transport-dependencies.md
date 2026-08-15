@@ -30,7 +30,7 @@ fall back to another transport.
 
 ## Mechanism
 
-The released runtime dependency set includes Floeterm terminal-go v0.10.4 and Flowersec Go v2.4.1.
+The released runtime dependency set includes Floeterm terminal-go v0.10.5 and Flowersec Go v2.4.1.
 
 Every shipped Redeven Runtime enables terminal-go's `floeterm_native` build tag
 with cgo. The published module carries the target-specific Ghostty static
@@ -60,7 +60,7 @@ Semantic terminal verification is layered and automated without starting Redeven
 
 For every product carrier sample, refresh forgets only the view attachment, preserves the existing semantic canvas, and requires a new current Presentation even when geometry is unchanged. The carrier then proves real input still reaches the PTY. This is the Runtime/PTTY/browser boundary rather than a mocked renderer lifecycle.
 
-Redeven consumes terminal-web v0.15.5. Each mounted view uses one `RendererSurface` and one `TerminalInputBridge` over complete semantic Presentations. Host bounds, DPR, view-local palette, typography, selection, IME anchor, and semantic history projection are browser concerns; PTY state, frame geometry, cursor, grapheme width, hyperlinks, graphics, and history remain terminal-go facts. Hidden keep-mounted views fence their canvas until a render commit matches current host bounds and DPR, preventing browser scaling of an old backing store. The browser has no Ghostty WebAssembly, TerminalCore, checkpoint worker, Beamterm renderer, or raw replay fallback.
+Redeven consumes terminal-web v0.15.7. Each mounted view uses one `RendererSurface` and one `TerminalInputBridge` over complete semantic Presentations and transport-bounded history pages. Host bounds, DPR, view-local palette, typography, selection, IME anchor, and semantic history projection are browser concerns; PTY state, frame geometry, cursor, inverse cells, grapheme width, hyperlinks, graphics, and history remain terminal-go facts. Hidden keep-mounted views fence their canvas until a render commit matches current host bounds and DPR, preventing browser scaling of an old backing store. The browser has no Ghostty WebAssembly, TerminalCore, checkpoint worker, Beamterm renderer, or raw replay fallback.
 
 The production carrier records runtime, surface, CSS canvas, client, and backing-store dimensions immediately after refresh and again after focus. Overflow fixtures may exceed the 8 MiB ring-buffer cap; they must recover the retained tail, preserve the stable renderer geometry after focus, and accept subsequent PTY input.
 

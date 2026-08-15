@@ -59,6 +59,7 @@ const MIN_TERMINAL_ROWS = 1;
 const MAX_TERMINAL_COLS = 500;
 const MAX_TERMINAL_ROWS = 200;
 const SEMANTIC_HISTORY_PAGE_LIMIT = 200;
+const SEMANTIC_HISTORY_MAX_PAGE_CELLS = 1024;
 const RECONNECT_DELAYS_MS = [100, 300, 900] as const;
 
 export function shouldPublishTerminalOutputCoverage(
@@ -82,6 +83,25 @@ function frameLines(frame: SemanticFrame | null): string[] {
 
 function frameText(frame: SemanticFrame | null): string {
   return frameLines(frame).join('\n').replace(/\n+$/, '');
+}
+
+function semanticHistoryPageLimit(frame: SemanticFrame): number {
+  return Math.max(1, Math.min(
+    SEMANTIC_HISTORY_PAGE_LIMIT,
+    Math.floor(SEMANTIC_HISTORY_MAX_PAGE_CELLS / Math.max(1, frame.width)),
+  ));
+}
+
+function auxiliaryTerminalErrorDetail(error: unknown): string {
+  if (!(error instanceof Error)) return 'unknown';
+  const code = Number((error as Error & { code?: unknown }).code);
+  const safeCode = Number.isInteger(code) ? `:${code}` : '';
+  const safeMessage = error.message.replace(/[\r\n\0]/gu, ' ').slice(0, 160);
+  const cause = (error as Error & { cause?: unknown }).cause;
+  const safeCause = cause instanceof Error
+    ? `; cause=${cause.name}:${cause.message.replace(/[\r\n\0]/gu, ' ').slice(0, 160)}`
+    : '';
+  return `${error.name}${safeCode}:${safeMessage}${safeCause}`;
 }
 
 function terminalPalette(colors: Readonly<Record<string, string>>): SemanticTerminalPalette {
@@ -196,6 +216,15 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   const [historyPage, setHistoryPage] = createSignal<SemanticHistoryPage | null>(null);
   const [historyProjected, setHistoryProjected] = createSignal(false);
   const [historyBusy, setHistoryBusy] = createSignal(false);
+  const [historyError, setHistoryError] = createSignal(false);
+  const [historyErrorDetail, setHistoryErrorDetail] = createSignal('');
+  const [historyRequestTrace, setHistoryRequestTrace] = createSignal({
+    count: 0,
+    direction: '' as SemanticHistoryRequest['direction'] | '',
+    state: 'idle' as 'idle' | 'pending' | 'settled' | 'error',
+    revision: 0,
+    offset: 0,
+  });
   const [presentationRevision, setPresentationRevision] = createSignal(0);
   const [geometryRevision, setGeometryRevision] = createSignal(0);
   const [controllerRevision, setControllerRevision] = createSignal(0);
@@ -228,7 +257,10 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   let searchQuery = '';
   let searchMatches: SearchMatch[] = [];
   let searchIndex = -1;
+  let searchState: SemanticTerminalSearchResult['state'] = 'idle';
   let searchCallback: ((result: SemanticTerminalSearchResult) => void) | null = null;
+  let retryHistoryRequest: (() => void) | null = null;
+  let pendingHistoryDirection: 'forward' | 'backward' | null = null;
   let lastBell = 0;
   let geometryLifecycleEpoch = 0;
   let geometryRendererEpoch = 1;
@@ -324,15 +356,14 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
 
   const syncInputGeometry = () => {
     if (!canvas || !inputElement) return;
-    const bounds = canvas.getBoundingClientRect();
     const metrics = cellMetrics();
     canvas.dataset.terminalCellWidth = String(metrics.cellWidthCssPx);
     canvas.dataset.terminalCellHeight = String(metrics.cellHeightCssPx);
-    const rect = renderer?.getCursorClientRect() ?? {
-      left: bounds.left,
-      top: bounds.top,
-      width: Math.min(metrics.cellWidthCssPx, Math.max(1, bounds.width)),
-      height: Math.min(metrics.cellHeightCssPx, Math.max(1, bounds.height)),
+    const rect = renderer?.getCursorLayoutRect() ?? {
+      left: 0,
+      top: 0,
+      width: Math.min(metrics.cellWidthCssPx, Math.max(1, canvas.clientWidth)),
+      height: Math.min(metrics.cellHeightCssPx, Math.max(1, canvas.clientHeight)),
     };
     inputElement.style.left = `${rect.left}px`;
     inputElement.style.top = `${rect.top}px`;
@@ -635,8 +666,37 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     dispatchInteraction(() => props.transport.sendInputIntent(sessionId, intent));
   };
 
+  function publishSearchResult() {
+    searchCallback?.({
+      resultIndex: searchIndex,
+      resultCount: searchMatches.length,
+      state: searchState,
+      retryable: searchState === 'error',
+    });
+  }
+
+  const resetSearch = () => {
+    searchRequestEpoch += 1;
+    searchQuery = '';
+    searchMatches = [];
+    searchIndex = -1;
+    searchState = 'idle';
+    publishSearchResult();
+  };
+
   const showLatestPresentation = () => {
     historyRequestEpoch += 1;
+    resetSearch();
+    retryHistoryRequest = null;
+    setHistoryRequestTrace((previous) => ({
+      ...previous,
+      direction: '',
+      state: 'idle',
+      revision: 0,
+      offset: 0,
+    }));
+    setHistoryError(false);
+    setHistoryErrorDetail('');
     setHistoryProjected(false);
     setHistoryPage(null);
     renderer?.project(null);
@@ -645,22 +705,40 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   const queryHistory = async (
     direction: SemanticHistoryRequest['direction'],
     project: boolean,
+    retry: () => void,
+    anchorOverride?: string,
   ): Promise<SemanticHistoryPage | null> => {
     const presentation = latestPresentation;
-    if (!presentation || historyBusy()) return null;
+    if (!presentation) return null;
     const current = historyPage();
     if ((direction === 'forward' || direction === 'backward') && !current) return null;
     const requestEpoch = ++historyRequestEpoch;
-    setHistoryBusy(true);
+    setHistoryRequestTrace((previous) => ({
+      ...previous,
+      count: previous.count + 1,
+      direction,
+      state: 'pending',
+      revision: 0,
+      offset: 0,
+    }));
     try {
       const page = await props.transport.semanticHistory(sessionId, {
         ...(direction === 'forward' || direction === 'backward'
-          ? { anchor: current!.anchor }
+          ? { anchor: anchorOverride ?? current!.anchor }
           : {}),
         direction,
-        limit: Math.min(SEMANTIC_HISTORY_PAGE_LIMIT, presentation.frame.height),
+        limit: Math.min(semanticHistoryPageLimit(presentation.frame), presentation.frame.height),
       });
       if (requestEpoch !== historyRequestEpoch) return null;
+      setHistoryRequestTrace((previous) => ({
+        ...previous,
+        state: 'settled',
+        revision: page.revision,
+        offset: page.offset,
+      }));
+      retryHistoryRequest = null;
+      setHistoryError(false);
+      setHistoryErrorDetail('');
       setHistoryPage(page);
       if (project && page.offset < page.screenStartOffset) {
         setHistoryProjected(true);
@@ -671,34 +749,58 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       }
       return page;
     } catch (error) {
-      if (requestEpoch === historyRequestEpoch && !(error instanceof DOMException && error.name === 'AbortError')) {
-        failClosed(error, 'semantic_history_failed');
+      if (requestEpoch !== historyRequestEpoch) return null;
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        setHistoryRequestTrace((previous) => ({ ...previous, state: 'idle' }));
+        return null;
       }
+      setHistoryRequestTrace((previous) => ({ ...previous, state: 'error' }));
+      retryHistoryRequest = retry;
+      setHistoryError(true);
+      setHistoryErrorDetail(auxiliaryTerminalErrorDetail(error));
+      setHistoryProjected(false);
+      setHistoryPage(null);
+      renderer?.project(null);
       return null;
-    } finally {
-      if (requestEpoch === historyRequestEpoch) setHistoryBusy(false);
     }
+  };
+
+  const projectHistoryStart = () => {
+    void queryHistory('start', true, projectHistoryStart);
   };
 
   const scrollHistory = async (direction: 'forward' | 'backward') => {
-    if (!latestPresentation || historyBusy()) return;
-    if (direction === 'forward' && !historyProjected()) return;
-    let current = historyPage();
-    if (!current) current = await queryHistory('end', false);
-    if (!current) return;
-    if (direction === 'backward' && !current.hasPrevious) return;
-    if (direction === 'forward' && !current.hasNext) {
-      showLatestPresentation();
+    if (!latestPresentation) return;
+    if (historyBusy()) {
+      pendingHistoryDirection = direction;
       return;
     }
-    await queryHistory(direction, true);
-  };
-
-  const publishSearchResult = () => {
-    searchCallback?.({
-      resultIndex: searchIndex,
-      resultCount: searchMatches.length,
-    });
+    resetSearch();
+    if (direction === 'forward' && !historyProjected()) return;
+    setHistoryBusy(true);
+    try {
+      let current = historyPage();
+      if (!current) {
+        current = await queryHistory('end', false, () => { void scrollHistory(direction); });
+      }
+      if (!current) return;
+      if (direction === 'backward' && !current.hasPrevious) return;
+      if (direction === 'forward' && !current.hasNext) {
+        showLatestPresentation();
+        return;
+      }
+      await queryHistory(
+        direction,
+        true,
+        () => { void scrollHistory(direction); },
+        direction === 'backward' && !historyProjected() ? current.screenStart : undefined,
+      );
+    } finally {
+      setHistoryBusy(false);
+      const pending = pendingHistoryDirection;
+      pendingHistoryDirection = null;
+      if (pending) queueMicrotask(() => { void scrollHistory(pending); });
+    }
   };
 
   const scanHistory = async (query: string, requestEpoch: number) => {
@@ -706,32 +808,50 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     if (!presentation) return;
     const normalized = query.toLocaleLowerCase();
     const matches: SearchMatch[] = [];
+    const pageLimit = semanticHistoryPageLimit(presentation.frame);
     let page = await props.transport.semanticHistory(sessionId, {
       direction: 'start',
-      limit: SEMANTIC_HISTORY_PAGE_LIMIT,
+      limit: pageLimit,
     });
-    const maxPages = Math.max(1, Math.ceil(page.totalRows / SEMANTIC_HISTORY_PAGE_LIMIT) + 1);
+    let pageRevision = page.revision;
+    // The server may lower the requested page size to stay below its RPC
+    // transport budget. One-row progress is the strict lower bound.
+    const maxPages = page.totalRows + 1;
     for (let pageIndex = 0; pageIndex < maxPages; pageIndex += 1) {
       if (requestEpoch !== searchRequestEpoch) return;
+      if (page.revision < pageRevision) {
+        throw new Error('terminal history revision regressed while searching');
+      }
+      pageRevision = page.revision;
       frameLines(page.frame).forEach((line, lineIndex) => {
         if (line.toLocaleLowerCase().includes(normalized)) {
           matches.push({ page, frame: page.frame, line: lineIndex });
         }
       });
       if (!page.hasNext) break;
-      page = await props.transport.semanticHistory(sessionId, {
+      const previousOffset = page.offset;
+      const nextPage = await props.transport.semanticHistory(sessionId, {
         anchor: page.anchor,
         direction: 'forward',
-        limit: SEMANTIC_HISTORY_PAGE_LIMIT,
+        limit: pageLimit,
       });
+      if (nextPage.offset <= previousOffset) {
+        throw new Error('terminal history offset did not advance while searching');
+      }
+      page = nextPage;
     }
     if (requestEpoch !== searchRequestEpoch) return;
     searchMatches = matches;
     searchIndex = matches.length > 0 ? 0 : -1;
+    searchState = 'ready';
     if (searchIndex >= 0) {
       setHistoryPage(matches[searchIndex]!.page);
       setHistoryProjected(true);
       renderer?.project(matches[searchIndex]!.frame);
+    } else {
+      setHistoryPage(null);
+      setHistoryProjected(false);
+      renderer?.project(null);
     }
     publishSearchResult();
   };
@@ -742,14 +862,31 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       viewport.clearSearch();
       return;
     }
-    if (normalized !== searchQuery) {
+    if (normalized !== searchQuery || searchState === 'error') {
+      historyRequestEpoch += 1;
+      pendingHistoryDirection = null;
+      setHistoryProjected(false);
+      setHistoryPage(null);
+      renderer?.project(null);
       searchQuery = normalized;
       searchMatches = [];
       searchIndex = -1;
+      searchState = 'searching';
       publishSearchResult();
       const requestEpoch = ++searchRequestEpoch;
       void scanHistory(normalized, requestEpoch).catch((error) => {
-        if (requestEpoch === searchRequestEpoch) failClosed(error, 'semantic_search_failed');
+        if (
+          requestEpoch === searchRequestEpoch
+          && !(error instanceof DOMException && error.name === 'AbortError')
+        ) {
+          searchMatches = [];
+          searchIndex = -1;
+          searchState = 'error';
+          setHistoryProjected(false);
+          setHistoryPage(null);
+          renderer?.project(null);
+          publishSearchResult();
+        }
       });
       return;
     }
@@ -837,12 +974,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       publishSearchResult();
     },
     clearSearch: () => {
-      searchRequestEpoch += 1;
-      searchQuery = '';
-      searchMatches = [];
-      searchIndex = -1;
       showLatestPresentation();
-      publishSearchResult();
     },
     findNext: (query) => find(query, 1),
     findPrevious: (query) => find(query, -1),
@@ -853,6 +985,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     reload: async () => {
       reconnectAttempt = 0;
       clearReconnectTimer();
+      showLatestPresentation();
       attached = false;
       runtimeAttachGeneration = 0;
       props.transport.forgetSession(sessionId);
@@ -900,7 +1033,6 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     if ((presentation.state.bell ?? 0) > lastBell) props.onBell?.(sessionId);
     lastBell = presentation.state.bell ?? lastBell;
     props.onInteractive?.(sessionId);
-    focusAfterActivation(true);
   };
 
   onMount(() => {
@@ -965,6 +1097,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
           return;
         }
         if (event.runtimeAttachGeneration !== runtimeAttachGeneration && runtimeAttachGeneration > 0) return;
+        showLatestPresentation();
         attached = false;
         runtimeAttachGeneration = 0;
         resetController();
@@ -1052,6 +1185,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     if (!connected || !currentClient) {
       if (lastProtocolClient !== undefined) {
         attachmentOperation += 1;
+        showLatestPresentation();
         attached = false;
         runtimeAttachGeneration = 0;
         resetController();
@@ -1146,6 +1280,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       data-terminal-renderer="semantic"
       data-terminal-session-active={props.active() ? 'true' : 'false'}
       data-terminal-view-active={props.viewActive() ? 'true' : 'false'}
+      data-terminal-connected={props.connected() ? 'true' : 'false'}
       data-terminal-presentation-sequence={presentationTrace()?.sequence ?? ''}
       data-terminal-content-epoch={presentationTrace()?.state.contentEpoch ?? ''}
       data-terminal-frame-cols={presentationTrace()?.frame.width ?? ''}
@@ -1157,6 +1292,14 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       data-terminal-geometry-rows={geometryTrace()?.rows ?? ''}
       data-terminal-controller-epoch={controllerTrace().epoch || ''}
       data-terminal-is-controller={controllerTrace().isController ? 'true' : 'false'}
+      data-terminal-history-projected={historyProjected() ? 'true' : 'false'}
+      data-terminal-history-busy={historyBusy() ? 'true' : 'false'}
+      data-terminal-history-offset={historyPage()?.offset ?? ''}
+      data-terminal-history-request-count={historyRequestTrace().count}
+      data-terminal-history-request-direction={historyRequestTrace().direction}
+      data-terminal-history-request-state={historyRequestTrace().state}
+      data-terminal-history-request-revision={historyRequestTrace().revision || ''}
+      data-terminal-history-request-offset={historyRequestTrace().offset}
       style={{
         'background-color': terminalBackground(),
         '--terminal-bottom-inset': `${props.bottomInsetPx()}px`,
@@ -1223,8 +1366,12 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
           spellcheck={false}
           autocapitalize="off"
           autocomplete="off"
-          class="fixed border-0 p-0 m-0 resize-none overflow-hidden outline-none"
+          class="absolute min-w-0 min-h-0 box-border border-0 p-0 m-0 resize-none overflow-hidden outline-none"
           style={{
+            position: 'absolute',
+            'min-width': '0',
+            'min-height': '0',
+            'box-sizing': 'border-box',
             opacity: '0.01',
             color: 'transparent',
             'caret-color': 'transparent',
@@ -1246,7 +1393,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
           onPointerDown={(event) => {
             const bounds = event.currentTarget.getBoundingClientRect();
             const ratio = Math.max(0, Math.min(1, (event.clientY - bounds.top) / Math.max(1, bounds.height)));
-            if (ratio <= 0.25) void queryHistory('start', true);
+            if (ratio <= 0.25) projectHistoryStart();
             else if (ratio >= 0.75) showLatestPresentation();
             else if (ratio < 0.5) void scrollHistory('backward');
             else void scrollHistory('forward');
@@ -1271,6 +1418,26 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         message={loadingMessage()}
         class="redeven-terminal-loading-curtain"
       />
+
+      {historyError() ? (
+        <div
+          class="absolute left-3 bottom-3 z-10 flex items-center gap-2 border border-warning/40 bg-background px-3 py-2 text-xs text-foreground"
+          data-terminal-semantic-history-error="true"
+          data-terminal-semantic-history-error-detail={historyErrorDetail()}
+          role="status"
+        >
+          <span>{i18n.t('terminal.olderOutputUnavailable')}</span>
+          <button
+            type="button"
+            class="font-medium text-primary underline-offset-2 hover:underline"
+            data-terminal-semantic-history-retry="true"
+            disabled={historyBusy()}
+            onClick={() => retryHistoryRequest?.()}
+          >
+            {i18n.t('terminal.retry')}
+          </button>
+        </div>
+      ) : null}
 
       {runtimeError() ? (
         <div

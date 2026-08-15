@@ -29,6 +29,8 @@ export type SemanticTerminalTouchScrollRuntime = Readonly<{
 export type SemanticTerminalSearchResult = Readonly<{
   resultIndex: number;
   resultCount: number;
+  state: 'idle' | 'searching' | 'ready' | 'error';
+  retryable: boolean;
 }>;
 
 export type SemanticTerminalLinkTarget =

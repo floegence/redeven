@@ -54,6 +54,37 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function dispatchTerminalWheel(canvas, deltaY) {
+  const handled = await canvas.evaluate((element, delta) => {
+    const event = new globalThis.WheelEvent('wheel', { deltaY: delta, bubbles: true, cancelable: true });
+    element.dispatchEvent(event);
+    return event.defaultPrevented;
+  }, deltaY);
+  if (!handled) throw new Error(`terminal wheel event was not handled: deltaY=${deltaY}`);
+}
+
+async function showLatestHistory(runtime) {
+  const scrollbar = runtime.locator('[data-floeterm-scrollbar][data-visible="true"]');
+  await scrollbar.evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    element.dispatchEvent(new globalThis.PointerEvent('pointerdown', {
+      bubbles: true,
+      cancelable: true,
+      clientX: bounds.right - 1,
+      clientY: bounds.bottom - 1,
+    }));
+  });
+  await runtime.evaluate(async (element) => {
+    const deadline = Date.now() + 10_000;
+    while (Date.now() < deadline) {
+      if (element.getAttribute('data-terminal-history-projected') === 'false'
+        && element.getAttribute('data-terminal-history-busy') === 'false') return;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    throw new Error('semantic history did not return to the live Presentation');
+  });
+}
+
 async function waitForFile(filePath, timeoutMs = 15_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -288,10 +319,22 @@ async function runtimeTrace(runtime) {
       geometry_rows: numeric('data-terminal-geometry-rows'),
       controller_epoch: numeric('data-terminal-controller-epoch'),
       is_controller: element.getAttribute('data-terminal-is-controller') === 'true',
+      connected: element.getAttribute('data-terminal-connected') === 'true',
       session_active: element.getAttribute('data-terminal-session-active') === 'true',
       view_active: element.getAttribute('data-terminal-view-active') === 'true',
       visibility_commit: canvas.dataset.terminalVisibilityCommit ?? '',
       semantic_error: element.querySelector('[data-terminal-semantic-error="true"]')?.textContent ?? '',
+      history_error: element.querySelector('[data-terminal-semantic-history-error="true"]')?.textContent ?? '',
+      history_error_detail: element.querySelector('[data-terminal-semantic-history-error="true"]')
+        ?.getAttribute('data-terminal-semantic-history-error-detail') ?? '',
+      history_projected: element.getAttribute('data-terminal-history-projected') === 'true',
+      history_busy: element.getAttribute('data-terminal-history-busy') === 'true',
+      history_offset: numeric('data-terminal-history-offset'),
+      history_request_count: numeric('data-terminal-history-request-count'),
+      history_request_direction: element.getAttribute('data-terminal-history-request-direction') ?? '',
+      history_request_state: element.getAttribute('data-terminal-history-request-state') ?? '',
+      history_request_revision: numeric('data-terminal-history-request-revision'),
+      history_request_offset: numeric('data-terminal-history-request-offset'),
       workbench_selected: element.closest('[data-terminal-panel-variant]')
         ?.getAttribute('data-terminal-workbench-selected') === 'true',
       cell_width: Number(canvas.dataset.terminalCellWidth),
@@ -404,6 +447,43 @@ async function waitForViewsToConverge(page, sessionID, minimumSequence = 1, time
   throw new Error(`Activity and Workbench did not converge on one Presentation: ${JSON.stringify(last)}`);
 }
 
+async function waitForRuntimePairToConverge(first, second, timeoutMs = 15_000) {
+  const deadline = Date.now() + timeoutMs;
+  let stableKey = '';
+  let stableSamples = 0;
+  let last = null;
+  while (Date.now() < deadline) {
+    try {
+      const firstTrace = await runtimeTrace(first);
+      const secondTrace = await runtimeTrace(second);
+      last = { first: firstTrace, second: secondTrace };
+      const key = JSON.stringify({
+        sequence: firstTrace.sequence,
+        geometry: [firstTrace.frame_cols, firstTrace.frame_rows],
+        controller_epoch: firstTrace.controller_epoch,
+      });
+      const matches = firstTrace.sequence === secondTrace.sequence
+        && firstTrace.frame_cols === secondTrace.frame_cols
+        && firstTrace.frame_rows === secondTrace.frame_rows
+        && firstTrace.controller_epoch === secondTrace.controller_epoch;
+      if (matches) {
+        stableSamples = key === stableKey ? stableSamples + 1 : 1;
+        stableKey = key;
+        if (stableSamples >= 3) return [firstTrace, secondTrace];
+      } else {
+        stableKey = '';
+        stableSamples = 0;
+      }
+    } catch (error) {
+      last = { error: error instanceof Error ? error.message : String(error) };
+      stableKey = '';
+      stableSamples = 0;
+    }
+    await delay(50);
+  }
+  throw new Error(`semantic terminal views did not converge: ${JSON.stringify(last)}`);
+}
+
 function analyzeCanvas(imageBuffer) {
   const image = PNG.sync.read(imageBuffer);
   let transparent = 0;
@@ -481,6 +561,8 @@ async function verifyAtomicClear(page, panel, sessionID, tempDir) {
 
 async function seedHistory(page, panel, runtime, fixtureBytes, tempDir) {
   const lineCount = Math.max(64, Math.ceil(fixtureBytes / 64));
+  const searchLineIndex = Math.min(512, lineCount - 1);
+  const searchMarker = `semantic-history-${String(searchLineIndex).padStart(6, '0')}`;
   const marker = path.join(tempDir, 'semantic-history-seeded');
   const before = await waitForTrace(runtime, () => true);
   const command = `i=0; while [ $i -lt ${lineCount} ]; do printf 'semantic-history-%06d abcdefghijklmnopqrstuvwxyz\\n' "$i"; i=$((i+1)); done; printf ok > ${shellQuote(marker)}`;
@@ -497,8 +579,12 @@ async function seedHistory(page, panel, runtime, fixtureBytes, tempDir) {
     throw new Error('semantic history rows did not exceed the visible frame');
   }, after.frame_rows);
   const canvas = runtime.locator(semanticCanvasSelector);
+  const beforeHistoryTrace = await runtimeTrace(runtime);
+  if (!beforeHistoryTrace.connected) {
+    throw new Error(`protocol disconnected before semantic history browse: ${JSON.stringify(beforeHistoryTrace)}`);
+  }
   const beforeScroll = await canvasEvidence(canvas);
-  await canvas.dispatchEvent('wheel', { deltaY: -720 });
+  await dispatchTerminalWheel(canvas, -720);
   await panel.locator('[data-floeterm-scrollbar][data-visible="true"]').waitFor({ state: 'attached', timeout: 10_000 });
   let afterScroll = beforeScroll;
   const deadline = Date.now() + 10_000;
@@ -507,16 +593,184 @@ async function seedHistory(page, panel, runtime, fixtureBytes, tempDir) {
     afterScroll = await canvasEvidence(canvas);
   }
   if (afterScroll.hash === beforeScroll.hash) throw new Error('semantic history projection did not repaint the viewport');
+  const afterScrollTrace = await runtimeTrace(runtime);
+  if (!afterScrollTrace.connected || !afterScrollTrace.history_projected) {
+    throw new Error(`semantic history projection did not settle: ${JSON.stringify(afterScrollTrace)}`);
+  }
   const projectedTrace = await waitForTrace(runtime, () => true);
   if (projectedTrace.sequence !== after.sequence) {
     throw new Error('view-local history projection changed the authoritative Presentation sequence');
+  }
+
+  const projectedHashes = [afterScroll.hash];
+  for (const deltaY of [720]) {
+    const previousHash = projectedHashes.at(-1);
+    await dispatchTerminalWheel(canvas, deltaY);
+    const scrollDeadline = Date.now() + 10_000;
+    let nextEvidence = await canvasEvidence(canvas);
+    while (Date.now() < scrollDeadline && nextEvidence.hash === previousHash) {
+      await delay(50);
+      nextEvidence = await canvasEvidence(canvas);
+    }
+    if (nextEvidence.hash === previousHash) {
+      const historyTrace = await panel.evaluate((root) => {
+        const scrollbar = root.querySelector('[data-floeterm-scrollbar]');
+        return {
+          value: scrollbar?.getAttribute('aria-valuenow') ?? '',
+          maximum: scrollbar?.getAttribute('aria-valuemax') ?? '',
+          localError: root.querySelector('[data-terminal-semantic-history-error="true"]')?.textContent ?? '',
+          localErrorDetail: root.querySelector('[data-terminal-semantic-history-error="true"]')
+            ?.getAttribute('data-terminal-semantic-history-error-detail') ?? '',
+          blockingError: root.querySelector('[data-terminal-semantic-error="true"]')?.textContent ?? '',
+        };
+      });
+      throw new Error(`semantic history wheel ${deltaY < 0 ? 'backward' : 'forward'} did not repaint: ${JSON.stringify(historyTrace)}`);
+    }
+    projectedHashes.push(nextEvidence.hash);
+  }
+
+  const beforeBurst = await runtimeTrace(runtime);
+  for (const deltaY of [-80, -160, 120, -240, 300, -120]) {
+    await dispatchTerminalWheel(canvas, deltaY);
+  }
+  const afterBurst = await waitForTrace(runtime, (trace) => (
+    !trace.history_busy
+    && trace.history_projected
+    && trace.history_request_state === 'settled'
+    && trace.history_request_direction === 'backward'
+    && trace.history_request_count >= beforeBurst.history_request_count + 2
+  ));
+  if (afterBurst.history_error || afterBurst.semantic_error) {
+    throw new Error(`continuous semantic history wheel failed: ${JSON.stringify(afterBurst)}`);
+  }
+
+  const liveDuringHistoryMarker = path.join(tempDir, 'history-live-output-ok');
+  const liveSequenceBefore = afterBurst.sequence;
+  await sendTerminalCommand(
+    page,
+    `printf 'semantic-live-during-history\\n'; printf ok > ${shellQuote(liveDuringHistoryMarker)}`,
+    runtime,
+  );
+  await waitForFile(liveDuringHistoryMarker);
+  const liveDuringHistory = await waitForTrace(runtime, (trace) => (
+    trace.sequence > liveSequenceBefore
+    && trace.history_projected
+    && !trace.history_busy
+  ));
+  if (liveDuringHistory.history_error || liveDuringHistory.semantic_error) {
+    throw new Error(`live output broke semantic history projection: ${JSON.stringify(liveDuringHistory)}`);
+  }
+  await showLatestHistory(runtime);
+  const returnedLive = await waitForTrace(runtime, (trace) => (
+    !trace.history_projected
+    && trace.sequence === liveDuringHistory.sequence
+  ));
+
+  const { input } = await terminalInput(runtime, true);
+  await input.focus();
+  await page.keyboard.press('Meta+f');
+  const searchState = panel.locator('[data-terminal-search-state]:visible').last();
+  await searchState.waitFor({ state: 'visible', timeout: 10_000 });
+  const searchInput = searchState.locator('..').locator('input').first();
+  await searchInput.fill(searchMarker);
+  await searchState.evaluate(async (element) => {
+    const deadline = Date.now() + 15_000;
+    while (Date.now() < deadline) {
+      const state = element.getAttribute('data-terminal-search-state');
+      if (state === 'ready') return;
+      if (state === 'error') throw new Error(`semantic history search failed: ${element.textContent ?? ''}`);
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    throw new Error('semantic history search did not settle');
+  });
+  if (!/^1\s*\/\s*1$/u.test((await searchState.textContent())?.trim() ?? '')) {
+    throw new Error(`semantic history search returned an unexpected result count: ${await searchState.textContent()}`);
+  }
+  await page.keyboard.press('Escape');
+  await searchState.waitFor({ state: 'detached', timeout: 10_000 });
+  const finalTrace = await waitForTrace(runtime, (trace) => trace.semantic_error === '');
+  if (finalTrace.sequence !== returnedLive.sequence) {
+    throw new Error('semantic history browse/search changed the authoritative Presentation sequence');
   }
   return {
     requested_bytes: fixtureBytes,
     generated_rows: lineCount,
     total_rows: Number(await historyRows.getAttribute('data-terminal-history-rows')),
-    presentation_sequence: after.sequence,
+    presentation_sequence: finalTrace.sequence,
+    projected_page_count: projectedHashes.length,
+    continuous_wheel: {
+      delta_count: 6,
+      request_count_before: beforeBurst.history_request_count,
+      request_count_after: afterBurst.history_request_count,
+      final_direction: afterBurst.history_request_direction,
+      final_offset: afterBurst.history_offset,
+    },
+    live_during_projection: {
+      sequence_before: liveSequenceBefore,
+      sequence_after: liveDuringHistory.sequence,
+      returned_live_sequence: returnedLive.sequence,
+    },
+    search_marker: searchMarker,
+    search_result_count: 1,
   };
+}
+
+async function verifyIndependentHistoryProjection(context, entryURL, page, sessionID) {
+  const workbench = await selectSurface(page, 'workbench');
+  const workbenchRuntime = await activateSession(workbench, sessionID);
+  const peer = await openEnvPage(context, entryURL);
+  try {
+    const activity = await selectSurface(peer.page, 'panel');
+    const activityRuntime = await activateSession(activity, sessionID);
+    const [workbenchLive, activityLive] = await waitForRuntimePairToConverge(
+      workbenchRuntime,
+      activityRuntime,
+    );
+    await showLatestHistory(workbenchRuntime);
+    await showLatestHistory(activityRuntime);
+
+    await dispatchTerminalWheel(workbenchRuntime.locator(semanticCanvasSelector), -720);
+    const workbenchProjected = await waitForTrace(workbenchRuntime, (trace) => (
+      trace.history_projected && !trace.history_busy
+    ));
+    if (await activityRuntime.getAttribute('data-terminal-history-projected') !== 'false') {
+      throw new Error('Workbench history projection leaked into the Activity view');
+    }
+
+    await dispatchTerminalWheel(activityRuntime.locator(semanticCanvasSelector), -720);
+    const activityProjected = await waitForTrace(activityRuntime, (trace) => (
+      trace.history_projected && !trace.history_busy
+    ));
+    await dispatchTerminalWheel(activityRuntime.locator(semanticCanvasSelector), -720);
+    const activityAdvanced = await waitForTrace(activityRuntime, (trace) => (
+      trace.history_projected
+      && !trace.history_busy
+      && trace.history_request_count > activityProjected.history_request_count
+    ));
+    const unchangedWorkbench = await runtimeTrace(workbenchRuntime);
+    if (!unchangedWorkbench.history_projected
+      || unchangedWorkbench.history_offset !== workbenchProjected.history_offset) {
+      throw new Error('Activity history projection overwrote the Workbench projection');
+    }
+    if (activityAdvanced.sequence !== workbenchProjected.sequence
+      || activityAdvanced.sequence !== workbenchLive.sequence
+      || activityAdvanced.sequence !== activityLive.sequence) {
+      throw new Error('view-local history projection changed the shared live Presentation');
+    }
+
+    await showLatestHistory(activityRuntime);
+    await showLatestHistory(workbenchRuntime);
+    assertPageHealthy(peer.problems);
+    return {
+      presentation_sequence: workbenchLive.sequence,
+      workbench_offset: workbenchProjected.history_offset,
+      activity_offset: activityAdvanced.history_offset,
+      retained_workbench_offset: unchangedWorkbench.history_offset,
+      independent: true,
+    };
+  } finally {
+    await peer.page.close();
+  }
 }
 
 async function verifyTopResize(page, runtime, maxResizeMs) {
@@ -675,6 +929,12 @@ async function seedProductScenario({ context, entryURL, fixtureBytes, tempDir, m
     const clear = await verifyAtomicClear(page, activeWorkbench, sessionID, tempDir);
     const history = await seedHistory(page, activeWorkbench, workbenchRuntime, fixtureBytes, tempDir);
     const viewsAfterHistory = await waitForViewsToConverge(page, sessionID, history.presentation_sequence);
+    const independentHistoryViews = await verifyIndependentHistoryProjection(
+      context,
+      entryURL,
+      page,
+      sessionID,
+    );
 
     const activityForInput = await selectSurface(page, 'panel');
     const controllerRuntime = await activateSession(activityForInput, sessionID);
@@ -697,6 +957,7 @@ async function seedProductScenario({ context, entryURL, fixtureBytes, tempDir, m
       initial_input: path.basename(initialInputMarker),
       clear,
       history,
+      independent_history_views: independentHistoryViews,
       controller_takeover_views: viewsAfterTakeover,
       top_resize_durations_ms: resizeDurationsMs,
       refresh,

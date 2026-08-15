@@ -954,6 +954,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   let sessionDrawerTriggerEl: HTMLButtonElement | null = null;
   const [searchResultCount, setSearchResultCount] = createSignal(0);
   const [searchResultIndex, setSearchResultIndex] = createSignal(-1);
+  const [searchState, setSearchState] = createSignal<'idle' | 'searching' | 'ready' | 'error'>('idle');
   const [panelHasFocus, setPanelHasFocus] = createSignal(false);
   const [agentHomePathAbs, setAgentHomePathAbs] = createSignal('');
   const [terminalAskMenu, setTerminalAskMenu] = createSignal<{
@@ -4138,12 +4139,14 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (!viewport) {
       setSearchResultIndex(-1);
       setSearchResultCount(0);
+      setSearchState('idle');
       return;
     }
 
-    viewport.setSearchResultsCallback(({ resultIndex, resultCount }) => {
+    viewport.setSearchResultsCallback(({ resultIndex, resultCount, state }) => {
       setSearchResultIndex(Number.isFinite(resultIndex) ? resultIndex : -1);
       setSearchResultCount(Number.isFinite(resultCount) ? resultCount : 0);
+      setSearchState(state);
     });
   };
 
@@ -4212,6 +4215,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     setSearchQuery('');
     setSearchResultIndex(-1);
     setSearchResultCount(0);
+    setSearchState('idle');
     searchLastAppliedKey = '';
     // Search UI is panel-scoped; clear all sessions on close to avoid lingering highlights.
     for (const viewport of viewportRegistry.values()) {
@@ -4644,12 +4648,14 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                   query={searchQuery()}
                   resultCount={searchResultCount()}
                   resultIndex={searchResultIndex()}
+                  state={searchState()}
                   inputRef={(element) => {
                     searchInputEl = element;
                   }}
                   onQueryChange={setSearchQuery}
                   onPrevious={goPrevMatch}
                   onNext={goNextMatch}
+                  onRetry={goNextMatch}
                   onClose={closeSearch}
                 />
               </Show>

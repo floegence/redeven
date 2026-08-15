@@ -34,9 +34,34 @@ const (
 	TypeID_TERMINAL_OUTPUT_ACTIVITY_UPDATE    uint32 = 2014 // notify (agent -> client): foreground command output activity changed
 	TypeID_TERMINAL_EXECUTION_CONTEXT_UPDATE  uint32 = 2015 // notify (agent -> client): atomic location/application context changed
 	TypeID_TERMINAL_WORK_STATE_UPDATE         uint32 = 2016 // notify (agent -> client): semantic work state changed
+
+	terminalSemanticHistoryMaxPageCells     = 1024
+	terminalSemanticHistoryRPCPayloadBudget = 96 * 1024
 )
 
 var ErrSessionNotFound = errors.New("terminal session not found")
+
+func terminalSemanticHistoryRPCLimit(requested, cols int) (int, error) {
+	if requested <= 0 || requested > termgo.MaxSemanticHistoryRows {
+		return 0, &sessionrpc.Error{Code: 400, Message: "invalid terminal history page limit"}
+	}
+	if cols <= 0 {
+		return 0, &sessionrpc.Error{Code: 409, Message: "terminal geometry is unavailable"}
+	}
+	maxRows := max(1, terminalSemanticHistoryMaxPageCells/cols)
+	return min(requested, maxRows), nil
+}
+
+func terminalSemanticHistoryRPCPayloadSize(page termgo.SemanticHistoryPage) (int, error) {
+	encoded, err := json.Marshal(page)
+	if err != nil {
+		return 0, &sessionrpc.Error{Code: 500, Message: "failed to encode semantic history"}
+	}
+	if len(encoded) > terminalSemanticHistoryRPCPayloadBudget {
+		return len(encoded), &sessionrpc.Error{Code: 413, Message: "terminal history page exceeds transport budget"}
+	}
+	return len(encoded), nil
+}
 
 type Manager struct {
 	agentHomeAbs string
@@ -295,6 +320,12 @@ func (m *Manager) RegisterWithAccessGate(r *sessionrpc.Router, meta *session.Met
 		if connectionID == "" || req.TransportGeneration == 0 {
 			return nil, &sessionrpc.Error{Code: 400, Message: "current terminal attachment is required"}
 		}
+		m.log.Debug("terminal semantic history request received",
+			"transport_generation", req.TransportGeneration,
+			"direction", req.Direction,
+			"requested_limit", req.Limit,
+			"has_anchor", strings.TrimSpace(req.Anchor) != "",
+		)
 
 		if !m.sessionAvailableForInteraction(sessionID) {
 			return nil, &sessionrpc.Error{Code: 404, Message: "terminal session not found"}
@@ -304,22 +335,61 @@ func (m *Manager) RegisterWithAccessGate(r *sessionrpc.Router, meta *session.Met
 		if !ok || sess == nil {
 			return nil, &sessionrpc.Error{Code: 404, Message: "terminal session not found"}
 		}
+		presentation, ok := sess.LatestPresentation()
+		if !ok {
+			return nil, &sessionrpc.Error{Code: 409, Message: "terminal presentation is unavailable"}
+		}
+		effectiveLimit, err := terminalSemanticHistoryRPCLimit(req.Limit, presentation.Frame.Width)
+		if err != nil {
+			return nil, err
+		}
 
 		page, err := sess.ReadSemanticHistory(connectionID, req.TransportGeneration, termgo.SemanticHistoryRequest{
 			Anchor:    strings.TrimSpace(req.Anchor),
 			Direction: req.Direction,
-			Limit:     req.Limit,
+			Limit:     effectiveLimit,
 		})
 		if err != nil {
+			m.log.Warn("terminal semantic history request failed",
+				"transport_generation", req.TransportGeneration,
+				"direction", req.Direction,
+				"requested_limit", req.Limit,
+				"effective_limit", effectiveLimit,
+				"has_anchor", strings.TrimSpace(req.Anchor) != "",
+				"error", err,
+			)
 			if errors.Is(err, termgo.ErrControllerTransport) {
 				return nil, &sessionrpc.Error{Code: 409, Message: "terminal attachment changed"}
 			}
 			if errors.Is(err, termgo.ErrSemanticHistoryAnchor) {
 				return nil, &sessionrpc.Error{Code: 409, Message: "terminal history anchor expired"}
 			}
-			m.log.Warn("terminal semantic history failed", "session_id", sessionID, "error", err)
 			return nil, &sessionrpc.Error{Code: 400, Message: "failed to read semantic history"}
 		}
+		payloadBytes, payloadErr := terminalSemanticHistoryRPCPayloadSize(page)
+		if payloadErr != nil {
+			m.log.Warn("terminal semantic history response exceeds RPC budget",
+				"transport_generation", req.TransportGeneration,
+				"direction", req.Direction,
+				"requested_limit", req.Limit,
+				"effective_limit", effectiveLimit,
+				"payload_bytes", payloadBytes,
+				"budget_bytes", terminalSemanticHistoryRPCPayloadBudget,
+				"error", payloadErr,
+			)
+			return nil, payloadErr
+		}
+		m.log.Debug("terminal semantic history response prepared",
+			"transport_generation", req.TransportGeneration,
+			"direction", req.Direction,
+			"requested_limit", req.Limit,
+			"effective_limit", effectiveLimit,
+			"payload_bytes", payloadBytes,
+			"offset", page.Offset,
+			"total_rows", page.TotalRows,
+			"has_previous", page.HasPrevious,
+			"has_next", page.HasNext,
+		)
 		return &page, nil
 	})
 
