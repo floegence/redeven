@@ -115,6 +115,93 @@ describe('applyFlowerRuntimeCurrentView', () => {
     });
   });
 
+  it.each([
+    { name: 'approved', approved: true, outcome: '', status: 'success', severity: 'normal', requiresApproval: true },
+    { name: 'rejected', approved: false, outcome: '', status: 'declined', severity: 'quiet', requiresApproval: false },
+    { name: 'canceled', approved: undefined, outcome: 'cancelled', status: 'canceled', severity: 'warning', requiresApproval: true },
+  ] as const)('merges a resolved $name approval into its canonical tool row', ({ name, approved, outcome, status, severity, requiresApproval }) => {
+    const interaction = {
+      id: 'approval-a', turn_id: 'turn-a', kind: 'approval' as const, tool_call_id: 'call-a', resolved: true,
+      ...(approved !== undefined ? { approved } : {}),
+      approval: { label: 'Run curl', tool_name: 'terminal.exec', tool_call_id: 'call-a' },
+      resolution: {
+        accepted: outcome !== 'cancelled',
+        ...(approved !== undefined ? { approved } : {}),
+        ...(outcome ? { outcome } : {}),
+      },
+    };
+    const current: FlowerRuntimeCurrentView = {
+      thread_id: 'thread-a', view_version: 10, last_outcome: 'completed', turn_id: 'turn-a',
+      interactions: [interaction],
+      items: [
+        { id: 'interaction-a', turn_id: 'turn-a', kind: 'interaction', interaction },
+        {
+          id: 'tool-a', turn_id: 'turn-a', kind: 'tool', activity: {
+            item_id: 'tool-a', tool_id: 'call-a', tool_name: 'terminal.exec', kind: 'tool',
+            status: 'success', severity: 'normal', needs_attention: false, requires_approval: false,
+            presentation: {
+              label: 'curl -s https://example.test', renderer: 'terminal',
+              payload: { command: 'curl -s https://example.test', exit_code: 0 },
+            },
+          },
+        },
+      ],
+    };
+
+    const result = applyFlowerRuntimeCurrentView(summary(), current);
+
+    expect(result.messages).toHaveLength(1);
+    expect(result.messages[0]).toMatchObject({ id: 'tool-a' });
+    expect(result.messages[0]?.blocks?.[0]).toMatchObject({
+      items: [{
+        tool_id: 'call-a', status, severity, requires_approval: requiresApproval,
+        approval_state: name, renderer: 'terminal',
+        payload: { command: 'curl -s https://example.test', exit_code: 0 },
+      }],
+    });
+  });
+
+  it('does not merge or render a resolved approval without a matching canonical tool id', () => {
+    const interaction = {
+      id: 'approval-other', turn_id: 'turn-a', kind: 'approval' as const, tool_call_id: 'call-other', resolved: true,
+      approved: false,
+      approval: { label: 'Other command', tool_name: 'terminal.exec', tool_call_id: 'call-other' },
+      resolution: { accepted: true, approved: false },
+    };
+    const current: FlowerRuntimeCurrentView = {
+      thread_id: 'thread-a', view_version: 10, last_outcome: 'completed', turn_id: 'turn-a',
+      interactions: [interaction],
+      items: [
+        { id: 'interaction-other', turn_id: 'turn-a', kind: 'interaction', interaction },
+        {
+          id: 'tool-a', turn_id: 'turn-a', kind: 'tool', activity: {
+            item_id: 'tool-a', tool_id: 'call-a', tool_name: 'terminal.exec', kind: 'tool',
+            status: 'success', severity: 'normal', needs_attention: false, requires_approval: false,
+            presentation: {
+              label: 'curl -s https://example.test', renderer: 'terminal',
+              payload: { command: 'curl -s https://example.test', exit_code: 0 },
+            },
+          },
+        },
+      ],
+    };
+
+    const result = applyFlowerRuntimeCurrentView(summary(), current);
+
+    expect(result.messages).toHaveLength(1);
+    expect(result.messages[0]).toMatchObject({ id: 'tool-a' });
+    expect(result.messages[0]?.blocks?.[0]).toMatchObject({
+      items: [{ tool_id: 'call-a', status: 'success', renderer: 'terminal' }],
+    });
+    expect(result.messages[0]?.blocks?.[0]).not.toMatchObject({ items: [{ approval_state: 'rejected' }] });
+
+    const withoutCanonicalTool = applyFlowerRuntimeCurrentView(summary(), {
+      ...current,
+      items: [{ id: 'interaction-other', turn_id: 'turn-a', kind: 'interaction', interaction }],
+    });
+    expect(withoutCanonicalTool.messages).toEqual([]);
+  });
+
   it('projects typed file-action target references into view-local action controls', () => {
     const current: FlowerRuntimeCurrentView = {
       thread_id: 'thread-a', view_version: 11, last_outcome: 'completed', turn_id: 'turn-a',

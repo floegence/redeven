@@ -1,12 +1,16 @@
 import type {
+  FlowerActivityApprovalState,
   FlowerActivityItem,
   FlowerActivityTimelineBlock,
   FlowerChatMessage,
   FlowerRuntimeCurrentItem,
   FlowerRuntimeCurrentView,
+  FlowerRuntimeInteraction,
   FlowerThreadSnapshot,
 } from './contracts/flowerSurfaceContracts';
 import { mapFlowerActivityItem } from './flowerLiveMapper';
+
+type ResolvedApprovalState = Exclude<FlowerActivityApprovalState, 'requested'>;
 
 function trim(value: unknown): string {
   return String(value ?? '').trim();
@@ -47,6 +51,45 @@ function activityItem(raw: Readonly<Record<string, unknown>>, effectRetry?: Flow
   return effectRetry ? { ...mapped, effect_retry: effectRetry } : mapped;
 }
 
+function resolvedApprovalState(interaction: FlowerRuntimeInteraction): ResolvedApprovalState | undefined {
+  const outcome = trim(interaction.resolution?.outcome).toLowerCase();
+  if (outcome === 'cancelled' || outcome === 'canceled') return 'canceled';
+  if (outcome === 'timed_out') return 'timed_out';
+  if (outcome === 'rejected') return 'rejected';
+  if (outcome === 'approved') return 'approved';
+  const approved = interaction.resolution?.approved ?? interaction.approved;
+  if (approved === true) return 'approved';
+  if (approved === false) return 'rejected';
+  return undefined;
+}
+
+function mergeResolvedApproval(activity: FlowerActivityItem, interaction: FlowerRuntimeInteraction): FlowerActivityItem {
+  const approvalState = resolvedApprovalState(interaction);
+  if (!approvalState) return activity;
+  const attentionReasons = activity.attention_reasons?.filter((reason) => reason !== 'approval' && reason !== 'waiting');
+  const base = {
+    ...activity,
+    approval_state: approvalState,
+    ...(attentionReasons?.length ? { attention_reasons: attentionReasons } : { attention_reasons: undefined }),
+  };
+  switch (approvalState) {
+    case 'approved':
+      return {
+        ...base,
+        status: activity.status === 'waiting' ? 'pending' : activity.status,
+        severity: activity.status === 'waiting' ? 'normal' : activity.severity,
+        needs_attention: activity.status === 'waiting' ? false : activity.needs_attention,
+        requires_approval: true,
+      };
+    case 'rejected':
+      return { ...base, status: 'declined', severity: 'quiet', needs_attention: false, requires_approval: false };
+    case 'canceled':
+      return { ...base, status: 'canceled', severity: 'warning', needs_attention: false, requires_approval: true };
+    case 'timed_out':
+      return { ...base, status: 'error', severity: 'blocking', needs_attention: true, requires_approval: true };
+  }
+}
+
 function activityBlock(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentView, item: FlowerRuntimeCurrentItem): FlowerActivityTimelineBlock {
   const activityIdentity = trim(item.activity?.tool_id) || trim(item.id);
   const retry = (view.interactions ?? []).find((interaction) => (
@@ -55,10 +98,17 @@ function activityBlock(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentVie
     && interaction.effect_retry
     && (trim(interaction.tool_call_id) || trim(interaction.effect_retry.tool_call_id)) === activityIdentity
   ))?.effect_retry;
-  const activity = activityItem(item.activity ?? {}, retry ? {
+  let activity = activityItem(item.activity ?? {}, retry ? {
     effect_attempt_id: trim(retry.effect_attempt_id),
     tool_call_id: trim(retry.tool_call_id),
   } : undefined);
+  const toolCallID = trim(item.activity?.tool_id);
+  const resolvedApproval = toolCallID ? (view.interactions ?? []).find((interaction) => (
+    interaction.kind === 'approval'
+    && interaction.resolved
+    && (trim(interaction.tool_call_id) || trim(interaction.approval?.tool_call_id)) === toolCallID
+  )) : undefined;
+  if (resolvedApproval) activity = mergeResolvedApproval(activity, resolvedApproval);
   const fileActions = Object.fromEntries((activity.target_refs ?? []).flatMap((target) => {
     const actionID = trim(target.kind).startsWith('file_action:')
       ? trim(target.kind).slice('file_action:'.length)
@@ -108,26 +158,6 @@ function runtimeMessages(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentV
         });
         continue;
       }
-      const approved = interaction.resolution?.approved ?? interaction.approved;
-      const label = trim(interaction.approval?.label) || trim(interaction.effect_retry?.tool_name) || 'Tool';
-      messages.push({
-        id: trim(item.id), thread_id: base.thread_id, turn_id: trim(item.turn_id), role: 'assistant',
-        content: '', status: 'complete', created_at_ms: createdAtMs,
-        blocks: [activityBlock(base, view, {
-          ...item,
-          kind: 'tool',
-          activity: {
-            item_id: trim(item.id),
-            tool_id: trim(interaction.tool_call_id),
-            tool_name: trim(interaction.approval?.tool_name) || trim(interaction.effect_retry?.tool_name),
-            kind: 'tool',
-            status: approved === false ? 'declined' : 'success',
-            severity: 'quiet',
-            needs_attention: false,
-            metadata: { label, outcome: trim(interaction.resolution?.outcome) },
-          },
-        })],
-      });
       continue;
     }
     if (item.kind === 'tool') {
