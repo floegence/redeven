@@ -551,7 +551,7 @@ function mapActivityPresentation(raw: unknown): Partial<Pick<FlowerActivityItem,
   };
 }
 
-function mapActivityItem(raw: unknown): FlowerActivityItem | null {
+export function mapFlowerActivityItem(raw: unknown): FlowerActivityItem | null {
   const record = plainRecordValue(raw);
   if (!record) return null;
   const itemID = trim(record.item_id);
@@ -633,7 +633,7 @@ function mapActivityTimelineBlock(raw: unknown): FlowerActivityTimelineBlock | n
   const threadID = trim(record.thread_id);
   const turnID = trim(record.turn_id);
   if (!runID || !threadID || !turnID) return null;
-  const items = Array.isArray(record.items) ? record.items.map(mapActivityItem).filter(isPresent) : [];
+  const items = Array.isArray(record.items) ? record.items.map(mapFlowerActivityItem).filter(isPresent) : [];
   const summary = plainRecordValue(record.summary) ?? {};
   const attention = activityAttentionReasonArray(summary.attention_reasons);
   const fileActions = mapActivityFileActions(record.file_actions);
