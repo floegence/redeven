@@ -1170,35 +1170,54 @@ export function EnvAppShell() {
     debugConsole.show(options);
   };
 
-  const pluginInventorySource = () => (
-    (
-      pluginsPanelOpen()
-      || layout.sidebarActiveTab() === PLUGIN_CENTER_ACTIVITY_ID
-      || String(activeSurface()) === PLUGIN_CENTER_ACTIVITY_ID
-    )
-    && (!isLocalMode() || pluginSessionReady())
-  );
-  const [pluginInventoryError, setPluginInventoryError] = createSignal<unknown>(null);
-  let pluginInventoryEmptyRefetchIssued = false;
-  let pluginInventoryDisposed = false;
-  onCleanup(() => { pluginInventoryDisposed = true; });
-  const [pluginInventoryProjection, { refetch: refetchPluginInventory }] = createResource<PluginInventoryProjection, true>(
+  const pluginInventorySource = (): object | false => {
+    if (protocol.status() !== 'connected' || (isLocalMode() && !pluginSessionReady())) return false;
+    const session = protocol.session();
+    return session && typeof session === 'object' ? session : false;
+  };
+  const [pluginInventoryFailure, setPluginInventoryFailure] = createSignal<Readonly<{ owner: object; error: unknown }> | null>(null);
+  type PluginInventorySessionState = Readonly<{
+    owner: object;
+    projection?: PluginInventoryProjection;
+  }>;
+  const [pluginInventorySessionState, { refetch: refetchPluginInventorySession }] = createResource<PluginInventorySessionState, object>(
     pluginInventorySource,
-    async (_source, info) => {
+    async (owner, info) => {
+      pluginInventoryAbort?.abort('Plugin inventory session superseded');
       const controller = new AbortController();
       pluginInventoryAbort = controller;
+      const previous = info.value?.owner === owner ? info.value.projection : undefined;
       try {
         const projection = await pluginLifecycle.loadInventoryProjection({ signal: controller.signal });
-        if (!controller.signal.aborted) setPluginInventoryError(null);
-        return projection;
+        if (!controller.signal.aborted) setPluginInventoryFailure(null);
+        return { owner, projection };
       } catch (error) {
-        if (!controller.signal.aborted) setPluginInventoryError(error);
-        return info.value ?? { items: [] };
+        if (!controller.signal.aborted && !previous) setPluginInventoryFailure({ owner, error });
+        return { owner, ...(previous ? { projection: previous } : {}) };
       } finally {
         if (pluginInventoryAbort === controller) pluginInventoryAbort = undefined;
       }
     },
   );
+  const pluginInventoryProjection = () => {
+    const owner = pluginInventorySource();
+    const state = pluginInventorySessionState();
+    return owner && state?.owner === owner ? state.projection : undefined;
+  };
+  const pluginInventoryError = () => {
+    const owner = pluginInventorySource();
+    const failure = pluginInventoryFailure();
+    return owner && failure?.owner === owner ? failure.error : null;
+  };
+  const pluginInventoryInitialPending = () => (
+    Boolean(pluginInventorySource())
+    && !pluginInventoryProjection()
+    && pluginInventorySessionState.loading
+  );
+  const refetchPluginInventory = async () => {
+    const state = await refetchPluginInventorySession();
+    return state?.owner === pluginInventorySource() ? state.projection : undefined;
+  };
   pluginInstallCoordinator = createPluginInstallCoordinator({
     lifecycle: pluginLifecycle,
     refreshInventory: async () => {
@@ -1211,20 +1230,6 @@ export function EnvAppShell() {
         || item.officialCatalog?.pluginInstanceID === pluginInstanceID
       ))?.pluginID
     ),
-  });
-  createEffect(() => {
-    if (!pluginInventorySource() || pluginInventoryProjection.loading || pluginInventoryError()) {
-      if (!pluginInventorySource()) pluginInventoryEmptyRefetchIssued = false;
-      return;
-    }
-    const projection = pluginInventoryProjection();
-    if ((projection?.items.length ?? 0) > 0 || pluginInventoryEmptyRefetchIssued) return;
-    pluginInventoryEmptyRefetchIssued = true;
-    queueMicrotask(() => {
-      if (!pluginInventoryDisposed && pluginInventorySource() && !pluginInventoryProjection.loading) {
-        void refetchPluginInventory();
-      }
-    });
   });
   let pluginRuntimeRecoveryClient: unknown = null;
   let pluginRuntimeRecoveryAbort: AbortController | undefined;
@@ -1331,7 +1336,8 @@ export function EnvAppShell() {
   });
   createEffect(() => {
     if (!pluginInventorySource()) {
-      pluginInventoryAbort?.abort('Plugin inventory surface closed');
+      pluginInventoryAbort?.abort('Plugin inventory session unavailable');
+      setPluginInventoryFailure(null);
     }
   });
 
@@ -1340,7 +1346,7 @@ export function EnvAppShell() {
     pluginInventoryError() ? getErrorMessage(pluginInventoryError()) : undefined,
     {
       canOpenSurfaces: canOpenPluginSurfaces(),
-      loading: pluginInventoryProjection.loading,
+      loading: pluginInventoryInitialPending(),
     },
   ));
 
@@ -3375,7 +3381,7 @@ export function EnvAppShell() {
       component: () => (
         <PluginCenterView
           projection={pluginInventoryProjection() ?? { items: [] }}
-          loading={pluginInventoryProjection.loading}
+          loading={pluginInventoryInitialPending()}
           error={pluginInventoryError()}
           selectedInventoryKey={pluginCenterSelectedInventoryKey()}
           focusRequest={pluginCenterFocusRequest()}
@@ -3675,7 +3681,6 @@ export function EnvAppShell() {
           setPluginsPanelPlacement('activity');
           const nextOpen = !pluginsPanelOpen();
           setPluginsPanelOpen(nextOpen);
-          if (nextOpen) void refetchPluginInventory();
         },
     });
     if (canUseFlower()) {
@@ -4705,7 +4710,6 @@ export function EnvAppShell() {
                 setPluginsPanelTrigger(trigger);
                 setPluginsPanelPlacement('workbench');
                 setPluginsPanelOpen(nextOpen);
-                if (nextOpen) void refetchPluginInventory();
               },
             }]}
             pluginSurfaceHost={{
@@ -4774,8 +4778,8 @@ export function EnvAppShell() {
       </div>
       <span
         data-plugin-inventory-debug
-        data-source={String(pluginInventorySource())}
-        data-loading={String(pluginInventoryProjection.loading)}
+        data-source={String(Boolean(pluginInventorySource()))}
+        data-loading={String(pluginInventorySessionState.loading)}
         data-error={String(Boolean(pluginInventoryError()))}
         data-items={String(pluginInventoryProjection()?.items.length ?? 0)}
         data-market-unavailable={String(Boolean(pluginInventoryProjection()?.marketUnavailable))}

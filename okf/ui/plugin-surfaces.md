@@ -100,6 +100,19 @@ commands carry that exact key. Plugin id is not unique, and instance id alone is
 not used to select catalog presentation. This keeps an official catalog entry
 and multiple external instances with identical manifest ids independent.
 
+Inventory lifetime follows the authenticated Host session, not the visibility
+of the Launcher or Plugin Center. Once the protocol and local plugin session are
+ready, the Shell prefetches one projection in the background. Closing or
+reopening either surface neither cancels nor reloads it. A lifecycle mutation,
+explicit retry, or session change refreshes through that same owner. During a
+same-session refresh the last successful projection remains interactive, so the
+Launcher never replaces existing tiles with a visible loading banner or an
+empty-state flash. A refresh failure keeps that projection; only a first load
+with no successful snapshot exposes an actionable error. Disconnect or session
+replacement aborts the old request and clears its projection boundary before a
+new owner can publish results. This process-local projection is not durable
+plugin state; Host catalog and `action_state` remain authoritative.
+
 Official catalog presentation comes from the frozen latest-only market snapshot
 and ultimately from the signed manifest. It requires exact publisher, plugin,
 version, package, manifest, and entries identity. Historical content additionally

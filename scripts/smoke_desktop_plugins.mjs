@@ -456,14 +456,23 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     await visiblePluginTrigger().click();
     await page.locator('[data-plugin-launcher-backdrop]').first().waitFor({ state: 'detached', timeout: 10_000 });
   }
-  await visiblePluginTrigger().click();
-  await page.locator('[data-plugin-launcher-backdrop]').first().waitFor({ state: 'visible', timeout: 10_000 });
+  phase = 'session_inventory_prefetch';
+  const inventoryPrefetch = await waitFor(async () => {
+    const debug = await inventoryDebug();
+    return debug?.source === 'true' && debug.loading === 'false' && debug.error === 'false' ? debug : null;
+  }, 60_000, 'session inventory prefetch');
+  mark('inventory_ready_ms');
   const sessionHeaders = await waitFor(() => {
     for (const headers of pluginRequestHeaders.values()) {
       if (headers['x-redeven-plugin-session'] && headers['x-redevplugin-csrf']) return headers;
     }
     return null;
   }, 30_000, 'plugin session credential');
+  phase = 'panel_open';
+  const firstPanelOpenStartedAt = performance.now();
+  await visiblePluginTrigger().click();
+  await page.locator('[data-plugin-launcher-backdrop]').first().waitFor({ state: 'visible', timeout: 10_000 });
+  const firstPanelOpenMS = Number((performance.now() - firstPanelOpenStartedAt).toFixed(1));
   phase = 'plugin_bootstrap';
   let bootstrap;
   try {
@@ -549,9 +558,112 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
   await backdrop.click({ position: { x: 2, y: 2 } });
   await backdrop.waitFor({ state: 'detached', timeout: 10_000 });
   panelDismissal.backdrop = { closed: true, backdrop_count: 0 };
-  await visiblePluginTrigger().click();
-  await page.locator('[data-plugin-launcher-backdrop]').first().waitFor({ state: 'visible', timeout: 10_000 });
-  panelDismissal.final_reopen = { open: true, backdrop_count: 1 };
+  const catalogQueryCount = () => pluginRequests.filter(
+    (request) => request.pathname.endsWith('/plugins/catalog/query'),
+  ).length;
+  const catalogQueryCountBefore = catalogQueryCount();
+  const panelReopenCycles = [];
+  let expectedTileKeys = null;
+  for (let index = 0; index < 5; index += 1) {
+    const openStartedAt = performance.now();
+    await visiblePluginTrigger().click();
+    const reopenedBackdrop = page.locator('[data-plugin-launcher-backdrop]').first();
+    await reopenedBackdrop.waitFor({ state: 'visible', timeout: 10_000 });
+    const openDurationMS = Number((performance.now() - openStartedAt).toFixed(1));
+    const installedTiles = reopenedBackdrop.locator('[data-plugin-panel-tile]:not([data-plugin-panel-tile="plugin-center"])');
+    await waitFor(async () => (
+      await installedTiles.count() === bootstrap.enabledCount ? true : null
+    ), 10_000, `Plugin Panel inventory on reopen ${index + 1}`);
+    const panelText = await reopenedBackdrop.innerText();
+    if (/Loading plugins|正在加载插件/u.test(panelText)) {
+      throw new Error(`Plugin Panel exposed a loading banner on reopen ${index + 1}`);
+    }
+    const tileKeys = await installedTiles.evaluateAll((tiles) => tiles.map(
+      (tile) => tile.getAttribute('data-plugin-panel-tile'),
+    ));
+    const tileOpacities = await installedTiles.evaluateAll((tiles) => tiles.map(
+      (tile) => getComputedStyle(tile).opacity,
+    ));
+    if (tileOpacities.some((opacity) => opacity === '0')) {
+      throw new Error(`Plugin Panel hid an installed tile on reopen ${index + 1}`);
+    }
+    if (expectedTileKeys && JSON.stringify(tileKeys) !== JSON.stringify(expectedTileKeys)) {
+      throw new Error(`Plugin Panel inventory changed across reopen ${index + 1}`);
+    }
+    expectedTileKeys ??= tileKeys;
+    panelReopenCycles.push({
+      cycle: index + 1,
+      open_duration_ms: openDurationMS,
+      tile_keys: tileKeys,
+      loading_text_visible: false,
+      tile_opacities: tileOpacities,
+    });
+    if (index < 4) {
+      const cycleClose = reopenedBackdrop.locator(
+        '[aria-label="Close plugins"], [aria-label="关闭插件"]',
+      ).first();
+      await cycleClose.click();
+      await reopenedBackdrop.waitFor({ state: 'detached', timeout: 10_000 });
+    }
+  }
+  const catalogQueryCountAfter = catalogQueryCount();
+  if (catalogQueryCountAfter !== catalogQueryCountBefore) {
+    throw new Error(`Plugin Panel reopen triggered inventory refresh: ${catalogQueryCountBefore} -> ${catalogQueryCountAfter}`);
+  }
+  const inventoryRefreshCount = catalogQueryCountAfter - catalogQueryCountBefore;
+  const finalBackdrop = page.locator('[data-plugin-launcher-backdrop]').first();
+  await finalBackdrop.locator('[data-plugin-center-market-action]').click();
+  await page.locator('[data-plugin-center-view]').waitFor({ state: 'visible', timeout: 10_000 });
+  let releaseDelayedCatalogRequest;
+  let delayedCatalogRequestIntercepted = false;
+  const delayedCatalogRequestGate = new Promise((resolve) => {
+    releaseDelayedCatalogRequest = resolve;
+  });
+  await page.route('**/_redevplugin/api/plugins/catalog/query', async (route) => {
+    delayedCatalogRequestIntercepted = true;
+    await delayedCatalogRequestGate;
+    await route.continue();
+  }, { times: 1 });
+  await page.locator('[data-plugin-center-refresh]').click();
+  await waitFor(
+    () => delayedCatalogRequestIntercepted,
+    10_000,
+    'delayed background inventory refresh',
+  );
+  await waitFor(async () => (
+    (await inventoryDebug())?.loading === 'true' ? true : null
+  ), 10_000, 'background refresh pending');
+  let backgroundRefreshTileKeys;
+  try {
+    await visiblePluginTrigger().click();
+    const pendingRefreshBackdrop = page.locator('[data-plugin-launcher-backdrop]').first();
+    await pendingRefreshBackdrop.waitFor({ state: 'visible', timeout: 10_000 });
+    const pendingRefreshTiles = pendingRefreshBackdrop.locator(
+      '[data-plugin-panel-tile]:not([data-plugin-panel-tile="plugin-center"])',
+    );
+    await waitFor(async () => (
+      await pendingRefreshTiles.count() === bootstrap.enabledCount ? true : null
+    ), 10_000, 'Plugin Panel snapshot during background refresh');
+    const pendingRefreshText = await pendingRefreshBackdrop.innerText();
+    if (/Loading plugins|正在加载插件/u.test(pendingRefreshText)) {
+      throw new Error('Plugin Panel exposed a loading banner during a background refresh');
+    }
+    backgroundRefreshTileKeys = await pendingRefreshTiles.evaluateAll((tiles) => tiles.map(
+      (tile) => tile.getAttribute('data-plugin-panel-tile'),
+    ));
+  } finally {
+    releaseDelayedCatalogRequest();
+  }
+  await waitFor(async () => (
+    (await inventoryDebug())?.loading === 'false' ? true : null
+  ), 30_000, 'background inventory refresh completion');
+  const backgroundRefreshEvidence = {
+    delayed: true,
+    snapshot_visible_while_pending: true,
+    loading_text_visible: false,
+    background_refresh_tile_keys: backgroundRefreshTileKeys,
+  };
+  panelDismissal.final_reopen = { open: true, backdrop_count: 1, cycles: 5 };
   mark('panel_ready_ms');
 
   phase = 'inventory';
@@ -712,6 +824,11 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     owner_id: config.ownerID,
     pids: config.pids,
     timings,
+    inventory_prefetch: {
+      completed_before_first_open: true,
+      debug: inventoryPrefetch,
+      first_open_ms: firstPanelOpenMS,
+    },
     bootstrap,
     recovery,
     catalog,
@@ -719,6 +836,11 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
       installed_count: panelInstalledCount,
       needs_attention: await page.locator('[data-plugin-runtime-recovery]').count(),
       dismissal: panelDismissal,
+      reopen_cycles: panelReopenCycles,
+      inventory_catalog_query_count_before: catalogQueryCountBefore,
+      inventory_catalog_query_count_after: catalogQueryCountAfter,
+      inventory_refresh_count: inventoryRefreshCount,
+      background_refresh: backgroundRefreshEvidence,
       icon_responses: pluginIconResponses,
     },
     surface,
