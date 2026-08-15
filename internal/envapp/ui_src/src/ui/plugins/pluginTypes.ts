@@ -369,6 +369,8 @@ export type ReDevPluginRecord = Omit<PluginRecord, 'presentation' | 'presentatio
 
 export type ReDevPluginCatalogResult = PluginCatalogResult;
 
+export type OfficialPluginReleaseInspection = PluginReleasePackageInspection;
+
 export type ExternalPluginInspection = Omit<PluginExternalPackageInspection, 'presentation' | 'presentation_sha256'> & {
   presentation?: PluginExternalPackageInspection['presentation'];
   presentation_sha256?: string;
@@ -391,6 +393,7 @@ import type {
   PluginPermissionGrant,
   PluginPlatformErrorCode,
   PluginRecord,
+  PluginReleasePackageInspection,
   PluginReleaseRef,
   PluginRecoveryResult,
   PluginSecurityPolicy,

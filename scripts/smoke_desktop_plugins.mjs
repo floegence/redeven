@@ -150,6 +150,102 @@ function installedPlugins(catalog) {
   return Array.isArray(catalog?.plugins) ? catalog.plugins : [];
 }
 
+export function releaseRefFromInstalledPlugin(plugin) {
+  const binding = plugin?.release_trust_binding;
+  const expectedHashes = {
+    package_sha256: plugin?.package_hash,
+    manifest_sha256: plugin?.manifest_hash,
+    entries_sha256: plugin?.entries_hash,
+  };
+  if (!binding || Object.values(expectedHashes).some((value) => typeof value !== 'string' || value.length === 0)) {
+    throw new Error('installed official plugin does not expose its verified release binding');
+  }
+  return {
+    source_id: binding.source_id,
+    channel: binding.channel,
+    release_metadata_ref: binding.release_metadata_ref,
+    release_metadata_sha256: binding.release_metadata_sha256,
+    publisher_id: binding.publisher_id,
+    plugin_id: binding.plugin_id,
+    version: binding.version,
+    expected_hashes: expectedHashes,
+  };
+}
+
+async function verifyDisabledUpdateIntent(page, sessionHeaders, initialCatalog, pluginResponses) {
+  const initiallyEnabled = enabledPlugins(initialCatalog)[0];
+  if (!initiallyEnabled) throw new Error('disabled update smoke requires an enabled official plugin');
+  const queryCatalog = async () => {
+    const response = await requestPluginJSON(page, '/_redevplugin/api/plugins/catalog/query', {}, sessionHeaders);
+    pluginResponses.push({ method: 'POST', pathname: '/_redevplugin/api/plugins/catalog/query', ...response });
+    return response;
+  };
+  const mutate = async (pathname, body) => {
+    const response = await requestPluginJSON(page, pathname, body, sessionHeaders);
+    pluginResponses.push({ method: 'POST', pathname, ...response });
+    if (response.status !== 200) throw new Error(`${pathname} failed with status ${response.status}`);
+    return response.body?.data ?? response.body;
+  };
+
+  await mutate('/_redevplugin/api/plugins/disable', {
+    plugin_instance_id: initiallyEnabled.plugin_instance_id,
+    expected_management_revision: initiallyEnabled.management_revision,
+    reason: 'user_disabled',
+  });
+  const disabledCatalog = await waitFor(async () => {
+    const response = await queryCatalog();
+    if (response.status !== 200) return null;
+    const catalog = response.body?.data ?? response.body;
+    return installedPlugins(catalog).find((plugin) => (
+      plugin.plugin_instance_id === initiallyEnabled.plugin_instance_id && plugin.enable_state === 'disabled'
+    )) ? catalog : null;
+  }, 30_000, 'user-disabled plugin state');
+  const disabled = installedPlugins(disabledCatalog).find(
+    (plugin) => plugin.plugin_instance_id === initiallyEnabled.plugin_instance_id,
+  );
+
+  await mutate('/_redevplugin/api/plugins/update-release-ref', {
+    plugin_instance_id: disabled.plugin_instance_id,
+    expected_management_revision: disabled.management_revision,
+    release_ref: releaseRefFromInstalledPlugin(disabled),
+  });
+  const preservedCatalog = await waitFor(async () => {
+    const response = await queryCatalog();
+    if (response.status !== 200) return null;
+    const catalog = response.body?.data ?? response.body;
+    const plugin = installedPlugins(catalog).find((candidate) => candidate.plugin_instance_id === disabled.plugin_instance_id);
+    return plugin?.enable_state === 'disabled' && plugin.management_revision > disabled.management_revision ? catalog : null;
+  }, 120_000, 'disabled intent after signed release update');
+  const preserved = installedPlugins(preservedCatalog).find(
+    (plugin) => plugin.plugin_instance_id === initiallyEnabled.plugin_instance_id,
+  );
+
+  await mutate('/_redevplugin/api/plugins/enable', {
+    plugin_instance_id: preserved.plugin_instance_id,
+    expected_management_revision: preserved.management_revision,
+  });
+  const restoredCatalog = await waitFor(async () => {
+    const response = await queryCatalog();
+    if (response.status !== 200) return null;
+    const catalog = response.body?.data ?? response.body;
+    return enabledPlugins(catalog).some((plugin) => plugin.plugin_instance_id === preserved.plugin_instance_id)
+      ? catalog
+      : null;
+  }, 120_000, 'explicit re-enable before cold restart');
+  const restored = enabledPlugins(restoredCatalog).find(
+    (plugin) => plugin.plugin_instance_id === initiallyEnabled.plugin_instance_id,
+  );
+  return {
+    plugin_instance_id: initiallyEnabled.plugin_instance_id,
+    before_revision: initiallyEnabled.management_revision,
+    disabled_revision: disabled.management_revision,
+    updated_revision: preserved.management_revision,
+    updated_enable_state: preserved.enable_state,
+    restored_revision: restored.management_revision,
+    restored_enable_state: restored.enable_state,
+  };
+}
+
 async function ensureInitialEnabledPlugin(page, sessionHeaders, config, pluginResponses) {
   const queryCatalog = async () => {
     const response = await requestPluginJSON(
@@ -194,14 +290,7 @@ async function ensureInitialEnabledPlugin(page, sessionHeaders, config, pluginRe
     return installedPlugins(catalog).length > 0 ? catalog : null;
   }, 120_000, 'official plugin installation');
   if (enabledPlugins(installed).length === 0) {
-    const enable = page.locator('[data-plugin-center-card-primary]').filter({ visible: true }).first();
-    await waitFor(async () => (
-      await enable.count() > 0
-      && await enable.isVisible()
-      && await enable.isEnabled()
-      && /^(?:Enable|启用)$/u.test((await enable.textContent() ?? '').trim())
-    ), 30_000, 'official plugin enable action');
-    await enable.click();
+    throw new Error('official plugin installation did not finish enabled');
   }
   const enabled = await waitFor(async () => {
     const response = await queryCatalog();
@@ -598,6 +687,11 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
   }
 
   const assessment = assessPluginSmoke({ recovery, catalog, panelInstalledCount, surface, rpc });
+  let disabledUpdateIntent = null;
+  if (config.mode !== 'attach' && config.phase === 'initial') {
+    phase = 'disabled_update_intent';
+    disabledUpdateIntent = await verifyDisabledUpdateIntent(page, sessionHeaders, catalog, pluginResponses);
+  }
   const summary = {
     schema_version: 1,
     mode: config.mode ?? 'isolated',
@@ -631,6 +725,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     },
     surface,
     rpc,
+    disabled_update_intent: disabledUpdateIntent,
     console_errors: consoleErrors,
     page_errors: pageErrors,
     failed_responses: failedResponses,

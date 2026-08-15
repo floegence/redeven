@@ -22,6 +22,7 @@ import type {
   PluginPresentationCategory,
   PluginRuntimeRecoveryPresentation,
   PluginTrustBadge,
+  OfficialPluginReleaseInspection,
 } from './pluginTypes';
 import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
 import { ExternalPluginInstallDialog } from './ExternalPluginInstallDialog';
@@ -48,6 +49,7 @@ export type PluginCenterViewProps = {
   onCommand: (command: PluginLifecycleCommand, signal: AbortSignal) => Promise<unknown> | unknown;
   installOperations?: readonly PluginInstallExecutionProjection[];
   onRetryInstall?: (pluginInstanceID: string) => Promise<unknown> | unknown;
+  onInspectOfficial?: (item: PluginInventoryItem, signal: AbortSignal) => Promise<OfficialPluginReleaseInspection>;
   onInspectExternal?: (request: ExternalPluginInspectionRequest, signal: AbortSignal) => Promise<ExternalPluginInspection>;
   onCommitExternal?: (inspection: ExternalPluginInspection, signal: AbortSignal) => Promise<ExternalPluginCommitResult>;
   onLoadMarketDetail?: (pluginID: string, generation: number, signal?: AbortSignal) => Promise<PluginMarketDetail>;
@@ -84,6 +86,9 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const [mobileDetailOpen, setMobileDetailOpen] = createSignal(Boolean(props.selectedInventoryKey));
   const [externalDialogOpen, setExternalDialogOpen] = createSignal(false);
   const [officialInstallReviewItem, setOfficialInstallReviewItem] = createSignal<PluginInventoryItem>();
+  const [officialInstallInspection, setOfficialInstallInspection] = createSignal<OfficialPluginReleaseInspection>();
+  const [officialInstallReviewPending, setOfficialInstallReviewPending] = createSignal(false);
+  const [officialInstallReviewError, setOfficialInstallReviewError] = createSignal<string>();
   const [externalUpdateItem, setExternalUpdateItem] = createSignal<PluginInventoryItem | undefined>();
   const [externalSourcePreset, setExternalSourcePreset] = createSignal<ExternalPluginSourcePreset | undefined>();
   const [updateReviewItem, setUpdateReviewItem] = createSignal<PluginInventoryItem>();
@@ -111,6 +116,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     loading: boolean;
   }>();
   let marketDetailController: AbortController | undefined;
+  let officialInstallInspectionController: AbortController | undefined;
   const marketDetailCache = new Map<string, PluginMarketDetail>();
 
   const cancelDeferredPermissionsFocus = () => {
@@ -127,6 +133,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   onCleanup(() => {
     commandController?.abort('Plugin Center disposed');
     marketDetailController?.abort('Plugin Center disposed');
+    officialInstallInspectionController?.abort('Plugin Center disposed');
     cancelDeferredPermissionsFocus();
   });
 
@@ -403,17 +410,42 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   };
   const installItem = (item: PluginInventoryItem) => {
     if (item.officialCatalog) {
+      officialInstallInspectionController?.abort('Official installation inspection superseded');
+      const controller = new AbortController();
+      officialInstallInspectionController = controller;
       setOfficialInstallReviewItem(item);
+      setOfficialInstallInspection(undefined);
+      setOfficialInstallReviewError(undefined);
+      setOfficialInstallReviewPending(true);
+      void (props.onInspectOfficial?.(item, controller.signal)
+        ?? Promise.reject(new Error(i18n.t('uiCopy.plugin.external.inspectFailed'))))
+        .then((inspection) => {
+          if (officialInstallInspectionController === controller) setOfficialInstallInspection(inspection);
+        })
+        .catch((error: unknown) => {
+          if (!controller.signal.aborted && officialInstallInspectionController === controller) {
+            setOfficialInstallReviewError(messageFromUnknown(error) ?? undefined);
+          }
+        })
+        .finally(() => {
+          if (officialInstallInspectionController === controller) {
+            officialInstallInspectionController = undefined;
+            setOfficialInstallReviewPending(false);
+          }
+        });
       return;
     }
     openExternalDialog();
   };
   const confirmOfficialInstall = () => {
     const reviewed = officialInstallReviewItem();
-    if (!reviewed?.officialCatalog) return;
-    const approvedPermissionIDs = (reviewed.officialCatalog.permissions ?? [])
-      .map((permission) => permission.permissionID);
+    const inspection = officialInstallInspection();
+    if (!reviewed?.officialCatalog || !inspection || officialInstallReviewPending()) return;
+    const approvedPermissionIDs = [...new Set(inspection.security_summary.permissions
+      .map((permission) => permission.permission_id))];
     setOfficialInstallReviewItem(undefined);
+    setOfficialInstallInspection(undefined);
+    setOfficialInstallReviewError(undefined);
     void runCommand({
       type: 'install',
       pluginID: reviewed.pluginID,
@@ -719,8 +751,18 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       </div>
       <OfficialPluginInstallDialog
         item={officialInstallReviewItem()}
+        inspection={officialInstallInspection()}
+        pending={officialInstallReviewPending()}
+        error={officialInstallReviewError()}
         onOpenChange={(open) => {
-          if (!open) setOfficialInstallReviewItem(undefined);
+          if (!open) {
+            officialInstallInspectionController?.abort('Official installation review closed');
+            officialInstallInspectionController = undefined;
+            setOfficialInstallReviewItem(undefined);
+            setOfficialInstallInspection(undefined);
+            setOfficialInstallReviewPending(false);
+            setOfficialInstallReviewError(undefined);
+          }
         }}
         onConfirm={confirmOfficialInstall}
       />
@@ -801,11 +843,23 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
 
 function OfficialPluginInstallDialog(props: {
   item?: PluginInventoryItem;
+  inspection?: OfficialPluginReleaseInspection;
+  pending: boolean;
+  error?: string;
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
 }): JSX.Element {
   const i18n = useI18n();
-  const permissions = () => props.item?.officialCatalog?.permissions ?? [];
+  const permissions = () => (props.inspection?.security_summary.permissions ?? []).map((permission) => {
+    const catalogPermission = props.item?.officialCatalog?.permissions?.find(
+      (candidate) => candidate.permissionID === permission.permission_id,
+    );
+    return {
+      permissionID: permission.permission_id,
+      group: catalogPermission?.group ?? 'other' as const,
+      requiredToOpen: catalogPermission?.requiredToOpen ?? true,
+    };
+  });
   return (
     <Dialog
       open={Boolean(props.item)}
@@ -827,6 +881,7 @@ function OfficialPluginInstallDialog(props: {
             data-plugin-install-review-confirm
             class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90')}
             onClick={props.onConfirm}
+            disabled={props.pending || !props.inspection || Boolean(props.error)}
           >
             {i18n.t('uiCopy.plugin.external.confirmInstall')}
           </button>
@@ -837,6 +892,12 @@ function OfficialPluginInstallDialog(props: {
         {(item) => (
           <div data-plugin-install-review-dialog class="space-y-4">
             <PluginIdentityHeader item={item()} description />
+            <Show when={props.pending}>
+              <p class="text-sm text-muted-foreground">{i18n.t('uiCopy.plugin.external.inspecting')}</p>
+            </Show>
+            <Show when={props.error}>
+              {(error) => <p role="alert" class="text-sm text-destructive">{error()}</p>}
+            </Show>
             <section class="rounded-md border bg-muted/10 px-4 py-3">
               <h3 class="text-sm font-semibold">
                 {i18n.t('uiCopy.plugin.permissionsTitle', { plugin: item().displayName })}

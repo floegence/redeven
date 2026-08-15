@@ -13,9 +13,11 @@ Activity opens Shell-root windows; Workbench opens `redeven.plugin` widgets. The
 Activity Bar Launcher provides stable categories, keyboard navigation, search,
 and exact inventory routing, while Plugin Center presents trust, lifecycle,
 access, and launch state. External installs require explicit source review and
-Host confirmation; fresh installs start disabled with zero grants. Updates require a
-side-effect-free, target-bound review and retain Host-managed state and grants
-without adding any. Redeven owns navigation, review, placement, and filters;
+Host confirmation; fresh installs enable in the same Host transaction when all
+required permissions are approved, otherwise they remain disabled with an
+explicit attention result. Updates require a side-effect-free, target-bound
+review and retain Host-managed enable intent and grants without adding any.
+Redeven owns navigation, review, placement, and filters;
 ReDevPlugin owns admission, sandbox and bridge lifecycle, confirmations, Events,
 and revocation. Failed exact-surface close remains retryable without wider
 authority.

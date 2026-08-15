@@ -19,6 +19,7 @@ import type {
   ReDevPluginRecord,
   PluginMarketSnapshot,
   PluginMarketDetail,
+  OfficialPluginReleaseInspection,
 } from './pluginTypes';
 
 const INVENTORY_MARKET_TIMEOUT_MS = 5_000;
@@ -168,13 +169,30 @@ export function createPluginLifecycleAPI(
     }, options);
   };
 
+  const inspectOfficialRelease = async (
+    pluginID: string,
+    options: PluginRequestOptions = {},
+  ): Promise<OfficialPluginReleaseInspection> => {
+    const official = requireOfficialPlugin(officialByPluginID(), pluginID);
+    return client.inspectReleasePackage({
+      plugin_instance_id: official.pluginInstanceID,
+      release_ref: official.distribution.releaseRef,
+    }, options);
+  };
+
   const installExternalPackage = async (
     inspection: ExternalPluginInspection,
     options: PluginRequestOptions = {},
   ): Promise<ExternalPluginCommitResult> => {
+    const freshInstall = inspection.intent.action === 'install';
+    const approvedPermissionIDs = freshInstall
+      ? [...new Set(inspection.security_summary.permissions.map((permission) => permission.permission_id))]
+      : [];
     return client.installInspectedPackage({
       inspection_id: inspection.inspection_id,
       expected_package_sha256: inspection.inspected_hashes.package_sha256,
+      ...(freshInstall ? { activate_after_install: true } : {}),
+      ...(approvedPermissionIDs.length > 0 ? { approved_permission_ids: approvedPermissionIDs } : {}),
     }, options);
   };
 
@@ -364,6 +382,7 @@ export function createPluginLifecycleAPI(
     listInstalledPlugins,
     loadInventoryProjection,
     loadMarketDetail: loadPluginMarketDetail,
+    inspectOfficialRelease,
     inspectExternalPackage,
     installExternalPackage,
     installOfficialRelease,

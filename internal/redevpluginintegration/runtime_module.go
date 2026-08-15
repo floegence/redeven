@@ -12,14 +12,14 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/floegence/redevplugin/pkg/contracts"
 	"github.com/floegence/redevplugin/pkg/host"
 	"github.com/floegence/redevplugin/pkg/version"
 )
 
-const (
-	officialRuntimeVersion       = "1.1.3"
-	bundledRuntimeDescriptorName = ".redevplugin-release-artifacts-verified.json"
-)
+const bundledRuntimeDescriptorName = ".redevplugin-release-artifacts-verified.json"
+
+var officialRuntimeVersion = contracts.PackageSet().PlatformVersion
 
 type bundledRuntimeReleaseDescriptor struct {
 	SchemaVersion       string `json:"schema_version"`

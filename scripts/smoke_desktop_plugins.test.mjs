@@ -7,6 +7,7 @@ import {
   assessPluginSmoke,
   browserPages,
   isEnvAppPage,
+  releaseRefFromInstalledPlugin,
   waitFor,
 } from './smoke_desktop_plugins.mjs';
 
@@ -158,9 +159,52 @@ test('Desktop smoke installs through Plugin Center only for the initial isolated
   assert.match(source, /\[data-plugin-center-install\]/u);
   assert.match(source, /\[data-plugin-install-review-confirm\]/u);
   assert.match(source, /installedPlugins\(catalog\)\.length > 0/u);
-  assert.match(source, /\[data-plugin-center-card-primary\]/u);
-  assert.match(source, /official plugin enable action/u);
+  assert.doesNotMatch(source, /\[data-plugin-center-card-primary\]/u);
+  assert.doesNotMatch(source, /official plugin enable action/u);
+  assert.match(source, /official plugin installation did not finish enabled/u);
   assert.match(source, /cold restart started without an enabled plugin/u);
+});
+
+test('Desktop smoke reconstructs the exact signed release reference from Host-owned installed facts', () => {
+  assert.deepEqual(releaseRefFromInstalledPlugin({
+    package_hash: 'package-sha256',
+    manifest_hash: 'manifest-sha256',
+    entries_hash: 'entries-sha256',
+    release_trust_binding: {
+      source_id: 'official',
+      channel: 'stable',
+      release_metadata_ref: 'https://example.invalid/release.json',
+      release_metadata_sha256: 'release-sha256',
+      publisher_id: 'redeven',
+      plugin_id: 'containers',
+      version: '4.4.4',
+    },
+  }), {
+    source_id: 'official',
+    channel: 'stable',
+    release_metadata_ref: 'https://example.invalid/release.json',
+    release_metadata_sha256: 'release-sha256',
+    publisher_id: 'redeven',
+    plugin_id: 'containers',
+    version: '4.4.4',
+    expected_hashes: {
+      package_sha256: 'package-sha256',
+      manifest_sha256: 'manifest-sha256',
+      entries_sha256: 'entries-sha256',
+    },
+  });
+});
+
+test('Desktop smoke verifies user-disabled intent through a real signed release update', async () => {
+  const source = await import('node:fs/promises').then((fs) => fs.readFile(
+    new URL('./smoke_desktop_plugins.mjs', import.meta.url),
+    'utf8',
+  ));
+  assert.match(source, /\/_redevplugin\/api\/plugins\/disable/u);
+  assert.match(source, /\/_redevplugin\/api\/plugins\/update-release-ref/u);
+  assert.match(source, /plugin\?\.enable_state === 'disabled'/u);
+  assert.match(source, /disabled_update_intent: disabledUpdateIntent/u);
+  assert.match(source, /explicit re-enable before cold restart/u);
 });
 
 test('Desktop smoke uses the current Host-owned recovery route', async () => {
