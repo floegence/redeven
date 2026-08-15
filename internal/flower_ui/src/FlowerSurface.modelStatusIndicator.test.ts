@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const stylesPath = path.join(repoRoot, 'internal', 'flower_ui', 'src', 'styles', 'flower.css');
 const surfacePath = path.join(repoRoot, 'internal', 'flower_ui', 'src', 'FlowerSurface.tsx');
+const contextIndicatorPath = path.join(repoRoot, 'internal', 'flower_ui', 'src', 'chat', 'FlowerComposerContextIndicator.tsx');
 
 function flowerStyles(): string {
   return fs.readFileSync(stylesPath, 'utf8');
@@ -14,6 +15,10 @@ function flowerStyles(): string {
 
 function surfaceSource(): string {
   return fs.readFileSync(surfacePath, 'utf8');
+}
+
+function contextIndicatorSource(): string {
+  return fs.readFileSync(contextIndicatorPath, 'utf8');
 }
 
 function cssRule(css: string, selector: string): string {
@@ -82,7 +87,7 @@ describe('Flower model status indicator', () => {
     const indicatorRule = cssRule(css, '.flower-composer-context-indicator');
     const progressRule = cssRule(css, '.flower-composer-context-progress');
     const tooltipRule = cssRule(css, '.flower-composer-context-tooltip');
-    const percentRule = cssRule(css, '.flower-composer-context-percent');
+    const contextIndicator = contextIndicatorSource();
 
     expect(actionsRule).toContain('display: inline-flex');
     expect(actionsRule).toContain('justify-content: flex-end');
@@ -98,11 +103,17 @@ describe('Flower model status indicator', () => {
     expect(attachmentButtonIndex).toBeGreaterThan(toolClusterIndex);
     expect(moreButtonIndex).toBeGreaterThan(attachmentButtonIndex);
     expect(indicatorRule).toContain('position: relative');
-    expect(progressRule).toContain('width: 2.1rem');
-    expect(progressRule).toContain('height: 2.1rem');
+    expect(progressRule).toContain('width: 1.125rem');
+    expect(progressRule).toContain('height: 1.125rem');
+    expect(progressRule).toContain('flex: 0 0 1.125rem');
     expect(progressRule).toContain('conic-gradient');
     expect(progressRule).toContain('cursor: pointer');
-    expect(percentRule).toContain('font-size: 0.625rem');
+    expect(css).not.toContain('.flower-composer-context-percent');
+    expect(contextIndicator).not.toContain('view().percentLabel');
+    expect(contextIndicator).toContain('role="progressbar"');
+    expect(contextIndicator).toContain('aria-valuemin="0"');
+    expect(contextIndicator).toContain('aria-valuemax="100"');
+    expect(contextIndicator).toContain('aria-valuenow={view().progressValue ?? undefined}');
     expect(tooltipRule).toContain('opacity: 0');
     expect(css).toContain(".flower-composer-context-indicator[data-context-pressure='warning'] .flower-composer-context-progress");
     expect(css).toContain(".flower-composer-context-indicator[data-context-pressure='danger'] .flower-composer-context-progress");

@@ -1442,9 +1442,9 @@ html.dark .flower-component-shell {
   --flower-composer-context-track: color-mix(in srgb, var(--flower-chat-surface-border) 78%, var(--flower-chat-surface) 22%);
   display: inline-grid;
   position: relative;
-  width: 2.1rem;
-  height: 2.1rem;
-  flex: 0 0 2.1rem;
+  width: 1.125rem;
+  height: 1.125rem;
+  flex: 0 0 1.125rem;
   cursor: pointer;
   place-items: center;
   border-radius: 9999px;
@@ -1459,23 +1459,9 @@ html.dark .flower-component-shell {
 .flower-composer-context-progress::after {
   content: '';
   position: absolute;
-  inset: 0.24rem;
+  inset: 0.1875rem;
   border-radius: inherit;
   background: var(--flower-chat-surface);
-}
-
-.flower-composer-context-percent {
-  position: relative;
-  z-index: 1;
-  max-width: 1.55rem;
-  overflow: hidden;
-  color: inherit;
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 0.625rem;
-  font-weight: 760;
-  line-height: 1;
-  text-align: center;
-  white-space: nowrap;
 }
 
 .flower-composer-context-indicator[data-context-pressure='warning'] .flower-composer-context-progress {
@@ -4915,6 +4901,11 @@ html.dark .flower-component-shell {
   padding: 0.125rem 0 0.25rem 0.625rem;
 }
 
+.flower-activity-inline-details-content-terminal {
+  border-left: 0;
+  padding-left: 0;
+}
+
 .flower-activity-inline-detail-line + .flower-activity-inline-detail-line {
   margin-top: 0.125rem;
 }
@@ -5996,20 +5987,23 @@ html.dark .flower-component-shell {
 }
 
 .flower-thread-card {
-  border-color: transparent;
+  border: 0;
   background: transparent;
   color: var(--flower-thread-rail-foreground);
 }
 
 .flower-thread-card:hover {
-  transition: background-color 150ms ease, border-color 150ms ease;
-  border-color: color-mix(in srgb, var(--primary) 15%, var(--flower-thread-rail-control-border));
+  transition: background-color 150ms ease;
   background: color-mix(in srgb, var(--flower-thread-rail-accent) 72%, transparent);
 }
 
-.flower-thread-card-active {
-  border-color: color-mix(in srgb, var(--primary) 26%, var(--flower-thread-rail-control-border));
+.flower-thread-card-active,
+.flower-thread-card-active:hover {
   background: var(--flower-thread-rail-accent-strong);
+}
+
+.flower-thread-card-active .flower-thread-list-title {
+  color: color-mix(in srgb, var(--primary) 34%, var(--flower-thread-rail-foreground) 66%);
 }
 
 .flower-thread-list-title {
@@ -7066,11 +7060,6 @@ button.flower-attachment-preview-trigger:disabled {
   cursor: wait;
 }
 
-.flower-composer:focus-within {
-  border-color: color-mix(in srgb, var(--primary) 30%, var(--redeven-stroke-overlay, var(--border)) 70%);
-  transition: border-color 100ms ease;
-}
-
 .flower-composer-submit {
   width: 2.25rem;
   height: 2.25rem;
@@ -7154,12 +7143,6 @@ button.flower-attachment-preview-trigger:disabled {
   .flower-approval-surface .flower-approval-reject-batch {
     grid-column: 1 / -1;
     margin-right: 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .flower-composer:focus-within {
-    transition: none;
   }
 }
 

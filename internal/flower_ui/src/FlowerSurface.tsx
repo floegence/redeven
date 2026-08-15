@@ -7995,7 +7995,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             onTouchStart={disclosureControl.retainOpen}
           >
             <div class="flower-activity-inline-details-clip">
-              <div ref={disclosure.bindContent} class="flower-activity-inline-details-content">
+              <div
+                ref={disclosure.bindContent}
+                class={cn(
+                  'flower-activity-inline-details-content',
+                  terminalDisclosure() && 'flower-activity-inline-details-content-terminal',
+                )}
+              >
                 <Show when={item().approval_state === 'rejected' && !terminalDisclosure()}>
                   <div class="flower-activity-approval-rejected-detail">
                     {copy().chat.toolApprovalRejectedDetail}
