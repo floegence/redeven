@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { createEffect, createSignal } from 'solid-js';
+import { createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -141,7 +141,8 @@ vi.mock('@floegence/floe-webapp-protocol', () => ({
   ProtocolNotConnectedError: class extends Error {},
   RpcError: class extends Error {},
 }));
-vi.mock('@floegence/floe-webapp-core', () => ({
+vi.mock('@floegence/floe-webapp-core', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core')>(),
   useNotification: () => ({ error: vi.fn(), info: vi.fn(), success: vi.fn() }),
 }));
 vi.mock('../protocol/redeven_v1', () => ({
@@ -177,11 +178,122 @@ import {
   useTerminalSessionCatalog,
 } from './terminalSessionCatalog';
 import { deriveTerminalSessionChrome } from './terminalSessionChrome';
+import {
+  createTerminalTabActivityTracker,
+  observeTerminalSemanticWorkStates,
+  shouldMarkTerminalSessionUnread,
+  type TerminalTabVisualState,
+} from './terminalTabActivity';
+import {
+  TerminalSessionNavigator,
+  type TerminalSessionNavigationItem,
+} from '../widgets/TerminalSessionNavigator';
 
 function Consumer(props: { onValue: (value: ReturnType<typeof useTerminalSessionCatalog>) => void }) {
   const catalog = useTerminalSessionCatalog();
   createEffect(() => props.onValue(catalog));
   return null;
+}
+
+function SemanticAttentionNavigatorConsumer() {
+  const catalog = useTerminalSessionCatalog();
+  if (!catalog) throw new Error('terminal catalog provider is required');
+  const [panelHasFocus, setPanelHasFocus] = createSignal(false);
+  const [visualBySession, setVisualBySession] = createSignal<Readonly<Record<string, TerminalTabVisualState>>>({});
+  const tracker = createTerminalTabActivityTracker({
+    publishVisualState: (sessionId, state) => {
+      setVisualBySession((current) => ({ ...current, [sessionId]: state }));
+    },
+  });
+  onCleanup(() => tracker.dispose());
+
+  const shouldMarkUnread = (sessionId: string) => shouldMarkTerminalSessionUnread({
+    sessionExists: catalog.sessions().some((session) => session.id === sessionId),
+    sessionId,
+    activeSessionId: 's1',
+    terminalFocusOwner: true,
+    panelHasFocus: panelHasFocus(),
+  });
+  createEffect(() => {
+    observeTerminalSemanticWorkStates(catalog.sessions(), tracker, shouldMarkUnread);
+  });
+  createEffect(() => {
+    if (panelHasFocus()) tracker.clearUnread('s1');
+  });
+
+  const items = createMemo<TerminalSessionNavigationItem[]>(() => catalog.sessions().map((session) => {
+    const chrome = deriveTerminalSessionChrome({
+      session,
+      directoryTitle: session.name,
+      fallbackTitle: session.name,
+      unread: visualBySession()[session.id] === 'unread',
+    });
+    return {
+      id: session.id,
+      label: session.name,
+      title: chrome.title,
+      avatarInitial: 'T',
+      avatarTone: { background: '#111', border: '#222', foreground: '#fff' },
+      avatar: chrome.avatar,
+      subtitleIcon: chrome.subtitleIcon,
+      subtitle: chrome.subtitle,
+      fullPath: chrome.displayPath,
+      localWorkingDir: chrome.localWorkingDir,
+      transitionIndicator: 'none',
+      processRunning: chrome.processRunning,
+      transitionState: 'none',
+      failureKind: 'none',
+      outputState: chrome.status === 'wave' ? 'streaming' : 'none',
+      activitySource: chrome.status === 'wave' && chrome.statusSource === 'semantic' ? 'semantic' : 'none',
+      attentionState: chrome.attention,
+      remote: chrome.remote,
+      canBrowsePath: false,
+      filesAvailability: 'invalid',
+      canClear: true,
+      canDuplicate: false,
+      closable: true,
+    };
+  }));
+  const itemById = createMemo(() => new Map(items().map((item) => [item.id, item])));
+
+  return (
+    <div
+      data-testid="semantic-attention-consumer"
+      data-hydrated={catalog.hydrated() ? 'true' : 'false'}
+      data-error={catalog.error() ?? ''}
+    >
+      <button data-testid="terminal-reader" onFocus={() => setPanelHasFocus(true)}>Terminal reader</button>
+      <TerminalSessionNavigator
+        accessibilityIdPrefix="terminal-agent-unread"
+        mobile={false}
+        drawerOpen={false}
+        connected
+        refreshing={false}
+        activeTitle={items()[0]?.title ?? ''}
+        activeAvatar={items()[0]?.avatar ?? { kind: 'initial' }}
+        shortcutModLabel="Ctrl"
+        filterQuery=""
+        itemIds={items().map((item) => item.id)}
+        itemById={itemById()}
+        sidebarActiveSessionId="s1"
+        activeSessionId="s1"
+        copiedPathSessionId={null}
+        emptyListLoading={false}
+        onCloseDrawer={() => undefined}
+        onCreateSession={() => undefined}
+        onRefresh={() => undefined}
+        onFilterQueryChange={() => undefined}
+        onPreviewSession={() => undefined}
+        onResetSessionPreview={() => undefined}
+        onSelectSession={() => undefined}
+        onOpenKeyboardMenu={() => undefined}
+        onOpenContextMenu={() => undefined}
+        onCopyPath={() => undefined}
+        onCloseSession={() => undefined}
+        onOpenFiles={() => undefined}
+      />
+    </div>
+  );
 }
 
 describe('TerminalSessionCatalogProvider', () => {
@@ -249,6 +361,57 @@ describe('TerminalSessionCatalogProvider', () => {
     await vi.waitFor(() => expect(latest?.hydrated()).toBe(true));
     expect(latest.sessions().map((session: any) => session.id)).toEqual(['s1']);
     expect(rpcState.list).toHaveBeenCalledTimes(1);
+    dispose();
+  });
+
+  it('projects semantic Agent completion into Navigator unread attention until terminal focus', async () => {
+    rpcState.sessions = [{
+      ...rpcState.sessions[0],
+      foregroundCommand: { phase: 'running', displayName: 'codex', revision: 2, updatedAtMs: 20 },
+      executionContext: {
+        location: { kind: 'local', phase: 'ready', label: '', authority: '', workingDirectory: '/', source: 'shell_integration' },
+        application: { kind: 'agent_cli', identity: 'codex', displayName: 'Codex' },
+        revision: 3,
+        updatedAtMs: 30,
+      },
+      workState: {
+        phase: 'idle', source: 'semantic', contextRevision: 3,
+        foregroundCommandRevision: 2, revision: 4, updatedAtMs: 40,
+      },
+    }] as any;
+    rpcState.list.mockResolvedValue({ sessions: rpcState.sessions });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <TerminalSessionCatalogProvider>
+        <SemanticAttentionNavigatorConsumer />
+      </TerminalSessionCatalogProvider>
+    ), host);
+    await vi.waitFor(() => expect(rpcState.list).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect({
+      hydrated: host.querySelector('[data-testid="semantic-attention-consumer"]')?.getAttribute('data-hydrated'),
+      error: host.querySelector('[data-testid="semantic-attention-consumer"]')?.getAttribute('data-error'),
+    }).toEqual({ hydrated: 'true', error: '' }));
+    expect(host.querySelector('button[data-terminal-session-id="s1"]')).not.toBeNull();
+
+    rpcState.workStateHandler?.({
+      sessionId: 's1',
+      workState: {
+        phase: 'working', source: 'semantic', contextRevision: 3,
+        foregroundCommandRevision: 2, revision: 5, updatedAtMs: 50,
+      },
+    });
+    rpcState.workStateHandler?.({
+      sessionId: 's1',
+      workState: {
+        phase: 'idle', source: 'semantic', contextRevision: 3,
+        foregroundCommandRevision: 2, revision: 6, updatedAtMs: 60,
+      },
+    });
+    await vi.waitFor(() => expect(host.querySelector('[data-terminal-attention-state="unread"]')).not.toBeNull());
+
+    host.querySelector<HTMLButtonElement>('[data-testid="terminal-reader"]')?.focus();
+    await vi.waitFor(() => expect(host.querySelector('[data-terminal-attention-state="unread"]')).toBeNull());
     dispose();
   });
 

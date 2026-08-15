@@ -85,7 +85,13 @@ import {
 } from '../services/desktopShellBridge';
 import type { TerminalResolvedLinkTarget } from '../services/terminalLinkProvider';
 import type { TerminalShellIntegrationEvent } from '../services/terminalShellIntegration';
-import { createTerminalTabActivityTracker, type TerminalSessionWorkState, type TerminalTabVisualState } from '../services/terminalTabActivity';
+import {
+  createTerminalTabActivityTracker,
+  observeTerminalSemanticWorkStates,
+  shouldMarkTerminalSessionUnread,
+  type TerminalSessionWorkState,
+  type TerminalTabVisualState,
+} from '../services/terminalTabActivity';
 import {
   createTerminalForegroundPresentationScheduler,
   normalizeTerminalForegroundCommand,
@@ -1956,16 +1962,18 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const shouldMarkSessionUnread = (sessionId: string): boolean => {
     const normalizedSessionId = String(sessionId ?? '').trim();
-    if (!normalizedSessionId) {
-      return false;
-    }
-
-    if (!sessions().some((session) => session.id === normalizedSessionId)) {
-      return false;
-    }
-
-    return activeSessionId() !== normalizedSessionId || !terminalFocusOwner();
+    return shouldMarkTerminalSessionUnread({
+      sessionExists: sessions().some((session) => session.id === normalizedSessionId),
+      sessionId: normalizedSessionId,
+      activeSessionId: activeSessionId(),
+      terminalFocusOwner: terminalFocusOwner(),
+      panelHasFocus: panelHasFocus(),
+    });
   };
+
+  createEffect(() => {
+    observeTerminalSemanticWorkStates(sessions(), tabActivityTracker, shouldMarkSessionUnread);
+  });
 
   const handleShellIntegrationEvent = (
     sessionId: string,
@@ -3140,7 +3148,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   });
 
   createEffect(() => {
-    if (!terminalFocusOwner()) return;
+    if (!terminalFocusOwner() || !panelHasFocus()) return;
     const id = activeSessionId();
     if (!id) return;
     tabActivityTracker.clearUnread(id);

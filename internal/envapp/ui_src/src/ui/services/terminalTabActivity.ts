@@ -4,6 +4,29 @@ export type TerminalTabVisualState = 'none' | 'running' | 'unread';
 export type TerminalSessionWorkState = 'idle' | 'running' | 'active';
 type TerminalRecentActivityPhase = 'inactive' | 'grace' | 'output';
 
+export type TerminalSemanticWorkObservation = Readonly<{
+  executionContext?: Readonly<{
+    application?: Readonly<{ kind?: string }>;
+    revision?: number;
+  }>;
+  foregroundCommand?: Readonly<{ revision?: number }>;
+  workState?: Readonly<{
+    phase?: string;
+    source?: string;
+    contextRevision?: number;
+    foregroundCommandRevision?: number;
+    revision?: number;
+  }>;
+}>;
+
+type TerminalSemanticWorkRuntime = Readonly<{
+  contextRevision: number;
+  foregroundCommandRevision: number;
+  revision: number;
+  phase: 'idle' | 'working' | 'waiting_user';
+  observedWorking: boolean;
+}>;
+
 export type TerminalSessionActivityRuntime = {
   commandPhase: TerminalCommandPhase;
   programActivityPhase: TerminalProgramActivityPhase;
@@ -18,6 +41,7 @@ export type TerminalSessionActivityRuntime = {
   settledThroughSequence: number;
   recentActivityTimer: ReturnType<typeof setTimeout> | null;
   pendingOutputTimer: ReturnType<typeof setTimeout> | null;
+  semanticWork: TerminalSemanticWorkRuntime | null;
   visualState: TerminalTabVisualState;
   workState: TerminalSessionWorkState;
 };
@@ -38,6 +62,11 @@ export interface TerminalTabActivityTracker {
   handleCommandFinish: (sessionId: string, shouldMarkUnread: boolean) => void;
   handlePromptReady: (sessionId: string, shouldMarkUnread: boolean) => void;
   handleProgramActivity: (sessionId: string, phase: Exclude<TerminalProgramActivityPhase, 'unknown'>) => void;
+  handleSemanticWorkState: (
+    sessionId: string,
+    observation: TerminalSemanticWorkObservation,
+    shouldMarkUnread: boolean,
+  ) => void;
   handlePendingLiveOutput: (
     sessionId: string,
     opts: { sequence?: number; shouldMarkUnread: boolean },
@@ -54,6 +83,30 @@ export interface TerminalTabActivityTracker {
   handleVisibleOutput: (sessionId: string, opts: { source: 'history' | 'live'; byteLength: number; shouldMarkUnread: boolean }) => void;
   pruneSessions: (activeSessionIds: Set<string>) => void;
   dispose: () => void;
+}
+
+export function shouldMarkTerminalSessionUnread(input: Readonly<{
+  sessionExists: boolean;
+  sessionId: string;
+  activeSessionId: string | null;
+  terminalFocusOwner: boolean;
+  panelHasFocus: boolean;
+}>): boolean {
+  const sessionId = String(input.sessionId ?? '').trim();
+  if (!sessionId || !input.sessionExists) return false;
+  return input.activeSessionId !== sessionId
+    || !input.terminalFocusOwner
+    || !input.panelHasFocus;
+}
+
+export function observeTerminalSemanticWorkStates(
+  sessions: readonly (TerminalSemanticWorkObservation & Readonly<{ id: string }>)[],
+  tracker: Pick<TerminalTabActivityTracker, 'handleSemanticWorkState'>,
+  shouldMarkUnread: (sessionId: string) => boolean,
+): void {
+  for (const session of sessions) {
+    tracker.handleSemanticWorkState(session.id, session, shouldMarkUnread(session.id));
+  }
 }
 
 const DEFAULT_OUTPUT_ACTIVITY_GRACE_MS = 1_500;
@@ -75,6 +128,7 @@ function createEmptyRuntime(): TerminalSessionActivityRuntime {
     settledThroughSequence: 0,
     recentActivityTimer: null,
     pendingOutputTimer: null,
+    semanticWork: null,
     visualState: 'none',
     workState: 'idle',
   };
@@ -374,6 +428,72 @@ export function createTerminalTabActivityTracker(
         clearRecentActivityTimer(runtime);
         runtime.recentActivityPhase = 'inactive';
       }
+      publishIfNeeded(normalizedSessionId, runtime);
+    },
+
+    handleSemanticWorkState(
+      sessionId: string,
+      observation: TerminalSemanticWorkObservation,
+      shouldMarkUnread: boolean,
+    ) {
+      const normalizedSessionId = normalizeSessionId(sessionId);
+      if (!normalizedSessionId || observation.executionContext?.application?.kind !== 'agent_cli') {
+        return;
+      }
+      const contextRevision = observation.executionContext.revision;
+      const foregroundCommandRevision = observation.foregroundCommand?.revision;
+      const workState = observation.workState;
+      const revision = workState?.revision;
+      const phase = workState?.phase;
+      if (
+        workState?.source !== 'semantic'
+        || typeof contextRevision !== 'number'
+        || !Number.isSafeInteger(contextRevision)
+        || typeof foregroundCommandRevision !== 'number'
+        || !Number.isSafeInteger(foregroundCommandRevision)
+        || typeof revision !== 'number'
+        || !Number.isSafeInteger(revision)
+        || workState.contextRevision !== contextRevision
+        || workState.foregroundCommandRevision !== foregroundCommandRevision
+        || (phase !== 'idle' && phase !== 'working' && phase !== 'waiting_user')
+      ) {
+        return;
+      }
+
+      const runtime = getRuntime(normalizedSessionId);
+      if (!runtime) return;
+      const previous = runtime.semanticWork;
+      const sameFence = previous?.contextRevision === contextRevision
+        && previous.foregroundCommandRevision === foregroundCommandRevision;
+      if (previous && (
+        contextRevision < previous.contextRevision
+        || foregroundCommandRevision < previous.foregroundCommandRevision
+        || revision <= previous.revision
+      )) {
+        return;
+      }
+      if (!sameFence) {
+        runtime.semanticWork = {
+          contextRevision,
+          foregroundCommandRevision,
+          revision,
+          phase,
+          observedWorking: phase === 'working',
+        };
+        return;
+      }
+      if (!previous) return;
+
+      const completedRound = phase === 'idle' && previous.observedWorking;
+      runtime.semanticWork = {
+        contextRevision,
+        foregroundCommandRevision,
+        revision,
+        phase,
+        observedWorking: phase === 'working'
+          || (phase === 'waiting_user' && previous.observedWorking),
+      };
+      markUnread(runtime, completedRound && shouldMarkUnread);
       publishIfNeeded(normalizedSessionId, runtime);
     },
 

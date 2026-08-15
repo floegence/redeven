@@ -1,6 +1,41 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createTerminalTabActivityTracker } from './terminalTabActivity';
+import {
+  createTerminalTabActivityTracker,
+  observeTerminalSemanticWorkStates,
+  shouldMarkTerminalSessionUnread,
+} from './terminalTabActivity';
+
+function semanticSession(input: Readonly<{
+  identity?: 'pi' | 'claude' | 'codex';
+  phase: 'idle' | 'working' | 'waiting_user';
+  revision: number;
+  contextRevision?: number;
+  foregroundCommandRevision?: number;
+  applicationKind?: 'agent_cli' | 'shell';
+  source?: '' | 'semantic';
+}>) {
+  const contextRevision = input.contextRevision ?? 7;
+  const foregroundCommandRevision = input.foregroundCommandRevision ?? 11;
+  return {
+    executionContext: {
+      application: {
+        kind: input.applicationKind ?? 'agent_cli',
+        identity: input.identity ?? 'codex',
+        displayName: input.identity ?? 'codex',
+      },
+      revision: contextRevision,
+    },
+    foregroundCommand: { revision: foregroundCommandRevision },
+    workState: {
+      phase: input.phase,
+      source: input.source ?? 'semantic',
+      contextRevision,
+      foregroundCommandRevision,
+      revision: input.revision,
+    },
+  };
+}
 
 describe('createTerminalTabActivityTracker', () => {
   beforeEach(() => {
@@ -9,6 +44,144 @@ describe('createTerminalTabActivityTracker', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it.each(['pi', 'claude', 'codex'] as const)(
+    'marks a background %s Agent round unread only after semantic working completes',
+    (identity) => {
+      const published: string[] = [];
+      const tracker = createTerminalTabActivityTracker({
+        publishVisualState: (_sessionId, state) => published.push(state),
+      });
+
+      tracker.handleSemanticWorkState('session-1', semanticSession({ identity, phase: 'idle', revision: 1 }), true);
+      expect(published).toEqual([]);
+
+      tracker.handleSemanticWorkState('session-1', semanticSession({ identity, phase: 'working', revision: 2 }), true);
+      expect(published).toEqual([]);
+
+      tracker.handleSemanticWorkState('session-1', semanticSession({ identity, phase: 'idle', revision: 3 }), true);
+      expect(published).toEqual(['unread']);
+      tracker.dispose();
+    },
+  );
+
+  it('consumes a focused completion without unread and marks the next background round', () => {
+    const published: string[] = [];
+    const tracker = createTerminalTabActivityTracker({
+      publishVisualState: (_sessionId, state) => published.push(state),
+    });
+
+    tracker.handleSemanticWorkState('session-1', semanticSession({ phase: 'working', revision: 1 }), false);
+    tracker.handleSemanticWorkState('session-1', semanticSession({ phase: 'idle', revision: 2 }), false);
+    expect(published).toEqual([]);
+
+    tracker.handleSemanticWorkState('session-1', semanticSession({ phase: 'working', revision: 3 }), true);
+    tracker.handleSemanticWorkState('session-1', semanticSession({ phase: 'idle', revision: 4 }), true);
+    expect(published).toEqual(['unread']);
+
+    tracker.clearUnread('session-1');
+    expect(published).toEqual(['unread', 'none']);
+    tracker.dispose();
+  });
+
+  it('preserves completion eligibility through waiting_user without replacing waiting attention', () => {
+    const published: string[] = [];
+    const tracker = createTerminalTabActivityTracker({
+      publishVisualState: (_sessionId, state) => published.push(state),
+    });
+
+    tracker.handleSemanticWorkState('session-1', semanticSession({ phase: 'working', revision: 1 }), true);
+    tracker.handleSemanticWorkState('session-1', semanticSession({ phase: 'waiting_user', revision: 2 }), true);
+    expect(published).toEqual([]);
+
+    tracker.handleSemanticWorkState('session-1', semanticSession({ phase: 'idle', revision: 3 }), true);
+    expect(published).toEqual(['unread']);
+    tracker.dispose();
+  });
+
+  it('rejects stale, replayed, unfenced, and non-semantic completion observations', () => {
+    const published: string[] = [];
+    const tracker = createTerminalTabActivityTracker({
+      publishVisualState: (_sessionId, state) => published.push(state),
+    });
+
+    tracker.handleSemanticWorkState('session-1', semanticSession({ phase: 'working', revision: 5 }), true);
+    tracker.handleSemanticWorkState('session-1', semanticSession({ phase: 'idle', revision: 5 }), true);
+    tracker.handleSemanticWorkState('session-1', semanticSession({ phase: 'idle', revision: 4 }), true);
+    tracker.handleSemanticWorkState('session-1', {
+      ...semanticSession({ phase: 'idle', revision: 6 }),
+      workState: {
+        ...semanticSession({ phase: 'idle', revision: 6 }).workState,
+        contextRevision: 6,
+      },
+    }, true);
+    tracker.handleSemanticWorkState('session-1', semanticSession({
+      applicationKind: 'shell', phase: 'idle', revision: 6,
+    }), true);
+    tracker.handleSemanticWorkState('session-1', semanticSession({
+      phase: 'idle', revision: 6, source: '',
+    }), true);
+    expect(published).toEqual([]);
+
+    tracker.handleSemanticWorkState('session-1', semanticSession({
+      phase: 'working', revision: 1, contextRevision: 8,
+    }), true);
+    tracker.handleSemanticWorkState('session-1', semanticSession({
+      phase: 'idle', revision: 6, contextRevision: 8,
+    }), true);
+    expect(published).toEqual([]);
+    tracker.dispose();
+  });
+
+  it('does not treat ordinary terminal output quieting as an Agent completion', () => {
+    const published: string[] = [];
+    const tracker = createTerminalTabActivityTracker({
+      publishVisualState: (_sessionId, state) => published.push(state),
+      outputActivityQuietMs: 25,
+    });
+
+    tracker.handleSemanticWorkState('session-1', semanticSession({
+      applicationKind: 'shell', phase: 'working', revision: 1,
+    }), true);
+    tracker.handleVisibleOutput('session-1', { source: 'live', byteLength: 8, shouldMarkUnread: false });
+    vi.advanceTimersByTime(25);
+
+    expect(published).toEqual([]);
+    tracker.dispose();
+  });
+
+  it('requires actual terminal-panel focus before treating the active session as read', () => {
+    const base = {
+      sessionExists: true,
+      sessionId: 'session-1',
+      activeSessionId: 'session-1',
+      terminalFocusOwner: true,
+      panelHasFocus: true,
+    };
+
+    expect(shouldMarkTerminalSessionUnread(base)).toBe(false);
+    expect(shouldMarkTerminalSessionUnread({ ...base, panelHasFocus: false })).toBe(true);
+    expect(shouldMarkTerminalSessionUnread({ ...base, terminalFocusOwner: false })).toBe(true);
+    expect(shouldMarkTerminalSessionUnread({ ...base, activeSessionId: 'session-2' })).toBe(true);
+    expect(shouldMarkTerminalSessionUnread({ ...base, sessionExists: false })).toBe(false);
+  });
+
+  it('observes semantic work for a background session without a mounted Runtime', () => {
+    const published: Array<{ sessionId: string; state: string }> = [];
+    const tracker = createTerminalTabActivityTracker({
+      publishVisualState: (sessionId, state) => published.push({ sessionId, state }),
+    });
+
+    observeTerminalSemanticWorkStates([
+      { id: 'background-session', ...semanticSession({ phase: 'working', revision: 1 }) },
+    ], tracker, () => true);
+    observeTerminalSemanticWorkStates([
+      { id: 'background-session', ...semanticSession({ phase: 'idle', revision: 2 }) },
+    ], tracker, () => true);
+
+    expect(published).toEqual([{ sessionId: 'background-session', state: 'unread' }]);
+    tracker.dispose();
   });
 
   it('publishes only boundary transitions while repeated live output refreshes the quiet timer', () => {
