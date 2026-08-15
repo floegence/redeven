@@ -37,8 +37,6 @@ import type {
   FlowerTurnLaunchReceipt,
   FlowerActivityStatus,
   FlowerModelIOStatus,
-  FlowerContextCompaction,
-  FlowerTimelineDecoration,
   FlowerSubagentDetail,
   FlowerSubagentSummary,
   FlowerLiveStreamConnectInput,
