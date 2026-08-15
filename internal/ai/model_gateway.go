@@ -233,7 +233,14 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 		// json_schema requires an explicit schema. Avoid implicit downgrade here and let upper layers drive structured output.
 	}
 
-	inputItems, instructions := buildOpenAIInput(req.Messages)
+	aliases, err := newOpenAIProviderToolAliases(req.Tools, req.Messages)
+	if err != nil {
+		return ModelGatewayResult{}, err
+	}
+	inputItems, instructions, err := buildOpenAIInput(req.Messages, aliases)
+	if err != nil {
+		return ModelGatewayResult{}, err
+	}
 	if len(inputItems) == 0 {
 		inputItems = append(inputItems, oresponses.ResponseInputItemParamOfMessage("Continue.", oresponses.EasyInputMessageRoleUser))
 	}
@@ -241,7 +248,7 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 	if strings.TrimSpace(instructions) != "" {
 		params.Instructions = openai.String(strings.TrimSpace(instructions))
 	}
-	tools, aliasToReal := buildOpenAITools(req.Tools, p.strictToolSchema)
+	tools := buildOpenAITools(req.Tools, p.strictToolSchema, aliases)
 	if err := applyResponsesReasoning(&params, req.ProviderControls); err != nil {
 		return ModelGatewayResult{}, err
 	}
@@ -268,13 +275,18 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 		Args    map[string]any
 	}
 	partials := map[string]*partialCall{} // item_id -> partial
+	invalidProviderToolName := ""
 
 	emitStart := func(pc *partialCall) {
 		if pc == nil || pc.Started {
 			return
 		}
+		name := canonicalProviderToolName(pc.Name, aliases)
+		if strings.TrimSpace(pc.CallID) == "" || name == "" {
+			return
+		}
 		pc.Started = true
-		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallStart, ToolCall: &PartialToolCall{ID: strings.TrimSpace(pc.CallID), Name: canonicalProviderToolName(pc.Name, aliasToReal)}})
+		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallStart, ToolCall: &PartialToolCall{ID: strings.TrimSpace(pc.CallID), Name: name}})
 	}
 	emitDelta := func(pc *partialCall) {
 		if pc == nil {
@@ -289,10 +301,18 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 		if raw != "" {
 			_ = json.Unmarshal([]byte(raw), &args) // Streaming deltas may be incomplete; ignore parse failures.
 		}
-		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallDelta, ToolCall: &PartialToolCall{ID: strings.TrimSpace(pc.CallID), Name: canonicalProviderToolName(pc.Name, aliasToReal), ArgumentsJSON: raw, Arguments: cloneAnyMap(args)}})
+		name := canonicalProviderToolName(pc.Name, aliases)
+		if name == "" {
+			return
+		}
+		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallDelta, ToolCall: &PartialToolCall{ID: strings.TrimSpace(pc.CallID), Name: name, ArgumentsJSON: raw, Arguments: cloneAnyMap(args)}})
 	}
 	emitEnd := func(pc *partialCall, rawArgs string) {
 		if pc == nil || pc.Ended {
+			return
+		}
+		name := canonicalProviderToolName(pc.Name, aliases)
+		if name == "" || strings.TrimSpace(pc.CallID) == "" {
 			return
 		}
 		pc.Ended = true
@@ -303,7 +323,7 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 		}
 		pc.Args = args
 		emitStart(pc)
-		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallEnd, ToolCall: &PartialToolCall{ID: strings.TrimSpace(pc.CallID), Name: canonicalProviderToolName(pc.Name, aliasToReal), Arguments: cloneAnyMap(args)}})
+		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallEnd, ToolCall: &PartialToolCall{ID: strings.TrimSpace(pc.CallID), Name: name, Arguments: cloneAnyMap(args)}})
 	}
 
 	getPartial := func(itemID string) *partialCall {
@@ -345,7 +365,10 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 			if cid := strings.TrimSpace(item.CallID); cid != "" {
 				pc.CallID = cid
 			}
-			name := canonicalProviderToolName(item.Name, aliasToReal)
+			name := canonicalProviderToolName(item.Name, aliases)
+			if strings.TrimSpace(item.Name) != "" && name == "" {
+				invalidProviderToolName = strings.TrimSpace(item.Name)
+			}
 			if name != "" {
 				pc.Name = name
 			}
@@ -391,7 +414,10 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 			if cid := strings.TrimSpace(item.CallID); cid != "" {
 				pc.CallID = cid
 			}
-			name := canonicalProviderToolName(item.Name, aliasToReal)
+			name := canonicalProviderToolName(item.Name, aliases)
+			if strings.TrimSpace(item.Name) != "" && name == "" {
+				invalidProviderToolName = strings.TrimSpace(item.Name)
+			}
 			if name != "" {
 				pc.Name = name
 			}
@@ -407,6 +433,9 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 	}
 	if err := stream.Err(); err != nil {
 		return ModelGatewayResult{}, err
+	}
+	if invalidProviderToolName != "" {
+		return ModelGatewayResult{}, fmt.Errorf("provider returned unregistered tool name %q", invalidProviderToolName)
 	}
 	// Some OpenAI-compatible endpoints omit `response.completed` even when they have already
 	// streamed usable text or tool call deltas. Treat missing completion as a soft-failure
@@ -468,7 +497,7 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 		seen[id] = struct{}{}
 		ordered = append(ordered, orderedToolCall{
 			OutputIndex: pc.OutputIndex,
-			Call:        ToolCall{ID: id, Name: canonicalProviderToolName(pc.Name, aliasToReal), Args: cloneAnyMap(pc.Args)},
+			Call:        ToolCall{ID: id, Name: canonicalProviderToolName(pc.Name, aliases), Args: cloneAnyMap(pc.Args)},
 		})
 	}
 	sort.SliceStable(ordered, func(i, j int) bool {
@@ -505,7 +534,10 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 			if _, ok := seen[callID]; ok {
 				continue
 			}
-			toolName := canonicalProviderToolName(item.Name, aliasToReal)
+			toolName := canonicalProviderToolName(item.Name, aliases)
+			if toolName == "" {
+				return ModelGatewayResult{}, fmt.Errorf("provider returned unregistered tool name %q", strings.TrimSpace(item.Name))
+			}
 			rawArgs := strings.TrimSpace(item.Arguments)
 			args := map[string]any{}
 			if rawArgs != "" {
@@ -555,8 +587,15 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 		return ModelGatewayResult{}, errors.New("missing model")
 	}
 
+	aliases, err := newOpenAIProviderToolAliases(req.Tools, req.Messages)
+	if err != nil {
+		return ModelGatewayResult{}, err
+	}
 	capability := req.ProviderControls.ReasoningCapability.Normalize()
-	messages := buildOpenAIChatMessagesWithCapability(req.Messages, capability)
+	messages, err := buildOpenAIChatMessagesWithCapability(req.Messages, capability, aliases)
+	if err != nil {
+		return ModelGatewayResult{}, err
+	}
 	if len(messages) == 0 {
 		messages = append(messages, openai.UserMessage("Continue."))
 	}
@@ -586,7 +625,7 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 		params.ResponseFormat = openai.ChatCompletionNewParamsResponseFormatUnion{OfJSONObject: &obj}
 	}
 
-	tools, aliasToReal := buildOpenAIChatTools(req.Tools, p.strictToolSchema)
+	tools := buildOpenAIChatTools(req.Tools, p.strictToolSchema, aliases)
 	if err := applyChatReasoning(&params, req.ProviderControls); err != nil {
 		return ModelGatewayResult{}, err
 	}
@@ -614,6 +653,7 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 	}
 	partials := map[int64]*partialCall{}
 	order := make([]int64, 0, 2)
+	invalidProviderToolName := ""
 	getPartial := func(index int64) *partialCall {
 		if pc := partials[index]; pc != nil {
 			return pc
@@ -637,7 +677,7 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 			return
 		}
 		callID := ensureCallID(pc)
-		name := canonicalProviderToolName(pc.Name, aliasToReal)
+		name := canonicalProviderToolName(pc.Name, aliases)
 		if callID == "" || name == "" {
 			return
 		}
@@ -649,7 +689,7 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 			return
 		}
 		callID := ensureCallID(pc)
-		name := canonicalProviderToolName(pc.Name, aliasToReal)
+		name := canonicalProviderToolName(pc.Name, aliases)
 		if callID == "" || name == "" {
 			return
 		}
@@ -666,7 +706,7 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 			return
 		}
 		callID := ensureCallID(pc)
-		name := canonicalProviderToolName(pc.Name, aliasToReal)
+		name := canonicalProviderToolName(pc.Name, aliases)
 		if callID == "" || name == "" {
 			return
 		}
@@ -711,7 +751,10 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 				if id := strings.TrimSpace(tc.ID); id != "" {
 					pc.CallID = id
 				}
-				name := canonicalProviderToolName(tc.Function.Name, aliasToReal)
+				name := canonicalProviderToolName(tc.Function.Name, aliases)
+				if strings.TrimSpace(tc.Function.Name) != "" && name == "" {
+					invalidProviderToolName = strings.TrimSpace(tc.Function.Name)
+				}
 				if name != "" {
 					pc.Name = name
 				}
@@ -727,6 +770,9 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 	if err := stream.Err(); err != nil {
 		return ModelGatewayResult{}, err
 	}
+	if invalidProviderToolName != "" {
+		return ModelGatewayResult{}, fmt.Errorf("provider returned unregistered tool name %q", invalidProviderToolName)
+	}
 
 	sort.SliceStable(order, func(i, j int) bool { return order[i] < order[j] })
 	for _, idx := range order {
@@ -738,7 +784,7 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 		if !pc.Ended {
 			continue
 		}
-		result.ToolCalls = append(result.ToolCalls, ToolCall{ID: ensureCallID(pc), Name: canonicalProviderToolName(pc.Name, aliasToReal), Args: cloneAnyMap(pc.Args)})
+		result.ToolCalls = append(result.ToolCalls, ToolCall{ID: ensureCallID(pc), Name: canonicalProviderToolName(pc.Name, aliases), Args: cloneAnyMap(pc.Args)})
 	}
 	result.Text = strings.TrimSpace(textBuf.String())
 	result.Reasoning = reasoningBuf.String()
@@ -773,7 +819,14 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 		return ModelGatewayResult{}, errors.New("missing model")
 	}
 
-	messages := buildOpenAIChatMessagesWithCapability(req.Messages, req.ProviderControls.ReasoningCapability)
+	aliases, err := newOpenAIProviderToolAliases(req.Tools, req.Messages)
+	if err != nil {
+		return ModelGatewayResult{}, err
+	}
+	messages, err := buildOpenAIChatMessagesWithCapability(req.Messages, req.ProviderControls.ReasoningCapability, aliases)
+	if err != nil {
+		return ModelGatewayResult{}, err
+	}
 	if len(messages) == 0 {
 		messages = append(messages, openai.UserMessage("Continue."))
 	}
@@ -805,7 +858,7 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 		// json_schema requires an explicit schema; leave unset and let upper layers decide.
 	}
 
-	tools, aliasToReal := buildOpenAIChatTools(req.Tools, p.strictToolSchema)
+	tools := buildOpenAIChatTools(req.Tools, p.strictToolSchema, aliases)
 	if err := applyChatReasoning(&params, req.ProviderControls); err != nil {
 		return ModelGatewayResult{}, err
 	}
@@ -835,6 +888,7 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 
 	partials := map[int64]*partialCall{}
 	order := make([]int64, 0, 2)
+	invalidProviderToolName := ""
 	getPartial := func(index int64) *partialCall {
 		if pc := partials[index]; pc != nil {
 			return pc
@@ -858,7 +912,7 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 			return
 		}
 		callID := ensureCallID(pc)
-		name := canonicalProviderToolName(pc.Name, aliasToReal)
+		name := canonicalProviderToolName(pc.Name, aliases)
 		if callID == "" || name == "" {
 			return
 		}
@@ -876,7 +930,7 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 			return
 		}
 		callID := ensureCallID(pc)
-		name := canonicalProviderToolName(pc.Name, aliasToReal)
+		name := canonicalProviderToolName(pc.Name, aliases)
 		if callID == "" || name == "" {
 			return
 		}
@@ -901,7 +955,7 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 			return
 		}
 		callID := ensureCallID(pc)
-		name := canonicalProviderToolName(pc.Name, aliasToReal)
+		name := canonicalProviderToolName(pc.Name, aliases)
 		if callID == "" || name == "" {
 			return
 		}
@@ -956,7 +1010,10 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 				if id := strings.TrimSpace(tc.ID); id != "" {
 					pc.CallID = id
 				}
-				name := canonicalProviderToolName(tc.Function.Name, aliasToReal)
+				name := canonicalProviderToolName(tc.Function.Name, aliases)
+				if strings.TrimSpace(tc.Function.Name) != "" && name == "" {
+					invalidProviderToolName = strings.TrimSpace(tc.Function.Name)
+				}
 				if name != "" {
 					pc.Name = name
 				}
@@ -972,6 +1029,9 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 	if err := stream.Err(); err != nil {
 		return ModelGatewayResult{}, err
 	}
+	if invalidProviderToolName != "" {
+		return ModelGatewayResult{}, fmt.Errorf("provider returned unregistered tool name %q", invalidProviderToolName)
+	}
 
 	sort.SliceStable(order, func(i, j int) bool { return order[i] < order[j] })
 	for _, idx := range order {
@@ -985,7 +1045,7 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 		}
 		result.ToolCalls = append(result.ToolCalls, ToolCall{
 			ID:   ensureCallID(pc),
-			Name: canonicalProviderToolName(pc.Name, aliasToReal),
+			Name: canonicalProviderToolName(pc.Name, aliases),
 			Args: cloneAnyMap(pc.Args),
 		})
 	}
@@ -1018,7 +1078,14 @@ func (p *moonshotProvider) Turn(ctx context.Context, req ModelGatewayRequest) (M
 		return ModelGatewayResult{}, errors.New("missing model")
 	}
 
-	messages := buildOpenAIChatMessagesWithCapability(req.Messages, req.ProviderControls.ReasoningCapability)
+	aliases, err := newOpenAIProviderToolAliases(req.Tools, req.Messages)
+	if err != nil {
+		return ModelGatewayResult{}, err
+	}
+	messages, err := buildOpenAIChatMessagesWithCapability(req.Messages, req.ProviderControls.ReasoningCapability, aliases)
+	if err != nil {
+		return ModelGatewayResult{}, err
+	}
 	if len(messages) == 0 {
 		messages = append(messages, openai.UserMessage("Continue."))
 	}
@@ -1046,7 +1113,7 @@ func (p *moonshotProvider) Turn(ctx context.Context, req ModelGatewayRequest) (M
 		obj := oshared.NewResponseFormatJSONObjectParam()
 		params.ResponseFormat = openai.ChatCompletionNewParamsResponseFormatUnion{OfJSONObject: &obj}
 	}
-	tools, aliasToReal := buildOpenAIChatTools(req.Tools, p.strictToolSchema)
+	tools := buildOpenAIChatTools(req.Tools, p.strictToolSchema, aliases)
 	if err := applyChatReasoning(&params, req.ProviderControls); err != nil {
 		return ModelGatewayResult{}, err
 	}
@@ -1076,7 +1143,10 @@ func (p *moonshotProvider) Turn(ctx context.Context, req ModelGatewayRequest) (M
 	result.Text = strings.TrimSpace(choice.Message.Content)
 	result.Reasoning = strings.TrimSpace(extractMoonshotReasoningJSON(choice.Message.RawJSON()))
 	for _, tc := range choice.Message.ToolCalls {
-		name := canonicalProviderToolName(tc.Function.Name, aliasToReal)
+		name := canonicalProviderToolName(tc.Function.Name, aliases)
+		if name == "" {
+			return ModelGatewayResult{}, fmt.Errorf("provider returned unregistered tool name %q", strings.TrimSpace(tc.Function.Name))
+		}
 		args := map[string]any{}
 		rawArgs := strings.TrimSpace(tc.Function.Arguments)
 		if rawArgs != "" {
@@ -1100,9 +1170,8 @@ func (p *moonshotProvider) Turn(ctx context.Context, req ModelGatewayRequest) (M
 	return result, nil
 }
 
-func buildOpenAIChatTools(defs []ToolDef, strict bool) ([]openai.ChatCompletionToolParam, map[string]string) {
+func buildOpenAIChatTools(defs []ToolDef, strict bool, aliases providerToolAliases) []openai.ChatCompletionToolParam {
 	out := make([]openai.ChatCompletionToolParam, 0, len(defs))
-	aliasToReal := make(map[string]string, len(defs))
 	for _, def := range defs {
 		name := strings.TrimSpace(def.Name)
 		if name == "" {
@@ -1112,7 +1181,7 @@ func buildOpenAIChatTools(defs []ToolDef, strict bool) ([]openai.ChatCompletionT
 		if len(def.InputSchema) > 0 {
 			_ = json.Unmarshal(def.InputSchema, &schema)
 		}
-		alias := sanitizeProviderToolName(name)
+		alias := aliases.wireName(name)
 		fn := oshared.FunctionDefinitionParam{
 			Name:        alias,
 			Description: openai.String(strings.TrimSpace(def.Description)),
@@ -1122,9 +1191,8 @@ func buildOpenAIChatTools(defs []ToolDef, strict bool) ([]openai.ChatCompletionT
 			fn.Parameters = oshared.FunctionParameters(schema)
 		}
 		out = append(out, openai.ChatCompletionToolParam{Function: fn})
-		aliasToReal[alias] = name
 	}
-	return out, aliasToReal
+	return out
 }
 
 func applyResponsesReasoning(params *oresponses.ResponseNewParams, controls ProviderControls) error {
@@ -1310,7 +1378,7 @@ func openAIResponsesToolOverride(v map[string]any) oresponses.ToolUnionParam {
 	return param.Override[oresponses.ToolUnionParam](json.RawMessage(b))
 }
 
-func buildOpenAIChatMessagesWithCapability(messages []Message, capability config.AIReasoningCapability) []openai.ChatCompletionMessageParamUnion {
+func buildOpenAIChatMessagesWithCapability(messages []Message, capability config.AIReasoningCapability, aliases providerToolAliases) ([]openai.ChatCompletionMessageParamUnion, error) {
 	capability = capability.Normalize()
 	replayReasoning := reasoningCapabilityContains(capability.HistoryReplayRequirements, "reasoning_content")
 	out := make([]openai.ChatCompletionMessageParamUnion, 0, len(messages)+2)
@@ -1380,13 +1448,10 @@ func buildOpenAIChatMessagesWithCapability(messages []Message, capability config
 					if callID == "" {
 						callID = fmt.Sprintf("assistant_call_%d", len(toolCalls)+1)
 					}
-					name := strings.TrimSpace(part.ToolName)
+					name := contentPartToolName(part)
+					name = aliases.wireName(name)
 					if name == "" {
-						name = strings.TrimSpace(part.Text)
-					}
-					name = sanitizeProviderToolName(name)
-					if name == "" {
-						continue
+						return nil, fmt.Errorf("assistant history references unregistered tool %q", strings.TrimSpace(part.ToolName))
 					}
 					argsRaw := strings.TrimSpace(part.ArgsJSON)
 					if argsRaw == "" && len(part.JSON) > 0 {
@@ -1461,7 +1526,7 @@ func buildOpenAIChatMessagesWithCapability(messages []Message, capability config
 			out = append(out, openai.UserMessage(contentParts))
 		}
 	}
-	return out
+	return out, nil
 }
 
 func reasoningCapabilityContains(values []string, want string) bool {
@@ -1574,9 +1639,8 @@ func emitProviderEvent(onEvent func(StreamEvent), event StreamEvent) {
 	}
 }
 
-func buildOpenAITools(defs []ToolDef, strict bool) ([]oresponses.ToolUnionParam, map[string]string) {
+func buildOpenAITools(defs []ToolDef, strict bool, aliases providerToolAliases) []oresponses.ToolUnionParam {
 	out := make([]oresponses.ToolUnionParam, 0, len(defs))
-	aliasToReal := make(map[string]string, len(defs))
 	for _, def := range defs {
 		if strings.TrimSpace(def.Name) == "" {
 			continue
@@ -1585,14 +1649,13 @@ func buildOpenAITools(defs []ToolDef, strict bool) ([]oresponses.ToolUnionParam,
 		if len(def.InputSchema) > 0 {
 			_ = json.Unmarshal(def.InputSchema, &schema)
 		}
-		alias := sanitizeProviderToolName(def.Name)
+		alias := aliases.wireName(def.Name)
 		out = append(out, oresponses.ToolParamOfFunction(alias, schema, strict))
-		aliasToReal[alias] = def.Name
 	}
-	return out, aliasToReal
+	return out
 }
 
-func buildOpenAIInput(messages []Message) (oresponses.ResponseInputParam, string) {
+func buildOpenAIInput(messages []Message, aliases providerToolAliases) (oresponses.ResponseInputParam, string, error) {
 	items := make(oresponses.ResponseInputParam, 0, len(messages)+2)
 	instructions := ""
 	for _, msg := range messages {
@@ -1634,11 +1697,8 @@ func buildOpenAIInput(messages []Message) (oresponses.ResponseInputParam, string
 				if callID == "" {
 					return
 				}
-				name := strings.TrimSpace(part.ToolName)
-				if name == "" {
-					name = strings.TrimSpace(part.Text)
-				}
-				name = sanitizeProviderToolName(name)
+				name := contentPartToolName(part)
+				name = aliases.wireName(name)
 				if name == "" {
 					return
 				}
@@ -1745,7 +1805,14 @@ func buildOpenAIInput(messages []Message) (oresponses.ResponseInputParam, string
 			flushMessage()
 		}
 	}
-	return items, instructions
+	for _, msg := range messages {
+		for _, part := range msg.Content {
+			if strings.EqualFold(strings.TrimSpace(part.Type), "tool_call") && aliases.wireName(contentPartToolName(part)) == "" {
+				return nil, "", fmt.Errorf("assistant history references unregistered tool %q", contentPartToolName(part))
+			}
+		}
+	}
+	return items, instructions, nil
 }
 
 func extractDataURLBase64(raw string) (string, bool) {
@@ -1781,7 +1848,7 @@ func (p *anthropicProvider) StreamTurn(ctx context.Context, req ModelGatewayRequ
 	if err := validateGatewayAttachmentParts(req.Messages, "anthropic"); err != nil {
 		return ModelGatewayResult{}, err
 	}
-	tools, aliasToReal := buildAnthropicTools(req.Tools)
+	tools := buildAnthropicTools(req.Tools)
 	params := anthropic.MessageNewParams{
 		Model:     anthropic.Model(strings.TrimSpace(req.Model)),
 		MaxTokens: modelGatewayDefaultMaxOutputTokens,
@@ -1826,7 +1893,7 @@ func (p *anthropicProvider) StreamTurn(ctx context.Context, req ModelGatewayRequ
 			return
 		}
 		pc.Started = true
-		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallStart, ToolCall: &PartialToolCall{ID: strings.TrimSpace(pc.ID), Name: canonicalProviderToolName(pc.Name, aliasToReal)}})
+		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallStart, ToolCall: &PartialToolCall{ID: strings.TrimSpace(pc.ID), Name: strings.TrimSpace(pc.Name)}})
 	}
 	emitDelta := func(pc *partialCall) {
 		if pc == nil {
@@ -1841,7 +1908,7 @@ func (p *anthropicProvider) StreamTurn(ctx context.Context, req ModelGatewayRequ
 		if raw != "" {
 			_ = json.Unmarshal([]byte(raw), &args) // Streaming deltas may be incomplete; ignore parse failures.
 		}
-		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallDelta, ToolCall: &PartialToolCall{ID: strings.TrimSpace(pc.ID), Name: canonicalProviderToolName(pc.Name, aliasToReal), ArgumentsJSON: raw, Arguments: cloneAnyMap(args)}})
+		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallDelta, ToolCall: &PartialToolCall{ID: strings.TrimSpace(pc.ID), Name: strings.TrimSpace(pc.Name), ArgumentsJSON: raw, Arguments: cloneAnyMap(args)}})
 	}
 	emitEnd := func(pc *partialCall, rawArgs string) {
 		if pc == nil || pc.Ended {
@@ -1855,7 +1922,7 @@ func (p *anthropicProvider) StreamTurn(ctx context.Context, req ModelGatewayRequ
 		}
 		pc.Args = args
 		emitStart(pc)
-		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallEnd, ToolCall: &PartialToolCall{ID: strings.TrimSpace(pc.ID), Name: canonicalProviderToolName(pc.Name, aliasToReal), Arguments: cloneAnyMap(args)}})
+		emitProviderEvent(onEvent, StreamEvent{Type: StreamEventToolCallEnd, ToolCall: &PartialToolCall{ID: strings.TrimSpace(pc.ID), Name: strings.TrimSpace(pc.Name), Arguments: cloneAnyMap(args)}})
 	}
 
 	for stream.Next() {
@@ -1872,7 +1939,7 @@ func (p *anthropicProvider) StreamTurn(ctx context.Context, req ModelGatewayRequ
 			if callID == "" {
 				callID = fmt.Sprintf("anthropic_call_%d", len(partials)+1)
 			}
-			toolName := canonicalProviderToolName(variant.ContentBlock.Name, aliasToReal)
+			toolName := strings.TrimSpace(variant.ContentBlock.Name)
 			pc := &partialCall{Index: variant.Index, ID: callID, Name: toolName}
 			partials[variant.Index] = pc
 			emitStart(pc)
@@ -1959,7 +2026,7 @@ func (p *anthropicProvider) StreamTurn(ctx context.Context, req ModelGatewayRequ
 			continue
 		}
 		seen[id] = struct{}{}
-		result.ToolCalls = append(result.ToolCalls, ToolCall{ID: id, Name: canonicalProviderToolName(pc.Name, aliasToReal), Args: cloneAnyMap(pc.Args)})
+		result.ToolCalls = append(result.ToolCalls, ToolCall{ID: id, Name: strings.TrimSpace(pc.Name), Args: cloneAnyMap(pc.Args)})
 	}
 
 	for _, block := range msg.Content {
@@ -1980,7 +2047,7 @@ func (p *anthropicProvider) StreamTurn(ctx context.Context, req ModelGatewayRequ
 			if _, ok := seen[callID]; ok {
 				continue
 			}
-			toolName := canonicalProviderToolName(variant.Name, aliasToReal)
+			toolName := strings.TrimSpace(variant.Name)
 			call := ToolCall{ID: callID, Name: toolName, Args: args}
 			result.ToolCalls = append(result.ToolCalls, call)
 			raw := ""
@@ -2000,9 +2067,8 @@ func (p *anthropicProvider) StreamTurn(ctx context.Context, req ModelGatewayRequ
 	return result, nil
 }
 
-func buildAnthropicTools(defs []ToolDef) ([]anthropic.ToolUnionParam, map[string]string) {
+func buildAnthropicTools(defs []ToolDef) []anthropic.ToolUnionParam {
 	out := make([]anthropic.ToolUnionParam, 0, len(defs))
-	aliasToReal := make(map[string]string, len(defs))
 	for _, def := range defs {
 		name := strings.TrimSpace(def.Name)
 		if name == "" {
@@ -2014,15 +2080,14 @@ func buildAnthropicTools(defs []ToolDef) ([]anthropic.ToolUnionParam, map[string
 		}
 		required, _ := toStringSlice(schemaMap["required"])
 		param := anthropic.ToolParam{
-			Name:        sanitizeProviderToolName(name),
+			Name:        name,
 			Description: anthropic.String(strings.TrimSpace(def.Description)),
 			InputSchema: anthropic.ToolInputSchemaParam{Type: "object", Properties: schemaMap["properties"], Required: required},
 			Strict:      anthropic.Bool(true),
 		}
-		aliasToReal[sanitizeProviderToolName(name)] = name
 		out = append(out, anthropic.ToolUnionParam{OfTool: &param})
 	}
-	return out, aliasToReal
+	return out
 }
 
 func buildAnthropicMessages(messages []Message) []anthropic.MessageParam {
@@ -3116,7 +3181,76 @@ func mapAnthropicStopReason(reason anthropic.StopReason) string {
 	}
 }
 
-func sanitizeProviderToolName(name string) string {
+type providerToolAliases struct {
+	canonicalToWire map[string]string
+	wireToCanonical map[string]string
+}
+
+func newOpenAIProviderToolAliases(defs []ToolDef, histories ...[]Message) (providerToolAliases, error) {
+	aliases := providerToolAliases{
+		canonicalToWire: make(map[string]string, len(defs)),
+		wireToCanonical: make(map[string]string, len(defs)),
+	}
+	register := func(canonical string) error {
+		canonical = strings.TrimSpace(canonical)
+		if canonical == "" {
+			return nil
+		}
+		switch canonical {
+		case "terminal_exec", "terminal_read", "terminal_write", "terminal_terminate":
+			return fmt.Errorf("tool name %q is not canonical; use the dotted terminal name", canonical)
+		}
+		wire := openAIWireToolName(canonical)
+		if existing, ok := aliases.wireToCanonical[wire]; ok && existing != canonical {
+			return fmt.Errorf("OpenAI tool alias %q collides for %q and %q", wire, existing, canonical)
+		}
+		aliases.canonicalToWire[canonical] = wire
+		aliases.wireToCanonical[wire] = canonical
+		return nil
+	}
+	for _, def := range defs {
+		if err := register(def.Name); err != nil {
+			return providerToolAliases{}, err
+		}
+	}
+	for _, messages := range histories {
+		for _, msg := range messages {
+			for _, part := range msg.Content {
+				if !strings.EqualFold(strings.TrimSpace(part.Type), "tool_call") {
+					continue
+				}
+				if err := register(contentPartToolName(part)); err != nil {
+					return providerToolAliases{}, err
+				}
+			}
+		}
+	}
+	return aliases, nil
+}
+
+func contentPartToolName(part ContentPart) string {
+	if name := strings.TrimSpace(part.ToolName); name != "" {
+		return name
+	}
+	return strings.TrimSpace(part.Text)
+}
+
+func (a providerToolAliases) wireName(canonical string) string {
+	return a.canonicalToWire[strings.TrimSpace(canonical)]
+}
+
+func (a providerToolAliases) canonicalName(wire string) string {
+	wire = strings.TrimSpace(wire)
+	if canonical := a.wireToCanonical[wire]; canonical != "" {
+		return canonical
+	}
+	if _, ok := a.canonicalToWire[wire]; ok {
+		return wire
+	}
+	return ""
+}
+
+func openAIWireToolName(name string) string {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return ""
@@ -3149,15 +3283,8 @@ func sanitizeProviderToolName(name string) string {
 	return out
 }
 
-func canonicalProviderToolName(name string, aliasToReal map[string]string) string {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return ""
-	}
-	if realName, ok := aliasToReal[name]; ok {
-		return strings.TrimSpace(realName)
-	}
-	return name
+func canonicalProviderToolName(name string, aliases providerToolAliases) string {
+	return aliases.canonicalName(name)
 }
 
 func toStringSlice(raw any) ([]string, bool) {
