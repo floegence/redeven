@@ -19,6 +19,7 @@ import (
 	"github.com/floegence/floret/v4/identity"
 	"github.com/floegence/floret/v4/observation"
 	flruntime "github.com/floegence/floret/v4/runtime"
+	fltools "github.com/floegence/floret/v4/tools"
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
@@ -53,7 +54,7 @@ type taskResult struct {
 	EvidencePaths       []string             `json:"evidence_paths,omitempty"`
 
 	rawThread    *ai.ThreadView      `json:"-"`
-	rawTodos     *ai.ThreadTodosView `json:"-"`
+	rawTodos     *todoSnapshot       `json:"-"`
 	rawToolCalls []canonicalToolCall `json:"-"`
 }
 
@@ -154,11 +155,13 @@ func observeTypedTurn(current flruntime.ThreadView, turnID identity.TurnID) type
 	}
 	if current.TurnID == turnID && current.Activity == flruntime.ThreadActivityIdle {
 		result.Terminal = true
-		switch current.Outcome {
-		case flruntime.TurnOutcomeFailed:
-			result.RunError = "turn failed"
-		case flruntime.TurnOutcomeCancelled:
-			result.RunError = "turn cancelled"
+		if current.LastOutcome != nil {
+			switch *current.LastOutcome {
+			case flruntime.TurnOutcomeFailed:
+				result.RunError = "turn failed"
+			case flruntime.TurnOutcomeCancelled, flruntime.TurnOutcomeInterrupted:
+				result.RunError = "turn cancelled"
+			}
 		}
 	}
 	return result
@@ -471,10 +474,11 @@ func runTask(
 		turns = append(turns, metrics)
 	}
 
-	threadView, _ := svc.GetThread(context.Background(), meta, thread.ThreadID)
-	todoView, todoErr := svc.GetThreadTodos(context.Background(), meta, thread.ThreadID)
-	if todoErr != nil {
-		todoView = nil
+	var threadView *ai.ThreadView
+	var todoView *todoSnapshot
+	if detail, detailErr := svc.GetFlowerThreadDetail(context.Background(), meta, thread.ThreadID); detailErr == nil && detail != nil {
+		threadView = &detail.Thread
+		todoView = extractTodoSnapshot(detail.Current)
 	}
 	toolCalls := loadCanonicalToolCalls(context.Background(), svc, meta, thread.ThreadID)
 
@@ -763,7 +767,44 @@ func canonicalToolStatusFailed(status string) bool {
 	}
 }
 
-func buildTodoSnapshotSummary(view *ai.ThreadTodosView) *todoSnapshotSummary {
+type todoSnapshot struct {
+	Version         int64
+	UpdatedAtUnixMs int64
+	Todos           []ai.TodoItem
+}
+
+func extractTodoSnapshot(view flruntime.ThreadView) *todoSnapshot {
+	for index := len(view.Items) - 1; index >= 0; index-- {
+		item := view.Items[index]
+		if item.Activity == nil || item.Activity.Presentation == nil {
+			continue
+		}
+		presentation := item.Activity.Presentation
+		if presentation.Renderer != fltools.ActivityRendererTodos {
+			continue
+		}
+		payload, ok := presentation.Payload.(fltools.TodosActivityPayload)
+		if !ok {
+			continue
+		}
+		todos := make([]ai.TodoItem, 0, len(payload.Items))
+		for _, todo := range payload.Items {
+			todos = append(todos, ai.TodoItem{Content: todo.Text, Status: todo.Status})
+		}
+		updatedAtUnixMs := int64(0)
+		if !item.CreatedAt.IsZero() {
+			updatedAtUnixMs = item.CreatedAt.UnixMilli()
+		}
+		return &todoSnapshot{
+			Version:         int64(view.ViewVersion),
+			UpdatedAtUnixMs: updatedAtUnixMs,
+			Todos:           todos,
+		}
+	}
+	return nil
+}
+
+func buildTodoSnapshotSummary(view *todoSnapshot) *todoSnapshotSummary {
 	if view == nil {
 		return nil
 	}

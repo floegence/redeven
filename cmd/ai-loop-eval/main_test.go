@@ -3,10 +3,13 @@ package main
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/floegence/floret/v4/identity"
 	"github.com/floegence/floret/v4/observation"
 	flruntime "github.com/floegence/floret/v4/runtime"
+	fltools "github.com/floegence/floret/v4/tools"
+	"github.com/floegence/redeven/internal/ai"
 )
 
 func TestObserveTypedTurnUsesInteractionAndTurnScopedToolState(t *testing.T) {
@@ -14,10 +17,10 @@ func TestObserveTypedTurnUsesInteractionAndTurnScopedToolState(t *testing.T) {
 
 	turnID := identity.TurnID("turn_eval_1")
 	current := flruntime.ThreadView{
-		Thread:   flruntime.ThreadSnapshot{ID: identity.ThreadID("thread_eval")},
-		Version:  3,
-		Activity: flruntime.ThreadActivityActive,
-		TurnID:   turnID,
+		ThreadID:    identity.ThreadID("thread_eval"),
+		ViewVersion: 3,
+		Activity:    flruntime.ThreadActivityActive,
+		TurnID:      turnID,
 		Interactions: []flruntime.ThreadInteraction{{
 			ID: "interaction_approval", Kind: flruntime.ThreadInteractionApproval,
 		}},
@@ -39,10 +42,48 @@ func TestObserveTypedTurnUsesInteractionAndTurnScopedToolState(t *testing.T) {
 	}
 
 	current.Activity = flruntime.ThreadActivityIdle
-	current.Outcome = flruntime.TurnOutcomeCompleted
+	completed := flruntime.TurnOutcomeCompleted
+	current.LastOutcome = &completed
 	observation = observeTypedTurn(current, turnID)
 	if !observation.Terminal || observation.RunError != "" {
 		t.Fatalf("completed observation=%+v", observation)
+	}
+}
+
+func TestExtractTodoSnapshotUsesLatestTypedCurrentViewPayload(t *testing.T) {
+	t.Parallel()
+
+	view := flruntime.ThreadView{
+		ViewVersion: 7,
+		Items: []flruntime.ThreadItem{
+			{
+				CreatedAt: time.Date(2026, 8, 15, 5, 0, 0, 0, time.UTC),
+				Activity: &observation.ActivityItem{Presentation: &fltools.ActivityPresentation{
+					Renderer: fltools.ActivityRendererTodos,
+					Payload: fltools.TodosActivityPayload{Items: []fltools.TodoActivityItem{
+						{Text: "old", Status: "pending"},
+					}},
+				}},
+			},
+			{
+				CreatedAt: time.Date(2026, 8, 15, 5, 1, 0, 0, time.UTC),
+				Activity: &observation.ActivityItem{Presentation: &fltools.ActivityPresentation{
+					Renderer: fltools.ActivityRendererTodos,
+					Payload: fltools.TodosActivityPayload{Items: []fltools.TodoActivityItem{
+						{Text: "inspect", Status: ai.TodoStatusCompleted},
+						{Text: "verify", Status: ai.TodoStatusInProgress},
+					}},
+				}},
+			},
+		},
+	}
+
+	snapshot := extractTodoSnapshot(view)
+	if snapshot == nil || snapshot.Version != 7 || len(snapshot.Todos) != 2 {
+		t.Fatalf("snapshot=%+v", snapshot)
+	}
+	if snapshot.Todos[0].Content != "inspect" || snapshot.Todos[1].Status != ai.TodoStatusInProgress {
+		t.Fatalf("todos=%+v", snapshot.Todos)
 	}
 }
 

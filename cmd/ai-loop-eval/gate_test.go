@@ -88,7 +88,7 @@ func TestAssessTaskOutcome_PassesStructuredFlowerAssertions(t *testing.T) {
 			{ToolName: "write_todos", Status: "success", ArgsJSON: `{"todos":[{"content":"Inspect repo","status":"completed"},{"content":"Summarize risk","status":"completed"},{"content":"Verify command","status":"completed"}]}`},
 			{ToolName: "task_complete", Status: "success"},
 		},
-		rawTodos: &ai.ThreadTodosView{
+		rawTodos: &todoSnapshot{
 			Version: 1,
 			Todos: []ai.TodoItem{
 				{Content: "Inspect repo", Status: ai.TodoStatusCompleted},
