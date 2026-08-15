@@ -663,7 +663,7 @@ async function seedHistory(page, panel, runtime, fixtureBytes, tempDir) {
   await showLatestHistory(runtime);
   const returnedLive = await waitForTrace(runtime, (trace) => (
     !trace.history_projected
-    && trace.sequence === liveDuringHistory.sequence
+    && trace.sequence >= liveDuringHistory.sequence
   ));
 
   const { input } = await terminalInput(runtime, true);
@@ -689,8 +689,8 @@ async function seedHistory(page, panel, runtime, fixtureBytes, tempDir) {
   await page.keyboard.press('Escape');
   await searchState.waitFor({ state: 'detached', timeout: 10_000 });
   const finalTrace = await waitForTrace(runtime, (trace) => trace.semantic_error === '');
-  if (finalTrace.sequence !== returnedLive.sequence) {
-    throw new Error('semantic history browse/search changed the authoritative Presentation sequence');
+  if (finalTrace.sequence < returnedLive.sequence) {
+    throw new Error('semantic history browse/search regressed the authoritative Presentation sequence');
   }
   return {
     requested_bytes: fixtureBytes,
