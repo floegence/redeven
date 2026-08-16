@@ -64,6 +64,7 @@ export function assertExtensionIOEvidence(evidence, { requireRevoke = true, requ
   }
   if (!Number.isInteger(v9.fs?.bytes) || v9.fs.bytes < 64 * 1024 * 1024
     || !/^[0-9a-f]{64}$/u.test(String(v9.fs.sha256 ?? ''))
+    || v9.fs.sha256 !== v9.fs.expected_sha256
     || ['list', 'stat', 'rename', 'watch', 'remove'].some((key) => v9.fs[key] !== true)) {
     throw new Error('v9 FS streaming/list/stat/rename/watch/remove evidence is incomplete');
   }

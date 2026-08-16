@@ -28,6 +28,7 @@ const completeIOEvidence = {
     fs: {
       bytes: 64 * 1024 * 1024,
       sha256: 'a'.repeat(64),
+      expected_sha256: 'a'.repeat(64),
       list: true,
       stat: true,
       rename: true,
@@ -69,6 +70,13 @@ test('Desktop smoke rejects partial protocol or revoke coverage', () => {
     ...completeIOEvidence,
     revoke: { ...completeIOEvidence.revoke, websocket_closed: false },
   }), /revoke/u);
+  assert.throws(() => assertExtensionIOEvidence({
+    ...completeIOEvidence,
+    v9: {
+      ...completeIOEvidence.v9,
+      fs: { ...completeIOEvidence.v9.fs, expected_sha256: 'f'.repeat(64) },
+    },
+  }), /FS/u);
 });
 
 test('Desktop smoke requires a distinct Linux PID and reused state for cold restart evidence', () => {
@@ -123,6 +131,18 @@ test('v9 I/O smoke worker preserves stable SDK errors instead of collapsing them
   assert.match(source, /ErrorCode::PermissionDenied => "PERMISSION_DENIED"/u);
   assert.doesNotMatch(source, /fn fail\(/u);
   assert.doesNotMatch(source, /WorkerError::hostcall\(error\.to_string\(\)\)/u);
+});
+
+test('v9 I/O smoke keeps 64 MiB transfer verification bounded to streaming chunks', async () => {
+  const source = await import('node:fs/promises').then((fs) => fs.readFile(
+    new URL('./fixtures/redevplugin_io_smoke/worker/src/lib.rs', import.meta.url),
+    'utf8',
+  ));
+  assert.match(source, /file\.read\(CHUNK\)/u);
+  assert.match(source, /download_body\.read\(CHUNK\)/u);
+  assert.doesNotMatch(source, /fs::read_file/u);
+  assert.doesNotMatch(source, /\.read_all\(\)/u);
+  assert.doesNotMatch(source, /Sha256/u);
 });
 
 test('Desktop smoke persists the failed RPC response and iframe diagnostics on timeout', async () => {
