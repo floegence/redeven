@@ -4121,6 +4121,28 @@ describe('EnvAppShell local access gate', () => {
     }
   });
 
+  it('renders one access gate when desktop KeepAlive has mounted both views', async () => {
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: true, unlocked: false });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushUntil(() => host.querySelectorAll('#redeven-access-password').length > 0, 40);
+      findButtonByText(host, 'Workbench')?.click();
+      await flushUntil(() => Boolean(host.querySelector('[data-testid="display-mode-view-workbench"]')), 40);
+
+      expect(host.querySelectorAll('#redeven-access-password')).toHaveLength(1);
+      expect(host.querySelectorAll('#redeven-access-password-help')).toHaveLength(1);
+      expect(host.querySelectorAll('#redeven-access-gate-title')).toHaveLength(1);
+    } finally {
+      dispose();
+    }
+  });
+
   it('labels the password field, links helper/error text, and restores focus after unlock failures', async () => {
     unlockLocalAccessMock.mockRejectedValueOnce(new Error('Wrong password.'));
 
