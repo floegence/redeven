@@ -182,7 +182,7 @@ describe('PluginPanel', () => {
     vi.useRealTimers();
   });
 
-  it('remounts after the close animation has fully removed the panel', async () => {
+  it('reopens through the stable Portal node after the close animation completes', async () => {
     vi.useFakeTimers();
     const [open, setOpen] = createSignal(true);
     const mount = document.createElement('div');
@@ -190,6 +190,7 @@ describe('PluginPanel', () => {
     dispose = render(() => (
       <PluginPanel open={open()} model={panelModel()} onClose={() => setOpen(false)} onOpenCenter={vi.fn()} onOpenPluginDetails={vi.fn()} onOpenPluginSurface={vi.fn()} />
     ), mount);
+    const backdrop = document.querySelector('[data-plugin-launcher-backdrop]');
 
     setOpen(false);
     await Promise.resolve();
@@ -200,6 +201,7 @@ describe('PluginPanel', () => {
     setOpen(true);
     await Promise.resolve();
     expect(document.querySelector('[data-plugin-panel-motion-state="open"]')).not.toBeNull();
+    expect(document.querySelector('[data-plugin-launcher-backdrop]')).toBe(backdrop);
     vi.useRealTimers();
   });
 
