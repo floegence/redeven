@@ -75,6 +75,7 @@ import type { ContextActionExecutionContext } from './contextActions/protocol';
 import { createFlowerLinkedContextNavigation } from './flower/linkedContextNavigation';
 import { createAIReadinessController } from './flower/aiReadiness';
 import { buildPluginPanelModel } from './plugins/pluginInventoryProjection';
+import { PluginPanel } from './plugins/PluginPanel';
 import { addPluginDockPin, loadPluginDockPins, pluginDockPinsStorageKey, savePluginDockPins } from './plugins/pluginDockPins';
 import { createPluginLifecycleAPI } from './plugins/pluginApi';
 import {
@@ -271,10 +272,10 @@ const EnvPortForwardsPage = lazy(() => import('./pages/EnvPortForwardsPage').the
 const EnvAIPage = lazy(() => import('./pages/EnvAIPage').then((module) => ({ default: module.EnvAIPage })));
 const CodexActivitySurface = lazy(() => import('./codex/CodexActivitySurface').then((module) => ({ default: module.CodexActivitySurface })));
 const EnvSettingsPage = lazy(() => import('./pages/EnvSettingsPage').then((module) => ({ default: module.EnvSettingsPage })));
-const PluginPanel = lazy(() => import('./plugins/PluginPanel').then((module) => ({ default: module.PluginPanel })));
 const PluginCenterView = lazy(() => import('./plugins/PluginCenterView').then((module) => ({ default: module.PluginCenterView })));
 const ActivityPluginSurfaceWindow = lazy(() => import('./plugins/ActivityPluginSurfaceWindow').then((module) => ({ default: module.ActivityPluginSurfaceWindow })));
 const DebugConsoleWindow = lazy(() => import('./debugConsole/DebugConsoleWindow').then((module) => ({ default: module.DebugConsoleWindow })));
+
 const AuditLogDialog = lazy(() => import('./widgets/AuditLogDialog').then((module) => ({ default: module.AuditLogDialog })));
 const FlowerTurnLauncherWindow = lazy(() => import('./widgets/FlowerTurnLauncherWindow').then((module) => ({ default: module.FlowerTurnLauncherWindow })));
 const FilePreviewHost = lazy(() => import('./widgets/FilePreviewHost').then((module) => ({ default: module.FilePreviewHost })));
@@ -288,6 +289,12 @@ type ActivityPluginWindow = Readonly<{
   targetKey: string;
   target: Accessor<PluginSurfaceLaunchTarget>;
   setTarget: Setter<PluginSurfaceLaunchTarget>;
+}>;
+
+type PluginPanelState = Readonly<{
+  open: boolean;
+  placement: 'activity' | 'workbench';
+  trigger: HTMLButtonElement | null;
 }>;
 
 function createActivityPluginWindow(
@@ -996,9 +1003,24 @@ export function EnvAppShell() {
   const [settingsFocusSeq, setSettingsFocusSeq] = createSignal(0);
   const [settingsFocusSection, setSettingsFocusSection] = createSignal<EnvSettingsSection | null>(null);
   const [settingsOrigin, setSettingsOrigin] = createSignal<EnvSettingsOrigin>(null);
-  const [pluginsPanelOpen, setPluginsPanelOpen] = createSignal(false);
-  const [pluginsPanelTrigger, setPluginsPanelTrigger] = createSignal<HTMLButtonElement | null>(null);
-  const [pluginsPanelPlacement, setPluginsPanelPlacement] = createSignal<'activity' | 'workbench'>('activity');
+  const [pluginPanelState, setPluginPanelState] = createSignal<PluginPanelState>({
+    open: false,
+    placement: 'activity',
+    trigger: null,
+  });
+  const updatePluginPanel = (update: Partial<PluginPanelState>) => {
+    setPluginPanelState((current) => {
+      const next = { ...current, ...update };
+      return next.open === current.open
+        && next.placement === current.placement
+        && next.trigger === current.trigger
+        ? current
+        : next;
+    });
+  };
+  const pluginsPanelOpen = () => pluginPanelState().open;
+  const pluginsPanelTrigger = () => pluginPanelState().trigger;
+  const pluginsPanelPlacement = () => pluginPanelState().placement;
   const [externalDockDragController, setExternalDockDragController] = createSignal<WorkbenchExternalDockDragController | null>(null);
   const pluginDockPinsKey = createMemo(() => pluginDockPinsStorageKey(String(envId() ?? 'default')));
   const [pluginDockPins, setPluginDockPins] = createSignal<string[]>([]);
@@ -1090,7 +1112,7 @@ export function EnvAppShell() {
   });
 
   const openSettings = (section?: EnvSettingsSection, options?: { origin?: EnvSettingsOrigin }) => {
-    setPluginsPanelOpen(false);
+    updatePluginPanel({ open: false });
     setPluginCenterSelectedInventoryKey(undefined);
     setSettingsFocusSection(section ?? 'config');
     setSettingsFocusSeq((n) => n + 1);
@@ -1293,7 +1315,7 @@ export function EnvAppShell() {
   ));
 
   const openPluginCenter = async (selectedInventoryKey?: string) => {
-    setPluginsPanelOpen(false);
+    updatePluginPanel({ open: false });
     setPluginCenterSelectedInventoryKey(selectedInventoryKey);
     setPluginCenterFocusRequest((request) => request + 1);
     setViewMode('activity', { surfaceId: activeSurface() });
@@ -1373,7 +1395,7 @@ export function EnvAppShell() {
     ) {
       throw new Error(i18n.t('uiCopy.plugin.surfaceFailed'));
     }
-    setPluginsPanelOpen(false);
+    updatePluginPanel({ open: false });
     if (!target.keepPluginCenter) setPluginCenterSelectedInventoryKey(undefined);
     if (currentTarget.preferredPlacement === 'workbench') {
       setViewMode('workbench', { surfaceId: lastActivitySurface() });
@@ -3676,15 +3698,14 @@ export function EnvAppShell() {
         icon: Grid3x3,
         label: i18n.t('uiCopy.plugin.panelTitle'),
         collapseBehavior: 'preserve',
-        buttonRef: setPluginsPanelTrigger,
+        buttonRef: (trigger) => updatePluginPanel({ trigger }),
         ariaExpanded: pluginsPanelOpen,
         ariaControls: 'redeven-plugin-switcher',
         ariaHasPopup: 'dialog',
-        onClick: () => {
-          setPluginsPanelPlacement('activity');
-          const nextOpen = !pluginsPanelOpen();
-          setPluginsPanelOpen(nextOpen);
-        },
+        onClick: () => updatePluginPanel({
+          open: !(pluginsPanelOpen() && pluginsPanelPlacement() === 'activity'),
+          placement: 'activity',
+        }),
     });
     if (canUseFlower()) {
       items.push({
@@ -4710,9 +4731,7 @@ export function EnvAppShell() {
               active: pluginsPanelOpen() && pluginsPanelPlacement() === 'workbench',
               onActivate: (trigger) => {
                 const nextOpen = !(pluginsPanelOpen() && pluginsPanelPlacement() === 'workbench');
-                setPluginsPanelTrigger(trigger);
-                setPluginsPanelPlacement('workbench');
-                setPluginsPanelOpen(nextOpen);
+                updatePluginPanel({ open: nextOpen, trigger, placement: 'workbench' });
               },
             }]}
             pluginSurfaceHost={{
@@ -4788,22 +4807,22 @@ export function EnvAppShell() {
         data-market-unavailable={String(Boolean(pluginInventoryProjection()?.marketUnavailable))}
       />
       <PluginPanel
-          id="redeven-plugin-switcher"
-          open={pluginsPanelOpen()}
-          mobile={layout.isMobile()}
-          trigger={pluginsPanelTrigger()}
-          placement={pluginsPanelPlacement()}
-          model={pluginPanelModel()}
-          onClose={() => setPluginsPanelOpen(false)}
-          onOpenCenter={() => void openPluginCenter().catch(reportPluginNavigationFailure)}
-          onOpenPluginDetails={(inventoryKey) => void openPluginCenter(inventoryKey).catch(reportPluginNavigationFailure)}
-          onOpenPluginSurface={(target) => void openPluginSurface({
-            ...target,
-            preferredPlacement: pluginsPanelPlacement() === 'workbench' ? 'workbench' : target.preferredPlacement,
-          }).catch(reportPluginNavigationFailure)}
-          onDropPlugin={(target) => void openPluginSurface(target).catch(reportPluginNavigationFailure)}
-          externalDockDragController={externalDockDragController()}
-          onPinPlugin={pinPlugin}
+        id="redeven-plugin-switcher"
+        open={pluginsPanelOpen()}
+        mobile={layout.isMobile()}
+        trigger={pluginsPanelTrigger()}
+        placement={pluginsPanelPlacement()}
+        model={pluginPanelModel()}
+        onClose={() => updatePluginPanel({ open: false })}
+        onOpenCenter={() => void openPluginCenter().catch(reportPluginNavigationFailure)}
+        onOpenPluginDetails={(inventoryKey) => void openPluginCenter(inventoryKey).catch(reportPluginNavigationFailure)}
+        onOpenPluginSurface={(target) => void openPluginSurface({
+          ...target,
+          preferredPlacement: pluginsPanelPlacement() === 'workbench' ? 'workbench' : target.preferredPlacement,
+        }).catch(reportPluginNavigationFailure)}
+        onDropPlugin={(target) => void openPluginSurface(target).catch(reportPluginNavigationFailure)}
+        externalDockDragController={externalDockDragController()}
+        onPinPlugin={pinPlugin}
       />
       <Show when={layout.isMobile() && viewMode() === 'activity' && canUseFlower()}>
         <div

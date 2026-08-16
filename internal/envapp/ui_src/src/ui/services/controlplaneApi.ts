@@ -5,7 +5,7 @@ import { SESSION_KIND_ENVAPP_RPC, sessionKindForLauncherApp, type LauncherFloeAp
 import { applyLocalAccessResumeHeader } from './localAccessAuth';
 import { controlPlaneOriginFromSandboxLocation } from './sandboxOrigins';
 import { AccessUnlockError, isKnownAccessUnlockErrorCode, normalizeRetryAfterMs } from './accessUnlockError';
-import { stagePluginSessionCredential } from './pluginSessionCredential';
+import { replacePendingPluginSessionCredential } from './pluginSessionCredential';
 
 export interface Environment {
   public_id: string;
@@ -522,7 +522,7 @@ export async function createLocalDirectArtifactSource(
       if (!pluginSessionCredential) {
         throw new Error('Invalid local plugin session credential');
       }
-      stagePluginSessionCredential(channelID, pluginSessionCredential);
+      replacePendingPluginSessionCredential(channelID, pluginSessionCredential);
       options.afterCredentialStaged?.();
       return new Response(JSON.stringify({
         v: out.v ?? 1,

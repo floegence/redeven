@@ -29,7 +29,7 @@ const contractSetSHA256 = '3'.repeat(64);
 const packageSet = {
   schema_version: 'redevplugin.platform_package_set.v3',
   platform_version: version,
-  go_module: { module: 'github.com/floegence/redevplugin', version: `v${version}` },
+  go_module: { module: 'github.com/floegence/redevplugin/v2', version: `v${version}` },
   npm_packages: [
     { name: '@floegence/redevplugin-contracts', version },
     { name: '@floegence/redevplugin-ui', version },
@@ -53,7 +53,7 @@ const publication = {
     sha: sourceCommit,
   },
   go_module: {
-    module: 'github.com/floegence/redevplugin',
+    module: 'github.com/floegence/redevplugin/v2',
     version: `v${version}`,
     h1: `h1:${Buffer.alloc(32, 8).toString('base64')}`,
     go_mod_h1: `h1:${Buffer.alloc(32, 9).toString('base64')}`,

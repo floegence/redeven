@@ -182,6 +182,27 @@ describe('PluginPanel', () => {
     vi.useRealTimers();
   });
 
+  it('remounts after the close animation has fully removed the panel', async () => {
+    vi.useFakeTimers();
+    const [open, setOpen] = createSignal(true);
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginPanel open={open()} model={panelModel()} onClose={() => setOpen(false)} onOpenCenter={vi.fn()} onOpenPluginDetails={vi.fn()} onOpenPluginSurface={vi.fn()} />
+    ), mount);
+
+    setOpen(false);
+    await Promise.resolve();
+    vi.advanceTimersByTime(160);
+    await Promise.resolve();
+    expect(document.querySelector('[data-plugin-launcher-backdrop]')).toBeNull();
+
+    setOpen(true);
+    await Promise.resolve();
+    expect(document.querySelector('[data-plugin-panel-motion-state="open"]')).not.toBeNull();
+    vi.useRealTimers();
+  });
+
   it('renders installed plugins with one market icon entry and no overflow menu', () => {
     const onOpenCenter = vi.fn();
     mountPanel({ onOpenCenter });

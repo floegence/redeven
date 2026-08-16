@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
+  activatePendingPluginSessionCredential,
   activatePluginSessionCredential,
   applyPluginSessionCredential,
   clearPluginSessionCredential,
   readPluginSessionCredential,
+  replacePendingPluginSessionCredential,
   stagePluginSessionCredential,
 } from './pluginSessionCredential';
 
@@ -39,5 +41,14 @@ describe('plugin session credential binding', () => {
 
     expect(activatePluginSessionCredential('channel-a')).toBe(false);
     expect(readPluginSessionCredential()).toBe('');
+  });
+
+  it('replaces stale pending credentials when a newer artifact is issued', () => {
+    stagePluginSessionCredential('channel-old', 'credential-old');
+    replacePendingPluginSessionCredential('channel-new', 'credential-new');
+
+    expect(activatePluginSessionCredential('channel-old')).toBe(false);
+    expect(activatePendingPluginSessionCredential()).toBe(true);
+    expect(readPluginSessionCredential()).toBe('credential-new');
   });
 });

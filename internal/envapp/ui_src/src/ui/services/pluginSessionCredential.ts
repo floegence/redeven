@@ -10,6 +10,14 @@ export function stagePluginSessionCredential(channelID: string, credential: stri
   pendingPluginSessionCredentials.set(normalizedChannelID, normalizedCredential);
 }
 
+export function replacePendingPluginSessionCredential(channelID: string, credential: string): void {
+  const normalizedChannelID = String(channelID ?? '').trim();
+  const normalizedCredential = String(credential ?? '').trim();
+  if (!normalizedChannelID || !normalizedCredential) return;
+  pendingPluginSessionCredentials.clear();
+  pendingPluginSessionCredentials.set(normalizedChannelID, normalizedCredential);
+}
+
 export function activatePluginSessionCredential(channelID: string): boolean {
   const normalizedChannelID = String(channelID ?? '').trim();
   const credential = pendingPluginSessionCredentials.get(normalizedChannelID);

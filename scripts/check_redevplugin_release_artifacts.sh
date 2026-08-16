@@ -106,7 +106,7 @@ gh attestation verify "$publication_path" --repo "$REPOSITORY" >/dev/null
 
 go_readback="$tmpdir/go-readback.json"
 GOWORK=off GOPROXY=https://proxy.golang.org GOSUMDB=sum.golang.org \
-  go mod download -json "github.com/floegence/redevplugin@$tag" >"$go_readback"
+  go mod download -json "github.com/floegence/redevplugin/v2@$tag" >"$go_readback"
 PUBLICATION="$publication_path" READBACK="$go_readback" node <<'NODE'
 const { readFileSync } = require('node:fs');
 const publication = JSON.parse(readFileSync(process.env.PUBLICATION, 'utf8'));

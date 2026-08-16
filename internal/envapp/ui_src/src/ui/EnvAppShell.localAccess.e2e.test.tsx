@@ -123,6 +123,9 @@ const workbenchPluginSurfaceState = vi.hoisted(() => ({
 const pluginPanelState = vi.hoisted(() => ({
   lastProps: null as any,
   renderActual: false,
+  mounts: 0,
+  activeInstances: 0,
+  maxActiveInstances: 0,
 }));
 const pluginCenterViewState = vi.hoisted(() => ({
   lastProps: null as any,
@@ -355,10 +358,11 @@ const setSidebarActiveTabMock = vi.fn((tab: string, opts?: {
 const setSidebarCollapsedMock = vi.fn();
 const EnvContextMock = createContext({} as any);
 
-function MockDisplayModeSurface(props: Readonly<{ testId: string }>) {
+function MockDisplayModeSurface(props: Readonly<{ testId: string; children?: JSX.Element }>) {
   return (
     <div>
       <div data-testid={props.testId} />
+      {props.children}
     </div>
   );
 }
@@ -593,7 +597,7 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
         <div>
           {Array.isArray(props.activityItems)
             ? props.activityItems.map((item: any) => (
-                <button type="button" data-activity-id={item.id} aria-expanded={typeof item.ariaExpanded === 'function' ? item.ariaExpanded() : item.ariaExpanded} aria-controls={item.ariaControls} onClick={() => activateItem(item)}>
+                <button ref={(button) => item.buttonRef?.(button)} type="button" data-activity-id={item.id} aria-expanded={typeof item.ariaExpanded === 'function' ? item.ariaExpanded() : item.ariaExpanded} aria-controls={item.ariaControls} onClick={() => activateItem(item)}>
                   {item.label}
                 </button>
               ))
@@ -811,6 +815,17 @@ vi.mock('./plugins/PluginPanel', async (importActual) => {
   return {
   PluginPanel: (props: any) => {
     pluginPanelState.lastProps = props;
+    onMount(() => {
+      pluginPanelState.mounts += 1;
+      pluginPanelState.activeInstances += 1;
+      pluginPanelState.maxActiveInstances = Math.max(
+        pluginPanelState.maxActiveInstances,
+        pluginPanelState.activeInstances,
+      );
+    });
+    onCleanup(() => {
+      pluginPanelState.activeInstances -= 1;
+    });
     if (pluginPanelState.renderActual) return actual.PluginPanel(props);
     return <Show when={props.open}>
       <div>
@@ -969,7 +984,22 @@ vi.mock('./workbench/EnvWorkbenchPage', () => ({
   EnvWorkbenchPage: (props: any) => {
     props.registerPluginSurfaceController?.(workbenchPluginSurfaceState);
     onCleanup(() => props.registerPluginSurfaceController?.(null));
-    return <MockDisplayModeSurface testId="workbench-page" />;
+    return (
+      <MockDisplayModeSurface testId="workbench-page">
+        <For each={props.dockActions ?? []}>
+          {(action: any) => (
+            <button
+              type="button"
+              data-workbench-dock-action={action.id}
+              aria-pressed={Boolean(action.active)}
+              onClick={(event) => action.onActivate?.(event.currentTarget)}
+            >
+              {action.label}
+            </button>
+          )}
+        </For>
+      </MockDisplayModeSurface>
+    );
   },
 }));
 vi.mock('./pages/EnvTerminalPage', () => ({ EnvTerminalPage: () => <div>activity main</div> }));
@@ -1351,6 +1381,9 @@ beforeEach(async () => {
   workbenchPluginSurfaceState.listPluginTargets.mockClear();
   pluginPanelState.lastProps = null;
   pluginPanelState.renderActual = false;
+  pluginPanelState.mounts = 0;
+  pluginPanelState.activeInstances = 0;
+  pluginPanelState.maxActiveInstances = 0;
   pluginCenterViewState.lastProps = null;
   pluginPlatformMocks.createRedevenPluginPlatform.mockClear();
   pluginPlatformMocks.createPluginSurfacePlacementCoordinator.mockClear();
@@ -2090,44 +2123,60 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
-  it('closes and reopens the real PluginPanel from every dismissal control', async () => {
+  it('keeps one real PluginPanel authority across enabled Activity and Workbench ingress', async () => {
     vi.useFakeTimers();
     pluginPanelState.renderActual = true;
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('enabled'));
     window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
     const host = document.createElement('div');
     document.body.appendChild(host);
     const { EnvAppShell } = await import('./EnvAppShell');
     const dispose = render(() => <EnvAppShell />, host);
     try {
-      await flushAsync();
+      await flushUntil(() => pluginPanelState.lastProps?.model?.tiles?.some(
+        (tile: any) => tile.kind === 'plugin' && tile.item.lifecycleState === 'enabled',
+      ), 40);
       const trigger = host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement;
       expect(trigger.getAttribute('aria-expanded')).toBe('false');
       trigger.click();
       await flushAsync();
       expect(trigger.getAttribute('aria-expanded')).toBe('true');
+      expect(pluginPanelState.lastProps.open).toBe(true);
+      expect(document.querySelectorAll('[data-plugin-launcher-backdrop]')).toHaveLength(1);
       (document.querySelector('[aria-label="Close plugins"]') as HTMLButtonElement).click();
       await flushAsync();
+      expect(pluginPanelState.lastProps.open).toBe(false);
       expect(trigger.getAttribute('aria-expanded')).toBe('false');
       expect(document.querySelector('[data-plugin-panel-motion-state="closing"]')).not.toBeNull();
       vi.advanceTimersByTime(75);
       trigger.click();
       await flushAsync();
+      expect(pluginPanelState.lastProps.open).toBe(true);
       expect(document.querySelector('[data-plugin-panel-motion-state="open"]')).not.toBeNull();
       vi.advanceTimersByTime(100);
-      expect(document.querySelector('[data-plugin-launcher-backdrop]')).not.toBeNull();
-      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      expect(document.querySelectorAll('[data-plugin-launcher-backdrop]')).toHaveLength(1);
+
+      findButtonByText(host, 'Workbench')?.click();
       await flushAsync();
-      vi.advanceTimersByTime(150);
-      expect(document.querySelector('[data-plugin-launcher-backdrop]')).toBeNull();
-      trigger.click();
+      const workbenchTrigger = host.querySelector('[data-workbench-dock-action="plugins"]') as HTMLButtonElement;
+      expect(workbenchTrigger).not.toBeNull();
+      workbenchTrigger.click();
       await flushAsync();
-      document.querySelector<HTMLElement>('[data-plugin-launcher-backdrop]')
-        ?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+      expect(pluginPanelState.lastProps.open).toBe(true);
+      expect(pluginPanelState.lastProps.placement).toBe('workbench');
+      expect(document.querySelectorAll('[data-plugin-launcher-backdrop]')).toHaveLength(1);
+      (document.querySelector('[aria-label="Close plugins"]') as HTMLButtonElement).click();
       await flushAsync();
-      vi.advanceTimersByTime(150);
-      expect(document.querySelector('[data-plugin-launcher-backdrop]')).toBeNull();
+      expect(pluginPanelState.lastProps.open).toBe(false);
+      (host.querySelector('[data-workbench-dock-action="plugins"]') as HTMLButtonElement).click();
+      await flushAsync();
+      expect(pluginPanelState.lastProps.open).toBe(true);
+      expect(pluginPanelState.lastProps.placement).toBe('workbench');
+      expect(document.querySelectorAll('[data-plugin-launcher-backdrop]')).toHaveLength(1);
+      expect(pluginPanelState.mounts).toBe(1);
+      expect(pluginPanelState.maxActiveInstances).toBe(1);
     } finally {
       dispose();
       vi.useRealTimers();
@@ -2730,6 +2779,12 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(hiddenPluginCenter).toBeTruthy();
       expect((hiddenPluginCenter?.closest('[data-testid="activity-view-plugin-center"]') as HTMLElement | null)?.style.display).toBe('none');
       expect(host.querySelector('[data-testid="settings-page"]')).toBeNull();
+
+      const reopenedPluginTrigger = host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null;
+      reopenedPluginTrigger?.click();
+      await flushAsync();
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="plugin-center"]')));
+      expect(host.querySelector('[data-activity-id="plugins"]')?.getAttribute('aria-expanded')).toBe('true');
     } finally {
       dispose();
     }
@@ -4228,6 +4283,51 @@ describe('EnvAppShell local access gate', () => {
       expect(protocolConnectionConfig?.source).toBe(localArtifactSource);
       expect(host.querySelector('[data-testid="workbench-page"]')).toBeTruthy();
       expect(protocolSnapshot.state).toBe('connected');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps only the newest plugin credential when direct artifact acquisition is superseded', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: true, unlocked: true });
+    let channelOrdinal = 0;
+    mintLocalDirectConnectArtifactMock.mockImplementation(async () => {
+      channelOrdinal += 1;
+      const channelID = `ch_attempt_${channelOrdinal}`;
+      const pluginCredential = await import('./services/pluginSessionCredential');
+      pluginCredential.replacePendingPluginSessionCredential(channelID, `credential-${channelOrdinal}`);
+      return {
+        transport: 'direct',
+        direct_info: {
+          ws_url: 'ws://localhost/_redeven_direct/ws',
+          channel_id: channelID,
+          e2ee_psk_b64u: 'secret',
+          channel_init_expire_at_unix_s: 1,
+          default_suite: 1,
+        },
+      };
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushUntil(() => connectMock.mock.calls.length === 1);
+      const connectConfig = connectMock.mock.calls[0]?.[0] as {
+        source: { acquire: (context: { signal: AbortSignal }) => Promise<unknown> };
+      };
+      const pluginCredential = await import('./services/pluginSessionCredential');
+      pluginCredential.clearPluginSessionCredential();
+      const first = new AbortController();
+      const second = new AbortController();
+      await connectConfig.source.acquire({ signal: first.signal });
+      await connectConfig.source.acquire({ signal: second.signal });
+
+      expect(pluginCredential.activatePendingPluginSessionCredential()).toBe(true);
+      expect(pluginCredential.readPluginSessionCredential()).toBe('credential-2');
+      expect(pluginCredential.activatePluginSessionCredential('ch_attempt_1')).toBe(false);
     } finally {
       dispose();
     }
