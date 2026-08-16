@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
 ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)
+source "$ROOT_DIR/scripts/ui_package_common.sh"
+ui_pkg_require_node_26 "$ROOT_DIR"
 MODE=isolated
 if [[ "${1:-}" == "--attach" ]]; then
   MODE=attach
@@ -106,13 +108,12 @@ prepare_linux_target() {
     "$ROOT_DIR/scripts/check_docker_runtime_e2e.sh" >/dev/null
   fi
   [[ -x "$runtime_cache/redevplugin-runtime" && -f "$runtime_cache/.redevplugin-release-artifacts-verified.json" ]] || { echo "published Linux runtime evidence was not produced" >&2; return 1; }
-  PATH=/Users/tangjianyin/.nvm/versions/node/v24.14.1/bin:$PATH "$ROOT_DIR/scripts/build_assets.sh" >/dev/null
+  "$ROOT_DIR/scripts/build_assets.sh" >/dev/null
   docker run --rm --platform linux/arm64 -v "$ROOT_DIR:/src" -v "$LINUX_TARGET_ROOT:/out" -w /src golang:1.26.6-bookworm bash -ceu 'CGO_ENABLED=0 GOWORK=off go build -trimpath -o /out/redeven ./cmd/redeven; CGO_ENABLED=0 GOWORK=off go build -trimpath -o /out/io-server ./scripts/fixtures/redevplugin_io_smoke_server'
   REDEVPLUGIN_IO_SMOKE_HTTP_PORT="$FIXTURE_HTTP_PORT" \
   REDEVPLUGIN_IO_SMOKE_WS_PORT="$FIXTURE_HTTP_PORT" \
   REDEVPLUGIN_IO_SMOKE_TCP_PORT="$FIXTURE_TCP_PORT" \
   REDEVPLUGIN_IO_SMOKE_UDP_PORT="$FIXTURE_UDP_PORT" \
-  PATH=/Users/tangjianyin/.nvm/versions/node/v24.14.1/bin:$PATH \
     pnpm --dir "$ROOT_DIR/internal/envapp/ui_src" exec vite build --config "$ROOT_DIR/scripts/fixtures/redevplugin_io_smoke/vite.config.mjs" >/dev/null
   cp "$ROOT_DIR/scripts/fixtures/redevplugin_io_smoke/ui/index.html" "$ROOT_DIR/scripts/fixtures/redevplugin_io_smoke/dist/ui/index.html"
   docker run --rm --platform linux/arm64 -v "$ROOT_DIR/scripts/fixtures/redevplugin_io_smoke:/src" -v "$LINUX_TARGET_ROOT:/out" -w /src/worker rust:1.88.0-bookworm bash -ceu 'rustup target add wasm32-unknown-unknown >/dev/null; cargo build --release --target wasm32-unknown-unknown; install -m 0644 target/wasm32-unknown-unknown/release/redevplugin_io_smoke_worker.wasm /out/io.wasm'

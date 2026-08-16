@@ -9,7 +9,30 @@ ui_pkg_die() {
   exit 1
 }
 
+ui_pkg_require_node_26() {
+  local root_dir="${1:-${ROOT_DIR:-}}"
+  local required_version
+  local actual_version
+
+  if [ -z "$root_dir" ] || [ ! -f "$root_dir/.node-version" ]; then
+    ui_pkg_die "repository .node-version is required"
+  fi
+  required_version=$(tr -d '\r\n' < "$root_dir/.node-version")
+  case "$required_version" in
+    26.*) ;;
+    *) ui_pkg_die "repository .node-version must select Node.js 26.x" ;;
+  esac
+  if ! command -v node >/dev/null 2>&1; then
+    ui_pkg_die "node not found (install Node.js 26.x)"
+  fi
+  actual_version=$(node -p 'process.versions.node')
+  if [ "${actual_version%%.*}" != "26" ]; then
+    ui_pkg_die "Node.js 26.x is required; found v${actual_version}"
+  fi
+}
+
 ui_pkg_run_pnpm() {
+  ui_pkg_require_node_26 "${ROOT_DIR:?ROOT_DIR is required}"
   if command -v corepack >/dev/null 2>&1; then
     # pnpm refuses to recreate node_modules without a TTY unless CI is set.
     if [ "${1:-}" = "install" ] && { [ ! -t 0 ] || [ ! -t 1 ]; } && [ -z "${CI:-}" ]; then

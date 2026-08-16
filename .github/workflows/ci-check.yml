@@ -27,7 +27,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
-          node-version: "24"
+          node-version-file: .node-version
 
       - name: Run bounded source checks
         run: ./scripts/check_quick_ci.sh

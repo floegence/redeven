@@ -465,11 +465,9 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @types/mdast | 4.0.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fmdast/v/4.0.4 |  |
 | @types/ms | 2.1.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40types%2Fms/v/2.1.0 |  |
 | @types/node | 14.18.63 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fnode/v/14.18.63 |  |
-| @types/node | 20.19.31 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fnode/v/20.19.31 |  |
-| @types/node | 20.19.37 | MIT | Desktop shell | https://www.npmjs.com/package/%40types%2Fnode/v/20.19.37 |  |
-| @types/node | 20.19.41 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fnode/v/20.19.41 | License verified from the exact registry package manifest. |
 | @types/node | 24.12.0 | MIT | Desktop shell | https://www.npmjs.com/package/%40types%2Fnode/v/24.12.0 |  |
 | @types/node | 24.12.4 | MIT | Desktop shell | https://www.npmjs.com/package/%40types%2Fnode/v/24.12.4 | License verified from the exact registry package manifest. |
+| @types/node | 26.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Fnode/v/26.2.0 |  |
 | @types/responselike | 1.0.3 | MIT | Desktop shell | https://www.npmjs.com/package/%40types%2Fresponselike/v/1.0.3 |  |
 | @types/semver | 7.7.1 | MIT | Env App UI | https://www.npmjs.com/package/%40types%2Fsemver/v/7.7.1 |  |
 | @types/trusted-types | 2.0.7 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40types%2Ftrusted-types/v/2.0.7 |  |
@@ -1099,8 +1097,8 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | type-fest | 0.13.1 | (MIT OR CC0-1.0) | Desktop shell | https://www.npmjs.com/package/type-fest/v/0.13.1 |  |
 | typescript | 5.9.3 | Apache-2.0 | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/typescript/v/5.9.3 |  |
 | ufo | 1.6.3 | MIT | Env App UI | https://www.npmjs.com/package/ufo/v/1.6.3 |  |
-| undici-types | 6.21.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/undici-types/v/6.21.0 |  |
 | undici-types | 7.16.0 | MIT | Desktop shell | https://www.npmjs.com/package/undici-types/v/7.16.0 |  |
+| undici-types | 8.3.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/undici-types/v/8.3.0 |  |
 | undici | 7.29.0 | MIT | Desktop shell | https://www.npmjs.com/package/undici/v/7.29.0 |  |
 | unist-util-is | 6.0.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/unist-util-is/v/6.0.1 |  |
 | unist-util-position | 5.0.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/unist-util-position/v/5.0.0 |  |

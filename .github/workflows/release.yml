@@ -71,7 +71,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
-          node-version: "24"
+          node-version-file: .node-version
 
       - name: Enable corepack
         run: corepack enable
@@ -218,7 +218,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
-          node-version: "24"
+          node-version-file: .node-version
 
       - name: Setup Go
         uses: actions/setup-go@v6
