@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"runtime"
+	"strconv"
 	"testing"
 	"time"
 
@@ -157,15 +158,41 @@ func TestRecoveredRuntimeFirstInvocationReachesWorkerAfterFilesystemHostcalls(t 
 
 	callCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
+	fullIO := os.Getenv("REDEVEN_TEST_PLUGIN_IO_FULL") == "1"
+	port := func(name string) float64 {
+		if !fullIO {
+			return 1
+		}
+		value, parseErr := strconv.ParseUint(os.Getenv(name), 10, 16)
+		if parseErr != nil || value == 0 {
+			t.Fatalf("%s is invalid", name)
+		}
+		return float64(value)
+	}
 	smokeParams := map[string]any{"server": map[string]any{
-		"http": float64(1), "ws": float64(1), "tcp": float64(1), "udp": float64(1),
+		"http": port("REDEVEN_TEST_PLUGIN_IO_HTTP_PORT"),
+		"ws":   port("REDEVEN_TEST_PLUGIN_IO_WS_PORT"),
+		"tcp":  port("REDEVEN_TEST_PLUGIN_IO_TCP_PORT"),
+		"udp":  port("REDEVEN_TEST_PLUGIN_IO_UDP_PORT"),
 	}}
-	_, err = integration.host.CallPluginMethod(callCtx, host.CallMethodRequest{
+	result, err := integration.host.CallPluginMethod(callCtx, host.CallMethodRequest{
 		PluginInstanceID:  installed.Plugin.PluginInstanceID,
 		SurfaceInstanceID: surfaceInstanceID, BridgeChannelID: bridgeChannelID,
 		GatewayToken: gateway.GatewayToken, Method: "smoke.run",
 		Params: smokeParams,
 	})
+	if fullIO {
+		if workerError, ok := host.AsValidatedWorkerExecutionError(err); ok {
+			t.Fatalf("full invocation worker error: %+v", workerError)
+		}
+		if err != nil {
+			t.Fatalf("full invocation: %T: %+v", err, err)
+		}
+		if result.Data == nil {
+			t.Fatal("full invocation returned no data")
+		}
+		return
+	}
 	workerError, ok := host.AsValidatedWorkerExecutionError(err)
 	if !ok {
 		t.Fatalf("first invocation did not reach the worker's network probe: %T: %v", err, err)
