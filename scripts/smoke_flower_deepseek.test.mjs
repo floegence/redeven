@@ -158,6 +158,8 @@ test('runner requires one S15 and exactly fifteen passing scenarios', async () =
   assert.match(runner, /String\(output\)\.includes\(firstToken\)/u);
   assert.match(runner, /String\(output\)\.includes\(secondToken\)/u);
   assert.match(runner, /\.trim\(\) === finalText/u);
+  assert.match(runner, /requestAnimationFrame\(\(\) => requestAnimationFrame\(resolve\)\)/u);
+  assert.ok(runner.indexOf("`${label}-geometry.json`") < runner.indexOf('geometry overflowed the viewport'));
 });
 
 test('port conflicts fail without killing the listener', async (t) => {

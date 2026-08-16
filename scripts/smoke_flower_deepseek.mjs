@@ -528,7 +528,9 @@ async function assertUIHealth(page) {
 async function checkpoint(page, config, label, compact = false) {
   const previous = page.viewportSize();
   if (compact) await page.setViewportSize({ width: 1024, height: 768 });
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   const geometry = await geometrySnapshot(page);
+  await writeFile(path.join(config.reportRoot, `${label}-geometry.json`), `${JSON.stringify(geometry, null, 2)}\n`);
   if (!geometry.surface || !geometry.composer || geometry.composer.bottom > geometry.viewport.height + 1) {
     throw new Error(`${label} geometry overflowed the viewport`);
   }
@@ -540,7 +542,6 @@ async function checkpoint(page, config, label, compact = false) {
     throw new Error(`${label} reference menu overlapped or overflowed the composer`);
   }
   await page.screenshot({ path: path.join(config.reportRoot, `${label}.png`), fullPage: true });
-  await writeFile(path.join(config.reportRoot, `${label}-geometry.json`), `${JSON.stringify(geometry, null, 2)}\n`);
   if (compact && previous) await page.setViewportSize(previous);
   return geometry;
 }
