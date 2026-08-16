@@ -15,7 +15,7 @@ Floret v4 `ThreadService` is the sole owner of active and canonical thread lifec
 
 One `ThreadRuntime` plus mutex owns each active thread. Provider and tool I/O run outside that mutex and return through a stable execution token; late results for a replaced or canceled token are ignored. The public boundary is typed `Create`, `Fork`, `Delete`, `View`, `Send`, `Respond`, `Cancel`, `Retry`, `RetryEffect`, queue mutation, and workspace `Subscribe`. There is no public generic command receipt, event replay cursor, execution handle, or projection delta.
 
-`Send` validates a stable `(thread_id, request_key)`, updates the in-memory view immediately, and schedules provider work. The canonical journal is the only durable lifecycle fact source. Unique request, turn, tool-call, effect-attempt, and terminal keys make repeated provider dispatch safe without duplicating the visible timeline. Irreversible effects alone require a minimal durable intent before dispatch; an unknown effect outcome is never replayed automatically and exposes RetryEffect on the original tool row.
+`Send` validates a stable `(thread_id, request_key)` and completes canonical turn acceptance before returning or publishing the user segment. Acceptance failure leaves the in-memory view unchanged; provider work starts asynchronously only after the accepted receipt. The canonical journal is the only durable lifecycle fact source. Unique request, turn, tool-call, effect-attempt, and terminal keys make repeated provider dispatch safe without duplicating the visible timeline. Irreversible effects alone require a minimal durable intent before dispatch; an unknown effect outcome is never replayed automatically and exposes RetryEffect on the original tool row.
 
 `Respond` resolves the exact pending interaction. `Cancel` is idempotent for every known thread, clears pending interactions, cancels active execution, and produces at most one terminal cancellation. `Retry` preserves logical request lineage without appending another user message. Restart hydration restores accepted input, queue items, unresolved interactions, and canonical outputs, then resumes provider-safe work from the last canonical boundary. Unknown effects remain unresolved.
 
@@ -40,7 +40,7 @@ no registry tools to the provider. Redeven relies on the published Floret runtim
 to preserve that distinction; provider tool names that are absent from the
 resolved definitions remain rejected before dispatch.
 
-Redeven consumes Floret v4.0.9's public ordered `ThreadView.Items` and
+Redeven consumes Floret v4.0.10's public ordered `ThreadView.Items` and
 `ThreadContextReader`. User, thinking, assistant, tool, and independent
 interaction segments retain Floret-assigned IDs and ordinals across live
 updates, approval settlement, canonical reload, and renderer recovery. Redeven
