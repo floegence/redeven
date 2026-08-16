@@ -133,6 +133,10 @@ const pluginPanelState = vi.hoisted(() => ({
 }));
 const pluginCenterViewState = vi.hoisted(() => ({
   lastProps: null as any,
+  renderActual: false,
+}));
+const uiFirstSelectionState = vi.hoisted(() => ({
+  useActual: false,
 }));
 const pluginPlatformMocks = vi.hoisted(() => {
   const client = {};
@@ -371,11 +375,14 @@ function MockDisplayModeSurface(props: Readonly<{ testId: string; children?: JSX
   );
 }
 
-vi.mock('@floegence/floe-webapp-core', () => ({
+vi.mock('@floegence/floe-webapp-core', async () => {
+  const actual = await vi.importActual<typeof import('@floegence/floe-webapp-core')>('@floegence/floe-webapp-core');
+  return {
   cn: (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(' '),
   getShellThemePresetsForMode: () => [],
   resolveThemeTokenOverrides: () => ({}),
   createUIFirstSelection: (options: any) => {
+    if (uiFirstSelectionState.useActual) return actual.createUIFirstSelection(options);
     const [visual, setVisual] = createSignal(options.committed());
     const [pending, setPending] = createSignal(false);
     let requestID = 0;
@@ -450,7 +457,8 @@ vi.mock('@floegence/floe-webapp-core', () => ({
     setShellPreset: vi.fn(),
     selectShellTheme: vi.fn(),
   }),
-}));
+  };
+});
 
 vi.mock('@floegence/floe-webapp-core/app', () => ({
   ActivityAppsMain: (props: any) => {
@@ -874,9 +882,12 @@ vi.mock('./plugins/PluginPanel', async (importActual) => {
   },
   };
 });
-vi.mock('./plugins/PluginCenterView', () => ({
+vi.mock('./plugins/PluginCenterView', async () => {
+  const actual = await vi.importActual<typeof import('./plugins/PluginCenterView')>('./plugins/PluginCenterView');
+  return {
   PluginCenterView: (props: any) => {
     pluginCenterViewState.lastProps = props;
+    if (pluginCenterViewState.renderActual) return actual.PluginCenterView(props);
     let rootRef: HTMLElement | undefined;
     createEffect(() => {
       if (!(props.focusRequest > 0)) return;
@@ -892,7 +903,8 @@ vi.mock('./plugins/PluginCenterView', () => ({
       </section>
     );
   },
-}));
+  };
+});
 
 vi.mock('@floegence/floe-webapp-core/icons', async () => {
   const actual = await vi.importActual<typeof import('@floegence/floe-webapp-core/icons')>('@floegence/floe-webapp-core/icons');
@@ -1405,6 +1417,8 @@ beforeEach(async () => {
   pluginPanelState.activeInstances = 0;
   pluginPanelState.maxActiveInstances = 0;
   pluginCenterViewState.lastProps = null;
+  pluginCenterViewState.renderActual = false;
+  uiFirstSelectionState.useActual = false;
   pluginPlatformMocks.createRedevenPluginPlatform.mockClear();
   pluginPlatformMocks.createPluginSurfacePlacementCoordinator.mockClear();
   pluginPlatformMocks.close.mockClear();
@@ -2128,7 +2142,8 @@ describe('EnvAppShell environment entry affordances', () => {
     const dispose = render(() => <EnvAppShell />, host);
     try {
       await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 1, 40);
-      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(host.querySelector('[data-activity-id="plugins"]')), 40);
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement).click();
       await flushAsync();
       expect(pluginLifecycleMocks.loadInventoryProjection).toHaveBeenCalledTimes(1);
       const pluginTiles = pluginPanelState.lastProps.model.tiles.filter((tile: any) => tile.kind === 'plugin');
@@ -2142,6 +2157,9 @@ describe('EnvAppShell environment entry affordances', () => {
   }, 10000);
 
   it('replaces a successful empty inventory when Plugin Center refresh discovers installed plugins', async () => {
+    pluginPanelState.renderActual = true;
+    pluginCenterViewState.renderActual = true;
+    uiFirstSelectionState.useActual = true;
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     pluginLifecycleMocks.loadInventoryProjection
@@ -2154,8 +2172,10 @@ describe('EnvAppShell environment entry affordances', () => {
     const dispose = render(() => <EnvAppShell />, host);
     try {
       await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 1, 40);
-      await pluginPanelState.lastProps.onOpenCenter();
-      await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onRefresh), 40);
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(document.querySelector('[data-plugin-center-market-action]')), 40);
+      (document.querySelector('[data-plugin-center-market-action]') as HTMLButtonElement).click();
+      await vi.waitFor(() => expect(pluginCenterViewState.lastProps?.onRefresh).toEqual(expect.any(Function)));
 
       await pluginCenterViewState.lastProps.onRefresh();
       await flushUntil(() => pluginPanelState.lastProps?.model?.tiles?.some(
