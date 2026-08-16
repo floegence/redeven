@@ -317,8 +317,8 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
   };
 
   return (
-    <Show when={mounted()}>
-      <Portal>
+    <Portal>
+      <Show when={props.open || mounted()}>
         <div
           data-plugin-launcher-backdrop
           class={cn(
@@ -514,8 +514,8 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
             </div>
           )}
         </Show>
-      </Portal>
-    </Show>
+      </Show>
+    </Portal>
   );
 }
 

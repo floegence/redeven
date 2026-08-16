@@ -220,7 +220,7 @@ test('the Activity Plugin Panel is an eagerly mounted core control', async () =>
   assert.match(shellSource, /<EnvContext\.Provider[\s\S]*?>\s*<PluginPanel[\s\S]*?<TerminalSessionCatalogProvider>/u);
   assert.doesNotMatch(shellSource, /requestPluginPanelState|activePluginPanelManager|activePluginsActivityBinding/u);
   assert.match(panelSource, /import \{ Portal \} from 'solid-js\/web'/u);
-  assert.match(panelSource, /<Show when=\{mounted\(\)\}>\s*<Portal>/u);
+  assert.match(panelSource, /<Portal>\s*<Show when=\{props\.open \|\| mounted\(\)\}>/u);
   assert.doesNotMatch(panelSource, /openCommands|registerController|PLUGIN_PANEL_CONTROL_EVENT/u);
 });
 
