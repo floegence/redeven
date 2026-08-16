@@ -286,6 +286,50 @@ async function buildSourceRuntimeAssets(sourceRoot: string, signal?: AbortSignal
   await runLocalCommand(scriptPath, [], { cwd: sourceRoot, signal });
 }
 
+async function sourceRuntimeBuilderPath(sourceRoot: string): Promise<string> {
+  const scriptPath = path.join(sourceRoot, 'scripts', 'build_runtime_binary.sh');
+  const scriptStat = await fs.stat(scriptPath).catch(() => null);
+  if (!scriptStat?.isFile()) {
+    throw new Error(`Redeven runtime build script is missing: ${scriptPath}`);
+  }
+  return scriptPath;
+}
+
+async function checkSourceRuntimeCompiler(
+  sourceRoot: string,
+  platform: DesktopSSHRemotePlatform,
+  signal?: AbortSignal,
+): Promise<void> {
+  const scriptPath = await sourceRuntimeBuilderPath(sourceRoot);
+  await runLocalCommand(scriptPath, [
+    '--check-only',
+    '--goos', platform.goos,
+    '--goarch', platform.goarch,
+  ], { cwd: sourceRoot, signal });
+}
+
+async function buildSourceRuntimeBinary(args: Readonly<{
+  sourceRoot: string;
+  commandName: 'redeven' | 'redeven-gateway';
+  outputPath: string;
+  platform: DesktopSSHRemotePlatform;
+  version: string;
+  commit: string;
+  buildTime: string;
+  signal?: AbortSignal;
+}>): Promise<void> {
+  const scriptPath = await sourceRuntimeBuilderPath(args.sourceRoot);
+  await runLocalCommand(scriptPath, [
+    '--goos', args.platform.goos,
+    '--goarch', args.platform.goarch,
+    '--output', args.outputPath,
+    '--command', `./cmd/${args.commandName}`,
+    '--version', args.version,
+    '--commit', args.commit,
+    '--build-time', args.buildTime,
+  ], { cwd: args.sourceRoot, signal: args.signal });
+}
+
 async function copySourceRuntimeRoot(
   sourceRoot: string,
   buildRoot: string,
@@ -346,6 +390,7 @@ async function prepareSourceRuntimeUploadAsset(args: Readonly<{
   if (!commandRootStat?.isDirectory()) {
     throw new Error(`Desktop ${args.packageKind} source root is not a Redeven checkout: ${sourceRoot}`);
   }
+  await checkSourceRuntimeCompiler(sourceRoot, args.platform, args.signal);
 
   const buildRoot = await fs.mkdtemp(path.join(os.tmpdir(), `redeven-source-${args.packageKind}-`));
   try {
@@ -355,24 +400,14 @@ async function prepareSourceRuntimeUploadAsset(args: Readonly<{
       || new Date().toISOString().replace(/\.\d{3}Z$/u, 'Z');
     const commit = await readSourceRuntimeCommit(sourceRoot, args.signal);
     await buildSourceRuntimeAssets(buildSourceRoot, args.signal);
-    const goBuildArgs = [
-      'build',
-      '-tags',
-      'floeterm_native',
-      '-trimpath',
-      '-ldflags',
-      `-s -w -X main.Version=${args.runtimeReleaseTag} -X main.Commit=${commit} -X main.BuildTime=${buildTime}`,
-      '-o',
-      binaryPath,
-      `./cmd/${commandName}`,
-    ];
-    await runLocalCommand('go', goBuildArgs, {
-      cwd: buildSourceRoot,
-      env: {
-        GOOS: args.platform.goos,
-        GOARCH: args.platform.goarch,
-        CGO_ENABLED: '1',
-      },
+    await buildSourceRuntimeBinary({
+      sourceRoot: buildSourceRoot,
+      commandName,
+      outputPath: binaryPath,
+      platform: args.platform,
+      version: args.runtimeReleaseTag,
+      commit,
+      buildTime,
       signal: args.signal,
     });
     throwIfCanceled(args.signal);

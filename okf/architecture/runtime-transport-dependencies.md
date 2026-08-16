@@ -36,9 +36,14 @@ Every shipped Redeven Runtime enables terminal-go's `floeterm_native` build tag
 with cgo. The published module carries the target-specific Ghostty static
 archive, generated adapter, public headers, and provenance for Darwin and Linux
 on amd64 and arm64. Release builds run on a matching native runner for each
-target; Desktop source builds and the exact-main semantic carrier use the same
-native build contract. Terminal-go's no-tag engine is retained only as a
-fail-closed boundary test and is never a shippable Runtime fallback.
+target. One shared Runtime binary builder owns the Desktop bundle and SSH source
+build commands. It uses the native C toolchain only when host and target match;
+a cross-platform Linux source build selects Zig's explicit GNU target for the
+requested architecture, disables Go workspaces, and fails before source copying
+or asset generation when Zig is unavailable. It never lets cgo fall back to the
+host compiler or SDK. Desktop source builds and the exact-main semantic carrier
+use the same native build contract. Terminal-go's no-tag engine is retained only
+as a fail-closed boundary test and is never a shippable Runtime fallback.
 
 Redeven pins released `flowersec-go` and `terminal-go` versions in `go.mod`. The runtime consumes Flowersec Go v2.5.2 and the browser surfaces consume Flowersec Core v2.5.2 through published packages only. The agent owns connection and retry lifecycle through Flowersec's `ConnectionController` and `Connect` APIs, while Env App tunnel reconnects select the matching TypeScript policy. Local UI direct reconnects first resolve the hostname with `resolveLocalTransportSecurityPolicy` and permit plaintext only for canonical loopback authorities; non-loopback direct admission fails closed. When the public page uses plaintext `localhost`, Redeven maps its already validated listener identity to the actual same-port loopback IP authority before issuing the direct artifact, and uses that one authority for both the Flowersec candidate and upstream address. This is a product adapter to Flowersec v2.5.2's published IP-literal plaintext contract, not an alternate URL validator or a relaxation of that contract. The Docker Local UI integration client applies the same selection so its two-container network test proves the host-scoped admission boundary rather than unrestricted plaintext. Product code therefore does not depend on a permissive library default and cannot silently accept unrelated remote `ws://` transport.
 
@@ -95,6 +100,7 @@ Compatibility depends on these published transport and terminal interfaces stayi
 - `redeven:internal/agent/ai_rpc_registration_test.go:1` - Production local session registration and structured-unavailable coverage.
 - `redeven:internal/ai/rpc_readiness_test.go:35` - Realtime RPC without a peer returns structured 503.
 - `redeven:internal/terminal/manager.go:14` - Runtime terminal manager wraps floeterm terminal-go plus Flowersec RPC types.
+- `redeven:scripts/build_runtime_binary.sh:1` - One target-aware native-CGO builder owns Desktop bundle and SSH source Runtime compilation.
 - `redeven:internal/terminal/manager_test.go` - Tests cover authorized terminal metadata notification broadcast, snapshot mapping, normalization, and payload isolation.
 - `redeven:internal/terminal/lifecycle.go:190` - Concurrent delete callers join one session-scoped in-flight cleanup operation.
 - `redeven:AGENTS.md:173` - Repository rules require published upstream releases instead of local sibling checkouts.
