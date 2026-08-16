@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	Version                    = "redeven-gateway-v1"
+	Version                    = "redeven-gateway-v2"
 	ReservedLocalEnvironmentID = "env_local"
 )
 
@@ -90,25 +90,6 @@ const (
 	EnvProfileControlOwnerGateway EnvProfileControlOwner = "gateway"
 )
 
-type EnvLifecycleOperation string
-
-const (
-	EnvLifecycleOperationStart         EnvLifecycleOperation = "start"
-	EnvLifecycleOperationStop          EnvLifecycleOperation = "stop"
-	EnvLifecycleOperationRestart       EnvLifecycleOperation = "restart"
-	EnvLifecycleOperationUpdateRuntime EnvLifecycleOperation = "update_runtime"
-)
-
-type EnvLifecycleState string
-
-const (
-	EnvLifecycleStateAccepted    EnvLifecycleState = "accepted"
-	EnvLifecycleStateRunning     EnvLifecycleState = "running"
-	EnvLifecycleStateSucceeded   EnvLifecycleState = "succeeded"
-	EnvLifecycleStateFailed      EnvLifecycleState = "failed"
-	EnvLifecycleStateUnsupported EnvLifecycleState = "unsupported"
-)
-
 type ConnectArtifactKind string
 
 const (
@@ -157,17 +138,18 @@ type GatewayMetadata struct {
 }
 
 type Environment struct {
-	GatewayEnvID        string                  `json:"gateway_env_id"`
-	DisplayName         string                  `json:"display_name"`
-	EnvKind             EnvironmentKind         `json:"env_kind"`
-	State               EnvironmentState        `json:"state"`
-	Capabilities        []EnvironmentCapability `json:"capabilities"`
-	AccessCapabilities  []EnvironmentCapability `json:"access_capabilities"`
-	ControlCapabilities []EnvironmentCapability `json:"control_capabilities"`
-	Profile             *EnvironmentProfile     `json:"profile,omitempty"`
-	ProfileAccessRoute  *EnvProfileAccessRoute  `json:"profile_access_route,omitempty"`
-	Origin              EnvironmentOrigin       `json:"origin"`
-	LastSeenAtUnixMS    int64                   `json:"last_seen_at_unix_ms,omitempty"`
+	GatewayEnvID        string                       `json:"gateway_env_id"`
+	DisplayName         string                       `json:"display_name"`
+	EnvKind             EnvironmentKind              `json:"env_kind"`
+	State               EnvironmentState             `json:"state"`
+	Capabilities        []EnvironmentCapability      `json:"capabilities"`
+	AccessCapabilities  []EnvironmentCapability      `json:"access_capabilities"`
+	ControlCapabilities []EnvironmentCapability      `json:"control_capabilities"`
+	Profile             *EnvironmentProfile          `json:"profile,omitempty"`
+	ProfileAccessRoute  *EnvProfileAccessRoute       `json:"profile_access_route,omitempty"`
+	RuntimeManagement   *RuntimeManagementCapability `json:"runtime_management,omitempty"`
+	Origin              EnvironmentOrigin            `json:"origin"`
+	LastSeenAtUnixMS    int64                        `json:"last_seen_at_unix_ms,omitempty"`
 }
 
 type EnvironmentProfile struct {
@@ -255,20 +237,6 @@ type EnvProfileDeleteResponse struct {
 	Deleted         bool   `json:"deleted"`
 }
 
-type EnvLifecycleRequest struct {
-	ProtocolVersion string                `json:"protocol_version,omitempty"`
-	GatewayEnvID    string                `json:"gateway_env_id"`
-	Operation       EnvLifecycleOperation `json:"operation"`
-}
-
-type EnvLifecycleResponse struct {
-	ProtocolVersion string                `json:"protocol_version"`
-	GatewayEnvID    string                `json:"gateway_env_id"`
-	Operation       EnvLifecycleOperation `json:"operation"`
-	State           EnvLifecycleState     `json:"state"`
-	Message         string                `json:"message,omitempty"`
-}
-
 type GatewayConnectArtifact struct {
 	Kind            ConnectArtifactKind `json:"kind"`
 	URL             string              `json:"url,omitempty"`
@@ -304,14 +272,15 @@ type PairingChallengeResponse struct {
 }
 
 type PairingCompleteRequest struct {
-	ProtocolVersion  string `json:"protocol_version,omitempty"`
-	ClientNonce      string `json:"client_nonce"`
-	GatewayNonce     string `json:"gateway_nonce"`
-	GatewayID        string `json:"gateway_id"`
-	BindingAudience  string `json:"binding_audience"`
-	ClientKeyID      string `json:"client_key_id"`
-	ClientCapability string `json:"client_capability,omitempty"`
-	Proof            string `json:"proof"`
+	ProtocolVersion  string         `json:"protocol_version,omitempty"`
+	ClientNonce      string         `json:"client_nonce"`
+	GatewayNonce     string         `json:"gateway_nonce"`
+	GatewayID        string         `json:"gateway_id"`
+	BindingAudience  string         `json:"binding_audience"`
+	ClientKeyID      string         `json:"client_key_id"`
+	ClientCapability string         `json:"client_capability,omitempty"`
+	RuntimeGrants    []RuntimeGrant `json:"runtime_grants,omitempty"`
+	Proof            string         `json:"proof"`
 }
 
 type PairingCompleteResponse struct {
@@ -343,6 +312,7 @@ var (
 	ErrInvalidSSHAuthMode         = errors.New("access_route.auth_mode is invalid")
 	ErrSSHPasswordAuthUnsupported = errors.New("ssh password auth is not supported")
 	ErrInvalidClientCapability    = errors.New("client_capability is invalid")
+	ErrInvalidRuntimeGrants       = errors.New("runtime_grants are invalid")
 )
 
 func (input *EnvProfileInput) UnmarshalJSON(data []byte) error {
@@ -406,11 +376,19 @@ func NormalizePairingCompleteRequest(req PairingCompleteRequest) PairingComplete
 	req.BindingAudience = strings.TrimSpace(req.BindingAudience)
 	req.ClientKeyID = strings.TrimSpace(req.ClientKeyID)
 	req.ClientCapability = strings.TrimSpace(req.ClientCapability)
+	req.RuntimeGrants = normalizeRuntimeGrants(req.RuntimeGrants)
 	req.Proof = strings.TrimSpace(req.Proof)
 	return req
 }
 
 func ValidatePairingCompleteRequest(req PairingCompleteRequest) error {
+	for _, grant := range req.RuntimeGrants {
+		switch RuntimeGrant(strings.TrimSpace(string(grant))) {
+		case RuntimeGrantManage, RuntimeGrantCustomBuild, RuntimeGrantManageBinding:
+		default:
+			return ErrInvalidRuntimeGrants
+		}
+	}
 	req = NormalizePairingCompleteRequest(req)
 	if err := ValidateProtocolVersion(req.ProtocolVersion); err != nil {
 		return err
@@ -486,6 +464,10 @@ func NormalizeEnvironments(environments []Environment) []Environment {
 			} else {
 				environment.ProfileAccessRoute = &route
 			}
+		}
+		if environment.RuntimeManagement != nil {
+			management := NormalizeRuntimeManagementCapability(*environment.RuntimeManagement)
+			environment.RuntimeManagement = &management
 		}
 		if environment.GatewayEnvID == "" {
 			continue
@@ -636,26 +618,6 @@ func ValidateEnvProfileDeleteRequest(req EnvProfileDeleteRequest) error {
 	}
 	if req.GatewayEnvID == "" {
 		return ErrMissingGatewayEnvID
-	}
-	return nil
-}
-
-func NormalizeEnvLifecycleRequest(req EnvLifecycleRequest) EnvLifecycleRequest {
-	req.GatewayEnvID = strings.TrimSpace(req.GatewayEnvID)
-	req.Operation = normalizeEnvLifecycleOperation(req.Operation)
-	return req
-}
-
-func ValidateEnvLifecycleRequest(req EnvLifecycleRequest) error {
-	req = NormalizeEnvLifecycleRequest(req)
-	if err := ValidateProtocolVersion(req.ProtocolVersion); err != nil {
-		return err
-	}
-	if req.GatewayEnvID == "" {
-		return ErrMissingGatewayEnvID
-	}
-	if req.Operation == "" {
-		return ErrMissingLifecycleOperation
 	}
 	return nil
 }
@@ -845,15 +807,6 @@ func normalizeEnvProfileControlOwner(owner EnvProfileControlOwner) EnvProfileCon
 		return owner
 	default:
 		return EnvProfileControlOwnerNone
-	}
-}
-
-func normalizeEnvLifecycleOperation(operation EnvLifecycleOperation) EnvLifecycleOperation {
-	switch operation {
-	case EnvLifecycleOperationStart, EnvLifecycleOperationStop, EnvLifecycleOperationRestart, EnvLifecycleOperationUpdateRuntime:
-		return operation
-	default:
-		return ""
 	}
 }
 

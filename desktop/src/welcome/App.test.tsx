@@ -132,7 +132,7 @@ function testControlPlaneSummary(input: Readonly<{
   const accessPoint = testProviderAccessPoint(providerOrigin);
   return {
     provider: {
-      protocol_version: 'rcpp-v2' as const,
+      protocol_version: 'rcpp-v3' as const,
       provider_id: 'example_control_plane',
       display_name: 'Example Control Plane',
       provider_origin: providerOrigin,
@@ -479,12 +479,9 @@ describe('DesktopWelcomeShell', () => {
     const local = testLocalEnvironment({
       currentRuntime: {
         local_ui_url: 'http://localhost:23998/',
-        desktop_managed: true,
         effective_run_mode: 'desktop',
         runtime_service: {
           protocol_version: 'redeven-runtime-v1',
-          service_owner: 'desktop',
-          desktop_managed: true,
           effective_run_mode: 'desktop',
           remote_enabled: false,
           compatibility: 'compatible',
@@ -1592,7 +1589,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain("kind: 'continue_launcher_operation'");
     expect(appSrc).toContain("kind: 'dismiss_launcher_operation'");
     expect(appSrc).toContain('IMPORTANT: Provider-link confirmation is intentionally reachable only from');
-    expect(appSrc).toContain('desktopEntryKindOwnsRuntimeManagement(environment.kind)');
+    expect(appSrc).toContain('desktopEntryKindSupportsRuntimeManagement(environment.kind)');
     expect(appSrc).toContain("action?.runtime_operation_method === 'desktop_local_update_handoff'");
     expect(appSrc).toContain("kind: 'manage_desktop_update'");
     expect(appSrc).toContain("result?.outcome === 'opened_desktop_update_handoff'");
@@ -2380,19 +2377,12 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('open={providerRuntimeLinkDialogOpen()}');
   });
 
-  it('uses a digest-bound destructive Runtime takeover dialog without an error toast', () => {
+  it('projects operation confirmation as progress without a client ownership dialog', () => {
     const appSrc = readWelcomeSource();
-    expect(appSrc).toContain("failure.code === 'confirmation_required'");
-    expect(appSrc).toContain('failure.runtime_process_takeover');
-    expect(appSrc).toContain('failure.continuation_action');
-    expect(appSrc).toContain('setRuntimeProcessTakeoverDialog({');
-    expect(appSrc).toContain('data-floe-autofocus');
-    expect(appSrc).toContain('variant="destructive"');
-    expect(appSrc).toContain("i18n().t('runtimeTakeover.forceRestartTitle')");
-    expect(appSrc).toContain('state_root');
-    expect(appSrc).toContain('process_started_at_unix_ms');
-    expect(appSrc).toContain('owner_evidence');
-    expect(appSrc.indexOf("failure.code === 'confirmation_required'")).toBeLessThan(appSrc.indexOf('const presentation = launcherActionFailurePresentation'));
+    expect(appSrc).toContain("progress.status === 'needs_confirmation'");
+    expect(appSrc).not.toContain('runtimeTakeover');
+    expect(appSrc).not.toContain('RuntimeProcessTakeover');
+    expect(appSrc).not.toContain('owner_evidence');
   });
 
   it('localizes structured local Runtime target details', () => {

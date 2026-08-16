@@ -47,7 +47,7 @@ function providerAccessPoint() {
 
 function controlPlaneSummary(): DesktopControlPlaneSummary {
   const provider = normalizeDesktopControlPlaneProvider({
-    protocol_version: 'rcpp-v2',
+    protocol_version: 'rcpp-v3',
     provider_id: 'example_provider',
     provider_origin: 'https://provider.example.invalid',
     display_name: 'Example Provider',

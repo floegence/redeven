@@ -73,7 +73,6 @@ func (c *cli) desktopBridgeCmd(args []string) int {
 				ProtocolVersion: endpointString(controlEndpoint, func(endpoint runtimemanagement.RuntimeControlEndpoint) string { return endpoint.ProtocolVersion }),
 				BaseURL:         "bridge://runtime-control",
 				Token:           endpointString(controlEndpoint, func(endpoint runtimemanagement.RuntimeControlEndpoint) string { return endpoint.Token }),
-				DesktopOwnerID:  endpointString(controlEndpoint, func(endpoint runtimemanagement.RuntimeControlEndpoint) string { return endpoint.DesktopOwnerID }),
 			},
 			RuntimeService: state.RuntimeService,
 		},

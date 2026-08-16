@@ -14,7 +14,6 @@ export type DesktopRuntimeHealthFreshness =
 export type DesktopRuntimeMaintenanceKind =
   | 'runtime_update_required'
   | 'runtime_restart_required'
-  | 'runtime_process_takeover_required'
   | 'runtime_stale_lock'
   | 'desktop_model_source_requires_runtime_update';
 export type DesktopRuntimeMaintenanceRequiredFor = 'open' | 'desktop_model_source';
@@ -98,7 +97,6 @@ function normalizeMaintenanceKind(value: unknown): DesktopRuntimeMaintenanceKind
   switch (kind) {
     case 'runtime_update_required':
     case 'runtime_restart_required':
-    case 'runtime_process_takeover_required':
     case 'runtime_stale_lock':
     case 'desktop_model_source_requires_runtime_update':
       return kind;
@@ -119,7 +117,6 @@ export function desktopRuntimeMaintenanceDefaultRecoveryAction(
     case 'desktop_model_source_requires_runtime_update':
       return 'update_runtime';
     case 'runtime_restart_required':
-    case 'runtime_process_takeover_required':
       return 'restart_runtime';
     case 'runtime_stale_lock':
       return 'start_runtime';
@@ -244,14 +241,7 @@ export function desktopRuntimeMaintenanceRequiresUpdate(
 export function desktopRuntimeMaintenanceRequiresRestart(
   maintenance: DesktopRuntimeMaintenanceRequirement | null | undefined,
 ): boolean {
-  return maintenance?.kind === 'runtime_restart_required'
-    || maintenance?.kind === 'runtime_process_takeover_required';
-}
-
-export function desktopRuntimeMaintenanceRequiresProcessTakeover(
-  maintenance: DesktopRuntimeMaintenanceRequirement | null | undefined,
-): boolean {
-  return maintenance?.kind === 'runtime_process_takeover_required';
+  return maintenance?.kind === 'runtime_restart_required';
 }
 
 export function desktopRuntimeMaintenanceIsStaleLock(
@@ -275,7 +265,6 @@ type DesktopRuntimeBlockedReportLike = Readonly<{
   message?: string;
   lock_owner?: Readonly<{
     pid?: number;
-    desktop_managed?: boolean;
   }>;
   diagnostics?: Readonly<{
     attach_state?: string;
@@ -433,7 +422,7 @@ export function classifyDesktopRuntimeBlockedLaunchReport(
           : 'open',
         recovery_action: 'update_runtime',
         can_desktop_start: false,
-        can_desktop_restart: lockPID > 0 && report.lock_owner?.desktop_managed !== false,
+        can_desktop_restart: lockPID > 0,
         has_active_work: lockPID > 0,
         active_work_label: lockPID > 0 ? 'Existing runtime work may be active' : 'No active work',
         target_runtime_version: options.target_runtime_version,
@@ -452,7 +441,7 @@ export function classifyDesktopRuntimeBlockedLaunchReport(
         required_for: 'open',
         recovery_action: 'restart_runtime',
         can_desktop_start: false,
-        can_desktop_restart: lockPID > 0 && report.lock_owner?.desktop_managed !== false,
+        can_desktop_restart: lockPID > 0,
         has_active_work: true,
         active_work_label: 'Existing runtime work may be active',
         target_runtime_version: options.target_runtime_version,

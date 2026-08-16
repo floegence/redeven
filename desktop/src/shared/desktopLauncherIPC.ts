@@ -1,5 +1,5 @@
 import type { DesktopSettingsSurfaceSnapshot } from './desktopSettingsSurface';
-import type { DesktopControlPlaneSummary } from './controlPlaneProvider';
+import type { DesktopControlPlaneSummary, DesktopProviderRuntimeManagementCapability } from './controlPlaneProvider';
 import { normalizeControlPlaneOrigin } from './controlPlaneProvider';
 import {
   normalizeDesktopSSHAuthMode,
@@ -28,10 +28,6 @@ import type { DesktopOpenConnectionTiming } from './desktopOpenConnectionProgres
 import type { DesktopRuntimeLifecycleProgress } from './desktopRuntimeLifecycleProgress';
 import type { DesktopOperationFailurePresentation } from './desktopOperationFailure';
 import type { DesktopLocalRuntimeOpenPlan } from './localRuntimeSupervisor';
-import type {
-  DesktopRuntimeProcessReconciliation,
-  DesktopRuntimeProcessTakeoverProposal,
-} from './desktopRuntimeProcessTakeover';
 import type { RuntimeServiceProviderConnectionState, RuntimeServiceSnapshot } from './runtimeService';
 import type { DesktopTranslationKey } from './i18n/desktopI18n';
 import type {
@@ -40,6 +36,7 @@ import type {
   DesktopGatewayEnvironment,
   DesktopGatewayEnvironmentCapability,
   DesktopGatewayEnvironmentState,
+  DesktopGatewayRuntimeManagementCapability,
   DesktopGatewayDiagnosis,
   DesktopGatewayServiceState,
   DesktopGatewaySource,
@@ -77,7 +74,7 @@ export type DesktopEnvironmentEntryCategory = 'local' | 'provider' | 'gateway' |
 export type DesktopEnvironmentOpenAction = 'open' | 'opening' | 'focus';
 export type DesktopLauncherCloseAction = 'quit' | 'close_launcher';
 export type DesktopLocalEnvironmentStateRoute = 'local_host' | 'remote_desktop';
-export type DesktopLocalRuntimeState = 'not_running' | 'running_desktop' | 'running_external';
+export type DesktopLocalRuntimeState = 'not_running' | 'running';
 export type DesktopLocalCloseBehavior = 'detaches' | 'not_applicable';
 export type DesktopLauncherSessionLifecycle = 'opening' | 'open' | 'closing';
 export type DesktopLauncherOperationStatus =
@@ -115,7 +112,6 @@ export type DesktopLauncherActionOutcome =
   | 'opened_environment_window'
   | 'focused_environment_window'
   | 'started_environment_runtime'
-  | 'recovered_plugin_state'
   | 'runtime_maintenance_required'
   | 'restarted_environment_runtime'
   | 'updated_environment_runtime'
@@ -171,7 +167,6 @@ export type DesktopLauncherActionFailureCode =
   | 'runtime_not_started'
   | 'runtime_not_ready'
   | 'runtime_lifecycle_in_progress'
-  | 'runtime_lifecycle_conflict'
   | 'control_plane_missing'
   | 'control_plane_environment_missing'
   | 'provider_environment_removed'
@@ -289,7 +284,6 @@ export type DesktopLauncherRuntimeTarget = Readonly<
     auto_runtime_probe_enabled: boolean;
     ssh_password: string;
     ssh_password_mode: 'keep' | 'replace' | 'clear';
-    runtime_process_reconciliation: DesktopRuntimeProcessReconciliation;
   }>
   & Partial<DesktopSSHEnvironmentDetails>
 >;
@@ -341,7 +335,6 @@ export type DesktopEnvironmentEntry = Readonly<{
   local_environment_ui_bind?: string;
   local_environment_ui_password_configured?: boolean;
   local_environment_network_exposure_review_required?: boolean;
-  local_environment_owner?: 'desktop' | 'agent' | 'unknown';
   local_environment_runtime_state?: DesktopLocalRuntimeState;
   local_environment_runtime_url?: string;
   local_environment_runtime_plan?: DesktopLocalRuntimeOpenPlan;
@@ -376,6 +369,7 @@ export type DesktopEnvironmentEntry = Readonly<{
   provider_status?: string;
   provider_lifecycle_status?: string;
   provider_last_seen_at_unix_ms?: number;
+  runtime_management?: DesktopProviderRuntimeManagementCapability | DesktopGatewayRuntimeManagementCapability;
   control_plane_sync_state?: DesktopControlPlaneSyncState;
   local_route_state?: DesktopLocalRouteState;
   remote_route_state?: DesktopProviderRemoteRouteState;
@@ -543,7 +537,6 @@ export type DesktopLauncherOperationSnapshot = Readonly<{
   deleted_subject: boolean;
   next_actions?: readonly DesktopLauncherOperationNextAction[];
   failure?: DesktopOperationFailurePresentation;
-  runtime_process_takeover?: DesktopRuntimeProcessTakeoverProposal;
 }>;
 
 export type DesktopLauncherOperationNextAction = Readonly<
@@ -894,6 +887,7 @@ export type DesktopLauncherActionRequest = Readonly<
       environment_id: string;
       gateway_id: string;
       gateway_env_id: string;
+      provider_environment_id?: string;
       operation: 'start' | 'stop' | 'restart' | 'update_runtime';
       label?: string;
     }
@@ -986,7 +980,6 @@ export type DesktopLauncherActionFailure = Readonly<{
   continuation_action?: DesktopLauncherActionRequest;
   resolve_focus?: DesktopGatewayResolveFocus;
   gateway_start_required_payload?: DesktopGatewayStartRequiredPayload;
-  runtime_process_takeover?: DesktopRuntimeProcessTakeoverProposal;
 }>;
 
 export type DesktopLauncherActionResult = DesktopLauncherActionSuccess | DesktopLauncherActionFailure;
@@ -1023,7 +1016,6 @@ export type DesktopLauncherActionProgress = Readonly<{
   deleted_subject?: boolean;
   next_actions?: readonly DesktopLauncherOperationNextAction[];
   failure?: DesktopOperationFailurePresentation;
-  runtime_process_takeover?: DesktopRuntimeProcessTakeoverProposal;
 }>;
 
 export function isDesktopLauncherActionFailure(
@@ -1058,8 +1050,17 @@ function normalizeGatewayStartPolicy(
 
 function normalizeDesktopLauncherRuntimeTarget(
   candidate: Record<string, unknown>,
-  options: Readonly<{ allowProcessReconciliation?: boolean }> = {},
 ): DesktopLauncherRuntimeTarget | null {
+  const allowedFields = new Set([
+    'kind', 'runtime_target_id', 'placement_target_id', 'host_access', 'placement',
+    'environment_id', 'provider_origin', 'provider_id', 'env_public_id', 'external_local_ui_url',
+    'label', 'force_runtime_update', 'auto_runtime_probe_enabled', 'ssh_password', 'ssh_password_mode',
+    'ssh_destination', 'ssh_port', 'auth_mode', 'connect_timeout_seconds', 'runtime_root',
+    'bootstrap_strategy', 'release_base_url',
+  ]);
+  if (Object.keys(candidate).some((field) => !allowedFields.has(field))) {
+    return null;
+  }
   const runtimeTargetID = compact(candidate.runtime_target_id);
   const placementTargetID = compact(candidate.placement_target_id);
   let hostAccess: DesktopRuntimeHostAccess | undefined;
@@ -1090,37 +1091,6 @@ function normalizeDesktopLauncherRuntimeTarget(
   const remoteInstallDir = compact(candidate.runtime_root);
   const bootstrapStrategy = compact(candidate.bootstrap_strategy);
   const releaseBaseURL = compact(candidate.release_base_url);
-  const reconciliationValue = candidate.runtime_process_reconciliation;
-  const hasProcessReconciliation = reconciliationValue !== undefined;
-  if (hasProcessReconciliation && options.allowProcessReconciliation !== true) {
-    return null;
-  }
-  let runtimeProcessReconciliation: DesktopRuntimeProcessReconciliation | undefined;
-  if (hasProcessReconciliation) {
-    if (!reconciliationValue || typeof reconciliationValue !== 'object' || Array.isArray(reconciliationValue)) {
-      return null;
-    }
-    const reconciliationRecord = reconciliationValue as Record<string, unknown>;
-    if (
-      Object.keys(reconciliationRecord).some((field) => (
-        field !== 'mode' && field !== 'expected_inventory_digest'
-      ))
-    ) {
-      return null;
-    }
-    const reconciliationDigest = compact(reconciliationRecord.expected_inventory_digest);
-    if (
-      compact(reconciliationRecord.mode) !== 'confirmed_takeover'
-      || !/^[a-f0-9]{64}$/u.test(reconciliationDigest)
-    ) {
-      return null;
-    }
-    runtimeProcessReconciliation = {
-      mode: 'confirmed_takeover',
-      expected_inventory_digest: reconciliationDigest,
-    };
-  }
-
   let providerOrigin = '';
   if (providerOriginRaw !== '') {
     try {
@@ -1160,7 +1130,6 @@ function normalizeDesktopLauncherRuntimeTarget(
     ...(candidate.connect_timeout_seconds != null ? { connect_timeout_seconds: normalizeDesktopSSHConnectTimeoutSeconds(candidate.connect_timeout_seconds) } : {}),
     ...(candidate.force_runtime_update === true ? { force_runtime_update: true } : {}),
     ...(candidate.auto_runtime_probe_enabled === true ? { auto_runtime_probe_enabled: true } : {}),
-    ...(runtimeProcessReconciliation ? { runtime_process_reconciliation: runtimeProcessReconciliation } : {}),
   };
 
   if (
@@ -1182,18 +1151,6 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
 
   const candidate = value as Partial<DesktopLauncherActionRequest>;
   const kind = compact(candidate.kind) as DesktopLauncherActionKind;
-  const hasProcessReconciliation = Object.prototype.hasOwnProperty.call(
-    candidate,
-    'runtime_process_reconciliation',
-  );
-  if (
-    hasProcessReconciliation
-    && kind !== 'restart_environment_runtime'
-    && kind !== 'update_environment_runtime'
-    && kind !== 'stop_environment_runtime'
-  ) {
-    return null;
-  }
   switch (kind) {
     case 'close_launcher_or_quit':
       return { kind };
@@ -1302,9 +1259,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
     case 'restart_environment_runtime':
     case 'update_environment_runtime':
     case 'stop_environment_runtime': {
-      const target = normalizeDesktopLauncherRuntimeTarget(candidate as Record<string, unknown>, {
-        allowProcessReconciliation: true,
-      });
+      const target = normalizeDesktopLauncherRuntimeTarget(candidate as Record<string, unknown>);
       if (!target) {
         return null;
       }
@@ -1703,6 +1658,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
       const gatewayID = compact((candidate as { gateway_id?: unknown }).gateway_id);
       const gatewayEnvID = compact((candidate as { gateway_env_id?: unknown }).gateway_env_id);
+      const providerEnvironmentID = compact((candidate as { provider_environment_id?: unknown }).provider_environment_id);
       const operation = compact((candidate as { operation?: unknown }).operation);
       if (
         environmentID === ''
@@ -1717,6 +1673,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         environment_id: environmentID,
         gateway_id: gatewayID,
         gateway_env_id: gatewayEnvID,
+        ...(providerEnvironmentID !== '' ? { provider_environment_id: providerEnvironmentID } : {}),
         operation,
         label: compact((candidate as { label?: unknown }).label) || undefined,
       };

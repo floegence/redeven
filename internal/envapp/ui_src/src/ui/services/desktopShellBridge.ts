@@ -27,7 +27,7 @@ export type DesktopShellCodespaceWindowOpenResult = Readonly<{
   message?: string;
 }>;
 
-export type DesktopManagedRuntimeRestartResult = Readonly<{
+export type DesktopRuntimeMaintenanceResult = Readonly<{
   ok: boolean;
   started: boolean;
   message?: string;
@@ -51,9 +51,9 @@ export interface DesktopShellBridge {
   openDashboard?: () => Promise<DesktopShellExternalURLOpenResult>;
   getRuntimeMaintenanceContext?: () => Promise<DesktopShellRuntimeMaintenanceContext>;
   notifyRuntimeMaintenanceStarted?: (kind: 'restart' | 'update') => void;
-  performRuntimeMaintenanceAction?: (request: unknown) => Promise<DesktopManagedRuntimeRestartResult>;
-  restartManagedRuntime?: () => Promise<DesktopManagedRuntimeRestartResult>;
-  manageDesktopUpdate?: () => Promise<DesktopManagedRuntimeRestartResult>;
+  performRuntimeMaintenanceAction?: (request: unknown) => Promise<DesktopRuntimeMaintenanceResult>;
+  restartManagedRuntime?: () => Promise<DesktopRuntimeMaintenanceResult>;
+  manageDesktopUpdate?: () => Promise<DesktopRuntimeMaintenanceResult>;
 }
 
 declare global {
@@ -287,7 +287,7 @@ export function runtimeMaintenanceMethodUsesDesktop(method: DesktopShellRuntimeM
   return desktopShellRuntimeMaintenanceMethodUsesDesktop(method);
 }
 
-export async function restartDesktopManagedRuntime(): Promise<DesktopManagedRuntimeRestartResult | null> {
+export async function restartRuntimeViaDesktop(): Promise<DesktopRuntimeMaintenanceResult | null> {
   const bridge = desktopShellBridge();
   if (!bridge || typeof bridge.restartManagedRuntime !== 'function') {
     return null;
@@ -295,7 +295,7 @@ export async function restartDesktopManagedRuntime(): Promise<DesktopManagedRunt
   return bridge.restartManagedRuntime();
 }
 
-export async function manageDesktopUpdate(): Promise<DesktopManagedRuntimeRestartResult | null> {
+export async function manageDesktopUpdate(): Promise<DesktopRuntimeMaintenanceResult | null> {
   const bridge = desktopShellBridge();
   if (!bridge || typeof bridge.manageDesktopUpdate !== 'function') {
     return null;

@@ -29,10 +29,10 @@ type RuntimeControlEnvelope = Readonly<{
 }>;
 
 type RuntimeControlServiceRoute =
-  | 'v1/provider-link'
-  | 'v1/provider-link/connect'
-  | 'v1/provider-link/disconnect'
-  | 'v1/code-workspace-engine/status';
+	| 'v2/provider-link'
+	| 'v2/provider-link/connect'
+	| 'v2/provider-link/disconnect'
+	| 'v2/code-workspace-engine/status';
 
 export type RuntimeControlProviderLinkStatus = Readonly<{
   linked?: boolean;
@@ -112,8 +112,7 @@ function requestRuntimeControl(
 ): Promise<RuntimeControlEnvelope> {
   const baseURL = compact(endpoint.base_url);
   const token = compact(endpoint.token);
-  const desktopOwnerID = compact(endpoint.desktop_owner_id);
-  if (!baseURL || !token || !desktopOwnerID) {
+	if (!baseURL || !token) {
     return Promise.reject(new RuntimeControlError('RUNTIME_CONTROL_UNAVAILABLE', 'Runtime control endpoint is incomplete.'));
   }
 
@@ -136,7 +135,6 @@ function requestRuntimeControl(
       headers: {
         Accept: 'application/json',
         Authorization: `Bearer ${token}`,
-        'X-Redeven-Desktop-Owner-ID': desktopOwnerID,
         ...(body.length > 0 ? {
           'Content-Type': options.contentType ?? (options.rawBody ? 'application/octet-stream' : 'application/json'),
           'Content-Length': body.length,
@@ -216,7 +214,7 @@ function parseProviderLinkStatus(data: unknown): RuntimeControlProviderLinkStatu
 export async function getProviderLinkStatus(
   endpoint: DesktopRuntimeControlEndpoint,
 ): Promise<RuntimeControlProviderLinkStatus> {
-  const envelope = await requestRuntimeControl(endpoint, 'v1/provider-link', { method: 'GET' });
+	const envelope = await requestRuntimeControl(endpoint, 'v2/provider-link', { method: 'GET' });
   return parseProviderLinkStatus(envelope.data);
 }
 
@@ -224,7 +222,7 @@ export async function connectProviderLink(
   endpoint: DesktopRuntimeControlEndpoint,
   request: RuntimeControlProviderLinkRequest,
 ): Promise<RuntimeControlProviderLinkStatus> {
-  const envelope = await requestRuntimeControl(endpoint, 'v1/provider-link/connect', {
+	const envelope = await requestRuntimeControl(endpoint, 'v2/provider-link/connect', {
     method: 'POST',
     body: request,
   });
@@ -234,7 +232,7 @@ export async function connectProviderLink(
 export async function disconnectProviderLink(
   endpoint: DesktopRuntimeControlEndpoint,
 ): Promise<RuntimeControlProviderLinkStatus> {
-  const envelope = await requestRuntimeControl(endpoint, 'v1/provider-link/disconnect', {
+	const envelope = await requestRuntimeControl(endpoint, 'v2/provider-link/disconnect', {
     method: 'POST',
   });
   return parseProviderLinkStatus(envelope.data);
@@ -244,6 +242,6 @@ export async function getCodeWorkspaceEngineStatus(
   endpoint: DesktopRuntimeControlEndpoint,
   signal?: AbortSignal,
 ): Promise<unknown> {
-  const envelope = await requestRuntimeControl(endpoint, 'v1/code-workspace-engine/status', { method: 'GET', signal });
+	const envelope = await requestRuntimeControl(endpoint, 'v2/code-workspace-engine/status', { method: 'GET', signal });
   return envelope.data;
 }

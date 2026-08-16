@@ -133,7 +133,6 @@ func DiscoverTargets(opts DiscoverTargetsOptions) (TargetCatalog, error) {
 		target.PasswordRequired = runtimeStatus.Endpoint.PasswordRequired
 		target.EffectiveRunMode = strings.TrimSpace(runtimeStatus.RuntimeService.EffectiveRunMode)
 		target.RemoteEnabled = runtimeStatus.RuntimeService.RemoteEnabled
-		target.DesktopManaged = runtimeStatus.Identity.DesktopManaged
 		if target.ControlplaneBaseURL == "" {
 			target.ControlplaneBaseURL = strings.TrimSpace(runtimeStatus.RuntimeService.Bindings.ProviderLink.AccessPointOrigin)
 		}

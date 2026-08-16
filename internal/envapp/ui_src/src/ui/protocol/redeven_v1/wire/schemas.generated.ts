@@ -3795,22 +3795,6 @@ export const redevenWireSchemas = {
           "compatibility_epoch": {
             "kind": "number"
           },
-          "service_owner": {
-            "kind": "string"
-          },
-          "desktop_managed": {
-            "kind": "union",
-            "options": [
-              {
-                "kind": "literal",
-                "value": false
-              },
-              {
-                "kind": "literal",
-                "value": true
-              }
-            ]
-          },
           "effective_run_mode": {
             "kind": "string"
           },

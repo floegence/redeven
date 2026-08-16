@@ -188,6 +188,7 @@ function buildGatewayEnvironmentEntry(
     gateway_environment_profile: environment.profile,
     gateway_environment_profile_access_route: environment.profile_access_route,
     gateway_environment_origin: environment.origin,
+    runtime_management: environment.runtime_management,
     environment_source: source,
     pinned: false,
     tag: gateway.status === 'online' ? 'Gateway' : 'Resolve',

@@ -150,7 +150,6 @@ func TestRichRuntimeOverviewAndSessionsPanel(t *testing.T) {
 			Commit:           "abcdef123456",
 			ProtocolVersion:  "redeven-runtime-v1",
 			Compatibility:    "compatible",
-			ServiceOwner:     "external",
 			EffectiveRunMode: "hybrid",
 			Workload: RuntimeWorkload{
 				ActiveSessions:      2,

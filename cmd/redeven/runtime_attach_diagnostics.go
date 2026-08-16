@@ -112,8 +112,6 @@ func runtimeIdentityFromLockMetadata(metadata *agentLockMetadata, base runtimema
 		RuntimeVersion:  strings.TrimSpace(metadata.RuntimeVersion),
 		RuntimeCommit:   strings.TrimSpace(metadata.RuntimeCommit),
 		BinaryPath:      strings.TrimSpace(metadata.BinaryPath),
-		DesktopManaged:  metadata.DesktopManaged,
-		DesktopOwnerID:  strings.TrimSpace(metadata.DesktopOwnerID),
 	}
 	if identity.InstanceID == "" {
 		identity.InstanceID = base.InstanceID

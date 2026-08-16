@@ -87,7 +87,6 @@ type DesktopModelSourceConnectorOptions struct {
 	SecretsPath           string
 	RuntimeControlBaseURL string
 	RuntimeControlToken   string
-	DesktopOwnerID        string
 	SessionID             string
 	Source                string
 	ExpiresAtUnixMS       int64
@@ -369,7 +368,7 @@ func (c *desktopModelSourceClient) BindingStatus(ctx context.Context) runtimeser
 	defer c.mu.Unlock()
 	return runtimeservice.NormalizeBinding(c.bindingLocked(time.Now()), runtimeservice.Capability{
 		Supported:  true,
-		BindMethod: runtimeservice.RuntimeControlBindMethodV1,
+		BindMethod: runtimeservice.RuntimeControlBindMethodV2,
 	})
 }
 
@@ -754,15 +753,11 @@ func RunDesktopModelSourceConnector(ctx context.Context, opts DesktopModelSource
 	}
 	runtimeControlURL := strings.TrimSpace(opts.RuntimeControlBaseURL)
 	token := strings.TrimSpace(opts.RuntimeControlToken)
-	desktopOwnerID := strings.TrimSpace(opts.DesktopOwnerID)
 	if runtimeControlURL == "" {
 		return errors.New("missing runtime-control url")
 	}
 	if token == "" {
 		return errors.New("missing runtime-control token")
-	}
-	if desktopOwnerID == "" {
-		return errors.New("missing Desktop owner id")
 	}
 	executor := &desktopModelSourceExecutor{
 		log:         opts.Logger,
@@ -774,7 +769,7 @@ func RunDesktopModelSourceConnector(ctx context.Context, opts DesktopModelSource
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 15 * time.Second}
 	}
-	wsURL, err := desktopModelSourceRuntimeControlURL(runtimeControlURL, "v1/desktop-model-source/rpc")
+	wsURL, err := desktopModelSourceRuntimeControlURL(runtimeControlURL, "v2/desktop-model-source/rpc")
 	if err != nil {
 		return err
 	}
@@ -791,7 +786,6 @@ func RunDesktopModelSourceConnector(ctx context.Context, opts DesktopModelSource
 	wsURL.RawQuery = q.Encode()
 	header := http.Header{}
 	header.Set("Authorization", "Bearer "+token)
-	header.Set("X-Redeven-Desktop-Owner-ID", desktopOwnerID)
 	header.Set("X-Redeven-Desktop-Model-Source-Protocol", DesktopModelSourceProtocolVersion)
 	reported := false
 	for {
@@ -801,7 +795,7 @@ func RunDesktopModelSourceConnector(ctx context.Context, opts DesktopModelSource
 		if session.ExpiresAtUnixMS > 0 && time.Now().UnixMilli() >= session.ExpiresAtUnixMS {
 			return errors.New("desktop model source session expired")
 		}
-		if err := postDesktopModelSourceConnect(ctx, httpClient, runtimeControlURL, token, desktopOwnerID, session); err != nil {
+		if err := postDesktopModelSourceConnect(ctx, httpClient, runtimeControlURL, token, session); err != nil {
 			return err
 		}
 		ws, _, err := websocket.DefaultDialer.DialContext(ctx, wsURL.String(), header)
@@ -1265,8 +1259,8 @@ func defaultProviderDisplayName(p config.AIProvider) string {
 	}
 }
 
-func postDesktopModelSourceConnect(ctx context.Context, client *http.Client, baseURL string, token string, desktopOwnerID string, session DesktopModelSourceSession) error {
-	u, err := desktopModelSourceRuntimeControlURL(baseURL, "v1/desktop-model-source/connect")
+func postDesktopModelSourceConnect(ctx context.Context, client *http.Client, baseURL string, token string, session DesktopModelSourceSession) error {
+	u, err := desktopModelSourceRuntimeControlURL(baseURL, "v2/desktop-model-source/connect")
 	if err != nil {
 		return err
 	}
@@ -1285,7 +1279,6 @@ func postDesktopModelSourceConnect(ctx context.Context, client *http.Client, bas
 		return err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("X-Redeven-Desktop-Owner-ID", desktopOwnerID)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := client.Do(req)
 	if err != nil {

@@ -1,36 +1,37 @@
 ---
 type: Protocol Contract
-title: Gateway v1 protocol
-description: Gateway v1 uses OpenAPI as the machine-readable HTTP JSON wire contract for /gateway/v1/*.
-tags: [gateway, protocol, desktop, openapi]
-timestamp: 2026-06-18T00:00:00Z
+title: Gateway v2 protocol
+description: OpenAPI and signed HTTP JSON contract for Gateway access and Runtime lifecycle operations.
+tags: [gateway, protocol, desktop, openapi, runtime]
+timestamp: 2026-08-17T00:00:00Z
 ---
 # Summary
 
-Gateway v1 is the `redeven-gateway-v1` HTTP JSON protocol used by Desktop and `redeven-gateway` for pairing, catalog reads, open-session artifacts, Gateway-owned profile writes, and lifecycle requests. Its machine-readable source contract is `spec/openapi/gateway-v1.yaml`.
+`redeven-gateway` exposes the stable `redeven-gateway-v2` HTTP JSON protocol. Gateway is an optional Runtime lifecycle supervisor and an independent process; it is not required for Runtime Connect, Workspace, or Runtime UI access. Gateway owns Runtime operation progress, target locking, checkpoints, fencing, and recovery. Desktop is a client that observes or starts an operation and never represents Runtime lifecycle ownership.
 
 # Contract
 
-## Mechanism
+## Wire surface
 
-The OpenAPI document defines seven `POST /gateway/v1/*` endpoints, one success envelope shape, one error envelope shape, the protocol version const, signed Gateway auth headers, the managed bridge token security boundary for profile writes, `GatewayConnectArtifact` variants, and the conditional profile access route variants. Open-session responses do not declare or depend on browser `Set-Cookie`; local-direct profile sessions are represented by a signed artifact URL whose listener port and random access path are session-specific service state, not a protocol cookie.
+The machine-readable source is `spec/openapi/gateway-v2.yaml`. It defines pairing, catalog, open-session, profile writes, capability discovery, operation prepare/confirm/artifact/commit/cancel/deadline/reconcile, and event reads under `/gateway/v2/*`. Signed requests bind protocol, method, route, body digest, gateway identity, binding audience, nonce, and timestamp. Pairing and profile-write bridge tokens are transport credentials, not Runtime operation authority.
 
-The OpenAPI contract is kept consistent with code by a focused Go contract test. The test parses YAML structurally, compares `info.version` with `internal/runtimegateway/protocol.Version` and the Desktop `GATEWAY_PROTOCOL_VERSION`, compares OpenAPI paths against Go server registrations and Desktop routes, verifies security requirements, checks required fields and enums, confirms closed object schemas, validates profile route variants, and rejects old `redeven-runtime-gateway-v1` residue or Runtime Service compatibility fields.
+Runtime lifecycle requests require an exact `lifecycle_target_id`, `target_generation`, authorized client key, operation scope, and (for updates) a published-release or custom-build artifact policy. `prepare` is the authorization linearization point and occurs before staging, upload, process stop, or local build. Repeating the same normalized scope attaches to the durable operation; a conflicting operation returns `operation_in_progress` instead of queueing or reassigning control.
 
-Gateway v1 does not expose `ssh_secret` in OpenAPI and accepts only key-agent SSH profile auth. Incoming `ssh_secret`, SSH password auth, unknown `client_capability`, and access-route fields outside the selected route variant are rejected by executable protocol and service validation instead of being ignored or treated as compatibility fallbacks.
+The Gateway operation store is the only lifecycle progress authority. It persists pre-commit deadlines, workload snapshots, artifact staging, lifecycle fence tokens, commit checkpoints, recovery, and `manual_recovery_required` quarantine. Commit rechecks target generation and exact workload identities; unknown inventory is never treated as empty. A successful commit performs atomic replacement and health verification, while an unverifiable recovery remains quarantined until a binding administrator reconciles it.
 
-Desktop treats Gateway protocol mismatch as a Gateway protocol failure, not as trust repair, pairing, reachability, or Runtime Service compatibility. Managed Gateway mismatches can recommend updating the managed Gateway package; URL/access-only Gateway mismatches remain facts-only and must not promise that Desktop can update a remote host. Protocol mismatch also invalidates cached Gateway catalog environments and capabilities so stale catalog entries cannot be opened after a failed protocol check.
+Gateway and Runtime versions are independent. Lifecycle compatibility is decided by the signed compatibility manifest, Gateway protocol, Runtime service protocol/epoch, and capabilities. A version string match is neither necessary nor sufficient. Gateway updates are performed by Desktop installer or administrator setup; the Gateway protocol contains no self-update operation.
+
+Catalog/open-session and ordinary terminal, files, web, and workspace traffic remain separate from lifecycle operations. An explicit Gateway card may use its own open-session transport, but ordinary data never enters the Runtime operation store and does not consume a lifecycle permit.
 
 # Boundaries
 
-OpenAPI is sufficient for the Gateway HTTP wire contract, but it is not used as a complete workflow DSL. Nonce lifetime, proof verification, trust profile persistence, isolated local-direct listener lifecycle, artifact-path request gating, stale catalog invalidation, recovery action selection, and debug redaction remain executable Go/TypeScript behavior with tests.
-
-No new custom Gateway protocol specification language is introduced. Flowersec DSL is also not used for this API contract because the Gateway API is a compact HTTP control surface, while Flowersec remains in the transport/session dependency boundary.
-
-The contract excludes Desktop bridge stdio hello/frame schemas, Env App proxy routes, direct proxy surfaces, Runtime Service compatibility windows, release installer metadata, and human Markdown protocol descriptions that are not active source contracts.
+The contract excludes Desktop bridge stdio frames, Env App proxy routes, Runtime Service schemas, installer metadata, and Provider authorization. Portal grants and permits are consumed by Gateway at prepare; Portal records only authorization and binding audit facts and does not mirror operation state. URL environments remain access-only for Runtime lifecycle management.
 
 # Evidence
 
-- `redeven:spec/openapi/gateway-v1.yaml:1` - The OpenAPI document declares version 3.1.
-- `redeven:internal/runtimegateway/protocol/openapi_contract_test.go:69` - The focused contract test parses and validates the OpenAPI file.
-- `redeven:desktop/src/main/main.ts:3808` - Gateway sync errors build a source record from the current error and previous catalog state.
+- `redeven:spec/openapi/gateway-v2.yaml:1` - OpenAPI 3.1 Gateway v2 contract and signed payload fields.
+- `redeven:internal/runtimegateway/protocol/openapi_contract_test.go:69` - Structural contract test compares protocol, paths, routes, security, enums, and closed schemas.
+- `redeven:internal/gatewayservice/server.go:188` - Gateway validates protocol, target, authorization, and operation scope before lifecycle execution.
+- `redeven:internal/runtimegateway/protocol/lifecycle_v2.go:283` - Typed prepare, confirmation, deadline, artifact, and recovery request contracts.
+- `redeven:internal/runtimegateway/supervisor/` - Durable operation authorization, target locking, checkpoint, and recovery implementation.
+- `redeven:desktop/src/main/gatewayClient.ts` - Desktop uses the Gateway v2 route and protocol literal.

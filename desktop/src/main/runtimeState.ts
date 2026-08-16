@@ -42,8 +42,6 @@ type RuntimeProbeStatus = Readonly<{
   local_ui_urls?: readonly string[];
   password_required: boolean;
   exposure?: LocalUIExposure;
-  desktop_managed?: boolean;
-  desktop_owner_id?: string;
   started_at_unix_ms?: number;
   runtime_service?: RuntimeServiceSnapshot;
 }>;
@@ -179,8 +177,6 @@ function parseLocalRuntimeHealthResponse(raw: string): RuntimeProbeStatus | null
       ...(localUIURLs.length > 0 ? { local_ui_urls: localUIURLs } : {}),
       password_required: data.password_required,
       exposure,
-      ...(typeof data.desktop_managed === 'boolean' ? { desktop_managed: data.desktop_managed } : {}),
-      ...(String(data.desktop_owner_id ?? '').trim() !== '' ? { desktop_owner_id: String(data.desktop_owner_id).trim() } : {}),
       ...(() => {
         const startedAtUnixMS = normalizePositiveInteger(data.started_at_unix_ms);
         return startedAtUnixMS ? { started_at_unix_ms: startedAtUnixMS } : {};
@@ -384,8 +380,6 @@ function startupReportFromProbeStatus(baseURL: string, status: RuntimeProbeStatu
     local_ui_urls: localUIURLs,
     password_required: status.password_required,
     ...(status.exposure ? { exposure: status.exposure } : {}),
-    ...(typeof status.desktop_managed === 'boolean' ? { desktop_managed: status.desktop_managed } : {}),
-    ...(String(status.desktop_owner_id ?? '').trim() !== '' ? { desktop_owner_id: String(status.desktop_owner_id).trim() } : {}),
     ...(status.started_at_unix_ms ? { started_at_unix_ms: status.started_at_unix_ms } : {}),
     ...(status.runtime_service ? { runtime_service: status.runtime_service } : {}),
   };
@@ -396,8 +390,6 @@ function probeStatusFromStartup(startup: StartupReport): RuntimeProbeStatus {
     status: 'online',
     password_required: startup.password_required === true,
     ...(startup.exposure ? { exposure: startup.exposure } : {}),
-    ...(typeof startup.desktop_managed === 'boolean' ? { desktop_managed: startup.desktop_managed } : {}),
-    ...(String(startup.desktop_owner_id ?? '').trim() !== '' ? { desktop_owner_id: String(startup.desktop_owner_id).trim() } : {}),
     ...(startup.started_at_unix_ms ? { started_at_unix_ms: startup.started_at_unix_ms } : {}),
     ...(startup.runtime_service ? { runtime_service: startup.runtime_service } : {}),
   };

@@ -466,7 +466,7 @@ describe('environmentProgressPrimaryPresentation', () => {
 });
 
 describe('selectEnvironmentPanelProgress', () => {
-  it('presents takeover confirmation as terminal attention instead of active work', () => {
+  it('presents operation confirmation as terminal attention instead of active work', () => {
     const progress = lifecycleActionProgress({
       action: 'restart_environment_runtime',
       status: 'needs_confirmation',

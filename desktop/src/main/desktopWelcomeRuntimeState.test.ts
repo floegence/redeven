@@ -70,8 +70,6 @@ function runtimeService(overrides: Record<string, unknown> = {}) {
   return {
     runtime_version: 'v1.4.0',
     compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
-    service_owner: 'desktop',
-    desktop_managed: true,
     effective_run_mode: 'desktop',
     remote_enabled: true,
     compatibility: 'compatible',
@@ -104,8 +102,6 @@ describe('desktopWelcomeRuntimeState', () => {
             runtime_service: {
               runtime_version: 'v1.4.0',
               compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
-              service_owner: 'external',
-              desktop_managed: false,
               effective_run_mode: 'local',
               remote_enabled: false,
               compatibility: 'compatible',
@@ -159,14 +155,12 @@ describe('desktopWelcomeRuntimeState', () => {
             localUIURL,
             'open',
             {
-              desktop_managed: false,
               password_required: true,
               effective_run_mode: 'local',
               pid: 4242,
               started_at_unix_ms: 1778750000000,
             },
             {
-              runtimeLifecycleOwner: 'external',
               runtimeLaunchMode: 'attached',
             },
           ),
@@ -177,8 +171,6 @@ describe('desktopWelcomeRuntimeState', () => {
         local_ui_url: localUIURL,
         effective_run_mode: 'local',
         remote_enabled: false,
-        desktop_managed: false,
-        desktop_ownership: 'external',
         password_required: true,
         exposure: {
           ...loopbackExposure,
@@ -192,8 +184,6 @@ describe('desktopWelcomeRuntimeState', () => {
         }),
       });
       expect(hydrated.local_environment.local_hosting.current_runtime?.runtime_service).toMatchObject({
-        service_owner: 'external',
-        desktop_managed: false,
         effective_run_mode: 'local',
         remote_enabled: false,
         open_readiness: { state: 'openable' },
@@ -211,13 +201,11 @@ describe('desktopWelcomeRuntimeState', () => {
     }
   });
 
-  it('classifies a probed Desktop-managed runtime leased to another Desktop', async () => {
+  it('keeps a probed attached runtime openable without client ownership classification', async () => {
     const server = await startRuntimeServer({
       status: 'online',
       password_required: false,
       exposure: loopbackExposure,
-      desktop_managed: true,
-      desktop_owner_id: 'other-desktop-owner',
       runtime_service: runtimeService(),
     });
     const environment = testLocalEnvironment();
@@ -234,27 +222,20 @@ describe('desktopWelcomeRuntimeState', () => {
             server.localUIURL,
             'open',
             {
-              desktop_managed: true,
-              desktop_owner_id: 'other-desktop-owner',
               effective_run_mode: 'desktop',
               pid: 4242,
             },
             {
-              runtimeLifecycleOwner: 'external',
               runtimeLaunchMode: 'attached',
             },
           ),
         ],
         {
-          desktopOwnerID: 'desktop-owner-1',
         },
       );
 
       expect(hydrated.local_environment.local_hosting.current_runtime).toEqual(expect.objectContaining({
         local_ui_url: server.localUIURL,
-        desktop_managed: true,
-        desktop_owner_id: 'other-desktop-owner',
-        desktop_ownership: 'managed_elsewhere',
         exposure: loopbackExposure,
       }));
     } finally {
@@ -262,13 +243,11 @@ describe('desktopWelcomeRuntimeState', () => {
     }
   });
 
-  it('keeps an owned Desktop-managed runtime openable without comparing bundled identity', async () => {
+  it('keeps a Desktop-mode runtime openable without comparing bundled identity', async () => {
     const server = await startRuntimeServer({
       status: 'online',
       password_required: false,
       exposure: loopbackExposure,
-      desktop_managed: true,
-      desktop_owner_id: 'desktop-owner-1',
       runtime_service: runtimeService({
         runtime_version: 'v1.4.0',
         runtime_commit: 'old-commit',
@@ -289,20 +268,16 @@ describe('desktopWelcomeRuntimeState', () => {
             server.localUIURL,
             'open',
             {
-              desktop_managed: true,
-              desktop_owner_id: 'desktop-owner-1',
               effective_run_mode: 'desktop',
               pid: 4242,
             },
           ),
         ],
         {
-          desktopOwnerID: 'desktop-owner-1',
         },
       );
 
       expect(hydrated.local_environment.local_hosting.current_runtime).toEqual(expect.objectContaining({
-        desktop_ownership: 'owned',
         exposure: loopbackExposure,
         runtime_service: expect.objectContaining({
           runtime_version: 'v1.4.0',
@@ -334,7 +309,6 @@ describe('desktopWelcomeRuntimeState', () => {
           'http://127.0.0.1:9/',
           'open',
           {
-            desktop_managed: true,
             password_required: false,
             effective_run_mode: 'desktop',
             pid: 4242,
@@ -359,12 +333,9 @@ describe('desktopWelcomeRuntimeState', () => {
             status: 'online',
             password_required: false,
             exposure: loopbackExposure,
-            desktop_owner_id: 'desktop-owner-1',
             runtime_service: {
               runtime_version: 'v1.4.0',
               compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
-              service_owner: 'desktop',
-              desktop_managed: true,
               effective_run_mode: 'desktop',
               remote_enabled: true,
               compatibility: 'compatible',
@@ -415,18 +386,14 @@ process.stdout.write(${JSON.stringify(JSON.stringify({
           local_ui_url: `http://127.0.0.1:${address.port}/`,
           local_ui_urls: [`http://127.0.0.1:${address.port}/`],
           exposure: loopbackExposure,
-          desktop_managed: true,
           remote_enabled: true,
           effective_run_mode: 'desktop',
           pid: 5252,
           started_at_unix_ms: 1778751234567,
-          desktop_owner_id: 'desktop-owner-1',
           runtime_service: {
             runtime_version: 'v1.4.0',
-            protocol_version: 'redeven-runtime-v1',
+            protocol_version: 'redeven-runtime-v2',
             compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
-            service_owner: 'desktop',
-            desktop_managed: true,
             effective_run_mode: 'desktop',
             remote_enabled: true,
             compatibility: 'compatible',
@@ -453,7 +420,6 @@ process.stdout.write(${JSON.stringify(JSON.stringify({
 
       const hydrated = await hydrateWelcomeLocalEnvironmentRuntimeState(preferences, [], {
         probeTimeoutMs: 5_000,
-        desktopOwnerID: 'desktop-owner-1',
         executablePath,
       });
 
@@ -461,9 +427,6 @@ process.stdout.write(${JSON.stringify(JSON.stringify({
         local_ui_url: `http://127.0.0.1:${address.port}/`,
         effective_run_mode: 'desktop',
         remote_enabled: true,
-        desktop_managed: true,
-        desktop_owner_id: 'desktop-owner-1',
-        desktop_ownership: 'owned',
         password_required: false,
         exposure: loopbackExposure,
         diagnostics_enabled: false,
@@ -473,10 +436,8 @@ process.stdout.write(${JSON.stringify(JSON.stringify({
           runtime_version: 'v1.4.0',
           runtime_commit: undefined,
           runtime_build_time: undefined,
-          protocol_version: 'redeven-runtime-v1',
+          protocol_version: 'redeven-runtime-v2',
           compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
-          service_owner: 'desktop',
-          desktop_managed: true,
           effective_run_mode: 'desktop',
           remote_enabled: true,
           compatibility: 'compatible',

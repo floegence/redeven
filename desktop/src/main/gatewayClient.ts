@@ -23,11 +23,12 @@ import type {
   DesktopGatewayEnvironmentProfileAccessRoute,
   DesktopGatewayEnvironmentOriginKind,
   DesktopGatewayEnvironmentState,
+  DesktopGatewayRuntimeManagementCapability,
 } from '../shared/desktopGateway';
 import { desktopGatewayProfileURLHasEmbeddedCredentials } from '../shared/desktopGateway';
 import type { RuntimePlacementBridgeSessionHandle } from './runtimePlacementBridgeSession';
 
-const GATEWAY_PROTOCOL_VERSION = 'redeven-gateway-v1';
+const GATEWAY_PROTOCOL_VERSION = 'redeven-gateway-v2';
 const DEFAULT_GATEWAY_REQUEST_TIMEOUT_MS = 20_000;
 
 type GatewayRequestOptions = Readonly<{
@@ -105,19 +106,127 @@ export type GatewayEnvProfileDeleteResponse = Readonly<{
   deleted: boolean;
 }>;
 
-export type GatewayEnvLifecycleOperation = 'start' | 'stop' | 'restart' | 'update_runtime';
+export type GatewayRuntimeOperationKind = 'start' | 'stop' | 'restart' | 'update_runtime' | 'reconcile';
+export type GatewayRuntimeArtifactPolicy = 'published_release' | 'custom_build';
+export type GatewayRuntimeOperationState =
+  | 'preflighting'
+  | 'awaiting_confirmation'
+  | 'awaiting_artifact'
+  | 'staging'
+  | 'commit_ready'
+  | 'confirmation_required'
+  | 'fencing'
+  | 'committing'
+  | 'recovering'
+  | 'manual_recovery_required'
+  | 'succeeded'
+  | 'failed'
+  | 'cancelled'
+  | 'expired';
 
-export type GatewayEnvLifecycleRequest = Readonly<{
+export type GatewayRuntimeOperationPrepareRequest = Readonly<{
+  operation_id: string;
+  authorized_client_key_id: string;
   gateway_env_id: string;
-  operation: GatewayEnvLifecycleOperation;
+  lifecycle_target_id: string;
+  target_generation: number;
+  operation: GatewayRuntimeOperationKind;
+  desired_runtime: Readonly<{
+    version: string;
+    platform: string;
+    architecture: string;
+    artifact_policy: GatewayRuntimeArtifactPolicy;
+  }>;
+  build_inputs?: unknown;
+  idempotency_key: string;
+  authorization_permit?: string;
 }>;
 
-export type GatewayEnvLifecycleResponse = Readonly<{
-  protocol_version: string;
+export type GatewayRuntimeManagementCapabilityRequest = Readonly<{
   gateway_env_id: string;
-  operation: GatewayEnvLifecycleOperation;
-  state: 'accepted' | 'running' | 'succeeded' | 'failed' | 'unsupported';
-  message?: string;
+}>;
+
+export type GatewayRuntimeWorkloadSnapshot = Readonly<{
+  runtime_binary_version?: string;
+  snapshot_revision: number;
+  process_inventory_digest: string;
+  workload_identity_digest: string;
+  workload_identities?: readonly string[];
+  workload: Readonly<{
+    knowledge: 'known' | 'unknown';
+    affected_process_count?: number;
+    active_session_count?: number;
+    protected_workload_present: boolean;
+  }>;
+  observed_at_unix_ms: number;
+}>;
+
+export type GatewayRuntimeOperation = Readonly<{
+  protocol_version: string;
+  operation_id: string;
+  idempotency_key: string;
+  lifecycle_target_id: string;
+  target_generation: number;
+  gateway_env_id: string;
+  kind: GatewayRuntimeOperationKind;
+  authorized_client_key_id: string;
+  desired_runtime: GatewayRuntimeOperationPrepareRequest['desired_runtime'];
+  state: GatewayRuntimeOperationState;
+  expected_snapshot: GatewayRuntimeWorkloadSnapshot;
+  expires_at_unix_ms?: number;
+  maximum_expires_at_unix_ms?: number;
+  confirmed_risk_summary_digest?: string;
+  artifact?: Readonly<{
+    size_bytes: number;
+    sha256: string;
+    manifest_sha256: string;
+    policy: GatewayRuntimeArtifactPolicy;
+  }>;
+  failure?: Readonly<{ code: string; message: string; retryable?: boolean }>;
+  created_at_unix_ms: number;
+  updated_at_unix_ms: number;
+}>;
+
+export type GatewayRuntimeOperationPrepareResponse = Readonly<{
+  protocol_version: string;
+  operation: GatewayRuntimeOperation;
+  confirmation_required: boolean;
+  artifact_max_bytes: number;
+}>;
+
+export type GatewayRuntimeOperationConfirmationRequest = Readonly<{
+  snapshot_revision: number;
+  process_inventory_digest: string;
+  workload_identity_digest: string;
+  risk_summary_digest: string;
+}>;
+
+export type GatewayRuntimeOperationReconcileRequest = Readonly<{
+  authorization_permit?: string;
+}>;
+
+export type GatewayRuntimeArtifactMetadata = Readonly<{
+  size_bytes: number;
+  sha256: string;
+  manifest: unknown;
+  manifest_signature?: string;
+  manifest_certificate?: string;
+  build_attestation?: unknown;
+}>;
+
+export type GatewayRuntimeOperationEventsResponse = Readonly<{
+  protocol_version: string;
+  operation_id: string;
+  events: readonly Readonly<{
+    sequence: number;
+    operation_id: string;
+    lifecycle_target_id: string;
+    target_generation: number;
+    operation: GatewayRuntimeOperationKind;
+    state: GatewayRuntimeOperationState;
+    reason_code?: string;
+    timestamp_unix_ms: number;
+  }>[];
 }>;
 
 export type GatewayConnectArtifact = Readonly<{
@@ -141,14 +250,28 @@ type GatewayHTTPEnvelope = Readonly<{
   }>;
 }>;
 
-type GatewayRoute =
-  | 'gateway/v1/pairing/challenge'
-  | 'gateway/v1/pairing/complete'
-  | 'gateway/v1/catalog'
-  | 'gateway/v1/open-session'
-  | 'gateway/v1/env-profiles/upsert'
-  | 'gateway/v1/env-profiles/delete'
-  | 'gateway/v1/env-lifecycle';
+type GatewayRouteTemplate =
+  | 'gateway/v2/pairing/challenge'
+  | 'gateway/v2/pairing/complete'
+  | 'gateway/v2/catalog'
+  | 'gateway/v2/open-session'
+  | 'gateway/v2/env-profiles/upsert'
+  | 'gateway/v2/env-profiles/delete'
+  | 'gateway/v2/runtime-management/capability'
+  | 'gateway/v2/runtime-operations/prepare'
+  | 'gateway/v2/runtime-operations/{operation_id}'
+  | 'gateway/v2/runtime-operations/{operation_id}/confirm'
+  | 'gateway/v2/runtime-operations/{operation_id}/artifact'
+  | 'gateway/v2/runtime-operations/{operation_id}/commit'
+  | 'gateway/v2/runtime-operations/{operation_id}/cancel'
+  | 'gateway/v2/runtime-operations/{operation_id}/renew-deadline'
+  | 'gateway/v2/runtime-operations/{operation_id}/reconcile'
+  | 'gateway/v2/runtime-operations/{operation_id}/events';
+
+type GatewayRoute = Exclude<GatewayRouteTemplate, `gateway/v2/runtime-operations/{operation_id}${string}`>
+  | `gateway/v2/runtime-operations/${string}`;
+
+type GatewayHTTPMethod = 'GET' | 'POST' | 'PUT';
 
 type GatewayTransportCallOptions = GatewayRequestOptions & Readonly<{
   secretStore: GatewaySecretStore;
@@ -293,8 +416,9 @@ function isLoopbackHost(hostname: string): boolean {
 function requestGatewayJSON(
   record: GatewayRecord,
   route: GatewayRoute,
-  body: unknown,
+  body: unknown | undefined,
   options: GatewayTransportCallOptions,
+  method: GatewayHTTPMethod = 'POST',
 ): Promise<GatewayHTTPDataResult> {
   if (record.connection.kind !== 'url') {
     return Promise.reject(new GatewayClientError('GATEWAY_TRANSPORT_UNSUPPORTED', 'This Gateway transport is not handled by the URL client.'));
@@ -306,7 +430,7 @@ function requestGatewayJSON(
     return Promise.reject(error);
   }
 
-  const payload = Buffer.from(JSON.stringify(body), 'utf8');
+  const payload = body == null ? Buffer.alloc(0) : Buffer.from(JSON.stringify(body), 'utf8');
   const requestImpl = url.protocol === 'https:' ? https.request : http.request;
   return new Promise((resolve, reject) => {
     if (options.signal?.aborted) {
@@ -315,18 +439,18 @@ function requestGatewayJSON(
     }
     void createGatewayAuthHeaders({
       record,
-      method: 'POST',
+      method,
       route: `/${route}`,
       body,
       secret_store: options.secretStore,
     }).then((authHeaders) => {
       const req = requestImpl(url, {
-        method: 'POST',
+        method,
         timeout: gatewayTimeoutMs(options.timeoutMs),
         headers: {
           Accept: 'application/json',
           ...authHeaders,
-          'Content-Length': payload.length,
+          ...(payload.length > 0 ? { 'Content-Length': payload.length } : {}),
         },
       }, (response) => {
         response.setEncoding('utf8');
@@ -361,7 +485,9 @@ function requestGatewayJSON(
       req.on('close', () => {
         options.signal?.removeEventListener('abort', onAbort);
       });
-      req.write(payload);
+      if (payload.length > 0) {
+        req.write(payload);
+      }
       req.end();
     }).catch(reject);
   });
@@ -369,7 +495,7 @@ function requestGatewayJSON(
 
 function requestGatewayPairingJSON(
   record: GatewayRecord,
-  route: Extract<GatewayRoute, 'gateway/v1/pairing/challenge' | 'gateway/v1/pairing/complete'>,
+  route: Extract<GatewayRoute, 'gateway/v2/pairing/challenge' | 'gateway/v2/pairing/complete'>,
   body: unknown,
   options: GatewayRequestOptions = {},
 ): Promise<unknown> {
@@ -438,8 +564,9 @@ function requestGatewayBridgeJSON(
   bridge: RuntimePlacementBridgeSessionHandle,
   record: GatewayRecord,
   route: GatewayRoute,
-  body: unknown,
+  body: unknown | undefined,
   options: GatewayTransportCallOptions,
+  method: GatewayHTTPMethod = 'POST',
 ): Promise<GatewayHTTPDataResult> {
   return new Promise((resolve, reject) => {
     let settled = false;
@@ -508,19 +635,19 @@ function requestGatewayBridgeJSON(
           ? {}
           : await createGatewayAuthHeaders({
               record,
-              method: 'POST',
+              method,
               route: `/${route}`,
               body,
               secret_store: options.secretStore,
             });
-        const payload = JSON.stringify(body);
+        const payload = body == null ? '' : JSON.stringify(body);
         const request = [
-          `POST /${route} HTTP/1.1`,
+          `${method} /${route} HTTP/1.1`,
           'Host: redeven-gateway.local',
           'Accept: application/json',
           'X-Redeven-Gateway-Transport: desktop_bridge',
           ...Object.entries(authHeaders).map(([key, value]) => `${key}: ${value}`),
-          `Content-Length: ${Buffer.byteLength(payload, 'utf8')}`,
+          ...(payload ? [`Content-Length: ${Buffer.byteLength(payload, 'utf8')}`] : []),
           'Connection: close',
           '',
           payload,
@@ -532,6 +659,170 @@ function requestGatewayBridgeJSON(
           reject(error instanceof GatewayClientError ? error : new GatewayClientError(
             'GATEWAY_BRIDGE_WRITE_FAILED',
             error instanceof Error ? error.message : 'Gateway bridge request failed.',
+            null,
+            true,
+          ));
+        });
+      }
+    })();
+  });
+}
+
+function runtimeOperationRoute(
+  operationID: string,
+  suffix: '' | '/confirm' | '/artifact' | '/commit' | '/cancel' | '/renew-deadline' | '/reconcile' | '/events' = '',
+): GatewayRoute {
+  const normalized = compact(operationID);
+  if (!normalized) {
+    throw new GatewayClientError('GATEWAY_RUNTIME_OPERATION_ID_REQUIRED', 'Runtime operation ID is required.');
+  }
+  return `gateway/v2/runtime-operations/${encodeURIComponent(normalized)}${suffix}`;
+}
+
+function runtimeArtifactMetadataHeader(metadata: GatewayRuntimeArtifactMetadata): string {
+  return Buffer.from(JSON.stringify(metadata), 'utf8').toString('base64url');
+}
+
+function requestGatewayURLArtifact(
+  record: GatewayRecord,
+  route: GatewayRoute,
+  metadata: GatewayRuntimeArtifactMetadata,
+  artifact: Buffer,
+  options: GatewayTransportCallOptions,
+): Promise<GatewayHTTPDataResult> {
+  if (record.connection.kind !== 'url') {
+    return Promise.reject(new GatewayClientError('GATEWAY_TRANSPORT_UNSUPPORTED', 'This Gateway transport is not handled by the URL client.'));
+  }
+  let url: URL;
+  try {
+    url = gatewayURL(record.connection, route);
+  } catch (error) {
+    return Promise.reject(error);
+  }
+  const requestImpl = url.protocol === 'https:' ? https.request : http.request;
+  return new Promise((resolve, reject) => {
+    if (options.signal?.aborted) {
+      reject(abortError());
+      return;
+    }
+    void createGatewayAuthHeaders({
+      record,
+      method: 'PUT',
+      route: `/${route}`,
+      body: metadata,
+      secret_store: options.secretStore,
+    }).then((authHeaders) => {
+      const req = requestImpl(url, {
+        method: 'PUT',
+        timeout: gatewayTimeoutMs(options.timeoutMs),
+        headers: {
+          Accept: 'application/json',
+          ...authHeaders,
+          'Content-Type': 'application/octet-stream',
+          'Content-Length': artifact.length,
+          'X-Redeven-Runtime-Artifact-Metadata': runtimeArtifactMetadataHeader(metadata),
+        },
+      }, (response) => {
+        response.setEncoding('utf8');
+        let raw = '';
+        response.on('data', (chunk: string) => { raw += chunk; });
+        response.on('end', () => {
+          const statusCode = response.statusCode ?? 500;
+          try {
+            resolve({ data: parseGatewayHTTPResponse(raw, statusCode) });
+          } catch (error) {
+            reject(error);
+          }
+        });
+      });
+      const onAbort = () => req.destroy(abortError());
+      options.signal?.addEventListener('abort', onAbort, { once: true });
+      req.on('timeout', () => req.destroy(new GatewayClientError('GATEWAY_TIMEOUT', 'Gateway artifact upload timed out.', null, true)));
+      req.on('error', (error) => {
+        reject(error instanceof GatewayClientError
+          ? error
+          : new GatewayClientError('GATEWAY_UNREACHABLE', error.message || 'Desktop could not upload the Runtime artifact.', null, true));
+      });
+      req.on('close', () => options.signal?.removeEventListener('abort', onAbort));
+      req.end(artifact);
+    }).catch(reject);
+  });
+}
+
+function requestGatewayBridgeArtifact(
+  bridge: RuntimePlacementBridgeSessionHandle,
+  record: GatewayRecord,
+  route: GatewayRoute,
+  metadata: GatewayRuntimeArtifactMetadata,
+  artifact: Buffer,
+  options: GatewayTransportCallOptions,
+): Promise<GatewayHTTPDataResult> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let raw = '';
+    let stream: ReturnType<RuntimePlacementBridgeSessionHandle['openStream']> | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const settle = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      options.signal?.removeEventListener('abort', onAbort);
+      fn();
+    };
+    const closeStream = () => { void stream?.close().catch(() => undefined); };
+    const onAbort = () => settle(() => { closeStream(); reject(abortError()); });
+    try {
+      throwIfCanceled(options.signal);
+      stream = bridge.openStream('gateway_protocol');
+    } catch (error) {
+      reject(new GatewayClientError('GATEWAY_BRIDGE_UNAVAILABLE', error instanceof Error ? error.message : 'Gateway bridge is unavailable.', null, true));
+      return;
+    }
+    options.signal?.addEventListener('abort', onAbort, { once: true });
+    timer = setTimeout(() => settle(() => {
+      closeStream();
+      reject(new GatewayClientError('GATEWAY_TIMEOUT', 'Gateway artifact upload timed out.', null, true));
+    }), gatewayTimeoutMs(options.timeoutMs));
+    stream.onData((chunk) => { raw += chunk.toString('utf8'); });
+    stream.onClose(() => settle(() => {
+      try {
+        resolve({ data: parseGatewayHTTPResponse(responseBody(raw), responseStatusCode(raw)) });
+      } catch (error) {
+        reject(error);
+      }
+    }));
+    stream.onError((error) => settle(() => reject(new GatewayClientError('GATEWAY_BRIDGE_FAILED', error.message, null, true))));
+    void (async () => {
+      try {
+        const authHeaders = await createGatewayAuthHeaders({
+          record,
+          method: 'PUT',
+          route: `/${route}`,
+          body: metadata,
+          secret_store: options.secretStore,
+        });
+        const header = [
+          `PUT /${route} HTTP/1.1`,
+          'Host: redeven-gateway.local',
+          'Accept: application/json',
+          'X-Redeven-Gateway-Transport: desktop_bridge',
+          ...Object.entries(authHeaders)
+            .filter(([key]) => key.toLowerCase() !== 'content-type')
+            .map(([key, value]) => `${key}: ${value}`),
+          'Content-Type: application/octet-stream',
+          `Content-Length: ${artifact.length}`,
+          `X-Redeven-Runtime-Artifact-Metadata: ${runtimeArtifactMetadataHeader(metadata)}`,
+          'Connection: close',
+          '',
+          '',
+        ].join('\r\n');
+        await stream!.write(Buffer.concat([Buffer.from(header, 'utf8'), artifact]));
+      } catch (error) {
+        settle(() => {
+          closeStream();
+          reject(error instanceof GatewayClientError ? error : new GatewayClientError(
+            'GATEWAY_BRIDGE_WRITE_FAILED',
+            error instanceof Error ? error.message : 'Gateway artifact upload failed.',
             null,
             true,
           ));
@@ -680,6 +971,83 @@ function normalizeGatewayEnvironmentProfile(value: unknown): DesktopGatewayEnvir
   };
 }
 
+function normalizeGatewayRuntimeManagementCapability(value: unknown): DesktopGatewayEnvironment['runtime_management'] | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+  const candidate = value as Record<string, unknown>;
+  const authorizationValue = candidate.authorization && typeof candidate.authorization === 'object'
+    ? candidate.authorization as Record<string, unknown>
+    : {};
+  const support = compact(candidate.support);
+  const authorization = compact(authorizationValue.state);
+  const readiness = compact(candidate.readiness);
+  if (
+    (support !== 'supported' && support !== 'unsupported' && support !== 'unknown')
+    || (authorization !== 'allowed' && authorization !== 'denied' && authorization !== 'unknown')
+    || (readiness !== 'ready' && readiness !== 'setup_required' && readiness !== 'temporarily_unavailable' && readiness !== 'unknown')
+  ) {
+    return undefined;
+  }
+  const presentationState = support === 'unsupported'
+    ? 'unsupported'
+    : support === 'unknown'
+      ? 'unknown'
+      : authorization === 'denied'
+        ? 'denied'
+        : authorization === 'unknown'
+          ? 'unknown'
+          : readiness === 'ready'
+            ? 'allowed'
+            : readiness;
+  const targetValue = candidate.target && typeof candidate.target === 'object'
+    ? candidate.target as Record<string, unknown>
+    : null;
+  const targetID = compact(targetValue?.lifecycle_target_id);
+  const targetGeneration = Number(targetValue?.target_generation);
+  const grants = Array.isArray(authorizationValue.grants)
+    ? authorizationValue.grants.map(compact).filter((grant): grant is 'manage_runtime' | 'deploy_custom_runtime' | 'manage_runtime_binding' => (
+      grant === 'manage_runtime' || grant === 'deploy_custom_runtime' || grant === 'manage_runtime_binding'
+    ))
+    : [];
+  const operations = Array.isArray(candidate.operations)
+    ? candidate.operations.map((operation) => {
+      try { return normalizeGatewayRuntimeOperationKind(operation); } catch { return null; }
+    }).filter((operation): operation is GatewayRuntimeOperationKind => operation !== null)
+    : [];
+  const artifactPolicies = Array.isArray(candidate.artifact_policies)
+    ? candidate.artifact_policies.map(compact).filter((policy): policy is GatewayRuntimeArtifactPolicy => policy === 'published_release' || policy === 'custom_build')
+    : [];
+  return {
+    support,
+    authorization: {
+      state: authorization,
+      ...(grants.length > 0 ? { grants: [...new Set(grants)] } : {}),
+    },
+    readiness,
+    presentation_state: presentationState,
+    ...(targetID && Number.isSafeInteger(targetGeneration) && targetGeneration > 0
+      ? { target: { lifecycle_target_id: targetID, target_generation: targetGeneration } }
+      : {}),
+    ...(operations.length > 0 ? { operations: [...new Set(operations)] } : {}),
+    ...(artifactPolicies.length > 0 ? { artifact_policies: [...new Set(artifactPolicies)] } : {}),
+    ...(Array.isArray(candidate.binding_actions)
+      ? { binding_actions: [...new Set(candidate.binding_actions.map(compact).filter(Boolean))] }
+      : {}),
+    ...(compact(candidate.supervision_mode) ? { supervision_mode: compact(candidate.supervision_mode) } : {}),
+    ...(compact(candidate.reason_code) ? { reason_code: compact(candidate.reason_code) } : {}),
+    checked_at_unix_ms: Number.isSafeInteger(Number(candidate.checked_at_unix_ms)) ? Number(candidate.checked_at_unix_ms) : 0,
+  };
+}
+
+function requireGatewayRuntimeManagementCapability(value: unknown): DesktopGatewayRuntimeManagementCapability {
+  const capability = normalizeGatewayRuntimeManagementCapability(value);
+  if (!capability) {
+    throw new GatewayClientError('GATEWAY_RUNTIME_CAPABILITY_INVALID', 'Gateway Runtime management capability response is invalid.');
+  }
+  return capability;
+}
+
 function normalizeGatewayEnvironment(value: unknown): DesktopGatewayEnvironment | null {
   if (!value || typeof value !== 'object') {
     return null;
@@ -702,6 +1070,7 @@ function normalizeGatewayEnvironment(value: unknown): DesktopGatewayEnvironment 
   const normalizedControlCapabilities = [...new Set(controlCapabilities)];
   const profileAccessRoute = normalizeGatewayEnvironmentProfileAccessRoute(candidate.profile_access_route);
   const profile = normalizeGatewayEnvironmentProfile(candidate.profile);
+  const runtimeManagement = normalizeGatewayRuntimeManagementCapability(candidate.runtime_management);
   return {
     gateway_env_id: gatewayEnvID,
     display_name: compact(candidate.display_name) || gatewayEnvID,
@@ -712,6 +1081,7 @@ function normalizeGatewayEnvironment(value: unknown): DesktopGatewayEnvironment 
     control_capabilities: normalizedControlCapabilities,
     ...(profile ? { profile } : {}),
     ...(profileAccessRoute ? { profile_access_route: profileAccessRoute } : {}),
+    ...(runtimeManagement ? { runtime_management: runtimeManagement } : {}),
     origin: {
       kind: normalizeOriginKind(origin.kind),
       label: compact(origin.label),
@@ -753,46 +1123,181 @@ function normalizeGatewayEnvProfileDeleteResponse(value: unknown): GatewayEnvPro
   };
 }
 
-function normalizeGatewayEnvLifecycleOperation(value: unknown): GatewayEnvLifecycleOperation {
+function normalizeGatewayRuntimeOperationKind(value: unknown): GatewayRuntimeOperationKind {
   switch (compact(value)) {
     case 'start':
     case 'stop':
     case 'restart':
     case 'update_runtime':
-      return compact(value) as GatewayEnvLifecycleOperation;
+    case 'reconcile':
+      return compact(value) as GatewayRuntimeOperationKind;
     default:
-      throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway lifecycle response has an unsupported operation.');
+      throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway Runtime operation kind is unsupported.');
   }
 }
 
-function normalizeGatewayEnvLifecycleState(value: unknown): GatewayEnvLifecycleResponse['state'] {
+function normalizeGatewayRuntimeOperationState(value: unknown): GatewayRuntimeOperationState {
   switch (compact(value)) {
-    case 'accepted':
-    case 'running':
+    case 'preflighting':
+    case 'awaiting_confirmation':
+    case 'awaiting_artifact':
+    case 'staging':
+    case 'commit_ready':
+    case 'confirmation_required':
+    case 'fencing':
+    case 'committing':
+    case 'recovering':
+    case 'manual_recovery_required':
     case 'succeeded':
     case 'failed':
-    case 'unsupported':
-      return compact(value) as GatewayEnvLifecycleResponse['state'];
+    case 'cancelled':
+    case 'expired':
+      return compact(value) as GatewayRuntimeOperationState;
     default:
-      return 'failed';
+      throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway Runtime operation state is unsupported.');
   }
 }
 
-function normalizeGatewayEnvLifecycleResponse(value: unknown): GatewayEnvLifecycleResponse {
+function finiteInteger(value: unknown, field: string): number {
+  const number = Number(value);
+  if (!Number.isSafeInteger(number)) {
+    throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', `Gateway Runtime operation ${field} is invalid.`);
+  }
+  return number;
+}
+
+function normalizeGatewayRuntimeOperation(value: unknown): GatewayRuntimeOperation {
   if (!value || typeof value !== 'object') {
-    throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway lifecycle response is invalid.');
+    throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway Runtime operation response is invalid.');
   }
   const candidate = value as Record<string, unknown>;
+  const operationID = compact(candidate.operation_id);
   const gatewayEnvID = compact(candidate.gateway_env_id);
-  if (!gatewayEnvID) {
-    throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway lifecycle response is missing gateway_env_id.');
+  const lifecycleTargetID = compact(candidate.lifecycle_target_id);
+  const authorizedClientKeyID = compact(candidate.authorized_client_key_id);
+  const desired = candidate.desired_runtime && typeof candidate.desired_runtime === 'object'
+    ? candidate.desired_runtime as Record<string, unknown>
+    : {};
+  const snapshot = candidate.expected_snapshot && typeof candidate.expected_snapshot === 'object'
+    ? candidate.expected_snapshot as Record<string, unknown>
+    : {};
+  const workload = snapshot.workload && typeof snapshot.workload === 'object'
+    ? snapshot.workload as Record<string, unknown>
+    : {};
+  if (!operationID || !gatewayEnvID || !lifecycleTargetID || !authorizedClientKeyID) {
+    throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway Runtime operation identity is incomplete.');
+  }
+  const artifactPolicy = compact(desired.artifact_policy);
+  if (artifactPolicy !== 'published_release' && artifactPolicy !== 'custom_build') {
+    throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway Runtime artifact policy is unsupported.');
+  }
+  const knowledge = compact(workload.knowledge);
+  if (knowledge !== 'known' && knowledge !== 'unknown') {
+    throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway Runtime workload knowledge is invalid.');
+  }
+  const artifact = candidate.artifact && typeof candidate.artifact === 'object'
+    ? candidate.artifact as Record<string, unknown>
+    : null;
+  const failure = candidate.failure && typeof candidate.failure === 'object'
+    ? candidate.failure as Record<string, unknown>
+    : null;
+  return {
+    protocol_version: normalizeProtocolVersion(candidate.protocol_version),
+    operation_id: operationID,
+    idempotency_key: compact(candidate.idempotency_key),
+    lifecycle_target_id: lifecycleTargetID,
+    target_generation: finiteInteger(candidate.target_generation, 'target_generation'),
+    gateway_env_id: gatewayEnvID,
+    kind: normalizeGatewayRuntimeOperationKind(candidate.kind),
+    authorized_client_key_id: authorizedClientKeyID,
+    desired_runtime: {
+      version: compact(desired.version),
+      platform: compact(desired.platform),
+      architecture: compact(desired.architecture),
+      artifact_policy: artifactPolicy,
+    },
+    state: normalizeGatewayRuntimeOperationState(candidate.state),
+    expected_snapshot: {
+      ...(compact(snapshot.runtime_binary_version) ? { runtime_binary_version: compact(snapshot.runtime_binary_version) } : {}),
+      snapshot_revision: finiteInteger(snapshot.snapshot_revision, 'snapshot_revision'),
+      process_inventory_digest: compact(snapshot.process_inventory_digest),
+      workload_identity_digest: compact(snapshot.workload_identity_digest),
+      ...(Array.isArray(snapshot.workload_identities)
+        ? { workload_identities: snapshot.workload_identities.map(compact).filter(Boolean) }
+        : {}),
+      workload: {
+        knowledge,
+        ...(Number.isSafeInteger(Number(workload.affected_process_count))
+          ? { affected_process_count: Number(workload.affected_process_count) }
+          : {}),
+        ...(Number.isSafeInteger(Number(workload.active_session_count))
+          ? { active_session_count: Number(workload.active_session_count) }
+          : {}),
+        protected_workload_present: workload.protected_workload_present === true,
+      },
+      observed_at_unix_ms: finiteInteger(snapshot.observed_at_unix_ms, 'observed_at_unix_ms'),
+    },
+    ...(Number.isSafeInteger(Number(candidate.expires_at_unix_ms)) ? { expires_at_unix_ms: Number(candidate.expires_at_unix_ms) } : {}),
+    ...(Number.isSafeInteger(Number(candidate.maximum_expires_at_unix_ms)) ? { maximum_expires_at_unix_ms: Number(candidate.maximum_expires_at_unix_ms) } : {}),
+    ...(compact(candidate.confirmed_risk_summary_digest) ? { confirmed_risk_summary_digest: compact(candidate.confirmed_risk_summary_digest) } : {}),
+    ...(artifact ? {
+      artifact: {
+        size_bytes: finiteInteger(artifact.size_bytes, 'artifact.size_bytes'),
+        sha256: compact(artifact.sha256),
+        manifest_sha256: compact(artifact.manifest_sha256),
+        policy: compact(artifact.policy) as GatewayRuntimeArtifactPolicy,
+      },
+    } : {}),
+    ...(failure ? {
+      failure: {
+        code: compact(failure.code),
+        message: compact(failure.message),
+        ...(failure.retryable === true ? { retryable: true } : {}),
+      },
+    } : {}),
+    created_at_unix_ms: finiteInteger(candidate.created_at_unix_ms, 'created_at_unix_ms'),
+    updated_at_unix_ms: finiteInteger(candidate.updated_at_unix_ms, 'updated_at_unix_ms'),
+  };
+}
+
+function normalizeGatewayRuntimeOperationPrepareResponse(value: unknown): GatewayRuntimeOperationPrepareResponse {
+  if (!value || typeof value !== 'object') {
+    throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway Runtime prepare response is invalid.');
+  }
+  const candidate = value as Record<string, unknown>;
+  return {
+    protocol_version: normalizeProtocolVersion(candidate.protocol_version),
+    operation: normalizeGatewayRuntimeOperation(candidate.operation),
+    confirmation_required: candidate.confirmation_required === true,
+    artifact_max_bytes: finiteInteger(candidate.artifact_max_bytes, 'artifact_max_bytes'),
+  };
+}
+
+function normalizeGatewayRuntimeOperationEventsResponse(value: unknown): GatewayRuntimeOperationEventsResponse {
+  if (!value || typeof value !== 'object') {
+    throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway Runtime events response is invalid.');
+  }
+  const candidate = value as Record<string, unknown>;
+  const operationID = compact(candidate.operation_id);
+  if (!operationID || !Array.isArray(candidate.events)) {
+    throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway Runtime events response is incomplete.');
   }
   return {
     protocol_version: normalizeProtocolVersion(candidate.protocol_version),
-    gateway_env_id: gatewayEnvID,
-    operation: normalizeGatewayEnvLifecycleOperation(candidate.operation),
-    state: normalizeGatewayEnvLifecycleState(candidate.state),
-    ...(compact(candidate.message) ? { message: compact(candidate.message) } : {}),
+    operation_id: operationID,
+    events: candidate.events.map((value) => {
+      const event = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+      return {
+        sequence: finiteInteger(event.sequence, 'event.sequence'),
+        operation_id: compact(event.operation_id),
+        lifecycle_target_id: compact(event.lifecycle_target_id),
+        target_generation: finiteInteger(event.target_generation, 'event.target_generation'),
+        operation: normalizeGatewayRuntimeOperationKind(event.operation),
+        state: normalizeGatewayRuntimeOperationState(event.state),
+        ...(compact(event.reason_code) ? { reason_code: compact(event.reason_code) } : {}),
+        timestamp_unix_ms: finiteInteger(event.timestamp_unix_ms, 'event.timestamp_unix_ms'),
+      };
+    }),
   };
 }
 
@@ -1026,7 +1531,7 @@ export class GatewayURLClient {
   constructor(private readonly secretStore: GatewaySecretStore) {}
 
   async catalog(record: GatewayRecord, options: GatewayRequestOptions = {}): Promise<GatewayCatalogResponse> {
-    const data = await requestGatewayJSON(record, 'gateway/v1/catalog', {
+    const data = await requestGatewayJSON(record, 'gateway/v2/catalog', {
       protocol_version: GATEWAY_PROTOCOL_VERSION,
     }, {
       secretStore: this.secretStore,
@@ -1041,7 +1546,7 @@ export class GatewayURLClient {
   async pairingChallenge(
     record: GatewayRecord,
     request: Readonly<{
-      protocol_version: 'redeven-gateway-v1';
+      protocol_version: 'redeven-gateway-v2';
 	      client_nonce: string;
 	      client_public_key: string;
 	      binding_audience: string;
@@ -1049,7 +1554,7 @@ export class GatewayURLClient {
 	    }>,
     options: GatewayRequestOptions = {},
   ): Promise<GatewayPairingChallengeResponse> {
-    const data = await requestGatewayPairingJSON(record, 'gateway/v1/pairing/challenge', request, options);
+    const data = await requestGatewayPairingJSON(record, 'gateway/v2/pairing/challenge', request, options);
     return normalizePairingChallengeResponse(data);
   }
 
@@ -1058,7 +1563,7 @@ export class GatewayURLClient {
     request: GatewayPairingCompleteRequest,
     options: GatewayRequestOptions = {},
   ): Promise<GatewayPairingCompleteResponse> {
-    const data = await requestGatewayPairingJSON(record, 'gateway/v1/pairing/complete', request, options);
+    const data = await requestGatewayPairingJSON(record, 'gateway/v2/pairing/complete', request, options);
     return normalizePairingCompleteResponse(data);
   }
 
@@ -1067,7 +1572,7 @@ export class GatewayURLClient {
     request: GatewayOpenSessionRequest,
     options: GatewayRequestOptions = {},
   ): Promise<GatewayOpenSessionResponse> {
-    const data = await requestGatewayJSON(record, 'gateway/v1/open-session', {
+    const data = await requestGatewayJSON(record, 'gateway/v2/open-session', {
       protocol_version: GATEWAY_PROTOCOL_VERSION,
       gateway_env_id: request.gateway_env_id,
       requested_capability: request.requested_capability,
@@ -1097,7 +1602,7 @@ export class GatewayURLClient {
     request: GatewayEnvProfileUpsertRequest,
     options: GatewayRequestOptions = {},
   ): Promise<GatewayEnvProfileUpsertResponse> {
-    const data = await requestGatewayJSON(record, 'gateway/v1/env-profiles/upsert', gatewayEnvProfilePayload(request), {
+    const data = await requestGatewayJSON(record, 'gateway/v2/env-profiles/upsert', gatewayEnvProfilePayload(request), {
       secretStore: this.secretStore,
       timeoutMs: options.timeoutMs,
       signal: options.signal,
@@ -1110,7 +1615,7 @@ export class GatewayURLClient {
     request: GatewayEnvProfileDeleteRequest,
     options: GatewayRequestOptions = {},
   ): Promise<GatewayEnvProfileDeleteResponse> {
-    const data = await requestGatewayJSON(record, 'gateway/v1/env-profiles/delete', {
+    const data = await requestGatewayJSON(record, 'gateway/v2/env-profiles/delete', {
       protocol_version: GATEWAY_PROTOCOL_VERSION,
       gateway_env_id: compact(request.gateway_env_id),
     }, {
@@ -1121,21 +1626,92 @@ export class GatewayURLClient {
     return normalizeGatewayEnvProfileDeleteResponse(data.data);
   }
 
-  async runEnvironmentLifecycle(
+  async prepareRuntimeOperation(
     record: GatewayRecord,
-    request: GatewayEnvLifecycleRequest,
+    request: GatewayRuntimeOperationPrepareRequest,
     options: GatewayRequestOptions = {},
-  ): Promise<GatewayEnvLifecycleResponse> {
-    const data = await requestGatewayJSON(record, 'gateway/v1/env-lifecycle', {
+  ): Promise<GatewayRuntimeOperationPrepareResponse> {
+    const data = await requestGatewayJSON(record, 'gateway/v2/runtime-operations/prepare', {
       protocol_version: GATEWAY_PROTOCOL_VERSION,
-      gateway_env_id: compact(request.gateway_env_id),
-      operation: request.operation,
+      ...request,
     }, {
       secretStore: this.secretStore,
       timeoutMs: options.timeoutMs,
       signal: options.signal,
     });
-    return normalizeGatewayEnvLifecycleResponse(data.data);
+    return normalizeGatewayRuntimeOperationPrepareResponse(data.data);
+  }
+
+  async runtimeManagementCapability(
+    record: GatewayRecord,
+    request: GatewayRuntimeManagementCapabilityRequest,
+    options: GatewayRequestOptions = {},
+  ): Promise<DesktopGatewayRuntimeManagementCapability> {
+    const data = await requestGatewayJSON(record, 'gateway/v2/runtime-management/capability', {
+      protocol_version: GATEWAY_PROTOCOL_VERSION,
+      gateway_env_id: compact(request.gateway_env_id),
+    }, {
+      secretStore: this.secretStore,
+      timeoutMs: options.timeoutMs,
+      signal: options.signal,
+    });
+    return requireGatewayRuntimeManagementCapability(data.data);
+  }
+
+  async getRuntimeOperation(record: GatewayRecord, operationID: string, options: GatewayRequestOptions = {}): Promise<GatewayRuntimeOperation> {
+    const data = await requestGatewayJSON(record, runtimeOperationRoute(operationID), undefined, {
+      secretStore: this.secretStore, ...options,
+    }, 'GET');
+    return normalizeGatewayRuntimeOperation(data.data);
+  }
+
+  async confirmRuntimeOperation(record: GatewayRecord, operationID: string, request: GatewayRuntimeOperationConfirmationRequest, options: GatewayRequestOptions = {}): Promise<GatewayRuntimeOperation> {
+    const data = await requestGatewayJSON(record, runtimeOperationRoute(operationID, '/confirm'), {
+      protocol_version: GATEWAY_PROTOCOL_VERSION,
+      ...request,
+    }, { secretStore: this.secretStore, ...options });
+    return normalizeGatewayRuntimeOperation(data.data);
+  }
+
+  async uploadRuntimeOperationArtifact(record: GatewayRecord, operationID: string, metadata: GatewayRuntimeArtifactMetadata, artifact: Buffer, options: GatewayRequestOptions = {}): Promise<GatewayRuntimeOperation> {
+    if (metadata.size_bytes !== artifact.length) {
+      throw new GatewayClientError('GATEWAY_RUNTIME_ARTIFACT_SIZE_MISMATCH', 'Runtime artifact size does not match its metadata.');
+    }
+    const data = await requestGatewayURLArtifact(record, runtimeOperationRoute(operationID, '/artifact'), metadata, artifact, {
+      secretStore: this.secretStore, ...options,
+    });
+    return normalizeGatewayRuntimeOperation(data.data);
+  }
+
+  async commitRuntimeOperation(record: GatewayRecord, operationID: string, options: GatewayRequestOptions = {}): Promise<GatewayRuntimeOperation> {
+    const data = await requestGatewayJSON(record, runtimeOperationRoute(operationID, '/commit'), undefined, { secretStore: this.secretStore, ...options });
+    return normalizeGatewayRuntimeOperation(data.data);
+  }
+
+  async cancelRuntimeOperation(record: GatewayRecord, operationID: string, options: GatewayRequestOptions = {}): Promise<GatewayRuntimeOperation> {
+    const data = await requestGatewayJSON(record, runtimeOperationRoute(operationID, '/cancel'), undefined, { secretStore: this.secretStore, ...options });
+    return normalizeGatewayRuntimeOperation(data.data);
+  }
+
+  async renewRuntimeOperation(record: GatewayRecord, operationID: string, expiresAtUnixMS: number, options: GatewayRequestOptions = {}): Promise<GatewayRuntimeOperation> {
+    const data = await requestGatewayJSON(record, runtimeOperationRoute(operationID, '/renew-deadline'), {
+      protocol_version: GATEWAY_PROTOCOL_VERSION,
+      expires_at_unix_ms: Math.floor(expiresAtUnixMS),
+    }, { secretStore: this.secretStore, ...options });
+    return normalizeGatewayRuntimeOperation(data.data);
+  }
+
+  async reconcileRuntimeOperation(record: GatewayRecord, operationID: string, request: GatewayRuntimeOperationReconcileRequest, options: GatewayRequestOptions = {}): Promise<GatewayRuntimeOperation> {
+    const data = await requestGatewayJSON(record, runtimeOperationRoute(operationID, '/reconcile'), {
+      protocol_version: GATEWAY_PROTOCOL_VERSION,
+      ...request,
+    }, { secretStore: this.secretStore, ...options });
+    return normalizeGatewayRuntimeOperation(data.data);
+  }
+
+  async runtimeOperationEvents(record: GatewayRecord, operationID: string, options: GatewayRequestOptions = {}): Promise<GatewayRuntimeOperationEventsResponse> {
+    const data = await requestGatewayJSON(record, runtimeOperationRoute(operationID, '/events'), undefined, { secretStore: this.secretStore, ...options }, 'GET');
+    return normalizeGatewayRuntimeOperationEventsResponse(data.data);
   }
 
   private assertGatewayIdentity(record: GatewayRecord, observedGatewayID: string, observedFingerprint: string | undefined): void {
@@ -1159,7 +1735,7 @@ export class GatewayBridgeClient {
   ) {}
 
   async catalog(record: GatewayRecord, options: GatewayRequestOptions = {}): Promise<GatewayCatalogResponse> {
-    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v1/catalog', {
+    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v2/catalog', {
       protocol_version: GATEWAY_PROTOCOL_VERSION,
     }, {
       secretStore: this.secretStore,
@@ -1174,7 +1750,7 @@ export class GatewayBridgeClient {
   async pairingChallenge(
     record: GatewayRecord,
     request: Readonly<{
-      protocol_version: 'redeven-gateway-v1';
+      protocol_version: 'redeven-gateway-v2';
 	      client_nonce: string;
 	      client_public_key: string;
 	      binding_audience: string;
@@ -1182,7 +1758,7 @@ export class GatewayBridgeClient {
 	    }>,
     options: GatewayRequestOptions = {},
   ): Promise<GatewayPairingChallengeResponse> {
-    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v1/pairing/challenge', request, {
+    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v2/pairing/challenge', request, {
       secretStore: this.secretStore,
       timeoutMs: options.timeoutMs,
       signal: options.signal,
@@ -1196,7 +1772,7 @@ export class GatewayBridgeClient {
     request: GatewayPairingCompleteRequest,
     options: GatewayRequestOptions = {},
   ): Promise<GatewayPairingCompleteResponse> {
-    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v1/pairing/complete', request, {
+    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v2/pairing/complete', request, {
       secretStore: this.secretStore,
       timeoutMs: options.timeoutMs,
       signal: options.signal,
@@ -1210,7 +1786,7 @@ export class GatewayBridgeClient {
     request: GatewayOpenSessionRequest,
     options: GatewayRequestOptions = {},
   ): Promise<GatewayOpenSessionResponse> {
-    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v1/open-session', {
+    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v2/open-session', {
       protocol_version: GATEWAY_PROTOCOL_VERSION,
       gateway_env_id: request.gateway_env_id,
       requested_capability: request.requested_capability,
@@ -1242,7 +1818,7 @@ export class GatewayBridgeClient {
     request: GatewayEnvProfileUpsertRequest,
     options: GatewayRequestOptions = {},
   ): Promise<GatewayEnvProfileUpsertResponse> {
-    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v1/env-profiles/upsert', gatewayEnvProfilePayload(request), {
+    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v2/env-profiles/upsert', gatewayEnvProfilePayload(request), {
       secretStore: this.secretStore,
       timeoutMs: options.timeoutMs,
       signal: options.signal,
@@ -1255,7 +1831,7 @@ export class GatewayBridgeClient {
     request: GatewayEnvProfileDeleteRequest,
     options: GatewayRequestOptions = {},
   ): Promise<GatewayEnvProfileDeleteResponse> {
-    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v1/env-profiles/delete', {
+    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v2/env-profiles/delete', {
       protocol_version: GATEWAY_PROTOCOL_VERSION,
       gateway_env_id: compact(request.gateway_env_id),
     }, {
@@ -1266,21 +1842,88 @@ export class GatewayBridgeClient {
     return normalizeGatewayEnvProfileDeleteResponse(data.data);
   }
 
-  async runEnvironmentLifecycle(
+  async prepareRuntimeOperation(
     record: GatewayRecord,
-    request: GatewayEnvLifecycleRequest,
+    request: GatewayRuntimeOperationPrepareRequest,
     options: GatewayRequestOptions = {},
-  ): Promise<GatewayEnvLifecycleResponse> {
-    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v1/env-lifecycle', {
+  ): Promise<GatewayRuntimeOperationPrepareResponse> {
+    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v2/runtime-operations/prepare', {
       protocol_version: GATEWAY_PROTOCOL_VERSION,
-      gateway_env_id: compact(request.gateway_env_id),
-      operation: request.operation,
+      ...request,
     }, {
       secretStore: this.secretStore,
       timeoutMs: options.timeoutMs,
       signal: options.signal,
     });
-    return normalizeGatewayEnvLifecycleResponse(data.data);
+    return normalizeGatewayRuntimeOperationPrepareResponse(data.data);
+  }
+
+  async runtimeManagementCapability(
+    record: GatewayRecord,
+    request: GatewayRuntimeManagementCapabilityRequest,
+    options: GatewayRequestOptions = {},
+  ): Promise<DesktopGatewayRuntimeManagementCapability> {
+    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v2/runtime-management/capability', {
+      protocol_version: GATEWAY_PROTOCOL_VERSION,
+      gateway_env_id: compact(request.gateway_env_id),
+    }, {
+      secretStore: this.secretStore,
+      timeoutMs: options.timeoutMs,
+      signal: options.signal,
+    });
+    return requireGatewayRuntimeManagementCapability(data.data);
+  }
+
+  async getRuntimeOperation(record: GatewayRecord, operationID: string, options: GatewayRequestOptions = {}): Promise<GatewayRuntimeOperation> {
+    const data = await requestGatewayBridgeJSON(this.bridge, record, runtimeOperationRoute(operationID), undefined, { secretStore: this.secretStore, ...options }, 'GET');
+    return normalizeGatewayRuntimeOperation(data.data);
+  }
+
+  async confirmRuntimeOperation(record: GatewayRecord, operationID: string, request: GatewayRuntimeOperationConfirmationRequest, options: GatewayRequestOptions = {}): Promise<GatewayRuntimeOperation> {
+    const data = await requestGatewayBridgeJSON(this.bridge, record, runtimeOperationRoute(operationID, '/confirm'), {
+      protocol_version: GATEWAY_PROTOCOL_VERSION,
+      ...request,
+    }, { secretStore: this.secretStore, ...options });
+    return normalizeGatewayRuntimeOperation(data.data);
+  }
+
+  async uploadRuntimeOperationArtifact(record: GatewayRecord, operationID: string, metadata: GatewayRuntimeArtifactMetadata, artifact: Buffer, options: GatewayRequestOptions = {}): Promise<GatewayRuntimeOperation> {
+    if (metadata.size_bytes !== artifact.length) {
+      throw new GatewayClientError('GATEWAY_RUNTIME_ARTIFACT_SIZE_MISMATCH', 'Runtime artifact size does not match its metadata.');
+    }
+    const data = await requestGatewayBridgeArtifact(this.bridge, record, runtimeOperationRoute(operationID, '/artifact'), metadata, artifact, { secretStore: this.secretStore, ...options });
+    return normalizeGatewayRuntimeOperation(data.data);
+  }
+
+  async commitRuntimeOperation(record: GatewayRecord, operationID: string, options: GatewayRequestOptions = {}): Promise<GatewayRuntimeOperation> {
+    const data = await requestGatewayBridgeJSON(this.bridge, record, runtimeOperationRoute(operationID, '/commit'), undefined, { secretStore: this.secretStore, ...options });
+    return normalizeGatewayRuntimeOperation(data.data);
+  }
+
+  async cancelRuntimeOperation(record: GatewayRecord, operationID: string, options: GatewayRequestOptions = {}): Promise<GatewayRuntimeOperation> {
+    const data = await requestGatewayBridgeJSON(this.bridge, record, runtimeOperationRoute(operationID, '/cancel'), undefined, { secretStore: this.secretStore, ...options });
+    return normalizeGatewayRuntimeOperation(data.data);
+  }
+
+  async renewRuntimeOperation(record: GatewayRecord, operationID: string, expiresAtUnixMS: number, options: GatewayRequestOptions = {}): Promise<GatewayRuntimeOperation> {
+    const data = await requestGatewayBridgeJSON(this.bridge, record, runtimeOperationRoute(operationID, '/renew-deadline'), {
+      protocol_version: GATEWAY_PROTOCOL_VERSION,
+      expires_at_unix_ms: Math.floor(expiresAtUnixMS),
+    }, { secretStore: this.secretStore, ...options });
+    return normalizeGatewayRuntimeOperation(data.data);
+  }
+
+  async reconcileRuntimeOperation(record: GatewayRecord, operationID: string, request: GatewayRuntimeOperationReconcileRequest, options: GatewayRequestOptions = {}): Promise<GatewayRuntimeOperation> {
+    const data = await requestGatewayBridgeJSON(this.bridge, record, runtimeOperationRoute(operationID, '/reconcile'), {
+      protocol_version: GATEWAY_PROTOCOL_VERSION,
+      ...request,
+    }, { secretStore: this.secretStore, ...options });
+    return normalizeGatewayRuntimeOperation(data.data);
+  }
+
+  async runtimeOperationEvents(record: GatewayRecord, operationID: string, options: GatewayRequestOptions = {}): Promise<GatewayRuntimeOperationEventsResponse> {
+    const data = await requestGatewayBridgeJSON(this.bridge, record, runtimeOperationRoute(operationID, '/events'), undefined, { secretStore: this.secretStore, ...options }, 'GET');
+    return normalizeGatewayRuntimeOperationEventsResponse(data.data);
   }
 
   private assertGatewayIdentity(record: GatewayRecord, observedGatewayID: string, observedFingerprint: string | undefined): void {

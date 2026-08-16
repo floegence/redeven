@@ -54,20 +54,12 @@ func startRuntimeProcessHelper(
 	t *testing.T,
 	executable string,
 	stateRoot string,
-	ownerID string,
 	readyFile string,
 ) *exec.Cmd {
 	t.Helper()
-	command := exec.Command(executable, "run", "--mode", "desktop", "--desktop-managed", "--state-root", stateRoot)
-	for _, entry := range os.Environ() {
-		if !strings.HasPrefix(entry, desktopOwnerIDEnvName+"=") {
-			command.Env = append(command.Env, entry)
-		}
-	}
+	command := exec.Command(executable, "run", "--mode", "desktop", "--state-root", stateRoot)
+	command.Env = append(command.Env, os.Environ()...)
 	command.Env = append(command.Env, "REDEVEN_TEST_READY_FILE="+readyFile)
-	if ownerID != "" {
-		command.Env = append(command.Env, desktopOwnerIDEnvName+"="+ownerID)
-	}
 	if err := command.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +95,7 @@ func waitRuntimeProcessHelper(t *testing.T, command *exec.Cmd) {
 	command.Process = nil
 }
 
-func writeRuntimeProcessLock(t *testing.T, stateRoot string, pid int, ownerID string) {
+func writeRuntimeProcessLock(t *testing.T, stateRoot string, pid int) {
 	t.Helper()
 	lockPath := filepath.Join(stateRoot, "local-environment", "agent.lock")
 	if err := os.MkdirAll(filepath.Dir(lockPath), 0o755); err != nil {
@@ -113,7 +105,6 @@ func writeRuntimeProcessLock(t *testing.T, stateRoot string, pid int, ownerID st
 		PID:            pid,
 		InstanceID:     "runtime-process-integration",
 		RuntimeVersion: "vtest",
-		DesktopOwnerID: ownerID,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -123,22 +114,17 @@ func writeRuntimeProcessLock(t *testing.T, stateRoot string, pid int, ownerID st
 	}
 }
 
-func TestRuntimeProcessInventoryRequiresConfirmationForOwnerlessCurrentProcess(t *testing.T) {
+func TestRuntimeProcessInventoryStopsAllVerifiedCurrentProcesses(t *testing.T) {
 	root := t.TempDir()
 	runtimeRoot := filepath.Join(root, ".redeven")
 	executable := filepath.Join(runtimeRoot, "runtime", "managed", "bin", "redeven")
 	buildRuntimeProcessHelper(t, executable)
-	current := startRuntimeProcessHelper(t, executable, runtimeRoot, "", filepath.Join(root, "current.ready"))
-	ownerless := startRuntimeProcessHelper(t, executable, runtimeRoot, "", filepath.Join(root, "ownerless.ready"))
-	writeRuntimeProcessLock(t, runtimeRoot, current.Process.Pid, "desktop-owner")
-	if err := os.RemoveAll(filepath.Join(runtimeRoot, "local-environment")); err != nil {
-		t.Fatal(err)
-	}
+	first := startRuntimeProcessHelper(t, executable, runtimeRoot, filepath.Join(root, "first.ready"))
+	second := startRuntimeProcessHelper(t, executable, runtimeRoot, filepath.Join(root, "second.ready"))
 
 	options := RuntimeProcessInventoryOptions{
 		RuntimeRoot:        runtimeRoot,
 		StateRoot:          runtimeRoot,
-		DesktopOwnerID:     "desktop-owner",
 		CurrentExecutables: []string{executable},
 	}
 	inventory, err := InspectRuntimeProcesses(context.Background(), options)
@@ -148,28 +134,18 @@ func TestRuntimeProcessInventoryRequiresConfirmationForOwnerlessCurrentProcess(t
 	if len(inventory.Instances) != 2 {
 		t.Fatalf("instances = %#v", inventory.Instances)
 	}
-	if inventory.Summary.Automatic != 0 || inventory.Summary.ConfirmedTakeover != 2 || inventory.Summary.Blocked != 0 {
+	if inventory.Summary.Automatic != 2 || inventory.Summary.Blocked != 0 {
 		t.Fatalf("summary = %#v", inventory.Summary)
 	}
-	automaticResult, err := StopRuntimeProcesses(context.Background(), options, inventory.InventoryDigest, 2*time.Second)
-	if RuntimeProcessErrorCode(err) != RuntimeProcessErrorTakeoverRequired {
-		t.Fatalf("automatic stop error = %v, initial = %#v, observed = %#v", err, inventory, automaticResult.Before)
-	}
-	result, err := StopRuntimeProcessesWithMode(
-		context.Background(),
-		options,
-		inventory.InventoryDigest,
-		2*time.Second,
-		RuntimeProcessReconciliationConfirmedTakeover,
-	)
+	result, err := StopRuntimeProcesses(context.Background(), options, inventory.InventoryDigest, 2*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(result.After.Instances) != 0 || len(result.Stopped) != 2 {
 		t.Fatalf("result = %#v", result)
 	}
-	waitRuntimeProcessHelper(t, current)
-	waitRuntimeProcessHelper(t, ownerless)
+	waitRuntimeProcessHelper(t, first)
+	waitRuntimeProcessHelper(t, second)
 }
 
 func TestRuntimeProcessInventoryFindsDeletedCurrentExecutableOnLinux(t *testing.T) {
@@ -181,7 +157,7 @@ func TestRuntimeProcessInventoryFindsDeletedCurrentExecutableOnLinux(t *testing.
 	stateRoot := runtimeRoot
 	executable := filepath.Join(runtimeRoot, "runtime", "managed", "bin", "redeven")
 	buildRuntimeProcessHelper(t, executable)
-	process := startRuntimeProcessHelper(t, executable, stateRoot, "", filepath.Join(root, "deleted.ready"))
+	process := startRuntimeProcessHelper(t, executable, stateRoot, filepath.Join(root, "deleted.ready"))
 	if err := os.Remove(executable); err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +165,6 @@ func TestRuntimeProcessInventoryFindsDeletedCurrentExecutableOnLinux(t *testing.
 	options := RuntimeProcessInventoryOptions{
 		RuntimeRoot:        runtimeRoot,
 		StateRoot:          stateRoot,
-		DesktopOwnerID:     "desktop-owner",
 		CurrentExecutables: []string{executable},
 	}
 	inventory, err := InspectRuntimeProcesses(context.Background(), options)
@@ -200,16 +175,10 @@ func TestRuntimeProcessInventoryFindsDeletedCurrentExecutableOnLinux(t *testing.
 		t.Fatalf("inventory = %#v", inventory)
 	}
 	if inventory.Instances[0].LayoutStatus != RuntimeProcessLayoutCurrent ||
-		inventory.Instances[0].StopAuthority != RuntimeProcessStopConfirmedTakeover {
+		inventory.Instances[0].StopAuthority != RuntimeProcessStopAutomatic {
 		t.Fatalf("instance = %#v", inventory.Instances[0])
 	}
-	result, err := StopRuntimeProcessesWithMode(
-		context.Background(),
-		options,
-		inventory.InventoryDigest,
-		2*time.Second,
-		RuntimeProcessReconciliationConfirmedTakeover,
-	)
+	result, err := StopRuntimeProcesses(context.Background(), options, inventory.InventoryDigest, 2*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +188,7 @@ func TestRuntimeProcessInventoryFindsDeletedCurrentExecutableOnLinux(t *testing.
 	waitRuntimeProcessHelper(t, process)
 }
 
-func TestRuntimeProcessInventoryStopsVerifiedAlternateDesktopBundle(t *testing.T) {
+func TestRuntimeProcessInventoryStopsVerifiedAlternateBundle(t *testing.T) {
 	root := t.TempDir()
 	runtimeRoot := filepath.Join(root, ".redeven")
 	stateRoot := runtimeRoot
@@ -230,15 +199,13 @@ func TestRuntimeProcessInventoryStopsVerifiedAlternateDesktopBundle(t *testing.T
 		t,
 		alternateExecutable,
 		stateRoot,
-		"desktop-owner",
 		filepath.Join(root, "alternate.ready"),
 	)
-	writeRuntimeProcessLock(t, stateRoot, process.Process.Pid, "desktop-owner")
+	writeRuntimeProcessLock(t, stateRoot, process.Process.Pid)
 
 	options := RuntimeProcessInventoryOptions{
 		RuntimeRoot:        runtimeRoot,
 		StateRoot:          stateRoot,
-		DesktopOwnerID:     "desktop-owner",
 		CurrentExecutables: []string{managedExecutable},
 	}
 	inventory, err := InspectRuntimeProcesses(context.Background(), options)

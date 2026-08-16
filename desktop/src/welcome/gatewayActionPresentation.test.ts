@@ -146,28 +146,7 @@ describe('buildGatewayActionPresentation', () => {
       expect.objectContaining({ label: 'Gateway target commit', value: 'a7fd66530509' }),
     ]));
 
-    const legacyResidue = buildGatewayActionPresentation({
-      gateway: gateway({
-        diagnosis: diagnosis('legacy_runtime_residue', {
-          managed_probe: {
-            legacy_runtime_residue: true,
-            legacy_runtime_pids: [3342497],
-            facts: [
-              { label: 'Legacy runtime residue', value: 'Found', tone: 'warning' },
-              { label: 'Legacy runtime pids', value: '3342497', tone: 'warning' },
-            ],
-          },
-        }),
-      }),
-      clicked_action: action('refresh_gateway'),
-      show_diagnosis_result: true,
-    });
-    expect(legacyResidue).toMatchObject({
-      title: 'Gateway update required',
-      primary_action: { intent: 'update_gateway', label: 'Update Gateway' },
-      continuation_action: { kind: 'update_gateway', gateway_id: 'gw-demo', impact_acknowledged: true },
-    });
-    expectNoLegacyGatewayActions([stopped, bridgeUnavailable, needsUpdate, legacyResidue]);
+    expectNoLegacyGatewayActions([stopped, bridgeUnavailable, needsUpdate]);
   });
 
   it('separates managed Gateway protocol updates from access-only protocol failures', () => {

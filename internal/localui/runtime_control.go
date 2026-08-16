@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -17,20 +18,20 @@ import (
 	"github.com/floegence/redeven/internal/codeapp/appserver"
 	"github.com/floegence/redeven/internal/logsafe"
 	"github.com/floegence/redeven/internal/runtimemanagement"
+	"github.com/floegence/redeven/internal/runtimeservice"
 	"github.com/gorilla/websocket"
 )
 
-const runtimeControlProtocolVersion = "redeven-runtime-control-v1"
+const runtimeControlProtocolVersion = "redeven-runtime-control-v2"
 
 type runtimeControlServer struct {
-	log            logger
-	agent          *agent.Agent
-	appServer      *appserver.Server
-	desktopOwnerID string
-	afterChange    func()
-	token          string
-	ln             net.Listener
-	srv            *http.Server
+	log         logger
+	agent       *agent.Agent
+	appServer   *appserver.Server
+	afterChange func()
+	token       string
+	ln          net.Listener
+	srv         *http.Server
 }
 
 type logger interface {
@@ -38,13 +39,9 @@ type logger interface {
 	Info(msg string, args ...any)
 }
 
-func newRuntimeControlServer(a *agent.Agent, appServer *appserver.Server, desktopOwnerID string, log logger, afterChange func()) (*runtimeControlServer, error) {
-	desktopOwnerID = strings.TrimSpace(desktopOwnerID)
+func newRuntimeControlServer(a *agent.Agent, appServer *appserver.Server, log logger, afterChange func()) (*runtimeControlServer, error) {
 	if a == nil {
 		return nil, errors.New("missing Agent")
-	}
-	if desktopOwnerID == "" {
-		return nil, errors.New("missing Desktop owner id")
 	}
 	tokenBytes := make([]byte, 32)
 	if _, err := rand.Read(tokenBytes); err != nil {
@@ -52,12 +49,11 @@ func newRuntimeControlServer(a *agent.Agent, appServer *appserver.Server, deskto
 	}
 	token := "rtctl_" + base64.RawURLEncoding.EncodeToString(tokenBytes)
 	return &runtimeControlServer{
-		log:            log,
-		agent:          a,
-		appServer:      appServer,
-		desktopOwnerID: desktopOwnerID,
-		afterChange:    afterChange,
-		token:          token,
+		log:         log,
+		agent:       a,
+		appServer:   appServer,
+		afterChange: afterChange,
+		token:       token,
 	}, nil
 }
 
@@ -141,14 +137,20 @@ func (s *runtimeControlServer) StartOnListener(ctx context.Context, ln net.Liste
 
 func (s *runtimeControlServer) routes() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/v1/provider-link", s.handleProviderLink)
-	mux.HandleFunc("/v1/provider-link/connect", s.handleProviderLinkConnect)
-	mux.HandleFunc("/v1/provider-link/disconnect", s.handleProviderLinkDisconnect)
-	mux.HandleFunc("/v1/code-workspace-engine/status", s.handleCodeWorkspaceEngineStatus)
-	mux.HandleFunc("/v1/desktop-model-source", s.handleDesktopModelSource)
-	mux.HandleFunc("/v1/desktop-model-source/connect", s.handleDesktopModelSourceConnect)
-	mux.HandleFunc("/v1/desktop-model-source/disconnect", s.handleDesktopModelSourceDisconnect)
-	mux.HandleFunc("/v1/desktop-model-source/rpc", s.handleDesktopModelSourceRPC)
+	mux.HandleFunc("/v2/provider-link", s.handleProviderLink)
+	mux.HandleFunc("/v2/provider-link/connect", s.handleProviderLinkConnect)
+	mux.HandleFunc("/v2/provider-link/disconnect", s.handleProviderLinkDisconnect)
+	mux.HandleFunc("/v2/code-workspace-engine/status", s.handleCodeWorkspaceEngineStatus)
+	mux.HandleFunc("/v2/desktop-model-source", s.handleDesktopModelSource)
+	mux.HandleFunc("/v2/desktop-model-source/connect", s.handleDesktopModelSourceConnect)
+	mux.HandleFunc("/v2/desktop-model-source/disconnect", s.handleDesktopModelSourceDisconnect)
+	mux.HandleFunc("/v2/desktop-model-source/rpc", s.handleDesktopModelSourceRPC)
+	mux.HandleFunc("GET /v2/runtime/identity", s.handleRuntimeIdentity)
+	mux.HandleFunc("GET /v2/runtime/workload-snapshot", s.handleRuntimeWorkloadSnapshot)
+	mux.HandleFunc("POST /v2/runtime/lifecycle-fence/begin", s.handleRuntimeLifecycleFenceBegin)
+	mux.HandleFunc("POST /v2/runtime/lifecycle-fence/release", s.handleRuntimeLifecycleFenceRelease)
+	mux.HandleFunc("POST /v2/runtime/shutdown", s.handleRuntimeShutdown)
+	mux.HandleFunc("GET /v2/runtime/health", s.handleRuntimeHealth)
 	return withLocalUISecurityHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r == nil {
 			http.Error(w, "invalid request", http.StatusBadRequest)
@@ -194,7 +196,6 @@ func (s *runtimeControlServer) Endpoint() *runtimemanagement.RuntimeControlEndpo
 		ProtocolVersion: runtimeControlProtocolVersion,
 		BaseURL:         fmt.Sprintf("http://127.0.0.1:%d", addr.Port),
 		Token:           s.token,
-		DesktopOwnerID:  s.desktopOwnerID,
 	}
 }
 
@@ -218,16 +219,135 @@ func (s *runtimeControlServer) require(w http.ResponseWriter, r *http.Request) b
 		writeRuntimeControlError(w, http.StatusForbidden, "RUNTIME_CONTROL_FORBIDDEN", "Runtime control only accepts loopback requests.")
 		return false
 	}
-	if strings.TrimSpace(r.Header.Get("X-Redeven-Desktop-Owner-ID")) != s.desktopOwnerID {
-		writeRuntimeControlError(w, http.StatusForbidden, "DESKTOP_OWNER_MISMATCH", "Desktop owner does not match this runtime.")
-		return false
-	}
 	auth := strings.TrimSpace(r.Header.Get("Authorization"))
 	if auth != "Bearer "+s.token {
 		writeRuntimeControlError(w, http.StatusUnauthorized, "RUNTIME_CONTROL_UNAUTHORIZED", "Runtime control token is invalid.")
 		return false
 	}
 	return true
+}
+
+type runtimeLifecycleFenceBeginRequest struct {
+	ProtocolVersion  string `json:"protocol_version"`
+	OperationID      string `json:"operation_id"`
+	TargetGeneration int64  `json:"target_generation"`
+}
+
+type runtimeLifecycleFenceTokenRequest struct {
+	ProtocolVersion string `json:"protocol_version"`
+	FenceToken      string `json:"fence_token"`
+}
+
+func (s *runtimeControlServer) handleRuntimeIdentity(w http.ResponseWriter, r *http.Request) {
+	if !s.require(w, r) {
+		return
+	}
+	identity, err := s.agent.RuntimeLifecycleIdentity()
+	if err != nil {
+		writeRuntimeControlError(w, http.StatusServiceUnavailable, "RUNTIME_IDENTITY_UNAVAILABLE", err.Error())
+		return
+	}
+	writeRuntimeControlJSON(w, http.StatusOK, runtimeControlEnvelope{OK: true, Data: identity})
+}
+
+func (s *runtimeControlServer) handleRuntimeWorkloadSnapshot(w http.ResponseWriter, r *http.Request) {
+	if !s.require(w, r) {
+		return
+	}
+	writeRuntimeControlJSON(w, http.StatusOK, runtimeControlEnvelope{OK: true, Data: s.agent.RuntimeLifecycleSnapshot()})
+}
+
+func (s *runtimeControlServer) handleRuntimeLifecycleFenceBegin(w http.ResponseWriter, r *http.Request) {
+	if !s.require(w, r) {
+		return
+	}
+	var request runtimeLifecycleFenceBeginRequest
+	if !decodeRuntimeControlJSON(w, r, &request) {
+		return
+	}
+	if request.ProtocolVersion != runtimeControlProtocolVersion {
+		writeRuntimeControlError(w, http.StatusBadRequest, "RUNTIME_CONTROL_PROTOCOL_INCOMPATIBLE", "Runtime control protocol is not supported.")
+		return
+	}
+	fence, err := s.agent.BeginRuntimeLifecycleFence(request.OperationID, request.TargetGeneration)
+	if err != nil {
+		writeRuntimeLifecycleManagerError(w, err)
+		return
+	}
+	writeRuntimeControlJSON(w, http.StatusOK, runtimeControlEnvelope{OK: true, Data: fence})
+}
+
+func (s *runtimeControlServer) handleRuntimeLifecycleFenceRelease(w http.ResponseWriter, r *http.Request) {
+	if !s.require(w, r) {
+		return
+	}
+	var request runtimeLifecycleFenceTokenRequest
+	if !decodeRuntimeControlJSON(w, r, &request) {
+		return
+	}
+	if request.ProtocolVersion != runtimeControlProtocolVersion {
+		writeRuntimeControlError(w, http.StatusBadRequest, "RUNTIME_CONTROL_PROTOCOL_INCOMPATIBLE", "Runtime control protocol is not supported.")
+		return
+	}
+	if err := s.agent.ReleaseRuntimeLifecycleFence(request.FenceToken); err != nil {
+		writeRuntimeLifecycleManagerError(w, err)
+		return
+	}
+	writeRuntimeControlJSON(w, http.StatusOK, runtimeControlEnvelope{OK: true, Data: map[string]any{"released": true}})
+}
+
+func (s *runtimeControlServer) handleRuntimeShutdown(w http.ResponseWriter, r *http.Request) {
+	if !s.require(w, r) {
+		return
+	}
+	var request runtimeLifecycleFenceTokenRequest
+	if !decodeRuntimeControlJSON(w, r, &request) {
+		return
+	}
+	if request.ProtocolVersion != runtimeControlProtocolVersion {
+		writeRuntimeControlError(w, http.StatusBadRequest, "RUNTIME_CONTROL_PROTOCOL_INCOMPATIBLE", "Runtime control protocol is not supported.")
+		return
+	}
+	if err := s.agent.RequestRuntimeLifecycleShutdown(request.FenceToken); err != nil {
+		writeRuntimeLifecycleManagerError(w, err)
+		return
+	}
+	writeRuntimeControlJSON(w, http.StatusAccepted, runtimeControlEnvelope{OK: true, Data: map[string]any{"shutdown_requested": true}})
+}
+
+func (s *runtimeControlServer) handleRuntimeHealth(w http.ResponseWriter, r *http.Request) {
+	if !s.require(w, r) {
+		return
+	}
+	writeRuntimeControlJSON(w, http.StatusOK, runtimeControlEnvelope{OK: true, Data: map[string]any{
+		"status": "ok", "service_protocol": runtimeservice.ProtocolVersion,
+		"compatibility_epoch": runtimeservice.CurrentCompatibilityContract().CompatibilityEpoch,
+	}})
+}
+
+func decodeRuntimeControlJSON(w http.ResponseWriter, r *http.Request, output any) bool {
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(output); err != nil {
+		writeRuntimeControlError(w, http.StatusBadRequest, "RUNTIME_CONTROL_INVALID_REQUEST", "Runtime control request JSON is invalid.")
+		return false
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		writeRuntimeControlError(w, http.StatusBadRequest, "RUNTIME_CONTROL_INVALID_REQUEST", "Runtime control request JSON is invalid.")
+		return false
+	}
+	return true
+}
+
+func writeRuntimeLifecycleManagerError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, runtimeservice.ErrLifecycleAdmissionClosed), errors.Is(err, runtimeservice.ErrLifecycleFenceHeld):
+		writeRuntimeControlError(w, http.StatusConflict, "OPERATION_IN_PROGRESS", err.Error())
+	case errors.Is(err, runtimeservice.ErrLifecycleFenceToken):
+		writeRuntimeControlError(w, http.StatusForbidden, "STALE_FENCE_TOKEN", err.Error())
+	default:
+		writeRuntimeControlError(w, http.StatusBadRequest, "RUNTIME_LIFECYCLE_INVALID_REQUEST", err.Error())
+	}
 }
 
 func (s *runtimeControlServer) handleProviderLink(w http.ResponseWriter, r *http.Request) {
@@ -483,9 +603,6 @@ func writeRuntimeControlAgentError(w http.ResponseWriter, err error) {
 	var linkErr *agent.ProviderLinkError
 	if errors.As(err, &linkErr) {
 		status := http.StatusBadRequest
-		if linkErr.Code == "LOCAL_RUNTIME_NOT_DESKTOP_MANAGED" || linkErr.Code == "DESKTOP_OWNER_MISMATCH" {
-			status = http.StatusForbidden
-		}
 		if linkErr.Code == "PROVIDER_LINK_ACTIVE_WORK" || linkErr.Code == "PROVIDER_LINK_ALREADY_CONNECTED" {
 			status = http.StatusConflict
 		}

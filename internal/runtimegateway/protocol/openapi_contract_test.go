@@ -36,8 +36,17 @@ type openAPIPathItem map[string]openAPIOperation
 type openAPIOperation struct {
 	OperationID string                     `yaml:"operationId"`
 	Security    []map[string][]string      `yaml:"security"`
+	Parameters  []openAPIParameter         `yaml:"parameters"`
 	RequestBody openAPIRequestBody         `yaml:"requestBody"`
 	Responses   map[string]openAPIResponse `yaml:"responses"`
+}
+
+type openAPIParameter struct {
+	Ref      string        `yaml:"$ref"`
+	Name     string        `yaml:"name"`
+	In       string        `yaml:"in"`
+	Required bool          `yaml:"required"`
+	Schema   openAPISchema `yaml:"schema"`
 }
 
 type openAPIRequestBody struct {
@@ -69,7 +78,7 @@ type openAPISchema struct {
 
 func TestGatewayOpenAPIContract(t *testing.T) {
 	root := repoRoot(t)
-	specPath := filepath.Join(root, "spec", "openapi", "gateway-v1.yaml")
+	specPath := filepath.Join(root, "spec", "openapi", "gateway-v2.yaml")
 	rawSpec := readFile(t, specPath)
 	if strings.Contains(rawSpec, "redeven-runtime-gateway-v1") {
 		t.Fatalf("gateway OpenAPI contract must not restore the old runtime-gateway protocol name")
@@ -201,36 +210,45 @@ func assertDesktopProtocolLiterals(t *testing.T, root string) {
 
 func assertGatewayPaths(t *testing.T, contract openAPIContract, root string) {
 	t.Helper()
-	expected := []string{
-		"/gateway/v1/pairing/challenge",
-		"/gateway/v1/pairing/complete",
-		"/gateway/v1/catalog",
-		"/gateway/v1/open-session",
-		"/gateway/v1/env-profiles/upsert",
-		"/gateway/v1/env-profiles/delete",
-		"/gateway/v1/env-lifecycle",
+	expected := map[string]string{
+		"/gateway/v2/pairing/challenge":                                "post",
+		"/gateway/v2/pairing/complete":                                 "post",
+		"/gateway/v2/catalog":                                          "post",
+		"/gateway/v2/open-session":                                     "post",
+		"/gateway/v2/env-profiles/upsert":                              "post",
+		"/gateway/v2/env-profiles/delete":                              "post",
+		"/gateway/v2/runtime-management/capability":                    "post",
+		"/gateway/v2/runtime-operations/prepare":                       "post",
+		"/gateway/v2/runtime-operations/{operation_id}":                "get",
+		"/gateway/v2/runtime-operations/{operation_id}/confirm":        "post",
+		"/gateway/v2/runtime-operations/{operation_id}/artifact":       "put",
+		"/gateway/v2/runtime-operations/{operation_id}/commit":         "post",
+		"/gateway/v2/runtime-operations/{operation_id}/cancel":         "post",
+		"/gateway/v2/runtime-operations/{operation_id}/renew-deadline": "post",
+		"/gateway/v2/runtime-operations/{operation_id}/reconcile":      "post",
+		"/gateway/v2/runtime-operations/{operation_id}/events":         "get",
 	}
-	assertSameStrings(t, "OpenAPI paths", keys(contract.Paths), expected)
-	for _, path := range expected {
+	assertSameStrings(t, "OpenAPI paths", keys(contract.Paths), keys(expected))
+	for path, method := range expected {
 		item := contract.Paths[path]
 		if len(item) != 1 {
-			t.Fatalf("%s methods = %v, want only post", path, keys(item))
+			t.Fatalf("%s methods = %v, want only %s", path, keys(item), method)
 		}
-		if _, ok := item["post"]; !ok {
-			t.Fatalf("%s does not define post", path)
+		if _, ok := item[method]; !ok {
+			t.Fatalf("%s does not define %s", path, method)
 		}
 	}
 
 	server := readFile(t, filepath.Join(root, "internal", "gatewayservice", "server.go"))
-	serverPaths := uniqueSubmatches(regexp.MustCompile(`mux\.HandleFunc\("([^"]+)"`), server)
-	assertSameStrings(t, "gateway service registered paths", serverPaths, expected)
+	serverPaths := uniqueSubmatches(regexp.MustCompile(`mux\.HandleFunc\("(?:[A-Z]+ )?(/[^"]+)"`), server)
+	assertSameStrings(t, "gateway service registered paths", serverPaths, keys(expected))
 
 	client := readFile(t, filepath.Join(root, "desktop", "src", "main", "gatewayClient.ts"))
-	clientRoutes := uniqueSubmatches(regexp.MustCompile(`'((?:gateway/v1/)[^']+)'`), client)
+	clientRoutes := uniqueSubmatches(regexp.MustCompile(`\| '((?:gateway/v2/)[^']+)'`), client)
 	for i, route := range clientRoutes {
 		clientRoutes[i] = "/" + route
 	}
-	assertSameStrings(t, "Desktop Gateway client routes", clientRoutes, expected)
+	assertSameStrings(t, "Desktop Gateway client routes", clientRoutes, keys(expected))
 }
 
 func assertGatewaySecurity(t *testing.T, contract openAPIContract) {
@@ -250,12 +268,18 @@ func assertGatewaySecurity(t *testing.T, contract openAPIContract) {
 		}
 	}
 	signed := requiredSchemes[:6]
-	requireSecurity(t, contract, "/gateway/v1/catalog", signed)
-	requireSecurity(t, contract, "/gateway/v1/open-session", signed)
-	requireSecurity(t, contract, "/gateway/v1/env-lifecycle", signed)
-	requireSecurity(t, contract, "/gateway/v1/env-profiles/upsert", append(append([]string{}, signed...), "GatewayManagedBridgeToken"))
-	requireSecurity(t, contract, "/gateway/v1/env-profiles/delete", append(append([]string{}, signed...), "GatewayManagedBridgeToken"))
-	for _, path := range []string{"/gateway/v1/pairing/challenge", "/gateway/v1/pairing/complete"} {
+	for path, item := range contract.Paths {
+		if path == "/gateway/v2/pairing/challenge" || path == "/gateway/v2/pairing/complete" ||
+			path == "/gateway/v2/env-profiles/upsert" || path == "/gateway/v2/env-profiles/delete" {
+			continue
+		}
+		for method := range item {
+			requireSecurity(t, contract, path, method, signed)
+		}
+	}
+	requireSecurity(t, contract, "/gateway/v2/env-profiles/upsert", "post", append(append([]string{}, signed...), "GatewayManagedBridgeToken"))
+	requireSecurity(t, contract, "/gateway/v2/env-profiles/delete", "post", append(append([]string{}, signed...), "GatewayManagedBridgeToken"))
+	for _, path := range []string{"/gateway/v2/pairing/challenge", "/gateway/v2/pairing/complete"} {
 		if got := postOperation(t, contract, path).Security; len(got) != 0 {
 			t.Fatalf("%s security = %#v, want unauthenticated pairing transport gate", path, got)
 		}
@@ -303,13 +327,26 @@ func assertSignatureHeaderSources(t *testing.T, root string) {
 	}
 }
 
-func requireSecurity(t *testing.T, contract openAPIContract, path string, schemes []string) {
+func requireSecurity(t *testing.T, contract openAPIContract, path, method string, schemes []string) {
 	t.Helper()
-	operation := postOperation(t, contract, path)
+	operation := operationFor(t, contract, path, method)
 	if len(operation.Security) != 1 {
 		t.Fatalf("%s security requirement count = %d, want 1", path, len(operation.Security))
 	}
 	assertSameStrings(t, path+" security schemes", keys(operation.Security[0]), schemes)
+}
+
+func operationFor(t *testing.T, contract openAPIContract, path, method string) openAPIOperation {
+	t.Helper()
+	item, ok := contract.Paths[path]
+	if !ok {
+		t.Fatalf("missing path %s", path)
+	}
+	operation, ok := item[method]
+	if !ok {
+		t.Fatalf("%s missing %s operation", path, method)
+	}
+	return operation
 }
 
 func assertRequestResponseEnvelopes(t *testing.T, contract openAPIContract) {
@@ -319,13 +356,38 @@ func assertRequestResponseEnvelopes(t *testing.T, contract openAPIContract) {
 		envelope string
 		response string
 	}{
-		"/gateway/v1/pairing/challenge":   {"PairingChallengeRequest", "PairingChallengeEnvelope", "PairingChallengeResponse"},
-		"/gateway/v1/pairing/complete":    {"PairingCompleteRequest", "PairingCompleteEnvelope", "PairingCompleteResponse"},
-		"/gateway/v1/catalog":             {"CatalogRequest", "CatalogEnvelope", "CatalogResponse"},
-		"/gateway/v1/open-session":        {"OpenSessionRequest", "OpenSessionEnvelope", "OpenSessionResponse"},
-		"/gateway/v1/env-profiles/upsert": {"EnvProfileUpsertRequest", "EnvProfileUpsertEnvelope", "EnvProfileUpsertResponse"},
-		"/gateway/v1/env-profiles/delete": {"EnvProfileDeleteRequest", "EnvProfileDeleteEnvelope", "EnvProfileDeleteResponse"},
-		"/gateway/v1/env-lifecycle":       {"EnvLifecycleRequest", "EnvLifecycleEnvelope", "EnvLifecycleResponse"},
+		"/gateway/v2/pairing/challenge":                           {"PairingChallengeRequest", "PairingChallengeEnvelope", "PairingChallengeResponse"},
+		"/gateway/v2/pairing/complete":                            {"PairingCompleteRequest", "PairingCompleteEnvelope", "PairingCompleteResponse"},
+		"/gateway/v2/catalog":                                     {"CatalogRequest", "CatalogEnvelope", "CatalogResponse"},
+		"/gateway/v2/open-session":                                {"OpenSessionRequest", "OpenSessionEnvelope", "OpenSessionResponse"},
+		"/gateway/v2/env-profiles/upsert":                         {"EnvProfileUpsertRequest", "EnvProfileUpsertEnvelope", "EnvProfileUpsertResponse"},
+		"/gateway/v2/env-profiles/delete":                         {"EnvProfileDeleteRequest", "EnvProfileDeleteEnvelope", "EnvProfileDeleteResponse"},
+		"/gateway/v2/runtime-management/capability":               {"RuntimeManagementCapabilityRequest", "RuntimeManagementCapabilityEnvelope", "RuntimeManagementCapability"},
+		"/gateway/v2/runtime-operations/prepare":                  {"RuntimeOperationPrepareRequest", "RuntimeOperationPrepareEnvelope", "RuntimeOperationPrepareResponse"},
+		"/gateway/v2/runtime-operations/{operation_id}/reconcile": {"RuntimeOperationReconcileRequest", "RuntimeOperationEnvelope", "RuntimeOperation"},
+	}
+	operationResponses := map[string]struct {
+		method   string
+		envelope string
+		response string
+	}{
+		"/gateway/v2/runtime-operations/{operation_id}":                {"get", "RuntimeOperationEnvelope", "RuntimeOperation"},
+		"/gateway/v2/runtime-operations/{operation_id}/confirm":        {"post", "RuntimeOperationEnvelope", "RuntimeOperation"},
+		"/gateway/v2/runtime-operations/{operation_id}/artifact":       {"put", "RuntimeOperationEnvelope", "RuntimeOperation"},
+		"/gateway/v2/runtime-operations/{operation_id}/commit":         {"post", "RuntimeOperationEnvelope", "RuntimeOperation"},
+		"/gateway/v2/runtime-operations/{operation_id}/cancel":         {"post", "RuntimeOperationEnvelope", "RuntimeOperation"},
+		"/gateway/v2/runtime-operations/{operation_id}/renew-deadline": {"post", "RuntimeOperationEnvelope", "RuntimeOperation"},
+		"/gateway/v2/runtime-operations/{operation_id}/events":         {"get", "RuntimeOperationEventsEnvelope", "RuntimeOperationEventsResponse"},
+	}
+	for path, want := range operationResponses {
+		operation := operationFor(t, contract, path, want.method)
+		assertSchemaRef(t, responseSchema(t, operation.Responses["200"]), want.envelope)
+		if operation.Responses["default"].Ref != "#/components/responses/GatewayError" {
+			t.Fatalf("%s default response ref = %q, want GatewayError", path, operation.Responses["default"].Ref)
+		}
+		envelope := schemaByName(t, contract, want.envelope)
+		assertRequired(t, want.envelope, envelope, "ok", "data")
+		assertSchemaRef(t, envelope.Properties["data"], want.response)
 	}
 	for path, want := range expected {
 		operation := postOperation(t, contract, path)
@@ -415,19 +477,35 @@ func assertGatewayEnums(t *testing.T, contract openAPIContract) {
 		EnvProfileAccessRouteKindSSHContainer,
 	))
 	assertEnum(t, contract, "EnvProfileControlOwner", constants(EnvProfileControlOwnerNone, EnvProfileControlOwnerGateway))
-	assertEnum(t, contract, "EnvLifecycleOperation", constants(
-		EnvLifecycleOperationStart,
-		EnvLifecycleOperationStop,
-		EnvLifecycleOperationRestart,
-		EnvLifecycleOperationUpdateRuntime,
+	assertEnum(t, contract, "RuntimeOperationKind", constants(
+		RuntimeOperationStart,
+		RuntimeOperationStop,
+		RuntimeOperationRestart,
+		RuntimeOperationUpdate,
+		RuntimeOperationReconcile,
 	))
-	assertEnum(t, contract, "EnvLifecycleState", constants(
-		EnvLifecycleStateAccepted,
-		EnvLifecycleStateRunning,
-		EnvLifecycleStateSucceeded,
-		EnvLifecycleStateFailed,
-		EnvLifecycleStateUnsupported,
+	assertEnum(t, contract, "RuntimeOperationState", constants(
+		RuntimeOperationPreflighting,
+		RuntimeOperationAwaitingConfirmation,
+		RuntimeOperationAwaitingArtifact,
+		RuntimeOperationStaging,
+		RuntimeOperationCommitReady,
+		RuntimeOperationConfirmationRequired,
+		RuntimeOperationFencing,
+		RuntimeOperationCommitting,
+		RuntimeOperationRecovering,
+		RuntimeOperationManualRecoveryRequired,
+		RuntimeOperationSucceeded,
+		RuntimeOperationFailed,
+		RuntimeOperationCancelled,
+		RuntimeOperationExpired,
 	))
+	assertEnum(t, contract, "ArtifactPolicy", constants(ArtifactPolicyPublishedRelease, ArtifactPolicyCustomBuild))
+	assertEnum(t, contract, "RuntimeGrant", constants(RuntimeGrantManage, RuntimeGrantCustomBuild, RuntimeGrantManageBinding))
+	assertEnum(t, contract, "AuthorizationState", constants(AuthorizationAllowed, AuthorizationDenied, AuthorizationUnknown))
+	assertEnum(t, contract, "CapabilitySupport", constants(CapabilitySupportSupported, CapabilitySupportUnsupported, CapabilitySupportUnknown))
+	assertEnum(t, contract, "ManagementReadiness", constants(ManagementReady, ManagementSetupRequired, ManagementTemporarilyUnavailable, ManagementReadinessUnknown))
+	assertEnum(t, contract, "ManagementPresentationState", constants(ManagementPresentationAllowed, ManagementPresentationDenied, ManagementPresentationSetupRequired, ManagementPresentationTemporarilyUnavailable, ManagementPresentationUnsupported, ManagementPresentationUnknown))
 	assertEnum(t, contract, "GatewayErrorCode", constants(
 		GatewayErrorCodeInvalidRequest,
 		GatewayErrorCodeUnauthorized,
@@ -452,30 +530,40 @@ func assertGatewayEnums(t *testing.T, contract openAPIContract) {
 func assertRequiredWireFields(t *testing.T, contract openAPIContract) {
 	t.Helper()
 	required := map[string][]string{
-		"CatalogRequest":                    {"protocol_version"},
-		"CatalogResponse":                   {"protocol_version", "gateway", "environments"},
-		"GatewayMetadata":                   {"gateway_id", "display_name", "status", "capabilities"},
-		"Environment":                       {"gateway_env_id", "display_name", "env_kind", "state", "capabilities", "access_capabilities", "control_capabilities", "origin"},
-		"EnvironmentProfile":                {"managed", "access_route_kind"},
-		"EnvironmentOrigin":                 {"kind", "label"},
-		"PairingChallengeRequest":           {"protocol_version", "client_nonce", "client_public_key", "binding_audience"},
-		"PairingChallengeResponse":          {"protocol_version", "gateway_id", "gateway_public_key", "gateway_public_key_fingerprint", "gateway_nonce", "expires_at_unix_ms", "signature"},
-		"PairingCompleteRequest":            {"protocol_version", "client_nonce", "gateway_nonce", "gateway_id", "binding_audience", "client_key_id", "proof"},
-		"PairingCompleteResponse":           {"protocol_version", "gateway_id", "client_key_id", "paired_at_unix_ms", "proof"},
-		"OpenSessionRequest":                {"protocol_version", "gateway_env_id", "requested_capability", "client_nonce"},
-		"OpenSessionResponse":               {"protocol_version", "gateway_session_id", "gateway_env_id", "connect_artifact"},
-		"DiagnosticsHint":                   {"gateway_env_id", "connection_kind"},
-		"EnvProfileUpsertRequest":           {"protocol_version", "profile"},
-		"EnvProfileInput":                   {"display_name", "access_route"},
-		"EnvProfileURLAccessRoute":          {"kind", "url"},
-		"EnvProfileSSHHostAccessRoute":      {"kind", "ssh_destination"},
-		"EnvProfileSSHContainerAccessRoute": {"kind", "ssh_destination", "container_engine", "container_id", "container_runtime_root"},
-		"EnvProfileUpsertResponse":          {"protocol_version", "environment"},
-		"EnvProfileDeleteRequest":           {"protocol_version", "gateway_env_id"},
-		"EnvProfileDeleteResponse":          {"protocol_version", "gateway_env_id", "deleted"},
-		"EnvLifecycleRequest":               {"protocol_version", "gateway_env_id", "operation"},
-		"EnvLifecycleResponse":              {"protocol_version", "gateway_env_id", "operation", "state"},
-		"GatewayErrorShape":                 {"code", "message"},
+		"CatalogRequest":                      {"protocol_version"},
+		"CatalogResponse":                     {"protocol_version", "gateway", "environments"},
+		"GatewayMetadata":                     {"gateway_id", "display_name", "status", "capabilities"},
+		"Environment":                         {"gateway_env_id", "display_name", "env_kind", "state", "capabilities", "access_capabilities", "control_capabilities", "origin"},
+		"EnvironmentProfile":                  {"managed", "access_route_kind"},
+		"EnvironmentOrigin":                   {"kind", "label"},
+		"PairingChallengeRequest":             {"protocol_version", "client_nonce", "client_public_key", "binding_audience"},
+		"PairingChallengeResponse":            {"protocol_version", "gateway_id", "gateway_public_key", "gateway_public_key_fingerprint", "gateway_nonce", "expires_at_unix_ms", "signature"},
+		"PairingCompleteRequest":              {"protocol_version", "client_nonce", "gateway_nonce", "gateway_id", "binding_audience", "client_key_id", "proof"},
+		"PairingCompleteResponse":             {"protocol_version", "gateway_id", "client_key_id", "paired_at_unix_ms", "proof"},
+		"OpenSessionRequest":                  {"protocol_version", "gateway_env_id", "requested_capability", "client_nonce"},
+		"OpenSessionResponse":                 {"protocol_version", "gateway_session_id", "gateway_env_id", "connect_artifact"},
+		"DiagnosticsHint":                     {"gateway_env_id", "connection_kind"},
+		"EnvProfileUpsertRequest":             {"protocol_version", "profile"},
+		"EnvProfileInput":                     {"display_name", "access_route"},
+		"EnvProfileURLAccessRoute":            {"kind", "url"},
+		"EnvProfileSSHHostAccessRoute":        {"kind", "ssh_destination"},
+		"EnvProfileSSHContainerAccessRoute":   {"kind", "ssh_destination", "container_engine", "container_id", "container_runtime_root"},
+		"EnvProfileUpsertResponse":            {"protocol_version", "environment"},
+		"EnvProfileDeleteRequest":             {"protocol_version", "gateway_env_id"},
+		"EnvProfileDeleteResponse":            {"protocol_version", "gateway_env_id", "deleted"},
+		"RuntimeManagementCapabilityRequest":  {"protocol_version", "gateway_env_id"},
+		"RuntimeOperationPrepareRequest":      {"protocol_version", "operation_id", "authorized_client_key_id", "gateway_env_id", "lifecycle_target_id", "target_generation", "operation", "desired_runtime", "idempotency_key"},
+		"RuntimeOperationConfirmationRequest": {"protocol_version", "snapshot_revision", "process_inventory_digest", "workload_identity_digest", "risk_summary_digest"},
+		"RuntimeOperationRenewRequest":        {"protocol_version", "expires_at_unix_ms"},
+		"RuntimeOperationReconcileRequest":    {"protocol_version"},
+		"RuntimeOperationPrepareResponse":     {"protocol_version", "operation", "confirmation_required", "artifact_max_bytes"},
+		"RuntimeOperation":                    {"protocol_version", "operation_id", "idempotency_key", "lifecycle_target_id", "target_generation", "gateway_env_id", "kind", "requested_actor", "authorized_client_key_id", "desired_runtime", "prepare_scope_digest", "state", "expected_snapshot", "authorization", "created_at_unix_ms", "updated_at_unix_ms"},
+		"RuntimeOperationEventsResponse":      {"protocol_version", "operation_id", "events"},
+		"RuntimeOperationEvent":               {"sequence", "operation_id", "lifecycle_target_id", "target_generation", "operation", "state", "timestamp_unix_ms"},
+		"RuntimeManagementCapability":         {"authorization", "support", "readiness", "presentation_state", "checked_at_unix_ms"},
+		"RuntimeManagementAuthorization":      {"state"},
+		"LifecycleTarget":                     {"lifecycle_target_id", "target_generation"},
+		"GatewayErrorShape":                   {"code", "message"},
 	}
 	for name, fields := range required {
 		assertRequired(t, name, schemaByName(t, contract, name), fields...)
@@ -484,7 +572,7 @@ func assertRequiredWireFields(t *testing.T, contract openAPIContract) {
 
 func assertOpenSessionDoesNotExposeCookies(t *testing.T, contract openAPIContract) {
 	t.Helper()
-	operation, ok := contract.Paths["/gateway/v1/open-session"]["post"]
+	operation, ok := contract.Paths["/gateway/v2/open-session"]["post"]
 	if !ok {
 		t.Fatal("open-session POST operation is missing")
 	}

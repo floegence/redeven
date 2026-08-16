@@ -93,6 +93,42 @@ describe('environmentAggregator', () => {
     });
   });
 
+  it('keeps Gateway runtime management identity on the aggregated card', () => {
+    const source = gatewaySource({
+      capabilities: ['env_lifecycle'],
+      environments: [{
+        gateway_env_id: 'env_demo',
+        display_name: 'Demo',
+        env_kind: 'reachable_env',
+        state: 'available',
+        capabilities: ['open', 'restart'],
+        control_capabilities: ['restart'],
+        runtime_management: {
+          support: 'supported',
+          authorization: { state: 'allowed', grants: ['manage_runtime'] },
+          readiness: 'ready',
+          presentation_state: 'allowed',
+          target: { lifecycle_target_id: 'rlt_demo', target_generation: 9 },
+          operations: ['restart'],
+          artifact_policies: ['published_release'],
+          checked_at_unix_ms: 1_710_000_000_000,
+        },
+        origin: { kind: 'network_target', label: 'Bastion network' },
+      }],
+    });
+
+    const entry = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences(),
+      gatewaySources: [source],
+    }).environments.find((candidate) => candidate.kind === 'gateway_environment');
+
+    expect(entry?.runtime_management).toMatchObject({
+      presentation_state: 'allowed',
+      target: { lifecycle_target_id: 'rlt_demo', target_generation: 9 },
+      operations: ['restart'],
+    });
+  });
+
   it('maps offline and trust-changed Gateway environments to Resolve without provider fallback', () => {
     const offline = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences(),

@@ -734,7 +734,6 @@ beforeEach(() => {
   getLocalRuntimeMock.mockResolvedValue({
     mode: 'local',
     env_public_id: 'env_local',
-    desktop_managed: true,
     direct_ws_url: 'ws://localhost/_redeven_direct/ws',
   });
   getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });

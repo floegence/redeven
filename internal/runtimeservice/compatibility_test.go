@@ -16,12 +16,12 @@ func TestCurrentCompatibilityContractIsValid(t *testing.T) {
 	if contract.CompatibilityEpoch <= 0 {
 		t.Fatalf("CompatibilityEpoch = %d, want positive", contract.CompatibilityEpoch)
 	}
-	if contract.CompatibilityEpoch != 8 {
-		t.Fatalf("CompatibilityEpoch = %d, want Local UI network exposure contract epoch 8", contract.CompatibilityEpoch)
+	if contract.CompatibilityEpoch != 9 {
+		t.Fatalf("CompatibilityEpoch = %d, want Runtime lifecycle fencing contract epoch 9", contract.CompatibilityEpoch)
 	}
-	if contract.MinimumDesktopVersion != "v0.10.0" || contract.MinimumRuntimeVersion != "v0.10.0" {
+	if contract.MinimumDesktopVersion != "v0.11.0" || contract.MinimumRuntimeVersion != "v0.11.0" {
 		t.Fatalf(
-			"minimum versions = Desktop %q Runtime %q, want matched v0.10.0 pair",
+			"minimum versions = Desktop %q Runtime %q, want matched v0.11.0 pair",
 			contract.MinimumDesktopVersion,
 			contract.MinimumRuntimeVersion,
 		)
@@ -31,8 +31,6 @@ func TestCurrentCompatibilityContractIsValid(t *testing.T) {
 func TestApplyCompatibilityContractFillsSnapshot(t *testing.T) {
 	snapshot := ApplyCompatibilityContract(Snapshot{
 		RuntimeVersion: "dev",
-		ServiceOwner:   OwnerDesktop,
-		DesktopManaged: true,
 	})
 	contract := CurrentCompatibilityContract()
 	if snapshot.ProtocolVersion != ProtocolVersion {
@@ -54,7 +52,6 @@ func TestApplyCompatibilityContractFillsSnapshot(t *testing.T) {
 
 func TestDegradedAIReadinessKeepsEnvironmentOpenable(t *testing.T) {
 	snapshot := ApplyCompatibilityContract(Snapshot{
-		RuntimeVersion: "dev", ServiceOwner: OwnerDesktop, DesktopManaged: true,
 		AIReadiness: AIReadiness{State: "degraded", ReasonCode: "host_thread_settings_missing", IssueCount: 2},
 	})
 	if snapshot.OpenReadiness.State != OpenReadinessOpenable {
@@ -65,30 +62,20 @@ func TestDegradedAIReadinessKeepsEnvironmentOpenable(t *testing.T) {
 	}
 }
 
-func TestNormalizeSnapshotBlocksOpenReadinessForHardCompatibilityFailures(t *testing.T) {
+func TestNormalizeSnapshotKeepsOrdinaryAccessOpenForLifecycleCompatibilityFailures(t *testing.T) {
 	snapshot := NormalizeSnapshot(Snapshot{
 		ProtocolVersion:      ProtocolVersion,
-		ServiceOwner:         OwnerDesktop,
-		DesktopManaged:       true,
 		Compatibility:        CompatibilityDesktopUpdateRequired,
 		CompatibilityMessage: "Desktop is too old.",
 	})
-	if snapshot.OpenReadiness.State != OpenReadinessBlocked {
-		t.Fatalf("OpenReadiness.State = %q, want %q", snapshot.OpenReadiness.State, OpenReadinessBlocked)
-	}
-	if snapshot.OpenReadiness.ReasonCode != "desktop_update_required" {
-		t.Fatalf("OpenReadiness.ReasonCode = %q", snapshot.OpenReadiness.ReasonCode)
-	}
-	if snapshot.OpenReadiness.Message != "Desktop is too old." {
-		t.Fatalf("OpenReadiness.Message = %q", snapshot.OpenReadiness.Message)
+	if snapshot.OpenReadiness.State != OpenReadinessOpenable {
+		t.Fatalf("OpenReadiness = %#v, want ordinary Runtime access to remain openable", snapshot.OpenReadiness)
 	}
 }
 
 func TestNormalizeSnapshotPreservesExplicitStartingReadiness(t *testing.T) {
 	snapshot := NormalizeSnapshot(Snapshot{
 		ProtocolVersion: ProtocolVersion,
-		ServiceOwner:    OwnerDesktop,
-		DesktopManaged:  true,
 		Compatibility:   CompatibilityCompatible,
 		OpenReadiness: OpenReadiness{
 			State:      OpenReadinessStarting,
@@ -119,8 +106,6 @@ func TestEnvAppShellUnavailableReadinessIsBlocked(t *testing.T) {
 func TestNormalizeSnapshotNormalizesDesktopModelSourceCapabilityAndBinding(t *testing.T) {
 	snapshot := NormalizeSnapshot(Snapshot{
 		ProtocolVersion: ProtocolVersion,
-		ServiceOwner:    OwnerDesktop,
-		DesktopManaged:  true,
 		Compatibility:   CompatibilityCompatible,
 		Capabilities: Capabilities{
 			DesktopModelSource: Capability{Supported: true},
@@ -142,7 +127,7 @@ func TestNormalizeSnapshotNormalizesDesktopModelSourceCapabilityAndBinding(t *te
 	if !snapshot.Capabilities.DesktopModelSource.Supported {
 		t.Fatalf("DesktopModelSource.Supported = false, want true")
 	}
-	if snapshot.Capabilities.DesktopModelSource.BindMethod != RuntimeControlBindMethodV1 {
+	if snapshot.Capabilities.DesktopModelSource.BindMethod != RuntimeControlBindMethodV2 {
 		t.Fatalf("BindMethod = %q", snapshot.Capabilities.DesktopModelSource.BindMethod)
 	}
 	binding := snapshot.Bindings.DesktopModelSource
@@ -166,8 +151,6 @@ func TestNormalizeSnapshotNormalizesDesktopModelSourceCapabilityAndBinding(t *te
 func TestNormalizeSnapshotMarksDesktopModelSourceBindingUnsupportedWithoutCapability(t *testing.T) {
 	snapshot := NormalizeSnapshot(Snapshot{
 		ProtocolVersion: ProtocolVersion,
-		ServiceOwner:    OwnerDesktop,
-		DesktopManaged:  true,
 		Compatibility:   CompatibilityCompatible,
 		Bindings: Bindings{
 			DesktopModelSource: Binding{State: BindingStateBound},
@@ -181,8 +164,6 @@ func TestNormalizeSnapshotMarksDesktopModelSourceBindingUnsupportedWithoutCapabi
 func TestNormalizeSnapshotNormalizesProviderLinkCapabilityAndBinding(t *testing.T) {
 	snapshot := NormalizeSnapshot(Snapshot{
 		ProtocolVersion: ProtocolVersion,
-		ServiceOwner:    OwnerDesktop,
-		DesktopManaged:  true,
 		Compatibility:   CompatibilityCompatible,
 		Capabilities: Capabilities{
 			ProviderLink: Capability{Supported: true},
@@ -203,7 +184,7 @@ func TestNormalizeSnapshotNormalizesProviderLinkCapabilityAndBinding(t *testing.
 	if !snapshot.Capabilities.ProviderLink.Supported {
 		t.Fatalf("ProviderLink.Supported = false, want true")
 	}
-	if snapshot.Capabilities.ProviderLink.BindMethod != RuntimeControlBindMethodV1 {
+	if snapshot.Capabilities.ProviderLink.BindMethod != RuntimeControlBindMethodV2 {
 		t.Fatalf("BindMethod = %q", snapshot.Capabilities.ProviderLink.BindMethod)
 	}
 	binding := snapshot.Bindings.ProviderLink
@@ -221,8 +202,6 @@ func TestNormalizeSnapshotNormalizesProviderLinkCapabilityAndBinding(t *testing.
 func TestNormalizeSnapshotNormalizesRuntimeGatewayCapability(t *testing.T) {
 	snapshot := NormalizeSnapshot(Snapshot{
 		ProtocolVersion: ProtocolVersion,
-		ServiceOwner:    OwnerDesktop,
-		DesktopManaged:  true,
 		Compatibility:   CompatibilityCompatible,
 		Capabilities: Capabilities{
 			RuntimeGateway: Capability{Supported: true},
@@ -232,16 +211,14 @@ func TestNormalizeSnapshotNormalizesRuntimeGatewayCapability(t *testing.T) {
 	if !snapshot.Capabilities.RuntimeGateway.Supported {
 		t.Fatalf("RuntimeGateway.Supported = false, want true")
 	}
-	if snapshot.Capabilities.RuntimeGateway.BindMethod != RuntimeControlBindMethodV1 {
-		t.Fatalf("BindMethod = %q, want %q", snapshot.Capabilities.RuntimeGateway.BindMethod, RuntimeControlBindMethodV1)
+	if snapshot.Capabilities.RuntimeGateway.BindMethod != RuntimeControlBindMethodV2 {
+		t.Fatalf("BindMethod = %q, want %q", snapshot.Capabilities.RuntimeGateway.BindMethod, RuntimeControlBindMethodV2)
 	}
 }
 
 func TestNormalizeSnapshotKeepsMissingRuntimeGatewayCapabilityUnsupported(t *testing.T) {
 	snapshot := NormalizeSnapshot(Snapshot{
 		ProtocolVersion: ProtocolVersion,
-		ServiceOwner:    OwnerDesktop,
-		DesktopManaged:  true,
 		Compatibility:   CompatibilityCompatible,
 	})
 
@@ -256,8 +233,6 @@ func TestNormalizeSnapshotKeepsMissingRuntimeGatewayCapabilityUnsupported(t *tes
 func TestNormalizeSnapshotPreservesProviderLinkRemoteEnabledFact(t *testing.T) {
 	snapshot := NormalizeSnapshot(Snapshot{
 		ProtocolVersion: ProtocolVersion,
-		ServiceOwner:    OwnerDesktop,
-		DesktopManaged:  true,
 		Compatibility:   CompatibilityCompatible,
 		RemoteEnabled:   false,
 		Capabilities: Capabilities{
@@ -285,8 +260,6 @@ func TestNormalizeSnapshotPreservesProviderLinkRemoteEnabledFact(t *testing.T) {
 func TestNormalizeSnapshotMarksProviderLinkUnsupportedWithoutCapability(t *testing.T) {
 	snapshot := NormalizeSnapshot(Snapshot{
 		ProtocolVersion: ProtocolVersion,
-		ServiceOwner:    OwnerDesktop,
-		DesktopManaged:  true,
 		Compatibility:   CompatibilityCompatible,
 		Bindings: Bindings{
 			ProviderLink: ProviderLinkBinding{

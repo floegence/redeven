@@ -32,20 +32,13 @@ func (a *Agent) RuntimeServiceSnapshot() runtimeservice.Snapshot {
 			Message:    "Desktop model source is not available in this runtime service.",
 		},
 		ProviderLink: runtimeservice.Capability{
-			Supported:  a.desktopManaged,
-			BindMethod: runtimeservice.RuntimeControlBindMethodV1,
+			Supported:  true,
+			BindMethod: runtimeservice.RuntimeControlBindMethodV2,
 		},
 		RuntimeGateway: runtimeservice.Capability{
 			Supported:  true,
-			BindMethod: runtimeservice.RuntimeControlBindMethodV1,
+			BindMethod: runtimeservice.RuntimeControlBindMethodV2,
 		},
-	}
-	if !a.desktopManaged {
-		capabilities.ProviderLink = runtimeservice.Capability{
-			Supported:  false,
-			ReasonCode: "runtime_not_desktop_managed",
-			Message:    "Provider linking is only available for Desktop-managed runtimes.",
-		}
 	}
 	bindings := runtimeservice.Bindings{
 		DesktopModelSource: runtimeservice.Binding{State: runtimeservice.BindingStateUnsupported},
@@ -64,7 +57,7 @@ func (a *Agent) RuntimeServiceSnapshot() runtimeservice.Snapshot {
 			defer release()
 			capabilities.DesktopModelSource = runtimeservice.Capability{
 				Supported:  true,
-				BindMethod: runtimeservice.RuntimeControlBindMethodV1,
+				BindMethod: runtimeservice.RuntimeControlBindMethodV2,
 			}
 			bindings.DesktopModelSource = aiSvc.DesktopModelSourceBindingStatus(leaseCtx)
 			aiTaskCount = aiSvc.ActiveRunCount("")
@@ -80,13 +73,6 @@ func (a *Agent) RuntimeServiceSnapshot() runtimeservice.Snapshot {
 		RuntimeCommit:    strings.TrimSpace(a.commit),
 		RuntimeBuildTime: strings.TrimSpace(a.buildTime),
 		ProtocolVersion:  runtimeservice.ProtocolVersion,
-		ServiceOwner: func() runtimeservice.Owner {
-			if a.desktopManaged {
-				return runtimeservice.OwnerDesktop
-			}
-			return runtimeservice.OwnerExternal
-		}(),
-		DesktopManaged:   a.desktopManaged,
 		EffectiveRunMode: strings.TrimSpace(a.effectiveRunMode),
 		RemoteEnabled:    a.remoteEnabled,
 		AIReadiness:      aiReadiness,

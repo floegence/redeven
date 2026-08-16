@@ -24,9 +24,7 @@ function provider(): DesktopProviderEnvironmentCandidate {
 
 function runtimeService(binding: RuntimeServiceProviderLinkBinding): RuntimeServiceSnapshot {
   return {
-    protocol_version: 'redeven-runtime-v1',
-    service_owner: 'desktop',
-    desktop_managed: true,
+    protocol_version: 'redeven-runtime-v2',
     effective_run_mode: 'desktop',
     remote_enabled: binding.state === 'linked' && binding.remote_enabled === true,
     compatibility: 'compatible',
@@ -38,8 +36,8 @@ function runtimeService(binding: RuntimeServiceProviderLinkBinding): RuntimeServ
       port_forward_count: 0,
     },
     capabilities: {
-      desktop_model_source: { supported: true, bind_method: 'runtime_control_v1' },
-      provider_link: { supported: true, bind_method: 'runtime_control_v1' },
+      desktop_model_source: { supported: true, bind_method: 'runtime_control_v2' },
+      provider_link: { supported: true, bind_method: 'runtime_control_v2' },
     },
     bindings: {
       desktop_model_source: { state: 'unbound' },
@@ -61,7 +59,6 @@ function target(overrides: Partial<DesktopProviderRuntimeLinkTarget> = {}): Desk
     runtime_openable: true,
     runtime_control_status: {
       state: 'available',
-      owner: 'current_desktop',
     },
     runtime_service: service,
     provider_connection_state: runtimeServiceProviderConnectionState(service),
@@ -219,16 +216,4 @@ describe('buildDesktopProviderRuntimeLinkPlan', () => {
     });
   });
 
-  it('blocks runtime-control owned by another Desktop instance', () => {
-    expect(buildDesktopProviderRuntimeLinkPlan(target({
-      runtime_control_status: {
-        state: 'owner_mismatch',
-        owner: 'other_desktop',
-        message: 'This runtime is owned by another Desktop instance.',
-      },
-    }), provider())).toMatchObject({
-      state: 'blocked_owner_mismatch',
-      can_connect: false,
-    });
-  });
 });

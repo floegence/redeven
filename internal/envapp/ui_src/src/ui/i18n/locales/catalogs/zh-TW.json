@@ -378,7 +378,11 @@
       "closeLabel": "關閉外觀設定",
       "commandDescription": "選擇色彩模式和可用的介面佈景主題。",
       "modeLabel": "色彩模式",
-      "mode": { "system": "跟隨系統", "light": "淺色", "dark": "深色" },
+      "mode": {
+        "system": "跟隨系統",
+        "light": "淺色",
+        "dark": "深色"
+      },
       "systemResolvedLight": "系統目前使用淺色模式",
       "systemResolvedDark": "系統目前使用深色模式",
       "themesLabel": "佈景主題",
@@ -473,12 +477,30 @@
           "other": "{lead}：{title}，另有 {count} 項"
         },
         "withoutTitle": {
-          "needsAttention": { "one": "有 1 項任務需要你處理", "other": "有 {count} 項任務需要你處理" },
-          "needsReview": { "one": "有 1 項任務需要檢查", "other": "有 {count} 項任務需要檢查" },
-          "working": { "one": "Flower 正在處理 1 項任務", "other": "Flower 正在處理 {count} 項任務" },
-          "queued": { "one": "有 1 項任務等待開始", "other": "有 {count} 項任務等待開始" },
-          "stopped": { "one": "有 1 項任務已停止", "other": "有 {count} 項任務已停止" },
-          "ready": { "one": "有 1 項結果已就緒", "other": "有 {count} 項結果已就緒" }
+          "needsAttention": {
+            "one": "有 1 項任務需要你處理",
+            "other": "有 {count} 項任務需要你處理"
+          },
+          "needsReview": {
+            "one": "有 1 項任務需要檢查",
+            "other": "有 {count} 項任務需要檢查"
+          },
+          "working": {
+            "one": "Flower 正在處理 1 項任務",
+            "other": "Flower 正在處理 {count} 項任務"
+          },
+          "queued": {
+            "one": "有 1 項任務等待開始",
+            "other": "有 {count} 項任務等待開始"
+          },
+          "stopped": {
+            "one": "有 1 項任務已停止",
+            "other": "有 {count} 項任務已停止"
+          },
+          "ready": {
+            "one": "有 1 項結果已就緒",
+            "other": "有 {count} 項結果已就緒"
+          }
         },
         "secondaryWorking": {
           "one": "Flower 也正在處理另外 1 項任務",
@@ -2623,10 +2645,8 @@
     "loading": "正在載入...",
     "statusLabel": "狀態",
     "statusNote": "maintenance controller 觀察到的目前狀態。",
-    "serviceOwner": "服務擁有者",
-    "serviceOwnerNote": "此持久運行時服務的生命週期擁有者。",
     "maintenanceAuthority": "維護權限方",
-    "maintenanceAuthorityNote": "此會話中重新啟動和更新作業的目前擁有者。",
+    "maintenanceAuthorityNote": "此工作階段中執行重新啟動和更新操作的目前通道。",
     "compatibilityLabel": "相容性",
     "compatibilityNote": "Desktop 和運行時服務相容性狀態。",
     "activeWork": "活躍工作",
@@ -2647,10 +2667,6 @@
     "noActiveWork": "無活躍工作",
     "runtimeRpc": "運行時 RPC",
     "unknown": "未知",
-    "owner": {
-      "redevenDesktop": "Redeven Desktop",
-      "externalService": "外部服務"
-    },
     "status": {
       "online": "線上",
       "offline": "離線"
@@ -2660,8 +2676,7 @@
       "updateAvailable": "有更新可用",
       "restartRecommended": "建議重新啟動",
       "updateRequired": "需要更新",
-      "desktopUpdateRequired": "需要更新 Desktop",
-      "managedElsewhere": "由其他位置管理"
+      "desktopUpdateRequired": "需要更新 Desktop"
     },
     "desktopModelState": {
       "bound": "已繫結",
@@ -2687,7 +2702,8 @@
         "one": "{count} 個 Web服務",
         "other": "{count} 個 Web服務"
       }
-    }
+    },
+    "desktopShell": "Redeven Desktop"
   },
   "runtimeConfig": {
     "title": "Shell 與工作區",
@@ -3783,7 +3799,10 @@
       "errorInvalidEncoding": "此文字檔案含有不符合 UTF-8 編碼的內容。",
       "errorUploadFailed": "上傳失敗，請重試。",
       "errorUnavailable": "所選模型不支援附件。",
-      "lines": { "one": "{count} 行", "other": "{count} 行" },
+      "lines": {
+        "one": "{count} 行",
+        "other": "{count} 行"
+      },
       "added": "已加入 {name}。",
       "converted": "較長的文字已轉換為附件 {name}。",
       "uploaded": "已上傳 {name}。",
@@ -4315,7 +4334,58 @@
       "backToList": "返回外掛程式清單",
       "reviewPermissions": "檢閱必要權限",
       "reviewUpdate": "檢閱更新內容",
-      "updateReview": {"title":"檢閱 {plugin} 更新","description":"安裝此更新前，先瞭解會有哪些變更。","loading":"正在準備更新內容...","versionChange":"版本","currentVersion":"目前版本","targetVersion":"新版本","newBuild":"新的開發建置","replacementBuild":"替換建置","whatIsNew":"本次更新內容","features":"新增功能","improvements":"體驗改善","fixes":"問題修正","notices":"注意事項","noReleaseNotes":"發佈者未提供更新說明。","impactTitle":"存取與更新影響","noAccessChange":"現有權限與授權將保留；本次更新不會要求新的存取範圍。","securityChanges":"有 {count} 項安全宣告為新增或已有變更。繼續前請檢閱 Host 檢查結果。","developmentEvidence":"Redeven 已驗證此開發交付項目及其能力契約身分。","developmentInspectionUnavailable":"開發建置不會執行套件簽章或安全宣告差異檢查。","externalEvidence":"Host 檢查結果與目前確切套件繫結。","enabledRetained":"更新後會保留目前啟用狀態。","grantsRetained":"現有權限授權將繼續保留。","technicalEvidence":"技術證據","packageHash":"套件雜湊","manifestHash":"資訊清單雜湊","entriesHash":"項目雜湊","capabilityVersion":"能力契約","releaseNotesID":"更新說明 ID","updateToVersion":"更新至 v{version}","installNewBuild":"安裝新建置","replaceBuild":"替換目前建置","noUpdate":"目前已安裝完全相同的建置。","downgradeBlocked":"目標版本低於已安裝版本。","riskConfirm":"我瞭解此套件會替換目前建置，並可能改變安全宣告。","committing":"正在安裝已確認的更新...","reconciling":"正在確認更新結果...","continueReconciliation":"繼續確認結果","stale":"插件或更新目標已經變更，請重新檢閱。","failed":"更新未完成，已檢閱的目標仍然可用。","outcomeUnknown":"Redeven 暫時無法確認結果。系統不會重複送出更新。","refreshFailed":"更新已完成，但插件中心無法重新整理清單。","completeTitle":"{plugin} 已是最新版本","completeDescription":"已安裝 v{version}，啟用狀態和授權均已保留。","done":"完成","viewPermissions":"檢視權限","allCurrent":"所有插件均為最新版本。","sourceTitle":"提供更新套件","sourceDescription":"需要重新提供來源，Redeven 才能檢查確切目標。","reviewPackage":"檢閱套件","readOnly":"你可以檢閱更新，但需要由環境管理員安裝。"},
+      "updateReview": {
+        "title": "檢閱 {plugin} 更新",
+        "description": "安裝此更新前，先瞭解會有哪些變更。",
+        "loading": "正在準備更新內容...",
+        "versionChange": "版本",
+        "currentVersion": "目前版本",
+        "targetVersion": "新版本",
+        "newBuild": "新的開發建置",
+        "replacementBuild": "替換建置",
+        "whatIsNew": "本次更新內容",
+        "features": "新增功能",
+        "improvements": "體驗改善",
+        "fixes": "問題修正",
+        "notices": "注意事項",
+        "noReleaseNotes": "發佈者未提供更新說明。",
+        "impactTitle": "存取與更新影響",
+        "noAccessChange": "現有權限與授權將保留；本次更新不會要求新的存取範圍。",
+        "securityChanges": "有 {count} 項安全宣告為新增或已有變更。繼續前請檢閱 Host 檢查結果。",
+        "developmentEvidence": "Redeven 已驗證此開發交付項目及其能力契約身分。",
+        "developmentInspectionUnavailable": "開發建置不會執行套件簽章或安全宣告差異檢查。",
+        "externalEvidence": "Host 檢查結果與目前確切套件繫結。",
+        "enabledRetained": "更新後會保留目前啟用狀態。",
+        "grantsRetained": "現有權限授權將繼續保留。",
+        "technicalEvidence": "技術證據",
+        "packageHash": "套件雜湊",
+        "manifestHash": "資訊清單雜湊",
+        "entriesHash": "項目雜湊",
+        "capabilityVersion": "能力契約",
+        "releaseNotesID": "更新說明 ID",
+        "updateToVersion": "更新至 v{version}",
+        "installNewBuild": "安裝新建置",
+        "replaceBuild": "替換目前建置",
+        "noUpdate": "目前已安裝完全相同的建置。",
+        "downgradeBlocked": "目標版本低於已安裝版本。",
+        "riskConfirm": "我瞭解此套件會替換目前建置，並可能改變安全宣告。",
+        "committing": "正在安裝已確認的更新...",
+        "reconciling": "正在確認更新結果...",
+        "continueReconciliation": "繼續確認結果",
+        "stale": "插件或更新目標已經變更，請重新檢閱。",
+        "failed": "更新未完成，已檢閱的目標仍然可用。",
+        "outcomeUnknown": "Redeven 暫時無法確認結果。系統不會重複送出更新。",
+        "refreshFailed": "更新已完成，但插件中心無法重新整理清單。",
+        "completeTitle": "{plugin} 已是最新版本",
+        "completeDescription": "已安裝 v{version}，啟用狀態和授權均已保留。",
+        "done": "完成",
+        "viewPermissions": "檢視權限",
+        "allCurrent": "所有插件均為最新版本。",
+        "sourceTitle": "提供更新套件",
+        "sourceDescription": "需要重新提供來源，Redeven 才能檢查確切目標。",
+        "reviewPackage": "檢閱套件",
+        "readOnly": "你可以檢閱更新，但需要由環境管理員安裝。"
+      },
       "viewPolicyRestriction": "檢視原則限制",
       "viewRuntimeRequirement": "檢視執行階段需求",
       "viewTrustDetails": "檢視信任狀態詳情",

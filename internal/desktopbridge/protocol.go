@@ -66,7 +66,6 @@ type RuntimeControl struct {
 	ProtocolVersion string `json:"protocol_version,omitempty"`
 	BaseURL         string `json:"base_url,omitempty"`
 	Token           string `json:"token,omitempty"`
-	DesktopOwnerID  string `json:"desktop_owner_id,omitempty"`
 }
 
 type StreamSurface string

@@ -7,7 +7,7 @@ import (
 )
 
 func TestBuildRunBootstrapArgs(t *testing.T) {
-	t.Run("desktop managed bootstrap defaults to info logging", func(t *testing.T) {
+	t.Run("desktop bootstrap defaults to info logging", func(t *testing.T) {
 		got := buildRunBootstrapArgs(
 			"/tmp/redeven",
 			"https://redeven.test",
@@ -16,7 +16,6 @@ func TestBuildRunBootstrapArgs(t *testing.T) {
 			"ticket-123",
 			"",
 			runModeDesktop,
-			true,
 			"dev",
 		)
 
@@ -35,7 +34,6 @@ func TestBuildRunBootstrapArgs(t *testing.T) {
 			"ticket-123",
 			"execute_read",
 			runModeHybrid,
-			false,
 			"dev",
 		)
 
@@ -57,7 +55,6 @@ func TestBuildRunBootstrapArgs(t *testing.T) {
 			"ticket-123",
 			"",
 			runModeDesktop,
-			false,
 			"dev",
 		)
 

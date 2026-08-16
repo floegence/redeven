@@ -12,8 +12,6 @@ export type StartupReport = Readonly<{
   exposure?: LocalUIExposure;
   effective_run_mode?: string;
   remote_enabled?: boolean;
-  desktop_managed?: boolean;
-  desktop_owner_id?: string;
   provider_origin?: string;
   controlplane_base_url?: string;
   controlplane_provider_id?: string;
@@ -30,8 +28,7 @@ function parseRuntimeControlEndpoint(value: unknown): DesktopRuntimeControlEndpo
   const protocolVersion = String(record.protocol_version ?? '').trim();
   const baseURL = String(record.base_url ?? '').trim();
   const token = String(record.token ?? '').trim();
-  const desktopOwnerID = String(record.desktop_owner_id ?? '').trim();
-  if (!protocolVersion || !baseURL || !token || !desktopOwnerID) {
+	if (!protocolVersion || !baseURL || !token) {
     return undefined;
   }
   const expiresAt = Number(record.expires_at_unix_ms);
@@ -39,7 +36,6 @@ function parseRuntimeControlEndpoint(value: unknown): DesktopRuntimeControlEndpo
     protocol_version: protocolVersion,
     base_url: baseURL,
     token,
-    desktop_owner_id: desktopOwnerID,
     ...(Number.isFinite(expiresAt) && expiresAt > 0 ? { expires_at_unix_ms: Math.floor(expiresAt) } : {}),
   };
 }
@@ -73,8 +69,6 @@ export function parseStartupReport(raw: string): StartupReport {
     ...(exposure ? { exposure } : {}),
     effective_run_mode: String(parsed.effective_run_mode ?? '').trim() || undefined,
     remote_enabled: typeof parsed.remote_enabled === 'boolean' ? parsed.remote_enabled : undefined,
-    desktop_managed: typeof parsed.desktop_managed === 'boolean' ? parsed.desktop_managed : undefined,
-    desktop_owner_id: String(parsed.desktop_owner_id ?? '').trim() || undefined,
     provider_origin: String(parsed.provider_origin ?? '').trim() || undefined,
     controlplane_base_url: String(parsed.controlplane_base_url ?? '').trim() || undefined,
     controlplane_provider_id: String(parsed.controlplane_provider_id ?? '').trim() || undefined,
@@ -84,7 +78,6 @@ export function parseStartupReport(raw: string): StartupReport {
     pid: normalizePositiveInteger(parsed.pid),
     started_at_unix_ms: normalizePositiveInteger(parsed.started_at_unix_ms),
     ...(parsed.runtime_service ? { runtime_service: normalizeRuntimeServiceSnapshot(parsed.runtime_service, {
-      desktopManaged: typeof parsed.desktop_managed === 'boolean' ? parsed.desktop_managed : undefined,
       effectiveRunMode: String(parsed.effective_run_mode ?? '').trim(),
       remoteEnabled: typeof parsed.remote_enabled === 'boolean' ? parsed.remote_enabled : undefined,
     }) } : {}),

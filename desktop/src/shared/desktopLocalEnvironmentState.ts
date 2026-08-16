@@ -18,15 +18,11 @@ export type DesktopLocalEnvironmentAccess = Readonly<{
 }>;
 
 export type DesktopLocalEnvironmentPreferredOpenRoute = 'auto' | 'local_host' | 'remote_desktop';
-export type DesktopLocalEnvironmentOwner = 'desktop' | 'agent' | 'unknown';
 
 export type DesktopLocalEnvironmentRuntimeState = Readonly<{
   local_ui_url: string;
   effective_run_mode: string;
   remote_enabled: boolean;
-  desktop_managed: boolean;
-  desktop_owner_id?: string;
-  desktop_ownership?: 'owned' | 'managed_elsewhere' | 'unowned' | 'external';
   controlplane_base_url?: string;
   provider_origin?: string;
   controlplane_provider_id?: string;
@@ -42,7 +38,6 @@ export type DesktopLocalEnvironmentRuntimeState = Readonly<{
 
 export type DesktopLocalEnvironmentHosting = Readonly<{
   state_dir: string;
-  owner: DesktopLocalEnvironmentOwner;
   access: DesktopLocalEnvironmentAccess;
   current_runtime?: DesktopLocalEnvironmentRuntimeState;
 }>;
@@ -133,15 +128,6 @@ function normalizeRuntimeState(
     local_ui_url: localUIURL,
     effective_run_mode: compact(value.effective_run_mode),
     remote_enabled: value.remote_enabled === true,
-    desktop_managed: value.desktop_managed === true,
-    desktop_owner_id: compact(value.desktop_owner_id) || undefined,
-    desktop_ownership: (() => {
-      const ownership = compact(value.desktop_ownership);
-      if (ownership === 'owned' || ownership === 'managed_elsewhere' || ownership === 'unowned' || ownership === 'external') {
-        return ownership;
-      }
-      return undefined;
-    })(),
     controlplane_base_url: compact(value.controlplane_base_url) || undefined,
     provider_origin: compact(value.provider_origin) || undefined,
     controlplane_provider_id: compact(value.controlplane_provider_id) || undefined,
@@ -153,7 +139,6 @@ function normalizeRuntimeState(
     started_at_unix_ms: Number.isInteger(startedAtUnixMS) && startedAtUnixMS > 0 ? startedAtUnixMS : undefined,
     runtime_control: value.runtime_control,
     runtime_service: normalizeRuntimeServiceSnapshot(value.runtime_service ?? {}, {
-      desktopManaged: value.desktop_managed === true,
       effectiveRunMode: value.effective_run_mode,
       remoteEnabled: value.remote_enabled === true,
     }),
@@ -162,7 +147,6 @@ function normalizeRuntimeState(
 
 type CreateDesktopLocalEnvironmentHostingOptions = Readonly<{
   access?: DesktopLocalEnvironmentAccess;
-  owner?: DesktopLocalEnvironmentOwner;
   stateDir?: string;
   currentRuntime?: Partial<DesktopLocalEnvironmentRuntimeState> | null;
 }>;
@@ -172,7 +156,6 @@ export function createDesktopLocalEnvironmentHosting(
 ): DesktopLocalEnvironmentHosting {
   return {
     state_dir: compact(options.stateDir),
-    owner: options.owner ?? 'desktop',
     access: options.access ?? defaultDesktopLocalEnvironmentAccess(),
     current_runtime: normalizeRuntimeState(options.currentRuntime),
   };
@@ -214,7 +197,6 @@ type CreateDesktopLocalEnvironmentStateOptions = Readonly<{
   autoRuntimeProbeEnabled?: boolean;
   preferredOpenRoute?: DesktopLocalEnvironmentPreferredOpenRoute;
   currentProviderBinding?: DesktopLocalEnvironmentProviderBinding;
-  owner?: DesktopLocalEnvironmentOwner;
   stateDir?: string;
   currentRuntime?: Partial<DesktopLocalEnvironmentRuntimeState> | null;
   createdAtMS?: number;
@@ -242,7 +224,6 @@ export function createDesktopLocalEnvironmentState(
     preferred_open_route: options.preferredOpenRoute ?? 'auto',
     local_hosting: createDesktopLocalEnvironmentHosting({
       access: options.access,
-      owner: options.owner,
       stateDir: options.stateDir,
       currentRuntime: options.currentRuntime,
     }),
@@ -271,7 +252,6 @@ export function projectProviderEnvironmentToLocalRuntimeTarget(
     preferredOpenRoute: providerEnvironment.preferred_open_route,
     currentProviderBinding,
     access: localEnvironment.local_hosting.access,
-    owner: localEnvironment.local_hosting.owner,
     stateDir: localEnvironment.local_hosting.state_dir,
     currentRuntime: localEnvironment.local_hosting.current_runtime,
     createdAtMS: localEnvironment.created_at_ms,

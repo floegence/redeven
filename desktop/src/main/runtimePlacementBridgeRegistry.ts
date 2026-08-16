@@ -9,7 +9,7 @@ import type { DesktopSessionRuntimeHandle } from './sessionRuntime';
 import type { DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 import type { DesktopProviderRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
 
-export type RuntimePlacementBridgeOwner = Readonly<
+export type RuntimePlacementBridgeAttachment = Readonly<
   | { kind: 'opening'; operation_key: string }
   | { kind: 'session'; session_key: DesktopSessionKey }
 >;
@@ -28,13 +28,13 @@ export type RuntimePlacementBridgeRecord = Readonly<{
 
 type RuntimePlacementBridgeRegistryEntry = {
   record: RuntimePlacementBridgeRecord;
-  owner: RuntimePlacementBridgeOwner;
+  attachment: RuntimePlacementBridgeAttachment;
   settlement: Promise<void>;
 };
 
 export type RuntimePlacementBridgeSettlementHandler = (
   record: RuntimePlacementBridgeRecord,
-  owner: RuntimePlacementBridgeOwner,
+  attachment: RuntimePlacementBridgeAttachment,
   termination: RuntimePlacementBridgeTermination,
 ) => void | Promise<void>;
 
@@ -51,8 +51,8 @@ export class RuntimePlacementBridgeRegistry {
     return this.entries.get(targetID)?.record ?? null;
   }
 
-  owner(targetID: DesktopRuntimeTargetID): RuntimePlacementBridgeOwner | null {
-    return this.entries.get(targetID)?.owner ?? null;
+  attachment(targetID: DesktopRuntimeTargetID): RuntimePlacementBridgeAttachment | null {
+    return this.entries.get(targetID)?.attachment ?? null;
   }
 
   keys(): readonly DesktopRuntimeTargetID[] {
@@ -69,12 +69,12 @@ export class RuntimePlacementBridgeRegistry {
   ): RuntimePlacementBridgeRecord {
     const targetID = record.session.placement_target_id;
     if (this.entries.has(targetID)) {
-      throw new Error(`Runtime Placement Bridge ${targetID} already has a lifecycle owner.`);
+      throw new Error(`Runtime Placement Bridge ${targetID} already has an active attachment.`);
     }
 
     const entry: RuntimePlacementBridgeRegistryEntry = {
       record,
-      owner: { kind: 'opening', operation_key: operationKey },
+      attachment: { kind: 'opening', operation_key: operationKey },
       settlement: Promise.resolve(),
     };
     this.entries.set(targetID, entry);
@@ -85,7 +85,7 @@ export class RuntimePlacementBridgeRegistry {
         return;
       }
       this.entries.delete(targetID);
-      await this.onSettled(current.record, current.owner, termination);
+      await this.onSettled(current.record, current.attachment, termination);
     });
     void entry.settlement.catch(() => undefined);
     return record;
@@ -100,10 +100,10 @@ export class RuntimePlacementBridgeRegistry {
     if (!entry || entry.record.session !== session) {
       return null;
     }
-    if (entry.owner.kind === 'session') {
-      return entry.owner.session_key === sessionKey ? entry.record : null;
+    if (entry.attachment.kind === 'session') {
+      return entry.attachment.session_key === sessionKey ? entry.record : null;
     }
-    entry.owner = { kind: 'session', session_key: sessionKey };
+    entry.attachment = { kind: 'session', session_key: sessionKey };
     return entry.record;
   }
 

@@ -1,13 +1,13 @@
 ---
 type: Desktop Contract
 title: Desktop runtime bridge
-description: Canonical navigation and security boundary for Desktop-managed Runtime integration.
+description: Canonical navigation and security boundary for Desktop-integrated Runtime access.
 tags: [desktop, runtime, bridge, lifecycle]
 timestamp: 2026-07-18T00:00:00Z
 ---
 # Summary
 
-Redeven Desktop launches and supervises managed Runtime instances through machine-readable startup, scoped control, transport, session, and process contracts. This overview is the canonical navigation point for readiness, recovery, SSH operations, and model/session integration. Focused concepts own the independent lifecycle details while the bridge overview retains the security boundary between Desktop coordination, Runtime APIs, and plugin capabilities.
+Redeven Desktop opens Runtime instances through machine-readable startup, scoped control, transport, session, and process contracts. Runtime remains independently runnable without Gateway, while Redeven-managed lifecycle actions route through the target user's Gateway supervisor. This overview is the canonical navigation point for readiness, recovery, SSH operations, and model/session integration. Focused concepts own the independent details while the bridge overview retains the security boundary between Desktop coordination, Runtime APIs, Gateway lifecycle authority, and plugin capabilities.
 
 # Contract
 
@@ -35,7 +35,7 @@ Runtime-control is a local Desktop coordination capability, not a general networ
 
 # Evidence
 
-- `redeven:cmd/redeven/main.go:299` - Desktop-managed startup is rejected for remote-only mode.
+- `redeven:cmd/redeven/main.go:299` - Local Desktop startup is rejected for remote-only mode.
 - `redeven:desktop/src/main/localUIURL.ts:44` - Desktop builds the Env App entry URL under `/_redeven_proxy/env/`.
 - `redeven:cmd/redeven/desktop_launch_report.go:123` - Ready and attached private reports require and validate the trusted bridge URL.
 - `redeven:internal/localui/localui.go:417` - Runtime starts a separate ephemeral loopback listener for trusted Desktop transport.

@@ -43,7 +43,6 @@ const (
 	EnvReasonUnsupportedTargetKind = "unsupported_target_kind"
 	EnvReasonRuntimeNotStarted     = "runtime_not_started"
 	EnvReasonRuntimeAlreadyRunning = "runtime_already_running"
-	EnvReasonRuntimeOwnerExternal  = "runtime_owner_external"
 	EnvReasonDesktopStartRequired  = "desktop_start_required"
 	EnvReasonDesktopUpdateRequired = "desktop_update_required"
 	EnvReasonCLIUpdateUnavailable  = "cli_update_unavailable"
@@ -72,7 +71,6 @@ type RuntimeStatusSummary struct {
 	Message          string   `json:"message,omitempty"`
 	Ready            bool     `json:"ready"`
 	Running          bool     `json:"running"`
-	DesktopManaged   bool     `json:"desktop_managed,omitempty"`
 	RuntimeVersion   string   `json:"runtime_version,omitempty"`
 	RuntimeCommit    string   `json:"runtime_commit,omitempty"`
 	PID              int      `json:"pid,omitempty"`
@@ -237,7 +235,6 @@ func RuntimeStatusSummaryFromAttach(status runtimemanagement.RuntimeAttachStatus
 		Message:          strings.TrimSpace(status.Message),
 		Ready:            status.State == runtimemanagement.AttachStateReady,
 		Running:          runtimeAttachStateIsRunning(status.State),
-		DesktopManaged:   status.Identity.DesktopManaged || status.RuntimeService.DesktopManaged,
 		RuntimeVersion:   runtimeVersion,
 		RuntimeCommit:    runtimeCommit,
 		PID:              status.Identity.PID,
@@ -356,22 +353,6 @@ func stopOperationPlan(status runtimemanagement.RuntimeAttachStatus, runtime Run
 		plan.Availability = OperationAvailabilityUnavailable
 		plan.ReasonCode = EnvReasonRuntimeNotStarted
 		plan.Message = "Runtime is not running."
-		plan.Command = ""
-		plan.Argv = nil
-		return plan
-	}
-	if status.State == runtimemanagement.AttachStateStaleLock && !status.Identity.DesktopManaged {
-		plan.Availability = OperationAvailabilityBlocked
-		plan.ReasonCode = EnvReasonRuntimeOwnerExternal
-		plan.Message = "The runtime lock is not owned by a Desktop-managed Redeven runtime; use the owning surface to clean it up."
-		plan.Command = ""
-		plan.Argv = nil
-		return plan
-	}
-	if runtime.Running && !status.Identity.DesktopManaged {
-		plan.Availability = OperationAvailabilityBlocked
-		plan.ReasonCode = EnvReasonRuntimeOwnerExternal
-		plan.Message = "A runtime appears to be running, but it is not Desktop-managed; use the owning runtime surface to stop it."
 		plan.Command = ""
 		plan.Argv = nil
 		return plan

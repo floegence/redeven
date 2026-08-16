@@ -81,13 +81,13 @@ describe('runtimeHostAccess', () => {
     }, { credentialScope: 'environment-a' });
     await executor.run(['docker', 'exec', '-i', 'dev', 'redeven', 'desktop-bridge'], {
       env: {
-        REDEVEN_DESKTOP_OWNER_ID: 'desktop-owner',
+        REDEVEN_TEST_CONTEXT: 'desktop-test',
         'BAD-NAME': 'ignored',
       },
     });
     const remoteCommand = transport.run.mock.calls[0]?.[0] ?? '';
     expect(remoteCommand).toBe(
-      "env REDEVEN_DESKTOP_OWNER_ID='desktop-owner' 'docker' 'exec' '-i' 'dev' 'redeven' 'desktop-bridge'",
+      "env REDEVEN_TEST_CONTEXT='desktop-test' 'docker' 'exec' '-i' 'dev' 'redeven' 'desktop-bridge'",
     );
     expect(remoteCommand).not.toContain('-L');
     expect(remoteCommand).not.toContain('ExitOnForwardFailure');

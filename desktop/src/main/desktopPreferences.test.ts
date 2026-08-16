@@ -79,7 +79,7 @@ function testAccessPoint(providerOrigin = 'https://redeven.test') {
 
 function buildTestControlPlaneProvider(providerOrigin = 'https://redeven.test') {
   const provider = normalizeDesktopControlPlaneProvider({
-    protocol_version: 'rcpp-v2',
+    protocol_version: 'rcpp-v3',
     provider_id: 'example_control_plane',
     display_name: 'Example Control Plane',
     provider_origin: providerOrigin,
@@ -659,7 +659,6 @@ describe('desktopPreferences', () => {
         local_environment: testLocalEnvironment({
           currentRuntime: {
             local_ui_url: 'http://127.0.0.1:24000/',
-            desktop_managed: true,
             effective_run_mode: 'desktop',
             remote_enabled: false,
             password_required: false,
@@ -685,7 +684,6 @@ describe('desktopPreferences', () => {
           ...legacyCatalog.local_hosting,
           current_runtime: {
             local_ui_url: 'http://127.0.0.1:25000/',
-            desktop_managed: true,
             effective_run_mode: 'desktop',
           },
         },
@@ -1537,7 +1535,7 @@ describe('desktopPreferences', () => {
     const devAccessPoint = testAccessPoint();
     const uswAccessPoint = testAccessPoint('https://redeven.test');
     const provider = normalizeDesktopControlPlaneProvider({
-      protocol_version: 'rcpp-v2',
+      protocol_version: 'rcpp-v3',
       provider_id: 'example_control_plane',
       display_name: 'Example Control Plane',
       provider_origin: 'https://redeven.test',

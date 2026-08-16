@@ -106,8 +106,6 @@ describe('runtimePlacementBridge', () => {
         'docker',
         'exec',
         '-i',
-        '--env',
-        'REDEVEN_DESKTOP_OWNER_ID',
         'container-stable-id',
         'sh',
         '-c',
@@ -143,8 +141,6 @@ describe('runtimePlacementBridge', () => {
         'docker',
         'exec',
         '-i',
-        '--env',
-        'REDEVEN_DESKTOP_OWNER_ID',
         'container-stable-id',
         'sh',
         '-c',
@@ -172,8 +168,8 @@ describe('runtimePlacementBridge', () => {
       runtime_binary_path: `${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/gateway/managed/bin/redeven-gateway`,
       command_kind: 'gateway',
     });
-    expect(plan.command[8]).toContain('exec "$runtime_binary_path" desktop-bridge --state-root "$state_root"');
-    expect(plan.command[8]).not.toContain('--allow-private-profile-targets');
-    expect(plan.command[8]).not.toContain('--enable-profile-write');
+    expect(plan.command[6]).toContain('exec "$runtime_binary_path" desktop-bridge --state-root "$state_root"');
+    expect(plan.command[6]).not.toContain('--allow-private-profile-targets');
+    expect(plan.command[6]).not.toContain('--enable-profile-write');
   });
 });

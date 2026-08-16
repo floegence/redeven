@@ -11,7 +11,6 @@ import type {
 } from '../shared/desktopLocalEnvironmentState';
 import {
   normalizeRuntimeServiceSnapshot,
-  type RuntimeServiceOwner,
 } from '../shared/runtimeService';
 
 const DEFAULT_WELCOME_RUNTIME_PROBE_TIMEOUT_MS = 200;
@@ -20,27 +19,9 @@ function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
 
-function runtimeOwnedByCurrentDesktop(startup: StartupReport, desktopOwnerID: string): boolean {
-  const cleanOwnerID = compact(desktopOwnerID);
-  const startupOwnerID = compact(startup.desktop_owner_id);
-  return startup.desktop_managed === true && cleanOwnerID !== '' && startupOwnerID !== '' && startupOwnerID === cleanOwnerID;
-}
-
-function runtimeDesktopOwnership(startup: StartupReport, desktopOwnerID: string): DesktopLocalEnvironmentRuntimeState['desktop_ownership'] {
-  if (startup.desktop_managed !== true) {
-    return 'external';
-  }
-  if (runtimeOwnedByCurrentDesktop(startup, desktopOwnerID)) {
-    return 'owned';
-  }
-  return compact(startup.desktop_owner_id) === '' ? 'unowned' : 'managed_elsewhere';
-}
-
 function runtimeStateFromStartup(
   startup: StartupReport,
-  desktopOwnerID: string,
   localUIURLOverride?: string,
-  serviceOwner?: RuntimeServiceOwner,
 ): DesktopLocalEnvironmentRuntimeState | undefined {
   const localUIURL = compact(localUIURLOverride) || compact(startup.local_ui_url);
   if (localUIURL === '') {
@@ -48,10 +29,7 @@ function runtimeStateFromStartup(
   }
   const pid = Number(startup.pid);
   const startedAtUnixMS = Number(startup.started_at_unix_ms);
-  const rawDesktopManaged = startup.desktop_managed === true;
-  const serviceDesktopManaged = startup.runtime_service?.desktop_managed ?? rawDesktopManaged;
-  const runtimeService = normalizeRuntimeServiceSnapshot(startup.runtime_service ?? { service_owner: serviceOwner }, {
-    desktopManaged: serviceDesktopManaged,
+  const runtimeService = normalizeRuntimeServiceSnapshot(startup.runtime_service ?? {}, {
     effectiveRunMode: startup.effective_run_mode,
     remoteEnabled: startup.remote_enabled === true,
   });
@@ -59,9 +37,6 @@ function runtimeStateFromStartup(
     local_ui_url: localUIURL,
     effective_run_mode: compact(startup.effective_run_mode),
     remote_enabled: startup.remote_enabled === true,
-    desktop_managed: rawDesktopManaged,
-    desktop_owner_id: compact(startup.desktop_owner_id) || undefined,
-    desktop_ownership: runtimeDesktopOwnership(startup, desktopOwnerID),
     controlplane_base_url: compact(startup.controlplane_base_url) || undefined,
     controlplane_provider_id: compact(startup.controlplane_provider_id) || undefined,
     env_public_id: compact(startup.env_public_id) || undefined,
@@ -90,7 +65,6 @@ function localManagedSessionByEnvironmentID(
 async function currentRuntimeFromLocalSession(
   session: DesktopSessionSummary | null | undefined,
   probeTimeoutMs: number,
-  desktopOwnerID: string,
 ): Promise<DesktopLocalEnvironmentRuntimeState | undefined> {
   if (
     !session
@@ -122,9 +96,7 @@ async function currentRuntimeFromLocalSession(
         ...session.startup,
         ...startup,
       },
-      desktopOwnerID,
       startup.local_ui_url,
-      session.runtime_lifecycle_owner,
     );
   }
   return undefined;
@@ -134,7 +106,6 @@ async function currentRuntimeFromProbeStateDir(
   stateDir: string,
   executablePath: string,
   probeTimeoutMs: number,
-  desktopOwnerID: string,
 ): Promise<DesktopLocalEnvironmentRuntimeState | undefined> {
   const cleanStateDir = compact(stateDir);
   const cleanExecutablePath = compact(executablePath);
@@ -152,7 +123,6 @@ async function currentRuntimeFromProbeStateDir(
   }
   return runtimeStateFromStartup(
     startup,
-    desktopOwnerID,
   );
 }
 
@@ -160,9 +130,8 @@ async function currentRuntimeFromProbe(
   environment: DesktopLocalEnvironmentState,
   executablePath: string,
   probeTimeoutMs: number,
-  desktopOwnerID: string,
 ): Promise<DesktopLocalEnvironmentRuntimeState | undefined> {
-  return currentRuntimeFromProbeStateDir(environment.local_hosting?.state_dir ?? '', executablePath, probeTimeoutMs, desktopOwnerID);
+  return currentRuntimeFromProbeStateDir(environment.local_hosting?.state_dir ?? '', executablePath, probeTimeoutMs);
 }
 
 function withCurrentRuntime(
@@ -177,9 +146,6 @@ function withCurrentRuntime(
   const nextURL = compact(currentRuntime?.local_ui_url);
   if (
     existingURL === nextURL
-    && (existingRuntime?.desktop_managed ?? false) === (currentRuntime?.desktop_managed ?? false)
-    && (existingRuntime?.desktop_owner_id ?? '') === (currentRuntime?.desktop_owner_id ?? '')
-    && (existingRuntime?.desktop_ownership ?? '') === (currentRuntime?.desktop_ownership ?? '')
     && (existingRuntime?.controlplane_base_url ?? '') === (currentRuntime?.controlplane_base_url ?? '')
     && (existingRuntime?.controlplane_provider_id ?? '') === (currentRuntime?.controlplane_provider_id ?? '')
     && (existingRuntime?.env_public_id ?? '') === (currentRuntime?.env_public_id ?? '')
@@ -208,20 +174,17 @@ export async function hydrateWelcomeLocalEnvironmentRuntimeState(
   openSessions: readonly DesktopSessionSummary[],
   options: Readonly<{
     probeTimeoutMs?: number;
-    desktopOwnerID?: string;
     executablePath?: string;
   }> = {},
 ): Promise<DesktopPreferences> {
   const probeTimeoutMs = options.probeTimeoutMs ?? DEFAULT_WELCOME_RUNTIME_PROBE_TIMEOUT_MS;
-  const desktopOwnerID = compact(options.desktopOwnerID);
   const localSessionsByEnvironmentID = localManagedSessionByEnvironmentID(openSessions);
   const localEnvironment = preferences.local_environment;
   const currentRuntime = await currentRuntimeFromLocalSession(
     localSessionsByEnvironmentID.get(localEnvironment.id),
     probeTimeoutMs,
-    desktopOwnerID,
   )
-    ?? await currentRuntimeFromProbe(localEnvironment, compact(options.executablePath), probeTimeoutMs, desktopOwnerID);
+    ?? await currentRuntimeFromProbe(localEnvironment, compact(options.executablePath), probeTimeoutMs);
   return {
     ...preferences,
     local_environment: withCurrentRuntime(localEnvironment, currentRuntime),

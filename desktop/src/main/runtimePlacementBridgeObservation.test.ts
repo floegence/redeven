@@ -58,7 +58,6 @@ function observationFixture(targetIDValue: string) {
     },
     runtime_handle: {
       runtime_kind: 'ssh',
-      lifecycle_owner: 'desktop',
       launch_mode: 'spawned',
       stop: disconnect,
     },

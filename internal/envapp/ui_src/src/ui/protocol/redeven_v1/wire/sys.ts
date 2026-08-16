@@ -31,8 +31,6 @@ export type wire_sys_ping_resp = {
     runtime_build_time?: string;
     protocol_version?: string;
     compatibility_epoch?: number;
-    service_owner?: string;
-    desktop_managed?: boolean;
     effective_run_mode?: string;
     remote_enabled?: boolean;
     compatibility?: string;

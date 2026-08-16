@@ -127,9 +127,8 @@ export async function startDesktopModelSource(args: StartDesktopModelSourceArgs)
   throwIfModelSourceStartupCanceled(args.signal);
   const runtimeControl = args.runtimeControl;
   const runtimeControlBaseURL = compact(runtimeControl.base_url);
-  const desktopOwnerID = compact(runtimeControl.desktop_owner_id);
-  const token = compact(runtimeControl.token);
-  if (!runtimeControlBaseURL || !desktopOwnerID || !token) {
+	const token = compact(runtimeControl.token);
+	if (!runtimeControlBaseURL || !token) {
     throw new Error('Runtime Control endpoint is missing Desktop model source connection fields.');
   }
 
@@ -145,8 +144,6 @@ export async function startDesktopModelSource(args: StartDesktopModelSourceArgs)
     runtimeControlBaseURL,
     '--runtime-control-token-env',
     TOKEN_ENV_NAME,
-    '--desktop-owner-id',
-    desktopOwnerID,
     '--session-id',
     sessionID,
     '--expires-at-unix-ms',

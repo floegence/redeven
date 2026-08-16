@@ -5,15 +5,7 @@ import (
 	"strings"
 )
 
-const ProtocolVersion = "redeven-runtime-v1"
-
-type Owner string
-
-const (
-	OwnerDesktop  Owner = "desktop"
-	OwnerExternal Owner = "external"
-	OwnerUnknown  Owner = "unknown"
-)
+const ProtocolVersion = "redeven-runtime-v2"
 
 type Compatibility string
 
@@ -23,7 +15,6 @@ const (
 	CompatibilityRestartRecommended    Compatibility = "restart_recommended"
 	CompatibilityUpdateRequired        Compatibility = "update_required"
 	CompatibilityDesktopUpdateRequired Compatibility = "desktop_update_required"
-	CompatibilityManagedElsewhere      Compatibility = "managed_elsewhere"
 	CompatibilityUnknown               Compatibility = "unknown"
 )
 
@@ -58,7 +49,7 @@ type AIReadiness struct {
 	IssueCount int    `json:"issue_count"`
 }
 
-const RuntimeControlBindMethodV1 = "runtime_control_v1"
+const RuntimeControlBindMethodV2 = "runtime_control_v2"
 
 type Capability struct {
 	Supported  bool   `json:"supported"`
@@ -132,8 +123,6 @@ type Snapshot struct {
 	RuntimeBuildTime      string        `json:"runtime_build_time,omitempty"`
 	ProtocolVersion       string        `json:"protocol_version,omitempty"`
 	CompatibilityEpoch    int           `json:"compatibility_epoch,omitempty"`
-	ServiceOwner          Owner         `json:"service_owner,omitempty"`
-	DesktopManaged        bool          `json:"desktop_managed"`
 	EffectiveRunMode      string        `json:"effective_run_mode,omitempty"`
 	RemoteEnabled         bool          `json:"remote_enabled"`
 	Compatibility         Compatibility `json:"compatibility,omitempty"`
@@ -150,12 +139,7 @@ type Snapshot struct {
 
 // NormalizeSnapshotForEndpoint applies endpoint-level facts that older or
 // partial carriers may not include before the canonical snapshot normalization.
-func NormalizeSnapshotForEndpoint(snapshot Snapshot, desktopManaged bool, effectiveRunMode string, remoteEnabled bool) Snapshot {
-	owner := strings.TrimSpace(string(snapshot.ServiceOwner))
-	if desktopManaged && (owner == "" || owner == string(OwnerUnknown)) {
-		snapshot.DesktopManaged = true
-		snapshot.ServiceOwner = OwnerDesktop
-	}
+func NormalizeSnapshotForEndpoint(snapshot Snapshot, effectiveRunMode string, remoteEnabled bool) Snapshot {
 	if strings.TrimSpace(snapshot.EffectiveRunMode) == "" {
 		snapshot.EffectiveRunMode = strings.TrimSpace(effectiveRunMode)
 	}
@@ -166,7 +150,6 @@ func NormalizeSnapshotForEndpoint(snapshot Snapshot, desktopManaged bool, effect
 func UnknownSnapshot() Snapshot {
 	return Snapshot{
 		ProtocolVersion: ProtocolVersion,
-		ServiceOwner:    OwnerUnknown,
 		Compatibility:   CompatibilityUnknown,
 		OpenReadiness: OpenReadiness{
 			State:      OpenReadinessStarting,
@@ -195,16 +178,6 @@ func NormalizeSnapshot(snapshot Snapshot) Snapshot {
 	if snapshot.CompatibilityEpoch < 0 {
 		snapshot.CompatibilityEpoch = 0
 	}
-	snapshot.ServiceOwner = Owner(strings.TrimSpace(string(snapshot.ServiceOwner)))
-	switch snapshot.ServiceOwner {
-	case OwnerDesktop, OwnerExternal, OwnerUnknown:
-	default:
-		if snapshot.DesktopManaged {
-			snapshot.ServiceOwner = OwnerDesktop
-		} else {
-			snapshot.ServiceOwner = OwnerUnknown
-		}
-	}
 	snapshot.EffectiveRunMode = strings.TrimSpace(snapshot.EffectiveRunMode)
 	snapshot.Compatibility = Compatibility(strings.TrimSpace(string(snapshot.Compatibility)))
 	switch snapshot.Compatibility {
@@ -213,7 +186,6 @@ func NormalizeSnapshot(snapshot Snapshot) Snapshot {
 		CompatibilityRestartRecommended,
 		CompatibilityUpdateRequired,
 		CompatibilityDesktopUpdateRequired,
-		CompatibilityManagedElsewhere,
 		CompatibilityUnknown:
 	default:
 		snapshot.Compatibility = CompatibilityUnknown
@@ -271,7 +243,7 @@ func NormalizeCapability(capability Capability) Capability {
 		capability.BindMethod = ""
 	}
 	if capability.Supported && capability.BindMethod == "" {
-		capability.BindMethod = RuntimeControlBindMethodV1
+		capability.BindMethod = RuntimeControlBindMethodV2
 	}
 	return capability
 }
@@ -382,28 +354,7 @@ func inferredOpenReadiness(snapshot Snapshot) OpenReadiness {
 			Message:    "Runtime Service protocol metadata is not available yet.",
 		}
 	}
-	switch snapshot.Compatibility {
-	case CompatibilityUpdateRequired:
-		return OpenReadiness{
-			State:      OpenReadinessBlocked,
-			ReasonCode: "runtime_update_required",
-			Message:    firstNonEmpty(snapshot.CompatibilityMessage, "Update the runtime before opening this environment."),
-		}
-	case CompatibilityDesktopUpdateRequired:
-		return OpenReadiness{
-			State:      OpenReadinessBlocked,
-			ReasonCode: "desktop_update_required",
-			Message:    firstNonEmpty(snapshot.CompatibilityMessage, "Update Desktop before opening this environment."),
-		}
-	case CompatibilityManagedElsewhere:
-		return OpenReadiness{
-			State:      OpenReadinessBlocked,
-			ReasonCode: "runtime_managed_elsewhere",
-			Message:    firstNonEmpty(snapshot.CompatibilityMessage, "This runtime is managed by another Desktop instance."),
-		}
-	default:
-		return OpenReadiness{State: OpenReadinessOpenable}
-	}
+	return OpenReadiness{State: OpenReadinessOpenable}
 }
 
 func firstNonEmpty(values ...string) string {

@@ -21,14 +21,10 @@ func TestWriteDesktopLaunchReportReady(t *testing.T) {
 		Exposure:         runtimemanagement.NewLocalUIExposure(false, true),
 		EffectiveRunMode: "hybrid",
 		RemoteEnabled:    true,
-		DesktopManaged:   true,
-		DesktopOwnerID:   "desktop-owner-report",
 		StartedAtUnixMS:  1778751234567,
 		RuntimeService: runtimeservice.Snapshot{
 			RuntimeVersion:   "v1.2.3",
 			ProtocolVersion:  runtimeservice.ProtocolVersion,
-			ServiceOwner:     runtimeservice.OwnerDesktop,
-			DesktopManaged:   true,
 			EffectiveRunMode: "hybrid",
 			RemoteEnabled:    true,
 			Compatibility:    runtimeservice.CompatibilityCompatible,
@@ -75,7 +71,7 @@ func TestWriteDesktopLaunchReportReady(t *testing.T) {
 	if !report.PasswordRequired {
 		t.Fatalf("PasswordRequired = false, want true")
 	}
-	if !report.RemoteEnabled || !report.DesktopManaged || report.DesktopOwnerID != "desktop-owner-report" || report.EffectiveRunMode != "hybrid" {
+	if !report.RemoteEnabled || report.EffectiveRunMode != "hybrid" {
 		t.Fatalf("unexpected report: %#v", report)
 	}
 	if report.StartedAtUnixMS != 1778751234567 {

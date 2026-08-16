@@ -53,8 +53,7 @@ type Options struct {
 	Logger *slog.Logger
 	Bind   BindSpec
 
-	DesktopManaged         bool
-	DesktopOwnerID         string
+	DisableSelfUpgrade     bool
 	EffectiveRunMode       string
 	RemoteEnabled          bool
 	ControlplaneBaseURL    string
@@ -93,8 +92,7 @@ type Server struct {
 	stateDir               string
 	runtimeControlSockPath string
 	version                string
-	desktopManaged         bool
-	desktopOwnerID         string
+	selfUpgradeDisabled    bool
 	effectiveRunMode       string
 	remoteEnabled          bool
 	controlplaneBaseURL    string
@@ -298,8 +296,7 @@ func New(opts Options) (*Server, error) {
 		stateDir:               filepath.Dir(configPath),
 		runtimeControlSockPath: strings.TrimSpace(opts.RuntimeControlSocketPath),
 		version:                strings.TrimSpace(opts.Version),
-		desktopManaged:         opts.DesktopManaged,
-		desktopOwnerID:         strings.TrimSpace(opts.DesktopOwnerID),
+		selfUpgradeDisabled:    opts.DisableSelfUpgrade,
 		effectiveRunMode:       strings.TrimSpace(opts.EffectiveRunMode),
 		remoteEnabled:          opts.RemoteEnabled,
 		controlplaneBaseURL:    strings.TrimSpace(opts.ControlplaneBaseURL),
@@ -530,18 +527,16 @@ func (s *Server) Start(ctx context.Context) error {
 		}()
 	}
 
-	if s.desktopManaged && strings.TrimSpace(s.desktopOwnerID) != "" {
-		runtimeControl, err := newRuntimeControlServer(s.a, s.appServer, s.desktopOwnerID, s.log, nil)
-		if err != nil {
-			_ = s.Close()
-			return fmt.Errorf("init runtime-control: %w", err)
-		}
-		if err := runtimeControl.Start(ctx); err != nil {
-			_ = s.Close()
-			return fmt.Errorf("start runtime-control: %w", err)
-		}
-		s.runtimeControl = runtimeControl
+	runtimeControl, err := newRuntimeControlServer(s.a, s.appServer, s.log, nil)
+	if err != nil {
+		_ = s.Close()
+		return fmt.Errorf("init runtime-control: %w", err)
 	}
+	if err := runtimeControl.Start(ctx); err != nil {
+		_ = s.Close()
+		return fmt.Errorf("start runtime-control: %w", err)
+	}
+	s.runtimeControl = runtimeControl
 
 	if err := s.startRuntimeStatusServer(ctx); err != nil {
 		_ = s.Close()
@@ -598,23 +593,21 @@ func (s *Server) StartOnListeners(ctx context.Context, listeners []net.Listener,
 		}()
 	}
 
-	if s.desktopManaged && strings.TrimSpace(s.desktopOwnerID) != "" {
-		runtimeControl, err := newRuntimeControlServer(s.a, s.appServer, s.desktopOwnerID, s.log, nil)
-		if err != nil {
-			_ = s.Close()
-			return fmt.Errorf("init runtime-control: %w", err)
-		}
-		if runtimeControlListener != nil {
-			if err := runtimeControl.StartOnListener(ctx, runtimeControlListener); err != nil {
-				_ = s.Close()
-				return fmt.Errorf("start runtime-control: %w", err)
-			}
-		} else if err := runtimeControl.Start(ctx); err != nil {
+	runtimeControl, err := newRuntimeControlServer(s.a, s.appServer, s.log, nil)
+	if err != nil {
+		_ = s.Close()
+		return fmt.Errorf("init runtime-control: %w", err)
+	}
+	if runtimeControlListener != nil {
+		if err := runtimeControl.StartOnListener(ctx, runtimeControlListener); err != nil {
 			_ = s.Close()
 			return fmt.Errorf("start runtime-control: %w", err)
 		}
-		s.runtimeControl = runtimeControl
+	} else if err := runtimeControl.Start(ctx); err != nil {
+		_ = s.Close()
+		return fmt.Errorf("start runtime-control: %w", err)
 	}
+	s.runtimeControl = runtimeControl
 
 	if err := s.startRuntimeStatusServer(ctx); err != nil {
 		_ = s.Close()
@@ -700,8 +693,6 @@ func (s *Server) RuntimeAttachStatus() runtimemanagement.RuntimeAttachStatus {
 			RuntimeVersion:  s.a.Version(),
 			RuntimeCommit:   s.a.Commit(),
 			BinaryPath:      s.a.BinaryPath(),
-			DesktopManaged:  s.desktopManaged,
-			DesktopOwnerID:  s.desktopOwnerID,
 		},
 		Endpoint: &runtimemanagement.RuntimeAttachEndpoint{
 			LocalUIURL:       firstNonEmptyString(s.DisplayURLs()),
@@ -828,8 +819,6 @@ type runtimeHealthResp struct {
 	LocalUIURLs      []string                          `json:"local_ui_urls,omitempty"`
 	PasswordRequired bool                              `json:"password_required"`
 	Exposure         runtimemanagement.LocalUIExposure `json:"exposure"`
-	DesktopManaged   bool                              `json:"desktop_managed,omitempty"`
-	DesktopOwnerID   string                            `json:"desktop_owner_id,omitempty"`
 	StartedAtUnixMS  int64                             `json:"started_at_unix_ms,omitempty"`
 	RuntimeService   runtimeservice.Snapshot           `json:"runtime_service"`
 }
@@ -1207,8 +1196,6 @@ func (s *Server) handleRuntimeHealth(w http.ResponseWriter, r *http.Request) {
 		LocalUIURLs:      displayURLs,
 		PasswordRequired: s.accessEnabled(),
 		Exposure:         s.LocalUIExposure(),
-		DesktopManaged:   s.desktopManaged,
-		DesktopOwnerID:   s.desktopOwnerID,
 		StartedAtUnixMS:  s.a.ProcessStartedAtUnixMS(),
 		RuntimeService:   s.runtimeServiceSnapshot(),
 	}})
@@ -1410,8 +1397,6 @@ type runtimeResp struct {
 	Mode             string                  `json:"mode"`
 	EnvPublicID      string                  `json:"env_public_id"`
 	DirectWSURL      string                  `json:"direct_ws_url"`
-	DesktopManaged   bool                    `json:"desktop_managed,omitempty"`
-	DesktopOwnerID   string                  `json:"desktop_owner_id,omitempty"`
 	EffectiveRunMode string                  `json:"effective_run_mode,omitempty"`
 	RemoteEnabled    bool                    `json:"remote_enabled,omitempty"`
 	RuntimeService   runtimeservice.Snapshot `json:"runtime_service"`
@@ -1433,8 +1418,6 @@ func (s *Server) handleRuntime(w http.ResponseWriter, r *http.Request) {
 		Mode:             "local",
 		EnvPublicID:      LocalEnvPublicID,
 		DirectWSURL:      wsURL,
-		DesktopManaged:   s.desktopManaged,
-		DesktopOwnerID:   s.desktopOwnerID,
 		EffectiveRunMode: s.resolvedEffectiveRunMode(),
 		RemoteEnabled:    s.remoteEnabled,
 		RuntimeService:   s.runtimeServiceSnapshot(),
@@ -1449,7 +1432,7 @@ func (s *Server) runtimeServiceSnapshot() runtimeservice.Snapshot {
 	if s.a != nil {
 		snapshot = s.a.RuntimeServiceSnapshot()
 	}
-	snapshot = runtimeservice.NormalizeSnapshotForEndpoint(snapshot, s.desktopManaged, s.resolvedEffectiveRunMode(), s.remoteEnabled)
+	snapshot = runtimeservice.NormalizeSnapshotForEndpoint(snapshot, s.resolvedEffectiveRunMode(), s.remoteEnabled)
 	if snapshot.OpenReadiness.State == runtimeservice.OpenReadinessOpenable && (s.appServer == nil || !s.appServer.EnvAppShellReady()) {
 		snapshot.OpenReadiness = runtimeservice.EnvAppShellUnavailableReadiness()
 		return runtimeservice.NormalizeSnapshot(snapshot)
@@ -1935,7 +1918,6 @@ type latestVersionResp struct {
 	FetchedAtMs        int64  `json:"fetched_at_ms,omitempty"`
 	CacheTTLMS         int64  `json:"cache_ttl_ms,omitempty"`
 	Message            string `json:"message,omitempty"`
-	DesktopManaged     bool   `json:"desktop_managed,omitempty"`
 	EffectiveRunMode   string `json:"effective_run_mode,omitempty"`
 	RemoteEnabled      bool   `json:"remote_enabled,omitempty"`
 }
@@ -1967,13 +1949,12 @@ func (s *Server) handleLatestVersion(w http.ResponseWriter, r *http.Request) {
 		CurrentVersion:   v,
 		UpgradePolicy:    "manual",
 		Message:          localLatestVersionUnavailableMessage,
-		DesktopManaged:   s.desktopManaged,
 		EffectiveRunMode: s.resolvedEffectiveRunMode(),
 		RemoteEnabled:    s.remoteEnabled,
 	}
-	if s.desktopManaged {
+	if s.selfUpgradeDisabled {
 		resp.UpgradePolicy = "desktop_release"
-		resp.Message = localLatestVersionDesktopManagedMessage
+		resp.Message = localLatestVersionSupervisorManagedMessage
 	}
 
 	loadResult, err := s.resolvedLatestVersionResolver().Load(r.Context())
@@ -1987,7 +1968,7 @@ func (s *Server) handleLatestVersion(w http.ResponseWriter, r *http.Request) {
 		resp.Stale = loadResult.stale
 		resp.FetchedAtMs = loadResult.snapshot.fetchedAt.UnixMilli()
 		resp.CacheTTLMS = int64(loadResult.snapshot.ttl / time.Millisecond)
-		if !s.desktopManaged {
+		if !s.selfUpgradeDisabled {
 			resp.UpgradePolicy = "self_upgrade"
 			resp.Message = strings.TrimSpace(loadResult.message)
 		}

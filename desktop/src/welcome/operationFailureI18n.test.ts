@@ -90,24 +90,24 @@ describe('operationFailureI18n', () => {
     expect(localizedOperationFailureDetail(i18n, failure)).toBe(detail);
     expect(localizedOperationFailureRecoveryHint(i18n, failure)).toBe(recovery);
   });
-  it('localizes lifecycle conflicts without exposing raw process inventory errors', () => {
+  it('localizes workload confirmation without exposing raw process inventory errors', () => {
     const failure: DesktopOperationFailurePresentation = {
-      code: 'runtime_lifecycle_conflict',
-      severity: 'error',
-      title: 'Runtime Changed During Operation',
+      code: 'confirmation_required',
+      severity: 'warning',
+      title: 'Runtime Confirmation Required',
       summary: 'raw summary',
-      summary_key: 'progress.runtimeLifecycleConflictSummary',
+      summary_key: 'progress.runtimeConfirmationRequiredSummary',
       detail: 'runtime_inventory_changed: pid changed',
-      detail_key: 'progress.runtimeLifecycleConflictDetail',
+      detail_key: 'progress.runtimeConfirmationRequiredDetail',
       recovery_hint: 'raw recovery',
-      recovery_hint_key: 'progress.runtimeLifecycleConflictRecoveryHint',
+      recovery_hint_key: 'progress.runtimeConfirmationRequiredRecoveryHint',
     };
     const i18n = createDesktopI18n('zh-CN');
 
-    expect(localizedOperationFailureTitle(i18n, failure)).toBe('操作期间运行时发生变化');
-    expect(localizedOperationFailureSummary(i18n, failure)).toContain('另一个生命周期控制方');
+    expect(localizedOperationFailureTitle(i18n, failure)).toBe('需要重新确认运行时');
+    expect(localizedOperationFailureSummary(i18n, failure)).toContain('工作负载');
     expect(localizedOperationFailureDetail(i18n, failure)).not.toContain('pid changed');
-    expect(localizedOperationFailureRecoveryHint(i18n, failure)).toContain('刷新运行时状态');
+    expect(localizedOperationFailureRecoveryHint(i18n, failure)).toContain('重新确认');
   });
 
   it('localizes protected local transport failures without asking users to disable network software', () => {

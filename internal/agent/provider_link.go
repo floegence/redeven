@@ -167,7 +167,7 @@ func (a *Agent) providerLinkBindingLocked(errorCode string) runtimeservice.Provi
 		LocalEnvironmentPublicID: a.cfg.LocalEnvironmentPublicID,
 		BindingGeneration:        a.cfg.BindingGeneration,
 		RemoteEnabled:            a.remoteEnabled,
-	}, runtimeservice.Capability{Supported: true, BindMethod: runtimeservice.RuntimeControlBindMethodV1})
+	}, runtimeservice.Capability{Supported: true, BindMethod: runtimeservice.RuntimeControlBindMethodV2})
 }
 
 func (a *Agent) hasActiveProviderWorkLocked() bool {
@@ -268,12 +268,6 @@ func (a *Agent) ConnectProvider(ctx context.Context, req ProviderLinkRequest) (*
 	a.providerLinkMu.Lock()
 	defer a.providerLinkMu.Unlock()
 
-	if !a.desktopManaged {
-		return nil, &ProviderLinkError{
-			Code:    "LOCAL_RUNTIME_NOT_DESKTOP_MANAGED",
-			Message: "Provider linking is only available for Desktop-managed runtimes.",
-		}
-	}
 	providerOrigin := strings.TrimSpace(req.ProviderOrigin)
 	accessPointOrigin := strings.TrimSpace(req.AccessPointOrigin)
 	envPublicID := strings.TrimSpace(req.EnvPublicID)
@@ -311,7 +305,7 @@ func (a *Agent) ConnectProvider(ctx context.Context, req ProviderLinkRequest) (*
 	current := a.providerLinkBindingLocked("")
 	matchingCurrent := current.State == runtimeservice.ProviderLinkStateLinked && providerLinkMatches(current, req)
 	// IMPORTANT: A persisted provider link is explicit user authorization for
-	// Desktop-managed startup to restore the provider control channel. This
+	// runtime startup to restore the provider control channel. This
 	// idempotent path exists for explicit refreshes, not as normal UI repair.
 	if matchingCurrent && a.providerControlChannelActiveLocked() {
 		a.mu.Unlock()
@@ -445,13 +439,6 @@ func (a *Agent) DisconnectProvider(ctx context.Context) (*ProviderLinkResponse, 
 	}
 	a.providerLinkMu.Lock()
 	defer a.providerLinkMu.Unlock()
-
-	if !a.desktopManaged {
-		return nil, &ProviderLinkError{
-			Code:    "LOCAL_RUNTIME_NOT_DESKTOP_MANAGED",
-			Message: "Provider linking is only available for Desktop-managed runtimes.",
-		}
-	}
 
 	a.mu.Lock()
 	cfg := a.cfg

@@ -167,8 +167,6 @@ func TestRuntimeGatewayWireContractsDoNotExposeSecrets(t *testing.T) {
 		reflect.TypeOf(EnvProfileUpsertResponse{}),
 		reflect.TypeOf(EnvProfileDeleteRequest{}),
 		reflect.TypeOf(EnvProfileDeleteResponse{}),
-		reflect.TypeOf(EnvLifecycleRequest{}),
-		reflect.TypeOf(EnvLifecycleResponse{}),
 		reflect.TypeOf(GatewayConnectArtifact{}),
 		reflect.TypeOf(DiagnosticsHint{}),
 		reflect.TypeOf(PairingChallengeRequest{}),

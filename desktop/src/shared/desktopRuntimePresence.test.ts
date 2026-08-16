@@ -4,7 +4,6 @@ import { buildDesktopRuntimeOperationPlans } from './desktopRuntimeOperationPlan
 import {
   desktopRuntimeControlStatusAvailable,
   desktopRuntimeControlStatusMissing,
-  desktopRuntimeControlStatusOwnerMismatch,
 } from './desktopRuntimePresence';
 
 const hostPlacement = { kind: 'host_process' as const, runtime_root: '' };
@@ -51,7 +50,7 @@ describe('desktopRuntimePresence', () => {
     expect(plans.refresh.availability).toBe('available');
   });
 
-  it('keeps host management available when runtime-control owner mismatches', () => {
+  it('keeps host lifecycle available when runtime-control is not reported', () => {
     const plans = buildDesktopRuntimeOperationPlans({
       surface: 'managed_runtime_card',
       host_access: { kind: 'ssh_host', ssh: {
@@ -63,7 +62,10 @@ describe('desktopRuntimePresence', () => {
       placement: hostPlacement,
       running: true,
       openable: true,
-      runtime_control_status: desktopRuntimeControlStatusOwnerMismatch('Owned by another Desktop.'),
+      runtime_control_status: desktopRuntimeControlStatusMissing(
+        'not_reported',
+        'Restart this runtime so runtime-control can be prepared.',
+      ),
     });
 
     expect(plans.stop).toMatchObject({
@@ -79,7 +81,7 @@ describe('desktopRuntimePresence', () => {
     });
     expect(plans.connect_provider).toMatchObject({
       availability: 'blocked',
-      reason_code: 'runtime_control_owner_mismatch',
+      reason_code: 'runtime_control_missing',
     });
   });
 
@@ -252,8 +254,6 @@ describe('desktopRuntimePresence', () => {
         openable: false,
         runtime_service: {
           protocol_version: 'redeven-runtime-v1',
-          service_owner: 'desktop',
-          desktop_managed: true,
           effective_run_mode: 'desktop',
           remote_enabled: false,
           compatibility,
@@ -293,8 +293,6 @@ describe('desktopRuntimePresence', () => {
       openable: false,
       runtime_service: {
         protocol_version: 'redeven-runtime-v1',
-        service_owner: 'desktop',
-        desktop_managed: true,
         effective_run_mode: 'desktop',
         remote_enabled: false,
         compatibility: 'compatible',
@@ -338,8 +336,6 @@ describe('desktopRuntimePresence', () => {
       openable: false,
       runtime_service: {
         protocol_version: 'redeven-runtime-v1',
-        service_owner: 'desktop',
-        desktop_managed: true,
         effective_run_mode: 'desktop',
         remote_enabled: false,
         compatibility: 'update_required',
@@ -557,15 +553,10 @@ describe('desktopRuntimePresence', () => {
   it('uses explicit runtime-control status values without exposing tokens', () => {
     expect(desktopRuntimeControlStatusAvailable()).toEqual({
       state: 'available',
-      owner: 'current_desktop',
     });
     expect(desktopRuntimeControlStatusMissing('not_reported', '')).toMatchObject({
       state: 'missing',
       reason_code: 'not_reported',
-    });
-    expect(desktopRuntimeControlStatusOwnerMismatch('')).toMatchObject({
-      state: 'owner_mismatch',
-      owner: 'other_desktop',
     });
   });
 });

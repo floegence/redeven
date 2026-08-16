@@ -22,14 +22,13 @@ func (c *cli) desktopModelSourceCmd(args []string) int {
 	runtimeControlURL := fs.String("runtime-control-url", "", "Runtime-control service root URL")
 	runtimeControlToken := fs.String("runtime-control-token", "", "Runtime-control bearer token")
 	runtimeControlTokenEnv := fs.String("runtime-control-token-env", "", "Environment variable name holding the runtime-control token")
-	desktopOwnerID := fs.String("desktop-owner-id", "", "Desktop owner id expected by the runtime")
 	sessionID := fs.String("session-id", "", "Desktop model source session id")
 	expiresAtUnixMS := fs.Int64("expires-at-unix-ms", 0, "Desktop model source session expiry in Unix milliseconds")
 	startupReportFile := fs.String("startup-report-file", "", "Write connector readiness JSON to the given file")
 
 	if err := parseCommandFlags(fs, args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
-			fmt.Fprintln(c.stdout, "Usage: redeven desktop-model-source --runtime-control-url URL --runtime-control-token-env NAME --desktop-owner-id ID --session-id ID [--state-root PATH]")
+			fmt.Fprintln(c.stdout, "Usage: redeven desktop-model-source --runtime-control-url URL --runtime-control-token-env NAME --session-id ID [--state-root PATH]")
 			return 0
 		}
 		message, details := translateFlagParseError("desktop-model-source", err)
@@ -64,7 +63,6 @@ func (c *cli) desktopModelSourceCmd(args []string) int {
 		SecretsPath:           layout.SecretsPath,
 		RuntimeControlBaseURL: *runtimeControlURL,
 		RuntimeControlToken:   token,
-		DesktopOwnerID:        *desktopOwnerID,
 		SessionID:             *sessionID,
 		Source:                ai.DesktopModelSourceDefaultSource,
 		ExpiresAtUnixMS:       *expiresAtUnixMS,

@@ -11,6 +11,7 @@ import (
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/auditlog"
 	"github.com/floegence/redeven/internal/diagnostics"
+	"github.com/floegence/redeven/internal/runtimeservice"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -77,6 +78,10 @@ func (a *Agent) ServeLocalDirectSession(ctx context.Context, sess flowersec.Sess
 	}
 
 	connectedAtUnixMs := time.Now().UnixMilli()
+	runtimeLease, err := a.admitRuntimeWorkload(runtimeservice.ManagedWorkload{Identity: "session:" + channelID, Kind: "session", Protected: true})
+	if err != nil {
+		return errors.New("Runtime lifecycle admission is closed")
+	}
 
 	// Register in the in-memory session list so the Env App can show it under Monitoring.
 	//
@@ -88,10 +93,12 @@ func (a *Agent) ServeLocalDirectSession(ctx context.Context, sess flowersec.Sess
 	a.mu.Lock()
 	if a.sessionStopping {
 		a.mu.Unlock()
+		runtimeLease.Release()
 		return errors.New("session admission is closed")
 	}
 	if _, ok := a.sessions[channelID]; ok {
 		a.mu.Unlock()
+		runtimeLease.Release()
 		return errors.New("session already active")
 	}
 	metaCopy := *meta
@@ -100,6 +107,7 @@ func (a *Agent) ServeLocalDirectSession(ctx context.Context, sess flowersec.Sess
 		meta:              metaCopy,
 		tunnelURL:         "", // no tunnel in direct mode
 		connectedAtUnixMs: connectedAtUnixMs,
+		runtimeLease:      runtimeLease,
 	}
 	a.sessionWG.Add(1)
 	a.mu.Unlock()

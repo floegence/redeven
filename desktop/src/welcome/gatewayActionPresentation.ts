@@ -269,8 +269,6 @@ function gatewayDiagnosisTitle(gateway: DesktopGatewaySource): string {
       return 'Gateway catalog check failed';
     case 'service_ready_catalog_failed':
       return 'Gateway catalog check failed';
-    case 'legacy_runtime_residue':
-      return 'Gateway update required';
     case 'unmanageable':
       return 'External Gateway endpoint';
     default:
@@ -501,16 +499,6 @@ function gatewayRefreshRecoveryPlan(
         detail: diagnosis.detail || 'Refresh could not complete pairing or catalog refresh. Review the diagnostics, then run Refresh again after the target is corrected.',
         aria_label: 'Gateway diagnostics',
       };
-    case 'legacy_runtime_residue': {
-      const updateAction = gatewaySourceAction('update_gateway', 'Update Gateway', 'default', gateway.service_state?.can_update !== false);
-      return {
-        title: 'Gateway update required',
-        detail: 'Desktop found old Gateway service residue on the target. Update Gateway to reinstall the service and clean the stale Desktop-managed service before refreshing.',
-        aria_label: 'Update Gateway and clean legacy residue',
-        primary_action: updateAction,
-        continuation_action: continuationActionFor(gateway, updateAction),
-      };
-    }
     case 'unmanageable':
       return {
         title: gatewayDiagnosisTitle(gateway),

@@ -198,9 +198,7 @@ describe('createAgentVersionModel', () => {
       version: 'v1.0.0',
       runtimeService: {
         runtimeVersion: 'v1.0.0',
-        protocolVersion: 'redeven-runtime-v1',
-        serviceOwner: 'desktop' as const,
-        desktopManaged: true,
+        protocolVersion: 'redeven-runtime-v2',
         effectiveRunMode: 'hybrid',
         remoteEnabled: true,
         compatibility: 'compatible' as const,
@@ -228,8 +226,6 @@ describe('createAgentVersionModel', () => {
 
       expect(model.runtimeService()).toMatchObject({
         runtimeVersion: 'v1.0.0',
-        serviceOwner: 'desktop',
-        desktopManaged: true,
         activeWorkload: {
           terminalCount: 2,
           sessionCount: 1,

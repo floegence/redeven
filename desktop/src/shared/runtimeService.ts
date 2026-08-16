@@ -1,12 +1,9 @@
-export type RuntimeServiceOwner = 'desktop' | 'external' | 'unknown';
-
 export type RuntimeServiceCompatibility =
   | 'compatible'
   | 'update_available'
   | 'restart_recommended'
   | 'update_required'
   | 'desktop_update_required'
-  | 'managed_elsewhere'
   | 'unknown';
 
 export type RuntimeServiceOpenReadinessState = 'starting' | 'openable' | 'blocked';
@@ -92,8 +89,6 @@ export type RuntimeServiceSnapshot = Readonly<{
   runtime_build_time?: string;
   protocol_version?: string;
   compatibility_epoch?: number;
-  service_owner: RuntimeServiceOwner;
-  desktop_managed: boolean;
   effective_run_mode?: string;
   remote_enabled: boolean;
   compatibility: RuntimeServiceCompatibility;
@@ -113,10 +108,10 @@ export type RuntimeServiceIdentity = Readonly<{
   runtime_build_time?: string;
 }>;
 
-export const RUNTIME_SERVICE_PROTOCOL_VERSION = 'redeven-runtime-v1';
-export const RUNTIME_SERVICE_COMPATIBILITY_EPOCH = 8;
-export const RUNTIME_SERVICE_MINIMUM_DESKTOP_VERSION = 'v0.10.0';
-export const RUNTIME_SERVICE_MINIMUM_RUNTIME_VERSION = 'v0.10.0';
+export const RUNTIME_SERVICE_PROTOCOL_VERSION = 'redeven-runtime-v2';
+export const RUNTIME_SERVICE_COMPATIBILITY_EPOCH = 9;
+export const RUNTIME_SERVICE_MINIMUM_DESKTOP_VERSION = 'v0.11.0';
+export const RUNTIME_SERVICE_MINIMUM_RUNTIME_VERSION = 'v0.11.0';
 export const RUNTIME_SERVICE_ENV_APP_SHELL_UNAVAILABLE_REASON = 'env_app_shell_unavailable';
 
 function compact(value: unknown): string {
@@ -131,14 +126,6 @@ function normalizeCount(value: unknown): number {
   return Math.max(0, Math.floor(n));
 }
 
-function normalizeOwner(value: unknown, desktopManaged: boolean): RuntimeServiceOwner {
-  const owner = compact(value);
-  if (owner === 'desktop' || owner === 'external' || owner === 'unknown') {
-    return owner;
-  }
-  return desktopManaged ? 'desktop' : 'unknown';
-}
-
 function normalizeCompatibility(value: unknown): RuntimeServiceCompatibility {
   const compatibility = compact(value);
   switch (compatibility) {
@@ -147,7 +134,6 @@ function normalizeCompatibility(value: unknown): RuntimeServiceCompatibility {
     case 'restart_recommended':
     case 'update_required':
     case 'desktop_update_required':
-    case 'managed_elsewhere':
     case 'unknown':
       return compatibility;
     default:
@@ -159,7 +145,6 @@ function compatibilityForEpoch(
   declared: RuntimeServiceCompatibility,
   observedEpoch: number | undefined,
 ): RuntimeServiceCompatibility {
-  if (declared === 'managed_elsewhere') return declared;
   if (observedEpoch === undefined || observedEpoch < RUNTIME_SERVICE_COMPATIBILITY_EPOCH) {
     return 'update_required';
   }
@@ -174,13 +159,13 @@ function compatibilityMessageForEpoch(
   observedEpoch: number | undefined,
 ): string | undefined {
   if (observedEpoch === undefined) {
-    return `This runtime does not report a valid compatibility epoch. Desktop requires epoch ${RUNTIME_SERVICE_COMPATIBILITY_EPOCH}; update the runtime before opening this environment.`;
+    return `This runtime does not report a valid compatibility epoch. Desktop requires epoch ${RUNTIME_SERVICE_COMPATIBILITY_EPOCH}; update the runtime before managing it.`;
   }
   if (observedEpoch < RUNTIME_SERVICE_COMPATIBILITY_EPOCH) {
-    return `This runtime uses compatibility epoch ${observedEpoch}. Desktop requires epoch ${RUNTIME_SERVICE_COMPATIBILITY_EPOCH}; update the runtime before opening this environment.`;
+    return `This runtime uses compatibility epoch ${observedEpoch}. Desktop requires epoch ${RUNTIME_SERVICE_COMPATIBILITY_EPOCH}; update the runtime before managing it.`;
   }
   if (observedEpoch !== undefined && observedEpoch > RUNTIME_SERVICE_COMPATIBILITY_EPOCH) {
-    return `This runtime requires compatibility epoch ${observedEpoch}. Desktop supports epoch ${RUNTIME_SERVICE_COMPATIBILITY_EPOCH}; update Desktop before opening this environment.`;
+    return `This runtime requires compatibility epoch ${observedEpoch}. Desktop supports epoch ${RUNTIME_SERVICE_COMPATIBILITY_EPOCH}; update Desktop before managing the runtime.`;
   }
   return declared;
 }
@@ -192,31 +177,10 @@ function normalizeCompatibilityEpoch(value: unknown): number | undefined {
 }
 
 function openReadinessFromCompatibility(
-  compatibility: RuntimeServiceCompatibility,
-  compatibilityMessage: string | undefined,
+  _compatibility: RuntimeServiceCompatibility,
+  _compatibilityMessage: string | undefined,
 ): RuntimeServiceOpenReadiness {
-  switch (compatibility) {
-    case 'update_required':
-      return {
-        state: 'blocked',
-        reason_code: 'runtime_update_required',
-        message: compatibilityMessage || 'Update the runtime before opening this environment.',
-      };
-    case 'desktop_update_required':
-      return {
-        state: 'blocked',
-        reason_code: 'desktop_update_required',
-        message: compatibilityMessage || 'Update Desktop before opening this environment.',
-      };
-    case 'managed_elsewhere':
-      return {
-        state: 'blocked',
-        reason_code: 'runtime_managed_elsewhere',
-        message: compatibilityMessage || 'This runtime is managed by another Desktop instance.',
-      };
-    default:
-      return { state: 'openable' };
-  }
+  return { state: 'openable' };
 }
 
 function missingOpenReadinessFromCompatibility(
@@ -262,7 +226,7 @@ function normalizeCapability(value: unknown): RuntimeServiceCapability {
   const bindMethod = compact(record.bind_method);
   return {
     supported,
-    bind_method: supported ? (bindMethod || 'runtime_control_v1') : undefined,
+    bind_method: supported ? (bindMethod || 'runtime_control_v2') : undefined,
     reason_code: compact(record.reason_code) || undefined,
     message: compact(record.message) || undefined,
   };
@@ -333,7 +297,6 @@ function normalizeProviderLinkBinding(
 export function normalizeRuntimeServiceSnapshot(
   value: unknown,
   fallback: Readonly<{
-    desktopManaged?: boolean;
     effectiveRunMode?: string;
     remoteEnabled?: boolean;
   }> = {},
@@ -351,16 +314,11 @@ export function normalizeRuntimeServiceSnapshot(
   const bindingsRecord = record.bindings && typeof record.bindings === 'object'
     ? record.bindings as Record<string, unknown>
     : {};
-  const desktopManaged = typeof record.desktop_managed === 'boolean'
-    ? record.desktop_managed
-    : fallback.desktopManaged === true;
   const observedCompatibilityEpoch = normalizeCompatibilityEpoch(record.compatibility_epoch);
   const declaredCompatibility = normalizeCompatibility(record.compatibility);
   const compatibility = compatibilityForEpoch(declaredCompatibility, observedCompatibilityEpoch);
   const declaredCompatibilityMessage = compact(record.compatibility_message) || undefined;
-  const compatibilityMessage = compatibility === 'managed_elsewhere'
-    ? declaredCompatibilityMessage
-    : compatibilityMessageForEpoch(declaredCompatibilityMessage, observedCompatibilityEpoch);
+  const compatibilityMessage = compatibilityMessageForEpoch(declaredCompatibilityMessage, observedCompatibilityEpoch);
   const compatibilityEpochMismatch = observedCompatibilityEpoch === undefined
     || compatibility !== declaredCompatibility;
   return {
@@ -369,8 +327,6 @@ export function normalizeRuntimeServiceSnapshot(
     runtime_build_time: compact(record.runtime_build_time) || undefined,
     protocol_version: compact(record.protocol_version) || RUNTIME_SERVICE_PROTOCOL_VERSION,
     compatibility_epoch: observedCompatibilityEpoch,
-    service_owner: normalizeOwner(record.service_owner, desktopManaged),
-    desktop_managed: desktopManaged,
     effective_run_mode: compact(record.effective_run_mode) || compact(fallback.effectiveRunMode) || undefined,
     remote_enabled: typeof record.remote_enabled === 'boolean'
       ? record.remote_enabled
@@ -506,7 +462,7 @@ export function runtimeServiceDesktopModelSourceBindingState(snapshot: RuntimeSe
 
 export function runtimeServiceSupportsDesktopModelSource(snapshot: RuntimeServiceSnapshot | null | undefined): boolean {
   return snapshot?.capabilities?.desktop_model_source?.supported === true
-    && (snapshot.capabilities.desktop_model_source.bind_method || 'runtime_control_v1') === 'runtime_control_v1';
+    && (snapshot.capabilities.desktop_model_source.bind_method || 'runtime_control_v2') === 'runtime_control_v2';
 }
 
 export function runtimeServiceProviderLinkBinding(
@@ -518,12 +474,12 @@ export function runtimeServiceProviderLinkBinding(
 
 export function runtimeServiceSupportsProviderLink(snapshot: RuntimeServiceSnapshot | null | undefined): boolean {
   return snapshot?.capabilities?.provider_link?.supported === true
-    && (snapshot.capabilities.provider_link.bind_method || 'runtime_control_v1') === 'runtime_control_v1';
+    && (snapshot.capabilities.provider_link.bind_method || 'runtime_control_v2') === 'runtime_control_v2';
 }
 
 export function runtimeServiceSupportsRuntimeGateway(snapshot: RuntimeServiceSnapshot | null | undefined): boolean {
   return snapshot?.capabilities?.runtime_gateway?.supported === true
-    && (snapshot.capabilities.runtime_gateway.bind_method || 'runtime_control_v1') === 'runtime_control_v1';
+    && (snapshot.capabilities.runtime_gateway.bind_method || 'runtime_control_v2') === 'runtime_control_v2';
 }
 
 export function runtimeServiceProviderConnectionState(

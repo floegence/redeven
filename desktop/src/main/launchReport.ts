@@ -17,8 +17,6 @@ export type LaunchReportDiagnostics = Readonly<{
 export type LaunchReportLockOwner = Readonly<{
   pid?: number;
   mode?: string;
-  desktop_managed?: boolean;
-  desktop_owner_id?: string;
   local_ui_enabled?: boolean;
   config_path?: string;
   state_root?: string;
@@ -88,8 +86,6 @@ export function parseLaunchReport(raw: string): LaunchReport {
       ? {
           pid: normalizeInteger((lockOwnerRecord as Record<string, unknown>).pid),
           mode: normalizeOptionalString((lockOwnerRecord as Record<string, unknown>).mode),
-          desktop_managed: normalizeBoolean((lockOwnerRecord as Record<string, unknown>).desktop_managed),
-          desktop_owner_id: normalizeOptionalString((lockOwnerRecord as Record<string, unknown>).desktop_owner_id),
           local_ui_enabled: normalizeBoolean((lockOwnerRecord as Record<string, unknown>).local_ui_enabled),
           config_path: normalizeOptionalString((lockOwnerRecord as Record<string, unknown>).config_path),
           state_dir: normalizeOptionalString((lockOwnerRecord as Record<string, unknown>).state_dir),

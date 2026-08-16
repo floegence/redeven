@@ -18,6 +18,8 @@ import (
 	"testing"
 	"time"
 
+	gatewayauth "github.com/floegence/redeven/internal/runtimegateway/auth"
+	gatewaylifecycle "github.com/floegence/redeven/internal/runtimegateway/lifecycle"
 	"github.com/floegence/redeven/internal/runtimegateway/protocol"
 	"github.com/floegence/redeven/internal/runtimegateway/security"
 	gatewaytrust "github.com/floegence/redeven/internal/runtimegateway/trust"
@@ -33,9 +35,135 @@ type gatewayTestMaterial struct {
 
 const gatewayTestManagedBridgeToken = "managed-bridge-test-token"
 
+type gatewayLifecycleTestAuthorizer struct{}
+
+func (gatewayLifecycleTestAuthorizer) AuthorizePrepare(_ context.Context, _ *http.Request, verified gatewayauth.VerifiedRequest, _ protocol.RuntimeOperationPrepareRequest) (gatewaylifecycle.Authorization, error) {
+	return gatewaylifecycle.Authorization{
+		Actor:  protocol.RuntimeOperationActor{Kind: "direct_user", SubjectID: verified.ClientKeyID},
+		Grants: []protocol.RuntimeGrant{protocol.RuntimeGrantManage, protocol.RuntimeGrantManageBinding},
+	}, nil
+}
+
+func (gatewayLifecycleTestAuthorizer) AuthorizeAccess(_ context.Context, _ *http.Request, verified gatewayauth.VerifiedRequest) (gatewaylifecycle.Access, error) {
+	return gatewaylifecycle.Access{ClientKeyID: verified.ClientKeyID, Grants: []protocol.RuntimeGrant{protocol.RuntimeGrantManage, protocol.RuntimeGrantManageBinding}}, nil
+}
+
+func (gatewayLifecycleTestAuthorizer) AuthorizeReconcile(_ context.Context, _ *http.Request, verified gatewayauth.VerifiedRequest, _ protocol.RuntimeOperation, _ string) (gatewaylifecycle.Access, error) {
+	return gatewaylifecycle.Access{ClientKeyID: verified.ClientKeyID, Grants: []protocol.RuntimeGrant{protocol.RuntimeGrantManageBinding}}, nil
+}
+
+type gatewayLifecycleTestController struct {
+	snapshot protocol.WorkloadSnapshot
+}
+
+func (c *gatewayLifecycleTestController) ValidateTarget(context.Context, string, protocol.LifecycleTarget) error {
+	return nil
+}
+
+func (controller *gatewayLifecycleTestController) Snapshot(context.Context, protocol.LifecycleTarget) (protocol.WorkloadSnapshot, error) {
+	return controller.snapshot, nil
+}
+
+func (controller *gatewayLifecycleTestController) BeginLifecycleFence(context.Context, string, protocol.LifecycleTarget) (gatewaylifecycle.LifecycleFence, error) {
+	return gatewaylifecycle.LifecycleFence{Token: "fence-http", Snapshot: controller.snapshot}, nil
+}
+
+func (*gatewayLifecycleTestController) ReleaseLifecycleFence(context.Context, string) error {
+	return nil
+}
+func (*gatewayLifecycleTestController) Commit(context.Context, protocol.RuntimeOperation, string) error {
+	return nil
+}
+func (*gatewayLifecycleTestController) Recover(context.Context, protocol.RuntimeOperation) error {
+	return nil
+}
+func (*gatewayLifecycleTestController) Reconcile(context.Context, protocol.RuntimeOperation) error {
+	return nil
+}
+
+func TestGatewayRuntimeOperationHTTPFlowPersistsAuthorizationAndEvents(t *testing.T) {
+	count := 0
+	snapshot := protocol.NormalizeWorkloadSnapshot(protocol.WorkloadSnapshot{
+		SnapshotRevision: 4, ProcessInventoryDigest: "sha256:inventory", WorkloadIdentityDigest: "sha256:workload",
+		Impact: protocol.WorkloadImpact{Knowledge: protocol.WorkloadKnown, AffectedProcessCount: &count}, ObservedAtUnixMS: 1,
+	})
+	server, err := New(Options{
+		StateRoot: t.TempDir(), PairingCode: "pair-demo",
+		LifecycleController:       &gatewayLifecycleTestController{snapshot: snapshot},
+		LifecycleArtifactVerifier: gatewayLifecycleTestArtifactVerifier{},
+		LifecycleAuthorizer:       gatewayLifecycleTestAuthorizer{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	material := pairGatewayTestClient(t, server, "http://127.0.0.1:24000/")
+	prepare := protocol.RuntimeOperationPrepareRequest{
+		ProtocolVersion: protocol.Version, OperationID: "op-http", AuthorizedClientKeyID: material.clientKeyID,
+		GatewayEnvID: "env-http", LifecycleTargetID: "target-http", TargetGeneration: 2,
+		Operation:      protocol.RuntimeOperationRestart,
+		DesiredRuntime: protocol.DesiredRuntime{Version: "v0.11.0", Platform: "linux", Architecture: "amd64", ArtifactPolicy: protocol.ArtifactPolicyPublishedRelease},
+		IdempotencyKey: "idem-http",
+	}
+	var prepared protocol.RuntimeOperationPrepareResponse
+	gatewayLifecycleJSONCall(t, server, material, http.MethodPost, "/gateway/v2/runtime-operations/prepare", prepare, &prepared)
+	if prepared.Operation.State != protocol.RuntimeOperationAwaitingConfirmation || !prepared.Operation.Authorization.Linearized {
+		t.Fatalf("prepared operation = %#v", prepared.Operation)
+	}
+	confirm := protocol.RuntimeOperationConfirmationRequest{
+		ProtocolVersion: protocol.Version, SnapshotRevision: snapshot.SnapshotRevision,
+		ProcessInventoryDigest: snapshot.ProcessInventoryDigest, WorkloadIdentityDigest: snapshot.WorkloadIdentityDigest,
+		RiskSummaryDigest: "sha256:risk",
+	}
+	var confirmed protocol.RuntimeOperation
+	gatewayLifecycleJSONCall(t, server, material, http.MethodPost, "/gateway/v2/runtime-operations/op-http/confirm", confirm, &confirmed)
+	if confirmed.State != protocol.RuntimeOperationCommitReady {
+		t.Fatalf("confirmed state = %q", confirmed.State)
+	}
+	var committed protocol.RuntimeOperation
+	gatewayLifecycleJSONCall(t, server, material, http.MethodPost, "/gateway/v2/runtime-operations/op-http/commit", nil, &committed)
+	if committed.State != protocol.RuntimeOperationSucceeded {
+		t.Fatalf("committed state = %q", committed.State)
+	}
+	var events protocol.RuntimeOperationEventsResponse
+	gatewayLifecycleJSONCall(t, server, material, http.MethodGet, "/gateway/v2/runtime-operations/op-http/events", nil, &events)
+	if len(events.Events) < 5 || events.Events[len(events.Events)-1].State != protocol.RuntimeOperationSucceeded {
+		t.Fatalf("events = %#v", events.Events)
+	}
+}
+
+func TestGatewayRuntimeReconcileDoesNotDiscloseUnknownOperation(t *testing.T) {
+	server, err := New(Options{
+		StateRoot: t.TempDir(), PairingCode: "pair-demo",
+		LifecycleController:       &gatewayLifecycleTestController{},
+		LifecycleArtifactVerifier: gatewayLifecycleTestArtifactVerifier{},
+		LifecycleAuthorizer:       gatewayLifecycleTestAuthorizer{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	material := pairGatewayTestClient(t, server, "http://127.0.0.1:24000/")
+	body, err := json.Marshal(protocol.RuntimeOperationReconcileRequest{ProtocolVersion: protocol.Version})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v2/runtime-operations/op-unknown/reconcile", bytes.NewReader(body))
+	signGatewayTestRequest(t, request, material, body)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden || strings.Contains(response.Body.String(), "not found") {
+		t.Fatalf("unknown reconcile response = %d %s, want opaque authorization failure", response.Code, response.Body.String())
+	}
+}
+
+type gatewayLifecycleTestArtifactVerifier struct{}
+
+func (gatewayLifecycleTestArtifactVerifier) Verify(context.Context, protocol.RuntimeOperation, protocol.RuntimeArtifactMetadata, string) error {
+	return nil
+}
+
 func TestGatewayServiceRequiresPairingForCatalog(t *testing.T) {
 	s := newGatewayTestServer(t, false)
-	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v1/catalog", bytes.NewBufferString(`{"protocol_version":"redeven-gateway-v1"}`))
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v2/catalog", bytes.NewBufferString(`{"protocol_version":"redeven-gateway-v2"}`))
 	req.Header.Set("Content-Type", "application/json")
 	res := httptest.NewRecorder()
 
@@ -51,7 +179,7 @@ func TestGatewayServiceRejectsOldRuntimeGatewayProtocol(t *testing.T) {
 	s := newGatewayTestServer(t, false)
 	material := pairGatewayTestClient(t, s, "http://127.0.0.1:24000/")
 	body := []byte(`{"protocol_version":"redeven-runtime-gateway-v1"}`)
-	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v1/catalog", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v2/catalog", bytes.NewReader(body))
 	signGatewayTestRequest(t, req, material, body)
 	res := httptest.NewRecorder()
 
@@ -107,7 +235,7 @@ func TestGatewayServiceProfileWriteCapabilityRequiresExplicitEnablement(t *testi
 	if err != nil {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
-	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v1/env-profiles/upsert", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v2/env-profiles/upsert", bytes.NewReader(body))
 	signGatewayTestRequest(t, req, material, body)
 	res := httptest.NewRecorder()
 	s.Handler().ServeHTTP(res, req)
@@ -132,7 +260,7 @@ func TestGatewayServiceURLPairingRequiresPairingCode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
-	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v1/pairing/challenge", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v2/pairing/challenge", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	res := httptest.NewRecorder()
 	s.Handler().ServeHTTP(res, req)
@@ -160,7 +288,7 @@ func TestGatewayServiceProfileWriteRequiresAuthorizedPairingClient(t *testing.T)
 	if err != nil {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
-	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v1/env-profiles/upsert", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v2/env-profiles/upsert", bytes.NewReader(body))
 	signGatewayTestRequest(t, req, material, body)
 	res := httptest.NewRecorder()
 	s.Handler().ServeHTTP(res, req)
@@ -215,13 +343,71 @@ func TestGatewayServiceURLTransportCannotClaimProfileWritePairing(t *testing.T) 
 	if err != nil {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
-	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v1/pairing/complete", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v2/pairing/complete", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	res := httptest.NewRecorder()
 	s.Handler().ServeHTTP(res, req)
 
 	if res.Result().StatusCode != http.StatusUnauthorized {
 		t.Fatalf("pairing complete status = %d, want %d; body=%s", res.Result().StatusCode, http.StatusUnauthorized, res.Body.String())
+	}
+}
+
+func TestGatewayServiceURLTransportCannotClaimRuntimeGrants(t *testing.T) {
+	s := newGatewayTestServer(t, false)
+	keys, err := security.GenerateKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	clientNonce := "pair-client-runtime-grants"
+	audience := "http://127.0.0.1:24000/"
+	challenge := gatewayPairingChallengeViaHTTP(t, s, protocol.PairingChallengeRequest{
+		ProtocolVersion: protocol.Version,
+		ClientNonce:     clientNonce,
+		ClientPublicKey: strings.TrimSpace(keys.PublicKeyPEM),
+		BindingAudience: audience,
+		PairingCode:     "pair-demo",
+	}, false)
+	clientKeyID := security.ClientKeyID(strings.TrimSpace(keys.PublicKeyPEM))
+	grants := []protocol.RuntimeGrant{protocol.RuntimeGrantManage}
+	payload, err := security.CanonicalJSON(map[string]any{
+		"binding_audience": audience,
+		"client_key_id":    clientKeyID,
+		"client_nonce":     clientNonce,
+		"gateway_id":       challenge.GatewayID,
+		"gateway_nonce":    challenge.GatewayNonce,
+		"protocol_version": protocol.Version,
+		"runtime_grants":   grants,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	proof, err := security.SignPayload(keys.PrivateKeyPEM, payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := json.Marshal(protocol.PairingCompleteRequest{
+		ProtocolVersion: protocol.Version,
+		ClientNonce:     clientNonce, GatewayNonce: challenge.GatewayNonce, GatewayID: challenge.GatewayID,
+		BindingAudience: audience, ClientKeyID: clientKeyID, RuntimeGrants: grants, Proof: proof,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v2/pairing/complete", bytes.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	s.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("pairing complete status = %d, want %d; body=%s", response.Code, http.StatusUnauthorized, response.Body.String())
+	}
+}
+
+func TestRuntimeManagementCapabilityDoesNotInferGrantFromProfileWrite(t *testing.T) {
+	s := newGatewayTestServer(t, true)
+	capability := s.runtimeManagementCapability(protocol.EnvProfileAccessRouteKindSSHHost, nil)
+	if capability.Authorization.State != protocol.AuthorizationDenied || capability.Readiness != protocol.ManagementReadinessUnknown || capability.ReasonCode != "runtime_management_permission_required" {
+		t.Fatalf("capability without Runtime grant = %#v", capability)
 	}
 }
 
@@ -270,7 +456,7 @@ func TestGatewayServiceManagedModeRejectsSpoofedBridgeProfileWritePairing(t *tes
 	if err != nil {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
-	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v1/pairing/complete", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v2/pairing/complete", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Redeven-Gateway-Transport", "desktop_bridge")
 	res := httptest.NewRecorder()
@@ -308,7 +494,7 @@ func TestGatewayServiceRejectsUnknownPairingClientCapability(t *testing.T) {
 	if err != nil {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
-	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v1/pairing/complete", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v2/pairing/complete", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	res := httptest.NewRecorder()
 	s.Handler().ServeHTTP(res, req)
@@ -332,23 +518,23 @@ func TestGatewayServiceRejectsSchemaInvalidProfileRoutes(t *testing.T) {
 	}{
 		{
 			name: "url route with ssh field",
-			body: `{"protocol_version":"redeven-gateway-v1","profile":{"display_name":"URL Env","access_route":{"kind":"url","url":"https://target.example/","ssh_destination":"devbox"}}}`,
+			body: `{"protocol_version":"redeven-gateway-v2","profile":{"display_name":"URL Env","access_route":{"kind":"url","url":"https://target.example/","ssh_destination":"devbox"}}}`,
 			want: "access_route",
 		},
 		{
 			name: "ssh secret",
-			body: `{"protocol_version":"redeven-gateway-v1","profile":{"display_name":"SSH Env","access_route":{"kind":"ssh_host","ssh_destination":"devbox","auth_mode":"key_agent"},"ssh_secret":{"mode":"replace","password":"secret"}}}`,
+			body: `{"protocol_version":"redeven-gateway-v2","profile":{"display_name":"SSH Env","access_route":{"kind":"ssh_host","ssh_destination":"devbox","auth_mode":"key_agent"},"ssh_secret":{"mode":"replace","password":"secret"}}}`,
 			want: "ssh_secret",
 		},
 		{
 			name: "ssh password auth",
-			body: `{"protocol_version":"redeven-gateway-v1","profile":{"display_name":"SSH Env","access_route":{"kind":"ssh_host","ssh_destination":"devbox","auth_mode":"password"}}}`,
+			body: `{"protocol_version":"redeven-gateway-v2","profile":{"display_name":"SSH Env","access_route":{"kind":"ssh_host","ssh_destination":"devbox","auth_mode":"password"}}}`,
 			want: "password auth",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			body := []byte(tc.body)
-			req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v1/env-profiles/upsert", bytes.NewReader(body))
+			req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v2/env-profiles/upsert", bytes.NewReader(body))
 			setManagedBridgeHeaders(req)
 			signGatewayTestRequest(t, req, material, body)
 			res := httptest.NewRecorder()
@@ -382,7 +568,7 @@ func TestGatewayServiceURLServerRejectsSpoofedBridgeProfileWrite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
-	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v1/env-profiles/upsert", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v2/env-profiles/upsert", bytes.NewReader(body))
 	req.Header.Set("X-Redeven-Gateway-Transport", "desktop_bridge")
 	signGatewayTestRequest(t, req, material, body)
 	res := httptest.NewRecorder()
@@ -396,8 +582,8 @@ func TestGatewayServiceURLServerRejectsSpoofedBridgeProfileWrite(t *testing.T) {
 func TestGatewayServiceRejectsDefaultHostEnvOpenSession(t *testing.T) {
 	s := newGatewayTestServer(t, false)
 	material := pairGatewayTestClient(t, s, "http://127.0.0.1:24000/")
-	body := []byte(`{"protocol_version":"redeven-gateway-v1","gateway_env_id":"env_local","requested_capability":"env_app","client_nonce":"client-nonce"}`)
-	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v1/open-session", bytes.NewReader(body))
+	body := []byte(`{"protocol_version":"redeven-gateway-v2","gateway_env_id":"env_local","requested_capability":"env_app","client_nonce":"client-nonce"}`)
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v2/open-session", bytes.NewReader(body))
 	signGatewayTestRequest(t, req, material, body)
 	res := httptest.NewRecorder()
 
@@ -850,7 +1036,7 @@ func TestGatewayServiceProfileSessionSigningFailureClosesListener(t *testing.T) 
 	if err != nil {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
-	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v1/open-session", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v2/open-session", bytes.NewReader(body))
 	signGatewayTestRequest(t, req, material, body)
 	res := httptest.NewRecorder()
 
@@ -888,7 +1074,7 @@ func TestGatewayServiceRejectsUnsafeURLProfileTargets(t *testing.T) {
 	if err != nil {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
-	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v1/env-profiles/upsert", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v2/env-profiles/upsert", bytes.NewReader(body))
 	setManagedBridgeHeaders(req)
 	signGatewayTestRequest(t, req, material, body)
 	res := httptest.NewRecorder()
@@ -905,10 +1091,10 @@ func TestGatewayServiceRejectsUnsafeURLProfileTargets(t *testing.T) {
 func TestGatewayServiceRejectsNonceReplay(t *testing.T) {
 	s := newGatewayTestServer(t, false)
 	material := pairGatewayTestClient(t, s, "http://127.0.0.1:24000/")
-	body := []byte(`{"protocol_version":"redeven-gateway-v1"}`)
+	body := []byte(`{"protocol_version":"redeven-gateway-v2"}`)
 
 	for attempt := 0; attempt < 2; attempt++ {
-		req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v1/catalog", bytes.NewReader(body))
+		req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v2/catalog", bytes.NewReader(body))
 		signGatewayTestRequestWithNonce(t, req, material, body, "fixed-nonce")
 		res := httptest.NewRecorder()
 		s.Handler().ServeHTTP(res, req)
@@ -1075,6 +1261,11 @@ func pairGatewayTestClientWithOptions(t *testing.T, s *Server, audience string, 
 	}
 	if profileWrite {
 		payloadFields["client_capability"] = string(protocol.GatewayCapabilityEnvProfileWrite)
+		payloadFields["runtime_grants"] = []protocol.RuntimeGrant{
+			protocol.RuntimeGrantCustomBuild,
+			protocol.RuntimeGrantManage,
+			protocol.RuntimeGrantManageBinding,
+		}
 	}
 	payload, err := security.CanonicalJSON(payloadFields)
 	if err != nil {
@@ -1096,7 +1287,17 @@ func pairGatewayTestClientWithOptions(t *testing.T, s *Server, audience string, 
 		BindingAudience:  audience,
 		ClientKeyID:      clientKeyID,
 		ClientCapability: clientCapability,
-		Proof:            proof,
+		RuntimeGrants: func() []protocol.RuntimeGrant {
+			if !profileWrite {
+				return nil
+			}
+			return []protocol.RuntimeGrant{
+				protocol.RuntimeGrantCustomBuild,
+				protocol.RuntimeGrantManage,
+				protocol.RuntimeGrantManageBinding,
+			}
+		}(),
+		Proof: proof,
 	}, bridgeTransport)
 	return gatewayTestMaterial{
 		gatewayID:        challenge.GatewayID,
@@ -1113,7 +1314,7 @@ func gatewayPairingChallengeViaHTTP(t *testing.T, s *Server, req protocol.Pairin
 	if err != nil {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
-	httpReq := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v1/pairing/challenge", bytes.NewReader(body))
+	httpReq := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v2/pairing/challenge", bytes.NewReader(body))
 	httpReq.Header.Set("Content-Type", "application/json")
 	if bridgeTransport {
 		setManagedBridgeHeaders(httpReq)
@@ -1142,7 +1343,7 @@ func gatewayPairingCompleteViaHTTP(t *testing.T, s *Server, req protocol.Pairing
 	if err != nil {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
-	httpReq := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v1/pairing/complete", bytes.NewReader(body))
+	httpReq := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v2/pairing/complete", bytes.NewReader(body))
 	httpReq.Header.Set("Content-Type", "application/json")
 	if bridgeTransport {
 		setManagedBridgeHeaders(httpReq)
@@ -1177,8 +1378,8 @@ func gatewayManagementCatalogViaHTTP(t *testing.T, s *Server, material gatewayTe
 
 func gatewayCatalogViaHTTPWithTransport(t *testing.T, s *Server, material gatewayTestMaterial, bridgeTransport bool) protocol.CatalogResponse {
 	t.Helper()
-	body := []byte(`{"protocol_version":"redeven-gateway-v1"}`)
-	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v1/catalog", bytes.NewReader(body))
+	body := []byte(`{"protocol_version":"redeven-gateway-v2"}`)
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v2/catalog", bytes.NewReader(body))
 	if bridgeTransport {
 		setManagedBridgeHeaders(req)
 	}
@@ -1215,7 +1416,7 @@ func upsertGatewayProfileViaHTTPWithTransport(t *testing.T, s *Server, material 
 	if err != nil {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
-	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v1/env-profiles/upsert", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v2/env-profiles/upsert", bytes.NewReader(body))
 	if bridgeTransport {
 		setManagedBridgeHeaders(req)
 	}
@@ -1252,7 +1453,7 @@ func deleteGatewayProfileViaHTTPWithTransport(t *testing.T, s *Server, material 
 	if err != nil {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
-	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v1/env-profiles/delete", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v2/env-profiles/delete", bytes.NewReader(body))
 	if bridgeTransport {
 		setManagedBridgeHeaders(req)
 	}
@@ -1323,7 +1524,7 @@ func openGatewayEnvViaHTTPWithControlBase(t *testing.T, s *Server, material gate
 		<-serverDone
 	})
 	baseURL := "http://" + listener.Addr().String() + "/"
-	req, err := http.NewRequest(http.MethodPost, baseURL+"gateway/v1/open-session", bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, baseURL+"gateway/v2/open-session", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("NewRequest() error = %v", err)
 	}
@@ -1447,7 +1648,7 @@ func openGatewayEnvWithBridgeFieldsViaHTTP(t *testing.T, s *Server, material gat
 	if err != nil {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
-	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v1/open-session", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v2/open-session", bytes.NewReader(body))
 	if spoofBridgeHeader {
 		setManagedBridgeHeaders(req)
 	}
@@ -1483,6 +1684,40 @@ func decodeOpenSessionEnvelope(t *testing.T, body []byte) protocol.OpenSessionRe
 func signGatewayTestRequest(t *testing.T, r *http.Request, material gatewayTestMaterial, body []byte) {
 	t.Helper()
 	signGatewayTestRequestWithNonce(t, r, material, body, randomGatewayNonce(t))
+}
+
+func gatewayLifecycleJSONCall(t *testing.T, server *Server, material gatewayTestMaterial, method string, path string, input any, output any) {
+	t.Helper()
+	body := []byte{}
+	if input != nil {
+		var err error
+		body, err = json.Marshal(input)
+		if err != nil {
+			t.Fatalf("json.Marshal() error = %v", err)
+		}
+	}
+	request := httptest.NewRequest(method, "http://127.0.0.1:24000"+path, bytes.NewReader(body))
+	signGatewayTestRequest(t, request, material, body)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("%s %s status = %d; body=%s", method, path, response.Code, response.Body.String())
+	}
+	envelope := struct {
+		OK   bool            `json:"ok"`
+		Data json.RawMessage `json:"data"`
+	}{}
+	if err := json.Unmarshal(response.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("decode lifecycle envelope: %v", err)
+	}
+	if !envelope.OK {
+		t.Fatalf("lifecycle envelope = %s", response.Body.String())
+	}
+	if output != nil {
+		if err := json.Unmarshal(envelope.Data, output); err != nil {
+			t.Fatalf("decode lifecycle data: %v", err)
+		}
+	}
 }
 
 func signGatewayTestRequestWithNonce(t *testing.T, r *http.Request, material gatewayTestMaterial, body []byte, nonce string) {

@@ -31,6 +31,8 @@ import {
   normalizeControlPlaneOrigin,
   normalizeDesktopControlPlaneAccount,
   normalizeDesktopControlPlaneProvider,
+  normalizeDesktopProviderEnvironmentAccess,
+  normalizeDesktopProviderRuntimeManagementCapability,
   type DesktopControlPlaneAccount,
   type DesktopControlPlaneProvider,
   type DesktopProviderAccessPoint,
@@ -219,7 +221,6 @@ type DesktopLocalEnvironmentStateCatalogFile = Readonly<{
   preferred_open_route?: unknown;
   local_hosting?: Readonly<{
     state_dir?: unknown;
-    owner?: unknown;
     access?: Readonly<{
       local_ui_bind?: unknown;
       local_ui_password_configured?: unknown;
@@ -297,6 +298,8 @@ type DesktopProviderEnvironmentCatalogFile = Readonly<{
     status?: unknown;
     lifecycle_status?: unknown;
     last_seen_at_unix_ms?: unknown;
+    access?: unknown;
+    runtime_management?: unknown;
   }>;
 }>;
 
@@ -667,7 +670,6 @@ function normalizeLocalEnvironmentState(
     autoRuntimeProbeEnabled: true,
     preferredOpenRoute: source?.preferred_open_route,
     currentProviderBinding: source?.current_provider_binding,
-    owner: source?.local_hosting.owner,
     stateDir: compact(source?.local_hosting.state_dir)
       || resolveLocalEnvironmentStateDir({ name: 'local' }, stateRootOverride),
     currentRuntime: source?.local_hosting.current_runtime,
@@ -1154,6 +1156,8 @@ function normalizeProviderEnvironmentRemoteCatalogEntry(
     status: compact(candidate.status),
     lifecycle_status: compact(candidate.lifecycle_status),
     last_seen_at_unix_ms: normalizeLastUsedAtMS(candidate.last_seen_at_unix_ms, 0),
+    access: normalizeDesktopProviderEnvironmentAccess(candidate.access) ?? undefined,
+    runtime_management: normalizeDesktopProviderRuntimeManagementCapability(candidate.runtime_management) ?? undefined,
   };
   return (
     entry.region !== ''
@@ -1166,6 +1170,8 @@ function normalizeProviderEnvironmentRemoteCatalogEntry(
     || entry.status !== ''
     || entry.lifecycle_status !== ''
     || entry.last_seen_at_unix_ms > 0
+    || entry.access !== undefined
+    || entry.runtime_management !== undefined
   )
     ? entry
     : undefined;
@@ -2369,13 +2375,9 @@ function normalizeLocalEnvironmentCatalogCandidate(
       passwordConfigured,
       localHostingSource?.access?.plaintext_network_exposure_acknowledgement,
     );
-    const owner = localHostingSource?.owner === 'desktop' || localHostingSource?.owner === 'agent'
-      ? localHostingSource.owner
-      : 'unknown';
     try {
       return createDesktopLocalEnvironmentHosting({
         access,
-        owner,
         stateDir: compact(localHostingSource?.state_dir)
           || localEnvironmentStateLayout(process.env, os.homedir, stateRootOverride).stateDir,
       });
@@ -2400,7 +2402,6 @@ function normalizeLocalEnvironmentCatalogCandidate(
         preferredOpenRoute: normalizePreferredOpenRoute(candidate.preferred_open_route),
         currentProviderBinding: currentProviderBinding ?? undefined,
         access: localHosting.access,
-        owner: localHosting.owner,
         stateDir: localHosting.state_dir,
         currentRuntime: localHosting.current_runtime,
         createdAtMS: normalizeLastUsedAtMS(candidate.created_at_ms, Date.now()),
@@ -2461,7 +2462,6 @@ function serializeLocalEnvironmentCatalog(environment: DesktopLocalEnvironmentSt
     preferred_open_route: environment.preferred_open_route,
     local_hosting: {
       state_dir: environment.local_hosting.state_dir,
-      owner: environment.local_hosting.owner,
       access: {
         local_ui_bind: access.local_ui_bind,
         local_ui_password_configured: access.local_ui_password_configured,

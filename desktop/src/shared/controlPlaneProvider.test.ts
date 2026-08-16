@@ -6,6 +6,8 @@ import {
   normalizeDesktopControlPlaneAccount,
   normalizeDesktopControlPlaneProvider,
   normalizeDesktopProviderEnvironmentList,
+  normalizeDesktopProviderRuntimeManagementCapability,
+  projectDesktopProviderRuntimeManagementState,
   suggestControlPlaneDisplayLabel,
 } from './controlPlaneProvider';
 
@@ -26,7 +28,7 @@ function accessPoint(overrides: Record<string, unknown> = {}) {
 
 function provider(overrides: Record<string, unknown> = {}) {
   return {
-    protocol_version: 'rcpp-v2',
+    protocol_version: 'rcpp-v3',
     provider_id: 'example_control_plane',
     display_name: 'Example Control Plane',
     provider_origin: 'https://redeven.test',
@@ -72,7 +74,7 @@ describe('controlPlaneProvider', () => {
         access_point_origin: 'https://dev.redeven.test/root/path',
       })],
     }))).toEqual({
-      protocol_version: 'rcpp-v2',
+      protocol_version: 'rcpp-v3',
       provider_id: 'example_control_plane',
       display_name: 'Example Control Plane',
       provider_origin: 'https://redeven.test',
@@ -194,5 +196,39 @@ describe('controlPlaneProvider', () => {
         access_point_id: 'sg-edge',
       }),
     ]);
+  });
+
+  it('projects Runtime management in support, authorization, readiness order', () => {
+    expect(projectDesktopProviderRuntimeManagementState('unsupported', 'allowed', 'ready')).toBe('unsupported');
+    expect(projectDesktopProviderRuntimeManagementState('supported', 'denied', 'ready')).toBe('denied');
+    expect(projectDesktopProviderRuntimeManagementState('supported', 'allowed', 'setup_required')).toBe('setup_required');
+    expect(projectDesktopProviderRuntimeManagementState('supported', 'allowed', 'temporarily_unavailable')).toBe('temporarily_unavailable');
+    expect(projectDesktopProviderRuntimeManagementState('supported', 'allowed', 'ready')).toBe('allowed');
+  });
+
+  it('removes target and supervisor facts from unauthorized Runtime capability payloads', () => {
+    expect(normalizeDesktopProviderRuntimeManagementCapability({
+      support: 'supported',
+      authorization: { state: 'denied', grants: ['manage_runtime_binding'] },
+      readiness: 'ready',
+      target: { lifecycle_target_id: 'secret_target', target_generation: 17 },
+      operations: ['update_runtime'],
+      artifact_policies: ['custom_build'],
+      binding_actions: ['rebind'],
+      supervision_mode: 'provider_gateway',
+      reason_code: 'runtime_supervisor_online',
+      checked_at_unix_ms: 1_710_000_000_000,
+    })).toEqual({
+      support: 'supported',
+      authorization: { state: 'denied', grants: [] },
+      readiness: 'unknown',
+      presentation_state: 'denied',
+      operations: [],
+      artifact_policies: [],
+      binding_actions: [],
+      supervision_mode: '',
+      reason_code: 'runtime_management_permission_required',
+      checked_at_unix_ms: 1_710_000_000_000,
+    });
   });
 });

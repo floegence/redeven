@@ -1,31 +1,28 @@
 ---
 type: Runtime Contract
 title: Runtime Service snapshot
-description: Runtime Service snapshots describe compatibility, open readiness, workload, capabilities, and Desktop/runtime bindings.
+description: Runtime identity, independent compatibility, access readiness, workload inventory, and optional Gateway supervision.
 tags: [architecture, desktop, runtime-service, compatibility]
-timestamp: 2026-07-13T00:00:00Z
+timestamp: 2026-08-17T00:00:00Z
 ---
 # Summary
 
-The Runtime Service snapshot is Redeven's typed compatibility and readiness surface between the endpoint runtime, Desktop, Local UI, and provider-facing environment catalogs.
-
-Runtime Service snapshots describe compatibility, open readiness, workload, capabilities, and Desktop/runtime bindings.
+The Runtime Service snapshot is a typed boundary between Runtime, Desktop, Local UI, and optional Gateway supervision. Runtime protocol/version, compatibility epoch, capabilities, service readiness, and workload identity are explicit facts. Gateway is optional for Runtime startup and ordinary access; its absence only closes Redeven-managed lifecycle actions.
 
 # Contract
 
-## Mechanism
+Runtime publishes its own service protocol and independent component version. Gateway compatibility is negotiated by protocol, epoch, capability set, signed manifest, and Runtime artifact digest; equal version strings are not required. A missing or incompatible Gateway fails closed only for lifecycle management. Runtime Connect, Workspace, terminal, files, web, and Runtime UI remain available according to their own gates.
 
-The Go runtime defines protocol version `redeven-runtime-v1`, owner states, compatibility states, open-readiness states, workload counts, runtime-control capabilities, Desktop model source binding state, and provider-link binding state. Normalization trims and defaults partial snapshots, applies endpoint facts such as Desktop ownership and effective run mode, infers open readiness from compatibility when missing, and blocks otherwise-open snapshots when the Env App shell is unavailable. The release compatibility contract is embedded and applied to snapshots. Desktop accepts only a positive integer compatibility epoch and compares it with its compiled epoch: a missing, malformed, or older Runtime epoch becomes `runtime_update_required`, while a newer Runtime becomes `desktop_update_required`. This fail-closed rule also applies to source-development builds because the Go compatibility contract stamps their snapshots. `managed_elsewhere` remains an ownership block and keeps its ownership guidance. Redeven v0.10.0 advances the compatibility epoch to 8 and requires a matched minimum Desktop and Runtime pair of `v0.10.0` because Local UI startup, attach, health, Desktop bridge, and Env App surfaces now share the `LocalUIExposure` contract and network acknowledgement behavior, even though the Runtime Service protocol identifier remains `redeven-runtime-v1`. The source check keeps Desktop epoch/minimum constants aligned with the embedded contract, and the Desktop CI gate runs focused normalization, startup-carrier, and Runtime-process behavior tests.
+The snapshot includes target identity, generation-bound workload/process inventory, snapshot revision, inventory digest, lifecycle fence state, and typed `unknown` values when inventory is unavailable or malformed. A supervisor can begin/release a fence and perform token-bound shutdown, but Runtime does not create Gateway operations, permits, locks, or recovery records. External OS maintenance is outside the product lifecycle authority; the next Gateway enablement revalidates identity, protocol, epoch, capabilities, and digest.
 
 # Boundaries
 
-Consumers should use normalized `open_readiness` and capability bindings rather than infer readiness from version strings or raw runtime claims. Protocol compatibility remains controlled by the embedded compatibility contract and its checked Desktop mirror.
+Portal `ControlChannelFence` fields protect the Provider control channel and are distinct from Gateway `target_generation`. Neither counter is a Desktop ownership marker. The Runtime Service has no hidden v1 lifecycle-owner fallback and does not require a Gateway endpoint, pairing, or operation store to start.
 
 # Evidence
 
-- `redeven:internal/runtimeservice/snapshot.go:8` - Runtime Service protocol version is `redeven-runtime-v1`.
-- `redeven:internal/localui/localui.go:1043` - Local UI exposes the agent Runtime Service snapshot after endpoint normalization.
-- `redeven:internal/runtimeservice/compatibility.go:11` - The compatibility contract JSON is embedded in the runtime.
-- `redeven:desktop/src/shared/runtimeService.ts:116` - Desktop declares the checked Runtime Service epoch and minimum version pair.
-- `redeven:scripts/check_runtime_compatibility_contract.sh:116` - The source check reads and validates the Desktop epoch and minimum-version constants against the embedded contract.
-- `redeven:scripts/check_desktop.sh:60` - The lightweight Desktop gate always runs the focused Runtime compatibility behavior suite.
+- `redeven:internal/runtimeservice/snapshot.go:1` - Runtime Service snapshot and independent protocol identifier.
+- `redeven:internal/runtimeservice/compatibility.go:1` - Signed/embedded Runtime compatibility contract.
+- `redeven:internal/runtimeservice/lifecycle.go:1` - Optional lifecycle fence and supervisor-facing identity.
+- `redeven:internal/runtimemanagement/process_inventory.go:1` - Exact workload identity and unknown inventory behavior.
+- `redeven:internal/localui/runtime_control.go:1` - Ordinary Runtime control remains a local Runtime interface.

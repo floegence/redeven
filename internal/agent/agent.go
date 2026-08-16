@@ -41,6 +41,7 @@ import (
 	"github.com/floegence/redeven/internal/rpcutil"
 	"github.com/floegence/redeven/internal/runtimeidentity"
 	"github.com/floegence/redeven/internal/runtimeproxy"
+	"github.com/floegence/redeven/internal/runtimeservice"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/sessionrpc"
 	syssvc "github.com/floegence/redeven/internal/sys"
@@ -52,6 +53,7 @@ const (
 	controlRPCTypeHeartbeat         uint32 = 41002
 	controlRPCTypeGrantServer       uint32 = 41003 // notify
 	controlRPCTypeRuntimeDisconnect uint32 = 41005
+	controlRPCTypeRuntimeEnrollment uint32 = 41008
 )
 
 // Floe app ids.
@@ -94,9 +96,8 @@ type Options struct {
 	//
 	// In Local mode, this should be false even when the config is fully bootstrapped.
 	ControlChannelEnabled bool
-	// DesktopManaged disables CLI self-upgrade behaviors that do not apply when the
-	// agent lifecycle is owned by a desktop shell package.
-	DesktopManaged bool
+	// DisableSelfUpgrade keeps packaged shells on their signed installer path.
+	DisableSelfUpgrade bool
 	// EffectiveRunMode reports the current runtime mode exposed to the UI/control plane.
 	EffectiveRunMode string
 	// RemoteEnabled reports whether the current process has the remote control channel enabled.
@@ -186,13 +187,17 @@ type Agent struct {
 	controlRPCCallMu     sync.Mutex
 	controlArtifact      controlArtifactSessionBinding
 
-	localUIEnabled        bool
-	controlChannelEnabled bool
-	desktopManaged        bool
-	effectiveRunMode      string
-	remoteEnabled         bool
-	accessGate            *accessgate.Gate
-	gitRuntime            *gitruntime.Runtime
+	localUIEnabled          bool
+	controlChannelEnabled   bool
+	selfUpgradeDisabled     bool
+	effectiveRunMode        string
+	remoteEnabled           bool
+	accessGate              *accessgate.Gate
+	gitRuntime              *gitruntime.Runtime
+	runtimeLifecycle        *runtimeservice.LifecycleManager
+	runtimeShutdown         chan struct{}
+	runtimeShutdownOnce     sync.Once
+	runtimeWorkloadSequence atomic.Uint64
 }
 
 // activeSession represents a server-side Flowersec channel session handled by the agent.
@@ -206,6 +211,7 @@ type activeSession struct {
 	grantExpiresAt    int64
 	connectedAtUnixMs int64 // set after ConnectTunnel succeeds
 	pluginGeneration  PluginSessionGeneration
+	runtimeLease      *runtimeservice.WorkloadLease
 }
 
 func New(opts Options) (*Agent, error) {
@@ -269,6 +275,7 @@ func New(opts Options) (*Agent, error) {
 			return nil, fmt.Errorf("create plugin process generation: %w", err)
 		}
 	}
+	runtimeLifecycle := runtimeservice.NewLifecycleManager()
 	a := &Agent{
 		cfg:                     opts.Config,
 		log:                     logger,
@@ -296,12 +303,28 @@ func New(opts Options) (*Agent, error) {
 		onControlDisabled:       opts.OnControlDisabled,
 		localUIEnabled:          opts.LocalUIEnabled,
 		controlChannelEnabled:   opts.ControlChannelEnabled,
-		desktopManaged:          opts.DesktopManaged,
+		selfUpgradeDisabled:     opts.DisableSelfUpgrade,
 		effectiveRunMode:        strings.TrimSpace(opts.EffectiveRunMode),
 		remoteEnabled:           opts.RemoteEnabled,
 		accessGate:              opts.AccessGate,
 		gitRuntime:              gitruntime.New(),
+		runtimeLifecycle:        runtimeLifecycle,
+		runtimeShutdown:         make(chan struct{}),
 	}
+	runtimeLifecycle.SetShutdown(func() error {
+		a.runtimeShutdownOnce.Do(func() { close(a.runtimeShutdown) })
+		return nil
+	})
+	a.term.SetWorkloadAdmission(func() (func(), error) {
+		sequence := a.runtimeWorkloadSequence.Add(1)
+		lease, err := a.admitRuntimeWorkload(runtimeservice.ManagedWorkload{
+			Identity: fmt.Sprintf("terminal:%d", sequence), Kind: "terminal", Protected: true,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return lease.Release, nil
+	})
 	a.reconcileRuntimeMaintenanceMarker()
 
 	auditStore, err := auditlog.New(auditlog.Options{Logger: logger, StateDir: stateDir})
@@ -322,7 +345,7 @@ func New(opts Options) (*Agent, error) {
 		a.diag = diagnosticsStore
 	}
 	var upgrader syssvc.Upgrader
-	if !a.desktopManaged {
+	if !a.selfUpgradeDisabled {
 		upgrader = &sysUpgrader{a: a}
 	}
 	a.sys = syssvc.NewService(syssvc.Options{
@@ -474,7 +497,12 @@ func (a *Agent) Run(ctx context.Context) error {
 		}
 	}
 
-	<-ctx.Done()
+	requestedShutdown := false
+	select {
+	case <-ctx.Done():
+	case <-a.runtimeShutdown:
+		requestedShutdown = true
+	}
 	a.beginSessionShutdown()
 	a.stopControlChannel()
 	a.pluginSessions.stopAdmission()
@@ -486,6 +514,9 @@ func (a *Agent) Run(ctx context.Context) error {
 	if !a.waitForPluginSessionCloses(30 * time.Second) {
 		closeCodeApp = false
 		return errors.New("plugin session maintenance timed out; plugin host left open for process termination")
+	}
+	if requestedShutdown {
+		return nil
 	}
 	return ctx.Err()
 }
@@ -590,6 +621,12 @@ func (a *Agent) runControlLoop(ctx context.Context) {
 		return
 	}
 	handlers := flowersec.NewRPCHandlers()
+	if err := handlers.HandleRPC(controlRPCTypeRuntimeEnrollment, func(handlerCtx context.Context, payload json.RawMessage) (any, *flowersec.RPCError) {
+		return a.handleRuntimeEnrollmentProof(handlerCtx, payload)
+	}); err != nil {
+		a.log.Error("control channel not started: register Runtime enrollment proof handler", "error", err)
+		return
+	}
 	if err := handlers.HandleNotification(controlRPCTypeGrantServer, func(handlerCtx context.Context, payload json.RawMessage) error {
 		a.handleGrantNotify(handlerCtx, payload)
 		return nil
@@ -708,7 +745,6 @@ func (a *Agent) runControlSession(ctx context.Context, current flowersec.Session
 		OS:                       runtime.GOOS,
 		Arch:                     runtime.GOARCH,
 		Hostname:                 hostnameBestEffort(),
-		DesktopManaged:           a.desktopManaged,
 		EffectiveRunMode:         normalizeEffectiveRunMode(a.effectiveRunMode),
 		RemoteEnabled:            a.remoteEnabled,
 	})
@@ -1000,14 +1036,21 @@ func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) 
 	// Freeze the metadata snapshot used for auditing/UI and for the session runtime.
 	metaCopy := *meta
 
+	runtimeLease, err := a.admitRuntimeWorkload(runtimeservice.ManagedWorkload{Identity: "session:" + channelID, Kind: "session", Protected: true})
+	if err != nil {
+		a.log.Info("data session rejected by Runtime lifecycle fence", "channel_id", channelID)
+		return
+	}
 	grantDigest := sha256.Sum256(n.GrantServer.ArtifactJSON)
 	a.mu.Lock()
 	if a.sessionStopping {
 		a.mu.Unlock()
+		runtimeLease.Release()
 		return
 	}
 	if existing, ok := a.sessions[channelID]; ok {
 		a.mu.Unlock()
+		runtimeLease.Release()
 		if existing.grantDigest != grantDigest || existing.grantExpiresAt != n.GrantServer.ArtifactExpiresAtUnixS {
 			a.log.Warn("conflicting grant_server notify ignored", "channel_id", channelID)
 		}
@@ -1022,6 +1065,7 @@ func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) 
 		tunnelURL:      "",
 		grantDigest:    grantDigest,
 		grantExpiresAt: n.GrantServer.ArtifactExpiresAtUnixS,
+		runtimeLease:   runtimeLease,
 	}
 	a.sessionWG.Add(1)
 	a.mu.Unlock()
@@ -1550,6 +1594,7 @@ func (a *Agent) removeActiveSession(channelID string) PluginSessionGeneration {
 	if s == nil {
 		return 0
 	}
+	s.runtimeLease.Release()
 	return s.pluginGeneration
 }
 
@@ -1756,7 +1801,6 @@ type registerReq struct {
 	OS                       string `json:"os,omitempty"`
 	Arch                     string `json:"arch,omitempty"`
 	Hostname                 string `json:"hostname,omitempty"`
-	DesktopManaged           bool   `json:"desktop_managed,omitempty"`
 	EffectiveRunMode         string `json:"effective_run_mode,omitempty"`
 	RemoteEnabled            bool   `json:"remote_enabled,omitempty"`
 }

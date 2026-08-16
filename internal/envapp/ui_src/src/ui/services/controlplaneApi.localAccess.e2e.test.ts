@@ -77,7 +77,6 @@ describe('controlplaneApi local access flow', () => {
           mode: 'local',
           env_public_id: 'env_local',
           direct_ws_url: 'ws://127.0.0.1:43123/_redeven_direct/ws',
-          desktop_managed: true,
           effective_run_mode: 'hybrid',
           remote_enabled: true,
         });
@@ -93,7 +92,6 @@ describe('controlplaneApi local access flow', () => {
       mode: 'local',
       env_public_id: 'env_local',
       direct_ws_url: 'ws://127.0.0.1:43123/_redeven_direct/ws',
-      desktop_managed: true,
       effective_run_mode: 'hybrid',
       remote_enabled: true,
       runtime_service: undefined,

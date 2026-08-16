@@ -13,7 +13,6 @@ import {
 } from '../main/desktopTarget';
 import type {
   DesktopSessionRuntimeLaunchMode,
-  DesktopSessionRuntimeLifecycleOwner,
 } from '../main/sessionRuntime';
 import type { StartupReport } from '../main/startup';
 import {
@@ -21,7 +20,6 @@ import {
   createDesktopLocalEnvironmentState,
   defaultDesktopLocalEnvironmentAccess,
   type DesktopLocalEnvironmentAccess,
-  type DesktopLocalEnvironmentOwner,
   type DesktopLocalEnvironmentPreferredOpenRoute,
   type DesktopLocalEnvironmentRuntimeState,
   type DesktopLocalEnvironmentState,
@@ -39,7 +37,6 @@ type TestLocalEnvironmentOptions = Readonly<{
   pinned?: boolean;
   autoRuntimeProbeEnabled?: boolean;
   stateDir?: string;
-  owner?: DesktopLocalEnvironmentOwner;
   preferredOpenRoute?: DesktopLocalEnvironmentPreferredOpenRoute;
   currentRuntime?: Partial<DesktopLocalEnvironmentRuntimeState> | null;
   createdAtMS?: number;
@@ -57,7 +54,6 @@ type TestProviderBoundLocalEnvironmentOptions = Readonly<{
   pinned?: boolean;
   autoRuntimeProbeEnabled?: boolean;
   stateDir?: string;
-  owner?: DesktopLocalEnvironmentOwner;
   preferredOpenRoute?: DesktopLocalEnvironmentPreferredOpenRoute;
   localHosting?: boolean;
   currentRuntime?: Partial<DesktopLocalEnvironmentRuntimeState> | null;
@@ -99,14 +95,7 @@ type TestProviderEnvironmentOptions = Readonly<{
 function testCurrentRuntime(
   runtime: Partial<DesktopLocalEnvironmentRuntimeState> | null | undefined,
 ): Partial<DesktopLocalEnvironmentRuntimeState> | null | undefined {
-  if (!runtime || runtime.desktop_managed !== true || runtime.desktop_ownership) {
-    return runtime;
-  }
-  return {
-    ...runtime,
-    desktop_owner_id: runtime.desktop_owner_id ?? 'desktop-owner-test',
-    desktop_ownership: 'owned',
-  };
+  return runtime;
 }
 
 function defaultTestAccessPointOrigin(providerOrigin: string): string {
@@ -166,7 +155,6 @@ export function testLocalEnvironment(
     pinned: options.pinned,
     autoRuntimeProbeEnabled: options.autoRuntimeProbeEnabled,
     stateDir: options.stateDir ?? localEnvironmentStateLayout().stateDir,
-    owner: options.owner,
     preferredOpenRoute: options.preferredOpenRoute,
     currentRuntime: testCurrentRuntime(options.currentRuntime),
     createdAtMS: options.createdAtMS,
@@ -199,7 +187,6 @@ export function testProviderBoundLocalEnvironment(
     testLocalEnvironment({
       access: options.access,
       autoRuntimeProbeEnabled: options.autoRuntimeProbeEnabled,
-      owner: options.owner ?? 'desktop',
       stateDir: options.stateDir ?? layout.stateDir,
       currentRuntime: testCurrentRuntime(options.currentRuntime),
       createdAtMS: options.createdAtMS,
@@ -276,19 +263,12 @@ export function testLocalEnvironmentSession(
   lifecycle: DesktopSessionLifecycle = 'open',
   startupOverrides: Partial<StartupReport> = {},
   options: Readonly<{
-    runtimeLifecycleOwner?: DesktopSessionRuntimeLifecycleOwner;
     runtimeLaunchMode?: DesktopSessionRuntimeLaunchMode;
   }> = {},
 ): DesktopSessionSummary {
   const target = buildLocalEnvironmentDesktopTarget(environment);
-  const desktopManaged = startupOverrides.desktop_managed !== false;
   const effectiveRunMode = String(startupOverrides.effective_run_mode ?? 'desktop');
   const remoteEnabled = startupOverrides.remote_enabled === true;
-  const serviceOwner = options.runtimeLifecycleOwner === 'external'
-    ? 'external'
-    : desktopManaged
-      ? 'desktop'
-      : 'unknown';
   const currentProviderBinding = environment.current_provider_binding;
   return {
     session_key: target.session_key,
@@ -305,9 +285,7 @@ export function testLocalEnvironmentSession(
         env_public_id: currentProviderBinding.env_public_id,
       } : {}),
       runtime_service: {
-        protocol_version: 'redeven-runtime-v1',
-        service_owner: serviceOwner,
-        desktop_managed: desktopManaged,
+        protocol_version: 'redeven-runtime-v2',
         effective_run_mode: effectiveRunMode,
         remote_enabled: remoteEnabled,
         compatibility: 'compatible',
@@ -321,7 +299,6 @@ export function testLocalEnvironmentSession(
       },
       ...startupOverrides,
     },
-    runtime_lifecycle_owner: options.runtimeLifecycleOwner,
     runtime_launch_mode: options.runtimeLaunchMode,
   };
 }

@@ -128,8 +128,6 @@ func TestServicePingReportsRuntimeServiceSnapshot(t *testing.T) {
 			snapshot: RuntimeServiceSnapshot{
 				RuntimeVersion:   "v1.2.3",
 				ProtocolVersion:  "redeven-runtime-v1",
-				ServiceOwner:     "desktop",
-				DesktopManaged:   true,
 				EffectiveRunMode: "hybrid",
 				RemoteEnabled:    true,
 				Compatibility:    "compatible",

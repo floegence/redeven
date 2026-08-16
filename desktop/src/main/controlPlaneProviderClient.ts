@@ -5,11 +5,14 @@ import {
   normalizeDesktopControlPlaneProvider,
   normalizeDesktopProviderEnvironmentList,
   normalizeDesktopProviderEnvironmentRuntimeHealthList,
+  normalizeDesktopProviderRuntimeManagementCapability,
   type DesktopControlPlaneAccount,
   type DesktopControlPlaneProvider,
   type DesktopProviderAccessPoint,
   type DesktopProviderEnvironment,
   type DesktopProviderEnvironmentRuntimeHealth,
+  type DesktopProviderRuntimeGrant,
+  type DesktopProviderRuntimeManagementCapability,
 } from '../shared/controlPlaneProvider';
 import {
   DesktopProviderRequestError,
@@ -19,14 +22,15 @@ import {
 } from './controlPlaneProviderTransport';
 
 const PROVIDER_DISCOVERY_PATH = '/.well-known/redeven-provider.json';
-const PROVIDER_ME_PATH = '/api/rcpp/v2/me';
-const PROVIDER_ENVIRONMENTS_PATH = '/api/rcpp/v2/environments';
-const PROVIDER_ENVIRONMENTS_RUNTIME_HEALTH_QUERY_PATH = '/api/rcpp/v2/environments/runtime-health/query';
-const PROVIDER_DESKTOP_CONNECT_EXCHANGE_PATH = '/api/rcpp/v2/desktop/connect/exchange';
-const PROVIDER_DESKTOP_TOKEN_REFRESH_PATH = '/api/rcpp/v2/desktop/token/refresh';
-const PROVIDER_DESKTOP_TOKEN_REVOKE_PATH = '/api/rcpp/v2/desktop/token/revoke';
+const PROVIDER_ME_PATH = '/api/rcpp/v3/me';
+const PROVIDER_ENVIRONMENTS_PATH = '/api/rcpp/v3/environments';
+const PROVIDER_ENVIRONMENTS_RUNTIME_HEALTH_QUERY_PATH = '/api/rcpp/v3/environments/runtime-health/query';
+const PROVIDER_DESKTOP_CONNECT_EXCHANGE_PATH = '/api/rcpp/v3/desktop/connect/exchange';
+const PROVIDER_DESKTOP_TOKEN_REFRESH_PATH = '/api/rcpp/v3/desktop/token/refresh';
+const PROVIDER_DESKTOP_TOKEN_REVOKE_PATH = '/api/rcpp/v3/desktop/token/revoke';
 const PROVIDER_DESKTOP_OPEN_SESSION_PATH_SUFFIX = '/desktop/open-session';
 const PROVIDER_BOOTSTRAP_EXCHANGE_PATH = '/api/rcpp/v2/runtime/bootstrap/exchange';
+const PROVIDER_PROTOCOL_VERSION = 'rcpp-v3';
 const DEFAULT_PROVIDER_TIMEOUT_MS = 15_000;
 
 export type ProviderDesktopOpenSession = Readonly<{
@@ -60,6 +64,41 @@ export type ProviderEnvironmentRuntimeHealthQuery = Readonly<{
   env_public_ids: readonly string[];
 }>;
 
+export type ProviderRuntimeOperationAuthorizationRequest = Readonly<{
+  action: 'prepare' | 'reconcile';
+  lifecycle_target_id: string;
+  target_generation: number;
+  operation_id: string;
+  operation: 'start' | 'stop' | 'restart' | 'update_runtime' | 'reconcile';
+  desired_runtime_version?: string;
+  artifact_policy: 'published_release' | 'custom_build';
+  build_inputs_digest?: string;
+  authorized_client_key_id: string;
+}>;
+
+export type ProviderRuntimeOperationAuthorization = Readonly<{
+  decision: 'allowed' | 'denied' | 'unknown';
+  grants: readonly DesktopProviderRuntimeGrant[];
+  permit?: string;
+  expires_at_unix_ms?: number;
+  reason_code: string;
+}>;
+
+export type ProviderRuntimeEnrollmentChallengeRequest = Readonly<{
+  mode: 'direct_card' | 'interactive_code';
+  lifecycle_target_id?: string;
+  expected_target_generation?: number;
+}>;
+
+export type ProviderRuntimeEnrollmentChallenge = Readonly<{
+  challenge_id: string;
+  enrollment_code: string;
+  proof_nonce: string;
+  control_binding_generation: number;
+  expected_target_generation: number;
+  expires_at_unix_ms: number;
+}>;
+
 type ProviderJSONErrorEnvelope = Readonly<{
   error?: Readonly<{
     code?: unknown;
@@ -73,6 +112,18 @@ type ProviderClientRequestOptions = Readonly<{
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
+}
+
+function normalizeStringSet<T extends string>(value: unknown, allowed: readonly T[]): readonly T[] {
+  if (!Array.isArray(value)) return [];
+  const allowedValues = new Set<string>(allowed);
+  return [...new Set(value.map((item) => compact(item)).filter((item): item is T => allowedValues.has(item)))].sort();
+}
+
+function requireProviderProtocolVersion(providerOrigin: string, value: unknown, message: string): void {
+  if (compact(value) !== PROVIDER_PROTOCOL_VERSION) {
+    throw invalidProviderResponseError(providerOrigin, message);
+  }
 }
 
 function normalizeUnixMS(value: unknown): number {
@@ -474,7 +525,155 @@ export async function fetchProviderEnvironments(
       'The provider environment list is invalid.',
     );
   }
+  requireProviderProtocolVersion(
+    accessPointOrigin,
+    (body as { protocol_version?: unknown }).protocol_version,
+    'The provider environment list protocol is invalid.',
+  );
   return normalizeDesktopProviderEnvironmentList(body, { provider });
+}
+
+export async function fetchProviderRuntimeManagementCapability(
+  provider: DesktopControlPlaneProvider,
+  accessPoint: DesktopProviderAccessPoint,
+  accessToken: string,
+  envPublicID: string,
+  requestOptions: ProviderClientRequestOptions = {},
+): Promise<DesktopProviderRuntimeManagementCapability> {
+  const cleanEnvPublicID = compact(envPublicID);
+  if (cleanEnvPublicID === '') throw new Error('Environment ID is required.');
+  const accessPointOrigin = accessPoint.access_point_origin;
+  const { body } = await fetchProviderJSON(accessPointRequestURL(
+    accessPointOrigin,
+    `${PROVIDER_ENVIRONMENTS_PATH}/${encodeURIComponent(cleanEnvPublicID)}/runtime-management/capabilities`,
+  ), {
+    bearerToken: accessToken,
+    operationLabel: 'the Runtime management capability',
+    transport: requestOptions.transport,
+  });
+  if (!body || typeof body !== 'object') {
+    throw invalidProviderResponseError(accessPointOrigin, 'The Runtime management capability response is invalid.');
+  }
+  const candidate = body as Record<string, unknown>;
+  requireProviderProtocolVersion(accessPointOrigin, candidate.protocol_version, 'The Runtime management capability protocol is invalid.');
+  if (compact(candidate.provider_id) !== provider.provider_id
+    || normalizeControlPlaneOrigin(compact(candidate.provider_origin)) !== provider.provider_origin
+    || compact(candidate.access_point_id) !== accessPoint.access_point_id
+    || compact(candidate.env_public_id) !== cleanEnvPublicID) {
+    throw invalidProviderResponseError(accessPointOrigin, 'The Runtime management capability scope is invalid.');
+  }
+  const capability = normalizeDesktopProviderRuntimeManagementCapability(candidate.capability);
+  if (!capability) {
+    throw invalidProviderResponseError(accessPointOrigin, 'The Runtime management capability response is invalid.');
+  }
+  return capability;
+}
+
+export async function authorizeProviderRuntimeOperation(
+  provider: DesktopControlPlaneProvider,
+  accessPoint: DesktopProviderAccessPoint,
+  accessToken: string,
+  envPublicID: string,
+  request: ProviderRuntimeOperationAuthorizationRequest,
+  requestOptions: ProviderClientRequestOptions = {},
+): Promise<ProviderRuntimeOperationAuthorization> {
+  const cleanEnvPublicID = compact(envPublicID);
+  if (cleanEnvPublicID === '') throw new Error('Environment ID is required.');
+  const accessPointOrigin = accessPoint.access_point_origin;
+  const { body } = await fetchProviderJSON(accessPointRequestURL(
+    accessPointOrigin,
+    `${PROVIDER_ENVIRONMENTS_PATH}/${encodeURIComponent(cleanEnvPublicID)}/runtime-management/authorizations`,
+  ), {
+    method: 'POST',
+    bearerToken: accessToken,
+    body: {
+      protocol_version: PROVIDER_PROTOCOL_VERSION,
+      env_public_id: cleanEnvPublicID,
+      ...request,
+    },
+    operationLabel: 'the Runtime operation authorization',
+    transport: requestOptions.transport,
+  });
+  if (!body || typeof body !== 'object') {
+    throw invalidProviderResponseError(accessPointOrigin, 'The Runtime operation authorization response is invalid.');
+  }
+  const candidate = body as Record<string, unknown>;
+  requireProviderProtocolVersion(accessPointOrigin, candidate.protocol_version, 'The Runtime operation authorization protocol is invalid.');
+  const decision = compact(candidate.decision) as ProviderRuntimeOperationAuthorization['decision'];
+  if (!['allowed', 'denied', 'unknown'].includes(decision)) {
+    throw invalidProviderResponseError(accessPointOrigin, 'The Runtime operation authorization response is invalid.');
+  }
+  const permit = compact(candidate.permit);
+  const expiresAtUnixMS = Number(candidate.expires_at_unix_ms);
+  if (decision === 'allowed' && (permit === '' || !Number.isSafeInteger(expiresAtUnixMS) || expiresAtUnixMS <= Date.now())) {
+    throw invalidProviderResponseError(accessPointOrigin, 'The Runtime operation permit is invalid.');
+  }
+  if (decision !== 'allowed' && permit !== '') {
+    throw invalidProviderResponseError(accessPointOrigin, 'The denied Runtime authorization exposed a permit.');
+  }
+  return {
+    decision,
+    grants: normalizeStringSet(candidate.grants, ['manage_runtime', 'deploy_custom_runtime', 'manage_runtime_binding'] as const),
+    ...(permit !== '' ? { permit } : {}),
+    ...(decision === 'allowed' ? { expires_at_unix_ms: expiresAtUnixMS } : {}),
+    reason_code: compact(candidate.reason_code),
+  };
+}
+
+export async function requestProviderRuntimeEnrollmentChallenge(
+  provider: DesktopControlPlaneProvider,
+  accessPoint: DesktopProviderAccessPoint,
+  accessToken: string,
+  envPublicID: string,
+  request: ProviderRuntimeEnrollmentChallengeRequest,
+  requestOptions: ProviderClientRequestOptions = {},
+): Promise<ProviderRuntimeEnrollmentChallenge> {
+  const cleanEnvPublicID = compact(envPublicID);
+  if (cleanEnvPublicID === '') throw new Error('Environment ID is required.');
+  const accessPointOrigin = accessPoint.access_point_origin;
+  const { body } = await fetchProviderJSON(accessPointRequestURL(
+    accessPointOrigin,
+    `${PROVIDER_ENVIRONMENTS_PATH}/${encodeURIComponent(cleanEnvPublicID)}/runtime-management/enrollment-challenges`,
+  ), {
+    method: 'POST',
+    bearerToken: accessToken,
+    body: {
+      protocol_version: PROVIDER_PROTOCOL_VERSION,
+      env_public_id: cleanEnvPublicID,
+      mode: request.mode,
+      ...(compact(request.lifecycle_target_id) ? { lifecycle_target_id: compact(request.lifecycle_target_id) } : {}),
+      ...(Number.isSafeInteger(request.expected_target_generation) && Number(request.expected_target_generation) > 0
+        ? { expected_target_generation: Number(request.expected_target_generation) }
+        : {}),
+    },
+    operationLabel: 'the Runtime enrollment challenge',
+    transport: requestOptions.transport,
+  });
+  if (!body || typeof body !== 'object') {
+    throw invalidProviderResponseError(accessPointOrigin, 'The Runtime enrollment challenge response is invalid.');
+  }
+  const candidate = body as Record<string, unknown>;
+  requireProviderProtocolVersion(accessPointOrigin, candidate.protocol_version, 'The Runtime enrollment challenge protocol is invalid.');
+  const challengeID = compact(candidate.challenge_id);
+  const enrollmentCode = compact(candidate.enrollment_code);
+  const proofNonce = compact(candidate.proof_nonce);
+  const controlBindingGeneration = Number(candidate.control_binding_generation);
+  const expectedTargetGeneration = Number(candidate.expected_target_generation);
+  const expiresAtUnixMS = Number(candidate.expires_at_unix_ms);
+  if (challengeID === '' || enrollmentCode === '' || proofNonce === ''
+    || !Number.isSafeInteger(controlBindingGeneration) || controlBindingGeneration < 0
+    || !Number.isSafeInteger(expectedTargetGeneration) || expectedTargetGeneration <= 0
+    || !Number.isSafeInteger(expiresAtUnixMS) || expiresAtUnixMS <= Date.now()) {
+    throw invalidProviderResponseError(accessPointOrigin, 'The Runtime enrollment challenge response is invalid.');
+  }
+  return {
+    challenge_id: challengeID,
+    enrollment_code: enrollmentCode,
+    proof_nonce: proofNonce,
+    control_binding_generation: controlBindingGeneration,
+    expected_target_generation: expectedTargetGeneration,
+    expires_at_unix_ms: expiresAtUnixMS,
+  };
 }
 
 export async function queryProviderEnvironmentRuntimeHealth(

@@ -29,6 +29,7 @@ type VerifiedRequest struct {
 	Nonce           string
 	TimestampUnixMS int64
 	ProfileWrite    bool
+	RuntimeGrants   []protocol.RuntimeGrant
 }
 
 func NewVerifier(store *trust.Store) *Verifier {
@@ -39,6 +40,14 @@ func NewVerifier(store *trust.Store) *Verifier {
 }
 
 func (v *Verifier) Verify(ctx context.Context, r *http.Request, body []byte, bindingAudience string) (VerifiedRequest, error) {
+	bodyDigest, err := security.CanonicalJSONDigestFromBytes(body)
+	if err != nil {
+		return VerifiedRequest{}, errors.New("Gateway request body is not canonical JSON")
+	}
+	return v.VerifyDigest(ctx, r, bodyDigest, bindingAudience)
+}
+
+func (v *Verifier) VerifyDigest(ctx context.Context, r *http.Request, bodyDigest string, bindingAudience string) (VerifiedRequest, error) {
 	if err := ctx.Err(); err != nil {
 		return VerifiedRequest{}, err
 	}
@@ -69,9 +78,9 @@ func (v *Verifier) Verify(ctx context.Context, r *http.Request, body []byte, bin
 	if !ok {
 		return VerifiedRequest{}, errors.New("Gateway client is not paired")
 	}
-	bodyDigest, err := security.CanonicalJSONDigestFromBytes(body)
-	if err != nil {
-		return VerifiedRequest{}, errors.New("Gateway request body is not canonical JSON")
+	bodyDigest = strings.TrimSpace(bodyDigest)
+	if bodyDigest == "" {
+		return VerifiedRequest{}, errors.New("Gateway request body digest is required")
 	}
 	payload, err := security.CanonicalJSON(map[string]any{
 		"binding_audience":  cleanAudience,
@@ -99,6 +108,7 @@ func (v *Verifier) Verify(ctx context.Context, r *http.Request, body []byte, bin
 		Nonce:           nonce,
 		TimestampUnixMS: ts,
 		ProfileWrite:    v.store.ClientCanWriteProfiles(clientKeyID, cleanAudience),
+		RuntimeGrants:   v.store.ClientRuntimeGrants(clientKeyID, cleanAudience),
 	}, nil
 }
 

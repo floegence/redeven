@@ -23,7 +23,6 @@ type ResolveInput struct {
 	Stdout            io.Writer
 	Stderr            io.Writer
 	Env               map[string]string
-	DesktopManaged    bool
 	StartupReportFile string
 }
 
@@ -62,7 +61,7 @@ func ResolveConfig(requested Mode, in ResolveInput) Config {
 	effective := requested
 	if effective == "" || effective == ModeAuto {
 		switch {
-		case in.DesktopManaged || strings.TrimSpace(in.StartupReportFile) != "":
+		case strings.TrimSpace(in.StartupReportFile) != "":
 			effective = ModeMachine
 		case stderrTTY && !noColor && !ci:
 			effective = ModeRich

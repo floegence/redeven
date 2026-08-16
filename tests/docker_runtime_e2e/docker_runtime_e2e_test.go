@@ -40,7 +40,6 @@ const (
 	pluginRuntimeEnv    = "REDEVEN_DOCKER_E2E_REDEVPLUGIN_RUNTIME"
 	pluginDescriptorEnv = "REDEVEN_DOCKER_E2E_REDEVPLUGIN_DESCRIPTOR"
 	targetVersion       = "v9.9.9-e2e"
-	desktopOwnerID      = "redeven-docker-e2e-desktop-owner"
 	networkTestPort     = "23998"
 	networkTestPassword = "redeven-network-e2e-password"
 )
@@ -102,8 +101,6 @@ type launchReport struct {
 	Exposure                 runtimemanagement.LocalUIExposure `json:"exposure"`
 	EffectiveRunMode         string                            `json:"effective_run_mode,omitempty"`
 	RemoteEnabled            bool                              `json:"remote_enabled"`
-	DesktopManaged           bool                              `json:"desktop_managed"`
-	DesktopOwnerID           string                            `json:"desktop_owner_id,omitempty"`
 	StateDir                 string                            `json:"state_dir,omitempty"`
 	RuntimeControlSocketPath string                            `json:"runtime_control_socket_path,omitempty"`
 	PID                      int                               `json:"pid,omitempty"`
@@ -116,13 +113,10 @@ type runtimeControlEndpoint struct {
 	ProtocolVersion string `json:"protocol_version"`
 	BaseURL         string `json:"base_url"`
 	Token           string `json:"token"`
-	DesktopOwnerID  string `json:"desktop_owner_id"`
 }
 
 type runtimeLockOwner struct {
-	PID            int    `json:"pid,omitempty"`
-	DesktopManaged bool   `json:"desktop_managed"`
-	DesktopOwnerID string `json:"desktop_owner_id,omitempty"`
+	PID int `json:"pid,omitempty"`
 }
 
 type runtimeDiagnostics struct {
@@ -192,7 +186,7 @@ func TestDockerUbuntuDesktopRuntimeLifecycle(t *testing.T) {
 	f.detectContainerArch(ctx)
 	f.buildBinaries(ctx)
 	f.assertRuntimeNotStarted(ctx)
-	f.assertInventoryRequiresConfirmedTakeover(ctx)
+	f.assertInventoryScopesVerifiedRuntime(ctx)
 
 	f.startRuntime(ctx)
 	initial := f.waitReady(ctx)
@@ -228,9 +222,9 @@ func TestDockerUbuntuDesktopRuntimeLifecycle(t *testing.T) {
 	afterManualStart := f.waitPingAfter(ctx, afterRestart.ProcessStartedAtMs)
 
 	if _, err := f.tryHelper(ctx, afterManualStart.LocalUIURL, "upgrade", targetVersion); err == nil || !strings.Contains(err.Error(), "upgrade not supported") {
-		t.Fatalf("desktop-managed sys.upgrade error = %v, want unsupported", err)
+		t.Fatalf("Runtime sys.upgrade error = %v, want unsupported", err)
 	}
-	f.performDesktopOwnedUpgrade(ctx)
+	f.performManagedUpgrade(ctx)
 	afterUpgrade := f.waitPingAfter(ctx, afterManualStart.ProcessStartedAtMs)
 
 	finalStatus := f.waitReady(ctx)
@@ -578,36 +572,22 @@ func (f *fixture) waitNetworkExposureReady(ctx context.Context, reportPath strin
 }
 
 func (f *fixture) startRuntime(ctx context.Context) {
-	f.startRuntimeWithOwner(ctx, desktopOwnerID)
-}
-
-func (f *fixture) startOwnerlessRuntime(ctx context.Context) {
-	f.startRuntimeWithOwner(ctx, "")
-}
-
-func (f *fixture) startRuntimeWithOwner(ctx context.Context, ownerID string) {
 	f.t.Helper()
 	args := []string{
 		"exec", "-d",
-	}
-	if ownerID != "" {
-		args = append(args, "--env", "REDEVEN_DESKTOP_OWNER_ID="+ownerID)
-	}
-	args = append(args,
 		f.containerName,
 		managedRedeven,
 		"run",
 		"--mode", "desktop",
-		"--desktop-managed",
 		"--state-root", containerStateRoot,
 		"--local-ui-bind", "127.0.0.1:0",
-	)
+	}
 	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", args...); err != nil {
 		f.t.Fatalf("start runtime: %v", err)
 	}
 }
 
-func (f *fixture) assertInventoryRequiresConfirmedTakeover(ctx context.Context) {
+func (f *fixture) assertInventoryScopesVerifiedRuntime(ctx context.Context) {
 	f.t.Helper()
 	isolationContainer := f.containerName + "-isolation"
 	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "run", "-d", "--name", isolationContainer, ubuntuImage, "sleep", "infinity"); err != nil {
@@ -645,11 +625,9 @@ func (f *fixture) assertInventoryRequiresConfirmedTakeover(ctx context.Context) 
 	}
 	if _, err := f.runHost(ctx, f.repoRoot, nil,
 		"docker", "exec", "-d",
-		"--env", "REDEVEN_DESKTOP_OWNER_ID="+desktopOwnerID,
 		isolationContainer,
 		managedRedeven, "run",
 		"--mode", "desktop",
-		"--desktop-managed",
 		"--state-root", containerStateRoot,
 		"--local-ui-bind", "127.0.0.1:0",
 	); err != nil {
@@ -668,62 +646,31 @@ func (f *fixture) assertInventoryRequiresConfirmedTakeover(ctx context.Context) 
 		f.t.Fatalf("isolation runtime inventory did not become ready: %#v", isolationInventory)
 	}
 
-	f.startOwnerlessRuntime(ctx)
+	f.startRuntime(ctx)
 	deadline := time.Now().Add(20 * time.Second)
 	var inventory runtimemanagement.RuntimeProcessInventory
 	for time.Now().Before(deadline) {
 		inventory = f.runtimeInventory(ctx)
-		if inventory.Summary.ConfirmedTakeover == 1 {
+		if inventory.Summary.Automatic == 1 {
 			break
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
-	if inventory.Summary.ConfirmedTakeover != 1 || inventory.Summary.Blocked != 0 || len(inventory.Instances) != 1 {
+	if inventory.Summary.Automatic != 1 || inventory.Summary.Blocked != 0 || len(inventory.Instances) != 1 {
 		f.dumpContainerDiagnostics(ctx)
-		f.t.Fatalf("runtime inventory did not require confirmed takeover: %#v", inventory)
-	}
-	f.dockerExec(ctx, nil, "rm", "-f", runtimeLockPath)
-	leaseRemovalDeadline := time.Now().Add(20 * time.Second)
-	for time.Now().Before(leaseRemovalDeadline) {
-		inventory = f.runtimeInventory(ctx)
-		if inventory.Summary.ConfirmedTakeover == 1 && inventory.Summary.Blocked == 0 && len(inventory.Instances) == 1 {
-			break
-		}
-		time.Sleep(250 * time.Millisecond)
-	}
-	if inventory.Summary.ConfirmedTakeover != 1 || inventory.Summary.Blocked != 0 || len(inventory.Instances) != 1 {
-		f.dumpContainerDiagnostics(ctx)
-		f.t.Fatalf("ownerless runtime inventory did not stabilize after lease removal: %#v", inventory)
+		f.t.Fatalf("runtime inventory did not identify the verified target: %#v", inventory)
 	}
 	instance := inventory.Instances[0]
-	if inventory.Summary.ConfirmedTakeover != 1 || instance.IdentityStatus != runtimemanagement.RuntimeProcessIdentityVerified ||
-		instance.OwnerStatus != runtimemanagement.RuntimeProcessOwnerMissing || instance.LayoutStatus != runtimemanagement.RuntimeProcessLayoutCurrent ||
-		instance.OwnerEvidence != runtimemanagement.RuntimeProcessOwnerEvidenceMissing || instance.StopAuthority != runtimemanagement.RuntimeProcessStopConfirmedTakeover {
-		f.t.Fatalf("ownerless runtime inventory after lease removal = %#v", inventory)
+	if instance.IdentityStatus != runtimemanagement.RuntimeProcessIdentityVerified ||
+		instance.LayoutStatus != runtimemanagement.RuntimeProcessLayoutCurrent ||
+		instance.StopAuthority != runtimemanagement.RuntimeProcessStopAutomatic {
+		f.t.Fatalf("verified runtime inventory = %#v", inventory)
 	}
-	automaticErr := f.stopRuntimeInventoryInContainer(ctx, f.containerName, inventory, runtimemanagement.RuntimeProcessReconciliationAutomatic)
-	if automaticErr == nil || (!strings.Contains(automaticErr.Error(), runtimemanagement.RuntimeProcessErrorTakeoverRequired) &&
-		!strings.Contains(automaticErr.Error(), runtimemanagement.RuntimeProcessErrorInventoryChanged)) {
-		f.t.Fatalf("automatic stop error = %v, want %s or %s", automaticErr, runtimemanagement.RuntimeProcessErrorTakeoverRequired, runtimemanagement.RuntimeProcessErrorInventoryChanged)
-	}
-
-	stopDeadline := time.Now().Add(15 * time.Second)
-	for {
-		inventory = f.runtimeInventory(ctx)
-		if len(inventory.Instances) == 0 {
-			break
-		}
-		err := f.stopRuntimeInventoryInContainer(ctx, f.containerName, inventory, runtimemanagement.RuntimeProcessReconciliationConfirmedTakeover)
-		if err == nil {
-			break
-		}
-		if !strings.Contains(err.Error(), runtimemanagement.RuntimeProcessErrorInventoryChanged) || !time.Now().Before(stopDeadline) {
-			f.t.Fatalf("confirmed takeover stop: %v", err)
-		}
-		time.Sleep(100 * time.Millisecond)
+	if err := f.stopRuntimeInventoryInContainer(ctx, f.containerName, inventory); err != nil {
+		f.t.Fatalf("verified target stop: %v", err)
 	}
 	if after := f.runtimeInventory(ctx); len(after.Instances) != 0 {
-		f.t.Fatalf("confirmed takeover left target processes: %#v", after)
+		f.t.Fatalf("verified target stop left processes: %#v", after)
 	}
 	isolationAfter := f.runtimeInventoryInContainer(ctx, isolationContainer)
 	if isolationAfter.Summary.Automatic != 1 || len(isolationAfter.Instances) != 1 {
@@ -736,7 +683,7 @@ func (f *fixture) assertInventoryRequiresConfirmedTakeover(ctx context.Context) 
 	}
 }
 
-func (f *fixture) performDesktopOwnedUpgrade(ctx context.Context) {
+func (f *fixture) performManagedUpgrade(ctx context.Context) {
 	f.t.Helper()
 	f.stopRuntime(ctx)
 	f.dockerExec(ctx, nil, "cp", stagedUpgrade, managedRedeven)
@@ -779,7 +726,6 @@ func (f *fixture) runtimeInventory(ctx context.Context) runtimemanagement.Runtim
 		"desktop-runtime-inventory",
 		"--runtime-root", containerStateRoot,
 		"--state-root", containerStateRoot,
-		"--desktop-owner-id", desktopOwnerID,
 		"--current-executable", managedRedeven,
 	)
 	var inventory runtimemanagement.RuntimeProcessInventory
@@ -797,7 +743,6 @@ func (f *fixture) runtimeInventoryInContainer(ctx context.Context, containerName
 		"desktop-runtime-inventory",
 		"--runtime-root", containerStateRoot,
 		"--state-root", containerStateRoot,
-		"--desktop-owner-id", desktopOwnerID,
 		"--current-executable", managedRedeven,
 	)
 	if err != nil {
@@ -814,7 +759,6 @@ func (f *fixture) stopRuntimeInventoryInContainer(
 	ctx context.Context,
 	containerName string,
 	inventory runtimemanagement.RuntimeProcessInventory,
-	mode runtimemanagement.RuntimeProcessReconciliationMode,
 ) error {
 	f.t.Helper()
 	if len(inventory.Instances) == 0 {
@@ -826,9 +770,7 @@ func (f *fixture) stopRuntimeInventoryInContainer(
 		"desktop-runtime-stop",
 		"--runtime-root", containerStateRoot,
 		"--state-root", containerStateRoot,
-		"--desktop-owner-id", desktopOwnerID,
 		"--current-executable", managedRedeven,
-		"--reconciliation-mode", string(mode),
 		"--all-matching",
 		"--expected-inventory-digest", inventory.InventoryDigest,
 		"--grace-period", "10s",
@@ -862,7 +804,7 @@ func (f *fixture) stopAutomaticRuntimeInventoryInContainer(
 		if len(inventory.Instances) == 0 {
 			return nil
 		}
-		err := f.stopRuntimeInventoryInContainer(ctx, containerName, inventory, runtimemanagement.RuntimeProcessReconciliationAutomatic)
+		err := f.stopRuntimeInventoryInContainer(ctx, containerName, inventory)
 		if err == nil {
 			return nil
 		}
@@ -887,8 +829,8 @@ func (f *fixture) recoverRuntimeAfterManagementSocketLoss(ctx context.Context, p
 	if blocked.Status != "blocked" || blocked.Code != "live_process_without_management_socket" {
 		f.t.Fatalf("socket removal status = %#v, want live_process_without_management_socket", blocked)
 	}
-	if blocked.LockOwner == nil || !blocked.LockOwner.DesktopManaged || blocked.LockOwner.PID != status.PID {
-		f.t.Fatalf("blocked status did not preserve desktop-managed lock owner: %#v", blocked)
+	if blocked.LockOwner == nil || blocked.LockOwner.PID != status.PID {
+		f.t.Fatalf("blocked status did not preserve runtime lock identity: %#v", blocked)
 	}
 	if blocked.Diagnostics == nil || !blocked.Diagnostics.PIDAlive || blocked.Diagnostics.SocketReachable {
 		f.t.Fatalf("blocked status did not expose socket diagnostics: %#v", blocked)
@@ -962,10 +904,7 @@ func (f *fixture) waitReady(ctx context.Context) launchReport {
 
 func (f *fixture) assertReadyRuntimeStatus(report launchReport) {
 	f.t.Helper()
-	if !report.DesktopManaged || report.DesktopOwnerID != desktopOwnerID {
-		f.t.Fatalf("ready runtime ownership = desktop_managed:%v owner:%q, want owner %q; report=%#v", report.DesktopManaged, report.DesktopOwnerID, desktopOwnerID, report)
-	}
-	if report.RuntimeControl == nil || report.RuntimeControl.DesktopOwnerID != desktopOwnerID || report.RuntimeControl.Token == "" {
+	if report.RuntimeControl == nil || report.RuntimeControl.Token == "" {
 		f.t.Fatalf("ready runtime-control endpoint is incomplete: %#v", report.RuntimeControl)
 	}
 	if report.RuntimeService == nil {
@@ -1063,7 +1002,6 @@ func (f *fixture) openBridgeAndAssertRequests(ctx context.Context, status launch
 	defer cancel()
 	cmd := exec.CommandContext(bridgeCtx,
 		"docker", "exec", "-i",
-		"--env", "REDEVEN_DESKTOP_OWNER_ID="+desktopOwnerID,
 		f.containerName,
 		containerRedeven, "desktop-bridge",
 		"--state-root", containerStateRoot,
@@ -1103,7 +1041,7 @@ func (f *fixture) openBridgeAndAssertRequests(ctx context.Context, status launch
 	if !hello.LocalUI.Available || !hello.RuntimeControl.Available {
 		f.t.Fatalf("bridge hello missing surfaces: %#v", hello)
 	}
-	if hello.RuntimeControl.Token == "" || hello.RuntimeControl.DesktopOwnerID != desktopOwnerID {
+	if hello.RuntimeControl.Token == "" {
 		f.t.Fatalf("unexpected runtime-control hello: %#v", hello.RuntimeControl)
 	}
 
@@ -1113,7 +1051,9 @@ func (f *fixture) openBridgeAndAssertRequests(ctx context.Context, status launch
 	}
 	localBody := bridgeHTTPRequest(f.t, reader, stdin, "local-ui-e2e", desktopbridge.StreamSurfaceLocalUI, "GET /api/local/runtime/health HTTP/1.1\r\nHost: "+localURL.Host+"\r\nConnection: close\r\n\r\n")
 	assertContains(f.t, string(localBody), `"status":"online"`)
-	assertContains(f.t, string(localBody), `"desktop_managed":true`)
+	if bytes.Contains(localBody, []byte("desktop_managed")) || bytes.Contains(localBody, []byte("desktop_owner_id")) {
+		f.t.Fatalf("Local UI health exposed removed Desktop ownership fields: %s", string(localBody))
+	}
 
 	if status.RuntimeControl == nil {
 		f.t.Fatal("runtime status did not include runtime-control")
@@ -1123,10 +1063,9 @@ func (f *fixture) openBridgeAndAssertRequests(ctx context.Context, status launch
 		f.t.Fatalf("parse runtime-control URL %q: %v", status.RuntimeControl.BaseURL, err)
 	}
 	controlRequest := fmt.Sprintf(
-		"GET /v1/provider-link HTTP/1.1\r\nHost: %s\r\nAuthorization: Bearer %s\r\nX-Redeven-Desktop-Owner-ID: %s\r\nConnection: close\r\n\r\n",
+		"GET /v2/provider-link HTTP/1.1\r\nHost: %s\r\nAuthorization: Bearer %s\r\nConnection: close\r\n\r\n",
 		controlURL.Host,
 		hello.RuntimeControl.Token,
-		hello.RuntimeControl.DesktopOwnerID,
 	)
 	controlBody := bridgeHTTPRequest(f.t, reader, stdin, "runtime-control-e2e", desktopbridge.StreamSurfaceRuntimeControl, controlRequest)
 	assertContains(f.t, string(controlBody), `"ok":true`)
@@ -1193,11 +1132,9 @@ func (f *fixture) runSecondRuntimeAttach(ctx context.Context) launchReport {
 	f.dockerExec(ctx, nil, "rm", "-f", reportPath)
 	out, err := f.runHost(ctx, f.repoRoot, nil,
 		"docker", "exec", "-i",
-		"--env", "REDEVEN_DESKTOP_OWNER_ID="+desktopOwnerID,
 		f.containerName,
 		managedRedeven, "run",
 		"--mode", "desktop",
-		"--desktop-managed",
 		"--state-root", containerStateRoot,
 		"--local-ui-bind", "127.0.0.1:0",
 		"--startup-report-file", reportPath,

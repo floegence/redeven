@@ -38,8 +38,7 @@ export function assertAttachSmokeConfiguration(config) {
     || requiredPorts.some((port) => !Number.isInteger(port) || port < 1024 || port > 65535)
     || requiredPIDs.some((pid) => !Number.isInteger(pid) || pid <= 1)
     || !path.isAbsolute(String(config.runningRoot ?? ''))
-    || !path.isAbsolute(String(config.stateRoot ?? ''))
-    || !String(config.ownerID ?? '').trim()) {
+    || !path.isAbsolute(String(config.stateRoot ?? ''))) {
     throw new Error('attach smoke requires complete running Desktop provenance');
   }
   if (!runningCommit || !runtimeCommit
@@ -1255,7 +1254,6 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
       report: config.reportRoot,
     },
     ports: { local_ui: config.localUIPort, cdp: config.cdpPort, inspector: config.inspectorPort },
-    owner_id: config.ownerID,
     pids: config.pids,
     timings,
     first_panel_open: {

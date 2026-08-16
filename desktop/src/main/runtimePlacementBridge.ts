@@ -175,9 +175,6 @@ export function buildRuntimePlacementBridgePlan(input: Readonly<{
     command: containerRuntimeExecCommand({
       engine: input.placement.container_engine,
       container_id: input.placement.container_id,
-      env: {
-        REDEVEN_DESKTOP_OWNER_ID: undefined,
-      },
       // IMPORTANT: Container targets execute the runtime binary inside the
       // container after placement bootstrap has resolved the container-local
       // binary path. Do not fall back to PATH lookup; Start Runtime owns

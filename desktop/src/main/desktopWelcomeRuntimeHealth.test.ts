@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { DesktopRuntimeHealth } from '../shared/desktopRuntimeHealth';
-import type { DesktopManagedRuntimePresence } from '../shared/desktopRuntimePresence';
+import type { DesktopRuntimePresence } from '../shared/desktopRuntimePresence';
 import {
   DesktopWelcomeRuntimeHealthStore,
   desktopWelcomeRuntimeHealthIsFresh,
@@ -51,8 +51,8 @@ function target(
 }
 
 function presence(
-  overrides: Partial<DesktopManagedRuntimePresence> = {},
-): DesktopManagedRuntimePresence {
+  overrides: Partial<DesktopRuntimePresence> = {},
+): DesktopRuntimePresence {
   const base = {
     target_id: 'local:demo',
     placement_target_id: 'local:host:demo',
@@ -65,11 +65,11 @@ function presence(
     running: true,
     local_ui_url: 'http://127.0.0.1:24000/',
     openable: true,
-    runtime_control_status: { state: 'available', owner: 'current_desktop' },
+    runtime_control_status: { state: 'available' },
     operations: {},
     checked_at_unix_ms: 1,
     ...overrides,
-  } as DesktopManagedRuntimePresence;
+  } as DesktopRuntimePresence;
   return base;
 }
 
@@ -143,7 +143,7 @@ describe('DesktopWelcomeRuntimeHealthStore', () => {
   });
 
   it('coalesces physical probes while projecting each saved record identity independently', async () => {
-    const probeResult = deferred<{ health: DesktopRuntimeHealth; presence: DesktopManagedRuntimePresence }>();
+    const probeResult = deferred<{ health: DesktopRuntimeHealth; presence: DesktopRuntimePresence }>();
     let firstProbeCount = 0;
     let secondProbeCount = 0;
     const store = new DesktopWelcomeRuntimeHealthStore(() => undefined);

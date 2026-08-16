@@ -42,7 +42,7 @@ describe('LauncherOperationRegistry', () => {
       action: operation.action,
       started_at_unix_ms: operation.started_at_unix_ms,
     }, 'needs_confirmation', {
-      title: 'Runtime takeover confirmation required',
+      title: 'Runtime operation confirmation required',
       detail: 'Review the verified Runtime processes.',
     });
     expect(registry.get(operation.operation_key)?.status).toBe('needs_confirmation');

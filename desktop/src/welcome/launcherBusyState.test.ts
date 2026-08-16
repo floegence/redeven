@@ -57,7 +57,6 @@ function providerRuntimeTarget(
     runtime_openable: false,
     runtime_control_status: {
       state: 'available',
-      owner: 'current_desktop',
     },
     provider_connection_state: 'connected',
     provider_link_state: 'linked',

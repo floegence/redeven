@@ -378,7 +378,11 @@
       "closeLabel": "外観設定を閉じる",
       "commandDescription": "カラーモードとテーマを選択します。",
       "modeLabel": "カラーモード",
-      "mode": { "system": "システム", "light": "ライト", "dark": "ダーク" },
+      "mode": {
+        "system": "システム",
+        "light": "ライト",
+        "dark": "ダーク"
+      },
       "systemResolvedLight": "現在、システムはライトモードを使用しています",
       "systemResolvedDark": "現在、システムはダークモードを使用しています",
       "themesLabel": "テーマ",
@@ -473,12 +477,30 @@
           "other": "{lead}: {title}、ほか{count}件"
         },
         "withoutTitle": {
-          "needsAttention": { "one": "対応が必要なタスクが1件あります", "other": "対応が必要なタスクが{count}件あります" },
-          "needsReview": { "one": "確認が必要なタスクが1件あります", "other": "確認が必要なタスクが{count}件あります" },
-          "working": { "one": "Flower が1件のタスクを処理しています", "other": "Flower が{count}件のタスクを処理しています" },
-          "queued": { "one": "1件のタスクが開始を待っています", "other": "{count}件のタスクが開始を待っています" },
-          "stopped": { "one": "1件のタスクが停止しました", "other": "{count}件のタスクが停止しました" },
-          "ready": { "one": "1件の結果を確認できます", "other": "{count}件の結果を確認できます" }
+          "needsAttention": {
+            "one": "対応が必要なタスクが1件あります",
+            "other": "対応が必要なタスクが{count}件あります"
+          },
+          "needsReview": {
+            "one": "確認が必要なタスクが1件あります",
+            "other": "確認が必要なタスクが{count}件あります"
+          },
+          "working": {
+            "one": "Flower が1件のタスクを処理しています",
+            "other": "Flower が{count}件のタスクを処理しています"
+          },
+          "queued": {
+            "one": "1件のタスクが開始を待っています",
+            "other": "{count}件のタスクが開始を待っています"
+          },
+          "stopped": {
+            "one": "1件のタスクが停止しました",
+            "other": "{count}件のタスクが停止しました"
+          },
+          "ready": {
+            "one": "1件の結果を確認できます",
+            "other": "{count}件の結果を確認できます"
+          }
         },
         "secondaryWorking": {
           "one": "Flower がほかに1件のタスクを処理しています",
@@ -2623,10 +2645,8 @@
     "loading": "読み込み中...",
     "statusLabel": "ステータス",
     "statusNote": "maintenance controller が観測した現在のステータス。",
-    "serviceOwner": "サービス所有者",
-    "serviceOwnerNote": "この永続的なランタイム サービスのライフサイクル所有者。",
     "maintenanceAuthority": "メンテナンス権限",
-    "maintenanceAuthorityNote": "このセッションの再起動および更新アクションの現在の所有者。",
+    "maintenanceAuthorityNote": "このセッションで再起動と更新操作を実行する現在の経路。",
     "compatibilityLabel": "互換性",
     "compatibilityNote": "Desktop とランタイム サービスの互換性状態。",
     "activeWork": "アクティブな作業",
@@ -2647,10 +2667,6 @@
     "noActiveWork": "アクティブな作業はありません",
     "runtimeRpc": "ランタイム RPC",
     "unknown": "不明",
-    "owner": {
-      "redevenDesktop": "Redeven Desktop",
-      "externalService": "外部サービス"
-    },
     "status": {
       "online": "オンライン",
       "offline": "オフライン"
@@ -2660,8 +2676,7 @@
       "updateAvailable": "更新可能",
       "restartRecommended": "再起動推奨",
       "updateRequired": "更新が必要",
-      "desktopUpdateRequired": "Desktop 更新が必要",
-      "managedElsewhere": "別の場所で管理"
+      "desktopUpdateRequired": "Desktop 更新が必要"
     },
     "desktopModelState": {
       "bound": "バインド済み",
@@ -2687,7 +2702,8 @@
         "one": "{count} Webサービス",
         "other": "{count} Webサービス"
       }
-    }
+    },
+    "desktopShell": "Redeven Desktop"
   },
   "runtimeConfig": {
     "title": "シェルおよびワークスペース",
@@ -3783,7 +3799,10 @@
       "errorInvalidEncoding": "このテキストファイルは有効な UTF-8 ではありません。",
       "errorUploadFailed": "アップロードに失敗しました。もう一度お試しください。",
       "errorUnavailable": "選択したモデルでは添付ファイルを使用できません。",
-      "lines": { "one": "{count} 行", "other": "{count} 行" },
+      "lines": {
+        "one": "{count} 行",
+        "other": "{count} 行"
+      },
       "added": "{name} を追加しました。",
       "converted": "長文を添付ファイル {name} に変換しました。",
       "uploaded": "{name} をアップロードしました。",
@@ -4315,7 +4334,58 @@
       "backToList": "プラグイン一覧に戻る",
       "reviewPermissions": "必要な権限を確認",
       "reviewUpdate": "更新内容を確認",
-      "updateReview": {"title":"{plugin} の更新を確認","description":"更新内容を確認してから対象をインストールします。","loading":"更新内容を準備しています...","versionChange":"バージョン","currentVersion":"現在","targetVersion":"新規","newBuild":"新しい開発ビルド","replacementBuild":"置換ビルド","whatIsNew":"更新内容","features":"新機能","improvements":"改善","fixes":"修正","notices":"注意事項","noReleaseNotes":"公開元から更新情報は提供されていません。","impactTitle":"アクセスと更新の影響","noAccessChange":"既存の権限と許可は維持され、別のアクセス変更は要求されません。","securityChanges":"{count} 件のセキュリティ宣言が追加または変更されています。Host の検査結果を確認してください。","developmentEvidence":"Redeven は開発用配布物と能力契約の識別情報を確認しました。","developmentInspectionUnavailable":"開発ビルドでは署名や宣言差分の検査は実行されません。","externalEvidence":"Host の検査はこのパッケージそのものに紐付いています。","enabledRetained":"現在の有効化状態が維持されます。","grantsRetained":"既存の権限許可は維持されます。","technicalEvidence":"技術的な証拠","packageHash":"パッケージハッシュ","manifestHash":"マニフェストハッシュ","entriesHash":"エントリーハッシュ","capabilityVersion":"能力契約","releaseNotesID":"更新情報 ID","updateToVersion":"v{version} に更新","installNewBuild":"新しいビルドをインストール","replaceBuild":"現在のビルドを置換","noUpdate":"このビルドはすでにインストールされています。","downgradeBlocked":"対象はインストール済みバージョンより古いものです。","riskConfirm":"現在のビルドが置き換わり、セキュリティ宣言が変わる可能性を理解しました。","committing":"確認した更新をインストールしています...","reconciling":"更新結果を確認しています...","continueReconciliation":"結果の確認を続ける","stale":"プラグインまたは対象が変更されました。もう一度確認してください。","failed":"更新は完了しませんでした。確認済みの対象は利用できます。","outcomeUnknown":"Redeven は更新結果をまだ確認できません。再送信せず確認を続けます。","refreshFailed":"更新は完了しましたが、Plugin Center の一覧を更新できませんでした。","completeTitle":"{plugin} は最新です","completeDescription":"v{version} をインストールしました。状態と許可は維持されています。","done":"完了","viewPermissions":"権限を表示","allCurrent":"すべてのプラグインは最新です。","sourceTitle":"更新パッケージを指定","sourceDescription":"Redeven が正確な更新を検査するため、提供元をもう一度指定してください。","reviewPackage":"パッケージを確認","readOnly":"更新内容は確認できますが、インストールには環境管理者が必要です。"},
+      "updateReview": {
+        "title": "{plugin} の更新を確認",
+        "description": "更新内容を確認してから対象をインストールします。",
+        "loading": "更新内容を準備しています...",
+        "versionChange": "バージョン",
+        "currentVersion": "現在",
+        "targetVersion": "新規",
+        "newBuild": "新しい開発ビルド",
+        "replacementBuild": "置換ビルド",
+        "whatIsNew": "更新内容",
+        "features": "新機能",
+        "improvements": "改善",
+        "fixes": "修正",
+        "notices": "注意事項",
+        "noReleaseNotes": "公開元から更新情報は提供されていません。",
+        "impactTitle": "アクセスと更新の影響",
+        "noAccessChange": "既存の権限と許可は維持され、別のアクセス変更は要求されません。",
+        "securityChanges": "{count} 件のセキュリティ宣言が追加または変更されています。Host の検査結果を確認してください。",
+        "developmentEvidence": "Redeven は開発用配布物と能力契約の識別情報を確認しました。",
+        "developmentInspectionUnavailable": "開発ビルドでは署名や宣言差分の検査は実行されません。",
+        "externalEvidence": "Host の検査はこのパッケージそのものに紐付いています。",
+        "enabledRetained": "現在の有効化状態が維持されます。",
+        "grantsRetained": "既存の権限許可は維持されます。",
+        "technicalEvidence": "技術的な証拠",
+        "packageHash": "パッケージハッシュ",
+        "manifestHash": "マニフェストハッシュ",
+        "entriesHash": "エントリーハッシュ",
+        "capabilityVersion": "能力契約",
+        "releaseNotesID": "更新情報 ID",
+        "updateToVersion": "v{version} に更新",
+        "installNewBuild": "新しいビルドをインストール",
+        "replaceBuild": "現在のビルドを置換",
+        "noUpdate": "このビルドはすでにインストールされています。",
+        "downgradeBlocked": "対象はインストール済みバージョンより古いものです。",
+        "riskConfirm": "現在のビルドが置き換わり、セキュリティ宣言が変わる可能性を理解しました。",
+        "committing": "確認した更新をインストールしています...",
+        "reconciling": "更新結果を確認しています...",
+        "continueReconciliation": "結果の確認を続ける",
+        "stale": "プラグインまたは対象が変更されました。もう一度確認してください。",
+        "failed": "更新は完了しませんでした。確認済みの対象は利用できます。",
+        "outcomeUnknown": "Redeven は更新結果をまだ確認できません。再送信せず確認を続けます。",
+        "refreshFailed": "更新は完了しましたが、Plugin Center の一覧を更新できませんでした。",
+        "completeTitle": "{plugin} は最新です",
+        "completeDescription": "v{version} をインストールしました。状態と許可は維持されています。",
+        "done": "完了",
+        "viewPermissions": "権限を表示",
+        "allCurrent": "すべてのプラグインは最新です。",
+        "sourceTitle": "更新パッケージを指定",
+        "sourceDescription": "Redeven が正確な更新を検査するため、提供元をもう一度指定してください。",
+        "reviewPackage": "パッケージを確認",
+        "readOnly": "更新内容は確認できますが、インストールには環境管理者が必要です。"
+      },
       "viewPolicyRestriction": "ポリシー制限を確認",
       "viewRuntimeRequirement": "ランタイム要件を確認",
       "viewTrustDetails": "信頼情報を確認",

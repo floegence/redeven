@@ -101,7 +101,6 @@ import {
   selectLatestDesktopWelcomeSnapshot,
 } from '../shared/desktopLauncherIPC';
 import type { DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
-import type { DesktopRuntimeProcessTakeoverProposal } from '../shared/desktopRuntimeProcessTakeover';
 import {
   desktopProviderEnvironmentRuntimeLabel,
   desktopProviderOnlineEnvironmentCount,
@@ -129,7 +128,11 @@ import {
   type FlowerThreadFocusRequest,
   type FlowerSurfaceWarmupState,
 } from '../../../internal/flower_ui/src';
-import { desktopEntryKindOwnsRuntimeManagement } from '../shared/environmentManagementPrinciples';
+import { desktopEntryKindSupportsRuntimeManagement } from '../shared/environmentManagementPrinciples';
+import {
+  providerRuntimeGatewayCandidates,
+  type ProviderRuntimeLifecycleOperation,
+} from '../shared/providerRuntimeGatewaySelection';
 import {
   openConnectionPhaseSequence,
   type DesktopOpenConnectionPhase,
@@ -515,11 +518,6 @@ type ControlPlaneDialogState = Readonly<{
   custom_provider_origin: string;
 }> | null;
 
-type RuntimeProcessTakeoverDialogState = Readonly<{
-  proposal: DesktopRuntimeProcessTakeoverProposal;
-  continuation_action: DesktopLauncherActionRequest;
-}>;
-
 type EnvironmentGuidanceActionResolution = Readonly<{
   close_panel: boolean;
   next_session: EnvironmentGuidanceSessionState;
@@ -582,6 +580,12 @@ type ProviderRuntimeLinkConfirmationAction = 'connect' | 'disconnect';
 type ProviderRuntimeLinkConfirmationState = Readonly<{
   environment: DesktopEnvironmentEntry;
   action: ProviderRuntimeLinkConfirmationAction;
+}>;
+
+type ProviderRuntimeGatewaySelectionState = Readonly<{
+  provider_environment: DesktopEnvironmentEntry;
+  operation: ProviderRuntimeLifecycleOperation;
+  candidates: readonly DesktopEnvironmentEntry[];
 }>;
 
 type LauncherActionErrorTarget = 'connect' | 'settings' | 'dialog' | 'control_plane_dialog' | 'gateway_dialog';
@@ -1281,8 +1285,6 @@ function localizedRuntimeMessage(i18n: DesktopI18n, message: string): string {
     'Start this runtime before opening it.': 'runtimeMessage.startRuntimeBeforeOpening',
     'Restart this runtime from Desktop so runtime-control can be prepared.': 'runtimeMessage.restartRuntimeForRuntimeControl',
     'Runtime-control is not available for this runtime.': 'runtimeMessage.runtimeControlUnavailable',
-    'This runtime is owned by another Desktop instance.': 'runtimeMessage.runtimeOwnedByAnotherDesktop',
-    'This runtime is managed by another Desktop instance.': 'runtimeMessage.runtimeManagedByAnotherDesktop',
     'Open this runtime to prepare the Desktop bridge and provider connection.': 'runtimeMessage.openRuntimePrepareProviderConnection',
     'Update this runtime before continuing.': 'runtimeMessage.updateRuntimeBeforeContinuing',
     'Update this incompatible runtime before continuing.': 'runtimeMessage.updateIncompatibleRuntimeBeforeContinuing',
@@ -1476,7 +1478,6 @@ function localizedFactLabel(i18n: DesktopI18n, label: string): string {
     PROVIDER: 'environmentFacts.provider',
     'LOCAL LINK': 'environmentFacts.localLink',
     'ENV ID': 'environmentFacts.environmentId',
-    OWNER: 'environmentFacts.owner',
     Provider: 'environmentFacts.provider',
     Gateway: 'environmentCenter.gatewaysSection',
     'Runtime root': 'environmentFacts.runtimeRoot',
@@ -2831,12 +2832,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [runtimeContainerOptionsError, setRuntimeContainerOptionsError] = createSignal('');
   const [runtimeContainerOptionsKey, setRuntimeContainerOptionsKey] = createSignal('');
   const [controlPlaneDialogState, setControlPlaneDialogState] = createSignal<ControlPlaneDialogState>(null);
-  const [runtimeProcessTakeoverDialog, setRuntimeProcessTakeoverDialog] = createSignal<RuntimeProcessTakeoverDialogState | null>(null);
-  const [runtimeProcessTakeoverSubmitting, setRuntimeProcessTakeoverSubmitting] = createSignal(false);
   const [deleteTarget, setDeleteTarget] = createSignal<DesktopEnvironmentEntry | null>(null);
   const [deleteGatewayTarget, setDeleteGatewayTarget] = createSignal<DesktopGatewaySource | null>(null);
   const [providerRuntimeLinkConfirmation, setProviderRuntimeLinkConfirmation] = createSignal<ProviderRuntimeLinkConfirmationState | null>(null);
   const [providerRuntimeLinkProviderEnvironmentID, setProviderRuntimeLinkProviderEnvironmentID] = createSignal('');
+  const [providerRuntimeGatewaySelection, setProviderRuntimeGatewaySelection] = createSignal<ProviderRuntimeGatewaySelectionState | null>(null);
+  const [providerRuntimeGatewayEnvironmentID, setProviderRuntimeGatewayEnvironmentID] = createSignal('');
   const [deleteControlPlaneTarget, setDeleteControlPlaneTarget] = createSignal<DesktopControlPlaneSummary | null>(null);
   const [flowerTurnLauncherOpen, setFlowerTurnLauncherOpen] = createSignal(false);
   const [flowerTurnLauncherIntent, setFlowerTurnLauncherIntent] = createSignal<FlowerTurnLauncherIntent | null>(null);
@@ -3609,17 +3610,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     requestEnvID?: string,
     request?: DesktopLauncherActionRequest,
   ): Promise<void> {
-    if (
-      failure.code === 'confirmation_required'
-      && failure.runtime_process_takeover
-      && failure.continuation_action
-    ) {
-      setRuntimeProcessTakeoverDialog({
-        proposal: failure.runtime_process_takeover,
-        continuation_action: failure.continuation_action,
-      });
-      return;
-    }
     const presentation = launcherActionFailurePresentation(i18n(), failure);
     if (presentation.refresh_snapshot) {
       try {
@@ -4336,43 +4326,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
   }
 
-  function cancelRuntimeProcessTakeover(): void {
-    const proposal = runtimeProcessTakeoverDialog()?.proposal;
-    if (proposal) {
-      console.info('[desktop-runtime-lifecycle]', JSON.stringify({
-        event: 'takeover_canceled',
-        operation: proposal.operation,
-        location: proposal.location,
-        target_id: proposal.target_id,
-        process_count: proposal.process_count,
-      }));
-    }
-    setRuntimeProcessTakeoverDialog(null);
-  }
-
-  async function confirmRuntimeProcessTakeover(): Promise<void> {
-    const state = runtimeProcessTakeoverDialog();
-    if (!state || runtimeProcessTakeoverSubmitting()) {
-      return;
-    }
-    setRuntimeProcessTakeoverSubmitting(true);
-    try {
-      const result = await performLauncherAction(state.continuation_action);
-      if (result) {
-        console.info('[desktop-runtime-lifecycle]', JSON.stringify({
-          event: 'takeover_confirmed',
-          operation: state.proposal.operation,
-          location: state.proposal.location,
-          target_id: state.proposal.target_id,
-          process_count: state.proposal.process_count,
-        }));
-        setRuntimeProcessTakeoverDialog(null);
-      }
-    } finally {
-      setRuntimeProcessTakeoverSubmitting(false);
-    }
-  }
-
   async function focusEnvironmentWindow(
     sessionKey: string,
     errorTarget: LauncherActionErrorTarget = 'connect',
@@ -4641,6 +4594,54 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return result?.outcome === expectedOutcome;
   }
 
+  function requestProviderRuntimeGatewaySelection(
+    environment: DesktopEnvironmentEntry,
+    operation: ProviderRuntimeLifecycleOperation,
+  ): void {
+    const candidates = providerRuntimeGatewayCandidates(environment, snapshot().environments, operation);
+    setProviderRuntimeGatewayEnvironmentID('');
+    setProviderRuntimeGatewaySelection({
+      provider_environment: environment,
+      operation,
+      candidates,
+    });
+  }
+
+  async function confirmProviderRuntimeGatewaySelection(): Promise<void> {
+    const selection = providerRuntimeGatewaySelection();
+    if (!selection) {
+      return;
+    }
+    const gatewayEnvironment = selection.candidates.find((candidate) => (
+      candidate.id === providerRuntimeGatewayEnvironmentID()
+    ));
+    if (!gatewayEnvironment) {
+      return;
+    }
+    const result = await performLauncherAction({
+      kind: 'run_gateway_environment_lifecycle',
+      environment_id: selection.provider_environment.id,
+      provider_environment_id: selection.provider_environment.id,
+      gateway_id: trimString(gatewayEnvironment.gateway_id),
+      gateway_env_id: trimString(gatewayEnvironment.gateway_env_id),
+      operation: selection.operation,
+      label: selection.provider_environment.label,
+    }, 'connect');
+    if (!result || !isDesktopLauncherActionSuccess(result)) {
+      return;
+    }
+    setProviderRuntimeGatewaySelection(null);
+    setProviderRuntimeGatewayEnvironmentID('');
+    const toastKey = selection.operation === 'start'
+      ? 'environmentCenter.runtimeStartedToast'
+      : selection.operation === 'stop'
+        ? 'environmentCenter.runtimeStoppedToast'
+        : selection.operation === 'restart'
+          ? 'environmentCenter.runtimeRestartedToast'
+          : 'environmentCenter.runtimeUpdatedToast';
+    showActionToast(i18n().t(toastKey, { label: selection.provider_environment.label }));
+  }
+
   async function startEnvironmentRuntime(
     environment: DesktopEnvironmentEntry,
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
@@ -4648,6 +4649,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       announceSuccess?: boolean;
     }> = {},
   ): Promise<boolean> {
+    if (environment.kind === 'provider_environment') {
+      requestProviderRuntimeGatewaySelection(environment, 'start');
+      return true;
+    }
     if (environment.kind === 'gateway_environment') {
       const started = await runGatewayEnvironmentLifecycle(
         environment,
@@ -4678,6 +4683,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     action: EnvironmentActionModel | undefined,
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
   ): Promise<boolean> {
+    if (environment.kind === 'provider_environment') {
+      requestProviderRuntimeGatewaySelection(environment, 'update_runtime');
+      return true;
+    }
     if (environment.kind === 'gateway_environment') {
       const updated = await runGatewayEnvironmentLifecycle(
         environment,
@@ -4721,6 +4730,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     environment: DesktopEnvironmentEntry,
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
   ): Promise<boolean> {
+    if (environment.kind === 'provider_environment') {
+      requestProviderRuntimeGatewaySelection(environment, 'restart');
+      return true;
+    }
     if (environment.kind === 'gateway_environment') {
       const restarted = await runGatewayEnvironmentLifecycle(
         environment,
@@ -4750,6 +4763,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     environment: DesktopEnvironmentEntry,
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
   ): Promise<boolean> {
+    if (environment.kind === 'provider_environment') {
+      requestProviderRuntimeGatewaySelection(environment, 'stop');
+      return true;
+    }
     if (environment.kind === 'gateway_environment') {
       const stopped = await runGatewayEnvironmentLifecycle(
         environment,
@@ -4820,7 +4837,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     // IMPORTANT: Provider-link confirmation is intentionally reachable only from
     // Local/SSH runtime cards. Provider Environment cards must never grant or
     // revoke provider control over a runtime.
-    if (!desktopEntryKindOwnsRuntimeManagement(environment.kind)) {
+    if (!desktopEntryKindSupportsRuntimeManagement(environment.kind)) {
       return;
     }
     const target = environment.provider_runtime_link_target;
@@ -6483,98 +6500,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         onConnect={connectControlPlaneFromDialog}
       />
 
-      <Dialog
-        open={runtimeProcessTakeoverDialog() !== null}
-        onOpenChange={(open) => {
-          if (!open && !runtimeProcessTakeoverSubmitting()) {
-            cancelRuntimeProcessTakeover();
-          }
-        }}
-        title={runtimeProcessTakeoverDialog()?.proposal.operation === 'stop'
-          ? i18n().t('runtimeTakeover.forceStopTitle')
-          : i18n().t('runtimeTakeover.forceRestartTitle')}
-        class="max-w-2xl"
-        footer={(
-          <div class="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              data-floe-autofocus
-              disabled={runtimeProcessTakeoverSubmitting()}
-              onClick={cancelRuntimeProcessTakeover}
-            >
-              {i18n().t('common.cancel')}
-            </Button>
-            <Button
-              variant="destructive"
-              loading={runtimeProcessTakeoverSubmitting()}
-              onClick={() => void confirmRuntimeProcessTakeover()}
-            >
-              {runtimeProcessTakeoverDialog()?.proposal.operation === 'stop'
-                ? i18n().t('runtimeTakeover.forceStopAction')
-                : i18n().t('runtimeTakeover.forceRestartAction')}
-            </Button>
-          </div>
-        )}
-      >
-        <Show when={runtimeProcessTakeoverDialog()?.proposal} keyed>
-          {(proposal) => (
-            <div class="space-y-4">
-              <div class="flex items-start gap-3 rounded-md border border-destructive/25 bg-destructive/10 px-4 py-3">
-                <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
-                <div class="space-y-1">
-                  <p class="text-sm font-semibold text-foreground">
-                    {i18n().t('runtimeTakeover.warningTitle', { count: proposal.process_count })}
-                  </p>
-                  <p class="text-xs leading-5 text-muted-foreground">
-                    {i18n().t('runtimeTakeover.warningDescription')}
-                  </p>
-                </div>
-              </div>
-
-              <dl class="grid grid-cols-[minmax(0,8rem)_minmax(0,1fr)] gap-x-4 gap-y-2 text-xs">
-                <dt class="text-muted-foreground">{i18n().t('runtimeTakeover.targetLabel')}</dt>
-                <dd class="min-w-0 break-words font-medium text-foreground">{proposal.target_label}</dd>
-                <dt class="text-muted-foreground">{i18n().t('runtimeTakeover.locationLabel')}</dt>
-                <dd class="font-medium text-foreground">{i18n().t(`runtimeTakeover.location.${proposal.location}` as DesktopTranslationKey)}</dd>
-              </dl>
-
-              <div class="max-h-72 space-y-2 overflow-y-auto pr-1">
-                <For each={proposal.instances}>
-                  {(instance) => (
-                    <section class="rounded-md border border-border bg-muted/15 px-4 py-3" aria-label={i18n().t('runtimeTakeover.processAriaLabel', { pid: instance.pid })}>
-                      <div class="flex flex-wrap items-center justify-between gap-2">
-                        <div class="font-mono text-sm font-semibold text-foreground">PID {instance.pid}</div>
-                        <Show when={instance.owner_status !== 'current'}>
-                          <Tag variant="warning" tone="soft" size="sm">
-                            {i18n().t(`runtimeTakeover.ownerStatus.${instance.owner_status}` as DesktopTranslationKey)}
-                          </Tag>
-                        </Show>
-                      </div>
-                      <dl class="mt-3 grid grid-cols-[minmax(0,8rem)_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-xs">
-                        <dt class="text-muted-foreground">{i18n().t('runtimeTakeover.startedLabel')}</dt>
-                        <dd class="text-foreground">{new Intl.DateTimeFormat(i18n().locale, { dateStyle: 'medium', timeStyle: 'medium' }).format(new Date(instance.process_started_at_unix_ms))}</dd>
-                        <dt class="text-muted-foreground">{i18n().t('runtimeTakeover.ownerEvidenceLabel')}</dt>
-                        <dd class="text-foreground">{i18n().t(`runtimeTakeover.ownerEvidence.${instance.owner_evidence}` as DesktopTranslationKey)}</dd>
-                        <dt class="text-muted-foreground">{i18n().t('runtimeTakeover.stateRootLabel')}</dt>
-                        <dd class="break-all font-mono text-[11px] text-foreground">{instance.state_root}</dd>
-                        <Show when={instance.runtime_version}>
-                          <dt class="text-muted-foreground">{i18n().t('runtimeTakeover.versionLabel')}</dt>
-                          <dd class="font-mono text-[11px] text-foreground">{instance.runtime_version}</dd>
-                        </Show>
-                      </dl>
-                    </section>
-                  )}
-                </For>
-              </div>
-
-              <p class="text-xs leading-5 text-muted-foreground">
-                {i18n().t('runtimeTakeover.authorizationNotice')}
-              </p>
-            </div>
-          )}
-        </Show>
-      </Dialog>
-
       <ConfirmDialog
         open={deleteTarget() !== null}
         onOpenChange={(open) => {
@@ -6651,6 +6576,84 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           </p>
         </div>
       </ConfirmDialog>
+
+      <Dialog
+        open={providerRuntimeGatewaySelection() !== null}
+        onOpenChange={(open) => {
+          if (!open && !busyStateMatchesAction(busyState(), 'run_gateway_environment_lifecycle')) {
+            setProviderRuntimeGatewaySelection(null);
+            setProviderRuntimeGatewayEnvironmentID('');
+          }
+        }}
+        title={i18n().t('environmentCenter.providerRuntimeGatewayTitle')}
+        class="max-w-xl"
+        footer={(
+          <div class="flex justify-end gap-2">
+            <Button
+              variant="ghost"
+              disabled={busyStateMatchesAction(busyState(), 'run_gateway_environment_lifecycle')}
+              onClick={() => {
+                setProviderRuntimeGatewaySelection(null);
+                setProviderRuntimeGatewayEnvironmentID('');
+              }}
+            >
+              {i18n().t('common.cancel')}
+            </Button>
+            <Button
+              variant="primary"
+              loading={busyStateMatchesAction(busyState(), 'run_gateway_environment_lifecycle')}
+              disabled={providerRuntimeGatewayEnvironmentID() === ''}
+              onClick={() => void confirmProviderRuntimeGatewaySelection()}
+            >
+              {i18n().t('environmentCenter.providerRuntimeGatewayContinue')}
+            </Button>
+          </div>
+        )}
+      >
+        <Show when={providerRuntimeGatewaySelection()} keyed>
+          {(selection) => (
+            <div class="space-y-4">
+              <p class="text-sm leading-6 text-muted-foreground">
+                {i18n().t('environmentCenter.providerRuntimeGatewayDescription', {
+                  label: selection.provider_environment.label,
+                })}
+              </p>
+              <Show
+                when={selection.candidates.length > 0}
+                fallback={(
+                  <div role="status" class="border-l-2 border-warning pl-3 text-sm leading-6 text-muted-foreground">
+                    {i18n().t('environmentCenter.providerRuntimeGatewayEmpty')}
+                  </div>
+                )}
+              >
+                <div class="space-y-2">
+                  <For each={selection.candidates}>
+                    {(candidate) => (
+                      <label class="flex cursor-pointer items-start justify-between gap-4 rounded-md border border-border px-3 py-3 hover:bg-muted/60">
+                        <span class="min-w-0">
+                          <span class="block truncate text-sm font-medium text-foreground">{candidate.label}</span>
+                          <span class="mt-1 block break-all text-xs leading-5 text-muted-foreground">
+                            {candidate.gateway_label} · {candidate.gateway_connection_kind} · {candidate.gateway_env_id}
+                          </span>
+                        </span>
+                        <input
+                          type="radio"
+                          name="provider-runtime-gateway"
+                          checked={providerRuntimeGatewayEnvironmentID() === candidate.id}
+                          onChange={() => setProviderRuntimeGatewayEnvironmentID(candidate.id)}
+                        />
+                      </label>
+                    )}
+                  </For>
+                </div>
+              </Show>
+              <p class="text-xs leading-5 text-muted-foreground">
+                {i18n().t('environmentCenter.providerRuntimeGatewayCredentialNote')}
+              </p>
+            </div>
+          )}
+        </Show>
+      </Dialog>
 
       <Dialog
         open={providerRuntimeLinkDialogOpen()}
@@ -8271,7 +8274,7 @@ function environmentProgressStatus(i18n: DesktopI18n, progress: DesktopLauncherA
     case 'failed':
       return i18n.t('progress.failed');
     case 'needs_confirmation':
-      return i18n.t('runtimeTakeover.reviewRequired');
+      return i18n.t('progress.needsAttention');
     case 'canceled':
       return i18n.t('progress.canceled');
     case 'succeeded':
@@ -8528,7 +8531,6 @@ function localizedProgressTitle(i18n: DesktopI18n, progress: DesktopLauncherActi
     'Runtime ready': 'progress.titleRuntimeReady',
     'Startup canceled': 'progress.titleStartupCanceled',
     'Connection removed': 'progress.connectionRemoved',
-    'Runtime takeover confirmation required': 'runtimeTakeover.progressTitle',
   });
 }
 
@@ -8569,8 +8571,6 @@ function localizedProgressDetail(i18n: DesktopI18n, progress: DesktopLauncherAct
     'The runtime daemon is running. Open will prepare the Desktop bridge.': 'progress.detailRuntimeReady',
     'Desktop stopped the container runtime startup and cleaned up local startup resources.': 'progress.detailStartupCanceled',
     'Desktop stopped the Runtime startup and cleaned up local startup resources.': 'progress.detailStartupCanceled',
-    'Review the verified Runtime processes before forcing a restart.': 'runtimeTakeover.progressRestartDetail',
-    'Review the verified Runtime processes before forcing this Runtime to stop.': 'runtimeTakeover.progressStopDetail',
   });
 }
 
@@ -9298,7 +9298,7 @@ function localizedPrimaryProgressPresentation(
     'Update failed': 'progress.updateFailed',
     'Stop failed': 'progress.stopFailed',
     'Needs attention': 'progress.needsAttention',
-    'Review required': 'runtimeTakeover.reviewRequired',
+    'Review required': 'progress.needsAttention',
   });
   return {
     ...presentation,
@@ -10446,8 +10446,6 @@ function localizedProviderRuntimeLinkPlanMessage(
       return i18n.t('providerRuntimeLink.linkedElsewhere', { runtime: runtimeLabel });
     case 'blocked_active_work':
       return i18n.t('providerRuntimeLink.blockedActiveWork', { runtime: runtimeLabel });
-    case 'blocked_owner_mismatch':
-      return i18n.t('providerRuntimeLink.blockedOwnerMismatch', { runtime: runtimeLabel });
     case 'blocked_runtime':
       return i18n.t('providerRuntimeLink.blockedRuntime', { runtime: runtimeLabel });
   }

@@ -348,7 +348,6 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
       if (requestURL.pathname === '/api/local/runtime') {
         jsonResponse(response, {
           env_public_id: 'env_built_dist_shell',
-          desktop_managed: true,
           effective_run_mode: 'local',
           direct_ws_url: baseURL.replace(/^http/, 'ws') + '_redeven_direct/ws',
         });
