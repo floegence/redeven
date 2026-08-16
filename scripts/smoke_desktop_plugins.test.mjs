@@ -12,6 +12,7 @@ import {
   releaseRefFromInstalledPlugin,
   runtimePIDFromHealth,
   waitFor,
+  workerResultFromRPCResponse,
 } from './smoke_desktop_plugins.mjs';
 
 const completeIOEvidence = {
@@ -61,6 +62,16 @@ const completeIOEvidence = {
 
 test('Desktop smoke accepts complete Linux v9 I/O, frozen v1.1.4, and revoke evidence', () => {
   assert.doesNotThrow(() => assertExtensionIOEvidence(completeIOEvidence));
+});
+
+test('Desktop smoke reads worker evidence from the canonical RPC result envelope', () => {
+  const workerResult = { manifest: 'redevplugin.manifest.v9', fs: { bytes: 64 * 1024 * 1024 } };
+
+  assert.equal(workerResultFromRPCResponse({ ok: true, data: { data: workerResult } }), workerResult);
+  assert.throws(
+    () => workerResultFromRPCResponse({ ok: true, data: workerResult }),
+    /worker data/u,
+  );
 });
 
 test('Desktop smoke rejects partial protocol or revoke coverage', () => {
@@ -188,6 +199,9 @@ test('Desktop smoke binds compatibility proof to a new frozen-package RPC withou
   assert.doesNotMatch(source, /revoked_resources:[^\n]*\?\? 1/u);
   assert.match(source, /'x-redeven-plugin-session': payload\.pluginSession/u);
   assert.doesNotMatch(source, /plugin_session_credential.*observation/u);
+  assert.match(source, /const frozenInventoryKey = `instance:\$\{frozenPluginInstanceID\}`;/u);
+  assert.match(source, /await visiblePluginTrigger\(\)\.click\(\);[\s\S]*?data-plugin-panel-tile=\$\{JSON\.stringify\(frozenInventoryKey\)\}/u);
+  assert.doesNotMatch(source, /frozenPlugin\?\.display_name/u);
   assert.ok(source.indexOf("'frozen v1.1.4 RPC'") < source.lastIndexOf('assertExtensionIOEvidence(ioEvidence'));
 });
 
@@ -204,6 +218,19 @@ test('v9 I/O smoke surface runs as an opaque worker and drives hold through rend
   assert.match(workerSource, /bridge\.onAction\(['"]hold-smoke['"]/u);
   assert.match(browserSource, /data-redevplugin-action="hold-smoke"/u);
   assert.doesNotMatch(browserSource, /window\.__ioSmokeHold/u);
+});
+
+test('Desktop smoke retains the active I/O frame through revoke verification', async () => {
+  const source = await import('node:fs/promises').then((fs) => fs.readFile(
+    new URL('./smoke_desktop_plugins.mjs', import.meta.url),
+    'utf8',
+  ));
+  const frameDeclaration = source.indexOf('let frame = null;');
+  const inventoryAssessment = source.indexOf('const inventoryAssessment');
+  const revokeVerification = source.indexOf('verifyIOSmokeRevoke(page, frame', inventoryAssessment);
+  assert.ok(frameDeclaration >= 0 && frameDeclaration < inventoryAssessment);
+  assert.ok(revokeVerification > inventoryAssessment);
+  assert.equal(source.indexOf('let frame;', inventoryAssessment), -1);
 });
 
 test('v9 I/O smoke worker preserves stable SDK errors instead of collapsing them into HOSTCALL_FAILED', async () => {

@@ -144,6 +144,14 @@ export function isEnvAppPage(page) {
   }
 }
 
+export function workerResultFromRPCResponse(response) {
+  const workerResult = response?.ok === true ? response.data?.data : null;
+  if (!workerResult || typeof workerResult !== 'object' || Array.isArray(workerResult)) {
+    throw new Error('plugin RPC response is missing worker data');
+  }
+  return workerResult;
+}
+
 export async function waitFor(check, timeoutMS, label, options = {}) {
   const now = options.now ?? Date.now;
   const delay = options.delay ?? ((timeout) => new Promise((resolve) => setTimeout(resolve, timeout)));
@@ -1124,6 +1132,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
 
   let surface = { ready: false };
   let rpc = { ok: false };
+  let frame = null;
   const inventoryAssessment = assessPluginSmoke({
     recovery,
     catalog,
@@ -1157,7 +1166,6 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
       describedBy: await firstTile.getAttribute('aria-describedby'),
     };
     await firstTile.click();
-    let frame;
     try {
       const iframe = page.locator('[data-plugin-surface-iframe]').first();
       await iframe.waitFor({ state: 'visible', timeout: 30_000 });
@@ -1239,7 +1247,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
   }
   let ioEvidence = null;
   if (config.ioPackagePath) {
-    const workerResult = rpc.result?.data ?? rpc.result?.result ?? rpc.result ?? {};
+    const workerResult = workerResultFromRPCResponse(rpc.result);
     const frozenBytes = await fs.readFile(config.frozenPackagePath);
     const frozenObservedHash = createHash('sha256').update(frozenBytes).digest('hex');
     const frozenSums = await fs.readFile(config.frozenSHA256SumsPath, 'utf8');
@@ -1287,14 +1295,23 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
         enabled_after_restart: bootstrap.enabledCount > 0,
       } : null,
     };
-    const frozenPlugin = installedPlugins(catalog).find((candidate) => candidate.plugin_instance_id === frozenPluginInstanceID);
     const surfaceHost = page.locator('[data-plugin-surface-host]').first();
     if (await surfaceHost.count() > 0) {
       const closeSurface = surfaceHost.locator('xpath=ancestor::*[@data-redeven-plugin-activity-window="true"]').getByRole('button', { name: /^(?:Close|关闭)$/u }).first();
-      if (await closeSurface.count() > 0) await closeSurface.click();
+      if (await closeSurface.count() > 0) {
+        await closeSurface.click();
+        await surfaceHost.waitFor({ state: 'detached', timeout: 10_000 });
+      }
     }
-    const frozenTile = page.locator('[data-plugin-panel-tile]:not([data-plugin-panel-tile="plugin-center"])')
-      .filter({ hasText: frozenPlugin?.display_name ?? 'worker' }).first();
+    const frozenPanel = page.locator('[data-plugin-launcher-backdrop]').first();
+    if (!await frozenPanel.isVisible().catch(() => false)) {
+      await visiblePluginTrigger().click();
+      await frozenPanel.waitFor({ state: 'visible', timeout: 10_000 });
+    }
+    const frozenInventoryKey = `instance:${frozenPluginInstanceID}`;
+    const frozenTile = frozenPanel.locator(
+      `[data-plugin-panel-tile=${JSON.stringify(frozenInventoryKey)}]`,
+    ).first();
     if (await frozenTile.count() > 0) {
       const frozenRPCStart = pluginResponses.length;
       await frozenTile.click();
@@ -1313,7 +1330,10 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
       ioEvidence.frozen_v1_1_4.rpc_method = frozenRPC.rpc_method;
       ioEvidence.frozen_v1_1_4.surface_opened = true;
     } else {
-      throw new Error(`frozen v1.1.4 tile is not visible: ${frozenPlugin?.plugin_instance_id ?? 'unknown'}`);
+      const availableTileKeys = await frozenPanel.locator('[data-plugin-panel-tile]').evaluateAll(
+        (tiles) => tiles.map((tile) => tile.getAttribute('data-plugin-panel-tile')),
+      );
+      throw new Error(`frozen v1.1.4 tile is not visible: expected ${frozenInventoryKey}, got ${JSON.stringify(availableTileKeys)}`);
     }
     assertExtensionIOEvidence(ioEvidence, {
       requireRevoke: config.phase === 'initial',
