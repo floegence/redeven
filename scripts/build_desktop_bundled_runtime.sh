@@ -258,18 +258,14 @@ build_go_command() {
   local commit="$6"
   local build_time="$7"
 
-  (
-    cd "$ROOT_DIR"
-    GOOS="$goos" \
-    GOARCH="$goarch" \
-    CGO_ENABLED=1 \
-    go build \
-      -tags floeterm_native \
-      -trimpath \
-      -ldflags "-s -w -X main.Version=${version} -X main.Commit=${commit} -X main.BuildTime=${build_time}" \
-      -o "$output_path" \
-      "$command_path"
-  )
+  "$SCRIPT_DIR/build_runtime_binary.sh" \
+    --goos "$goos" \
+    --goarch "$goarch" \
+    --output "$output_path" \
+    --command "$command_path" \
+    --version "$version" \
+    --commit "$commit" \
+    --build-time "$build_time"
 }
 
 bundle_from_source() {
@@ -291,6 +287,10 @@ bundle_from_source() {
   ui_pkg_log "OUTPUT: $output_path"
   ui_pkg_log "GATEWAY_OUTPUT: $runtime_gateway_output_path"
 
+  "$SCRIPT_DIR/build_runtime_binary.sh" \
+    --check-only \
+    --goos "$goos" \
+    --goarch "$goarch"
   "$SCRIPT_DIR/build_assets.sh"
 
   build_go_command "$goos" "$goarch" "$output_path" ./cmd/redeven "$version" "$commit" "$build_time"

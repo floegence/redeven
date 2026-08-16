@@ -161,6 +161,27 @@ async function createSourceRuntimeFixture(): Promise<Readonly<{
     `if [ -e "$PWD/desktop/.bundle/linux-arm64/redeven" ]; then printf 'copied:desktop-bundle\\n' >> ${JSON.stringify(buildLogPath)}; fi`,
     `if [ -e "$PWD/desktop/release/mac-arm64/Redeven Desktop.app/Contents/Resources/app.asar" ]; then printf 'copied:desktop-release\\n' >> ${JSON.stringify(buildLogPath)}; fi`,
   ].join('\n'), { mode: 0o755 });
+  await fs.writeFile(path.join(root, 'scripts', 'build_runtime_binary.sh'), [
+    '#!/usr/bin/env sh',
+    'set -eu',
+    'goos=',
+    'goarch=',
+    'output=',
+    'command_path=',
+    'check_only=0',
+    'while [ "$#" -gt 0 ]; do',
+    '  case "$1" in',
+    '    --check-only) check_only=1; shift; continue ;;',
+    '    --goos) goos="$2" ;;',
+    '    --goarch) goarch="$2" ;;',
+    '    --output) output="$2" ;;',
+    '    --command) command_path="$2" ;;',
+    '  esac',
+    '  shift 2',
+    'done',
+    '[ "$check_only" -eq 0 ] || exit 0',
+    'GOWORK=off GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 go build -o "$output" "$command_path"',
+  ].join('\n'), { mode: 0o755 });
 
   return {
     root,
@@ -418,6 +439,31 @@ describe('runtimePackageCache', () => {
     }
   }, 15_000);
 
+  it('checks the cross compiler before copying source or building assets', async () => {
+    const fixture = await createSourceRuntimeFixture();
+    const platform = resolveDesktopSSHRemotePlatform('linux', 'x86_64');
+    await fs.writeFile(path.join(fixture.root, 'scripts', 'build_runtime_binary.sh'), [
+      '#!/usr/bin/env sh',
+      'echo "Zig is required to cross-compile the linux/amd64 cgo runtime" >&2',
+      'exit 1',
+    ].join('\n'), { mode: 0o755 });
+    try {
+      const error = await preparePackage({
+        cacheRoot: fixture.cacheRoot,
+        platform,
+        sourceRuntimeRoot: fixture.root,
+      }).catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(DesktopOperationFailureError);
+      expect((error as DesktopOperationFailureError).presentation.diagnostics?.[0]?.text).toContain(
+        'Zig is required to cross-compile the linux/amd64 cgo runtime',
+      );
+      await expect(fs.access(fixture.buildLogPath)).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      await fs.rm(path.dirname(fixture.root), { recursive: true, force: true });
+    }
+  });
+
 	  it('keeps source runtime build failures concise with raw output in diagnostics', async () => {
 	    const fixture = await createSourceRuntimeFixture();
 	    const platform = resolveDesktopSSHRemotePlatform('linux', 'x86_64');
@@ -439,7 +485,8 @@ describe('runtimePackageCache', () => {
         'Desktop could not prepare the linux/amd64 Redeven runtime package.',
       );
       expect((error as DesktopOperationFailureError).runtime_lifecycle_step_id).toBe('preparing_runtime_package');
-      expect((error as DesktopOperationFailureError).presentation.diagnostics?.[0]?.text).toContain('go failed');
+      expect((error as DesktopOperationFailureError).presentation.diagnostics?.[0]?.text).toContain('build_runtime_binary.sh failed');
+      expect((error as DesktopOperationFailureError).presentation.diagnostics?.[0]?.text).toContain('syntax error');
     } finally {
 	      await fs.rm(path.dirname(fixture.root), { recursive: true, force: true });
 	    }
