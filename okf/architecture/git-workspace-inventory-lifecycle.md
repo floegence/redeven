@@ -27,7 +27,7 @@ Repository identity separates the common Git directory from the worktree root an
 
 Every Git request passes raw payload and structural admission before JSON DTO decoding. Every Git response, including errors and mutation output, passes a Git-domain envelope budget using the production envelope shape. Response encoding checks and emits JSON incrementally within the payload cap, so high-escape strings cannot allocate an oversized encoded buffer before rejection. Large parsers and command runners enforce byte and record limits while reading rather than constructing an oversized business object first. Stable numeric errors distinguish stale snapshots, inventory limits, response budgets, pagination requirements, destructive-scan limits, process resources, request budgets, and path encoding.
 
-The current Flowersec v2.5.1 integration admits at most four direct RPC streams and fixes each stream's request and notification scheduler limits before serving it. The reservation covers Flowersec-owned inbound frames and queues plus bounded Git outbound payload and final-marshal allowance. It does not claim a general bound for non-Git outbound responses or notifications; transport-wide lifecycle remains owned by the published Flowersec v2.5.1 release.
+The current Flowersec v2.5.2 integration admits at most four direct RPC streams and fixes each stream's request and notification scheduler limits before serving it. The reservation covers Flowersec-owned inbound frames and queues plus bounded Git outbound payload and final-marshal allowance. It does not claim a general bound for non-Git outbound responses or notifications; transport-wide lifecycle remains owned by the published Flowersec v2.5.2 release.
 
 ## Mutation coordination
 

@@ -16,9 +16,9 @@ Env App composes published floe-webapp, Floeterm, and Flowersec web packages.
 
 ## Mechanism
 
-The browser dependency set includes the public Floeterm terminal-web v0.16.4 release, Floe Webapp Boot, Core, and Protocol v0.41.2, and Flowersec Core v2.5.1. Terminal-web is semantic-only and has no Ghostty WebAssembly or Beamterm dependency. Every published UI dependency resolves from the public npm registry. Local paths, links, workspaces, portals, aliases, runtime patches, private registries, and renderer fallbacks remain forbidden.
+The browser dependency set includes the public Floeterm terminal-web v0.16.4 release, Floe Webapp Boot, Core, and Protocol v0.41.4, and Flowersec Core v2.5.2. Terminal-web is semantic-only and has no Ghostty WebAssembly or Beamterm dependency. Every published UI dependency resolves from the public npm registry. Local paths, links, workspaces, portals, aliases, runtime patches, private registries, and renderer fallbacks remain forbidden.
 
-The UI package pins Floe Webapp Boot, Core, and Protocol v0.41.2 and Flowersec Core v2.5.1 from the public registry. Floe Webapp owns shell presets, generated token CSS, Monaco themes, accessible menu navigation, floating layers, bottom-bar companion behavior, and terminal classification of rejected trusted spend bindings. Redeven selects those public contracts and derives product semantic aliases from the active preset; it does not fork the catalog, synthesize a second token map, recreate upstream keyboard and layer state machines, or add a second retry policy for rejected bindings. Shiki syntax themes remain a scoped exception while their chrome follows the shell preset, and Mermaid receives browser-resolved canonical sRGB colors with preset identity in its render cache key.
+The UI package pins Floe Webapp Boot, Core, and Protocol v0.41.4 and Flowersec Core v2.5.2 from the public registry. Each Floe package carries its own MIT metadata and license file. Floe Webapp owns shell presets, generated token CSS, Monaco themes, accessible menu navigation, floating layers, bottom-bar companion behavior, terminal classification of rejected trusted spend bindings, and protocol-controller lifecycle ownership. The controller fences state writes by owner generation, and Env App secure-session retry calls the published `replaceConnection()` operation so an old asynchronous close cannot overwrite the newly installed connection with `idle`. Redeven selects those public contracts and derives product semantic aliases from the active preset; it does not fork the catalog, synthesize a second token map, recreate upstream keyboard and layer state machines, or add a second retry policy for rejected bindings. Shiki syntax themes remain a scoped exception while their chrome follows the shell preset, and Mermaid receives browser-resolved canonical sRGB colors with preset identity in its render cache key.
 
 Terminal surfaces import Floeterm's semantic, live, and sessions entry points. `TerminalSessionRuntime` is a thin adapter around one `RendererSurface`, one `TerminalInputBridge`, one live attachment, and generation-bound semantic history and clear controls. Activity and Workbench reuse that runtime and the same controller/observer contract. The catalog stays renderer-free, dormant sessions stay metadata-only, and the initial build graph rejects terminal live or renderer modules. The complete terminal interaction contract is [Workbench terminal interaction](../ui/workbench-terminal-interaction.md).
 
@@ -64,7 +64,7 @@ The Env App recovery snapshot is a product presentation projection, not another 
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/package.json:22` - Env App pins published Floe Webapp Boot, Core, and Protocol v0.41.2 packages.
+- `redeven:internal/envapp/ui_src/package.json:22` - Env App pins published Floe Webapp Boot, Core, and Protocol v0.41.4 packages.
 - `redeven:internal/envapp/ui_src/src/ui/App.tsx:62` - Env App configures the published shell preset catalog and per-mode defaults.
 - `redeven:internal/envapp/ui_src/src/styles/redeven.css` - Product semantic aliases derive component surfaces, status roles, and code chrome from active Floe tokens.
 - `redeven:internal/envapp/ui_src/src/ui/file-markdown/mermaidPlugin.ts` - Browser-resolved theme colors cross the Mermaid boundary only as canonical sRGB hex values.
@@ -72,6 +72,8 @@ The Env App recovery snapshot is a product presentation projection, not another 
 - `redeven:internal/envapp/ui_src/scripts/checkThemeColorSources.mjs` - The source gate rejects legacy component palettes and fixed Tailwind status colors in governed production surfaces.
 - `redeven:internal/envapp/ui_src/src/ui/services/desktopTheme.ts:103` - The storage adapter projects Desktop-owned source and versioned shell selection into Floe persistence keys.
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:2` - Env App shell imports floe-webapp runtime and layout primitives.
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:2490` - Secure-session retry atomically replaces the protocol connection through the published controller.
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx:4759` - Regression coverage requires one initial connect and one replacement without a separate disconnect.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/TerminalSessionRuntime.tsx` - The per-session runtime adapts released semantic renderer, input, history, activation, and live APIs.
 - `redeven:internal/envapp/ui_src/src/ui/services/terminalPreferences.ts:1` - Persisted System/catalog selection preserves unknown values while resolving a released-theme fallback in memory.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/TerminalSettingsDialog.tsx:1` - The product settings surface presents the released catalog as an accessible preview radio gallery.

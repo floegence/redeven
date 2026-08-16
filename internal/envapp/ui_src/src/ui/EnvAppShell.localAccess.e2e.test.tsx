@@ -4751,6 +4751,8 @@ describe('EnvAppShell remote access gate', () => {
 
       expect(connectMock).toHaveBeenCalledTimes(1);
       const initialConnectionConfig = connectMock.mock.calls[0]?.[0];
+      const disconnectCallsBeforeRetry = disconnectMock.mock.calls.length;
+      expect(disconnectCallsBeforeRetry).toBe(1);
       const retryButton = findButtonByText(host, 'Retry connection');
       expect(retryButton).toBeTruthy();
       expect(retryButton?.disabled).toBe(false);
@@ -4759,11 +4761,12 @@ describe('EnvAppShell remote access gate', () => {
       await Promise.resolve();
       await Promise.resolve();
       await vi.advanceTimersByTimeAsync(0);
-      await flushUntil(() => connectMock.mock.calls.length === 2);
+      await flushUntil(() => replaceConnectionMock.mock.calls.length === 1);
 
-      expect(disconnectMock).toHaveBeenCalled();
-      expect(connectMock).toHaveBeenCalledTimes(2);
-      const retriedConnectionConfig = connectMock.mock.calls[1]?.[0];
+      expect(disconnectMock).toHaveBeenCalledTimes(disconnectCallsBeforeRetry);
+      expect(connectMock).toHaveBeenCalledTimes(1);
+      expect(replaceConnectionMock).toHaveBeenCalledTimes(1);
+      const retriedConnectionConfig = replaceConnectionMock.mock.calls[0]?.[0];
       expect(retriedConnectionConfig).not.toBe(initialConnectionConfig);
       expect(retriedConnectionConfig?.source).toBe(remoteArtifactSource);
       expect(retriedConnectionConfig?.source).toBe(initialConnectionConfig?.source);

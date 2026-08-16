@@ -41,9 +41,6 @@ const floetermThemeArtifactContract = {
 };
 
 const npmLicenseOverrides = new Map([
-  ['@floegence/floe-webapp-boot', { license: 'MIT', note: 'License inherited from floegence/floe-webapp root LICENSE.' }],
-  ['@floegence/floe-webapp-core', { license: 'MIT', note: 'License inherited from floegence/floe-webapp root LICENSE.' }],
-  ['@floegence/floe-webapp-protocol', { license: 'MIT', note: 'License inherited from floegence/floe-webapp root LICENSE.' }],
   ['@floegence/floeterm-terminal-web', { license: 'MIT', note: 'Built-in theme attribution and license texts are reproduced below from the verified 0.16.4 package.' }],
   ['@floegence/redevplugin-ui', { license: 'MIT', note: 'License inherited from floegence/redevplugin root LICENSE.' }],
   ['khroma', { license: 'MIT', note: 'The published README declares MIT copyright for the package authors.' }],

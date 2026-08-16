@@ -2492,8 +2492,7 @@ export function EnvAppShell() {
     setCurrentAccessError(null);
     setManualError(null);
     setCurrentAccessChannelReady(false);
-    protocol.disconnect();
-    await connect();
+    await replaceConnection();
   };
 
   const triggerReconnect = async () => {
