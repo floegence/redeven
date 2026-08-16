@@ -759,6 +759,34 @@ describe('PluginCenterView', () => {
     expect(mount.querySelector('[role="tab"][aria-selected="true"]')?.id).toBe('plugin-center-tab-installed');
   });
 
+  it('adopts the first installed projection after mounting with an empty inventory', () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const [currentProjection, setCurrentProjection] = createSignal<PluginInventoryProjection>({ items: [] });
+    dispose = render(() => (
+      <PluginCenterView
+        projection={currentProjection()}
+        loading={false}
+        canManagePlugins
+        canOpenPluginSurfaces
+        onRefresh={() => undefined}
+        onCommand={() => undefined}
+      />
+    ), mount);
+
+    const installed = containersPermissionProjection().items[0]!;
+    setCurrentProjection({
+      items: [{
+        ...installed,
+        inventoryKey: `instance:${installed.pluginInstanceID}`,
+        officialCatalog: undefined,
+      }],
+    });
+
+    expect(mount.querySelector('[role="tab"][aria-selected="true"]')?.id).toBe('plugin-center-tab-installed');
+    expect(mount.querySelector('[data-plugin-center-item^="instance:"]')).not.toBeNull();
+  });
+
   it('renders a dedicated management shell outside Settings with local search', () => {
     const mount = document.createElement('div');
     const onClose = vi.fn();
