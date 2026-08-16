@@ -1102,12 +1102,30 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     await waitFor(async () => (await frame.locator('body').innerText()).trim().length > 0, 30_000, 'plugin iframe body');
     surface = { ready: true, url: frame.url(), body: (await frame.locator('body').innerText()).slice(0, 2_000) };
     const v9Plugin = installedPlugins(catalog).find((candidate) => candidate.plugin_id === 'dev.redeven.smoke.io');
-    const rpcEntry = await waitFor(
-      () => pluginResponses.find((entry) => entry.pathname.endsWith('/plugins/rpc') && entry.status === 200
-        && entry.rpc_plugin_instance_id === v9Plugin?.plugin_instance_id && entry.rpc_method === 'smoke.run'),
-      30_000,
-      'plugin RPC',
-    );
+    let rpcEntry;
+    try {
+      rpcEntry = await waitFor(
+        () => pluginResponses.find((entry) => entry.pathname.endsWith('/plugins/rpc') && entry.status === 200
+          && entry.rpc_plugin_instance_id === v9Plugin?.plugin_instance_id && entry.rpc_method === 'smoke.run'),
+        30_000,
+        'plugin RPC',
+      );
+    } catch (error) {
+      const matchesV9RPC = (entry) => entry.pathname.endsWith('/plugins/rpc')
+        && entry.rpc_plugin_instance_id === v9Plugin?.plugin_instance_id
+        && entry.rpc_method === 'smoke.run';
+      await fs.writeFile(path.join(config.reportRoot, `${config.phase}-rpc-diagnostics.json`), `${JSON.stringify({
+        matchingRequests: pluginRequests.filter(matchesV9RPC),
+        matchingResponses: pluginResponses.filter(matchesV9RPC),
+        iframeURL: frame.url(),
+        iframeBody: (await frame.locator('body').innerText().catch(() => '')).slice(0, 8_000),
+        consoleErrors,
+        pageErrors,
+        failedResponses,
+        error: String(error),
+      }, null, 2)}\n`);
+      throw error;
+    }
     rpc = { ok: true, method: rpcEntry.body?.data?.method ?? 'observed_plugin_rpc', result: rpcEntry.body };
     surface.icon = iconEvidence;
     mark('surface_ready_ms');
