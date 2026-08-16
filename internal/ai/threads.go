@@ -366,6 +366,12 @@ func (s *Service) GetFlowerThreadDetail(ctx context.Context, meta *session.Meta,
 	if err != nil {
 		return nil, fmt.Errorf("read thread runtime view: %w", err)
 	}
+	compactions, decorations, err := s.readCanonicalThreadContextProjection(ctx, current)
+	if err != nil {
+		return nil, err
+	}
+	thread.ContextCompactions = compactions
+	thread.TimelineDecorations = decorations
 	applyThreadRuntimeSummary(thread, current)
 	return &FlowerThreadDetail{Thread: *thread, Current: publicFloretThreadView(current)}, nil
 }

@@ -8,7 +8,7 @@
     "summary": "Redeven v0.10.1 consumes published Flowersec Go and Core v2.4.2 plus Floe Webapp v0.40.21, keeps Flowersec as the connection, session, RPC, stream, and retry owner, and binds terminal handlers and notification sinks to each accepted session while retaining the v0.10.0 Runtime Service compatibility window.",
     "same_window_rationale": "The Runtime Service wire protocol remains redeven-runtime-v1 at compatibility epoch 8. Flowersec v2.4.2 keeps carrier and accepted-session lifecycle behavior behind the existing Runtime Service snapshot and bridge contracts, so the matched v0.10.0 minimum Desktop and Runtime pair remains sufficient.",
     "checked_surfaces": [
-      "Redeven consumes published github.com/floegence/floret/v4 v4.0.4 with GOWORK=off, exact module checksums, and no replace, go.work, sibling source path, copied contract, internal import, or Floret schema access",
+      "Redeven consumes published github.com/floegence/floret/v4 v4.0.7 with GOWORK=off and exact module checksums; it preserves dynamic ToolSurface registry definition inheritance, reads canonical context and compaction through ThreadContextReader across resumed runs, and has no replace, go.work, sibling source path, copied contract, internal import, or Floret schema access",
       "Floret ThreadService is the only lifecycle boundary for View, Send, Respond, Cancel, Retry, RetryEffect, PromoteQueued, and Subscribe",
       "Each Floret thread has one in-memory ThreadRuntime owner; its canonical journal is the only durable lifecycle fact source",
       "Redeven persists only product settings, authorization audit, uploads, read state, and the contiguous v1-to-v2 migration import boundary",

@@ -757,7 +757,7 @@ export type FlowerRuntimeCurrentView = Readonly<{
   last_outcome?: 'completed' | 'failed' | 'cancelled' | 'interrupted';
   attention?: Readonly<{ approval_count?: number; input_count?: number }>;
   items?: readonly FlowerRuntimeCurrentItem[];
-  queue?: readonly Readonly<{ request_key: string; input: Readonly<{ text?: string }> }>[];
+  queue?: readonly Readonly<{ id: string; request_key: string; input: Readonly<{ text?: string }> }>[];
   interactions?: readonly FlowerRuntimeInteraction[];
   assistant_draft?: string;
   thinking_draft?: string;
@@ -777,6 +777,8 @@ export type FlowerLiveStreamEnvelope = Readonly<{
   summaries?: readonly FlowerThreadSnapshot[];
   /** Typed current-state replacement from Floret; never contains replay metadata. */
   current?: FlowerRuntimeCurrentView;
+  context_compactions?: readonly FlowerContextCompaction[];
+  timeline_decorations?: readonly FlowerTimelineDecoration[];
   read_status?: FlowerThreadReadStatus;
 }>;
 

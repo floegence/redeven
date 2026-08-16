@@ -82,6 +82,94 @@ func TestFlowerWorkspaceStreamReceivesTypedRuntimeCurrentViewWithoutSelectingThr
 	}
 }
 
+func TestFlowerWorkspaceTerminalBatchAndDetailRestoreCanonicalManualCompaction(t *testing.T) {
+	ctx := context.Background()
+	svc := newRealtimeTestService(t, 0)
+	meta := testSendTurnMeta()
+	thread, err := svc.CreateThread(ctx, meta, "Manual compaction recovery", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	subscription, err := svc.SubscribeFlowerLiveStream(ctx, meta, FlowerLiveStreamRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer subscription.Close()
+	if ready := nextFlowerLiveStreamFrame(t, subscription); ready.Kind != FlowerLiveStreamReady {
+		t.Fatalf("ready kind=%q", ready.Kind)
+	}
+	started, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
+		ClientRequestID: "request-manual-compaction-recovery",
+		ThreadID:        thread.ThreadID,
+		Input:           RunInput{Text: "/compact"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var terminal FlowerLiveStreamEnvelope
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		frame := nextFlowerLiveStreamFrame(t, subscription)
+		if frame.Kind != FlowerLiveStreamThreadBatch {
+			continue
+		}
+		var envelope FlowerLiveStreamEnvelope
+		if err := json.Unmarshal(frame.Data, &envelope); err != nil {
+			t.Fatal(err)
+		}
+		if envelope.ThreadID == thread.ThreadID && envelope.Current != nil &&
+			envelope.Current.Activity == flruntime.ThreadActivityIdle && len(envelope.ContextCompactions) > 0 {
+			terminal = envelope
+			break
+		}
+	}
+	if terminal.Current == nil {
+		t.Fatal("terminal thread.batch omitted canonical manual compaction")
+	}
+	expectedAnchor := canonicalUserMessageIDForTurn(terminal.Current.Items, identity.TurnID(started.TurnID))
+	assertTerminalManualCompactionProjection(t, terminal.ContextCompactions, terminal.TimelineDecorations, expectedAnchor)
+
+	detail, err := svc.GetFlowerThreadDetail(ctx, meta, thread.ThreadID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertTerminalManualCompactionProjection(t, detail.Thread.ContextCompactions, detail.Thread.TimelineDecorations, expectedAnchor)
+}
+
+func canonicalUserMessageIDForTurn(items []flruntime.ThreadItem, turnID identity.TurnID) string {
+	for _, item := range items {
+		if item.Kind == flruntime.ThreadItemUser && item.TurnID == turnID {
+			return item.ID
+		}
+	}
+	return ""
+}
+
+func assertTerminalManualCompactionProjection(t *testing.T, compactions []FlowerContextCompaction, decorations []FlowerTimelineDecoration, expectedAnchor string) {
+	t.Helper()
+	if strings.TrimSpace(expectedAnchor) == "" {
+		t.Fatal("canonical manual compaction turn has no user message")
+	}
+	if len(compactions) != 1 || len(decorations) != 1 {
+		t.Fatalf("compactions=%#v decorations=%#v, want one canonical operation", compactions, decorations)
+	}
+	compaction := compactions[0]
+	if compaction.RequestID != "request-manual-compaction-recovery" || compaction.Source != flowerManualCompactionSourceName {
+		t.Fatalf("manual compaction identity=%#v", compaction)
+	}
+	if compaction.Status != "noop" && compaction.Status != "compacted" {
+		t.Fatalf("manual compaction status=%q, want terminal noop or compacted", compaction.Status)
+	}
+	decoration := decorations[0]
+	if decoration.DecorationID != "context-compaction:"+compaction.OperationID || decoration.Compaction.Status != compaction.Status {
+		t.Fatalf("manual compaction decoration=%#v", decoration)
+	}
+	if decoration.Anchor.TargetKind != "message" || decoration.Anchor.Edge != "after" || decoration.Anchor.MessageID != expectedAnchor {
+		t.Fatalf("manual compaction anchor=%#v, want canonical user message %q", decoration.Anchor, expectedAnchor)
+	}
+}
+
 func TestFlowerWorkspaceSummaryFrameContainsSnapshotNotProjectionEvent(t *testing.T) {
 	ctx := context.Background()
 	svc := newSendTurnTestService(t)

@@ -163,6 +163,8 @@ type ThreadView struct {
 	LastMessageAtUnixMs  int64                        `json:"last_message_at_unix_ms"`
 	LastMessagePreview   string                       `json:"last_message_preview"`
 	Subagents            []FlowerSubagentSummary      `json:"subagents,omitempty"`
+	ContextCompactions   []FlowerContextCompaction    `json:"context_compactions,omitempty"`
+	TimelineDecorations  []FlowerTimelineDecoration   `json:"timeline_decorations,omitempty"`
 	FlowerActivity       FlowerThreadReadSnapshot     `json:"-"`
 }
 

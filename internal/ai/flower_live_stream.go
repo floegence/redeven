@@ -35,12 +35,14 @@ const (
 type FlowerLiveStreamRequest struct{}
 
 type FlowerLiveStreamEnvelope struct {
-	SchemaVersion int64                 `json:"schema_version"`
-	Kind          FlowerLiveStreamKind  `json:"kind"`
-	ThreadID      string                `json:"thread_id,omitempty"`
-	Summaries     []ThreadView          `json:"summaries,omitempty"`
-	Current       *flruntime.ThreadView `json:"current,omitempty"`
-	ReadStatus    *FlowerThreadReadView `json:"read_status,omitempty"`
+	SchemaVersion       int64                      `json:"schema_version"`
+	Kind                FlowerLiveStreamKind       `json:"kind"`
+	ThreadID            string                     `json:"thread_id,omitempty"`
+	Summaries           []ThreadView               `json:"summaries,omitempty"`
+	Current             *flruntime.ThreadView      `json:"current,omitempty"`
+	ContextCompactions  []FlowerContextCompaction  `json:"context_compactions,omitempty"`
+	TimelineDecorations []FlowerTimelineDecoration `json:"timeline_decorations,omitempty"`
+	ReadStatus          *FlowerThreadReadView      `json:"read_status,omitempty"`
 }
 
 type FlowerLiveStreamFrame struct {
@@ -165,12 +167,26 @@ func (s *Service) publishFlowerRuntimeCurrent(endpointID string, current flrunti
 		return
 	}
 	copy := publicFloretThreadView(current)
-	batch := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{
+	envelope := FlowerLiveStreamEnvelope{
 		SchemaVersion: FlowerLiveSchemaVersion,
 		Kind:          FlowerLiveStreamThreadBatch,
 		ThreadID:      current.ThreadID.String(),
 		Current:       &copy,
-	})
+	}
+	if current.Activity != flruntime.ThreadActivityActive {
+		ctx, cancel := context.WithTimeout(context.Background(), s.persistTimeout())
+		compactions, decorations, err := s.readCanonicalThreadContextProjection(ctx, current)
+		cancel()
+		if err != nil {
+			if s.log != nil {
+				s.log.Warn("ai: project canonical Flower thread context", "thread_id", current.ThreadID.String(), "error", err)
+			}
+		} else {
+			envelope.ContextCompactions = compactions
+			envelope.TimelineDecorations = decorations
+		}
+	}
+	batch := newFlowerLiveEncodedBatch(envelope)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, subscriber := range s.flowerLiveSubscribers {

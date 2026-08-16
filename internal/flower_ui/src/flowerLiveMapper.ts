@@ -330,13 +330,13 @@ function mapTimelineDecoration(raw: unknown): FlowerTimelineDecoration | null {
   return null;
 }
 
-function mapContextCompactions(raw: unknown): readonly FlowerContextCompaction[] | undefined {
+export function mapFlowerContextCompactions(raw: unknown): readonly FlowerContextCompaction[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   const compactions = raw.map(mapContextCompaction).filter(isPresent);
   return compactions.length > 0 ? compactions : undefined;
 }
 
-function mapTimelineDecorations(raw: unknown): readonly FlowerTimelineDecoration[] | undefined {
+export function mapFlowerTimelineDecorations(raw: unknown): readonly FlowerTimelineDecoration[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   const decorations = raw.map((value) => {
     const decoration = mapTimelineDecoration(value);
@@ -1004,8 +1004,8 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
   const errorMessage = trim(record.run_error);
   const errorCode = trim(record.run_error_code);
   const contextUsage = mapContextUsage(record.context_usage);
-  const contextCompactions = mapContextCompactions(record.context_compactions);
-  const timelineDecorations = mapTimelineDecorations(record.timeline_decorations);
+  const contextCompactions = mapFlowerContextCompactions(record.context_compactions);
+  const timelineDecorations = mapFlowerTimelineDecorations(record.timeline_decorations);
   const subagents = mapFlowerSubagents(record.subagents, 'thread.subagents');
   const queuedTurns = mapFlowerQueuedTurns(record.queued_turns);
   if (record.approval_pending !== undefined && typeof record.approval_pending !== 'boolean') {

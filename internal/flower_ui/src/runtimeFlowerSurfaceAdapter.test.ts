@@ -291,6 +291,24 @@ describe('runtime Flower surface adapter read state', () => {
 					schema_version: 1,
 					kind: 'thread.batch',
 					thread_id: 'thread_stream',
+					context_compactions: [{
+						operation_id: 'compact_stream',
+						phase: 'noop',
+						status: 'noop',
+						updated_at_ms: 4,
+					}],
+					timeline_decorations: [{
+						decoration_id: 'context-compaction:compact_stream',
+						kind: 'context_compaction',
+						anchor: { target_kind: 'message', message_id: 'message_compact', edge: 'after' },
+						ordinal: 0,
+						compaction: {
+							operation_id: 'compact_stream',
+							phase: 'noop',
+							status: 'noop',
+							updated_at_ms: 4,
+						},
+					}],
 					current: {
 						thread: { id: 'thread_stream', title: 'Streaming' },
 						version: 3,
@@ -318,6 +336,8 @@ describe('runtime Flower surface adapter read state', () => {
 			});
 			expect(frames[1]).toMatchObject({
 				kind: 'thread.batch',
+				context_compactions: [{ operation_id: 'compact_stream', status: 'noop' }],
+				timeline_decorations: [{ decoration_id: 'context-compaction:compact_stream' }],
 				current: { thread: { id: 'thread_stream', title: 'Streaming' }, version: 3, activity: 'active' },
 				});
 				expect(frames[2]).toMatchObject({
