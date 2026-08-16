@@ -1,0 +1,115 @@
+{
+  "schema_version": "redevplugin.manifest.v9",
+  "publisher": { "publisher_id": "dev.redeven.smoke", "display_name": "Redeven Smoke" },
+  "plugin": { "plugin_id": "dev.redeven.smoke.io", "display_name": "I/O smoke", "version": "9.0.0" },
+  "api": {
+    "surface": 1,
+    "worker": 1,
+    "required_features": ["io.stream.v1", "fs.workspace.v1", "fs.home.v1", "fs.environment.v1", "fs.watch.v1", "net.http.v1", "net.websocket.v1", "net.tcp.v1", "net.udp.v1"]
+  },
+  "permissions": ["fs.environment.read", "fs.environment.write", "network.client"],
+  "presentation": {
+    "icon": { "path": "assets/icon.png" },
+    "locales": { "default": "en-US" }
+  },
+  "surfaces": [{ "surface_id": "io.view", "kind": "view", "intent": "primary", "label": "I/O smoke", "entry": "ui/index.html", "default_size": { "width": 900, "height": 650 } }],
+  "workers": [{ "worker_id": "io_worker", "artifact": "workers/io.wasm", "mode": "job", "scope": "environment", "memory_limit_bytes": 268435456 }],
+  "methods": [
+    {
+      "method": "smoke.run",
+      "worker_id": "io_worker",
+      "effect": "execute",
+      "execution": "sync",
+      "request_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "server": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "http": { "type": "integer", "minimum": 1, "maximum": 65535 },
+              "ws": { "type": "integer", "minimum": 1, "maximum": 65535 },
+              "tcp": { "type": "integer", "minimum": 1, "maximum": 65535 },
+              "udp": { "type": "integer", "minimum": 1, "maximum": 65535 }
+            }
+          }
+        }
+      },
+      "response_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["manifest", "fs", "http", "websocket", "tcp", "udp"],
+        "properties": {
+          "manifest": { "const": "redevplugin.manifest.v9" },
+          "fs": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["bytes", "sha256", "expected_sha256", "list", "stat", "rename", "watch", "remove"],
+            "properties": {
+              "bytes": { "type": "integer", "minimum": 0 },
+              "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+              "expected_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+              "list": { "type": "boolean" },
+              "stat": { "type": "boolean" },
+              "rename": { "type": "boolean" },
+              "watch": { "type": "boolean" },
+              "remove": { "type": "boolean" }
+            }
+          },
+          "http": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["download_bytes", "upload_bytes", "sha256"],
+            "properties": {
+              "download_bytes": { "type": "integer", "minimum": 0 },
+              "upload_bytes": { "type": "integer", "minimum": 0 },
+              "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+            }
+          },
+          "websocket": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["messages"],
+            "properties": { "messages": { "type": "integer", "minimum": 0 } }
+          },
+          "tcp": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["exchanges"],
+            "properties": { "exchanges": { "type": "integer", "minimum": 0 } }
+          },
+          "udp": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["datagrams"],
+            "properties": { "datagrams": { "type": "integer", "minimum": 0 } }
+          }
+        }
+      }
+    },
+    {
+      "method": "smoke.hold",
+      "worker_id": "io_worker",
+      "effect": "execute",
+      "execution": "sync",
+      "request_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "server": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "http": { "type": "integer", "minimum": 1, "maximum": 65535 },
+              "ws": { "type": "integer", "minimum": 1, "maximum": 65535 },
+              "tcp": { "type": "integer", "minimum": 1, "maximum": 65535 },
+              "udp": { "type": "integer", "minimum": 1, "maximum": 65535 }
+            }
+          }
+        }
+      },
+      "response_schema": { "type": "object", "additionalProperties": false }
+    }
+  ]
+}

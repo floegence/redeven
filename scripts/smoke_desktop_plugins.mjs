@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import process from 'node:process';
@@ -45,6 +46,60 @@ export function assertAttachSmokeConfiguration(config) {
     || (!runningCommit.startsWith(runtimeCommit) && !runtimeCommit.startsWith(runningCommit))) {
     throw new Error('attach smoke commit provenance does not match the running runtime');
   }
+}
+
+export function assertExtensionIOEvidence(evidence, { requireRevoke = true, requireColdRestart = false } = {}) {
+  const target = evidence?.linux_target;
+  if (target?.os !== 'linux' || !['amd64', 'arm64'].includes(target.arch)
+    || !/^[0-9a-f]{12,64}$/u.test(String(target.container_id ?? ''))
+    || !/^[0-9a-f]{12,40}$/u.test(String(target.commit ?? ''))
+    || !Number.isInteger(target.runtime_pid) || target.runtime_pid <= 1
+    || !Number.isInteger(target.local_ui_pid) || target.local_ui_pid <= 1
+    || !String(target.state_root ?? '').startsWith('/')) {
+    throw new Error('Linux target provenance is incomplete');
+  }
+  const v9 = evidence?.v9;
+  if (v9?.manifest_schema !== 'redevplugin.manifest.v9' || v9.enabled_after_install !== true) {
+    throw new Error('v9 install evidence is incomplete');
+  }
+  if (!Number.isInteger(v9.fs?.bytes) || v9.fs.bytes < 64 * 1024 * 1024
+    || !/^[0-9a-f]{64}$/u.test(String(v9.fs.sha256 ?? ''))
+    || ['list', 'stat', 'rename', 'watch', 'remove'].some((key) => v9.fs[key] !== true)) {
+    throw new Error('v9 FS streaming/list/stat/rename/watch/remove evidence is incomplete');
+  }
+  if (!Number.isInteger(v9.http?.download_bytes) || v9.http.download_bytes < 64 * 1024 * 1024
+    || !Number.isInteger(v9.http?.upload_bytes) || v9.http.upload_bytes < 64 * 1024 * 1024
+    || !/^[0-9a-f]{64}$/u.test(String(v9.http.sha256 ?? ''))) {
+    throw new Error('v9 HTTP streaming evidence is incomplete');
+  }
+  if (!Number.isInteger(v9.websocket?.messages) || v9.websocket.messages < 100) throw new Error('v9 WebSocket evidence is incomplete');
+  if (!Number.isInteger(v9.tcp?.exchanges) || v9.tcp.exchanges < 100) throw new Error('v9 TCP evidence is incomplete');
+  if (!Number.isInteger(v9.udp?.datagrams) || v9.udp.datagrams < 100) throw new Error('v9 UDP evidence is incomplete');
+  const frozen = evidence?.frozen_v1_1_4;
+  if (!String(frozen?.package ?? '').endsWith('.redevplugin')
+    || !/^[0-9a-f]{64}$/u.test(String(frozen.expected_sha256 ?? ''))
+    || frozen.expected_sha256 !== frozen.observed_sha256 || frozen.rpc_ok !== true
+    || !String(frozen.plugin_instance_id ?? '').trim()) {
+    throw new Error('frozen v1.1.4 compatibility evidence is incomplete');
+  }
+  if (requireRevoke) {
+    const revoke = evidence?.revoke;
+    if (revoke?.disabled !== true || revoke.pending_rpc_rejected !== true
+      || revoke.http_closed !== true || revoke.websocket_closed !== true || revoke.tcp_closed !== true
+      || !Number.isInteger(revoke.revoked_resources) || revoke.revoked_resources < 3) {
+      throw new Error('revoke/resource closure evidence is incomplete');
+    }
+  }
+  if (requireColdRestart) {
+    const cold = evidence?.cold_restart;
+    if (cold?.runtime_restarted !== true || cold?.state_root_reused !== true
+      || cold?.enabled_after_restart !== true
+      || !Number.isInteger(target.previous_runtime_pid) || target.previous_runtime_pid <= 1
+      || target.previous_runtime_pid === target.runtime_pid) {
+      throw new Error('Linux cold restart evidence is incomplete');
+    }
+  }
+  return true;
 }
 
 export function assessPluginSmoke({ recovery, catalog, panelInstalledCount, surface, rpc }) {
@@ -246,6 +301,134 @@ async function verifyDisabledUpdateIntent(page, sessionHeaders, initialCatalog, 
   };
 }
 
+async function installUploadedSmokePlugin(page, sessionHeaders, config, pluginResponses) {
+  const packageBytes = await fs.readFile(config.ioPackagePath);
+  const encoded = packageBytes.toString('base64');
+  const inspectionResponse = await page.evaluate(async (payload) => {
+    const bytes = Uint8Array.from(atob(payload.bytes), (value) => value.charCodeAt(0));
+    const response = await fetch('/_redevplugin/api/plugins/external-packages/upload/inspect', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/vnd.redevplugin.package+zip',
+        ...(payload.csrf ? { 'x-redevplugin-csrf': payload.csrf } : {}),
+        ...(payload.pluginSession ? { 'x-redeven-plugin-session': payload.pluginSession } : {}),
+      },
+      credentials: 'include',
+      body: bytes,
+    });
+    return { status: response.status, body: await response.json().catch(() => null) };
+  }, {
+    bytes: encoded,
+    csrf: sessionHeaders['x-redevplugin-csrf'],
+    pluginSession: sessionHeaders['x-redeven-plugin-session'],
+  });
+  pluginResponses.push({ method: 'POST', pathname: '/_redevplugin/api/plugins/external-packages/upload/inspect', ...inspectionResponse });
+  if (inspectionResponse.status !== 200) throw new Error(`I/O package inspection failed: ${JSON.stringify(inspectionResponse)}`);
+  const inspection = inspectionResponse.body?.data ?? inspectionResponse.body;
+  const approvedPermissionIDs = [...new Set((inspection.security_summary?.permissions ?? []).map((permission) => permission.permission_id))];
+  const installResponse = await requestPluginJSON(page, '/_redevplugin/api/plugins/external-packages/install', {
+    inspection_id: inspection.inspection_id,
+    expected_package_sha256: inspection.inspected_hashes.package_sha256,
+    activate_after_install: true,
+    approved_permission_ids: approvedPermissionIDs,
+  }, sessionHeaders);
+  pluginResponses.push({ method: 'POST', pathname: '/_redevplugin/api/plugins/external-packages/install', ...installResponse });
+  if (installResponse.status !== 200) throw new Error(`I/O package install failed: ${JSON.stringify(installResponse)}`);
+  return {
+    performed: true,
+    enabledCount: 1,
+    package_sha256: inspection.inspected_hashes.package_sha256,
+    approved_permission_ids: approvedPermissionIDs,
+    plugin_instance_id: installResponse.body?.data?.plugin?.plugin_instance_id ?? installResponse.body?.plugin?.plugin_instance_id,
+  };
+}
+
+async function installCompatibilityPackage(page, sessionHeaders, packagePath, pluginResponses) {
+  const bytes = (await fs.readFile(packagePath)).toString('base64');
+  const inspectionResponse = await page.evaluate(async (payload) => {
+    const raw = Uint8Array.from(atob(payload.bytes), (value) => value.charCodeAt(0));
+    const response = await fetch('/_redevplugin/api/plugins/external-packages/upload/inspect', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/vnd.redevplugin.package+zip',
+        'x-redevplugin-csrf': payload.csrf,
+        'x-redeven-plugin-session': payload.pluginSession,
+      },
+      body: raw,
+    });
+    return { status: response.status, body: await response.json().catch(() => null) };
+  }, {
+    bytes,
+    csrf: sessionHeaders['x-redevplugin-csrf'],
+    pluginSession: sessionHeaders['x-redeven-plugin-session'],
+  });
+  pluginResponses.push({ method: 'POST', pathname: '/_redevplugin/api/plugins/external-packages/upload/inspect', ...inspectionResponse });
+  if (inspectionResponse.status !== 200) throw new Error(`frozen v1.1.4 inspection failed: ${JSON.stringify(inspectionResponse)}`);
+  const inspection = inspectionResponse.body?.data ?? inspectionResponse.body;
+  const installResponse = await requestPluginJSON(page, '/_redevplugin/api/plugins/external-packages/install', {
+    inspection_id: inspection.inspection_id,
+    expected_package_sha256: inspection.inspected_hashes.package_sha256,
+    activate_after_install: true,
+    approved_permission_ids: [...new Set((inspection.security_summary?.permissions ?? []).map((permission) => permission.permission_id))],
+  }, sessionHeaders);
+  pluginResponses.push({ method: 'POST', pathname: '/_redevplugin/api/plugins/external-packages/install', ...installResponse });
+  if (installResponse.status !== 200) throw new Error(`frozen v1.1.4 install failed: ${JSON.stringify(installResponse)}`);
+  return installResponse.body?.data?.plugin?.plugin_instance_id ?? installResponse.body?.plugin?.plugin_instance_id;
+}
+
+async function verifyIOSmokeRevoke(page, frame, sessionHeaders, catalog, config, pluginResponses, pluginInstanceID) {
+  const plugin = enabledPlugins(catalog).find((candidate) => candidate.plugin_instance_id === pluginInstanceID) ?? enabledPlugins(catalog)[0];
+  if (!plugin) throw new Error('v9 I/O revoke smoke requires an enabled plugin');
+  const holdPromise = frame.evaluate(() => window.__ioSmokeHold?.()).catch((error) => ({ error: String(error) }));
+  const stateURL = `http://127.0.0.1:${config.fixturePorts.http}/state`;
+  const activeBefore = await waitFor(async () => {
+    const response = await fetch(stateURL);
+    const state = await response.json();
+    return state.http_active > 0 && state.ws_active > 0 && state.tcp_active > 0 ? state : null;
+  }, 30_000, 'v9 hold resource activation');
+  const disableResponse = await requestPluginJSON(page, '/_redevplugin/api/plugins/disable', {
+    plugin_instance_id: plugin.plugin_instance_id,
+    expected_management_revision: plugin.management_revision,
+    reason: 'user_disabled',
+  }, sessionHeaders);
+  pluginResponses.push({ method: 'POST', pathname: '/_redevplugin/api/plugins/disable', ...disableResponse });
+  if (disableResponse.status !== 200) throw new Error(`v9 I/O disable failed: ${JSON.stringify(disableResponse)}`);
+  const closed = await waitFor(async () => {
+    const response = await fetch(stateURL);
+    const state = await response.json();
+    return state.http_active === 0 && state.ws_active === 0 && state.tcp_active === 0
+      && state.http_closed > 0 && state.ws_closed > 0 && state.tcp_closed > 0 ? state : null;
+  }, 60_000, 'v9 resource closure after revoke');
+  const holdOutcome = await Promise.race([
+    holdPromise,
+    new Promise((resolve) => setTimeout(() => resolve({ timeout: true }), 30_000)),
+  ]);
+  const disabled = await waitFor(async () => {
+    const response = await requestPluginJSON(page, '/_redevplugin/api/plugins/catalog/query', {}, sessionHeaders);
+    if (response.status !== 200) return null;
+    const next = response.body?.data ?? response.body;
+    return installedPlugins(next).find((item) => item.plugin_instance_id === plugin.plugin_instance_id && item.enable_state === 'disabled') ?? null;
+  }, 30_000, 'v9 disabled state');
+  const enableResponse = await requestPluginJSON(page, '/_redevplugin/api/plugins/enable', {
+    plugin_instance_id: disabled.plugin_instance_id,
+    expected_management_revision: disabled.management_revision,
+  }, sessionHeaders);
+  pluginResponses.push({ method: 'POST', pathname: '/_redevplugin/api/plugins/enable', ...enableResponse });
+  if (enableResponse.status !== 200) throw new Error(`v9 I/O re-enable failed: ${JSON.stringify(enableResponse)}`);
+  return {
+    disabled: true,
+    pending_rpc_rejected: holdOutcome?.timeout !== true
+      && (Boolean(holdOutcome?.error) || holdOutcome?.ok === false),
+    http_closed: closed.http_closed > activeBefore.http_active,
+    websocket_closed: closed.ws_closed > activeBefore.ws_active,
+    tcp_closed: closed.tcp_closed > activeBefore.tcp_active,
+    revoked_resources: activeBefore.http_active + activeBefore.ws_active + activeBefore.tcp_active,
+    active_before: activeBefore,
+    closed_state: closed,
+    hold_outcome: holdOutcome,
+  };
+}
+
 async function ensureInitialEnabledPlugin(page, sessionHeaders, config, pluginResponses) {
   const queryCatalog = async () => {
     const response = await requestPluginJSON(
@@ -270,6 +453,25 @@ async function ensureInitialEnabledPlugin(page, sessionHeaders, config, pluginRe
   }
   if (config.phase !== 'initial') {
     throw new Error('cold restart started without an enabled plugin');
+  }
+
+  if (config.ioPackagePath) {
+    const installed = await installUploadedSmokePlugin(page, sessionHeaders, config, pluginResponses);
+    const frozenPluginInstanceID = await installCompatibilityPackage(page, sessionHeaders, config.frozenPackagePath, pluginResponses);
+    const expectedPluginInstanceIDs = [installed.plugin_instance_id, frozenPluginInstanceID];
+    if (expectedPluginInstanceIDs.some((pluginInstanceID) => !String(pluginInstanceID ?? '').trim())) {
+      throw new Error(`smoke package installation omitted plugin identity: ${JSON.stringify(expectedPluginInstanceIDs)}`);
+    }
+    const enabled = await waitFor(async () => {
+      const response = await queryCatalog();
+      if (response.status !== 200) return null;
+      const catalog = response.body?.data ?? response.body;
+      const active = enabledPlugins(catalog);
+      return expectedPluginInstanceIDs.every((pluginInstanceID) => active.some((plugin) => (
+        plugin.plugin_instance_id === pluginInstanceID && plugin.action_state?.can_open === true
+      ))) ? catalog : null;
+    }, 120_000, 'v9 and frozen plugin activation');
+    return { ...installed, frozen_plugin_instance_id: frozenPluginInstanceID, enabledCount: enabledPlugins(enabled).length };
   }
 
   const openCenter = page.locator('[data-plugin-center-market-action]').first();
@@ -344,15 +546,18 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     if (config.mode === 'attach') {
       throw new Error('attached Desktop has no open Env App target');
     }
-    const open = initialPage.getByRole('button', { name: /^(?:Open|打开)$/u }).last();
-    try {
-      await open.waitFor({ state: 'visible', timeout: 30_000 });
-    } catch (error) {
-      await initialPage.screenshot({ path: path.join(config.reportRoot, `${config.phase}-welcome-failure.png`), fullPage: true }).catch(() => {});
-      await fs.writeFile(path.join(config.reportRoot, `${config.phase}-welcome-failure.html`), await initialPage.content()).catch(() => {});
-      throw error;
-    }
-    await open.click();
+    if (!config.externalLocalUIURL) throw new Error('isolated Desktop smoke requires an external Linux Local UI URL');
+    const launcherResult = await initialPage.evaluate(async (url) => {
+      if (!window.redevenDesktopLauncher?.performAction) throw new Error('Desktop preload launcher bridge is unavailable');
+      return window.redevenDesktopLauncher.performAction({
+        kind: 'open_remote_environment',
+        external_local_ui_url: url,
+        environment_id: 'linux-io-smoke',
+        label: 'Linux I/O smoke',
+      });
+    }, config.externalLocalUIURL);
+    await fs.writeFile(path.join(config.reportRoot, `${config.phase}-external-open.json`), `${JSON.stringify(launcherResult, null, 2)}\n`);
+    if (launcherResult?.ok === false) throw new Error(`external Linux Local UI open failed: ${JSON.stringify(launcherResult)}`);
     browser = await reconnectBrowser();
   }
   let page;
@@ -371,6 +576,21 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     throw error;
   }
   await page.bringToFront();
+  if (config.externalLocalUIURL) {
+    const accessPassword = page.locator('#redeven-access-password');
+    let unlock = { status: 204, unlocked: true };
+    if (await accessPassword.count() > 0) {
+      await accessPassword.fill('smoke-password');
+      const unlockResponse = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/local/access/unlock');
+      await page.locator('form button[type="submit"]').click();
+      const response = await unlockResponse;
+      const body = await responseJSON(response);
+      unlock = { status: response.status(), unlocked: body?.data?.unlocked === true };
+      await accessPassword.waitFor({ state: 'detached', timeout: 30_000 });
+    }
+    await fs.writeFile(path.join(config.reportRoot, `${config.phase}-external-unlock.json`), `${JSON.stringify(unlock, null, 2)}\n`);
+    if (unlock.status !== 200 && unlock.status !== 204) throw new Error(`Linux Local UI unlock failed: ${JSON.stringify(unlock)}`);
+  }
   phase = 'surface_reset';
   const existingSurfaceHosts = page.locator('[data-plugin-surface-host]');
   while (await existingSurfaceHosts.count() > 0) {
@@ -402,7 +622,13 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
   page.on('request', (request) => void (async () => {
     const pathname = new URL(request.url()).pathname;
     if (pathname.includes('/_redevplugin/api/plugins/') || pathname.includes('/_redeven_proxy/api/plugins/market')) {
-      pluginRequests.push({ method: request.method(), pathname });
+      const observation = { method: request.method(), pathname };
+      if (pathname.endsWith('/plugins/rpc')) {
+        const body = request.postDataJSON();
+        observation.rpc_plugin_instance_id = body?.plugin_instance_id;
+        observation.rpc_method = body?.method;
+      }
+      pluginRequests.push(observation);
       pluginRequestHeaders.set(pathname, await request.allHeaders());
     }
   })().catch((error) => pageErrors.push(`request observation failed: ${String(error)}`)));
@@ -419,7 +645,13 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
           headers: await response.allHeaders(),
         });
       } else {
-        pluginResponses.push({ method: request.method(), pathname, status: response.status(), body: await responseJSON(response) });
+        const observation = { method: request.method(), pathname, status: response.status(), body: await responseJSON(response) };
+        if (pathname.endsWith('/plugins/rpc')) {
+          const requestBody = request.postDataJSON();
+          observation.rpc_plugin_instance_id = requestBody?.plugin_instance_id;
+          observation.rpc_method = requestBody?.method;
+        }
+        pluginResponses.push(observation);
       }
     }
   })().catch((error) => pageErrors.push(`response observation failed: ${String(error)}`)));
@@ -457,10 +689,24 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     await page.locator('[data-plugin-launcher-backdrop]').first().waitFor({ state: 'detached', timeout: 10_000 });
   }
   phase = 'session_inventory_prefetch';
-  const inventoryPrefetch = await waitFor(async () => {
-    const debug = await inventoryDebug();
-    return debug?.source === 'true' && debug.loading === 'false' && debug.error === 'false' ? debug : null;
-  }, 60_000, 'session inventory prefetch');
+  let inventoryPrefetch;
+  try {
+    inventoryPrefetch = await waitFor(async () => {
+      const debug = await inventoryDebug();
+      return debug?.source === 'true' && debug.loading === 'false' && debug.error === 'false' ? debug : null;
+    }, 60_000, 'session inventory prefetch');
+  } catch (error) {
+    await fs.writeFile(path.join(config.reportRoot, `${config.phase}-inventory-prefetch-diagnostics.json`), JSON.stringify({
+      selectedPageURL: page.url(),
+      envAppPageURLs: browserPages(browser).filter(isEnvAppPage).map((candidate) => candidate.url()),
+      inventoryDebug: await inventoryDebug(),
+      failedResponses,
+      consoleErrors,
+      pageErrors,
+      error: String(error),
+    }, null, 2));
+    throw error;
+  }
   mark('inventory_ready_ms');
   const sessionHeaders = await waitFor(() => {
     for (const headers of pluginRequestHeaders.values()) {
@@ -492,14 +738,67 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     throw error;
   }
   if (bootstrap.performed) {
-    const closeCenter = page.locator('[data-plugin-center-toolbar-primary] button[aria-label]').last();
-    await closeCenter.click();
-    await page.locator('[data-plugin-center-view]').waitFor({ state: 'hidden', timeout: 10_000 });
-    const activityPluginTrigger = page.locator('[aria-controls="redeven-plugin-switcher"]').filter({ visible: true }).first();
-    await activityPluginTrigger.waitFor({ state: 'visible', timeout: 10_000 });
-    await activityPluginTrigger.click();
+    const pluginCenter = page.locator('[data-plugin-center-view]');
+    if (config.ioPackagePath) {
+      try {
+        if (!await pluginCenter.isVisible().catch(() => false)) {
+          await page.locator('[data-plugin-launcher-backdrop] [data-plugin-center-market-action]').click();
+          await pluginCenter.waitFor({ state: 'visible', timeout: 10_000 });
+        }
+        await page.locator('[data-plugin-center-refresh]').click();
+        await waitFor(async () => {
+          const debug = await inventoryDebug();
+          return debug?.loading === 'false' && debug.items === bootstrap.enabledCount ? debug : null;
+        }, 30_000, 'Plugin Center projection after direct smoke install');
+      } catch (error) {
+        await page.screenshot({ path: path.join(config.reportRoot, `${config.phase}-direct-install-projection-failure.png`), fullPage: true }).catch(() => {});
+        await fs.writeFile(path.join(config.reportRoot, `${config.phase}-direct-install-projection-failure.html`), await page.content()).catch(() => {});
+        await fs.writeFile(path.join(config.reportRoot, `${config.phase}-direct-install-projection-diagnostics.json`), JSON.stringify({
+          expectedEnabledCount: bootstrap.enabledCount,
+          inventoryDebug: await inventoryDebug(),
+          pluginCenterVisible: await pluginCenter.isVisible().catch(() => false),
+          pluginResponses,
+          pluginRequests,
+          failedResponses,
+          consoleErrors,
+          pageErrors,
+          error: String(error),
+        }, null, 2)).catch(() => {});
+        throw error;
+      }
+    }
     try {
-      await page.locator('[data-plugin-launcher-backdrop]').first().waitFor({ state: 'visible', timeout: 10_000 });
+      if (await pluginCenter.isVisible().catch(() => false)) {
+        await page.locator('[data-plugin-center-close]').click();
+        await pluginCenter.waitFor({ state: 'hidden', timeout: 10_000 });
+      }
+    } catch (error) {
+      await page.screenshot({ path: path.join(config.reportRoot, `${config.phase}-plugin-center-close-failure.png`), fullPage: true }).catch(() => {});
+      await fs.writeFile(path.join(config.reportRoot, `${config.phase}-plugin-center-close-failure.html`), await page.content()).catch(() => {});
+      await fs.writeFile(path.join(config.reportRoot, `${config.phase}-plugin-center-close-diagnostics.json`), JSON.stringify({
+        pluginCenterCount: await pluginCenter.count(),
+        pluginCenterVisible: await pluginCenter.isVisible().catch(() => false),
+        toolbarButtons: await page.locator('[data-plugin-center-toolbar-primary] button').evaluateAll((buttons) => buttons.map((button) => ({
+          ariaLabel: button.getAttribute('aria-label'),
+          disabled: button.hasAttribute('disabled'),
+        }))),
+        activityPluginTriggers: await page.locator('[aria-controls="redeven-plugin-switcher"]').evaluateAll((triggers) => triggers.map((trigger) => ({
+          ariaExpanded: trigger.getAttribute('aria-expanded'),
+          ariaPressed: trigger.getAttribute('aria-pressed'),
+          visible: Boolean(trigger.getClientRects().length),
+        }))),
+        error: String(error),
+      }, null, 2)).catch(() => {});
+      throw error;
+    }
+    const activityPluginTrigger = page.locator('[aria-controls="redeven-plugin-switcher"]').filter({ visible: true }).first();
+    const pluginPanelBackdrop = page.locator('[data-plugin-launcher-backdrop]').first();
+    try {
+      if (!await pluginPanelBackdrop.isVisible().catch(() => false)) {
+        await activityPluginTrigger.waitFor({ state: 'visible', timeout: 10_000 });
+        await activityPluginTrigger.click();
+      }
+      await pluginPanelBackdrop.waitFor({ state: 'visible', timeout: 10_000 });
     } catch (error) {
       await page.screenshot({ path: path.join(config.reportRoot, `${config.phase}-panel-after-install-failure.png`), fullPage: true }).catch(() => {});
       await fs.writeFile(path.join(config.reportRoot, `${config.phase}-panel-after-install-failure.html`), await page.content()).catch(() => {});
@@ -510,6 +809,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
           className: node.getAttribute('class'),
         })).catch(() => null),
         backdropCount: await page.locator('[data-plugin-launcher-backdrop]').count(),
+        backdropVisible: await pluginPanelBackdrop.isVisible().catch(() => false),
         motionStates: await page.locator('[data-plugin-panel-motion-state]').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-plugin-panel-motion-state'))),
         workbenchSelected: await page.getByRole('tab', { name: 'Workbench', exact: true }).getAttribute('aria-selected'),
         inventoryDebug: await inventoryDebug(),
@@ -571,9 +871,29 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     await reopenedBackdrop.waitFor({ state: 'visible', timeout: 10_000 });
     const openDurationMS = Number((performance.now() - openStartedAt).toFixed(1));
     const installedTiles = reopenedBackdrop.locator('[data-plugin-panel-tile]:not([data-plugin-panel-tile="plugin-center"])');
-    await waitFor(async () => (
-      await installedTiles.count() === bootstrap.enabledCount ? true : null
-    ), 10_000, `Plugin Panel inventory on reopen ${index + 1}`);
+    try {
+      await waitFor(async () => (
+        await installedTiles.count() === bootstrap.enabledCount ? true : null
+      ), 10_000, `Plugin Panel inventory on reopen ${index + 1}`);
+    } catch (error) {
+      await page.screenshot({ path: path.join(config.reportRoot, `${config.phase}-panel-reopen-${index + 1}-failure.png`), fullPage: true }).catch(() => {});
+      await fs.writeFile(path.join(config.reportRoot, `${config.phase}-panel-reopen-${index + 1}-failure.html`), await page.content()).catch(() => {});
+      await fs.writeFile(path.join(config.reportRoot, `${config.phase}-panel-reopen-${index + 1}-diagnostics.json`), JSON.stringify({
+        cycle: index + 1,
+        expectedEnabledCount: bootstrap.enabledCount,
+        installedTileCount: await installedTiles.count(),
+        tileKeys: await installedTiles.evaluateAll((tiles) => tiles.map((tile) => tile.getAttribute('data-plugin-panel-tile'))),
+        panelText: (await reopenedBackdrop.innerText().catch(() => '')).slice(0, 4000),
+        inventoryDebug: await inventoryDebug(),
+        pluginResponses,
+        pluginRequests,
+        failedResponses,
+        consoleErrors,
+        pageErrors,
+        error: String(error),
+      }, null, 2)).catch(() => {});
+      throw error;
+    }
     const panelText = await reopenedBackdrop.innerText();
     if (/Loading plugins|正在加载插件/u.test(panelText)) {
       throw new Error(`Plugin Panel exposed a loading banner on reopen ${index + 1}`);
@@ -734,7 +1054,9 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     rpc: { ok: true },
   });
   if (inventoryAssessment.ok && enabledCount > 0) {
-    const firstTile = page.locator('[data-plugin-panel-tile]:not([data-plugin-panel-tile="plugin-center"])').first();
+    const firstTile = config.ioPackagePath
+      ? page.locator('[data-plugin-panel-tile]:not([data-plugin-panel-tile="plugin-center"])').filter({ hasText: 'I/O smoke' }).first()
+      : page.locator('[data-plugin-panel-tile]:not([data-plugin-panel-tile="plugin-center"])').first();
     const icon = await firstTile.locator('img').evaluateAll((images) => images.map((candidate) => {
       const image = candidate;
       return {
@@ -786,8 +1108,10 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     }
     await waitFor(async () => (await frame.locator('body').innerText()).trim().length > 0, 30_000, 'plugin iframe body');
     surface = { ready: true, url: frame.url(), body: (await frame.locator('body').innerText()).slice(0, 2_000) };
+    const v9Plugin = installedPlugins(catalog).find((candidate) => candidate.plugin_id === 'dev.redeven.smoke.io');
     const rpcEntry = await waitFor(
-      () => pluginResponses.find((entry) => entry.pathname.endsWith('/plugins/rpc') && entry.status === 200),
+      () => pluginResponses.find((entry) => entry.pathname.endsWith('/plugins/rpc') && entry.status === 200
+        && entry.rpc_plugin_instance_id === v9Plugin?.plugin_instance_id && entry.rpc_method === 'smoke.run'),
       30_000,
       'plugin RPC',
     );
@@ -798,9 +1122,96 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
 
   const assessment = assessPluginSmoke({ recovery, catalog, panelInstalledCount, surface, rpc });
   let disabledUpdateIntent = null;
-  if (config.mode !== 'attach' && config.phase === 'initial') {
+  if (config.mode !== 'attach' && config.phase === 'initial' && config.ioPackagePath) {
+    phase = 'disabled_revoke';
+    const v9Plugin = installedPlugins(catalog).find((candidate) => candidate.plugin_id === 'dev.redeven.smoke.io');
+    disabledUpdateIntent = await verifyIOSmokeRevoke(page, frame, sessionHeaders, catalog, config, pluginResponses, v9Plugin?.plugin_instance_id);
+  } else if (config.mode !== 'attach' && config.phase === 'initial') {
     phase = 'disabled_update_intent';
     disabledUpdateIntent = await verifyDisabledUpdateIntent(page, sessionHeaders, catalog, pluginResponses);
+  }
+  let ioEvidence = null;
+  if (config.ioPackagePath) {
+    const workerResult = rpc.result?.data ?? rpc.result?.result ?? rpc.result ?? {};
+    const frozenBytes = await fs.readFile(config.frozenPackagePath);
+    const frozenObservedHash = createHash('sha256').update(frozenBytes).digest('hex');
+    const frozenSums = await fs.readFile(config.frozenSHA256SumsPath, 'utf8');
+    const frozenExpectedHash = frozenSums.split('\n').map((line) => line.trim().split(/\s+/u))
+      .find(([, name]) => name === 'worker.redevplugin')?.[0];
+    if (!/^[0-9a-f]{64}$/u.test(String(frozenExpectedHash ?? ''))) {
+      throw new Error('frozen v1.1.4 SHA256SUMS does not contain worker.redevplugin');
+    }
+    const initialEvidence = config.phase === 'cold_restart' && config.initialOutput
+      ? JSON.parse(await fs.readFile(config.initialOutput, 'utf8')).io_evidence
+      : null;
+    const frozenPluginInstanceID = bootstrap.frozen_plugin_instance_id
+      ?? initialEvidence?.frozen_v1_1_4?.plugin_instance_id;
+    ioEvidence = {
+      linux_target: {
+        os: config.linuxTarget?.os,
+        arch: config.linuxTarget?.arch,
+        container_id: config.linuxTarget?.container_id,
+        commit: config.commit,
+        runtime_pid: config.linuxTarget?.runtime_pid,
+        previous_runtime_pid: config.linuxTarget?.previous_runtime_pid,
+        local_ui_pid: config.linuxTarget?.local_ui_pid ?? config.linuxTarget?.runtime_pid,
+        state_root: config.linuxTarget?.state_root,
+      },
+      v9: {
+        manifest_schema: workerResult.manifest ?? workerResult.schema_version,
+        enabled_after_install: bootstrap.enabledCount > 0,
+        fs: workerResult.fs,
+        http: workerResult.http,
+        websocket: workerResult.websocket,
+        tcp: workerResult.tcp,
+        udp: workerResult.udp,
+      },
+      frozen_v1_1_4: {
+        package: 'worker.redevplugin',
+        plugin_instance_id: frozenPluginInstanceID,
+        expected_sha256: frozenExpectedHash,
+        observed_sha256: frozenObservedHash,
+        rpc_ok: false,
+      },
+      revoke: disabledUpdateIntent,
+      cold_restart: config.phase === 'cold_restart' ? {
+        runtime_restarted: true,
+        state_root_reused: config.linuxTarget?.state_root === initialEvidence?.linux_target?.state_root,
+        enabled_after_restart: bootstrap.enabledCount > 0,
+      } : null,
+    };
+    const frozenPlugin = installedPlugins(catalog).find((candidate) => candidate.plugin_instance_id === frozenPluginInstanceID);
+    const surfaceHost = page.locator('[data-plugin-surface-host]').first();
+    if (await surfaceHost.count() > 0) {
+      const closeSurface = surfaceHost.locator('xpath=ancestor::*[@data-redeven-plugin-activity-window="true"]').getByRole('button', { name: /^(?:Close|关闭)$/u }).first();
+      if (await closeSurface.count() > 0) await closeSurface.click();
+    }
+    const frozenTile = page.locator('[data-plugin-panel-tile]:not([data-plugin-panel-tile="plugin-center"])')
+      .filter({ hasText: frozenPlugin?.display_name ?? 'worker' }).first();
+    if (await frozenTile.count() > 0) {
+      const frozenRPCStart = pluginResponses.length;
+      await frozenTile.click();
+      const frozenFrame = await waitFor(async () => {
+        const iframe = page.locator('[data-plugin-surface-iframe]').first();
+        if (await iframe.count() === 0) return null;
+        const handle = await iframe.elementHandle();
+        return handle?.contentFrame() ?? null;
+      }, 30_000, 'frozen v1.1.4 surface');
+      await waitFor(async () => (await frozenFrame.locator('body').innerText()).trim().length > 0, 30_000, 'frozen v1.1.4 surface body');
+      const frozenRPC = await waitFor(() => pluginResponses.slice(frozenRPCStart).find((entry) => (
+        entry.pathname.endsWith('/plugins/rpc') && entry.status === 200
+        && entry.rpc_plugin_instance_id === frozenPluginInstanceID
+      )), 30_000, 'frozen v1.1.4 RPC');
+      ioEvidence.frozen_v1_1_4.rpc_ok = Boolean(frozenRPC);
+      ioEvidence.frozen_v1_1_4.rpc_method = frozenRPC.rpc_method;
+      ioEvidence.frozen_v1_1_4.surface_opened = true;
+    } else {
+      throw new Error(`frozen v1.1.4 tile is not visible: ${frozenPlugin?.plugin_instance_id ?? 'unknown'}`);
+    }
+    assertExtensionIOEvidence(ioEvidence, {
+      requireRevoke: config.phase === 'initial',
+      requireColdRestart: config.phase === 'cold_restart',
+    });
   }
   const summary = {
     schema_version: 1,
@@ -846,6 +1257,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     surface,
     rpc,
     disabled_update_intent: disabledUpdateIntent,
+    io_evidence: ioEvidence,
     console_errors: consoleErrors,
     page_errors: pageErrors,
     failed_responses: failedResponses,

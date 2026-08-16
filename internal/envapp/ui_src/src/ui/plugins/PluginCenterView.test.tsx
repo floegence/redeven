@@ -761,6 +761,7 @@ describe('PluginCenterView', () => {
 
   it('renders a dedicated management shell outside Settings with local search', () => {
     const mount = document.createElement('div');
+    const onClose = vi.fn();
     document.body.append(mount);
 
     dispose = render(() => (
@@ -770,6 +771,7 @@ describe('PluginCenterView', () => {
         error={null}
         onCommand={vi.fn()}
         onRefresh={vi.fn()}
+        onClose={onClose}
         canManagePlugins
         canOpenPluginSurfaces={false}
       />
@@ -785,6 +787,8 @@ describe('PluginCenterView', () => {
     expect(mount.textContent).toContain('Updates');
     expect(mount.textContent).toContain('Containers');
     expect(mount.textContent).not.toMatch(/Developer|Install from URL|Install from file|unsigned|marketplace/i);
+    (mount.querySelector('[data-plugin-center-close]') as HTMLButtonElement).click();
+    expect(onClose).toHaveBeenCalledOnce();
 
     const search = mount.querySelector('[data-plugin-center-search]') as HTMLInputElement;
     search.value = 'database';

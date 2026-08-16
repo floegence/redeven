@@ -1067,6 +1067,7 @@ export function PluginCenterShell(props: {
             <Show when={props.onClose}>
               <button
                 type="button"
+                data-plugin-center-close
                 class="inline-flex h-[44px] w-[44px] cursor-pointer items-center justify-center rounded-md border text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground sm:h-9 sm:w-9 motion-reduce:transition-none"
                 aria-label={i18n.t('uiCopy.plugin.closeCenter')}
                 title={i18n.t('uiCopy.plugin.closeCenter')}

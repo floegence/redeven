@@ -168,7 +168,7 @@ export function validatePackageSet(value) {
   digest(value.contract_set_sha256, 'package set contract digest');
   if (value.contract_registry_version !== 'contract-registry-v2') fail('package set registry version is invalid');
   exactKeys(value.go_module, ['module', 'version'], 'package set Go module');
-  if (value.go_module.module !== 'github.com/floegence/redevplugin' || value.go_module.version !== `v${value.platform_version}`) {
+  if (value.go_module.module !== 'github.com/floegence/redevplugin/v2' || value.go_module.version !== `v${value.platform_version}`) {
     fail('package set Go coordinate is invalid');
   }
   if (!Array.isArray(value.npm_packages) || value.npm_packages.length !== expectedNPM.length) {

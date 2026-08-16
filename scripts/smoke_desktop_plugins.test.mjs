@@ -41,6 +41,7 @@ const completeIOEvidence = {
   },
   frozen_v1_1_4: {
     package: 'worker.redevplugin',
+    plugin_instance_id: 'plugini_frozen',
     expected_sha256: 'c'.repeat(64),
     observed_sha256: 'c'.repeat(64),
     rpc_ok: true,
@@ -70,6 +71,46 @@ test('Desktop smoke rejects partial protocol or revoke coverage', () => {
   }), /revoke/u);
 });
 
+test('Desktop smoke requires a distinct Linux PID and reused state for cold restart evidence', () => {
+  assert.doesNotThrow(() => assertExtensionIOEvidence({
+    ...completeIOEvidence,
+    linux_target: { ...completeIOEvidence.linux_target, previous_runtime_pid: 40 },
+    cold_restart: { runtime_restarted: true, state_root_reused: true, enabled_after_restart: true },
+  }, { requireRevoke: false, requireColdRestart: true }));
+  assert.throws(() => assertExtensionIOEvidence({
+    ...completeIOEvidence,
+    linux_target: { ...completeIOEvidence.linux_target, previous_runtime_pid: 41 },
+    cold_restart: { runtime_restarted: true, state_root_reused: true, enabled_after_restart: true },
+  }, { requireRevoke: false, requireColdRestart: true }), /cold restart/u);
+});
+
+test('Desktop smoke binds compatibility proof to a new frozen-package RPC without leaking bridge credentials', async () => {
+  const source = await import('node:fs/promises').then((fs) => fs.readFile(
+    new URL('./smoke_desktop_plugins.mjs', import.meta.url),
+    'utf8',
+  ));
+  assert.match(source, /pluginResponses\.slice\(frozenRPCStart\)/u);
+  assert.match(source, /rpc_plugin_instance_id === frozenPluginInstanceID/u);
+  assert.doesNotMatch(source, /plugin_gateway_token.*observation/u);
+  assert.doesNotMatch(source, /revoked_resources:[^\n]*\?\? 1/u);
+  assert.match(source, /'x-redeven-plugin-session': payload\.pluginSession/u);
+  assert.doesNotMatch(source, /plugin_session_credential.*observation/u);
+  assert.ok(source.indexOf("'frozen v1.1.4 RPC'") < source.lastIndexOf('assertExtensionIOEvidence(ioEvidence'));
+});
+
+test('Desktop smoke redacts Local UI resume credentials from persisted unlock evidence', async () => {
+  const source = await import('node:fs/promises').then((fs) => fs.readFile(
+    new URL('./smoke_desktop_plugins.mjs', import.meta.url),
+    'utf8',
+  ));
+  const unlockEvidence = source.slice(
+    source.indexOf("const accessPassword = page.locator('#redeven-access-password');"),
+    source.indexOf("phase = 'surface_reset';"),
+  );
+  assert.match(unlockEvidence, /unlocked: body\?\.data\?\.unlocked === true/u);
+  assert.doesNotMatch(unlockEvidence, /response\.text\(\)|resume_token/u);
+});
+
 test('Desktop smoke launches a task-owned Linux target and opens it through the Desktop preload bridge', async () => {
   const [shellSource, browserSource] = await Promise.all([
     import('node:fs/promises').then((fs) => fs.readFile(new URL('./smoke_desktop_plugins.sh', import.meta.url), 'utf8')),
@@ -77,9 +118,29 @@ test('Desktop smoke launches a task-owned Linux target and opens it through the 
   ]);
   assert.match(shellSource, /docker run/u);
   assert.match(shellSource, /linux\/arm64/u);
+  assert.ok(shellSource.indexOf('scripts/build_assets.sh') < shellSource.indexOf('go build -trimpath -o /out/redeven'));
   assert.match(shellSource, /REDEVEN_DESKTOP_AUTO_START_RUNTIME=0/u);
   assert.match(browserSource, /redevenDesktopLauncher\.performAction/u);
   assert.match(browserSource, /kind: 'open_remote_environment'/u);
+  assert.match(shellSource, /restart_linux_redeven/u);
+  assert.match(shellSource, /run_phase initial\s+restart_linux_redeven\s+run_phase cold_restart/u);
+  assert.match(shellSource, /previous_runtime_pid/u);
+  assert.match(shellSource, /reserve_linux_ports/u);
+  assert.match(shellSource, /container_removed/u);
+  assert.doesNotMatch(shellSource, /127\.0\.0\.1:1808[0-2]:1808[0-2]/u);
+});
+
+test('Linux smoke reserves a distinct non-ephemeral port group for the shared container namespace', async () => {
+  const source = await import('node:fs/promises').then((fs) => fs.readFile(
+    new URL('./smoke_desktop_plugins.sh', import.meta.url),
+    'utf8',
+  ));
+  assert.match(source, /reserve_linux_ports/u);
+  assert.match(source, /LOW_PORT_MIN=20000/u);
+  assert.match(source, /LOW_PORT_MAX=29999/u);
+  assert.match(source, /new Set\(ports\)\.size === ports\.length/u);
+  assert.doesNotMatch(source, /LINUX_UI_PORT=.*\$\(reserve_port\)/u);
+  assert.doesNotMatch(source, /FIXTURE_HTTP_PORT=.*\$\(reserve_port\)/u);
 });
 
 test('attach smoke accepts the shared dev Desktop ports with verified provenance', () => {
@@ -143,6 +204,23 @@ test('browser smoke waits for session inventory before first Panel open', async 
   const panelOpen = source.indexOf("await visiblePluginTrigger().click();", panelPhase);
   assert.ok(inventoryReady > 0 && sessionWait > inventoryReady && panelOpen > sessionWait);
   assert.match(source, /config\.mode === 'attach'[\s\S]*?aria-expanded[\s\S]*?state: 'detached'/u);
+});
+
+test('the Activity Plugin Panel is an eagerly mounted core control', async () => {
+  const fs = await import('node:fs/promises');
+  const [shellSource, panelSource] = await Promise.all([
+    fs.readFile(new URL('../internal/envapp/ui_src/src/ui/EnvAppShell.tsx', import.meta.url), 'utf8'),
+    fs.readFile(new URL('../internal/envapp/ui_src/src/ui/plugins/PluginPanel.tsx', import.meta.url), 'utf8'),
+  ]);
+  assert.match(shellSource, /import \{ PluginPanel \} from '\.\/plugins\/PluginPanel'/u);
+  assert.doesNotMatch(shellSource, /const PluginPanel = lazy/u);
+  assert.match(shellSource, /type PluginPanelState = Readonly<\{[\s\S]*?open: boolean;[\s\S]*?placement: 'activity' \| 'workbench';[\s\S]*?trigger: HTMLButtonElement \| null;/u);
+  assert.match(shellSource, /createSignal<PluginPanelState>/u);
+  assert.match(shellSource, /<PluginPanel[\s\S]*?open=\{pluginsPanelOpen\(\)\}/u);
+  assert.doesNotMatch(shellSource, /requestPluginPanelState|activePluginPanelManager|activePluginsActivityBinding/u);
+  assert.match(panelSource, /import \{ Portal \} from 'solid-js\/web'/u);
+  assert.match(panelSource, /<Show when=\{mounted\(\)\}>\s*<Portal>/u);
+  assert.doesNotMatch(panelSource, /openCommands|registerController|PLUGIN_PANEL_CONTROL_EVENT/u);
 });
 
 test('isolated smoke configuration rejects shared Desktop paths and ports', () => {
@@ -236,6 +314,28 @@ test('Desktop smoke installs through Plugin Center only for the initial isolated
   assert.doesNotMatch(source, /official plugin enable action/u);
   assert.match(source, /official plugin activation/u);
   assert.match(source, /cold restart started without an enabled plugin/u);
+});
+
+test('Desktop smoke waits for both v9 and frozen plugin surfaces before fixing Panel expectations', async () => {
+  const source = await import('node:fs/promises').then((fs) => fs.readFile(
+    new URL('./smoke_desktop_plugins.mjs', import.meta.url),
+    'utf8',
+  ));
+  assert.match(source, /const expectedPluginInstanceIDs = \[installed\.plugin_instance_id, frozenPluginInstanceID\]/u);
+  assert.match(source, /expectedPluginInstanceIDs\.every\(\(pluginInstanceID\) => active\.some\(\(plugin\) => \([\s\S]*?plugin\.action_state\?\.can_open === true/u);
+  assert.match(source, /v9 and frozen plugin activation/u);
+  assert.match(source, /panel-reopen-\$\{index \+ 1\}-diagnostics\.json/u);
+});
+
+test('Desktop smoke refreshes the UI projection once after direct fixture installation', async () => {
+  const source = await import('node:fs/promises').then((fs) => fs.readFile(
+    new URL('./smoke_desktop_plugins.mjs', import.meta.url),
+    'utf8',
+  ));
+  assert.match(source, /if \(config\.ioPackagePath\) \{[\s\S]*?data-plugin-center-market-action[\s\S]*?data-plugin-center-refresh/u);
+  assert.match(source, /debug\?\.loading === 'false' && debug\.items === bootstrap\.enabledCount/u);
+  assert.match(source, /Plugin Center projection after direct smoke install/u);
+  assert.match(source, /direct-install-projection-diagnostics\.json/u);
 });
 
 test('Desktop smoke reconstructs the exact signed release reference from Host-owned installed facts', () => {
@@ -356,11 +456,14 @@ test('Desktop smoke leaves Plugin Center before reopening the Activity Plugin Pa
     new URL('./smoke_desktop_plugins.mjs', import.meta.url),
     'utf8',
   ));
-  assert.match(source, /const closeCenter = page\.locator\('\[data-plugin-center-toolbar-primary\] button\[aria-label\]'\)\.last\(\)/u);
-  assert.match(source, /page\.locator\('\[data-plugin-center-view\]'\)\.waitFor\(\{ state: 'hidden'/u);
+  assert.match(source, /const pluginCenter = page\.locator\('\[data-plugin-center-view\]'\)/u);
+  assert.match(source, /if \(await pluginCenter\.isVisible\(\)\.catch\(\(\) => false\)\) \{[\s\S]*?page\.locator\('\[data-plugin-center-close\]'\)\.click\(\)[\s\S]*?pluginCenter\.waitFor\(\{ state: 'hidden'/u);
+  assert.match(source, /plugin-center-close-diagnostics\.json/u);
   assert.doesNotMatch(source, /data-activity-id="monitor"/u);
   assert.match(source, /const activityPluginTrigger = page\.locator\('\[aria-controls="redeven-plugin-switcher"\]'\)\.filter\(\{ visible: true \}\)\.first\(\)/u);
-  assert.match(source, /await activityPluginTrigger\.click\(\)/u);
+  assert.match(source, /const pluginPanelBackdrop = page\.locator\('\[data-plugin-launcher-backdrop\]'\)\.first\(\)/u);
+  assert.match(source, /if \(!await pluginPanelBackdrop\.isVisible\(\)\.catch\(\(\) => false\)\) \{[\s\S]*?await activityPluginTrigger\.click\(\);[\s\S]*?pluginPanelBackdrop\.waitFor\(\{ state: 'visible'/u);
+  assert.doesNotMatch(source, /stale Activity Plugin Panel trigger reset|panelTriggerOpenDelayMS|pluginPanelActivityEvents|__redevenPluginPanelClickTrace/u);
 });
 
 test('Desktop smoke identifies the Env App target by its product route before shell readiness', () => {
