@@ -1,219 +1,125 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  buildDesktopRuntimeProcessTakeoverProposal,
+  desktopRuntimeProcessInventoryHasSingleCurrent,
   desktopRuntimeProcessInventoryNeedsMaintenance,
+  desktopRuntimeProcessStopTargetCount,
   parseDesktopRuntimeProcessInventory,
   parseDesktopRuntimeProcessStopResult,
-  requireDesktopRuntimeProcessReconciliation,
-  RuntimeProcessCommandError,
+  requireDesktopRuntimeProcessIdentity,
   RuntimeProcessIdentityBlockedError,
-  RuntimeProcessTakeoverRequiredError,
 } from './runtimeProcessInventory';
 
 const inventory = {
-  schema_version: 2,
+  schema_version: 3,
   scope: {
     runtime_root: '/root/.redeven',
     state_root: '/root/.redeven',
-    desktop_owner_id: 'desktop-owner',
+    user_identity: 'root',
     namespace_id: 'mnt:[1]',
   },
   inventory_digest: 'a'.repeat(64),
   instances: [{
     pid: 123,
     process_started_at_unix_ms: 456,
-    desktop_owner_id: 'desktop-owner',
+    instance_id: 'runtime-instance',
     state_root: '/root/.redeven',
     executable_path: '/root/.redeven/runtime/managed/bin/redeven',
     executable_device: 1,
     executable_inode: 2,
+    namespace_id: 'mnt:[1]',
+    runtime_version: 'v1.0.0',
     identity_status: 'verified',
-    owner_status: 'current',
     layout_status: 'current',
-    owner_evidence: 'process_environment',
     stop_authority: 'automatic',
   }],
   summary: {
     automatic: 1,
-    confirmed_takeover: 0,
     blocked: 0,
   },
 };
 
 describe('runtimeProcessInventory', () => {
-  it('parses the strict orthogonal process inventory', () => {
+  it('parses the strict schema 3 process inventory', () => {
     expect(parseDesktopRuntimeProcessInventory(JSON.stringify(inventory))).toMatchObject({
-      schema_version: 2,
+      schema_version: 3,
       inventory_digest: 'a'.repeat(64),
-      instances: [{ pid: 123, owner_status: 'current', stop_authority: 'automatic' }],
+      scope: { user_identity: 'root', namespace_id: 'mnt:[1]' },
+      instances: [{ pid: 123, layout_status: 'current', stop_authority: 'automatic' }],
+      summary: { automatic: 1, blocked: 0 },
     });
   });
 
-  it('rejects obsolete schemas and fields outside the exact contract', () => {
-    expect(() => parseDesktopRuntimeProcessInventory(JSON.stringify({ ...inventory, schema_version: 1 })))
+  it('rejects schema 2 and removed ownership or takeover fields', () => {
+    expect(() => parseDesktopRuntimeProcessInventory(JSON.stringify({ ...inventory, schema_version: 2 })))
       .toThrow('schema is unsupported');
     expect(() => parseDesktopRuntimeProcessInventory(JSON.stringify({
       ...inventory,
-      instances: [{ ...inventory.instances[0], classification: 'current_owned', stoppable: true }],
+      scope: { ...inventory.scope, desktop_owner_id: 'desktop-owner' },
+    }))).toThrow('unexpected scope field');
+    expect(() => parseDesktopRuntimeProcessInventory(JSON.stringify({
+      ...inventory,
+      instances: [{ ...inventory.instances[0], owner_status: 'current' }],
     }))).toThrow('unexpected process field');
     expect(() => parseDesktopRuntimeProcessInventory(JSON.stringify({
       ...inventory,
-      summary: { ...inventory.summary, blocking: 0 },
+      summary: { ...inventory.summary, confirmed_takeover: 0 },
     }))).toThrow('unexpected summary field');
     expect(() => parseDesktopRuntimeProcessInventory(JSON.stringify({
       ...inventory,
-      summary: { automatic: 0, confirmed_takeover: 0, blocked: 0 },
+      instances: [{ ...inventory.instances[0], stop_authority: 'confirmed_takeover' }],
+      summary: { automatic: 0, blocked: 0 },
+    }))).toThrow('invalid stop authority');
+  });
+
+  it('rejects inconsistent authority and summary projections', () => {
+    expect(() => parseDesktopRuntimeProcessInventory(JSON.stringify({
+      ...inventory,
+      summary: { automatic: 0, blocked: 0 },
     }))).toThrow('summary does not match');
     expect(() => parseDesktopRuntimeProcessInventory(JSON.stringify({
       ...inventory,
-      instances: [{ ...inventory.instances[0], stop_authority: 'confirmed_takeover' }],
-      summary: { automatic: 0, confirmed_takeover: 1, blocked: 0 },
-    }))).toThrow('inconsistent process authority');
-    expect(() => parseDesktopRuntimeProcessInventory(JSON.stringify({
-      ...inventory,
       instances: [{ ...inventory.instances[0], stop_authority: 'blocked' }],
-      summary: { automatic: 0, confirmed_takeover: 0, blocked: 1 },
+      summary: { automatic: 0, blocked: 1 },
     }))).toThrow('inconsistent process authority');
   });
 
-  it('requires an exact digest-bound confirmation for verified foreign owners', () => {
-    const takeoverInventory = parseDesktopRuntimeProcessInventory(JSON.stringify({
+  it('accepts a verified alternate executable as an automatic stop target', () => {
+    const alternate = parseDesktopRuntimeProcessInventory(JSON.stringify({
       ...inventory,
       instances: [{
         ...inventory.instances[0],
-        desktop_owner_id: 'another-owner',
-        owner_status: 'foreign',
-        stop_authority: 'confirmed_takeover',
-        reason_code: 'runtime_owned_by_another_desktop',
-      }],
-      summary: { automatic: 0, confirmed_takeover: 1, blocked: 0 },
-    }));
-
-    expect(() => requireDesktopRuntimeProcessReconciliation(takeoverInventory)).toThrow(RuntimeProcessTakeoverRequiredError);
-    expect(() => requireDesktopRuntimeProcessReconciliation(takeoverInventory, {
-      mode: 'confirmed_takeover',
-      expected_inventory_digest: 'b'.repeat(64),
-    })).toThrow(RuntimeProcessTakeoverRequiredError);
-    expect(() => requireDesktopRuntimeProcessReconciliation(takeoverInventory, {
-      mode: 'confirmed_takeover',
-      expected_inventory_digest: takeoverInventory.inventory_digest,
-    })).not.toThrow();
-
-    const proposal = buildDesktopRuntimeProcessTakeoverProposal(takeoverInventory, {
-      operation: 'restart',
-      location: 'ssh_host',
-      environment_id: 'env-1',
-      target_id: 'ssh:target',
-      target_label: 'Build host',
-    });
-    expect(proposal).toMatchObject({
-      operation: 'restart',
-      process_count: 1,
-      instances: [{ pid: 123, owner_status: 'foreign' }],
-    });
-    expect(JSON.stringify(proposal)).not.toContain('another-owner');
-    expect(JSON.stringify(proposal)).not.toContain('executable_path');
-
-    const mixedProposal = buildDesktopRuntimeProcessTakeoverProposal(parseDesktopRuntimeProcessInventory(JSON.stringify({
-      ...takeoverInventory,
-      instances: [inventory.instances[0], {
-        ...takeoverInventory.instances[0],
-        pid: 124,
-        process_started_at_unix_ms: 457,
-        executable_inode: 3,
-      }],
-      summary: { automatic: 1, confirmed_takeover: 1, blocked: 0 },
-    })), {
-      operation: 'restart',
-      location: 'ssh_host',
-      environment_id: 'env-1',
-      target_id: 'ssh:target',
-      target_label: 'Build host',
-    });
-    expect(mixedProposal).toMatchObject({
-      process_count: 2,
-      instances: [
-        { pid: 123, owner_status: 'current' },
-        { pid: 124, owner_status: 'foreign' },
-      ],
-    });
-  });
-
-  it('accepts a verified alternate bundle without treating it as the current bundle', () => {
-    const alternateCurrentOwner = parseDesktopRuntimeProcessInventory(JSON.stringify({
-      ...inventory,
-      instances: [{
-        ...inventory.instances[0],
-        instance_id: 'alternate-runtime',
-        runtime_version: 'v4.0.0',
         executable_path: '/Applications/Redeven Preview.app/Contents/Resources/redeven',
         layout_status: 'verified_alternate',
       }],
     }));
-    expect(alternateCurrentOwner.instances[0]).toMatchObject({
+
+    expect(alternate.instances[0]).toMatchObject({
       layout_status: 'verified_alternate',
       stop_authority: 'automatic',
     });
-    expect(desktopRuntimeProcessInventoryNeedsMaintenance(alternateCurrentOwner)).toBe(true);
-
-    const alternateForeignOwner = parseDesktopRuntimeProcessInventory(JSON.stringify({
-      ...alternateCurrentOwner,
-      instances: [{
-        ...alternateCurrentOwner.instances[0],
-        desktop_owner_id: 'another-owner',
-        owner_status: 'foreign',
-        stop_authority: 'confirmed_takeover',
-        reason_code: 'runtime_owned_by_another_desktop',
-      }],
-      summary: { automatic: 0, confirmed_takeover: 1, blocked: 0 },
-    }));
-    const proposal = buildDesktopRuntimeProcessTakeoverProposal(alternateForeignOwner, {
-      operation: 'stop',
-      location: 'local_host',
-      environment_id: 'env-1',
-      target_id: 'local',
-      target_label: 'Local Environment',
-    });
-    expect(proposal.instances).toEqual([expect.objectContaining({
-      layout_status: 'verified_alternate',
-      owner_status: 'foreign',
-    })]);
+    expect(desktopRuntimeProcessStopTargetCount(alternate)).toBe(1);
+    expect(desktopRuntimeProcessInventoryHasSingleCurrent(alternate)).toBe(false);
+    expect(desktopRuntimeProcessInventoryNeedsMaintenance(alternate)).toBe(true);
   });
 
-  it('never reuses a confirmed takeover after the inventory becomes automatic', () => {
-    const automaticInventory = parseDesktopRuntimeProcessInventory(JSON.stringify(inventory));
-    let error: unknown;
-    try {
-      requireDesktopRuntimeProcessReconciliation(automaticInventory, {
-        mode: 'confirmed_takeover',
-        expected_inventory_digest: 'b'.repeat(64),
-      });
-    } catch (caught) {
-      error = caught;
-    }
-    expect(error).toBeInstanceOf(RuntimeProcessCommandError);
-    expect(error).toMatchObject({ code: 'runtime_inventory_changed' });
-  });
-
-  it('never permits confirmation to override incomplete core identity', () => {
-    const blockedInventory = parseDesktopRuntimeProcessInventory(JSON.stringify({
+  it('fails closed when core process identity is incomplete', () => {
+    const blocked = parseDesktopRuntimeProcessInventory(JSON.stringify({
       ...inventory,
       instances: [{
         ...inventory.instances[0],
+        executable_device: undefined,
         executable_inode: undefined,
+        reason_code: 'runtime_process_identity_incomplete',
         identity_status: 'incomplete',
-        owner_status: 'missing',
         layout_status: 'unknown',
-        owner_evidence: 'missing',
         stop_authority: 'blocked',
       }],
-      summary: { automatic: 0, confirmed_takeover: 0, blocked: 1 },
+      summary: { automatic: 0, blocked: 1 },
     }));
-    expect(() => requireDesktopRuntimeProcessReconciliation(blockedInventory, {
-      mode: 'confirmed_takeover',
-      expected_inventory_digest: blockedInventory.inventory_digest,
-    })).toThrow(RuntimeProcessIdentityBlockedError);
+
+    expect(() => requireDesktopRuntimeProcessIdentity(blocked)).toThrow(RuntimeProcessIdentityBlockedError);
+    expect(desktopRuntimeProcessStopTargetCount(blocked)).toBe(0);
   });
 
   it('rejects incomplete process envelopes', () => {
@@ -223,24 +129,23 @@ describe('runtimeProcessInventory', () => {
     }))).toThrow('incomplete process identity');
   });
 
-  it('parses stop results and identifies non-current ownership as maintenance', () => {
-    const takeover = {
+  it('parses strict schema 3 stop results', () => {
+    const after = {
       ...inventory,
-      instances: [{
-        ...inventory.instances[0],
-        desktop_owner_id: undefined,
-        owner_status: 'missing',
-        owner_evidence: 'missing',
-        stop_authority: 'confirmed_takeover',
-      }],
-      summary: { automatic: 0, confirmed_takeover: 1, blocked: 0 },
+      inventory_digest: 'b'.repeat(64),
+      instances: [],
+      summary: { automatic: 0, blocked: 0 },
     };
-    expect(desktopRuntimeProcessInventoryNeedsMaintenance(parseDesktopRuntimeProcessInventory(JSON.stringify(takeover)))).toBe(true);
     expect(parseDesktopRuntimeProcessStopResult(JSON.stringify({
-      schema_version: 2,
-      before: takeover,
-      after: { ...inventory, instances: [], summary: { automatic: 0, confirmed_takeover: 0, blocked: 0 } },
-      stopped: takeover.instances,
-    })).stopped).toHaveLength(1);
+      schema_version: 3,
+      before: inventory,
+      after,
+      stopped: inventory.instances,
+    }))).toMatchObject({
+      schema_version: 3,
+      before: { inventory_digest: 'a'.repeat(64) },
+      after: { inventory_digest: 'b'.repeat(64), instances: [] },
+      stopped: [{ pid: 123 }],
+    });
   });
 });

@@ -6,9 +6,12 @@ import {
   type DesktopProviderTransportResponse,
 } from './controlPlaneProviderTransport';
 import {
+  authorizeProviderRuntimeOperation,
   fetchProviderDiscovery,
   fetchProviderEnvironments,
+  fetchProviderRuntimeManagementCapability,
   exchangeProviderDesktopConnectAuthorization,
+  requestProviderRuntimeEnrollmentChallenge,
   requestDesktopOpenSession,
 } from './controlPlaneProviderClient';
 import { normalizeDesktopControlPlaneProvider } from '../shared/controlPlaneProvider';
@@ -30,7 +33,7 @@ function accessPoint(overrides: Record<string, unknown> = {}) {
 
 function providerPayload(overrides: Record<string, unknown> = {}) {
   return {
-    protocol_version: 'rcpp-v2',
+    protocol_version: 'rcpp-v3',
     provider_id: 'redeven',
     display_name: 'Redeven',
     provider_origin: 'https://redeven.test',
@@ -161,7 +164,7 @@ describe('controlPlaneProviderClient', () => {
     });
 
     expect(transport).toHaveBeenCalledWith(expect.objectContaining({
-      url: 'https://redeven.test/api/rcpp/v2/desktop/connect/exchange',
+      url: 'https://redeven.test/api/rcpp/v3/desktop/connect/exchange',
       method: 'POST',
       body_text: JSON.stringify({
         authorization_code: 'code_demo',
@@ -194,7 +197,7 @@ describe('controlPlaneProviderClient', () => {
     });
 
     expect(transport).toHaveBeenCalledWith(expect.objectContaining({
-      url: 'https://dev.redeven.test/api/rcpp/v2/environments/env_demo/desktop/open-session',
+      url: 'https://dev.redeven.test/api/rcpp/v3/environments/env_demo/desktop/open-session',
       method: 'POST',
       headers: expect.objectContaining({
         authorization: 'Bearer access-token',
@@ -249,6 +252,127 @@ describe('controlPlaneProviderClient', () => {
     }, { transport })).rejects.toMatchObject({
       code: 'provider_invalid_response',
       message: 'The provider desktop connect response is invalid.',
+    });
+  });
+
+  it('strictly parses scoped Runtime management capability responses', async () => {
+    const normalizedProvider = provider();
+    const transport = vi.fn<DesktopProviderTransport>().mockResolvedValueOnce(response(200, JSON.stringify({
+      protocol_version: 'rcpp-v3',
+      provider_id: normalizedProvider.provider_id,
+      provider_origin: normalizedProvider.provider_origin,
+      access_point_id: 'dev',
+      env_public_id: 'env_demo',
+      capability: {
+        support: 'supported',
+        authorization: { state: 'allowed', grants: ['manage_runtime'] },
+        readiness: 'ready',
+        target: { lifecycle_target_id: 'target_demo', target_generation: 7 },
+        operations: ['restart', 'update_runtime'],
+        artifact_policies: ['published_release'],
+        binding_actions: [],
+        supervision_mode: 'provider_gateway',
+        checked_at_unix_ms: 1_710_000_000_000,
+      },
+    })));
+
+    await expect(fetchProviderRuntimeManagementCapability(
+      normalizedProvider,
+      normalizedProvider.access_points[0]!,
+      'access-token',
+      'env_demo',
+      { transport },
+    )).resolves.toMatchObject({
+      presentation_state: 'allowed',
+      target: { lifecycle_target_id: 'target_demo', target_generation: 7 },
+      operations: ['restart', 'update_runtime'],
+    });
+    expect(transport).toHaveBeenCalledWith(expect.objectContaining({
+      url: 'https://dev.redeven.test/api/rcpp/v3/environments/env_demo/runtime-management/capabilities',
+    }));
+  });
+
+  it('rejects v3 environment lists without the exact outer protocol version', async () => {
+    const normalizedProvider = provider();
+    const transport = vi.fn<DesktopProviderTransport>().mockResolvedValueOnce(response(200, JSON.stringify({
+      protocol_version: 'rcpp-v2',
+      environments: [],
+    })));
+    await expect(fetchProviderEnvironments(
+      normalizedProvider,
+      normalizedProvider.access_points[0]!,
+      'access-token',
+      { transport },
+    )).rejects.toMatchObject({
+      code: 'provider_invalid_response',
+      message: 'The provider environment list protocol is invalid.',
+    });
+  });
+
+  it('returns an operation permit only from an allowed v3 authorization', async () => {
+    const normalizedProvider = provider();
+    const expiresAt = Date.now() + 60_000;
+    const transport = vi.fn<DesktopProviderTransport>().mockResolvedValueOnce(response(200, JSON.stringify({
+      protocol_version: 'rcpp-v3',
+      decision: 'allowed',
+      grants: ['manage_runtime'],
+      permit: 'permit_demo',
+      expires_at_unix_ms: expiresAt,
+    })));
+    await expect(authorizeProviderRuntimeOperation(
+      normalizedProvider,
+      normalizedProvider.access_points[0]!,
+      'access-token',
+      'env_demo',
+      {
+        action: 'prepare',
+        lifecycle_target_id: 'target_demo',
+        target_generation: 7,
+        operation_id: 'operation_demo',
+        operation: 'restart',
+        artifact_policy: 'published_release',
+        authorized_client_key_id: 'client_key_demo',
+      },
+      { transport },
+    )).resolves.toEqual({
+      decision: 'allowed',
+      grants: ['manage_runtime'],
+      permit: 'permit_demo',
+      expires_at_unix_ms: expiresAt,
+      reason_code: '',
+    });
+    expect(transport).toHaveBeenCalledWith(expect.objectContaining({
+      url: 'https://dev.redeven.test/api/rcpp/v3/environments/env_demo/runtime-management/authorizations',
+      body_text: expect.stringContaining('"protocol_version":"rcpp-v3"'),
+    }));
+  });
+
+  it('parses an explicit interactive Runtime enrollment challenge', async () => {
+    const normalizedProvider = provider();
+    const expiresAt = Date.now() + 60_000;
+    const transport = vi.fn<DesktopProviderTransport>().mockResolvedValueOnce(response(200, JSON.stringify({
+      protocol_version: 'rcpp-v3',
+      challenge_id: 'challenge_demo',
+      enrollment_code: 'enrollment_demo',
+      proof_nonce: 'proof_nonce_demo',
+      control_binding_generation: 5,
+      expected_target_generation: 8,
+      expires_at_unix_ms: expiresAt,
+    })));
+    await expect(requestProviderRuntimeEnrollmentChallenge(
+      normalizedProvider,
+      normalizedProvider.access_points[0]!,
+      'access-token',
+      'env_demo',
+      { mode: 'interactive_code', expected_target_generation: 8 },
+      { transport },
+    )).resolves.toEqual({
+      challenge_id: 'challenge_demo',
+      enrollment_code: 'enrollment_demo',
+      proof_nonce: 'proof_nonce_demo',
+      control_binding_generation: 5,
+      expected_target_generation: 8,
+      expires_at_unix_ms: expiresAt,
     });
   });
 });

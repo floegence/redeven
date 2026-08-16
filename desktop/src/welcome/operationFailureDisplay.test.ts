@@ -30,12 +30,12 @@ describe('operationFailureDisplay', () => {
 
   it('deduplicates localized explanations, raw errors, progress detail, and diagnostics', () => {
     const failure: DesktopOperationFailurePresentation = {
-      code: 'runtime_lifecycle_conflict',
-      severity: 'error',
-      title: 'Runtime Changed During Operation',
-      summary: 'Another lifecycle authority changed this Runtime while Desktop was managing it.',
+      code: 'confirmation_required',
+      severity: 'warning',
+      title: 'Runtime Confirmation Required',
+      summary: 'The Runtime workload changed before this operation could continue.',
       detail: 'inventory digest changed',
-      recovery_hint: 'Wait for the other lifecycle operation to finish, then refresh Runtime status.',
+      recovery_hint: 'Review the current Runtime workload, then confirm again to continue.',
       diagnostics: [{
         channel: 'runtime_control',
         label: 'Runtime control',
@@ -50,8 +50,8 @@ describe('operationFailureDisplay', () => {
       fallback_title: 'Startup needs attention',
     });
 
-    expect(display.explanation).toBe('The verified Runtime process inventory changed before Desktop completed the lifecycle transaction.');
-    expect(display.recovery_hint).toBe('Wait for the other lifecycle operation to finish, then refresh Runtime status.');
+    expect(display.explanation).toBe("The verified Runtime process inventory no longer matches the operation's confirmation snapshot.");
+    expect(display.recovery_hint).toBe('Review the current Runtime workload, then confirm again to continue.');
     expect(display.technical_details).toEqual(['inventory digest changed']);
     expect(display.diagnostics).toEqual(failure.diagnostics);
   });

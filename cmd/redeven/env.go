@@ -187,21 +187,7 @@ func (c *cli) envOperationCmd(operation string, args []string) int {
 		if gracePeriod != nil {
 			stopGracePeriod = *gracePeriod
 		}
-		if err := stopDesktopManagedRuntime(*stateRoot, *probeTimeout, stopGracePeriod); err != nil {
-			if errors.Is(err, errDesktopRuntimeStopOwnerExternal) {
-				plan = agentprotocol.BlockedOperationPlan(
-					agentprotocol.EnvOperationStop,
-					agentprotocol.OperationMethodLocalHost,
-					agentprotocol.EnvReasonRuntimeOwnerExternal,
-					"A runtime is present, but it is not owned by a Desktop-managed Redeven runtime. Use the owning runtime surface to stop it.",
-				)
-				result := agentprotocol.EnvironmentOperationResultFromStatus(status, plan, true)
-				if *jsonOut {
-					return c.writeAgentProtocolSuccess(result, status.Target.ID, true)
-				}
-				fmt.Fprintf(c.stdout, "%s\t%s\t%s\t%s\n", result.Operation.Operation, result.Operation.Availability, result.Operation.Label, result.Operation.Message)
-				return 0
-			}
+		if err := stopDesktopRuntime(*stateRoot, *probeTimeout, stopGracePeriod); err != nil {
 			return c.writeAgentProtocolFailure(agentprotocol.ErrCodeEnvironmentOperation, err.Error(), status.Target.ID, *jsonOut)
 		}
 		after, loadErr := c.loadEnvironmentStatus(*stateRoot, *targetName, *probeTimeout, true)

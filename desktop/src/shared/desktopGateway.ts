@@ -50,6 +50,26 @@ export type DesktopGatewayEnvironmentCapability =
   | 'web_service'
   | 'port_forward';
 
+export type DesktopGatewayRuntimeManagementCapability = Readonly<{
+  support: 'supported' | 'unsupported' | 'unknown';
+  authorization: Readonly<{
+    state: 'allowed' | 'denied' | 'unknown';
+    grants?: readonly ('manage_runtime' | 'deploy_custom_runtime' | 'manage_runtime_binding')[];
+  }>;
+  readiness: 'ready' | 'setup_required' | 'temporarily_unavailable' | 'unknown';
+  presentation_state: 'allowed' | 'denied' | 'setup_required' | 'temporarily_unavailable' | 'unsupported' | 'unknown';
+  target?: Readonly<{
+    lifecycle_target_id: string;
+    target_generation: number;
+  }>;
+  operations?: readonly ('start' | 'stop' | 'restart' | 'update_runtime' | 'reconcile')[];
+  artifact_policies?: readonly ('published_release' | 'custom_build')[];
+  binding_actions?: readonly string[];
+  supervision_mode?: string;
+  reason_code?: string;
+  checked_at_unix_ms: number;
+}>;
+
 export type DesktopGatewayEnvironmentOriginKind =
   | 'gateway_host'
   | 'ssh_target'
@@ -85,6 +105,7 @@ export type DesktopGatewayEnvironment = Readonly<{
   control_capabilities?: readonly DesktopGatewayEnvironmentCapability[];
   profile?: DesktopGatewayEnvironmentProfile;
   profile_access_route?: DesktopGatewayEnvironmentProfileAccessRoute;
+  runtime_management?: DesktopGatewayRuntimeManagementCapability;
   origin: Readonly<{
     kind: DesktopGatewayEnvironmentOriginKind;
     label: string;
@@ -138,7 +159,6 @@ export type DesktopGatewayDiagnosisClassification =
   | 'identity_changed'
   | 'catalog_failed'
   | 'service_ready_catalog_failed'
-  | 'legacy_runtime_residue'
   | 'unmanageable'
   | 'unknown';
 
@@ -166,9 +186,6 @@ export type DesktopGatewayManagedProbe = Readonly<{
   service_pid?: number;
   service_listen?: string;
   state_root?: string;
-  legacy_local_catalog_present?: boolean;
-  legacy_runtime_residue?: boolean;
-  legacy_runtime_pids?: readonly number[];
   facts: readonly DesktopGatewayManagedProbeFact[];
 }>;
 

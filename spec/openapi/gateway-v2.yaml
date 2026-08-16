@@ -1,6 +1,6 @@
 openapi: 3.1.0
 x-redeven-contract-scope:
-  includes: /gateway/v1/* JSON protocol endpoints only.
+  includes: /gateway/v2/* JSON protocol endpoints only.
   excludes:
     - Gateway Env App page/data routes on isolated local-direct listeners.
     - Desktop bridge Local UI routes such as /, /_redeven_proxy/*, /_redeven_direct/*, and /api/local/*.
@@ -19,8 +19,8 @@ x-redeven-signature-payload:
     - timestamp_unix_ms
 info:
   title: Redeven Gateway Protocol
-  version: redeven-gateway-v1
-  summary: Desktop-managed Gateway HTTP API for pairing, catalog, environment sessions, profile management, and lifecycle requests.
+  version: redeven-gateway-v2
+  summary: Gateway HTTP API for pairing, catalog, environment sessions, profile management, and lifecycle requests.
 servers:
   - url: https://gateway.example
     description: Paired Gateway URL transport.
@@ -33,12 +33,12 @@ tags:
   - name: Profiles
   - name: Lifecycle
 paths:
-  /gateway/v1/pairing/challenge:
+  /gateway/v2/pairing/challenge:
     post:
       tags: [Pairing]
       operationId: createGatewayPairingChallenge
       summary: Create a signed Gateway pairing challenge.
-      description: URL transports require the configured pairing code. Desktop-managed bridge transports are authorized by the managed bridge token injected below the bridge layer.
+      description: URL transports require the configured pairing code. Desktop bridge transports are authorized by the bridge token injected below the bridge layer.
       parameters:
         - $ref: '#/components/parameters/GatewayTransportHeader'
       requestBody:
@@ -56,12 +56,12 @@ paths:
                 $ref: '#/components/schemas/PairingChallengeEnvelope'
         default:
           $ref: '#/components/responses/GatewayError'
-  /gateway/v1/pairing/complete:
+  /gateway/v2/pairing/complete:
     post:
       tags: [Pairing]
       operationId: completeGatewayPairing
       summary: Complete pairing after the client verifies the challenge.
-      description: Profile-write pairing is accepted only on the managed Desktop bridge transport.
+      description: Profile-write pairing is accepted only on the Desktop bridge transport.
       parameters:
         - $ref: '#/components/parameters/GatewayTransportHeader'
       requestBody:
@@ -79,7 +79,7 @@ paths:
                 $ref: '#/components/schemas/PairingCompleteEnvelope'
         default:
           $ref: '#/components/responses/GatewayError'
-  /gateway/v1/catalog:
+  /gateway/v2/catalog:
     post:
       tags: [Catalog]
       operationId: listGatewayEnvironments
@@ -108,7 +108,7 @@ paths:
                 $ref: '#/components/schemas/CatalogEnvelope'
         default:
           $ref: '#/components/responses/GatewayError'
-  /gateway/v1/open-session:
+  /gateway/v2/open-session:
     post:
       tags: [Session]
       operationId: openGatewayEnvironmentSession
@@ -137,12 +137,12 @@ paths:
                 $ref: '#/components/schemas/OpenSessionEnvelope'
         default:
           $ref: '#/components/responses/GatewayError'
-  /gateway/v1/env-profiles/upsert:
+  /gateway/v2/env-profiles/upsert:
     post:
       tags: [Profiles]
       operationId: upsertGatewayEnvironmentProfile
       summary: Create or update a Gateway-owned environment profile.
-      description: Requires a paired profile-write client over the managed Desktop bridge transport.
+      description: Requires a paired profile-write client over the Desktop bridge transport.
       security:
         - GatewayID: []
           GatewayBindingAudience: []
@@ -168,12 +168,12 @@ paths:
                 $ref: '#/components/schemas/EnvProfileUpsertEnvelope'
         default:
           $ref: '#/components/responses/GatewayError'
-  /gateway/v1/env-profiles/delete:
+  /gateway/v2/env-profiles/delete:
     post:
       tags: [Profiles]
       operationId: deleteGatewayEnvironmentProfile
       summary: Delete a Gateway-owned environment profile.
-      description: Requires a paired profile-write client over the managed Desktop bridge transport.
+      description: Requires a paired profile-write client over the Desktop bridge transport.
       security:
         - GatewayID: []
           GatewayBindingAudience: []
@@ -199,11 +199,11 @@ paths:
                 $ref: '#/components/schemas/EnvProfileDeleteEnvelope'
         default:
           $ref: '#/components/responses/GatewayError'
-  /gateway/v1/env-lifecycle:
+  /gateway/v2/runtime-management/capability:
     post:
       tags: [Lifecycle]
-      operationId: runGatewayEnvironmentLifecycle
-      summary: Request a Gateway-owned environment lifecycle operation.
+      operationId: getRuntimeManagementCapability
+      summary: Project Runtime management support, authorization, and readiness before operation preparation.
       security:
         - GatewayID: []
           GatewayBindingAudience: []
@@ -218,14 +218,266 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/EnvLifecycleRequest'
+              $ref: '#/components/schemas/RuntimeManagementCapabilityRequest'
       responses:
         '200':
-          description: Lifecycle operation status.
+          description: Runtime management capability with privacy-preserving readiness projection.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/EnvLifecycleEnvelope'
+                $ref: '#/components/schemas/RuntimeManagementCapabilityEnvelope'
+        default:
+          $ref: '#/components/responses/GatewayError'
+  /gateway/v2/runtime-operations/prepare:
+    post:
+      tags: [Lifecycle]
+      operationId: prepareRuntimeOperation
+      summary: Authorize and prepare one durable Runtime lifecycle operation before artifact work begins.
+      security:
+        - GatewayID: []
+          GatewayBindingAudience: []
+          GatewayClientKeyID: []
+          GatewayClientNonce: []
+          GatewayRequestTimestamp: []
+          GatewayRequestSignature: []
+      parameters:
+        - $ref: '#/components/parameters/GatewayTransportHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimeOperationPrepareRequest'
+      responses:
+        '200':
+          description: Prepared or idempotently attached Runtime operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeOperationPrepareEnvelope'
+        default:
+          $ref: '#/components/responses/GatewayError'
+  /gateway/v2/runtime-operations/{operation_id}:
+    get:
+      tags: [Lifecycle]
+      operationId: getRuntimeOperation
+      summary: Read a Runtime operation after current manage-runtime authorization is verified.
+      security:
+        - GatewayID: []
+          GatewayBindingAudience: []
+          GatewayClientKeyID: []
+          GatewayClientNonce: []
+          GatewayRequestTimestamp: []
+          GatewayRequestSignature: []
+      parameters:
+        - $ref: '#/components/parameters/GatewayTransportHeader'
+        - $ref: '#/components/parameters/RuntimeOperationID'
+      responses:
+        '200':
+          description: Current Runtime operation state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeOperationEnvelope'
+        default:
+          $ref: '#/components/responses/GatewayError'
+  /gateway/v2/runtime-operations/{operation_id}/confirm:
+    post:
+      tags: [Lifecycle]
+      operationId: confirmRuntimeOperation
+      summary: Confirm the exact workload snapshot captured during prepare.
+      security:
+        - GatewayID: []
+          GatewayBindingAudience: []
+          GatewayClientKeyID: []
+          GatewayClientNonce: []
+          GatewayRequestTimestamp: []
+          GatewayRequestSignature: []
+      parameters:
+        - $ref: '#/components/parameters/GatewayTransportHeader'
+        - $ref: '#/components/parameters/RuntimeOperationID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimeOperationConfirmationRequest'
+      responses:
+        '200':
+          description: Confirmed Runtime operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeOperationEnvelope'
+        default:
+          $ref: '#/components/responses/GatewayError'
+  /gateway/v2/runtime-operations/{operation_id}/artifact:
+    put:
+      tags: [Lifecycle]
+      operationId: uploadRuntimeOperationArtifact
+      summary: Stage and independently verify the artifact for an authorized Runtime operation.
+      security:
+        - GatewayID: []
+          GatewayBindingAudience: []
+          GatewayClientKeyID: []
+          GatewayClientNonce: []
+          GatewayRequestTimestamp: []
+          GatewayRequestSignature: []
+      parameters:
+        - $ref: '#/components/parameters/GatewayTransportHeader'
+        - $ref: '#/components/parameters/RuntimeOperationID'
+        - name: X-Redeven-Runtime-Artifact-Metadata
+          in: header
+          required: true
+          description: Base64url-encoded canonical RuntimeArtifactMetadata JSON; this metadata is the signed request body.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: Runtime operation with verified staged artifact.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeOperationEnvelope'
+        default:
+          $ref: '#/components/responses/GatewayError'
+  /gateway/v2/runtime-operations/{operation_id}/commit:
+    post:
+      tags: [Lifecycle]
+      operationId: commitRuntimeOperation
+      summary: Fence the Runtime, revalidate target and workload identity, then atomically commit.
+      security:
+        - GatewayID: []
+          GatewayBindingAudience: []
+          GatewayClientKeyID: []
+          GatewayClientNonce: []
+          GatewayRequestTimestamp: []
+          GatewayRequestSignature: []
+      parameters:
+        - $ref: '#/components/parameters/GatewayTransportHeader'
+        - $ref: '#/components/parameters/RuntimeOperationID'
+      responses:
+        '200':
+          description: Runtime operation after commit or recovery.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeOperationEnvelope'
+        default:
+          $ref: '#/components/responses/GatewayError'
+  /gateway/v2/runtime-operations/{operation_id}/cancel:
+    post:
+      tags: [Lifecycle]
+      operationId: cancelRuntimeOperation
+      summary: Cancel a cancellable Runtime operation without implicit queuing or reassignment.
+      security:
+        - GatewayID: []
+          GatewayBindingAudience: []
+          GatewayClientKeyID: []
+          GatewayClientNonce: []
+          GatewayRequestTimestamp: []
+          GatewayRequestSignature: []
+      parameters:
+        - $ref: '#/components/parameters/GatewayTransportHeader'
+        - $ref: '#/components/parameters/RuntimeOperationID'
+      responses:
+        '200':
+          description: Cancelled Runtime operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeOperationEnvelope'
+        default:
+          $ref: '#/components/responses/GatewayError'
+  /gateway/v2/runtime-operations/{operation_id}/renew-deadline:
+    post:
+      tags: [Lifecycle]
+      operationId: renewRuntimeOperationDeadline
+      summary: Extend a pre-commit deadline within the operation maximum.
+      security:
+        - GatewayID: []
+          GatewayBindingAudience: []
+          GatewayClientKeyID: []
+          GatewayClientNonce: []
+          GatewayRequestTimestamp: []
+          GatewayRequestSignature: []
+      parameters:
+        - $ref: '#/components/parameters/GatewayTransportHeader'
+        - $ref: '#/components/parameters/RuntimeOperationID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimeOperationRenewRequest'
+      responses:
+        '200':
+          description: Runtime operation with its durable deadline renewed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeOperationEnvelope'
+        default:
+          $ref: '#/components/responses/GatewayError'
+  /gateway/v2/runtime-operations/{operation_id}/reconcile:
+    post:
+      tags: [Lifecycle]
+      operationId: reconcileRuntimeOperation
+      summary: Verify a quarantined target and release it only with binding-admin authorization.
+      security:
+        - GatewayID: []
+          GatewayBindingAudience: []
+          GatewayClientKeyID: []
+          GatewayClientNonce: []
+          GatewayRequestTimestamp: []
+          GatewayRequestSignature: []
+      parameters:
+        - $ref: '#/components/parameters/GatewayTransportHeader'
+        - $ref: '#/components/parameters/RuntimeOperationID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimeOperationReconcileRequest'
+      responses:
+        '200':
+          description: Reconciled Runtime operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeOperationEnvelope'
+        default:
+          $ref: '#/components/responses/GatewayError'
+  /gateway/v2/runtime-operations/{operation_id}/events:
+    get:
+      tags: [Lifecycle]
+      operationId: listRuntimeOperationEvents
+      summary: List durable progress events for an authorized Runtime operation.
+      security:
+        - GatewayID: []
+          GatewayBindingAudience: []
+          GatewayClientKeyID: []
+          GatewayClientNonce: []
+          GatewayRequestTimestamp: []
+          GatewayRequestSignature: []
+      parameters:
+        - $ref: '#/components/parameters/GatewayTransportHeader'
+        - $ref: '#/components/parameters/RuntimeOperationID'
+      responses:
+        '200':
+          description: Ordered Runtime operation events.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeOperationEventsEnvelope'
         default:
           $ref: '#/components/responses/GatewayError'
 components:
@@ -275,10 +527,17 @@ components:
       schema:
         type: string
         enum: [desktop_bridge]
+    RuntimeOperationID:
+      name: operation_id
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
   schemas:
     ProtocolVersion:
       type: string
-      const: redeven-gateway-v1
+      const: redeven-gateway-v2
     GatewayErrorCode:
       type: string
       enum:
@@ -419,6 +678,8 @@ components:
           $ref: '#/components/schemas/EnvironmentProfile'
         profile_access_route:
           $ref: '#/components/schemas/EnvProfileAccessRoute'
+        runtime_management:
+          $ref: '#/components/schemas/RuntimeManagementCapability'
         origin:
           $ref: '#/components/schemas/EnvironmentOrigin'
         last_seen_at_unix_ms:
@@ -561,6 +822,11 @@ components:
         client_capability:
           type: string
           enum: [env_profile_write]
+        runtime_grants:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/RuntimeGrant'
         proof:
           type: string
     PairingCompleteEnvelope:
@@ -880,25 +1146,16 @@ components:
           type: string
         deleted:
           type: boolean
-    EnvLifecycleRequest:
+    RuntimeManagementCapabilityRequest:
       type: object
-      required: [protocol_version, gateway_env_id, operation]
+      required: [protocol_version, gateway_env_id]
       additionalProperties: false
       properties:
         protocol_version:
           $ref: '#/components/schemas/ProtocolVersion'
         gateway_env_id:
           type: string
-        operation:
-          $ref: '#/components/schemas/EnvLifecycleOperation'
-    EnvLifecycleOperation:
-      type: string
-      enum:
-        - start
-        - stop
-        - restart
-        - update_runtime
-    EnvLifecycleEnvelope:
+    RuntimeManagementCapabilityEnvelope:
       type: object
       required: [ok, data]
       additionalProperties: false
@@ -907,31 +1164,491 @@ components:
           type: boolean
           const: true
         data:
-          $ref: '#/components/schemas/EnvLifecycleResponse'
-    EnvLifecycleResponse:
+          $ref: '#/components/schemas/RuntimeManagementCapability'
+    RuntimeOperationPrepareRequest:
       type: object
       required:
         - protocol_version
+        - operation_id
+        - authorized_client_key_id
         - gateway_env_id
+        - lifecycle_target_id
+        - target_generation
         - operation
-        - state
+        - desired_runtime
+        - idempotency_key
       additionalProperties: false
       properties:
         protocol_version:
           $ref: '#/components/schemas/ProtocolVersion'
+        operation_id:
+          type: string
+        authorized_client_key_id:
+          type: string
         gateway_env_id:
           type: string
-        operation:
-          $ref: '#/components/schemas/EnvLifecycleOperation'
-        state:
-          $ref: '#/components/schemas/EnvLifecycleState'
-        message:
+        lifecycle_target_id:
           type: string
-    EnvLifecycleState:
+        target_generation:
+          type: integer
+          format: int64
+          minimum: 1
+        operation:
+          $ref: '#/components/schemas/RuntimeOperationKind'
+        desired_runtime:
+          $ref: '#/components/schemas/DesiredRuntime'
+        build_inputs:
+          description: Canonical JSON build inputs bound into custom-build authorization.
+        idempotency_key:
+          type: string
+        authorization_permit:
+          type: string
+          writeOnly: true
+    RuntimeOperationConfirmationRequest:
+      type: object
+      required:
+        - protocol_version
+        - snapshot_revision
+        - process_inventory_digest
+        - workload_identity_digest
+        - risk_summary_digest
+      additionalProperties: false
+      properties:
+        protocol_version:
+          $ref: '#/components/schemas/ProtocolVersion'
+        snapshot_revision:
+          type: integer
+          format: int64
+          minimum: 0
+        process_inventory_digest:
+          type: string
+        workload_identity_digest:
+          type: string
+        risk_summary_digest:
+          type: string
+    RuntimeOperationRenewRequest:
+      type: object
+      required: [protocol_version, expires_at_unix_ms]
+      additionalProperties: false
+      properties:
+        protocol_version:
+          $ref: '#/components/schemas/ProtocolVersion'
+        expires_at_unix_ms:
+          type: integer
+          format: int64
+          minimum: 1
+    RuntimeOperationReconcileRequest:
+      type: object
+      required: [protocol_version]
+      additionalProperties: false
+      properties:
+        protocol_version:
+          $ref: '#/components/schemas/ProtocolVersion'
+        authorization_permit:
+          type: string
+          writeOnly: true
+    RuntimeArtifactMetadata:
+      type: object
+      required: [size_bytes, sha256, manifest]
+      additionalProperties: false
+      properties:
+        size_bytes:
+          type: integer
+          format: int64
+          minimum: 1
+        sha256:
+          type: string
+        manifest:
+          description: Signed compatibility and capability manifest JSON.
+        manifest_signature:
+          type: string
+        manifest_certificate:
+          type: string
+        build_attestation:
+          description: Custom-build attestation JSON bound to the prepared build inputs.
+    RuntimeOperationPrepareEnvelope:
+      type: object
+      required: [ok, data]
+      additionalProperties: false
+      properties:
+        ok:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/RuntimeOperationPrepareResponse'
+    RuntimeOperationEnvelope:
+      type: object
+      required: [ok, data]
+      additionalProperties: false
+      properties:
+        ok:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/RuntimeOperation'
+    RuntimeOperationEventsEnvelope:
+      type: object
+      required: [ok, data]
+      additionalProperties: false
+      properties:
+        ok:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/RuntimeOperationEventsResponse'
+    RuntimeOperationPrepareResponse:
+      type: object
+      required: [protocol_version, operation, confirmation_required, artifact_max_bytes]
+      additionalProperties: false
+      properties:
+        protocol_version:
+          $ref: '#/components/schemas/ProtocolVersion'
+        operation:
+          $ref: '#/components/schemas/RuntimeOperation'
+        confirmation_required:
+          type: boolean
+        artifact_max_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+    RuntimeOperation:
+      type: object
+      required:
+        - protocol_version
+        - operation_id
+        - idempotency_key
+        - lifecycle_target_id
+        - target_generation
+        - gateway_env_id
+        - kind
+        - requested_actor
+        - authorized_client_key_id
+        - desired_runtime
+        - prepare_scope_digest
+        - state
+        - expected_snapshot
+        - authorization
+        - created_at_unix_ms
+        - updated_at_unix_ms
+      additionalProperties: false
+      properties:
+        protocol_version:
+          $ref: '#/components/schemas/ProtocolVersion'
+        operation_id:
+          type: string
+        idempotency_key:
+          type: string
+        lifecycle_target_id:
+          type: string
+        target_generation:
+          type: integer
+          format: int64
+        gateway_env_id:
+          type: string
+        kind:
+          $ref: '#/components/schemas/RuntimeOperationKind'
+        requested_actor:
+          $ref: '#/components/schemas/RuntimeOperationActor'
+        route_binding_id:
+          type: string
+        authorized_client_key_id:
+          type: string
+        desired_runtime:
+          $ref: '#/components/schemas/DesiredRuntime'
+        build_inputs:
+          description: Canonical JSON build inputs.
+        prepare_scope_digest:
+          type: string
+        state:
+          $ref: '#/components/schemas/RuntimeOperationState'
+        expires_at_unix_ms:
+          type: integer
+          format: int64
+        maximum_expires_at_unix_ms:
+          type: integer
+          format: int64
+        expected_snapshot:
+          $ref: '#/components/schemas/WorkloadSnapshot'
+        confirmed_risk_summary_digest:
+          type: string
+        artifact:
+          $ref: '#/components/schemas/RuntimeArtifact'
+        authorization:
+          $ref: '#/components/schemas/RuntimeOperationAuthorization'
+        checkpoint:
+          $ref: '#/components/schemas/RuntimeCommitCheckpoint'
+        failure:
+          $ref: '#/components/schemas/RuntimeOperationFailure'
+        created_at_unix_ms:
+          type: integer
+          format: int64
+        updated_at_unix_ms:
+          type: integer
+          format: int64
+    RuntimeOperationKind:
+      type: string
+      enum: [start, stop, restart, update_runtime, reconcile]
+    RuntimeOperationState:
       type: string
       enum:
-        - accepted
-        - running
+        - preflighting
+        - awaiting_confirmation
+        - awaiting_artifact
+        - staging
+        - commit_ready
+        - confirmation_required
+        - fencing
+        - committing
+        - recovering
+        - manual_recovery_required
         - succeeded
         - failed
-        - unsupported
+        - cancelled
+        - expired
+    ArtifactPolicy:
+      type: string
+      enum: [published_release, custom_build]
+    RuntimeGrant:
+      type: string
+      enum: [manage_runtime, deploy_custom_runtime, manage_runtime_binding]
+    CapabilitySupport:
+      type: string
+      enum: [supported, unsupported, unknown]
+    ManagementReadiness:
+      type: string
+      enum: [ready, setup_required, temporarily_unavailable, unknown]
+    ManagementPresentationState:
+      type: string
+      enum: [allowed, denied, setup_required, temporarily_unavailable, unsupported, unknown]
+    RuntimeManagementAuthorization:
+      type: object
+      required: [state]
+      additionalProperties: false
+      properties:
+        state:
+          $ref: '#/components/schemas/AuthorizationState'
+        grants:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/RuntimeGrant'
+    LifecycleTarget:
+      type: object
+      required: [lifecycle_target_id, target_generation]
+      additionalProperties: false
+      properties:
+        lifecycle_target_id:
+          type: string
+        target_generation:
+          type: integer
+          format: int64
+          minimum: 1
+    RuntimeManagementCapability:
+      type: object
+      required: [authorization, support, readiness, presentation_state, checked_at_unix_ms]
+      additionalProperties: false
+      properties:
+        authorization:
+          $ref: '#/components/schemas/RuntimeManagementAuthorization'
+        support:
+          $ref: '#/components/schemas/CapabilitySupport'
+        readiness:
+          $ref: '#/components/schemas/ManagementReadiness'
+        presentation_state:
+          $ref: '#/components/schemas/ManagementPresentationState'
+        target:
+          $ref: '#/components/schemas/LifecycleTarget'
+        operations:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/RuntimeOperationKind'
+        artifact_policies:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/ArtifactPolicy'
+        binding_actions:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+        supervision_mode:
+          type: string
+        reason_code:
+          type: string
+        checked_at_unix_ms:
+          type: integer
+          format: int64
+    AuthorizationState:
+      type: string
+      enum: [allowed, denied, unknown]
+    DesiredRuntime:
+      type: object
+      required: [version, platform, architecture, artifact_policy]
+      additionalProperties: false
+      properties:
+        version:
+          type: string
+        platform:
+          type: string
+        architecture:
+          type: string
+        artifact_policy:
+          $ref: '#/components/schemas/ArtifactPolicy'
+    RuntimeOperationActor:
+      type: object
+      required: [kind, subject_id]
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+        subject_id:
+          type: string
+    RuntimeOperationAuthorization:
+      type: object
+      required: [decision, linearized, grants, scope_digest, authorized_at_unix_ms]
+      additionalProperties: false
+      properties:
+        decision:
+          $ref: '#/components/schemas/AuthorizationState'
+        linearized:
+          type: boolean
+        grants:
+          type: array
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/RuntimeGrant'
+        permit_jti_hash:
+          type: string
+        scope_digest:
+          type: string
+        authorized_at_unix_ms:
+          type: integer
+          format: int64
+    WorkloadSnapshot:
+      type: object
+      required:
+        - snapshot_revision
+        - process_inventory_digest
+        - workload_identity_digest
+        - workload
+        - observed_at_unix_ms
+      additionalProperties: false
+      properties:
+        runtime_binary_version:
+          type: string
+        snapshot_revision:
+          type: integer
+          format: int64
+        process_inventory_digest:
+          type: string
+        workload_identity_digest:
+          type: string
+        workload_identities:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+        workload:
+          $ref: '#/components/schemas/WorkloadImpact'
+        observed_at_unix_ms:
+          type: integer
+          format: int64
+    WorkloadImpact:
+      type: object
+      required: [knowledge, protected_workload_present]
+      additionalProperties: false
+      properties:
+        knowledge:
+          type: string
+          enum: [known, unknown]
+        affected_process_count:
+          type: integer
+          minimum: 0
+        active_session_count:
+          type: integer
+          minimum: 0
+        protected_workload_present:
+          type: boolean
+    RuntimeArtifact:
+      type: object
+      required: [size_bytes, sha256, manifest_sha256, policy]
+      additionalProperties: false
+      properties:
+        size_bytes:
+          type: integer
+          format: int64
+        sha256:
+          type: string
+        manifest_sha256:
+          type: string
+        policy:
+          $ref: '#/components/schemas/ArtifactPolicy'
+    RuntimeCommitCheckpoint:
+      type: object
+      required: [fence_token_hash, created_at_unix_ms]
+      additionalProperties: false
+      properties:
+        previous_artifact_path:
+          type: string
+        fence_token_hash:
+          type: string
+        created_at_unix_ms:
+          type: integer
+          format: int64
+    RuntimeOperationFailure:
+      type: object
+      required: [code, message]
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        retryable:
+          type: boolean
+    RuntimeOperationEventsResponse:
+      type: object
+      required: [protocol_version, operation_id, events]
+      additionalProperties: false
+      properties:
+        protocol_version:
+          $ref: '#/components/schemas/ProtocolVersion'
+        operation_id:
+          type: string
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/RuntimeOperationEvent'
+    RuntimeOperationEvent:
+      type: object
+      required:
+        - sequence
+        - operation_id
+        - lifecycle_target_id
+        - target_generation
+        - operation
+        - state
+        - timestamp_unix_ms
+      additionalProperties: false
+      properties:
+        sequence:
+          type: integer
+          format: int64
+        operation_id:
+          type: string
+        lifecycle_target_id:
+          type: string
+        target_generation:
+          type: integer
+          format: int64
+        operation:
+          $ref: '#/components/schemas/RuntimeOperationKind'
+        state:
+          $ref: '#/components/schemas/RuntimeOperationState'
+        reason_code:
+          type: string
+        timestamp_unix_ms:
+          type: integer
+          format: int64

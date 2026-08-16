@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 	"testing"
 
 	"github.com/floegence/redeven/internal/agentprotocol"
@@ -194,7 +193,6 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 		code, _, stderr := runCLITest(t,
 			"run",
 			"--mode", "desktop",
-			"--desktop-managed",
 			"--state-root", stateRoot,
 			"--startup-report-file", reportPath,
 			"--provider-origin", "https://redeven.test",
@@ -255,12 +253,12 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 	})
 
 	t.Run("desktop startup rejects human presentation", func(t *testing.T) {
-		code, _, stderr := runCLITest(t, "run", "--mode", "desktop", "--desktop-managed", "--presentation", "rich")
+		code, _, stderr := runCLITest(t, "run", "--mode", "desktop", "--startup-report-file", filepath.Join(t.TempDir(), "startup.json"), "--presentation", "rich")
 		if code != 2 {
 			t.Fatalf("exit code = %d, want 2", code)
 		}
 		assertContainsAll(t, stderr,
-			"`--desktop-managed` and `--startup-report-file` require `--presentation machine`",
+			"`--startup-report-file` requires `--presentation machine`",
 			"Desktop and startup-report consumers must use the machine presentation contract.",
 		)
 	})
@@ -285,17 +283,6 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 		assertContainsAll(t, stderr,
 			"invalid value for `--local-ui-bind`: localhost:0 is not supported; use 127.0.0.1:0 or [::1]:0",
 			"Accepted examples: localhost:23998, 127.0.0.1:0, 192.168.1.20:23998, 0.0.0.0:23998, [2001:db8::20]:23998, [::]:23998.",
-		)
-	})
-
-	t.Run("desktop managed requires a local ui mode", func(t *testing.T) {
-		code, _, stderr := runCLITest(t, "run", "--mode", "remote", "--desktop-managed")
-		if code != 2 {
-			t.Fatalf("exit code = %d, want 2", code)
-		}
-		assertContainsAll(t, stderr,
-			"`--desktop-managed` requires a Local UI run mode",
-			"Hint: use `redeven run --mode desktop --desktop-managed --presentation machine` for the packaged desktop shell.",
 		)
 	})
 
@@ -497,7 +484,7 @@ func TestDefaultRunModeIsLocal(t *testing.T) {
 		t.Fatalf("defaultRunMode = %q, want %q", defaultRunMode, runModeLocal)
 	}
 
-	policy := resolveRuntimeLaunchPolicy(defaultRunMode, false, true)
+	policy := resolveRuntimeLaunchPolicy(defaultRunMode, true)
 	if !policy.localUIEnabled || policy.controlChannelEnabled || policy.effectiveRunMode != runModeLocal || policy.remoteEnabled {
 		t.Fatalf("default run policy = %#v, want local-only", policy)
 	}
@@ -507,7 +494,6 @@ func TestResolveRuntimeLaunchPolicy(t *testing.T) {
 	tests := []struct {
 		name                  string
 		mode                  runMode
-		desktopManaged        bool
 		remoteConfigValid     bool
 		wantLocalUIEnabled    bool
 		wantControlEnabled    bool
@@ -515,9 +501,8 @@ func TestResolveRuntimeLaunchPolicy(t *testing.T) {
 		wantProcessRemoteMode bool
 	}{
 		{
-			name:                  "desktop managed restores saved provider link",
+			name:                  "desktop mode restores saved provider link",
 			mode:                  runModeDesktop,
-			desktopManaged:        true,
 			remoteConfigValid:     true,
 			wantLocalUIEnabled:    true,
 			wantControlEnabled:    true,
@@ -527,7 +512,6 @@ func TestResolveRuntimeLaunchPolicy(t *testing.T) {
 		{
 			name:                 "desktop without provider link stays local",
 			mode:                 runModeDesktop,
-			desktopManaged:       true,
 			remoteConfigValid:    false,
 			wantLocalUIEnabled:   true,
 			wantControlEnabled:   false,
@@ -536,7 +520,6 @@ func TestResolveRuntimeLaunchPolicy(t *testing.T) {
 		{
 			name:                 "local mode remains local even with provider config",
 			mode:                 runModeLocal,
-			desktopManaged:       true,
 			remoteConfigValid:    true,
 			wantLocalUIEnabled:   true,
 			wantControlEnabled:   false,
@@ -562,7 +545,7 @@ func TestResolveRuntimeLaunchPolicy(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := resolveRuntimeLaunchPolicy(tt.mode, tt.desktopManaged, tt.remoteConfigValid)
+			got := resolveRuntimeLaunchPolicy(tt.mode, tt.remoteConfigValid)
 			if got.localUIEnabled != tt.wantLocalUIEnabled ||
 				got.controlChannelEnabled != tt.wantControlEnabled ||
 				got.effectiveRunMode != tt.wantEffectiveRunMode ||
@@ -881,8 +864,6 @@ func TestEnvCommandJSON(t *testing.T) {
 				StateDir:        layout.StateDir,
 				PID:             12345,
 				RuntimeVersion:  "1.2.3",
-				DesktopManaged:  true,
-				DesktopOwnerID:  "desktop_1",
 				StartedAtUnixMS: 1779100944496,
 			},
 			Endpoint: &runtimemanagement.RuntimeAttachEndpoint{
@@ -961,8 +942,11 @@ func TestEnvCommandJSON(t *testing.T) {
 		}
 		data := payload["data"].(map[string]any)
 		runtime := data["runtime"].(map[string]any)
-		if runtime["state"] != "ready" || runtime["desktop_managed"] != true {
+		if runtime["state"] != "ready" {
 			t.Fatalf("unexpected runtime summary: %#v", runtime)
+		}
+		if _, ok := runtime["desktop_managed"]; ok {
+			t.Fatalf("runtime summary exposed removed desktop ownership: %#v", runtime)
 		}
 		operations := data["operations"].(map[string]any)
 		stop := operations["stop"].(map[string]any)
@@ -1067,71 +1051,5 @@ func TestEnvRestartStoppedLocalRuntimeReturnsDesktopHandoffPlan(t *testing.T) {
 		operation["reason_code"] != agentprotocol.EnvReasonDesktopStartRequired ||
 		operation["performed"] == true {
 		t.Fatalf("unexpected restart operation: %#v", operation)
-	}
-}
-
-func TestEnvStopRechecksDesktopOwnerBeforeStopping(t *testing.T) {
-	stateRoot, err := os.MkdirTemp("/tmp", "rdv-env-stop-owner-cli-*")
-	if err != nil {
-		t.Fatalf("MkdirTemp() error = %v", err)
-	}
-	defer func() { _ = os.RemoveAll(stateRoot) }()
-	layout, err := config.LocalEnvironmentStateLayout(stateRoot)
-	if err != nil {
-		t.Fatalf("LocalEnvironmentStateLayout() error = %v", err)
-	}
-	if err := config.Save(layout.ConfigPath, &config.Config{
-		ProviderOrigin:           "https://redeven.test",
-		ControlplaneBaseURL:      "https://dev.redeven.test",
-		ControlplaneProviderID:   "provider_1",
-		EnvironmentID:            "env_123",
-		LocalEnvironmentPublicID: "le_123",
-	}); err != nil {
-		t.Fatalf("Save() error = %v", err)
-	}
-	var calls int32
-	statusServer, err := runtimemanagement.NewServer(layout.RuntimeControlSocketPath, func(context.Context) (runtimemanagement.RuntimeAttachStatus, error) {
-		desktopManaged := atomic.AddInt32(&calls, 1) == 1
-		return runtimemanagement.RuntimeAttachStatus{
-			State: runtimemanagement.AttachStateReady,
-			Identity: runtimemanagement.RuntimeInstanceIdentity{
-				StateDir:       layout.StateDir,
-				PID:            os.Getpid(),
-				RuntimeVersion: "1.2.3",
-				DesktopManaged: desktopManaged,
-			},
-			Endpoint: &runtimemanagement.RuntimeAttachEndpoint{
-				LocalUIURL: "http://127.0.0.1:23998/",
-			},
-			RuntimeService: runtimeservice.NormalizeSnapshot(runtimeservice.Snapshot{
-				EffectiveRunMode: "desktop",
-			}),
-		}, nil
-	})
-	if err != nil {
-		t.Fatalf("NewServer() error = %v", err)
-	}
-	if err := statusServer.Start(context.Background()); err != nil {
-		t.Fatalf("Start() error = %v", err)
-	}
-	defer func() { _ = statusServer.Close() }()
-
-	code, stdout, stderr := runCLITest(t, "env", "stop", "--state-root", stateRoot, "--target", "local", "--json")
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0; stderr=%s", code, stderr)
-	}
-	var payload map[string]any
-	if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
-		t.Fatalf("json.Unmarshal() error = %v\nstdout=%s", err, stdout)
-	}
-	if payload["ok"] != true {
-		t.Fatalf("unexpected envelope: %#v", payload)
-	}
-	data := payload["data"].(map[string]any)
-	operation := data["operation"].(map[string]any)
-	if operation["availability"] != agentprotocol.OperationAvailabilityBlocked ||
-		operation["reason_code"] != agentprotocol.EnvReasonRuntimeOwnerExternal ||
-		operation["performed"] == true {
-		t.Fatalf("unexpected stop operation: %#v", operation)
 	}
 }

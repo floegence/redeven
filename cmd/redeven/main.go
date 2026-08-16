@@ -32,8 +32,6 @@ var (
 	BuildTime = "unknown"
 )
 
-const desktopOwnerIDEnvName = "REDEVEN_DESKTOP_OWNER_ID"
-
 type cli struct {
 	stdin            io.Reader
 	stdout           io.Writer
@@ -239,7 +237,6 @@ func (c *cli) runCmd(args []string) int {
 	passwordStdin := fs.Bool("password-stdin", false, "Read the access password from stdin")
 	passwordFile := fs.String("password-file", "", "File path holding the access password")
 	startupSecretsStdin := fs.Bool("startup-secrets-stdin", false, "Read the Desktop startup secrets envelope from stdin")
-	desktopManaged := fs.Bool("desktop-managed", false, "Disable CLI self-upgrade semantics for desktop-managed Local UI runs")
 	startupReportFile := fs.String("startup-report-file", "", "Write Local UI readiness JSON to the given file (advanced)")
 	presentationRaw := fs.String("presentation", string(runtimepresentation.ModeAuto), "Startup presentation: auto|rich|plain|machine")
 	var desktopLaunchFailure func(string, string, config.StateLayout, int) int
@@ -296,15 +293,6 @@ func (c *cli) runCmd(args []string) int {
 		return 2
 	}
 
-	if *desktopManaged && mode == runModeRemote {
-		writeErrorWithHelp(
-			c.stderr,
-			"`--desktop-managed` requires a Local UI run mode",
-			[]string{"Hint: use `redeven run --mode desktop --desktop-managed --presentation machine` for the packaged desktop shell."},
-			runHelpText(),
-		)
-		return 2
-	}
 	if strings.TrimSpace(*startupReportFile) != "" && mode == runModeRemote {
 		writeErrorWithHelp(
 			c.stderr,
@@ -314,12 +302,12 @@ func (c *cli) runCmd(args []string) int {
 		)
 		return 2
 	}
-	if (*desktopManaged || strings.TrimSpace(*startupReportFile) != "") &&
+	if strings.TrimSpace(*startupReportFile) != "" &&
 		requestedPresentation != runtimepresentation.ModeAuto &&
 		requestedPresentation != runtimepresentation.ModeMachine {
 		writeErrorWithHelp(
 			c.stderr,
-			"`--desktop-managed` and `--startup-report-file` require `--presentation machine`",
+			"`--startup-report-file` requires `--presentation machine`",
 			[]string{"Hint: Desktop and startup-report consumers must use the machine presentation contract."},
 			runHelpText(),
 		)
@@ -368,7 +356,7 @@ func (c *cli) runCmd(args []string) int {
 		environment:           &c.startupSecretEnv,
 		usePasswordEnv:        mode != runModeRemote,
 		useBootstrapTicketEnv: inlineBootstrapRequested,
-		desktopEnvelopeAllowed: mode == runModeDesktop && *desktopManaged &&
+		desktopEnvelopeAllowed: mode == runModeDesktop &&
 			(requestedPresentation == runtimepresentation.ModeAuto || requestedPresentation == runtimepresentation.ModeMachine),
 	})
 	if err != nil {
@@ -411,7 +399,6 @@ func (c *cli) runCmd(args []string) int {
 		Stdin:             c.stdin,
 		Stdout:            c.stdout,
 		Stderr:            c.stderr,
-		DesktopManaged:    *desktopManaged,
 		StartupReportFile: *startupReportFile,
 	})
 
@@ -424,7 +411,6 @@ func (c *cli) runCmd(args []string) int {
 		Commit:           Commit,
 		RequestedRunMode: string(mode),
 		PresentationMode: string(presentationConfig.Effective),
-		DesktopManaged:   *desktopManaged,
 		StateDir:         stateLayout.StateDir,
 		LocalUIBind:      localUIBind.ListenLabel(),
 		LocalUIExposure:  localUIExposure,
@@ -444,7 +430,7 @@ func (c *cli) runCmd(args []string) int {
 		Phase: runtimepresentation.PhaseResolveState,
 		Title: fmt.Sprintf("local state: %s", stateLayout.StateDir),
 	})
-	if desktopLaunchReportEnabled(mode, *desktopManaged, *startupReportFile) {
+	if desktopLaunchReportEnabled(mode, *startupReportFile) {
 		desktopLaunchFailure = func(code string, message string, layout config.StateLayout, exitCode int) int {
 			if reportErr := writeDesktopBlockedLaunchReport(*startupReportFile, code, message, layout); reportErr != nil {
 				fmt.Fprintf(c.stderr, "failed to write desktop launch report: %v\n", reportErr)
@@ -541,7 +527,7 @@ func (c *cli) runCmd(args []string) int {
 	lk, err := lockfile.Acquire(lockPath)
 	if err != nil {
 		if errors.Is(err, lockfile.ErrAlreadyLocked) {
-			if desktopLaunchReportEnabled(mode, *desktopManaged, *startupReportFile) {
+			if desktopLaunchReportEnabled(mode, *startupReportFile) {
 				handled, exitCode, reportErr := handleDesktopLockConflict(*startupReportFile, lockPath, stateLayout.ConfigPath)
 				if reportErr != nil {
 					fmt.Fprintf(c.stderr, "failed to resolve desktop startup conflict: %v\n", reportErr)
@@ -584,7 +570,6 @@ func (c *cli) runCmd(args []string) int {
 			resolvedBootstrapTicket,
 			*permissionPolicy,
 			mode,
-			*desktopManaged,
 			Version,
 		))
 		if err != nil {
@@ -629,7 +614,7 @@ func (c *cli) runCmd(args []string) int {
 	remoteErr := cfg.ValidateRemoteStrict()
 	remoteEnabled := remoteErr == nil
 
-	launchPolicy := resolveRuntimeLaunchPolicy(mode, *desktopManaged, remoteEnabled)
+	launchPolicy := resolveRuntimeLaunchPolicy(mode, remoteEnabled)
 	controlChannelEnabled := launchPolicy.controlChannelEnabled
 	localUIEnabled := launchPolicy.localUIEnabled
 	effectiveRunMode := launchPolicy.effectiveRunMode
@@ -657,11 +642,7 @@ func (c *cli) runCmd(args []string) int {
 
 	localUIBindLabel := localUIBind.ListenLabel()
 	localUIURLs := localUIBind.DisplayURLs()
-	desktopOwnerID := ""
-	if *desktopManaged {
-		desktopOwnerID = strings.TrimSpace(os.Getenv(desktopOwnerIDEnvName))
-	}
-	lockMetadata, err := newAgentLockMetadata(string(mode), runtimeInstanceID, *desktopManaged, desktopOwnerID, mode != runModeRemote, stateLayout)
+	lockMetadata, err := newAgentLockMetadata(string(mode), runtimeInstanceID, mode != runModeRemote, stateLayout)
 	if err != nil {
 		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to resolve runtime executable identity: %v", err))
 	}
@@ -704,7 +685,7 @@ func (c *cli) runCmd(args []string) int {
 		LocalUIBind:           localUIBind.ListenLabel(),
 		LocalUIEnabled:        localUIEnabled,
 		ControlChannelEnabled: controlChannelEnabled,
-		DesktopManaged:        *desktopManaged,
+		DisableSelfUpgrade:    mode == runModeDesktop,
 		EffectiveRunMode:      string(effectiveRunMode),
 		RemoteEnabled:         processRemoteEnabled,
 		Version:               Version,
@@ -772,8 +753,7 @@ func (c *cli) runCmd(args []string) int {
 		srv, err := localui.New(localui.Options{
 			Logger:                   localUILogger,
 			Bind:                     localUIBind,
-			DesktopManaged:           *desktopManaged,
-			DesktopOwnerID:           desktopOwnerID,
+			DisableSelfUpgrade:       mode == runModeDesktop,
 			EffectiveRunMode:         string(effectiveRunMode),
 			RemoteEnabled:            processRemoteEnabled,
 			ControlplaneBaseURL:      cfg.ControlplaneBaseURL,
@@ -843,7 +823,6 @@ func (c *cli) runCmd(args []string) int {
 						ProtocolVersion: endpoint.ProtocolVersion,
 						BaseURL:         endpoint.BaseURL,
 						Token:           endpoint.Token,
-						DesktopOwnerID:  endpoint.DesktopOwnerID,
 						ExpiresAtUnixMS: endpoint.ExpiresAtUnixMS,
 					}
 				}(),
@@ -851,8 +830,6 @@ func (c *cli) runCmd(args []string) int {
 				Exposure:                 srv.LocalUIExposure(),
 				EffectiveRunMode:         string(effectiveRunMode),
 				RemoteEnabled:            processRemoteEnabled,
-				DesktopManaged:           *desktopManaged,
-				DesktopOwnerID:           desktopOwnerID,
 				ProviderOrigin:           cfg.ProviderOrigin,
 				ControlplaneBaseURL:      cfg.ControlplaneBaseURL,
 				ControlplaneProviderID:   cfg.ControlplaneProviderID,
@@ -933,7 +910,6 @@ func buildRunBootstrapArgs(
 	bootstrapTicket string,
 	permissionPolicy string,
 	mode runMode,
-	desktopManaged bool,
 	runtimeVersion string,
 ) config.BootstrapArgs {
 	args := config.BootstrapArgs{
@@ -945,7 +921,7 @@ func buildRunBootstrapArgs(
 		StateRoot:              stateRoot,
 		PermissionPolicyPreset: permissionPolicy,
 	}
-	if mode == runModeDesktop && desktopManaged {
+	if mode == runModeDesktop {
 		// Desktop startup should stay on the normal logging baseline unless the
 		// user later opts into debug mode explicitly from Runtime Settings.
 		args.LogLevel = "info"
@@ -1029,7 +1005,7 @@ type runtimeLaunchPolicy struct {
 	remoteEnabled         bool
 }
 
-func resolveRuntimeLaunchPolicy(mode runMode, desktopManaged bool, remoteConfigValid bool) runtimeLaunchPolicy {
+func resolveRuntimeLaunchPolicy(mode runMode, remoteConfigValid bool) runtimeLaunchPolicy {
 	switch mode {
 	case runModeRemote:
 		return runtimeLaunchPolicy{
@@ -1055,7 +1031,7 @@ func resolveRuntimeLaunchPolicy(mode runMode, desktopManaged bool, remoteConfigV
 	case runModeDesktop:
 		if remoteConfigValid {
 			// IMPORTANT: A saved provider link is an explicit user authorization.
-			// Desktop-managed startup must restore that provider control channel;
+			// Desktop shell startup must restore that provider control channel;
 			// provider cards still never initiate runtime management.
 			return runtimeLaunchPolicy{
 				localUIEnabled:        true,

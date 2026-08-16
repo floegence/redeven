@@ -20,13 +20,12 @@ func TestRuntimeProcessInventoryOptionsPreservesExplicitMachineScope(t *testing.
 	options, err := runtimeProcessInventoryOptions(
 		stateRoot,
 		runtimeRoot,
-		" desktop-owner ",
 		[]string{filepath.Join(runtimeRoot, "bin", "redeven")},
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if options.StateRoot != stateRoot || options.RuntimeRoot != runtimeRoot || options.DesktopOwnerID != "desktop-owner" {
+	if options.StateRoot != stateRoot || options.RuntimeRoot != runtimeRoot {
 		t.Fatalf("options = %#v", options)
 	}
 	if len(options.CurrentExecutables) != 1 {
@@ -43,7 +42,6 @@ func TestDesktopRuntimeStopAllMatchingRequiresDigestAsJSONError(t *testing.T) {
 		"--json",
 		"--state-root", t.TempDir(),
 		"--runtime-root", t.TempDir(),
-		"--desktop-owner-id", "desktop-owner",
 	})
 	if exitCode != 1 {
 		t.Fatalf("exit code = %d, stderr = %q", exitCode, stderr.String())
@@ -145,16 +143,12 @@ func TestDesktopLaunchReportFromRuntimeStatusIncludesStartTime(t *testing.T) {
 		Identity: runtimemanagement.RuntimeInstanceIdentity{
 			PID:             4242,
 			StartedAtUnixMS: 1778751234567,
-			DesktopManaged:  true,
-			DesktopOwnerID:  "desktop-owner-status",
 		},
 		Endpoint: &runtimemanagement.RuntimeAttachEndpoint{
 			LocalUIURL:       "http://127.0.0.1:23998/",
 			LocalUIBridgeURL: "http://127.0.0.1:43123/",
 		},
 		RuntimeService: runtimeservice.NormalizeSnapshot(runtimeservice.Snapshot{
-			ServiceOwner:     runtimeservice.OwnerDesktop,
-			DesktopManaged:   true,
 			EffectiveRunMode: "desktop",
 			OpenReadiness: runtimeservice.OpenReadiness{
 				State: runtimeservice.OpenReadinessOpenable,

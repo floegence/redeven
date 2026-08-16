@@ -1,12 +1,11 @@
 {
   "schema_version": 1,
   "release_review": {
-    "release_version": "v0.10.1",
-    "previous_release": "v0.10.0",
-    "reviewed_at": "2026-08-16",
-    "review_id": "flowersec-v2-5-2-floe-webapp-v0-41-4",
-    "summary": "Redeven v0.10.1 consumes published Flowersec Go and Core v2.5.2 plus Floe Webapp v0.41.4, keeps Flowersec as the connection, session, RPC, stream, and retry owner, uses the protocol controller's atomic connection replacement path, and binds terminal handlers and notification sinks to each accepted session while retaining the v0.10.0 Runtime Service compatibility window.",
-    "same_window_rationale": "The Runtime Service wire protocol remains redeven-runtime-v1 at compatibility epoch 8. Flowersec v2.5.2 preserves carrier and accepted-session APIs while waiting for standalone WSS sessions and their lease-release retries during shutdown. Floe Webapp v0.41.4 preserves the product bootstrap contract, rejects stale controller close callbacks by owner generation, and publishes complete MIT license metadata and files. These lifecycle and packaging corrections remain behind the existing Runtime Service snapshot and bridge contracts, so the matched v0.10.0 minimum Desktop and Runtime pair remains sufficient.",
+    "release_version": "v0.11.0",
+    "previous_release": "v0.10.1",
+    "reviewed_at": "2026-08-17",
+    "review_id": "runtime-permission-lifecycle-v2",
+    "summary": "Redeven v0.11.0 separates Connect, Workspace, and Runtime management authority, moves managed Runtime operations to the durable Gateway v2 supervisor, and introduces Runtime Service v2 lifecycle fencing at compatibility epoch 9 without making ordinary Runtime access depend on Gateway.",
     "checked_surfaces": [
       "Redeven consumes published github.com/floegence/floret/v4 v4.0.11 with GOWORK=off and exact module checksums; it receives a user segment only after canonical turn acceptance, accepts long first messages without violating trim-stable fallback-title authority, maps Floret-owned stable ordered user, thinking, assistant, tool, and interaction segments directly across live updates and canonical reload, preserves dynamic ToolSurface registry definition inheritance, reads canonical context and compaction through ThreadContextReader across resumed runs, and has no replace, go.work, sibling source path, copied contract, internal import, or Floret schema access",
       "Floret ThreadService is the only lifecycle boundary for View, Send, Respond, Cancel, Retry, RetryEffect, PromoteQueued, and Subscribe",
@@ -21,11 +20,12 @@
       "Each remote or local accepted session registers the final Flowersec SessionHandlers, RPC, ByteStream, and terminal/live_v1 boundaries directly; outbound terminal notification sinks attach to the established Flowersec RPC peer and detach idempotently when that session ends",
       "Desktop attach and start, Local UI health, startup reports, sys.ping, Env App maintenance, SSH runtime bootstrap, public WSS, loopback direct WebSocket, terminal history recovery, and consecutive Desktop bridge sessions remain covered by the exact-main integration and focused transport contracts",
       "Flowersec ConnectionController remains the only reconnect owner; secure-session retry uses Floe Webapp replaceConnection so an old asynchronous close cannot overwrite a new controller generation, while Redeven supplies artifact acquisition, authorization, permissions, product RPC handlers, and post-session business recovery without a second reconnect state machine or alternate carrier path",
-      "Runtime Service protocol_version is redeven-runtime-v1, compatibility_epoch is 8, and both minimum product versions are v0.10.0; Flowersec carrier and accepted-session lifecycle remain behind that stable snapshot and bridge contract"
+      "Runtime Service protocol_version is redeven-runtime-v2 at compatibility_epoch 9; lifecycle incompatibility disables Runtime management without changing authorized Connect and Workspace paths",
+      "Gateway and Runtime component versions are independent and compatibility is decided by signed digest, protocol, epoch, and capability facts"
     ]
   },
-  "runtime_protocol_version": "redeven-runtime-v1",
-  "compatibility_epoch": 8,
-  "minimum_desktop_version": "v0.10.0",
-  "minimum_runtime_version": "v0.10.0"
+  "runtime_protocol_version": "redeven-runtime-v2",
+  "compatibility_epoch": 9,
+  "minimum_desktop_version": "v0.11.0",
+  "minimum_runtime_version": "v0.11.0"
 }

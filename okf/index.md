@@ -33,7 +33,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 ## Desktop
 
 - [Desktop shell theme state](desktop/desktop-shell-theme-state.md) - Global source, per-mode Floe presets, renderer synchronization, and native window colors.
-- [Desktop runtime bridge](desktop/desktop-runtime-bridge.md) - Desktop-managed Local UI launches, runtime-control, and startup probing.
+- [Desktop runtime bridge](desktop/desktop-runtime-bridge.md) - Desktop-integrated Local UI access, runtime-control, and startup probing.
 - [Desktop runtime readiness](desktop/desktop-runtime-readiness.md) - Validate startup handoff, access admission, lifecycle readiness, and window-open gates.
 - [Desktop transport recovery](desktop/desktop-transport-recovery.md) - Preserve bridge identity, recovery generations, and terminal session disposal.
 - [Desktop SSH runtime operations](desktop/desktop-ssh-runtime-operations.md) - Coordinate shared SSH transports, operation generations, host discovery, and process inventory.
@@ -91,8 +91,8 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 ## Protocol
 
-- [Gateway v1 protocol](protocol/gateway-v1-protocol.md) - OpenAPI source contract for Gateway HTTP JSON endpoints, auth, envelopes, and Desktop behavior boundaries.
-- [RCPP v2 provider API](protocol/rcpp-v2-provider-api.md) - Provider discovery, Desktop auth, environment catalog, health, open-session, and bootstrap.
+- [Gateway v2 protocol](protocol/gateway-v1-protocol.md) - Signed Gateway HTTP JSON access and Runtime lifecycle contract.
+- [RCPP v3 provider API](protocol/rcpp-v2-provider-api.md) - Provider Runtime grants, permits, enrollment, binding, and readiness projection.
 
 ## Release
 

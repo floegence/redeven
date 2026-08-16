@@ -221,7 +221,6 @@ func (r *Renderer) richRuntimeBlock(width int, event Event, scenario richScenari
 	overview := r.runtimeOverview(event)
 	version := r.richRuntimeVersionLine(overview, event)
 	mode := valueOr(overview.EffectiveRunMode, event.Snapshot.EffectiveRunMode, event.Snapshot.RequestedRunMode, "local")
-	owner := valueOr(overview.ServiceOwner, richBoolLabel(overview.DesktopManaged, "desktop", "external"))
 	protocol := valueOr(overview.ProtocolVersion, "starting")
 	compatibility := valueOr(overview.Compatibility, "checking")
 	readiness := valueOr(overview.OpenReadinessState, r.runtimeReadinessFromScenario(scenario))
@@ -231,7 +230,7 @@ func (r *Renderer) richRuntimeBlock(width int, event Event, scenario richScenari
 		r.richSectionTitle("Runtime"),
 		"",
 		r.richKVLine("Version", version, richText, width),
-		r.richKVLine("Mode", mode+" · "+owner, richAccent, width),
+		r.richKVLine("Mode", mode, richAccent, width),
 		r.richKVLine("Protocol", protocol, richMuted, width),
 		r.richKVLine("Health", readiness+" · "+compatibility, r.richTone(scenario), width),
 	}
@@ -297,14 +296,6 @@ func (r *Renderer) runtimeOverview(event Event) RuntimeOverview {
 	if overview.EffectiveRunMode == "" {
 		overview.EffectiveRunMode = event.Snapshot.RequestedRunMode
 	}
-	if overview.ServiceOwner == "" {
-		if event.Snapshot.DesktopManaged {
-			overview.ServiceOwner = "desktop"
-		} else {
-			overview.ServiceOwner = "external"
-		}
-	}
-	overview.DesktopManaged = overview.DesktopManaged || event.Snapshot.DesktopManaged
 	overview.RemoteEnabled = overview.RemoteEnabled || event.Snapshot.RemoteEnabled
 	return overview
 }

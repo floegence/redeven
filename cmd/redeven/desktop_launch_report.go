@@ -34,8 +34,6 @@ type desktopLaunchLockOwner struct {
 	RuntimeVersion           string `json:"runtime_version,omitempty"`
 	RuntimeCommit            string `json:"runtime_commit,omitempty"`
 	BinaryPath               string `json:"binary_path,omitempty"`
-	DesktopManaged           bool   `json:"desktop_managed"`
-	DesktopOwnerID           string `json:"desktop_owner_id,omitempty"`
 	LocalUIEnabled           bool   `json:"local_ui_enabled"`
 	ConfigPath               string `json:"config_path,omitempty"`
 	StateRoot                string `json:"state_root,omitempty"`
@@ -69,8 +67,6 @@ type desktopLaunchReport struct {
 	Exposure                 runtimemanagement.LocalUIExposure `json:"exposure"`
 	EffectiveRunMode         string                            `json:"effective_run_mode,omitempty"`
 	RemoteEnabled            bool                              `json:"remote_enabled"`
-	DesktopManaged           bool                              `json:"desktop_managed"`
-	DesktopOwnerID           string                            `json:"desktop_owner_id,omitempty"`
 	ProviderOrigin           string                            `json:"provider_origin,omitempty"`
 	ControlplaneBaseURL      string                            `json:"controlplane_base_url,omitempty"`
 	ControlplaneProviderID   string                            `json:"controlplane_provider_id,omitempty"`
@@ -90,7 +86,6 @@ type runtimeControlEndpoint struct {
 	ProtocolVersion string `json:"protocol_version"`
 	BaseURL         string `json:"base_url"`
 	Token           string `json:"token"`
-	DesktopOwnerID  string `json:"desktop_owner_id"`
 	ExpiresAtUnixMS int64  `json:"expires_at_unix_ms,omitempty"`
 }
 
@@ -126,14 +121,12 @@ func writeDesktopLaunchReport(path string, report desktopLaunchReport) error {
 		}
 		report.LocalUIBridgeURL = normalizedBridgeURL
 		report.EffectiveRunMode = strings.TrimSpace(report.EffectiveRunMode)
-		report.DesktopOwnerID = strings.TrimSpace(report.DesktopOwnerID)
 		report.ProviderOrigin = strings.TrimSpace(report.ProviderOrigin)
 		report.ControlplaneBaseURL = strings.TrimSpace(report.ControlplaneBaseURL)
 		report.ControlplaneProviderID = strings.TrimSpace(report.ControlplaneProviderID)
 		report.EnvPublicID = strings.TrimSpace(report.EnvPublicID)
 		report.RuntimeService = normalizeLaunchRuntimeServiceSnapshot(
 			report.RuntimeService,
-			report.DesktopManaged,
 			report.EffectiveRunMode,
 			report.RemoteEnabled,
 		)

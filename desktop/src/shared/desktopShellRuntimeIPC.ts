@@ -39,8 +39,15 @@ export type DesktopShellRuntimeMaintenanceMethod =
   | 'manual';
 
 export type DesktopShellRuntimeMaintenanceRuntimeKind = 'local_environment' | 'ssh' | 'external' | 'unknown';
-export type DesktopShellRuntimeMaintenanceLifecycleOwner = 'desktop' | 'external' | 'unknown';
 export type DesktopShellRuntimeMaintenanceUpgradePolicy = 'self_upgrade' | 'desktop_release' | 'manual';
+
+export type DesktopShellRuntimeManagementCapability = Readonly<{
+  support: 'supported' | 'unsupported' | 'unknown';
+  authorization: 'allowed' | 'denied' | 'unknown';
+  readiness: 'ready' | 'setup_required' | 'temporarily_unavailable' | 'unknown';
+  presentation_state: 'allowed' | 'denied' | 'setup_required' | 'temporarily_unavailable' | 'unsupported' | 'unknown';
+  reason_code?: string;
+}>;
 
 export type DesktopShellRuntimeMaintenanceWorkload = Readonly<{
   terminal_count: number;
@@ -65,9 +72,7 @@ export type DesktopShellRuntimeMaintenanceContext = Readonly<{
   available: boolean;
   authority: DesktopShellRuntimeMaintenanceAuthority;
   runtime_kind: DesktopShellRuntimeMaintenanceRuntimeKind;
-  lifecycle_owner: DesktopShellRuntimeMaintenanceLifecycleOwner;
-  service_owner: DesktopShellRuntimeMaintenanceLifecycleOwner;
-  desktop_managed: boolean;
+  management: DesktopShellRuntimeManagementCapability;
   upgrade_policy: DesktopShellRuntimeMaintenanceUpgradePolicy;
   current_version?: string;
   latest_version?: string;
@@ -85,7 +90,7 @@ export type DesktopShellRuntimeActionRequest = Readonly<{
 export type DesktopShellRuntimeActionResponse = Readonly<{
   ok: boolean;
   started: boolean;
-  code?: 'runtime_lifecycle_in_progress' | 'runtime_lifecycle_conflict';
+  code?: 'runtime_lifecycle_in_progress' | 'confirmation_required';
   operation_key?: string;
   message?: string;
   failure?: DesktopOperationFailurePresentation;
@@ -159,7 +164,7 @@ export function normalizeDesktopShellRuntimeActionResponse(value: unknown): Desk
   const candidate = value as Partial<DesktopShellRuntimeActionResponse>;
   const failure = normalizeDesktopOperationFailurePresentation(candidate.failure);
   const message = failure?.summary || String(candidate.message ?? '').trim();
-  const code = candidate.code === 'runtime_lifecycle_in_progress' || candidate.code === 'runtime_lifecycle_conflict'
+  const code = candidate.code === 'runtime_lifecycle_in_progress' || candidate.code === 'confirmation_required'
     ? candidate.code
     : undefined;
   const operationKey = String(candidate.operation_key ?? '').trim() || undefined;
@@ -195,18 +200,6 @@ function normalizeRuntimeKind(value: unknown): DesktopShellRuntimeMaintenanceRun
     case 'external':
     case 'unknown':
       return runtimeKind;
-    default:
-      return 'unknown';
-  }
-}
-
-function normalizeLifecycleOwner(value: unknown): DesktopShellRuntimeMaintenanceLifecycleOwner {
-  const owner = compact(value);
-  switch (owner) {
-    case 'desktop':
-    case 'external':
-    case 'unknown':
-      return owner;
     default:
       return 'unknown';
   }
@@ -322,9 +315,7 @@ export function unavailableDesktopShellRuntimeMaintenanceContext(
     available: false,
     authority: 'manual',
     runtime_kind: 'unknown',
-    lifecycle_owner: 'unknown',
-    service_owner: 'unknown',
-    desktop_managed: false,
+    management: normalizeRuntimeManagementCapability(undefined),
     upgrade_policy: 'manual',
     restart: defaultActionPlan('restart', message),
     upgrade: defaultActionPlan('upgrade', message),
@@ -342,9 +333,7 @@ export function normalizeDesktopShellRuntimeMaintenanceContext(value: unknown): 
     available: record.available === true,
     authority: normalizeAuthority(record.authority),
     runtime_kind: normalizeRuntimeKind(record.runtime_kind),
-    lifecycle_owner: normalizeLifecycleOwner(record.lifecycle_owner),
-    service_owner: normalizeLifecycleOwner(record.service_owner),
-    desktop_managed: record.desktop_managed === true,
+    management: normalizeRuntimeManagementCapability(record.management),
     upgrade_policy: normalizeUpgradePolicy(record.upgrade_policy),
     current_version: compactRaw(record.current_version) || undefined,
     latest_version: compactRaw(record.latest_version) || undefined,
@@ -352,6 +341,39 @@ export function normalizeDesktopShellRuntimeMaintenanceContext(value: unknown): 
     active_workload: normalizeWorkload(record.active_workload),
     restart,
     upgrade,
+  };
+}
+
+function projectRuntimeManagementState(
+  support: DesktopShellRuntimeManagementCapability['support'],
+  authorization: DesktopShellRuntimeManagementCapability['authorization'],
+  readiness: DesktopShellRuntimeManagementCapability['readiness'],
+): DesktopShellRuntimeManagementCapability['presentation_state'] {
+  if (support === 'unsupported') return 'unsupported';
+  if (support !== 'supported') return 'unknown';
+  if (authorization === 'denied') return 'denied';
+  if (authorization !== 'allowed') return 'unknown';
+  if (readiness === 'ready') return 'allowed';
+  if (readiness === 'setup_required') return 'setup_required';
+  if (readiness === 'temporarily_unavailable') return 'temporarily_unavailable';
+  return 'unknown';
+}
+
+function normalizeRuntimeManagementCapability(value: unknown): DesktopShellRuntimeManagementCapability {
+  const record = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  const support = record.support === 'supported' || record.support === 'unsupported' ? record.support : 'unknown';
+  const authorization = record.authorization === 'allowed' || record.authorization === 'denied' ? record.authorization : 'unknown';
+  const readiness = record.readiness === 'ready'
+    || record.readiness === 'setup_required'
+    || record.readiness === 'temporarily_unavailable'
+    ? record.readiness
+    : 'unknown';
+  return {
+    support,
+    authorization,
+    readiness,
+    presentation_state: projectRuntimeManagementState(support, authorization, readiness),
+    reason_code: compactRaw(record.reason_code) || undefined,
   };
 }
 

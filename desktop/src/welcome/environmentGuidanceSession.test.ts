@@ -75,12 +75,9 @@ describe('environmentGuidanceSession', () => {
         local_environment: testLocalEnvironment({
           currentRuntime: {
             local_ui_url: 'http://127.0.0.1:24001/',
-            desktop_managed: true,
             effective_run_mode: 'desktop',
             runtime_service: {
               protocol_version: 'redeven-runtime-v1',
-              service_owner: 'desktop',
-              desktop_managed: true,
               effective_run_mode: 'desktop',
               remote_enabled: false,
               compatibility: 'compatible',

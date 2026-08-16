@@ -12,12 +12,6 @@ import type { RuntimeServiceSnapshot } from './runtimeService';
 export type DesktopRuntimeControlStatus =
   | Readonly<{
       state: 'available';
-      owner: 'current_desktop';
-    }>
-  | Readonly<{
-      state: 'owner_mismatch';
-      owner: 'other_desktop' | 'unknown';
-      message: string;
     }>
   | Readonly<{
       state: 'missing';
@@ -32,7 +26,7 @@ export type DesktopRuntimeControlStatus =
       message: string;
     }>;
 
-export type DesktopManagedRuntimePresence = Readonly<{
+export type DesktopRuntimePresence = Readonly<{
   target_id: DesktopProviderRuntimeLinkTargetID;
   placement_target_id: DesktopRuntimeTargetID;
   kind: 'local_environment' | 'ssh_environment';
@@ -63,7 +57,6 @@ const missingNotStarted: DesktopRuntimeControlStatus = {
 export function desktopRuntimeControlStatusAvailable(): DesktopRuntimeControlStatus {
   return {
     state: 'available',
-    owner: 'current_desktop',
   };
 }
 
@@ -75,14 +68,6 @@ export function desktopRuntimeControlStatusMissing(
     state: 'missing',
     reason_code: reasonCode,
     message: String(message ?? '').trim() || 'Runtime-control is not available for this runtime.',
-  };
-}
-
-export function desktopRuntimeControlStatusOwnerMismatch(message: string): DesktopRuntimeControlStatus {
-  return {
-    state: 'owner_mismatch',
-    owner: 'other_desktop',
-    message: String(message ?? '').trim() || 'This runtime is owned by another Desktop instance.',
   };
 }
 

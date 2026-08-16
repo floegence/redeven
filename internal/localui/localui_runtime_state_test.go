@@ -21,7 +21,7 @@ import (
 func discardLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
-func newDesktopManagedTestAgent(t *testing.T, cfgPath string) *agent.Agent {
+func newRuntimeManagementTestAgent(t *testing.T, cfgPath string) *agent.Agent {
 	t.Helper()
 	policy, err := config.ParsePermissionPolicyPreset("")
 	if err != nil {
@@ -35,7 +35,6 @@ func newDesktopManagedTestAgent(t *testing.T, cfgPath string) *agent.Agent {
 		ConfigPath:       cfgPath,
 		InstanceID:       "rt_test",
 		LocalUIEnabled:   true,
-		DesktopManaged:   true,
 		EffectiveRunMode: "desktop",
 	})
 	if err != nil {
@@ -65,8 +64,6 @@ func TestServerStartPublishesRuntimeManagementStatus(t *testing.T) {
 		stateDir:               filepath.Dir(cfgPath),
 		runtimeControlSockPath: filepath.Join(socketDir, "control.sock"),
 		version:                "dev",
-		desktopManaged:         true,
-		desktopOwnerID:         "desktop-owner-state",
 		appServer:              newTestAppServer(t, cfgPath),
 		diag: func() *diagnostics.Store {
 			store, err := diagnostics.New(diagnostics.Options{
@@ -79,7 +76,7 @@ func TestServerStartPublishesRuntimeManagementStatus(t *testing.T) {
 			}
 			return store
 		}(),
-		a:       newDesktopManagedTestAgent(t, cfgPath),
+		a:       newRuntimeManagementTestAgent(t, cfgPath),
 		pending: make(map[string]pendingDirect),
 	}
 
@@ -112,14 +109,10 @@ func TestServerStartPublishesRuntimeManagementStatus(t *testing.T) {
 	if status.Identity.StateDir != filepath.Dir(cfgPath) {
 		t.Fatalf("unexpected identity metadata: %#v", status.Identity)
 	}
-	if !status.Identity.DesktopManaged || status.Identity.DesktopOwnerID != "desktop-owner-state" {
-		t.Fatalf("unexpected desktop ownership metadata: %#v", status.Identity)
-	}
 	if status.Endpoint.RuntimeControl == nil ||
-		status.Endpoint.RuntimeControl.ProtocolVersion != "redeven-runtime-control-v1" ||
+		status.Endpoint.RuntimeControl.ProtocolVersion != "redeven-runtime-control-v2" ||
 		status.Endpoint.RuntimeControl.BaseURL == "" ||
-		status.Endpoint.RuntimeControl.Token == "" ||
-		status.Endpoint.RuntimeControl.DesktopOwnerID != "desktop-owner-state" {
+		status.Endpoint.RuntimeControl.Token == "" {
 		t.Fatalf("unexpected runtime-control endpoint: %#v", status.Endpoint.RuntimeControl)
 	}
 
@@ -198,7 +191,7 @@ func TestServerRuntimeControlUsesStructuredAuthErrors(t *testing.T) {
 		t.Fatalf("MkdirTemp() error = %v", err)
 	}
 	defer func() { _ = os.RemoveAll(socketDir) }()
-	a := newDesktopManagedTestAgent(t, cfgPath)
+	a := newRuntimeManagementTestAgent(t, cfgPath)
 	s := &Server{
 		log:                    discardLogger(),
 		bind:                   bind,
@@ -207,8 +200,6 @@ func TestServerRuntimeControlUsesStructuredAuthErrors(t *testing.T) {
 		stateDir:               filepath.Dir(cfgPath),
 		runtimeControlSockPath: filepath.Join(socketDir, "control.sock"),
 		version:                "dev",
-		desktopManaged:         true,
-		desktopOwnerID:         "desktop-owner-state",
 		appServer:              newTestAppServer(t, cfgPath),
 		a:                      a,
 		pending:                make(map[string]pendingDirect),
@@ -226,12 +217,11 @@ func TestServerRuntimeControlUsesStructuredAuthErrors(t *testing.T) {
 		t.Fatalf("missing runtime-control endpoint")
 	}
 
-	req, err := http.NewRequest(http.MethodPost, endpoint.BaseURL+"/v1/provider-link", nil)
+	req, err := http.NewRequest(http.MethodPost, endpoint.BaseURL+"/v2/provider-link", nil)
 	if err != nil {
 		t.Fatalf("NewRequest() error = %v", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+endpoint.Token)
-	req.Header.Set("X-Redeven-Desktop-Owner-ID", endpoint.DesktopOwnerID)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("Do() error = %v", err)

@@ -9,7 +9,6 @@ import {
 import { sanitizeDesktopChildEnvironment } from './desktopProcessEnvironment';
 import { canonicalLocalUIBind, isLoopbackOnlyBind, parseLocalUIBind } from './localUIBind';
 
-export const DESKTOP_OWNER_ID_ENV_NAME = 'REDEVEN_DESKTOP_OWNER_ID';
 export const DESKTOP_AUTO_START_RUNTIME_ENV_NAME = 'REDEVEN_DESKTOP_AUTO_START_RUNTIME';
 export const DESKTOP_LOCAL_UI_BIND_ENV_NAME = 'REDEVEN_DESKTOP_LOCAL_UI_BIND';
 export { RUNTIME_SECRET_ENV_NAMES } from './desktopProcessEnvironment';
@@ -72,7 +71,6 @@ export function buildDesktopRuntimeArgs(
     'run',
     '--mode',
     'desktop',
-    '--desktop-managed',
     '--presentation',
     'machine',
     '--local-ui-bind',
@@ -119,21 +117,10 @@ export function buildDesktopRuntimeArgs(
 export function buildDesktopRuntimeEnvironment(
   _environment: DesktopLocalEnvironmentState,
   baseEnv: NodeJS.ProcessEnv = process.env,
-  options?: Readonly<{
-    desktopOwnerID?: string;
-  }>,
 ): NodeJS.ProcessEnv {
-  const env = sanitizeDesktopChildEnvironment({
+  return sanitizeDesktopChildEnvironment({
     ...baseEnv,
   });
-  const desktopOwnerID = String(options?.desktopOwnerID ?? '').trim();
-  if (desktopOwnerID !== '') {
-    env[DESKTOP_OWNER_ID_ENV_NAME] = desktopOwnerID;
-  } else {
-    delete env[DESKTOP_OWNER_ID_ENV_NAME];
-  }
-
-  return env;
 }
 
 function buildDesktopRuntimePlan(
@@ -142,14 +129,11 @@ function buildDesktopRuntimePlan(
   options?: Readonly<{
     localUIBind?: string;
     bootstrap?: DesktopRuntimeBootstrap | null;
-    desktopOwnerID?: string;
   }>,
 ): DesktopRuntimeLaunchPlan {
   const stateLayout = resolveDesktopLocalEnvironmentStateLayout(environment, baseEnv);
   const developmentLocalUIBind = String(baseEnv[DESKTOP_LOCAL_UI_BIND_ENV_NAME] ?? '').trim();
-  const env = buildDesktopRuntimeEnvironment(environment, baseEnv, {
-    desktopOwnerID: options?.desktopOwnerID,
-  });
+  const env = buildDesktopRuntimeEnvironment(environment, baseEnv);
   const args = buildDesktopRuntimeArgs(environment, {
     localUIBind: options?.localUIBind ?? (developmentLocalUIBind || undefined),
     bootstrap: options?.bootstrap,
@@ -187,7 +171,6 @@ export function buildDesktopRuntimeLaunchPlan(
   options?: Readonly<{
     localUIBind?: string;
     bootstrap?: DesktopRuntimeBootstrap | null;
-    desktopOwnerID?: string;
   }>,
 ): DesktopRuntimeLaunchPlan {
   return buildDesktopRuntimePlan(environment, baseEnv, options);
@@ -200,7 +183,6 @@ export function buildDesktopRuntimeSpawnPlan(
   options?: Readonly<{
     localUIBind?: string;
     bootstrap?: DesktopRuntimeBootstrap | null;
-    desktopOwnerID?: string;
   }>,
 ): DesktopRuntimeSpawnPlan {
   const launchPlan = buildDesktopRuntimeLaunchPlan(environment, baseEnv, options);

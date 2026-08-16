@@ -16,7 +16,7 @@ const (
 	localLatestVersionCacheTTL                    = 5 * time.Minute
 	localLatestVersionUnavailableMessage          = "Latest version metadata is unavailable."
 	localLatestVersionTemporaryUnavailableMessage = "Latest version metadata is temporarily unavailable."
-	localLatestVersionDesktopManagedMessage       = "Managed by Redeven Desktop. Update from the desktop release instead of self-upgrade."
+	localLatestVersionSupervisorManagedMessage    = "Use Runtime management to install a verified update for this Runtime."
 )
 
 var (

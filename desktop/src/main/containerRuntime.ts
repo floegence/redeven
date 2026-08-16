@@ -556,7 +556,6 @@ export function containerRuntimeDaemonStartCommand(input: Readonly<{
   runtime_binary_path: string;
   runtime_root: string;
   runtime_state_root?: string;
-  desktop_owner_id: string;
 }>): readonly string[] {
   const startDriver = [
     'set -eu',
@@ -577,14 +576,11 @@ export function containerRuntimeDaemonStartCommand(input: Readonly<{
     `    runtime_binary_path="\${HOME%/}/.redeven/\${runtime_binary_path#${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/}"`,
     '    ;;',
     'esac',
-    'exec "$runtime_binary_path" run --mode desktop --desktop-managed --presentation machine --state-root "$state_root" --local-ui-bind 127.0.0.1:0',
+    'exec "$runtime_binary_path" run --mode desktop --presentation machine --state-root "$state_root" --local-ui-bind 127.0.0.1:0',
   ].join('\n');
   return containerRuntimeExecCommandWithMode({
     engine: input.engine,
     container_id: input.container_id,
-    env: {
-      REDEVEN_DESKTOP_OWNER_ID: input.desktop_owner_id,
-    },
     argv: [
       'sh',
       '-c',
@@ -652,11 +648,9 @@ export function containerRuntimeProcessHelperCommand(input: Readonly<{
   runtime_binary_path: string;
   runtime_root: string;
   runtime_state_root?: string;
-  desktop_owner_id: string;
   operation: 'inventory' | 'stop';
   inventory_digest?: string;
   grace_period_seconds?: number;
-  reconciliation_mode?: 'automatic' | 'confirmed_takeover';
 }>): readonly string[] {
   const helperDriver = [
     'set -eu',
@@ -677,11 +671,9 @@ export function containerRuntimeProcessHelperCommand(input: Readonly<{
     `    managed_binary="\${HOME%/}/.redeven/\${managed_binary#${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/}"`,
     '    ;;',
     'esac',
-    'desktop_owner_id="$4"',
-    'operation="$5"',
-    'inventory_digest="${6:-}"',
-    'grace_period="${7:-5s}"',
-    'reconciliation_mode="${8:-automatic}"',
+    'operation="$4"',
+    'inventory_digest="${5:-}"',
+    'grace_period="${6:-5s}"',
     'helper_root="$(mktemp -d "${TMPDIR:-/tmp}/redeven-runtime-process-helper.XXXXXX")"',
     'archive_path="${helper_root}/runtime.tar.gz"',
     'output_path="${helper_root}/output"',
@@ -698,11 +690,11 @@ export function containerRuntimeProcessHelperCommand(input: Readonly<{
     'set +e',
     'case "$operation" in',
     '  inventory)',
-    '    "$helper_binary" desktop-runtime-inventory --runtime-root "$runtime_root" --state-root "$state_root" --desktop-owner-id "$desktop_owner_id" --current-executable "$managed_binary" >"$output_path" 2>"$error_path"',
+    '    "$helper_binary" desktop-runtime-inventory --runtime-root "$runtime_root" --state-root "$state_root" --current-executable "$managed_binary" >"$output_path" 2>"$error_path"',
     '    exit_code=$?',
     '    ;;',
     '  stop)',
-    '    "$helper_binary" desktop-runtime-stop --runtime-root "$runtime_root" --state-root "$state_root" --desktop-owner-id "$desktop_owner_id" --current-executable "$managed_binary" --reconciliation-mode "$reconciliation_mode" --all-matching --expected-inventory-digest "$inventory_digest" --grace-period "$grace_period" --json >"$output_path" 2>"$error_path"',
+    '    "$helper_binary" desktop-runtime-stop --runtime-root "$runtime_root" --state-root "$state_root" --current-executable "$managed_binary" --all-matching --expected-inventory-digest "$inventory_digest" --grace-period "$grace_period" --json >"$output_path" 2>"$error_path"',
     '    exit_code=$?',
     '    ;;',
     '  *)',
@@ -726,11 +718,9 @@ export function containerRuntimeProcessHelperCommand(input: Readonly<{
       input.runtime_state_root ?? input.runtime_root,
       input.runtime_root,
       input.runtime_binary_path,
-      input.desktop_owner_id,
       input.operation,
       input.inventory_digest || '-',
       `${Math.max(1, Math.ceil(input.grace_period_seconds ?? 5))}s`,
-      input.reconciliation_mode ?? 'automatic',
     ],
   });
 }

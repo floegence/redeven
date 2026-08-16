@@ -22,7 +22,7 @@ import type {
   RuntimeServiceSnapshot,
 } from '../shared/runtimeService';
 import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
-import type { DesktopManagedRuntimePresence } from '../shared/desktopRuntimePresence';
+import type { DesktopRuntimePresence } from '../shared/desktopRuntimePresence';
 import { buildDesktopRuntimeOperationPlans } from '../shared/desktopRuntimeOperationPlanner';
 import {
   testDesktopPreferences,
@@ -82,7 +82,7 @@ function placeholderFact(label: string, value = 'None') {
 
 function buildProvider(providerOrigin = 'https://redeven.test') {
   return {
-    protocol_version: 'rcpp-v2' as const,
+    protocol_version: 'rcpp-v3' as const,
     provider_id: 'example_control_plane',
     display_name: 'Example Control Plane',
     provider_origin: providerOrigin,
@@ -210,10 +210,8 @@ function providerRuntimeService(
     last_error_message: providerLink?.last_error_message,
   };
   return {
-    protocol_version: 'redeven-runtime-v1',
+    protocol_version: 'redeven-runtime-v2',
     compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
-    service_owner: 'desktop',
-    desktop_managed: true,
     effective_run_mode: 'desktop',
     remote_enabled: providerLinkBinding.remote_enabled,
     compatibility: 'compatible',
@@ -228,7 +226,7 @@ function providerRuntimeService(
       desktop_model_source: { supported: false },
       provider_link: {
         supported: true,
-        bind_method: 'runtime_control_v1',
+        bind_method: 'runtime_control_v2',
       },
     },
     bindings: {
@@ -240,8 +238,8 @@ function providerRuntimeService(
 
 function localRuntimePresence(
   runtimeService: RuntimeServiceSnapshot | undefined,
-  overrides: Partial<DesktopManagedRuntimePresence> = {},
-): DesktopManagedRuntimePresence {
+  overrides: Partial<DesktopRuntimePresence> = {},
+): DesktopRuntimePresence {
   const presence = {
     target_id: 'local:local',
     placement_target_id: 'local:host:local',
@@ -257,11 +255,10 @@ function localRuntimePresence(
     ...(runtimeService ? { runtime_service: runtimeService } : {}),
     runtime_control_status: {
       state: 'available',
-      owner: 'current_desktop',
     },
     checked_at_unix_ms: Date.now(),
     ...overrides,
-  } as Omit<DesktopManagedRuntimePresence, 'operations'> & Partial<Pick<DesktopManagedRuntimePresence, 'operations'>>;
+  } as Omit<DesktopRuntimePresence, 'operations'> & Partial<Pick<DesktopRuntimePresence, 'operations'>>;
   return {
     ...presence,
     operations: overrides.operations ?? buildDesktopRuntimeOperationPlans({
@@ -329,7 +326,6 @@ describe('buildEnvironmentDisplayStateModel', () => {
     const local = testLocalEnvironment({
       currentRuntime: {
         local_ui_url: 'http://localhost:23998/',
-        desktop_managed: true,
         effective_run_mode: 'desktop',
         runtime_service: providerRuntimeService({ state: 'openable' }),
       },
@@ -604,14 +600,11 @@ describe('buildEnvironmentCardModel', () => {
     const local = testLocalEnvironment({
       currentRuntime: {
         local_ui_url: 'http://localhost:23998/',
-        desktop_managed: true,
         effective_run_mode: 'desktop',
         remote_enabled: true,
         runtime_service: {
           runtime_version: 'v1.4.2',
           protocol_version: 'redeven-runtime-v1',
-          service_owner: 'desktop',
-          desktop_managed: true,
           effective_run_mode: 'desktop',
           remote_enabled: true,
           compatibility: 'compatible',
@@ -664,8 +657,6 @@ describe('buildEnvironmentCardModel', () => {
           runtime_service: {
             runtime_version: 'v1.4.2',
             protocol_version: 'redeven-runtime-v1',
-            service_owner: 'desktop',
-            desktop_managed: true,
             effective_run_mode: 'desktop',
             remote_enabled: true,
             compatibility: 'compatible',
@@ -682,8 +673,6 @@ describe('buildEnvironmentCardModel', () => {
           runtime_service: {
             runtime_version: 'v1.4.2',
             protocol_version: 'redeven-runtime-v1',
-            service_owner: 'desktop',
-            desktop_managed: true,
             effective_run_mode: 'hybrid',
             remote_enabled: true,
             compatibility: 'compatible',
@@ -723,8 +712,6 @@ describe('buildEnvironmentCardModel', () => {
             runtime_service: {
               runtime_version: 'v1.4.1',
               protocol_version: 'redeven-runtime-v1',
-              service_owner: 'external',
-              desktop_managed: false,
               effective_run_mode: 'standalone',
               remote_enabled: true,
               compatibility: 'compatible',
@@ -762,8 +749,6 @@ describe('buildEnvironmentCardModel', () => {
             runtime_service: {
               runtime_version: 'v1.4.0',
               protocol_version: 'redeven-runtime-v1',
-              service_owner: 'desktop',
-              desktop_managed: true,
               effective_run_mode: 'desktop',
               remote_enabled: false,
               compatibility: 'compatible',
@@ -925,14 +910,11 @@ describe('buildEnvironmentCardModel', () => {
     const local = testLocalEnvironment({
       currentRuntime: {
         local_ui_url: 'http://localhost:23998/',
-        desktop_managed: true,
         effective_run_mode: 'desktop',
         remote_enabled: true,
         runtime_service: {
           runtime_version: 'v1.4.3',
           protocol_version: 'redeven-runtime-v1',
-          service_owner: 'desktop',
-          desktop_managed: true,
           effective_run_mode: 'desktop',
           remote_enabled: true,
           compatibility: 'update_available',
@@ -955,8 +937,6 @@ describe('buildEnvironmentCardModel', () => {
           runtime_service: {
             runtime_version: 'v1.4.3',
             protocol_version: 'redeven-runtime-v1',
-            service_owner: 'desktop',
-            desktop_managed: true,
             effective_run_mode: 'desktop',
             remote_enabled: true,
             compatibility: 'update_available',
@@ -993,7 +973,6 @@ describe('buildEnvironmentCardModel', () => {
       lastUsedAtMS: 1778750000000,
       currentRuntime: {
         local_ui_url: 'http://localhost:23998/',
-        desktop_managed: true,
         effective_run_mode: 'desktop',
         started_at_unix_ms: 1778751234567,
       },
@@ -1033,7 +1012,6 @@ describe('buildEnvironmentCardModel', () => {
       lastUsedAtMS: 1778750000000,
       currentRuntime: {
         local_ui_url: 'http://localhost:23998/',
-        desktop_managed: true,
         effective_run_mode: 'desktop',
       },
     });
@@ -1717,8 +1695,6 @@ describe('buildEnvironmentCardModel', () => {
           runtime_service: {
             runtime_version: 'v0.5.9',
             protocol_version: 'redeven-runtime-v1',
-            service_owner: 'desktop',
-            desktop_managed: true,
             effective_run_mode: 'desktop',
             remote_enabled: false,
             compatibility: 'compatible',
@@ -1821,8 +1797,6 @@ describe('buildEnvironmentCardModel', () => {
           runtime_service: {
             runtime_version: 'v0.0.0-dev',
             protocol_version: 'redeven-runtime-v1',
-            service_owner: 'desktop',
-            desktop_managed: true,
             effective_run_mode: 'desktop',
             remote_enabled: false,
             compatibility: 'compatible',
@@ -2420,13 +2394,11 @@ describe('buildEnvironmentCardModel', () => {
         local_environment: testLocalEnvironment({
           currentRuntime: {
             local_ui_url: 'http://127.0.0.1:24001/',
-            desktop_managed: true,
             effective_run_mode: 'desktop',
             runtime_control: {
-              protocol_version: 'redeven-runtime-control-v1',
+              protocol_version: 'redeven-runtime-control-v2',
               base_url: 'http://127.0.0.1:25000/',
               token: 'runtime-control-token',
-              desktop_owner_id: 'desktop-owner-test',
             },
             runtime_service: providerRuntimeService(),
           },
@@ -2480,7 +2452,6 @@ describe('buildEnvironmentCardModel', () => {
         local_environment: testLocalEnvironment({
           currentRuntime: {
             local_ui_url: 'http://127.0.0.1:24001/',
-            desktop_managed: false,
             effective_run_mode: 'desktop',
             runtime_service: providerRuntimeService(),
           },
@@ -2502,7 +2473,6 @@ describe('buildEnvironmentCardModel', () => {
         local_environment: testLocalEnvironment({
           currentRuntime: {
             local_ui_url: 'http://127.0.0.1:24001/',
-            desktop_managed: true,
             effective_run_mode: 'desktop',
             ...providerRuntimeState('env_demo'),
             runtime_service: providerRuntimeService({ state: 'openable' }, {
@@ -2579,14 +2549,12 @@ describe('buildEnvironmentCardModel', () => {
         local_environment: testLocalEnvironment({
           currentRuntime: {
             local_ui_url: 'http://127.0.0.1:24001/',
-            desktop_managed: true,
             effective_run_mode: 'desktop',
             ...providerRuntimeState('env_demo'),
             runtime_control: {
-              protocol_version: 'redeven-runtime-control-v1',
+              protocol_version: 'redeven-runtime-control-v2',
               base_url: 'http://127.0.0.1:25000/',
               token: 'runtime-control-token',
-              desktop_owner_id: 'desktop-owner-test',
             },
             runtime_service: localOnlyRuntimeService,
           },
@@ -2701,13 +2669,11 @@ describe('buildEnvironmentCardModel', () => {
         local_environment: testLocalEnvironment({
           currentRuntime: {
             local_ui_url: 'http://127.0.0.1:24001/',
-            desktop_managed: true,
             effective_run_mode: 'desktop',
             runtime_control: {
-              protocol_version: 'redeven-runtime-control-v1',
+              protocol_version: 'redeven-runtime-control-v2',
               base_url: 'http://127.0.0.1:25000/',
               token: 'runtime-control-token',
-              desktop_owner_id: 'desktop-owner-test',
             },
             runtime_service: runtimeService,
           },
@@ -2740,13 +2706,11 @@ describe('buildEnvironmentCardModel', () => {
         local_environment: testLocalEnvironment({
           currentRuntime: {
             local_ui_url: 'http://127.0.0.1:24001/',
-            desktop_managed: true,
             effective_run_mode: 'desktop',
             runtime_control: {
-              protocol_version: 'redeven-runtime-control-v1',
+              protocol_version: 'redeven-runtime-control-v2',
               base_url: 'http://127.0.0.1:25000/',
               token: 'runtime-control-token',
-              desktop_owner_id: 'desktop-owner-test',
             },
             runtime_service: busyRuntimeService,
           },
@@ -2881,7 +2845,6 @@ describe('buildEnvironmentCardModel', () => {
   it('keeps provider cards on the provider tunnel when managed runtimes are linked', () => {
     const providerRuntime = {
       local_ui_url: 'http://127.0.0.1:24001/',
-      desktop_managed: false,
       ...providerRuntimeState('env_demo'),
       runtime_service: providerRuntimeService({ state: 'openable' }, {
         state: 'linked',
@@ -2951,7 +2914,6 @@ describe('buildEnvironmentCardModel', () => {
     const focusableLocalEnvironment = testProviderBoundLocalEnvironment('https://redeven.test', 'env_demo', {
       currentRuntime: {
         local_ui_url: 'http://127.0.0.1:24001/',
-        desktop_managed: true,
         effective_run_mode: 'desktop',
         ...providerRuntimeState('env_demo'),
         runtime_service: providerRuntimeService({ state: 'openable' }, {
@@ -3010,7 +2972,6 @@ describe('buildEnvironmentCardModel', () => {
     const localServe = testProviderBoundLocalEnvironment('https://redeven.test', 'env_opening', {
       currentRuntime: {
         local_ui_url: 'http://localhost:23998/',
-        desktop_managed: true,
         effective_run_mode: 'desktop',
         ...providerRuntimeState('env_opening'),
         runtime_service: providerRuntimeService(),
@@ -3078,7 +3039,6 @@ describe('buildEnvironmentCardModel', () => {
     const local = testLocalEnvironment({
       currentRuntime: {
         local_ui_url: 'http://127.0.0.1:24001/',
-        desktop_managed: true,
         runtime_service: providerRuntimeService({
           state: 'blocked',
           reason_code: 'runtime_update_required',
@@ -3117,7 +3077,6 @@ describe('buildEnvironmentCardModel', () => {
     const local = testLocalEnvironment({
       currentRuntime: {
         local_ui_url: 'http://127.0.0.1:24001/',
-        desktop_managed: true,
         runtime_service: {
           ...providerRuntimeService({
             state: 'blocked',
@@ -3162,7 +3121,6 @@ describe('buildEnvironmentCardModel', () => {
     const local = testLocalEnvironment({
       currentRuntime: {
         local_ui_url: 'http://127.0.0.1:24001/',
-        desktop_managed: true,
         ...providerRuntimeState('env_preparing'),
         runtime_service: providerRuntimeService({
             state: 'starting',

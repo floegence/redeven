@@ -1,4 +1,8 @@
-import type { DesktopProviderEnvironment } from './controlPlaneProvider';
+import type {
+  DesktopProviderEnvironment,
+  DesktopProviderEnvironmentAccess,
+  DesktopProviderRuntimeManagementCapability,
+} from './controlPlaneProvider';
 import { normalizeControlPlaneOrigin } from './controlPlaneProvider';
 import {
   normalizeDesktopProviderEnvironmentID,
@@ -16,6 +20,8 @@ export type DesktopProviderEnvironmentRemoteCatalogEntry = Readonly<{
   status: string;
   lifecycle_status: string;
   last_seen_at_unix_ms: number;
+  access?: DesktopProviderEnvironmentAccess;
+  runtime_management?: DesktopProviderRuntimeManagementCapability;
 }>;
 
 export type DesktopProviderEnvironmentRecord = Readonly<{
@@ -65,6 +71,8 @@ export function desktopProviderEnvironmentRemoteCatalogEntryFromPublished(
     status: compact(published.status),
     lifecycle_status: compact(published.lifecycle_status),
     last_seen_at_unix_ms: Number(published.last_seen_at_unix_ms) || 0,
+    ...(published.access ? { access: published.access } : {}),
+    ...(published.runtime_management ? { runtime_management: published.runtime_management } : {}),
   };
 }
 

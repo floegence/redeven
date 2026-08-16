@@ -10,8 +10,6 @@ import type { RuntimeServiceSnapshot } from './runtimeService';
 
 const openableRuntimeService: RuntimeServiceSnapshot = {
   protocol_version: 'redeven-runtime-v1',
-  service_owner: 'desktop',
-  desktop_managed: true,
   effective_run_mode: 'desktop',
   remote_enabled: false,
   compatibility: 'compatible',
@@ -125,7 +123,6 @@ describe('desktopRuntimeHealth', () => {
       message: 'A runtime process is alive but not reachable.',
       lock_owner: {
         pid: 4321,
-        desktop_managed: true,
       },
       diagnostics: {
         attach_state: 'live_process_without_management_socket',
@@ -203,19 +200,4 @@ describe('desktopRuntimeHealth', () => {
     })).toBeUndefined();
   });
 
-  it('normalizes verified process takeover as restart maintenance', () => {
-    expect(normalizeDesktopRuntimeMaintenanceRequirement({
-      kind: 'runtime_process_takeover_required',
-      required_for: 'open',
-      can_desktop_start: false,
-      can_desktop_restart: true,
-      has_active_work: true,
-      active_work_label: 'Active work may be interrupted',
-      message: 'Review the verified Runtime processes.',
-    })).toMatchObject({
-      kind: 'runtime_process_takeover_required',
-      recovery_action: 'restart_runtime',
-      can_desktop_restart: true,
-    });
-  });
 });

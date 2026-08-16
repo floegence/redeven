@@ -57,10 +57,9 @@ type BridgeStreamCallbacks = {
 type RuntimeBridgeIdentity = Readonly<{
   kind: 'runtime';
   started_at_unix_ms: number;
-  runtime_version: string;
-  runtime_control_protocol_version: string;
-  desktop_owner_id: string;
-  runtime_control_token: string;
+	runtime_version: string;
+	runtime_control_protocol_version: string;
+	runtime_control_token: string;
 }>;
 
 type GatewayBridgeIdentity = Readonly<{
@@ -121,7 +120,6 @@ export type StartRuntimePlacementBridgeSessionArgs = Readonly<{
   placement: DesktopRuntimePlacement;
   runtime_binary_path?: string;
   bridge_command_kind?: RuntimePlacementBridgeCommandKind;
-  desktop_owner_id: string;
   require_local_ui?: boolean;
   ssh_password?: string;
   ssh_credential_scope?: string;
@@ -179,16 +177,14 @@ function runtimeBridgeIdentity(hello: RuntimePlacementBridgeHello): RuntimeBridg
   const startedAtUnixMS = Number(hello.started_at_unix_ms);
   const runtimeVersion = compact(hello.runtime_version);
   const protocolVersion = compact(hello.runtime_control.protocol_version);
-  const desktopOwnerID = compact(hello.runtime_control.desktop_owner_id);
-  const token = compact(hello.runtime_control.token);
+	const token = compact(hello.runtime_control.token);
   if (
     !Number.isInteger(startedAtUnixMS)
     || startedAtUnixMS <= 0
     || runtimeVersion === ''
     || !hello.runtime_control.available
     || protocolVersion === ''
-    || desktopOwnerID === ''
-    || token === ''
+		|| token === ''
   ) {
     throw new RuntimePlacementBridgeIdentityChangedError(
       'Runtime Placement Bridge did not report the complete Runtime process identity.',
@@ -199,7 +195,6 @@ function runtimeBridgeIdentity(hello: RuntimePlacementBridgeHello): RuntimeBridg
     started_at_unix_ms: startedAtUnixMS,
     runtime_version: runtimeVersion,
     runtime_control_protocol_version: protocolVersion,
-    desktop_owner_id: desktopOwnerID,
     runtime_control_token: token,
   };
 }
@@ -250,7 +245,6 @@ function bridgeProcessIdentityMatches(left: BridgeProcessIdentity, right: Bridge
     return left.started_at_unix_ms === right.started_at_unix_ms
       && left.runtime_version === right.runtime_version
       && left.runtime_control_protocol_version === right.runtime_control_protocol_version
-      && left.desktop_owner_id === right.desktop_owner_id
       && secureStringEqual(left.runtime_control_token, right.runtime_control_token);
   }
   if (left.kind === 'gateway' && right.kind === 'gateway') {
@@ -289,21 +283,17 @@ async function spawnBridgeCommand(
     runtime_binary_path: args.runtime_binary_path,
     command_kind: args.bridge_command_kind,
   });
-  const env = {
-    REDEVEN_DESKTOP_OWNER_ID: compact(args.desktop_owner_id),
-  };
   if (args.host_access.kind === 'ssh_host') {
     if (!args.ssh_transport_manager) {
       throw new Error('SSH bridge requires the Desktop SSH transport manager.');
     }
     return spawnSSHRuntimeHostCommand(args.ssh_transport_manager, args.host_access.ssh, plan.command, {
-      env,
       sshPassword: args.ssh_password,
       credentialScope: args.ssh_credential_scope ?? '',
       signal,
     });
   }
-  return spawnLocalRuntimeHostCommand(plan.command, { env, signal });
+  return spawnLocalRuntimeHostCommand(plan.command, { signal });
 }
 
 async function closeStreamingCommand(command: RuntimeHostStreamingCommand): Promise<void> {
@@ -783,8 +773,6 @@ export async function startRuntimePlacementBridgeSession(
     ...(runtimeControl ? { runtime_control: runtimeControl } : {}),
     effective_run_mode: runtimeService?.effective_run_mode,
     remote_enabled: runtimeService?.remote_enabled,
-    desktop_managed: true,
-    desktop_owner_id: compact(args.desktop_owner_id),
     started_at_unix_ms: hello.started_at_unix_ms,
     runtime_service: runtimeService,
   };
@@ -801,7 +789,6 @@ export async function startRuntimePlacementBridgeSession(
     ...(runtimeService ? { runtime_service: runtimeService } : {}),
     runtime_handle: {
       runtime_kind: args.host_access.kind === 'ssh_host' ? 'ssh' : 'local_environment',
-      lifecycle_owner: 'desktop',
       launch_mode: 'spawned',
       stop,
     },

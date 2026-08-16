@@ -28,6 +28,7 @@ import (
 	"github.com/floegence/redeven/internal/diagnostics"
 	"github.com/floegence/redeven/internal/lockfile"
 	"github.com/floegence/redeven/internal/redevpluginintegration"
+	"github.com/floegence/redeven/internal/runtimeservice"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/sessionhop"
 )
@@ -915,10 +916,8 @@ func TestServer_handleFavicon_redirect(t *testing.T) {
 	}
 }
 
-func TestServer_handleRuntime_reportsDesktopManagedMetadata(t *testing.T) {
+func TestServer_handleRuntime_reportsRuntimeServiceMetadataWithoutDesktopOwnership(t *testing.T) {
 	s := newTestServer(t, nil)
-	s.desktopManaged = true
-	s.desktopOwnerID = "desktop-owner-runtime"
 	s.effectiveRunMode = "hybrid"
 	s.remoteEnabled = true
 
@@ -934,12 +933,10 @@ func TestServer_handleRuntime_reportsDesktopManagedMetadata(t *testing.T) {
 	if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v", err)
 	}
-	if !body.DesktopManaged || body.DesktopOwnerID != "desktop-owner-runtime" || body.EffectiveRunMode != "hybrid" || !body.RemoteEnabled {
+	if body.EffectiveRunMode != "hybrid" || !body.RemoteEnabled {
 		t.Fatalf("unexpected runtime body: %#v", body)
 	}
-	if body.RuntimeService.ProtocolVersion != "redeven-runtime-v1" ||
-		body.RuntimeService.ServiceOwner != "desktop" ||
-		!body.RuntimeService.DesktopManaged ||
+	if body.RuntimeService.ProtocolVersion != runtimeservice.ProtocolVersion ||
 		body.RuntimeService.EffectiveRunMode != "hybrid" ||
 		!body.RuntimeService.RemoteEnabled {
 		t.Fatalf("unexpected runtime service body: %#v", body.RuntimeService)
@@ -1072,10 +1069,10 @@ func TestServer_DiagnosticsSkipsDiagnosticsAPIRequests(t *testing.T) {
 	}
 }
 
-func TestServer_handleLatestVersion_desktopManagedMessage(t *testing.T) {
+func TestServer_handleLatestVersion_supervisorManagedMessage(t *testing.T) {
 	s := newTestServer(t, nil)
 	s.version = "v1.2.3"
-	s.desktopManaged = true
+	s.selfUpgradeDisabled = true
 	s.effectiveRunMode = "hybrid"
 	s.remoteEnabled = true
 	s.latestVersionResolver = latestVersionResolverFunc(func(context.Context) (latestVersionLoadResult, error) {
@@ -1117,7 +1114,7 @@ func TestServer_handleLatestVersion_desktopManagedMessage(t *testing.T) {
 	if body.ReleasePageURL != "https://example.test/releases/v1.2.4" || body.ManifestETag != "\"etag-1\"" || body.Source != "upstream" {
 		t.Fatalf("unexpected manifest metadata: %#v", body)
 	}
-	if !body.DesktopManaged || !strings.Contains(body.Message, "Managed by Redeven Desktop") {
+	if body.Message != localLatestVersionSupervisorManagedMessage {
 		t.Fatalf("unexpected latest version body: %#v", body)
 	}
 }
@@ -1125,7 +1122,6 @@ func TestServer_handleLatestVersion_desktopManagedMessage(t *testing.T) {
 func TestServer_handleLatestVersion_manualPolicyForLocalMode(t *testing.T) {
 	s := newTestServer(t, nil)
 	s.version = "v1.2.3"
-	s.desktopManaged = false
 	s.effectiveRunMode = "local"
 	s.remoteEnabled = false
 	s.latestVersionResolver = latestVersionResolverFunc(func(context.Context) (latestVersionLoadResult, error) {
@@ -1268,6 +1264,7 @@ func TestServer_Start_UsesActualDynamicPortForDisplayURLs(t *testing.T) {
 		bind:       bind,
 		configPath: cfgPath,
 		appServer:  newTestAppServer(t, cfgPath),
+		a:          newRuntimeHealthTestAgent(t, cfgPath),
 		pending:    make(map[string]pendingDirect),
 	}
 

@@ -48,8 +48,7 @@ export type RuntimePlacementBridgeHello = Readonly<{
     available: boolean;
     protocol_version?: string;
     base_url?: string;
-    token?: string;
-    desktop_owner_id?: string;
+		token?: string;
   }>;
   runtime_service?: RuntimeServiceSnapshot;
   gateway_service?: Readonly<{
@@ -327,7 +326,6 @@ export function parseRuntimePlacementBridgeHello(payload: Buffer): RuntimePlacem
       protocol_version: compact(runtimeControl.protocol_version) || undefined,
       base_url: compact(runtimeControl.base_url) || undefined,
       token: compact(runtimeControl.token) || undefined,
-      desktop_owner_id: compact(runtimeControl.desktop_owner_id) || undefined,
     },
     ...(parsed.runtime_service
       ? { runtime_service: normalizeRuntimeServiceSnapshot(parsed.runtime_service) }
@@ -354,15 +352,13 @@ export function runtimeControlEndpointFromBridgeHello(
   }
   const protocolVersion = compact(hello.runtime_control.protocol_version);
   const token = compact(hello.runtime_control.token);
-  const desktopOwnerID = compact(hello.runtime_control.desktop_owner_id);
-  if (protocolVersion === '' || token === '' || desktopOwnerID === '') {
+	if (protocolVersion === '' || token === '') {
     return undefined;
   }
   return {
     protocol_version: protocolVersion,
     base_url: `${compact(loopbackBaseURL).replace(/\/+$/u, '')}/__redeven_runtime_control/`,
     token,
-    desktop_owner_id: desktopOwnerID,
   };
 }
 

@@ -7,6 +7,7 @@ describe('localRuntimeSupervisor', () => {
   it('keeps Local Environment Open available when the running runtime reports a runtime update block', () => {
     const runtimeService = normalizeRuntimeServiceSnapshot({
       runtime_version: 'v0.5.9',
+      compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
       compatibility: 'update_required',
       compatibility_message: 'Redeven Desktop has a newer bundled runtime.',
       open_readiness: {
@@ -20,12 +21,7 @@ describe('localRuntimeSupervisor', () => {
       { kind: 'local_environment' },
       {
         local_ui_url: 'http://127.0.0.1:24001/',
-        desktop_managed: true,
-        desktop_owner_id: 'desktop-owner',
         runtime_service: runtimeService,
-      },
-      {
-        desktopOwnerID: 'desktop-owner',
       },
     );
 
@@ -42,6 +38,7 @@ describe('localRuntimeSupervisor', () => {
   it('keeps Local Environment Open available even when an update-required runtime has active work', () => {
     const runtimeService = normalizeRuntimeServiceSnapshot({
       runtime_version: 'v0.5.9',
+      compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
       compatibility: 'update_required',
       open_readiness: {
         state: 'blocked',
@@ -56,12 +53,7 @@ describe('localRuntimeSupervisor', () => {
       { kind: 'local_environment' },
       {
         local_ui_url: 'http://127.0.0.1:24001/',
-        desktop_managed: true,
-        desktop_owner_id: 'desktop-owner',
         runtime_service: runtimeService,
-      },
-      {
-        desktopOwnerID: 'desktop-owner',
       },
     );
 
@@ -78,6 +70,7 @@ describe('localRuntimeSupervisor', () => {
   it('keeps Local Environment Open available when a newer runtime requires a Desktop update', () => {
     const runtimeService = normalizeRuntimeServiceSnapshot({
       runtime_version: 'v0.8.0',
+      compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
       compatibility: 'desktop_update_required',
       open_readiness: {
         state: 'blocked',
@@ -90,12 +83,7 @@ describe('localRuntimeSupervisor', () => {
       { kind: 'local_environment' },
       {
         local_ui_url: 'http://127.0.0.1:24001/',
-        desktop_managed: true,
-        desktop_owner_id: 'desktop-owner',
         runtime_service: runtimeService,
-      },
-      {
-        desktopOwnerID: 'desktop-owner',
       },
     );
 
@@ -118,12 +106,7 @@ describe('localRuntimeSupervisor', () => {
       { kind: 'local_environment' },
       {
         local_ui_url: 'http://127.0.0.1:24001/',
-        desktop_managed: true,
-        desktop_owner_id: 'desktop-owner',
         runtime_service: runtimeService,
-      },
-      {
-        desktopOwnerID: 'desktop-owner',
       },
     );
 
@@ -149,12 +132,7 @@ describe('localRuntimeSupervisor', () => {
       { kind: 'local_environment' },
       {
         local_ui_url: 'http://127.0.0.1:24001/',
-        desktop_managed: true,
-        desktop_owner_id: 'desktop-owner',
         runtime_service: runtimeService,
-      },
-      {
-        desktopOwnerID: 'desktop-owner',
       },
     );
 
@@ -184,12 +162,7 @@ describe('localRuntimeSupervisor', () => {
       { kind: 'local_environment' },
       {
         local_ui_url: 'http://127.0.0.1:24001/',
-        desktop_managed: true,
-        desktop_owner_id: 'desktop-owner',
         runtime_service: runtimeService,
-      },
-      {
-        desktopOwnerID: 'desktop-owner',
       },
     );
 
@@ -202,7 +175,7 @@ describe('localRuntimeSupervisor', () => {
     });
   });
 
-  it('keeps reclaim protection when an unowned runtime has active work', () => {
+  it('does not turn active sessions into a client ownership conflict', () => {
     const runtimeService = normalizeRuntimeServiceSnapshot({
       runtime_version: 'v0.5.11',
       compatibility: 'compatible',
@@ -215,24 +188,19 @@ describe('localRuntimeSupervisor', () => {
       { kind: 'local_environment' },
       {
         local_ui_url: 'http://127.0.0.1:24001/',
-        desktop_managed: true,
-        desktop_owner_id: '',
         runtime_service: runtimeService,
-      },
-      {
-        desktopOwnerID: 'desktop-owner',
       },
     );
 
     expect(plan).toMatchObject({
-      state: 'blocked_active_work',
-      can_open: false,
-      requires_restart: true,
-      requires_confirmation: true,
+      state: 'openable',
+      can_open: true,
+      requires_restart: false,
+      requires_confirmation: false,
     });
   });
 
-  it('treats active AI tasks as active work before reclaiming an unowned runtime', () => {
+  it('does not turn active AI tasks into a client ownership conflict', () => {
     const runtimeService = normalizeRuntimeServiceSnapshot({
       runtime_version: 'v0.5.11',
       compatibility: 'compatible',
@@ -245,20 +213,15 @@ describe('localRuntimeSupervisor', () => {
       { kind: 'local_environment' },
       {
         local_ui_url: 'http://127.0.0.1:24001/',
-        desktop_managed: true,
-        desktop_owner_id: '',
         runtime_service: runtimeService,
-      },
-      {
-        desktopOwnerID: 'desktop-owner',
       },
     );
 
     expect(plan).toMatchObject({
-      state: 'blocked_active_work',
-      can_open: false,
-      requires_restart: true,
-      requires_confirmation: true,
+      state: 'openable',
+      can_open: true,
+      requires_restart: false,
+      requires_confirmation: false,
     });
   });
 });

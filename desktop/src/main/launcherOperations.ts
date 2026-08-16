@@ -117,7 +117,6 @@ function operationProgress(snapshot: DesktopLauncherOperationSnapshot): DesktopL
     deleted_subject: snapshot.deleted_subject,
     next_actions: snapshot.next_actions,
     failure: snapshot.failure,
-    runtime_process_takeover: snapshot.runtime_process_takeover,
   };
 }
 

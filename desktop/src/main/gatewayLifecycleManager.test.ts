@@ -104,7 +104,6 @@ function manager(progress: string[] = [], secretStore = memorySecretStore()): Ga
     asset_cache_root: '/tmp/redeven-assets',
     temp_root: '/tmp/redeven-temp',
     source_runtime_root: '/Applications/Redeven.app/Contents/Resources',
-    desktop_owner_id: vi.fn(async () => 'desktop-owner'),
     lifecycle_coordinator: new RuntimeLifecycleCoordinator(),
     on_progress: (event) => {
       progress.push(event.phase);
@@ -172,8 +171,6 @@ describe('GatewayLifecycleManager', () => {
       service_status: 'running',
       service_pid: 1234,
       service_listen: '127.0.0.1:24000',
-      legacy_local_catalog_present: false,
-      legacy_runtime_pids: [],
     });
     lifecycleMocks.probeManagedGatewayServiceStatus.mockResolvedValue({
       status: 'not_running',
@@ -226,7 +223,6 @@ describe('GatewayLifecycleManager', () => {
       runtime_binary_path: '/opt/redeven/gateway/managed/bin/redeven-gateway',
       bridge_command_kind: 'gateway',
       require_local_ui: false,
-      desktop_owner_id: 'desktop-owner',
       ssh_password: '',
       fallback_local_id: 'gw_bastion',
     }));
@@ -291,7 +287,6 @@ describe('GatewayLifecycleManager', () => {
       asset_cache_root: '/tmp/redeven-assets',
       temp_root: '/tmp/redeven-temp',
       source_runtime_root: '/Applications/Redeven.app/Contents/Resources',
-      desktop_owner_id: vi.fn(async () => 'desktop-owner'),
       lifecycle_coordinator: new RuntimeLifecycleCoordinator(),
       session_cache: sessionCache,
     });
@@ -494,7 +489,6 @@ describe('GatewayLifecycleManager', () => {
       runtime_binary_path: '/root/.redeven/gateway/managed/bin/redeven-gateway',
       bridge_command_kind: 'gateway',
       require_local_ui: false,
-      desktop_owner_id: 'desktop-owner',
       ssh_password: '',
       fallback_local_id: 'gw_container',
     }));

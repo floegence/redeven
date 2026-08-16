@@ -4,6 +4,7 @@ import {
   assertGatewayConnectArtifactProof,
   assertGatewayPairingChallenge,
   assertGatewayPairingCompleteResponse,
+  buildPairingCompleteRequest,
   completeGatewayPairing,
   createGatewayAuthHeaders,
   createGatewayPairingMaterial,
@@ -11,8 +12,10 @@ import {
   pairingChallengePayload,
   pairingChallengeRequest,
   pairingCompleteResponsePayload,
+  pairingProofPayload,
   revokeGatewayTrust,
   signGatewayPayload,
+  verifyGatewaySignature,
   gatewayConnectArtifactProofPayload,
   type GatewaySecretStore,
 } from './gatewayTrust';
@@ -60,7 +63,7 @@ function signedChallenge(
   }> = {},
 ) {
   const challenge = {
-    protocol_version: overrides.protocol_version ?? 'redeven-gateway-v1',
+    protocol_version: overrides.protocol_version ?? 'redeven-gateway-v2',
     gateway_id: overrides.gateway_id ?? 'gw_demo',
     gateway_public_key: gatewayMaterial.client_public_key,
     gateway_public_key_fingerprint: gatewayPublicKeyFingerprint(gatewayMaterial.client_public_key),
@@ -92,7 +95,7 @@ function signedRuntimeStyleChallenge(
   const gatewayPublicKey = gatewayMaterial.client_public_key.trim();
   const gatewayPublicKeyWire = `${gatewayPublicKey}\n`;
   const challenge = {
-    protocol_version: 'redeven-gateway-v1',
+    protocol_version: 'redeven-gateway-v2',
     gateway_id: 'gw_demo',
     gateway_public_key: gatewayPublicKeyWire,
     gateway_public_key_fingerprint: gatewayPublicKeyFingerprint(gatewayPublicKey),
@@ -273,12 +276,12 @@ describe('gatewayTrust', () => {
     const gatewayMaterial = createGatewayPairingMaterial(record);
     const challenge = signedChallenge(material, gatewayMaterial);
     const response = {
-      protocol_version: 'redeven-gateway-v1',
+      protocol_version: 'redeven-gateway-v2',
       gateway_id: record.gateway_id,
       client_key_id: material.client_key_id,
       paired_at_unix_ms: 1_000,
       proof: signGatewayPayload(gatewayMaterial.client_private_key, pairingCompleteResponsePayload({
-        protocol_version: 'redeven-gateway-v1',
+        protocol_version: 'redeven-gateway-v2',
         client_nonce: material.client_nonce,
         gateway_nonce: challenge.gateway_nonce,
         gateway_id: record.gateway_id,
@@ -297,6 +300,33 @@ describe('gatewayTrust', () => {
       ...response,
       protocol_version: 'redeven-runtime-gateway-v1',
     })).toThrow('Gateway protocol version is not supported');
+  });
+
+  it('binds explicit Runtime grants into direct pairing proofs', () => {
+    const record = gatewayRecord();
+    const material = createGatewayPairingMaterial(record);
+    const gatewayMaterial = createGatewayPairingMaterial(record);
+    const challenge = signedChallenge(material, gatewayMaterial);
+    const request = buildPairingCompleteRequest(material, challenge, {
+      profileWrite: true,
+      runtimeGrants: ['manage_runtime_binding', 'manage_runtime', 'deploy_custom_runtime'],
+    });
+
+    expect(request.runtime_grants).toEqual([
+      'deploy_custom_runtime',
+      'manage_runtime',
+      'manage_runtime_binding',
+    ]);
+    expect(verifyGatewaySignature(material.client_public_key, pairingProofPayload({
+      protocol_version: request.protocol_version,
+      client_nonce: request.client_nonce,
+      gateway_nonce: request.gateway_nonce,
+      gateway_id: request.gateway_id,
+      binding_audience: request.binding_audience,
+      client_key_id: request.client_key_id,
+      client_capability: request.client_capability,
+      runtime_grants: request.runtime_grants,
+    }), request.proof)).toBe(true);
   });
 
   it('blocks authenticated calls until the Gateway is paired and not revoked', async () => {
@@ -377,7 +407,7 @@ describe('gatewayTrust', () => {
       }),
       method: 'POST',
       route: '/gateway/v1/catalog',
-      body: { protocol_version: 'redeven-gateway-v1' },
+      body: { protocol_version: 'redeven-gateway-v2' },
       secret_store: store,
       timestamp_unix_ms: 1_770_000_000_000,
       nonce: 'nonce',
@@ -415,7 +445,7 @@ describe('gatewayTrust', () => {
   it('builds pairing challenge requests from generated key material', () => {
     const material = createGatewayPairingMaterial(gatewayRecord());
     expect(pairingChallengeRequest(material)).toMatchObject({
-      protocol_version: 'redeven-gateway-v1',
+      protocol_version: 'redeven-gateway-v2',
       client_nonce: material.client_nonce,
       client_public_key: material.client_public_key,
       binding_audience: 'https://gateway.example/',

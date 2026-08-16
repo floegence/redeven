@@ -2353,10 +2353,8 @@ export const enUS = defineDictionary({
     loading: 'Loading...',
     statusLabel: 'Status',
     statusNote: 'Current status as observed by the maintenance controller.',
-    serviceOwner: 'Service owner',
-    serviceOwnerNote: 'Lifecycle owner for this persistent Runtime Service.',
     maintenanceAuthority: 'Maintenance authority',
-    maintenanceAuthorityNote: 'Current owner for restart and update actions in this session.',
+    maintenanceAuthorityNote: 'Current execution channel for restart and update actions in this session.',
     compatibilityLabel: 'Compatibility',
     compatibilityNote: 'Desktop and Runtime Service compatibility state.',
     activeWork: 'Active work',
@@ -2376,11 +2374,8 @@ export const enUS = defineDictionary({
     adminRequired: 'Admin permission required.',
     noActiveWork: 'No active work',
     runtimeRpc: 'Runtime RPC',
+    desktopShell: 'Redeven Desktop',
     unknown: 'Unknown',
-    owner: {
-      redevenDesktop: 'Redeven Desktop',
-      externalService: 'External service',
-    },
     status: {
       online: 'Online',
       offline: 'Offline',
@@ -2391,7 +2386,6 @@ export const enUS = defineDictionary({
       restartRecommended: 'Restart recommended',
       updateRequired: 'Update required',
       desktopUpdateRequired: 'Desktop update required',
-      managedElsewhere: 'Managed elsewhere',
     },
     desktopModelState: {
       bound: 'Bound',

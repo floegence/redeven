@@ -16,14 +16,13 @@ import {
 import {
   parseDesktopRuntimeProcessInventory,
   parseDesktopRuntimeProcessStopResult,
-  requireDesktopRuntimeProcessReconciliation,
-  desktopRuntimeProcessInventoryHasSingleCurrentOwner,
+  requireDesktopRuntimeProcessIdentity,
+  desktopRuntimeProcessInventoryHasSingleCurrent,
   desktopRuntimeProcessStopTargetCount,
   runtimeProcessCommandErrorFromOutput,
   type DesktopRuntimeProcessInventory,
   type DesktopRuntimeProcessStopResult,
 } from './runtimeProcessInventory';
-import type { DesktopRuntimeProcessReconciliation } from '../shared/desktopRuntimeProcessTakeover';
 import type { DesktopSessionRuntimeHandle, DesktopSessionRuntimeLaunchMode } from './sessionRuntime';
 import type { StartupReport } from './startup';
 import { formatBlockedLaunchDiagnostics, parseLaunchReport, type LaunchBlockedReport } from './launchReport';
@@ -110,14 +109,12 @@ export type ManagedSSHRuntimeProcessInventoryArgs = Readonly<{
   transportLease?: DesktopSSHTransportLease;
   target: DesktopSSHEnvironmentDetails;
   runtimeReleaseTag: string;
-  desktopOwnerID: string;
   runtimeStateRoot?: string;
   sshPassword?: string;
   sshBinary?: string;
   tempRoot?: string;
   assetCacheRoot: string;
   sourceRuntimeRoot?: string;
-  runtimeProcessReconciliation?: DesktopRuntimeProcessReconciliation;
   connectTimeoutSeconds?: number;
   signal?: AbortSignal;
   onLog?: StartManagedSSHRuntimeArgs['onLog'];
@@ -233,7 +230,6 @@ export type StartManagedSSHRuntimeArgs = Readonly<{
   sshCredentialScope: string;
   target: DesktopSSHEnvironmentDetails;
   runtimeReleaseTag: string;
-  desktopOwnerID: string;
   runtimeStateRoot?: string;
   sshPassword?: string;
   sshBinary?: string;
@@ -243,7 +239,6 @@ export type StartManagedSSHRuntimeArgs = Readonly<{
   assetCacheRoot?: string;
   forceRuntimeUpdate?: boolean;
   runtimeProcessIntent?: 'start' | 'restart' | 'update';
-  runtimeProcessReconciliation?: DesktopRuntimeProcessReconciliation;
   allowActiveWorkReplacement?: boolean;
   startupTimeoutMs?: number;
   stopTimeoutMs?: number;
@@ -534,7 +529,7 @@ function buildManagedSSHRuntimeProbeShell(): string {
     '  fi',
     '  if ! grep -Fx "managed_by=redeven-desktop" "$stamp_path" >/dev/null 2>&1; then',
     '    probe_status="stamp_invalid"',
-    '    probe_reason="managed runtime stamp owner is invalid"',
+    '    probe_reason="managed runtime stamp provenance is invalid"',
     '    return 1',
     '  fi',
     '  slot_release_tag=""',
@@ -568,7 +563,7 @@ function buildManagedSSHRuntimeProbeShell(): string {
     '      ;;',
     '  esac',
     '  probe_status="ready"',
-    '  probe_reason="desktop-managed runtime is compatible"',
+    '  probe_reason="managed Runtime package is compatible"',
     '  return 0',
     '}',
   ].join('\n');
@@ -797,7 +792,6 @@ export function buildManagedSSHStartScript(): string {
     buildRemoteStateRootShell(),
     buildManagedSSHRuntimePathShell('3'),
     'session_token="$4"',
-    'desktop_owner_id="${5:-}"',
     'session_dir="${state_root%/}/runtime/sessions/${session_token}"',
     'report_path="${session_dir}/startup-report.json"',
     'log_dir="${state_root%/}/runtime/logs"',
@@ -808,15 +802,10 @@ export function buildManagedSSHStartScript(): string {
     '  echo "Redeven runtime is not installed at ${binary}" >&2',
     '  exit 1',
     'fi',
-    'if [ -z "$desktop_owner_id" ]; then',
-    '  echo "Desktop owner id is required for SSH runtime-control." >&2',
-    '  exit 1',
-    'fi',
-    'export REDEVEN_DESKTOP_OWNER_ID="$desktop_owner_id"',
     'if command -v setsid >/dev/null 2>&1; then',
-    '  setsid "$binary" run --state-root "$state_root" --mode desktop --desktop-managed --presentation machine --local-ui-bind 127.0.0.1:0 --startup-report-file "$report_path" >>"$log_path" 2>&1 </dev/null &',
+    '  setsid "$binary" run --state-root "$state_root" --mode desktop --presentation machine --local-ui-bind 127.0.0.1:0 --startup-report-file "$report_path" >>"$log_path" 2>&1 </dev/null &',
     'else',
-    '  nohup "$binary" run --state-root "$state_root" --mode desktop --desktop-managed --presentation machine --local-ui-bind 127.0.0.1:0 --startup-report-file "$report_path" >>"$log_path" 2>&1 </dev/null &',
+    '  nohup "$binary" run --state-root "$state_root" --mode desktop --presentation machine --local-ui-bind 127.0.0.1:0 --startup-report-file "$report_path" >>"$log_path" 2>&1 </dev/null &',
     'fi',
     'printf "%s\\n" "$!" > "${session_dir}/launcher.pid"',
   ].join('\n');
@@ -855,10 +844,8 @@ function buildManagedSSHRuntimeProcessHelperScript(): string {
     buildRemoteInstallRootShell(),
     buildRemoteStateRootShell(),
     'operation="${3:-}"',
-    'desktop_owner_id="${4:-}"',
-    'inventory_digest="${5:-}"',
-    'grace_period="${6:-5s}"',
-    'reconciliation_mode="${7:-automatic}"',
+    'inventory_digest="${4:-}"',
+    'grace_period="${5:-5s}"',
     'maintenance_root="${runtime_root%/}/runtime/maintenance"',
     'mkdir -p "$maintenance_root"',
     'helper_root="$(mktemp -d "${maintenance_root%/}/process-helper.XXXXXX")"',
@@ -875,10 +862,10 @@ function buildManagedSSHRuntimeProcessHelperScript(): string {
     'fi',
     'case "$operation" in',
     '  inventory)',
-    '    "$binary" desktop-runtime-inventory --runtime-root "$runtime_root" --state-root "$state_root" --desktop-owner-id "$desktop_owner_id" --current-executable "$managed_binary"',
+    '    "$binary" desktop-runtime-inventory --runtime-root "$runtime_root" --state-root "$state_root" --current-executable "$managed_binary"',
     '    ;;',
     '  stop)',
-    '    "$binary" desktop-runtime-stop --runtime-root "$runtime_root" --state-root "$state_root" --desktop-owner-id "$desktop_owner_id" --current-executable "$managed_binary" --reconciliation-mode "$reconciliation_mode" --all-matching --expected-inventory-digest "$inventory_digest" --grace-period "$grace_period" --json',
+    '    "$binary" desktop-runtime-stop --runtime-root "$runtime_root" --state-root "$state_root" --current-executable "$managed_binary" --all-matching --expected-inventory-digest "$inventory_digest" --grace-period "$grace_period" --json',
     '    ;;',
     '  *)',
     '    echo "runtime helper operation is invalid" >&2',
@@ -1015,10 +1002,6 @@ async function runManagedSSHRuntimeProcessCommand(
 ): Promise<string> {
   const target = normalizeDesktopSSHEnvironmentDetails(args.target);
   const runtimeReleaseTag = normalizeRuntimeReleaseTag(args.runtimeReleaseTag);
-  const desktopOwnerID = compact(args.desktopOwnerID);
-  if (!desktopOwnerID) {
-    throw new Error('Desktop owner id is required for runtime process reconciliation.');
-  }
   const logs = createMutableRecentLogs();
   let ownedLease: DesktopSSHTransportLease | null = null;
   const lease = args.transportLease ?? await args.sshTransportManager.acquire({
@@ -1048,12 +1031,12 @@ async function runManagedSSHRuntimeProcessCommand(
       throw runtimeProcessCommandErrorFromOutput(
         platformResult.stdout,
         platformResult.stderr,
-        'Desktop could not detect the SSH host platform for runtime reconciliation.',
+        'Desktop could not detect the SSH host platform for Runtime process identity validation.',
       );
     }
     const platformLines = platformResult.stdout.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean);
     if (platformLines.length < 2) {
-      throw new Error('Desktop received an incomplete SSH host platform result for runtime reconciliation.');
+      throw new Error('Desktop received an incomplete SSH host platform result for Runtime process identity validation.');
     }
     const platform = resolveDesktopSSHRemotePlatform(platformLines[0] ?? '', platformLines[1] ?? '');
     const asset = await prepareDesktopRuntimeUploadAsset({
@@ -1071,10 +1054,8 @@ async function runManagedSSHRuntimeProcessCommand(
         target.runtime_root,
         args.runtimeStateRoot ?? target.runtime_root,
         operation,
-        desktopOwnerID,
         inventoryDigest,
         `${Math.max(1, Math.ceil(gracePeriodMs / 1000))}s`,
-        args.runtimeProcessReconciliation?.mode ?? 'automatic',
       ]),
       asset.archiveData,
     );
@@ -1113,7 +1094,7 @@ export async function stopManagedSSHRuntimeProcesses(
 function probeResultFallbackReason(status: DesktopSSHRemoteRuntimeProbeStatus): string {
   switch (status) {
     case 'ready':
-      return 'desktop-managed runtime slot is ready';
+      return 'managed Runtime slot is ready';
     case 'missing_binary':
       return 'managed runtime binary is missing';
     case 'binary_not_executable':
@@ -1194,7 +1175,7 @@ export function parseManagedSSHRuntimeProbeResult(raw: string): DesktopSSHRemote
 export function describeManagedSSHRuntimeProbeResult(result: DesktopSSHRemoteRuntimeProbeResult): string {
   switch (result.status) {
     case 'ready':
-      return `Desktop-managed runtime at ${result.binary_path} is ready (${result.reported_release_tag ?? result.slot_release_tag ?? 'unknown version'}).`;
+      return `Managed Runtime at ${result.binary_path} is ready (${result.reported_release_tag ?? result.slot_release_tag ?? 'unknown version'}).`;
     case 'slot_version_mismatch':
       return `Managed runtime at ${result.binary_path} reports ${result.reported_release_tag ?? 'an unknown version'}, but its Desktop stamp records ${result.slot_release_tag ?? 'an unknown version'}.`;
     case 'stamp_missing':
@@ -1298,7 +1279,7 @@ async function probeRemoteRuntimeCompatibility(args: Readonly<{
     args.onProgress,
     'ssh_checking_runtime',
     'Checking remote runtime',
-    `Looking for a Desktop-managed Redeven ${args.runtimeReleaseTag} runtime on the SSH host.`,
+    `Looking for a managed Redeven ${args.runtimeReleaseTag} Runtime on the SSH host.`,
   );
   const result = await runSSHControlCommand(
     args.session,
@@ -1857,7 +1838,6 @@ type RuntimeIdentityMismatchDiagnostic = Readonly<{
   state_dir?: string;
   runtime_control_base_url?: string;
   binary_path?: string;
-  desktop_owner_id?: string;
 }>;
 
 function startupReportsStoppablePID(startup: StartupReport): boolean {
@@ -1879,7 +1859,6 @@ function runtimeIdentityMismatchDiagnostic(
     target: DesktopSSHEnvironmentDetails;
     runtimeStateRoot?: string;
     runtimeReleaseTag: string;
-    desktopOwnerID: string;
   }>,
 ): RuntimeIdentityMismatchDiagnostic {
   const runtimeService = startup.runtime_service;
@@ -1891,7 +1870,6 @@ function runtimeIdentityMismatchDiagnostic(
     state_dir: compact(startup.state_dir) || compact(args.runtimeStateRoot) || compact(args.target.runtime_root) || undefined,
     runtime_control_base_url: compact(startup.runtime_control?.base_url) || undefined,
     binary_path: managedSSHRuntimeBinaryPath(args.target),
-    desktop_owner_id: compact(startup.desktop_owner_id) || compact(startup.runtime_control?.desktop_owner_id) || args.desktopOwnerID,
   };
 }
 
@@ -1903,7 +1881,6 @@ function formatRuntimeIdentityMismatchDiagnostic(diagnostic: RuntimeIdentityMism
     ['state_dir', diagnostic.state_dir],
     ['runtime_control_base_url', diagnostic.runtime_control_base_url],
     ['binary_path', diagnostic.binary_path],
-    ['desktop_owner_id', diagnostic.desktop_owner_id],
   ];
   return rows
     .map(([key, value]) => {
@@ -1984,10 +1961,6 @@ async function startManagedSSHRuntimeInternal(
   throwIfSSHRuntimeCanceled(args.signal);
   const target = normalizeDesktopSSHEnvironmentDetails(args.target);
   const runtimeReleaseTag = normalizeRuntimeReleaseTag(args.runtimeReleaseTag);
-  const desktopOwnerID = compact(args.desktopOwnerID);
-  if (desktopOwnerID === '') {
-    throw new Error('Desktop owner id is required before starting a managed SSH runtime.');
-  }
   const installScriptURL = compact(args.installScriptURL) || PUBLIC_INSTALL_SCRIPT_URL;
   const tempRoot = compact(args.tempRoot) || os.tmpdir();
   const assetCacheRoot = compact(args.assetCacheRoot) || path.join(tempRoot, 'redeven-ssh-release-cache');
@@ -2087,7 +2060,6 @@ async function startManagedSSHRuntimeInternal(
           sshCredentialScope: args.sshCredentialScope,
           target,
           runtimeReleaseTag,
-          desktopOwnerID,
           runtimeStateRoot: args.runtimeStateRoot,
           sshPassword: args.sshPassword,
           sshBinary: args.sshBinary,
@@ -2096,10 +2068,9 @@ async function startManagedSSHRuntimeInternal(
           sourceRuntimeRoot: args.sourceRuntimeRoot,
           connectTimeoutSeconds,
           onLog: args.onLog,
-          runtimeProcessReconciliation: args.runtimeProcessReconciliation,
         };
         const inventory = await inspectManagedSSHRuntimeProcesses(processArgs);
-        requireDesktopRuntimeProcessReconciliation(inventory, args.runtimeProcessReconciliation);
+        requireDesktopRuntimeProcessIdentity(inventory);
         if (inventory.instances.length > 0) {
           await stopManagedSSHRuntimeProcesses(processArgs, inventory, stopTimeoutMs);
         }
@@ -2129,7 +2100,6 @@ async function startManagedSSHRuntimeInternal(
       transportLease: lease,
       target,
       runtimeReleaseTag,
-      desktopOwnerID,
       runtimeStateRoot: args.runtimeStateRoot,
       sshPassword: args.sshPassword,
       sshBinary: args.sshBinary,
@@ -2139,7 +2109,6 @@ async function startManagedSSHRuntimeInternal(
       connectTimeoutSeconds,
       onLog: args.onLog,
       onProgress: args.onProgress,
-      runtimeProcessReconciliation: args.runtimeProcessReconciliation,
     };
     emitSSHRuntimeProgress(
       args.onProgress,
@@ -2148,7 +2117,7 @@ async function startManagedSSHRuntimeInternal(
       'Desktop is verifying Runtime process identities on the SSH host.',
     );
     const processInventory = await inspectManagedSSHRuntimeProcesses(processArgs);
-    requireDesktopRuntimeProcessReconciliation(processInventory, args.runtimeProcessReconciliation);
+    requireDesktopRuntimeProcessIdentity(processInventory);
     if (runtimeProcessIntent === 'start' && processInventory.summary.automatic > 1) {
       const maintenance = buildDesktopRuntimeMaintenanceRequirement({
         kind: 'runtime_restart_required',
@@ -2157,7 +2126,7 @@ async function startManagedSSHRuntimeInternal(
         can_desktop_start: false,
         can_desktop_restart: true,
         has_active_work: true,
-        active_work_label: 'Runtime process reconciliation required',
+        active_work_label: 'Runtime process identity validation required',
         target_runtime_version: runtimeReleaseTag,
         message: `Desktop found ${processInventory.summary.automatic} verified SSH Runtime processes for this target. Restart or update this Runtime before opening it.`,
       });
@@ -2171,7 +2140,7 @@ async function startManagedSSHRuntimeInternal(
         args.onProgress,
         'ssh_stopping_runtime_process',
         'Stopping Runtime processes',
-        `Desktop is stopping ${desktopRuntimeProcessStopTargetCount(processInventory, args.runtimeProcessReconciliation)} verified SSH Runtime process(es).`,
+        `Desktop is stopping ${desktopRuntimeProcessStopTargetCount(processInventory)} verified SSH Runtime process(es).`,
       );
       await stopManagedSSHRuntimeProcesses(processArgs, processInventory, stopTimeoutMs);
       emitSSHRuntimeProgress(
@@ -2213,7 +2182,6 @@ async function startManagedSSHRuntimeInternal(
           args.runtimeStateRoot ?? target.runtime_root,
           runtimeReleaseTag,
           sessionToken,
-          desktopOwnerID,
         ]),
         {
           signal: args.signal,
@@ -2262,7 +2230,6 @@ async function startManagedSSHRuntimeInternal(
           target,
           runtimeStateRoot: args.runtimeStateRoot,
           runtimeReleaseTag,
-          desktopOwnerID,
         });
         throw readinessFailure('Desktop restarted the SSH runtime, but the running Runtime Service still does not match this session.', logs, {
           code: 'ssh_runtime_launch_failed',
@@ -2281,7 +2248,6 @@ async function startManagedSSHRuntimeInternal(
         transportLease: lease,
         target,
         runtimeReleaseTag,
-        desktopOwnerID,
         runtimeStateRoot: args.runtimeStateRoot,
         sshPassword: args.sshPassword,
         sshBinary: args.sshBinary,
@@ -2290,10 +2256,9 @@ async function startManagedSSHRuntimeInternal(
         sourceRuntimeRoot: args.sourceRuntimeRoot,
         connectTimeoutSeconds,
         onLog: args.onLog,
-        runtimeProcessReconciliation: args.runtimeProcessReconciliation,
       };
       const replacementInventory = await inspectManagedSSHRuntimeProcesses(replacementProcessArgs);
-      requireDesktopRuntimeProcessReconciliation(replacementInventory, args.runtimeProcessReconciliation);
+      requireDesktopRuntimeProcessIdentity(replacementInventory);
       if (replacementInventory.instances.length === 0) {
         throw new Error('Desktop could not verify the SSH runtime process inventory before replacement.');
       }
@@ -2323,12 +2288,10 @@ async function startManagedSSHRuntimeInternal(
       : normalizeRuntimeReleaseTag(remoteStartup.runtime_service?.runtime_version ?? runtimeReleaseTag);
     const finalIdentityIssues = [
       ...(finalInventory.summary.blocked > 0 ? [`blocked=${finalInventory.summary.blocked}`] : []),
-      ...(finalInventory.summary.confirmed_takeover > 0 ? [`takeover=${finalInventory.summary.confirmed_takeover}`] : []),
-      ...(!desktopRuntimeProcessInventoryHasSingleCurrentOwner(finalInventory) ? ['current_owner=invalid'] : []),
+      ...(!desktopRuntimeProcessInventoryHasSingleCurrent(finalInventory) ? ['current_layout=invalid'] : []),
       ...(finalInventory.instances.length !== 1 ? [`instances=${finalInventory.instances.length}`] : []),
       ...(!finalInstance ? ['instance=missing'] : []),
       ...(finalInstance && finalInstance.pid !== remoteStartup.pid ? [`pid=${finalInstance.pid}, expected=${remoteStartup.pid}`] : []),
-      ...(finalInstance && finalInstance.desktop_owner_id !== desktopOwnerID ? ['owner=mismatch'] : []),
       ...(finalInstance && finalInstance.state_root !== finalInventory.scope.state_root ? ['state_root=mismatch'] : []),
       ...(finalInstance && finalInstance.namespace_id !== finalInventory.scope.namespace_id ? ['namespace=mismatch'] : []),
       ...(finalInstance && compact(finalInstance.runtime_version) === '' ? ['version=missing'] : []),
@@ -2353,7 +2316,6 @@ async function startManagedSSHRuntimeInternal(
       startup: remoteStartup,
       runtime_handle: {
         runtime_kind: 'ssh',
-        lifecycle_owner: 'external',
         launch_mode: remoteLaunch.launch_mode,
         stop,
       },

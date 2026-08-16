@@ -29,7 +29,8 @@ import {
   type DesktopProviderRuntimeLinkTargetID,
 } from '../shared/providerRuntimeLinkTarget';
 import {
-  desktopEntryKindOwnsRuntimeManagement,
+  desktopEntryKindSupportsRuntimeManagement,
+  desktopEntryKindCanInitiateRuntimeManagement,
   desktopProviderEnvironmentOpenRoute,
 } from '../shared/environmentManagementPrinciples';
 import {
@@ -609,7 +610,6 @@ function buildPlaceholderEnvironmentCardFact(
 const ENVIRONMENT_CARD_FACT_ORDER = [
   'RUNS ON',
   'CONTAINER',
-  'OWNER',
   'VERSION',
   'PROVIDER',
   'LOCAL LINK',
@@ -1264,9 +1264,8 @@ function providerPrimaryRoute(environment: DesktopEnvironmentEntry): DesktopLoca
   if (environment.kind !== 'provider_environment') {
     return '';
   }
-  // IMPORTANT: A Provider Environment card always opens through the provider
-  // tunnel. Local/SSH runtime cards are the only surfaces that may expose direct
-  // Local UI opening or runtime management.
+  // IMPORTANT: Provider Open always uses the provider tunnel. Runtime management
+  // is a separate action that requires an explicitly selected matching Gateway.
   return desktopProviderEnvironmentOpenRoute();
 }
 
@@ -1323,7 +1322,7 @@ function runtimeProviderLinkMenuAction(
 ): EnvironmentActionMenuItemModel | null {
   // IMPORTANT: Provider-link controls live only on Local/SSH runtime cards.
   // Provider cards represent remote access permissions, not device management.
-  if (!desktopEntryKindOwnsRuntimeManagement(environment.kind)) {
+  if (!desktopEntryKindSupportsRuntimeManagement(environment.kind)) {
     return null;
   }
   const target = environment.provider_runtime_link_target;
@@ -1512,7 +1511,7 @@ function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly Envi
   if (runtimeProviderLinkAction) {
     items.push(runtimeProviderLinkAction);
   }
-  if (desktopEntryKindOwnsRuntimeManagement(environment.kind)) {
+  if (desktopEntryKindCanInitiateRuntimeManagement(environment.kind)) {
     for (const operation of runtimeOperationMenuOrder) {
       const item = runtimeOperationMenuItem(environment.runtime_operations[operation]);
       if (item) {

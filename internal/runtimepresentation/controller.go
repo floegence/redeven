@@ -48,8 +48,6 @@ type RuntimeOverview struct {
 	CompatibilityMessage    string
 	MinimumDesktopVersion   string
 	MinimumRuntimeVersion   string
-	ServiceOwner            string
-	DesktopManaged          bool
 	EffectiveRunMode        string
 	RemoteEnabled           bool
 	OpenReadinessState      string

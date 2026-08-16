@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   RuntimePlacementBridgeRegistry,
-  type RuntimePlacementBridgeOwner,
+  type RuntimePlacementBridgeAttachment,
   type RuntimePlacementBridgeRecord,
 } from './runtimePlacementBridgeRegistry';
 import type {
@@ -46,7 +46,6 @@ function bridgeFixture(targetIDValue: string) {
     startup: { local_ui_url: 'http://127.0.0.1:3000/', local_ui_urls: ['http://127.0.0.1:3000/'] },
     runtime_handle: {
       runtime_kind: 'ssh',
-      lifecycle_owner: 'desktop',
       launch_mode: 'spawned',
       stop: disconnect,
     },
@@ -66,7 +65,7 @@ function bridgeFixture(targetIDValue: string) {
 }
 
 describe('RuntimePlacementBridgeRegistry', () => {
-  it('tracks an opening owner and attaches the exact session owner', () => {
+  it('tracks an opening operation and attaches the exact session', () => {
     const settled = vi.fn();
     const registry = new RuntimePlacementBridgeRegistry(settled);
     const fixture = bridgeFixture('target-one');
@@ -74,11 +73,11 @@ describe('RuntimePlacementBridgeRegistry', () => {
     registry.trackOpening(fixture.record, 'target-one:open');
 
     expect(registry.get(fixture.targetID)).toBe(fixture.record);
-    expect(registry.owner(fixture.targetID)).toEqual({ kind: 'opening', operation_key: 'target-one:open' });
+    expect(registry.attachment(fixture.targetID)).toEqual({ kind: 'opening', operation_key: 'target-one:open' });
     expect(registry.attachSession(fixture.targetID, fixture.session, 'ssh:session-one' as DesktopSessionKey)).toBe(fixture.record);
-    expect(registry.owner(fixture.targetID)).toEqual({ kind: 'session', session_key: 'ssh:session-one' });
+    expect(registry.attachment(fixture.targetID)).toEqual({ kind: 'session', session_key: 'ssh:session-one' });
     expect(registry.attachSession(fixture.targetID, fixture.session, 'ssh:session-two' as DesktopSessionKey)).toBeNull();
-    expect(registry.owner(fixture.targetID)).toEqual({ kind: 'session', session_key: 'ssh:session-one' });
+    expect(registry.attachment(fixture.targetID)).toEqual({ kind: 'session', session_key: 'ssh:session-one' });
     expect(registry.attachSession(fixture.targetID, bridgeFixture('other').session, 'ssh:wrong' as DesktopSessionKey)).toBeNull();
   });
 
@@ -89,7 +88,7 @@ describe('RuntimePlacementBridgeRegistry', () => {
     registry.trackOpening(first.record, 'first:open');
 
     expect(() => registry.trackOpening(second.record, 'second:open')).toThrow(
-      'Runtime Placement Bridge target-one already has a lifecycle owner.',
+      'Runtime Placement Bridge target-one already has an active attachment.',
     );
     expect(registry.get(first.targetID)).toBe(first.record);
   });
@@ -109,11 +108,11 @@ describe('RuntimePlacementBridgeRegistry', () => {
     expect(registry.updateIfCurrent(fixture.targetID, bridgeFixture('other').session, (record) => record)).toBeNull();
   });
 
-  it('keeps the record until disconnect settles and invokes one settlement owner', async () => {
-    const settlements: Array<Readonly<{ owner: RuntimePlacementBridgeOwner; termination: RuntimePlacementBridgeTermination }>> = [];
+  it('keeps the record until disconnect settles and invokes one attached settlement', async () => {
+    const settlements: Array<Readonly<{ attachment: RuntimePlacementBridgeAttachment; termination: RuntimePlacementBridgeTermination }>> = [];
     const settlementGate = deferred<void>();
-    const registry = new RuntimePlacementBridgeRegistry(async (_record, owner, termination) => {
-      settlements.push({ owner, termination });
+    const registry = new RuntimePlacementBridgeRegistry(async (_record, attachment, termination) => {
+      settlements.push({ attachment, termination });
       await settlementGate.promise;
     });
     const fixture = bridgeFixture('target-one');
@@ -126,7 +125,7 @@ describe('RuntimePlacementBridgeRegistry', () => {
     expect(fixture.disconnect).toHaveBeenCalledTimes(1);
     expect(registry.get(fixture.targetID)).toBeNull();
     expect(settlements).toEqual([{
-      owner: { kind: 'session', session_key: 'ssh:session-one' },
+      attachment: { kind: 'session', session_key: 'ssh:session-one' },
       termination: { kind: 'closed' },
     }]);
 

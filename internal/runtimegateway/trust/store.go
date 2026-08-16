@@ -54,12 +54,13 @@ type gatewayIdentity struct {
 }
 
 type clientKey struct {
-	ClientKeyID        string `json:"client_key_id"`
-	ClientPublicKey    string `json:"client_public_key"`
-	BindingAudience    string `json:"binding_audience"`
-	ProfileWrite       bool   `json:"profile_write,omitempty"`
-	PairedAtUnixMS     int64  `json:"paired_at_unix_ms"`
-	LastVerifiedUnixMS int64  `json:"last_verified_at_unix_ms,omitempty"`
+	ClientKeyID        string                  `json:"client_key_id"`
+	ClientPublicKey    string                  `json:"client_public_key"`
+	BindingAudience    string                  `json:"binding_audience"`
+	ProfileWrite       bool                    `json:"profile_write,omitempty"`
+	RuntimeGrants      []protocol.RuntimeGrant `json:"runtime_grants,omitempty"`
+	PairedAtUnixMS     int64                   `json:"paired_at_unix_ms"`
+	LastVerifiedUnixMS int64                   `json:"last_verified_at_unix_ms,omitempty"`
 }
 
 func NewStore(filePath string) *Store {
@@ -195,6 +196,9 @@ func (s *Store) CompletePairing(req protocol.PairingCompleteRequest) (protocol.P
 	if req.ClientCapability != "" {
 		requestFields["client_capability"] = req.ClientCapability
 	}
+	if len(req.RuntimeGrants) > 0 {
+		requestFields["runtime_grants"] = req.RuntimeGrants
+	}
 	requestPayload, err := security.CanonicalJSON(requestFields)
 	if err != nil {
 		return protocol.PairingCompleteResponse{}, err
@@ -211,6 +215,7 @@ func (s *Store) CompletePairing(req protocol.PairingCompleteRequest) (protocol.P
 		ClientPublicKey: challenge.ClientPublicKey,
 		BindingAudience: req.BindingAudience,
 		ProfileWrite:    req.ClientCapability == string(protocol.GatewayCapabilityEnvProfileWrite),
+		RuntimeGrants:   append([]protocol.RuntimeGrant(nil), req.RuntimeGrants...),
 		PairedAtUnixMS:  pairedAt,
 	}
 	if err := s.saveState(state); err != nil {
@@ -227,6 +232,9 @@ func (s *Store) CompletePairing(req protocol.PairingCompleteRequest) (protocol.P
 	}
 	if req.ClientCapability != "" {
 		responseFields["client_capability"] = req.ClientCapability
+	}
+	if len(req.RuntimeGrants) > 0 {
+		responseFields["runtime_grants"] = req.RuntimeGrants
 	}
 	payload, err := security.CanonicalJSON(responseFields)
 	if err != nil {
@@ -329,6 +337,21 @@ func (s *Store) ClientCanWriteProfiles(clientKeyID string, bindingAudience strin
 		return false
 	}
 	return client.ProfileWrite
+}
+
+func (s *Store) ClientRuntimeGrants(clientKeyID string, bindingAudience string) []protocol.RuntimeGrant {
+	state, err := s.ensureStateForRead()
+	if err != nil {
+		return nil
+	}
+	client, ok := state.Clients[strings.TrimSpace(clientKeyID)]
+	if !ok {
+		return nil
+	}
+	if cleanAudience := strings.TrimSpace(bindingAudience); cleanAudience != "" && client.BindingAudience != cleanAudience {
+		return nil
+	}
+	return append([]protocol.RuntimeGrant(nil), client.RuntimeGrants...)
 }
 
 func (s *Store) ensureStateForPairing(bindingAudience string) (fileState, error) {

@@ -17,8 +17,8 @@ const (
 	desktopRuntimeProbeTimeout       = 300 * time.Millisecond
 )
 
-func desktopLaunchReportEnabled(mode runMode, desktopManaged bool, reportPath string) bool {
-	return mode == runModeDesktop && desktopManaged && strings.TrimSpace(reportPath) != ""
+func desktopLaunchReportEnabled(mode runMode, reportPath string) bool {
+	return mode == runModeDesktop && strings.TrimSpace(reportPath) != ""
 }
 
 func writeDesktopBlockedLaunchReport(
@@ -51,8 +51,6 @@ func writeDesktopReadyLaunchReport(reportPath string, startup runtimeStartupRepo
 		Exposure:                 startup.Exposure,
 		EffectiveRunMode:         startup.EffectiveRunMode,
 		RemoteEnabled:            startup.RemoteEnabled,
-		DesktopManaged:           startup.DesktopManaged,
-		DesktopOwnerID:           startup.DesktopOwnerID,
 		ProviderOrigin:           startup.ProviderOrigin,
 		ControlplaneBaseURL:      startup.ControlplaneBaseURL,
 		ControlplaneProviderID:   startup.ControlplaneProviderID,
@@ -75,8 +73,6 @@ type runtimeStartupReport struct {
 	Exposure                 runtimemanagement.LocalUIExposure
 	EffectiveRunMode         string
 	RemoteEnabled            bool
-	DesktopManaged           bool
-	DesktopOwnerID           string
 	ProviderOrigin           string
 	ControlplaneBaseURL      string
 	ControlplaneProviderID   string
@@ -106,7 +102,6 @@ func buildRuntimeStartupReport(status runtimemanagement.RuntimeAttachStatus) run
 				ProtocolVersion: endpoint.RuntimeControl.ProtocolVersion,
 				BaseURL:         endpoint.RuntimeControl.BaseURL,
 				Token:           endpoint.RuntimeControl.Token,
-				DesktopOwnerID:  endpoint.RuntimeControl.DesktopOwnerID,
 				ExpiresAtUnixMS: endpoint.RuntimeControl.ExpiresAtUnixMS,
 			}
 		}(),
@@ -114,8 +109,6 @@ func buildRuntimeStartupReport(status runtimemanagement.RuntimeAttachStatus) run
 		Exposure:                 endpoint.Exposure,
 		EffectiveRunMode:         status.RuntimeService.EffectiveRunMode,
 		RemoteEnabled:            status.RuntimeService.RemoteEnabled,
-		DesktopManaged:           status.Identity.DesktopManaged,
-		DesktopOwnerID:           status.Identity.DesktopOwnerID,
 		ProviderOrigin:           status.RuntimeService.Bindings.ProviderLink.ProviderOrigin,
 		ControlplaneBaseURL:      status.RuntimeService.Bindings.ProviderLink.AccessPointOrigin,
 		ControlplaneProviderID:   status.RuntimeService.Bindings.ProviderLink.ProviderID,
@@ -128,8 +121,8 @@ func buildRuntimeStartupReport(status runtimemanagement.RuntimeAttachStatus) run
 	}
 }
 
-func normalizeLaunchRuntimeServiceSnapshot(snapshot runtimeservice.Snapshot, desktopManaged bool, effectiveRunMode string, remoteEnabled bool) runtimeservice.Snapshot {
-	return runtimeservice.NormalizeSnapshotForEndpoint(snapshot, desktopManaged, effectiveRunMode, remoteEnabled)
+func normalizeLaunchRuntimeServiceSnapshot(snapshot runtimeservice.Snapshot, effectiveRunMode string, remoteEnabled bool) runtimeservice.Snapshot {
+	return runtimeservice.NormalizeSnapshotForEndpoint(snapshot, effectiveRunMode, remoteEnabled)
 }
 
 func handleDesktopLockConflict(reportPath string, lockPath string, configPath string) (handled bool, exitCode int, err error) {

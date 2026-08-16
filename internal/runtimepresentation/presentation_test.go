@@ -26,14 +26,6 @@ func TestResolveConfig(t *testing.T) {
 		want Mode
 	}{
 		{
-			name: "desktop managed auto uses machine",
-			req:  ModeAuto,
-			in: ResolveInput{
-				DesktopManaged: true,
-			},
-			want: ModeMachine,
-		},
-		{
 			name: "startup report auto uses machine",
 			req:  ModeAuto,
 			in: ResolveInput{

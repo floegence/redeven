@@ -16,17 +16,9 @@ import (
 const (
 	RuntimeProcessErrorInventoryChanged = "runtime_inventory_changed"
 	RuntimeProcessErrorInventoryBlocked = "runtime_inventory_blocked"
-	RuntimeProcessErrorTakeoverRequired = "runtime_takeover_confirmation_required"
 	RuntimeProcessErrorIdentityChanged  = "runtime_process_identity_changed"
 	RuntimeProcessErrorLeaseCleanup     = "runtime_lock_cleanup_failed"
 	RuntimeProcessErrorStopTimeout      = "runtime_stop_timeout"
-)
-
-type RuntimeProcessReconciliationMode string
-
-const (
-	RuntimeProcessReconciliationAutomatic         RuntimeProcessReconciliationMode = "automatic"
-	RuntimeProcessReconciliationConfirmedTakeover RuntimeProcessReconciliationMode = "confirmed_takeover"
 )
 
 type RuntimeProcessOperationError struct {
@@ -199,7 +191,6 @@ func stopRuntimeProcesses(
 	options RuntimeProcessInventoryOptions,
 	expectedDigest string,
 	gracePeriod time.Duration,
-	reconciliationMode RuntimeProcessReconciliationMode,
 ) (RuntimeProcessStopResult, error) {
 	before, err := controller.Inspect(ctx, options)
 	if err != nil {
@@ -212,31 +203,15 @@ func stopRuntimeProcesses(
 			"runtime process inventory changed before the stop operation began",
 		)
 	}
-	if reconciliationMode == "" {
-		reconciliationMode = RuntimeProcessReconciliationAutomatic
-	}
-	if reconciliationMode != RuntimeProcessReconciliationAutomatic && reconciliationMode != RuntimeProcessReconciliationConfirmedTakeover {
-		return RuntimeProcessStopResult{SchemaVersion: schemaVersion, Before: before}, runtimeProcessOperationError(
-			RuntimeProcessErrorInventoryBlocked,
-			"runtime process reconciliation mode is invalid",
-		)
-	}
 	if before.Summary.Blocked > 0 {
 		return RuntimeProcessStopResult{SchemaVersion: schemaVersion, Before: before}, runtimeProcessOperationError(
 			RuntimeProcessErrorInventoryBlocked,
 			"runtime process inventory contains an instance whose core identity cannot be safely verified",
 		)
 	}
-	if reconciliationMode == RuntimeProcessReconciliationAutomatic && before.Summary.ConfirmedTakeover > 0 {
-		return RuntimeProcessStopResult{SchemaVersion: schemaVersion, Before: before}, runtimeProcessOperationError(
-			RuntimeProcessErrorTakeoverRequired,
-			"runtime process inventory requires explicit confirmed takeover",
-		)
-	}
 	targets := make([]RuntimeProcessInstance, 0, len(before.Instances))
 	for _, instance := range before.Instances {
-		if instance.StopAuthority == RuntimeProcessStopAutomatic ||
-			(reconciliationMode == RuntimeProcessReconciliationConfirmedTakeover && instance.StopAuthority == RuntimeProcessStopConfirmedTakeover) {
+		if instance.StopAuthority == RuntimeProcessStopAutomatic {
 			targets = append(targets, instance)
 		}
 	}
@@ -484,28 +459,12 @@ func StopRuntimeProcesses(
 	expectedDigest string,
 	gracePeriod time.Duration,
 ) (RuntimeProcessStopResult, error) {
-	return StopRuntimeProcessesWithMode(
-		ctx,
-		options,
-		expectedDigest,
-		gracePeriod,
-		RuntimeProcessReconciliationAutomatic,
-	)
-}
-
-func StopRuntimeProcessesWithMode(
-	ctx context.Context,
-	options RuntimeProcessInventoryOptions,
-	expectedDigest string,
-	gracePeriod time.Duration,
-	reconciliationMode RuntimeProcessReconciliationMode,
-) (RuntimeProcessStopResult, error) {
 	normalized, err := normalizeRuntimeInventoryOptions(options)
 	if err != nil {
 		return RuntimeProcessStopResult{}, err
 	}
 	controller := systemRuntimeProcessController{}
-	result, err := stopRuntimeProcesses(ctx, controller, normalized, expectedDigest, gracePeriod, reconciliationMode)
+	result, err := stopRuntimeProcesses(ctx, controller, normalized, expectedDigest, gracePeriod)
 	if err != nil {
 		return result, err
 	}

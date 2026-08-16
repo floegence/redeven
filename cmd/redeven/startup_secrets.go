@@ -103,7 +103,7 @@ func (e *startupSecretError) Error() string {
 	case startupSecretErrorEnvelopeConflict:
 		return "--startup-secrets-stdin cannot be combined with another secret source"
 	case startupSecretErrorEnvelopeMode:
-		return "--startup-secrets-stdin is only available to Desktop-managed machine startup"
+		return "--startup-secrets-stdin is only available to Desktop shell machine startup"
 	case startupSecretErrorRead:
 		if e.path != "" {
 			return fmt.Sprintf("read %s file %q: %v", e.source, e.path, e.cause)

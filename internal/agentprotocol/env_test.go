@@ -108,7 +108,6 @@ func TestEnvironmentStatusFromAttachSanitizesRuntimeControlToken(t *testing.T) {
 		Identity: runtimemanagement.RuntimeInstanceIdentity{
 			PID:            123,
 			RuntimeVersion: "1.2.3",
-			DesktopManaged: true,
 		},
 		Endpoint: &runtimemanagement.RuntimeAttachEndpoint{
 			LocalUIURL: "http://127.0.0.1:23998/",
@@ -130,7 +129,7 @@ func TestEnvironmentStatusFromAttachSanitizesRuntimeControlToken(t *testing.T) {
 	if strings.Contains(string(body), "secret-runtime-control-token") || strings.Contains(string(body), "runtime_control") {
 		t.Fatalf("environment status leaked runtime-control material: %s", body)
 	}
-	if status.Runtime.LocalUIURL == "" || !status.Runtime.DesktopManaged {
+	if status.Runtime.LocalUIURL == "" {
 		t.Fatalf("sanitized runtime summary lost expected public fields: %#v", status.Runtime)
 	}
 	if status.Operations[EnvOperationStop].Availability != OperationAvailabilityAvailable {
@@ -234,17 +233,6 @@ func TestStopOperationPlanDoesNotExposeExecutableCommandWhenUnavailable(t *testi
 			name:       "not running",
 			status:     runtimemanagement.RuntimeAttachStatus{State: runtimemanagement.AttachStateNotRunning},
 			reasonCode: EnvReasonRuntimeNotStarted,
-		},
-		{
-			name: "external owner",
-			status: runtimemanagement.RuntimeAttachStatus{
-				State: runtimemanagement.AttachStateReady,
-				Identity: runtimemanagement.RuntimeInstanceIdentity{
-					PID:            123,
-					DesktopManaged: false,
-				},
-			},
-			reasonCode: EnvReasonRuntimeOwnerExternal,
 		},
 	}
 	for _, tt := range tests {

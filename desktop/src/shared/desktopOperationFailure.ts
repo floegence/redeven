@@ -13,7 +13,7 @@ export type DesktopFailureCode =
   | 'local_runtime_launch_failed'
   | 'local_runtime_stop_failed'
   | 'runtime_cleanup_failed'
-  | 'runtime_lifecycle_conflict'
+  | 'confirmation_required'
   | 'container_runtime_launch_failed'
   | 'container_runtime_stop_failed'
   | 'gateway_package_prepare_failed'
@@ -65,7 +65,7 @@ function normalizeFailureCode(value: unknown): DesktopFailureCode {
     case 'local_runtime_launch_failed':
     case 'local_runtime_stop_failed':
     case 'runtime_cleanup_failed':
-    case 'runtime_lifecycle_conflict':
+    case 'confirmation_required':
     case 'container_runtime_launch_failed':
     case 'container_runtime_stop_failed':
     case 'gateway_package_prepare_failed':

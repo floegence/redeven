@@ -30,11 +30,11 @@ Commands:
   desktop-bridge
               Run the Desktop runtime placement bridge over stdio.
   desktop-runtime-status
-              Probe an already-running Desktop-managed runtime daemon.
+              Probe an already-running Runtime daemon.
   desktop-runtime-inventory
-              Inspect Desktop-managed runtime process identities.
+              Inspect Runtime process identities.
   desktop-runtime-stop
-              Stop an already-running Desktop-managed runtime daemon.
+              Stop verified Runtime processes.
   desktop-model-source
               Connect Desktop Local Environment models to runtime-control.
   local-authority
@@ -67,7 +67,7 @@ Run the Desktop runtime placement bridge over stdio.
 Usage:
   redeven desktop-bridge [flags]
 
-This command is intended for Redeven Desktop managed runtime targets. It
+This command is intended for Runtime targets opened through Redeven Desktop. It
 exposes the Local UI and Desktop runtime-control to Desktop through the
 versioned placement bridge protocol without requiring a published container
 port. It attaches to an already-running runtime daemon and never starts a
@@ -83,7 +83,7 @@ func desktopRuntimeStatusHelpText() string {
 	return strings.TrimLeft(`
 redeven desktop-runtime-status
 
-Probe an already-running Desktop-managed runtime daemon and print its startup
+Probe an already-running Runtime daemon and print its startup
 metadata as JSON.
 
 Usage:
@@ -116,7 +116,7 @@ func desktopRuntimeInventoryHelpText() string {
 	return strings.TrimLeft(`
 redeven desktop-runtime-inventory
 
-Inspect Desktop-managed runtime processes in the current execution namespace and
+Inspect Runtime processes in the current execution namespace and
 print a sanitized, versioned JSON inventory.
 
 Usage:
@@ -125,7 +125,6 @@ Usage:
 Flags:
   --runtime-root <path>             Managed runtime package root.
   --state-root <path>               Current Runtime state root.
-  --desktop-owner-id <id>           Expected Desktop owner identity.
   --current-executable <path>       Expected current runtime binary; repeatable.
 `, "\n")
 }
@@ -134,7 +133,7 @@ func desktopRuntimeStopHelpText() string {
 	return strings.TrimLeft(`
 redeven desktop-runtime-stop
 
-Stop an already-running Desktop-managed runtime daemon. This command is used by
+Stop verified Runtime processes. This command is used by
 explicit Desktop Stop Runtime operations; Open and Reconnect do not call it.
 
 Usage:
@@ -146,8 +145,6 @@ Flags:
   --grace-period <duration>        Time to wait after requesting runtime shutdown.
   --all-matching                   Stop every verified matching Runtime instance.
   --runtime-root <path>            Managed runtime package root.
-  --desktop-owner-id <id>          Expected Desktop owner identity.
-  --reconciliation-mode <mode>     automatic or confirmed_takeover.
   --current-executable <path>      Expected current runtime binary; repeatable.
   --expected-inventory-digest <d>  Inventory digest required by --all-matching.
   --json                           Write a versioned machine-readable result.
@@ -158,12 +155,12 @@ func desktopModelSourceHelpText() string {
 	return strings.TrimLeft(`
 redeven desktop-model-source
 
-Connect Desktop Local Environment model settings to a Desktop-managed runtime
+Connect Desktop Local Environment model settings to a Runtime
 through runtime-control. This command is intended to be launched by Redeven
 Desktop, not typed directly by users.
 
 Usage:
-  redeven desktop-model-source --runtime-control-url URL --runtime-control-token-env NAME --desktop-owner-id ID --session-id ID [flags]
+  redeven desktop-model-source --runtime-control-url URL --runtime-control-token-env NAME --session-id ID [flags]
 
 Flags:
   --state-root PATH
@@ -174,8 +171,6 @@ Flags:
       Environment variable that contains the runtime-control bearer token.
   --runtime-control-token TOKEN
       Runtime-control bearer token. Prefer --runtime-control-token-env.
-  --desktop-owner-id ID
-      Desktop owner id expected by the runtime.
   --session-id ID
       Desktop model source session id.
   --expires-at-unix-ms VALUE
@@ -266,7 +261,7 @@ Bootstrap rules:
 Local Environment state rules:
   - Redeven uses one Local Environment state at ~/.redeven/local-environment.
   - Inline bootstrap flags rebind the same Local Environment state before startup.
-  - Use --state-root to relocate the whole Local Environment state root, including desktop-managed SSH runtimes.
+  - Use --state-root to relocate the whole Local Environment state root, including SSH runtimes.
 
 Local UI bind rules:
   - Default bind: localhost:23998
@@ -304,9 +299,8 @@ Flags:
   --password-prompt                 Prompt for the Local UI password without echo.
   --password-stdin                  Read the Local UI password from stdin.
   --password-file <path>            Read the Local UI password from a file.
-  --startup-secrets-stdin           Desktop-managed machine startup envelope (internal).
+  --startup-secrets-stdin           Desktop shell machine startup envelope (internal).
   --state-root <path>               State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
-  --desktop-managed                 Disable CLI self-upgrade for desktop-managed Local UI runs.
   --startup-report-file <path>      Write structured Local UI readiness JSON.
   --presentation <auto|rich|plain|machine>
                                     Startup presentation (default: auto).
@@ -328,7 +322,7 @@ Examples:
     redeven run --mode hybrid
 
   Desktop shell mode:
-    redeven run --mode desktop --desktop-managed --presentation machine --local-ui-bind 127.0.0.1:0
+    redeven run --mode desktop --presentation machine --local-ui-bind 127.0.0.1:0
 
   Cross-device access:
     redeven run --local-ui-bind 0.0.0.0:23998 --password-file /run/secrets/redeven-local-ui-password --acknowledge-plaintext-network-exposure
@@ -494,7 +488,7 @@ Commands:
   resolve    Resolve an environment target into Redeven environment semantics.
   status     Inspect sanitized runtime status and available operation plans.
   diagnose   Inspect status plus runtime attach diagnostics.
-  stop       Stop a supported Desktop-managed Local Environment runtime.
+  stop       Stop a supported Local Environment Runtime.
   start      Return the structured start plan for an environment target.
   restart    Return the structured restart plan for an environment target.
   update     Return the structured update plan for an environment target.
@@ -612,9 +606,9 @@ func envStopHelpText() string {
 	return strings.TrimLeft(`
 redeven env stop
 
-Stop a supported Desktop-managed Local Environment runtime, or return a
-structured unavailable/blocked plan when the target is unsupported or owned by
-another runtime surface.
+Stop a supported Local Environment Runtime, or return a structured
+unavailable/blocked plan when the target is unsupported or its identity cannot
+be verified safely.
 
 Usage:
   redeven env stop [flags]
@@ -983,9 +977,9 @@ func translateStartupSecretError(err error, command string) (string, []string) {
 			[]string{"Hint: put one secret in a protected file, or let Redeven Desktop send both through its private startup envelope."}
 	case startupSecretErrorEnvelopeConflict:
 		return "invalid Desktop startup secrets: --startup-secrets-stdin conflicts with another secret source",
-			[]string{"Hint: remove password/ticket flags and fixed secret environment variables from Desktop-managed startup."}
+			[]string{"Hint: remove password/ticket flags and fixed secret environment variables from Desktop shell startup."}
 	case startupSecretErrorEnvelopeMode:
-		return "invalid Desktop startup secrets: --startup-secrets-stdin requires desktop-managed machine startup",
+		return "invalid Desktop startup secrets: --startup-secrets-stdin requires Desktop shell machine startup",
 			[]string{"Hint: this private envelope is reserved for Redeven Desktop; ordinary CLI startup should use prompt, stdin, file, or fixed environment sources."}
 	case startupSecretErrorPrompt:
 		switch {

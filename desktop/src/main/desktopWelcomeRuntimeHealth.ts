@@ -1,5 +1,5 @@
 import type { DesktopRuntimeHealth } from '../shared/desktopRuntimeHealth';
-import type { DesktopManagedRuntimePresence } from '../shared/desktopRuntimePresence';
+import type { DesktopRuntimePresence } from '../shared/desktopRuntimePresence';
 import type { DesktopProviderRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
 
 export type DesktopWelcomeRuntimeHealthSlot =
@@ -18,7 +18,7 @@ export type DesktopWelcomeRuntimeHealthProbeEvent = Readonly<{
 
 export type DesktopWelcomeRuntimeHealthProbeResult = Readonly<{
   health?: DesktopRuntimeHealth;
-  presence?: DesktopManagedRuntimePresence;
+  presence?: DesktopRuntimePresence;
 }>;
 
 export type DesktopWelcomeRuntimeHealthTarget = Readonly<{
@@ -40,14 +40,14 @@ export type DesktopWelcomeRuntimeHealthSnapshot = Readonly<{
   savedExternalRuntimeHealth: Readonly<Record<string, DesktopRuntimeHealth>>;
   savedSSHRuntimeHealth: Readonly<Record<string, DesktopRuntimeHealth>>;
   savedRuntimeTargetHealth: Readonly<Record<string, DesktopRuntimeHealth>>;
-  managedRuntimePresenceByTargetID: Readonly<Record<string, DesktopManagedRuntimePresence>>;
+  managedRuntimePresenceByTargetID: Readonly<Record<string, DesktopRuntimePresence>>;
 }>;
 
 type CacheEntry = {
   generation: number;
   target: DesktopWelcomeRuntimeHealthTarget;
   health?: DesktopRuntimeHealth;
-  presence?: DesktopManagedRuntimePresence;
+  presence?: DesktopRuntimePresence;
 };
 
 type RefreshTask = Readonly<{
@@ -115,7 +115,7 @@ export class DesktopWelcomeRuntimeHealthStore {
     const savedExternalRuntimeHealth: Record<string, DesktopRuntimeHealth> = {};
     const savedSSHRuntimeHealth: Record<string, DesktopRuntimeHealth> = {};
     const savedRuntimeTargetHealth: Record<string, DesktopRuntimeHealth> = {};
-    const managedRuntimePresenceByTargetID: Record<string, DesktopManagedRuntimePresence> = {};
+    const managedRuntimePresenceByTargetID: Record<string, DesktopRuntimePresence> = {};
 
     for (const entry of this.cache.values()) {
       if (entry.health) {

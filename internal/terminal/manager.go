@@ -67,6 +67,8 @@ type Manager struct {
 	deleteOperations      map[string]*sessionDeleteOperation
 	lifecycleHooks        map[int]SessionLifecycleHook
 	nextLifecycleID       int
+	workloadAdmission     func() (func(), error)
+	workloadReleases      map[string]func()
 }
 
 type SessionInfo struct {
@@ -225,6 +227,7 @@ func NewManagerWithScope(shell string, scope *filesystemscope.Registry, log *slo
 		localPathCapabilities: make(map[string]string),
 		deleteOperations:      make(map[string]*sessionDeleteOperation),
 		lifecycleHooks:        make(map[int]SessionLifecycleHook),
+		workloadReleases:      make(map[string]func()),
 	}
 
 	m.term = termgo.NewManager(newTerminalGoManagerConfig(shell, m.agentHomeAbs, log))
@@ -233,6 +236,15 @@ func NewManagerWithScope(shell string, scope *filesystemscope.Registry, log *slo
 	m.activateSessionFunc = m.term.ActivateSessionContext
 
 	return m
+}
+
+func (m *Manager) SetWorkloadAdmission(admit func() (func(), error)) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	m.workloadAdmission = admit
+	m.mu.Unlock()
 }
 
 func (m *Manager) CreateSession(name string, workingDir string) (*SessionInfo, error) {
@@ -846,11 +858,35 @@ func (m *Manager) createSession(name string, workingDir string) (*termgo.Session
 		}
 	}
 
+	m.mu.Lock()
+	admit := m.workloadAdmission
+	m.mu.Unlock()
+	release := func() {}
+	if admit != nil {
+		var err error
+		release, err = admit()
+		if err != nil {
+			return nil, &sessionrpc.Error{Code: 409, Message: "Runtime lifecycle admission is closed"}
+		}
+		if release == nil {
+			release = func() {}
+		}
+	}
 	sess, err := m.term.CreateSession(name, workingDirAbs)
 	if err != nil {
+		release()
 		m.log.Warn("terminal create failed", "error", err)
 		return nil, &sessionrpc.Error{Code: 500, Message: "failed to create terminal session"}
 	}
+	sessionID := strings.TrimSpace(sess.ToSessionInfo().ID)
+	if sessionID == "" {
+		release()
+		_ = sess.Close()
+		return nil, &sessionrpc.Error{Code: 500, Message: "terminal session identity is unavailable"}
+	}
+	m.mu.Lock()
+	m.workloadReleases[sessionID] = release
+	m.mu.Unlock()
 	return sess, nil
 }
 
@@ -1027,6 +1063,13 @@ func (h *eventHandler) OnTerminalSessionClosed(sessionID string) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return
+	}
+	h.m.mu.Lock()
+	release := h.m.workloadReleases[sessionID]
+	delete(h.m.workloadReleases, sessionID)
+	h.m.mu.Unlock()
+	if release != nil {
+		release()
 	}
 
 	reason := h.m.finalizeSessionClosed(sessionID)

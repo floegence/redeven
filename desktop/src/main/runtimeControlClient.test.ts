@@ -25,7 +25,6 @@ function endpoint(baseURL: string): DesktopRuntimeControlEndpoint {
     protocol_version: 'redeven-runtime-control-v1',
     base_url: baseURL,
     token: 'runtime-control-token',
-    desktop_owner_id: 'desktop-owner',
   };
 }
 
@@ -122,9 +121,8 @@ describe('runtimeControlClient', () => {
     });
 
     expect(result.binding.state).toBe('linked');
-    expect(server.requests[0]?.url).toBe('/__redeven_runtime_control/v1/provider-link/connect');
+    expect(server.requests[0]?.url).toBe('/__redeven_runtime_control/v2/provider-link/connect');
     expect(server.requests[0]?.headers.authorization).toBe('Bearer runtime-control-token');
-    expect(server.requests[0]?.headers['x-redeven-desktop-owner-id']).toBe('desktop-owner');
     expect(JSON.parse(server.bodies[0] ?? '{}')).toMatchObject({
       provider_id: 'provider-1',
       env_public_id: 'env-1',
@@ -140,24 +138,24 @@ describe('runtimeControlClient', () => {
 
     await getProviderLinkStatus(endpoint(`${server.origin}/__redeven_runtime_control`));
 
-    expect(server.requests[0]?.url).toBe('/__redeven_runtime_control/v1/provider-link');
+    expect(server.requests[0]?.url).toBe('/__redeven_runtime_control/v2/provider-link');
   });
 
   it('resolves ordinary loopback runtime-control roots without adding a bridge prefix', () => {
     expect(runtimeControlServiceURL(
       endpoint('http://127.0.0.1:43124/'),
-      'v1/provider-link/disconnect',
-    ).toString()).toBe('http://127.0.0.1:43124/v1/provider-link/disconnect');
+      'v2/provider-link/disconnect',
+    ).toString()).toBe('http://127.0.0.1:43124/v2/provider-link/disconnect');
   });
 
   it('rejects routes that would escape the runtime-control service root', () => {
     expect(() => runtimeControlServiceURL(
       endpoint('http://127.0.0.1:43124/__redeven_runtime_control/'),
-      '/v1/provider-link' as never,
+      '/v2/provider-link' as never,
     )).toThrow(RuntimeControlError);
     expect(() => runtimeControlServiceURL(
       endpoint('http://127.0.0.1:43124/__redeven_runtime_control/'),
-      'https://example.invalid/v1/provider-link' as never,
+      'https://example.invalid/v2/provider-link' as never,
     )).toThrow(RuntimeControlError);
   });
 

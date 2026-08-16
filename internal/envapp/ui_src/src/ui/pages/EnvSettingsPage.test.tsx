@@ -795,9 +795,7 @@ describe('EnvSettingsPage', () => {
       runtimeVersion: 'v1.4.2',
       runtimeCommit: 'abc123',
       runtimeBuildTime: '2026-05-02T00:00:00Z',
-      protocolVersion: 'redeven-runtime-v1',
-      serviceOwner: 'desktop',
-      desktopManaged: true,
+      protocolVersion: 'redeven-runtime-v2',
       effectiveRunMode: 'hybrid',
       remoteEnabled: true,
       compatibility: 'restart_recommended',
@@ -811,7 +809,7 @@ describe('EnvSettingsPage', () => {
       capabilities: {
         desktopModelSource: {
           supported: true,
-          bindMethod: 'runtime_control_v1',
+          bindMethod: 'runtime_control_v2',
         },
       },
       bindings: {
@@ -828,8 +826,7 @@ describe('EnvSettingsPage', () => {
     await openSettingsSection(host, 'agent');
 
     const runtimeStatus = host.querySelector('[data-settings-card="Runtime Status"]');
-    expect(runtimeStatus?.textContent).toContain('Service owner');
-    expect(runtimeStatus?.textContent).toContain('Redeven Desktop');
+    expect(runtimeStatus?.textContent).not.toContain('Service owner');
     expect(runtimeStatus?.textContent).toContain('Maintenance authority');
     expect(runtimeStatus?.textContent).toContain('Runtime RPC');
     expect(runtimeStatus?.textContent).toContain('Compatibility');
@@ -838,7 +835,7 @@ describe('EnvSettingsPage', () => {
     expect(runtimeStatus?.textContent).toContain('Active work');
     expect(runtimeStatus?.textContent).toContain('3 terminals, 2 sessions, 1 task, 4 web services');
     expect(runtimeStatus?.textContent).toContain('Runtime protocol');
-    expect(runtimeStatus?.textContent).toContain('redeven-runtime-v1');
+    expect(runtimeStatus?.textContent).toContain('redeven-runtime-v2');
     expect(runtimeStatus?.textContent).toContain('Desktop model source');
     expect(runtimeStatus?.textContent).toContain('Bound');
   });

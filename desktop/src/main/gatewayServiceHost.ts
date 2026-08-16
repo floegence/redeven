@@ -64,8 +64,6 @@ export type GatewayServiceDeepProbe = Readonly<{
   service_pid?: number;
   service_listen?: string;
   service_error?: string;
-  legacy_local_catalog_present: boolean;
-  legacy_runtime_pids: readonly number[];
 }>;
 
 export type GatewayServiceProgressPhase =
@@ -122,7 +120,7 @@ type GatewayServiceCommandStatus = Readonly<{
 }>;
 
 const MANAGED_GATEWAY_STAMP_FILENAME = 'managed-gateway.stamp';
-const MANAGED_GATEWAY_STAMP_SCHEMA_VERSION = 1;
+const MANAGED_GATEWAY_STAMP_SCHEMA_VERSION = 2;
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
@@ -211,7 +209,7 @@ function gatewayStampShell(): string {
     '  mkdir -p "$managed_root"',
     '  {',
     `    printf 'schema_version=${MANAGED_GATEWAY_STAMP_SCHEMA_VERSION}\\n'`,
-    `    printf 'managed_by=redeven-desktop\\n'`,
+    `    printf 'installed_by=redeven-desktop\\n'`,
     `    printf 'slot_release_tag=%s\\n' "$release_tag"`,
     `    printf 'install_strategy=%s\\n' "$install_strategy"`,
     '  } > "$stamp_path"',
@@ -259,9 +257,9 @@ function gatewayProbeShell(): string {
     '    probe_reason="managed Gateway stamp schema is invalid"',
     '    return 1',
     '  fi',
-    '  if ! grep -Fx "managed_by=redeven-desktop" "$stamp_path" >/dev/null 2>&1; then',
+    '  if ! grep -Fx "installed_by=redeven-desktop" "$stamp_path" >/dev/null 2>&1; then',
     '    probe_status="stamp_invalid"',
-    '    probe_reason="managed Gateway stamp owner is invalid"',
+    '    probe_reason="managed Gateway stamp provenance is invalid"',
     '    return 1',
     '  fi',
     '  while IFS= read -r stamp_line; do',
@@ -288,7 +286,7 @@ function gatewayProbeShell(): string {
     '    fi',
     '  fi',
     '  probe_status="ready"',
-    '  probe_reason="desktop-managed Gateway slot is ready"',
+    '  probe_reason="managed Gateway slot is ready"',
     '  return 0',
     '}',
   ].join('\n');
@@ -410,7 +408,7 @@ function gatewayServiceStartScript(rootShell: string): string {
     'set -eu',
     rootShell,
     managedGatewayPathShell(),
-    'exec "$binary" service-start --state-root "$state_root" --enable-profile-write',
+    'exec "$binary" service-start --state-root "$state_root" --runtime-root "$runtime_root" --enable-profile-write',
   ].join('\n');
 }
 
@@ -424,25 +422,6 @@ function gatewayServiceStopScript(rootShell: string): string {
     '  exit 0',
     'fi',
     'exec "$binary" service-stop --state-root "$state_root"',
-  ].join('\n');
-}
-
-function gatewayLegacyRuntimePIDAwkScript(): string {
-  return [
-    '    index($0, "redeven run") && !index($0, "awk -v state") {',
-    '      has_state = 0',
-    '      desktop_managed = 0',
-    '      n = split($0, parts, /[[:space:]]+/)',
-    '      for (i = 1; i <= n; i++) {',
-    '        if (parts[i] == "--desktop-managed") {',
-    '          desktop_managed = 1',
-    '        }',
-    '        if ((parts[i] == "--state-root" && (parts[i + 1] == state || parts[i + 1] == profile)) || parts[i] == "--state-root=" state || parts[i] == "--state-root=" profile || (parts[i] == "--profile-root" && parts[i + 1] == profile) || parts[i] == "--profile-root=" profile) {',
-    '          has_state = 1',
-    '        }',
-    '      }',
-    '      if (desktop_managed && has_state) { print $1 }',
-    '    }',
   ].join('\n');
 }
 
@@ -491,23 +470,6 @@ function gatewayDeepProbeScript(rootShell: string): string {
     '    service_error="${parsed_error:-$service_error}"',
     '  fi',
     'fi',
-    'legacy_local_catalog_present=false',
-    'profile_root="${state_root%/state}"',
-    'if [ -f "${profile_root%/}/catalog/local-environment.json" ]; then',
-    '  legacy_local_catalog_present=true',
-    'fi',
-    'legacy_pids=""',
-    'if command -v ps >/dev/null 2>&1; then',
-    '  legacy_pids="$(ps -eo pid=,args= 2>/dev/null | awk -v state="$state_root" -v profile="$profile_root" \'',
-    gatewayLegacyRuntimePIDAwkScript(),
-    '  \')"',
-    'fi',
-    'legacy_csv=""',
-    'for pid in $legacy_pids; do',
-    '  case "$pid" in *[!0-9]*|"") continue ;; esac',
-    '  if [ -n "$legacy_csv" ]; then legacy_csv="${legacy_csv},"; fi',
-    '  legacy_csv="${legacy_csv}${pid}"',
-    'done',
     'printf "binary_path=%s\\n" "$binary"',
     'printf "state_root=%s\\n" "$state_root"',
     'printf "package_status=%s\\n" "$probe_status"',
@@ -520,53 +482,6 @@ function gatewayDeepProbeScript(rootShell: string): string {
     'printf "service_pid=%s\\n" "$service_pid"',
     'printf "service_listen=%s\\n" "$service_listen"',
     'printf "service_error=%s\\n" "$service_error"',
-    'printf "legacy_local_catalog_present=%s\\n" "$legacy_local_catalog_present"',
-    'printf "legacy_runtime_pids=%s\\n" "$legacy_csv"',
-  ].join('\n');
-}
-
-function gatewayLegacyCleanupScript(rootShell: string): string {
-  return [
-    'set -eu',
-    rootShell,
-    managedGatewayPathShell('4'),
-    'gateway_id="${3:-}"',
-    'if [ -z "$gateway_id" ]; then',
-    '  echo "gateway id is required for Gateway legacy cleanup" >&2',
-    '  exit 1',
-    'fi',
-    'case "$gateway_id" in *[!A-Za-z0-9._-]*|"")',
-    '  echo "gateway id is not safe for Gateway legacy cleanup" >&2',
-    '  exit 1',
-    '  ;;',
-    'esac',
-    'profile_root="${state_root%/state}"',
-    'expected_profile_root="${runtime_root%/}/gateways/${gateway_id}"',
-    'expected_state_root="${expected_profile_root%/}/state"',
-    'if [ "$profile_root" != "$expected_profile_root" ] || [ "$state_root" != "$expected_state_root" ]; then',
-    '  echo "Gateway legacy cleanup refused unexpected state root" >&2',
-    '  exit 1',
-    'fi',
-    'legacy_pids=""',
-    'if command -v ps >/dev/null 2>&1; then',
-    '  legacy_pids="$(ps -eo pid=,args= 2>/dev/null | awk -v state="$state_root" -v profile="$profile_root" \'',
-    gatewayLegacyRuntimePIDAwkScript(),
-    '  \')"',
-    'fi',
-    'for pid in $legacy_pids; do',
-    '  case "$pid" in *[!0-9]*|"") continue ;; esac',
-    '  kill "$pid" 2>/dev/null || true',
-    'done',
-    'if [ -n "$legacy_pids" ]; then',
-    '  sleep 1',
-    '  for pid in $legacy_pids; do',
-    '    case "$pid" in *[!0-9]*|"") continue ;; esac',
-    '    if kill -0 "$pid" 2>/dev/null; then',
-    '      kill -KILL "$pid" 2>/dev/null || true',
-    '    fi',
-    '  done',
-    'fi',
-    'rm -f "${profile_root%/}/catalog/local-environment.json"',
   ].join('\n');
 }
 
@@ -676,7 +591,7 @@ function parseGatewayPackageProbe(raw: string): GatewayPackageProbe {
 function gatewayPackageProbeFallbackReason(status: GatewayServicePackageProbeStatus): string {
   switch (status) {
     case 'ready':
-      return 'desktop-managed Gateway slot is ready';
+      return 'managed Gateway slot is ready';
     case 'missing_binary':
       return 'managed Gateway binary is missing';
     case 'binary_not_executable':
@@ -696,7 +611,7 @@ function gatewayPackageProbeFallbackReason(status: GatewayServicePackageProbeSta
 
 function describeGatewayPackageProbe(probe: GatewayPackageProbe): string {
   if (probe.status === 'ready') {
-    return `Desktop-managed Gateway at ${probe.binary_path} is ready (${probe.reported_release_tag ?? probe.slot_release_tag ?? 'unknown version'}).`;
+    return `Managed Gateway at ${probe.binary_path} is ready (${probe.reported_release_tag ?? probe.slot_release_tag ?? 'unknown version'}).`;
   }
   if (probe.status === 'slot_version_mismatch') {
     return `Managed Gateway at ${probe.binary_path} reports ${probe.reported_release_tag ?? 'an unknown version'}, but Desktop expects ${probe.target_release_tag ?? 'the current release'}.`;
@@ -866,10 +781,6 @@ export async function probeManagedGatewayServiceStatus(options: GatewayServiceHo
 function parseGatewayServiceDeepProbe(raw: string): GatewayServiceDeepProbe {
   const parsed = parseProbeLines(raw);
   const servicePID = Number(compact(parsed.get('service_pid')));
-  const legacyRuntimePIDs = (parsed.get('legacy_runtime_pids') ?? '')
-    .split(',')
-    .map((pid) => Number(pid.trim()))
-    .filter((pid) => Number.isInteger(pid) && pid > 0);
   return {
     binary_path: compact(parsed.get('binary_path')),
     state_root: compact(parsed.get('state_root')),
@@ -883,8 +794,6 @@ function parseGatewayServiceDeepProbe(raw: string): GatewayServiceDeepProbe {
     service_pid: Number.isInteger(servicePID) && servicePID > 0 ? servicePID : undefined,
     service_listen: compact(parsed.get('service_listen')) || undefined,
     service_error: compact(parsed.get('service_error')) || undefined,
-    legacy_local_catalog_present: compact(parsed.get('legacy_local_catalog_present')) === 'true',
-    legacy_runtime_pids: legacyRuntimePIDs,
   };
 }
 
@@ -902,23 +811,6 @@ export async function probeManagedGatewayServiceDeep(options: GatewayServiceHost
   });
 }
 
-async function cleanupLegacyGatewayRuntimeResidue(
-  options: GatewayServiceHostOptions,
-  executor: RuntimeHostAccessExecutor,
-): Promise<void> {
-  const gatewayID = compact(options.gatewayID);
-  if (!gatewayID) {
-    throw new Error('Gateway legacy cleanup requires a Gateway id.');
-  }
-  const rootShell = rootShellForPlacement(options.placement);
-  await executor.run(commandForPlacement(options.placement, gatewayLegacyCleanupScript(rootShell), [
-    options.placement.runtime_root,
-    options.stateRoot,
-    gatewayID,
-    normalizeReleaseTag(options.releaseTag),
-  ]), { signal: options.signal });
-}
-
 export async function ensureManagedGatewayServiceReady(options: GatewayServiceHostOptions): Promise<string> {
   return withGatewayExecutor(options, async (executor) => {
     const releaseTag = normalizeReleaseTag(options.releaseTag);
@@ -930,9 +822,6 @@ export async function ensureManagedGatewayServiceReady(options: GatewayServiceHo
       if (installedProbe.status !== 'ready') {
         throw new Error(describeGatewayPackageProbe(installedProbe));
       }
-    }
-    if (options.forceUpdate === true) {
-      await cleanupLegacyGatewayRuntimeResidue(options, executor);
     }
     options.onProgress?.({
       phase: 'starting_gateway',

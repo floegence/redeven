@@ -52,16 +52,17 @@ describe('main routing', () => {
     expect(mainSrc).not.toContain("'window:settings'");
   });
 
-  it('forces the launcher runtime health to converge after automatic startup', () => {
+  it('reattaches without starting Runtime during Desktop launch', () => {
     const mainSrc = readMainSource();
     const start = mainSrc.indexOf('async function autoStartLocalRuntimeOnDesktopLaunch()');
     const end = mainSrc.indexOf('function controlPlaneIssueForError(', start);
     expect(start).toBeGreaterThanOrEqual(0);
     expect(end).toBeGreaterThan(start);
     const startupSrc = mainSrc.slice(start, end);
-    expect(startupSrc.match(/await refreshWelcomeRuntimeHealthForEnvironment\(environment\.id, \{ force: true \}\);/gu)).toHaveLength(2);
+    expect(startupSrc.match(/await refreshWelcomeRuntimeHealthForEnvironment\(environment\.id, \{ force: true \}\);/gu)).toHaveLength(1);
     expect(startupSrc).toContain('resetLauncherIssueState();');
     expect(startupSrc).toContain('broadcastDesktopWelcomeSnapshots();');
+    expect(startupSrc).not.toContain('startLocalHostRuntimeWithLifecycleProgress({');
   });
 
   it('tracks environment windows by session key and scopes child windows per session', () => {
@@ -140,25 +141,6 @@ describe('main routing', () => {
     expect(mainSrc).toContain("'session_stale'");
     expect(mainSrc).toContain("'That window was already closed. Desktop refreshed the environment list.'");
     expect(mainSrc).not.toContain("throw new Error('That environment window is no longer open.')");
-  });
-
-  it('keeps raced Start takeover discovery observational', () => {
-    const mainSrc = readMainSource();
-
-    expect(mainSrc).toContain('function finishRuntimeProcessReconciliation(');
-    expect(mainSrc).toContain('class RuntimeProcessTakeoverMaintenanceRequiredError extends Error');
-    expect(mainSrc).toContain("kind: 'maintenance_required'");
-    expect(mainSrc).toContain("kind: 'confirmation_required'");
-    expect(mainSrc).toContain("if (input.lifecycleOperation === 'start') {");
-    expect(mainSrc).toContain('error: new RuntimeProcessTakeoverMaintenanceRequiredError(),');
-    expect(mainSrc).toContain('throwRuntimeProcessReconciliationOutcome(takeoverOutcome);');
-    expect(mainSrc).toContain('return runtimeProcessConfirmationFailure(takeoverOutcome);');
-    expect(mainSrc).toContain('return launcherActionSuccessFromRuntimeProcessMaintenance(error)');
-    expect(mainSrc).toContain("return launcherActionSuccess('runtime_maintenance_required');");
-    expect(mainSrc).not.toContain('thrownLauncherActionSuccess');
-    expect(mainSrc.indexOf("if (input.lifecycleOperation === 'start') {")).toBeLessThan(
-      mainSrc.indexOf("'confirmation_required'", mainSrc.indexOf('function finishRuntimeProcessReconciliation(')),
-    );
   });
 
   it('keeps desktop windows unthrottled while the user works in other apps', () => {
@@ -420,7 +402,7 @@ describe('main routing', () => {
     expect(diagnosisEnd).toBeGreaterThan(diagnosisStart);
     const diagnosisSrc = mainSrc.slice(diagnosisStart, diagnosisEnd);
     const protocolStart = diagnosisSrc.indexOf("if (error.code === 'GATEWAY_PROTOCOL_VERSION_UNSUPPORTED') {");
-    const protocolEnd = diagnosisSrc.indexOf("if (managedProbe?.legacy_runtime_residue === true)", protocolStart);
+    const protocolEnd = diagnosisSrc.indexOf('classification: manageable && serviceState?.status', protocolStart);
     expect(protocolStart).toBeGreaterThanOrEqual(0);
     expect(protocolEnd).toBeGreaterThan(protocolStart);
     const protocolSrc = diagnosisSrc.slice(protocolStart, protocolEnd);
@@ -787,70 +769,48 @@ describe('main routing', () => {
     expect(removalSrc).toContain('launcherOperationMatchesAttempt(current, owner)');
   });
 
-  it('routes runtime maintenance through an explicit Desktop session contract', () => {
+  it('requires Gateway operations for product-managed Runtime lifecycle actions', () => {
     const mainSrc = readMainSource();
 
     expect(mainSrc).toContain('DESKTOP_SHELL_RUNTIME_MAINTENANCE_CONTEXT_CHANNEL');
     expect(mainSrc).toContain('DESKTOP_SHELL_RUNTIME_MAINTENANCE_STARTED_CHANNEL');
-    expect(mainSrc).toContain('async function closeEnvironmentSessionsForRuntimeLifecycle(');
-    expect(mainSrc).toContain("reason: `runtime_${input.operation}`");
-    expect(mainSrc).toContain('markRuntimeLifecycleAccepted(input.scope);');
-    expect(mainSrc).toContain('cancelLauncherOpensForRuntimeLifecycle(input.scope);');
-    expect(mainSrc).toContain('options.runtimeLifecycleGenerationIdentityKeys ?? runtimeLifecycleIdentityKeysForTarget(target)');
-    expect(mainSrc).toContain('async function handoffSessionToRuntimeLifecycle(');
     expect(mainSrc).toContain('function runtimeMaintenanceContextFromSession(');
-    expect(mainSrc).toContain("authority: 'desktop_ssh'");
-    expect(mainSrc).toContain("method: 'desktop_ssh_restart'");
-    expect(mainSrc).toContain("method: 'desktop_ssh_force_update'");
-    expect(mainSrc).toContain("method: 'desktop_local_update_handoff'");
-    expect(mainSrc).toContain('async function restartSSHRuntimeFromShell(');
+    expect(mainSrc).toContain("? 'runtime_gateway_setup_required'");
+    expect(mainSrc).toContain("readiness: directTarget ? 'setup_required' : 'unknown'");
+    expect(mainSrc).toContain("presentation_state: unsupported ? 'unsupported' : directTarget ? 'setup_required' : 'unknown'");
     expect(mainSrc).toContain('async function manageDesktopUpdateFromLauncher(');
     expect(mainSrc).toContain('async function runEnvironmentRuntimeLifecycleFromLauncher(');
-    expect(mainSrc).toContain('async function restartEnvironmentRuntimeFromLauncher(');
     expect(mainSrc).toContain("case 'manage_desktop_update':");
     expect(mainSrc).toContain("case 'restart_environment_runtime':");
     expect(mainSrc).toContain("launcherActionSuccess('opened_desktop_update_handoff')");
-    expect(mainSrc).toContain('forceRuntimeUpdate: options.forceRuntimeUpdate === true');
-    expect(mainSrc).toContain('allowActiveWorkReplacement: true');
 
-    const managedRestartStart = mainSrc.indexOf('async function restartManagedRuntimeFromShell(');
-    const sshRestartStart = mainSrc.indexOf('async function restartSSHRuntimeFromShell(', managedRestartStart);
-    const sshRestartEnd = mainSrc.indexOf('async function showDesktopUpdateHandoffDialog(', sshRestartStart);
-    const managedRestartSrc = mainSrc.slice(managedRestartStart, sshRestartStart);
-    const sshRestartSrc = mainSrc.slice(sshRestartStart, sshRestartEnd);
-    expect(managedRestartSrc).not.toContain('await handoffSessionToRuntimeLifecycle({');
-    expect(managedRestartSrc).toContain('await startLocalHostRuntimeWithLifecycleProgress({');
-    expect(managedRestartSrc).not.toContain('rootWindow.loadURL');
-    expect(managedRestartSrc).not.toContain('focusEnvironmentSession(');
-    expect(sshRestartSrc).not.toContain('await handoffSessionToRuntimeLifecycle({');
-    expect(sshRestartSrc).toContain('await ensureSSHRuntimeReadyRecord(sshDetails, {');
-    expect(sshRestartSrc).not.toContain('openSSHEnvironmentFromLauncher({');
-    expect(sshRestartSrc).not.toContain('rootWindow.loadURL');
-    expect(sshRestartSrc).not.toContain('focusEnvironmentSession(');
+    const directLifecycleStart = mainSrc.indexOf('async function runEnvironmentRuntimeLifecycleFromLauncher(');
+    const directLifecycleEnd = mainSrc.indexOf('async function startLocalHostRuntimeWithLifecycleProgress(', directLifecycleStart);
+    const directLifecycleSrc = mainSrc.slice(directLifecycleStart, directLifecycleEnd);
+    expect(directLifecycleSrc).toContain("'runtime_not_ready'");
+    expect(directLifecycleSrc).toContain('Set up Redeven Gateway for this target before managing Runtime.');
+    expect(directLifecycleSrc).not.toContain('ensureRuntimePlacementReadyRecordFromLauncher(');
+    expect(directLifecycleSrc).not.toContain('ensureSSHRuntimeReadyRecord(');
+    expect(directLifecycleSrc).not.toContain('startLocalHostRuntimeWithLifecycleProgress(');
 
-    const startEnvironmentRuntimeStart = mainSrc.indexOf('async function startEnvironmentRuntimeFromLauncher(');
-    const updateEnvironmentRuntimeStart = mainSrc.indexOf('async function updateEnvironmentRuntimeFromLauncher(');
-    const restartEnvironmentRuntimeStart = mainSrc.indexOf('async function restartEnvironmentRuntimeFromLauncher(');
-    expect(startEnvironmentRuntimeStart).toBeGreaterThanOrEqual(0);
-    expect(updateEnvironmentRuntimeStart).toBeGreaterThan(startEnvironmentRuntimeStart);
-    expect(restartEnvironmentRuntimeStart).toBeGreaterThan(updateEnvironmentRuntimeStart);
-    const startEnvironmentRuntimeSrc = mainSrc.slice(startEnvironmentRuntimeStart, updateEnvironmentRuntimeStart);
-    const updateEnvironmentRuntimeSrc = mainSrc.slice(updateEnvironmentRuntimeStart, restartEnvironmentRuntimeStart);
-    const restartEnvironmentRuntimeSrc = mainSrc.slice(restartEnvironmentRuntimeStart, mainSrc.indexOf('async function manageDesktopUpdateFromLauncher(', restartEnvironmentRuntimeStart));
-    expect(startEnvironmentRuntimeSrc).toContain('return runEnvironmentRuntimeLifecycleFromLauncher(request);');
-    expect(updateEnvironmentRuntimeSrc).toContain("kind: 'update_environment_runtime',\n    force_runtime_update: true,");
-    expect(restartEnvironmentRuntimeSrc).toContain("kind: 'restart_environment_runtime',\n    force_runtime_update: false,");
-
-    expect(mainSrc).toContain("if (normalized.action === 'restart_runtime')");
-    expect(mainSrc).toContain("if (normalized.action === 'upgrade_runtime')");
-    expect(mainSrc).toContain('normalizeDesktopShellRuntimeMaintenanceStartedNotification(notification)');
+    const shellActionStart = mainSrc.indexOf('ipcMain.handle(DESKTOP_SHELL_RUNTIME_ACTION_CHANNEL');
+    const shellActionEnd = mainSrc.indexOf('ipcMain.handle(DESKTOP_CODE_WORKSPACE_PACKAGE_PREPARE_CHANNEL', shellActionStart);
+    const shellActionSrc = mainSrc.slice(shellActionStart, shellActionEnd);
+    expect(shellActionSrc).toContain("normalized.action === 'restart_managed_runtime'");
+    expect(shellActionSrc).toContain("performRuntimeMaintenanceFromShell(event.sender.id, 'restart')");
+    expect(shellActionSrc).not.toContain('restartManagedRuntimeFromShell(');
 
     const gatewayLifecycleStart = mainSrc.indexOf('async function runGatewayEnvironmentLifecycleFromLauncher(');
     const gatewayLifecycleEnd = mainSrc.indexOf('function gatewayStartRequiredFailure(', gatewayLifecycleStart);
     const gatewayLifecycleSrc = mainSrc.slice(gatewayLifecycleStart, gatewayLifecycleEnd);
-    expect(gatewayLifecycleSrc).toContain("if (request.operation !== 'start')");
-    expect(gatewayLifecycleSrc.indexOf('await closeEnvironmentSessionsForRuntimeLifecycle({')).toBeLessThan(
-      gatewayLifecycleSrc.indexOf('gatewayLifecycleManager().runEnvironmentLifecycle(record'),
+    expect(gatewayLifecycleSrc).toContain('requireGatewayEnvironmentLifecycleCapability(record, request');
+    expect(gatewayLifecycleSrc).toContain("management.presentation_state !== 'allowed'");
+    expect(gatewayLifecycleSrc).toContain('gatewayLifecycleManager().prepareRuntimeOperation(record');
+    expect(gatewayLifecycleSrc).toContain('gatewayLifecycleManager().confirmRuntimeOperation(record');
+    expect(gatewayLifecycleSrc).toContain('gatewayLifecycleManager().commitRuntimeOperation(record');
+    expect(gatewayLifecycleSrc).not.toContain('await closeEnvironmentSessionsForRuntimeLifecycle({');
+    expect(gatewayLifecycleSrc.indexOf('requireGatewayEnvironmentLifecycleCapability(record, request')).toBeLessThan(
+      gatewayLifecycleSrc.indexOf('gatewayLifecycleManager().prepareRuntimeOperation(record'),
     );
   });
 
@@ -1049,60 +1009,18 @@ describe('main routing', () => {
     const startRuntimeStart = mainSrc.indexOf('async function runEnvironmentRuntimeLifecycleFromLauncher(');
     const startRuntimeEnd = mainSrc.indexOf('async function connectProviderRuntimeFromLauncher(', startRuntimeStart);
     const startRuntimeSrc = mainSrc.slice(startRuntimeStart, startRuntimeEnd);
-    expect(startRuntimeSrc).toContain("if (requestedPlacement.kind === 'container_process')");
-    expect(startRuntimeSrc).toContain('ensureRuntimePlacementReadyRecordFromLauncher(request)');
+    expect(startRuntimeSrc).toContain("'runtime_not_ready'");
+    expect(startRuntimeSrc).toContain('Set up Redeven Gateway for this target before managing Runtime.');
+    expect(startRuntimeSrc).not.toContain('ensureRuntimePlacementReadyRecordFromLauncher(request)');
     expect(startRuntimeSrc).not.toContain('startRuntimePlacementBridgeSession({');
-    const containerLifecycleSrc = startRuntimeSrc.slice(
-      startRuntimeSrc.indexOf("if (requestedPlacement.kind === 'container_process')"),
-      startRuntimeSrc.indexOf('const normalizedSSHTarget = sshDetailsFromRuntimeTargetRequest(request);'),
-    );
-    expect(containerLifecycleSrc).not.toContain('closeEnvironmentSessionsForRuntimeLifecycle');
-    expect(startRuntimeSrc).toContain('const normalizedSSHTarget = sshDetailsFromRuntimeTargetRequest(request);');
-    expect(startRuntimeSrc).not.toContain("if (lifecycleOperation === 'restart' || lifecycleOperation === 'update')");
-    expect(startRuntimeSrc).toContain('beforeRuntimeReplacement: lifecycleOperation === \'restart\' || lifecycleOperation === \'update\'');
+    expect(startRuntimeSrc).not.toContain('const normalizedSSHTarget = sshDetailsFromRuntimeTargetRequest(request);');
 
     const stopRuntimeStart = mainSrc.indexOf('async function stopEnvironmentRuntimeFromLauncher(');
-    const stopRuntimeEnd = mainSrc.indexOf('async function refreshEnvironmentRuntimeFromLauncher(', stopRuntimeStart);
+    const stopRuntimeEnd = mainSrc.indexOf('async function stopEnvironmentRuntimeFromLauncherUncoordinated(', stopRuntimeStart);
     const stopRuntimeSrc = mainSrc.slice(stopRuntimeStart, stopRuntimeEnd);
-    expect(stopRuntimeSrc).toContain("if (placement.kind === 'container_process')");
-    expect(stopRuntimeSrc).toContain("action: 'stop_environment_runtime'");
-    expect(stopRuntimeSrc).toContain("operation: lifecycleOperation");
-    expect(stopRuntimeSrc).toContain("phase: 'discovering_runtime_instances'");
-    expect(stopRuntimeSrc).toContain("'stopping_runtime_process'");
-    expect(stopRuntimeSrc).toContain("phase: 'verifying_runtime_inventory'");
-    expect(stopRuntimeSrc).toContain("phase: 'runtime_stopped'");
-    expect(stopRuntimeSrc).toContain('const inventory = await inspectContainerRuntimeProcesses(processArgs);');
-    expect(stopRuntimeSrc).toContain('await stopContainerRuntimeProcesses(processArgs, inventory);');
-    expect(stopRuntimeSrc).not.toContain('containerRuntimeDaemonStopCommand({');
-    const stopUncoordinatedStart = stopRuntimeSrc.indexOf('async function stopEnvironmentRuntimeFromLauncherUncoordinated(');
-    const containerStopStart = stopRuntimeSrc.indexOf("if (placement.kind === 'container_process')", stopUncoordinatedStart);
-    const sshStopStart = stopRuntimeSrc.indexOf('const sshDetails = sshDetailsFromRuntimeTargetRequest(request);', containerStopStart);
-    const containerStopSrc = stopRuntimeSrc.slice(containerStopStart, sshStopStart);
-    expect(containerStopSrc.indexOf('await clearRuntimePlacementBridgeRecord(targetID)')).toBeLessThan(
-      containerStopSrc.indexOf('const inventory = await inspectContainerRuntimeProcesses(processArgs)'),
-    );
-    expect(stopRuntimeSrc).not.toContain('runtimePlacementBridgeByTargetID');
-    expect(stopRuntimeSrc).toContain('runtimePlacementReadyByTargetID.delete(targetID)');
-    expect(stopRuntimeSrc).toContain('sshRuntimeReadyByKey.delete(runtimeKey)');
-    expect(stopRuntimeSrc).toContain('runtimeLifecycleFailureNextActions');
-    expect(stopRuntimeSrc).toContain('const sshDetails = sshDetailsFromRuntimeTargetRequest(request);');
-    expect(stopRuntimeSrc.match(/await closeEnvironmentSessionsForRuntimeLifecycle\(\{/gu)).toHaveLength(3);
-    const coordinatedSSHStopStart = stopRuntimeSrc.indexOf('const sshDetails = sshDetailsFromRuntimeTargetRequest(request);', stopUncoordinatedStart);
-    const localStopStart = stopRuntimeSrc.indexOf(
-      '\n  const preferences = await loadDesktopPreferencesCached();\n  const environment =',
-      coordinatedSSHStopStart,
-    );
-    const sshStopSrc = stopRuntimeSrc.slice(coordinatedSSHStopStart, localStopStart);
-    expect(sshStopSrc.indexOf('await closeEnvironmentSessionsForRuntimeLifecycle({')).toBeLessThan(
-      sshStopSrc.indexOf('const processInventory = await inspectManagedSSHRuntimeProcesses(processInventoryArgs)'),
-    );
-    expect(sshStopSrc.indexOf('await clearRuntimePlacementBridgeRecord(placementTargetID)')).toBeLessThan(
-      sshStopSrc.indexOf('const processInventory = await inspectManagedSSHRuntimeProcesses(processInventoryArgs)'),
-    );
-    expect(stopRuntimeSrc).toContain("decision: 'runtime_already_stopped'");
-    expect(stopRuntimeSrc).not.toContain('await finalizeSessionClosure(liveRuntimeSession.session_key)');
-    expect(stopRuntimeSrc).not.toContain('await finalizeSessionClosure(liveSessionRecord.session_key)');
-    expect(stopRuntimeSrc).not.toContain('await finalizeSessionClosure(liveLocalSession.session_key)');
+    expect(stopRuntimeSrc).toContain("request.external_local_ui_url ? 'action_invalid' : 'runtime_not_ready'");
+    expect(stopRuntimeSrc).toContain('Runtime management is not supported for URL connections.');
+    expect(stopRuntimeSrc).not.toContain('stopEnvironmentRuntimeFromLauncherUncoordinated(request');
 
     const refreshRuntimeStart = mainSrc.indexOf('async function refreshEnvironmentRuntimeFromLauncher(');
     const refreshRuntimeEnd = mainSrc.indexOf('async function refreshAllEnvironmentRuntimesFromLauncher(', refreshRuntimeStart);
@@ -1380,17 +1298,12 @@ describe('main routing', () => {
     expect(ensureStart).toBeGreaterThanOrEqual(0);
     expect(ensureEnd).toBeGreaterThan(ensureStart);
     const ensureSrc = mainSrc.slice(ensureStart, ensureEnd);
-    expect(ensureSrc).toContain('const activeLifecycle = runtimeLifecycleCoordinator.active(targetKey);');
-    expect(ensureSrc).toContain('await runtimeLifecycleCoordinator.waitForReadyMutation(targetKey);');
-    expect(ensureSrc).toContain("presentation_context: 'flower_warmup'");
     expect(ensureSrc).toContain('buildDesktopLocalRuntimeOpenPlan(');
     expect(ensureSrc).toContain('if (runtimePlan.requires_restart)');
-    expect(ensureSrc).toContain("action: 'restart_environment_runtime'");
     expect(ensureSrc).toContain('assertRuntimeFlowerRecordOpenable(attached);');
-    expect(ensureSrc).toContain('startLocalHostRuntimeWithLifecycleProgress({');
-    expect(ensureSrc).toContain("action: 'start_environment_runtime'");
-    expect(ensureSrc).toContain("presentationContext: 'flower_warmup'");
-    expect(ensureSrc).not.toContain('prepareManagedTarget({ environment })');
+    expect(ensureSrc).toContain('Set up Redeven Gateway for this target before restarting Runtime.');
+    expect(ensureSrc).not.toContain('startLocalHostRuntimeWithLifecycleProgress({');
+    expect(ensureSrc).not.toContain('runtimeLifecycleCoordinator.');
 
     const lifecycleStart = mainSrc.indexOf('async function startLocalHostRuntimeWithLifecycleProgress(');
     const lifecycleEnd = mainSrc.indexOf('async function startEnvironmentRuntimeFromLauncher(', lifecycleStart);
@@ -1427,9 +1340,8 @@ describe('main routing', () => {
     expect(startRuntimeStart).toBeGreaterThanOrEqual(0);
     expect(startRuntimeEnd).toBeGreaterThan(startRuntimeStart);
     const startRuntimeSrc = mainSrc.slice(startRuntimeStart, startRuntimeEnd);
-    expect(startRuntimeSrc).toContain('void syncLinkedProviderRuntimeHealthFromService(runtimeRecord.startup.runtime_service)');
-    expect(startRuntimeSrc).toContain('void syncLinkedProviderRuntimeHealthFromService(record.startup.runtime_service)');
-    expect(startRuntimeSrc).toContain('.finally(() => broadcastDesktopWelcomeSnapshots())');
+    expect(startRuntimeSrc).not.toContain('syncLinkedProviderRuntimeHealthFromService(');
+    expect(startRuntimeSrc).toContain('Set up Redeven Gateway for this target before managing Runtime.');
 
     const connectStart = mainSrc.indexOf('async function connectProviderRuntimeFromLauncher(');
     const connectEnd = mainSrc.indexOf('async function disconnectProviderRuntimeFromLauncher(', connectStart);
@@ -1624,7 +1536,9 @@ describe('main routing', () => {
     expect(helperSrc).toContain('assertGatewayPairingChallenge({');
     expect(pairSrc).not.toContain('confirmDesktopImpact({');
     expect(pairSrc).not.toContain("phase: 'waiting_for_identity_confirmation'");
-    expect(helperSrc).toContain("const pairingOptions = { profileWrite: record.connection.kind !== 'url' };");
+    expect(helperSrc).toContain("const pairingOptions = record.connection.kind === 'url'");
+    expect(helperSrc).toContain("runtimeGrants: ['manage_runtime', 'deploy_custom_runtime', 'manage_runtime_binding'] as const");
+    expect(helperSrc).toContain('runtime_grants: completionRequest.runtime_grants');
     expect(helperSrc).toContain('const completionRequest = buildPairingCompleteRequest(material, challenge, pairingOptions);');
     expect(helperSrc).toContain('const completion = await client.completePairing(record, completionRequest, {');
     expect(helperSrc).toContain('assertGatewayPairingCompleteResponse(material, challenge, completion, {');

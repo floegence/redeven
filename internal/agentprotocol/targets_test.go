@@ -56,8 +56,7 @@ func TestDiscoverTargetsFromLocalEnvironmentState(t *testing.T) {
 		return runtimemanagement.RuntimeAttachStatus{
 			State: runtimemanagement.AttachStateReady,
 			Identity: runtimemanagement.RuntimeInstanceIdentity{
-				StateDir:       layout.StateDir,
-				DesktopManaged: true,
+				StateDir: layout.StateDir,
 			},
 			Endpoint: &runtimemanagement.RuntimeAttachEndpoint{
 				LocalUIURL:  "http://127.0.0.1:23998/",
@@ -370,8 +369,7 @@ func TestDiscoverTargetsDoesNotAdvertiseFlowerFromBoundDesktopModelSource(t *tes
 		return runtimemanagement.RuntimeAttachStatus{
 			State: runtimemanagement.AttachStateReady,
 			Identity: runtimemanagement.RuntimeInstanceIdentity{
-				StateDir:       layout.StateDir,
-				DesktopManaged: true,
+				StateDir: layout.StateDir,
 			},
 			Endpoint: &runtimemanagement.RuntimeAttachEndpoint{
 				LocalUIURL: "http://127.0.0.1:23998/",
@@ -420,8 +418,7 @@ func TestDiscoverTargetsDoesNotAdvertiseFlowerForUnboundDesktopModelSource(t *te
 		return runtimemanagement.RuntimeAttachStatus{
 			State: runtimemanagement.AttachStateReady,
 			Identity: runtimemanagement.RuntimeInstanceIdentity{
-				StateDir:       layout.StateDir,
-				DesktopManaged: true,
+				StateDir: layout.StateDir,
 			},
 			Endpoint: &runtimemanagement.RuntimeAttachEndpoint{
 				LocalUIURL: "http://127.0.0.1:23998/",

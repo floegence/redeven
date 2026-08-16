@@ -24,8 +24,6 @@ func TestWriteAndReadAgentLockMetadata(t *testing.T) {
 		"desktop",
 		"rt_test",
 		true,
-		"desktop-owner-test",
-		true,
 		config.StateLayout{
 			StateRoot:                "/Users/tester/.redeven",
 			ConfigPath:               "/Users/tester/.redeven/local-environment/config.json",
@@ -46,7 +44,7 @@ func TestWriteAndReadAgentLockMetadata(t *testing.T) {
 	if got == nil {
 		t.Fatalf("expected metadata")
 	}
-	if got.Mode != "desktop" || !got.DesktopManaged || !got.LocalUIEnabled {
+	if got.Mode != "desktop" || !got.LocalUIEnabled {
 		t.Fatalf("unexpected metadata: %#v", got)
 	}
 	if got.InstanceID != "rt_test" {
@@ -54,9 +52,6 @@ func TestWriteAndReadAgentLockMetadata(t *testing.T) {
 	}
 	if got.PID != os.Getpid() || got.StartedAtUnixMS <= 0 || got.ProtocolVersion != runtimeservice.ProtocolVersion {
 		t.Fatalf("lock owner identity = %#v", got)
-	}
-	if got.DesktopOwnerID != "desktop-owner-test" {
-		t.Fatalf("DesktopOwnerID = %q", got.DesktopOwnerID)
 	}
 	if got.ConfigPath != "/Users/tester/.redeven/local-environment/config.json" {
 		t.Fatalf("ConfigPath = %q", got.ConfigPath)

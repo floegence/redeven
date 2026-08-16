@@ -92,8 +92,6 @@ func (c *runtimePresentationController) RuntimeOverview() runtimepresentation.Ru
 		CompatibilityMessage:    snapshot.CompatibilityMessage,
 		MinimumDesktopVersion:   snapshot.MinimumDesktopVersion,
 		MinimumRuntimeVersion:   snapshot.MinimumRuntimeVersion,
-		ServiceOwner:            string(snapshot.ServiceOwner),
-		DesktopManaged:          snapshot.DesktopManaged,
 		EffectiveRunMode:        snapshot.EffectiveRunMode,
 		RemoteEnabled:           snapshot.RemoteEnabled,
 		OpenReadinessState:      string(snapshot.OpenReadiness.State),

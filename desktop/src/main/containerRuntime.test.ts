@@ -107,7 +107,7 @@ describe('containerRuntime', () => {
       container_id: 'podman-stable-id',
       argv: ['redeven', 'desktop-bridge'],
       env: {
-        REDEVEN_DESKTOP_OWNER_ID: undefined,
+        REDEVEN_RUNTIME_PROFILE: undefined,
         'BAD-NAME': 'ignored',
       },
     })).toEqual([
@@ -115,7 +115,7 @@ describe('containerRuntime', () => {
       'exec',
       '-i',
       '--env',
-      'REDEVEN_DESKTOP_OWNER_ID',
+      'REDEVEN_RUNTIME_PROFILE',
       'podman-stable-id',
       'redeven',
       'desktop-bridge',
@@ -198,13 +198,10 @@ describe('containerRuntime', () => {
       container_id: 'dev',
       runtime_binary_path: '/home/app/.redeven/runtime/managed/bin/redeven',
       runtime_root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
-      desktop_owner_id: 'desktop-owner',
     })).toEqual([
       'docker',
       'exec',
       '-d',
-      '--env',
-      'REDEVEN_DESKTOP_OWNER_ID=desktop-owner',
       'dev',
       'sh',
       '-c',
@@ -219,8 +216,7 @@ describe('containerRuntime', () => {
       container_id: 'dev',
       runtime_binary_path: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
       runtime_root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
-      desktop_owner_id: 'desktop-owner',
-    })[8]).toContain('runtime_binary_path="${runtime_root%/}/runtime/managed/bin/redeven"');
+    })[6]).toContain('runtime_binary_path="${runtime_root%/}/runtime/managed/bin/redeven"');
     expect(containerRuntimeDaemonStatusCommand({
       engine: 'docker',
       container_id: 'dev',
@@ -249,17 +245,14 @@ describe('containerRuntime', () => {
       runtime_binary_path: '/home/app/.redeven/runtime/managed/bin/redeven',
       runtime_root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
       runtime_state_root: runtimeStateRoot,
-      desktop_owner_id: 'desktop-owner',
     })).toEqual([
       'docker',
       'exec',
       '-d',
-      '--env',
-      'REDEVEN_DESKTOP_OWNER_ID=desktop-owner',
       'dev',
       'sh',
       '-c',
-      expect.stringContaining('run --mode desktop --desktop-managed --presentation machine --state-root "$state_root"'),
+      expect.stringContaining('run --mode desktop --presentation machine --state-root "$state_root"'),
       'redeven-container-runtime-start',
       runtimeStateRoot,
       DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
@@ -299,7 +292,6 @@ describe('containerRuntime', () => {
       container_id: 'dev',
       runtime_binary_path: '/root/.redeven/runtime/managed/bin/redeven',
       runtime_root: '/root/.redeven',
-      desktop_owner_id: 'desktop-owner',
       operation: 'inventory',
     });
     const stopCommand = containerRuntimeProcessHelperCommand({
@@ -307,10 +299,8 @@ describe('containerRuntime', () => {
       container_id: 'dev',
       runtime_binary_path: '/root/.redeven/runtime/managed/bin/redeven',
       runtime_root: '/root/.redeven',
-      desktop_owner_id: 'desktop-owner',
       operation: 'stop',
       inventory_digest: 'a'.repeat(64),
-      reconciliation_mode: 'confirmed_takeover',
     });
 
     expect(inventoryCommand.join('\n')).toContain('desktop-runtime-inventory');
@@ -319,7 +309,6 @@ describe('containerRuntime', () => {
     expect(stopCommand.join('\n')).toContain('--all-matching');
     expect(stopCommand.join('\n')).toContain('--expected-inventory-digest "$inventory_digest"');
     expect(stopCommand).toContain('a'.repeat(64));
-    expect(stopCommand).toContain('confirmed_takeover');
     expect(stopCommand.join('\n')).toContain('tar -xzf "$archive_path"');
     expect(stopCommand.join('\n')).toContain('rm -rf "$helper_root"');
     expect(stopCommand.join('\n')).not.toContain('--process-contract-version');

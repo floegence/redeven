@@ -40,8 +40,7 @@ type FakeSSHScenario =
   | 'blocked_report'
   | 'transient_blocked_report'
   | 'status_blocked_without_socket'
-  | 'duplicate_current_owner'
-  | 'foreign_owner';
+  | 'duplicate_verified_runtime';
 
 type FakeSSHEvent = Readonly<{
   event: string;
@@ -138,8 +137,6 @@ function currentRuntimeService() {
     runtime_version: String(state.installed_version || 'v1.2.3'),
     protocol_version: 'redeven-runtime-v1',
     compatibility_epoch: compatibilityEpoch,
-    service_owner: 'desktop',
-    desktop_managed: true,
     effective_run_mode: 'desktop',
     remote_enabled: false,
     compatibility: 'compatible',
@@ -354,7 +351,7 @@ function writeProbeResult() {
   const state = readState();
   const installed = state.installed === true;
   const status = installed ? 'ready' : 'missing_binary';
-  const reason = installed ? 'desktop-managed runtime slot is ready' : 'managed runtime binary is missing';
+  const reason = installed ? 'runtime slot is ready' : 'runtime binary is missing';
   const releaseTag = remoteInstallReleaseTag() || args[args.length - 1] || 'v0.0.0';
   const installedVersion = String(state.installed_version || releaseTag);
   process.stdout.write([
@@ -378,8 +375,6 @@ function writeRuntimeStatus() {
       message: 'A Redeven runtime process is alive, but its management socket is not reachable.',
       lock_owner: {
         pid: 4242,
-        desktop_managed: true,
-        desktop_owner_id: 'desktop-owner-test',
       },
       diagnostics: {
         lock_pid: 4242,
@@ -401,7 +396,6 @@ function writeRuntimeStatus() {
       protocol_version: 'redeven-runtime-control-v1',
       base_url: 'http://127.0.0.1:39002/',
       token: 'runtime-control-token',
-      desktop_owner_id: 'desktop-owner-test',
       expires_at_unix_ms: Date.now() + 60 * 60 * 1000,
     },
     password_required: false,
@@ -411,7 +405,6 @@ function writeRuntimeStatus() {
       password_required: false,
     },
     effective_run_mode: 'local',
-    desktop_managed: true,
     pid: 4242,
     runtime_service: runtimeServiceForScenario(),
   }));
@@ -591,8 +584,6 @@ if (args.includes('-M') && args.includes('-N')) {
             message: 'A Redeven runtime process is alive, but its management socket is not reachable.',
             lock_owner: {
               pid: 4242,
-              desktop_managed: true,
-              desktop_owner_id: 'desktop-owner-test',
             },
             diagnostics: {
               lock_pid: 4242,
@@ -616,7 +607,6 @@ if (args.includes('-M') && args.includes('-N')) {
           protocol_version: 'redeven-runtime-control-v1',
           base_url: 'http://127.0.0.1:39002/',
           token: 'runtime-control-token',
-          desktop_owner_id: 'desktop-owner-test',
           expires_at_unix_ms: Date.now() + 60 * 60 * 1000,
         },
         password_required: false,
@@ -626,7 +616,6 @@ if (args.includes('-M') && args.includes('-N')) {
           password_required: false,
         },
         effective_run_mode: 'local',
-        desktop_managed: true,
         pid: Number(state.runtime_pid || 4242),
         runtime_service: runtimeServiceForScenario(),
       }));
@@ -639,13 +628,11 @@ if (args.includes('-M') && args.includes('-N')) {
       const live = state.runtime_live === true;
       const runtimePID = Number(state.runtime_pid || 4242);
       const runtimeStartedAt = Number(state.runtime_started_at || 1000);
-      const foreignOwner = scenario === 'foreign_owner';
-      const duplicateCurrentOwner = scenario === 'duplicate_current_owner';
+      const duplicateCurrentOwner = scenario === 'duplicate_verified_runtime';
       const inventoryRuntimeVersion = state.installed_version || 'v1.2.3';
       const instances = live ? [{
         pid: runtimePID,
         process_started_at_unix_ms: runtimeStartedAt,
-        desktop_owner_id: foreignOwner ? 'another-desktop' : 'desktop-owner-test',
         state_root: '/home/test/.redeven',
         executable_path: '/home/test/.redeven/runtime/managed/bin/redeven',
         executable_device: 1,
@@ -653,10 +640,8 @@ if (args.includes('-M') && args.includes('-N')) {
         namespace_id: 'mnt:[host]',
         runtime_version: inventoryRuntimeVersion,
         identity_status: 'verified',
-        owner_status: foreignOwner ? 'foreign' : 'current',
         layout_status: 'current',
-        owner_evidence: 'process_environment',
-        stop_authority: foreignOwner ? 'confirmed_takeover' : 'automatic',
+        stop_authority: 'automatic',
       }] : [];
       if (duplicateCurrentOwner) {
         instances.push({
@@ -666,17 +651,17 @@ if (args.includes('-M') && args.includes('-N')) {
         });
       }
       const before = {
-        schema_version: 2,
-        scope: { runtime_root: '/home/test/.redeven', state_root: '/home/test/.redeven', desktop_owner_id: 'desktop-owner-test', user_identity: 'test', namespace_id: 'mnt:[host]' },
+        schema_version: 3,
+        scope: { runtime_root: '/home/test/.redeven', state_root: '/home/test/.redeven', user_identity: 'test', namespace_id: 'mnt:[host]' },
         inventory_digest: live ? 'a'.repeat(64) : 'b'.repeat(64),
         instances,
-        summary: { automatic: foreignOwner ? 0 : instances.length, confirmed_takeover: foreignOwner ? instances.length : 0, blocked: 0 },
+        summary: { automatic: instances.length, blocked: 0 },
       };
       if (stopOperation) {
         appendLog('stop_runtime', { count: before.instances.length });
         writeState({ ...state, stopped: true, runtime_live: false });
-        const after = { ...before, inventory_digest: 'b'.repeat(64), instances: [], summary: { automatic: 0, confirmed_takeover: 0, blocked: 0 } };
-        process.stdout.write(JSON.stringify({ schema_version: 2, before, after, stopped: before.instances }));
+        const after = { ...before, inventory_digest: 'b'.repeat(64), instances: [], summary: { automatic: 0, blocked: 0 } };
+        process.stdout.write(JSON.stringify({ schema_version: 3, before, after, stopped: before.instances }));
       } else {
         process.stdout.write(JSON.stringify(before));
       }
@@ -686,11 +671,11 @@ if (args.includes('-M') && args.includes('-N')) {
     case 'redeven-ssh-stop': {
       const state = readState();
       const live = state.runtime_live === true;
-      const before = { schema_version: 2, scope: { runtime_root: '/home/test/.redeven', state_root: '/home/test/.redeven', desktop_owner_id: 'desktop-owner-test', user_identity: 'test', namespace_id: 'mnt:[host]' }, inventory_digest: live ? 'a'.repeat(64) : 'b'.repeat(64), instances: live ? [{ pid: 4242, process_started_at_unix_ms: 1000, desktop_owner_id: 'desktop-owner-test', state_root: '/home/test/.redeven', executable_path: '/home/test/.redeven/runtime/managed/bin/redeven', executable_device: 1, executable_inode: 2, namespace_id: 'mnt:[host]', identity_status: 'verified', owner_status: 'current', layout_status: 'current', owner_evidence: 'process_environment', stop_authority: 'automatic' }] : [], summary: { automatic: live ? 1 : 0, confirmed_takeover: 0, blocked: 0 } };
+      const before = { schema_version: 3, scope: { runtime_root: '/home/test/.redeven', state_root: '/home/test/.redeven', user_identity: 'test', namespace_id: 'mnt:[host]' }, inventory_digest: live ? 'a'.repeat(64) : 'b'.repeat(64), instances: live ? [{ pid: 4242, process_started_at_unix_ms: 1000, state_root: '/home/test/.redeven', executable_path: '/home/test/.redeven/runtime/managed/bin/redeven', executable_device: 1, executable_inode: 2, namespace_id: 'mnt:[host]', identity_status: 'verified', layout_status: 'current', stop_authority: 'automatic' }] : [], summary: { automatic: live ? 1 : 0, blocked: 0 } };
       appendLog('stop_runtime', { count: before.instances.length });
       writeState({ ...state, stopped: true, runtime_live: false });
-      const after = { ...before, inventory_digest: 'b'.repeat(64), instances: [], summary: { automatic: 0, confirmed_takeover: 0, blocked: 0 } };
-      process.stdout.write(JSON.stringify({ schema_version: 2, before, after, stopped: before.instances }));
+      const after = { ...before, inventory_digest: 'b'.repeat(64), instances: [], summary: { automatic: 0, blocked: 0 } };
+      process.stdout.write(JSON.stringify({ schema_version: 3, before, after, stopped: before.instances }));
       process.exit(0);
       break;
     }
@@ -725,8 +710,7 @@ async function createFakeSSHFixture(scenario: FakeSSHScenario): Promise<FakeSSHF
       || scenario === 'quick_exit_report'
       || scenario === 'blocked_report'
       || scenario === 'status_blocked_without_socket'
-      || scenario === 'duplicate_current_owner'
-      || scenario === 'foreign_owner',
+      || scenario === 'duplicate_verified_runtime',
     installed_version: 'v1.2.3',
     runtime_live: scenario === 'ready'
       || scenario === 'report_connection_interrupted'
@@ -735,8 +719,7 @@ async function createFakeSSHFixture(scenario: FakeSSHScenario): Promise<FakeSSHF
       || scenario === 'quick_exit_report'
       || scenario === 'blocked_report'
       || scenario === 'status_blocked_without_socket'
-      || scenario === 'duplicate_current_owner'
-      || scenario === 'foreign_owner',
+      || scenario === 'duplicate_verified_runtime',
     runtime_pid: 4242,
     runtime_started_at: 1000,
   }));
@@ -852,7 +835,6 @@ async function startWithFakeSSH(
     sshCredentialScope: fixture.root,
     target: options.target ?? targetFor(strategy),
     runtimeReleaseTag: options.runtimeReleaseTag ?? 'v1.2.3',
-    desktopOwnerID: 'desktop-owner-test',
     sshBinary: fixture.sshBinary,
     sourceRuntimeRoot: options.sourceRuntimeRoot,
     forceRuntimeUpdate: options.forceRuntimeUpdate,
@@ -886,7 +868,6 @@ async function ensureReadyWithFakeSSH(
     sshCredentialScope: fixture.root,
     target: targetFor(strategy),
     runtimeReleaseTag: 'v1.2.3',
-    desktopOwnerID: 'desktop-owner-test',
     sshBinary: fixture.sshBinary,
     tempRoot: fixture.root,
     assetCacheRoot: path.join(fixture.root, 'asset-cache'),
@@ -921,6 +902,22 @@ async function createFakeSourceRuntimeRoot(root: string): Promise<Readonly<{
   await fs.writeFile(path.join(sourceRoot, 'scripts', 'build_assets.sh'), `#!/bin/sh
 set -eu
 printf 'ready\\n' > .assets-built
+`, { mode: 0o755 });
+  await fs.writeFile(path.join(sourceRoot, 'scripts', 'build_runtime_binary.sh'), `#!/bin/sh
+set -eu
+if [ "\${1:-}" = "--check-only" ]; then
+  command -v go >/dev/null
+  exit 0
+fi
+output=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --output) output="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+[ -n "$output" ]
+go build -o "$output" ./cmd/redeven
 `, { mode: 0o755 });
   const fakeGo = path.join(binDir, 'go');
   await fs.writeFile(fakeGo, `#!/usr/bin/env node
@@ -995,7 +992,6 @@ describe('sshRuntime integration', () => {
           code: 'live_process_without_management_socket',
           lock_owner: {
             pid: 4242,
-            desktop_managed: true,
           },
           diagnostics: {
             failure_code: 'management_socket_unreachable',
@@ -1008,7 +1004,6 @@ describe('sshRuntime integration', () => {
         sshCredentialScope: fixture.root,
         target: targetFor('auto'),
         runtimeReleaseTag: 'v1.2.3',
-        desktopOwnerID: 'desktop-owner-test',
         sshBinary: fixture.sshBinary,
         tempRoot: fixture.root,
         assetCacheRoot: path.join(fixture.root, 'asset-cache'),
@@ -1016,7 +1011,7 @@ describe('sshRuntime integration', () => {
       };
       const inventory = await withFakeSSHEnv(fixture, () => inspectManagedSSHRuntimeProcesses(processArgs));
       expect(inventory.instances).toEqual([
-        expect.objectContaining({ pid: 4242, owner_status: 'current', stop_authority: 'automatic' }),
+        expect.objectContaining({ pid: 4242, stop_authority: 'automatic' }),
       ]);
       const stopped = await withFakeSSHEnv(fixture, () => stopManagedSSHRuntimeProcesses(processArgs, inventory));
       expect(stopped.after.instances).toEqual([]);
@@ -1213,7 +1208,7 @@ describe('sshRuntime integration', () => {
     try {
       await expect(startWithFakeSSH(fixture, 'remote_install', {
         runtimeProcessIntent: 'restart',
-      })).rejects.toThrow('managed runtime binary is missing');
+      })).rejects.toThrow('runtime binary is missing');
 
       const events = await readFakeSSHEvents(fixture);
       const eventNames = events.map((event) => event.event);
@@ -1425,28 +1420,8 @@ describe('sshRuntime integration', () => {
     await removeFakeSSHFixture(fixture);
   });
 
-  it('does not stop, activate, or start an SSH update when inventory reports a foreign owner', async () => {
-    const fixture = await createFakeSSHFixture('foreign_owner');
-    try {
-      await expect(startWithFakeSSH(fixture, 'remote_install', {
-        forceRuntimeUpdate: true,
-      })).rejects.toMatchObject({ name: 'RuntimeProcessTakeoverRequiredError' });
-
-      const events = await readFakeSSHEvents(fixture);
-      const eventNames = events.map((event) => event.event);
-      expect(eventNames).toContain('remote_install');
-      expect(eventNames).not.toContain('stop_runtime');
-      expect(eventNames).not.toContain('activate_runtime');
-      expect(eventNames).not.toContain('start_runtime');
-      const state = JSON.parse(await fs.readFile(fixture.statePath, 'utf8')) as { installed_version?: string };
-      expect(state.installed_version).toBe('v1.2.3');
-    } finally {
-      await removeFakeSSHFixture(fixture);
-    }
-  });
-
-  it('keeps Start observational when more than one current-owner SSH runtime is verified', async () => {
-    const fixture = await createFakeSSHFixture('duplicate_current_owner');
+  it('keeps Start observational when more than one verified SSH runtime is verified', async () => {
+    const fixture = await createFakeSSHFixture('duplicate_verified_runtime');
     try {
       await expect(startWithFakeSSH(fixture, 'auto')).rejects.toMatchObject({
         name: 'DesktopSSHRuntimeMaintenanceRequiredError',
@@ -1531,7 +1506,6 @@ describe('sshRuntime integration', () => {
           sshCredentialScope: fixture.root,
           target: targetFor('desktop_upload'),
           runtimeReleaseTag: 'v1.2.3',
-          desktopOwnerID: 'desktop-owner-test',
           sshBinary: fixture.sshBinary,
           tempRoot: fixture.root,
           assetCacheRoot: sharedCacheRoot,

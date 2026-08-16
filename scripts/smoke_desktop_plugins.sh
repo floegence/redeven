@@ -284,7 +284,7 @@ run_attach() {
     return 1
   }
   running_root=$(cd -- "$electron_cwd/.." >/dev/null 2>&1 && pwd)
-  local electron_command runtime_command startup_report state_root owner_file user_data_root
+  local electron_command runtime_command startup_report state_root user_data_root
   electron_command=$(ps -p "$electron_pid" -o command=)
   runtime_command=$(ps -p "$runtime_pid" -o command=)
   [[ "$electron_command" == "$electron_cwd"/node_modules/*/Electron.app/Contents/MacOS/Electron* ]] || { echo "CDP listener is not this checkout's dev Electron" >&2; return 1; }
@@ -292,11 +292,10 @@ run_attach() {
   startup_report=$(node -e 'const m=process.argv[1].match(/(?:^| )--startup-report-file ([^ ]+)/);if(m)process.stdout.write(m[1])' "$runtime_command")
   state_root=$(node -e 'const m=process.argv[1].match(/(?:^| )--state-root ([^ ]+)/);if(m)process.stdout.write(m[1])' "$runtime_command")
   [[ -f "$startup_report" && -d "$state_root" ]] || { echo "runtime startup report or state root is unavailable" >&2; return 1; }
-  owner_file=${REDEVEN_PLUGIN_SMOKE_ATTACH_OWNER_FILE:-$HOME/Library/Application Support/@floegence/redeven-desktop/desktop-runtime-owner.json}
-  [[ -f "$owner_file" ]] || { echo "Desktop runtime owner file is unavailable" >&2; return 1; }
-  user_data_root=$(dirname "$owner_file")
+  user_data_root=${REDEVEN_PLUGIN_SMOKE_ATTACH_USER_DATA_ROOT:-${REDEVEN_DESKTOP_USER_DATA_ROOT:-}}
+  [[ -n "$user_data_root" && -d "$user_data_root" ]] || { echo "Desktop user-data root is unavailable; set REDEVEN_PLUGIN_SMOKE_ATTACH_USER_DATA_ROOT" >&2; return 1; }
 
-  local smoke_commit running_commit runtime_meta runtime_status runtime_commit runtime_report_pid runtime_report_state runtime_open_readiness owner_id report_owner
+  local smoke_commit running_commit runtime_meta runtime_status runtime_commit runtime_report_pid runtime_report_state runtime_open_readiness
   smoke_commit=$(git -C "$ROOT_DIR" rev-parse HEAD)
   running_commit=$(git -C "$running_root" rev-parse HEAD)
   runtime_meta=$(node - "$startup_report" <<'NODE'
@@ -306,7 +305,6 @@ console.log(JSON.stringify({
   status: report.status,
   pid: report.pid,
   state_dir: report.state_dir,
-  desktop_owner_id: report.desktop_owner_id,
   runtime_commit: report.runtime_service?.runtime_commit,
   runtime_version: report.runtime_service?.runtime_version,
   open_readiness: report.runtime_service?.open_readiness?.state,
@@ -318,9 +316,7 @@ NODE
   runtime_report_pid=$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).pid||""))' "$runtime_meta")
   runtime_report_state=$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).state_dir||""))' "$runtime_meta")
   runtime_open_readiness=$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).open_readiness||""))' "$runtime_meta")
-  report_owner=$(node -e 'process.stdout.write(String(JSON.parse(process.argv[1]).desktop_owner_id||""))' "$runtime_meta")
-  owner_id=$(node -e 'const f=require("node:fs");process.stdout.write(String(JSON.parse(f.readFileSync(process.argv[1])).owner_id||""))' "$owner_file")
-  [[ "$runtime_report_pid" == "$runtime_pid" && "$runtime_report_state" == "$state_root/local-environment" && -n "$owner_id" && "$owner_id" == "$report_owner" ]] || {
+  [[ "$runtime_report_pid" == "$runtime_pid" && "$runtime_report_state" == "$state_root/local-environment" ]] || {
     echo "runtime startup provenance does not match the listeners" >&2
     return 1
   }
@@ -334,14 +330,14 @@ NODE
 
   local config="$REPORT_ROOT/attach-config.json" output="$REPORT_ROOT/attach.json" versions
   versions=$(node -e 'const p=require(process.argv[1]);console.log(JSON.stringify({contracts:p.dependencies["@floegence/redevplugin-contracts"],ui:p.dependencies["@floegence/redevplugin-ui"]}))' "$running_root/internal/envapp/ui_src/package.json")
-  node - "$config" "$SMOKE_ROOT" "$state_root" "$user_data_root" "$REPORT_ROOT" "$running_root" "$LOCAL_UI_PORT" "$CDP_PORT" "$INSPECTOR_PORT" "$owner_id" "$running_commit" "$runtime_commit" "$electron_pid" "$runtime_pid" "$output" "$versions" <<'NODE'
+  node - "$config" "$SMOKE_ROOT" "$state_root" "$user_data_root" "$REPORT_ROOT" "$running_root" "$LOCAL_UI_PORT" "$CDP_PORT" "$INSPECTOR_PORT" "$running_commit" "$runtime_commit" "$electron_pid" "$runtime_pid" "$output" "$versions" <<'NODE'
 const fs = require('node:fs');
-const [file, root, stateRoot, userDataRoot, reportRoot, runningRoot, localUIPort, cdpPort, inspectorPort, ownerID, runningCommit, runtimeCommit, electronPID, runtimePID, output, versions] = process.argv.slice(2);
+const [file, root, stateRoot, userDataRoot, reportRoot, runningRoot, localUIPort, cdpPort, inspectorPort, runningCommit, runtimeCommit, electronPID, runtimePID, output, versions] = process.argv.slice(2);
 fs.writeFileSync(file, `${JSON.stringify({
   mode: 'attach', phase: 'attached', root, stateRoot, userDataRoot, cacheRoot: null, tempRoot: null,
   reportRoot, runningRoot, playwrightRoot: `${runningRoot}/internal/envapp/ui_src/node_modules`,
   localUIPort: Number(localUIPort), cdpPort: Number(cdpPort), inspectorPort: Number(inspectorPort),
-  ownerID, commit: runningCommit, runningCommit, runtimeCommit,
+  commit: runningCommit, runningCommit, runtimeCommit,
   electronPID: Number(electronPID), runtimePID: Number(runtimePID),
   pids: [Number(electronPID), Number(runtimePID)], output, dependencies: JSON.parse(versions),
 }, null, 2)}\n`);
@@ -548,7 +544,6 @@ run_phase() {
   LAUNCH_PID=$!
   wait_cdp
   capture_pids
-  owner_id=$(node -e 'const f=require("node:fs");const p=process.argv[1];console.log(f.existsSync(p)?JSON.parse(f.readFileSync(p)).owner_id:"")' "$USER_DATA_ROOT/desktop-runtime-owner.json")
   commit=$(git -C "$ROOT_DIR" rev-parse HEAD)
   versions=$(node -e 'const p=require(process.argv[1]);console.log(JSON.stringify({contracts:p.dependencies["@floegence/redevplugin-contracts"],ui:p.dependencies["@floegence/redevplugin-ui"]}))' "$ROOT_DIR/internal/envapp/ui_src/package.json")
   pids=$(node -e 'const f=require("node:fs");console.log(JSON.stringify(f.readFileSync(process.argv[1],"utf8").trim().split(/\s+/).filter(Boolean).map(Number)))' "$PID_FILE")
@@ -561,7 +556,7 @@ run_phase() {
   node - "$config" <<JSON
 const fs = require('node:fs');
 const file = process.argv[2];
-fs.writeFileSync(file, JSON.stringify({phase:"$phase",root:"$SMOKE_ROOT",stateRoot:"$STATE_ROOT",reusedTaskState:$([[ "$REUSE_SEED_STATE" == "1" ]] && echo true || echo false),seed:$seed_meta,userDataRoot:"$USER_DATA_ROOT",cacheRoot:"$CACHE_ROOT",tempRoot:"$TEMP_ROOT",reportRoot:"$REPORT_ROOT",playwrightRoot:"$ROOT_DIR/internal/envapp/ui_src/node_modules",localUIPort:$LOCAL_UI_PORT,cdpPort:$CDP_PORT,inspectorPort:$INSPECTOR_PORT,ownerID:"$owner_id",commit:"$commit",dependencies:$versions,pids:$pids,output:"$output",initialOutput:"$REPORT_ROOT/initial.json",externalLocalUIURL:"http://127.0.0.1:$LOCAL_UI_PORT/",ioPackagePath:"$LINUX_TARGET_ROOT/io-smoke.redevplugin",fixturePorts:$FIXTURE_PORTS_JSON,linuxTarget:JSON.parse(require('node:fs').readFileSync("$LINUX_REPORT"))}, null, 2)+"\n");
+fs.writeFileSync(file, JSON.stringify({phase:"$phase",root:"$SMOKE_ROOT",stateRoot:"$STATE_ROOT",reusedTaskState:$([[ "$REUSE_SEED_STATE" == "1" ]] && echo true || echo false),seed:$seed_meta,userDataRoot:"$USER_DATA_ROOT",cacheRoot:"$CACHE_ROOT",tempRoot:"$TEMP_ROOT",reportRoot:"$REPORT_ROOT",playwrightRoot:"$ROOT_DIR/internal/envapp/ui_src/node_modules",localUIPort:$LOCAL_UI_PORT,cdpPort:$CDP_PORT,inspectorPort:$INSPECTOR_PORT,commit:"$commit",dependencies:$versions,pids:$pids,output:"$output",initialOutput:"$REPORT_ROOT/initial.json",externalLocalUIURL:"http://127.0.0.1:$LOCAL_UI_PORT/",ioPackagePath:"$LINUX_TARGET_ROOT/io-smoke.redevplugin",fixturePorts:$FIXTURE_PORTS_JSON,linuxTarget:JSON.parse(require('node:fs').readFileSync("$LINUX_REPORT"))}, null, 2)+"\n");
 JSON
   node "$ROOT_DIR/scripts/smoke_desktop_plugins.mjs" "$config"
   stop_owned

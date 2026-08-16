@@ -41,15 +41,12 @@ type RuntimeInstanceIdentity struct {
 	RuntimeVersion  string `json:"runtime_version,omitempty"`
 	RuntimeCommit   string `json:"runtime_commit,omitempty"`
 	BinaryPath      string `json:"binary_path,omitempty"`
-	DesktopManaged  bool   `json:"desktop_managed"`
-	DesktopOwnerID  string `json:"desktop_owner_id,omitempty"`
 }
 
 type RuntimeControlEndpoint struct {
 	ProtocolVersion string `json:"protocol_version"`
 	BaseURL         string `json:"base_url"`
 	Token           string `json:"token"`
-	DesktopOwnerID  string `json:"desktop_owner_id"`
 	ExpiresAtUnixMS int64  `json:"expires_at_unix_ms,omitempty"`
 }
 

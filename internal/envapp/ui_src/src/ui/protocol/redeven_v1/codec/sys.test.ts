@@ -11,10 +11,8 @@ describe('sys codec', () => {
         runtime_version: 'v1.4.2',
         runtime_commit: 'abc123',
         runtime_build_time: '2026-05-02T00:00:00Z',
-        protocol_version: 'redeven-runtime-v1',
+        protocol_version: 'redeven-runtime-v2',
         compatibility_epoch: 1,
-        service_owner: 'desktop',
-        desktop_managed: true,
         effective_run_mode: 'hybrid',
         remote_enabled: true,
         compatibility: 'restart_recommended',
@@ -36,11 +34,11 @@ describe('sys codec', () => {
         capabilities: {
           desktop_model_source: {
             supported: true,
-            bind_method: 'runtime_control_v1',
+            bind_method: 'runtime_control_v2',
           },
           provider_link: {
             supported: true,
-            bind_method: 'runtime_control_v1',
+            bind_method: 'runtime_control_v2',
           },
         },
         bindings: {
@@ -71,10 +69,8 @@ describe('sys codec', () => {
         runtimeVersion: 'v1.4.2',
         runtimeCommit: 'abc123',
         runtimeBuildTime: '2026-05-02T00:00:00Z',
-        protocolVersion: 'redeven-runtime-v1',
+        protocolVersion: 'redeven-runtime-v2',
         compatibilityEpoch: 1,
-        serviceOwner: 'desktop',
-        desktopManaged: true,
         effectiveRunMode: 'hybrid',
         remoteEnabled: true,
         compatibility: 'restart_recommended',
@@ -96,11 +92,11 @@ describe('sys codec', () => {
         capabilities: {
           desktopModelSource: {
             supported: true,
-            bindMethod: 'runtime_control_v1',
+            bindMethod: 'runtime_control_v2',
           },
           providerLink: {
             supported: true,
-            bindMethod: 'runtime_control_v1',
+            bindMethod: 'runtime_control_v2',
           },
         },
         bindings: {
@@ -131,8 +127,6 @@ describe('sys codec', () => {
     expect(fromWireSysPingResponse({
       server_time_ms: 0,
       runtime_service: {
-        desktop_managed: true,
-        service_owner: 'surprise-owner',
         compatibility: 'surprise-state',
         active_workload: {
           terminal_count: -1,
@@ -145,10 +139,8 @@ describe('sys codec', () => {
       runtimeVersion: undefined,
       runtimeCommit: undefined,
       runtimeBuildTime: undefined,
-      protocolVersion: 'redeven-runtime-v1',
+      protocolVersion: 'redeven-runtime-v2',
       compatibilityEpoch: undefined,
-      serviceOwner: 'desktop',
-      desktopManaged: true,
       effectiveRunMode: undefined,
       remoteEnabled: false,
       compatibility: 'unknown',

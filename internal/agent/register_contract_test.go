@@ -13,7 +13,6 @@ func TestRegisterReqJSON_IncludesRuntimeMetaFields(t *testing.T) {
 		OS:               "darwin",
 		Arch:             "arm64",
 		Hostname:         "desktop-host",
-		DesktopManaged:   true,
 		EffectiveRunMode: "hybrid",
 		RemoteEnabled:    true,
 	})
@@ -26,8 +25,8 @@ func TestRegisterReqJSON_IncludesRuntimeMetaFields(t *testing.T) {
 		t.Fatalf("json.Unmarshal() error = %v", err)
 	}
 
-	if out["desktop_managed"] != true {
-		t.Fatalf("desktop_managed = %#v", out["desktop_managed"])
+	if _, ok := out["desktop_managed"]; ok {
+		t.Fatalf("desktop_managed must not be serialized: %#v", out["desktop_managed"])
 	}
 	if out["effective_run_mode"] != "hybrid" {
 		t.Fatalf("effective_run_mode = %#v", out["effective_run_mode"])

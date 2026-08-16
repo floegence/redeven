@@ -45,7 +45,6 @@ export type AgentLatestVersion = {
   fetched_at_ms?: number;
   cache_ttl_ms?: number;
   message?: string;
-  desktop_managed?: boolean;
   effective_run_mode?: 'local' | 'hybrid' | 'remote';
   remote_enabled?: boolean;
 };
@@ -54,7 +53,6 @@ export type LocalRuntimeInfo = {
   mode: 'local';
   env_public_id: string;
   direct_ws_url?: string;
-  desktop_managed?: boolean;
   effective_run_mode?: 'local' | 'hybrid' | 'remote';
   remote_enabled?: boolean;
   runtime_service?: unknown;
@@ -372,7 +370,6 @@ function normalizeLocalRuntimeInfo(raw: unknown): LocalRuntimeInfo {
     mode,
     env_public_id: envPublicID,
     direct_ws_url: asString(data.direct_ws_url) || buildLocalDirectWSURLBestEffort(),
-    desktop_managed: Boolean(data.desktop_managed),
     effective_run_mode: effectiveRunMode,
     remote_enabled: typeof data.remote_enabled === 'boolean' ? data.remote_enabled : undefined,
     runtime_service: data.runtime_service,

@@ -139,7 +139,6 @@ func newProviderLinkTestAgent(t *testing.T, cfgPath string, cfg *config.Config) 
 		ConfigPath:       cfgPath,
 		StateRoot:        stateRoot,
 		LocalUIEnabled:   true,
-		DesktopManaged:   true,
 		EffectiveRunMode: "desktop",
 		Version:          "dev",
 	})

@@ -19,8 +19,14 @@ export const DESKTOP_PROVIDER_CARD_FORBIDDEN_ACTIONS = [
   'disconnect_provider_runtime',
 ] as const satisfies readonly DesktopLauncherActionKind[];
 
-export const DESKTOP_MANAGED_RUNTIME_ENTRY_KINDS = [
+export const DESKTOP_RUNTIME_MANAGEMENT_ENTRY_KINDS = [
   'local_environment',
+  'ssh_environment',
+] as const satisfies readonly DesktopEnvironmentEntryKind[];
+
+export const DESKTOP_RUNTIME_MANAGEMENT_INITIATOR_KINDS = [
+  'local_environment',
+  'provider_environment',
   'ssh_environment',
 ] as const satisfies readonly DesktopEnvironmentEntryKind[];
 
@@ -38,18 +44,17 @@ function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
 
-// IMPORTANT: Provider Environment cards are provider-tunnel access surfaces only.
-// Runtime lifecycle and provider-link management belong exclusively to Local/SSH
-// runtime cards so a user never grants provider control from the remote access card.
-// A saved provider link may auto-restore during runtime startup, but that belongs
-// to the managed runtime lifecycle and must not become a Provider card action.
+// IMPORTANT: Provider Open remains a provider-tunnel access path. Provider Runtime
+// management is a separate authorization path and may execute only through the
+// exact Gateway card selected by the user; it must not select another card,
+// borrow that card's credentials, or use the public Environment URL as fallback.
 export function desktopEnvironmentManagementSurface(
   kind: DesktopEnvironmentEntryKind,
 ): DesktopEnvironmentManagementSurface {
   if (kind === 'provider_environment') {
     return 'provider_card';
   }
-  if (desktopEntryKindOwnsRuntimeManagement(kind)) {
+  if (desktopEntryKindSupportsRuntimeManagement(kind)) {
     return 'managed_runtime_card';
   }
   return 'unmanaged_environment_card';
@@ -63,8 +68,12 @@ export function desktopProviderCardAllowsAction(action: DesktopLauncherActionKin
   return !DESKTOP_PROVIDER_CARD_FORBIDDEN_ACTIONS.includes(action as (typeof DESKTOP_PROVIDER_CARD_FORBIDDEN_ACTIONS)[number]);
 }
 
-export function desktopEntryKindOwnsRuntimeManagement(kind: DesktopEnvironmentEntryKind): boolean {
-  return DESKTOP_MANAGED_RUNTIME_ENTRY_KINDS.includes(kind as (typeof DESKTOP_MANAGED_RUNTIME_ENTRY_KINDS)[number]);
+export function desktopEntryKindSupportsRuntimeManagement(kind: DesktopEnvironmentEntryKind): boolean {
+  return DESKTOP_RUNTIME_MANAGEMENT_ENTRY_KINDS.includes(kind as (typeof DESKTOP_RUNTIME_MANAGEMENT_ENTRY_KINDS)[number]);
+}
+
+export function desktopEntryKindCanInitiateRuntimeManagement(kind: DesktopEnvironmentEntryKind): boolean {
+  return DESKTOP_RUNTIME_MANAGEMENT_INITIATOR_KINDS.includes(kind as (typeof DESKTOP_RUNTIME_MANAGEMENT_INITIATOR_KINDS)[number]);
 }
 
 // IMPORTANT: Provider-link requests are runtime-target-first and must name the

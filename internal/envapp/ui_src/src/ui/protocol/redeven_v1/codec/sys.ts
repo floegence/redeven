@@ -2,7 +2,6 @@ import type {
   RuntimeServiceBindingState,
   RuntimeServiceCompatibility,
   RuntimeServiceOpenReadiness,
-  RuntimeServiceOwner,
   RuntimeServiceProviderLinkBinding,
   RuntimeServiceProviderLinkState,
   RuntimeServiceSnapshot,
@@ -36,12 +35,6 @@ function fromWireSysMaintenanceSnapshot(resp: wire_sys_ping_resp['maintenance'])
   };
 }
 
-function normalizeRuntimeServiceOwner(value: unknown, desktopManaged: boolean): RuntimeServiceOwner {
-  const owner = String(value ?? '').trim();
-  if (owner === 'desktop' || owner === 'external' || owner === 'unknown') return owner;
-  return desktopManaged ? 'desktop' : 'unknown';
-}
-
 function normalizeRuntimeServiceCompatibility(value: unknown): RuntimeServiceCompatibility {
   const compatibility = String(value ?? '').trim();
   switch (compatibility) {
@@ -50,7 +43,6 @@ function normalizeRuntimeServiceCompatibility(value: unknown): RuntimeServiceCom
     case 'restart_recommended':
     case 'update_required':
     case 'desktop_update_required':
-    case 'managed_elsewhere':
     case 'unknown':
       return compatibility;
     default:
@@ -152,15 +144,12 @@ function fromWireRuntimeServiceSnapshot(resp: wire_sys_ping_resp['runtime_servic
   const bindings = resp.bindings ?? {};
   const desktopModelSourceBinding = bindings.desktop_model_source ?? {};
   const providerLinkBinding = bindings.provider_link ?? {};
-  const desktopManaged = resp.desktop_managed === true;
   return {
     runtimeVersion: resp.runtime_version ? String(resp.runtime_version) : undefined,
     runtimeCommit: resp.runtime_commit ? String(resp.runtime_commit) : undefined,
     runtimeBuildTime: resp.runtime_build_time ? String(resp.runtime_build_time) : undefined,
-    protocolVersion: resp.protocol_version ? String(resp.protocol_version) : 'redeven-runtime-v1',
+    protocolVersion: resp.protocol_version ? String(resp.protocol_version) : 'redeven-runtime-v2',
     compatibilityEpoch: normalizeCount(resp.compatibility_epoch) || undefined,
-    serviceOwner: normalizeRuntimeServiceOwner(resp.service_owner, desktopManaged),
-    desktopManaged,
     effectiveRunMode: resp.effective_run_mode ? String(resp.effective_run_mode) : undefined,
     remoteEnabled: resp.remote_enabled === true,
     compatibility: normalizeRuntimeServiceCompatibility(resp.compatibility),
@@ -179,7 +168,7 @@ function fromWireRuntimeServiceSnapshot(resp: wire_sys_ping_resp['runtime_servic
       desktopModelSource: {
         supported: desktopModelSourceSupported,
         bindMethod: desktopModelSourceSupported
-          ? (String(desktopModelSourceCapability.bind_method ?? '').trim() || 'runtime_control_v1')
+          ? (String(desktopModelSourceCapability.bind_method ?? '').trim() || 'runtime_control_v2')
           : undefined,
         reasonCode: String(desktopModelSourceCapability.reason_code ?? '').trim() || undefined,
         message: String(desktopModelSourceCapability.message ?? '').trim() || undefined,
@@ -187,7 +176,7 @@ function fromWireRuntimeServiceSnapshot(resp: wire_sys_ping_resp['runtime_servic
       providerLink: {
         supported: providerLinkSupported,
         bindMethod: providerLinkSupported
-          ? (String(providerLinkCapability.bind_method ?? '').trim() || 'runtime_control_v1')
+          ? (String(providerLinkCapability.bind_method ?? '').trim() || 'runtime_control_v2')
           : undefined,
         reasonCode: String(providerLinkCapability.reason_code ?? '').trim() || undefined,
         message: String(providerLinkCapability.message ?? '').trim() || undefined,

@@ -16,8 +16,6 @@ import (
 	"github.com/floegence/redeven/internal/runtimemanagement"
 )
 
-var errDesktopRuntimeStopOwnerExternal = errors.New("runtime is not Desktop-managed")
-
 type repeatedStringFlag []string
 
 func (f *repeatedStringFlag) String() string {
@@ -53,7 +51,6 @@ func writeRuntimeProcessJSONError(out io.Writer, err error) {
 func runtimeProcessInventoryOptions(
 	stateRoot string,
 	runtimeRoot string,
-	desktopOwnerID string,
 	currentExecutables []string,
 ) (runtimemanagement.RuntimeProcessInventoryOptions, error) {
 	resolvedStateRoot, err := config.ResolveStateRoot(stateRoot)
@@ -67,7 +64,6 @@ func runtimeProcessInventoryOptions(
 	return runtimemanagement.RuntimeProcessInventoryOptions{
 		RuntimeRoot:        resolvedRuntimeRoot,
 		StateRoot:          resolvedStateRoot,
-		DesktopOwnerID:     strings.TrimSpace(desktopOwnerID),
 		CurrentExecutables: append([]string(nil), currentExecutables...),
 	}, nil
 }
@@ -112,7 +108,6 @@ func (c *cli) desktopRuntimeInventoryCmd(args []string) int {
 	fs := newCLIFlagSet("desktop-runtime-inventory")
 	stateRoot := fs.String("state-root", "", "Current Runtime state root.")
 	runtimeRoot := fs.String("runtime-root", "", "Managed runtime package root.")
-	desktopOwnerID := fs.String("desktop-owner-id", "", "Expected Desktop owner identity.")
 	var currentExecutables repeatedStringFlag
 	fs.Var(&currentExecutables, "current-executable", "Expected current runtime executable; repeatable.")
 	if err := parseCommandFlags(fs, args); err != nil {
@@ -131,7 +126,6 @@ func (c *cli) desktopRuntimeInventoryCmd(args []string) int {
 	options, err := runtimeProcessInventoryOptions(
 		*stateRoot,
 		*runtimeRoot,
-		*desktopOwnerID,
 		currentExecutables,
 	)
 	if err != nil {
@@ -157,8 +151,6 @@ func (c *cli) desktopRuntimeStopCmd(args []string) int {
 	gracePeriod := fs.Duration("grace-period", 5*time.Second, "Time to wait after requesting runtime shutdown.")
 	allMatching := fs.Bool("all-matching", false, "Stop every verified matching Runtime instance.")
 	runtimeRoot := fs.String("runtime-root", "", "Managed runtime package root.")
-	desktopOwnerID := fs.String("desktop-owner-id", "", "Expected Desktop owner identity.")
-	reconciliationMode := fs.String("reconciliation-mode", string(runtimemanagement.RuntimeProcessReconciliationAutomatic), "Process reconciliation mode: automatic or confirmed_takeover.")
 	var currentExecutables repeatedStringFlag
 	fs.Var(&currentExecutables, "current-executable", "Expected current runtime executable; repeatable.")
 	expectedDigest := fs.String("expected-inventory-digest", "", "Expected runtime process inventory digest.")
@@ -180,15 +172,10 @@ func (c *cli) desktopRuntimeStopCmd(args []string) int {
 		options, err := runtimeProcessInventoryOptions(
 			*stateRoot,
 			*runtimeRoot,
-			*desktopOwnerID,
 			currentExecutables,
 		)
 		if err == nil && strings.TrimSpace(*expectedDigest) == "" {
 			err = errors.New("--expected-inventory-digest is required with --all-matching")
-		}
-		mode := runtimemanagement.RuntimeProcessReconciliationMode(strings.TrimSpace(*reconciliationMode))
-		if err == nil && mode != runtimemanagement.RuntimeProcessReconciliationAutomatic && mode != runtimemanagement.RuntimeProcessReconciliationConfirmedTakeover {
-			err = errors.New("--reconciliation-mode must be automatic or confirmed_takeover")
 		}
 		if err != nil {
 			if *jsonOut {
@@ -198,12 +185,11 @@ func (c *cli) desktopRuntimeStopCmd(args []string) int {
 			}
 			return 1
 		}
-		result, stopErr := runtimemanagement.StopRuntimeProcessesWithMode(
+		result, stopErr := runtimemanagement.StopRuntimeProcesses(
 			context.Background(),
 			options,
 			*expectedDigest,
 			*gracePeriod,
-			mode,
 		)
 		if stopErr != nil {
 			if *jsonOut {
@@ -221,10 +207,6 @@ func (c *cli) desktopRuntimeStopCmd(args []string) int {
 		}
 		return 0
 	}
-	if strings.TrimSpace(*reconciliationMode) != string(runtimemanagement.RuntimeProcessReconciliationAutomatic) {
-		writeErrorWithHelp(c.stderr, "--reconciliation-mode requires --all-matching", nil, desktopRuntimeStopHelpText())
-		return 2
-	}
 	if err := stopDesktopRuntime(*stateRoot, *probeTimeout, *gracePeriod); err != nil {
 		fmt.Fprintf(c.stderr, "desktop-runtime-stop failed: %v\n", err)
 		return 1
@@ -236,17 +218,6 @@ func stopDesktopRuntime(stateRoot string, probeTimeout time.Duration, gracePerio
 	status, err := loadDesktopRuntimeStatus(stateRoot, probeTimeout)
 	if err != nil {
 		return err
-	}
-	return stopDesktopRuntimeStatus(stateRoot, probeTimeout, gracePeriod, status)
-}
-
-func stopDesktopManagedRuntime(stateRoot string, probeTimeout time.Duration, gracePeriod time.Duration) error {
-	status, err := loadDesktopRuntimeStatus(stateRoot, probeTimeout)
-	if err != nil {
-		return err
-	}
-	if status.State != runtimemanagement.AttachStateNotRunning && !status.Identity.DesktopManaged {
-		return errDesktopRuntimeStopOwnerExternal
 	}
 	return stopDesktopRuntimeStatus(stateRoot, probeTimeout, gracePeriod, status)
 }
@@ -405,8 +376,6 @@ func desktopLaunchReportFromRuntimeStatus(state runtimemanagement.RuntimeAttachS
 		Exposure:                 endpoint.Exposure,
 		EffectiveRunMode:         state.RuntimeService.EffectiveRunMode,
 		RemoteEnabled:            state.RuntimeService.RemoteEnabled,
-		DesktopManaged:           state.Identity.DesktopManaged,
-		DesktopOwnerID:           state.Identity.DesktopOwnerID,
 		ProviderOrigin:           state.RuntimeService.Bindings.ProviderLink.ProviderOrigin,
 		ControlplaneBaseURL:      state.RuntimeService.Bindings.ProviderLink.AccessPointOrigin,
 		ControlplaneProviderID:   state.RuntimeService.Bindings.ProviderLink.ProviderID,
@@ -430,8 +399,6 @@ func lockOwnerFromRuntimeIdentity(identity runtimemanagement.RuntimeInstanceIden
 		RuntimeVersion:  identity.RuntimeVersion,
 		RuntimeCommit:   identity.RuntimeCommit,
 		BinaryPath:      identity.BinaryPath,
-		DesktopManaged:  identity.DesktopManaged,
-		DesktopOwnerID:  identity.DesktopOwnerID,
 		StateRoot:       identity.StateRoot,
 		StateDir:        identity.StateDir,
 	}
@@ -445,7 +412,6 @@ func runtimeControlEndpointFromRuntimeStatus(endpoint *runtimemanagement.Runtime
 		ProtocolVersion: endpoint.ProtocolVersion,
 		BaseURL:         endpoint.BaseURL,
 		Token:           endpoint.Token,
-		DesktopOwnerID:  endpoint.DesktopOwnerID,
 		ExpiresAtUnixMS: endpoint.ExpiresAtUnixMS,
 	}
 }

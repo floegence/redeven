@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 
 import {
   DESKTOP_AUTO_START_RUNTIME_ENV_NAME,
-  DESKTOP_OWNER_ID_ENV_NAME,
   RUNTIME_SECRET_ENV_NAMES,
   buildDesktopRuntimeArgs,
   buildDesktopRuntimeEnvironment,
@@ -25,7 +24,7 @@ describe('desktopLaunch', () => {
     expect(DESKTOP_AUTO_START_RUNTIME_ENV_NAME).toBe('REDEVEN_DESKTOP_AUTO_START_RUNTIME');
   });
 
-  it('builds desktop-managed args from persistent local settings', () => {
+  it('builds desktop-mode args from persistent local settings', () => {
     const environment = testLocalEnvironment({
       access: testLocalAccess({
         local_ui_bind: '0.0.0.0:24000',
@@ -39,7 +38,6 @@ describe('desktopLaunch', () => {
       'run',
       '--mode',
       'desktop',
-      '--desktop-managed',
       '--presentation',
       'machine',
       '--local-ui-bind',
@@ -102,7 +100,6 @@ describe('desktopLaunch', () => {
       environment,
       { HOME: '/Users/tester' },
       {
-        desktopOwnerID: 'desktop-owner-1',
         bootstrap: {
           kind: 'bootstrap_ticket',
           provider_origin: 'https://redeven.test',
@@ -116,7 +113,6 @@ describe('desktopLaunch', () => {
       'run',
       '--mode',
       'desktop',
-      '--desktop-managed',
       '--presentation',
       'machine',
       '--local-ui-bind',
@@ -141,7 +137,6 @@ describe('desktopLaunch', () => {
     for (const name of RUNTIME_SECRET_ENV_NAMES) {
       expect(plan.env[name]).toBeUndefined();
     }
-    expect(plan.env[DESKTOP_OWNER_ID_ENV_NAME]).toBe('desktop-owner-1');
     expect(plan.state_layout).toEqual(expect.objectContaining({
       configPath: '/Users/tester/.redeven/local-environment/config.json',
       stateDir: '/Users/tester/.redeven/local-environment',
@@ -159,11 +154,8 @@ describe('desktopLaunch', () => {
 
     const env = buildDesktopRuntimeEnvironment(environment, {
       HOME: '/Users/tester',
-    }, {
-      desktopOwnerID: 'desktop-owner-1',
     });
 
-    expect(env[DESKTOP_OWNER_ID_ENV_NAME]).toBe('desktop-owner-1');
     for (const name of RUNTIME_SECRET_ENV_NAMES) {
       expect(env[name]).toBeUndefined();
     }
@@ -183,7 +175,6 @@ describe('desktopLaunch', () => {
       'run',
       '--mode',
       'desktop',
-      '--desktop-managed',
       '--presentation',
       'machine',
       '--local-ui-bind',
@@ -194,7 +185,7 @@ describe('desktopLaunch', () => {
     ]);
   });
 
-  it('removes every stale runtime secret and Desktop owner env vars when unused', () => {
+  it('removes every stale runtime secret when unused', () => {
     const environment = testLocalEnvironment({
       access: testLocalAccess({
         local_ui_bind: '127.0.0.1:0',
@@ -206,13 +197,11 @@ describe('desktopLaunch', () => {
       REDEVEN_LOCAL_UI_PASSWORD: 'old-password',
       REDEVEN_BOOTSTRAP_TICKET: 'old-ticket',
       REDEVEN_DESKTOP_BOOTSTRAP_TICKET: 'legacy-ticket',
-      [DESKTOP_OWNER_ID_ENV_NAME]: 'old-owner',
     });
 
     for (const name of RUNTIME_SECRET_ENV_NAMES) {
       expect(env[name]).toBeUndefined();
     }
-    expect(env[DESKTOP_OWNER_ID_ENV_NAME]).toBeUndefined();
     expect(env.HOME).toBe('/Users/tester');
   });
 
@@ -228,7 +217,6 @@ describe('desktopLaunch', () => {
       'run',
       '--mode',
       'desktop',
-      '--desktop-managed',
       '--presentation',
       'machine',
       '--local-ui-bind',

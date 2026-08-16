@@ -18,7 +18,6 @@ export type DesktopProviderRuntimeLinkPlanState =
   | 'provider_environment_occupied'
   | 'linked_elsewhere'
   | 'blocked_active_work'
-  | 'blocked_owner_mismatch'
   | 'blocked_runtime';
 
 export type DesktopProviderRuntimeLinkPlan = Readonly<{
@@ -69,8 +68,6 @@ function planMessage(
       return `${runtimeLabel} is connected to another provider Environment. Disconnect it before connecting this provider.`;
     case 'blocked_active_work':
       return `${runtimeLabel} has active provider work. Disconnect or finish that work before changing provider links.`;
-    case 'blocked_owner_mismatch':
-      return `${runtimeLabel} is owned by another Desktop instance. Manage it from the owning Desktop.`;
     case 'blocked_runtime':
       return `${runtimeLabel} cannot accept provider linking in its current state.`;
   }
@@ -93,9 +90,6 @@ export function buildDesktopProviderRuntimeLinkPlan(
     }
     if (runtimeTarget.runtime_control_status.state === 'missing') {
       return 'runtime_control_missing';
-    }
-    if (runtimeTarget.runtime_control_status.state === 'owner_mismatch') {
-      return 'blocked_owner_mismatch';
     }
     if (!runtimeServiceSupportsProviderLink(runtimeTarget.runtime_service)) {
       return 'provider_link_unsupported';

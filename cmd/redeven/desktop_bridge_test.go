@@ -61,7 +61,7 @@ func TestDesktopBridgeKeepsStdoutProtocolPure(t *testing.T) {
 	trustedBridgeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/local/runtime/health" {
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"data":{"status":"online","password_required":false,"desktop_managed":true,"desktop_owner_id":"test-desktop-owner"}}`))
+			_, _ = w.Write([]byte(`{"data":{"status":"online","password_required":false}}`))
 			return
 		}
 		w.WriteHeader(http.StatusNotFound)
@@ -75,8 +75,6 @@ func TestDesktopBridgeKeepsStdoutProtocolPure(t *testing.T) {
 			Identity: runtimemanagement.RuntimeInstanceIdentity{
 				StateDir:        layout.StateDir,
 				StartedAtUnixMS: 1778751234567,
-				DesktopManaged:  true,
-				DesktopOwnerID:  "test-desktop-owner",
 			},
 			Endpoint: &runtimemanagement.RuntimeAttachEndpoint{
 				LocalUIURL:       publicLocalUIServer.URL + "/",
@@ -87,12 +85,9 @@ func TestDesktopBridgeKeepsStdoutProtocolPure(t *testing.T) {
 					ProtocolVersion: "runtime-control-v1",
 					BaseURL:         controlServer.URL + "/",
 					Token:           "token",
-					DesktopOwnerID:  "test-desktop-owner",
 				},
 			},
-			RuntimeService: runtimeservice.NormalizeSnapshot(runtimeservice.Snapshot{
-				DesktopManaged: true,
-			}),
+			RuntimeService: runtimeservice.NormalizeSnapshot(runtimeservice.Snapshot{}),
 		}, nil
 	})
 	if err != nil {

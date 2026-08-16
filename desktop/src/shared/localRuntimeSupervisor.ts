@@ -1,6 +1,5 @@
 import {
   runtimeServiceAllowsOpenAttempt,
-  runtimeServiceHasActiveWork,
   type RuntimeServiceProviderLinkBinding,
   type RuntimeServiceSnapshot,
 } from './runtimeService';
@@ -13,27 +12,15 @@ export type DesktopLocalRuntimeOpenPlanState =
   | 'not_running'
   | 'openable'
   | 'starting'
-  | 'restart_to_reclaim'
-  | 'blocked_active_work'
-  | 'blocked_external_runtime'
   | 'blocked_runtime';
 
 export type DesktopLocalRuntimeObservation = Readonly<{
   local_ui_url?: string;
-  desktop_managed?: boolean;
-  desktop_owner_id?: string;
-  desktop_ownership?: DesktopLocalRuntimeOwnership;
   controlplane_base_url?: string;
   controlplane_provider_id?: string;
   env_public_id?: string;
   runtime_service?: RuntimeServiceSnapshot;
 }>;
-
-export type DesktopLocalRuntimeOwnership =
-  | 'owned'
-  | 'managed_elsewhere'
-  | 'unowned'
-  | 'external';
 
 export type DesktopLocalRuntimeOpenPlan = Readonly<{
   target: DesktopLocalRuntimeTarget;
@@ -74,25 +61,6 @@ export function desktopRuntimeProviderBindingMatches(
   );
 }
 
-function desktopLocalRuntimeOwnership(
-  runtime: DesktopLocalRuntimeObservation | null | undefined,
-  desktopOwnerID: string | undefined,
-): DesktopLocalRuntimeOwnership {
-  const declared = compact(runtime?.desktop_ownership);
-  if (declared === 'owned' || declared === 'managed_elsewhere' || declared === 'unowned' || declared === 'external') {
-    return declared;
-  }
-  if (runtime?.desktop_managed !== true) {
-    return 'external';
-  }
-  const expectedOwnerID = compact(desktopOwnerID);
-  const observedOwnerID = compact(runtime.desktop_owner_id);
-  if (expectedOwnerID !== '' && observedOwnerID !== '' && expectedOwnerID === observedOwnerID) {
-    return 'owned';
-  }
-  return observedOwnerID === '' ? 'unowned' : 'managed_elsewhere';
-}
-
 function plan(
   input: Readonly<{
     target: DesktopLocalRuntimeTarget;
@@ -128,18 +96,13 @@ function plan(
 export function buildDesktopLocalRuntimeOpenPlan(
   target: DesktopLocalRuntimeTarget,
   runtime: DesktopLocalRuntimeObservation | null | undefined,
-  options: Readonly<{
-    desktopOwnerID?: string;
-  }> = {},
 ): DesktopLocalRuntimeOpenPlan {
   const runtimeURL = compact(runtime?.local_ui_url);
   const runtimeRunning = runtimeURL !== '';
-  const runtimeOwnership = desktopLocalRuntimeOwnership(runtime, options.desktopOwnerID);
-  const desktopCanManage = runtimeOwnership === 'owned' || runtimeOwnership === 'unowned';
+  const desktopCanManage = true;
   const runtimeMatchesTarget = true;
   const requiresBootstrap = false;
   const runtimeService = runtime?.runtime_service;
-  const runtimeHasActiveWork = runtimeServiceHasActiveWork(runtimeService);
 
   if (!runtimeRunning) {
     return plan({
@@ -154,56 +117,6 @@ export function buildDesktopLocalRuntimeOpenPlan(
       requiresRestart: false,
       requiresConfirmation: false,
       message: 'Desktop will start the Local Runtime before opening the Local Environment.',
-    });
-  }
-
-  if (runtimeOwnership === 'managed_elsewhere') {
-    return plan({
-      target,
-      state: 'blocked_external_runtime',
-      runtimeRunning,
-      runtimeMatchesTarget,
-      desktopCanManage: false,
-      canOpen: false,
-      canPrepare: false,
-      requiresBootstrap,
-      requiresRestart: true,
-      requiresConfirmation: false,
-      runtimeURL,
-      message: 'This Desktop-managed Local Runtime is owned by another Desktop instance. Stop that runtime from its owner, then refresh status.',
-    });
-  }
-
-  if (runtimeOwnership === 'unowned') {
-    if (runtimeHasActiveWork) {
-      return plan({
-        target,
-        state: 'blocked_active_work',
-        runtimeRunning,
-        runtimeMatchesTarget,
-        desktopCanManage,
-        canOpen: false,
-        canPrepare: false,
-        requiresBootstrap,
-        requiresRestart: true,
-        requiresConfirmation: true,
-        runtimeURL,
-        message: 'This Desktop-managed runtime needs to be restarted before Desktop can own it. Close active runtime work before restarting.',
-      });
-    }
-    return plan({
-      target,
-      state: 'restart_to_reclaim',
-      runtimeRunning,
-      runtimeMatchesTarget,
-      desktopCanManage,
-      canOpen: true,
-      canPrepare: true,
-      requiresBootstrap,
-      requiresRestart: true,
-      requiresConfirmation: false,
-      runtimeURL,
-      message: 'Desktop will restart the Local Runtime before opening.',
     });
   }
 

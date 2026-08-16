@@ -33,10 +33,10 @@ function normalizeRuntimeServiceSnapshot(value: unknown) {
 }
 
 describe('runtimeService', () => {
-  it('publishes the Local UI exposure compatibility window for v0.10.0', () => {
-    expect(RUNTIME_SERVICE_COMPATIBILITY_EPOCH).toBe(8);
-    expect(RUNTIME_SERVICE_MINIMUM_DESKTOP_VERSION).toBe('v0.10.0');
-    expect(RUNTIME_SERVICE_MINIMUM_RUNTIME_VERSION).toBe('v0.10.0');
+  it('publishes the Runtime service v2 compatibility window for v0.11.0', () => {
+    expect(RUNTIME_SERVICE_COMPATIBILITY_EPOCH).toBe(9);
+    expect(RUNTIME_SERVICE_MINIMUM_DESKTOP_VERSION).toBe('v0.11.0');
+    expect(RUNTIME_SERVICE_MINIMUM_RUNTIME_VERSION).toBe('v0.11.0');
   });
 
   it('enforces the current compatibility epoch in both directions', () => {
@@ -50,10 +50,7 @@ describe('runtimeService', () => {
     expect(outdatedRuntime).toMatchObject({
       compatibility: 'update_required',
       minimum_runtime_version: RUNTIME_SERVICE_MINIMUM_RUNTIME_VERSION,
-      open_readiness: {
-        state: 'blocked',
-        reason_code: 'runtime_update_required',
-      },
+      open_readiness: { state: 'openable' },
     });
     expect(outdatedRuntime.compatibility_message).toContain('update the runtime');
 
@@ -67,10 +64,7 @@ describe('runtimeService', () => {
     expect(newerRuntime).toMatchObject({
       compatibility: 'desktop_update_required',
       minimum_desktop_version: RUNTIME_SERVICE_MINIMUM_DESKTOP_VERSION,
-      open_readiness: {
-        state: 'blocked',
-        reason_code: 'desktop_update_required',
-      },
+      open_readiness: { state: 'openable' },
     });
     expect(newerRuntime.compatibility_message).toContain('update Desktop');
   });
@@ -100,16 +94,13 @@ describe('runtimeService', () => {
         compatibility_epoch: undefined,
         compatibility: 'update_required',
         minimum_runtime_version: RUNTIME_SERVICE_MINIMUM_RUNTIME_VERSION,
-        open_readiness: {
-          state: 'blocked',
-          reason_code: 'runtime_update_required',
-        },
+        open_readiness: { state: 'openable' },
       });
       expect(snapshot.compatibility_message).toContain('does not report a valid compatibility epoch');
     }
   });
 
-  it('preserves managed-elsewhere ownership guidance when the epoch is absent', () => {
+  it('rejects retired ownership compatibility without blocking ordinary access', () => {
     const snapshot = normalizeRuntimeServiceSnapshot({
       runtime_version: 'v2.0.0',
       compatibility_epoch: undefined,
@@ -119,15 +110,11 @@ describe('runtimeService', () => {
     });
 
     expect(snapshot).toMatchObject({
-      compatibility: 'managed_elsewhere',
-      compatibility_message: 'Use the owning Desktop instance.',
-      minimum_runtime_version: undefined,
-      open_readiness: {
-        state: 'blocked',
-        reason_code: 'runtime_managed_elsewhere',
-        message: 'Use the owning Desktop instance.',
-      },
+      compatibility: 'update_required',
+      minimum_runtime_version: RUNTIME_SERVICE_MINIMUM_RUNTIME_VERSION,
+      open_readiness: { state: 'openable' },
     });
+    expect(snapshot.compatibility_message).not.toContain('owning Desktop');
   });
 
   it('treats missing open-readiness as openable for otherwise compatible runtimes', () => {
@@ -177,7 +164,7 @@ describe('runtimeService', () => {
     expect(runtimeServiceHasActiveWork(snapshot)).toBe(true);
   });
 
-  it('allows Open attempts for compatibility update blocks while preserving the update type', () => {
+  it('keeps Open available when only lifecycle compatibility needs an update', () => {
     const runtimeUpdate = normalizeRuntimeServiceSnapshot({
       runtime_version: 'v0.5.9',
       compatibility: 'update_required',
@@ -191,22 +178,14 @@ describe('runtimeService', () => {
       active_workload: {},
     });
 
-    expect(runtimeUpdate.open_readiness).toEqual({
-      state: 'blocked',
-      reason_code: 'runtime_update_required',
-      message: 'Redeven Desktop has a newer bundled runtime.',
-    });
-    expect(runtimeServiceIsOpenable(runtimeUpdate)).toBe(false);
+    expect(runtimeUpdate.open_readiness).toEqual({ state: 'openable' });
+    expect(runtimeServiceIsOpenable(runtimeUpdate)).toBe(true);
     expect(runtimeServiceAllowsOpenAttempt(runtimeUpdate)).toBe(true);
     expect(runtimeServiceNeedsRuntimeUpdate(runtimeUpdate)).toBe(true);
     expect(runtimeServiceNeedsDesktopUpdate(runtimeUpdate)).toBe(false);
 
-    expect(desktopUpdate.open_readiness).toEqual({
-      state: 'blocked',
-      reason_code: 'desktop_update_required',
-      message: 'Update Desktop before opening this runtime.',
-    });
-    expect(runtimeServiceIsOpenable(desktopUpdate)).toBe(false);
+    expect(desktopUpdate.open_readiness).toEqual({ state: 'openable' });
+    expect(runtimeServiceIsOpenable(desktopUpdate)).toBe(true);
     expect(runtimeServiceAllowsOpenAttempt(desktopUpdate)).toBe(true);
     expect(runtimeServiceNeedsRuntimeUpdate(desktopUpdate)).toBe(false);
     expect(runtimeServiceNeedsDesktopUpdate(desktopUpdate)).toBe(true);
@@ -297,7 +276,7 @@ describe('runtimeService', () => {
 
     expect(runtimeServiceSupportsDesktopModelSource(snapshot)).toBe(true);
     expect(runtimeServiceDesktopModelSourceBindingState(snapshot)).toBe('bound');
-    expect(snapshot.capabilities?.desktop_model_source.bind_method).toBe('runtime_control_v1');
+    expect(snapshot.capabilities?.desktop_model_source.bind_method).toBe('runtime_control_v2');
     expect(snapshot.bindings?.desktop_model_source).toMatchObject({
       state: 'bound',
       session_id: 'desktop-session',
@@ -332,7 +311,7 @@ describe('runtimeService', () => {
     });
 
     expect(runtimeServiceSupportsProviderLink(snapshot)).toBe(true);
-    expect(snapshot.capabilities?.provider_link.bind_method).toBe('runtime_control_v1');
+    expect(snapshot.capabilities?.provider_link.bind_method).toBe('runtime_control_v2');
     expect(runtimeServiceProviderLinkBinding(snapshot)).toMatchObject({
       state: 'linked',
       provider_origin: 'https://provider.example.invalid',
@@ -375,7 +354,7 @@ describe('runtimeService', () => {
     });
 
     expect(runtimeServiceSupportsRuntimeGateway(supported)).toBe(true);
-    expect(supported.capabilities?.runtime_gateway?.bind_method).toBe('runtime_control_v1');
+    expect(supported.capabilities?.runtime_gateway?.bind_method).toBe('runtime_control_v2');
     expect(runtimeServiceSupportsRuntimeGateway(legacy)).toBe(false);
     expect(legacy.capabilities?.runtime_gateway).toEqual({ supported: false });
   });

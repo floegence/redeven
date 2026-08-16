@@ -378,7 +378,11 @@
       "closeLabel": "关闭外观设置",
       "commandDescription": "选择颜色模式和可用的界面主题。",
       "modeLabel": "颜色模式",
-      "mode": { "system": "跟随系统", "light": "浅色", "dark": "深色" },
+      "mode": {
+        "system": "跟随系统",
+        "light": "浅色",
+        "dark": "深色"
+      },
       "systemResolvedLight": "系统当前使用浅色模式",
       "systemResolvedDark": "系统当前使用深色模式",
       "themesLabel": "主题",
@@ -473,12 +477,30 @@
           "other": "{lead}：{title}，另有 {count} 项"
         },
         "withoutTitle": {
-          "needsAttention": { "one": "有 1 项任务需要你处理", "other": "有 {count} 项任务需要你处理" },
-          "needsReview": { "one": "有 1 项任务需要你查看", "other": "有 {count} 项任务需要你查看" },
-          "working": { "one": "Flower 正在处理 1 项任务", "other": "Flower 正在处理 {count} 项任务" },
-          "queued": { "one": "有 1 项任务等待开始", "other": "有 {count} 项任务等待开始" },
-          "stopped": { "one": "有 1 项任务已停止", "other": "有 {count} 项任务已停止" },
-          "ready": { "one": "有 1 项结果已就绪", "other": "有 {count} 项结果已就绪" }
+          "needsAttention": {
+            "one": "有 1 项任务需要你处理",
+            "other": "有 {count} 项任务需要你处理"
+          },
+          "needsReview": {
+            "one": "有 1 项任务需要你查看",
+            "other": "有 {count} 项任务需要你查看"
+          },
+          "working": {
+            "one": "Flower 正在处理 1 项任务",
+            "other": "Flower 正在处理 {count} 项任务"
+          },
+          "queued": {
+            "one": "有 1 项任务等待开始",
+            "other": "有 {count} 项任务等待开始"
+          },
+          "stopped": {
+            "one": "有 1 项任务已停止",
+            "other": "有 {count} 项任务已停止"
+          },
+          "ready": {
+            "one": "有 1 项结果已就绪",
+            "other": "有 {count} 项结果已就绪"
+          }
         },
         "secondaryWorking": {
           "one": "Flower 还在处理另外 1 项任务",
@@ -2623,10 +2645,8 @@
     "loading": "正在加载...",
     "statusLabel": "状态",
     "statusNote": "maintenance controller 观察到的当前状态。",
-    "serviceOwner": "服务所有者",
-    "serviceOwnerNote": "此持久运行时服务的生命周期所有者。",
     "maintenanceAuthority": "维护权限方",
-    "maintenanceAuthorityNote": "此会话中重新启动和更新操作的当前所有者。",
+    "maintenanceAuthorityNote": "此会话中执行重启和更新操作的当前通道。",
     "compatibilityLabel": "兼容性",
     "compatibilityNote": "Desktop 和运行时服务兼容性状态。",
     "activeWork": "活跃工作",
@@ -2647,10 +2667,6 @@
     "noActiveWork": "无活跃工作",
     "runtimeRpc": "运行时 RPC",
     "unknown": "未知",
-    "owner": {
-      "redevenDesktop": "Redeven Desktop",
-      "externalService": "外部服务"
-    },
     "status": {
       "online": "在线",
       "offline": "离线"
@@ -2660,8 +2676,7 @@
       "updateAvailable": "有更新可用",
       "restartRecommended": "建议重启",
       "updateRequired": "需要更新",
-      "desktopUpdateRequired": "需要更新 Desktop",
-      "managedElsewhere": "由其他位置管理"
+      "desktopUpdateRequired": "需要更新 Desktop"
     },
     "desktopModelState": {
       "bound": "已绑定",
@@ -2687,7 +2702,8 @@
         "one": "{count} 个 Web服务",
         "other": "{count} 个 Web服务"
       }
-    }
+    },
+    "desktopShell": "Redeven Desktop"
   },
   "runtimeConfig": {
     "title": "Shell 与工作区",
@@ -3783,7 +3799,10 @@
       "errorInvalidEncoding": "此文本文件的 UTF-8 编码无效。",
       "errorUploadFailed": "上传失败，请重试。",
       "errorUnavailable": "当前所选模型无法使用附件。",
-      "lines": { "one": "{count} 行", "other": "{count} 行" },
+      "lines": {
+        "one": "{count} 行",
+        "other": "{count} 行"
+      },
       "added": "已添加 {name}。",
       "converted": "长文本已转换为附件 {name}。",
       "uploaded": "已上传 {name}。",
@@ -4315,7 +4334,58 @@
       "backToList": "返回插件列表",
       "reviewPermissions": "查看所需权限",
       "reviewUpdate": "查看更新内容",
-      "updateReview": {"title":"查看 {plugin} 更新","description":"安装此更新前，先了解会发生哪些变化。","loading":"正在准备更新内容...","versionChange":"版本","currentVersion":"当前版本","targetVersion":"新版本","newBuild":"新的开发构建","replacementBuild":"替换构建","whatIsNew":"本次更新内容","features":"新增能力","improvements":"体验改进","fixes":"问题修复","notices":"注意事项","noReleaseNotes":"发布者未提供更新说明。","impactTitle":"访问与更新影响","noAccessChange":"现有权限与授权将保留；本次更新不会申请新的访问范围。","securityChanges":"有 {count} 项安全声明为新增或发生变化。继续前请查看 Host 检查结果。","developmentEvidence":"Redeven 已验证此开发交付物及其能力契约身份。","developmentInspectionUnavailable":"开发构建不执行插件包签名或安全声明差异检查。","externalEvidence":"Host 检查结果与当前精确插件包绑定。","enabledRetained":"更新后会保留当前启用状态。","grantsRetained":"现有权限授权将继续保留。","technicalEvidence":"技术证据","packageHash":"插件包哈希","manifestHash":"清单哈希","entriesHash":"条目哈希","capabilityVersion":"能力契约","releaseNotesID":"更新说明 ID","updateToVersion":"更新到 v{version}","installNewBuild":"安装新构建","replaceBuild":"替换当前构建","noUpdate":"当前已安装完全相同的构建。","downgradeBlocked":"目标版本低于已安装版本。","riskConfirm":"我了解此插件包会替换当前构建，并可能改变安全声明。","committing":"正在安装已确认的更新...","reconciling":"正在确认更新结果...","continueReconciliation":"继续确认结果","stale":"插件或更新目标已经变化，请重新查看。","failed":"更新未完成，已查看的目标仍然可用。","outcomeUnknown":"Redeven 暂时无法确认结果。系统不会重复提交更新。","refreshFailed":"更新已完成，但插件中心无法刷新清单。","completeTitle":"{plugin} 已是最新版本","completeDescription":"已安装 v{version}，启用状态和授权均已保留。","done":"完成","viewPermissions":"查看权限","allCurrent":"所有插件均为最新。","sourceTitle":"提供更新插件包","sourceDescription":"需要重新提供来源，Redeven 才能检查精确目标。","reviewPackage":"查看插件包","readOnly":"你可以查看更新，但需要由环境管理员安装。"},
+      "updateReview": {
+        "title": "查看 {plugin} 更新",
+        "description": "安装此更新前，先了解会发生哪些变化。",
+        "loading": "正在准备更新内容...",
+        "versionChange": "版本",
+        "currentVersion": "当前版本",
+        "targetVersion": "新版本",
+        "newBuild": "新的开发构建",
+        "replacementBuild": "替换构建",
+        "whatIsNew": "本次更新内容",
+        "features": "新增能力",
+        "improvements": "体验改进",
+        "fixes": "问题修复",
+        "notices": "注意事项",
+        "noReleaseNotes": "发布者未提供更新说明。",
+        "impactTitle": "访问与更新影响",
+        "noAccessChange": "现有权限与授权将保留；本次更新不会申请新的访问范围。",
+        "securityChanges": "有 {count} 项安全声明为新增或发生变化。继续前请查看 Host 检查结果。",
+        "developmentEvidence": "Redeven 已验证此开发交付物及其能力契约身份。",
+        "developmentInspectionUnavailable": "开发构建不执行插件包签名或安全声明差异检查。",
+        "externalEvidence": "Host 检查结果与当前精确插件包绑定。",
+        "enabledRetained": "更新后会保留当前启用状态。",
+        "grantsRetained": "现有权限授权将继续保留。",
+        "technicalEvidence": "技术证据",
+        "packageHash": "插件包哈希",
+        "manifestHash": "清单哈希",
+        "entriesHash": "条目哈希",
+        "capabilityVersion": "能力契约",
+        "releaseNotesID": "更新说明 ID",
+        "updateToVersion": "更新到 v{version}",
+        "installNewBuild": "安装新构建",
+        "replaceBuild": "替换当前构建",
+        "noUpdate": "当前已安装完全相同的构建。",
+        "downgradeBlocked": "目标版本低于已安装版本。",
+        "riskConfirm": "我了解此插件包会替换当前构建，并可能改变安全声明。",
+        "committing": "正在安装已确认的更新...",
+        "reconciling": "正在确认更新结果...",
+        "continueReconciliation": "继续确认结果",
+        "stale": "插件或更新目标已经变化，请重新查看。",
+        "failed": "更新未完成，已查看的目标仍然可用。",
+        "outcomeUnknown": "Redeven 暂时无法确认结果。系统不会重复提交更新。",
+        "refreshFailed": "更新已完成，但插件中心无法刷新清单。",
+        "completeTitle": "{plugin} 已是最新版本",
+        "completeDescription": "已安装 v{version}，启用状态和授权均已保留。",
+        "done": "完成",
+        "viewPermissions": "查看权限",
+        "allCurrent": "所有插件均为最新。",
+        "sourceTitle": "提供更新插件包",
+        "sourceDescription": "需要重新提供来源，Redeven 才能检查精确目标。",
+        "reviewPackage": "查看插件包",
+        "readOnly": "你可以查看更新，但需要由环境管理员安装。"
+      },
       "viewPolicyRestriction": "查看策略限制",
       "viewRuntimeRequirement": "查看运行时要求",
       "viewTrustDetails": "查看信任详情",

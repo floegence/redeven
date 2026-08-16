@@ -20,23 +20,13 @@ import (
 	processlib "github.com/shirou/gopsutil/v4/process"
 )
 
-const RuntimeProcessInventorySchemaVersion = 2
-
-const desktopOwnerIDEnvName = "REDEVEN_DESKTOP_OWNER_ID"
+const RuntimeProcessInventorySchemaVersion = 3
 
 type RuntimeProcessIdentityStatus string
 
 const (
 	RuntimeProcessIdentityVerified   RuntimeProcessIdentityStatus = "verified"
 	RuntimeProcessIdentityIncomplete RuntimeProcessIdentityStatus = "incomplete"
-)
-
-type RuntimeProcessOwnerStatus string
-
-const (
-	RuntimeProcessOwnerCurrent RuntimeProcessOwnerStatus = "current"
-	RuntimeProcessOwnerMissing RuntimeProcessOwnerStatus = "missing"
-	RuntimeProcessOwnerForeign RuntimeProcessOwnerStatus = "foreign"
 )
 
 type RuntimeProcessLayoutStatus string
@@ -47,42 +37,30 @@ const (
 	RuntimeProcessLayoutUnknown           RuntimeProcessLayoutStatus = "unknown"
 )
 
-type RuntimeProcessOwnerEvidence string
-
-const (
-	RuntimeProcessOwnerEvidenceEnvironment RuntimeProcessOwnerEvidence = "process_environment"
-	RuntimeProcessOwnerEvidenceLock        RuntimeProcessOwnerEvidence = "runtime_lock"
-	RuntimeProcessOwnerEvidenceMissing     RuntimeProcessOwnerEvidence = "missing"
-)
-
 type RuntimeProcessStopAuthority string
 
 const (
-	RuntimeProcessStopAutomatic         RuntimeProcessStopAuthority = "automatic"
-	RuntimeProcessStopConfirmedTakeover RuntimeProcessStopAuthority = "confirmed_takeover"
-	RuntimeProcessStopBlocked           RuntimeProcessStopAuthority = "blocked"
+	RuntimeProcessStopAutomatic RuntimeProcessStopAuthority = "automatic"
+	RuntimeProcessStopBlocked   RuntimeProcessStopAuthority = "blocked"
 )
 
 type RuntimeProcessInventoryOptions struct {
 	RuntimeRoot        string
 	StateRoot          string
-	DesktopOwnerID     string
 	CurrentExecutables []string
 }
 
 type RuntimeProcessScope struct {
-	RuntimeRoot    string `json:"runtime_root"`
-	StateRoot      string `json:"state_root"`
-	DesktopOwnerID string `json:"desktop_owner_id,omitempty"`
-	UserIdentity   string `json:"user_identity,omitempty"`
-	NamespaceID    string `json:"namespace_id,omitempty"`
+	RuntimeRoot  string `json:"runtime_root"`
+	StateRoot    string `json:"state_root"`
+	UserIdentity string `json:"user_identity,omitempty"`
+	NamespaceID  string `json:"namespace_id,omitempty"`
 }
 
 type RuntimeProcessInstance struct {
 	PID                    int                          `json:"pid"`
 	ProcessStartedAtUnixMS int64                        `json:"process_started_at_unix_ms"`
 	InstanceID             string                       `json:"instance_id,omitempty"`
-	DesktopOwnerID         string                       `json:"desktop_owner_id,omitempty"`
 	StateRoot              string                       `json:"state_root"`
 	ExecutablePath         string                       `json:"executable_path"`
 	ExecutableDeleted      bool                         `json:"executable_deleted,omitempty"`
@@ -92,16 +70,13 @@ type RuntimeProcessInstance struct {
 	RuntimeVersion         string                       `json:"runtime_version,omitempty"`
 	ReasonCode             string                       `json:"reason_code,omitempty"`
 	IdentityStatus         RuntimeProcessIdentityStatus `json:"identity_status"`
-	OwnerStatus            RuntimeProcessOwnerStatus    `json:"owner_status"`
 	LayoutStatus           RuntimeProcessLayoutStatus   `json:"layout_status"`
-	OwnerEvidence          RuntimeProcessOwnerEvidence  `json:"owner_evidence"`
 	StopAuthority          RuntimeProcessStopAuthority  `json:"stop_authority"`
 }
 
 type RuntimeProcessInventorySummary struct {
-	Automatic         int `json:"automatic"`
-	ConfirmedTakeover int `json:"confirmed_takeover"`
-	Blocked           int `json:"blocked"`
+	Automatic int `json:"automatic"`
+	Blocked   int `json:"blocked"`
 }
 
 type RuntimeProcessInventory struct {
@@ -122,8 +97,6 @@ type runtimeProcessSnapshot struct {
 	ExecutableDevice       uint64
 	ExecutableInode        uint64
 	Args                   []string
-	DesktopOwnerID         string
-	OwnerEvidence          RuntimeProcessOwnerEvidence
 	InstanceID             string
 	RuntimeVersion         string
 	RuntimeLockVerified    bool
@@ -138,7 +111,6 @@ type runtimeLockMetadata struct {
 	PID            int    `json:"pid"`
 	InstanceID     string `json:"instance_id"`
 	RuntimeVersion string `json:"runtime_version"`
-	DesktopOwnerID string `json:"desktop_owner_id"`
 }
 
 func normalizeRuntimeInventoryOptions(options RuntimeProcessInventoryOptions) (RuntimeProcessInventoryOptions, error) {
@@ -159,7 +131,6 @@ func normalizeRuntimeInventoryOptions(options RuntimeProcessInventoryOptions) (R
 	return RuntimeProcessInventoryOptions{
 		RuntimeRoot:        runtimeRoot,
 		StateRoot:          stateRoot,
-		DesktopOwnerID:     strings.TrimSpace(options.DesktopOwnerID),
 		CurrentExecutables: uniqueCleanPaths(options.CurrentExecutables),
 	}, nil
 }
@@ -293,19 +264,6 @@ func loadSystemRuntimeProcessSnapshot(ctx context.Context, candidate *processlib
 			username = strconv.FormatUint(uint64(uids[0]), 10)
 		}
 	}
-	ownerID := ""
-	ownerEvidence := RuntimeProcessOwnerEvidenceMissing
-	if environ, environErr := candidate.EnvironWithContext(ctx); environErr == nil {
-		for _, entry := range environ {
-			if strings.HasPrefix(entry, desktopOwnerIDEnvName+"=") {
-				ownerID = strings.TrimSpace(strings.TrimPrefix(entry, desktopOwnerIDEnvName+"="))
-				if ownerID != "" {
-					ownerEvidence = RuntimeProcessOwnerEvidenceEnvironment
-				}
-				break
-			}
-		}
-	}
 	device, inode := processExecutableIdentity(int(candidate.Pid), executablePath)
 	return runtimeProcessSnapshot{
 		PID:                    int(candidate.Pid),
@@ -317,21 +275,11 @@ func loadSystemRuntimeProcessSnapshot(ctx context.Context, candidate *processlib
 		ExecutableDevice:       device,
 		ExecutableInode:        inode,
 		Args:                   append([]string(nil), args...),
-		DesktopOwnerID:         ownerID,
-		OwnerEvidence:          ownerEvidence,
 	}, nil
 }
 
 func runtimeProcessArgs(args []string) bool {
-	if len(args) < 2 || filepath.Base(strings.TrimSpace(args[0])) != "redeven" || strings.TrimSpace(args[1]) != "run" {
-		return false
-	}
-	for _, arg := range args[2:] {
-		if arg == "--desktop-managed" {
-			return true
-		}
-	}
-	return false
+	return len(args) >= 2 && filepath.Base(strings.TrimSpace(args[0])) == "redeven" && strings.TrimSpace(args[1]) == "run"
 }
 
 func runtimeProcessStateRoot(args []string) string {
@@ -397,12 +345,6 @@ func enrichRuntimeProcessSnapshot(snapshot runtimeProcessSnapshot, stateRoot str
 		if json.Unmarshal(body, &metadata) != nil || metadata.PID != snapshot.PID {
 			continue
 		}
-		if snapshot.DesktopOwnerID == "" {
-			snapshot.DesktopOwnerID = strings.TrimSpace(metadata.DesktopOwnerID)
-			if snapshot.DesktopOwnerID != "" {
-				snapshot.OwnerEvidence = RuntimeProcessOwnerEvidenceLock
-			}
-		}
 		snapshot.InstanceID = strings.TrimSpace(metadata.InstanceID)
 		snapshot.RuntimeVersion = strings.TrimSpace(metadata.RuntimeVersion)
 		snapshot.RuntimeLockVerified = snapshot.InstanceID != "" && snapshot.RuntimeVersion != ""
@@ -454,8 +396,6 @@ func classifyRuntimeProcess(
 		identityComplete = false
 		reasonCode = "runtime_namespace_unavailable"
 	}
-	ownerMatches := options.DesktopOwnerID != "" && snapshot.DesktopOwnerID == options.DesktopOwnerID
-	ownerForeign := options.DesktopOwnerID != "" && snapshot.DesktopOwnerID != "" && snapshot.DesktopOwnerID != options.DesktopOwnerID
 	layoutStatus := RuntimeProcessLayoutUnknown
 	if currentManagedExecutable(options, snapshot.ExecutablePath) {
 		layoutStatus = RuntimeProcessLayoutCurrent
@@ -470,40 +410,17 @@ func classifyRuntimeProcess(
 	if identityComplete {
 		identityStatus = RuntimeProcessIdentityVerified
 	}
-	ownerStatus := RuntimeProcessOwnerMissing
-	switch {
-	case ownerMatches:
-		ownerStatus = RuntimeProcessOwnerCurrent
-	case ownerForeign:
-		ownerStatus = RuntimeProcessOwnerForeign
-	}
 	stopAuthority := RuntimeProcessStopBlocked
 	if identityComplete {
-		switch {
-		case ownerStatus == RuntimeProcessOwnerCurrent:
-			stopAuthority = RuntimeProcessStopAutomatic
-		default:
-			stopAuthority = RuntimeProcessStopConfirmedTakeover
-		}
+		stopAuthority = RuntimeProcessStopAutomatic
 	}
-	switch {
-	case !identityComplete:
-	case ownerForeign:
-		reasonCode = "runtime_owned_by_another_desktop"
-	case ownerMatches:
+	if identityComplete {
 		reasonCode = ""
-	default:
-		reasonCode = "runtime_owner_identity_unavailable"
-	}
-	ownerEvidence := snapshot.OwnerEvidence
-	if ownerEvidence == "" {
-		ownerEvidence = RuntimeProcessOwnerEvidenceMissing
 	}
 	instance := RuntimeProcessInstance{
 		PID:                    snapshot.PID,
 		ProcessStartedAtUnixMS: snapshot.ProcessStartedAtUnixMS,
 		InstanceID:             snapshot.InstanceID,
-		DesktopOwnerID:         snapshot.DesktopOwnerID,
 		StateRoot:              stateRoot,
 		ExecutablePath:         snapshot.ExecutablePath,
 		ExecutableDeleted:      snapshot.ExecutableDeleted,
@@ -513,9 +430,7 @@ func classifyRuntimeProcess(
 		RuntimeVersion:         snapshot.RuntimeVersion,
 		ReasonCode:             reasonCode,
 		IdentityStatus:         identityStatus,
-		OwnerStatus:            ownerStatus,
 		LayoutStatus:           layoutStatus,
-		OwnerEvidence:          ownerEvidence,
 		StopAuthority:          stopAuthority,
 	}
 	return instance, true
@@ -551,8 +466,6 @@ func buildRuntimeProcessInventory(
 		switch instance.StopAuthority {
 		case RuntimeProcessStopAutomatic:
 			summary.Automatic++
-		case RuntimeProcessStopConfirmedTakeover:
-			summary.ConfirmedTakeover++
 		case RuntimeProcessStopBlocked:
 			summary.Blocked++
 		}
@@ -560,11 +473,10 @@ func buildRuntimeProcessInventory(
 	inventory := RuntimeProcessInventory{
 		SchemaVersion: RuntimeProcessInventorySchemaVersion,
 		Scope: RuntimeProcessScope{
-			RuntimeRoot:    options.RuntimeRoot,
-			StateRoot:      options.StateRoot,
-			DesktopOwnerID: options.DesktopOwnerID,
-			UserIdentity:   scope.UserIdentity,
-			NamespaceID:    scope.NamespaceID,
+			RuntimeRoot:  options.RuntimeRoot,
+			StateRoot:    options.StateRoot,
+			UserIdentity: scope.UserIdentity,
+			NamespaceID:  scope.NamespaceID,
 		},
 		Instances: instances,
 		Summary:   summary,
@@ -582,7 +494,6 @@ func runtimeProcessIdentityKey(instance RuntimeProcessInstance) string {
 		instance.ExecutablePath,
 		strconv.FormatUint(instance.ExecutableDevice, 10),
 		strconv.FormatUint(instance.ExecutableInode, 10),
-		instance.DesktopOwnerID,
 	}, "\x00")
 }
 
@@ -616,9 +527,7 @@ func InspectRuntimeProcesses(ctx context.Context, options RuntimeProcessInventor
 func runtimeProcessInstancesEqual(left RuntimeProcessInstance, right RuntimeProcessInstance) bool {
 	return runtimeProcessIdentityKey(left) == runtimeProcessIdentityKey(right) &&
 		left.IdentityStatus == right.IdentityStatus &&
-		left.OwnerStatus == right.OwnerStatus &&
 		left.LayoutStatus == right.LayoutStatus &&
-		left.OwnerEvidence == right.OwnerEvidence &&
 		left.StopAuthority == right.StopAuthority
 }
 

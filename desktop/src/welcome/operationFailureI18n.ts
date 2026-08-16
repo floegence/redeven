@@ -38,8 +38,8 @@ function failureTitleKey(failure: DesktopOperationFailurePresentation): DesktopT
       return 'progress.runtimeStopFailedTitle';
     case 'runtime_cleanup_failed':
       return 'progress.runtimeCleanupFailedTitle';
-    case 'runtime_lifecycle_conflict':
-      return 'progress.runtimeLifecycleConflictTitle';
+    case 'confirmation_required':
+      return 'progress.runtimeConfirmationRequiredTitle';
     case 'runtime_host_command_failed':
       return 'progress.runtimeHostCommandFailedTitle';
     case 'runtime_update_required':
@@ -86,8 +86,8 @@ function failureSummaryKey(failure: DesktopOperationFailurePresentation): Deskto
       return 'progress.runtimeStopFailedSummary';
     case 'runtime_cleanup_failed':
       return 'progress.runtimeCleanupFailedSummary';
-    case 'runtime_lifecycle_conflict':
-      return 'progress.runtimeLifecycleConflictSummary';
+    case 'confirmation_required':
+      return 'progress.runtimeConfirmationRequiredSummary';
     case 'runtime_host_command_failed':
       return 'progress.runtimeHostCommandFailedSummary';
     case 'environment_open_failed':
@@ -146,8 +146,8 @@ export function localizedOperationFailureDetail(
   if (failure.code === 'ssh_upload_directory_unavailable') {
     return i18n.t('progress.sshUploadDirectoryUnavailableDetail');
   }
-  if (failure.code === 'runtime_lifecycle_conflict') {
-    return i18n.t('progress.runtimeLifecycleConflictDetail');
+  if (failure.code === 'confirmation_required') {
+    return i18n.t('progress.runtimeConfirmationRequiredDetail');
   }
   return i18n.locale === 'en-US' ? compact(failure.detail) : '';
 }
@@ -165,8 +165,8 @@ export function localizedOperationFailureRecoveryHint(
   if (failure.code === 'ssh_upload_directory_unavailable') {
     return i18n.t('progress.sshUploadDirectoryUnavailableRecoveryHint');
   }
-  if (failure.code === 'runtime_lifecycle_conflict') {
-    return i18n.t('progress.runtimeLifecycleConflictRecoveryHint');
+  if (failure.code === 'confirmation_required') {
+    return i18n.t('progress.runtimeConfirmationRequiredRecoveryHint');
   }
   return i18n.locale === 'en-US' ? compact(failure.recovery_hint) : '';
 }

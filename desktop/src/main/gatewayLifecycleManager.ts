@@ -17,19 +17,26 @@ import {
   GatewayBridgeClient,
   GatewayURLClient,
   type GatewayCatalogResponse,
-  type GatewayEnvLifecycleRequest,
-  type GatewayEnvLifecycleResponse,
   type GatewayEnvProfileDeleteRequest,
   type GatewayEnvProfileDeleteResponse,
   type GatewayEnvProfileUpsertRequest,
   type GatewayEnvProfileUpsertResponse,
   type GatewayOpenSessionRequest,
   type GatewayOpenSessionResponse,
+  type GatewayRuntimeArtifactMetadata,
+  type GatewayRuntimeManagementCapabilityRequest,
+  type GatewayRuntimeOperation,
+  type GatewayRuntimeOperationConfirmationRequest,
+  type GatewayRuntimeOperationEventsResponse,
+  type GatewayRuntimeOperationPrepareRequest,
+  type GatewayRuntimeOperationReconcileRequest,
+  type GatewayRuntimeOperationPrepareResponse,
 } from './gatewayClient';
 import { gatewayEnvAppBridgeRouteID } from './gatewaySessionArtifact';
 import { gatewayRecordSSHPasswordRef, type GatewayRecord } from './gatewayStore';
 import type { GatewaySecretStore } from './gatewayTrust';
 import type { DesktopGatewayServiceState } from '../shared/desktopGateway';
+import type { DesktopGatewayRuntimeManagementCapability } from '../shared/desktopGateway';
 import {
   ensureManagedGatewayServiceReady,
   gatewayServiceBinaryPath,
@@ -116,7 +123,6 @@ export type GatewayLifecycleManagerOptions = Readonly<{
   release_base_url: string;
   asset_cache_root: string;
   temp_root: string;
-  desktop_owner_id: () => Promise<string>;
   lifecycle_coordinator: RuntimeLifecycleCoordinator;
   source_runtime_root?: string;
   target_commit?: string;
@@ -234,20 +240,68 @@ export class GatewayLifecycleManager {
     return session.client.deleteEnvironmentProfile(record, request, options);
   }
 
-  async runEnvironmentLifecycle(
+  async prepareRuntimeOperation(
     record: GatewayRecord,
-    request: GatewayEnvLifecycleRequest,
+    request: GatewayRuntimeOperationPrepareRequest,
     options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; startPolicy?: GatewayStartPolicy; onProgress?: GatewayLifecycleProgressSink }> = {},
-  ): Promise<GatewayEnvLifecycleResponse> {
+  ): Promise<GatewayRuntimeOperationPrepareResponse> {
+    const client = await this.runtimeOperationClient(record, options);
+    return client.prepareRuntimeOperation(record, request, options);
+  }
+
+  async runtimeManagementCapability(
+    record: GatewayRecord,
+    request: GatewayRuntimeManagementCapabilityRequest,
+    options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; startPolicy?: GatewayStartPolicy; onProgress?: GatewayLifecycleProgressSink }> = {},
+  ): Promise<DesktopGatewayRuntimeManagementCapability> {
+    const client = await this.runtimeOperationClient(record, options);
+    return client.runtimeManagementCapability(record, request, options);
+  }
+
+  async getRuntimeOperation(record: GatewayRecord, operationID: string, options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; startPolicy?: GatewayStartPolicy }> = {}): Promise<GatewayRuntimeOperation> {
+    return (await this.runtimeOperationClient(record, options)).getRuntimeOperation(record, operationID, options);
+  }
+
+  async confirmRuntimeOperation(record: GatewayRecord, operationID: string, request: GatewayRuntimeOperationConfirmationRequest, options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; startPolicy?: GatewayStartPolicy }> = {}): Promise<GatewayRuntimeOperation> {
+    return (await this.runtimeOperationClient(record, options)).confirmRuntimeOperation(record, operationID, request, options);
+  }
+
+  async uploadRuntimeOperationArtifact(record: GatewayRecord, operationID: string, metadata: GatewayRuntimeArtifactMetadata, artifact: Buffer, options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; startPolicy?: GatewayStartPolicy }> = {}): Promise<GatewayRuntimeOperation> {
+    return (await this.runtimeOperationClient(record, options)).uploadRuntimeOperationArtifact(record, operationID, metadata, artifact, options);
+  }
+
+  async commitRuntimeOperation(record: GatewayRecord, operationID: string, options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; startPolicy?: GatewayStartPolicy }> = {}): Promise<GatewayRuntimeOperation> {
+    return (await this.runtimeOperationClient(record, options)).commitRuntimeOperation(record, operationID, options);
+  }
+
+  async cancelRuntimeOperation(record: GatewayRecord, operationID: string, options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; startPolicy?: GatewayStartPolicy }> = {}): Promise<GatewayRuntimeOperation> {
+    return (await this.runtimeOperationClient(record, options)).cancelRuntimeOperation(record, operationID, options);
+  }
+
+  async renewRuntimeOperation(record: GatewayRecord, operationID: string, expiresAtUnixMS: number, options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; startPolicy?: GatewayStartPolicy }> = {}): Promise<GatewayRuntimeOperation> {
+    return (await this.runtimeOperationClient(record, options)).renewRuntimeOperation(record, operationID, expiresAtUnixMS, options);
+  }
+
+  async reconcileRuntimeOperation(record: GatewayRecord, operationID: string, request: GatewayRuntimeOperationReconcileRequest, options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; startPolicy?: GatewayStartPolicy }> = {}): Promise<GatewayRuntimeOperation> {
+    return (await this.runtimeOperationClient(record, options)).reconcileRuntimeOperation(record, operationID, request, options);
+  }
+
+  async runtimeOperationEvents(record: GatewayRecord, operationID: string, options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; startPolicy?: GatewayStartPolicy }> = {}): Promise<GatewayRuntimeOperationEventsResponse> {
+    return (await this.runtimeOperationClient(record, options)).runtimeOperationEvents(record, operationID, options);
+  }
+
+  private async runtimeOperationClient(
+    record: GatewayRecord,
+    options: Readonly<{ signal?: AbortSignal; startPolicy?: GatewayStartPolicy; onProgress?: GatewayLifecycleProgressSink }>,
+  ): Promise<GatewayURLClient | GatewayBridgeClient> {
     if (record.connection.kind === 'url') {
-      return new GatewayURLClient(this.options.secret_store).runEnvironmentLifecycle(record, request, options);
+      throw new GatewayNotManageableError('URL Gateways do not expose Runtime lifecycle management.');
     }
-    const session = await this.ensureGatewayReady(record, {
+    return (await this.ensureGatewayReady(record, {
       startPolicy: options.startPolicy ?? 'start_if_needed',
       signal: options.signal,
       onProgress: options.onProgress,
-    });
-    return session.client.runEnvironmentLifecycle(record, request, options);
+    })).client;
   }
 
   async bridgeClient(record: GatewayRecord, options: Readonly<{
@@ -552,7 +606,6 @@ export class GatewayLifecycleManager {
         runtime_binary_path: gatewayBinaryPath,
         bridge_command_kind: 'gateway',
         require_local_ui: false,
-        desktop_owner_id: await this.options.desktop_owner_id(),
         ssh_password: sshPassword,
         ssh_credential_scope: record.gateway_id,
         ssh_transport_manager: this.options.ssh_transport_manager,

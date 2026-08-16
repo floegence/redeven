@@ -46,12 +46,10 @@ describe('gatewayServiceHost', () => {
   it('keeps Check Gateway deep probe read-only and bridge-free', () => {
     const source = readGatewayServiceHostSource();
     const probeStart = source.indexOf('function gatewayDeepProbeScript');
-    const probeEnd = source.indexOf('function gatewayLegacyCleanupScript');
+    const probeEnd = source.indexOf('function commandForPlacement');
     const probeSource = source.slice(probeStart, probeEnd);
 
     expect(probeSource).toContain('service-status --state-root "$state_root"');
-    expect(probeSource).toContain('legacy_local_catalog_present');
-    expect(probeSource).toContain('legacy_runtime_pids');
     expect(probeSource).not.toContain('desktop-bridge');
     expect(probeSource).not.toContain('service-start');
     expect(probeSource).not.toContain('service-stop');
@@ -59,25 +57,11 @@ describe('gatewayServiceHost', () => {
     expect(probeSource).not.toContain('rm -f');
   });
 
-  it('limits legacy cleanup to the exact desktop-managed Gateway root', () => {
+  it('never inspects or stops Runtime processes while installing Gateway', () => {
     const source = readGatewayServiceHostSource();
-    const matcherStart = source.indexOf('function gatewayLegacyRuntimePIDAwkScript');
-    const matcherEnd = source.indexOf('function gatewayDeepProbeScript');
-    const cleanupStart = source.indexOf('function gatewayLegacyCleanupScript');
-    const cleanupEnd = source.indexOf('function commandForPlacement');
-    const matcherSource = source.slice(matcherStart, matcherEnd);
-    const cleanupSource = source.slice(cleanupStart, cleanupEnd);
-
-    expect(cleanupSource).toContain('gateway_id="${3:-}"');
-    expect(cleanupSource).toContain('expected_profile_root="${runtime_root%/}/gateways/${gateway_id}"');
-    expect(cleanupSource).toContain('expected_state_root="${expected_profile_root%/}/state"');
-    expect(cleanupSource).toContain('Gateway legacy cleanup refused unexpected state root');
-    expect(cleanupSource).toContain('gatewayLegacyRuntimePIDAwkScript()');
-    expect(matcherSource).toContain('parts[i] == "--desktop-managed"');
-    expect(matcherSource).toContain('parts[i] == "--state-root" && (parts[i + 1] == state || parts[i + 1] == profile)');
-    expect(matcherSource).toContain('parts[i] == "--state-root=" state');
-    expect(matcherSource).toContain('parts[i] == "--state-root=" profile');
-    expect(matcherSource).not.toContain('index($0, "--desktop-managed")');
-    expect(cleanupSource).toContain('rm -f "${profile_root%/}/catalog/local-environment.json"');
+    expect(source).not.toContain('gatewayLegacyRuntimePIDAwkScript');
+    expect(source).not.toContain('gatewayLegacyCleanupScript');
+    expect(source).not.toContain('desktop-runtime-stop');
+    expect(source).not.toContain('legacy_runtime_pids');
   });
 });

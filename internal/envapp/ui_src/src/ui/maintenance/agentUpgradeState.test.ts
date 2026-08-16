@@ -63,9 +63,12 @@ describe('agentUpgradeState', () => {
       available: true,
       authority: 'desktop_ssh',
       runtime_kind: 'ssh',
-      lifecycle_owner: 'external',
-      service_owner: 'desktop',
-      desktop_managed: true,
+      management: {
+        support: 'supported',
+        authorization: 'allowed',
+        readiness: 'ready',
+        presentation_state: 'allowed',
+      },
       upgrade_policy: 'desktop_release',
       restart: {
         availability: 'available',

@@ -19,7 +19,7 @@ import {
   openDashboardInDesktopShell,
   openExternalURLInDesktopShell,
   performRuntimeMaintenanceActionInDesktopShell,
-  restartDesktopManagedRuntime,
+  restartRuntimeViaDesktop,
   toggleDesktopWindowFullScreen,
   toggleDesktopWindowMaximize,
 } from './desktopShellBridge';
@@ -173,7 +173,7 @@ describe('desktopShellBridge', () => {
       restartManagedRuntime: restartManagedRuntimeBridge,
     };
 
-    await expect(restartDesktopManagedRuntime()).resolves.toEqual({
+    await expect(restartRuntimeViaDesktop()).resolves.toEqual({
       ok: true,
       started: true,
       message: 'Desktop restarted the managed runtime.',
@@ -186,9 +186,6 @@ describe('desktopShellBridge', () => {
       available: true,
       authority: 'desktop_ssh',
       runtime_kind: 'ssh',
-      lifecycle_owner: 'external',
-      service_owner: 'desktop',
-      desktop_managed: true,
       upgrade_policy: 'desktop_release',
       restart: {
         availability: 'available',

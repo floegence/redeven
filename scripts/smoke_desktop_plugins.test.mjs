@@ -322,7 +322,6 @@ test('attach smoke accepts the shared dev Desktop ports with verified provenance
     runningRoot: '/Users/test/code/redeven',
     runningCommit: '416871dd1731',
     runtimeCommit: '416871dd1731',
-    ownerID: 'owner-id',
     stateRoot: '/Users/test/.redeven',
   }));
 });
@@ -338,7 +337,6 @@ test('attach smoke requires process and commit provenance', () => {
     runningRoot: '/Users/test/code/redeven',
     runningCommit: 'different',
     runtimeCommit: '416871dd1731',
-    ownerID: 'owner-id',
     stateRoot: '/Users/test/.redeven',
   }), /commit provenance/u);
 });
@@ -742,5 +740,5 @@ test('Desktop smoke records the task owner in each phase summary', async () => {
     new URL('./smoke_desktop_plugins.mjs', import.meta.url),
     'utf8',
   ));
-  assert.match(source, /owner_id: config\.ownerID/u);
+  assert.doesNotMatch(source, /owner_id: config\.ownerID/u);
 });

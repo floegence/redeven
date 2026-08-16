@@ -132,13 +132,11 @@ describe('runtimePlacementBridgeProtocol', () => {
         available: true,
         protocol_version: 'redeven-runtime-control-v1',
         token: 'runtime-control-token',
-        desktop_owner_id: 'desktop-owner',
       },
     }, 'http://127.0.0.1:41234/')).toEqual({
       protocol_version: 'redeven-runtime-control-v1',
       base_url: 'http://127.0.0.1:41234/__redeven_runtime_control/',
       token: 'runtime-control-token',
-      desktop_owner_id: 'desktop-owner',
     });
   });
 

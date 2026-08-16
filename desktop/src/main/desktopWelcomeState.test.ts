@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { normalizeDesktopControlPlaneProvider } from '../shared/controlPlaneProvider';
-import type { DesktopManagedRuntimePresence } from '../shared/desktopRuntimePresence';
+import type { DesktopRuntimePresence } from '../shared/desktopRuntimePresence';
 import { buildDesktopRuntimeOperationPlans } from '../shared/desktopRuntimeOperationPlanner';
 import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
 import {
@@ -39,7 +39,7 @@ const testAccessPoint = {
 } as const;
 
 const testProvider = normalizeDesktopControlPlaneProvider({
-  protocol_version: 'rcpp-v2',
+  protocol_version: 'rcpp-v3',
   provider_id: 'example_control_plane',
   display_name: 'Example Control Plane',
   provider_origin: 'https://provider.example.invalid',
@@ -108,8 +108,8 @@ function testControlPlaneSummary(input: Readonly<{
 }
 
 function sshRuntimePresence(
-  overrides: Partial<DesktopManagedRuntimePresence> = {},
-): DesktopManagedRuntimePresence {
+  overrides: Partial<DesktopRuntimePresence> = {},
+): DesktopRuntimePresence {
   const presence = {
     target_id: 'ssh:ssh:devbox:2222:key_agent:remote_default',
     placement_target_id: 'ssh:host:devbox%3A2222:remote_default',
@@ -134,9 +134,7 @@ function sshRuntimePresence(
     local_ui_url: 'http://127.0.0.1:40111/',
     openable: true,
     runtime_service: {
-      protocol_version: 'redeven-runtime-v1',
-      service_owner: 'desktop',
-      desktop_managed: true,
+      protocol_version: 'redeven-runtime-v2',
       effective_run_mode: 'desktop',
       remote_enabled: false,
       compatibility: 'compatible',
@@ -151,17 +149,16 @@ function sshRuntimePresence(
         desktop_model_source: { supported: false },
         provider_link: {
           supported: true,
-          bind_method: 'runtime_control_v1',
+          bind_method: 'runtime_control_v2',
         },
       },
     },
     runtime_control_status: {
       state: 'available',
-      owner: 'current_desktop',
     },
     checked_at_unix_ms: 1000,
     ...overrides,
-  } as Omit<DesktopManagedRuntimePresence, 'operations'> & Partial<Pick<DesktopManagedRuntimePresence, 'operations'>>;
+  } as Omit<DesktopRuntimePresence, 'operations'> & Partial<Pick<DesktopRuntimePresence, 'operations'>>;
   return {
     ...presence,
     operations: overrides.operations ?? buildDesktopRuntimeOperationPlans({
@@ -179,8 +176,8 @@ function sshRuntimePresence(
 }
 
 function localRuntimePresence(
-  overrides: Partial<DesktopManagedRuntimePresence> = {},
-): DesktopManagedRuntimePresence {
+  overrides: Partial<DesktopRuntimePresence> = {},
+): DesktopRuntimePresence {
   const presence = {
     target_id: 'local:local',
     placement_target_id: 'local:host:local',
@@ -194,9 +191,7 @@ function localRuntimePresence(
     local_ui_url: 'http://localhost:23998/',
     openable: true,
     runtime_service: {
-      protocol_version: 'redeven-runtime-v1',
-      service_owner: 'desktop',
-      desktop_managed: true,
+      protocol_version: 'redeven-runtime-v2',
       effective_run_mode: 'desktop',
       remote_enabled: false,
       compatibility: 'compatible',
@@ -211,17 +206,16 @@ function localRuntimePresence(
         desktop_model_source: { supported: false },
         provider_link: {
           supported: true,
-          bind_method: 'runtime_control_v1',
+          bind_method: 'runtime_control_v2',
         },
       },
     },
     runtime_control_status: {
       state: 'available',
-      owner: 'current_desktop',
     },
     checked_at_unix_ms: 1000,
     ...overrides,
-  } as Omit<DesktopManagedRuntimePresence, 'operations'> & Partial<Pick<DesktopManagedRuntimePresence, 'operations'>>;
+  } as Omit<DesktopRuntimePresence, 'operations'> & Partial<Pick<DesktopRuntimePresence, 'operations'>>;
   return {
     ...presence,
     operations: overrides.operations ?? buildDesktopRuntimeOperationPlans({
@@ -296,12 +290,10 @@ describe('desktopWelcomeState', () => {
       }),
       currentRuntime: {
         local_ui_url: 'http://localhost:23998/',
-        desktop_managed: true,
         effective_run_mode: 'desktop',
         runtime_service: {
-          protocol_version: 'redeven-runtime-v1',
-          service_owner: 'desktop',
-          desktop_managed: true,
+          protocol_version: 'redeven-runtime-v2',
+          compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
           effective_run_mode: 'desktop',
           remote_enabled: true,
           compatibility: 'compatible',
@@ -413,7 +405,7 @@ describe('desktopWelcomeState', () => {
         can_delete: false,
         local_environment_kind: 'local',
         local_environment_ui_bind: '0.0.0.0:24000',
-        local_environment_runtime_state: 'running_desktop',
+        local_environment_runtime_state: 'running',
         local_environment_runtime_url: 'http://localhost:23998/',
         local_environment_close_behavior: 'detaches',
       }),
@@ -506,7 +498,6 @@ describe('desktopWelcomeState', () => {
       currentRuntime: {
         local_ui_url: 'http://localhost:23998/',
         effective_run_mode: 'desktop',
-        desktop_managed: true,
         started_at_unix_ms: 1778751234567,
       },
     });
@@ -671,13 +662,10 @@ describe('desktopWelcomeState', () => {
     const local = testLocalEnvironment({
       currentRuntime: {
         local_ui_url: 'http://127.0.0.1:24001/',
-        desktop_managed: false,
         effective_run_mode: 'local',
         runtime_service: {
-          protocol_version: 'redeven-runtime-v1',
+          protocol_version: 'redeven-runtime-v2',
           compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
-          service_owner: 'external',
-          desktop_managed: false,
           effective_run_mode: 'local',
           remote_enabled: false,
           compatibility: 'compatible',
@@ -702,7 +690,7 @@ describe('desktopWelcomeState', () => {
       expect.objectContaining({
         id: 'local',
         local_ui_url: 'http://127.0.0.1:24001/',
-        local_environment_runtime_state: 'running_external',
+        local_environment_runtime_state: 'running',
         local_environment_runtime_url: 'http://127.0.0.1:24001/',
         local_environment_close_behavior: 'detaches',
         window_state: 'closed',
@@ -745,8 +733,6 @@ describe('desktopWelcomeState', () => {
             runtime_version: 'v1.7.0',
             protocol_version: 'redeven-runtime-v1',
             compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
-            service_owner: 'external',
-            desktop_managed: false,
             remote_enabled: true,
             compatibility: 'compatible',
             open_readiness: { state: 'openable' },
@@ -768,7 +754,6 @@ describe('desktopWelcomeState', () => {
         is_open: false,
         runtime_service: expect.objectContaining({
           runtime_version: 'v1.7.0',
-          service_owner: 'external',
           open_readiness: { state: 'openable' },
         }),
       }),
@@ -799,8 +784,6 @@ describe('desktopWelcomeState', () => {
               runtime_version: 'v1.9.0',
               protocol_version: 'redeven-runtime-v1',
               compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
-              service_owner: 'external',
-              desktop_managed: false,
               remote_enabled: true,
               compatibility: 'compatible',
               open_readiness: { state: 'openable' },
@@ -1000,8 +983,6 @@ describe('desktopWelcomeState', () => {
             runtime_version: 'v1.8.0',
             protocol_version: 'redeven-runtime-v1',
             compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
-            service_owner: 'desktop',
-            desktop_managed: true,
             remote_enabled: false,
             compatibility: 'compatible',
             open_readiness: { state: 'openable' },
@@ -1023,7 +1004,6 @@ describe('desktopWelcomeState', () => {
         is_open: false,
         runtime_service: expect.objectContaining({
           runtime_version: 'v1.8.0',
-          service_owner: 'desktop',
           open_readiness: { state: 'openable' },
         }),
       }),
@@ -1076,7 +1056,6 @@ describe('desktopWelcomeState', () => {
         runtime_running: true,
         runtime_control_status: {
           state: 'available',
-          owner: 'current_desktop',
         },
         can_connect_provider: true,
       },
@@ -1091,8 +1070,6 @@ describe('desktopWelcomeState', () => {
       openable: false,
       runtime_service: {
         protocol_version: 'redeven-runtime-v1',
-        service_owner: 'desktop',
-        desktop_managed: true,
         effective_run_mode: 'desktop',
         remote_enabled: false,
         compatibility: 'update_required',
@@ -1154,8 +1131,6 @@ describe('desktopWelcomeState', () => {
     const providerEnvironment = testProviderEnvironment('https://provider.example.invalid', 'env_demo');
     const localService = {
       protocol_version: 'redeven-runtime-v1',
-      service_owner: 'desktop' as const,
-      desktop_managed: true,
       effective_run_mode: 'desktop',
       remote_enabled: true,
       compatibility: 'compatible' as const,
@@ -1482,7 +1457,6 @@ describe('desktopWelcomeState', () => {
         local_environment: testLocalEnvironment({
           currentRuntime: {
             local_ui_url: 'http://localhost:23998/',
-            desktop_managed: false,
             effective_run_mode: 'desktop',
           },
         }),
@@ -1506,8 +1480,6 @@ describe('desktopWelcomeState', () => {
       openable: false,
       runtime_service: {
         protocol_version: 'redeven-runtime-v1',
-        service_owner: 'desktop',
-        desktop_managed: true,
         effective_run_mode: 'desktop',
         remote_enabled: false,
         compatibility: 'desktop_update_required',
@@ -1574,8 +1546,6 @@ describe('desktopWelcomeState', () => {
       open_connection_required: true,
       runtime_service: {
         protocol_version: 'redeven-runtime-v1',
-        service_owner: 'desktop',
-        desktop_managed: true,
         effective_run_mode: 'desktop',
         remote_enabled: false,
         compatibility: 'update_required',
@@ -2019,8 +1989,6 @@ describe('desktopWelcomeState', () => {
               runtime_version: 'v1.9.0',
               protocol_version: 'redeven-runtime-v1',
               compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
-              service_owner: 'desktop',
-              desktop_managed: true,
               remote_enabled: false,
               compatibility: 'compatible',
               open_readiness: { state: 'openable' },
@@ -2165,13 +2133,10 @@ describe('desktopWelcomeState', () => {
       }),
       currentRuntime: {
         local_ui_url: 'http://localhost:23998/',
-        desktop_managed: true,
         effective_run_mode: 'desktop',
         ...providerRuntimeState('env_demo'),
         runtime_service: {
-          protocol_version: 'redeven-runtime-v1',
-          service_owner: 'desktop',
-          desktop_managed: true,
+          protocol_version: 'redeven-runtime-v2',
           effective_run_mode: 'desktop',
           remote_enabled: true,
           compatibility: 'compatible',
@@ -2186,7 +2151,7 @@ describe('desktopWelcomeState', () => {
             desktop_model_source: { supported: false },
             provider_link: {
               supported: true,
-              bind_method: 'runtime_control_v1',
+              bind_method: 'runtime_control_v2',
             },
           },
           bindings: {
@@ -2516,12 +2481,9 @@ describe('desktopWelcomeState', () => {
         local_environment: testLocalEnvironment({
           currentRuntime: {
             local_ui_url: 'http://localhost:23998/',
-            desktop_managed: true,
             effective_run_mode: 'desktop',
             runtime_service: {
-              protocol_version: 'redeven-runtime-v1',
-              service_owner: 'desktop',
-              desktop_managed: true,
+              protocol_version: 'redeven-runtime-v2',
               effective_run_mode: 'desktop',
               remote_enabled: false,
               compatibility: 'compatible',
@@ -2586,19 +2548,15 @@ describe('desktopWelcomeState', () => {
         local_environment: testLocalEnvironment({
           currentRuntime: {
             local_ui_url: 'http://localhost:23998/',
-            desktop_managed: true,
             effective_run_mode: 'desktop',
             ...providerRuntimeState('env_demo'),
             runtime_control: {
               protocol_version: 'redeven-runtime-control-v1',
               base_url: 'http://127.0.0.1:25000/',
               token: 'runtime-control-token',
-              desktop_owner_id: 'desktop-owner-test',
             },
             runtime_service: {
               protocol_version: 'redeven-runtime-v1',
-              service_owner: 'desktop',
-              desktop_managed: true,
               effective_run_mode: 'desktop',
               remote_enabled: false,
               compatibility: 'compatible',
@@ -2613,7 +2571,7 @@ describe('desktopWelcomeState', () => {
                 desktop_model_source: { supported: false },
                 provider_link: {
                   supported: true,
-                  bind_method: 'runtime_control_v1',
+                  bind_method: 'runtime_control_v2',
                 },
               },
               bindings: {
@@ -2635,9 +2593,7 @@ describe('desktopWelcomeState', () => {
       managedRuntimePresenceByTargetID: {
         'local:local': localRuntimePresence({
           runtime_service: {
-            protocol_version: 'redeven-runtime-v1',
-            service_owner: 'desktop',
-            desktop_managed: true,
+            protocol_version: 'redeven-runtime-v2',
             effective_run_mode: 'desktop',
             remote_enabled: false,
             compatibility: 'compatible',
@@ -2652,7 +2608,7 @@ describe('desktopWelcomeState', () => {
               desktop_model_source: { supported: false },
               provider_link: {
                 supported: true,
-                bind_method: 'runtime_control_v1',
+                bind_method: 'runtime_control_v2',
               },
             },
             bindings: {
@@ -2735,8 +2691,6 @@ describe('desktopWelcomeState', () => {
         'local:local': localRuntimePresence({
           runtime_service: {
             protocol_version: 'redeven-runtime-v1',
-            service_owner: 'desktop',
-            desktop_managed: true,
             effective_run_mode: 'desktop',
             remote_enabled: true,
             compatibility: 'compatible',

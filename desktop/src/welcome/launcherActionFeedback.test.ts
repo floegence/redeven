@@ -35,7 +35,7 @@ describe('launcherActionFeedback', () => {
     });
   });
 
-  it('turns lifecycle ownership collisions into an informational progress handoff', () => {
+  it('turns an operation in progress into an informational progress handoff', () => {
     expect(launcherActionFailurePresentation(i18n, {
       ok: false,
       code: 'runtime_lifecycle_in_progress',

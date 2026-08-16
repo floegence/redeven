@@ -378,7 +378,11 @@
       "closeLabel": "Cerrar el selector de apariencia",
       "commandDescription": "Elige un modo de color y uno de los temas de interfaz disponibles.",
       "modeLabel": "Modo de color",
-      "mode": { "system": "Sistema", "light": "Claro", "dark": "Oscuro" },
+      "mode": {
+        "system": "Sistema",
+        "light": "Claro",
+        "dark": "Oscuro"
+      },
       "systemResolvedLight": "El sistema está usando el modo claro",
       "systemResolvedDark": "El sistema está usando el modo oscuro",
       "themesLabel": "Temas",
@@ -473,12 +477,30 @@
           "other": "{lead}: {title} y {count} tareas más"
         },
         "withoutTitle": {
-          "needsAttention": { "one": "Una tarea requiere tu atención", "other": "{count} tareas requieren tu atención" },
-          "needsReview": { "one": "Una tarea está pendiente de revisión", "other": "{count} tareas están pendientes de revisión" },
-          "working": { "one": "Flower está trabajando en una tarea", "other": "Flower está trabajando en {count} tareas" },
-          "queued": { "one": "Una tarea está esperando para empezar", "other": "{count} tareas están esperando para empezar" },
-          "stopped": { "one": "Una tarea se ha detenido", "other": "{count} tareas se han detenido" },
-          "ready": { "one": "Hay un resultado listo", "other": "Hay {count} resultados listos" }
+          "needsAttention": {
+            "one": "Una tarea requiere tu atención",
+            "other": "{count} tareas requieren tu atención"
+          },
+          "needsReview": {
+            "one": "Una tarea está pendiente de revisión",
+            "other": "{count} tareas están pendientes de revisión"
+          },
+          "working": {
+            "one": "Flower está trabajando en una tarea",
+            "other": "Flower está trabajando en {count} tareas"
+          },
+          "queued": {
+            "one": "Una tarea está esperando para empezar",
+            "other": "{count} tareas están esperando para empezar"
+          },
+          "stopped": {
+            "one": "Una tarea se ha detenido",
+            "other": "{count} tareas se han detenido"
+          },
+          "ready": {
+            "one": "Hay un resultado listo",
+            "other": "Hay {count} resultados listos"
+          }
         },
         "secondaryWorking": {
           "one": "Flower también está trabajando en otra tarea",
@@ -2623,10 +2645,8 @@
     "loading": "Cargando...",
     "statusLabel": "Estado",
     "statusNote": "Estado actual observado por el controlador de mantenimiento.",
-    "serviceOwner": "Propietario del servicio",
-    "serviceOwnerNote": "Propietario del ciclo de vida de este servicio de ejecución persistente.",
     "maintenanceAuthority": "Autoridad de mantenimiento",
-    "maintenanceAuthorityNote": "Propietario actual de las acciones de reinicio y actualización en esta sesión.",
+    "maintenanceAuthorityNote": "Canal de ejecución actual para las acciones de reinicio y actualización de esta sesión.",
     "compatibilityLabel": "Compatibilidad",
     "compatibilityNote": "Desktop y estado de compatibilidad del servicio de tiempo de ejecución.",
     "activeWork": "Trabajo activo",
@@ -2647,10 +2667,6 @@
     "noActiveWork": "No hay trabajo activo",
     "runtimeRpc": "Tiempo de ejecución RPC",
     "unknown": "Desconocido",
-    "owner": {
-      "redevenDesktop": "Redeven Desktop",
-      "externalService": "Servicio externo"
-    },
     "status": {
       "online": "En línea",
       "offline": "Sin conexión"
@@ -2660,8 +2676,7 @@
       "updateAvailable": "Actualización disponible",
       "restartRecommended": "Reinicio recomendado",
       "updateRequired": "Actualización requerida",
-      "desktopUpdateRequired": "Actualización de Desktop requerida",
-      "managedElsewhere": "Gestionado en otro lugar"
+      "desktopUpdateRequired": "Actualización de Desktop requerida"
     },
     "desktopModelState": {
       "bound": "Vinculado",
@@ -2687,7 +2702,8 @@
         "one": "{count} servicio web",
         "other": "{count} servicios web"
       }
-    }
+    },
+    "desktopShell": "Redeven Desktop"
   },
   "runtimeConfig": {
     "title": "Shell y espacio de trabajo",
@@ -3783,7 +3799,10 @@
       "errorInvalidEncoding": "Este archivo de texto no tiene una codificación UTF-8 válida.",
       "errorUploadFailed": "La subida ha fallado. Inténtalo de nuevo.",
       "errorUnavailable": "Los archivos adjuntos no están disponibles para el modelo seleccionado.",
-      "lines": { "one": "{count} línea", "other": "{count} líneas" },
+      "lines": {
+        "one": "{count} línea",
+        "other": "{count} líneas"
+      },
       "added": "{name} añadido.",
       "converted": "El texto largo se ha convertido en el archivo adjunto {name}.",
       "uploaded": "{name} subido.",
@@ -4315,7 +4334,58 @@
       "backToList": "Volver a los plugins",
       "reviewPermissions": "Revisar los permisos necesarios",
       "reviewUpdate": "Revisar la actualización",
-      "updateReview": {"title":"Revisar la actualización de {plugin}","description":"Consulta los cambios antes de instalar esta actualización.","loading":"Preparando la revisión...","versionChange":"Versión","currentVersion":"Actual","targetVersion":"Nueva","newBuild":"Nueva compilación de desarrollo","replacementBuild":"Compilación de reemplazo","whatIsNew":"Novedades","features":"Nuevas funciones","improvements":"Mejoras","fixes":"Correcciones","notices":"Notas","noReleaseNotes":"El editor no proporcionó notas de actualización.","impactTitle":"Impacto sobre el acceso y la actualización","noAccessChange":"Se conservan los permisos existentes. No se solicita otro cambio de acceso.","securityChanges":"Hay {count} declaraciones de seguridad nuevas o modificadas. Revisa la inspección del Host.","developmentEvidence":"Redeven verificó esta entrega de desarrollo y su contrato de capacidades.","developmentInspectionUnavailable":"Las compilaciones de desarrollo no reciben inspección de firma ni de diferencias entre declaraciones.","externalEvidence":"La inspección del Host está vinculada exactamente a este paquete.","enabledRetained":"Se conserva el estado de activación.","grantsRetained":"Se conservan las autorizaciones existentes.","technicalEvidence":"Pruebas técnicas","packageHash":"Hash del paquete","manifestHash":"Hash del manifiesto","entriesHash":"Hash de las entradas","capabilityVersion":"Contrato de capacidades","releaseNotesID":"ID de notas de actualización","updateToVersion":"Actualizar a v{version}","installNewBuild":"Instalar nueva compilación","replaceBuild":"Reemplazar compilación actual","noUpdate":"Esta compilación exacta ya está instalada.","downgradeBlocked":"El destino es anterior a la versión instalada.","riskConfirm":"Entiendo que este paquete reemplaza la compilación actual y puede cambiar sus declaraciones de seguridad.","committing":"Instalando la actualización revisada...","reconciling":"Confirmando el resultado...","continueReconciliation":"Seguir confirmando el resultado","stale":"El plugin o el destino cambió. Abre una revisión nueva.","failed":"La actualización no se completó. El destino revisado sigue disponible.","outcomeUnknown":"Redeven aún no puede confirmar el resultado. No volverá a enviar la actualización.","refreshFailed":"La actualización terminó, pero Plugin Center no pudo actualizar el inventario.","completeTitle":"{plugin} está actualizado","completeDescription":"Se instaló v{version}. Se conservaron el estado y las autorizaciones.","done":"Finalizar","viewPermissions":"Ver permisos","allCurrent":"Todos los plugins están actualizados.","sourceTitle":"Proporciona el paquete de actualización","sourceDescription":"Debes proporcionar de nuevo el origen para que Redeven inspeccione la actualización exacta.","reviewPackage":"Revisar paquete","readOnly":"Puedes revisar la actualización, pero debe instalarla un administrador del entorno."},
+      "updateReview": {
+        "title": "Revisar la actualización de {plugin}",
+        "description": "Consulta los cambios antes de instalar esta actualización.",
+        "loading": "Preparando la revisión...",
+        "versionChange": "Versión",
+        "currentVersion": "Actual",
+        "targetVersion": "Nueva",
+        "newBuild": "Nueva compilación de desarrollo",
+        "replacementBuild": "Compilación de reemplazo",
+        "whatIsNew": "Novedades",
+        "features": "Nuevas funciones",
+        "improvements": "Mejoras",
+        "fixes": "Correcciones",
+        "notices": "Notas",
+        "noReleaseNotes": "El editor no proporcionó notas de actualización.",
+        "impactTitle": "Impacto sobre el acceso y la actualización",
+        "noAccessChange": "Se conservan los permisos existentes. No se solicita otro cambio de acceso.",
+        "securityChanges": "Hay {count} declaraciones de seguridad nuevas o modificadas. Revisa la inspección del Host.",
+        "developmentEvidence": "Redeven verificó esta entrega de desarrollo y su contrato de capacidades.",
+        "developmentInspectionUnavailable": "Las compilaciones de desarrollo no reciben inspección de firma ni de diferencias entre declaraciones.",
+        "externalEvidence": "La inspección del Host está vinculada exactamente a este paquete.",
+        "enabledRetained": "Se conserva el estado de activación.",
+        "grantsRetained": "Se conservan las autorizaciones existentes.",
+        "technicalEvidence": "Pruebas técnicas",
+        "packageHash": "Hash del paquete",
+        "manifestHash": "Hash del manifiesto",
+        "entriesHash": "Hash de las entradas",
+        "capabilityVersion": "Contrato de capacidades",
+        "releaseNotesID": "ID de notas de actualización",
+        "updateToVersion": "Actualizar a v{version}",
+        "installNewBuild": "Instalar nueva compilación",
+        "replaceBuild": "Reemplazar compilación actual",
+        "noUpdate": "Esta compilación exacta ya está instalada.",
+        "downgradeBlocked": "El destino es anterior a la versión instalada.",
+        "riskConfirm": "Entiendo que este paquete reemplaza la compilación actual y puede cambiar sus declaraciones de seguridad.",
+        "committing": "Instalando la actualización revisada...",
+        "reconciling": "Confirmando el resultado...",
+        "continueReconciliation": "Seguir confirmando el resultado",
+        "stale": "El plugin o el destino cambió. Abre una revisión nueva.",
+        "failed": "La actualización no se completó. El destino revisado sigue disponible.",
+        "outcomeUnknown": "Redeven aún no puede confirmar el resultado. No volverá a enviar la actualización.",
+        "refreshFailed": "La actualización terminó, pero Plugin Center no pudo actualizar el inventario.",
+        "completeTitle": "{plugin} está actualizado",
+        "completeDescription": "Se instaló v{version}. Se conservaron el estado y las autorizaciones.",
+        "done": "Finalizar",
+        "viewPermissions": "Ver permisos",
+        "allCurrent": "Todos los plugins están actualizados.",
+        "sourceTitle": "Proporciona el paquete de actualización",
+        "sourceDescription": "Debes proporcionar de nuevo el origen para que Redeven inspeccione la actualización exacta.",
+        "reviewPackage": "Revisar paquete",
+        "readOnly": "Puedes revisar la actualización, pero debe instalarla un administrador del entorno."
+      },
       "viewPolicyRestriction": "Ver la restricción de la política",
       "viewRuntimeRequirement": "Ver el requisito del entorno de ejecución",
       "viewTrustDetails": "Ver los detalles de confianza",

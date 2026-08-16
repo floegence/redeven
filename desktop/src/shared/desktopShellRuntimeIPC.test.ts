@@ -103,9 +103,6 @@ describe('desktopShellRuntimeIPC', () => {
       available: true,
       authority: 'desktop_ssh',
       runtime_kind: 'ssh',
-      lifecycle_owner: 'external',
-      service_owner: 'desktop',
-      desktop_managed: true,
       upgrade_policy: 'desktop_release',
       current_version: ' v1.0.0 ',
       active_workload: {

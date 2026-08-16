@@ -46,7 +46,6 @@ type Snapshot struct {
 	RequestedRunMode         string
 	EffectiveRunMode         string
 	PresentationMode         string
-	DesktopManaged           bool
 	RemoteEnabled            bool
 	ControlChannelEnabled    bool
 	LocalUIEnabled           bool

@@ -43,7 +43,6 @@ export function RuntimeStatusSection() {
       case 'restart_recommended': return i18n.t('runtimeStatus.compatibility.restartRecommended');
       case 'update_required': return i18n.t('runtimeStatus.compatibility.updateRequired');
       case 'desktop_update_required': return i18n.t('runtimeStatus.compatibility.desktopUpdateRequired');
-      case 'managed_elsewhere': return i18n.t('runtimeStatus.compatibility.managedElsewhere');
       default: return i18n.t('runtimeStatus.unknown');
     }
   };
@@ -66,18 +65,11 @@ export function RuntimeStatusSection() {
     return parts.length > 0 ? parts.join(', ') : i18n.t('runtimeStatus.noActiveWork');
   };
 
-  const serviceOwnerLabel = () => {
-    const service = ctx.runtimeService();
-    if (service?.serviceOwner === 'desktop' || service?.desktopManaged) return i18n.t('runtimeStatus.owner.redevenDesktop');
-    if (service?.serviceOwner === 'external') return i18n.t('runtimeStatus.owner.externalService');
-    return i18n.t('runtimeStatus.unknown');
-  };
-
   const maintenanceAuthority = () => {
     const authority = String(ctx.maintenanceContext()?.authority ?? '').trim();
     if (!authority) return i18n.t('runtimeStatus.runtimeRpc');
     if (authority === 'runtime_rpc') return i18n.t('runtimeStatus.runtimeRpc');
-    if (authority === 'desktop_shell') return i18n.t('runtimeStatus.owner.redevenDesktop');
+    if (authority === 'desktop_shell') return i18n.t('runtimeStatus.desktopShell');
     return authority.replace(/_/g, ' ');
   };
 
@@ -174,10 +166,6 @@ export function RuntimeStatusSection() {
             <div class="flex items-center justify-between text-xs">
               <span class="text-muted-foreground">{i18n.t('runtimeStatus.activeWork')}</span>
               <span class="text-foreground">{activeWorkSummary()}</span>
-            </div>
-            <div class="flex items-center justify-between text-xs">
-              <span class="text-muted-foreground">{i18n.t('runtimeStatus.serviceOwner')}</span>
-              <span class="text-foreground">{serviceOwnerLabel()}</span>
             </div>
             <div class="flex items-center justify-between text-xs">
               <span class="text-muted-foreground">{i18n.t('runtimeStatus.maintenanceAuthority')}</span>

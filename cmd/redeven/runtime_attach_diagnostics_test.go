@@ -17,8 +17,6 @@ func TestDiagnoseRuntimeAttachFailureUsesLockMetadataAsRuntimeIdentity(t *testin
 		RuntimeVersion:           "v1.2.3",
 		RuntimeCommit:            "abc123",
 		BinaryPath:               "/opt/redeven/bin/redeven",
-		DesktopManaged:           true,
-		DesktopOwnerID:           "desktop-owner",
 		LocalUIEnabled:           true,
 		StateRoot:                "/root/.redeven",
 		StateDir:                 "/root/.redeven/local-environment",
@@ -37,9 +35,6 @@ func TestDiagnoseRuntimeAttachFailureUsesLockMetadataAsRuntimeIdentity(t *testin
 	}
 	if status.Identity.PID != os.Getpid() || status.Identity.InstanceID != "rt_owner" {
 		t.Fatalf("unexpected identity: %#v", status.Identity)
-	}
-	if !status.Identity.DesktopManaged || status.Identity.DesktopOwnerID != "desktop-owner" {
-		t.Fatalf("unexpected desktop owner identity: %#v", status.Identity)
 	}
 	if status.Diagnostics.LockPID != os.Getpid() || !status.Diagnostics.PIDAlive {
 		t.Fatalf("unexpected diagnostics: %#v", status.Diagnostics)

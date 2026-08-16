@@ -17,14 +17,12 @@ export type SysMaintenanceSnapshot = {
   completedAtMs?: number;
 };
 
-export type RuntimeServiceOwner = 'desktop' | 'external' | 'unknown';
 export type RuntimeServiceCompatibility =
   | 'compatible'
   | 'update_available'
   | 'restart_recommended'
   | 'update_required'
   | 'desktop_update_required'
-  | 'managed_elsewhere'
   | 'unknown';
 
 export type RuntimeServiceOpenReadinessState = 'starting' | 'openable' | 'blocked';
@@ -91,8 +89,6 @@ export type RuntimeServiceSnapshot = {
   runtimeBuildTime?: string;
   protocolVersion?: string;
   compatibilityEpoch?: number;
-  serviceOwner: RuntimeServiceOwner;
-  desktopManaged: boolean;
   effectiveRunMode?: string;
   remoteEnabled: boolean;
   compatibility: RuntimeServiceCompatibility;

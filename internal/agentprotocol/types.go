@@ -109,7 +109,6 @@ type TargetDescriptor struct {
 	PasswordRequired         bool                  `json:"password_required,omitempty"`
 	EffectiveRunMode         string                `json:"effective_run_mode,omitempty"`
 	RemoteEnabled            bool                  `json:"remote_enabled,omitempty"`
-	DesktopManaged           bool                  `json:"desktop_managed,omitempty"`
 	ControlplaneBaseURL      string                `json:"controlplane_base_url,omitempty"`
 	ControlplaneProvider     string                `json:"controlplane_provider_id,omitempty"`
 	EnvPublicID              string                `json:"env_public_id,omitempty"`
