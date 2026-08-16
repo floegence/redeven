@@ -1099,6 +1099,10 @@ Outside temporary Local Fast Debugging, Redeven must use the released v4 module 
 
 Validation has three explicit levels:
 
+`.node-version` is the single source of truth for the first-party Node.js toolchain.
+GitHub workflows, local development helpers, and first-party package engines
+must select Node 26 without older-major fallbacks.
+
 - During implementation, run focused checks for changed behavior and affected
   contracts.
 - `.githooks/pre-commit` is intentionally fast. It runs staged diff validation,

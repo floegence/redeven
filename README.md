@@ -35,7 +35,7 @@
 
 <p align="center">
   <a href="https://go.dev/"><img alt="Go Version" src="https://img.shields.io/badge/Go-1.26.6-00ADD8?style=flat-square&logo=go"></a>
-  <a href="https://nodejs.org/"><img alt="Node Version" src="https://img.shields.io/badge/Node.js-24-339933?style=flat-square&logo=node.js"></a>
+  <a href="https://nodejs.org/"><img alt="Node Version" src="https://img.shields.io/badge/Node.js-26.7.0-339933?style=flat-square&logo=node.js"></a>
   <a href="okf/index.md"><img alt="OKF Knowledge" src="https://img.shields.io/badge/Knowledge-OKF%20v0.1-6C3BFF?style=flat-square"></a>
   <a href="https://github.com/floegence/redeven/releases"><img alt="Releases" src="https://img.shields.io/badge/Releases-GitHub-181717?style=flat-square&logo=github"></a>
 </p>
@@ -150,7 +150,7 @@ Build, lint, and verify from source.
 ### Prerequisites
 
 - Go `1.26.6`
-- Node.js `24`
+- Node.js `26.7.0`
 - npm
 - pnpm or Node.js `corepack`
 

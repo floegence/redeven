@@ -26,6 +26,7 @@ trap cleanup EXIT
 mkdir -p "$FAKE_CHECKOUT/.git" "$FAKE_DESKTOP" "$FAKE_SCRIPTS"
 printf '%s\n' '{"name":"@floegence/redeven-desktop"}' > "$FAKE_DESKTOP/package.json"
 cp "$ROOT_DIR/scripts/dev_desktop.sh" "$ROOT_DIR/scripts/ui_package_common.sh" "$FAKE_SCRIPTS/"
+cp "$ROOT_DIR/.node-version" "$FAKE_CHECKOUT/.node-version"
 
 (
   cd "$ROOT_DIR/desktop"

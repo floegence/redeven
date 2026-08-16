@@ -53,6 +53,13 @@ sources and requires the local gate runtime to report the exact version. Build,
 test, Desktop, and release paths therefore cannot silently select an older Go
 patch release.
 
+`.node-version` is the single authoritative first-party Node.js toolchain and
+pins Node 26.7.0. GitHub Actions resolves it through `node-version-file`, while
+Desktop, Env App, and Code App package engines accept only Node 26. Shared UI
+and Desktop development helpers reject other Node majors before dependency or
+build work begins, and the public README badges and prerequisites mirror the
+same exact version.
+
 Shipped Redeven Runtime binaries use cgo plus the `floeterm_native` tag so the
 published terminal-go Ghostty engine is present. The release matrix builds
 Linux amd64/arm64 and Darwin amd64/arm64 on matching native runners and never

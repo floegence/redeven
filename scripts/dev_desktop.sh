@@ -133,9 +133,6 @@ resolve_absolute_path() {
 resolve_development_state_root() {
   local checkout_name checkout_checksum port_window state_base explicit_root user_state_root uses_user_state_root
 
-  if ! command -v node >/dev/null 2>&1; then
-    ui_pkg_die "node not found (install Node.js 24+)"
-  fi
   checkout_name="$(printf '%s' "$(basename "$ROOT_DIR")" | tr -cs '[:alnum:]_.-' '-')"
   checkout_checksum="$(printf '%s' "$ROOT_DIR" | cksum | awk '{print $1}')"
   DEVELOPMENT_OWNER="${checkout_name}-${checkout_checksum}"
@@ -489,7 +486,7 @@ ensure_desktop_workspace() {
     ui_pkg_die "desktop workspace not found: $DESKTOP_DIR"
   fi
   if ! command -v npm >/dev/null 2>&1; then
-    ui_pkg_die "npm not found (install Node.js 24+)"
+    ui_pkg_die "npm not found (install Node.js 26.x)"
   fi
 }
 
@@ -628,6 +625,7 @@ parse_args() {
 
 main() {
   parse_args "$@"
+  ui_pkg_require_node_26 "$ROOT_DIR"
   resolve_development_state_root
   validate_stop_timeout
   validate_debug_port "--remote-debugging-port" "$REMOTE_DEBUGGING_PORT"
