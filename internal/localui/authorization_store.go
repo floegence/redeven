@@ -473,18 +473,6 @@ func (store *localAuthorizationStore) advanceBootGeneration() error {
 	return store.retireUnusedKeysLocked()
 }
 
-func (store *localAuthorizationStore) currentGeneration() (int64, error) {
-	if store == nil || store.db == nil {
-		return 0, errors.New("local authorization store is unavailable")
-	}
-	store.mu.Lock()
-	defer store.mu.Unlock()
-	if store.generation <= 0 {
-		return 0, errors.New("local authorization generation is unavailable")
-	}
-	return store.generation, nil
-}
-
 func (store *localAuthorizationStore) issue(record controlplane.AuthorizationRecord, binding pendingDirect, channelID, accessSessionID string, expiresAt time.Time, artifactDigest, projectionDigest, spendOrigin string, targetBinding []byte) (string, error) {
 	if store == nil || store.db == nil {
 		return "", errors.New("local authorization store is unavailable")
@@ -901,13 +889,6 @@ func (store *localAuthorizationStore) revokeAccessSession(accessSessionID string
 		return err
 	}
 	return tx.Commit()
-}
-
-func (store *localAuthorizationStore) bindingByChannel(channelID string) (pendingDirect, string, bool) {
-	if store == nil || store.db == nil || strings.TrimSpace(channelID) == "" {
-		return pendingDirect{}, "", false
-	}
-	return store.bindingByQuery(`channel_id = ?`, channelID)
 }
 
 func (store *localAuthorizationStore) bindingByLookup(lookupKey string) (pendingDirect, string, bool) {

@@ -424,7 +424,7 @@ func makeControlPoolResponse(t *testing.T, generation int64, bindingID string, e
 	wireEntries := make([]controlArtifactPoolWireEntry, 0, len(entries))
 	serverHighest := uint64(config.ControlArtifactTargetWaterline)
 	for _, entry := range entries {
-		wireEntries = append(wireEntries, controlArtifactPoolWireEntry{ArtifactJSON: entry.ArtifactJSON, ArtifactChannelID: entry.ArtifactChannelID, BindingGeneration: entry.BindingGeneration, ArtifactSequence: entry.ArtifactSequence, ExpiresAtUnixS: entry.ExpiresAtUnixS})
+		wireEntries = append(wireEntries, controlArtifactPoolWireEntry(entry))
 		serverHighest = entry.ArtifactSequence
 	}
 	return func(requestID string) json.RawMessage {
