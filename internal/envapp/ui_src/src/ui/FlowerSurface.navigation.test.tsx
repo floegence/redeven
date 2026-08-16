@@ -457,6 +457,103 @@ describe('FlowerSurface navigation', () => {
     }));
   });
 
+  it('keeps the latest A to B to A selection when older detail loads settle late', async () => {
+    const summaryA = thread({
+      thread_id: 'thread-selection-a',
+      title: 'Thread A',
+      messages: [],
+      created_at_ms: 10,
+      updated_at_ms: 12,
+    });
+    const summaryB = thread({
+      thread_id: 'thread-selection-b',
+      title: 'Thread B',
+      messages: [],
+      created_at_ms: 20,
+      updated_at_ms: 22,
+    });
+    const staleA = deferred<ReturnType<typeof liveBootstrap>>();
+    const latestA = deferred<ReturnType<typeof liveBootstrap>>();
+    const lateB = deferred<ReturnType<typeof liveBootstrap>>();
+    let aLoads = 0;
+    const loadThread = vi.fn((threadID: string) => {
+      if (threadID === summaryA.thread_id) {
+        aLoads += 1;
+        return aLoads === 1 ? staleA.promise : latestA.promise;
+      }
+      if (threadID === summaryB.thread_id) return lateB.promise;
+      throw new Error(`unexpected thread ${threadID}`);
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [summaryA, summaryB]),
+      loadThread,
+    });
+    const button = (threadID: string) => runtime.querySelector(
+      `[data-thread-id="${threadID}"] .flower-thread-card-select-button`,
+    ) as HTMLButtonElement;
+    const activeThreadID = () => runtime.querySelector('.flower-thread-card-active')?.getAttribute('data-thread-id');
+
+    await waitFor(() => Boolean(button(summaryA.thread_id)) && Boolean(button(summaryB.thread_id)));
+    button(summaryA.thread_id).click();
+    await waitFor(() => loadThread.mock.calls.some(([threadID]) => threadID === summaryA.thread_id));
+
+    button(summaryB.thread_id).click();
+    await flush();
+    button(summaryA.thread_id).click();
+    staleA.resolve(liveBootstrap(thread({
+      ...summaryA,
+      messages: [{
+        id: 'stale-a-message',
+        turn_id: 'turn-stale-a',
+        role: 'user',
+        content: 'STALE A DETAIL',
+        status: 'complete',
+        created_at_ms: 11,
+      }],
+    })));
+    await waitFor(() => aLoads >= 2);
+
+    expect(activeThreadID()).toBe(summaryA.thread_id);
+    expect(runtime.textContent).not.toContain('STALE A DETAIL');
+
+    latestA.resolve(liveBootstrap(thread({
+      ...summaryA,
+      messages: [{
+        id: 'latest-a-message',
+        turn_id: 'turn-latest-a',
+        role: 'user',
+        content: 'LATEST A DETAIL',
+        status: 'complete',
+        created_at_ms: 13,
+      }],
+    })));
+    await waitFor(() => runtime.textContent?.includes('LATEST A DETAIL') ?? false);
+
+    button(summaryB.thread_id).click();
+    await waitFor(() => loadThread.mock.calls.some(([threadID]) => threadID === summaryB.thread_id));
+    button(summaryA.thread_id).click();
+    await waitFor(() => activeThreadID() === summaryA.thread_id);
+    lateB.resolve(liveBootstrap(thread({
+      ...summaryB,
+      messages: [{
+        id: 'late-b-message',
+        turn_id: 'turn-late-b',
+        role: 'user',
+        content: 'LATE B DETAIL',
+        status: 'complete',
+        created_at_ms: 23,
+      }],
+    })));
+    await flush();
+
+    expect(activeThreadID()).toBe(summaryA.thread_id);
+    expect(runtime.querySelector('.flower-chat-header-title')?.textContent).toBe('Thread A');
+    expect(runtime.textContent).toContain('LATEST A DETAIL');
+    expect(runtime.textContent).not.toContain('LATE B DETAIL');
+    expect(runtime.querySelectorAll('[data-flower-message-id="latest-a-message"]')).toHaveLength(1);
+  });
+
   it('waits for canonical timeline messages after a new thread is accepted', async () => {
     const acceptedThread = thread({
       thread_id: 'thread-accepted-without-messages',

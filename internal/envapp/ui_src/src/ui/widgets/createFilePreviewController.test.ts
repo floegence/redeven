@@ -13,6 +13,16 @@ function flushAsync(): Promise<void> {
   return Promise.resolve().then(() => Promise.resolve());
 }
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 function createTextChannel(text: string, truncated = false) {
   const bytes = new TextEncoder().encode(text);
   let offset = 0;
@@ -281,6 +291,47 @@ describe('createFilePreviewController', () => {
       expect(controller.open()).toBe(false);
       expect(controller.item()).toBe(null);
       expect(openReadFileStreamChannelMock).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('settles rejected stream teardown promises when an in-flight preview closes', async () => {
+    const file = { id: '/workspace/demo.ts', name: 'demo.ts', path: '/workspace/demo.ts', type: 'file' } satisfies FileItem;
+    const read = deferred<Uint8Array<ArrayBuffer>>();
+    const reset = vi.fn(() => Promise.reject(new Error('reset rejected during teardown')));
+    const close = vi.fn(() => Promise.reject(new Error('close rejected during teardown')));
+    openReadFileStreamChannelMock.mockResolvedValue({
+      meta: { content_len: 1, truncated: false },
+      channel: {
+        reader: { readExactly: vi.fn(() => read.promise) },
+        stream: { reset },
+        close,
+      },
+    });
+    const [client] = createSignal({ id: 'client-ready' } as any);
+    const [rpc] = createSignal({ fs: { writeFile: vi.fn(async () => ({ success: true })) } } as any);
+    const [canWrite] = createSignal(true);
+    let controller!: ReturnType<typeof createFilePreviewController>;
+    const dispose = createRoot((disposeRoot) => {
+      controller = createFilePreviewController({ client, rpc, canWrite });
+      return disposeRoot;
+    });
+
+    try {
+      const opening = controller.openPreview(file);
+      await vi.waitFor(() => expect(openReadFileStreamChannelMock).toHaveBeenCalledTimes(1));
+      controller.closePreview();
+      await flushAsync();
+
+      expect(reset).toHaveBeenCalledTimes(1);
+      expect(close).toHaveBeenCalledTimes(1);
+      expect(controller.open()).toBe(false);
+
+      read.resolve(new Uint8Array([65]));
+      await opening;
+      await flushAsync();
+      expect(controller.open()).toBe(false);
     } finally {
       dispose();
     }

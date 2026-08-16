@@ -302,10 +302,10 @@ async function acquireEnvPage(browser, reconnect, reportRoot) {
   try {
     await ensureFlowerSurface(page);
   } catch (error) {
-    await page.screenshot({ path: path.join(reportRoot, 'navigation-failure.png'), fullPage: true }).catch(() => {});
+    await page.screenshot({ path: path.join(reportRoot, 'navigation-failure.png') }).catch(() => {});
     throw error;
   }
-  await page.screenshot({ path: path.join(reportRoot, 'startup.png'), fullPage: true });
+  await page.screenshot({ path: path.join(reportRoot, 'startup.png') });
   return { browser, page };
 }
 
@@ -448,8 +448,10 @@ async function queuePrompt(page, prompt, visibleMarker) {
 }
 
 async function waitForThreadTerminal(page, threadID, timeoutMS = 180_000, options = {}) {
+  const expectedSelectedThreadID = options.expectedSelectedThreadID ?? threadID;
   const terminal = await waitFor(async () => {
-    if (await selectedThreadID(page) !== threadID) return '';
+    const selected = await selectedThreadID(page);
+    if (selected !== expectedSelectedThreadID) return { selectionDrift: selected };
     const canonical = canonicalEvidence(await canonicalThread(page, threadID));
     const status = canonical.status;
     if (!['success', 'failed', 'canceled'].includes(status)) return '';
@@ -457,6 +459,9 @@ async function waitForThreadTerminal(page, threadID, timeoutMS = 180_000, option
     if (options.afterTurnID && (!canonical.turn_id || canonical.turn_id === options.afterTurnID)) return '';
     return { status, canonical };
   }, timeoutMS, `thread ${threadID} terminal status`, 200);
+  if ('selectionDrift' in terminal) {
+    throw new Error(`thread selection drifted from ${expectedSelectedThreadID} to ${terminal.selectionDrift || '<none>'}`);
+  }
   if (terminal.status === 'failed' && !options.allowFailed) {
     const code = terminal.canonical.error_code;
     const classification = /auth|key|quota|rate|unreachable|timeout|provider|model/iu.test(code)
@@ -479,7 +484,14 @@ function assistantMessage(page, turnID) {
 async function selectThread(page, threadID) {
   const card = await threadCard(page, threadID);
   await card.locator('.flower-thread-card-select-button').click();
-  await waitFor(() => selectedThreadID(page).then((id) => id === threadID), 20_000, `select thread ${threadID}`);
+  await waitFor(async () => (
+    await selectedThreadID(page) === threadID
+    && await flowerSurface(page).getAttribute('data-flower-selected-thread-loading') !== 'true'
+  ), 20_000, `select thread ${threadID}`);
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  if (await selectedThreadID(page) !== threadID) {
+    throw new Error(`thread selection drifted after selecting ${threadID}`);
+  }
 }
 
 async function duplicateCounts(page) {
@@ -509,6 +521,19 @@ async function geometrySnapshot(page) {
     };
     return {
       viewport: { width: innerWidth, height: innerHeight },
+      document_scroll: {
+        body_height: document.body.scrollHeight,
+        document_height: document.documentElement.scrollHeight,
+        body_width: document.body.scrollWidth,
+        document_width: document.documentElement.scrollWidth,
+      },
+      unique_surfaces: {
+        env_shell: document.querySelectorAll('[data-env-shell-background]').length,
+        activity_bottom_bar: document.querySelectorAll('[data-activity-flower-bottom-bar]').length,
+        flower_product: document.querySelectorAll('#redeven-activity-flower-product').length,
+        flower_surface: document.querySelectorAll('#redeven-flower-surface').length,
+      },
+      activity_bottom_bar: box('[data-activity-flower-bottom-bar]', true),
       surface: box('#redeven-flower-surface'), rail: box('.flower-component-thread-rail'),
       transcript: box('.flower-chat-transcript'), composer: box('.flower-composer'),
       approval: box('[data-flower-composer-approval]'), input_request: box('[data-flower-input-request-prompt]'),
@@ -516,6 +541,48 @@ async function geometrySnapshot(page) {
       preview_window: box('.file-preview-floating-window, .flower-chat-context-preview-window, .flower-attachment-preview-window', true),
     };
   });
+}
+
+export function assertEnvGeometry(geometry, label) {
+  const unique = geometry.unique_surfaces;
+  if (
+    unique.env_shell !== 1
+    || unique.activity_bottom_bar !== 1
+    || unique.flower_product !== 1
+    || unique.flower_surface !== 1
+  ) {
+    throw new Error(`${label} mounted duplicate or missing shell surfaces: ${JSON.stringify(unique)}`);
+  }
+  const scrollTolerance = 2;
+  if (
+    geometry.document_scroll.body_height > geometry.viewport.height + scrollTolerance
+    || geometry.document_scroll.document_height > geometry.viewport.height + scrollTolerance
+    || geometry.document_scroll.body_width > geometry.viewport.width + scrollTolerance
+    || geometry.document_scroll.document_width > geometry.viewport.width + scrollTolerance
+  ) {
+    throw new Error(`${label} document exceeds the native viewport: ${JSON.stringify(geometry.document_scroll)}`);
+  }
+  if (!geometry.activity_bottom_bar || Math.abs(geometry.activity_bottom_bar.bottom - geometry.viewport.height) > 1) {
+    throw new Error(`${label} Activity bottom bar is not aligned with the native viewport bottom`);
+  }
+  const geometryTolerance = 1;
+  for (const [name, rect] of [
+    ['Activity bottom bar', geometry.activity_bottom_bar],
+    ['Flower surface', geometry.surface],
+    ['thread rail', geometry.rail],
+    ['composer', geometry.composer],
+    ['preview window', geometry.preview_window],
+  ]) {
+    if (!rect) continue;
+    if (
+      rect.x < -geometryTolerance
+      || rect.y < -geometryTolerance
+      || rect.right > geometry.viewport.width + geometryTolerance
+      || rect.bottom > geometry.viewport.height + geometryTolerance
+    ) {
+      throw new Error(`${label} ${name} exceeds the native viewport: ${JSON.stringify(rect)}`);
+    }
+  }
 }
 
 async function assertUIHealth(page) {
@@ -531,15 +598,16 @@ async function assertUIHealth(page) {
   if (!await rail.isVisible()) throw new Error('thread rail is unavailable');
   const composer = surface.locator('.flower-composer textarea');
   if (await composer.count() && await composer.isVisible() && await composer.isDisabled()) throw new Error('composer is unexpectedly disabled');
+  const geometry = await geometrySnapshot(page);
+  assertEnvGeometry(geometry, 'Env App');
   return duplicates;
 }
 
-async function checkpoint(page, config, label, compact = false) {
-  const previous = page.viewportSize();
-  if (compact) await page.setViewportSize({ width: 1024, height: 768 });
+async function checkpoint(page, config, label) {
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   const geometry = await geometrySnapshot(page);
   await writeFile(path.join(config.reportRoot, `${label}-geometry.json`), `${JSON.stringify(geometry, null, 2)}\n`);
+  assertEnvGeometry(geometry, label);
   if (!geometry.surface || !geometry.composer || geometry.composer.bottom > geometry.viewport.height + 1) {
     throw new Error(`${label} geometry overflowed the viewport`);
   }
@@ -550,8 +618,7 @@ async function checkpoint(page, config, label, compact = false) {
   )) {
     throw new Error(`${label} reference menu overlapped or overflowed the composer`);
   }
-  await page.screenshot({ path: path.join(config.reportRoot, `${label}.png`), fullPage: true });
-  if (compact && previous) await page.setViewportSize(previous);
+  await page.screenshot({ path: path.join(config.reportRoot, `${label}.png`) });
   return geometry;
 }
 
@@ -741,7 +808,7 @@ async function runScenarios(page, config, telemetry) {
     await waitFor(async () => await selectedStatus(page) === 'waiting_approval', 180_000, 'approval waiting');
     const card = await threadCard(page, sent.threadID);
     if (await card.getAttribute('data-flower-thread-action-required') !== 'true') throw new Error('thread rail did not expose approval attention');
-    await checkpoint(page, config, 's03-approval-pending', true);
+    await checkpoint(page, config, 's03-approval-pending');
     await approveCurrent(page, true);
     const terminal = await waitForThreadTerminal(page, sent.threadID, 180_000, { turnID: sent.turnID });
     if ((await readFile(output, 'utf8')).trim() !== token) throw new Error('approved terminal write did not stay in smoke workspace');
@@ -805,7 +872,7 @@ async function runScenarios(page, config, telemetry) {
     await startNewThread(page); await selectThread(page, sentNormal.threadID);
     await prompt.waitFor({ state: 'visible', timeout: 20_000 });
     await prompt.locator('[data-flower-input-answer-kind="choice"]').first().click();
-    await checkpoint(page, config, 's06-ask-user-choice', true);
+    await checkpoint(page, config, 's06-ask-user-choice');
     await surface.locator('.flower-composer-continue').click();
     await waitForThreadTerminal(page, sentNormal.threadID, 180_000, { turnID: sentNormal.turnID });
 
@@ -817,7 +884,7 @@ async function runScenarios(page, config, telemetry) {
     await otherPrompt.locator('[data-flower-input-answer-kind="custom"]').click();
     const custom = surface.locator('[data-flower-input-custom-answer="true"]');
     await custom.fill('Gamma lane');
-    await checkpoint(page, config, 's06-ask-user-other', true);
+    await checkpoint(page, config, 's06-ask-user-other');
     await surface.locator('.flower-composer-continue').click();
     const terminal = await waitForThreadTerminal(page, sentOther.threadID, 180_000, { turnID: sentOther.turnID });
     return { thread_id: sentOther.threadID, run_id: sentOther.runID, canonical: terminal.canonical };
@@ -946,7 +1013,7 @@ async function runScenarios(page, config, telemetry) {
     const textarea = surface.locator('.flower-composer textarea');
     await textarea.fill('@reference');
     const menu = page.locator('.flower-composer-reference-menu'); await menu.waitFor({ state: 'visible', timeout: 30_000 });
-    await checkpoint(page, config, 's12-reference-menu', true);
+    await checkpoint(page, config, 's12-reference-menu');
     const option = menu.getByRole('option').filter({ hasText: 'reference-marker-with-a-deliberately-long-file-name' }).first();
     await option.click();
     const token = marker('REFERENCE');
@@ -957,7 +1024,7 @@ async function runScenarios(page, config, telemetry) {
     const chip = surface.locator('[data-flower-message-role="user"] [data-flower-chat-context-chip="true"]').first(); await chip.click();
     const previewSelector = '.file-preview-floating-window, .flower-chat-context-preview-window';
     await page.locator(previewSelector).first().waitFor({ state: 'visible', timeout: 20_000 });
-    await checkpoint(page, config, 's12-reference', true);
+    await checkpoint(page, config, 's12-reference');
     await closeFloatingPreview(page, previewSelector);
     return { thread_id: sent.threadID, run_id: sent.runID, canonical: terminal.canonical };
   });
@@ -974,7 +1041,7 @@ async function runScenarios(page, config, telemetry) {
     const keepItem = items.filter({ hasText: 'attachment-keep' });
     await keepItem.locator('.flower-attachment-preview-trigger').click();
     await page.locator('.flower-attachment-preview-window').waitFor({ state: 'visible', timeout: 30_000 });
-    await checkpoint(page, config, 's13-attachment', true);
+    await checkpoint(page, config, 's13-attachment');
     await closeFloatingPreview(page, '.flower-attachment-preview-window');
     await items.filter({ hasText: 'attachment-remove.txt' }).locator('.flower-attachment-icon-button').last().click();
     await waitFor(async () => await items.count() === 1, 10_000, 'one attachment remains after removal');
@@ -999,7 +1066,10 @@ async function runScenarios(page, config, telemetry) {
     const tokenB = marker('SWITCH_B'); const b = await sendPrompt(page, `Call terminal.exec exactly once with "printf ${tokenB}" and wait for approval. After the decision, reply only as plain text. Do not call task_complete or any other tool.`, { visibleMarker: tokenB });
     await waitFor(async () => await selectedStatus(page) === 'waiting_approval', 180_000, 'recovery companion approval');
     await selectThread(page, a.threadID); await selectThread(page, b.threadID); await selectThread(page, a.threadID);
-    const terminal = await waitForThreadTerminal(page, a.threadID, 180_000, { turnID: a.turnID });
+    const terminal = await waitForThreadTerminal(page, a.threadID, 180_000, {
+      turnID: a.turnID,
+      expectedSelectedThreadID: a.threadID,
+    });
     const before = await duplicateCounts(page);
     telemetry.workspace_sse_reconnect_reasons.push('renderer_reload_recovery');
     await page.reload(); await ensureFlowerSurface(page);
@@ -1152,9 +1222,10 @@ async function runFlowerBrowserSmoke(config) {
     workspace_sse_connections: 0, workspace_sse_reconnect_reasons: [], scenarios: [],
   };
   let page;
+  let nativeViewport;
   try {
     ({ browser, page } = await acquireEnvPage(browser, connect, config.reportRoot));
-    await page.setViewportSize({ width: 1440, height: 900 });
+    nativeViewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
     page.on('console', (message) => { if (message.type() === 'error') telemetry.console_errors.push(message.text().slice(0, 2000)); });
     page.on('pageerror', (error) => telemetry.page_errors.push(String(error).slice(0, 2000)));
     page.on('request', (request) => {
@@ -1176,6 +1247,7 @@ async function runFlowerBrowserSmoke(config) {
     const result = {
       schema_version: 1, redeven_commit: config.commit, runtime_commit: config.commit, floret_version: floretVersion,
       model: SMOKE_MODEL, provider: { configured: true },
+      native_viewport: nativeViewport,
       runtime: { pid: config.runtimePID, ports: { local_ui: config.localUIPort, cdp: config.cdpPort, inspector: config.inspectorPort }, state_root: config.stateRoot },
       scenarios: output.results, request_count: telemetry.requests, workspace_sse_connections: telemetry.workspace_sse_connections,
       workspace_sse_reconnect_reasons: telemetry.workspace_sse_reconnect_reasons,
@@ -1187,7 +1259,7 @@ async function runFlowerBrowserSmoke(config) {
     await writeFile(path.join(config.reportRoot, 'timings.json'), `${JSON.stringify(Object.fromEntries(output.results.map((item) => [item.id, item.timings ?? { duration_ms: item.duration_ms }])), null, 2)}\n`);
     await writeFile(path.join(config.reportRoot, 'browser-errors.json'), `${JSON.stringify({ console_errors: [], page_errors: [], failed_responses: [] }, null, 2)}\n`);
   } catch (error) {
-    if (page) await page.screenshot({ path: path.join(config.reportRoot, 'failure.png'), fullPage: true }).catch(() => {});
+    if (page) await page.screenshot({ path: path.join(config.reportRoot, 'failure.png') }).catch(() => {});
     await writeFile(path.join(config.reportRoot, 'result.json'), `${JSON.stringify({ schema_version: 1, model: SMOKE_MODEL, provider: { configured: true }, scenarios: telemetry.scenarios, retries: 0, pass: false, failure: String(error) }, null, 2)}\n`);
     await writeFile(path.join(config.reportRoot, 'browser-errors.json'), `${JSON.stringify({ console_errors: telemetry.console_errors, page_errors: telemetry.page_errors, failed_responses: telemetry.failed_responses }, null, 2)}\n`);
     throw error;

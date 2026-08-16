@@ -1192,11 +1192,19 @@ describe('EnvAppShell Activity Flower browser integration', () => {
   });
 
   it('reanchors the same Flower surface when crossing the production 767/768 mobile boundary', async () => {
+    const expectUniqueShellSurfaces = () => {
+      expect(document.querySelectorAll('[data-env-shell-background]')).toHaveLength(1);
+      expect(document.querySelectorAll('#redeven-activity-flower-product')).toHaveLength(1);
+      expect(document.querySelectorAll(
+        '[data-floe-shell-slot="bottom-bar"], [data-floe-shell-slot="mobile-tab-bar"]',
+      )).toHaveLength(1);
+    };
     await page.viewport(767, 800);
     const fixture = await mountProductionMobileShell();
     const flowerSurface = document.querySelector('[data-testid="env-ai-page"]');
     if (!(flowerSurface instanceof HTMLElement)) throw new Error('Activity EnvAIPage did not mount.');
     const mountID = flowerSurface.dataset.mountId;
+    expectUniqueShellSurfaces();
 
     await userEvent.click(fixture.input);
     await flushAsync();
@@ -1219,6 +1227,7 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     expect(fixture.product.dataset.presentation).toBe('expanded');
     expect(document.querySelector('[data-testid="activity-flower-composer"]')).toBe(fixture.textarea);
     expect(elementRect(fixture.panel).right).toBeLessThanOrEqual(769 - 12);
+    expectUniqueShellSurfaces();
 
     await page.viewport(767, 800);
     await flushAsync();
@@ -1231,6 +1240,7 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     expect(document.querySelectorAll('[data-testid="activity-flower-composer"]')).toHaveLength(1);
     expect(retainedInput).toBe(fixture.textarea);
     expect(fixture.companion.isConnected).toBe(true);
+    expectUniqueShellSurfaces();
   });
 
   it.each([

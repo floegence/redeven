@@ -7,6 +7,7 @@ import test from 'node:test';
 
 import {
   assertPortsFree,
+  assertEnvGeometry,
   assertAcceptedReceipt,
   assertSmokeConfiguration,
   canonicalEvidence,
@@ -172,6 +173,44 @@ test('runner requires one S15 and exactly fifteen passing scenarios', async () =
   assert.match(runner, /response_mode "select", choices_exhaustive true, and exactly two fixed choices: Alpha and Beta/u);
   assert.match(runner, /response_mode "select_or_write", choices_exhaustive false, exactly two fixed choices Alpha and Beta, and write_label "Other"/u);
   assert.doesNotMatch(runner, /choices Alpha, Beta, and Other/u);
+  assert.doesNotMatch(runner, /setViewportSize/u);
+  assert.doesNotMatch(runner, /fullPage\s*:\s*true/u);
+  assert.match(runner, /async function checkpoint\(page, config, label\)/u);
+  assert.match(runner, /nativeViewport = await page\.evaluate\(\(\) => \(\{ width: innerWidth, height: innerHeight \}\)\)/u);
+  assert.match(runner, /document\.querySelectorAll\('\[data-env-shell-background\]'\)\.length/u);
+  assert.match(runner, /document\.querySelectorAll\('\[data-activity-flower-bottom-bar\]'\)\.length/u);
+  assert.match(runner, /document\.querySelectorAll\('#redeven-activity-flower-product'\)\.length/u);
+  assert.match(runner, /document\.querySelectorAll\('#redeven-flower-surface'\)\.length/u);
+});
+
+test('native viewport geometry rejects duplicate surfaces and document or preview overflow', () => {
+  const valid = {
+    viewport: { width: 1440, height: 900 },
+    document_scroll: { body_height: 900, document_height: 900, body_width: 1440, document_width: 1440 },
+    unique_surfaces: { env_shell: 1, activity_bottom_bar: 1, flower_product: 1, flower_surface: 1 },
+    activity_bottom_bar: { x: 0, y: 850, width: 1440, height: 50, right: 1440, bottom: 900 },
+    surface: { x: 100, y: 80, width: 1200, height: 700, right: 1300, bottom: 780 },
+    rail: { x: 100, y: 80, width: 260, height: 700, right: 360, bottom: 780 },
+    composer: { x: 380, y: 700, width: 900, height: 80, right: 1280, bottom: 780 },
+    preview_window: null,
+  };
+  assert.doesNotThrow(() => assertEnvGeometry(valid, 'checkpoint'));
+  assert.throws(() => assertEnvGeometry({
+    ...valid,
+    unique_surfaces: { ...valid.unique_surfaces, activity_bottom_bar: 2 },
+  }, 'checkpoint'), /duplicate or missing/u);
+  assert.throws(() => assertEnvGeometry({
+    ...valid,
+    document_scroll: { ...valid.document_scroll, document_width: 1444 },
+  }, 'checkpoint'), /document exceeds/u);
+  assert.throws(() => assertEnvGeometry({
+    ...valid,
+    preview_window: { x: 1200, y: 100, width: 300, height: 400, right: 1500, bottom: 500 },
+  }, 'checkpoint'), /preview window exceeds/u);
+  assert.throws(() => assertEnvGeometry({
+    ...valid,
+    activity_bottom_bar: { ...valid.activity_bottom_bar, bottom: 880 },
+  }, 'checkpoint'), /not aligned/u);
 });
 
 test('port conflicts fail without killing the listener', async (t) => {
