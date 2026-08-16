@@ -37,6 +37,40 @@ function semanticSession(input: Readonly<{
   };
 }
 
+function stockAgentSession(input: Readonly<{
+  identity?: 'pi' | 'claude' | 'codex';
+  outputPhase: 'streaming' | 'settled';
+  outputRevision: number;
+  contextRevision?: number;
+  foregroundCommandRevision?: number;
+  applicationKind?: 'agent_cli' | 'shell';
+}>) {
+  const contextRevision = input.contextRevision ?? 7;
+  const foregroundCommandRevision = input.foregroundCommandRevision ?? 11;
+  return {
+    executionContext: {
+      application: {
+        kind: input.applicationKind ?? 'agent_cli',
+        identity: input.identity ?? 'codex',
+        displayName: input.identity ?? 'codex',
+      },
+      revision: contextRevision,
+    },
+    foregroundCommand: { revision: foregroundCommandRevision },
+    workState: {
+      phase: 'unknown',
+      source: '',
+      contextRevision: 0,
+      foregroundCommandRevision: 0,
+      revision: 0,
+    },
+    outputActivity: {
+      phase: input.outputPhase,
+      revision: input.outputRevision,
+    },
+  };
+}
+
 describe('createTerminalTabActivityTracker', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -44,6 +78,145 @@ describe('createTerminalTabActivityTracker', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it.each(['pi', 'claude', 'codex'] as const)(
+    'tracks a stock %s Agent output batch from streaming until settled',
+    (identity) => {
+      const published: string[] = [];
+      const tracker = createTerminalTabActivityTracker({
+        publishVisualState: (_sessionId, state) => published.push(state),
+      });
+
+      tracker.handleAgentSessionSnapshot('session-1', stockAgentSession({
+        identity, outputPhase: 'settled', outputRevision: 1,
+      }), true);
+      expect(published).toEqual([]);
+
+      tracker.handleAgentSessionSnapshot('session-1', stockAgentSession({
+        identity, outputPhase: 'streaming', outputRevision: 2,
+      }), true);
+      expect(published).toEqual(['unread']);
+
+      tracker.handleAgentSessionSnapshot('session-1', stockAgentSession({
+        identity, outputPhase: 'settled', outputRevision: 3,
+      }), true);
+      expect(published).toEqual(['unread']);
+      tracker.dispose();
+    },
+  );
+
+  it('treats an initial streaming snapshot and its settle as baseline only', () => {
+    const published: string[] = [];
+    const tracker = createTerminalTabActivityTracker({
+      publishVisualState: (_sessionId, state) => published.push(state),
+    });
+
+    tracker.handleAgentSessionSnapshot('session-1', stockAgentSession({
+      outputPhase: 'streaming', outputRevision: 4,
+    }), true);
+    tracker.handleAgentSessionSnapshot('session-1', stockAgentSession({
+      outputPhase: 'settled', outputRevision: 5,
+    }), true);
+    expect(published).toEqual([]);
+
+    tracker.handleAgentSessionSnapshot('session-1', stockAgentSession({
+      outputPhase: 'streaming', outputRevision: 6,
+    }), true);
+    expect(published).toEqual(['unread']);
+    tracker.dispose();
+  });
+
+  it('does not restore a cleared unread batch when streaming settles', () => {
+    const published: string[] = [];
+    const tracker = createTerminalTabActivityTracker({
+      publishVisualState: (_sessionId, state) => published.push(state),
+    });
+    tracker.handleAgentSessionSnapshot('session-1', stockAgentSession({
+      outputPhase: 'settled', outputRevision: 1,
+    }), true);
+    tracker.handleAgentSessionSnapshot('session-1', stockAgentSession({
+      outputPhase: 'streaming', outputRevision: 2,
+    }), true);
+    tracker.clearUnread('session-1');
+    tracker.handleAgentSessionSnapshot('session-1', stockAgentSession({
+      outputPhase: 'settled', outputRevision: 3,
+    }), true);
+    expect(published).toEqual(['unread', 'none']);
+
+    tracker.handleAgentSessionSnapshot('session-1', stockAgentSession({
+      outputPhase: 'streaming', outputRevision: 4,
+    }), true);
+    expect(published).toEqual(['unread', 'none', 'unread']);
+    tracker.dispose();
+  });
+
+  it('keeps valid semantic work authoritative over output activity', () => {
+    const published: string[] = [];
+    const tracker = createTerminalTabActivityTracker({
+      publishVisualState: (_sessionId, state) => published.push(state),
+    });
+    const semanticWorking = {
+      ...stockAgentSession({ outputPhase: 'settled', outputRevision: 1 }),
+      workState: semanticSession({ phase: 'working', revision: 1 }).workState,
+    };
+    const semanticIdle = {
+      ...stockAgentSession({ outputPhase: 'streaming', outputRevision: 2 }),
+      workState: semanticSession({ phase: 'idle', revision: 2 }).workState,
+    };
+
+    tracker.handleAgentSessionSnapshot('session-1', semanticWorking, true);
+    tracker.handleAgentSessionSnapshot('session-1', semanticIdle, true);
+    expect(published).toEqual(['unread']);
+    tracker.dispose();
+  });
+
+  it('rejects output replay and resets unread when the Agent fence changes', () => {
+    const published: string[] = [];
+    const tracker = createTerminalTabActivityTracker({
+      publishVisualState: (_sessionId, state) => published.push(state),
+    });
+    tracker.handleAgentSessionSnapshot('session-1', stockAgentSession({
+      outputPhase: 'settled', outputRevision: 4,
+    }), true);
+    tracker.handleAgentSessionSnapshot('session-1', stockAgentSession({
+      outputPhase: 'streaming', outputRevision: 5,
+    }), true);
+    tracker.handleAgentSessionSnapshot('session-1', stockAgentSession({
+      outputPhase: 'settled', outputRevision: 4,
+    }), true);
+    expect(published).toEqual(['unread']);
+
+    tracker.handleAgentSessionSnapshot('session-1', stockAgentSession({
+      outputPhase: 'streaming', outputRevision: 6, contextRevision: 8,
+    }), true);
+    expect(published).toEqual(['unread', 'none']);
+    tracker.handleAgentSessionSnapshot('session-1', stockAgentSession({
+      outputPhase: 'settled', outputRevision: 7, contextRevision: 8,
+    }), true);
+    expect(published).toEqual(['unread', 'none']);
+    tracker.dispose();
+  });
+
+  it('does not use output activity for a focused Agent or ordinary shell', () => {
+    const published: string[] = [];
+    const tracker = createTerminalTabActivityTracker({
+      publishVisualState: (_sessionId, state) => published.push(state),
+    });
+    tracker.handleAgentSessionSnapshot('agent', stockAgentSession({
+      outputPhase: 'settled', outputRevision: 1,
+    }), false);
+    tracker.handleAgentSessionSnapshot('agent', stockAgentSession({
+      outputPhase: 'streaming', outputRevision: 2,
+    }), false);
+    tracker.handleAgentSessionSnapshot('shell', stockAgentSession({
+      applicationKind: 'shell', outputPhase: 'settled', outputRevision: 1,
+    }), true);
+    tracker.handleAgentSessionSnapshot('shell', stockAgentSession({
+      applicationKind: 'shell', outputPhase: 'streaming', outputRevision: 2,
+    }), true);
+    expect(published).toEqual([]);
+    tracker.dispose();
   });
 
   it.each(['pi', 'claude', 'codex'] as const)(

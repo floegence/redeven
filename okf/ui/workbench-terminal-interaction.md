@@ -3,7 +3,7 @@ type: UI Contract
 title: Workbench terminal interaction
 description: Activity and Workbench consume one actor-owned semantic terminal state through view-local surfaces.
 tags: [ui, terminal, workbench, activity, semantic]
-timestamp: 2026-08-14T00:00:00Z
+timestamp: 2026-08-16T00:00:00Z
 ---
 # Summary
 
@@ -25,7 +25,7 @@ All attached views receive the same authoritative Presentation. A view may crop 
 
 Resize settles only when terminal-go has applied the canonical geometry and emitted the matching new Presentation. Redeven never acknowledges resize with an old frame, broadcasts a stored frame as a resize result, or treats attachment loss as success. Rapid grow and shrink is latest-wins only before presentation; once visible, sequence and geometry cannot regress. Activity and Workbench may have different host bounds, but every view renders the same frame dimensions and sequence.
 
-Agent CLI completion attention is derived from the catalog's fenced semantic work state, not output quieting. For one unchanged context and foreground-command fence, an accepted `working` followed by a newer `idle` marks that session unread only when its active terminal panel is not the real focus owner; the first snapshot, replayed or regressing revisions, mismatched fences, and ordinary shell sessions are inert. `waiting_user` retains higher attention priority and preserves the in-progress round until a later semantic `idle`. Focusing the actual terminal view clears unread, while hidden KeepAlive views cannot clear it.
+Agent CLI attention has one catalog-owned state shared by Activity and Workbench. A valid fenced semantic work state is authoritative: for one unchanged context and foreground-command fence, an accepted `working` followed by a newer `idle` marks unread only when no real terminal reader owns focus, while `waiting_user` retains higher attention priority and preserves the in-progress round. Stock Agents that do not publish semantic work state use the server-owned, revisioned output activity as a narrower unread-output fallback. After the first snapshot establishes a baseline, a newer `streaming` revision on the same fence marks a background output batch unread; `settled` removes the wave but neither asserts task completion nor recreates unread that the reader already cleared. First snapshots, replayed or regressing revisions, changed or mismatched fences, and ordinary shell sessions are inert. Focusing either real view clears the shared unread state, while hidden KeepAlive views cannot clear it. No browser output parser or quiet timer participates in this fallback.
 
 ## Input, links, selection, and mobile interaction
 
@@ -55,6 +55,7 @@ The following coordinates preserve user-facing behavior after removal of legacy 
 - Refresh and reconnect: `refresh_redraw_integration_test.go`, `terminalTransport.test.ts`, and the semantic carrier prove quiet same-size redraw, explicit lifecycle, and stable canvas identity.
 - Permission and lifecycle cleanup: `internal/terminal/live_stream_test.go`, `manager_test.go`, and `terminalSessionCatalog.test.tsx` cover process denial, hidden cleanup failure, deletion, and stale catalog rejection.
 - Activity, Workbench, controller, and observer: the semantic browser test covers explicit activation-before-focus/input, ordered input settlement, rejection without PTY writes, transformed-host measurement, read-only observers, and controller diagnostics; the semantic carrier opens both surfaces, proves the hidden display mode cannot reclaim control, and requires identical sequence, epoch, and frame geometry.
+- Agent unread attention: `terminalTabActivity.test.ts` proves semantic priority and fenced output-batch fallback; `terminalSessionCatalog.test.tsx` drives RPC 2014 catalog revisions; `TerminalPanel.agentUnread.browser.test.tsx` drives stock Pi, Claude Code, and Codex through the real catalog, Panel chrome, and Navigator DOM across shared Activity/Workbench reader focus.
 - Theme, cursor, resize, CJK, and graphics: the semantic browser test covers view-local palette, typography, atomic Presentation, monotonic resize, one canvas, and fifty three-tab zero-size-to-visible commits across DPR 1/1.5/2; published terminal-web tests cover cursor shapes, IME anchor, natural grapheme width, DPR repaint, and Kitty graphics; the carrier covers real top alternate-screen resize, fifty three-session paint-safe switches, and nontransparent pixels.
 - Touch and mobile input: `mobileViewportPolicy.test.ts`, the semantic browser touch projection test, and TerminalPanel's input-mode contract preserve system and Floe keyboard paths without textarea autofocus.
 
@@ -76,5 +77,6 @@ Redeven may adapt Flowersec streams, product permissions, local-path capability,
 - `redeven:internal/envapp/ui_src/src/ui/widgets/TerminalSessionRuntime.tsx` - Thin product runtime around RendererSurface, TerminalInputBridge, history projection, and attachment lifecycle.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/semanticTerminalViewport.ts` - View-local viewport, link hit-testing, and capability-neutral presentation helpers.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/TerminalSessionRuntime.semantic.browser.test.tsx` - Direct semantic renderer, input, history, theme, resize, and performance coverage.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.agentUnread.browser.test.tsx` - Real catalog-to-Panel-to-Navigator stock Agent unread and shared reader-focus coverage.
 - `redeven:internal/envapp/ui_src/scripts/checkSemanticTerminalCarrier.mjs` - Real Runtime, PTY, Activity, Workbench, clear, top resize, refresh, and multi-view carrier.
 - `redeven:internal/session/dependency_contract_test.go` - Published dependency and legacy package exclusion contract.

@@ -15,6 +15,10 @@ import { createRedevenTerminalCatalogTransport } from './terminalCatalogTranspor
 import { createRedevenTerminalSessionsCoordinator } from './terminalSessions';
 import { TerminalSessionsLifecycleSync } from './terminalSessionsLifecycleSync';
 import { markTerminalPerformance } from './terminalPerformance';
+import {
+  createTerminalTabActivityTracker,
+  observeTerminalAgentAttentionStates,
+} from './terminalTabActivity';
 
 export type TerminalSessionCatalogValue = Readonly<{
   sessions: Accessor<readonly TerminalSessionInfo[]>;
@@ -24,6 +28,8 @@ export type TerminalSessionCatalogValue = Readonly<{
   error: Accessor<string | null>;
   permissionDenied: Accessor<boolean>;
   connectionEpoch: Accessor<number>;
+  agentUnreadSessionIds: Accessor<ReadonlySet<string>>;
+  setAgentSessionReader: (readerId: string, sessionId: string | null) => void;
   remoteOpeningObservedAtMs: (sessionId: string) => number | undefined;
   coordinator: Accessor<TerminalSessionsCoordinator | null>;
   getCoordinator: () => TerminalSessionsCoordinator | null;
@@ -90,6 +96,20 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
   const [connectionEpoch, setConnectionEpoch] = createSignal(0);
   const [remoteOpeningEpochRevision, setRemoteOpeningEpochRevision] = createSignal(0);
   const [coordinator, setCoordinator] = createSignal<TerminalSessionsCoordinator | null>(null);
+  const [agentUnreadSessionIds, setAgentUnreadSessionIds] = createSignal<ReadonlySet<string>>(new Set());
+  const agentReaderSessionById = new Map<string, string>();
+  const agentAttentionTracker = createTerminalTabActivityTracker({
+    publishVisualState: (sessionId, state) => {
+      setAgentUnreadSessionIds((current) => {
+        const unread = state === 'unread';
+        if (current.has(sessionId) === unread) return current;
+        const next = new Set(current);
+        if (unread) next.add(sessionId);
+        else next.delete(sessionId);
+        return next;
+      });
+    },
+  });
 
   let activeClient: object | null = null;
   let activeEnvId = '';
@@ -792,6 +812,37 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     return remoteOpeningObservedAtBySession.get(String(sessionId ?? '').trim());
   };
 
+  const setAgentSessionReader = (readerId: string, sessionId: string | null) => {
+    const normalizedReaderId = String(readerId ?? '').trim();
+    if (!normalizedReaderId) return;
+    const normalizedSessionId = String(sessionId ?? '').trim();
+    if (normalizedSessionId) {
+      agentReaderSessionById.set(normalizedReaderId, normalizedSessionId);
+      agentAttentionTracker.clearUnread(normalizedSessionId);
+      return;
+    }
+    agentReaderSessionById.delete(normalizedReaderId);
+  };
+
+  createEffect(() => {
+    const currentSessions = sessions();
+    const sessionIds = new Set(currentSessions.map((session) => session.id));
+    const readerSessionIds = new Set(agentReaderSessionById.values());
+    observeTerminalAgentAttentionStates(
+      currentSessions,
+      agentAttentionTracker,
+      (sessionId) => !readerSessionIds.has(sessionId),
+    );
+    agentAttentionTracker.pruneSessions(sessionIds);
+    setAgentUnreadSessionIds((current) => {
+      const next = new Set([...current].filter((sessionId) => sessionIds.has(sessionId)));
+      return next.size === current.size ? current : next;
+    });
+    for (const [readerId, sessionId] of agentReaderSessionById) {
+      if (!sessionIds.has(sessionId)) agentReaderSessionById.delete(readerId);
+    }
+  });
+
   createEffect(() => {
     const envId = String(env.env_id() ?? '').trim();
     const client = protocol.session?.();
@@ -848,6 +899,8 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
 
   onCleanup(() => {
     providerDisposed = true;
+    agentAttentionTracker.dispose();
+    agentReaderSessionById.clear();
     disposeConnection(false);
   });
 
@@ -859,6 +912,8 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     error,
     permissionDenied,
     connectionEpoch,
+    agentUnreadSessionIds,
+    setAgentSessionReader,
     remoteOpeningObservedAtMs,
     coordinator,
     getCoordinator,

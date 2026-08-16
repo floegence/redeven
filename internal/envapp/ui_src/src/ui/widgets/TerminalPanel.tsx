@@ -87,7 +87,6 @@ import type { TerminalResolvedLinkTarget } from '../services/terminalLinkProvide
 import type { TerminalShellIntegrationEvent } from '../services/terminalShellIntegration';
 import {
   createTerminalTabActivityTracker,
-  observeTerminalSemanticWorkStates,
   shouldMarkTerminalSessionUnread,
   type TerminalSessionWorkState,
   type TerminalTabVisualState,
@@ -944,6 +943,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const wid = String(widgetId ?? '').trim();
     return wid ? `embedded:${wid}` : 'terminal_page';
   })();
+  const agentAttentionReaderId = createClientId('terminal-agent-reader');
   const activeSessionStorageKey = buildActiveSessionStorageKey(panelId);
   const sessionGroupState = createMemo<TerminalPanelSessionGroupState | null>(() => props.sessionGroupState ?? null);
 
@@ -1971,10 +1971,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     });
   };
 
-  createEffect(() => {
-    observeTerminalSemanticWorkStates(sessions(), tabActivityTracker, shouldMarkSessionUnread);
-  });
-
   const handleShellIntegrationEvent = (
     sessionId: string,
     event: TerminalShellIntegrationEvent,
@@ -2164,6 +2160,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const terminalChromeBySession = createMemo<ReadonlyMap<string, TerminalSessionChrome>>(() => {
     const foregroundPresentations = foregroundPresentationBySession();
     const tabStates = tabVisualStateBySession();
+    const sharedAgentUnreadSessionIds = terminalCatalog?.agentUnreadSessionIds?.() ?? new Set<string>();
     const runtimeStatuses = runtimeStatusBySession();
     terminalChromeDeadlineRevision();
     const nowMs = Date.now();
@@ -2182,7 +2179,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         foregroundDisplayName: foregroundPresentations.get(session.id)?.displayName ?? '',
         foregroundRunning: foregroundPresentations.has(session.id),
         transition: resolveTerminalChromeTransition(runtimeStatuses[session.id]),
-        unread: tabStates[session.id] === 'unread',
+        unread: tabStates[session.id] === 'unread' || sharedAgentUnreadSessionIds.has(session.id),
         nowMs,
         remoteOpeningObservedAtMs: terminalCatalog?.remoteOpeningObservedAtMs?.(session.id)
           ?? fallbackRemoteOpeningObservedAtBySession.get(session.id),
@@ -3148,10 +3145,18 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   });
 
   createEffect(() => {
-    if (!terminalFocusOwner() || !panelHasFocus()) return;
+    const sharedReaderSessionId = terminalFocusOwner() && panelHasFocus()
+      ? activeSessionId()
+      : null;
+    terminalCatalog?.setAgentSessionReader?.(agentAttentionReaderId, sharedReaderSessionId);
+    if (!sharedReaderSessionId) return;
     const id = activeSessionId();
     if (!id) return;
     tabActivityTracker.clearUnread(id);
+  });
+
+  onCleanup(() => {
+    terminalCatalog?.setAgentSessionReader?.(agentAttentionReaderId, null);
   });
 
   createEffect(() => {

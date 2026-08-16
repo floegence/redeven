@@ -17,6 +17,10 @@ export type TerminalSemanticWorkObservation = Readonly<{
     foregroundCommandRevision?: number;
     revision?: number;
   }>;
+  outputActivity?: Readonly<{
+    phase?: string;
+    revision?: number;
+  }>;
 }>;
 
 type TerminalSemanticWorkRuntime = Readonly<{
@@ -25,6 +29,13 @@ type TerminalSemanticWorkRuntime = Readonly<{
   revision: number;
   phase: 'idle' | 'working' | 'waiting_user';
   observedWorking: boolean;
+}>;
+
+type TerminalAgentOutputRuntime = Readonly<{
+  contextRevision: number;
+  foregroundCommandRevision: number;
+  revision: number;
+  phase: 'streaming' | 'settled';
 }>;
 
 export type TerminalSessionActivityRuntime = {
@@ -42,6 +53,7 @@ export type TerminalSessionActivityRuntime = {
   recentActivityTimer: ReturnType<typeof setTimeout> | null;
   pendingOutputTimer: ReturnType<typeof setTimeout> | null;
   semanticWork: TerminalSemanticWorkRuntime | null;
+  agentOutput: TerminalAgentOutputRuntime | null;
   visualState: TerminalTabVisualState;
   workState: TerminalSessionWorkState;
 };
@@ -63,6 +75,11 @@ export interface TerminalTabActivityTracker {
   handlePromptReady: (sessionId: string, shouldMarkUnread: boolean) => void;
   handleProgramActivity: (sessionId: string, phase: Exclude<TerminalProgramActivityPhase, 'unknown'>) => void;
   handleSemanticWorkState: (
+    sessionId: string,
+    observation: TerminalSemanticWorkObservation,
+    shouldMarkUnread: boolean,
+  ) => void;
+  handleAgentSessionSnapshot: (
     sessionId: string,
     observation: TerminalSemanticWorkObservation,
     shouldMarkUnread: boolean,
@@ -109,6 +126,16 @@ export function observeTerminalSemanticWorkStates(
   }
 }
 
+export function observeTerminalAgentAttentionStates(
+  sessions: readonly (TerminalSemanticWorkObservation & Readonly<{ id: string }>)[],
+  tracker: Pick<TerminalTabActivityTracker, 'handleAgentSessionSnapshot'>,
+  shouldMarkUnread: (sessionId: string) => boolean,
+): void {
+  for (const session of sessions) {
+    tracker.handleAgentSessionSnapshot(session.id, session, shouldMarkUnread(session.id));
+  }
+}
+
 const DEFAULT_OUTPUT_ACTIVITY_GRACE_MS = 1_500;
 const DEFAULT_OUTPUT_ACTIVITY_QUIET_MS = 3_500;
 const MAX_PENDING_LIVE_SEQUENCES = 2048;
@@ -129,6 +156,7 @@ function createEmptyRuntime(): TerminalSessionActivityRuntime {
     recentActivityTimer: null,
     pendingOutputTimer: null,
     semanticWork: null,
+    agentOutput: null,
     visualState: 'none',
     workState: 'idle',
   };
@@ -321,6 +349,72 @@ export function createTerminalTabActivityTracker(
 
   const normalizeSessionId = (sessionId: string): string => String(sessionId ?? '').trim();
 
+  const handleSemanticWorkState = (
+    sessionId: string,
+    observation: TerminalSemanticWorkObservation,
+    shouldMarkUnread: boolean,
+  ) => {
+    const normalizedSessionId = normalizeSessionId(sessionId);
+    if (!normalizedSessionId || observation.executionContext?.application?.kind !== 'agent_cli') {
+      return;
+    }
+    const contextRevision = observation.executionContext.revision;
+    const foregroundCommandRevision = observation.foregroundCommand?.revision;
+    const workState = observation.workState;
+    const revision = workState?.revision;
+    const phase = workState?.phase;
+    if (
+      workState?.source !== 'semantic'
+      || typeof contextRevision !== 'number'
+      || !Number.isSafeInteger(contextRevision)
+      || typeof foregroundCommandRevision !== 'number'
+      || !Number.isSafeInteger(foregroundCommandRevision)
+      || typeof revision !== 'number'
+      || !Number.isSafeInteger(revision)
+      || workState.contextRevision !== contextRevision
+      || workState.foregroundCommandRevision !== foregroundCommandRevision
+      || (phase !== 'idle' && phase !== 'working' && phase !== 'waiting_user')
+    ) {
+      return;
+    }
+
+    const runtime = getRuntime(normalizedSessionId);
+    if (!runtime) return;
+    const previous = runtime.semanticWork;
+    const sameFence = previous?.contextRevision === contextRevision
+      && previous.foregroundCommandRevision === foregroundCommandRevision;
+    if (previous && (
+      contextRevision < previous.contextRevision
+      || foregroundCommandRevision < previous.foregroundCommandRevision
+      || revision <= previous.revision
+    )) {
+      return;
+    }
+    if (!sameFence) {
+      runtime.semanticWork = {
+        contextRevision,
+        foregroundCommandRevision,
+        revision,
+        phase,
+        observedWorking: phase === 'working',
+      };
+      return;
+    }
+    if (!previous) return;
+
+    const completedRound = phase === 'idle' && previous.observedWorking;
+    runtime.semanticWork = {
+      contextRevision,
+      foregroundCommandRevision,
+      revision,
+      phase,
+      observedWorking: phase === 'working'
+        || (phase === 'waiting_user' && previous.observedWorking),
+    };
+    markUnread(runtime, completedRound && shouldMarkUnread);
+    publishIfNeeded(normalizedSessionId, runtime);
+  };
+
   return {
     clearUnread(sessionId: string) {
       const normalizedSessionId = normalizeSessionId(sessionId);
@@ -431,69 +525,99 @@ export function createTerminalTabActivityTracker(
       publishIfNeeded(normalizedSessionId, runtime);
     },
 
-    handleSemanticWorkState(
+    handleSemanticWorkState,
+
+    handleAgentSessionSnapshot(
       sessionId: string,
       observation: TerminalSemanticWorkObservation,
       shouldMarkUnread: boolean,
     ) {
       const normalizedSessionId = normalizeSessionId(sessionId);
-      if (!normalizedSessionId || observation.executionContext?.application?.kind !== 'agent_cli') {
+      if (!normalizedSessionId) return;
+      const existingRuntime = runtimeBySession.get(normalizedSessionId);
+      if (observation.executionContext?.application?.kind !== 'agent_cli') {
+        if (!existingRuntime || (!existingRuntime.semanticWork && !existingRuntime.agentOutput)) return;
+        existingRuntime.semanticWork = null;
+        existingRuntime.agentOutput = null;
+        existingRuntime.unread = false;
+        publishIfNeeded(normalizedSessionId, existingRuntime);
         return;
       }
+
       const contextRevision = observation.executionContext.revision;
       const foregroundCommandRevision = observation.foregroundCommand?.revision;
       const workState = observation.workState;
-      const revision = workState?.revision;
-      const phase = workState?.phase;
+      const outputActivity = observation.outputActivity;
       if (
-        workState?.source !== 'semantic'
-        || typeof contextRevision !== 'number'
+        typeof contextRevision !== 'number'
         || !Number.isSafeInteger(contextRevision)
         || typeof foregroundCommandRevision !== 'number'
         || !Number.isSafeInteger(foregroundCommandRevision)
-        || typeof revision !== 'number'
-        || !Number.isSafeInteger(revision)
-        || workState.contextRevision !== contextRevision
-        || workState.foregroundCommandRevision !== foregroundCommandRevision
-        || (phase !== 'idle' && phase !== 'working' && phase !== 'waiting_user')
       ) {
         return;
       }
 
       const runtime = getRuntime(normalizedSessionId);
       if (!runtime) return;
-      const previous = runtime.semanticWork;
-      const sameFence = previous?.contextRevision === contextRevision
-        && previous.foregroundCommandRevision === foregroundCommandRevision;
-      if (previous && (
-        contextRevision < previous.contextRevision
-        || foregroundCommandRevision < previous.foregroundCommandRevision
-        || revision <= previous.revision
+      const previousFence = runtime.semanticWork ?? runtime.agentOutput;
+      if (previousFence && (
+        contextRevision < previousFence.contextRevision
+        || foregroundCommandRevision < previousFence.foregroundCommandRevision
       )) {
         return;
       }
+      const sameFence = previousFence?.contextRevision === contextRevision
+        && previousFence.foregroundCommandRevision === foregroundCommandRevision;
+      const outputRevision = outputActivity?.revision;
+      const outputPhase = outputActivity?.phase;
+      const validOutput = typeof outputRevision === 'number'
+        && Number.isSafeInteger(outputRevision)
+        && (outputPhase === 'streaming' || outputPhase === 'settled');
+      const validSemantic = workState?.source === 'semantic'
+        && workState.contextRevision === contextRevision
+        && workState.foregroundCommandRevision === foregroundCommandRevision
+        && typeof workState.revision === 'number'
+        && Number.isSafeInteger(workState.revision)
+        && (workState.phase === 'idle' || workState.phase === 'working' || workState.phase === 'waiting_user');
+
       if (!sameFence) {
-        runtime.semanticWork = {
+        runtime.semanticWork = null;
+        runtime.agentOutput = validOutput ? {
           contextRevision,
           foregroundCommandRevision,
-          revision,
-          phase,
-          observedWorking: phase === 'working',
-        };
+          revision: outputRevision,
+          phase: outputPhase,
+        } : null;
+        runtime.unread = false;
+        publishIfNeeded(normalizedSessionId, runtime);
+        if (validSemantic) handleSemanticWorkState(normalizedSessionId, observation, shouldMarkUnread);
         return;
       }
-      if (!previous) return;
 
-      const completedRound = phase === 'idle' && previous.observedWorking;
-      runtime.semanticWork = {
+      if (validSemantic) {
+        if (validOutput && (!runtime.agentOutput || outputRevision > runtime.agentOutput.revision)) {
+          runtime.agentOutput = {
+            contextRevision,
+            foregroundCommandRevision,
+            revision: outputRevision,
+            phase: outputPhase,
+          };
+        }
+        handleSemanticWorkState(normalizedSessionId, observation, shouldMarkUnread);
+        return;
+      }
+      if (runtime.semanticWork || !validOutput) return;
+      const previousOutput = runtime.agentOutput;
+      if (!previousOutput || outputRevision <= previousOutput.revision) return;
+      runtime.agentOutput = {
         contextRevision,
         foregroundCommandRevision,
-        revision,
-        phase,
-        observedWorking: phase === 'working'
-          || (phase === 'waiting_user' && previous.observedWorking),
+        revision: outputRevision,
+        phase: outputPhase,
       };
-      markUnread(runtime, completedRound && shouldMarkUnread);
+      markUnread(runtime, outputPhase === 'streaming'
+        && previousOutput.phase !== 'streaming'
+        && shouldMarkUnread);
       publishIfNeeded(normalizedSessionId, runtime);
     },
 
