@@ -1178,6 +1178,7 @@ func (a *Agent) runDataSession(ctx context.Context, grant *session.ChannelInitGr
 	if err != nil {
 		return err
 	}
+	defer sess.Close()
 	if remotePlan != nil && a.term != nil {
 		detachTerminalSink := a.term.AttachSink(meta, sess.RPC(), a.accessGate)
 		defer detachTerminalSink()
@@ -1221,8 +1222,6 @@ func (a *Agent) runDataSession(ctx context.Context, grant *session.ChannelInitGr
 			},
 		})
 	}
-	defer sess.Close()
-
 	switch strings.TrimSpace(meta.FloeApp) {
 	case FloeAppRedevenCode:
 		return a.serveCodeAppSession(ctx, sess, meta)
