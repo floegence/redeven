@@ -166,7 +166,7 @@ describe('v1.1.4 plugin lifecycle client integration', () => {
 
     expect(loadInstalledIcon).toHaveBeenCalledWith(
       `/_redevplugin/api/plugins/${encodeURIComponent(generatedContainersInstanceID)}/icon/${iconDigest.slice(7)}`,
-      undefined,
+      expect.any(AbortSignal),
     );
     expect(projection.items.find((item) => item.pluginInstanceID === generatedContainersInstanceID)?.iconURL)
       .toBe('blob:redeven-installed-icon');
@@ -176,6 +176,48 @@ describe('v1.1.4 plugin lifecycle client integration', () => {
 
     expect(revokeObjectURL).toHaveBeenCalledOnce();
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:redeven-installed-icon');
+  });
+
+  it('publishes installed inventory when icon decoding does not settle', async () => {
+    vi.useFakeTimers();
+    const { mocks } = createClientHarness();
+    const iconDigest = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const iconPath = 'ui/assets/containers.png';
+    mocks.catalog.mockResolvedValue({
+      plugins: [{
+        ...generatedContainersRecord,
+        manifest: {
+          ...generatedContainersRecord.manifest,
+          presentation: { ...generatedContainersRecord.manifest.presentation, icon: { path: iconPath } },
+        },
+        package_entries: [{
+          path: iconPath,
+          size: 123,
+          sha256: iconDigest,
+          mode: '0644',
+          content_type: 'image/png',
+        }],
+      }],
+    });
+    const loadInstalledIcon = vi.fn(() => new Promise<string>(() => {}));
+    const lifecycle = createPluginLifecycleAPI(
+      mocks as unknown as PluginPlatformClient,
+      OFFICIAL_PLUGIN_CATALOG_SEED,
+      undefined,
+      loadInstalledIcon,
+    );
+
+    const loading = lifecycle.loadInventoryProjection();
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    await expect(loading).resolves.toMatchObject({
+      items: [expect.objectContaining({
+        pluginInstanceID: generatedContainersInstanceID,
+        iconURL: undefined,
+      })],
+    });
+    lifecycle.dispose();
+    vi.useRealTimers();
   });
 
   it('keeps an enabled registry record visible when lifecycle metadata reads fail', async () => {

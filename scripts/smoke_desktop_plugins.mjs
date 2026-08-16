@@ -606,13 +606,18 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
   const pluginResponses = [];
   const pluginIconResponses = [];
   const projectionCheckpoints = [];
-  const inventoryDebug = () => page.locator('[data-plugin-inventory-debug]').evaluate((node) => ({
-    source: node.getAttribute('data-source'),
-    loading: node.getAttribute('data-loading'),
-    error: node.getAttribute('data-error'),
-    items: Number(node.getAttribute('data-items') ?? 0),
-    marketUnavailable: node.getAttribute('data-market-unavailable'),
-  })).catch(() => null);
+  const inventorySnapshot = async () => {
+    const center = page.locator('[data-plugin-center-view]');
+    const refresh = center.locator('[data-plugin-center-refresh]');
+    const centerItems = center.locator('[data-plugin-center-item]');
+    const panelTiles = page.locator('[data-plugin-panel-tile]:not([data-plugin-panel-tile="plugin-center"])');
+    return {
+      centerVisible: await center.isVisible().catch(() => false),
+      refreshDisabled: await refresh.isDisabled().catch(() => null),
+      centerItemKeys: await centerItems.evaluateAll((items) => items.map((item) => item.getAttribute('data-plugin-center-item'))),
+      panelTileKeys: await panelTiles.evaluateAll((tiles) => tiles.map((tile) => tile.getAttribute('data-plugin-panel-tile'))),
+    };
+  };
   const pluginRequestHeaders = new Map();
   const pluginRequests = [];
   page.on('console', (message) => {
@@ -688,37 +693,18 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     await visiblePluginTrigger().click();
     await page.locator('[data-plugin-launcher-backdrop]').first().waitFor({ state: 'detached', timeout: 10_000 });
   }
-  phase = 'session_inventory_prefetch';
-  let inventoryPrefetch;
-  try {
-    inventoryPrefetch = await waitFor(async () => {
-      const debug = await inventoryDebug();
-      return debug?.source === 'true' && debug.loading === 'false' && debug.error === 'false' ? debug : null;
-    }, 60_000, 'session inventory prefetch');
-  } catch (error) {
-    await fs.writeFile(path.join(config.reportRoot, `${config.phase}-inventory-prefetch-diagnostics.json`), JSON.stringify({
-      selectedPageURL: page.url(),
-      envAppPageURLs: browserPages(browser).filter(isEnvAppPage).map((candidate) => candidate.url()),
-      inventoryDebug: await inventoryDebug(),
-      failedResponses,
-      consoleErrors,
-      pageErrors,
-      error: String(error),
-    }, null, 2));
-    throw error;
-  }
-  mark('inventory_ready_ms');
+  phase = 'panel_open';
+  const firstPanelOpenStartedAt = performance.now();
+  await visiblePluginTrigger().click();
+  await page.locator('[data-plugin-launcher-backdrop]').first().waitFor({ state: 'visible', timeout: 10_000 });
+  const firstPanelOpenMS = Number((performance.now() - firstPanelOpenStartedAt).toFixed(1));
+  phase = 'session_credentials';
   const sessionHeaders = await waitFor(() => {
     for (const headers of pluginRequestHeaders.values()) {
       if (headers['x-redeven-plugin-session'] && headers['x-redevplugin-csrf']) return headers;
     }
     return null;
   }, 30_000, 'plugin session credential');
-  phase = 'panel_open';
-  const firstPanelOpenStartedAt = performance.now();
-  await visiblePluginTrigger().click();
-  await page.locator('[data-plugin-launcher-backdrop]').first().waitFor({ state: 'visible', timeout: 10_000 });
-  const firstPanelOpenMS = Number((performance.now() - firstPanelOpenStartedAt).toFixed(1));
   phase = 'plugin_bootstrap';
   let bootstrap;
   try {
@@ -727,7 +713,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     await page.screenshot({ path: path.join(config.reportRoot, `${config.phase}-bootstrap-failure.png`), fullPage: true }).catch(() => {});
     await fs.writeFile(path.join(config.reportRoot, `${config.phase}-bootstrap-failure.html`), await page.content()).catch(() => {});
     await fs.writeFile(path.join(config.reportRoot, `${config.phase}-bootstrap-diagnostics.json`), JSON.stringify({
-      inventoryDebug: await inventoryDebug(),
+      inventorySnapshot: await inventorySnapshot(),
       pluginResponses,
       pluginRequests,
       failedResponses,
@@ -739,23 +725,25 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
   }
   if (bootstrap.performed) {
     const pluginCenter = page.locator('[data-plugin-center-view]');
+    const pluginCenterRefresh = pluginCenter.locator('[data-plugin-center-refresh]');
     if (config.ioPackagePath) {
       try {
         if (!await pluginCenter.isVisible().catch(() => false)) {
           await page.locator('[data-plugin-launcher-backdrop] [data-plugin-center-market-action]').click();
           await pluginCenter.waitFor({ state: 'visible', timeout: 10_000 });
         }
-        await page.locator('[data-plugin-center-refresh]').click();
+        await pluginCenterRefresh.click();
+        const centerItems = pluginCenter.locator('[data-plugin-center-item^="instance:"]');
         await waitFor(async () => {
-          const debug = await inventoryDebug();
-          return debug?.loading === 'false' && debug.items === bootstrap.enabledCount ? debug : null;
+          return await centerItems.count() === bootstrap.enabledCount
+            && !(await pluginCenterRefresh.isDisabled()) ? true : null;
         }, 30_000, 'Plugin Center projection after direct smoke install');
       } catch (error) {
         await page.screenshot({ path: path.join(config.reportRoot, `${config.phase}-direct-install-projection-failure.png`), fullPage: true }).catch(() => {});
         await fs.writeFile(path.join(config.reportRoot, `${config.phase}-direct-install-projection-failure.html`), await page.content()).catch(() => {});
         await fs.writeFile(path.join(config.reportRoot, `${config.phase}-direct-install-projection-diagnostics.json`), JSON.stringify({
           expectedEnabledCount: bootstrap.enabledCount,
-          inventoryDebug: await inventoryDebug(),
+          inventorySnapshot: await inventorySnapshot(),
           pluginCenterVisible: await pluginCenter.isVisible().catch(() => false),
           pluginResponses,
           pluginRequests,
@@ -812,7 +800,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
         backdropVisible: await pluginPanelBackdrop.isVisible().catch(() => false),
         motionStates: await page.locator('[data-plugin-panel-motion-state]').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-plugin-panel-motion-state'))),
         workbenchSelected: await page.getByRole('tab', { name: 'Workbench', exact: true }).getAttribute('aria-selected'),
-        inventoryDebug: await inventoryDebug(),
+        inventorySnapshot: await inventorySnapshot(),
         error: String(error),
       }, null, 2)).catch(() => {});
       throw error;
@@ -841,7 +829,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
           text: (await dialog.innerText().catch(() => '')).slice(0, 500),
         };
       })),
-      inventoryDebug: await inventoryDebug(),
+      inventorySnapshot: await inventorySnapshot(),
       error: String(error),
     }, null, 2)).catch(() => {});
     throw error;
@@ -884,7 +872,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
         installedTileCount: await installedTiles.count(),
         tileKeys: await installedTiles.evaluateAll((tiles) => tiles.map((tile) => tile.getAttribute('data-plugin-panel-tile'))),
         panelText: (await reopenedBackdrop.innerText().catch(() => '')).slice(0, 4000),
-        inventoryDebug: await inventoryDebug(),
+        inventorySnapshot: await inventorySnapshot(),
         pluginResponses,
         pluginRequests,
         failedResponses,
@@ -933,7 +921,9 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
   const inventoryRefreshCount = catalogQueryCountAfter - catalogQueryCountBefore;
   const finalBackdrop = page.locator('[data-plugin-launcher-backdrop]').first();
   await finalBackdrop.locator('[data-plugin-center-market-action]').click();
-  await page.locator('[data-plugin-center-view]').waitFor({ state: 'visible', timeout: 10_000 });
+  const pluginCenter = page.locator('[data-plugin-center-view]');
+  const pluginCenterRefresh = pluginCenter.locator('[data-plugin-center-refresh]');
+  await pluginCenter.waitFor({ state: 'visible', timeout: 10_000 });
   let releaseDelayedCatalogRequest;
   let delayedCatalogRequestIntercepted = false;
   const delayedCatalogRequestGate = new Promise((resolve) => {
@@ -944,15 +934,15 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     await delayedCatalogRequestGate;
     await route.continue();
   }, { times: 1 });
-  await page.locator('[data-plugin-center-refresh]').click();
+  await pluginCenterRefresh.click();
   await waitFor(
     () => delayedCatalogRequestIntercepted,
     10_000,
     'delayed background inventory refresh',
   );
   await waitFor(async () => (
-    (await inventoryDebug())?.loading === 'true' ? true : null
-  ), 10_000, 'background refresh pending');
+    await pluginCenterRefresh.isDisabled() ? true : null
+  ), 10_000, 'background refresh control pending');
   let backgroundRefreshTileKeys;
   try {
     await visiblePluginTrigger().click();
@@ -975,7 +965,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     releaseDelayedCatalogRequest();
   }
   await waitFor(async () => (
-    (await inventoryDebug())?.loading === 'false' ? true : null
+    !(await pluginCenterRefresh.isDisabled()) ? true : null
   ), 30_000, 'background inventory refresh completion');
   const backgroundRefreshEvidence = {
     delayed: true,
@@ -1003,7 +993,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     label: 'after_catalog_replay',
     panelTiles: await page.locator('[data-plugin-panel-tile]:not([data-plugin-panel-tile="plugin-center"])').count(),
     panelText: (await page.locator('[data-plugin-launcher-grid]').innerText().catch(() => '')).slice(0, 4000),
-    inventoryDebug: await inventoryDebug(),
+    inventorySnapshot: await inventorySnapshot(),
   });
   const recovery = recoveryEntry.body;
   const catalog = catalogEntry.body?.data ?? catalogEntry.body;
@@ -1032,7 +1022,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
       enabledCount,
       panelTiles: await page.locator('[data-plugin-panel-tile]').count(),
       panelText: (await page.locator('[data-plugin-launcher-grid]').innerText().catch(() => '')).slice(0, 4000),
-      inventoryDebug: await inventoryDebug(),
+      inventorySnapshot: await inventorySnapshot(),
       pluginResponses,
       pluginRequests,
       failedResponses,
@@ -1096,7 +1086,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
         surfaceErrors: await page.locator('[data-plugin-surface-error]').allInnerTexts(),
         panelText: (await page.locator('[data-plugin-launcher-grid]').innerText().catch(() => '')).slice(0, 4_000),
         bodyText: (await page.locator('body').innerText().catch(() => '')).slice(0, 8_000),
-        inventoryDebug: await inventoryDebug(),
+        inventorySnapshot: await inventorySnapshot(),
         pluginResponses,
         pluginRequests,
         failedResponses,
@@ -1235,9 +1225,8 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     owner_id: config.ownerID,
     pids: config.pids,
     timings,
-    inventory_prefetch: {
-      completed_before_first_open: true,
-      debug: inventoryPrefetch,
+    first_panel_open: {
+      completed_before_session_credential_wait: true,
       first_open_ms: firstPanelOpenMS,
     },
     bootstrap,
