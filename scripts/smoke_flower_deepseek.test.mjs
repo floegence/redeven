@@ -13,6 +13,8 @@ import {
   canonicalEvidence,
   findDeepSeekProvider,
   ownedManifestPIDs,
+  orderedToolCommand,
+  orderedToolPayload,
   scanSecretLeaks,
   validateOrderedPresentationCheckpoints,
   withSensitiveState,
@@ -165,6 +167,7 @@ test('runner requires one S15 and exactly fifteen passing scenarios', async () =
   assert.match(runner, /output\.results\.length === 15/u);
   assert.match(runner, /retries: 0/u);
   assert.match(runner, /tool_name === 'terminal\.exec'/u);
+  assert.match(runner, /Do not emit assistant text before or between tool calls/u);
   assert.match(runner, /String\(output\)\.includes\(firstToken\)/u);
   assert.match(runner, /String\(output\)\.includes\(secondToken\)/u);
   assert.match(runner, /\.trim\(\) === finalText/u);
@@ -181,6 +184,22 @@ test('runner requires one S15 and exactly fifteen passing scenarios', async () =
   assert.match(runner, /document\.querySelectorAll\('\[data-activity-flower-bottom-bar\]'\)\.length/u);
   assert.match(runner, /document\.querySelectorAll\('#redeven-activity-flower-product'\)\.length/u);
   assert.match(runner, /document\.querySelectorAll\('#redeven-flower-surface'\)\.length/u);
+});
+
+test('ordered tool evidence reads the typed activity payload and approval command', () => {
+  const nested = {
+    activity: { tool_id: 'call-1', presentation: { payload: { command: 'printf first', output: 'first' } } },
+  };
+  assert.deepEqual(orderedToolPayload(nested), { command: 'printf first', output: 'first' });
+  assert.equal(orderedToolCommand({}, nested), 'printf first');
+
+  const flattened = { activity: { tool_id: 'call-2', payload: { command: 'printf second' } } };
+  assert.equal(orderedToolCommand({}, flattened), 'printf second');
+
+  const approvalOnly = { activity: { tool_id: 'call-3', presentation: { payload: {} } } };
+  assert.equal(orderedToolCommand({
+    interactions: [{ kind: 'approval', tool_call_id: 'call-3', approval: { command: 'printf third' } }],
+  }, approvalOnly), 'printf third');
 });
 
 test('native viewport geometry rejects duplicate surfaces and document or preview overflow', () => {

@@ -191,10 +191,7 @@ export async function openFileByteStream(params: StreamFileBytesParams): Promise
       return meta;
     } finally {
       if (params.signal?.aborted) {
-        try {
-		  void channel.stream.reset();
-        } catch {
-        }
+        await Promise.resolve(channel.stream.reset()).catch(() => undefined);
       }
       await closeChannelBestEffort(channel);
     }

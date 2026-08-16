@@ -44,8 +44,9 @@ describe('fileStreamReader', () => {
 	expect(stream.close).toHaveBeenCalledTimes(1);
   });
 
-  it('resets the stream when an abort signal interrupts consumption', async () => {
-	const { session, stream: byteStream } = createSession({ ok: true, content_len: 4, file_size: 4 }, new Uint8Array(4));
+  it('absorbs a rejected reset when an abort signal interrupts consumption', async () => {
+		const { session, stream: byteStream } = createSession({ ok: true, content_len: 4, file_size: 4 }, new Uint8Array(4));
+		byteStream.reset.mockRejectedValueOnce(new Error('RPC transport or response decode error'));
 	const controller = new AbortController();
 
     const stream = await openFileByteStream({
