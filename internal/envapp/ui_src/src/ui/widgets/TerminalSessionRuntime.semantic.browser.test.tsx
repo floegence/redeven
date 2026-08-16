@@ -506,7 +506,7 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     expect(paste.defaultPrevented).toBe(true);
   });
 
-  it('keeps a same-cell click selection-free while preserving intentional drag selection', async () => {
+  it('keeps a click selection-free, selects words and rows on repeated clicks, and preserves drag selection', async () => {
     const runtime = harness();
     mounted.push(runtime);
     runtime.emitPresentation(presentation(1, 'click-target'));
@@ -534,6 +534,24 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     pointer('pointerup', bounds.left + 2, 8);
     expect(runtime.getViewport()?.hasSelection()).toBe(false);
     expect(runtime.getViewport()?.getSelectionText()).toBe('');
+
+    canvas.dispatchEvent(new MouseEvent('click', {
+      detail: 2,
+      clientX: bounds.left + 2,
+      clientY: bounds.top + 4,
+      bubbles: true,
+      cancelable: true,
+    }));
+    expect(runtime.getViewport()?.getSelectionText()).toBe('click-target');
+
+    canvas.dispatchEvent(new MouseEvent('click', {
+      detail: 3,
+      clientX: bounds.left + 2,
+      clientY: bounds.top + 4,
+      bubbles: true,
+      cancelable: true,
+    }));
+    expect(runtime.getViewport()?.getSelectionText()).toBe('click-target');
 
     pointer('pointerdown', bounds.left + 2, 9);
     pointer('pointermove', bounds.left + 20, 9);
