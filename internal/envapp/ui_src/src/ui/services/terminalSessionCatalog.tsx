@@ -816,12 +816,20 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     const normalizedReaderId = String(readerId ?? '').trim();
     if (!normalizedReaderId) return;
     const normalizedSessionId = String(sessionId ?? '').trim();
+    const previousSessionId = agentReaderSessionById.get(normalizedReaderId) ?? '';
     if (normalizedSessionId) {
       agentReaderSessionById.set(normalizedReaderId, normalizedSessionId);
       agentAttentionTracker.clearUnread(normalizedSessionId);
-      return;
+    } else {
+      agentReaderSessionById.delete(normalizedReaderId);
     }
-    agentReaderSessionById.delete(normalizedReaderId);
+    if (
+      previousSessionId
+      && previousSessionId !== normalizedSessionId
+      && ![...agentReaderSessionById.values()].includes(previousSessionId)
+    ) {
+      agentAttentionTracker.handleAgentSessionReaderExit(previousSessionId);
+    }
   };
 
   createEffect(() => {

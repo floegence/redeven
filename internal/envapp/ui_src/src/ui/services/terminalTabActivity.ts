@@ -36,6 +36,7 @@ type TerminalAgentOutputRuntime = Readonly<{
   foregroundCommandRevision: number;
   revision: number;
   phase: 'streaming' | 'settled';
+  unreadEligible: boolean;
 }>;
 
 export type TerminalSessionActivityRuntime = {
@@ -84,6 +85,7 @@ export interface TerminalTabActivityTracker {
     observation: TerminalSemanticWorkObservation,
     shouldMarkUnread: boolean,
   ) => void;
+  handleAgentSessionReaderExit: (sessionId: string) => void;
   handlePendingLiveOutput: (
     sessionId: string,
     opts: { sequence?: number; shouldMarkUnread: boolean },
@@ -587,6 +589,7 @@ export function createTerminalTabActivityTracker(
           foregroundCommandRevision,
           revision: outputRevision,
           phase: outputPhase,
+          unreadEligible: false,
         } : null;
         runtime.unread = false;
         publishIfNeeded(normalizedSessionId, runtime);
@@ -601,6 +604,7 @@ export function createTerminalTabActivityTracker(
             foregroundCommandRevision,
             revision: outputRevision,
             phase: outputPhase,
+            unreadEligible: false,
           };
         }
         handleSemanticWorkState(normalizedSessionId, observation, shouldMarkUnread);
@@ -614,10 +618,23 @@ export function createTerminalTabActivityTracker(
         foregroundCommandRevision,
         revision: outputRevision,
         phase: outputPhase,
+        unreadEligible: outputPhase === 'streaming' && previousOutput.phase !== 'streaming',
       };
-      markUnread(runtime, outputPhase === 'streaming'
-        && previousOutput.phase !== 'streaming'
-        && shouldMarkUnread);
+      markUnread(runtime, runtime.agentOutput.unreadEligible && shouldMarkUnread);
+      publishIfNeeded(normalizedSessionId, runtime);
+    },
+
+    handleAgentSessionReaderExit(sessionId: string) {
+      const normalizedSessionId = normalizeSessionId(sessionId);
+      if (!normalizedSessionId) return;
+      const runtime = runtimeBySession.get(normalizedSessionId);
+      if (
+        !runtime
+        || runtime.semanticWork
+        || runtime.agentOutput?.phase !== 'streaming'
+        || !runtime.agentOutput.unreadEligible
+      ) return;
+      runtime.unread = true;
       publishIfNeeded(normalizedSessionId, runtime);
     },
 

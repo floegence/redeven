@@ -245,9 +245,22 @@ describe('TerminalPanel stock Agent unread integration', () => {
       ).toHaveLength(0));
 
       publishOutput('streaming', 4);
-      publishOutput('settled', 5);
-      await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
+      await vi.waitFor(() => expect(
+        host.querySelectorAll('[data-terminal-output-state="streaming"]'),
+      ).toHaveLength(2));
       expect(host.querySelectorAll('[data-terminal-attention-state="unread"]')).toHaveLength(0);
+
+      outside.focus();
+      await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
+      publishOutput('settled', 5);
+      await vi.waitFor(() => expect(
+        host.querySelectorAll('[data-terminal-attention-state="unread"]'),
+      ).toHaveLength(2));
+
+      activitySurface?.focus();
+      await vi.waitFor(() => expect(
+        host.querySelectorAll('[data-terminal-attention-state="unread"]'),
+      ).toHaveLength(0));
 
       outside.focus();
       await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));

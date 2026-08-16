@@ -115,6 +115,7 @@ describe('createTerminalTabActivityTracker', () => {
     tracker.handleAgentSessionSnapshot('session-1', stockAgentSession({
       outputPhase: 'streaming', outputRevision: 4,
     }), true);
+    tracker.handleAgentSessionReaderExit('session-1');
     tracker.handleAgentSessionSnapshot('session-1', stockAgentSession({
       outputPhase: 'settled', outputRevision: 5,
     }), true);
@@ -148,6 +149,43 @@ describe('createTerminalTabActivityTracker', () => {
       outputPhase: 'streaming', outputRevision: 4,
     }), true);
     expect(published).toEqual(['unread', 'none', 'unread']);
+    tracker.dispose();
+  });
+
+  it('keeps a stock Agent streaming batch unread when its last reader leaves before settle', () => {
+    const published: string[] = [];
+    const tracker = createTerminalTabActivityTracker({
+      publishVisualState: (_sessionId, state) => published.push(state),
+    });
+    tracker.handleAgentSessionSnapshot('session-1', stockAgentSession({
+      outputPhase: 'settled', outputRevision: 1,
+    }), false);
+    tracker.handleAgentSessionSnapshot('session-1', stockAgentSession({
+      outputPhase: 'streaming', outputRevision: 2,
+    }), false);
+
+    tracker.handleAgentSessionReaderExit('session-1');
+    tracker.handleAgentSessionSnapshot('session-1', stockAgentSession({
+      outputPhase: 'settled', outputRevision: 3,
+    }), true);
+
+    expect(published).toEqual(['unread']);
+    tracker.dispose();
+  });
+
+  it('does not derive reader-exit unread when semantic work state is authoritative', () => {
+    const published: string[] = [];
+    const tracker = createTerminalTabActivityTracker({
+      publishVisualState: (_sessionId, state) => published.push(state),
+    });
+    tracker.handleAgentSessionSnapshot('session-1', {
+      ...stockAgentSession({ outputPhase: 'streaming', outputRevision: 1 }),
+      workState: semanticSession({ phase: 'working', revision: 1 }).workState,
+    }, false);
+
+    tracker.handleAgentSessionReaderExit('session-1');
+
+    expect(published).toEqual([]);
     tracker.dispose();
   });
 
