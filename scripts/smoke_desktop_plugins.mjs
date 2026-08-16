@@ -55,6 +55,7 @@ export function assertExtensionIOEvidence(evidence, { requireRevoke = true, requ
     || !/^[0-9a-f]{12,40}$/u.test(String(target.commit ?? ''))
     || !Number.isInteger(target.runtime_pid) || target.runtime_pid <= 1
     || !Number.isInteger(target.local_ui_pid) || target.local_ui_pid <= 1
+    || target.runtime_pid === target.local_ui_pid
     || !String(target.state_root ?? '').startsWith('/')) {
     throw new Error('Linux target provenance is incomplete');
   }
@@ -204,6 +205,77 @@ function enabledPlugins(catalog) {
 
 function installedPlugins(catalog) {
   return Array.isArray(catalog?.plugins) ? catalog.plugins : [];
+}
+
+function successfulPluginResponse(response, operation) {
+  if (response?.status !== 200 || response?.body?.ok !== true) {
+    throw new Error(`${operation} failed: ${JSON.stringify(response)}`);
+  }
+  return response.body.data;
+}
+
+function runtimeTargetFromDescriptor(descriptor) {
+  const match = /^(linux)\/(amd64|arm64)$/u.exec(String(descriptor?.target ?? ''));
+  if (!match) throw new Error('plugin runtime descriptor does not expose a supported Linux target');
+  return { os: match[1], arch: match[2] };
+}
+
+export function runtimePIDFromHealth(health) {
+  const readyShards = Array.isArray(health?.shards) ? health.shards.filter((shard) => shard?.ready === true) : [];
+  if (health?.ready !== true || readyShards.length !== 1) {
+    throw new Error('plugin runtime health does not expose one ready runtime process identity');
+  }
+  const match = /^runtime_([1-9][0-9]*)$/u.exec(String(readyShards[0].runtime_instance_id ?? ''));
+  const pid = Number(match?.[1]);
+  if (!Number.isSafeInteger(pid) || pid <= 1) {
+    throw new Error('plugin runtime process identity is invalid');
+  }
+  return pid;
+}
+
+export async function ensureEnabledWorkerRuntime({ request, plugins }) {
+  if (typeof request !== 'function') throw new Error('plugin runtime request adapter is required');
+  const workerPlugins = installedPlugins({ plugins }).filter((plugin) => (
+    plugin?.enable_state === 'enabled' && Array.isArray(plugin?.manifest?.workers) && plugin.manifest.workers.length > 0
+  ));
+  if (workerPlugins.length === 0) return { runtimePID: null, started: false, retries: [], health: null };
+
+  const featuresResponse = await request('/_redevplugin/api/plugins/features/query', {});
+  const features = successfulPluginResponse(featuresResponse, 'plugin feature query');
+  if (!Array.isArray(features) || !features.includes('runtime')) {
+    throw new Error('enabled worker plugins require the configured runtime feature');
+  }
+
+  const initialHealthResponse = await request('/_redevplugin/api/plugins/runtime/health/query', {});
+  let health = successfulPluginResponse(initialHealthResponse, 'plugin runtime health query');
+  let startResponse = null;
+  if (health?.ready !== true) {
+    startResponse = await request('/_redevplugin/api/plugins/runtime/start', {
+      target: runtimeTargetFromDescriptor(health?.descriptor),
+    });
+    health = successfulPluginResponse(startResponse, 'plugin runtime start');
+  }
+
+  const retries = [];
+  for (const plugin of workerPlugins) {
+    const response = await request('/_redevplugin/api/plugins/runtime/recover/retry', {
+      plugin_instance_id: plugin.plugin_instance_id,
+    });
+    const result = successfulPluginResponse(response, `plugin runtime recovery for ${plugin.plugin_instance_id}`);
+    if (result?.status !== 'ready') {
+      throw new Error(`plugin runtime recovery failed for ${plugin.plugin_instance_id}: ${JSON.stringify(result)}`);
+    }
+    retries.push({ plugin_instance_id: plugin.plugin_instance_id, status: result.status });
+  }
+
+  const finalHealthResponse = await request('/_redevplugin/api/plugins/runtime/health/query', {});
+  health = successfulPluginResponse(finalHealthResponse, 'plugin runtime health verification');
+  return {
+    runtimePID: runtimePIDFromHealth(health),
+    started: startResponse !== null,
+    retries,
+    health,
+  };
 }
 
 export function releaseRefFromInstalledPlugin(plugin) {
@@ -1001,11 +1073,23 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
   });
   const recovery = recoveryEntry.body;
   const catalog = catalogEntry.body?.data ?? catalogEntry.body;
+  let runtimePreparation = null;
+  if (config.ioPackagePath) {
+    runtimePreparation = await ensureEnabledWorkerRuntime({
+      plugins: installedPlugins(catalog),
+      request: async (pathname, body) => {
+        const response = await requestPluginJSON(page, pathname, body, sessionHeaders);
+        pluginResponses.push({ method: 'POST', pathname, ...response });
+        return response;
+      },
+    });
+  }
   const enabledCount = Array.isArray(catalog?.plugins)
     ? catalog.plugins.filter((plugin) => plugin?.enable_state === 'enabled').length
     : 0;
   await fs.writeFile(path.join(config.reportRoot, `${config.phase}-catalog-checkpoint.json`), JSON.stringify({
     recovery,
+    runtimePreparation,
     catalog,
     enabledCount,
     panelTiles: await page.locator('[data-plugin-panel-tile]:not([data-plugin-panel-tile="plugin-center"])').count(),
@@ -1115,9 +1199,20 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
       const matchesV9RPC = (entry) => entry.pathname.endsWith('/plugins/rpc')
         && entry.rpc_plugin_instance_id === v9Plugin?.plugin_instance_id
         && entry.rpc_method === 'smoke.run';
+      const [fixtureState, diagnosticResponse] = await Promise.all([
+        fetch(`http://127.0.0.1:${config.fixturePorts.http}/state`)
+          .then(async (response) => ({ status: response.status, body: await response.json() }))
+          .catch((stateError) => ({ error: String(stateError) })),
+        requestPluginJSON(page, '/_redevplugin/api/plugins/diagnostics/query', {
+          plugin_instance_id: v9Plugin?.plugin_instance_id,
+          limit: 100,
+        }, sessionHeaders).catch((diagnosticError) => ({ error: String(diagnosticError) })),
+      ]);
       await fs.writeFile(path.join(config.reportRoot, `${config.phase}-rpc-diagnostics.json`), `${JSON.stringify({
         matchingRequests: pluginRequests.filter(matchesV9RPC),
         matchingResponses: pluginResponses.filter(matchesV9RPC),
+        fixtureState,
+        diagnosticResponse,
         iframeURL: frame.url(),
         iframeBody: (await frame.locator('body').innerText().catch(() => '')).slice(0, 8_000),
         consoleErrors,
@@ -1164,8 +1259,8 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
         arch: config.linuxTarget?.arch,
         container_id: config.linuxTarget?.container_id,
         commit: config.commit,
-        runtime_pid: config.linuxTarget?.runtime_pid,
-        previous_runtime_pid: config.linuxTarget?.previous_runtime_pid,
+        runtime_pid: runtimePreparation?.runtimePID,
+        previous_runtime_pid: initialEvidence?.linux_target?.runtime_pid,
         local_ui_pid: config.linuxTarget?.local_ui_pid ?? config.linuxTarget?.runtime_pid,
         state_root: config.linuxTarget?.state_root,
       },

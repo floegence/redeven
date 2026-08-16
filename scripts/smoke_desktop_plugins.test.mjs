@@ -7,8 +7,10 @@ import {
   assertIsolatedSmokeConfiguration,
   assessPluginSmoke,
   browserPages,
+  ensureEnabledWorkerRuntime,
   isEnvAppPage,
   releaseRefFromInstalledPlugin,
+  runtimePIDFromHealth,
   waitFor,
 } from './smoke_desktop_plugins.mjs';
 
@@ -90,6 +92,89 @@ test('Desktop smoke requires a distinct Linux PID and reused state for cold rest
     linux_target: { ...completeIOEvidence.linux_target, previous_runtime_pid: 41 },
     cold_restart: { runtime_restarted: true, state_root_reused: true, enabled_after_restart: true },
   }, { requireRevoke: false, requireColdRestart: true }), /cold restart/u);
+  assert.throws(() => assertExtensionIOEvidence({
+    ...completeIOEvidence,
+    linux_target: { ...completeIOEvidence.linux_target, runtime_pid: completeIOEvidence.linux_target.local_ui_pid },
+  }), /provenance/u);
+});
+
+test('Desktop smoke starts and retries workers installed after an empty startup recovery snapshot', async () => {
+  const requests = [];
+  const responses = new Map([
+    ['/_redevplugin/api/plugins/features/query', { status: 200, body: { ok: true, data: ['runtime', 'io', 'connectivity'] } }],
+    ['/_redevplugin/api/plugins/runtime/health/query', [
+      {
+        status: 200,
+        body: {
+          ok: true,
+          data: {
+            ready: false,
+            descriptor: { target: 'linux/arm64' },
+            shards: [],
+          },
+        },
+      },
+      {
+        status: 200,
+        body: {
+          ok: true,
+          data: {
+            ready: true,
+            descriptor: { target: 'linux/arm64' },
+            shards: [{ ready: true, runtime_instance_id: 'runtime_431', descriptor: { target: 'linux/arm64' } }],
+          },
+        },
+      },
+    ]],
+    ['/_redevplugin/api/plugins/runtime/start', {
+      status: 200,
+      body: {
+        ok: true,
+        data: {
+          ready: true,
+          descriptor: { target: 'linux/arm64' },
+          shards: [{ ready: true, runtime_instance_id: 'runtime_431', descriptor: { target: 'linux/arm64' } }],
+        },
+      },
+    }],
+    ['/_redevplugin/api/plugins/runtime/recover/retry', {
+      status: 200,
+      body: { ok: true, data: { status: 'ready' } },
+    }],
+  ]);
+  const request = async (pathname, body) => {
+    requests.push({ pathname, body });
+    const configured = responses.get(pathname);
+    return Array.isArray(configured) ? configured.shift() : configured;
+  };
+  const plugins = [
+    { plugin_instance_id: 'plugini_io', enable_state: 'enabled', manifest: { workers: [{ worker_id: 'io' }] } },
+    { plugin_instance_id: 'plugini_frozen', enable_state: 'enabled', manifest: { workers: [{ worker_id: 'legacy' }] } },
+    { plugin_instance_id: 'plugini_ui', enable_state: 'enabled', manifest: { workers: [] } },
+  ];
+
+  const result = await ensureEnabledWorkerRuntime({ request, plugins });
+
+  assert.equal(result.runtimePID, 431);
+  assert.deepEqual(requests, [
+    { pathname: '/_redevplugin/api/plugins/features/query', body: {} },
+    { pathname: '/_redevplugin/api/plugins/runtime/health/query', body: {} },
+    { pathname: '/_redevplugin/api/plugins/runtime/start', body: { target: { os: 'linux', arch: 'arm64' } } },
+    { pathname: '/_redevplugin/api/plugins/runtime/recover/retry', body: { plugin_instance_id: 'plugini_io' } },
+    { pathname: '/_redevplugin/api/plugins/runtime/recover/retry', body: { plugin_instance_id: 'plugini_frozen' } },
+    { pathname: '/_redevplugin/api/plugins/runtime/health/query', body: {} },
+  ]);
+});
+
+test('Desktop smoke rejects Local UI agent identity as runtime PID evidence', () => {
+  assert.equal(runtimePIDFromHealth({
+    ready: true,
+    shards: [{ ready: true, runtime_instance_id: 'runtime_431' }],
+  }), 431);
+  assert.throws(() => runtimePIDFromHealth({
+    ready: true,
+    shards: [{ ready: true, runtime_instance_id: 'agent_17' }],
+  }), /runtime process identity/u);
 });
 
 test('Desktop smoke binds compatibility proof to a new frozen-package RPC without leaking bridge credentials', async () => {
@@ -154,6 +239,9 @@ test('Desktop smoke persists the failed RPC response and iframe diagnostics on t
   assert.match(source, /matchingRequests/u);
   assert.match(source, /matchingResponses/u);
   assert.match(source, /iframeBody/u);
+  assert.match(source, /fixtureState/u);
+  assert.match(source, /diagnosticResponse/u);
+  assert.match(source, /plugins\/diagnostics\/query/u);
   assert.match(source, /consoleErrors/u);
   assert.match(source, /pageErrors/u);
 });
@@ -201,6 +289,14 @@ test('Linux smoke reserves a distinct non-ephemeral port group for the shared co
   assert.match(source, /new Set\(ports\)\.size === ports\.length/u);
   assert.doesNotMatch(source, /LINUX_UI_PORT=.*\$\(reserve_port\)/u);
   assert.doesNotMatch(source, /FIXTURE_HTTP_PORT=.*\$\(reserve_port\)/u);
+});
+
+test('Linux smoke permits Host clone3 so the runtime can install its own containment profile', async () => {
+  const source = await import('node:fs/promises').then((fs) => fs.readFile(
+    new URL('./smoke_desktop_plugins.sh', import.meta.url),
+    'utf8',
+  ));
+  assert.match(source, /docker run -d --rm --platform linux\/arm64 --security-opt seccomp=unconfined/u);
 });
 
 test('attach smoke accepts the shared dev Desktop ports with verified provenance', () => {

@@ -2,11 +2,13 @@
 
 ## 2026-08-16
 * **ReDevPlugin package-set readback**: Upgraded the complete published
-  ReDevPlugin v2.0.3 Go, npm, and Rust source package set. The Host now emits
-  required empty presentation arrays as arrays, while Redeven retains one
-  EnvAppShell-owned Plugin Panel state and no inventory or credential fallback
-  state machine. Linux smoke resolves frozen v1.1.4 fixtures from the exact
-  published Go module instead of a machine-specific module-cache path.
+  ReDevPlugin v2.0.4 Go, npm, and Rust source package set. The Host preserves
+  the verified manifest model across durable JSON round trips and strictly
+  recovers affected v2.0.3 rows from immutable installed manifest evidence.
+  Redeven retains one EnvAppShell-owned Plugin Panel state and no inventory or
+  credential fallback state machine. Linux smoke resolves frozen v1.1.4
+  fixtures from the exact published Go module instead of a machine-specific
+  module-cache path.
 
 ## 2026-08-15
 * **Canonical provider tool names**: Tool definitions, Floret history, current
