@@ -140,6 +140,7 @@ function harness(options: Readonly<{
   let latestWidth = 80;
   const sendInput = vi.fn(async () => undefined);
   const sendInputIntent = vi.fn(async (_sessionId: string, _intent: TerminalKeyInputIntent) => undefined);
+  const sendPaste = vi.fn(async (_sessionId: string, _data: string) => undefined);
   const semanticHistory = vi.fn(async (_sessionId: string, request: SemanticHistoryRequest) => {
     const screenStartOffset = 40;
     const currentOffset = request.direction === 'start'
@@ -213,6 +214,7 @@ function harness(options: Readonly<{
     activate,
     sendInput,
     sendInputIntent,
+    sendPaste,
     semanticHistory,
     clearSemanticContent: async () => ({ presentationSequence: 3, contentEpoch: 2 }),
     forgetSession: vi.fn(),
@@ -306,6 +308,7 @@ function harness(options: Readonly<{
     statuses,
     sendInput,
     sendInputIntent,
+    sendPaste,
     setViewActive,
     setActive,
     setFontSize,
@@ -349,6 +352,7 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
   afterEach(() => {
     for (const item of mounted.splice(0)) item.dispose();
     document.body.replaceChildren();
+    vi.restoreAllMocks();
   });
 
   it('mounts one semantic canvas and applies only advancing atomic presentations', async () => {
@@ -433,21 +437,14 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     expect(runtime.sendInputIntent).toHaveBeenCalledTimes(2);
   });
 
-  it('commits pasted Unicode once and copies the renderer-owned selection', async () => {
+  it('routes native copy and paste events through the renderer and semantic paste owner', async () => {
+    vi.spyOn(window.navigator, 'platform', 'get').mockReturnValue('MacIntel');
     const runtime = harness();
     mounted.push(runtime);
     runtime.emitPresentation(presentation(1, 'copy-target'));
     await vi.waitFor(() => expect(runtime.getViewport()).not.toBeNull());
     await waitForPaint();
     const input = runtime.root.querySelector<HTMLTextAreaElement>('[data-terminal-input-bridge="semantic"]')!;
-
-    input.value = '粘贴🙂';
-    input.dispatchEvent(new InputEvent('input', {
-      inputType: 'insertFromPaste',
-      bubbles: true,
-    }));
-    expect(runtime.sendInput).toHaveBeenCalledOnce();
-    expect(runtime.sendInput).toHaveBeenCalledWith(SESSION.id, '粘贴🙂');
 
     const canvas = runtime.root.querySelector<HTMLCanvasElement>('[data-terminal-semantic-canvas="true"]')!;
     Object.defineProperties(canvas, {
@@ -470,17 +467,43 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     pointer('pointerup', bounds.left + 20);
     expect(runtime.getViewport()?.getSelectionText()).toContain('copy-target');
 
-    const writeText = vi.fn(async () => undefined);
-    Object.defineProperty(navigator, 'clipboard', {
-      configurable: true,
-      value: { writeText },
+    const keydown = new KeyboardEvent('keydown', {
+      key: 'c',
+      code: 'KeyC',
+      metaKey: true,
+      bubbles: true,
+      cancelable: true,
     });
-    await expect(runtime.getViewport()?.copySelection('command')).resolves.toEqual({
-      copied: true,
-      source: 'command',
-      textLength: 'copy-target'.length,
+    input.dispatchEvent(keydown);
+    const setData = vi.fn();
+    const copy = new Event('copy', { bubbles: true, cancelable: true }) as ClipboardEvent;
+    Object.defineProperty(copy, 'clipboardData', { value: { setData } });
+    if (!keydown.defaultPrevented) input.dispatchEvent(copy);
+    await Promise.resolve();
+
+    expect(keydown.defaultPrevented).toBe(false);
+    expect(copy.defaultPrevented).toBe(true);
+    expect(setData).toHaveBeenCalledWith('text/plain', 'copy-target');
+
+    const pasteKeydown = new KeyboardEvent('keydown', {
+      key: 'v',
+      code: 'KeyV',
+      metaKey: true,
+      bubbles: true,
+      cancelable: true,
     });
-    expect(writeText).toHaveBeenCalledWith('copy-target');
+    input.dispatchEvent(pasteKeydown);
+    const paste = new Event('paste', { bubbles: true, cancelable: true }) as ClipboardEvent;
+    Object.defineProperty(paste, 'clipboardData', {
+      value: { getData: vi.fn(() => '粘贴🙂') },
+    });
+    if (!pasteKeydown.defaultPrevented) input.dispatchEvent(paste);
+
+    await vi.waitFor(() => expect(runtime.sendPaste).toHaveBeenCalledOnce());
+    expect(pasteKeydown.defaultPrevented).toBe(false);
+    expect(runtime.sendPaste).toHaveBeenCalledWith(SESSION.id, '粘贴🙂');
+    expect(runtime.sendInput).not.toHaveBeenCalled();
+    expect(paste.defaultPrevented).toBe(true);
   });
 
   it('keeps a same-cell click selection-free while preserving intentional drag selection', async () => {
@@ -843,9 +866,13 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
       bubbles: true,
       cancelable: true,
     }));
+    const paste = new Event('paste', { bubbles: true, cancelable: true }) as ClipboardEvent;
+    Object.defineProperty(paste, 'clipboardData', { value: { getData: () => 'blocked paste' } });
+    input.dispatchEvent(paste);
 
     expect(runtime.sendInputIntent).not.toHaveBeenCalled();
     expect(runtime.sendInput).not.toHaveBeenCalled();
+    expect(runtime.sendPaste).not.toHaveBeenCalled();
   });
 
   it('does not reclaim controller ownership when a hidden display mode receives a Presentation', async () => {
