@@ -49,7 +49,7 @@ const settingsPageState = vi.hoisted(() => ({
 const registeredComponentsState = vi.hoisted(() => ({
   components: [] as Array<{ id: string; component: () => JSX.Element }>,
 }));
-const registryRuntimeState = vi.hoisted(() => ({
+const innerProviderState = vi.hoisted(() => ({
   refreshEnabled: false,
   refreshOwner: (() => undefined) as () => void,
 }));
@@ -487,14 +487,20 @@ vi.mock('@floegence/floe-webapp-core/app', () => ({
     );
   },
   FloeRegistryRuntime: (props: any) => {
-    const [ownerGeneration, setOwnerGeneration] = createSignal({ id: 0 });
-    registryRuntimeState.refreshOwner = () => {
-      setOwnerGeneration((current) => ({ id: current.id + 1 }));
-    };
     createEffect(() => {
       registeredComponentsState.components = Array.isArray(props.components) ? props.components : [];
     });
-    return registryRuntimeState.refreshEnabled ? (
+    return <>{props.children}</>;
+  },
+}));
+
+vi.mock('./services/terminalSessionCatalog', () => ({
+  TerminalSessionCatalogProvider: (props: any) => {
+    const [ownerGeneration, setOwnerGeneration] = createSignal({ id: 0 });
+    innerProviderState.refreshOwner = () => {
+      setOwnerGeneration((current) => ({ id: current.id + 1 }));
+    };
+    return innerProviderState.refreshEnabled ? (
       <For each={[ownerGeneration()]}>
         {() => <>{props.children}</>}
       </For>
@@ -1336,8 +1342,8 @@ beforeEach(async () => {
   settingsPageState.focusSeq = 0;
   settingsPageState.focusSection = null;
   registeredComponentsState.components = [];
-  registryRuntimeState.refreshEnabled = false;
-  registryRuntimeState.refreshOwner = () => undefined;
+  innerProviderState.refreshEnabled = false;
+  innerProviderState.refreshOwner = () => undefined;
   activitySurfaceLifecycleState.fileMounts = 0;
   activitySurfaceLifecycleState.fileCleanups = 0;
   activitySurfaceLifecycleState.flowerMounts = 0;
@@ -2140,7 +2146,7 @@ describe('EnvAppShell environment entry affordances', () => {
   it('keeps one real PluginPanel authority across enabled Activity and Workbench ingress', async () => {
     vi.useFakeTimers();
     pluginPanelState.renderActual = true;
-    registryRuntimeState.refreshEnabled = true;
+    innerProviderState.refreshEnabled = true;
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('enabled'));
@@ -2167,7 +2173,7 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(document.querySelector('[data-plugin-panel-motion-state="closing"]')).not.toBeNull();
       vi.advanceTimersByTime(160);
       expect(document.querySelector('[data-plugin-launcher-backdrop]')).toBeNull();
-      registryRuntimeState.refreshOwner();
+      innerProviderState.refreshOwner();
       await flushAsync();
       expect(pluginPanelState.mounts).toBe(1);
       expect(pluginPanelState.activeInstances).toBe(1);

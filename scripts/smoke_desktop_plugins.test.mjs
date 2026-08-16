@@ -217,7 +217,7 @@ test('the Activity Plugin Panel is an eagerly mounted core control', async () =>
   assert.match(shellSource, /type PluginPanelState = Readonly<\{[\s\S]*?open: boolean;[\s\S]*?placement: 'activity' \| 'workbench';[\s\S]*?trigger: HTMLButtonElement \| null;/u);
   assert.match(shellSource, /createSignal<PluginPanelState>/u);
   assert.match(shellSource, /<PluginPanel[\s\S]*?open=\{pluginsPanelOpen\(\)\}/u);
-  assert.match(shellSource, /<\/FloeRegistryRuntime>\s*<PluginPanel/u);
+  assert.match(shellSource, /<EnvContext\.Provider[\s\S]*?>\s*<PluginPanel[\s\S]*?<TerminalSessionCatalogProvider>/u);
   assert.doesNotMatch(shellSource, /requestPluginPanelState|activePluginPanelManager|activePluginsActivityBinding/u);
   assert.match(panelSource, /import \{ Portal \} from 'solid-js\/web'/u);
   assert.match(panelSource, /<Show when=\{mounted\(\)\}>\s*<Portal>/u);
