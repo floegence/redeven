@@ -22,9 +22,9 @@ import (
 
 const (
 	flowersecGoModule    = "github.com/floegence/flowersec/flowersec-go/v2"
-	flowersecGoVersion   = "v2.5.0"
+	flowersecGoVersion   = "v2.5.1"
 	flowersecCorePackage = "@floegence/flowersec-core"
-	flowersecCoreVersion = "2.5.0"
+	flowersecCoreVersion = "2.5.1"
 )
 
 func TestDesktopPnpmPeerInstallSettingMatchesLockfile(t *testing.T) {
@@ -319,58 +319,58 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 	root := repoRootForTest(t)
 	expectedPackages := map[string][]string{
 		"desktop/package.json": {
-			"\"@floegence/floe-webapp-core\": \"0.41.0\"",
+			"\"@floegence/floe-webapp-core\": \"0.41.2\"",
 		},
 		"desktop/package-lock.json": {
-			"floe-webapp-core-0.41.0.tgz",
+			"floe-webapp-core-0.41.2.tgz",
 		},
 		"desktop/pnpm-lock.yaml": {
-			"@floegence/floe-webapp-core@0.41.0",
+			"@floegence/floe-webapp-core@0.41.2",
 		},
 		"internal/envapp/ui_src/package.json": {
-			"\"@floegence/floe-webapp-boot\": \"0.41.0\"",
-			"\"@floegence/floe-webapp-core\": \"0.41.0\"",
-			"\"@floegence/floe-webapp-protocol\": \"0.41.0\"",
+			"\"@floegence/floe-webapp-boot\": \"0.41.2\"",
+			"\"@floegence/floe-webapp-core\": \"0.41.2\"",
+			"\"@floegence/floe-webapp-protocol\": \"0.41.2\"",
 			"\"@floegence/floeterm-terminal-web\": \"0.16.4\"",
-			"\"@floegence/flowersec-core\": \"2.5.0\"",
+			"\"@floegence/flowersec-core\": \"2.5.1\"",
 		},
 		"internal/envapp/ui_src/package-lock.json": {
-			"floe-webapp-boot-0.41.0.tgz",
-			"floe-webapp-core-0.41.0.tgz",
-			"floe-webapp-protocol-0.41.0.tgz",
+			"floe-webapp-boot-0.41.2.tgz",
+			"floe-webapp-core-0.41.2.tgz",
+			"floe-webapp-protocol-0.41.2.tgz",
 			"floeterm-terminal-web-0.16.4.tgz",
-			"flowersec-core-2.5.0.tgz",
+			"flowersec-core-2.5.1.tgz",
 		},
 		"internal/envapp/ui_src/pnpm-lock.yaml": {
-			"@floegence/floe-webapp-boot@0.41.0",
-			"@floegence/floe-webapp-core@0.41.0",
-			"@floegence/floe-webapp-protocol@0.41.0",
+			"@floegence/floe-webapp-boot@0.41.2",
+			"@floegence/floe-webapp-core@0.41.2",
+			"@floegence/floe-webapp-protocol@0.41.2",
 			"@floegence/floeterm-terminal-web@0.16.4",
-			"@floegence/flowersec-core@2.5.0",
+			"@floegence/flowersec-core@2.5.1",
 		},
 		"internal/codeapp/ui_src/package.json": {
-			"\"@floegence/flowersec-core\": \"2.5.0\"",
+			"\"@floegence/flowersec-core\": \"2.5.1\"",
 		},
 		"internal/codeapp/ui_src/package-lock.json": {
-			"flowersec-core-2.5.0.tgz",
+			"flowersec-core-2.5.1.tgz",
 		},
 		"THIRD_PARTY_NOTICES.md": {
-			"@floegence/floe-webapp-boot | 0.41.0",
-			"@floegence/floe-webapp-core | 0.41.0",
-			"@floegence/floe-webapp-protocol | 0.41.0",
+			"@floegence/floe-webapp-boot | 0.41.2",
+			"@floegence/floe-webapp-core | 0.41.2",
+			"@floegence/floe-webapp-protocol | 0.41.2",
 			"@floegence/floeterm-terminal-web | 0.16.4",
-			"@floegence/flowersec-core | 2.5.0",
+			"@floegence/flowersec-core | 2.5.1",
 		},
 		"okf/architecture/runtime-transport-dependencies.md": {
 			"terminal-go v0.11.2",
-			"Flowersec Go v2.5.0",
-			"Flowersec Core v2.5.0",
+			"Flowersec Go v2.5.1",
+			"Flowersec Core v2.5.1",
 		},
 		"okf/architecture/env-app-upstream-web-dependencies.md": {
 			"terminal-web v0.16.4",
 			"semantic Presentation",
-			"Floe Webapp Boot, Core, and Protocol v0.41.0",
-			"Flowersec Core v2.5.0",
+			"Floe Webapp Boot, Core, and Protocol v0.41.2",
+			"Flowersec Core v2.5.1",
 		},
 	}
 	for file, expectedMarkers := range expectedPackages {
@@ -709,7 +709,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 		},
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
 			"github.com/floegence/floret/v4 v4.0.7",
-			"flowersec-v2-5-0-floe-webapp-v0-41-0",
+			"flowersec-v2-5-1-floe-webapp-v0-41-2",
 			"Floret ThreadService is the only lifecycle boundary",
 			"one workspace SSE",
 			"redeven-runtime-v1",
