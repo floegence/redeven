@@ -37,10 +37,6 @@ type LocalDirectSessionOptions struct {
 	PluginCredentialHash      [sha256.Size]byte
 	HasPluginCredential       bool
 	AccessSessionID           string
-	// HandlersServedByAcceptor is set when Flowersec's Acceptor owns handler
-	// dispatch for the accepted session. Redeven still owns product lifecycle,
-	// access-gate registration, monitoring, and audit state.
-	HandlersServedByAcceptor bool
 }
 
 func (a *Agent) registerLocalDirectChannel(meta session.Meta, opts LocalDirectSessionOptions) func() {
@@ -250,21 +246,10 @@ func (a *Agent) ServeLocalDirectSession(ctx context.Context, sess flowersec.Sess
 
 	defer sess.Close()
 
-	if opts.HandlersServedByAcceptor {
-		if a.term != nil {
-			detachTerminalSink := a.term.AttachSink(meta, sess.RPC(), a.accessGate)
-			defer detachTerminalSink()
-		}
-		_, err = sess.WaitTermination(sessCtx)
-		return err
+	if a.term != nil {
+		detachTerminalSink := a.term.AttachSink(meta, sess.RPC(), a.accessGate)
+		defer detachTerminalSink()
 	}
-
-	switch strings.TrimSpace(meta.FloeApp) {
-	case FloeAppRedevenCode:
-		return a.serveCodeAppSession(sessCtx, sess, meta)
-	case FloeAppRedevenPortForward:
-		return a.servePortForwardSession(sessCtx, sess, meta)
-	default:
-		return a.serveRedevenAgentSession(sessCtx, sess, meta)
-	}
+	_, err = sess.WaitTermination(sessCtx)
+	return err
 }

@@ -181,11 +181,13 @@ paths:
               $ref: '#/components/schemas/RuntimeBootstrapExchangeRequest'
       responses:
         '200':
-          description: Runtime direct connection info.
+          description: Runtime binding metadata and one bounded, exact control_artifact_pool_v1 bootstrap delivery, limited to 524,288 serialized bytes.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/RuntimeBootstrapExchangeResponse'
+        '409':
+          $ref: '#/components/responses/BootstrapConflict'
         default:
           $ref: '#/components/responses/ErrorEnvelope'
 components:
@@ -194,6 +196,28 @@ components:
       type: http
       scheme: bearer
   responses:
+    BootstrapConflict:
+      description: BOOTSTRAP_DELIVERY_EXPIRED means the persisted delivery is no longer replayable and is the only code that permits one request-ID rotation. BOOTSTRAP_BINDING_STALE rejects a non-increasing generation for the same logical binding. CONTROL_POOL_RELINK_REQUIRED rejects a new bootstrap delivery after the exact binding generation reaches its 65,536-request history bound.
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [success, error]
+            properties:
+              success:
+                type: boolean
+                const: false
+              error:
+                type: object
+                additionalProperties: false
+                required: [code, message]
+                properties:
+                  code:
+                    type: string
+                    enum: [BOOTSTRAP_DELIVERY_EXPIRED, BOOTSTRAP_BINDING_STALE, CONTROL_POOL_RELINK_REQUIRED]
+                  message:
+                    type: string
     ErrorEnvelope:
       description: Standard error envelope.
       content:
@@ -432,7 +456,8 @@ components:
           format: int64
     RuntimeBootstrapExchangeRequest:
       type: object
-      required: [env_public_id, provider_origin, local_environment_public_id, agent_instance_id]
+      additionalProperties: false
+      required: [env_public_id, provider_origin, local_environment_public_id, agent_instance_id, bootstrap_delivery_request_id_b64u]
       properties:
         env_public_id:
           type: string
@@ -443,6 +468,10 @@ components:
           type: string
         agent_instance_id:
           type: string
+        bootstrap_delivery_request_id_b64u:
+          type: string
+          pattern: '^[A-Za-z0-9_-]{43}$'
+          description: Canonical base64url encoding of a Runtime-generated 32-byte idempotency ID persisted before the request. Uncertain retries reuse this ID.
         hostname:
           type: string
         os:
@@ -453,7 +482,15 @@ components:
           type: string
     RuntimeBootstrapExchangeResponse:
       type: object
-      required: [provider_id, provider_origin, access_point_id, access_point_origin, env_public_id, direct]
+      additionalProperties: false
+      required:
+        - provider_id
+        - provider_origin
+        - access_point_id
+        - access_point_origin
+        - env_public_id
+        - control_artifact_pool
+        - local_environment_binding
       properties:
         provider_id:
           type: string
@@ -467,27 +504,174 @@ components:
           format: uri
         env_public_id:
           type: string
-        direct:
-          $ref: '#/components/schemas/RuntimeDirectConnectInfo'
+        control_artifact_pool:
+          $ref: '#/components/schemas/RuntimeBootstrapControlArtifactPoolV1'
         local_environment_binding:
           $ref: '#/components/schemas/ProviderLocalEnvironmentBinding'
-    RuntimeDirectConnectInfo:
+    RuntimeControlArtifactPoolV1:
       type: object
-      required: [ws_url, channel_id, e2ee_psk_b64u, channel_init_expire_at_unix_s, default_suite]
+      additionalProperties: false
+      required:
+        - version
+        - logical_provider_binding_id
+        - binding_generation
+        - target_waterline
+        - refresh_horizon_seconds
+        - server_highest_artifact_sequence
+        - entries
+        - response_digest_b64u
       properties:
-        ws_url:
+        version:
           type: string
-        channel_id:
+          const: control_artifact_pool_v1
+        logical_provider_binding_id:
           type: string
-        e2ee_psk_b64u:
-          type: string
-        channel_init_expire_at_unix_s:
+          minLength: 1
+        binding_generation:
           type: integer
           format: int64
-        default_suite:
+          minimum: 1
+          maximum: 9223372036854775807
+        target_waterline:
           type: integer
+          const: 2
+        refresh_horizon_seconds:
+          type: integer
+          const: 60
+        server_highest_artifact_sequence:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9223372036854775807
+          description: Authenticated durable server high-watermark after this exact delivery. Top-up entries are internally contiguous but may start after an expired, undelivered sequence range.
+        entries:
+          type: array
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/RuntimeControlArtifactPoolEntry'
+        response_digest_b64u:
+          type: string
+          pattern: '^[A-Za-z0-9_-]{43}$'
+          description: For bootstrap, SHA-256 of the canonical pool JSON with this field empty. For top-up, SHA-256 of the canonical outer response with this field empty, including top_up_request_id_b64u.
+    RuntimeBootstrapControlArtifactPoolV1:
+      allOf:
+        - $ref: '#/components/schemas/RuntimeControlArtifactPoolV1'
+        - type: object
+          properties:
+            entries:
+              type: array
+              minItems: 2
+              maxItems: 2
+              items:
+                $ref: '#/components/schemas/RuntimeControlArtifactPoolEntry'
+    RuntimeControlArtifactPoolTopUpRequest:
+      type: object
+      additionalProperties: false
+      required: [env_public_id, local_environment_public_id, binding_generation, top_up_request_id_b64u]
+      properties:
+        env_public_id:
+          type: string
+          minLength: 1
+        local_environment_public_id:
+          type: string
+          minLength: 1
+        binding_generation:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9223372036854775807
+        top_up_request_id_b64u:
+          type: string
+          pattern: '^[A-Za-z0-9_-]{43}$'
+          description: Canonical base64url encoding of a fresh 32-byte idempotency ID persisted before RPC type 41006. Existing IDs are replayed before capacity enforcement; a new ID after 65,536 accepted bootstrap and top-up delivery IDs in the exact binding generation receives 409/control_pool_relink_required and requires relinking.
+    RuntimeControlArtifactPoolTopUpResponse:
+      type: object
+      additionalProperties: false
+      required: [top_up_request_id_b64u, pool]
+      properties:
+        top_up_request_id_b64u:
+          type: string
+          pattern: '^[A-Za-z0-9_-]{43}$'
+          description: Exact ID echoed from the persisted pending request and covered by response_digest_b64u.
+        pool:
+          allOf:
+            - $ref: '#/components/schemas/RuntimeControlArtifactPoolV1'
+            - type: object
+              properties:
+                entries:
+                  type: array
+                  maxItems: 4
+                  items:
+                    $ref: '#/components/schemas/RuntimeControlArtifactPoolEntry'
+      description: Flowersec RPC type 41006 response; exact serialized JSON is limited to 524,288 bytes. The same request ID replays the same outbox bytes until its replay horizon. Entries are internally contiguous, but their first sequence may be above the Runtime's local high-watermark when an older undelivered outbox expired; server_highest_artifact_sequence authenticates that forward gap.
+    RuntimeControlArtifactPoolAck:
+      type: object
+      additionalProperties: false
+      required: [env_public_id, binding_generation, top_up_request_id_b64u, response_digest_b64u, highest_artifact_sequence]
+      properties:
+        env_public_id:
+          type: string
+          minLength: 1
+        binding_generation:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9223372036854775807
+        top_up_request_id_b64u:
+          type: string
+          pattern: '^[A-Za-z0-9_-]{43}$'
+        response_digest_b64u:
+          type: string
+          pattern: '^[A-Za-z0-9_-]{43}$'
+        highest_artifact_sequence:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9223372036854775807
+    RuntimeControlArtifactPoolAckResponse:
+      type: object
+      additionalProperties: false
+      required: [ok]
+      properties:
+        ok:
+          type: boolean
+          const: true
+      description: Exact Flowersec RPC type 41007 response. Repeating an ACK for the same outbox is idempotent; an expired tombstone returns top_up_request_expired and never issues replacement artifacts for that ID.
+    RuntimeControlArtifactPoolEntry:
+      type: object
+      additionalProperties: false
+      required:
+        - artifact_json
+        - artifact_channel_id
+        - binding_generation
+        - artifact_sequence
+        - expires_at_unix_s
+      properties:
+        artifact_json:
+          type: object
+          description: Opaque Flowersec v2 artifact JSON; its exact serialized form is limited to 65,536 bytes and consumers must pass it only to the published SDK parser.
+        artifact_channel_id:
+          type: string
+          minLength: 1
+        binding_generation:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9223372036854775807
+        artifact_sequence:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9223372036854775807
+        expires_at_unix_s:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 9223372036854775807
     ProviderLocalEnvironmentBinding:
       type: object
+      additionalProperties: false
+      required: [local_environment_public_id, user_public_id, env_public_id, generation]
       properties:
         local_environment_public_id:
           type: string
@@ -498,6 +682,8 @@ components:
         generation:
           type: integer
           format: int64
+          minimum: 1
+          maximum: 9223372036854775807
         hostname:
           type: string
         os:

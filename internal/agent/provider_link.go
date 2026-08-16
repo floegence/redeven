@@ -355,7 +355,7 @@ func (a *Agent) ConnectProvider(ctx context.Context, req ProviderLinkRequest) (*
 		a.mu.Unlock()
 		return nil, linkErr
 	}
-	if err := config.Save(a.configPath, cfg); err != nil {
+	if err := config.SaveProviderLinkConfig(a.configPath, cfg); err != nil {
 		a.mu.Unlock()
 		return nil, &ProviderLinkError{
 			Code:    ProviderLinkErrorBootstrapFailed,
@@ -418,6 +418,7 @@ func (a *Agent) clearProviderLinkBindingLocked(snapshot providerDisconnectSnapsh
 	next.LocalEnvironmentPublicID = ""
 	next.BindingGeneration = 0
 	next.Direct = nil
+	next.ControlArtifactPool = nil
 	if strings.TrimSpace(next.AgentInstanceID) == "" {
 		next.AgentInstanceID = a.cfg.AgentInstanceID
 	}

@@ -7,29 +7,17 @@ import (
 	"testing"
 )
 
-func TestSecretsStoreRuntimeDirectPSKs(t *testing.T) {
+func TestSecretsStoreDropsRetiredRuntimeDirectPSKsOnWrite(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "secrets.json")
-	first := NewSecretsStore(path)
-	second := NewSecretsStore(path)
-	if err := first.SetAIProviderAPIKey("provider-1", "api-key"); err != nil {
+	legacy := []byte(`{"schema_version":1,"ai":{"provider_api_keys":{"provider-1":"api-key"}},"runtime":{"direct_psks":{"channel-old":"psk-old"}}}`)
+	if err := os.WriteFile(path, legacy, 0o600); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	store := NewSecretsStore(path)
+	if err := store.SetAIProviderAPIKey("provider-2", "api-key-2"); err != nil {
 		t.Fatalf("SetAIProviderAPIKey() error = %v", err)
 	}
-	if err := first.SetRuntimeDirectPSK("channel-old", "psk-old"); err != nil {
-		t.Fatalf("SetRuntimeDirectPSK(old) error = %v", err)
-	}
-	if err := second.SetRuntimeDirectPSK("channel-current", "psk-current"); err != nil {
-		t.Fatalf("SetRuntimeDirectPSK(current) error = %v", err)
-	}
-	if err := second.RetainRuntimeDirectPSK("channel-current"); err != nil {
-		t.Fatalf("RetainRuntimeDirectPSK() error = %v", err)
-	}
-	if _, ok, err := first.GetRuntimeDirectPSK("channel-old"); err != nil || ok {
-		t.Fatalf("old direct psk = ok:%v err:%v, want removed", ok, err)
-	}
-	if got, ok, err := first.GetRuntimeDirectPSK("channel-current"); err != nil || !ok || got != "psk-current" {
-		t.Fatalf("current direct psk = %q, %v, %v", got, ok, err)
-	}
-	if got, ok, err := second.GetAIProviderAPIKey("provider-1"); err != nil || !ok || got != "api-key" {
+	if got, ok, err := store.GetAIProviderAPIKey("provider-1"); err != nil || !ok || got != "api-key" {
 		t.Fatalf("AI provider key = %q, %v, %v", got, ok, err)
 	}
 
@@ -41,8 +29,8 @@ func TestSecretsStoreRuntimeDirectPSKs(t *testing.T) {
 	if err := json.Unmarshal(body, &raw); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v", err)
 	}
-	if raw["runtime"] == nil || raw["ai"] == nil {
-		t.Fatalf("secrets file lost a section: %s", body)
+	if raw["runtime"] != nil || raw["ai"] == nil {
+		t.Fatalf("retired runtime secrets were not removed: %s", body)
 	}
 	info, err := os.Stat(path)
 	if err != nil {

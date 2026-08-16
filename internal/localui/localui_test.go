@@ -599,6 +599,13 @@ func TestServer_LocalAccessUnlockFlow(t *testing.T) {
 	if lockedRes.Result().StatusCode != http.StatusLocked {
 		t.Fatalf("locked runtime status = %d, want %d", lockedRes.Result().StatusCode, http.StatusLocked)
 	}
+	var lockedBody apiResp
+	if err := json.Unmarshal(lockedRes.Body.Bytes(), &lockedBody); err != nil {
+		t.Fatalf("decode locked runtime body error = %v", err)
+	}
+	if lockedBody.OK || lockedBody.Error == nil || lockedBody.Error.Code != "ACCESS_PASSWORD_REQUIRED" {
+		t.Fatalf("unexpected locked runtime body: %#v", lockedBody)
+	}
 
 	unlockReq := httptest.NewRequest(http.MethodPost, "http://localhost:23998/api/local/access/unlock", bytes.NewBufferString(`{"password":"secret"}`))
 	unlockReq.Header.Set("Content-Type", "application/json")

@@ -2049,13 +2049,7 @@ func (g *Server) toSettingsView(cfg *config.Config, aiSvc *ai.Service) settingsV
 		configPath = g.configPath
 		secrets = g.secrets
 	}
-	var direct settingsDirectView
-	if cfg != nil && cfg.Direct != nil {
-		direct = settingsDirectView{
-			ArtifactProvisioned: len(cfg.Direct.ArtifactJSON) > 0,
-			ExpiresAtUnixS:      cfg.Direct.ExpiresAtUnixS,
-		}
-	}
+	direct := controlArtifactPoolSettingsView(cfg, time.Now().Unix())
 
 	var out settingsView
 	out.ConfigPath = strings.TrimSpace(configPath)
@@ -2114,6 +2108,26 @@ func (g *Server) toSettingsView(cfg *config.Config, aiSvc *ai.Service) settingsV
 		}
 	}
 	return out
+}
+
+func controlArtifactPoolSettingsView(cfg *config.Config, nowUnixS int64) settingsDirectView {
+	var view settingsDirectView
+	if cfg == nil || cfg.ControlArtifactPool == nil {
+		return view
+	}
+	pool := cfg.ControlArtifactPool
+	refreshCutoff := nowUnixS + pool.RefreshHorizonSeconds
+	for index := range pool.Entries {
+		entry := &pool.Entries[index]
+		if entry.Spent || entry.Revoked || len(entry.ArtifactJSON) == 0 || entry.ExpiresAtUnixS <= refreshCutoff {
+			continue
+		}
+		view.ArtifactProvisioned = true
+		if entry.ExpiresAtUnixS > view.ExpiresAtUnixS {
+			view.ExpiresAtUnixS = entry.ExpiresAtUnixS
+		}
+	}
+	return view
 }
 
 func (g *Server) loadConfigLocked() (*config.Config, error) {

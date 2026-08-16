@@ -3,7 +3,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -27,7 +29,22 @@ type runtimeServiceSnapshot struct {
 }
 
 type connectArtifactEnvelope struct {
-	ConnectArtifact json.RawMessage `json:"connect_artifact"`
+	ConnectArtifact             string          `json:"connect_artifact"`
+	CriticalScopeProjectionJSON string          `json:"critical_scope_projection_json"`
+	SpendScope                  localSpendScope `json:"spend_scope"`
+	ChannelID                   string          `json:"channel_id"`
+}
+
+type localSpendScope struct {
+	Receipt              string          `json:"receipt"`
+	ArtifactDigestB64u   string          `json:"artifact_digest_b64u"`
+	ProjectionDigestB64u string          `json:"projection_digest_b64u"`
+	LauncherOrigin       string          `json:"launcher_origin"`
+	RuntimeOrigin        string          `json:"runtime_origin"`
+	AppOrigin            string          `json:"app_origin"`
+	Consumer             string          `json:"consumer"`
+	TargetBinding        json.RawMessage `json:"target_binding"`
+	ExpiresAt            string          `json:"expires_at"`
 }
 
 type pingResponse struct {
@@ -108,11 +125,11 @@ func run(baseURL string, action string, targetVersion string, password string) e
 			return err
 		}
 	}
-	artifact, origin, err := mintConnectArtifact(ctx, httpClient, parsedBase)
+	acquisition, origin, err := mintConnectArtifact(ctx, httpClient, parsedBase)
 	if err != nil {
 		return err
 	}
-	session, err := connectFlowersecSession(ctx, artifact, origin)
+	session, err := connectFlowersecSession(ctx, httpClient, parsedBase, acquisition, origin)
 	if err != nil {
 		return fmt.Errorf("connect direct session: %w", err)
 	}
@@ -318,35 +335,38 @@ func requestConnectArtifactStatus(ctx context.Context, client *http.Client, pars
 	return resp.StatusCode, nil
 }
 
-func mintConnectArtifact(ctx context.Context, client *http.Client, parsedBase *url.URL) (flowersec.Artifact, string, error) {
+func mintConnectArtifact(ctx context.Context, client *http.Client, parsedBase *url.URL) (connectArtifactEnvelope, string, error) {
 	origin := parsedBase.Scheme + "://" + parsedBase.Host
 	endpoint := parsedBase.ResolveReference(&url.URL{Path: "/api/local/direct/connect_artifact"})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint.String(), bytes.NewBufferString(`{}`))
 	if err != nil {
-		return flowersec.Artifact{}, "", err
+		return connectArtifactEnvelope{}, "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Origin", origin)
 	resp, err := client.Do(req)
 	if err != nil {
-		return flowersec.Artifact{}, "", fmt.Errorf("POST connect_artifact: %w", err)
+		return connectArtifactEnvelope{}, "", fmt.Errorf("POST connect_artifact: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return flowersec.Artifact{}, "", fmt.Errorf("POST connect_artifact returned HTTP %d", resp.StatusCode)
+		return connectArtifactEnvelope{}, "", fmt.Errorf("POST connect_artifact returned HTTP %d", resp.StatusCode)
 	}
 	var envelope connectArtifactEnvelope
 	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
-		return flowersec.Artifact{}, "", fmt.Errorf("decode connect artifact envelope: %w", err)
+		return connectArtifactEnvelope{}, "", fmt.Errorf("decode connect artifact envelope: %w", err)
 	}
-	artifact, err := flowersec.ParseArtifact(envelope.ConnectArtifact)
-	if err != nil {
-		return flowersec.Artifact{}, "", fmt.Errorf("decode connect artifact: %w", err)
+	if strings.TrimSpace(envelope.ConnectArtifact) == "" || strings.TrimSpace(envelope.SpendScope.Receipt) == "" {
+		return connectArtifactEnvelope{}, "", errors.New("connect artifact envelope is incomplete")
 	}
-	return artifact, origin, nil
+	return envelope, origin, nil
 }
 
-func connectFlowersecSession(ctx context.Context, artifact flowersec.Artifact, origin string) (flowersec.Session, error) {
+func connectFlowersecSession(ctx context.Context, client *http.Client, parsedBase *url.URL, acquisition connectArtifactEnvelope, origin string) (flowersec.Session, error) {
+	artifact, err := flowersec.ParseArtifact([]byte(acquisition.ConnectArtifact))
+	if err != nil {
+		return nil, fmt.Errorf("decode connect artifact: %w", err)
+	}
 	endpoint, err := url.Parse(strings.TrimSpace(origin))
 	if err != nil {
 		return nil, fmt.Errorf("parse Local UI origin: %w", err)
@@ -355,11 +375,60 @@ func connectFlowersecSession(ctx context.Context, artifact flowersec.Artifact, o
 	if err != nil {
 		return nil, err
 	}
-	lease, err := flowersec.NewArtifactLease(artifact, func(context.Context) error { return nil })
+	attemptBytes := make([]byte, 32)
+	if _, err := rand.Read(attemptBytes); err != nil {
+		return nil, fmt.Errorf("create artifact spend attempt: %w", err)
+	}
+	attemptID := base64.RawURLEncoding.EncodeToString(attemptBytes)
+	lease, err := flowersec.NewArtifactLease(artifact, func(spendCtx context.Context) error {
+		return commitArtifactSpend(spendCtx, client, parsedBase, origin, attemptID, acquisition.SpendScope)
+	})
 	if err != nil {
 		return nil, err
 	}
 	return flowersec.Connect(ctx, lease, flowersec.ConnectorOptions{TrustRoots: trustRoots, Origin: origin, ConnectTimeout: 15 * time.Second})
+}
+
+func commitArtifactSpend(ctx context.Context, client *http.Client, parsedBase *url.URL, origin, attemptID string, scope localSpendScope) error {
+	if client == nil || parsedBase == nil {
+		return errors.New("Local UI artifact spend client is unavailable")
+	}
+	payload, err := json.Marshal(struct {
+		AttemptID            string          `json:"attempt_id"`
+		Receipt              string          `json:"receipt"`
+		ArtifactDigestB64u   string          `json:"artifact_digest_b64u"`
+		ProjectionDigestB64u string          `json:"projection_digest_b64u"`
+		LauncherOrigin       string          `json:"launcher_origin"`
+		RuntimeOrigin        string          `json:"runtime_origin"`
+		AppOrigin            string          `json:"app_origin"`
+		Consumer             string          `json:"consumer"`
+		TargetBinding        json.RawMessage `json:"target_binding"`
+		ExpiresAt            string          `json:"expires_at"`
+	}{
+		AttemptID: attemptID, Receipt: scope.Receipt,
+		ArtifactDigestB64u: scope.ArtifactDigestB64u, ProjectionDigestB64u: scope.ProjectionDigestB64u,
+		LauncherOrigin: scope.LauncherOrigin, RuntimeOrigin: scope.RuntimeOrigin, AppOrigin: scope.AppOrigin,
+		Consumer: scope.Consumer, TargetBinding: scope.TargetBinding, ExpiresAt: scope.ExpiresAt,
+	})
+	if err != nil {
+		return fmt.Errorf("encode artifact spend: %w", err)
+	}
+	endpoint := parsedBase.ResolveReference(&url.URL{Path: "/api/local/direct/artifact/spend"})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint.String(), bytes.NewReader(payload))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", origin)
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("POST artifact spend: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("POST artifact spend returned HTTP %d", resp.StatusCode)
+	}
+	return nil
 }
 
 func connectorTrustRoots(endpoint *url.URL, loadSystemRoots func() (*x509.CertPool, error)) (*x509.CertPool, error) {

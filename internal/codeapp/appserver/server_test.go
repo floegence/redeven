@@ -1696,8 +1696,8 @@ func TestServer_Settings_RedactsSecrets(t *testing.T) {
 		if _, ok := direct["e2ee_psk_b64u"]; ok {
 			t.Fatalf("secret leaked: e2ee_psk_b64u must not be returned")
 		}
-		if direct["artifact_provisioned"] != true {
-			t.Fatalf("artifact_provisioned mismatch: got=%v want=true", direct["artifact_provisioned"])
+		if direct["artifact_provisioned"] != false {
+			t.Fatalf("legacy direct artifact must not be projected as provisioned: got=%v", direct["artifact_provisioned"])
 		}
 	}
 
@@ -1710,6 +1710,39 @@ func TestServer_Settings_RedactsSecrets(t *testing.T) {
 		if rr.Code != http.StatusNotFound {
 			t.Fatalf("cs origin status = %d, want %d", rr.Code, http.StatusNotFound)
 		}
+	}
+}
+
+func TestControlArtifactPoolSettingsViewUsesOnlyUsableEntries(t *testing.T) {
+	now := int64(2_000_000_000)
+	cfg := &config.Config{
+		Direct: &config.DirectConnectInfo{ArtifactJSON: json.RawMessage(`{"legacy":true}`), ExpiresAtUnixS: now + 10_000},
+		ControlArtifactPool: &config.ControlArtifactPool{
+			RefreshHorizonSeconds: 60,
+			Entries: []config.ControlArtifactEntry{
+				{Sequence: 1, ArtifactJSON: json.RawMessage(`{"usable":1}`), ExpiresAtUnixS: now + 120},
+				{Sequence: 2, ArtifactJSON: json.RawMessage(`{"spent":true}`), ExpiresAtUnixS: now + 240, Spent: true},
+				{Sequence: 3, ArtifactJSON: json.RawMessage(`{"revoked":true}`), ExpiresAtUnixS: now + 360, Revoked: true},
+				{Sequence: 4, ArtifactJSON: json.RawMessage(`{"horizon":true}`), ExpiresAtUnixS: now + 60},
+				{Sequence: 5, ExpiresAtUnixS: now + 480},
+				{Sequence: 6, ArtifactJSON: json.RawMessage(`{"usable":2}`), ExpiresAtUnixS: now + 600},
+			},
+		},
+	}
+
+	view := controlArtifactPoolSettingsView(cfg, now)
+	if !view.ArtifactProvisioned {
+		t.Fatal("ArtifactProvisioned = false, want true")
+	}
+	if view.ExpiresAtUnixS != now+600 {
+		t.Fatalf("ExpiresAtUnixS = %d, want %d", view.ExpiresAtUnixS, now+600)
+	}
+
+	cfg.ControlArtifactPool.Entries[0].Spent = true
+	cfg.ControlArtifactPool.Entries[5].Revoked = true
+	view = controlArtifactPoolSettingsView(cfg, now)
+	if view.ArtifactProvisioned || view.ExpiresAtUnixS != 0 {
+		t.Fatalf("terminal pool view = %#v, want unprovisioned", view)
 	}
 }
 

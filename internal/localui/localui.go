@@ -136,9 +136,8 @@ type Server struct {
 	runtimeStatus  *runtimemanagement.Server
 	acceptor       *flowersec.Acceptor
 	authMu         sync.Mutex
-	authRecords    map[string]controlplane.AuthorizationRecord
-	authChannels   map[string]string
 	handlerCleanup map[string]func()
+	authStore      *localAuthorizationStore
 }
 
 type pendingDirect struct {
@@ -191,6 +190,7 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("/api/local/access/logout", s.handleAccessLogout)
 	mux.HandleFunc("/api/local/runtime", s.handleRuntime)
 	mux.HandleFunc("/api/local/direct/connect_artifact", s.handleConnectArtifact)
+	mux.HandleFunc("/api/local/direct/artifact/spend", s.handleArtifactSpend)
 	mux.HandleFunc("/api/local/environment", s.handleEnvironment)
 	mux.HandleFunc("/api/local/agent/version/latest", s.handleLatestVersion)
 	mux.HandleFunc(flowersec.WebSocketDirectPath, s.handleDirectWS)
@@ -282,11 +282,19 @@ func New(opts Options) (*Server, error) {
 	if err := exposure.Validate(); err != nil {
 		return nil, err
 	}
+	stateRoot := strings.TrimSpace(opts.StateRoot)
+	if stateRoot == "" {
+		stateRoot = filepath.Dir(configPath)
+	}
+	authStore, err := openLocalAuthorizationStore(filepath.Join(stateRoot, localAuthorizationDatabaseFile))
+	if err != nil {
+		return nil, fmt.Errorf("open Local UI authorization store: %w", err)
+	}
 	return &Server{
 		log:                    logger,
 		bind:                   bind,
 		configPath:             configPath,
-		stateRoot:              strings.TrimSpace(opts.StateRoot),
+		stateRoot:              stateRoot,
 		stateDir:               filepath.Dir(configPath),
 		runtimeControlSockPath: strings.TrimSpace(opts.RuntimeControlSocketPath),
 		version:                strings.TrimSpace(opts.Version),
@@ -306,17 +314,41 @@ func New(opts Options) (*Server, error) {
 		pending:                make(map[string]pendingDirect),
 		pluginAccess:           make(map[string]*pluginAccessSession),
 		activePluginSession:    make(map[string]activePluginSessionBinding),
-		authRecords:            make(map[string]controlplane.AuthorizationRecord),
-		authChannels:           make(map[string]string),
 		handlerCleanup:         make(map[string]func()),
+		authStore:              authStore,
 		networkAuthorities:     make(map[string]struct{}),
 		resolveAccessHosts:     resolveNetworkAccessHosts,
 	}, nil
 }
 
+func (s *Server) ensureAuthorizationStore() error {
+	if s == nil {
+		return errors.New("missing Local UI server")
+	}
+	if s.authStore != nil {
+		return s.authStore.ensureOpen()
+	}
+	root := strings.TrimSpace(s.stateRoot)
+	if root == "" {
+		root = filepath.Dir(strings.TrimSpace(s.configPath))
+	}
+	if root == "" || root == "." {
+		return errors.New("missing Local UI state root")
+	}
+	store, err := openLocalAuthorizationStore(filepath.Join(root, localAuthorizationDatabaseFile))
+	if err != nil {
+		return fmt.Errorf("open Local UI authorization store: %w", err)
+	}
+	s.authStore = store
+	return nil
+}
+
 func (s *Server) configureAcceptor() error {
 	if s == nil {
 		return errors.New("missing Local UI server")
+	}
+	if err := s.ensureAuthorizationStore(); err != nil {
+		return err
 	}
 	s.authorityMu.RLock()
 	origins := make([]string, 0, len(s.networkAuthorities)*2)
@@ -331,29 +363,32 @@ func (s *Server) configureAcceptor() error {
 		AllowedOrigins:    origins,
 		MaxInboundStreams: 32,
 		Authorize: func(_ context.Context, request controlplane.RuntimeAuthorizationRequest) (controlplane.AuthorizationResponse, error) {
-			key := request.LookupKey()
-			s.authMu.Lock()
-			record, ok := s.authRecords[key]
-			channelID := s.authChannels[key]
-			if ok {
-				delete(s.authRecords, key)
-			}
-			s.authMu.Unlock()
-			if !ok || strings.TrimSpace(channelID) == "" {
+			reserved, err := s.authStore.reserve(request)
+			if err != nil {
 				return controlplane.RejectRuntime("permission_denied", false)
 			}
-			return controlplane.AuthorizeRuntime(request, record, channelID)
+			response, err := controlplane.AuthorizeRuntime(request, reserved.Record, reserved.LeaseID)
+			if err != nil {
+				_ = s.authStore.burn(reserved.LookupKey, reserved.LeaseID)
+				return controlplane.RejectRuntime("permission_denied", false)
+			}
+			if err := s.authStore.markLeased(reserved.LookupKey, reserved.LeaseID); err != nil {
+				_ = s.authStore.burn(reserved.LookupKey, reserved.LeaseID)
+				return controlplane.RejectRuntime("permission_denied", false)
+			}
+			return response, nil
 		},
 		ResolveHandlers: func(_ context.Context, request controlplane.RuntimeAuthorizationRequest) (*flowersec.SessionHandlers, error) {
-			s.authMu.Lock()
-			channelID := s.authChannels[request.LookupKey()]
-			s.authMu.Unlock()
-			pending, ok := s.resolvePending(channelID)
+			lookupKey := request.LookupKey()
+			pending, channelID, ok := s.authStore.bindingByLookup(lookupKey)
 			if !ok {
 				return nil, errors.New("local session authorization is unavailable")
 			}
 			handlers, cleanup, err := s.a.NewLocalSessionHandlers(&pending.meta)
 			if err != nil {
+				if cleanupErr := s.authStore.burnLeased(lookupKey); cleanupErr != nil && s.log != nil {
+					s.log.Error("terminate local authorization after handler failure", "error", cleanupErr)
+				}
 				if s.log != nil {
 					s.log.Error("create local handlers failed", "error", err)
 				}
@@ -372,6 +407,13 @@ func (s *Server) configureAcceptor() error {
 			// Flowersec owns the carrier lifecycle; Redeven records only the
 			// public session needed to revoke product access on logout or expiry.
 			channelID := strings.TrimSpace(endpointID)
+			if err := s.authStore.markActivated(channelID); err != nil {
+				s.releaseAcceptedSessionAuthorization(channelID)
+				if s.log != nil {
+					s.log.Warn("reject local Flowersec session activation", "endpoint_id", channelID, "error", err)
+				}
+				return errors.New("local session activation is unavailable")
+			}
 			pending, ok := s.activateAcceptedSession(channelID, current)
 			if !ok {
 				s.releaseAcceptedSession(channelID)
@@ -388,15 +430,30 @@ func (s *Server) configureAcceptor() error {
 				PluginCredentialHash:      pending.pluginCredentialHash,
 				HasPluginCredential:       true,
 				AccessSessionID:           pending.accessSessionID,
-				HandlersServedByAcceptor:  true,
 			})
 			if err != nil && s.log != nil {
 				s.log.Warn("local Flowersec session ended with an error", "channel_id", channelID, "error", err)
 			}
 			return err
 		},
-		Release: func(_ context.Context, channelID string) {
-			s.releaseAcceptedSession(channelID)
+		Release: func(_ context.Context, leaseID string) {
+			if s.authStore == nil {
+				return
+			}
+			artifactChannelID, err := s.authStore.releaseLease(leaseID)
+			if err != nil {
+				if s.log != nil {
+					s.log.Error("release local Flowersec authorization lease", "error", err)
+				}
+				return
+			}
+			if artifactChannelID == "" {
+				if s.log != nil {
+					s.log.Warn("ignore unknown local Flowersec authorization lease")
+				}
+				return
+			}
+			s.releaseAcceptedSession(artifactChannelID)
 		},
 	})
 	if err != nil {
@@ -415,6 +472,9 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	if s.srv != nil {
 		return nil
+	}
+	if err := s.ensureAuthorizationStore(); err != nil {
+		return err
 	}
 
 	var listeners []net.Listener
@@ -501,6 +561,9 @@ func (s *Server) StartOnListeners(ctx context.Context, listeners []net.Listener,
 	}
 	if s.srv != nil {
 		return nil
+	}
+	if err := s.ensureAuthorizationStore(); err != nil {
+		return err
 	}
 	if len(listeners) == 0 {
 		return errors.New("missing Local UI listeners")
@@ -696,6 +759,10 @@ func (s *Server) Close() error {
 	s.localUIBridgeURL = ""
 	s.runtimeControl = nil
 	s.runtimeStatus = nil
+	if s.authStore != nil {
+		_ = s.authStore.close()
+		s.authStore = nil
+	}
 	return nil
 }
 
@@ -952,7 +1019,10 @@ func (s *Server) requireLocalAccessAPI(w http.ResponseWriter, r *http.Request) b
 	if s.ensureLocalAccessHTTPResponse(w, r) {
 		return true
 	}
-	writeJSON(w, http.StatusLocked, apiResp{OK: false, Error: &apiError{Message: "access password required"}})
+	writeJSON(w, http.StatusLocked, apiResp{OK: false, Error: &apiError{
+		Code:    "ACCESS_PASSWORD_REQUIRED",
+		Message: "access password required",
+	}})
 	return false
 }
 
@@ -1414,22 +1484,101 @@ func randomB64u(n int) (string, error) {
 }
 
 type connectArtifactEnvelope struct {
-	ConnectArtifact         json.RawMessage `json:"connect_artifact"`
-	ChannelID               string          `json:"channel_id"`
-	PluginSessionCredential string          `json:"plugin_session_credential"`
+	Version                     int             `json:"v"`
+	ConnectArtifact             json.RawMessage `json:"-"`
+	CriticalScopeProjectionJSON string          `json:"critical_scope_projection_json"`
+	SpendScope                  localSpendScope `json:"spend_scope"`
+	ChannelID                   string          `json:"channel_id"`
+	PluginSessionCredential     string          `json:"plugin_session_credential"`
 }
 
-func (s *Server) mintPending(meta session.Meta, wsURL string, traceID, accessSessionID string, accessExpiresAt time.Time) (json.RawMessage, string, string, error) {
+type localSpendScope struct {
+	Version              int             `json:"v"`
+	Receipt              string          `json:"receipt"`
+	ArtifactDigestB64u   string          `json:"artifact_digest_b64u"`
+	ProjectionDigestB64u string          `json:"projection_digest_b64u"`
+	LauncherOrigin       string          `json:"launcher_origin"`
+	RuntimeOrigin        string          `json:"runtime_origin"`
+	AppOrigin            string          `json:"app_origin"`
+	Consumer             string          `json:"consumer"`
+	TargetBinding        json.RawMessage `json:"target_binding"`
+	ExpiresAt            string          `json:"expires_at"`
+}
+
+func (envelope connectArtifactEnvelope) MarshalJSON() ([]byte, error) {
+	type wire struct {
+		Version                     int             `json:"v"`
+		ConnectArtifact             string          `json:"connect_artifact"`
+		CriticalScopeProjectionJSON string          `json:"critical_scope_projection_json"`
+		SpendScope                  localSpendScope `json:"spend_scope"`
+		ChannelID                   string          `json:"channel_id"`
+		PluginSessionCredential     string          `json:"plugin_session_credential"`
+	}
+	return json.Marshal(wire{
+		Version: envelope.Version, ConnectArtifact: string(envelope.ConnectArtifact),
+		CriticalScopeProjectionJSON: envelope.CriticalScopeProjectionJSON,
+		SpendScope:                  envelope.SpendScope, ChannelID: envelope.ChannelID,
+		PluginSessionCredential: envelope.PluginSessionCredential,
+	})
+}
+
+func (envelope *connectArtifactEnvelope) UnmarshalJSON(data []byte) error {
+	if envelope == nil {
+		return errors.New("nil connect artifact envelope")
+	}
+	type wire struct {
+		Version                     int             `json:"v"`
+		ConnectArtifact             json.RawMessage `json:"connect_artifact"`
+		CriticalScopeProjectionJSON string          `json:"critical_scope_projection_json"`
+		SpendScope                  localSpendScope `json:"spend_scope"`
+		ChannelID                   string          `json:"channel_id"`
+		PluginSessionCredential     string          `json:"plugin_session_credential"`
+	}
+	var decoded wire
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	artifact := decoded.ConnectArtifact
+	if len(artifact) > 0 && artifact[0] == '"' {
+		var text string
+		if err := json.Unmarshal(artifact, &text); err != nil {
+			return err
+		}
+		artifact = json.RawMessage(text)
+	}
+	*envelope = connectArtifactEnvelope{
+		Version: decoded.Version, ConnectArtifact: artifact,
+		CriticalScopeProjectionJSON: decoded.CriticalScopeProjectionJSON,
+		SpendScope:                  decoded.SpendScope, ChannelID: decoded.ChannelID,
+		PluginSessionCredential: decoded.PluginSessionCredential,
+	}
+	return nil
+}
+
+type localIssuedPending struct {
+	Artifact         json.RawMessage
+	PluginCredential string
+	ChannelID        string
+	ProjectionJSON   string
+	Receipt          string
+	SpendOrigin      string
+	ExpiresAt        time.Time
+}
+
+func (s *Server) mintPending(meta session.Meta, wsURL, spendOrigin, traceID, accessSessionID string, accessExpiresAt time.Time) (localIssuedPending, error) {
 	if s == nil {
-		return nil, "", "", errors.New("server not ready")
+		return localIssuedPending{}, errors.New("server not ready")
+	}
+	if err := s.ensureAuthorizationStore(); err != nil {
+		return localIssuedPending{}, err
 	}
 	channelID, err := randomB64u(24)
 	if err != nil {
-		return nil, "", "", err
+		return localIssuedPending{}, err
 	}
 	pluginCredential, err := randomB64u(32)
 	if err != nil {
-		return nil, "", "", err
+		return localIssuedPending{}, err
 	}
 	pluginCredentialHash := sha256.Sum256([]byte(pluginCredential))
 	// Flowersec control-plane artifacts are limited to a five-minute lifetime;
@@ -1442,16 +1591,23 @@ func (s *Server) mintPending(meta session.Meta, wsURL string, traceID, accessSes
 	if accessSessionID == "" {
 		accessSessionID = "direct:" + channelID
 	}
+	pending := pendingDirect{
+		pluginCredentialHash:      pluginCredentialHash,
+		accessSessionID:           accessSessionID,
+		initExpireAtUnixS:         expiresAt.Unix(),
+		meta:                      meta,
+		traceID:                   strings.TrimSpace(traceID),
+		connectArtifactIssuedAtMs: now.UnixMilli(),
+	}
 
+	// Admission state is checked before issuance, then checked again before the
+	// post-commit cache is published. The cache never authorizes a request.
 	s.pendingMu.Lock()
 	s.directMu.Lock()
 	if s.directClosing {
 		s.directMu.Unlock()
 		s.pendingMu.Unlock()
-		return nil, "", "", errors.New("plugin session admission is closed")
-	}
-	if s.pending == nil {
-		s.pending = make(map[string]pendingDirect)
+		return localIssuedPending{}, errors.New("plugin session admission is closed")
 	}
 	if s.pluginAccess == nil {
 		s.pluginAccess = make(map[string]*pluginAccessSession)
@@ -1471,34 +1627,25 @@ func (s *Server) mintPending(meta session.Meta, wsURL string, traceID, accessSes
 	if access.state != pluginAccessActive || (!access.expiresAt.IsZero() && !time.Now().Before(access.expiresAt)) {
 		s.directMu.Unlock()
 		s.pendingMu.Unlock()
-		return nil, "", "", errors.New("local access session is unavailable")
+		return localIssuedPending{}, errors.New("local access session is unavailable")
 	}
 	if !accessExpiresAt.IsZero() && (access.expiresAt.IsZero() || accessExpiresAt.After(access.expiresAt)) {
 		access.expiresAt = accessExpiresAt
 	}
-	s.pending[channelID] = pendingDirect{
-		pluginCredentialHash:      pluginCredentialHash,
-		accessSessionID:           accessSessionID,
-		initExpireAtUnixS:         expiresAt.Unix(),
-		meta:                      meta,
-		traceID:                   strings.TrimSpace(traceID),
-		connectArtifactIssuedAtMs: now.UnixMilli(),
-	}
-	access.pending[channelID] = struct{}{}
 	s.directMu.Unlock()
 	s.pendingMu.Unlock()
 
 	endpoints, err := controlplane.NewEndpointSet(strings.TrimSpace(wsURL))
 	if err != nil {
-		s.releaseAcceptedSession(channelID)
-		return nil, "", "", err
+		return localIssuedPending{}, err
 	}
 	endpointURL, err := url.Parse(strings.TrimSpace(wsURL))
 	if err != nil || endpointURL == nil || strings.TrimSpace(endpointURL.Host) == "" {
-		s.releaseAcceptedSession(channelID)
-		return nil, "", "", errors.New("invalid direct endpoint authority")
+		return localIssuedPending{}, errors.New("invalid direct endpoint authority")
 	}
-	metadata := controlplane.ArtifactMetadata{}
+	metadata := controlplane.ArtifactMetadata{Scopes: []controlplane.Scope{{
+		Name: "proxy.runtime", Version: 2, Critical: true, Payload: json.RawMessage(localProxyRuntimePayloadJSON()),
+	}}}
 	if trace := strings.TrimSpace(traceID); trace != "" {
 		metadata.CorrelationTags = map[string]string{"trace_id": trace}
 	}
@@ -1516,20 +1663,36 @@ func (s *Server) mintPending(meta session.Meta, wsURL string, traceID, accessSes
 		Metadata:          metadata,
 	})
 	if err != nil {
-		s.releaseAcceptedSession(channelID)
-		return nil, "", "", err
+		return localIssuedPending{}, err
 	}
-	s.authMu.Lock()
-	if s.authRecords == nil {
-		s.authRecords = make(map[string]controlplane.AuthorizationRecord)
+	artifact := json.RawMessage(issued.ArtifactJSON())
+	projection := localProjectionJSON()
+	receipt, err := s.authStore.issue(
+		issued.AuthorizationRecord(), pending, channelID, accessSessionID, expiresAt,
+		digestB64u(artifact), digestB64u([]byte(projection)), spendOrigin, localTargetBindingJSON(),
+	)
+	if err != nil {
+		return localIssuedPending{}, err
 	}
-	if s.authChannels == nil {
-		s.authChannels = make(map[string]string)
+
+	s.pendingMu.Lock()
+	s.directMu.Lock()
+	access = s.pluginAccess[accessSessionID]
+	if s.directClosing || access == nil || access.state != pluginAccessActive || (!access.expiresAt.IsZero() && !time.Now().Before(access.expiresAt)) {
+		s.directMu.Unlock()
+		s.pendingMu.Unlock()
+		_ = s.authStore.releaseChannel(channelID)
+		return localIssuedPending{}, errors.New("local access session closed during artifact issuance")
 	}
-	s.authRecords[issued.LookupKey()] = issued.AuthorizationRecord()
-	s.authChannels[issued.LookupKey()] = channelID
-	s.authMu.Unlock()
-	return json.RawMessage(issued.ArtifactJSON()), pluginCredential, channelID, nil
+	if s.pending == nil {
+		s.pending = make(map[string]pendingDirect)
+	}
+	s.pending[channelID] = pending
+	access.pending[channelID] = struct{}{}
+	s.directMu.Unlock()
+	s.pendingMu.Unlock()
+
+	return localIssuedPending{Artifact: artifact, PluginCredential: pluginCredential, ChannelID: channelID, ProjectionJSON: projection, Receipt: receipt, SpendOrigin: spendOrigin, ExpiresAt: expiresAt}, nil
 }
 
 func (s *Server) handleConnectArtifact(w http.ResponseWriter, r *http.Request) {
@@ -1566,6 +1729,11 @@ func (s *Server) handleConnectArtifact(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid request", http.StatusBadRequest)
 		return
 	}
+	spendOrigin, err := s.localSpendOriginFromRequest(r)
+	if err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
 
 	cap := s.resolveLocalCap()
 	meta := localAccessResumeMeta()
@@ -1582,15 +1750,19 @@ func (s *Server) handleConnectArtifact(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "local access session unavailable", http.StatusLocked)
 		return
 	}
-	artifact, pluginCredential, channelID, err := s.mintPending(meta, wsURL, traceID, accessSessionID, accessExpiresAt)
+	acquisition, err := s.mintPending(meta, wsURL, spendOrigin, traceID, accessSessionID, accessExpiresAt)
 	if err != nil {
 		if s.log != nil {
 			s.log.Error("failed to mint connect artifact", "error", err)
 		}
-		http.Error(w, "failed to mint connect artifact", http.StatusInternalServerError)
+		status := http.StatusInternalServerError
+		if errors.Is(err, errLocalAuthorizationCapacity) {
+			status = http.StatusServiceUnavailable
+		}
+		http.Error(w, "failed to mint connect artifact", status)
 		return
 	}
-	if len(artifact) == 0 {
+	if len(acquisition.Artifact) == 0 {
 		http.Error(w, "failed to mint connect artifact", http.StatusInternalServerError)
 		return
 	}
@@ -1602,7 +1774,7 @@ func (s *Server) handleConnectArtifact(w http.ResponseWriter, r *http.Request) {
 			TraceID: traceID,
 			Message: "issued direct connect artifact",
 			Detail: map[string]any{
-				"channel_id":    channelID,
+				"channel_id":    acquisition.ChannelID,
 				"floe_app":      meta.FloeApp,
 				"code_space_id": meta.CodeSpaceID,
 			},
@@ -1610,10 +1782,73 @@ func (s *Server) handleConnectArtifact(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, connectArtifactEnvelope{
-		ConnectArtifact:         artifact,
-		ChannelID:               channelID,
-		PluginSessionCredential: pluginCredential,
+		Version:                     1,
+		ConnectArtifact:             acquisition.Artifact,
+		CriticalScopeProjectionJSON: acquisition.ProjectionJSON,
+		SpendScope: localSpendScope{
+			Version: 1, Receipt: acquisition.Receipt,
+			ArtifactDigestB64u:   digestB64u(acquisition.Artifact),
+			ProjectionDigestB64u: digestB64u([]byte(acquisition.ProjectionJSON)),
+			LauncherOrigin:       acquisition.SpendOrigin, RuntimeOrigin: acquisition.SpendOrigin, AppOrigin: acquisition.SpendOrigin,
+			Consumer: "trusted", TargetBinding: json.RawMessage(localTargetBindingJSON()),
+			ExpiresAt: acquisition.ExpiresAt.UTC().Format(time.RFC3339Nano),
+		},
+		ChannelID:               acquisition.ChannelID,
+		PluginSessionCredential: acquisition.PluginCredential,
 	})
+}
+
+func (s *Server) localSpendOriginFromRequest(r *http.Request) (string, error) {
+	if s == nil || r == nil || !s.isTrustedOrAllowedAuthority(r) {
+		return "", errors.New("invalid Local UI authority")
+	}
+	authority, err := canonicalLocalUIAuthority(r.Host)
+	if err != nil {
+		return "", errors.New("invalid Local UI authority")
+	}
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	return (&url.URL{Scheme: scheme, Host: authority}).String(), nil
+}
+
+func (s *Server) handleArtifactSpend(w http.ResponseWriter, r *http.Request) {
+	if s == nil || w == nil || r == nil {
+		return
+	}
+	if !s.requireLocalAccessAPI(w, r) {
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if err := s.ensureAuthorizationStore(); err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: &apiError{Code: "LOCAL_AUTHORITY_UNAVAILABLE", Message: "Local artifact authority is unavailable."}})
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, localUIJSONBodyLimit)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	var request localSpendRequest
+	if err := decoder.Decode(&request); err != nil {
+		writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: &apiError{Code: "INVALID_SPEND_REQUEST", Message: "Invalid artifact spend request."}})
+		return
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: &apiError{Code: "INVALID_SPEND_REQUEST", Message: "Invalid artifact spend request."}})
+		return
+	}
+	if err := s.authStore.spend(request); err != nil {
+		var spendErr *localSpendError
+		if !errors.As(err, &spendErr) {
+			spendErr = &localSpendError{Status: http.StatusServiceUnavailable, Code: "local_authority_unavailable"}
+		}
+		writeJSON(w, spendErr.Status, apiResp{OK: false, Error: &apiError{Code: strings.ToUpper(spendErr.Code), Message: "Artifact spend could not be committed."}})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 type environmentResp struct {
@@ -1792,6 +2027,13 @@ func (s *Server) resolvePending(channelID string) (pendingDirect, bool) {
 	}
 	now := time.Now().Unix()
 
+	// Durable authority is the first and only source across process boundaries.
+	if s.authStore == nil {
+		return pendingDirect{}, false
+	}
+	if stored, _, found := s.authStore.bindingByChannel(id); found {
+		return stored, true
+	}
 	s.pendingMu.Lock()
 	p, ok := s.pending[id]
 	if !ok {
@@ -1817,17 +2059,41 @@ func (s *Server) releaseAcceptedSessionAuthorization(channelID string) {
 	if id == "" {
 		return
 	}
-	s.authMu.Lock()
-	for key, current := range s.authChannels {
-		if current == id {
-			delete(s.authChannels, key)
-			delete(s.authRecords, key)
+	if s.authStore != nil {
+		_ = s.authStore.releaseChannel(id)
+	}
+	s.clearAuthorizationCache([]string{id})
+}
+
+// clearAuthorizationCache removes only the short-lived handler projections.
+// Durable authorization state is transitioned by the authority store before
+// this cache is cleared.
+func (s *Server) clearAuthorizationCache(channelIDs []string) {
+	if s == nil || len(channelIDs) == 0 {
+		return
+	}
+	wanted := make(map[string]struct{}, len(channelIDs))
+	for _, channelID := range channelIDs {
+		if id := strings.TrimSpace(channelID); id != "" {
+			wanted[id] = struct{}{}
 		}
 	}
-	cleanup := s.handlerCleanup[id]
-	delete(s.handlerCleanup, id)
+	if len(wanted) == 0 {
+		return
+	}
+	s.authMu.Lock()
+	cleanups := make([]func(), 0)
+	for channelID, cleanup := range s.handlerCleanup {
+		if _, ok := wanted[channelID]; !ok {
+			continue
+		}
+		delete(s.handlerCleanup, channelID)
+		if cleanup != nil {
+			cleanups = append(cleanups, cleanup)
+		}
+	}
 	s.authMu.Unlock()
-	if cleanup != nil {
+	for _, cleanup := range cleanups {
 		cleanup()
 	}
 }
@@ -1991,13 +2257,14 @@ func (s *Server) beginDirectShutdown() []flowersec.Session {
 			cleanups = append(cleanups, cleanup)
 		}
 	}
-	s.authRecords = make(map[string]controlplane.AuthorizationRecord)
-	s.authChannels = make(map[string]string)
 	s.handlerCleanup = make(map[string]func())
 	s.authMu.Unlock()
 
 	if s.a != nil {
 		for _, accessSessionID := range accessSessionIDs {
+			if s.authStore != nil {
+				_ = s.authStore.revokeAccessSession(accessSessionID)
+			}
 			s.a.EndPluginAccessSession(accessSessionID)
 		}
 	}
@@ -2100,6 +2367,7 @@ func (s *Server) closePluginAccessSession(accessSessionID string) {
 		pending = append(pending, channelID)
 	}
 	sessions := make([]flowersec.Session, 0)
+	channels := append([]string(nil), pending...)
 	for channelID, binding := range s.activePluginSession {
 		if binding.accessSessionID != accessSessionID {
 			continue
@@ -2107,12 +2375,17 @@ func (s *Server) closePluginAccessSession(accessSessionID string) {
 		if binding.session != nil {
 			sessions = append(sessions, binding.session)
 		}
+		channels = append(channels, channelID)
 		delete(s.activePluginSession, channelID)
 	}
 	s.directMu.Unlock()
 	if s.a != nil {
+		if s.authStore != nil {
+			_ = s.authStore.revokeAccessSession(accessSessionID)
+		}
 		s.a.EndPluginAccessSession(accessSessionID)
 	}
+	s.clearAuthorizationCache(channels)
 
 	s.pendingMu.Lock()
 	for _, channelID := range pending {
@@ -2199,6 +2472,11 @@ func (s *Server) sweepExpired() {
 func (s *Server) sweepExpiredAt(now time.Time) {
 	if s == nil {
 		return
+	}
+	if s.authStore != nil {
+		if err := s.authStore.maintain(now); err != nil && s.log != nil {
+			s.log.Error("maintain Local UI authorization store", "error", err)
+		}
 	}
 	nowUnix := now.Unix()
 

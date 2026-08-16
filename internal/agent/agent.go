@@ -1,8 +1,10 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base32"
 	"encoding/json"
@@ -49,7 +51,6 @@ const (
 	controlRPCTypeRegister          uint32 = 41001
 	controlRPCTypeHeartbeat         uint32 = 41002
 	controlRPCTypeGrantServer       uint32 = 41003 // notify
-	controlRPCTypeCredentialRenew   uint32 = 41004
 	controlRPCTypeRuntimeDisconnect uint32 = 41005
 )
 
@@ -161,6 +162,7 @@ type Agent struct {
 
 	providerLinkMu  sync.Mutex
 	mu              sync.Mutex
+	spendLedgerMu   sync.Mutex
 	sessions        map[string]*activeSession // channel_id -> session
 	sessionStopping bool
 	pluginSessions  *authenticatedPluginSessionRegistry
@@ -170,16 +172,19 @@ type Agent struct {
 	pluginCloseWG   sync.WaitGroup
 
 	controlConnectedOnce sync.Once
+	controlLifecycleMu   sync.Mutex
 	onControlConnected   func()
 	onControlConnecting  func()
 	onControlRetry       func(error, time.Duration)
 	onControlDisabled    func()
 	runCtx               context.Context
 	controlCancel        context.CancelFunc
+	controlLoopDone      chan struct{}
 	controlController    *flowersec.ConnectionController
 	controlRPC           rpcutil.Caller
 	controlRPCSerial     uint64
 	controlRPCCallMu     sync.Mutex
+	controlArtifact      controlArtifactSessionBinding
 
 	localUIEnabled        bool
 	controlChannelEnabled bool
@@ -197,7 +202,9 @@ type activeSession struct {
 	cancel            context.CancelFunc
 	meta              session.Meta
 	tunnelURL         string // grant_server.tunnel_url (for UI/auditing only)
-	connectedAtUnixMs int64  // set after ConnectTunnel succeeds
+	grantDigest       [sha256.Size]byte
+	grantExpiresAt    int64
+	connectedAtUnixMs int64 // set after ConnectTunnel succeeds
 	pluginGeneration  PluginSessionGeneration
 }
 
@@ -512,33 +519,55 @@ func (a *Agent) startControlChannel(ctx context.Context) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	a.controlLifecycleMu.Lock()
+	defer a.controlLifecycleMu.Unlock()
 	a.mu.Lock()
-	if a.controlCancel != nil {
-		a.controlCancel()
-		a.controlCancel = nil
+	previousCancel := a.controlCancel
+	previousDone := a.controlLoopDone
+	a.controlCancel = nil
+	a.controlLoopDone = nil
+	a.mu.Unlock()
+	if previousCancel != nil {
+		previousCancel()
 	}
+	if previousDone != nil {
+		<-previousDone
+	}
+	a.mu.Lock()
 	a.controlController = nil
 	a.controlRPCSerial++
 	a.controlRPC = nil
 	controlCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
 	a.controlCancel = cancel
+	a.controlLoopDone = done
 	a.mu.Unlock()
-	go a.runControlLoop(controlCtx)
+	go func() {
+		defer close(done)
+		a.runControlLoop(controlCtx)
+	}()
 }
 
 func (a *Agent) stopControlChannel() {
 	if a == nil {
 		return
 	}
+	a.controlLifecycleMu.Lock()
+	defer a.controlLifecycleMu.Unlock()
 	a.mu.Lock()
 	cancel := a.controlCancel
+	done := a.controlLoopDone
 	a.controlCancel = nil
+	a.controlLoopDone = nil
 	a.controlController = nil
 	a.controlRPCSerial++
 	a.controlRPC = nil
 	a.mu.Unlock()
 	if cancel != nil {
 		cancel()
+	}
+	if done != nil {
+		<-done
 	}
 }
 
@@ -561,9 +590,9 @@ func (a *Agent) runControlLoop(ctx context.Context) {
 		return
 	}
 	handlers := flowersec.NewRPCHandlers()
-	if err := handlers.HandleRPC(controlRPCTypeGrantServer, func(handlerCtx context.Context, payload json.RawMessage) (any, *flowersec.RPCError) {
+	if err := handlers.HandleNotification(controlRPCTypeGrantServer, func(handlerCtx context.Context, payload json.RawMessage) error {
 		a.handleGrantNotify(handlerCtx, payload)
-		return struct{}{}, nil
+		return nil
 	}); err != nil {
 		a.log.Error("control channel not started: register grant handler", "error", err)
 		return
@@ -662,12 +691,18 @@ func (a *Agent) runControlSession(ctx context.Context, current flowersec.Session
 	}
 	controlRPCSerial := a.setCurrentControlRPC(rpcC)
 	defer a.clearCurrentControlRPC(controlRPCSerial)
+	artifactBinding := a.currentControlArtifactSessionBinding()
+	if artifactBinding.BindingGeneration != cfg.BindingGeneration || artifactBinding.Sequence == 0 || strings.TrimSpace(artifactBinding.ChannelID) == "" {
+		return errors.New("control session artifact binding is unavailable")
+	}
 
-	// Register (best-effort; required for server-side online state).
+	// Register is the Portal-side active-owner fence for this exact artifact.
 	_, err := callControlJSON[registerReq, registerResp](ctx, a, rpcC, controlRPCTypeRegister, &registerReq{
 		EnvPublicID:              cfg.EnvironmentID,
 		LocalEnvironmentPublicID: cfg.LocalEnvironmentPublicID,
 		BindingGeneration:        cfg.BindingGeneration,
+		ControlArtifactSequence:  artifactBinding.Sequence,
+		ControlArtifactChannelID: artifactBinding.ChannelID,
 		AgentInstanceID:          cfg.AgentInstanceID,
 		Version:                  a.version,
 		OS:                       runtime.GOOS,
@@ -679,6 +714,13 @@ func (a *Agent) runControlSession(ctx context.Context, current flowersec.Session
 	})
 	if err != nil {
 		return err
+	}
+	if err := a.maintainControlArtifactPool(ctx, rpcC); err != nil {
+		a.log.Warn("control recovery reserve is degraded", "error", err)
+	}
+	cfg = a.remoteConfigSnapshot()
+	if cfg == nil {
+		return errors.New("control config unavailable after pool maintenance")
 	}
 
 	a.controlConnectedOnce.Do(func() {
@@ -696,23 +738,26 @@ func (a *Agent) runControlSession(ctx context.Context, current flowersec.Session
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-t.C:
-			if shouldRenewDirectCredentials(cfg.Direct, time.Now()) {
-				if err := a.renewDirectCredentials(ctx, rpcC, cfg); err != nil {
-					return err
-				}
-				cfg = a.remoteConfigSnapshot()
-				if cfg == nil {
-					return errors.New("control credentials renewed but config is unavailable")
-				}
-			}
 			_, err := callControlJSON[heartbeatReq, heartbeatResp](ctx, a, rpcC, controlRPCTypeHeartbeat, &heartbeatReq{
 				NowUnixMs: time.Now().UnixMilli(),
 			})
 			if err != nil {
 				return err
 			}
+			if err := a.maintainControlArtifactPool(ctx, rpcC); err != nil {
+				a.log.Warn("control recovery reserve remains degraded", "error", err)
+			}
 		}
 	}
+}
+
+func (a *Agent) currentControlArtifactSessionBinding() controlArtifactSessionBinding {
+	if a == nil {
+		return controlArtifactSessionBinding{}
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.controlArtifact
 }
 
 func (a *Agent) remoteConfigSnapshot() *config.Config {
@@ -729,6 +774,19 @@ func (a *Agent) remoteConfigSnapshot() *config.Config {
 		direct := *a.cfg.Direct
 		direct.ArtifactJSON = append([]byte(nil), a.cfg.Direct.ArtifactJSON...)
 		cfg.Direct = &direct
+	}
+	if a.cfg.ControlArtifactPool != nil {
+		pool := *a.cfg.ControlArtifactPool
+		if a.cfg.ControlArtifactPool.PendingTopUp != nil {
+			pending := *a.cfg.ControlArtifactPool.PendingTopUp
+			pool.PendingTopUp = &pending
+		}
+		pool.Entries = make([]config.ControlArtifactEntry, len(a.cfg.ControlArtifactPool.Entries))
+		copy(pool.Entries, a.cfg.ControlArtifactPool.Entries)
+		for index := range pool.Entries {
+			pool.Entries[index].ArtifactJSON = append([]byte(nil), pool.Entries[index].ArtifactJSON...)
+		}
+		cfg.ControlArtifactPool = &pool
 	}
 	return &cfg
 }
@@ -775,61 +833,6 @@ func callControlJSON[TReq any, TResp any](ctx context.Context, a *Agent, caller 
 	return rpcutil.CallJSON[TReq, TResp](ctx, caller, typeID, req)
 }
 
-func shouldRenewDirectCredentials(direct *config.DirectConnectInfo, now time.Time) bool {
-	if direct == nil || direct.ExpiresAtUnixS <= 0 {
-		return false
-	}
-	expireAt := time.Unix(direct.ExpiresAtUnixS, 0)
-	return now.Add(5 * time.Minute).After(expireAt)
-}
-
-func (a *Agent) renewDirectCredentials(ctx context.Context, rpcC rpcutil.Caller, cfg *config.Config) error {
-	if a == nil || cfg == nil {
-		return errors.New("missing config")
-	}
-	req := &credentialRenewReq{
-		EnvPublicID:              cfg.EnvironmentID,
-		LocalEnvironmentPublicID: cfg.LocalEnvironmentPublicID,
-		BindingGeneration:        cfg.BindingGeneration,
-		AgentInstanceID:          cfg.AgentInstanceID,
-		NowUnixMs:                time.Now().UnixMilli(),
-	}
-	resp, err := callControlJSON[credentialRenewReq, credentialRenewResp](ctx, a, rpcC, controlRPCTypeCredentialRenew, req)
-	if err != nil {
-		return fmt.Errorf("renew control credentials: %w", err)
-	}
-	if resp == nil {
-		return errors.New("renew control credentials: empty response")
-	}
-	if resp.Direct == nil || len(resp.Direct.ArtifactJSON) == 0 || resp.Direct.ExpiresAtUnixS <= 0 {
-		return errors.New("renew control credentials: invalid direct")
-	}
-	if _, err := flowersec.ParseArtifact(resp.Direct.ArtifactJSON); err != nil {
-		return fmt.Errorf("renew control credentials: invalid artifact: %w", err)
-	}
-	resp.Direct.Spent = false
-	if resp.BindingGeneration <= cfg.BindingGeneration {
-		return errors.New("renew control credentials: stale binding generation")
-	}
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.cfg == nil ||
-		strings.TrimSpace(a.cfg.EnvironmentID) != strings.TrimSpace(cfg.EnvironmentID) ||
-		strings.TrimSpace(a.cfg.LocalEnvironmentPublicID) != strings.TrimSpace(cfg.LocalEnvironmentPublicID) ||
-		a.cfg.BindingGeneration != cfg.BindingGeneration {
-		return errors.New("renew control credentials: provider binding changed")
-	}
-	next := *a.cfg
-	next.Direct = resp.Direct
-	next.BindingGeneration = resp.BindingGeneration
-	if err := config.Save(a.configPath, &next); err != nil {
-		return fmt.Errorf("persist renewed control credentials: %w", err)
-	}
-	a.cfg = &next
-	a.log.Info("control credentials renewed", "environment_id", next.EnvironmentID, "local_environment_public_id", next.LocalEnvironmentPublicID, "binding_generation", next.BindingGeneration)
-	return nil
-}
-
 func (a *Agent) sendRuntimeDisconnect(ctx context.Context, snapshot providerDisconnectSnapshot, reasonCode string) error {
 	if a == nil {
 		return errors.New("nil agent")
@@ -870,6 +873,17 @@ func sendRuntimeDisconnectWithCaller(ctx context.Context, caller rpcutil.Caller,
 	return nil
 }
 
+func requireJSONEOF(decoder *json.Decoder) error {
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return errors.New("unexpected trailing JSON value")
+		}
+		return err
+	}
+	return nil
+}
+
 func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) {
 	if a != nil && a.maintenanceOp.Load() != maintenanceOpNone {
 		a.log.Debug("maintenance in progress; ignoring grant_server notify", "op", a.maintenanceOp.Load())
@@ -877,7 +891,13 @@ func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) 
 	}
 
 	var n session.GrantServerNotify
-	if err := json.Unmarshal(payload, &n); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(payload))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&n); err != nil {
+		a.log.Warn("invalid grant_server notify json", "error", err)
+		return
+	}
+	if err := requireJSONEOF(decoder); err != nil {
 		a.log.Warn("invalid grant_server notify json", "error", err)
 		return
 	}
@@ -980,21 +1000,28 @@ func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) 
 	// Freeze the metadata snapshot used for auditing/UI and for the session runtime.
 	metaCopy := *meta
 
+	grantDigest := sha256.Sum256(n.GrantServer.ArtifactJSON)
 	a.mu.Lock()
 	if a.sessionStopping {
 		a.mu.Unlock()
 		return
 	}
-	if _, ok := a.sessions[channelID]; ok {
+	if existing, ok := a.sessions[channelID]; ok {
 		a.mu.Unlock()
-		// Idempotency: ignore duplicate notify for the same channel.
+		if existing.grantDigest != grantDigest || existing.grantExpiresAt != n.GrantServer.ArtifactExpiresAtUnixS {
+			a.log.Warn("conflicting grant_server notify ignored", "channel_id", channelID)
+		}
+		// Exact duplicate notifications are idempotent. Conflicting grants do
+		// not replace the already-authorized owner for this channel.
 		return
 	}
 	sessCtx, cancel := context.WithCancel(ctx)
 	a.sessions[channelID] = &activeSession{
-		cancel:    cancel,
-		meta:      metaCopy,
-		tunnelURL: "",
+		cancel:         cancel,
+		meta:           metaCopy,
+		tunnelURL:      "",
+		grantDigest:    grantDigest,
+		grantExpiresAt: n.GrantServer.ArtifactExpiresAtUnixS,
 	}
 	a.sessionWG.Add(1)
 	a.mu.Unlock()
@@ -1119,21 +1146,41 @@ func (a *Agent) runDataSession(ctx context.Context, grant *session.ChannelInitGr
 	if err != nil {
 		return err
 	}
-	lease, err := flowersec.NewArtifactLease(artifact, func(context.Context) error { return nil })
+	artifactDigest := sha256.Sum256(grant.ArtifactJSON)
+	lease, err := flowersec.NewArtifactLease(artifact, func(spendCtx context.Context) error {
+		return a.commitDataArtifactSpend(spendCtx, artifactDigest, grant.ArtifactExpiresAtUnixS)
+	})
 	if err != nil {
 		return err
+	}
+	var remotePlan *remoteSessionPlan
+	if strings.TrimSpace(meta.FloeApp) == FloeAppRedevenAgent {
+		remotePlan, err = a.prepareRemoteSessionPlan(meta)
+		if err != nil {
+			return err
+		}
+		defer remotePlan.cleanup()
 	}
 	trustRoots, err := x509.SystemCertPool()
 	if err != nil || trustRoots == nil {
 		return errors.New("system trust roots are unavailable")
 	}
-	sess, err := flowersec.Connect(ctx, lease, flowersec.ConnectorOptions{
+	connectorOptions := flowersec.ConnectorOptions{
 		TrustRoots:     trustRoots,
 		Origin:         strings.TrimSuffix(a.cfg.ControlplaneBaseURL, "/"),
 		ConnectTimeout: 15 * time.Second,
-	})
+		RPCHandlers:    flowersec.NewRPCHandlers(),
+	}
+	if remotePlan != nil {
+		connectorOptions.RPCHandlers = remotePlan.rpc
+	}
+	sess, err := flowersec.Connect(ctx, lease, connectorOptions)
 	if err != nil {
 		return err
+	}
+	if remotePlan != nil && a.term != nil {
+		detachTerminalSink := a.term.AttachSink(meta, sess.RPC(), a.accessGate)
+		defer detachTerminalSink()
 	}
 	opened = true
 
@@ -1182,7 +1229,7 @@ func (a *Agent) runDataSession(ctx context.Context, grant *session.ChannelInitGr
 	case FloeAppRedevenPortForward:
 		return a.servePortForwardSession(ctx, sess, meta)
 	default:
-		return a.serveRedevenAgentSession(ctx, sess, meta)
+		return a.serveRedevenAgentSession(ctx, sess, meta, remotePlan)
 	}
 }
 
@@ -1223,7 +1270,7 @@ func (a *Agent) serveCodeAppSession(ctx context.Context, sess flowersec.Session,
 	}
 	defer cleanupUpstream()
 
-	handlers, err := flowersec.NewSessionHandlers(flowersec.SessionHandlerOptions{OnError: func(err error) {
+	handlers, err := flowersec.NewStreamHandlers(flowersec.StreamHandlerOptions{OnError: func(err error) {
 		if err == nil {
 			return
 		}
@@ -1238,9 +1285,11 @@ func (a *Agent) serveCodeAppSession(ctx context.Context, sess flowersec.Session,
 		UpstreamOrigin:         origin,
 		BlockedResponseHeaders: runtimeproxy.ProductBlockedResponseHeaders(),
 	}
-	if _, err := runtimeproxy.Register(handlers, proxyOpts); err != nil {
+	proxy, err := runtimeproxy.RegisterStreamHandlers(handlers, proxyOpts)
+	if err != nil {
 		return err
 	}
+	defer func() { _ = proxy.Close() }()
 	return handlers.Serve(ctx, sess)
 }
 
@@ -1279,7 +1328,7 @@ func (a *Agent) servePortForwardSession(ctx context.Context, sess flowersec.Sess
 	}
 	defer cleanupUpstream()
 
-	handlers, err := flowersec.NewSessionHandlers(flowersec.SessionHandlerOptions{OnError: func(err error) {
+	handlers, err := flowersec.NewStreamHandlers(flowersec.StreamHandlerOptions{OnError: func(err error) {
 		if err == nil {
 			return
 		}
@@ -1294,13 +1343,15 @@ func (a *Agent) servePortForwardSession(ctx context.Context, sess flowersec.Sess
 		UpstreamOrigin:         origin,
 		BlockedResponseHeaders: runtimeproxy.ProductBlockedResponseHeaders(),
 	}
-	if _, err := runtimeproxy.Register(handlers, proxyOpts); err != nil {
+	proxy, err := runtimeproxy.RegisterStreamHandlers(handlers, proxyOpts)
+	if err != nil {
 		return err
 	}
+	defer func() { _ = proxy.Close() }()
 	return handlers.Serve(ctx, sess)
 }
 
-func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess flowersec.Session, meta *session.Meta) error {
+func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess flowersec.Session, meta *session.Meta, plan *remoteSessionPlan) error {
 	if a == nil || meta == nil {
 		return errors.New("invalid args")
 	}
@@ -1308,49 +1359,10 @@ func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess flowersec.Ses
 		return errors.New("missing session")
 	}
 
-	fsSvc := fs.NewServiceWithCoordinator(a.filesystemScope, a.gitRuntime)
-	gitRepoSvc := gitrepo.NewServiceWithScopeAndRuntime(a.filesystemScope, a.gitRuntime)
-	defer gitRepoSvc.Close()
-
-	handlers, err := flowersec.NewSessionHandlers(flowersec.SessionHandlerOptions{OnError: func(err error) {
-		if err == nil {
-			return
-		}
-		a.log.Warn("agent stream error", "channel_id", meta.ChannelID, "floe_app", meta.FloeApp, "code_space_id", meta.CodeSpaceID, "error", err)
-	}})
-	if err != nil {
-		return err
+	if plan == nil {
+		return errors.New("missing pre-connect remote session plan")
 	}
-
-	router := sessionrpc.NewRouter()
-	accessrpc.New(a.accessGate).Register(router, meta)
-	a.sys.RegisterWithAccessGate(router, meta, a.accessGate)
-	fsSvc.RegisterWithAccessGate(router, meta, a.accessGate)
-	gitRepoSvc.RegisterWithAccessGate(router, meta, a.accessGate)
-	a.mon.RegisterWithAccessGate(router, meta, a.accessGate)
-	a.registerSessionsRPCWithAccessGate(router, meta, a.accessGate)
-	detachAI := a.registerAISessionRPC(router, meta, sess.RPC())
-	defer detachAI()
-	if a.term != nil {
-		detachTerminal := a.term.RegisterWithAccessGate(router, meta, sess.RPC(), a.accessGate)
-		defer detachTerminal()
-	}
-	if err := router.Bind(handlers); err != nil {
-		return err
-	}
-
-	// FS read-file stream (binary, chunked)
-	if err := handlers.HandleStream("fs/read_file", func(ctx context.Context, incoming flowersec.IncomingStream) error {
-		fsSvc.ServeReadFileStreamWithAccessGate(ctx, incoming.Stream, meta, a.accessGate)
-		return nil
-	}); err != nil {
-		return err
-	}
-	if a.term != nil {
-		if err := handlers.HandleStream(livev1.StreamKind, a.terminalLiveStreamHandler(meta)); err != nil {
-			return err
-		}
-	}
+	handlers := plan.streams
 
 	// Env App UI static assets are delivered over flowersec-proxy (Standard Mode only).
 	// Only enable the proxy handler for the reserved Env App code_space_id, and only when the
@@ -1384,9 +1396,11 @@ func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess flowersec.Ses
 			UpstreamOrigin:         origin,
 			BlockedResponseHeaders: runtimeproxy.ProductBlockedResponseHeaders(),
 		}
-		if _, err := runtimeproxy.Register(handlers, proxyOpts); err != nil {
+		proxy, err := runtimeproxy.RegisterStreamHandlers(handlers, proxyOpts)
+		if err != nil {
 			return err
 		}
+		defer func() { _ = proxy.Close() }()
 	}
 	return handlers.Serve(ctx, sess)
 }
@@ -1736,6 +1750,8 @@ type registerReq struct {
 	EnvPublicID              string `json:"env_public_id,omitempty"`
 	LocalEnvironmentPublicID string `json:"local_environment_public_id,omitempty"`
 	BindingGeneration        int64  `json:"binding_generation,omitempty"`
+	ControlArtifactSequence  uint64 `json:"control_artifact_sequence"`
+	ControlArtifactChannelID string `json:"control_artifact_channel_id"`
 	AgentInstanceID          string `json:"agent_instance_id,omitempty"`
 	Version                  string `json:"version,omitempty"`
 	OS                       string `json:"os,omitempty"`
@@ -1756,19 +1772,6 @@ type heartbeatReq struct {
 
 type heartbeatResp struct {
 	OK bool `json:"ok"`
-}
-
-type credentialRenewReq struct {
-	EnvPublicID              string `json:"env_public_id,omitempty"`
-	LocalEnvironmentPublicID string `json:"local_environment_public_id,omitempty"`
-	BindingGeneration        int64  `json:"binding_generation,omitempty"`
-	AgentInstanceID          string `json:"agent_instance_id,omitempty"`
-	NowUnixMs                int64  `json:"now_unix_ms,omitempty"`
-}
-
-type credentialRenewResp struct {
-	Direct            *config.DirectConnectInfo `json:"direct"`
-	BindingGeneration int64                     `json:"binding_generation"`
 }
 
 type runtimeDisconnectReq struct {

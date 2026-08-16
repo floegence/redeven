@@ -65,6 +65,28 @@ test('rejects terminal runtime modules hidden in a static shared chunk', () => {
   assert.deepEqual(result.forbiddenModules[0]?.path, ['assets/index.js', 'assets/dist-a1.js']);
 });
 
+test('rejects Floe acquisition and Flowersec connection runtime modules on the initial graph', () => {
+  const result = analyzeInitialBuildGraph({
+    'index.html': entry('assets/index.js', { imports: ['connection.ts'] }),
+    'connection.ts': { file: 'assets/connection.js' },
+  }, {
+    chunks: {
+      'assets/index.js': chunk(['src/index.ts']),
+      'assets/connection.js': chunk([
+        '@floegence/floe-webapp-boot/dist/acquisition.js',
+        '@floegence/floe-webapp-boot/dist/artifact-source.js',
+        '@floegence/flowersec-core/dist/browser/connectSession.js',
+      ]),
+    },
+  });
+
+  assert.deepEqual(result.forbiddenModules.map((item) => item.moduleId), [
+    '@floegence/floe-webapp-boot/dist/acquisition.js',
+    '@floegence/floe-webapp-boot/dist/artifact-source.js',
+    '@floegence/flowersec-core/dist/browser/connectSession.js',
+  ]);
+});
+
 test('fails closed when a static manifest edge is missing', () => {
   assert.throws(() => analyzeInitialBuildGraph({
     'index.html': entry('assets/index.js', { imports: ['missing.ts'] }),

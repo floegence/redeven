@@ -2,8 +2,11 @@ package agent
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -13,6 +16,7 @@ import (
 	"time"
 
 	flowersec "github.com/floegence/flowersec/flowersec-go/v2"
+	flowercontrol "github.com/floegence/flowersec/flowersec-go/v2/controlplane"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/runtimeservice"
 	"github.com/floegence/redeven/internal/session"
@@ -66,6 +70,7 @@ func providerLinkRemoteConfig(t *testing.T, cfgPath string) *config.Config {
 	if err != nil {
 		t.Fatalf("ParsePermissionPolicyPreset() error = %v", err)
 	}
+	digest := sha256.Sum256([]byte(controlArtifactFixture))
 	cfg := &config.Config{
 		ProviderOrigin:           "https://redeven.test",
 		ControlplaneBaseURL:      "https://dev.redeven.test",
@@ -75,8 +80,23 @@ func providerLinkRemoteConfig(t *testing.T, cfgPath string) *config.Config {
 		BindingGeneration:        7,
 		AgentInstanceID:          "ai_existing",
 		Direct:                   testDirectConnectInfo(),
-		AgentHomeDir:             t.TempDir(),
-		PermissionPolicy:         policy,
+		ControlArtifactPool: &config.ControlArtifactPool{
+			SchemaVersion:         config.ControlArtifactPoolSchemaVersion,
+			LogicalBindingID:      "provider-binding-7",
+			TargetWaterline:       config.ControlArtifactTargetWaterline,
+			RefreshHorizonSeconds: config.ControlArtifactRefreshHorizonS,
+			BindingGeneration:     7,
+			RecoveryState:         config.ControlArtifactRecoveryReady,
+			Entries: []config.ControlArtifactEntry{{
+				Sequence:       1,
+				ArtifactJSON:   []byte(controlArtifactFixture),
+				ArtifactDigest: base64.RawURLEncoding.EncodeToString(digest[:]),
+				ChannelID:      "provider-control-7",
+				ExpiresAtUnixS: time.Now().Add(4 * time.Minute).Unix(),
+			}},
+		},
+		AgentHomeDir:     t.TempDir(),
+		PermissionPolicy: policy,
 	}
 	if cfgPath != "" {
 		if err := config.Save(cfgPath, cfg); err != nil {
@@ -146,7 +166,26 @@ func providerLinkTestServer(t *testing.T, handler func(http.ResponseWriter, *htt
 	}))
 }
 
-func writeProviderLinkBootstrapResponse(t *testing.T, w http.ResponseWriter, r *http.Request, _ string) {
+type providerLinkBootstrapPoolEntry struct {
+	ArtifactJSON      json.RawMessage `json:"artifact_json"`
+	ArtifactChannelID string          `json:"artifact_channel_id"`
+	BindingGeneration int64           `json:"binding_generation"`
+	ArtifactSequence  uint64          `json:"artifact_sequence"`
+	ExpiresAtUnixS    int64           `json:"expires_at_unix_s"`
+}
+
+type providerLinkBootstrapPool struct {
+	Version                       string                           `json:"version"`
+	LogicalProviderBindingID      string                           `json:"logical_provider_binding_id"`
+	BindingGeneration             int64                            `json:"binding_generation"`
+	TargetWaterline               int                              `json:"target_waterline"`
+	RefreshHorizonSeconds         int64                            `json:"refresh_horizon_seconds"`
+	ServerHighestArtifactSequence uint64                           `json:"server_highest_artifact_sequence"`
+	Entries                       []providerLinkBootstrapPoolEntry `json:"entries"`
+	ResponseDigestB64u            string                           `json:"response_digest_b64u"`
+}
+
+func writeProviderLinkBootstrapResponse(t *testing.T, w http.ResponseWriter, r *http.Request, channelPrefix string) {
 	t.Helper()
 	if r.Method != http.MethodPost || r.URL.Path != "/api/rcpp/v2/runtime/bootstrap/exchange" {
 		t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
@@ -165,23 +204,65 @@ func writeProviderLinkBootstrapResponse(t *testing.T, w http.ResponseWriter, r *
 	if payload.ProviderOrigin == "" {
 		t.Fatalf("ProviderOrigin is empty")
 	}
+	endpoints, err := flowercontrol.NewEndpointSet("wss://example.com/flowersec/v2/direct")
+	if err != nil {
+		t.Fatal(err)
+	}
+	expires := time.Now().Add(4 * time.Minute).Truncate(time.Second)
+	pool := providerLinkBootstrapPool{
+		Version:                       config.ControlArtifactPoolContractVersion,
+		LogicalProviderBindingID:      "binding-7",
+		BindingGeneration:             7,
+		TargetWaterline:               config.ControlArtifactTargetWaterline,
+		RefreshHorizonSeconds:         config.ControlArtifactRefreshHorizonS,
+		ServerHighestArtifactSequence: config.ControlArtifactTargetWaterline,
+		Entries:                       make([]providerLinkBootstrapPoolEntry, 0, config.ControlArtifactTargetWaterline),
+	}
+	for sequence := 1; sequence <= config.ControlArtifactTargetWaterline; sequence++ {
+		channelID := fmt.Sprintf("%s-%d", channelPrefix, sequence)
+		issued, issueErr := flowercontrol.NewIssuer().IssueDirect(flowercontrol.DirectIssueOptions{
+			Session: flowercontrol.SessionOptions{
+				ChannelID: channelID,
+				ExpiresAt: expires,
+			},
+			Endpoints:         endpoints,
+			RendezvousGroupID: "provider-link-test",
+			ListenerAudience:  "redeven",
+			UpstreamAddress:   "127.0.0.1:1",
+		})
+		if issueErr != nil {
+			t.Fatal(issueErr)
+		}
+		pool.Entries = append(pool.Entries, providerLinkBootstrapPoolEntry{
+			ArtifactJSON:      issued.ArtifactJSON(),
+			ArtifactChannelID: channelID,
+			BindingGeneration: 7,
+			ArtifactSequence:  uint64(sequence),
+			ExpiresAtUnixS:    expires.Unix(),
+		})
+	}
+	unsigned, err := json.Marshal(pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(unsigned)
+	pool.ResponseDigestB64u = base64.RawURLEncoding.EncodeToString(digest[:])
 	w.Header().Set("Content-Type", "application/json")
-	_, _ = w.Write([]byte(`{
-  "provider_id": "example_control_plane",
-  "provider_origin": "` + payload.ProviderOrigin + `",
-  "access_point_id": "dev",
-  "access_point_origin": "https://` + r.Host + `",
-  "direct": {
-	"artifact_json": ` + controlArtifactFixture + `,
-	"expires_at_unix_s": 4102444800,
-	"spent": false
-  },
-  "local_environment_binding": {
-    "local_environment_public_id": "` + payload.LocalEnvironmentPublicID + `",
-    "env_public_id": "` + payload.EnvPublicID + `",
-    "generation": 7
-  }
-}`))
+	response := map[string]any{
+		"provider_id":           "example_control_plane",
+		"provider_origin":       payload.ProviderOrigin,
+		"access_point_id":       "dev",
+		"access_point_origin":   "https://" + r.Host,
+		"control_artifact_pool": pool,
+		"local_environment_binding": map[string]any{
+			"local_environment_public_id": payload.LocalEnvironmentPublicID,
+			"env_public_id":               payload.EnvPublicID,
+			"generation":                  7,
+		},
+	}
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		t.Fatalf("Encode(response) error = %v", err)
+	}
 }
 
 func TestConnectProviderPersistsConfigOnlyAfterBootstrapSucceeds(t *testing.T) {
@@ -357,8 +438,11 @@ func TestConnectProviderRefreshesExistingMatchingBindingWhenExplicitlyRequested(
 	if err != nil {
 		t.Fatalf("config.Load() error = %v", err)
 	}
-	if saved.Direct == nil || len(saved.Direct.ArtifactJSON) == 0 || saved.Direct.Spent {
-		t.Fatalf("saved Direct = %#v, want fresh v2 artifact", saved.Direct)
+	if saved.Direct != nil {
+		t.Fatalf("saved Direct = %#v, want nil after artifact-pool bootstrap", saved.Direct)
+	}
+	if saved.ControlArtifactPool == nil || len(saved.ControlArtifactPool.Entries) != config.ControlArtifactTargetWaterline {
+		t.Fatalf("saved ControlArtifactPool = %#v, want ready bootstrap pool", saved.ControlArtifactPool)
 	}
 	if saved.BindingGeneration != 7 {
 		t.Fatalf("BindingGeneration = %d, want refreshed generation 7", saved.BindingGeneration)
@@ -412,7 +496,8 @@ func TestDisconnectProviderSendsRuntimeDisconnectBeforeClearingConfig(t *testing
 		saved.EnvironmentID != "" ||
 		saved.LocalEnvironmentPublicID != "" ||
 		saved.BindingGeneration != 0 ||
-		saved.Direct != nil {
+		saved.Direct != nil ||
+		saved.ControlArtifactPool != nil {
 		t.Fatalf("saved config after disconnect = %#v, want provider fields cleared", saved)
 	}
 	if saved.AgentInstanceID != "ai_existing" {
@@ -451,7 +536,9 @@ func TestDisconnectProviderConflictDoesNotClearConfig(t *testing.T) {
 		saved.EnvironmentID != cfg.EnvironmentID ||
 		saved.LocalEnvironmentPublicID != cfg.LocalEnvironmentPublicID ||
 		saved.BindingGeneration != cfg.BindingGeneration ||
-		saved.Direct == nil || saved.Direct.ExpiresAtUnixS != cfg.Direct.ExpiresAtUnixS || saved.Direct.Spent != cfg.Direct.Spent {
+		saved.Direct == nil || saved.Direct.ExpiresAtUnixS != cfg.Direct.ExpiresAtUnixS || saved.Direct.Spent != cfg.Direct.Spent ||
+		saved.ControlArtifactPool == nil || saved.ControlArtifactPool.BindingGeneration != cfg.ControlArtifactPool.BindingGeneration ||
+		len(saved.ControlArtifactPool.Entries) != len(cfg.ControlArtifactPool.Entries) {
 		t.Fatalf("config changed after rejected disconnect: %#v", saved)
 	}
 	if binding := a.ProviderLinkBinding(); binding.State != runtimeservice.ProviderLinkStateLinked || !binding.RemoteEnabled {
@@ -482,7 +569,8 @@ func TestDisconnectProviderClearsConfigWithoutActiveControlChannel(t *testing.T)
 		saved.EnvironmentID != "" ||
 		saved.LocalEnvironmentPublicID != "" ||
 		saved.BindingGeneration != 0 ||
-		saved.Direct != nil {
+		saved.Direct != nil ||
+		saved.ControlArtifactPool != nil {
 		t.Fatalf("saved config after inactive-channel disconnect = %#v, want provider fields cleared", saved)
 	}
 	if saved.AgentInstanceID != "ai_existing" {

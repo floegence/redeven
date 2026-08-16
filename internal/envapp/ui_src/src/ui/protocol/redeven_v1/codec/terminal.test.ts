@@ -82,7 +82,7 @@ describe('terminal codec', () => {
     expect(response.totalRows).toBe(42);
     expect(response.snapshotId).toBe('snapshot');
     expect(response.lane).toBe('search');
-    expect(response.payload).toBe('AQID');
+    expect(response.payload).toEqual(new Uint8Array([1, 2, 3]));
   });
 
   it('accepts only a real semantic clear actor cut', () => {

@@ -115,7 +115,7 @@ export function ConnectionRecoveryView(props: ConnectionRecoveryViewProps) {
     if (props.snapshot.phase === 'desktop_transport') {
       return props.snapshot.desktop_transport?.actions.includes('retry_now') ?? false;
     }
-    return props.snapshot.phase === 'runtime_probe';
+    return props.snapshot.phase === 'runtime_probe' || props.snapshot.phase === 'protocol_connect';
   });
   const canOpenConnectionCenter = createMemo(() => (
     props.snapshot.state === 'failed'

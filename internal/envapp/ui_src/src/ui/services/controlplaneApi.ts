@@ -1,13 +1,11 @@
-import type { ArtifactSourceResult } from '@floegence/flowersec-core';
+import type { ArtifactSource, JsonValue } from '@floegence/flowersec-core';
+import type { SpendBindingView, SpendCommitRequest } from '@floegence/floe-webapp-boot';
 
 import { SESSION_KIND_ENVAPP_RPC, sessionKindForLauncherApp, type LauncherFloeApp } from './floeproxyContract';
 import { applyLocalAccessResumeHeader } from './localAccessAuth';
 import { controlPlaneOriginFromSandboxLocation } from './sandboxOrigins';
 import { AccessUnlockError, isKnownAccessUnlockErrorCode, normalizeRetryAfterMs } from './accessUnlockError';
 import { stagePluginSessionCredential } from './pluginSessionCredential';
-
-const loadArtifactRuntime = () => import('@floegence/flowersec-core');
-const loadControlplaneArtifactSource = () => import('@floegence/floe-webapp-boot/artifact-source');
 
 export interface Environment {
   public_id: string;
@@ -478,26 +476,68 @@ export async function refreshLocalRuntime(): Promise<LocalRuntimeInfo | null> {
   return request;
 }
 
-export async function mintLocalDirectConnectArtifact(context: Readonly<{ signal: AbortSignal }>): Promise<ArtifactSourceResult> {
-  const out = await fetchLocalJSON<{
-    connect_artifact?: unknown;
-    plugin_session_credential?: unknown;
-  }>('/api/local/direct/connect_artifact', {
-    method: 'POST',
-    ...(context.signal === undefined ? {} : { signal: context.signal }),
+export type LocalDirectArtifactSourceOptions = Readonly<{
+  beforeAcquire?: (context: Readonly<{ signal: AbortSignal }>) => void | Promise<void>;
+  afterCredentialStaged?: () => void;
+}>;
+
+export async function createLocalDirectArtifactSource(
+  options: LocalDirectArtifactSourceOptions = {},
+): Promise<ArtifactSource> {
+  const { createControlplaneArtifactSource } = await import('@floegence/floe-webapp-boot/artifact-source');
+  return createControlplaneArtifactSource({
+    baseUrl: window.location.origin,
+    endpointId: 'env_local',
+    ...(window.location.protocol === 'http:' ? { allowLoopbackHTTP: true } : {}),
+    fetch: async (_input, init) => {
+      const signal = init?.signal ?? new AbortController().signal;
+      await options.beforeAcquire?.({ signal });
+      let out: {
+        v?: number;
+        channel_id?: unknown;
+        connect_artifact?: string;
+        critical_scope_projection_json?: string;
+        spend_scope?: SpendBindingView & { v?: number };
+        plugin_session_credential?: unknown;
+      };
+      try {
+        out = await fetchLocalJSON('/api/local/direct/connect_artifact', {
+          method: 'POST',
+          signal,
+        });
+      } catch (error) {
+        if (!(error instanceof APIError) && !(error instanceof AccessUnlockError)) throw error;
+        return new Response(JSON.stringify({
+          error: { code: asString(error.code).toLowerCase() },
+        }), {
+          status: error.status,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      const channelID = asString(out?.channel_id);
+      if (!out?.connect_artifact || !out.critical_scope_projection_json || !out.spend_scope || !channelID) {
+        throw new Error('Invalid local direct connect artifact');
+      }
+      const pluginSessionCredential = asString(out?.plugin_session_credential);
+      if (!pluginSessionCredential) {
+        throw new Error('Invalid local plugin session credential');
+      }
+      stagePluginSessionCredential(channelID, pluginSessionCredential);
+      options.afterCredentialStaged?.();
+      return new Response(JSON.stringify({
+        v: out.v ?? 1,
+        connect_artifact: out.connect_artifact,
+        critical_scope_projection_json: out.critical_scope_projection_json,
+        spend_scope: out.spend_scope,
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    },
+    commitSpend: commitLocalArtifactSpend,
+    validateSpendBinding: (binding) => validateTrustedEnvSpendBinding(binding, {
+      envPublicId: 'env_local',
+      floeApp: 'com.floegence.redeven.agent',
+      origin: window.location.origin,
+    }),
   });
-  const channelID = asString((out as { channel_id?: unknown })?.channel_id);
-  if (!out?.connect_artifact || !channelID) {
-    throw new Error('Invalid local direct connect artifact');
-  }
-  const pluginSessionCredential = asString(out?.plugin_session_credential);
-  if (!pluginSessionCredential) {
-    throw new Error('Invalid local plugin session credential');
-  }
-  stagePluginSessionCredential(channelID, pluginSessionCredential);
-  const { createArtifactLease, parseArtifact } = await loadArtifactRuntime();
-  const artifact = parseArtifact(JSON.stringify(out.connect_artifact));
-  return { kind: 'lease', lease: createArtifactLease(artifact, async () => undefined) };
 }
 
 export type EnvironmentDetailSource = 'local' | 'controlplane';
@@ -580,7 +620,12 @@ export async function getAgentLatestVersion(args: AgentLatestVersionRequest): Pr
     : getControlplaneAgentLatestVersion(args.envId);
 }
 
-export async function mintEnvProxyEntryTicket(args: { endpointId: string; floeApp: string; codeSpaceId: string }): Promise<string> {
+export async function mintEnvProxyEntryTicket(args: {
+  endpointId: string;
+  floeApp: string;
+  codeSpaceId: string;
+  signal?: AbortSignal;
+}): Promise<string> {
   const endpointId = args.endpointId.trim();
   const floeApp = args.floeApp.trim();
   const codeSpaceId = args.codeSpaceId.trim();
@@ -591,6 +636,7 @@ export async function mintEnvProxyEntryTicket(args: { endpointId: string; floeAp
     {
       method: 'POST',
       credentials: 'include',
+      ...(args.signal === undefined ? {} : { signal: args.signal }),
       body: JSON.stringify({
         endpoint_id: endpointId,
         floe_app: floeApp,
@@ -637,30 +683,137 @@ export async function mintEnvEntryTicketForApp(args: { envId: string; floeApp: L
   return t;
 }
 
-export async function connectArtifactEntry(args: {
-  endpointId: string;
+export type EnvProxyArtifactSourceOptions = Readonly<{
+  endpointId: () => string;
   floeApp: string;
-  entryTicket: string;
+  codeSpaceId: string;
   allowLoopbackHTTP?: boolean;
-  signal?: AbortSignal;
   traceId?: string;
-}): Promise<ArtifactSourceResult> {
-  const endpointId = args.endpointId.trim();
-  const floeApp = args.floeApp.trim();
-  const entryTicket = args.entryTicket.trim();
-  if (!endpointId || !floeApp || !entryTicket) throw new Error('Invalid request');
+  prepareAcquire?: (context: Readonly<{ endpointId: string; signal: AbortSignal }>) => void | Promise<void>;
+}>;
 
-  const { createControlplaneArtifactSource } = await loadControlplaneArtifactSource();
-  const source = createControlplaneArtifactSource({
-	baseUrl: controlPlaneOriginFromSandboxOriginBestEffort(),
-    endpointId,
-    entryTicket,
+export async function createEnvProxyArtifactSource(args: EnvProxyArtifactSourceOptions): Promise<ArtifactSource> {
+  const floeApp = args.floeApp.trim();
+  const codeSpaceId = args.codeSpaceId.trim();
+  if (!floeApp || !codeSpaceId) throw new Error('Invalid request');
+  const fetchImpl = globalThis.fetch;
+  const { createControlplaneArtifactSource } = await import('@floegence/floe-webapp-boot/artifact-source');
+
+  return createControlplaneArtifactSource({
+    baseUrl: controlPlaneOriginFromSandboxOriginBestEffort(),
+    endpointId: 'dynamic_env',
+    entryTicket: 'dynamic_entry_ticket',
     payload: {
       floe_app: floeApp,
     },
-	...(args.traceId === undefined ? {} : { correlation: { traceId: args.traceId } }),
+    ...(args.traceId === undefined ? {} : { correlation: { traceId: args.traceId } }),
     ...(args.allowLoopbackHTTP === true ? { allowLoopbackHTTP: true } : {}),
+    fetch: async (input, init) => {
+      if (typeof fetchImpl !== 'function') throw new Error('Fetch unavailable');
+      const signal = init?.signal ?? new AbortController().signal;
+      const endpointId = args.endpointId().trim();
+      if (!endpointId) throw new Error('Missing environment context');
+      await args.prepareAcquire?.({ endpointId, signal });
+      const entryTicket = await mintEnvProxyEntryTicket({
+        endpointId,
+        floeApp,
+        codeSpaceId,
+        signal,
+      });
+      const headers = new Headers(init?.headers);
+      headers.set('authorization', `Bearer ${entryTicket}`);
+      return fetchImpl(input, {
+        ...init,
+        headers,
+        signal,
+        body: JSON.stringify({
+          endpoint_id: endpointId,
+          payload: { floe_app: floeApp },
+          ...(args.traceId === undefined ? {} : { correlation: { trace_id: args.traceId } }),
+        }),
+      });
+    },
+    commitSpend: commitRemoteArtifactSpend,
+    validateSpendBinding: (binding) => validateTrustedEnvSpendBinding(binding, {
+      envPublicId: args.endpointId().trim(),
+      floeApp,
+      origin: window.location.origin,
+    }),
   });
-  const signal = args.signal ?? new AbortController().signal;
-  return source.acquire({ signal });
+}
+
+function validateTrustedEnvSpendBinding(binding: SpendBindingView, expected: Readonly<{
+  envPublicId: string;
+  floeApp: string;
+  origin: string;
+}>): string {
+  const values = [
+    binding.artifactDigestB64u,
+    binding.projectionDigestB64u,
+    binding.launcherOrigin,
+    binding.runtimeOrigin,
+    binding.appOrigin,
+    binding.consumer,
+    binding.expiresAt,
+  ];
+  if (values.some((value) => typeof value !== 'string' || value.trim() === '')) {
+    throw new Error('Invalid spend binding');
+  }
+  if (binding.consumer !== 'trusted' || binding.launcherOrigin !== expected.origin ||
+      binding.runtimeOrigin !== expected.origin || binding.appOrigin !== expected.origin) {
+    throw new Error('Spend origin binding mismatch');
+  }
+  const target = binding.targetBinding;
+  if (target === null || typeof target !== 'object' || Array.isArray(target)) {
+    throw new Error('Invalid spend target binding');
+  }
+  const record = target as Record<string, JsonValue>;
+  const keys = Object.keys(record).sort();
+  const expectedKeys = ['env_public_id', 'floe_app', 'kind', 'launcher_id', 'launcher_kind', 'v'];
+  if (keys.length !== expectedKeys.length || keys.some((key, index) => key !== expectedKeys[index]) ||
+      record.v !== 1 || record.kind !== 'env' || record.env_public_id !== expected.envPublicId ||
+      record.floe_app !== expected.floeApp || record.launcher_kind !== 'env' || record.launcher_id !== expected.envPublicId) {
+    throw new Error('Spend target binding mismatch');
+  }
+  return `${binding.artifactDigestB64u}.${binding.projectionDigestB64u}`;
+}
+
+async function commitLocalArtifactSpend(request: SpendCommitRequest, signal?: AbortSignal): Promise<void> {
+  await fetchLocalJSON('/api/local/direct/artifact/spend', {
+    method: 'POST',
+    signal,
+    body: JSON.stringify({
+      attempt_id: request.attemptId,
+      receipt: request.receipt,
+      artifact_digest_b64u: request.artifactDigestB64u,
+      projection_digest_b64u: request.projectionDigestB64u,
+      launcher_origin: request.launcherOrigin,
+      runtime_origin: request.runtimeOrigin,
+      app_origin: request.appOrigin,
+      consumer: request.consumer,
+      target_binding: request.targetBinding,
+      expires_at: request.expiresAt,
+    }),
+  });
+}
+
+async function commitRemoteArtifactSpend(request: SpendCommitRequest, signal?: AbortSignal): Promise<void> {
+  const receipt = request.receipt.trim();
+  if (!receipt) throw new Error('Missing artifact spend receipt');
+  await fetchJSON('/api/srv/v1/floeproxy/artifact/spend', {
+    method: 'POST',
+    signal,
+    bearerToken: receipt,
+    body: JSON.stringify({
+      v: 1,
+      attempt_id: request.attemptId,
+      artifact_digest_b64u: request.artifactDigestB64u,
+      projection_digest_b64u: request.projectionDigestB64u,
+      runtime_origin: request.runtimeOrigin,
+      app_origin: request.appOrigin,
+      consumer: request.consumer,
+      target_binding: request.targetBinding,
+      expires_at: request.expiresAt,
+    }),
+  });
 }

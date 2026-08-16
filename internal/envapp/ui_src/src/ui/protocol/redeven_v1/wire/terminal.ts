@@ -116,8 +116,30 @@ export type wire_terminal_history_req = {
   viewport_rows?: number;
 };
 
-export type wire_terminal_history_resp = Omit<SemanticHistoryChunk, 'payload'> & {
-  payload: string | Uint8Array;
+export type wire_terminal_history_resp = {
+  snapshotId: string;
+  continuation?: string;
+  lane?: SemanticHistoryLane;
+  chunkIndex: number;
+  chunkCount: number;
+  payloadBytes: number;
+  payloadSha256: string;
+  payload: string;
+  revision: number;
+  transportGeneration: number;
+  contentEpoch: number;
+  geometryGeneration: number;
+  cols: number;
+  rows: number;
+  anchor: string;
+  firstAvailable: string;
+  lastAvailable: string;
+  screenStart: string;
+  offset: number;
+  totalRows: number;
+  screenStartOffset: number;
+  hasPrevious: boolean;
+  hasNext: boolean;
 };
 
 export type wire_terminal_clear_req = {
@@ -151,6 +173,5 @@ export type wire_terminal_sessions_changed_notify = {
 };
 import type {
   SemanticHistoryDirection,
-  SemanticHistoryChunk,
   SemanticHistoryLane,
 } from '@floegence/floeterm-terminal-web/semantic';

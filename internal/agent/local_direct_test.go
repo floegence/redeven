@@ -107,6 +107,19 @@ func TestRegisterLocalDirectChannelStartsUnlockedWhenAccessAlreadyAuthorized(t *
 	}
 }
 
+func TestServeRedevenAgentSessionRequiresPreConnectPlan(t *testing.T) {
+	a := &Agent{}
+	err := a.serveRedevenAgentSession(
+		context.Background(),
+		shutdownAdmissionSession{},
+		&session.Meta{ChannelID: "ch-remote", FloeApp: FloeAppRedevenAgent},
+		nil,
+	)
+	if err == nil || err.Error() != "missing pre-connect remote session plan" {
+		t.Fatalf("serveRedevenAgentSession() error = %v, want missing pre-connect plan rejection", err)
+	}
+}
+
 func TestServeLocalDirectAcceptorSessionAttachesAndDetachesTerminalNotificationSink(t *testing.T) {
 	manager := terminal.NewManager("/bin/sh", t.TempDir(), slog.New(slog.NewTextHandler(io.Discard, nil)))
 	t.Cleanup(manager.Cleanup)
@@ -134,9 +147,7 @@ func TestServeLocalDirectAcceptorSessionAttachesAndDetachesTerminalNotificationS
 
 	done := make(chan error, 1)
 	go func() {
-		done <- a.ServeLocalDirectSession(context.Background(), sess, meta, LocalDirectSessionOptions{
-			HandlersServedByAcceptor: true,
-		})
+		done <- a.ServeLocalDirectSession(context.Background(), sess, meta, LocalDirectSessionOptions{})
 	}()
 	select {
 	case <-sess.started:

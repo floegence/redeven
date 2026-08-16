@@ -30,6 +30,8 @@ const getEnvAppAccessStatusMock = vi.fn();
 const getEnvironmentMock = vi.fn();
 const mintLocalDirectConnectArtifactMock = vi.fn();
 const connectArtifactEntryMock = vi.fn();
+const createLocalDirectArtifactSourceMock = vi.fn(() => Object.freeze({ acquire: mintLocalDirectConnectArtifactMock }));
+const createEnvProxyArtifactSourceMock = vi.fn(() => Object.freeze({ acquire: connectArtifactEntryMock }));
 const flowerLaunchTurnMock = vi.fn(async () => ({
   thread_id: 'thread-launched',
   turn_id: 'turn-launched',
@@ -38,8 +40,18 @@ const flowerLaunchTurnMock = vi.fn(async () => ({
 }));
 
 let debugConsoleEnabled = false;
-let protocolStatus: 'connected' | 'disconnected' | 'connecting' | 'error' = 'disconnected';
-let protocolClient: unknown = null;
+type ProtocolSnapshotMock = Readonly<{
+  state: 'idle' | 'connecting' | 'connected' | 'waiting' | 'failed' | 'closed';
+  attempt: number;
+  currentSession?: unknown;
+}>;
+
+let protocolSnapshot: ProtocolSnapshotMock = Object.freeze({ state: 'idle', attempt: 0 });
+let protocolConnectionConfig: Record<string, any> | null = null;
+let protocolSessionOrdinal = 0;
+const publishProtocolSnapshot = (snapshot: ProtocolSnapshotMock) => {
+  protocolSnapshot = Object.freeze(snapshot);
+};
 let desktopViewMode: 'activity' | 'workbench' = 'activity';
 let envAIPageMountSequence = 0;
 let activityFlowerSubmitting = false;
@@ -106,9 +118,29 @@ function testFlowerTurnIntent(sourceSurface: string) {
   };
 }
 
-const connectMock = vi.fn(async () => {
-  protocolStatus = 'connected';
-  protocolClient = { id: 'client-1' };
+const publishProtocolConnected = () => {
+  const attempt = protocolSnapshot.attempt + 1;
+  publishProtocolSnapshot({ state: 'connecting', attempt });
+  protocolSessionOrdinal += 1;
+  publishProtocolSnapshot({
+    state: 'connected',
+    attempt,
+    currentSession: { id: `client-${protocolSessionOrdinal}` },
+  });
+};
+const connectMock = vi.fn(async (config: Record<string, any>) => {
+  protocolConnectionConfig = config;
+  publishProtocolConnected();
+});
+const replaceConnectionMock = vi.fn(async (config: Record<string, any>) => {
+  protocolConnectionConfig?.lifecycle?.dispose?.();
+  protocolConnectionConfig = config;
+  publishProtocolConnected();
+});
+const retryNowMock = vi.fn(() => {
+  if (protocolSnapshot.state !== 'waiting') return false;
+  publishProtocolConnected();
+  return true;
 });
 vi.mock('@floegence/floe-webapp-core', async (importOriginal) => ({
   ...await importOriginal<typeof import('@floegence/floe-webapp-core')>(),
@@ -347,13 +379,16 @@ vi.mock('@floegence/floe-webapp-boot', () => ({
 
 vi.mock('@floegence/floe-webapp-protocol', () => ({
   useProtocol: () => ({
-    status: () => protocolStatus,
-    session: () => protocolClient,
+    status: () => protocolSnapshot.state,
+    snapshot: () => protocolSnapshot,
+    session: () => protocolSnapshot.currentSession ?? null,
     connect: connectMock,
-    reconnect: vi.fn(async () => undefined),
+    replaceConnection: replaceConnectionMock,
+    retryNow: retryNowMock,
     disconnect: vi.fn(() => {
-      protocolStatus = 'disconnected';
-      protocolClient = null;
+      protocolConnectionConfig?.lifecycle?.dispose?.();
+      protocolConnectionConfig = null;
+      publishProtocolSnapshot({ state: 'idle', attempt: 0 });
     }),
     error: () => null,
   }),
@@ -392,13 +427,13 @@ vi.mock('./widgets/FileBrowserSurfaceContext', () => ({
 }));
 
 vi.mock('./services/controlplaneApi', () => ({
-  connectArtifactEntry: connectArtifactEntryMock,
+  createEnvProxyArtifactSource: createEnvProxyArtifactSourceMock,
+  createLocalDirectArtifactSource: createLocalDirectArtifactSourceMock,
   getEnvPublicIDFromSession: vi.fn(() => ''),
   getLocalAccessStatus: getLocalAccessStatusMock,
   getLocalRuntime: getLocalRuntimeMock,
   getEnvironment: getEnvironmentMock,
   mintEnvProxyEntryTicket: vi.fn(),
-  mintLocalDirectConnectArtifact: mintLocalDirectConnectArtifactMock,
   mintEnvEntryTicketForApp: vi.fn(),
   refreshLocalRuntime: vi.fn(async () => null),
   unlockLocalAccess: unlockLocalAccessMock,
@@ -873,6 +908,7 @@ async function mountShell(): Promise<MountedShell> {
   await flushAsync();
   await vi.waitFor(() => {
     expect(document.querySelector('[data-testid="activity-flower-composer"]')).toBeInstanceOf(HTMLTextAreaElement);
+    expect(protocolSnapshot.state).toBe('connected');
   }, { timeout: 1_000 });
 
   const companion = document.querySelector('#redeven-activity-flower-companion');
@@ -918,6 +954,7 @@ async function mountProductionMobileShell(): Promise<MountedMobileShell> {
   await flushAsync();
   await vi.waitFor(() => {
     expect(document.querySelector('[data-testid="activity-flower-composer"]')).toBeInstanceOf(HTMLTextAreaElement);
+    expect(protocolSnapshot.state).toBe('connected');
   }, { timeout: 1_000 });
 
   const companion = document.querySelector('#redeven-activity-flower-companion');
@@ -968,8 +1005,9 @@ afterEach(async () => {
 beforeEach(() => {
   vi.clearAllMocks();
   debugConsoleEnabled = false;
-  protocolStatus = 'disconnected';
-  protocolClient = null;
+  protocolSnapshot = Object.freeze({ state: 'idle', attempt: 0 });
+  protocolConnectionConfig = null;
+  protocolSessionOrdinal = 0;
   desktopViewMode = 'activity';
   envAIPageMountSequence = 0;
   floeRegistryComponents = () => [];

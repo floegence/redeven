@@ -39,6 +39,8 @@ Commands:
               Connect Desktop Local Environment models to runtime-control.
   plugin-state-recovery
               Inspect or explicitly recover copied plugin state.
+  local-authority
+              Maintain the stopped Local UI durable authority store.
   env         Inspect and plan Redeven environment lifecycle operations.
   targets     Inspect Redeven targets for local automation.
   search      Run web search using configured provider credentials.
@@ -111,6 +113,23 @@ Usage:
 The command takes the same agent.lock as the runtime. Recover rejects a stale
 plan digest and never activates plugins, grants, settings, secrets, or storage
 from the retained archive.
+`, "\n")
+}
+
+func localAuthorityHelpText() string {
+	return strings.TrimLeft(`
+redeven local-authority
+
+Rotate the Local UI durable authority encryption key while the runtime is
+stopped. The command takes the same agent.lock as the runtime, rewraps active
+authorization records, and retains only key versions still referenced by
+retained authorization or spend rows.
+
+Usage:
+  redeven local-authority rotate-key --state-root <path>
+
+Flags:
+  --state-root <path>              Exact Redeven state root.
 `, "\n")
 }
 
@@ -793,6 +812,8 @@ func lookupHelpText(args []string) (string, bool) {
 		return desktopModelSourceHelpText(), true
 	case "plugin-state-recovery", "plugin-state-recovery inspect", "plugin-state-recovery recover":
 		return pluginStateRecoveryHelpText(), true
+	case "local-authority", "local-authority rotate-key":
+		return localAuthorityHelpText(), true
 	case "env":
 		return envHelpText(), true
 	case "env list":

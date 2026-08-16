@@ -1,4 +1,5 @@
 import type { ProtocolContract, RpcHelpers } from '@floegence/floe-webapp-protocol';
+import type { JsonValue } from '@floegence/flowersec-core';
 import {
   captureDebugConsoleProtocolCall,
   publishDebugConsoleStructuredEvent,
@@ -174,91 +175,15 @@ import {
 import { fromWireSessionsListActiveResponse } from './codec/sessions';
 import { fromWireSysPingResponse, fromWireSysRestartResponse, fromWireSysUpgradeResponse, toWireSysRestartRequest, toWireSysUpgradeRequest } from './codec/sys';
 import { fromWireTerminalExecutionContextUpdateNotify, fromWireTerminalForegroundCommandUpdateNotify, fromWireTerminalNameUpdateNotify, fromWireTerminalOutputActivityUpdateNotify, fromWireTerminalSessionCreateResponse, fromWireTerminalSessionDeleteResponse, fromWireTerminalSessionListResponse, fromWireTerminalSemanticClearResponse, fromWireTerminalSemanticHistoryResponse, toWireTerminalSemanticClearRequest, toWireTerminalSessionCreateRequest, toWireTerminalSessionDeleteRequest, toWireTerminalSemanticHistoryRequest, fromWireTerminalSessionsChangedNotify, fromWireTerminalWorkStateUpdateNotify } from './codec/terminal';
-import type { wire_access_resume_req, wire_access_resume_resp, wire_access_status_resp } from './wire/access';
-import type {
-  wire_ai_event_notify,
-  wire_ai_list_messages_req,
-  wire_ai_list_messages_resp,
-  wire_ai_send_user_turn_req,
-  wire_ai_send_user_turn_resp,
-  wire_ai_submit_request_user_input_response_req,
-  wire_ai_submit_request_user_input_response_resp,
-  wire_ai_stop_thread_req,
-  wire_ai_stop_thread_resp,
-} from './wire/ai';
-import type { wire_fs_copy_req, wire_fs_copy_resp, wire_fs_delete_req, wire_fs_delete_resp, wire_fs_get_path_context_resp, wire_fs_list_req, wire_fs_list_resp, wire_fs_mkdir_req, wire_fs_mkdir_resp, wire_fs_read_file_req, wire_fs_read_file_resp, wire_fs_rename_req, wire_fs_rename_resp, wire_fs_write_file_req, wire_fs_write_file_resp } from './wire/fs';
-import type {
-  wire_git_apply_stash_req,
-  wire_git_apply_stash_resp,
-  wire_git_checkout_branch_req,
-  wire_git_checkout_branch_resp,
-  wire_git_get_capabilities_resp,
-  wire_git_commit_workspace_req,
-  wire_git_commit_workspace_resp,
-  wire_git_discard_workspace_req,
-  wire_git_discard_workspace_resp,
-  wire_git_delete_branch_req,
-  wire_git_delete_branch_resp,
-  wire_git_drop_stash_req,
-  wire_git_drop_stash_resp,
-  wire_git_get_stash_detail_req,
-  wire_git_get_stash_detail_resp,
-  wire_git_merge_branch_req,
-  wire_git_merge_branch_resp,
-  wire_git_list_stashes_req,
-  wire_git_list_stashes_resp,
-  wire_git_preview_delete_branch_req,
-  wire_git_preview_delete_branch_resp,
-  wire_git_preview_apply_stash_req,
-  wire_git_preview_apply_stash_resp,
-  wire_git_preview_drop_stash_req,
-  wire_git_preview_drop_stash_resp,
-  wire_git_preview_merge_branch_req,
-  wire_git_preview_merge_branch_resp,
-  wire_git_fetch_repo_req,
-  wire_git_fetch_repo_resp,
-  wire_git_get_branch_compare_req,
-  wire_git_get_branch_compare_resp,
-  wire_git_get_commit_detail_req,
-  wire_git_get_commit_detail_resp,
-  wire_git_get_diff_content_req,
-  wire_git_get_diff_content_resp,
-  wire_git_get_repo_summary_req,
-  wire_git_get_repo_summary_resp,
-  wire_git_list_branches_req,
-  wire_git_list_branches_resp,
-  wire_git_list_commits_req,
-  wire_git_list_commits_resp,
-  wire_git_list_workspace_page_req,
-  wire_git_list_workspace_page_resp,
-  wire_git_list_workspace_path_statuses_req,
-  wire_git_list_workspace_path_statuses_resp,
-  wire_git_list_workspace_changes_req,
-  wire_git_list_workspace_changes_resp,
-  wire_git_pull_repo_req,
-  wire_git_pull_repo_resp,
-  wire_git_push_repo_req,
-  wire_git_push_repo_resp,
-  wire_git_resolve_repo_req,
-  wire_git_resolve_repo_resp,
-  wire_git_save_stash_req,
-  wire_git_save_stash_resp,
-  wire_git_stage_workspace_req,
-  wire_git_stage_workspace_resp,
-  wire_git_switch_detached_req,
-  wire_git_switch_detached_resp,
-  wire_git_unstage_workspace_req,
-  wire_git_unstage_workspace_resp,
-} from './wire/git';
-import type {
-  wire_sys_monitor_kill_process_req,
-  wire_sys_monitor_kill_process_resp,
-  wire_sys_monitor_req,
-  wire_sys_monitor_resp,
-} from './wire/monitor';
-import type { wire_sessions_list_active_resp } from './wire/sessions';
-import type { wire_sys_ping_resp, wire_sys_restart_req, wire_sys_restart_resp, wire_sys_upgrade_req, wire_sys_upgrade_resp } from './wire/sys';
-import type { wire_terminal_clear_req, wire_terminal_clear_resp, wire_terminal_execution_context_update_notify, wire_terminal_foreground_command_update_notify, wire_terminal_history_req, wire_terminal_history_resp, wire_terminal_name_update_notify, wire_terminal_output_activity_update_notify, wire_terminal_session_create_req, wire_terminal_session_create_resp, wire_terminal_session_delete_req, wire_terminal_session_delete_resp, wire_terminal_session_list_resp, wire_terminal_sessions_changed_notify, wire_terminal_work_state_update_notify } from './wire/terminal';
+import { redevenWireSchemaNames, type RedevenWireSchemaName } from './wire/schemas.generated';
+import { validateRedevenWireValue } from './wire/validate';
+
+function decodeWire<Wire, Result>(
+  schemaName: RedevenWireSchemaName,
+  decoder: (value: Wire) => Result,
+): (value: JsonValue) => Result {
+  return (value: JsonValue) => decoder(validateRedevenWireValue<Wire>(schemaName, value));
+}
 
 export type RedevenV1Rpc = {
   fs: {
@@ -343,250 +268,250 @@ export type RedevenV1Rpc = {
 };
 
 export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
-  const call = <Req, Resp>(typeID: number, payload: Req) =>
+  const call = <Req extends JsonValue, Resp>(
+    typeID: number,
+    payload: Req,
+    decodeResponse: (value: JsonValue) => Resp,
+  ) =>
     captureDebugConsoleProtocolCall<Req, Resp>({
       typeID,
       payload,
-      execute: () => helpers.call<Req, Resp>(typeID, payload),
+      execute: () => helpers.call(typeID, payload, decodeResponse),
     });
-  const onNotify = helpers.onNotify;
 
   return {
     fs: {
       getPathContext: async () => {
-        const resp = await call<Record<string, never>, wire_fs_get_path_context_resp>(redevenV1TypeIds.fs.getPathContext, {});
-        return fromWireFsPathContextResponse(resp);
+        const resp = await call(redevenV1TypeIds.fs.getPathContext, {}, decodeWire(redevenWireSchemaNames.fromWireFsPathContextResponse, fromWireFsPathContextResponse));
+        return resp;
       },
       list: async (req) => {
         const payload = toWireFsListRequest(req);
-        const resp = await call<wire_fs_list_req, wire_fs_list_resp>(redevenV1TypeIds.fs.list, payload);
-        return fromWireFsListResponse(resp);
+        const resp = await call(redevenV1TypeIds.fs.list, payload, decodeWire(redevenWireSchemaNames.fromWireFsListResponse, fromWireFsListResponse));
+        return resp;
       },
       readFile: async (req) => {
         const payload = toWireFsReadFileRequest(req);
-        const resp = await call<wire_fs_read_file_req, wire_fs_read_file_resp>(redevenV1TypeIds.fs.readFile, payload);
-        return fromWireFsReadFileResponse(resp);
+        const resp = await call(redevenV1TypeIds.fs.readFile, payload, decodeWire(redevenWireSchemaNames.fromWireFsReadFileResponse, fromWireFsReadFileResponse));
+        return resp;
       },
       writeFile: async (req) => {
         const payload = toWireFsWriteFileRequest(req);
-        const resp = await call<wire_fs_write_file_req, wire_fs_write_file_resp>(redevenV1TypeIds.fs.writeFile, payload);
-        return fromWireFsWriteFileResponse(resp);
+        const resp = await call(redevenV1TypeIds.fs.writeFile, payload, decodeWire(redevenWireSchemaNames.fromWireFsWriteFileResponse, fromWireFsWriteFileResponse));
+        return resp;
       },
       mkdir: async (req) => {
         const payload = toWireFsMkdirRequest(req);
-        const resp = await call<wire_fs_mkdir_req, wire_fs_mkdir_resp>(redevenV1TypeIds.fs.mkdir, payload);
-        return fromWireFsMkdirResponse(resp);
+        const resp = await call(redevenV1TypeIds.fs.mkdir, payload, decodeWire(redevenWireSchemaNames.fromWireFsMkdirResponse, fromWireFsMkdirResponse));
+        return resp;
       },
       rename: async (req) => {
         const payload = toWireFsRenameRequest(req);
-        const resp = await call<wire_fs_rename_req, wire_fs_rename_resp>(redevenV1TypeIds.fs.rename, payload);
-        return fromWireFsRenameResponse(resp);
+        const resp = await call(redevenV1TypeIds.fs.rename, payload, decodeWire(redevenWireSchemaNames.fromWireFsRenameResponse, fromWireFsRenameResponse));
+        return resp;
       },
       copy: async (req) => {
         const payload = toWireFsCopyRequest(req);
-        const resp = await call<wire_fs_copy_req, wire_fs_copy_resp>(redevenV1TypeIds.fs.copy, payload);
-        return fromWireFsCopyResponse(resp);
+        const resp = await call(redevenV1TypeIds.fs.copy, payload, decodeWire(redevenWireSchemaNames.fromWireFsCopyResponse, fromWireFsCopyResponse));
+        return resp;
       },
       delete: async (req) => {
         const payload = toWireFsDeleteRequest(req);
-        const resp = await call<wire_fs_delete_req, wire_fs_delete_resp>(redevenV1TypeIds.fs.delete, payload);
-        return fromWireFsDeleteResponse(resp);
+        const resp = await call(redevenV1TypeIds.fs.delete, payload, decodeWire(redevenWireSchemaNames.fromWireFsDeleteResponse, fromWireFsDeleteResponse));
+        return resp;
       },
     },
     git: {
       getCapabilities: async () => {
-        const resp = await call<Record<string, never>, wire_git_get_capabilities_resp>(redevenV1TypeIds.git.getCapabilities, {});
-        return fromWireGitCapabilitiesResponse(resp);
+        const resp = await call(redevenV1TypeIds.git.getCapabilities, {}, decodeWire(redevenWireSchemaNames.fromWireGitCapabilitiesResponse, fromWireGitCapabilitiesResponse));
+        return resp;
       },
       resolveRepo: async (req) => {
         const payload = toWireGitResolveRepoRequest(req);
-        const resp = await call<wire_git_resolve_repo_req, wire_git_resolve_repo_resp>(redevenV1TypeIds.git.resolveRepo, payload);
-        return fromWireGitResolveRepoResponse(resp);
+        const resp = await call(redevenV1TypeIds.git.resolveRepo, payload, decodeWire(redevenWireSchemaNames.fromWireGitResolveRepoResponse, fromWireGitResolveRepoResponse));
+        return resp;
       },
       getRepoSummary: async (req) => {
         const payload = toWireGitGetRepoSummaryRequest(req);
-        const resp = await call<wire_git_get_repo_summary_req, wire_git_get_repo_summary_resp>(redevenV1TypeIds.git.getRepoSummary, payload);
-        return fromWireGitGetRepoSummaryResponse(resp);
+        const resp = await call(redevenV1TypeIds.git.getRepoSummary, payload, decodeWire(redevenWireSchemaNames.fromWireGitGetRepoSummaryResponse, fromWireGitGetRepoSummaryResponse));
+        return resp;
       },
       listWorkspacePage: async (req) => {
         const payload = toWireGitListWorkspacePageRequest(req);
-        const resp = await call<wire_git_list_workspace_page_req, wire_git_list_workspace_page_resp>(redevenV1TypeIds.git.listWorkspacePage, payload);
-        return fromWireGitListWorkspacePageResponse(resp);
+        const resp = await call(redevenV1TypeIds.git.listWorkspacePage, payload, decodeWire(redevenWireSchemaNames.fromWireGitListWorkspacePageResponse, fromWireGitListWorkspacePageResponse));
+        return resp;
       },
       listWorkspacePathStatuses: async (req) => {
         const payload = toWireGitListWorkspacePathStatusesRequest(req);
-        const resp = await call<wire_git_list_workspace_path_statuses_req, wire_git_list_workspace_path_statuses_resp>(redevenV1TypeIds.git.listWorkspacePathStatuses, payload);
-        return fromWireGitListWorkspacePathStatusesResponse(resp);
+        const resp = await call(redevenV1TypeIds.git.listWorkspacePathStatuses, payload, decodeWire(redevenWireSchemaNames.fromWireGitListWorkspacePathStatusesResponse, fromWireGitListWorkspacePathStatusesResponse));
+        return resp;
       },
       listWorkspaceChanges: async (req) => {
         const payload = toWireGitListWorkspaceChangesRequest(req);
-        const resp = await call<wire_git_list_workspace_changes_req, wire_git_list_workspace_changes_resp>(redevenV1TypeIds.git.listWorkspaceChanges, payload);
-        return fromWireGitListWorkspaceChangesResponse(resp);
+        const resp = await call(redevenV1TypeIds.git.listWorkspaceChanges, payload, decodeWire(redevenWireSchemaNames.fromWireGitListWorkspaceChangesResponse, fromWireGitListWorkspaceChangesResponse));
+        return resp;
       },
       listStashes: async (req) => {
         const payload = toWireGitListStashesRequest(req);
-        const resp = await call<wire_git_list_stashes_req, wire_git_list_stashes_resp>(redevenV1TypeIds.git.listStashes, payload);
-        return fromWireGitListStashesResponse(resp);
+        const resp = await call(redevenV1TypeIds.git.listStashes, payload, decodeWire(redevenWireSchemaNames.fromWireGitListStashesResponse, fromWireGitListStashesResponse));
+        return resp;
       },
       getStashDetail: async (req) => {
         const payload = toWireGitGetStashDetailRequest(req);
-        const resp = await call<wire_git_get_stash_detail_req, wire_git_get_stash_detail_resp>(redevenV1TypeIds.git.getStashDetail, payload);
-        return fromWireGitGetStashDetailResponse(resp);
+        const resp = await call(redevenV1TypeIds.git.getStashDetail, payload, decodeWire(redevenWireSchemaNames.fromWireGitGetStashDetailResponse, fromWireGitGetStashDetailResponse));
+        return resp;
       },
       stageWorkspace: async (req) => {
         const payload = toWireGitStageWorkspaceRequest(req);
-        const resp = await call<wire_git_stage_workspace_req, wire_git_stage_workspace_resp>(redevenV1TypeIds.git.stageWorkspace, payload);
-        return fromWireGitStageWorkspaceResponse(resp);
+        const resp = await call(redevenV1TypeIds.git.stageWorkspace, payload, decodeWire(redevenWireSchemaNames.fromWireGitStageWorkspaceResponse, fromWireGitStageWorkspaceResponse));
+        return resp;
       },
       unstageWorkspace: async (req) => {
         const payload = toWireGitUnstageWorkspaceRequest(req);
-        const resp = await call<wire_git_unstage_workspace_req, wire_git_unstage_workspace_resp>(redevenV1TypeIds.git.unstageWorkspace, payload);
-        return fromWireGitUnstageWorkspaceResponse(resp);
+        const resp = await call(redevenV1TypeIds.git.unstageWorkspace, payload, decodeWire(redevenWireSchemaNames.fromWireGitUnstageWorkspaceResponse, fromWireGitUnstageWorkspaceResponse));
+        return resp;
       },
       discardWorkspace: async (req) => {
         const payload = toWireGitDiscardWorkspaceRequest(req);
-        const resp = await call<wire_git_discard_workspace_req, wire_git_discard_workspace_resp>(redevenV1TypeIds.git.discardWorkspace, payload);
-        return fromWireGitDiscardWorkspaceResponse(resp);
+        const resp = await call(redevenV1TypeIds.git.discardWorkspace, payload, decodeWire(redevenWireSchemaNames.fromWireGitDiscardWorkspaceResponse, fromWireGitDiscardWorkspaceResponse));
+        return resp;
       },
       commitWorkspace: async (req) => {
         const payload = toWireGitCommitWorkspaceRequest(req);
-        const resp = await call<wire_git_commit_workspace_req, wire_git_commit_workspace_resp>(redevenV1TypeIds.git.commitWorkspace, payload);
-        return fromWireGitCommitWorkspaceResponse(resp);
+        const resp = await call(redevenV1TypeIds.git.commitWorkspace, payload, decodeWire(redevenWireSchemaNames.fromWireGitCommitWorkspaceResponse, fromWireGitCommitWorkspaceResponse));
+        return resp;
       },
       saveStash: async (req) => {
         const payload = toWireGitSaveStashRequest(req);
-        const resp = await call<wire_git_save_stash_req, wire_git_save_stash_resp>(redevenV1TypeIds.git.saveStash, payload);
-        return fromWireGitSaveStashResponse(resp);
+        const resp = await call(redevenV1TypeIds.git.saveStash, payload, decodeWire(redevenWireSchemaNames.fromWireGitSaveStashResponse, fromWireGitSaveStashResponse));
+        return resp;
       },
       fetchRepo: async (req) => {
         const payload = toWireGitFetchRepoRequest(req);
-        const resp = await call<wire_git_fetch_repo_req, wire_git_fetch_repo_resp>(redevenV1TypeIds.git.fetchRepo, payload);
-        return fromWireGitFetchRepoResponse(resp);
+        const resp = await call(redevenV1TypeIds.git.fetchRepo, payload, decodeWire(redevenWireSchemaNames.fromWireGitFetchRepoResponse, fromWireGitFetchRepoResponse));
+        return resp;
       },
       pullRepo: async (req) => {
         const payload = toWireGitPullRepoRequest(req);
-        const resp = await call<wire_git_pull_repo_req, wire_git_pull_repo_resp>(redevenV1TypeIds.git.pullRepo, payload);
-        return fromWireGitPullRepoResponse(resp);
+        const resp = await call(redevenV1TypeIds.git.pullRepo, payload, decodeWire(redevenWireSchemaNames.fromWireGitPullRepoResponse, fromWireGitPullRepoResponse));
+        return resp;
       },
       pushRepo: async (req) => {
         const payload = toWireGitPushRepoRequest(req);
-        const resp = await call<wire_git_push_repo_req, wire_git_push_repo_resp>(redevenV1TypeIds.git.pushRepo, payload);
-        return fromWireGitPushRepoResponse(resp);
+        const resp = await call(redevenV1TypeIds.git.pushRepo, payload, decodeWire(redevenWireSchemaNames.fromWireGitPushRepoResponse, fromWireGitPushRepoResponse));
+        return resp;
       },
       checkoutBranch: async (req) => {
         const payload = toWireGitCheckoutBranchRequest(req);
-        const resp = await call<wire_git_checkout_branch_req, wire_git_checkout_branch_resp>(redevenV1TypeIds.git.checkoutBranch, payload);
-        return fromWireGitCheckoutBranchResponse(resp);
+        const resp = await call(redevenV1TypeIds.git.checkoutBranch, payload, decodeWire(redevenWireSchemaNames.fromWireGitCheckoutBranchResponse, fromWireGitCheckoutBranchResponse));
+        return resp;
       },
       switchDetached: async (req) => {
         const payload = toWireGitSwitchDetachedRequest(req);
-        const resp = await call<wire_git_switch_detached_req, wire_git_switch_detached_resp>(redevenV1TypeIds.git.switchDetached, payload);
-        return fromWireGitSwitchDetachedResponse(resp);
+        const resp = await call(redevenV1TypeIds.git.switchDetached, payload, decodeWire(redevenWireSchemaNames.fromWireGitSwitchDetachedResponse, fromWireGitSwitchDetachedResponse));
+        return resp;
       },
       previewDeleteBranch: async (req) => {
         const payload = toWireGitPreviewDeleteBranchRequest(req);
-        const resp = await call<wire_git_preview_delete_branch_req, wire_git_preview_delete_branch_resp>(redevenV1TypeIds.git.previewDeleteBranch, payload);
-        return fromWireGitPreviewDeleteBranchResponse(resp);
+        const resp = await call(redevenV1TypeIds.git.previewDeleteBranch, payload, decodeWire(redevenWireSchemaNames.fromWireGitPreviewDeleteBranchResponse, fromWireGitPreviewDeleteBranchResponse));
+        return resp;
       },
       deleteBranch: async (req) => {
         const payload = toWireGitDeleteBranchRequest(req);
-        const resp = await call<wire_git_delete_branch_req, wire_git_delete_branch_resp>(redevenV1TypeIds.git.deleteBranch, payload);
-        return fromWireGitDeleteBranchResponse(resp);
+        const resp = await call(redevenV1TypeIds.git.deleteBranch, payload, decodeWire(redevenWireSchemaNames.fromWireGitDeleteBranchResponse, fromWireGitDeleteBranchResponse));
+        return resp;
       },
       previewApplyStash: async (req) => {
         const payload = toWireGitPreviewApplyStashRequest(req);
-        const resp = await call<wire_git_preview_apply_stash_req, wire_git_preview_apply_stash_resp>(redevenV1TypeIds.git.previewApplyStash, payload);
-        return fromWireGitPreviewApplyStashResponse(resp);
+        const resp = await call(redevenV1TypeIds.git.previewApplyStash, payload, decodeWire(redevenWireSchemaNames.fromWireGitPreviewApplyStashResponse, fromWireGitPreviewApplyStashResponse));
+        return resp;
       },
       applyStash: async (req) => {
         const payload = toWireGitApplyStashRequest(req);
-        const resp = await call<wire_git_apply_stash_req, wire_git_apply_stash_resp>(redevenV1TypeIds.git.applyStash, payload);
-        return fromWireGitApplyStashResponse(resp);
+        const resp = await call(redevenV1TypeIds.git.applyStash, payload, decodeWire(redevenWireSchemaNames.fromWireGitApplyStashResponse, fromWireGitApplyStashResponse));
+        return resp;
       },
       previewDropStash: async (req) => {
         const payload = toWireGitPreviewDropStashRequest(req);
-        const resp = await call<wire_git_preview_drop_stash_req, wire_git_preview_drop_stash_resp>(redevenV1TypeIds.git.previewDropStash, payload);
-        return fromWireGitPreviewDropStashResponse(resp);
+        const resp = await call(redevenV1TypeIds.git.previewDropStash, payload, decodeWire(redevenWireSchemaNames.fromWireGitPreviewDropStashResponse, fromWireGitPreviewDropStashResponse));
+        return resp;
       },
       dropStash: async (req) => {
         const payload = toWireGitDropStashRequest(req);
-        const resp = await call<wire_git_drop_stash_req, wire_git_drop_stash_resp>(redevenV1TypeIds.git.dropStash, payload);
-        return fromWireGitDropStashResponse(resp);
+        const resp = await call(redevenV1TypeIds.git.dropStash, payload, decodeWire(redevenWireSchemaNames.fromWireGitDropStashResponse, fromWireGitDropStashResponse));
+        return resp;
       },
       previewMergeBranch: async (req) => {
         const payload = toWireGitPreviewMergeBranchRequest(req);
-        const resp = await call<wire_git_preview_merge_branch_req, wire_git_preview_merge_branch_resp>(redevenV1TypeIds.git.previewMergeBranch, payload);
-        return fromWireGitPreviewMergeBranchResponse(resp);
+        const resp = await call(redevenV1TypeIds.git.previewMergeBranch, payload, decodeWire(redevenWireSchemaNames.fromWireGitPreviewMergeBranchResponse, fromWireGitPreviewMergeBranchResponse));
+        return resp;
       },
       mergeBranch: async (req) => {
         const payload = toWireGitMergeBranchRequest(req);
-        const resp = await call<wire_git_merge_branch_req, wire_git_merge_branch_resp>(redevenV1TypeIds.git.mergeBranch, payload);
-        return fromWireGitMergeBranchResponse(resp);
+        const resp = await call(redevenV1TypeIds.git.mergeBranch, payload, decodeWire(redevenWireSchemaNames.fromWireGitMergeBranchResponse, fromWireGitMergeBranchResponse));
+        return resp;
       },
       listBranches: async (req) => {
         const payload = toWireGitListBranchesRequest(req);
-        const resp = await call<wire_git_list_branches_req, wire_git_list_branches_resp>(redevenV1TypeIds.git.listBranches, payload);
-        return fromWireGitListBranchesResponse(resp);
+        const resp = await call(redevenV1TypeIds.git.listBranches, payload, decodeWire(redevenWireSchemaNames.fromWireGitListBranchesResponse, fromWireGitListBranchesResponse));
+        return resp;
       },
       listCommits: async (req) => {
         const payload = toWireGitListCommitsRequest(req);
-        const resp = await call<wire_git_list_commits_req, wire_git_list_commits_resp>(redevenV1TypeIds.git.listCommits, payload);
-        return fromWireGitListCommitsResponse(resp);
+        const resp = await call(redevenV1TypeIds.git.listCommits, payload, decodeWire(redevenWireSchemaNames.fromWireGitListCommitsResponse, fromWireGitListCommitsResponse));
+        return resp;
       },
       getCommitDetail: async (req) => {
         const payload = toWireGitGetCommitDetailRequest(req);
-        const resp = await call<wire_git_get_commit_detail_req, wire_git_get_commit_detail_resp>(redevenV1TypeIds.git.getCommitDetail, payload);
-        return fromWireGitGetCommitDetailResponse(resp);
+        const resp = await call(redevenV1TypeIds.git.getCommitDetail, payload, decodeWire(redevenWireSchemaNames.fromWireGitGetCommitDetailResponse, fromWireGitGetCommitDetailResponse));
+        return resp;
       },
       getBranchCompare: async (req) => {
         const payload = toWireGitGetBranchCompareRequest(req);
-        const resp = await call<wire_git_get_branch_compare_req, wire_git_get_branch_compare_resp>(redevenV1TypeIds.git.getBranchCompare, payload);
-        return fromWireGitGetBranchCompareResponse(resp);
+        const resp = await call(redevenV1TypeIds.git.getBranchCompare, payload, decodeWire(redevenWireSchemaNames.fromWireGitGetBranchCompareResponse, fromWireGitGetBranchCompareResponse));
+        return resp;
       },
       getDiffContent: async (req) => {
         const payload = toWireGitGetDiffContentRequest(req);
-        const resp = await call<wire_git_get_diff_content_req, wire_git_get_diff_content_resp>(redevenV1TypeIds.git.getDiffContent, payload);
-        return fromWireGitGetDiffContentResponse(resp);
+        const resp = await call(redevenV1TypeIds.git.getDiffContent, payload, decodeWire(redevenWireSchemaNames.fromWireGitGetDiffContentResponse, fromWireGitGetDiffContentResponse));
+        return resp;
       },
     },
     terminal: {
       createSession: async (req) => {
         const payload = toWireTerminalSessionCreateRequest(req);
-        const resp = await call<wire_terminal_session_create_req, wire_terminal_session_create_resp>(redevenV1TypeIds.terminal.sessionCreate, payload);
-        return fromWireTerminalSessionCreateResponse(resp);
+        const resp = await call(redevenV1TypeIds.terminal.sessionCreate, payload, decodeWire(redevenWireSchemaNames.fromWireTerminalSessionCreateResponse, fromWireTerminalSessionCreateResponse));
+        return resp;
       },
       listSessions: async () => {
-        const resp = await call<Record<string, never>, wire_terminal_session_list_resp>(redevenV1TypeIds.terminal.sessionList, {});
-        return fromWireTerminalSessionListResponse(resp);
+        const resp = await call(redevenV1TypeIds.terminal.sessionList, {}, decodeWire(redevenWireSchemaNames.fromWireTerminalSessionListResponse, fromWireTerminalSessionListResponse));
+        return resp;
       },
       semanticHistory: async (req) => {
         const payload = toWireTerminalSemanticHistoryRequest(req);
-        const resp = await call<wire_terminal_history_req, wire_terminal_history_resp>(redevenV1TypeIds.terminal.semanticHistory, payload);
-        return fromWireTerminalSemanticHistoryResponse(resp);
+        const resp = await call(redevenV1TypeIds.terminal.semanticHistory, payload, decodeWire(redevenWireSchemaNames.fromWireTerminalSemanticHistoryResponse, fromWireTerminalSemanticHistoryResponse));
+        return resp;
       },
       semanticClear: async (req) => {
         const payload = toWireTerminalSemanticClearRequest(req);
-        const resp = await call<wire_terminal_clear_req, wire_terminal_clear_resp>(redevenV1TypeIds.terminal.semanticClear, payload);
-        return fromWireTerminalSemanticClearResponse(resp);
+        const resp = await call(redevenV1TypeIds.terminal.semanticClear, payload, decodeWire(redevenWireSchemaNames.fromWireTerminalSemanticClearResponse, fromWireTerminalSemanticClearResponse));
+        return resp;
       },
       deleteSession: async (req) => {
         const payload = toWireTerminalSessionDeleteRequest(req);
-        const resp = await call<wire_terminal_session_delete_req, wire_terminal_session_delete_resp>(redevenV1TypeIds.terminal.sessionDelete, payload);
-        return fromWireTerminalSessionDeleteResponse(resp);
+        const resp = await call(redevenV1TypeIds.terminal.sessionDelete, payload, decodeWire(redevenWireSchemaNames.fromWireTerminalSessionDeleteResponse, fromWireTerminalSessionDeleteResponse));
+        return resp;
       },
       onNameUpdate: (handler) =>
-        onNotify<wire_terminal_name_update_notify>(redevenV1TypeIds.terminal.nameUpdate, (payload) => {
-          const ev = fromWireTerminalNameUpdateNotify(payload);
+        helpers.onNotify(redevenV1TypeIds.terminal.nameUpdate, decodeWire(redevenWireSchemaNames.fromWireTerminalNameUpdateNotify, fromWireTerminalNameUpdateNotify), (ev) => {
           if (ev) handler(ev);
         }),
       onForegroundCommandUpdate: (handler) =>
-        onNotify<wire_terminal_foreground_command_update_notify>(redevenV1TypeIds.terminal.foregroundCommandUpdate, (payload) => {
-          const ev = fromWireTerminalForegroundCommandUpdateNotify(payload);
+        helpers.onNotify(redevenV1TypeIds.terminal.foregroundCommandUpdate, decodeWire(redevenWireSchemaNames.fromWireTerminalForegroundCommandUpdateNotify, fromWireTerminalForegroundCommandUpdateNotify), (ev) => {
           if (ev) handler(ev);
         }),
       onOutputActivityUpdate: (handler) =>
-        onNotify<wire_terminal_output_activity_update_notify>(redevenV1TypeIds.terminal.outputActivityUpdate, (payload) => {
-          const ev = fromWireTerminalOutputActivityUpdateNotify(payload);
+        helpers.onNotify(redevenV1TypeIds.terminal.outputActivityUpdate, decodeWire(redevenWireSchemaNames.fromWireTerminalOutputActivityUpdateNotify, fromWireTerminalOutputActivityUpdateNotify), (ev) => {
           if (ev) {
             handler(ev);
             return;
@@ -605,8 +530,7 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
           });
         }),
       onExecutionContextUpdate: (handler) =>
-        onNotify<wire_terminal_execution_context_update_notify>(redevenV1TypeIds.terminal.executionContextUpdate, (payload) => {
-          const ev = fromWireTerminalExecutionContextUpdateNotify(payload);
+        helpers.onNotify(redevenV1TypeIds.terminal.executionContextUpdate, decodeWire(redevenWireSchemaNames.fromWireTerminalExecutionContextUpdateNotify, fromWireTerminalExecutionContextUpdateNotify), (ev) => {
           if (ev) {
             handler(ev);
             return;
@@ -625,8 +549,7 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
           });
         }),
       onWorkStateUpdate: (handler) =>
-        onNotify<wire_terminal_work_state_update_notify>(redevenV1TypeIds.terminal.workStateUpdate, (payload) => {
-          const ev = fromWireTerminalWorkStateUpdateNotify(payload);
+        helpers.onNotify(redevenV1TypeIds.terminal.workStateUpdate, decodeWire(redevenWireSchemaNames.fromWireTerminalWorkStateUpdateNotify, fromWireTerminalWorkStateUpdateNotify), (ev) => {
           if (ev) {
             handler(ev);
             return;
@@ -645,81 +568,79 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
           });
         }),
       onSessionsChanged: (handler) =>
-        onNotify<wire_terminal_sessions_changed_notify>(redevenV1TypeIds.terminal.sessionsChanged, (payload) => {
-          const ev = fromWireTerminalSessionsChangedNotify(payload);
+        helpers.onNotify(redevenV1TypeIds.terminal.sessionsChanged, decodeWire(redevenWireSchemaNames.fromWireTerminalSessionsChangedNotify, fromWireTerminalSessionsChangedNotify), (ev) => {
           if (ev) handler(ev);
         }),
     },
     ai: {
       sendUserTurn: async (req) => {
         const payload = toWireAISendUserTurnRequest(req);
-        const resp = await call<wire_ai_send_user_turn_req, wire_ai_send_user_turn_resp>(redevenV1TypeIds.ai.sendUserTurn, payload);
-        return fromWireAISendUserTurnResponse(resp);
+        const resp = await call(redevenV1TypeIds.ai.sendUserTurn, payload, decodeWire(redevenWireSchemaNames.fromWireAISendUserTurnResponse, fromWireAISendUserTurnResponse));
+        return resp;
       },
       submitRequestUserInputResponse: async (req) => {
         const payload = toWireAISubmitRequestUserInputResponseRequest(req);
-        const resp = await call<wire_ai_submit_request_user_input_response_req, wire_ai_submit_request_user_input_response_resp>(redevenV1TypeIds.ai.submitRequestUserInputResponse, payload);
-        return fromWireAISubmitRequestUserInputResponseResponse(resp);
+        const resp = await call(redevenV1TypeIds.ai.submitRequestUserInputResponse, payload, decodeWire(redevenWireSchemaNames.fromWireAISubmitRequestUserInputResponseResponse, fromWireAISubmitRequestUserInputResponseResponse));
+        return resp;
       },
       stopThread: async (req) => {
         const payload = toWireAIStopThreadRequest(req);
-        const resp = await call<wire_ai_stop_thread_req, wire_ai_stop_thread_resp>(redevenV1TypeIds.ai.stopThread, payload);
-        return fromWireAIStopThreadResponse(resp);
+        const resp = await call(redevenV1TypeIds.ai.stopThread, payload, decodeWire(redevenWireSchemaNames.fromWireAIStopThreadResponse, fromWireAIStopThreadResponse));
+        return resp;
       },
       listMessages: async (req) => {
         const payload = toWireAIListMessagesRequest(req);
-        const resp = await call<wire_ai_list_messages_req, wire_ai_list_messages_resp>(redevenV1TypeIds.ai.listMessages, payload);
-        return fromWireAIListMessagesResponse(resp);
+        const resp = await call(redevenV1TypeIds.ai.listMessages, payload, decodeWire(redevenWireSchemaNames.fromWireAIListMessagesResponse, fromWireAIListMessagesResponse));
+        return resp;
       },
       onEvent: (handler) =>
-        onNotify<wire_ai_event_notify>(redevenV1TypeIds.ai.event, (payload) => {
-          const ev = fromWireAIEventNotify(payload);
+        helpers.onNotify(redevenV1TypeIds.ai.event, decodeWire(redevenWireSchemaNames.fromWireAIEventNotify, fromWireAIEventNotify), (ev) => {
           if (ev) handler(ev);
         }),
     },
     monitor: {
       getSysMonitor: async (req = {}) => {
         const payload = toWireSysMonitorRequest(req);
-        const resp = await call<wire_sys_monitor_req, wire_sys_monitor_resp>(redevenV1TypeIds.monitor.sysMonitor, payload);
-        return fromWireSysMonitorResponse(resp);
+        const resp = await call(redevenV1TypeIds.monitor.sysMonitor, payload, decodeWire(redevenWireSchemaNames.fromWireSysMonitorResponse, fromWireSysMonitorResponse));
+        return resp;
       },
       killProcess: async (req) => {
         const payload = toWireSysMonitorKillProcessRequest(req);
-        const resp = await call<wire_sys_monitor_kill_process_req, wire_sys_monitor_kill_process_resp>(redevenV1TypeIds.monitor.killProcess, payload);
-        return fromWireSysMonitorKillProcessResponse(resp);
+        const resp = await call(redevenV1TypeIds.monitor.killProcess, payload, decodeWire(redevenWireSchemaNames.fromWireSysMonitorKillProcessResponse, fromWireSysMonitorKillProcessResponse));
+        return resp;
       },
     },
     sessions: {
       listActiveSessions: async () => {
-        const resp = await call<Record<string, never>, wire_sessions_list_active_resp>(redevenV1TypeIds.sessions.listActive, {});
-        return fromWireSessionsListActiveResponse(resp);
+        const resp = await call(redevenV1TypeIds.sessions.listActive, {}, decodeWire(redevenWireSchemaNames.fromWireSessionsListActiveResponse, fromWireSessionsListActiveResponse));
+        return resp;
       },
     },
     access: {
       status: async () => {
-        const resp = await call<Record<string, never>, wire_access_status_resp>(redevenV1TypeIds.access.status, {});
-        return fromWireAccessStatusResponse(resp);
+        const resp = await call(redevenV1TypeIds.access.status, {}, decodeWire(redevenWireSchemaNames.fromWireAccessStatusResponse, fromWireAccessStatusResponse));
+        return resp;
       },
       resume: async (req) => {
         const payload = toWireAccessResumeRequest(req);
-        const resp = await call<wire_access_resume_req, wire_access_resume_resp>(redevenV1TypeIds.access.resume, payload);
-        return fromWireAccessResumeResponse(resp);
+        const resp = await call(redevenV1TypeIds.access.resume, payload, decodeWire(redevenWireSchemaNames.fromWireAccessResumeResponse, fromWireAccessResumeResponse));
+        return resp;
       },
     },
     sys: {
       ping: async () => {
-        const resp = await call<Record<string, never>, wire_sys_ping_resp>(redevenV1TypeIds.sys.ping, {});
-        return fromWireSysPingResponse(resp);
+        const resp = await call(redevenV1TypeIds.sys.ping, {}, decodeWire(redevenWireSchemaNames.fromWireSysPingResponse, fromWireSysPingResponse));
+        return resp;
       },
       upgrade: async (req = {}) => {
         const payload = toWireSysUpgradeRequest(req);
-        const resp = await call<wire_sys_upgrade_req, wire_sys_upgrade_resp>(redevenV1TypeIds.sys.upgrade, payload);
-        return fromWireSysUpgradeResponse(resp);
+        const resp = await call(redevenV1TypeIds.sys.upgrade, payload, decodeWire(redevenWireSchemaNames.fromWireSysUpgradeResponse, fromWireSysUpgradeResponse));
+        return resp;
       },
       restart: async () => {
         const payload = toWireSysRestartRequest();
-        const resp = await call<wire_sys_restart_req, wire_sys_restart_resp>(redevenV1TypeIds.sys.restart, payload);
-        return fromWireSysRestartResponse(resp);
+        const resp = await call(redevenV1TypeIds.sys.restart, payload, decodeWire(redevenWireSchemaNames.fromWireSysRestartResponse, fromWireSysRestartResponse));
+        return resp;
       },
     },
   };

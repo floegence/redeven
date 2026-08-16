@@ -84,6 +84,8 @@ func (c *cli) run(args []string) int {
 		return c.desktopModelSourceCmd(args[1:])
 	case "plugin-state-recovery":
 		return c.pluginStateRecoveryCmd(args[1:])
+	case "local-authority":
+		return c.localAuthorityCmd(args[1:])
 	case "env":
 		return c.envCmd(args[1:])
 	case "search":

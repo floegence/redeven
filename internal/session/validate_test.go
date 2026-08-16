@@ -3,6 +3,7 @@ package session
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestValidateGrantServerNotifyRemote(t *testing.T) {
@@ -76,6 +77,27 @@ func TestValidateGrantServerNotifyRemote(t *testing.T) {
 			wantError: "grant_server.channel_id mismatch",
 		},
 		{
+			name: "rejects missing artifact",
+			mutate: func(n *GrantServerNotify) {
+				n.GrantServer.ArtifactJSON = nil
+			},
+			wantError: "artifact_json",
+		},
+		{
+			name: "rejects expired artifact",
+			mutate: func(n *GrantServerNotify) {
+				n.GrantServer.ArtifactExpiresAtUnixS = time.Now().Add(-time.Second).Unix()
+			},
+			wantError: "must be in the future",
+		},
+		{
+			name: "rejects artifact beyond maximum lifetime",
+			mutate: func(n *GrantServerNotify) {
+				n.GrantServer.ArtifactExpiresAtUnixS = time.Now().Add(MaxGrantArtifactLifetime + time.Minute).Unix()
+			},
+			wantError: "maximum lifetime",
+		},
+		{
 			name: "rejects endpoint mismatch",
 			mutate: func(n *GrantServerNotify) {
 				n.SessionMeta.EndpointID = "env_other"
@@ -141,8 +163,9 @@ func TestValidateGrantServerNotifyRemoteRejectsMissingNotify(t *testing.T) {
 func validRemoteNotifyForTest() GrantServerNotify {
 	return GrantServerNotify{
 		GrantServer: &ChannelInitGrant{
-			ChannelID:    "ch_remote",
-			ArtifactJSON: []byte(`{"version":2}`),
+			ChannelID:              "ch_remote",
+			ArtifactJSON:           []byte(`{"version":2}`),
+			ArtifactExpiresAtUnixS: time.Now().Add(2 * time.Minute).Unix(),
 		},
 		SessionMeta: &Meta{
 			ChannelID:         "ch_remote",

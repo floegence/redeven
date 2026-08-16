@@ -1,5 +1,6 @@
 import type { ContextActionEnvelope } from '../../../contextActions/protocol';
 import type { FlowerReasoningSelection, FlowerTimelineDecoration } from '../../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { JsonValue } from '@floegence/flowersec-core';
 
 export type wire_ai_attachment = {
   name: string;
@@ -106,8 +107,8 @@ export type wire_ai_event_notify = {
   at_unix_ms: number;
   stream_kind?: 'lifecycle' | 'assistant' | 'tool' | 'context';
   phase?: 'start' | 'state_change' | 'end' | 'error';
-  diag?: Record<string, any>;
-  stream_event?: any;
+  diag?: Record<string, JsonValue>;
+  stream_event?: JsonValue;
   run_status?: string;
   run_error_code?: string;
   run_error?: string;
@@ -140,7 +141,7 @@ export type wire_ai_list_messages_req = {
 
 export type wire_ai_timeline_message_item = {
   row_id: number;
-  message_json: any;
+  message_json: JsonValue;
 };
 
 export type wire_ai_list_messages_resp = {

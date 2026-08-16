@@ -49,10 +49,6 @@ import {
   type BottomBarCompanionPhase,
 } from '@floegence/floe-webapp-core/layout';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
-import {
-  createArtifactDirectConnectionConfig,
-  createProxyRuntimeTunnelConnectionConfig,
-} from '@floegence/floe-webapp-boot';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { pluginMutationOutcome } from '@floegence/redevplugin-ui';
 
@@ -119,11 +115,8 @@ import { createDownloadManager } from './downloads/createDownloadManager';
 import { createRuntimeDownloadSource } from './downloads/runtimeDownloadSource';
 import { resolveDownloadPlatformSink } from './downloads/downloadPlatformResolver';
 import {
-  LOCAL_FAST_RECONNECT_POLICY,
-  REMOTE_FAST_RECONNECT_POLICY,
   classifyReconnectFailure,
   createRuntimeReconnectController,
-  type ReconnectAvailability,
 } from './reconnect/createRuntimeReconnectController';
 import { ConnectionRecoveryView } from './reconnect/ConnectionRecoveryView';
 import { createDebugConsoleController } from './debugConsole/createDebugConsoleController';
@@ -144,6 +137,7 @@ import { fileItemFromPath } from './utils/filePreviewItem';
 import { reloadCurrentPage } from './utils/windowNavigation';
 import { resolveEnvSidebarVisibilityMotion, shouldEnvTabOpenSidebar } from './envSidebarVisibilityMotion';
 import { createUIPresentationEventRecorder } from './services/uiPresentationTransactions';
+import { createEnvAppConnectionRuntime } from './services/connectionRuntime';
 import { TerminalSessionCatalogProvider } from './services/terminalSessionCatalog';
 import { buildDesktopShellCommandPaletteEntries } from './services/desktopShellCommandPalette';
 import {
@@ -178,15 +172,14 @@ import { getSandboxWindowInfo } from './services/sandboxWindowRegistry';
 import { consumeAccessResumeTokenFromWindow } from './accessResume';
 import { CODE_SPACE_ID_ENV_UI, FLOE_APP_AGENT, FLOE_APP_CODE, FLOE_APP_PORT_FORWARD, type LauncherFloeApp } from './services/floeproxyContract';
 import {
-  connectArtifactEntry,
+  createEnvProxyArtifactSource,
+  createLocalDirectArtifactSource,
   type EnvironmentDetailRequest,
   getEnvPublicIDFromSession,
   getLocalAccessStatus,
   getLocalRuntime,
   refreshLocalRuntime,
   getEnvironment,
-  mintEnvProxyEntryTicket,
-  mintLocalDirectConnectArtifact,
   mintEnvEntryTicketForApp,
   unlockLocalAccess,
   type EnvironmentDetail,
@@ -538,6 +531,7 @@ export function EnvAppShell() {
     return theme.shellPresetForMode(mode)?.name === presetName;
   };
   const protocol = useProtocol();
+  let remoteProxyServiceWorkerControlled = false;
   const rpc = useRedevenRpc();
   const cmd = useCommand();
   const notify = useNotification();
@@ -871,58 +865,6 @@ export function EnvAppShell() {
     const handle = window.setInterval(() => setAccessRetryNowMs(Date.now()), 1_000);
     onCleanup(() => window.clearInterval(handle));
   });
-
-  const probeRemoteRuntimeAvailability = async (): Promise<ReconnectAvailability> => {
-    const id = envId();
-    if (!id) {
-      return { status: 'unknown', access: 'unknown' };
-    }
-
-    try {
-      const request = environmentDetailRequest() ?? { source: 'controlplane' as const, envId: id };
-      const detail = await getEnvironment(request);
-      return {
-        status: String(detail?.status ?? '').trim().toLowerCase() === 'offline' ? 'offline' : 'online',
-        access: 'unknown',
-      };
-    } catch (error) {
-      return {
-        status: 'unknown',
-        access: 'unknown',
-        failure: classifyReconnectFailure(error),
-      };
-    }
-  };
-
-  const probeLocalRuntimeAvailability = async (): Promise<ReconnectAvailability> => {
-    const status = await getLocalAccessStatus();
-    if (!status) {
-      return {
-        status: 'offline',
-        access: 'unknown',
-        failure: classifyReconnectFailure({ code: 'LOCAL_RUNTIME_UNAVAILABLE' }),
-      };
-    }
-
-    if (status.password_required && !status.unlocked) {
-      markCurrentAccessLocked(i18n.t('accessGate.passwordExpiredError'));
-      return {
-        status: 'online',
-        access: 'locked',
-        failure: {
-          code: 'authentication_failed',
-          retryable: false,
-          technical_detail: '',
-        },
-      };
-    }
-
-    setLocalAccessStatus(status);
-    setLocalAccessChecked(true);
-    setCurrentAccessChannelReady(false);
-    setCurrentAccessError(null);
-    return { status: 'online', access: 'ready' };
-  };
 
   const [envId, setEnvId] = createSignal(getEnvPublicIDFromSession());
   const environmentDetailRequest = createMemo<EnvironmentDetailRequest | null>(() => {
@@ -2384,66 +2326,80 @@ export function EnvAppShell() {
     }
   };
 
-  const acquireRemoteArtifact = async (ctx: Readonly<{ signal: AbortSignal }>) => {
-    const id = envId();
-    if (!id) throw new Error(i18n.t('shell.status.missingEnvContext'));
-
-    // Probe runtime status to avoid grant-audit spam while the runtime is clearly offline.
-    let agentStatus: string | null = null;
-    try {
-      const detail = await getEnvironment({ source: 'controlplane', envId: id });
-      // `status` is the only availability source of truth returned by the controlplane API.
-      agentStatus = detail?.status ? String(detail.status) : null;
-    } catch (error) {
-      const failure = classifyReconnectFailure(error);
-      if (!failure.retryable) throw error;
-      // For transient failures (meta/network), continue with the grant flow below.
-    }
-    if (agentStatus && agentStatus !== 'online') {
-      throw new Error(`Runtime is ${agentStatus}.`);
-    }
-
-    const entryTicket = await mintEnvProxyEntryTicket({
-      endpointId: id,
+  const connectionRuntime = createEnvAppConnectionRuntime({
+    ...(localTransportSecurity.policy ? {
+      localSource: () => createLocalDirectArtifactSource({
+        beforeAcquire: async () => {
+          setPluginSessionReady(false);
+          setPluginRuntimeRecoveryComplete(false);
+          if (!readPluginSessionCredential()) return;
+          pluginConfirmationQueue.cancelAll();
+          await Promise.allSettled([
+            pluginSurfaceCoordinator.closeAll(),
+            workbenchPluginSurfaceController?.closeAll() ?? Promise.resolve(),
+          ]);
+          setActivityPluginWindows([]);
+          clearPluginSessionCredential();
+        },
+        afterCredentialStaged: () => {
+          if (pluginSessionRetired()) clearPluginSessionCredential();
+        },
+      }),
+    } : {}),
+    remoteSource: () => createEnvProxyArtifactSource({
+      endpointId: envId,
       floeApp: FLOE_APP_AGENT,
       codeSpaceId: CODE_SPACE_ID_ENV_UI,
-    });
-
-    return connectArtifactEntry({
-      endpointId: id,
-      floeApp: FLOE_APP_AGENT,
-      entryTicket,
       ...(allowLoopbackControlplaneHTTP(window.location.protocol, localTransportSecurity)
         ? { allowLoopbackHTTP: true }
         : {}),
-      signal: ctx.signal,
-    });
-  };
+      prepareAcquire: async ({ endpointId }) => {
+        const { registerServiceWorkerAndEnsureControl } = await import('@floegence/flowersec-core/proxy');
+        await registerServiceWorkerAndEnsureControl({
+          scriptUrl: '/_redeven_sw.js',
+          scope: '/',
+          repairQueryKey: '_redeven_sw_repair',
+          maxRepairAttempts: 2,
+          controllerTimeoutMs: 8_000,
+        });
+        remoteProxyServiceWorkerControlled = true;
 
-  const acquireLocalDirectArtifact = async (context: Readonly<{ signal: AbortSignal }>) => {
-    setPluginSessionReady(false);
-    setPluginRuntimeRecoveryComplete(false);
-    if (readPluginSessionCredential()) {
-      pluginConfirmationQueue.cancelAll();
-      await Promise.allSettled([
-        pluginSurfaceCoordinator.closeAll(),
-        workbenchPluginSurfaceController?.closeAll() ?? Promise.resolve(),
-      ]);
-      setActivityPluginWindows([]);
-      clearPluginSessionCredential();
-    }
-    const artifact = await mintLocalDirectConnectArtifact(context);
-    if (pluginSessionRetired()) clearPluginSessionCredential();
-    return artifact;
-  };
-
-  const localProtocolConnectConfig: ProtocolConnectConfig | null = localTransportSecurity.policy ? createArtifactDirectConnectionConfig({
-    source: { acquire: acquireLocalDirectArtifact },
-    controller: { maximumAttempts: LOCAL_FAST_RECONNECT_POLICY.maxAttempts },
-  }) : null;
-  const remoteProtocolConnectConfig: ProtocolConnectConfig = createProxyRuntimeTunnelConnectionConfig({
-    source: { acquire: acquireRemoteArtifact },
-    controller: { maximumAttempts: REMOTE_FAST_RECONNECT_POLICY.maxAttempts },
+        // Probe runtime status to avoid grant-audit spam while the runtime is clearly offline.
+        let agentStatus: string | null = null;
+        try {
+          const detail = await getEnvironment({ source: 'controlplane', envId: endpointId });
+          // `status` is the only availability source of truth returned by the controlplane API.
+          agentStatus = detail?.status ? String(detail.status) : null;
+        } catch (error) {
+          const failure = classifyReconnectFailure(error);
+          if (!failure.retryable) throw error;
+          // For transient failures (meta/network), continue with the grant flow below.
+        }
+        if (agentStatus && agentStatus !== 'online') {
+          throw new Error(`Runtime is ${agentStatus}.`);
+        }
+      },
+    }),
+    proxyBootstrap: async () => {
+      const { registerProxyControllerWindow } = await import('@floegence/flowersec-core/proxy');
+      return {
+        controllerBridge: ({ runtime, allowedOrigins, capabilityNonce }) => registerProxyControllerWindow({
+          runtime,
+          allowedOrigins,
+          capabilityNonce,
+          targetWindow: window,
+          expectedSource: window.parent === window ? null : window.parent,
+        }),
+        serviceWorker: ({ scriptUrl, serviceWorkerScope }) => {
+          if (!remoteProxyServiceWorkerControlled || scriptUrl !== '/_redeven_sw.js' || serviceWorkerScope !== '/') {
+            throw new Error('Remote proxy service worker binding is unavailable');
+          }
+          // Floe owns the runtime generation and disposes it exactly once. The
+          // service worker already controls this page before acquisition begins.
+          return { dispose: () => undefined };
+        },
+      };
+    },
   });
 
   const runConnect = async (fn: (config: ProtocolConnectConfig) => Promise<void>) => {
@@ -2458,7 +2414,7 @@ export function EnvAppShell() {
         retryable: false,
         technical_detail: '',
         error_code: 'MISSING_ENV_CONTEXT',
-      });
+      }, { attempt: protocol.snapshot().attempt, terminal: true });
       protocol.disconnect();
       return;
     }
@@ -2471,13 +2427,23 @@ export function EnvAppShell() {
     setCurrentAccessError(null);
     setManualError(null);
 
+    let configLease: Awaited<ReturnType<typeof connectionRuntime.createConfig>> | undefined;
     try {
-      if (isLocalMode()) {
-        if (!localProtocolConnectConfig) {
-          throw new Error(localTransportSecurity.error || i18n.t('networkExposure.policyUnavailable'));
-        }
+      const mode = isLocalMode() ? 'local' : 'remote';
+      if (mode === 'local' && !localTransportSecurity.policy) {
+        throw new Error(localTransportSecurity.error || i18n.t('networkExposure.policyUnavailable'));
+      }
+      configLease = await connectionRuntime.createConfig(mode);
+      if (accessRecoverySeq !== attemptKey) {
+        configLease.dispose();
+        return;
+      }
+
+      const config = configLease.config as ProtocolConnectConfig;
+      if (mode === 'local') {
         setLocalAccessChannelReady(false);
-        await fn(localProtocolConnectConfig);
+        await fn(config);
+        configLease = undefined;
         if (accessRecoverySeq !== attemptKey) return;
         if (!pluginSessionRetired() && !pluginSessionReady()) {
           setPluginSessionReady(activatePendingPluginSessionCredential());
@@ -2487,11 +2453,13 @@ export function EnvAppShell() {
         setCurrentAccessError(null);
         setManualError(null);
       } else {
-        await fn(remoteProtocolConnectConfig);
+        await fn(config);
+        configLease = undefined;
         if (accessRecoverySeq !== attemptKey) return;
         await ensureAccessResumed(attemptKey);
       }
     } catch (error) {
+      configLease?.dispose();
       if (accessRecoverySeq === attemptKey) {
         handleAccessRecoveryFailure(error);
         protocol.disconnect();
@@ -2504,7 +2472,20 @@ export function EnvAppShell() {
   };
 
   const connect = async () => runConnect((config) => protocol.connect(config));
-  const reconnect = async () => runConnect((config) => protocol.reconnect(config));
+  const replaceConnection = async () => runConnect((config) => protocol.replaceConnection(config));
+  const reconnect = async () => {
+    const state = protocol.snapshot().state;
+    if (state === 'waiting') {
+      // Flowersec owns retry_after and backoff. A false result deliberately
+      // leaves the controller waiting instead of rebuilding it.
+      protocol.retryNow();
+      return;
+    }
+    if (state === 'connected' || state === 'connecting') return;
+    if (state === 'idle') {
+      await connect();
+    }
+  };
 
   const retryAccessConnection = async () => {
     if (accessPending() || accessLocked() || accessUnlocking()) return;
@@ -2534,8 +2515,7 @@ export function EnvAppShell() {
   const reconnectController = createRuntimeReconnectController({
     enabled: runtimeConnectionEstablished,
     desktopTransport: desktopTransportRecovery,
-    probeAvailability: () => (isLocalMode() ? probeLocalRuntimeAvailability() : probeRemoteRuntimeAvailability()),
-    reconnect,
+    retryProtocolNow: () => protocol.retryNow(),
     requestDesktopRecoveryNow: requestDesktopTransportRecoveryNow,
   });
 
@@ -2897,8 +2877,10 @@ export function EnvAppShell() {
       return true;
     }
     if (recoverySnapshot().state === 'recovering') {
-      return recoverySnapshot().phase === 'protocol_connect'
-        || recoverySnapshot().phase === 'secure_session';
+      if (recoverySnapshot().phase === 'desktop_transport') {
+        return !(recoverySnapshot().desktop_transport?.actions.includes('retry_now') ?? false);
+      }
+      return recoverySnapshot().phase === 'secure_session';
     }
 
     return accessRecoveryBusy() || connecting();
@@ -2968,7 +2950,12 @@ export function EnvAppShell() {
         setRemoteAccessChecked(true);
       }
 
-      await connect();
+      const connectionState = protocol.snapshot().state;
+      if (connectionState === 'failed' || connectionState === 'closed') {
+        await replaceConnection();
+      } else {
+        await connect();
+      }
     } catch (error) {
       const message = localizedAccessUnlockErrorMessage(error, i18n);
       const retryAfterMs = getAccessUnlockRetryAfterMs(error);
@@ -3001,11 +2988,17 @@ export function EnvAppShell() {
   createEffect(() => {
     if (!runtimeConnectionEstablished() || connectionAttemptSeq() <= 0) return;
 
-    const protocolStatusValue = String(protocol.status() ?? '').trim();
+    const protocolSnapshot = protocol.snapshot();
+    const protocolStatusValue = String(protocolSnapshot.state ?? '').trim();
     if (!protocolStatusValue) return;
-    if (accessRecoveryBusy() && protocolStatusValue === 'disconnected') return;
-
-    const rawFailure = manualError() || protocol.error();
+    const snapshotFailureCode = String(protocolSnapshot.failure?.code ?? '').trim();
+    const protocolError = protocol.error();
+    const rawFailure = manualError() || (snapshotFailureCode
+      ? {
+          code: snapshotFailureCode,
+          message: protocolError?.message ?? `${protocolSnapshot.failure?.phase ?? 'connection'}:${snapshotFailureCode}`,
+        }
+      : protocolError);
     const failure = classifyReconnectFailure(rawFailure);
 
     if (protocolStatusValue === 'connected') {
@@ -3023,11 +3016,21 @@ export function EnvAppShell() {
     }
 
     lastConnectedClient = null;
+    if (isLocalMode() && snapshotFailureCode.toUpperCase() === 'ACCESS_PASSWORD_REQUIRED') {
+      markCurrentAccessLocked(i18n.t('accessGate.passwordExpiredError'));
+    }
     if (protocolStatusValue === 'connecting') {
-      untrack(() => reconnectController.noteProtocolConnecting());
+      untrack(() => reconnectController.noteProtocolConnecting(protocolSnapshot.attempt));
       return;
     }
-    untrack(() => reconnectController.activateWaiting(failure));
+    const retryDisposition = protocolSnapshot.retryDisposition;
+    untrack(() => reconnectController.activateWaiting(failure, {
+      attempt: protocolSnapshot.attempt,
+      terminal: retryDisposition?.kind === 'terminal' || protocolStatusValue === 'failed' || protocolStatusValue === 'closed',
+      ...(retryDisposition?.kind === 'retry_after'
+        ? { nextRetryAtUnixMs: retryDisposition.notBeforeUnixMilliseconds }
+        : {}),
+    }));
   });
 
   createEffect(() => {
@@ -3259,6 +3262,7 @@ export function EnvAppShell() {
   });
 
   onCleanup(() => {
+    accessRecoverySeq += 1;
     protocol.disconnect();
   });
 
