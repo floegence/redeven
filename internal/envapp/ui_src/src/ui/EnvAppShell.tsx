@@ -4678,11 +4678,11 @@ export function EnvAppShell() {
             <Show when={!accessGateVisible() || recoveryVisible()}>
               <ActivityAppsMain activeId={() => layout.sidebarActiveTab()} activationMode="after-paint" />
             </Show>
-            <Show when={accessGateVisible() && !recoveryVisible()}>
+            <Show when={viewMode() === 'activity' && accessGateVisible() && !recoveryVisible()}>
               {accessGatePanel()}
             </Show>
           </div>
-          <Show when={recoveryVisible()}>
+          <Show when={viewMode() === 'activity' && recoveryVisible()}>
             <Show
               when={accessGatePhase() === 'unlock_required'}
               fallback={(
@@ -4747,11 +4747,11 @@ export function EnvAppShell() {
             }}
           />
         </Show>
-        <Show when={accessGateVisible() && !recoveryVisible()}>
+        <Show when={viewMode() === 'workbench' && accessGateVisible() && !recoveryVisible()}>
           {accessGatePanel()}
         </Show>
       </div>
-      <Show when={recoveryVisible()}>
+      <Show when={viewMode() === 'workbench' && recoveryVisible()}>
         <Show
           when={accessGatePhase() === 'unlock_required'}
           fallback={(
