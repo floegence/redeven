@@ -1,13 +1,13 @@
 use redevplugin_worker_sdk::{
-    WorkerError, WorkerRequest, WorkerResult,
+    IO_FLAG_EOF, WorkerError, WorkerRequest, WorkerResult,
     error::{Error as PlatformError, ErrorCode},
     export_worker, fs, http, tcp, udp, websocket,
 };
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 
 const BYTES: usize = 64 * 1024 * 1024;
 const CHUNK: usize = 64 * 1024;
+const EXPECTED_SHA256: &str = "77a0c90e19a4122c3bb62fa54f710f121a215a2123ea7f0b38ec1b1265bcac83";
 
 fn server(params: &Value) -> Result<(u16, u16, u16, u16), WorkerError> {
     let value = params.get("server").unwrap_or(&Value::Null);
@@ -49,6 +49,47 @@ fn platform_error(error: PlatformError) -> WorkerError {
     WorkerError::new(code, error.message)
 }
 
+fn validate_samples(chunk: &[u8], offset: usize) -> Result<(), WorkerError> {
+    if chunk.is_empty() {
+        return Ok(());
+    }
+    for index in [0, chunk.len() / 2, chunk.len() - 1] {
+        let expected = (((offset + index) % CHUNK) % 251) as u8;
+        if chunk[index] != expected {
+            return Err(WorkerError::new(
+                "SMOKE_CONTENT_MISMATCH",
+                "streamed payload sample did not match deterministic content",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn read_json_body(mut body: http::ResponseBody) -> Result<Value, WorkerError> {
+    let mut bytes = Vec::new();
+    loop {
+        let (chunk, flags) = body.read(CHUNK).map_err(platform_error)?;
+        if bytes.len() + chunk.len() > CHUNK {
+            return Err(WorkerError::new(
+                "SMOKE_RESPONSE_INVALID",
+                "fixture response exceeded the bounded JSON response size",
+            ));
+        }
+        bytes.extend_from_slice(&chunk);
+        if flags & IO_FLAG_EOF != 0 {
+            body.close().map_err(platform_error)?;
+            return serde_json::from_slice(&bytes)
+                .map_err(|error| WorkerError::new("SMOKE_RESPONSE_INVALID", error.to_string()));
+        }
+        if chunk.is_empty() {
+            return Err(WorkerError::new(
+                "SMOKE_RESPONSE_INVALID",
+                "fixture response made no progress",
+            ));
+        }
+    }
+}
+
 fn run(params: Value) -> WorkerResult {
     let (http_port, ws_port, tcp_port, udp_port) = server(&params)?;
     let uri = "redevfs://environment/tmp/redevplugin-io-smoke/data.bin";
@@ -73,17 +114,12 @@ fn run(params: Value) -> WorkerResult {
         },
     )
     .map_err(platform_error)?;
-    let mut expected = Sha256::new();
     for _ in 0..(BYTES / CHUNK) {
         file.write_all(&source).map_err(platform_error)?;
-        expected.update(&source);
     }
     file.sync().map_err(platform_error)?;
     file.close().map_err(platform_error)?;
     let stat = fs::stat(uri, true).map_err(platform_error)?;
-    let read = fs::read_file(uri).map_err(platform_error)?;
-    let mut actual = Sha256::new();
-    actual.update(&read);
     let mut dir = fs::Directory::open("redevfs://environment/tmp/redevplugin-io-smoke")
         .map_err(platform_error)?;
     let page = dir.next(32).map_err(platform_error)?;
@@ -94,7 +130,6 @@ fn run(params: Value) -> WorkerResult {
     fs::rename(renamed, uri, true).map_err(platform_error)?;
     let event = watch.next(5_000).map_err(platform_error)?;
     watch.close().map_err(platform_error)?;
-    fs::remove(uri, false).map_err(platform_error)?;
 
     let mut upload = http::RequestBody::begin(http::HttpRequest {
         method: "POST".into(),
@@ -104,13 +139,45 @@ fn run(params: Value) -> WorkerResult {
         timeout_ms: Some(180_000),
     })
     .map_err(platform_error)?;
-    for _ in 0..(BYTES / CHUNK) {
-        upload.write_all(&source).map_err(platform_error)?;
+    let mut file = fs::File::open(
+        uri,
+        fs::OpenOptions {
+            read: true,
+            ..fs::OpenOptions::default()
+        },
+    )
+    .map_err(platform_error)?;
+    let mut uploaded_bytes = 0_usize;
+    loop {
+        let (chunk, flags) = file.read(CHUNK).map_err(platform_error)?;
+        validate_samples(&chunk, uploaded_bytes)?;
+        upload.write_all(&chunk).map_err(platform_error)?;
+        uploaded_bytes += chunk.len();
+        if flags & IO_FLAG_EOF != 0 {
+            break;
+        }
+        if chunk.is_empty() {
+            return Err(WorkerError::new(
+                "SMOKE_STREAM_STALLED",
+                "file stream made no progress",
+            ));
+        }
     }
+    file.close().map_err(platform_error)?;
     let upload_response = upload.finish().map_err(platform_error)?;
-    let upload_body = upload_response.body.read_all().map_err(platform_error)?;
-    let upload_result: Value = serde_json::from_slice(&upload_body)
-        .map_err(|error| WorkerError::new("SMOKE_RESPONSE_INVALID", error.to_string()))?;
+    let upload_result = read_json_body(upload_response.body)?;
+    let upload_sha256 = upload_result
+        .get("sha256")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    if uploaded_bytes != BYTES || upload_sha256 != EXPECTED_SHA256 {
+        return Err(WorkerError::new(
+            "SMOKE_CONTENT_MISMATCH",
+            "file-to-HTTP stream did not preserve the deterministic payload",
+        ));
+    }
+    fs::remove(uri, false).map_err(platform_error)?;
     let download = http::RequestBody::begin(http::HttpRequest {
         method: "GET".into(),
         url: format!("http://127.0.0.1:{http_port}/download"),
@@ -120,7 +187,29 @@ fn run(params: Value) -> WorkerResult {
     })
     .map_err(platform_error)?;
     let download_response = download.finish().map_err(platform_error)?;
-    let download_body = download_response.body.read_all().map_err(platform_error)?;
+    let mut download_body = download_response.body;
+    let mut download_bytes = 0_usize;
+    loop {
+        let (chunk, flags) = download_body.read(CHUNK).map_err(platform_error)?;
+        validate_samples(&chunk, download_bytes)?;
+        download_bytes += chunk.len();
+        if flags & IO_FLAG_EOF != 0 {
+            download_body.close().map_err(platform_error)?;
+            break;
+        }
+        if chunk.is_empty() {
+            return Err(WorkerError::new(
+                "SMOKE_STREAM_STALLED",
+                "HTTP download stream made no progress",
+            ));
+        }
+    }
+    if download_bytes != BYTES {
+        return Err(WorkerError::new(
+            "SMOKE_CONTENT_MISMATCH",
+            "HTTP download size did not match the deterministic payload",
+        ));
+    }
 
     let mut ws = websocket::WebSocket::open(websocket::WebSocketOpen {
         url: format!("ws://127.0.0.1:{ws_port}/ws"),
@@ -162,8 +251,8 @@ fn run(params: Value) -> WorkerResult {
     }
     udp.close().map_err(platform_error)?;
     Ok(json!({
-        "manifest": "redevplugin.manifest.v9", "fs": {"bytes": stat.size, "sha256": format!("{:x}", actual.finalize()), "expected_sha256": format!("{:x}", expected.finalize()), "list": !page.entries.is_empty(), "stat": stat.size == BYTES as u64, "rename": true, "watch": event.sequence > 0, "remove": true},
-        "http": {"download_bytes": download_body.len(), "upload_bytes": upload_result.get("bytes").and_then(Value::as_u64), "sha256": upload_result.get("sha256").and_then(Value::as_str)}, "websocket": {"messages": 100}, "tcp": {"exchanges": 100}, "udp": {"datagrams": 100}
+        "manifest": "redevplugin.manifest.v9", "fs": {"bytes": stat.size, "sha256": upload_sha256, "expected_sha256": EXPECTED_SHA256, "list": !page.entries.is_empty(), "stat": stat.size == BYTES as u64, "rename": true, "watch": event.sequence > 0, "remove": true},
+        "http": {"download_bytes": download_bytes, "upload_bytes": upload_result.get("bytes").and_then(Value::as_u64), "sha256": upload_result.get("sha256").and_then(Value::as_str)}, "websocket": {"messages": 100}, "tcp": {"exchanges": 100}, "udp": {"datagrams": 100}
     }))
 }
 
