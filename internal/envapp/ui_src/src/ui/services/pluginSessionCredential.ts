@@ -1,8 +1,6 @@
-import { createSignal } from 'solid-js';
-
 const PLUGIN_SESSION_HEADER = 'X-Redeven-Plugin-Session';
 
-const [pluginSessionCredential, setPluginSessionCredential] = createSignal('');
+let pluginSessionCredential = '';
 const pendingPluginSessionCredentials = new Map<string, string>();
 
 export function stagePluginSessionCredential(channelID: string, credential: string): void {
@@ -24,7 +22,7 @@ export function activatePluginSessionCredential(channelID: string): boolean {
   const normalizedChannelID = String(channelID ?? '').trim();
   const credential = pendingPluginSessionCredentials.get(normalizedChannelID);
   if (!credential) return false;
-  setPluginSessionCredential(credential);
+  pluginSessionCredential = credential;
   pendingPluginSessionCredentials.clear();
   return true;
 }
@@ -36,11 +34,11 @@ export function activatePendingPluginSessionCredential(): boolean {
 }
 
 export function readPluginSessionCredential(): string {
-  return pluginSessionCredential();
+  return pluginSessionCredential;
 }
 
 export function clearPluginSessionCredential(): void {
-  setPluginSessionCredential('');
+  pluginSessionCredential = '';
   pendingPluginSessionCredentials.clear();
 }
 

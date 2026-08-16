@@ -98,8 +98,9 @@ prepare_linux_target() {
   FIXTURE_HTTP_PORT=${REDEVEN_PLUGIN_SMOKE_FIXTURE_HTTP_PORT:-$default_fixture_http_port}
   FIXTURE_TCP_PORT=${REDEVEN_PLUGIN_SMOKE_FIXTURE_TCP_PORT:-$default_fixture_tcp_port}
   FIXTURE_UDP_PORT=${REDEVEN_PLUGIN_SMOKE_FIXTURE_UDP_PORT:-$default_fixture_udp_port}
-  local image="debian:bookworm-slim" runtime_version runtime_cache
+  local image="debian:bookworm-slim" runtime_version runtime_cache published_module_dir
   runtime_version=$(cd "$ROOT_DIR" && GOWORK=off go run ./scripts/read_redevplugin_package_set.go | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).platform_version))')
+  published_module_dir=$(cd "$ROOT_DIR" && GOWORK=off go list -m -f '{{.Dir}}' "github.com/floegence/redevplugin/v2@v${runtime_version}")
   runtime_cache="${XDG_CACHE_HOME:-$HOME/.cache}/redeven/docker-runtime-e2e/redevplugin-runtime-${runtime_version}-rust-1.88.0-linux-arm64-$(git -C "$ROOT_DIR" rev-parse HEAD)-evidence-v1"
   if [[ ! -x "$runtime_cache/redevplugin-runtime" || ! -f "$runtime_cache/.redevplugin-release-artifacts-verified.json" ]]; then
     "$ROOT_DIR/scripts/check_docker_runtime_e2e.sh" >/dev/null
@@ -125,9 +126,9 @@ prepare_linux_target() {
   cp "$ROOT_DIR/assets/brand/redeven/png/app-icon-64.png" "$LINUX_TARGET_ROOT/io-package/dist/assets/icon.png"
   cp -a "$ROOT_DIR/scripts/fixtures/redevplugin_io_smoke/dist/ui/." "$LINUX_TARGET_ROOT/io-package/dist/ui/"
   cp "$LINUX_TARGET_ROOT/io.wasm" "$LINUX_TARGET_ROOT/io-package/dist/workers/io.wasm"
-  GOWORK=off go run github.com/floegence/redevplugin/v2/cmd/redevplugin@v2.0.2 package "$LINUX_TARGET_ROOT/io-package/dist" "$LINUX_TARGET_ROOT/io-smoke.redevplugin" >/dev/null
-  cp "/Users/tangjianyin/go/pkg/mod/github.com/floegence/redevplugin/v2@v2.0.2/testdata/compat/v1.1.4/worker.redevplugin" "$LINUX_TARGET_ROOT/worker-v1.1.4.redevplugin"
-  cp "/Users/tangjianyin/go/pkg/mod/github.com/floegence/redevplugin/v2@v2.0.2/testdata/compat/v1.1.4/SHA256SUMS" "$LINUX_TARGET_ROOT/v1.1.4.SHA256SUMS"
+  GOWORK=off go run "github.com/floegence/redevplugin/v2/cmd/redevplugin@v${runtime_version}" package "$LINUX_TARGET_ROOT/io-package/dist" "$LINUX_TARGET_ROOT/io-smoke.redevplugin" >/dev/null
+  cp "$published_module_dir/testdata/compat/v1.1.4/worker.redevplugin" "$LINUX_TARGET_ROOT/worker-v1.1.4.redevplugin"
+  cp "$published_module_dir/testdata/compat/v1.1.4/SHA256SUMS" "$LINUX_TARGET_ROOT/v1.1.4.SHA256SUMS"
   local frozen_expected frozen_observed
   frozen_expected=$(awk '$2 == "worker.redevplugin" { print $1 }' "$LINUX_TARGET_ROOT/v1.1.4.SHA256SUMS")
   frozen_observed=$(shasum -a 256 "$LINUX_TARGET_ROOT/worker-v1.1.4.redevplugin" | awk '{print $1}')

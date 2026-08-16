@@ -226,6 +226,16 @@ test('the Activity Plugin Panel is an eagerly mounted core control', async () =>
   assert.doesNotMatch(panelSource, /openCommands|registerController|PLUGIN_PANEL_CONTROL_EVENT/u);
 });
 
+test('Linux fixture preparation resolves frozen packages from the published Go module', async () => {
+  const source = await import('node:fs/promises').then((fs) => fs.readFile(
+    new URL('./smoke_desktop_plugins.sh', import.meta.url),
+    'utf8',
+  ));
+  assert.match(source, /GOWORK=off go list -m -f '\{\{\.Dir\}\}' "github\.com\/floegence\/redevplugin\/v2@v\$\{runtime_version\}"/u);
+  assert.match(source, /\$published_module_dir\/testdata\/compat\/v1\.1\.4\/worker\.redevplugin/u);
+  assert.doesNotMatch(source, /\/Users\/[^"]+\/go\/pkg\/mod\/github\.com\/floegence\/redevplugin/u);
+});
+
 test('isolated smoke configuration rejects shared Desktop paths and ports', () => {
   assert.throws(() => assertIsolatedSmokeConfiguration({
     root: '/tmp/redeven-plugin-smoke',
