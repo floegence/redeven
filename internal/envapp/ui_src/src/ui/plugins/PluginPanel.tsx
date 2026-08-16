@@ -103,6 +103,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
   const attentionCount = createMemo(() => pluginTiles().filter((tile) => (
     tile.item.lifecycleState === 'needs_attention' || tile.item.lifecycleState === 'update_available'
   )).length);
+  const visible = () => props.open || mounted();
   const isWorkbenchPopup = () => props.placement === 'workbench';
   const [popupPosition, setPopupPosition] = createSignal<{
     left: number;
@@ -318,9 +319,11 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
 
   return (
     <Portal>
-      <Show when={props.open || mounted()}>
         <div
-          data-plugin-launcher-backdrop
+          data-plugin-launcher-backdrop={visible() ? '' : undefined}
+          hidden={!visible()}
+          inert={!visible()}
+          aria-hidden={visible() ? undefined : 'true'}
           class={cn(
             'redeven-plugin-motion fixed inset-0 flex animate-in fade-in duration-150 motion-reduce:animate-none',
             isWorkbenchPopup() ? 'pointer-events-none items-end' : 'bg-[var(--redeven-overlay-scrim)]',
@@ -334,14 +337,14 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
           <div
             id={props.id}
             ref={panelRef}
-            role="dialog"
+            role={visible() ? 'dialog' : undefined}
             data-plugin-panel-motion-axis="y"
-            data-plugin-panel-motion-state={closing() ? 'closing' : 'open'}
+            data-plugin-panel-motion-state={visible() ? (closing() ? 'closing' : 'open') : undefined}
             tabIndex={-1}
-            aria-modal={isWorkbenchPopup() ? undefined : 'true'}
-            aria-label={isWorkbenchPopup() ? i18n.t('uiCopy.plugin.launcherTitle') : undefined}
-            aria-labelledby={isWorkbenchPopup() ? undefined : 'plugin-launcher-title'}
-            aria-describedby="plugin-launcher-description"
+            aria-modal={visible() && !isWorkbenchPopup() ? 'true' : undefined}
+            aria-label={visible() && isWorkbenchPopup() ? i18n.t('uiCopy.plugin.launcherTitle') : undefined}
+            aria-labelledby={visible() && !isWorkbenchPopup() ? 'plugin-launcher-title' : undefined}
+            aria-describedby={visible() ? 'plugin-launcher-description' : undefined}
             class={cn(
               'redeven-plugin-motion pointer-events-auto flex min-h-0 origin-bottom flex-col overflow-hidden border bg-popover text-popover-foreground shadow-2xl ease-out motion-reduce:animate-none',
               isWorkbenchPopup()
@@ -484,7 +487,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
             </Show>
           </div>
         </div>
-        <Show when={isWorkbenchPopup()}>
+        <Show when={visible() && isWorkbenchPopup()}>
           <span
             data-plugin-workbench-popover-arrow
             class="pointer-events-none fixed h-3 w-3 rotate-45 border-b border-r bg-popover"
@@ -496,7 +499,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
             aria-hidden="true"
           />
         </Show>
-        <Show when={dragState()}>
+        <Show when={visible() ? dragState() : null}>
           {(state) => (
             <div
               data-plugin-workbench-drag-ghost
@@ -514,7 +517,6 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
             </div>
           )}
         </Show>
-      </Show>
     </Portal>
   );
 }
