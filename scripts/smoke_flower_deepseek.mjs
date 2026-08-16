@@ -32,6 +32,31 @@ export function assertSmokeConfiguration(config) {
   return config;
 }
 
+export async function dragQueuedTurnAfter(page, source, target) {
+  const targetBounds = await target.boundingBox();
+  if (!targetBounds) throw new Error('queue reorder target has no geometry');
+  const clientY = targetBounds.y + Math.max(targetBounds.height / 2 + 1, targetBounds.height - 2);
+  const dataTransfer = await page.evaluateHandle(() => new DataTransfer());
+  try {
+    await source.dispatchEvent('dragstart', { dataTransfer });
+    if (await source.getAttribute('data-flower-queued-turn-dragging') !== 'true') {
+      throw new Error('queue reorder dragstart did not enter the dragging state');
+    }
+    await target.dispatchEvent('dragover', { dataTransfer, clientY });
+    await target.dispatchEvent('drop', { dataTransfer, clientY });
+  } finally {
+    await dataTransfer.dispose();
+  }
+}
+
+export function isExpectedQueueOrderResponse(response, threadID, expectedQueueIDs) {
+  if (response.request().method() !== 'PATCH') return false;
+  const pathname = new URL(response.url()).pathname;
+  if (!pathname.endsWith(`/threads/${threadID}/queue/order`)) return false;
+  const orderedQueueIDs = response.request().postDataJSON()?.ordered_queue_ids ?? [];
+  return JSON.stringify(orderedQueueIDs) === JSON.stringify(expectedQueueIDs);
+}
+
 function aiConfig(value) {
   return value?.ai && typeof value.ai === 'object' ? value.ai : value;
 }
@@ -942,20 +967,27 @@ async function runScenarios(page, config, telemetry) {
     await queuePrompt(page, `Reply exactly ${q2} as plain text after current work. Call no tools, including task_complete.`, q2);
     const queue = surface.locator('[data-flower-queued-turn-dock-id]');
     await waitFor(async () => await queue.count() === 2, 30_000, 'two queued turns');
-    const reorderResponse = page.waitForResponse((response) => (
-      new URL(response.url()).pathname.endsWith(`/threads/${sent.threadID}/queue/order`)
-    ), { timeout: 30_000 });
-    const reorderTarget = await queue.last().boundingBox();
-    if (!reorderTarget) throw new Error('queue reorder target has no geometry');
-    await queue.first().dragTo(queue.last(), {
-      targetPosition: { x: reorderTarget.width / 2, y: Math.max(1, reorderTarget.height - 2) },
-    });
+    const initialQueueIDs = await queue.evaluateAll((items) => items.map((item) => (
+      item.getAttribute('data-flower-queued-turn-dock-id') ?? ''
+    )));
+    if (initialQueueIDs.length !== 2 || initialQueueIDs.some((queueID) => !queueID)) {
+      throw new Error(`queue reorder requires two canonical IDs; received ${initialQueueIDs.join(',')}`);
+    }
+    const expectedQueueIDs = [...initialQueueIDs].reverse();
+    const reorderResponse = page.waitForResponse(
+      (response) => isExpectedQueueOrderResponse(response, sent.threadID, expectedQueueIDs),
+      { timeout: 30_000 },
+    );
+    await dragQueuedTurnAfter(page, queue.first(), queue.last());
     const reordered = await reorderResponse;
     if (reordered.status() !== 200) {
       const requestOrder = reordered.request().postDataJSON()?.ordered_queue_ids ?? [];
       const responseBody = await reordered.json().catch(() => ({}));
       throw new Error(`queue reorder returned ${reordered.status()}: ${String(responseBody.error ?? 'unknown')}; ids=${requestOrder.join(',')}`);
     }
+    await waitFor(async () => JSON.stringify(await queue.evaluateAll((items) => items.map((item) => (
+      item.getAttribute('data-flower-queued-turn-dock-id') ?? ''
+    )))) === JSON.stringify(expectedQueueIDs), 20_000, 'reordered queued turn DOM order');
     const deletedMarker = (await queue.first().innerText()).includes(q1) ? q1 : q2;
     const remainingMarker = deletedMarker === q1 ? q2 : q1;
     await queue.first().locator('[data-flower-queued-turn-delete]').click();

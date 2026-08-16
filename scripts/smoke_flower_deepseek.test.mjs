@@ -11,7 +11,9 @@ import {
   assertAcceptedReceipt,
   assertSmokeConfiguration,
   canonicalEvidence,
+  dragQueuedTurnAfter,
   findDeepSeekProvider,
+  isExpectedQueueOrderResponse,
   ownedManifestPIDs,
   orderedToolCommand,
   orderedToolPayload,
@@ -178,12 +180,59 @@ test('runner requires one S15 and exactly fifteen passing scenarios', async () =
   assert.doesNotMatch(runner, /choices Alpha, Beta, and Other/u);
   assert.doesNotMatch(runner, /setViewportSize/u);
   assert.doesNotMatch(runner, /fullPage\s*:\s*true/u);
+  assert.doesNotMatch(runner, /\.dragTo\(/u);
+  assert.match(runner, /expectedQueueIDs = \[\.\.\.initialQueueIDs\]\.reverse\(\)/u);
   assert.match(runner, /async function checkpoint\(page, config, label\)/u);
   assert.match(runner, /nativeViewport = await page\.evaluate\(\(\) => \(\{ width: innerWidth, height: innerHeight \}\)\)/u);
   assert.match(runner, /document\.querySelectorAll\('\[data-env-shell-background\]'\)\.length/u);
   assert.match(runner, /document\.querySelectorAll\('\[data-activity-flower-bottom-bar\]'\)\.length/u);
   assert.match(runner, /document\.querySelectorAll\('#redeven-activity-flower-product'\)\.length/u);
   assert.match(runner, /document\.querySelectorAll\('#redeven-flower-surface'\)\.length/u);
+});
+
+test('queued turn drag dispatches one shared native transfer through the target lower half', async () => {
+  const calls = [];
+  const dataTransfer = { dispose: async () => calls.push(['dispose']) };
+  const page = {
+    evaluateHandle: async () => {
+      calls.push(['evaluateHandle']);
+      return dataTransfer;
+    },
+  };
+  const source = {
+    dispatchEvent: async (...args) => calls.push(['source.dispatchEvent', ...args]),
+    getAttribute: async () => 'true',
+  };
+  const target = {
+    boundingBox: async () => ({ x: 10, y: 80, width: 100, height: 40 }),
+    dispatchEvent: async (...args) => calls.push(['target.dispatchEvent', ...args]),
+  };
+
+  await dragQueuedTurnAfter(page, source, target);
+
+  assert.deepEqual(calls, [
+    ['evaluateHandle'],
+    ['source.dispatchEvent', 'dragstart', { dataTransfer }],
+    ['target.dispatchEvent', 'dragover', { dataTransfer, clientY: 118 }],
+    ['target.dispatchEvent', 'drop', { dataTransfer, clientY: 118 }],
+    ['dispose'],
+  ]);
+});
+
+test('queued turn response predicate follows the PATCH transport contract and exact order', () => {
+  const response = (method, threadID, orderedQueueIDs) => ({
+    url: () => `http://127.0.0.1/_redeven_proxy/api/ai/threads/${threadID}/queue/order`,
+    request: () => ({
+      method: () => method,
+      postDataJSON: () => ({ ordered_queue_ids: orderedQueueIDs }),
+    }),
+  });
+  const expected = ['queue-second', 'queue-first'];
+
+  assert.equal(isExpectedQueueOrderResponse(response('PATCH', 'thread-1', expected), 'thread-1', expected), true);
+  assert.equal(isExpectedQueueOrderResponse(response('PUT', 'thread-1', expected), 'thread-1', expected), false);
+  assert.equal(isExpectedQueueOrderResponse(response('PATCH', 'thread-2', expected), 'thread-1', expected), false);
+  assert.equal(isExpectedQueueOrderResponse(response('PATCH', 'thread-1', [...expected].reverse()), 'thread-1', expected), false);
 });
 
 test('ordered tool evidence reads the typed activity payload and approval command', () => {
