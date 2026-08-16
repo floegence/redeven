@@ -4806,24 +4806,6 @@ export function EnvAppShell() {
         data-items={String(pluginInventoryProjection()?.items.length ?? 0)}
         data-market-unavailable={String(Boolean(pluginInventoryProjection()?.marketUnavailable))}
       />
-      <PluginPanel
-        id="redeven-plugin-switcher"
-        open={pluginsPanelOpen()}
-        mobile={layout.isMobile()}
-        trigger={pluginsPanelTrigger()}
-        placement={pluginsPanelPlacement()}
-        model={pluginPanelModel()}
-        onClose={() => updatePluginPanel({ open: false })}
-        onOpenCenter={() => void openPluginCenter().catch(reportPluginNavigationFailure)}
-        onOpenPluginDetails={(inventoryKey) => void openPluginCenter(inventoryKey).catch(reportPluginNavigationFailure)}
-        onOpenPluginSurface={(target) => void openPluginSurface({
-          ...target,
-          preferredPlacement: pluginsPanelPlacement() === 'workbench' ? 'workbench' : target.preferredPlacement,
-        }).catch(reportPluginNavigationFailure)}
-        onDropPlugin={(target) => void openPluginSurface(target).catch(reportPluginNavigationFailure)}
-        externalDockDragController={externalDockDragController()}
-        onPinPlugin={pinPlugin}
-      />
       <Show when={layout.isMobile() && viewMode() === 'activity' && canUseFlower()}>
         <div
           class="flower-activity-mobile-companion-rail"
@@ -4954,6 +4936,24 @@ export function EnvAppShell() {
                     />
                   </Show>
               </FloeRegistryRuntime>
+              <PluginPanel
+                id="redeven-plugin-switcher"
+                open={pluginsPanelOpen()}
+                mobile={layout.isMobile()}
+                trigger={pluginsPanelTrigger()}
+                placement={pluginsPanelPlacement()}
+                model={pluginPanelModel()}
+                onClose={() => updatePluginPanel({ open: false })}
+                onOpenCenter={() => void openPluginCenter().catch(reportPluginNavigationFailure)}
+                onOpenPluginDetails={(inventoryKey) => void openPluginCenter(inventoryKey).catch(reportPluginNavigationFailure)}
+                onOpenPluginSurface={(target) => void openPluginSurface({
+                  ...target,
+                  preferredPlacement: pluginsPanelPlacement() === 'workbench' ? 'workbench' : target.preferredPlacement,
+                }).catch(reportPluginNavigationFailure)}
+                onDropPlugin={(target) => void openPluginSurface(target).catch(reportPluginNavigationFailure)}
+                externalDockDragController={externalDockDragController()}
+                onPinPlugin={pinPlugin}
+              />
             </RuntimeUpdateContext.Provider>
           </FilePreviewContext.Provider>
         </FileBrowserSurfaceContext.Provider>
