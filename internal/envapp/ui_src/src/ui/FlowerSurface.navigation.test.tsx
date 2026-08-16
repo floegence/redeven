@@ -475,6 +475,7 @@ describe('FlowerSurface navigation', () => {
           items: [{
             id: `user:${input.client_request_id}`,
             turn_id: acceptedTurnID,
+            ordinal: 1,
             kind: 'user' as const,
             text: input.prompt,
           }],

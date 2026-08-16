@@ -173,7 +173,7 @@ describe('runtime Flower surface adapter read state', () => {
 					thread_id: 'thread_detail',
 					view_version: 7,
 				activity: 'active',
-				items: [{ id: 'user:req-1', kind: 'user', text: 'hello' }],
+				items: [{ id: 'user:req-1', ordinal: 1, kind: 'user', text: 'hello' }],
 			},
 		}));
 		const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ loadThread }));

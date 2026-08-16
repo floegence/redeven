@@ -464,7 +464,7 @@ async function threadCard(page, threadID) {
 }
 
 function assistantMessage(page, turnID) {
-  return flowerSurface(page).locator(`[data-flower-message-id="assistant:${turnID}"]`);
+  return flowerSurface(page).locator(`[data-flower-message-id^="assistant:${turnID}:"]`);
 }
 
 async function selectThread(page, threadID) {
@@ -543,6 +543,119 @@ async function checkpoint(page, config, label, compact = false) {
   await writeFile(path.join(config.reportRoot, `${label}-geometry.json`), `${JSON.stringify(geometry, null, 2)}\n`);
   if (compact && previous) await page.setViewportSize(previous);
   return geometry;
+}
+
+function currentView(response) {
+  const root = response?.body?.data ?? response?.body ?? {};
+  return root.current ?? root;
+}
+
+function orderedDisplayItems(current) {
+  return (Array.isArray(current?.items) ? current.items : []).filter((item) => (
+    ['user', 'thinking', 'assistant', 'tool'].includes(item?.kind)
+    || (item?.kind === 'interaction' && item?.interaction?.kind === 'input' && item?.interaction?.resolved)
+  ));
+}
+
+export function validateOrderedPresentationCheckpoints(checkpoints) {
+  if (!Array.isArray(checkpoints) || checkpoints.length === 0) {
+    throw new Error('ordered presentation requires at least one checkpoint');
+  }
+  let stableCanonicalPrefix = [];
+  for (const [index, checkpointValue] of checkpoints.entries()) {
+    const label = String(checkpointValue?.label ?? `checkpoint-${index}`);
+    const items = checkpointValue?.canonical_items;
+    const canonicalIDs = checkpointValue?.canonical_display_ids;
+    const domIDs = checkpointValue?.dom_message_ids;
+    if (!Array.isArray(items) || !Array.isArray(canonicalIDs) || !Array.isArray(domIDs)) {
+      throw new Error(`${label} ordered checkpoint schema is incomplete`);
+    }
+    const itemIDs = items.map((item) => item.id);
+    if (itemIDs.some((id) => !id)
+      || new Set(itemIDs).size !== itemIDs.length
+      || new Set(canonicalIDs).size !== canonicalIDs.length
+      || new Set(domIDs).size !== domIDs.length) {
+      throw new Error(`${label} ordered checkpoint contains duplicate IDs`);
+    }
+    const ordinals = items.map((item) => item.ordinal);
+    if (ordinals.some((ordinal) => !Number.isInteger(ordinal) || ordinal < 1)
+      || ordinals.some((ordinal, ordinalIndex) => ordinalIndex > 0 && ordinal <= ordinals[ordinalIndex - 1])) {
+      throw new Error(`${label} canonical ordinals are not strictly increasing`);
+    }
+    const canonicalIdentity = items.map((item) => `${item.id}\u0000${item.ordinal}`);
+    if (canonicalIdentity.length < stableCanonicalPrefix.length
+      || stableCanonicalPrefix.some((identity, prefixIndex) => canonicalIdentity[prefixIndex] !== identity)) {
+      throw new Error(`${label} canonical items do not preserve the stable prefix`);
+    }
+    const expectedDisplayIDs = items.filter((item) => item.display === true).map((item) => item.id);
+    if (expectedDisplayIDs.length !== canonicalIDs.length
+      || expectedDisplayIDs.some((id, idIndex) => canonicalIDs[idIndex] !== id)) {
+      throw new Error(`${label} display IDs do not match displayable canonical items`);
+    }
+    if (canonicalIDs.length !== domIDs.length || canonicalIDs.some((id, idIndex) => domIDs[idIndex] !== id)) {
+      throw new Error(`${label} canonical and DOM order differ`);
+    }
+    stableCanonicalPrefix = canonicalIdentity;
+  }
+  return checkpoints.at(-1).canonical_display_ids;
+}
+
+async function orderedPresentationCheckpoint(page, config, threadID, label, checkpoints, startedAt, accepts) {
+  let evidence;
+  await waitFor(async () => {
+    const response = await canonicalThread(page, threadID);
+    if (response.status !== 200) throw new Error(`${label} canonical API returned ${response.status}`);
+    const current = currentView(response);
+    if (accepts && !accepts(current)) return false;
+    const displayItems = orderedDisplayItems(current);
+    const canonicalDisplayIDs = displayItems.map((item) => String(item.id ?? ''));
+    const displayIDSet = new Set(canonicalDisplayIDs);
+    const items = (Array.isArray(current.items) ? current.items : []).map((item) => {
+      const payload = item?.activity?.presentation?.payload ?? {};
+      const output = payload.stdout ?? payload.output ?? payload.latest_output ?? '';
+      return {
+        id: String(item?.id ?? ''),
+        ordinal: Number(item?.ordinal ?? 0),
+        kind: String(item?.kind ?? ''),
+        live: item?.live === true,
+        display: displayIDSet.has(String(item?.id ?? '')),
+        ...(['thinking', 'assistant'].includes(item?.kind) ? { text_excerpt: String(item?.text ?? '').slice(0, 1000) } : {}),
+        ...(item?.kind === 'tool' ? {
+          activity_status: String(item?.activity?.status ?? ''),
+          tool_id: String(item?.activity?.tool_id ?? ''),
+          tool_name: String(item?.activity?.tool_name ?? ''),
+          command: String(payload.command ?? '').slice(0, 1000),
+          output_excerpt: String(output).slice(0, 1000),
+        } : {}),
+      };
+    });
+    const domMessageIDs = await flowerSurface(page).locator('[data-flower-message-id]').evaluateAll((nodes) => (
+      nodes.map((node) => node.getAttribute('data-flower-message-id')).filter(Boolean)
+    ));
+    const candidate = {
+      schema_version: 1,
+      label,
+      elapsed_ms: Number((performance.now() - startedAt).toFixed(1)),
+      canonical_items: items,
+      canonical_display_ids: canonicalDisplayIDs,
+      dom_message_ids: domMessageIDs,
+      summary: {
+        activity: String(current.activity ?? ''),
+        item_count: items.length,
+        kinds: items.map((item) => item.kind),
+        tool_statuses: items.filter((item) => item.kind === 'tool').map((item) => item.activity_status),
+        text_excerpts: items.filter((item) => item.text_excerpt).map((item) => item.text_excerpt),
+      },
+    };
+    validateOrderedPresentationCheckpoints([...checkpoints, candidate]);
+    evidence = candidate;
+    return true;
+  }, 180_000, `${label} canonical/DOM convergence`, 50);
+  if (!evidence) throw new Error(`${label} checkpoint evidence was not captured`);
+  await checkpoint(page, config, label);
+  await writeFile(path.join(config.reportRoot, `${label}-ordered.json`), `${JSON.stringify(evidence, null, 2)}\n`);
+  checkpoints.push(evidence);
+  return evidence;
 }
 
 async function closeFloatingPreview(page, selector) {
@@ -661,7 +774,7 @@ async function runScenarios(page, config, telemetry) {
     await startNewThread(page); await setPermission(page, 'full_access');
     const running = marker('STOP_RUNNING');
     const sentRunning = await sendPrompt(page, `Write a numbered list from 1 through 2000, one item per line, and only after the list append ${running}.`, { visibleMarker: running });
-    await surface.locator(`[data-flower-message-id="draft:${sentRunning.turnID}"]`).waitFor({ state: 'visible', timeout: 180_000 });
+    await surface.locator(`[data-flower-message-id^="assistant:${sentRunning.turnID}:"][data-flower-message-status="streaming"]`).waitFor({ state: 'visible', timeout: 180_000 });
     await surface.locator('[data-flower-primary-action="stop"]').click();
     await waitForThreadTerminal(page, sentRunning.threadID, 180_000, { allowFailed: true, turnID: sentRunning.turnID });
     const followRunning = marker('STOP_RUNNING_CONTINUE');
@@ -891,6 +1004,125 @@ async function runScenarios(page, config, telemetry) {
     return { thread_id: a.threadID, run_id: a.runID, canonical: terminal.canonical, switch_thread_id: b.threadID };
   });
 
+  await remember('S15', async () => {
+    await startNewThread(page); await setPermission(page, 'approval_required');
+    const firstToken = marker('ORDERED_FIRST');
+    const secondToken = marker('ORDERED_SECOND');
+    const scenarioStarted = performance.now();
+    const checkpoints = [];
+    const sent = await sendPrompt(page, [
+      'Work through exactly two sequential safe terminal steps.',
+      `First reason about the first step, then call terminal.exec exactly once with command "sleep 2; printf ${firstToken}" and wait for its result.`,
+      `Only after the first result, reason about the second step, then call terminal.exec exactly once with command "sleep 2; printf ${secondToken}" and wait for its result.`,
+      `Only after both results, reply exactly ${firstToken}_${secondToken} as plain text.`,
+      'Do not call both tools together. Do not call task_complete or any other tool.',
+    ].join(' '), { visibleMarker: firstToken });
+
+    await orderedPresentationCheckpoint(
+      page, config, sent.threadID, 's15-01-first-thinking', checkpoints, scenarioStarted,
+      (current) => orderedDisplayItems(current).some((item) => item.kind === 'thinking'),
+    );
+
+    const firstWaiting = await orderedPresentationCheckpoint(
+      page, config, sent.threadID, 's15-02-tool-1-waiting', checkpoints, scenarioStarted,
+      (current) => {
+        const tools = orderedDisplayItems(current).filter((item) => item.kind === 'tool');
+        const payload = tools[0]?.activity?.presentation?.payload ?? {};
+        return tools.length === 1
+          && tools[0]?.activity?.tool_name === 'terminal.exec'
+          && tools[0]?.activity?.status === 'waiting'
+          && String(payload.command ?? '').includes(`printf ${firstToken}`);
+      },
+    );
+    const firstTool = firstWaiting.canonical_items.find((item) => item.kind === 'tool');
+    if (!firstTool) throw new Error('S15 first terminal.exec evidence is missing');
+    await approveCurrent(page, true);
+    await orderedPresentationCheckpoint(
+      page, config, sent.threadID, 's15-03-tool-1-complete', checkpoints, scenarioStarted,
+      (current) => {
+        const item = orderedDisplayItems(current).find((entry) => entry.id === firstTool.id);
+        const payload = item?.activity?.presentation?.payload ?? {};
+        const output = payload.stdout ?? payload.output ?? payload.latest_output ?? '';
+        return item?.activity?.status === 'success' && String(output).includes(firstToken);
+      },
+    );
+
+    await orderedPresentationCheckpoint(
+      page, config, sent.threadID, 's15-04-second-thinking', checkpoints, scenarioStarted,
+      (current) => {
+        const items = orderedDisplayItems(current);
+        const firstToolIndex = items.findIndex((item) => item.id === firstTool.id);
+        return items.some((item, index) => item.kind === 'thinking' && index > firstToolIndex);
+      },
+    );
+
+    const secondWaiting = await orderedPresentationCheckpoint(
+      page, config, sent.threadID, 's15-05-tool-2-waiting', checkpoints, scenarioStarted,
+      (current) => {
+        const tools = orderedDisplayItems(current).filter((item) => item.kind === 'tool');
+        const payload = tools[1]?.activity?.presentation?.payload ?? {};
+        return tools.length === 2
+          && tools.every((item) => item?.activity?.tool_name === 'terminal.exec')
+          && tools[0]?.activity?.status === 'success'
+          && tools[1]?.activity?.status === 'waiting'
+          && String(payload.command ?? '').includes(`printf ${secondToken}`);
+      },
+    );
+    const secondTool = secondWaiting.canonical_items.filter((item) => item.kind === 'tool')[1];
+    if (!secondTool) throw new Error('S15 second terminal.exec evidence is missing');
+    await approveCurrent(page, true);
+    await orderedPresentationCheckpoint(
+      page, config, sent.threadID, 's15-06-tool-2-complete', checkpoints, scenarioStarted,
+      (current) => {
+        const item = orderedDisplayItems(current).find((entry) => entry.id === secondTool.id);
+        const payload = item?.activity?.presentation?.payload ?? {};
+        const output = payload.stdout ?? payload.output ?? payload.latest_output ?? '';
+        return item?.activity?.status === 'success' && String(output).includes(secondToken);
+      },
+    );
+
+    const terminal = await waitForThreadTerminal(page, sent.threadID, 180_000, { turnID: sent.turnID });
+    const finalText = `${firstToken}_${secondToken}`;
+    const finalCheckpoint = await orderedPresentationCheckpoint(
+      page, config, sent.threadID, 's15-07-final', checkpoints, scenarioStarted,
+      (current) => {
+        const assistants = orderedDisplayItems(current).filter((item) => item.kind === 'assistant');
+        return String(assistants.at(-1)?.text ?? '').trim() === finalText;
+      },
+    );
+    const finalItems = finalCheckpoint.canonical_items;
+    const firstThinkingIndex = finalItems.findIndex((item) => item.kind === 'thinking');
+    const firstToolIndex = finalItems.findIndex((item) => item.id === firstTool.id);
+    const secondThinkingIndex = finalItems.findIndex((item, index) => item.kind === 'thinking' && index > firstToolIndex);
+    const secondToolIndex = finalItems.findIndex((item) => item.id === secondTool.id);
+    const finalAssistantIndex = finalItems.findLastIndex((item) => item.kind === 'assistant');
+    if (!(firstThinkingIndex >= 0 && firstThinkingIndex < firstToolIndex && firstToolIndex < secondThinkingIndex
+      && secondThinkingIndex < secondToolIndex && secondToolIndex < finalAssistantIndex)) {
+      throw new Error(`S15 final order is invalid: ${finalItems.map((item) => item.kind).join(' > ')}`);
+    }
+
+    telemetry.workspace_sse_reconnect_reasons.push('renderer_reload_ordered_presentation');
+    await page.reload(); await ensureFlowerSurface(page); await selectThread(page, sent.threadID);
+    const reloadCheckpoint = await orderedPresentationCheckpoint(
+      page, config, sent.threadID, 's15-08-renderer-reload', checkpoints, scenarioStarted,
+      (current) => {
+        const assistants = orderedDisplayItems(current).filter((item) => item.kind === 'assistant');
+        return String(assistants.at(-1)?.text ?? '').trim() === finalText;
+      },
+    );
+    if (reloadCheckpoint.canonical_display_ids.some((id, index) => id !== finalCheckpoint.canonical_display_ids[index])
+      || reloadCheckpoint.canonical_display_ids.length !== finalCheckpoint.canonical_display_ids.length) {
+      throw new Error('S15 renderer reload changed canonical ordered IDs');
+    }
+    return {
+      thread_id: sent.threadID,
+      run_id: sent.runID,
+      canonical: terminal.canonical,
+      ordered_checkpoints: checkpoints.map((item) => ({ label: item.label, elapsed_ms: item.elapsed_ms, ids: item.canonical_display_ids })),
+      timings: Object.fromEntries(checkpoints.map((item) => [item.label, item.elapsed_ms])),
+    };
+  });
+
   telemetry.scenarios = results;
   return { results, keyThreads: { basic: s01.thread_id, terminal: s02.thread_id, approval: s03.thread_id, rejected: s04.thread_id } };
 }
@@ -939,7 +1171,7 @@ async function runFlowerBrowserSmoke(config) {
       workspace_sse_reconnect_reasons: telemetry.workspace_sse_reconnect_reasons,
       duplicate_message_count: output.results.reduce((sum, item) => sum + (item.duplicate_counts?.messages ?? 0), 0),
       duplicate_tool_count: output.results.reduce((sum, item) => sum + (item.duplicate_counts?.tools ?? 0), 0),
-      retries: 0, pass: output.results.length === 14 && output.results.every((item) => item.pass),
+      retries: 0, pass: output.results.length === 15 && output.results.every((item) => item.pass),
     };
     await writeFile(path.join(config.reportRoot, 'result.json'), `${JSON.stringify(result, null, 2)}\n`);
     await writeFile(path.join(config.reportRoot, 'timings.json'), `${JSON.stringify(Object.fromEntries(output.results.map((item) => [item.id, item.timings ?? { duration_ms: item.duration_ms }])), null, 2)}\n`);

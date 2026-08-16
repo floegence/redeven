@@ -41,6 +41,7 @@ main() {
       src/ui/activityFlowerSummary.test.ts \
       src/ui/FlowerSurface.emptyStatePresentation.test.tsx \
       src/ui/FlowerSurface.navigation.test.tsx \
+      src/ui/FlowerSurface.orderedPresentation.test.tsx \
       src/ui/FlowerSurface.composerReferences.test.tsx \
       src/ui/FlowerSurface.desktopModelSource.e2e.test.tsx \
       src/ui/FlowerSurface.visibility.shared.test.tsx \
