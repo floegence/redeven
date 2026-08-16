@@ -32,6 +32,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | github.com/Azure/azure-sdk-for-go/sdk/azidentity | v1.7.0 | MIT | Runtime | https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/azidentity@v1.7.0 | Detected from LICENSE.txt. |
 | github.com/Azure/azure-sdk-for-go/sdk/internal | v1.10.0 | MIT | Runtime | https://pkg.go.dev/github.com/Azure/azure-sdk-for-go/sdk/internal@v1.10.0 | Detected from LICENSE.txt. |
 | github.com/AzureAD/microsoft-authentication-library-for-go | v1.2.2 | MIT | Runtime | https://pkg.go.dev/github.com/AzureAD/microsoft-authentication-library-for-go@v1.2.2 | Detected from LICENSE. |
+| github.com/coder/websocket | v1.8.15 | BSD-style | Runtime | https://pkg.go.dev/github.com/coder/websocket@v1.8.15 | coder/websocket is distributed under a BSD-style license. |
 | github.com/creack/pty | v1.1.24 | MIT | Runtime | https://pkg.go.dev/github.com/creack/pty@v1.1.24 | Detected from LICENSE. |
 | github.com/davecgh/go-spew | v1.1.1 | ISC | Runtime | https://pkg.go.dev/github.com/davecgh/go-spew@v1.1.1 | Detected from LICENSE. |
 | github.com/dunglas/httpsfv | v1.1.0 | BSD-style | Runtime | https://pkg.go.dev/github.com/dunglas/httpsfv@v1.1.0 | Detected from LICENSE. |
