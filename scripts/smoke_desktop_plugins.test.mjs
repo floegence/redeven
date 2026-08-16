@@ -193,16 +193,16 @@ test('attach shell never launches, installs, restarts, or stops the existing Des
   assert.match(attachFunction, /runtime_open_readiness.*openable/u);
 });
 
-test('browser smoke waits for session inventory before first Panel open', async () => {
+test('browser smoke opens the Panel before waiting for session inventory credentials', async () => {
   const source = await import('node:fs/promises').then((fs) => fs.readFile(
     new URL('./smoke_desktop_plugins.mjs', import.meta.url),
     'utf8',
   ));
   const sessionWait = source.indexOf("}, 30_000, 'plugin session credential');");
-  const inventoryReady = source.indexOf("'session inventory prefetch'");
-  const panelPhase = source.indexOf("phase = 'panel_open';", sessionWait);
+  const panelPhase = source.indexOf("phase = 'panel_open';");
   const panelOpen = source.indexOf("await visiblePluginTrigger().click();", panelPhase);
-  assert.ok(inventoryReady > 0 && sessionWait > inventoryReady && panelOpen > sessionWait);
+  assert.ok(panelOpen > panelPhase && sessionWait > panelOpen);
+  assert.doesNotMatch(source, /session inventory prefetch|data-plugin-inventory-debug/u);
   assert.match(source, /config\.mode === 'attach'[\s\S]*?aria-expanded[\s\S]*?state: 'detached'/u);
 });
 
@@ -219,6 +219,7 @@ test('the Activity Plugin Panel is an eagerly mounted core control', async () =>
   assert.match(shellSource, /<PluginPanel[\s\S]*?open=\{pluginsPanelOpen\(\)\}/u);
   assert.match(shellSource, /<EnvContext\.Provider[\s\S]*?>\s*<PluginPanel[\s\S]*?<TerminalSessionCatalogProvider>/u);
   assert.doesNotMatch(shellSource, /requestPluginPanelState|activePluginPanelManager|activePluginsActivityBinding/u);
+  assert.doesNotMatch(shellSource, /data-plugin-inventory-debug/u);
   assert.match(panelSource, /import \{ Portal \} from 'solid-js\/web'/u);
   assert.match(panelSource, /const visible = \(\) => props\.open \|\| mounted\(\)/u);
   assert.match(panelSource, /<Portal>[\s\S]*?data-plugin-launcher-backdrop=\{visible\(\) \? '' : undefined\}[\s\S]*?hidden=\{!visible\(\)\}/u);
@@ -335,7 +336,8 @@ test('Desktop smoke refreshes the UI projection once after direct fixture instal
     'utf8',
   ));
   assert.match(source, /if \(config\.ioPackagePath\) \{[\s\S]*?data-plugin-center-market-action[\s\S]*?data-plugin-center-refresh/u);
-  assert.match(source, /debug\?\.loading === 'false' && debug\.items === bootstrap\.enabledCount/u);
+  assert.match(source, /centerItems\.count\(\) === bootstrap\.enabledCount/u);
+  assert.match(source, /pluginCenterRefresh\.isDisabled\(\)/u);
   assert.match(source, /Plugin Center projection after direct smoke install/u);
   assert.match(source, /direct-install-projection-diagnostics\.json/u);
 });
@@ -416,7 +418,7 @@ test('Desktop smoke reopens the Panel five times without a visible loading state
   assert.match(source, /open_duration_ms/u);
   assert.match(source, /tile_keys/u);
   assert.match(source, /inventory_refresh_count/u);
-  assert.match(source, /background refresh pending/u);
+  assert.match(source, /background refresh control pending/u);
   assert.match(source, /page\.route\('\*\*\/_redevplugin\/api\/plugins\/catalog\/query'/u);
   assert.match(source, /background_refresh_tile_keys/u);
 });

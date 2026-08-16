@@ -4798,14 +4798,6 @@ export function EnvAppShell() {
           ]}
         />
       </div>
-      <span
-        data-plugin-inventory-debug
-        data-source={String(Boolean(pluginInventorySource()))}
-        data-loading={String(pluginInventorySessionState.loading)}
-        data-error={String(Boolean(pluginInventoryError()))}
-        data-items={String(pluginInventoryProjection()?.items.length ?? 0)}
-        data-market-unavailable={String(Boolean(pluginInventoryProjection()?.marketUnavailable))}
-      />
       <Show when={layout.isMobile() && viewMode() === 'activity' && canUseFlower()}>
         <div
           class="flower-activity-mobile-companion-rail"

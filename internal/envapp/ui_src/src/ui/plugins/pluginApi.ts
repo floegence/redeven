@@ -23,6 +23,7 @@ import type {
 } from './pluginTypes';
 
 const INVENTORY_MARKET_TIMEOUT_MS = 5_000;
+const INVENTORY_ICON_TIMEOUT_MS = 5_000;
 // Host enable includes worker preflight, data namespace initialization, and
 // surface publication. Keep this bounded, but allow a cold runtime to finish.
 const POST_INSTALL_MUTATION_TIMEOUT_MS = 90_000;
@@ -122,7 +123,12 @@ export function createPluginLifecycleAPI(
       if (!item.pluginInstanceID || !item.iconURL?.startsWith('/_redevplugin/api/plugins/')) return item;
       try {
         const icon = installedIconURLs.get(item.iconURL)
-          ?? loadInstalledIcon(item.iconURL, options.signal).then((objectURL) => {
+          ?? withAbortTimeout(
+            (signal) => loadInstalledIcon(item.iconURL!, signal),
+            options.signal,
+            INVENTORY_ICON_TIMEOUT_MS,
+            `Loading the icon for ${item.pluginInstanceID}`,
+          ).then((objectURL) => {
             if (disposed) {
               URL.revokeObjectURL(objectURL);
             } else {
