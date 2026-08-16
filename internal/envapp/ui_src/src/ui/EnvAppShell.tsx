@@ -1134,38 +1134,67 @@ export function EnvAppShell() {
     debugConsole.show(options);
   };
 
+  let pluginInventoryOwner: object | false = false;
+  let pluginInventoryCredential = '';
   const pluginInventorySource = (): object | false => {
     if (protocol.status() !== 'connected' || (isLocalMode() && !pluginSessionReady())) return false;
-    const session = protocol.session();
-    return session && typeof session === 'object' ? session : false;
+    const credential = readPluginSessionCredential();
+    if (!pluginInventoryOwner || (credential && pluginInventoryCredential !== credential)) {
+      pluginInventoryOwner = {};
+      pluginInventoryCredential = credential;
+    }
+    return pluginInventoryOwner;
   };
   const [pluginInventoryFailure, setPluginInventoryFailure] = createSignal<Readonly<{ owner: object; error: unknown }> | null>(null);
   type PluginInventorySessionState = Readonly<{
     owner: object;
     projection?: PluginInventoryProjection;
   }>;
-  const [pluginInventorySessionState, { refetch: refetchPluginInventorySession }] = createResource<PluginInventorySessionState, object>(
-    pluginInventorySource,
-    async (owner, info) => {
-      pluginInventoryAbort?.abort('Plugin inventory session superseded');
-      const controller = new AbortController();
-      pluginInventoryAbort = controller;
-      const previous = info.value?.owner === owner ? info.value.projection : undefined;
-      try {
-        const projection = await pluginLifecycle.loadInventoryProjection({ signal: controller.signal });
-        if (!controller.signal.aborted) setPluginInventoryFailure(null);
-        return { owner, projection };
-      } catch (error) {
-        if (!controller.signal.aborted && !previous) setPluginInventoryFailure({ owner, error });
-        return { owner, ...(previous ? { projection: previous } : {}) };
-      } finally {
-        if (pluginInventoryAbort === controller) pluginInventoryAbort = undefined;
+  const [pluginInventorySnapshot, setPluginInventorySnapshot] = createSignal<PluginInventorySessionState | null>(null);
+  const [pluginInventoryLoadingOwner, setPluginInventoryLoadingOwner] = createSignal<object | null>(null);
+  let pluginInventoryRequestGeneration = 0;
+  const loadPluginInventory = async (owner: object): Promise<PluginInventoryProjection | undefined> => {
+    const generation = pluginInventoryRequestGeneration + 1;
+    pluginInventoryRequestGeneration = generation;
+    pluginInventoryAbort?.abort('Plugin inventory request superseded');
+    const controller = new AbortController();
+    pluginInventoryAbort = controller;
+    setPluginInventoryLoadingOwner(owner);
+    const current = pluginInventorySnapshot();
+    const previous = current?.owner === owner ? current.projection : undefined;
+    try {
+      const projection = await pluginLifecycle.loadInventoryProjection({ signal: controller.signal });
+      if (controller.signal.aborted || pluginInventoryRequestGeneration !== generation) return previous;
+      setPluginInventoryFailure(null);
+      setPluginInventorySnapshot({ owner, projection });
+      return projection;
+    } catch (error) {
+      if (controller.signal.aborted || pluginInventoryRequestGeneration !== generation) return previous;
+      if (!previous) setPluginInventoryFailure({ owner, error });
+      setPluginInventorySnapshot({ owner, ...(previous ? { projection: previous } : {}) });
+      return previous;
+    } finally {
+      if (pluginInventoryRequestGeneration === generation) {
+        pluginInventoryAbort = undefined;
+        setPluginInventoryLoadingOwner(null);
       }
-    },
-  );
+    }
+  };
+  createEffect(() => {
+    const owner = pluginInventorySource();
+    if (!owner) {
+      pluginInventoryRequestGeneration += 1;
+      pluginInventoryAbort?.abort('Plugin inventory session unavailable');
+      pluginInventoryAbort = undefined;
+      setPluginInventoryLoadingOwner(null);
+      setPluginInventoryFailure(null);
+      return;
+    }
+    void untrack(() => loadPluginInventory(owner));
+  });
   const pluginInventoryProjection = () => {
     const owner = pluginInventorySource();
-    const state = pluginInventorySessionState();
+    const state = pluginInventorySnapshot();
     return owner && state?.owner === owner ? state.projection : undefined;
   };
   const pluginInventoryError = () => {
@@ -1174,13 +1203,12 @@ export function EnvAppShell() {
     return owner && failure?.owner === owner ? failure.error : null;
   };
   const pluginInventoryInitialPending = () => (
-    Boolean(pluginInventorySource())
-    && !pluginInventoryProjection()
-    && pluginInventorySessionState.loading
+    !pluginInventoryProjection()
+    && pluginInventoryLoadingOwner() === pluginInventorySource()
   );
   const refetchPluginInventory = async () => {
-    const state = await refetchPluginInventorySession();
-    return state?.owner === pluginInventorySource() ? state.projection : undefined;
+    const owner = pluginInventorySource();
+    return owner ? loadPluginInventory(owner) : undefined;
   };
   pluginInstallCoordinator = createPluginInstallCoordinator({
     lifecycle: pluginLifecycle,
@@ -1298,13 +1326,6 @@ export function EnvAppShell() {
     pluginInstallResumeEligible = true;
     void pluginInstallCoordinator?.resume();
   });
-  createEffect(() => {
-    if (!pluginInventorySource()) {
-      pluginInventoryAbort?.abort('Plugin inventory session unavailable');
-      setPluginInventoryFailure(null);
-    }
-  });
-
   const pluginPanelModel = createMemo(() => buildPluginPanelModel(
     pluginInventoryProjection() ?? { items: [] },
     pluginInventoryError() ? getErrorMessage(pluginInventoryError()) : undefined,

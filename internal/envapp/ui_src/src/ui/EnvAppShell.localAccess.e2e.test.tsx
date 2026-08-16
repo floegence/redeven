@@ -1954,6 +1954,9 @@ describe('EnvAppShell environment entry affordances', () => {
 
     try {
       await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 1, 40);
+      const pluginCredential = await import('./services/pluginSessionCredential');
+      pluginCredential.stagePluginSessionCredential('ch_replacement', 'replacement-plugin-session');
+      pluginCredential.activatePluginSessionCredential('ch_replacement');
       publishProtocolSnapshot({
         ...protocolSnapshot,
         state: 'connected',
@@ -2137,6 +2140,36 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(pluginTiles).toHaveLength(0);
       expect(pluginPanelState.lastProps.model.tiles).not.toContainEqual(
         expect.objectContaining({ kind: 'empty' }),
+      );
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('replaces a successful empty inventory when Plugin Center refresh discovers installed plugins', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection
+      .mockResolvedValueOnce({ items: [], marketUnavailable: true })
+      .mockResolvedValueOnce(officialContainersProjection('enabled'));
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 1, 40);
+      await pluginPanelState.lastProps.onOpenCenter();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onRefresh), 40);
+
+      await pluginCenterViewState.lastProps.onRefresh();
+      await flushUntil(() => pluginPanelState.lastProps?.model?.tiles?.some(
+        (tile: any) => tile.kind === 'plugin' && tile.item?.pluginID === officialContainersCatalog.pluginID,
+      ), 40);
+
+      expect(pluginLifecycleMocks.loadInventoryProjection).toHaveBeenCalledTimes(2);
+      expect(pluginCenterViewState.lastProps.projection.items).toContainEqual(
+        expect.objectContaining({ pluginID: officialContainersCatalog.pluginID }),
       );
     } finally {
       dispose();
