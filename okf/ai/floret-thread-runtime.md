@@ -24,6 +24,9 @@ Child agents are ordinary child threads with parent identity and independent run
 The first accepted canonical user message and its fallback title commit in the
 same Floret boundary. Pending or failed automatic-title work keeps that
 fallback; provider success or an explicit host rename is the only replacement.
+Fallback title truncation remains whitespace-normalized and trim-stable at the
+canonical length boundary, so a long first message cannot invalidate otherwise
+healthy session-tree authority.
 Redeven sends Floret's tool-free `thread_title` provider request through the
 run lifetime admission without requiring the main turn's canonical permission
 owner, because the title request cannot dispatch tools. Ordinary provider
@@ -40,7 +43,7 @@ no registry tools to the provider. Redeven relies on the published Floret runtim
 to preserve that distinction; provider tool names that are absent from the
 resolved definitions remain rejected before dispatch.
 
-Redeven consumes Floret v4.0.10's public ordered `ThreadView.Items` and
+Redeven consumes Floret v4.0.11's public ordered `ThreadView.Items` and
 `ThreadContextReader`. User, thinking, assistant, tool, and independent
 interaction segments retain Floret-assigned IDs and ordinals across live
 updates, approval settlement, canonical reload, and renderer recovery. Redeven
