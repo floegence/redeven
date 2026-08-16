@@ -1,5 +1,14 @@
 # Redeven OKF Update Log
 
+## 2026-08-17
+* **ReDevPlugin v2.0.9 package-set readback**: Upgraded the coordinated Go,
+  npm, and Rust source package set after public registry and provenance
+  verification. The Host now preserves the required `bytes_read` field for a
+  successful zero-byte EOF result, so the stable WASM filesystem API completes
+  full reads without weakening result validation. Redeven continues to use the
+  released Host, runtime, sandbox surface, and worker SDK through one published
+  package set with no sibling-source fallback.
+
 ## 2026-08-16
 * **ReDevPlugin package-set readback**: Upgraded the complete published
   ReDevPlugin v2.0.7 Go, npm, and Rust source package set. The Host preserves
