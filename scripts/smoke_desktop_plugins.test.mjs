@@ -113,6 +113,31 @@ test('v9 I/O smoke surface runs as an opaque worker and drives hold through rend
   assert.doesNotMatch(browserSource, /window\.__ioSmokeHold/u);
 });
 
+test('v9 I/O smoke worker preserves stable SDK errors instead of collapsing them into HOSTCALL_FAILED', async () => {
+  const source = await import('node:fs/promises').then((fs) => fs.readFile(
+    new URL('./fixtures/redevplugin_io_smoke/worker/src/lib.rs', import.meta.url),
+    'utf8',
+  ));
+  assert.match(source, /fn platform_error\(error: PlatformError\) -> WorkerError/u);
+  assert.match(source, /ErrorCode::MountUnavailable => "MOUNT_UNAVAILABLE"/u);
+  assert.match(source, /ErrorCode::PermissionDenied => "PERMISSION_DENIED"/u);
+  assert.doesNotMatch(source, /fn fail\(/u);
+  assert.doesNotMatch(source, /WorkerError::hostcall\(error\.to_string\(\)\)/u);
+});
+
+test('Desktop smoke persists the failed RPC response and iframe diagnostics on timeout', async () => {
+  const source = await import('node:fs/promises').then((fs) => fs.readFile(
+    new URL('./smoke_desktop_plugins.mjs', import.meta.url),
+    'utf8',
+  ));
+  assert.match(source, /rpc-diagnostics\.json/u);
+  assert.match(source, /matchingRequests/u);
+  assert.match(source, /matchingResponses/u);
+  assert.match(source, /iframeBody/u);
+  assert.match(source, /consoleErrors/u);
+  assert.match(source, /pageErrors/u);
+});
+
 test('Desktop smoke redacts Local UI resume credentials from persisted unlock evidence', async () => {
   const source = await import('node:fs/promises').then((fs) => fs.readFile(
     new URL('./smoke_desktop_plugins.mjs', import.meta.url),
