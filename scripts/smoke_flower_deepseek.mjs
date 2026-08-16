@@ -664,19 +664,39 @@ export function orderedToolPayload(item) {
   return activity?.presentation?.payload ?? activity?.payload ?? {};
 }
 
-export function orderedToolCommand(current, item) {
-  const direct = String(orderedToolPayload(item).command ?? '').trim();
-  if (direct) return direct;
-  const toolID = String(item?.activity?.tool_id ?? '').trim();
-  if (!toolID) return '';
-  const interactions = [
+function orderedInteractions(current) {
+  return [
     ...(Array.isArray(current?.interactions) ? current.interactions : []),
     ...(Array.isArray(current?.items) ? current.items.map((entry) => entry?.interaction).filter(Boolean) : []),
   ];
-  const approval = interactions.find((interaction) => (
+}
+
+function orderedApprovalForTool(current, item, pendingOnly = false) {
+  const itemID = String(item?.id ?? '').trim();
+  const segmentToolID = itemID.startsWith('tool:') ? String(itemID.split(':').at(-1) ?? '').trim() : '';
+  const toolIDs = new Set([
+    String(item?.activity?.tool_id ?? '').trim(),
+    segmentToolID,
+  ].filter(Boolean));
+  const approvals = orderedInteractions(current).filter((interaction) => (
     interaction?.kind === 'approval'
-    && String(interaction?.tool_call_id || interaction?.approval?.tool_call_id || '').trim() === toolID
-  ))?.approval;
+    && interaction?.approval
+    && (!pendingOnly || interaction?.resolved !== true)
+  ));
+  if (toolIDs.size === 0) return approvals.length === 1 ? approvals[0] : undefined;
+  return approvals.find((interaction) => toolIDs.has(
+    String(interaction?.tool_call_id || interaction?.approval?.tool_call_id || '').trim(),
+  ));
+}
+
+export function orderedPendingApprovalForTool(current, item) {
+  return orderedApprovalForTool(current, item, true);
+}
+
+export function orderedToolCommand(current, item) {
+  const direct = String(orderedToolPayload(item).command ?? '').trim();
+  if (direct) return direct;
+  const approval = orderedApprovalForTool(current, item)?.approval;
   return String(approval?.command ?? '').trim();
 }
 
@@ -725,55 +745,66 @@ export function validateOrderedPresentationCheckpoints(checkpoints) {
 
 async function orderedPresentationCheckpoint(page, config, threadID, label, checkpoints, startedAt, accepts) {
   let evidence;
-  await waitFor(async () => {
-    const response = await canonicalThread(page, threadID);
-    if (response.status !== 200) throw new Error(`${label} canonical API returned ${response.status}`);
-    const current = currentView(response);
-    if (accepts && !accepts(current)) return false;
-    const displayItems = orderedDisplayItems(current);
-    const canonicalDisplayIDs = displayItems.map((item) => String(item.id ?? ''));
-    const displayIDSet = new Set(canonicalDisplayIDs);
-    const items = (Array.isArray(current.items) ? current.items : []).map((item) => {
-      const payload = orderedToolPayload(item);
-      const output = payload.stdout ?? payload.output ?? payload.latest_output ?? '';
-      return {
-        id: String(item?.id ?? ''),
-        ordinal: Number(item?.ordinal ?? 0),
-        kind: String(item?.kind ?? ''),
-        live: item?.live === true,
-        display: displayIDSet.has(String(item?.id ?? '')),
-        ...(['thinking', 'assistant'].includes(item?.kind) ? { text_excerpt: String(item?.text ?? '').slice(0, 1000) } : {}),
-        ...(item?.kind === 'tool' ? {
-          activity_status: String(item?.activity?.status ?? ''),
-          tool_id: String(item?.activity?.tool_id ?? ''),
-          tool_name: String(item?.activity?.tool_name ?? ''),
-          command: orderedToolCommand(current, item).slice(0, 1000),
-          output_excerpt: String(output).slice(0, 1000),
-        } : {}),
+  let lastObserved;
+  try {
+    await waitFor(async () => {
+      const response = await canonicalThread(page, threadID);
+      if (response.status !== 200) throw new Error(`${label} canonical API returned ${response.status}`);
+      const current = currentView(response);
+      const displayItems = orderedDisplayItems(current);
+      const canonicalDisplayIDs = displayItems.map((item) => String(item.id ?? ''));
+      const displayIDSet = new Set(canonicalDisplayIDs);
+      const items = (Array.isArray(current.items) ? current.items : []).map((item) => {
+        const payload = orderedToolPayload(item);
+        const output = payload.stdout ?? payload.output ?? payload.latest_output ?? '';
+        const pendingApproval = item?.kind === 'tool' ? orderedPendingApprovalForTool(current, item) : undefined;
+        return {
+          id: String(item?.id ?? ''),
+          ordinal: Number(item?.ordinal ?? 0),
+          kind: String(item?.kind ?? ''),
+          live: item?.live === true,
+          display: displayIDSet.has(String(item?.id ?? '')),
+          ...(['thinking', 'assistant'].includes(item?.kind) ? { text_excerpt: String(item?.text ?? '').slice(0, 1000) } : {}),
+          ...(item?.kind === 'tool' ? {
+            activity_status: String(item?.activity?.status ?? ''),
+            tool_id: String(item?.activity?.tool_id ?? ''),
+            tool_name: String(item?.activity?.tool_name ?? ''),
+            command: orderedToolCommand(current, item).slice(0, 1000),
+            approval_pending: Boolean(pendingApproval),
+            output_excerpt: String(output).slice(0, 1000),
+          } : {}),
+        };
+      });
+      const domMessageIDs = await flowerSurface(page).locator('[data-flower-message-id]').evaluateAll((nodes) => (
+        nodes.map((node) => node.getAttribute('data-flower-message-id')).filter(Boolean)
+      ));
+      const candidate = {
+        schema_version: 1,
+        label,
+        elapsed_ms: Number((performance.now() - startedAt).toFixed(1)),
+        canonical_items: items,
+        canonical_display_ids: canonicalDisplayIDs,
+        dom_message_ids: domMessageIDs,
+        summary: {
+          activity: String(current.activity ?? ''),
+          item_count: items.length,
+          kinds: items.map((item) => item.kind),
+          tool_statuses: items.filter((item) => item.kind === 'tool').map((item) => item.activity_status),
+          text_excerpts: items.filter((item) => item.text_excerpt).map((item) => item.text_excerpt),
+        },
       };
-    });
-    const domMessageIDs = await flowerSurface(page).locator('[data-flower-message-id]').evaluateAll((nodes) => (
-      nodes.map((node) => node.getAttribute('data-flower-message-id')).filter(Boolean)
-    ));
-    const candidate = {
-      schema_version: 1,
-      label,
-      elapsed_ms: Number((performance.now() - startedAt).toFixed(1)),
-      canonical_items: items,
-      canonical_display_ids: canonicalDisplayIDs,
-      dom_message_ids: domMessageIDs,
-      summary: {
-        activity: String(current.activity ?? ''),
-        item_count: items.length,
-        kinds: items.map((item) => item.kind),
-        tool_statuses: items.filter((item) => item.kind === 'tool').map((item) => item.activity_status),
-        text_excerpts: items.filter((item) => item.text_excerpt).map((item) => item.text_excerpt),
-      },
-    };
-    validateOrderedPresentationCheckpoints([...checkpoints, candidate]);
-    evidence = candidate;
-    return true;
-  }, 180_000, `${label} canonical/DOM convergence`, 50);
+      lastObserved = candidate;
+      if (accepts && !accepts(current)) return false;
+      validateOrderedPresentationCheckpoints([...checkpoints, candidate]);
+      evidence = candidate;
+      return true;
+    }, 180_000, `${label} canonical/DOM convergence`, 50);
+  } catch (error) {
+    if (lastObserved) {
+      await writeFile(path.join(config.reportRoot, `${label}-last-observed.json`), `${JSON.stringify(lastObserved, null, 2)}\n`);
+    }
+    throw error;
+  }
   if (!evidence) throw new Error(`${label} checkpoint evidence was not captured`);
   await checkpoint(page, config, label);
   await writeFile(path.join(config.reportRoot, `${label}-ordered.json`), `${JSON.stringify(evidence, null, 2)}\n`);
@@ -1162,9 +1193,10 @@ async function runScenarios(page, config, telemetry) {
       page, config, sent.threadID, 's15-02-tool-1-waiting', checkpoints, scenarioStarted,
       (current) => {
         const tools = orderedDisplayItems(current).filter((item) => item.kind === 'tool');
+        const approval = orderedPendingApprovalForTool(current, tools[0]);
         return tools.length === 1
           && tools[0]?.activity?.tool_name === 'terminal.exec'
-          && tools[0]?.activity?.status === 'waiting'
+          && Boolean(approval)
           && orderedToolCommand(current, tools[0]).includes(`printf ${firstToken}`);
       },
     );
@@ -1194,10 +1226,11 @@ async function runScenarios(page, config, telemetry) {
       page, config, sent.threadID, 's15-05-tool-2-waiting', checkpoints, scenarioStarted,
       (current) => {
         const tools = orderedDisplayItems(current).filter((item) => item.kind === 'tool');
+        const approval = orderedPendingApprovalForTool(current, tools[1]);
         return tools.length === 2
           && tools.every((item) => item?.activity?.tool_name === 'terminal.exec')
           && tools[0]?.activity?.status === 'success'
-          && tools[1]?.activity?.status === 'waiting'
+          && Boolean(approval)
           && orderedToolCommand(current, tools[1]).includes(`printf ${secondToken}`);
       },
     );
@@ -1281,7 +1314,16 @@ async function runFlowerBrowserSmoke(config) {
     ({ browser, page } = await acquireEnvPage(browser, connect, config.reportRoot));
     nativeViewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
     page.on('console', (message) => { if (message.type() === 'error') telemetry.console_errors.push({ scenario: telemetry.active_scenario, elapsed_ms: Number((performance.now() - browserStarted).toFixed(1)), message: message.text().slice(0, 2000) }); });
-    page.on('pageerror', (error) => telemetry.page_errors.push({ scenario: telemetry.active_scenario, elapsed_ms: Number((performance.now() - browserStarted).toFixed(1)), message: String(error).slice(0, 2000) }));
+    const sanitizeDiagnostic = (value) => String(value ?? '')
+      .replaceAll(config.worktree, '<worktree>')
+      .replaceAll(`/private${SMOKE_ROOT}`, '<smoke-root>')
+      .replaceAll(SMOKE_ROOT, '<smoke-root>');
+    page.on('pageerror', (error) => telemetry.page_errors.push({
+      scenario: telemetry.active_scenario,
+      elapsed_ms: Number((performance.now() - browserStarted).toFixed(1)),
+      message: sanitizeDiagnostic(error).slice(0, 2000),
+      stack: sanitizeDiagnostic(error?.stack ?? error).slice(0, 6000),
+    }));
     page.on('request', (request) => {
       telemetry.requests += 1;
       try { if (new URL(request.url()).pathname.endsWith('/api/ai/flower/stream')) telemetry.workspace_sse_connections += 1; } catch {}
