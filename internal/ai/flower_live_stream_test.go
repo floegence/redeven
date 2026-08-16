@@ -412,8 +412,11 @@ func TestFlowerLiveStreamSharesEncodedBatchesAcrossObservers(t *testing.T) {
 	}
 
 	svc.publishFlowerRuntimeCurrent(meta.EndpointID, flruntime.ThreadView{
-		ThreadID:    identity.ThreadID(threadID),
-		ViewVersion: 1, Activity: flruntime.ThreadActivityActive, AssistantDraft: "hello",
+		ThreadID: identity.ThreadID(threadID), ViewVersion: 1, Activity: flruntime.ThreadActivityActive,
+		Items: []flruntime.ThreadItem{{
+			ID: "assistant:turn_live_stream_shared:1", TurnID: identity.TurnID("turn_live_stream_shared"),
+			Ordinal: 1, Kind: flruntime.ThreadItemAssistant, Text: "hello", Live: true,
+		}},
 	})
 	firstBatch := nextFlowerLiveStreamFrame(t, first)
 	secondBatch := nextFlowerLiveStreamFrame(t, second)
@@ -512,7 +515,11 @@ func TestFlowerLiveStreamAdmissionAndSlowObserverIsolation(t *testing.T) {
 	for index := range flowerLiveSubscriberBatchLimit + 1 {
 		svc.publishFlowerRuntimeCurrent(meta.EndpointID, flruntime.ThreadView{
 			ThreadID: identity.ThreadID(threadID), ViewVersion: uint64(index + 1),
-			Activity: flruntime.ThreadActivityActive, AssistantDraft: fmt.Sprintf("draft-%d", index),
+			Activity: flruntime.ThreadActivityActive,
+			Items: []flruntime.ThreadItem{{
+				ID: "assistant:turn_live_stream_scale:1", TurnID: identity.TurnID("turn_live_stream_scale"),
+				Ordinal: 1, Kind: flruntime.ThreadItemAssistant, Text: fmt.Sprintf("draft-%d", index), Live: true,
+			}},
 		})
 		_ = nextFlowerLiveStreamFrame(t, fast)
 	}

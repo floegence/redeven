@@ -18,7 +18,7 @@ function trim(value: unknown): string {
 }
 
 function messageStatus(view: FlowerRuntimeCurrentView, item: FlowerRuntimeCurrentItem): FlowerChatMessage['status'] {
-  if (item.kind === 'assistant' && view.activity === 'active' && item.turn_id === view.turn_id) return 'streaming';
+  if (item.live) return 'streaming';
   if (view.last_outcome === 'cancelled' && item.turn_id === view.turn_id) return 'canceled';
   return 'complete';
 }
@@ -151,7 +151,10 @@ function runtimeMessages(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentV
       if (interaction.kind === 'input') {
         const values = interaction.resolution?.redacted
           ? []
-          : Object.values(interaction.resolution?.input ?? {}).map(String).map(trim).filter(Boolean);
+          : Object.entries(interaction.resolution?.input ?? {})
+            .sort(([left], [right]) => left.localeCompare(right))
+            .map(([, value]) => trim(String(value)))
+            .filter(Boolean);
         messages.push({
           id: trim(item.id), thread_id: base.thread_id, turn_id: trim(item.turn_id), role: 'user',
           content: values.join('\n'), status: 'complete', created_at_ms: createdAtMs,
@@ -170,27 +173,22 @@ function runtimeMessages(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentV
       });
       continue;
     }
+    if (item.kind === 'thinking') {
+      messages.push({
+        id: trim(item.id), thread_id: base.thread_id, turn_id: trim(item.turn_id), role: 'assistant',
+        content: '', status: messageStatus(view, item), created_at_ms: createdAtMs,
+        blocks: [{ type: 'thinking', content: String(item.text ?? '') }],
+        ...(item.live ? { live: true } : {}),
+        ...(references ? { references } : {}),
+      });
+      continue;
+    }
     messages.push({
       id: trim(item.id), thread_id: base.thread_id, turn_id: trim(item.turn_id),
       role: item.kind === 'user' ? 'user' : 'assistant', content: String(item.text ?? ''),
       status: messageStatus(view, item), created_at_ms: createdAtMs,
+      ...(item.live ? { live: true, active_cursor: item.kind === 'assistant' } : {}),
       ...(references ? { references } : {}),
-    });
-  }
-  const assistantDraft = String(view.assistant_draft ?? '');
-  const thinkingDraft = String(view.thinking_draft ?? '');
-  if (thinkingDraft) {
-    messages.push({
-      id: `thinking:${trim(view.turn_id) || base.thread_id}`, thread_id: base.thread_id, turn_id: trim(view.turn_id),
-      role: 'assistant', content: '', status: 'streaming', created_at_ms: base.updated_at_ms,
-      blocks: [{ type: 'thinking', content: thinkingDraft }], live: true,
-    });
-  }
-  if (assistantDraft) {
-    messages.push({
-      id: `draft:${trim(view.turn_id) || base.thread_id}`, thread_id: base.thread_id, turn_id: trim(view.turn_id),
-      role: 'assistant', content: assistantDraft, status: 'streaming', created_at_ms: base.updated_at_ms,
-      live: true, active_cursor: true,
     });
   }
   return messages;

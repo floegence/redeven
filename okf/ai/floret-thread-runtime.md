@@ -40,7 +40,15 @@ no registry tools to the provider. Redeven relies on the published Floret runtim
 to preserve that distinction; provider tool names that are absent from the
 resolved definitions remain rejected before dispatch.
 
-Redeven consumes Floret v4.0.7's public `ThreadContextReader` to recover the
+Redeven consumes Floret v4.0.9's public ordered `ThreadView.Items` and
+`ThreadContextReader`. User, thinking, assistant, tool, and independent
+interaction segments retain Floret-assigned IDs and ordinals across live
+updates, approval settlement, canonical reload, and renderer recovery. Redeven
+maps the sequence directly and does not consume the deprecated global draft
+fields, infer order from timestamps or tool identity, or persist a second
+presentation order.
+
+`ThreadContextReader` recovers the
 canonical merged compaction operations for detail reads and terminal workspace
 updates. A pure `/compact` input supplies one host-owned manual compaction request;
 the canonical user message anchors exactly one terminal `compacted` or `noop`

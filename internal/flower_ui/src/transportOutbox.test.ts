@@ -16,7 +16,7 @@ describe('TransportOutbox', () => {
     outbox = outbox.confirm({
       thread_id: 'thread-a',
       view_version: 2,
-      items: [{ id: 'user:request-1', kind: 'user', text: 'hello' }],
+      items: [{ id: 'user:request-1', ordinal: 1, kind: 'user', text: 'hello' }],
     });
     expect(outbox.entries.has('request-1')).toBe(false);
   });

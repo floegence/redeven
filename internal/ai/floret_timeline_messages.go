@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"maps"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/floegence/floret/v4/identity"
+	"github.com/floegence/floret/v4/observation"
 	flruntime "github.com/floegence/floret/v4/runtime"
 )
 
@@ -56,7 +58,7 @@ func (service *Service) typedTimelineMessages(ctx context.Context, endpointID, t
 		}
 		items = history.Items
 	}
-	out := make([]threadTimelineMessage, 0, len(items)+1)
+	out := make([]threadTimelineMessage, 0, len(items))
 	for _, item := range items {
 		raw, ok, itemErr := typedThreadItemMessage(threadID, item)
 		if itemErr != nil {
@@ -67,39 +69,85 @@ func (service *Service) typedTimelineMessages(ctx context.Context, endpointID, t
 		}
 		out = append(out, threadTimelineMessage{RowID: int64(len(out) + 1), MessageID: item.ID, MessageJSON: raw})
 	}
-	if draft := strings.TrimSpace(view.AssistantDraft); draft != "" {
-		raw, marshalErr := json.Marshal(map[string]any{
-			"id": "draft:" + view.TurnID.String(), "thread_id": threadID, "turn_id": view.TurnID.String(),
-			"role": "assistant", "status": "streaming", "content": draft,
-			"blocks": []any{persistedMarkdownBlock{Type: "markdown", Content: draft}}, "live": true, "active_cursor": true,
-		})
-		if marshalErr != nil {
-			return nil, marshalErr
-		}
-		out = append(out, threadTimelineMessage{RowID: int64(len(out) + 1), MessageID: "draft:" + view.TurnID.String(), MessageJSON: raw})
-	}
 	return out, nil
 }
 
 func typedThreadItemMessage(threadID string, item flruntime.ThreadItem) (json.RawMessage, bool, error) {
 	createdAt := item.CreatedAt.UnixMilli()
-	if item.Kind == flruntime.ThreadItemUser {
+	switch item.Kind {
+	case flruntime.ThreadItemUser:
 		raw, err := canonicalUserTimelineMessageForThread(threadID, item.TurnID.String(), item.ID, item.Text, item.Attachments, item.References, createdAt)
 		return raw, err == nil, err
-	}
-	if item.Kind != flruntime.ThreadItemAssistant {
+	case flruntime.ThreadItemInteraction:
+		return typedResolvedInputMessage(threadID, item, createdAt)
+	case flruntime.ThreadItemTool:
+		if item.Activity == nil {
+			return nil, false, nil
+		}
+		timeline := observation.ActivityTimeline{
+			SchemaVersion: observation.ActivityTimelineSchemaVersion,
+			ThreadID:      identity.ThreadID(threadID),
+			TurnID:        item.TurnID,
+			Items:         []observation.ActivityItem{*item.Activity},
+		}
+		timeline.Summary = observation.RebuildActivitySummary(timeline)
+		block := newActivityTimelineBlockWithPublicIdentity(timeline, nil, activityTimelinePublicIdentity{
+			ThreadID: threadID,
+			TurnID:   item.TurnID.String(),
+		})
+		raw, err := json.Marshal(map[string]any{
+			"id": item.ID, "thread_id": threadID, "turn_id": item.TurnID.String(), "role": "assistant",
+			"status": "complete", "timestamp": createdAt, "content": "", "blocks": []any{block},
+			"live": false, "active_cursor": false,
+		})
+		return raw, true, err
+	case flruntime.ThreadItemThinking, flruntime.ThreadItemAssistant:
+		// Both text segment kinds are mapped below.
+	default:
 		return nil, false, nil
 	}
 	text := strings.TrimSpace(item.Text)
 	if text == "" {
 		return nil, false, nil
 	}
+	status := "complete"
+	if item.Live {
+		status = "streaming"
+	}
+	blocks := []any{persistedMarkdownBlock{Type: "markdown", Content: text}}
+	content := text
+	activeCursor := item.Live
+	if item.Kind == flruntime.ThreadItemThinking {
+		blocks = []any{persistedThinkingBlock{Type: "thinking", Content: text}}
+		content = ""
+		activeCursor = false
+	}
 	raw, err := json.Marshal(map[string]any{
 		"id": item.ID, "thread_id": threadID, "turn_id": item.TurnID.String(), "role": "assistant",
-		"status": "complete", "timestamp": createdAt, "content": text,
-		"blocks": []any{persistedMarkdownBlock{Type: "markdown", Content: text}}, "live": false, "active_cursor": false,
+		"status": status, "timestamp": createdAt, "content": content,
+		"blocks": blocks, "live": item.Live, "active_cursor": activeCursor,
 	})
 	return raw, true, err
+}
+
+func typedResolvedInputMessage(threadID string, item flruntime.ThreadItem, createdAt int64) (json.RawMessage, bool, error) {
+	interaction := item.Interaction
+	if interaction == nil || interaction.Kind != flruntime.ThreadInteractionInput || !interaction.Resolved || interaction.Resolution == nil || interaction.Resolution.Redacted {
+		return nil, false, nil
+	}
+	keys := slices.Sorted(maps.Keys(interaction.Resolution.Input))
+	values := make([]string, 0, len(keys))
+	for _, key := range keys {
+		if value := strings.TrimSpace(interaction.Resolution.Input[key]); value != "" {
+			values = append(values, value)
+		}
+	}
+	text := strings.Join(values, "\n")
+	if text == "" {
+		return nil, false, nil
+	}
+	raw, err := canonicalUserTimelineMessageForThread(threadID, item.TurnID.String(), item.ID, text, nil, nil, createdAt)
+	return raw, err == nil, err
 }
 
 func (service *Service) listThreadTimelineMessages(ctx context.Context, endpointID, threadID string, limit int, beforeRowID int64) ([]threadTimelineMessage, int64, bool, error) {

@@ -678,8 +678,10 @@ export type FlowerLiveStreamConnectInput = Readonly<{
 export type FlowerRuntimeCurrentItem = Readonly<{
   id: string;
   turn_id?: string;
-  kind: 'user' | 'assistant' | 'tool' | 'interaction';
+  ordinal: number;
+  kind: 'user' | 'thinking' | 'assistant' | 'tool' | 'interaction';
   text?: string;
+  live?: boolean;
   created_at?: string;
   attachments?: readonly Readonly<{
     resource_ref?: string;

@@ -13,29 +13,74 @@ describe('applyFlowerRuntimeCurrentView', () => {
   it('keeps product metadata while replacing detail with the typed current view', () => {
     const current: FlowerRuntimeCurrentView = {
       thread_id: 'thread-a', view_version: 7, activity: 'active', turn_id: 'turn-a',
-      items: [{ id: 'user-a', turn_id: 'turn-a', kind: 'user', text: 'hello' }],
-      assistant_draft: 'working',
+      items: [{ id: 'user-a', turn_id: 'turn-a', ordinal: 1, kind: 'user', text: 'hello' }],
+      assistant_draft: 'deprecated assistant draft must not render',
+      thinking_draft: 'deprecated thinking draft must not render',
     };
     const result = applyFlowerRuntimeCurrentView(summary(), current);
     expect(result.model_id).toBe('deepseek/chat');
     expect(result.working_dir).toBe('/');
     expect(result.status).toBe('running');
-    expect(result.messages.map((message) => message.content)).toEqual(['hello', 'working']);
+    expect(result.messages.map((message) => message.content)).toEqual(['hello']);
   });
 
-  it('keeps typed thinking and assistant drafts in the active turn', () => {
-    const current: FlowerRuntimeCurrentView = {
-      thread_id: 'thread-a', view_version: 8, activity: 'active', turn_id: 'turn-a',
-      thinking_draft: 'Inspecting files', assistant_draft: 'Working answer',
-    };
-
-    const result = applyFlowerRuntimeCurrentView(summary(), current);
-
-    expect(result.status).toBe('running');
-    expect(result.messages).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 'thinking:turn-a', status: 'streaming', blocks: [{ type: 'thinking', content: 'Inspecting files' }] }),
-      expect.objectContaining({ id: 'draft:turn-a', content: 'Working answer', status: 'streaming' }),
-    ]));
+  it('preserves Floret ordered segments and stable IDs through approval, completion, and reload', () => {
+    const tool = (id: string, ordinal: number, status: 'waiting' | 'running' | 'success') => ({
+      id: `tool:turn-a:${id}`, turn_id: 'turn-a', ordinal, kind: 'tool' as const,
+      activity: {
+        item_id: id, tool_id: id, tool_name: 'terminal.exec', kind: 'tool', status,
+        severity: status === 'waiting' ? 'blocking' : 'normal', needs_attention: status === 'waiting',
+        requires_approval: status === 'waiting',
+      },
+    });
+    const ordered = [
+      { id: 'user:turn-a', turn_id: 'turn-a', ordinal: 1, kind: 'user' as const, text: 'run two tools' },
+      { id: 'thinking:turn-a:1', turn_id: 'turn-a', ordinal: 2, kind: 'thinking' as const, text: 'first reasoning', live: true },
+      tool('call-1', 3, 'waiting'),
+      { id: 'thinking:turn-a:2', turn_id: 'turn-a', ordinal: 4, kind: 'thinking' as const, text: 'second reasoning', live: true },
+      tool('call-2', 5, 'waiting'),
+      { id: 'assistant:turn-a:1', turn_id: 'turn-a', ordinal: 6, kind: 'assistant' as const, text: 'done', live: true },
+    ];
+    const stages = [
+      ordered.slice(0, 2),
+      ordered.slice(0, 3),
+      [...ordered.slice(0, 2), tool('call-1', 3, 'running')],
+      [...ordered.slice(0, 2), tool('call-1', 3, 'success')],
+      [...ordered.slice(0, 2), tool('call-1', 3, 'success'), ordered[3]],
+      [...ordered.slice(0, 2), tool('call-1', 3, 'success'), ordered[3], ordered[4]],
+      [...ordered.slice(0, 2), tool('call-1', 3, 'success'), ordered[3], tool('call-2', 5, 'running')],
+      [...ordered.slice(0, 2), tool('call-1', 3, 'success'), ordered[3], tool('call-2', 5, 'success')],
+      [...ordered.slice(0, 2), tool('call-1', 3, 'success'), { ...ordered[3], live: false }, tool('call-2', 5, 'success'), ordered[5]],
+      ordered.map((item) => ({ ...item, live: false })),
+    ];
+    let stablePrefix: string[] = [];
+    for (const [index, items] of stages.entries()) {
+      const current: FlowerRuntimeCurrentView = {
+        thread_id: 'thread-a', view_version: index + 1,
+        activity: index === stages.length - 1 ? 'idle' : 'active', turn_id: 'turn-a',
+        ...(index === stages.length - 1 ? { last_outcome: 'completed' as const } : {}),
+        items,
+        assistant_draft: 'deprecated assistant draft must not render',
+        thinking_draft: 'deprecated thinking draft must not render',
+      };
+      const result = applyFlowerRuntimeCurrentView(summary(), current);
+      const ids = result.messages.map((message) => message.id);
+      expect(ids.slice(0, stablePrefix.length), `stage ${index}`).toEqual(stablePrefix);
+      expect(new Set(ids).size, `stage ${index}`).toBe(ids.length);
+      stablePrefix = ids;
+    }
+    expect(stablePrefix).toEqual([
+      'user:turn-a', 'thinking:turn-a:1', 'tool:turn-a:call-1',
+      'thinking:turn-a:2', 'tool:turn-a:call-2', 'assistant:turn-a:1',
+    ]);
+    const reload = applyFlowerRuntimeCurrentView(summary(), {
+      thread_id: 'thread-a', view_version: 11, activity: 'idle', turn_id: 'turn-a', last_outcome: 'completed',
+      items: ordered.map((item) => ({ ...item, live: false })),
+    });
+    expect(reload.messages.map((message) => message.id)).toEqual(stablePrefix);
+    expect(reload.messages[1]).toMatchObject({
+      id: 'thinking:turn-a:1', status: 'complete', blocks: [{ type: 'thinking', content: 'first reasoning' }],
+    });
   });
 
   it('prioritizes waiting input over approval and running', () => {
@@ -52,7 +97,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
   it('renders accepted busy input only in the typed runtime queue', () => {
     const current: FlowerRuntimeCurrentView = {
       thread_id: 'thread-a', view_version: 8, activity: 'active',
-      items: [{ id: 'user:active', turn_id: 'turn-a', kind: 'user', text: 'active work' }],
+      items: [{ id: 'user:active', turn_id: 'turn-a', ordinal: 1, kind: 'user', text: 'active work' }],
       queue: [
         { id: 'queue:queued-first', request_key: 'queued-first', input: { text: 'first queued' } },
         { id: 'queue:queued-second', request_key: 'queued-second', input: { text: 'second queued' } },
@@ -71,7 +116,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
   it('keeps declined tools quiet and terminal in their own timeline row', () => {
     const current: FlowerRuntimeCurrentView = {
       thread_id: 'thread-a', view_version: 9, last_outcome: 'completed',
-      items: [{ id: 'tool-a', turn_id: 'turn-a', kind: 'tool', activity: {
+      items: [{ id: 'tool-a', turn_id: 'turn-a', ordinal: 1, kind: 'tool', activity: {
         item_id: 'tool-a', kind: 'tool', status: 'declined', severity: 'quiet', needs_attention: false,
         requires_approval: true, approval_state: 'rejected',
       } }],
@@ -86,7 +131,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
     const current: FlowerRuntimeCurrentView = {
       thread_id: 'thread-a', view_version: 10, last_outcome: 'completed', turn_id: 'turn-a',
       items: [{
-        id: 'tool-a', turn_id: 'turn-a', kind: 'tool',
+        id: 'tool-a', turn_id: 'turn-a', ordinal: 1, kind: 'tool',
         activity: {
           item_id: 'tool-a', tool_id: 'call-a', tool_name: 'terminal.exec', kind: 'tool',
           status: 'success', severity: 'normal', needs_attention: false, requires_approval: false,
@@ -134,9 +179,9 @@ describe('applyFlowerRuntimeCurrentView', () => {
       thread_id: 'thread-a', view_version: 10, last_outcome: 'completed', turn_id: 'turn-a',
       interactions: [interaction],
       items: [
-        { id: 'interaction-a', turn_id: 'turn-a', kind: 'interaction', interaction },
+        { id: 'interaction-a', turn_id: 'turn-a', ordinal: 1, kind: 'interaction', interaction },
         {
-          id: 'tool-a', turn_id: 'turn-a', kind: 'tool', activity: {
+          id: 'tool-a', turn_id: 'turn-a', ordinal: 2, kind: 'tool', activity: {
             item_id: 'tool-a', tool_id: 'call-a', tool_name: 'terminal.exec', kind: 'tool',
             status: 'success', severity: 'normal', needs_attention: false, requires_approval: false,
             presentation: {
@@ -172,9 +217,9 @@ describe('applyFlowerRuntimeCurrentView', () => {
       thread_id: 'thread-a', view_version: 10, last_outcome: 'completed', turn_id: 'turn-a',
       interactions: [interaction],
       items: [
-        { id: 'interaction-other', turn_id: 'turn-a', kind: 'interaction', interaction },
+        { id: 'interaction-other', turn_id: 'turn-a', ordinal: 1, kind: 'interaction', interaction },
         {
-          id: 'tool-a', turn_id: 'turn-a', kind: 'tool', activity: {
+          id: 'tool-a', turn_id: 'turn-a', ordinal: 2, kind: 'tool', activity: {
             item_id: 'tool-a', tool_id: 'call-a', tool_name: 'terminal.exec', kind: 'tool',
             status: 'success', severity: 'normal', needs_attention: false, requires_approval: false,
             presentation: {
@@ -197,7 +242,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
 
     const withoutCanonicalTool = applyFlowerRuntimeCurrentView(summary(), {
       ...current,
-      items: [{ id: 'interaction-other', turn_id: 'turn-a', kind: 'interaction', interaction }],
+      items: [{ id: 'interaction-other', turn_id: 'turn-a', ordinal: 1, kind: 'interaction', interaction }],
     });
     expect(withoutCanonicalTool.messages).toEqual([]);
   });
@@ -206,7 +251,7 @@ describe('applyFlowerRuntimeCurrentView', () => {
     const current: FlowerRuntimeCurrentView = {
       thread_id: 'thread-a', view_version: 11, last_outcome: 'completed', turn_id: 'turn-a',
       items: [{
-        id: 'tool-entry-a', turn_id: 'turn-a', kind: 'tool',
+        id: 'tool-entry-a', turn_id: 'turn-a', ordinal: 1, kind: 'tool',
         activity: {
           item_id: 'tool-a', tool_id: 'call-a', tool_name: 'file.read', kind: 'tool',
           status: 'success', severity: 'quiet', needs_attention: false, requires_approval: false,
@@ -229,11 +274,29 @@ describe('applyFlowerRuntimeCurrentView', () => {
     });
   });
 
+  it('orders resolved input answers by question key like the canonical adapter', () => {
+    const current: FlowerRuntimeCurrentView = {
+      thread_id: 'thread-a', view_version: 10, last_outcome: 'completed', turn_id: 'turn-a',
+      items: [{
+        id: 'interaction-answer', turn_id: 'turn-a', ordinal: 1, kind: 'interaction',
+        interaction: {
+          id: 'input-a', turn_id: 'turn-a', kind: 'input', resolved: true,
+          resolution: { accepted: true, input: { zeta: 'second', alpha: 'first' } },
+        },
+      }],
+    };
+
+    const result = applyFlowerRuntimeCurrentView(summary(), current);
+
+    expect(result.messages).toHaveLength(1);
+    expect(result.messages[0]).toMatchObject({ id: 'interaction-answer', role: 'user', content: 'first\nsecond' });
+  });
+
   it('rejects malformed presentation fields from typed activity items', () => {
     const current: FlowerRuntimeCurrentView = {
       thread_id: 'thread-a', view_version: 11, last_outcome: 'completed', turn_id: 'turn-a',
       items: [{
-        id: 'tool-a', turn_id: 'turn-a', kind: 'tool',
+        id: 'tool-a', turn_id: 'turn-a', ordinal: 1, kind: 'tool',
         activity: {
           item_id: 'tool-a', kind: 'tool', status: 'success', severity: 'quiet',
           needs_attention: false, requires_approval: false,

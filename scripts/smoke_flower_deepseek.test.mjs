@@ -12,6 +12,7 @@ import {
   findDeepSeekProvider,
   ownedManifestPIDs,
   scanSecretLeaks,
+  validateOrderedPresentationCheckpoints,
   withSensitiveState,
 } from './smoke_flower_deepseek.mjs';
 
@@ -75,6 +76,88 @@ test('canonical evidence unwraps the API envelope and preserves canonical IDs', 
     status: 'running', activity: 'active', item_ids: ['message-1', 'tool-1'],
     message_ids: ['message-1'], interaction_ids: ['approval-1'], error_code: '',
   });
+});
+
+test('ordered checkpoint validation accepts stable prefixes and canonical DOM parity', () => {
+  const checkpoint = (label, ids, statuses = []) => ({
+    label,
+    canonical_items: ids.map((id, index) => ({
+      id, ordinal: index + 1,
+      display: true,
+      kind: id.startsWith('thinking:') ? 'thinking' : id.startsWith('tool:') ? 'tool' : id.startsWith('assistant:') ? 'assistant' : 'user',
+      ...(id.startsWith('tool:') ? { activity_status: statuses.shift() ?? 'success' } : {}),
+    })),
+    canonical_display_ids: ids,
+    dom_message_ids: [...ids],
+  });
+  const stages = [
+    checkpoint('first-thinking', ['user:1', 'thinking:1']),
+    checkpoint('tool-1-waiting', ['user:1', 'thinking:1', 'tool:1'], ['waiting']),
+    checkpoint('tool-1-complete', ['user:1', 'thinking:1', 'tool:1'], ['success']),
+    checkpoint('second-thinking', ['user:1', 'thinking:1', 'tool:1', 'thinking:2']),
+    checkpoint('tool-2-waiting', ['user:1', 'thinking:1', 'tool:1', 'thinking:2', 'tool:2'], ['success', 'waiting']),
+    checkpoint('final', ['user:1', 'thinking:1', 'tool:1', 'thinking:2', 'tool:2', 'assistant:1'], ['success', 'success']),
+  ];
+  assert.deepEqual(validateOrderedPresentationCheckpoints(stages), stages.at(-1).canonical_display_ids);
+});
+
+test('ordered checkpoint validation rejects duplicate, disappearance, reorder, and DOM drift', () => {
+  const valid = {
+    label: 'valid',
+    canonical_items: [
+      { id: 'user:1', ordinal: 1, kind: 'user', display: true },
+      { id: 'thinking:1', ordinal: 2, kind: 'thinking', display: true },
+    ],
+    canonical_display_ids: ['user:1', 'thinking:1'],
+    dom_message_ids: ['user:1', 'thinking:1'],
+  };
+  assert.throws(() => validateOrderedPresentationCheckpoints([{ ...valid, canonical_display_ids: ['user:1', 'user:1'] }]), /duplicate/u);
+  assert.throws(() => validateOrderedPresentationCheckpoints([valid, {
+    ...valid, label: 'disappeared', canonical_items: valid.canonical_items.slice(0, 1),
+    canonical_display_ids: ['user:1'], dom_message_ids: ['user:1'],
+  }]), /stable prefix/u);
+  assert.throws(() => validateOrderedPresentationCheckpoints([valid, {
+    ...valid, label: 'reordered', canonical_display_ids: ['thinking:1', 'user:1'], dom_message_ids: ['thinking:1', 'user:1'],
+  }]), /displayable canonical/u);
+  assert.throws(() => validateOrderedPresentationCheckpoints([{
+    ...valid, dom_message_ids: ['thinking:1', 'user:1'],
+  }]), /DOM order/u);
+  assert.throws(() => validateOrderedPresentationCheckpoints([{
+    ...valid, canonical_items: [{ id: 'user:1', ordinal: 2, kind: 'user', display: true }, { id: 'thinking:1', ordinal: 1, kind: 'thinking', display: true }],
+  }]), /ordinals/u);
+  assert.throws(() => validateOrderedPresentationCheckpoints([{
+    ...valid,
+    canonical_items: [
+      { id: 'user:1', ordinal: 1, kind: 'user', display: true },
+      { id: 'user:1', ordinal: 2, kind: 'interaction', display: false },
+    ],
+  }]), /duplicate/u);
+  assert.throws(() => validateOrderedPresentationCheckpoints([valid, {
+    ...valid,
+    label: 'ordinal-changed',
+    canonical_items: [
+      { id: 'user:1', ordinal: 1, kind: 'user', display: true },
+      { id: 'thinking:1', ordinal: 3, kind: 'thinking', display: true },
+    ],
+  }]), /stable prefix/u);
+  assert.throws(() => validateOrderedPresentationCheckpoints([{
+    ...valid,
+    canonical_items: [
+      { id: 'user:1', ordinal: 1, kind: 'user', display: true },
+      { id: 'thinking:1', ordinal: 2, kind: 'thinking', display: false },
+    ],
+  }]), /displayable canonical/u);
+});
+
+test('runner requires one S15 and exactly fifteen passing scenarios', async () => {
+  const runner = await readFile(new URL('./smoke_flower_deepseek.mjs', import.meta.url), 'utf8');
+  assert.equal((runner.match(/remember\('S15'/gu) ?? []).length, 1);
+  assert.match(runner, /output\.results\.length === 15/u);
+  assert.match(runner, /retries: 0/u);
+  assert.match(runner, /tool_name === 'terminal\.exec'/u);
+  assert.match(runner, /String\(output\)\.includes\(firstToken\)/u);
+  assert.match(runner, /String\(output\)\.includes\(secondToken\)/u);
+  assert.match(runner, /\.trim\(\) === finalText/u);
 });
 
 test('port conflicts fail without killing the listener', async (t) => {

@@ -691,8 +691,8 @@ func (service *Service) GetFlowerSubagentDetail(ctx context.Context, meta *sessi
 		return nil, err
 	}
 	snapshot := subagentSnapshotFromThread(*summary, view)
-	messages := make([]FlowerTimelineMessage, 0, len(view.Items)+1)
-	rows := make([]FlowerSubagentTimelineRow, 0, len(view.Items)+1)
+	messages := make([]FlowerTimelineMessage, 0, len(view.Items))
+	rows := make([]FlowerSubagentTimelineRow, 0, len(view.Items))
 	for _, item := range view.Items {
 		if item.Kind != flruntime.ThreadItemUser && item.Kind != flruntime.ThreadItemAssistant {
 			continue
@@ -709,12 +709,6 @@ func (service *Service) GetFlowerSubagentDetail(ctx context.Context, meta *sessi
 		rows = append(rows, FlowerSubagentTimelineRow{
 			Ordinal: int64(len(rows) + 1), Kind: "message", Type: role,
 			Message: &FlowerSubagentDetailMessage{Role: role, Text: item.Text, Preview: truncateRunes(item.Text, 240)},
-		})
-	}
-	if draft := strings.TrimSpace(view.AssistantDraft); draft != "" {
-		messages = append(messages, FlowerTimelineMessage{
-			MessageID: "draft:" + view.TurnID.String(), ThreadID: childThreadID, TurnID: view.TurnID.String(),
-			Role: "assistant", Content: draft, Status: "streaming", Live: true, ActiveCursor: true,
 		})
 	}
 	if limit <= 0 || limit > 500 {

@@ -77,6 +77,22 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
 }
 
 describe('buildFlowerTimelineEntries', () => {
+  it('preserves Floret ordered thinking and tool message input without sorting', () => {
+    const messages = [
+      { id: 'user:turn-1', role: 'user' as const, content: 'run both', status: 'complete' as const, created_at_ms: 10 },
+      { id: 'thinking:turn-1:1', role: 'assistant' as const, content: '', status: 'complete' as const, created_at_ms: 50, blocks: [{ type: 'thinking' as const, content: 'first' }] },
+      { id: 'tool:turn-1:call-1', role: 'assistant' as const, content: '', status: 'complete' as const, created_at_ms: 20, blocks: [activityTimeline({ items: [activityItem({ item_id: 'call-1', tool_id: 'call-1' })] })] },
+      { id: 'thinking:turn-1:2', role: 'assistant' as const, content: '', status: 'complete' as const, created_at_ms: 40, blocks: [{ type: 'thinking' as const, content: 'second' }] },
+      { id: 'tool:turn-1:call-2', role: 'assistant' as const, content: '', status: 'complete' as const, created_at_ms: 30, blocks: [activityTimeline({ items: [activityItem({ item_id: 'call-2', tool_id: 'call-2' })] })] },
+      { id: 'assistant:turn-1:1', role: 'assistant' as const, content: 'done', status: 'complete' as const, created_at_ms: 1 },
+    ];
+
+    const entries = buildFlowerTimelineEntries(thread({ messages }));
+    expect(entries.filter((entry) => entry.type === 'message').map((entry) => entry.message.id)).toEqual(
+      messages.map((message) => message.id),
+    );
+  });
+
   it('recognizes a canonical declined tool from the rendered timeline without an approval marker', () => {
     const entries = buildFlowerTimelineEntries(thread({
       messages: [{

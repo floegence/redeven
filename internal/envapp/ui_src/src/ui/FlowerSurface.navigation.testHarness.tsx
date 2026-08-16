@@ -443,6 +443,7 @@ export function launchReceipt(
             items: [{
               id: `user:${clientRequestID}`,
               turn_id: canonicalID,
+              ordinal: 1,
               kind: 'user' as const,
               text: '',
             }],
@@ -474,12 +475,14 @@ export function runtimeCurrentView(
       },
     }] : []),
   ];
+  let nextOrdinal = 0;
   const items: FlowerRuntimeCurrentItem[] = threadValue.messages.flatMap<FlowerRuntimeCurrentItem>((message) => {
     const activity = message.blocks?.find((block) => block.type === 'activity-timeline');
     if (activity?.type === 'activity-timeline') {
       return activity.items.map((item) => ({
         id: item.item_id,
         turn_id: message.turn_id,
+        ordinal: ++nextOrdinal,
         kind: 'tool' as const,
         activity: item as unknown as Readonly<Record<string, unknown>>,
       }));
@@ -487,6 +490,7 @@ export function runtimeCurrentView(
     return [{
       id: message.id,
       turn_id: message.turn_id,
+      ordinal: ++nextOrdinal,
       kind: message.role === 'user' ? 'user' as const : 'assistant' as const,
       text: message.content,
     }];
