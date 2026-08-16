@@ -554,6 +554,58 @@ describe('FlowerSurface navigation', () => {
     expect(runtime.querySelectorAll('[data-flower-message-id="latest-a-message"]')).toHaveLength(1);
   });
 
+  it('reorders two canonical queued turns through drag events', async () => {
+    const first = { queue_id: 'queue-first', prompt: 'First queued turn', created_at_ms: 10 };
+    const second = { queue_id: 'queue-second', prompt: 'Second queued turn', created_at_ms: 11 };
+    const queuedThread = thread({
+      thread_id: 'thread-queued-reorder',
+      title: 'Queued reorder',
+      status: 'running',
+      queued_turn_count: 2,
+      queued_turns: [first, second],
+    });
+    const reorderQueuedTurns = vi.fn(async (_threadID: string, orderedQueueIDs: readonly string[]) => liveBootstrap(thread({
+      ...queuedThread,
+      queued_turns: orderedQueueIDs.map((queueID) => queueID === first.queue_id ? first : second),
+      updated_at_ms: queuedThread.updated_at_ms + 1,
+    }), 2));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [queuedThread]),
+      loadThread: vi.fn(async () => liveBootstrap(queuedThread, 1)),
+      reorderQueuedTurns,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-queued-reorder"] button')));
+    (runtime.querySelector('[data-thread-id="thread-queued-reorder"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelectorAll('[data-flower-queued-turn-dock-id]').length === 2);
+    const items = Array.from(runtime.querySelectorAll<HTMLElement>('[data-flower-queued-turn-dock-id]'));
+    const dataTransfer = {
+      effectAllowed: 'none',
+      dropEffect: 'none',
+      setData: vi.fn(),
+      getData: vi.fn(() => first.queue_id),
+    };
+    const dragEvent = (type: string, clientY = 0) => {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      Object.defineProperties(event, {
+        dataTransfer: { value: dataTransfer },
+        clientY: { value: clientY },
+      });
+      return event;
+    };
+
+    items[0].dispatchEvent(dragEvent('dragstart'));
+    items[1].dispatchEvent(dragEvent('dragover', 1));
+    items[1].dispatchEvent(dragEvent('drop', 1));
+
+    await waitFor(() => reorderQueuedTurns.mock.calls.length === 1);
+    expect(reorderQueuedTurns).toHaveBeenCalledWith(queuedThread.thread_id, [second.queue_id, first.queue_id]);
+    await waitFor(() => Array.from(runtime.querySelectorAll('[data-flower-queued-turn-dock-id]')).map((item) => (
+      item.getAttribute('data-flower-queued-turn-dock-id')
+    )).join(',') === `${second.queue_id},${first.queue_id}`);
+  });
+
   it('waits for canonical timeline messages after a new thread is accepted', async () => {
     const acceptedThread = thread({
       thread_id: 'thread-accepted-without-messages',
