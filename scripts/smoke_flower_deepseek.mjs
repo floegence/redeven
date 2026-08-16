@@ -790,7 +790,7 @@ async function runScenarios(page, config, telemetry) {
   await remember('S06', async () => {
     await startNewThread(page); await setPermission(page, 'full_access');
     const normal = marker('ASK_CHOICE');
-    const sentNormal = await sendPrompt(page, `Call ask_user exactly once. Ask for a deployment lane with choices Alpha, Beta, and Other. After the answer, reply ${normal}. Call no other tool.`, { visibleMarker: normal });
+    const sentNormal = await sendPrompt(page, `Call ask_user exactly once. Ask for a deployment lane using response_mode "select", choices_exhaustive true, and exactly two fixed choices: Alpha and Beta. After the answer, reply ${normal}. Call no other tool.`, { visibleMarker: normal });
     const prompt = surface.locator('[data-flower-input-request-prompt]');
     await prompt.waitFor({ state: 'visible', timeout: 180_000 });
     await startNewThread(page); await selectThread(page, sentNormal.threadID);
@@ -802,7 +802,7 @@ async function runScenarios(page, config, telemetry) {
 
     await startNewThread(page); await setPermission(page, 'full_access');
     const other = marker('ASK_OTHER');
-    const sentOther = await sendPrompt(page, `Call ask_user exactly once. Ask for a deployment lane with choices Alpha, Beta, and Other. After a custom answer, reply ${other}. Call no other tool.`, { visibleMarker: other });
+    const sentOther = await sendPrompt(page, `Call ask_user exactly once. Ask for a deployment lane using response_mode "select_or_write", choices_exhaustive false, exactly two fixed choices Alpha and Beta, and write_label "Other" for custom text. After a custom answer, reply ${other}. Call no other tool.`, { visibleMarker: other });
     const otherPrompt = surface.locator('[data-flower-input-request-prompt]');
     await otherPrompt.waitFor({ state: 'visible', timeout: 180_000 });
     await otherPrompt.locator('[data-flower-input-answer-kind="custom"]').click();
