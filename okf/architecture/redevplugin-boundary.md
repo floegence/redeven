@@ -8,7 +8,7 @@ timestamp: 2026-07-25T00:00:00Z
 # Summary
 
 ReDevPlugin is an independently released plugin platform. Redeven consumes its
-coordinated `v2.0.4` Go, npm, Rust source-crate, and machine-contract artifacts;
+coordinated `v2.0.7` Go, npm, Rust source-crate, and machine-contract artifacts;
 it does not fork platform mechanics. Redeven owns authenticated session mapping,
 product source policy and review UX, UI placement, product runtime builds, and
 concrete business adapters. Missing or unverifiable upstream identity, lifecycle,
@@ -42,12 +42,12 @@ external-package inspection or receipt store.
 
 ## Published dependency set
 
-The current integration consumes the coordinated ReDevPlugin `v2.0.4` set:
+The current integration consumes the coordinated ReDevPlugin `v2.0.7` set:
 
-- `github.com/floegence/redevplugin/v2 v2.0.4`;
-- `@floegence/redevplugin-contracts@2.0.4` and
-  `@floegence/redevplugin-ui@2.0.4`;
-- `redevplugin-runtime@2.0.4` and `redevplugin-worker-sdk@2.0.4` as the exact
+- `github.com/floegence/redevplugin/v2 v2.0.7`;
+- `@floegence/redevplugin-contracts@2.0.7` and
+  `@floegence/redevplugin-ui@2.0.7`;
+- `redevplugin-runtime@2.0.7` and `redevplugin-worker-sdk@2.0.7` as the exact
   public Rust source-crate boundary;
 - the released contract registry, package-set contract, contract hashes, and
   attested `platform-package-publication-v2.json` registry readback, whose
@@ -78,7 +78,7 @@ platform state. Redeven may reconnect and refresh inventory, but must not create
 a local execution store, copy the state machine, invent progress, or cancel work
 when a panel closes.
 
-Enabled-plugin startup recovery remains ReDevPlugin work. The `v2.0.4` Host
+Enabled-plugin startup recovery remains ReDevPlugin work. The `v2.0.7` Host
 revalidates the installed package identity, SHA-256 hashes, Ed25519 status,
 revocation, grants, policy fences, runtime admission, and session scope before it
 publishes a runnable result. Invalid or revoked evidence, schema drift, tampering,
@@ -86,10 +86,16 @@ and stale fences fail closed. Redeven consumes the Host `RecoverySnapshot` and
 `recoverEnabled` result and must not inspect opaque control state, duplicate trust
 decisions, or treat local presentation state as fallback authorization.
 
-The v2.0.4 Host also preserves the verified manifest model across control-store
+The v2.0.7 Host also preserves the verified manifest model across control-store
 JSON round trips. A durable v2.0.3 row whose model was omitted is recovered only
 from the immutable installed `manifest.json` after exact package identity and
 hash validation; missing, conflicting, or tampered evidence remains fail closed.
+
+Environment-scoped runtime invocations retain `owner_user_hash` in the signed
+short-lived lease audience while deriving the narrower resource scope without a
+user hash. The Host validates those two bindings independently before IPC, so a
+valid authenticated session can use environment resources without weakening the
+environment-only ownership of filesystem and network handles.
 
 The platform bounds each enabled-plugin recovery attempt to 15 seconds and
 reports deadline exhaustion as `recovery_timeout`, distinct from lifecycle
