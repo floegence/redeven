@@ -126,11 +126,11 @@ export function createFilePreviewController(params: {
   const cleanupPreviewContent = () => {
     if (activePreviewChannel) {
       try {
-		void activePreviewChannel.stream.reset();
+		void Promise.resolve(activePreviewChannel.stream.reset()).catch(() => undefined);
       } catch {
       }
       try {
-        void activePreviewChannel.close();
+        void Promise.resolve(activePreviewChannel.close()).catch(() => undefined);
       } catch {
       }
       activePreviewChannel = null;

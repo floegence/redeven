@@ -51,6 +51,12 @@ maps the sequence directly and does not consume the deprecated global draft
 fields, infer order from timestamps or tool identity, or persist a second
 presentation order.
 
+Flower thread navigation assigns the selection generation synchronously with
+the user's rail intent. Deferred presentation work carries that generation,
+and an older bootstrap is rejected before it can update `ThreadCache` detail.
+Rapid A to B to A navigation therefore keeps the latest selected identity and
+transcript even when earlier detail requests settle out of order.
+
 `ThreadContextReader` recovers the
 canonical merged compaction operations for detail reads and terminal workspace
 updates. A pure `/compact` input supplies one host-owned manual compaction request;
@@ -76,3 +82,5 @@ Redeven never imports Floret internals, reads Floret storage, copies canonical l
 - `redeven:internal/ai/send_user_turn.go` - Thin product send mapping into typed Floret state.
 - `redeven:internal/ai/stop_thread.go` - Idempotent typed cancellation without handler lookup.
 - `redeven:internal/ai/retry_thread_effect.go` - Exact unknown-effect retry mapping.
+- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Latest-selection generation fence before detail cache mutation.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.navigation.test.tsx` - Deterministic out-of-order A to B to A navigation coverage.
