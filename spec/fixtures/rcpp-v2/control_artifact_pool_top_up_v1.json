@@ -1,0 +1,1 @@
+{"top_up_request_id_b64u":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","pool":{"version":"control_artifact_pool_v1","logical_provider_binding_id":"redeven:user:local","binding_generation":7,"target_waterline":2,"refresh_horizon_seconds":60,"server_highest_artifact_sequence":4,"entries":[],"response_digest_b64u":"k9J9kYTGyuVYiClrBC6f9NI3OpbUpsBMqLpZqwne25k"}}

@@ -2,6 +2,13 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const registeredSource = Object.freeze({ acquire: vi.fn() });
+const createControlplaneArtifactSource = vi.fn((_options: Record<string, unknown>) => registeredSource);
+
+vi.mock('@floegence/floe-webapp-boot/artifact-source', () => ({
+  createControlplaneArtifactSource,
+}));
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify({ data: body }), {
     status,
@@ -24,6 +31,8 @@ describe('controlplaneApi local access flow', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.restoreAllMocks();
+    registeredSource.acquire.mockClear();
+    createControlplaneArtifactSource.mockClear();
     window.history.replaceState(null, document.title, '/_redeven_proxy/env/');
   });
 
@@ -211,7 +220,7 @@ describe('controlplaneApi local access flow', () => {
     });
   });
 
-  it('uses same-origin credentials when minting local direct connect artifacts', async () => {
+  it('returns one stable local source whose acquire fetch stages the matching plugin credential', async () => {
     const auth = await import('./localAccessAuth');
     auth.writeLocalAccessResumeToken('resume123');
     const controller = new AbortController();
@@ -223,21 +232,146 @@ describe('controlplaneApi local access flow', () => {
       expect(new Headers(init?.headers).get(auth.getLocalAccessResumeHeaderName())).toBe('resume123');
       return jsonResponse({
         plugin_session_credential: 'plugin-generation-secret',
-		channel_id: 'ch_local',
-		connect_artifact: validV2Artifact(),
+        channel_id: 'ch_local',
+        v: 1,
+        connect_artifact: JSON.stringify(validV2Artifact()),
+        critical_scope_projection_json: '{"scope":"proxy.runtime"}',
+        spend_scope: {
+          v: 1,
+          receipt: 'r1.local.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+          artifact_digest_b64u: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+          projection_digest_b64u: 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+          launcher_origin: window.location.origin,
+          runtime_origin: window.location.origin,
+          app_origin: window.location.origin,
+          consumer: 'trusted',
+          target_binding: {
+            v: 1,
+            kind: 'env',
+            env_public_id: 'env_local',
+            floe_app: 'com.floegence.redeven.agent',
+            launcher_kind: 'env',
+            launcher_id: 'env_local',
+          },
+          expires_at: '2033-05-18T03:33:20Z',
+        },
       });
     });
     vi.stubGlobal('fetch', fetchMock);
 
+    const beforeAcquire = vi.fn();
+    const afterCredentialStaged = vi.fn();
     const mod = await import('./controlplaneApi');
-    const out = await mod.mintLocalDirectConnectArtifact({ signal: controller.signal });
+    const source = await mod.createLocalDirectArtifactSource({ beforeAcquire, afterCredentialStaged });
 
-	expect(out.kind).toBe('lease');
+    expect(source).toBe(registeredSource);
+    expect(createControlplaneArtifactSource).toHaveBeenCalledWith(expect.objectContaining({
+      baseUrl: window.location.origin,
+      endpointId: 'env_local',
+      allowLoopbackHTTP: true,
+      fetch: expect.any(Function),
+      commitSpend: expect.any(Function),
+      validateSpendBinding: expect.any(Function),
+    }));
+    const sourceOptions = createControlplaneArtifactSource.mock.calls[0]?.[0] as {
+      fetch: typeof globalThis.fetch;
+    };
+    const acquisitionResponse = await sourceOptions.fetch('http://localhost:3000/v1/connect/artifact', {
+      method: 'POST',
+      signal: controller.signal,
+    });
+    expect(acquisitionResponse.ok).toBe(true);
+    await expect(acquisitionResponse.json()).resolves.toMatchObject({
+      v: 1,
+      critical_scope_projection_json: '{"scope":"proxy.runtime"}',
+    });
+    expect(beforeAcquire).toHaveBeenCalledWith({ signal: controller.signal });
+    expect(afterCredentialStaged).toHaveBeenCalledTimes(1);
     const pluginCredential = await import('./pluginSessionCredential');
     expect(pluginCredential.readPluginSessionCredential()).toBe('');
     expect(pluginCredential.activatePluginSessionCredential('ch_local')).toBe(true);
     expect(pluginCredential.readPluginSessionCredential()).toBe('plugin-generation-secret');
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves local access expiry as a terminal artifact-source response', async () => {
+    const fetchMock = vi.fn(async () => errorResponse('access password required', 423, {
+      code: 'ACCESS_PASSWORD_REQUIRED',
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const mod = await import('./controlplaneApi');
+    await mod.createLocalDirectArtifactSource();
+    const sourceOptions = createControlplaneArtifactSource.mock.calls[0]?.[0] as {
+      fetch: typeof globalThis.fetch;
+    };
+    const response = await sourceOptions.fetch('http://localhost:3000/v1/connect/artifact', {
+      method: 'POST',
+      signal: new AbortController().signal,
+    });
+
+    expect(response.status).toBe(423);
+    await expect(response.json()).resolves.toEqual({
+      error: { code: 'access_password_required' },
+    });
+
+    const actualBoot = await vi.importActual<typeof import('@floegence/floe-webapp-boot/artifact-source')>(
+      '@floegence/floe-webapp-boot/artifact-source',
+    );
+    const actualSource = actualBoot.createControlplaneArtifactSource(
+      sourceOptions as Parameters<typeof actualBoot.createControlplaneArtifactSource>[0],
+    );
+    await expect(actualSource.acquire({ signal: new AbortController().signal })).resolves.toEqual({
+      kind: 'failure',
+      code: 'access_password_required',
+      disposition: { kind: 'terminal' },
+    });
+  });
+
+  it('keeps the Local UI spend body complete and applies local access authority', async () => {
+    const auth = await import('./localAccessAuth');
+    auth.writeLocalAccessResumeToken('resume-spend');
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(null, { status: 204 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const mod = await import('./controlplaneApi');
+    await mod.createLocalDirectArtifactSource();
+    const sourceOptions = createControlplaneArtifactSource.mock.calls[0]?.[0] as {
+      commitSpend: (request: Record<string, any>, signal?: AbortSignal) => Promise<void>;
+    };
+    const signal = new AbortController().signal;
+    const targetBinding = { v: 1, kind: 'env', env_public_id: 'env_local' };
+    await sourceOptions.commitSpend({
+      attemptId: 'attempt-local',
+      receipt: 'receipt-local',
+      artifactDigestB64u: 'artifact-local',
+      projectionDigestB64u: 'projection-local',
+      launcherOrigin: window.location.origin,
+      runtimeOrigin: window.location.origin,
+      appOrigin: window.location.origin,
+      consumer: 'trusted',
+      targetBinding,
+      expiresAt: '2033-05-18T03:33:20Z',
+    }, signal);
+
+    const [input, init] = fetchMock.mock.calls[0] ?? [];
+    expect(String(input)).toBe('/api/local/direct/artifact/spend');
+    expect(init?.credentials).toBe('same-origin');
+    expect(init?.signal).toBe(signal);
+    expect(new Headers(init?.headers).get(auth.getLocalAccessResumeHeaderName())).toBe('resume-spend');
+    expect(new Headers(init?.headers).has('authorization')).toBe(false);
+    expect(JSON.parse(String(init?.body))).toEqual({
+      attempt_id: 'attempt-local',
+      receipt: 'receipt-local',
+      artifact_digest_b64u: 'artifact-local',
+      projection_digest_b64u: 'projection-local',
+      launcher_origin: window.location.origin,
+      runtime_origin: window.location.origin,
+      app_origin: window.location.origin,
+      consumer: 'trusted',
+      target_binding: targetBinding,
+      expires_at: '2033-05-18T03:33:20Z',
+    });
   });
 
   it('loads local environment detail only when the caller selects the local source explicitly', async () => {
@@ -340,59 +474,5 @@ describe('controlplaneApi local access flow', () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).not.toHaveBeenCalledWith('/api/local/agent/version/latest', expect.anything());
-  });
-
-  it('rejects loopback HTTP artifact requests before fetch unless explicitly allowed', async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
-
-    const mod = await import('./controlplaneApi');
-    await expect(mod.connectArtifactEntry({
-      endpointId: 'env_demo',
-      floeApp: 'com.floegence.redeven.agent',
-      entryTicket: 'ticket-1',
-    })).rejects.toMatchObject({
-      status: 0,
-      code: 'transport_policy_denied',
-    });
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it('redeems entry tickets via the canonical connect artifact contract with explicit loopback HTTP permission', async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-	  expect(String(input)).toMatch(/\/v1\/connect\/artifact\/entry$/u);
-      expect(init?.method).toBe('POST');
-      expect(init?.credentials).toBe('omit');
-      expect(init?.redirect).toBe('error');
-      const headers = new Headers(init?.headers);
-      expect(headers.get('Authorization')).toBe('Bearer ticket-1');
-      expect(JSON.parse(String(init?.body))).toEqual({
-        endpoint_id: 'env_demo',
-        payload: {
-          floe_app: 'com.floegence.redeven.agent',
-        },
-      });
-      return new Response(
-        JSON.stringify({
-		  connect_artifact: validV2Artifact(),
-        }),
-        {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        },
-      );
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
-    const mod = await import('./controlplaneApi');
-    const out = await mod.connectArtifactEntry({
-      endpointId: 'env_demo',
-      floeApp: 'com.floegence.redeven.agent',
-      entryTicket: 'ticket-1',
-      allowLoopbackHTTP: true,
-    });
-
-	expect(out.kind).toBe('lease');
-    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

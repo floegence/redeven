@@ -15,6 +15,8 @@ const mintLocalDirectConnectArtifactMock = vi.fn();
 const mintEnvProxyEntryTicketMock = vi.fn();
 const mintEnvEntryTicketForAppMock = vi.fn();
 const connectArtifactEntryMock = vi.fn();
+const createLocalDirectArtifactSourceMock = vi.fn(() => Object.freeze({ acquire: mintLocalDirectConnectArtifactMock }));
+const createEnvProxyArtifactSourceMock = vi.fn(() => Object.freeze({ acquire: connectArtifactEntryMock }));
 const getEnvPublicIDFromSessionMock = vi.fn(() => 'env_remote');
 const notificationMocks = vi.hoisted(() => ({
   error: vi.fn(),
@@ -22,23 +24,44 @@ const notificationMocks = vi.hoisted(() => ({
   info: vi.fn(),
 }));
 
-let protocolStatus: 'connected' | 'disconnected' | 'connecting' | 'error' = 'disconnected';
-let protocolClient: unknown = null;
+type ProtocolSnapshotMock = Readonly<{
+  state: 'idle' | 'connecting' | 'connected' | 'waiting' | 'failed' | 'closed';
+  attempt: number;
+  currentSession?: unknown;
+}>;
+
+let protocolSnapshot: ProtocolSnapshotMock = Object.freeze({ state: 'idle', attempt: 0 });
+let protocolConnectionConfig: Record<string, any> | null = null;
+let protocolSessionOrdinal = 0;
 const [protocolRevision, setProtocolRevision] = createSignal(0);
 
-const connectMock = vi.fn(async () => {
-  protocolStatus = 'connected';
-  protocolClient = { id: 'client-1' };
+const publishProtocolConnected = () => {
+  protocolSessionOrdinal += 1;
+  protocolSnapshot = Object.freeze({
+    state: 'connected',
+    attempt: protocolSnapshot.attempt + 1,
+    currentSession: { id: `client-${protocolSessionOrdinal}` },
+  });
   setProtocolRevision((revision) => revision + 1);
+};
+const connectMock = vi.fn(async (config: Record<string, any>) => {
+  protocolConnectionConfig = config;
+  publishProtocolConnected();
 });
-const reconnectMock = vi.fn(async () => {
-  protocolStatus = 'connected';
-  protocolClient = { id: 'client-2' };
-  setProtocolRevision((revision) => revision + 1);
+const replaceConnectionMock = vi.fn(async (config: Record<string, any>) => {
+  protocolConnectionConfig?.lifecycle?.dispose?.();
+  protocolConnectionConfig = config;
+  publishProtocolConnected();
+});
+const retryNowMock = vi.fn(() => {
+  if (protocolSnapshot.state !== 'waiting') return false;
+  publishProtocolConnected();
+  return true;
 });
 const disconnectMock = vi.fn(() => {
-  protocolStatus = 'disconnected';
-  protocolClient = null;
+  protocolConnectionConfig?.lifecycle?.dispose?.();
+  protocolConnectionConfig = null;
+  protocolSnapshot = Object.freeze({ state: 'idle', attempt: 0 });
   setProtocolRevision((revision) => revision + 1);
 });
 const accessStatusMock = vi.fn(async () => ({ passwordRequired: false, unlocked: true }));
@@ -190,14 +213,19 @@ vi.mock('@floegence/floe-webapp-protocol', () => ({
   useProtocol: () => ({
     status: () => {
       protocolRevision();
-      return protocolStatus;
+      return protocolSnapshot.state;
+    },
+    snapshot: () => {
+      protocolRevision();
+      return protocolSnapshot;
     },
     session: () => {
       protocolRevision();
-      return protocolClient;
+      return protocolSnapshot.currentSession ?? null;
     },
     connect: connectMock,
-    reconnect: reconnectMock,
+    replaceConnection: replaceConnectionMock,
+    retryNow: retryNowMock,
     disconnect: disconnectMock,
     error: () => null,
   }),
@@ -226,14 +254,14 @@ vi.mock('./protocol/redeven_v1', () => ({
 }));
 
 vi.mock('./services/controlplaneApi', () => ({
-  connectArtifactEntry: connectArtifactEntryMock,
+  createEnvProxyArtifactSource: createEnvProxyArtifactSourceMock,
+  createLocalDirectArtifactSource: createLocalDirectArtifactSourceMock,
   getAgentLatestVersion: getAgentLatestVersionMock,
   getEnvPublicIDFromSession: getEnvPublicIDFromSessionMock,
   getLocalAccessStatus: getLocalAccessStatusMock,
   getLocalRuntime: getLocalRuntimeMock,
   getEnvironment: getEnvironmentMock,
   mintEnvProxyEntryTicket: mintEnvProxyEntryTicketMock,
-  mintLocalDirectConnectArtifact: mintLocalDirectConnectArtifactMock,
   mintEnvEntryTicketForApp: mintEnvEntryTicketForAppMock,
   unlockLocalAccess: unlockLocalAccessMock,
 }));
@@ -322,8 +350,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
   sessionStorage.clear();
-  protocolStatus = 'disconnected';
-  protocolClient = null;
+  protocolSnapshot = Object.freeze({ state: 'idle', attempt: 0 });
+  protocolConnectionConfig = null;
+  protocolSessionOrdinal = 0;
+  setProtocolRevision((revision) => revision + 1);
 
   getLocalRuntimeMock.mockResolvedValue(null);
   getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
@@ -367,6 +397,7 @@ describe('EnvAppShell update prompt orchestration', () => {
 
     try {
       await flushUntil(() => Boolean(host.querySelector('[data-testid="workbench-page"]')));
+      await flushUntil(() => connectMock.mock.calls.length > 0);
 
       expect(host.querySelector('[data-testid="workbench-page"]')).toBeTruthy();
       expect(connectMock).toHaveBeenCalled();

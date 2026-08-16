@@ -7,6 +7,13 @@ const allowedFloetermInitialModules = new Set([
 ]);
 
 function isForbiddenInitialModule(moduleId) {
+  if (moduleId === '@floegence/floe-webapp-boot'
+      || moduleId.startsWith('@floegence/floe-webapp-boot/')) {
+    return true;
+  }
+  if (moduleId === '@floegence/flowersec-core/dist/browser/connectSession.js') {
+    return true;
+  }
   if (moduleId.startsWith('@floegence/floeterm-terminal-web/')) {
     return !allowedFloetermInitialModules.has(moduleId);
   }

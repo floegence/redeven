@@ -44,6 +44,7 @@ type GrantServerNotify struct {
 // intentionally limited to the published Flowersec v2 artifact grant fields;
 // transport/session implementation details stay inside Flowersec.
 type ChannelInitGrant struct {
-	ArtifactJSON json.RawMessage `json:"artifact_json"`
-	ChannelID    string          `json:"channel_id"`
+	ArtifactJSON           json.RawMessage `json:"artifact_json"`
+	ChannelID              string          `json:"channel_id"`
+	ArtifactExpiresAtUnixS int64           `json:"artifact_expires_at_unix_s"`
 }

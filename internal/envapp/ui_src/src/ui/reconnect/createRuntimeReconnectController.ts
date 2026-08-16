@@ -2,17 +2,7 @@ import { createEffect, createSignal, on, onCleanup, untrack, type Accessor } fro
 
 import type { DesktopTransportRecoverySnapshot } from '../services/desktopSessionContext';
 
-const WAIT_DELAYS_MS = [2_000, 3_000, 5_000, 8_000, 12_000, 15_000] as const;
 const RECOVERY_SUCCESS_HOLD_MS = 1_500;
-
-export const REMOTE_FAST_RECONNECT_POLICY = {
-  enabled: true,
-  maxAttempts: 3,
-  initialDelayMs: 500,
-  maxDelayMs: 3_000,
-} as const;
-
-export const LOCAL_FAST_RECONNECT_POLICY = REMOTE_FAST_RECONNECT_POLICY;
 
 export type ReconnectAvailabilityStatus = 'online' | 'offline' | 'unknown';
 export type ReconnectAccessStatus = 'ready' | 'locked' | 'unknown';
@@ -31,12 +21,6 @@ export type ReconnectFailure = Readonly<{
   technical_detail: string;
   error_code?: string;
   http_status?: number;
-}>;
-
-export type ReconnectAvailability = Readonly<{
-  status: ReconnectAvailabilityStatus;
-  access?: ReconnectAccessStatus;
-  failure?: ReconnectFailure;
 }>;
 
 export type ConnectionRecoveryPhase =
@@ -65,18 +49,16 @@ export type ConnectionRecoverySnapshot = Readonly<{
   failure?: ReconnectFailure;
 }>;
 
-export type ReconnectDiagnosticEvent = Readonly<{
-  stage: string;
-  code: string;
-  result: string;
-  attempt_seq: number;
+export type ProtocolWaitingPresentation = Readonly<{
+  attempt: number;
+  terminal: boolean;
+  nextRetryAtUnixMs?: number;
 }>;
 
 export type RuntimeReconnectController = Readonly<{
   snapshot: Accessor<ConnectionRecoverySnapshot>;
-  activateWaiting: (failure: ReconnectFailure) => void;
-  noteProtocolDiagnostic: (event: ReconnectDiagnosticEvent, failure?: ReconnectFailure) => void;
-  noteProtocolConnecting: () => void;
+  activateWaiting: (failure: ReconnectFailure, protocol: ProtocolWaitingPresentation) => void;
+  noteProtocolConnecting: (attempt: number) => void;
   noteProtocolConnected: () => void;
   noteSecureSession: (state: 'recovering' | 'ready' | 'failed', failure?: ReconnectFailure) => void;
   requestImmediateRetry: () => Promise<void>;
@@ -85,8 +67,7 @@ export type RuntimeReconnectController = Readonly<{
 type CreateRuntimeReconnectControllerArgs = Readonly<{
   enabled: Accessor<boolean>;
   desktopTransport: Accessor<DesktopTransportRecoverySnapshot | null>;
-  probeAvailability: () => Promise<ReconnectAvailability>;
-  reconnect: () => Promise<void>;
+  retryProtocolNow: () => boolean;
   requestDesktopRecoveryNow: () => Promise<boolean>;
   successHoldMs?: number;
 }>;
@@ -95,13 +76,9 @@ function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
 
-function positiveInteger(value: unknown): number | null {
+function positiveInteger(value: unknown): number {
   const numberValue = Number(value);
-  return Number.isSafeInteger(numberValue) && numberValue > 0 ? numberValue : null;
-}
-
-function nextWaitDelayMs(attempt: number): number {
-  return WAIT_DELAYS_MS[Math.min(Math.max(0, Math.floor(attempt)), WAIT_DELAYS_MS.length - 1)]!;
+  return Number.isSafeInteger(numberValue) && numberValue > 0 ? numberValue : 0;
 }
 
 function freezeSnapshot(snapshot: ConnectionRecoverySnapshot): ConnectionRecoverySnapshot {
@@ -157,6 +134,7 @@ export function classifyReconnectFailure(error: unknown): ReconnectFailure {
     || errorCode === 'INVALID_ENV_SESSION'
     || errorCode === 'MISSING_ENV_SESSION'
     || errorCode === 'UNAUTHORIZED'
+    || errorCode === 'ACCESS_PASSWORD_REQUIRED'
   ) {
     return Object.freeze({
       code: 'authentication_failed',
@@ -195,20 +173,10 @@ export function classifyReconnectFailure(error: unknown): ReconnectFailure {
 
 export function createRuntimeReconnectController(args: CreateRuntimeReconnectControllerArgs): RuntimeReconnectController {
   const [snapshot, setSnapshot] = createSignal<ConnectionRecoverySnapshot>(idleSnapshot());
-  let waitTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
   let successTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
-  let tickInFlight = false;
-  let lastDiagnosticAttemptSeq = 0;
 
   const publish = (next: Omit<ConnectionRecoverySnapshot, 'revision'>) => {
     setSnapshot(freezeSnapshot({ ...next, revision: snapshot().revision + 1 }));
-  };
-
-  const clearWaitTimer = () => {
-    if (typeof waitTimer !== 'undefined') {
-      globalThis.clearTimeout(waitTimer);
-      waitTimer = undefined;
-    }
   };
 
   const clearSuccessTimer = () => {
@@ -219,9 +187,7 @@ export function createRuntimeReconnectController(args: CreateRuntimeReconnectCon
   };
 
   const reset = () => {
-    clearWaitTimer();
     clearSuccessTimer();
-    tickInFlight = false;
     const current = snapshot();
     setSnapshot(idleSnapshot(current.generation, current.revision + 1));
   };
@@ -258,7 +224,6 @@ export function createRuntimeReconnectController(args: CreateRuntimeReconnectCon
   };
 
   const failRecovery = (failure: ReconnectFailure) => {
-    clearWaitTimer();
     clearSuccessTimer();
     ensureRecovery('failed', failure);
     const current = snapshot();
@@ -281,7 +246,6 @@ export function createRuntimeReconnectController(args: CreateRuntimeReconnectCon
     const current = snapshot();
     if (current.state === 'idle' || current.state === 'succeeded') return;
     if (current.state === 'failed' && !isRecoverableAuthenticationFailure(current)) return;
-    clearWaitTimer();
     clearSuccessTimer();
     publish({
       ...current,
@@ -301,76 +265,6 @@ export function createRuntimeReconnectController(args: CreateRuntimeReconnectCon
     return phase === 'waiting' || phase === 'connecting' || phase === 'failed';
   };
 
-  const scheduleTick = (delayMs: number, forceReconnect: boolean) => {
-    if (!args.enabled() || snapshot().state === 'failed' || desktopTransportBlocksProbe()) return;
-    clearWaitTimer();
-    const safeDelay = Math.max(0, Math.floor(delayMs));
-    const current = snapshot();
-    publish({
-      ...current,
-      phase: 'runtime_probe',
-      next_retry_at_unix_ms: Date.now() + safeDelay,
-    });
-    waitTimer = globalThis.setTimeout(() => {
-      waitTimer = undefined;
-      void runTick(forceReconnect);
-    }, safeDelay);
-  };
-
-  const runTick = async (forceReconnect: boolean) => {
-    if (!args.enabled() || tickInFlight || snapshot().state === 'failed' || desktopTransportBlocksProbe()) return;
-    tickInFlight = true;
-    clearWaitTimer();
-    const beforeProbe = snapshot();
-    const probeAttemptCount = beforeProbe.runtime_probe_attempt_count + 1;
-    publish({
-      ...beforeProbe,
-      phase: 'runtime_probe',
-      runtime_probe_attempt_count: probeAttemptCount,
-      next_retry_at_unix_ms: undefined,
-    });
-    try {
-      const availability = await args.probeAvailability();
-      if (!args.enabled() || snapshot().state === 'failed' || desktopTransportBlocksProbe()) return;
-      if (availability.access === 'locked') {
-        failRecovery(availability.failure ?? {
-          code: 'authentication_failed',
-          retryable: false,
-          technical_detail: '',
-        });
-        return;
-      }
-      const current = snapshot();
-      publish({
-        ...current,
-        availability_status: availability.status,
-        ...(availability.failure ? { failure: availability.failure } : {}),
-      });
-      if (!forceReconnect && availability.status === 'offline') {
-        scheduleTick(nextWaitDelayMs(probeAttemptCount), false);
-        return;
-      }
-      const beforeReconnect = snapshot();
-      publish({
-        ...beforeReconnect,
-        phase: 'protocol_connect',
-        next_retry_at_unix_ms: undefined,
-      });
-      await args.reconnect();
-    } catch (error) {
-      const failure = classifyReconnectFailure(error);
-      if (!failure.retryable) {
-        failRecovery(failure);
-        return;
-      }
-      const current = snapshot();
-      publish({ ...current, failure });
-      scheduleTick(nextWaitDelayMs(current.runtime_probe_attempt_count), false);
-    } finally {
-      tickInFlight = false;
-    }
-  };
-
   createEffect(on([args.enabled, args.desktopTransport], ([enabled, desktop]) => {
     const currentSnapshot = untrack(snapshot);
     if (!enabled) {
@@ -379,7 +273,6 @@ export function createRuntimeReconnectController(args: CreateRuntimeReconnectCon
     }
     if (!desktop) return;
     if (desktop.phase === 'waiting' || desktop.phase === 'connecting') {
-      clearWaitTimer();
       ensureRecovery('desktop_transport', desktop.failure ? {
         code: desktop.failure.code === 'authentication_failed' ? 'authentication_failed' : 'transport_unavailable',
         retryable: desktop.failure.code !== 'authentication_failed',
@@ -409,64 +302,40 @@ export function createRuntimeReconnectController(args: CreateRuntimeReconnectCon
     if (currentSnapshot.state === 'recovering' && desktop.recovered_at_unix_ms) {
       const current = snapshot();
       publish({ ...current, desktop_transport: desktop });
-      scheduleTick(0, false);
+      args.retryProtocolNow();
     }
   }));
 
   onCleanup(() => {
-    clearWaitTimer();
     clearSuccessTimer();
   });
 
   return {
     snapshot,
-    activateWaiting: (failure) => {
+    activateWaiting: (failure, protocol) => {
       if (!args.enabled()) return;
-      if (!failure.retryable) {
+      if (!failure.retryable || protocol.terminal) {
         failRecovery(failure);
         return;
       }
-      ensureRecovery(desktopTransportBlocksProbe() ? 'desktop_transport' : 'runtime_probe', failure);
-      if (!desktopTransportBlocksProbe() && !tickInFlight && typeof waitTimer === 'undefined') {
-        scheduleTick(nextWaitDelayMs(snapshot().runtime_probe_attempt_count), false);
-      }
+      ensureRecovery(desktopTransportBlocksProbe() ? 'desktop_transport' : 'protocol_connect', failure);
+      const current = snapshot();
+      publish({
+        ...current,
+        phase: desktopTransportBlocksProbe() ? 'desktop_transport' : 'protocol_connect',
+        protocol_attempt_count: Math.max(current.protocol_attempt_count, positiveInteger(protocol.attempt)),
+        next_retry_at_unix_ms: protocol.nextRetryAtUnixMs,
+      });
     },
-    noteProtocolDiagnostic: (event, failure) => {
-      if (!args.enabled() || event.stage !== 'reconnect') return;
-      const attemptSeq = positiveInteger(event.attempt_seq);
-      if (event.code === 'reconnect_attempt' || event.code === 'reconnect_retry_attempt') {
-        if (!attemptSeq || attemptSeq <= lastDiagnosticAttemptSeq) return;
-        lastDiagnosticAttemptSeq = attemptSeq;
-        ensureRecovery(desktopTransportBlocksProbe() ? 'desktop_transport' : 'protocol_connect');
-        const current = snapshot();
-        publish({
-          ...current,
-          phase: desktopTransportBlocksProbe() ? 'desktop_transport' : 'protocol_connect',
-          protocol_attempt_count: current.protocol_attempt_count + 1,
-          next_retry_at_unix_ms: undefined,
-        });
-        return;
-      }
-      if (event.code === 'reconnect_exhausted') {
-        const exhaustedFailure = failure ?? {
-          code: 'transport_unavailable',
-          retryable: true,
-          technical_detail: '',
-        };
-        if (!exhaustedFailure.retryable) {
-          failRecovery(exhaustedFailure);
-          return;
-        }
-        ensureRecovery(desktopTransportBlocksProbe() ? 'desktop_transport' : 'runtime_probe', exhaustedFailure);
-        if (!desktopTransportBlocksProbe() && !tickInFlight && typeof waitTimer === 'undefined') {
-          scheduleTick(nextWaitDelayMs(snapshot().runtime_probe_attempt_count), false);
-        }
-      }
-    },
-    noteProtocolConnecting: () => {
+    noteProtocolConnecting: (attempt) => {
       if (!args.enabled() || snapshot().state === 'idle') return;
       const current = snapshot();
-      publish({ ...current, phase: desktopTransportBlocksProbe() ? 'desktop_transport' : 'protocol_connect' });
+      publish({
+        ...current,
+        phase: desktopTransportBlocksProbe() ? 'desktop_transport' : 'protocol_connect',
+        protocol_attempt_count: Math.max(current.protocol_attempt_count, positiveInteger(attempt)),
+        next_retry_at_unix_ms: undefined,
+      });
     },
     noteProtocolConnected: () => {
       const current = snapshot();
@@ -509,7 +378,7 @@ export function createRuntimeReconnectController(args: CreateRuntimeReconnectCon
         return;
       }
       if (desktopTransportBlocksProbe()) return;
-      scheduleTick(0, true);
+      args.retryProtocolNow();
     },
   };
 }

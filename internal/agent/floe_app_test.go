@@ -2,7 +2,9 @@ package agent
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"testing"
@@ -41,8 +43,9 @@ func TestGrantNotifyAcceptsValidRemoteSessionAndRegistersAccessGate(t *testing.T
 
 	notify := session.GrantServerNotify{
 		GrantServer: &session.ChannelInitGrant{
-			ChannelID:    " ch_remote ",
-			ArtifactJSON: []byte(controlArtifactFixture),
+			ChannelID:              " ch_remote ",
+			ArtifactJSON:           []byte(controlArtifactFixture),
+			ArtifactExpiresAtUnixS: time.Now().Add(2 * time.Minute).Unix(),
 		},
 		SessionMeta: &session.Meta{
 			ChannelID:         "ch_remote",
@@ -102,6 +105,43 @@ func TestGrantNotifyAcceptsValidRemoteSessionAndRegistersAccessGate(t *testing.T
 	if status := gate.Status("ch_remote"); !status.PasswordRequired || status.Unlocked {
 		t.Fatalf("remote session should be registered in a locked access gate state: %#v", status)
 	}
+
+	// Exact duplicates are idempotent. A conflicting artifact for the same
+	// channel cannot replace the active owner.
+	a.handleGrantNotify(ctx, payload)
+	conflict := notify
+	conflictGrant := *notify.GrantServer
+	conflictGrant.ArtifactJSON = []byte(`{"conflicting":true}`)
+	conflict.GrantServer = &conflictGrant
+	conflictPayload, err := json.Marshal(conflict)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.handleGrantNotify(ctx, conflictPayload)
+	a.mu.Lock()
+	afterConflict := a.sessions["ch_remote"]
+	a.mu.Unlock()
+	if afterConflict != accepted || afterConflict.grantDigest != sha256.Sum256(notify.GrantServer.ArtifactJSON) {
+		t.Fatal("conflicting grant replaced the active session owner")
+	}
+}
+
+func TestGrantNotifyRejectsUnknownFields(t *testing.T) {
+	a := &Agent{
+		cfg:      &config.Config{EnvironmentID: "env_test", PermissionPolicy: defaultPermissionPolicyForAgentTest(t)},
+		log:      slog.New(slog.NewTextHandler(io.Discard, nil)),
+		sessions: map[string]*activeSession{},
+	}
+	payload := []byte(`{
+  "grant_server":{"channel_id":"ch_unknown","artifact_json":{"v":2},"artifact_expires_at_unix_s":` + fmt.Sprint(time.Now().Add(2*time.Minute).Unix()) + `},
+  "session_meta":{"channel_id":"ch_unknown","endpoint_id":"env_test","floe_app":"com.floegence.redeven.agent","user_public_id":"user_test","namespace_public_id":"ns_test","created_at_unix_ms":1700000000000,"legacy":true}
+}`)
+	a.handleGrantNotify(context.Background(), payload)
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if len(a.sessions) != 0 {
+		t.Fatal("grant notification with an unknown nested field was accepted")
+	}
 }
 
 func TestGrantNotifyRejectsMissingRemoteIdentityBeforeRegisteringAccessGate(t *testing.T) {
@@ -118,8 +158,9 @@ func TestGrantNotifyRejectsMissingRemoteIdentityBeforeRegisteringAccessGate(t *t
 
 	notify := session.GrantServerNotify{
 		GrantServer: &session.ChannelInitGrant{
-			ChannelID:    "ch_missing_identity",
-			ArtifactJSON: []byte(controlArtifactFixture),
+			ChannelID:              "ch_missing_identity",
+			ArtifactJSON:           []byte(controlArtifactFixture),
+			ArtifactExpiresAtUnixS: time.Now().Add(2 * time.Minute).Unix(),
 		},
 		SessionMeta: &session.Meta{
 			ChannelID:         "ch_missing_identity",
@@ -165,8 +206,9 @@ func TestGrantNotifyRejectsSessionAfterShutdownAdmissionCloses(t *testing.T) {
 
 	notify := session.GrantServerNotify{
 		GrantServer: &session.ChannelInitGrant{
-			ChannelID:    "ch_after_shutdown",
-			ArtifactJSON: []byte(controlArtifactFixture),
+			ChannelID:              "ch_after_shutdown",
+			ArtifactJSON:           []byte(controlArtifactFixture),
+			ArtifactExpiresAtUnixS: time.Now().Add(2 * time.Minute).Unix(),
 		},
 		SessionMeta: &session.Meta{
 			ChannelID:         "ch_after_shutdown",

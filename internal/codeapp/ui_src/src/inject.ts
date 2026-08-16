@@ -5,6 +5,19 @@ import { registerCodeAppProxyBridge, REDEVEN_APP_PROXY_SW_SUFFIX } from "./runti
 // It MUST be an external script (no inline) to satisfy code-server's strict CSP.
 
 const ERR_SW_REGISTER_DISABLED = "service worker register is disabled by flowersec-proxy runtime";
+const CODE_APP_PROXY_BOOTSTRAP_FATAL_CODE = "REDEVEN_CODE_APP_PROXY_BOOTSTRAP_FAILED";
+const CODE_APP_NETWORK_DISABLED_MESSAGE = "Code App network is disabled because secure proxy bootstrap failed";
+const CODE_APP_FATAL_CSP = [
+  "default-src 'none'",
+  "base-uri 'none'",
+  "connect-src 'none'",
+  "form-action 'none'",
+  "frame-src 'none'",
+  "object-src 'none'",
+  "script-src 'none'",
+  "style-src 'unsafe-inline'",
+  "worker-src 'none'",
+].join("; ");
 
 // Allow the VSCode webview pre service worker from code-server.
 //
@@ -206,22 +219,174 @@ async function uninstallConflictingServiceWorkersBestEffort(): Promise<void> {
   }
 }
 
+function normalizedFailureMessage(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  const normalized = Array.from(raw, (character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return codePoint <= 0x1f || codePoint === 0x7f ? " " : character;
+  })
+    .join("")
+    .replace(/\s+/gu, " ")
+    .trim()
+    .slice(0, 512);
+  return normalized || "unknown secure proxy bootstrap failure";
+}
+
+function networkDisabledError(): Error {
+  return new Error(CODE_APP_NETWORK_DISABLED_MESSAGE);
+}
+
+function lockProperty(target: object, property: PropertyKey, value: unknown): void {
+  try {
+    Object.defineProperty(target, property, {
+      configurable: false,
+      enumerable: true,
+      value,
+      writable: false,
+    });
+    return;
+  } catch {
+    // Window and browser API objects can expose non-configurable properties.
+  }
+
+  try {
+    Reflect.set(target, property, value);
+  } catch {
+    // The fatal CSP and window.stop remain the final browser-level boundary.
+  }
+}
+
+function blockUnpatchedCodeAppNetwork(targetWindow: Window): void {
+  const DisabledNetworkConstructor = function DisabledCodeAppNetwork(): never {
+    throw networkDisabledError();
+  };
+  for (const property of ["EventSource", "SharedWorker", "WebSocket", "WebTransport", "Worker", "XMLHttpRequest"] as const) {
+    lockProperty(targetWindow, property, DisabledNetworkConstructor);
+  }
+
+  lockProperty(targetWindow, "fetch", () => Promise.reject(networkDisabledError()));
+
+  try {
+    lockProperty(targetWindow.navigator, "sendBeacon", () => false);
+    const serviceWorker = targetWindow.navigator.serviceWorker;
+    if (serviceWorker) {
+      lockProperty(serviceWorker, "register", () => Promise.reject(networkDisabledError()));
+      if (serviceWorker.controller) {
+        lockProperty(serviceWorker.controller, "postMessage", () => {
+          throw networkDisabledError();
+        });
+      }
+    }
+  } catch {
+    // Access to navigator or its service worker can itself be denied.
+  }
+}
+
+function renderCodeAppFatalDocument(targetWindow: Window, failureDetail: string): void {
+  const document = targetWindow.document;
+  const head = document.head ?? document.createElement("head");
+  const body = document.body ?? document.createElement("body");
+
+  const policy = document.createElement("meta");
+  policy.setAttribute("http-equiv", "Content-Security-Policy");
+  policy.setAttribute("content", CODE_APP_FATAL_CSP);
+
+  const style = document.createElement("style");
+  style.textContent = `
+    html, body { min-height: 100%; margin: 0; }
+    body {
+      display: grid;
+      place-items: center;
+      background: #0f1115;
+      color: #f5f7fa;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      letter-spacing: 0;
+    }
+    body > :not([data-redeven-code-app-fatal]) { display: none !important; }
+    [data-redeven-code-app-fatal] {
+      box-sizing: border-box;
+      width: min(42rem, calc(100% - 2rem));
+      padding: 1.5rem;
+      border-left: 4px solid #e5484d;
+      background: #181b20;
+    }
+    h1 { margin: 0; font-size: 1rem; line-height: 1.5; overflow-wrap: anywhere; }
+    code { display: block; margin-top: 0.75rem; color: #b8bec8; line-height: 1.5; overflow-wrap: anywhere; }
+  `;
+
+  const fatal = document.createElement("main");
+  fatal.setAttribute("data-redeven-code-app-fatal", "true");
+  fatal.setAttribute("role", "alert");
+  fatal.setAttribute("aria-live", "assertive");
+
+  const title = document.createElement("h1");
+  title.textContent = CODE_APP_PROXY_BOOTSTRAP_FATAL_CODE;
+  const detail = document.createElement("code");
+  detail.textContent = failureDetail;
+  fatal.append(title, detail);
+
+  head.replaceChildren(policy, style);
+  body.replaceChildren(fatal);
+  document.documentElement.replaceChildren(head, body);
+  document.title = CODE_APP_PROXY_BOOTSTRAP_FATAL_CODE;
+}
+
+function failClosedCodeAppBootstrap(error: unknown, targetWindow: Window = window): never {
+  const detail = normalizedFailureMessage(error);
+  const failure = new Error(`${CODE_APP_PROXY_BOOTSTRAP_FATAL_CODE}: ${detail}`, { cause: error });
+
+  blockUnpatchedCodeAppNetwork(targetWindow);
+  try {
+    targetWindow.stop();
+  } catch {
+    // The remaining fatal boundaries still apply when window.stop is unavailable.
+  }
+  try {
+    renderCodeAppFatalDocument(targetWindow, detail);
+  } catch (renderError) {
+    console.error(CODE_APP_PROXY_BOOTSTRAP_FATAL_CODE, "failed to render fatal document", renderError);
+  }
+
+  console.error(failure);
+  throw failure;
+}
+
+function startCodeAppProxyRuntime(): void {
+  let bridge: ReturnType<typeof registerCodeAppProxyBridge> | undefined;
+  let webSocketPatch: ReturnType<typeof installWebSocketPatch> | undefined;
+  try {
+    bridge = registerCodeAppProxyBridge();
+
+    // Native same-origin WebSockets must not be available after bridge registration.
+    webSocketPatch = installWebSocketPatch({ runtime: bridge.runtime });
+
+    patchServiceWorkerRegisterForCodeServer();
+    installWebviewPreProxyFetchForwarder();
+    void uninstallConflictingServiceWorkersBestEffort();
+
+    window.addEventListener("pagehide", (event) => {
+      // A bfcache entry resumes this same JavaScript realm. Keep its bridge alive so
+      // the installed WebSocket patch cannot resume against a disposed runtime.
+      if (event.persisted) return;
+      bridge?.dispose();
+    });
+  } catch (error) {
+    try {
+      webSocketPatch?.uninstall();
+    } catch {
+      // The fatal path replaces all native network constructors below.
+    }
+    try {
+      bridge?.dispose();
+    } catch {
+      // The startup error remains authoritative.
+    }
+    throw error;
+  }
+}
+
 try {
-  void uninstallConflictingServiceWorkersBestEffort();
-  const bridge = registerCodeAppProxyBridge();
-  window.addEventListener(
-    "pagehide",
-    () => {
-      bridge.dispose();
-    },
-    { once: true },
-  );
-
-  patchServiceWorkerRegisterForCodeServer();
-  installWebviewPreProxyFetchForwarder();
-
-  // Route same-origin WebSocket connections through flowersec-proxy/ws streams.
-  installWebSocketPatch({ runtime: bridge.runtime });
-} catch {
-  // Best-effort: failing to patch should not break the page render.
+  startCodeAppProxyRuntime();
+} catch (error) {
+  failClosedCodeAppBootstrap(error);
 }

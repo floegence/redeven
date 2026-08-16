@@ -155,6 +155,47 @@ describe('ConnectionRecoveryView', () => {
     }
   });
 
+  it('offers an immediate retry for a Flowersec protocol waiting snapshot', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const retry = vi.fn(async () => undefined);
+    const dispose = render(() => (
+      <I18nProvider>
+        <ConnectionRecoveryView
+          environmentName="Build Environment"
+          onRetry={retry}
+          snapshot={{
+            generation: 1,
+            revision: 6,
+            state: 'recovering',
+            phase: 'protocol_connect',
+            started_at_unix_ms: 100,
+            next_retry_at_unix_ms: Date.now() + 2_000,
+            runtime_probe_attempt_count: 0,
+            protocol_attempt_count: 2,
+            availability_status: 'offline',
+            protocol_connected: false,
+            secure_session: 'pending',
+            failure: {
+              code: 'runtime_offline',
+              retryable: true,
+              technical_detail: '',
+            },
+          }}
+        />
+      </I18nProvider>
+    ), host);
+
+    try {
+      const retryButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Retry now'));
+      retryButton?.click();
+      expect(retry).toHaveBeenCalledTimes(1);
+    } finally {
+      dispose();
+      host.remove();
+    }
+  });
+
   it('focuses the terminal failure, preserves technical details collapsed, and opens Connection Center', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

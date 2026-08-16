@@ -12,8 +12,8 @@ import (
 // SecretsStore persists user-managed secrets to a local file.
 //
 // It is intentionally separate from config.json:
-// - config.json contains non-secret runtime and control-plane metadata
-// - secrets.json contains runtime credentials and user-provided provider keys
+// - config.json contains runtime metadata and the runtime-managed one-shot control artifact pool
+// - secrets.json contains user-provided provider keys
 //
 // Secrets must never be returned back to the UI in plaintext. The UI should only see
 // derived status fields such as "api_key_set".
@@ -41,7 +41,6 @@ type secretsFile struct {
 	SchemaVersion int               `json:"schema_version"`
 	AI            *aiSecrets        `json:"ai,omitempty"`
 	WebSearch     *webSearchSecrets `json:"web_search,omitempty"`
-	Runtime       *runtimeSecrets   `json:"runtime,omitempty"`
 }
 
 type aiSecrets struct {
@@ -50,94 +49,6 @@ type aiSecrets struct {
 
 type webSearchSecrets struct {
 	ProviderAPIKeys map[string]string `json:"provider_api_keys,omitempty"`
-}
-
-type runtimeSecrets struct {
-	DirectPSKs map[string]string `json:"direct_psks,omitempty"`
-}
-
-func (s *SecretsStore) GetRuntimeDirectPSK(channelID string) (string, bool, error) {
-	if s == nil {
-		return "", false, errors.New("nil secrets store")
-	}
-	channelID = strings.TrimSpace(channelID)
-	if channelID == "" {
-		return "", false, errors.New("missing direct channel id")
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	sf, err := s.loadLocked()
-	if err != nil {
-		return "", false, err
-	}
-	if sf == nil || sf.Runtime == nil || len(sf.Runtime.DirectPSKs) == 0 {
-		return "", false, nil
-	}
-	psk := strings.TrimSpace(sf.Runtime.DirectPSKs[channelID])
-	if psk == "" {
-		return "", false, nil
-	}
-	return psk, true, nil
-}
-
-func (s *SecretsStore) SetRuntimeDirectPSK(channelID string, psk string) error {
-	if s == nil {
-		return errors.New("nil secrets store")
-	}
-	channelID = strings.TrimSpace(channelID)
-	if channelID == "" {
-		return errors.New("missing direct channel id")
-	}
-	psk = strings.TrimSpace(psk)
-	if psk == "" {
-		return errors.New("missing direct psk")
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	sf, err := s.loadLocked()
-	if err != nil {
-		return err
-	}
-	if sf.Runtime == nil {
-		sf.Runtime = &runtimeSecrets{}
-	}
-	if sf.Runtime.DirectPSKs == nil {
-		sf.Runtime.DirectPSKs = make(map[string]string)
-	}
-	sf.Runtime.DirectPSKs[channelID] = psk
-	return s.saveLocked(sf)
-}
-
-// RetainRuntimeDirectPSK removes direct PSKs that are no longer referenced by config.json.
-// An empty channel id clears every persisted direct PSK.
-func (s *SecretsStore) RetainRuntimeDirectPSK(channelID string) error {
-	if s == nil {
-		return errors.New("nil secrets store")
-	}
-	channelID = strings.TrimSpace(channelID)
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	sf, err := s.loadLocked()
-	if err != nil {
-		return err
-	}
-	if sf.Runtime == nil || len(sf.Runtime.DirectPSKs) == 0 {
-		return nil
-	}
-	if channelID == "" {
-		sf.Runtime.DirectPSKs = nil
-	} else if psk := strings.TrimSpace(sf.Runtime.DirectPSKs[channelID]); psk != "" {
-		sf.Runtime.DirectPSKs = map[string]string{channelID: psk}
-	} else {
-		sf.Runtime.DirectPSKs = nil
-	}
-	if len(sf.Runtime.DirectPSKs) == 0 {
-		sf.Runtime = nil
-	}
-	return s.saveLocked(sf)
 }
 
 func (s *SecretsStore) getAIProviderKey(providerID string) (string, bool, error) {

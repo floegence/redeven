@@ -16,7 +16,10 @@ import {
   registerCodeAppProxyBridge,
 } from "./runtimeBridge";
 
-function targetWindowWithStorage(values: Readonly<Record<string, string>> = {}): Window {
+function targetWindowWithStorage(values: Readonly<Record<string, string>> = {
+  [APP_BRIDGE_CAPABILITY_NONCE_STORAGE_KEY]: "bridge-capability-123",
+  [APP_MAX_WS_FRAME_BYTES_STORAGE_KEY]: String(MAX_WS_FRAME_BYTES),
+}): Window {
   return {
     location: {
       protocol: "https:",
@@ -74,6 +77,7 @@ describe("runtimeBridge", () => {
     expect(registerProxyAppWindowMock).toHaveBeenCalledWith({
       targetWindow,
       controllerOrigin: "https://rt-demo.dev.redeven-online.test",
+      capabilityNonce: "bridge-capability-123",
       maxWsFrameBytes: MAX_WS_FRAME_BYTES,
     });
   });
@@ -94,26 +98,33 @@ describe("runtimeBridge", () => {
     });
   });
 
-  test.each(["0", "-1", "1.5", " 1024", "67108864", "9007199254740992"])(
-    "uses the product WebSocket limit when the stored value is invalid or too large: %s",
+  test.each(["", "0", "-1", "1.5", " 1024", "67108864", "9007199254740992"])(
+    "rejects an invalid or oversized stored WebSocket limit: %s",
     (storedMaxWsFrameBytes) => {
       const targetWindow = targetWindowWithStorage({
         [APP_BRIDGE_CAPABILITY_NONCE_STORAGE_KEY]: "bridge-capability-123",
         [APP_MAX_WS_FRAME_BYTES_STORAGE_KEY]: storedMaxWsFrameBytes,
       });
 
-      registerCodeAppProxyBridge(targetWindow);
-
-      expect(registerProxyAppWindowMock).toHaveBeenCalledWith({
-        targetWindow,
-        controllerOrigin: "https://rt-demo.dev.redeven-online.test",
-        capabilityNonce: "bridge-capability-123",
-        maxWsFrameBytes: MAX_WS_FRAME_BYTES,
-      });
+      expect(() => registerCodeAppProxyBridge(targetWindow)).toThrow("invalid proxy bridge WebSocket frame limit");
+      expect(registerProxyAppWindowMock).not.toHaveBeenCalled();
     },
   );
 
-  test("keeps the legacy bridge registration when session storage is unavailable", () => {
+  test.each(["", " leading", "trailing ", "line\nbreak", "a".repeat(257)])(
+    "rejects an invalid bridge capability nonce",
+    (capabilityNonce) => {
+      const targetWindow = targetWindowWithStorage({
+        [APP_BRIDGE_CAPABILITY_NONCE_STORAGE_KEY]: capabilityNonce,
+        [APP_MAX_WS_FRAME_BYTES_STORAGE_KEY]: String(MAX_WS_FRAME_BYTES),
+      });
+
+      expect(() => registerCodeAppProxyBridge(targetWindow)).toThrow("invalid proxy bridge capability nonce");
+      expect(registerProxyAppWindowMock).not.toHaveBeenCalled();
+    },
+  );
+
+  test("fails closed when session storage is unavailable", () => {
     const targetWindow = {
       location: {
         protocol: "https:",
@@ -125,14 +136,7 @@ describe("runtimeBridge", () => {
       },
     } as unknown as Window;
 
-    registerCodeAppProxyBridge(targetWindow);
-
-    const options = registerProxyAppWindowMock.mock.calls[0]?.[0];
-    expect(options?.targetWindow).toBe(targetWindow);
-    expect(options).toMatchObject({
-      controllerOrigin: "https://rt-demo.dev.redeven-online.test",
-      maxWsFrameBytes: MAX_WS_FRAME_BYTES,
-    });
-    expect(options).not.toHaveProperty("capabilityNonce");
+    expect(() => registerCodeAppProxyBridge(targetWindow)).toThrow("storage unavailable");
+    expect(registerProxyAppWindowMock).not.toHaveBeenCalled();
   });
 });

@@ -17,7 +17,7 @@ type WindowLike = Readonly<{
 }>;
 
 type ProxyBridgeBootstrap = Readonly<{
-  capabilityNonce?: string;
+  capabilityNonce: string;
   maxWsFrameBytes: number;
 }>;
 
@@ -61,27 +61,30 @@ export function controllerOriginFromAppLocation(loc: OriginLocationLike = window
 }
 
 function proxyBridgeBootstrapFromWindow(win: WindowLike): ProxyBridgeBootstrap {
-  try {
-    const storage = win.sessionStorage;
-    if (!storage) return { maxWsFrameBytes: MAX_WS_FRAME_BYTES };
-    const capabilityNonce = String(storage.getItem(APP_BRIDGE_CAPABILITY_NONCE_STORAGE_KEY) ?? "").trim();
-    const rawMaxWsFrameBytes = String(storage.getItem(APP_MAX_WS_FRAME_BYTES_STORAGE_KEY) ?? "");
-    const parsedMaxWsFrameBytes = /^[1-9][0-9]*$/.test(rawMaxWsFrameBytes) ? Number(rawMaxWsFrameBytes) : NaN;
-    const maxWsFrameBytes = Number.isSafeInteger(parsedMaxWsFrameBytes)
-      ? Math.min(parsedMaxWsFrameBytes, MAX_WS_FRAME_BYTES)
-      : MAX_WS_FRAME_BYTES;
-    const hasInvalidNonceCharacter = Array.from(capabilityNonce).some((character) => {
-      const codePoint = character.codePointAt(0) ?? 0;
-      return /\s/.test(character) || codePoint < 0x20 || codePoint === 0x7f;
-    });
+  const storage = win.sessionStorage;
+  if (!storage) throw new Error("proxy bridge bootstrap is unavailable");
 
-    return {
-      ...(capabilityNonce && !hasInvalidNonceCharacter ? { capabilityNonce } : {}),
-      maxWsFrameBytes,
-    };
-  } catch {
-    return { maxWsFrameBytes: MAX_WS_FRAME_BYTES };
+  const capabilityNonce = String(storage.getItem(APP_BRIDGE_CAPABILITY_NONCE_STORAGE_KEY) ?? "");
+  const hasInvalidNonceCharacter = Array.from(capabilityNonce).some((character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return codePoint <= 0x20 || codePoint === 0x7f;
+  });
+  if (
+    capabilityNonce === "" ||
+    capabilityNonce !== capabilityNonce.trim() ||
+    hasInvalidNonceCharacter ||
+    capabilityNonce.length > 256
+  ) {
+    throw new Error("invalid proxy bridge capability nonce");
   }
+
+  const rawMaxWsFrameBytes = String(storage.getItem(APP_MAX_WS_FRAME_BYTES_STORAGE_KEY) ?? "");
+  const maxWsFrameBytes = /^[1-9][0-9]*$/u.test(rawMaxWsFrameBytes) ? Number(rawMaxWsFrameBytes) : NaN;
+  if (!Number.isSafeInteger(maxWsFrameBytes) || maxWsFrameBytes <= 0 || maxWsFrameBytes > MAX_WS_FRAME_BYTES) {
+    throw new Error("invalid proxy bridge WebSocket frame limit");
+  }
+
+  return { capabilityNonce, maxWsFrameBytes };
 }
 
 export function registerCodeAppProxyBridge(targetWindow: Window = window): ProxyAppWindowHandle {

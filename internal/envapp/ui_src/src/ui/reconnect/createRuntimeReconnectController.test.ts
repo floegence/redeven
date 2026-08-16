@@ -60,55 +60,34 @@ describe('createRuntimeReconnectController', () => {
     vi.useRealTimers();
   });
 
-  it('keeps one recovery snapshot while probing offline and reconnecting online', async () => {
-    vi.useFakeTimers();
-    const probeAvailability = vi.fn()
-      .mockResolvedValueOnce({ status: 'offline', access: 'unknown' })
-      .mockResolvedValueOnce({ status: 'online', access: 'ready' });
-    const reconnect = vi.fn(async () => undefined);
+  it('projects Flowersec waiting state without scheduling product retries', async () => {
+    const retryProtocolNow = vi.fn(() => true);
 
     let controller!: RuntimeReconnectController;
     const dispose = createRoot((disposeRoot) => {
       controller = createRuntimeReconnectController({
         enabled: () => true,
         desktopTransport: () => null,
-        probeAvailability,
-        reconnect,
+        retryProtocolNow,
         requestDesktopRecoveryNow: async () => false,
       });
       return disposeRoot;
     });
 
-    controller.activateWaiting(OFFLINE_FAILURE);
+    controller.activateWaiting(OFFLINE_FAILURE, { attempt: 4, terminal: false, nextRetryAtUnixMs: 12_345 });
     expect(controller.snapshot()).toMatchObject({
       state: 'recovering',
-      phase: 'runtime_probe',
-      runtime_probe_attempt_count: 0,
-    });
-
-    await vi.advanceTimersByTimeAsync(2_000);
-    await flushAsync();
-    expect(probeAvailability).toHaveBeenCalledTimes(1);
-    expect(controller.snapshot()).toMatchObject({
-      availability_status: 'offline',
-      runtime_probe_attempt_count: 1,
-    });
-    expect(reconnect).not.toHaveBeenCalled();
-
-    await vi.advanceTimersByTimeAsync(3_000);
-    await flushAsync();
-    expect(probeAvailability).toHaveBeenCalledTimes(2);
-    expect(controller.snapshot()).toMatchObject({
       phase: 'protocol_connect',
-      availability_status: 'online',
-      runtime_probe_attempt_count: 2,
+      runtime_probe_attempt_count: 0,
+      protocol_attempt_count: 4,
+      next_retry_at_unix_ms: 12_345,
     });
-    expect(reconnect).toHaveBeenCalledTimes(1);
+    await controller.requestImmediateRetry();
+    expect(retryProtocolNow).toHaveBeenCalledTimes(1);
     dispose();
   });
 
-  it('pauses runtime probes until Desktop transport recovery completes', async () => {
-    vi.useFakeTimers();
+  it('keeps Desktop recovery separate and nudges the same protocol controller when ready', async () => {
     const [desktopTransport, setDesktopTransport] = createSignal<DesktopTransportRecoverySnapshot>({
       generation: 1,
       revision: 1,
@@ -118,8 +97,7 @@ describe('createRuntimeReconnectController', () => {
       next_attempt_at_unix_ms: 200,
       actions: ['retry_now' as const],
     });
-    const probeAvailability = vi.fn().mockResolvedValue({ status: 'online', access: 'ready' });
-    const reconnect = vi.fn(async () => undefined);
+    const retryProtocolNow = vi.fn(() => true);
     const requestDesktopRecoveryNow = vi.fn(async () => true);
 
     let controller!: RuntimeReconnectController;
@@ -127,8 +105,7 @@ describe('createRuntimeReconnectController', () => {
       controller = createRuntimeReconnectController({
         enabled: () => true,
         desktopTransport,
-        probeAvailability,
-        reconnect,
+        retryProtocolNow,
         requestDesktopRecoveryNow,
       });
       return disposeRoot;
@@ -136,8 +113,6 @@ describe('createRuntimeReconnectController', () => {
     await flushAsync();
 
     expect(controller.snapshot()).toMatchObject({ state: 'recovering', phase: 'desktop_transport' });
-    await vi.advanceTimersByTimeAsync(20_000);
-    expect(probeAvailability).not.toHaveBeenCalled();
     await controller.requestImmediateRetry();
     expect(requestDesktopRecoveryNow).toHaveBeenCalledTimes(1);
 
@@ -151,32 +126,29 @@ describe('createRuntimeReconnectController', () => {
       actions: [],
     });
     await flushAsync();
-    expect(probeAvailability).toHaveBeenCalledTimes(1);
-    expect(reconnect).toHaveBeenCalledTimes(1);
+    expect(retryProtocolNow).toHaveBeenCalledTimes(1);
     dispose();
   });
 
-  it('counts exact Flowersec reconnect diagnostics and holds success before returning idle', async () => {
+  it('uses Flowersec attempt ordinals and holds success before returning idle', async () => {
     vi.useFakeTimers();
     let controller!: RuntimeReconnectController;
     const dispose = createRoot((disposeRoot) => {
       controller = createRuntimeReconnectController({
         enabled: () => true,
         desktopTransport: () => null,
-        probeAvailability: async () => ({ status: 'online', access: 'ready' }),
-        reconnect: async () => undefined,
+        retryProtocolNow: () => true,
         requestDesktopRecoveryNow: async () => false,
       });
       return disposeRoot;
     });
 
-    controller.noteProtocolDiagnostic({ stage: 'reconnect', code: 'reconnect_attempt', result: 'retry', attempt_seq: 8 });
-    controller.noteProtocolDiagnostic({ stage: 'reconnect', code: 'reconnect_attempt', result: 'retry', attempt_seq: 8 });
-    controller.noteProtocolDiagnostic({ stage: 'reconnect', code: 'reconnect_retry_attempt', result: 'retry', attempt_seq: 9 });
+    controller.activateWaiting(OFFLINE_FAILURE, { attempt: 8, terminal: false });
+    controller.noteProtocolConnecting(9);
     expect(controller.snapshot()).toMatchObject({
       state: 'recovering',
       phase: 'protocol_connect',
-      protocol_attempt_count: 2,
+      protocol_attempt_count: 9,
     });
 
     controller.noteProtocolConnected();
@@ -196,8 +168,7 @@ describe('createRuntimeReconnectController', () => {
       controller = createRuntimeReconnectController({
         enabled: () => true,
         desktopTransport: () => null,
-        probeAvailability: async () => ({ status: 'online', access: 'ready' }),
-        reconnect: async () => undefined,
+        retryProtocolNow: () => true,
         requestDesktopRecoveryNow: async () => false,
       });
       return disposeRoot;
@@ -207,7 +178,7 @@ describe('createRuntimeReconnectController', () => {
       code: 'authentication_failed',
       retryable: false,
       technical_detail: 'The access grant expired.',
-    });
+    }, { attempt: 1, terminal: true });
     expect(controller.snapshot()).toMatchObject({ state: 'failed', secure_session: 'failed' });
 
     controller.noteProtocolConnected();
@@ -216,29 +187,20 @@ describe('createRuntimeReconnectController', () => {
     dispose();
   });
 
-  it('hands exhausted Flowersec fast reconnect into the outer runtime probe loop', async () => {
-    vi.useFakeTimers();
-    const probeAvailability = vi.fn().mockResolvedValue({ status: 'offline', access: 'unknown' });
+  it('keeps terminal Flowersec failures terminal without an outer retry loop', async () => {
     let controller!: RuntimeReconnectController;
     const dispose = createRoot((disposeRoot) => {
       controller = createRuntimeReconnectController({
         enabled: () => true,
         desktopTransport: () => null,
-        probeAvailability,
-        reconnect: async () => undefined,
+        retryProtocolNow: () => true,
         requestDesktopRecoveryNow: async () => false,
       });
       return disposeRoot;
     });
 
-    controller.noteProtocolDiagnostic(
-      { stage: 'reconnect', code: 'reconnect_exhausted', result: 'fail', attempt_seq: 12 },
-      OFFLINE_FAILURE,
-    );
-    expect(controller.snapshot()).toMatchObject({ state: 'recovering', phase: 'runtime_probe' });
-    await vi.advanceTimersByTimeAsync(2_000);
-    await flushAsync();
-    expect(probeAvailability).toHaveBeenCalledTimes(1);
+    controller.activateWaiting(OFFLINE_FAILURE, { attempt: 12, terminal: true });
+    expect(controller.snapshot()).toMatchObject({ state: 'failed', phase: 'failed' });
     dispose();
   });
 
@@ -261,8 +223,7 @@ describe('createRuntimeReconnectController', () => {
       controller = createRuntimeReconnectController({
         enabled: () => true,
         desktopTransport,
-        probeAvailability: async () => ({ status: 'unknown' }),
-        reconnect: async () => undefined,
+        retryProtocolNow: () => true,
         requestDesktopRecoveryNow: async () => false,
       });
       return disposeRoot;
@@ -288,8 +249,7 @@ describe('createRuntimeReconnectController', () => {
       controller = createRuntimeReconnectController({
         enabled: () => true,
         desktopTransport: () => null,
-        probeAvailability: async () => ({ status: 'unknown' }),
-        reconnect: async () => undefined,
+        retryProtocolNow: () => true,
         requestDesktopRecoveryNow: async () => false,
       });
       return disposeRoot;
@@ -300,7 +260,7 @@ describe('createRuntimeReconnectController', () => {
       retryable: false,
       technical_detail: 'Environment context is unavailable.',
       error_code: 'MISSING_ENV_CONTEXT',
-    });
+    }, { attempt: 1, terminal: true });
     const terminalSnapshot = controller.snapshot();
     expect(terminalSnapshot).toMatchObject({
       state: 'failed',

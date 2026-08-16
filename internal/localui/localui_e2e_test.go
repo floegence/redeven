@@ -583,6 +583,8 @@ func connectDesktopBridgeArtifactResult(ctx context.Context, encodedArtifact jso
 	if err != nil {
 		return nil, err
 	}
+	// These accepted-session tests intentionally isolate issuer and handler behavior.
+	// TestServer_E2E_LocalPasswordFlow covers the real HTTP spend callback before Connect.
 	lease, err := flowersec.NewArtifactLease(artifact, func(context.Context) error { return nil })
 	if err != nil {
 		return nil, err
@@ -683,7 +685,7 @@ func assertDirectStateEventuallyEmpty(t *testing.T, s *Server) {
 		}
 		s.directMu.Unlock()
 		s.authMu.Lock()
-		authCount = len(s.authRecords) + len(s.authChannels) + len(s.handlerCleanup)
+		authCount = len(s.handlerCleanup)
 		s.authMu.Unlock()
 		if pendingCount == 0 && accessBindingCount == 0 && authCount == 0 {
 			return
@@ -860,15 +862,15 @@ func TestServer_E2E_LocalPasswordFlow(t *testing.T) {
 	if _, err := flowersec.ParseArtifact(corruptArtifact); err == nil {
 		t.Fatal("tampered Flowersec artifact unexpectedly parsed")
 	}
-	connectLocalDirectSession(t, s, srv.URL, srv.Certificate(), unlockBody.Data.ResumeToken, connectBody.ChannelID, connectBody.ConnectArtifact)
+	connectLocalDirectSession(t, s, client, srv.URL, srv.Certificate(), unlockBody.Data.ResumeToken, connectBody)
 }
 
-func connectLocalDirectSession(t *testing.T, s *Server, serverURL string, certificate *x509.Certificate, resumeToken, channelID string, encodedArtifact json.RawMessage) {
+func connectLocalDirectSession(t *testing.T, s *Server, httpClient *http.Client, serverURL string, certificate *x509.Certificate, resumeToken string, acquisition connectArtifactEnvelope) {
 	t.Helper()
 	if s == nil || s.a == nil {
 		t.Fatal("test server missing agent")
 	}
-	artifact, err := flowersec.ParseArtifact(encodedArtifact)
+	artifact, err := flowersec.ParseArtifact(acquisition.ConnectArtifact)
 	if err != nil {
 		t.Fatalf("ParseArtifact() error = %v", err)
 	}
@@ -885,7 +887,40 @@ func connectLocalDirectSession(t *testing.T, s *Server, serverURL string, certif
 	}
 	trustRoots := x509.NewCertPool()
 	trustRoots.AddCert(certificate)
-	lease, err := flowersec.NewArtifactLease(artifact, func(context.Context) error { return nil })
+	attemptID, err := randomB64u(32)
+	if err != nil {
+		t.Fatalf("create artifact spend attempt error = %v", err)
+	}
+	lease, err := flowersec.NewArtifactLease(artifact, func(spendCtx context.Context) error {
+		payload := localSpendRequest{
+			AttemptID: attemptID, Receipt: acquisition.SpendScope.Receipt,
+			ArtifactDigestB64u: acquisition.SpendScope.ArtifactDigestB64u, ProjectionDigestB64u: acquisition.SpendScope.ProjectionDigestB64u,
+			LauncherOrigin: acquisition.SpendScope.LauncherOrigin, RuntimeOrigin: acquisition.SpendScope.RuntimeOrigin,
+			AppOrigin: acquisition.SpendScope.AppOrigin, Consumer: acquisition.SpendScope.Consumer,
+			TargetBinding: acquisition.SpendScope.TargetBinding, ExpiresAt: acquisition.SpendScope.ExpiresAt,
+		}
+		body, marshalErr := json.Marshal(payload)
+		if marshalErr != nil {
+			return marshalErr
+		}
+		req, requestErr := http.NewRequestWithContext(spendCtx, http.MethodPost, serverURL+"/api/local/direct/artifact/spend", bytes.NewReader(body))
+		if requestErr != nil {
+			return requestErr
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Origin", serverURL)
+		req.Header.Set(localAccessResumeHeader, resumeToken)
+		resp, requestErr := httpClient.Do(req)
+		if requestErr != nil {
+			return requestErr
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusNoContent {
+			responseBody, _ := io.ReadAll(resp.Body)
+			return fmt.Errorf("artifact spend status = %d; body=%q", resp.StatusCode, responseBody)
+		}
+		return nil
+	})
 	if err != nil {
 		t.Fatalf("NewArtifactLease() error = %v", err)
 	}
@@ -901,7 +936,7 @@ func connectLocalDirectSession(t *testing.T, s *Server, serverURL string, certif
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		s.directMu.Lock()
-		binding, active := s.activePluginSession[channelID]
+		binding, active := s.activePluginSession[acquisition.ChannelID]
 		access := s.pluginAccess[binding.accessSessionID]
 		s.directMu.Unlock()
 		if active && access != nil {
@@ -909,7 +944,7 @@ func connectLocalDirectSession(t *testing.T, s *Server, serverURL string, certif
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatalf("Flowersec accepted session %q was not bound to plugin access", channelID)
+	t.Fatalf("Flowersec accepted session %q was not bound to plugin access", acquisition.ChannelID)
 }
 
 func TestServer_E2E_CodespaceBrowserBootstrapFromResumeToken(t *testing.T) {

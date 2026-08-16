@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 )
 
@@ -13,6 +14,7 @@ var configKnownJSONFields = map[string]struct{}{
 	"binding_generation":          {},
 	"agent_instance_id":           {},
 	"direct":                      {},
+	"control_artifact_pool":       {},
 	"ai":                          {},
 	"permission_policy":           {},
 	"agent_home_dir":              {},
@@ -42,6 +44,19 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 	}
 
 	*c = Config(decoded)
+	// json.RawMessage encodes a nil value as the literal `null`. Keep terminal
+	// artifact tombstones truly byte-empty after a restart so validation cannot
+	// mistake the JSON marker for retained opaque credential material.
+	if c.Direct != nil && bytes.Equal(bytes.TrimSpace(c.Direct.ArtifactJSON), []byte("null")) {
+		c.Direct.ArtifactJSON = nil
+	}
+	if c.ControlArtifactPool != nil {
+		for index := range c.ControlArtifactPool.Entries {
+			if bytes.Equal(bytes.TrimSpace(c.ControlArtifactPool.Entries[index].ArtifactJSON), []byte("null")) {
+				c.ControlArtifactPool.Entries[index].ArtifactJSON = nil
+			}
+		}
+	}
 	if len(raw) > 0 {
 		c.extra = raw
 	} else {

@@ -43,6 +43,7 @@ import type {
   TerminalWorkStateUpdateEvent,
 } from '../sdk/terminal';
 import { canonicalAbsolutePath } from '../../../utils/canonicalAbsolutePath';
+import { bytesFromBase64 } from './base64';
 
 import type {
   TerminalExecutionContextInfo,
@@ -236,10 +237,31 @@ export function toWireTerminalSemanticHistoryRequest(req: TerminalSemanticHistor
 export function fromWireTerminalSemanticHistoryResponse(
   resp: wire_terminal_history_resp,
 ): TerminalSemanticHistoryResponse {
-  // The generated RPC layer preserves the wire payload. Validation belongs to
-  // the lazy terminal feature, where the published semantic validator is
-  // already loaded and the response can be bound to the live attachment.
-  return resp as TerminalSemanticHistoryResponse;
+  return {
+    snapshotId: resp.snapshotId,
+    ...(resp.continuation === undefined ? {} : { continuation: resp.continuation }),
+    ...(resp.lane === undefined ? {} : { lane: resp.lane }),
+    chunkIndex: resp.chunkIndex,
+    chunkCount: resp.chunkCount,
+    payloadBytes: resp.payloadBytes,
+    payloadSha256: resp.payloadSha256,
+    payload: bytesFromBase64(resp.payload),
+    revision: resp.revision,
+    transportGeneration: resp.transportGeneration,
+    contentEpoch: resp.contentEpoch,
+    geometryGeneration: resp.geometryGeneration,
+    cols: resp.cols,
+    rows: resp.rows,
+    anchor: resp.anchor,
+    firstAvailable: resp.firstAvailable,
+    lastAvailable: resp.lastAvailable,
+    screenStart: resp.screenStart,
+    offset: resp.offset,
+    totalRows: resp.totalRows,
+    screenStartOffset: resp.screenStartOffset,
+    hasPrevious: resp.hasPrevious,
+    hasNext: resp.hasNext,
+  };
 }
 
 export function toWireTerminalSemanticClearRequest(

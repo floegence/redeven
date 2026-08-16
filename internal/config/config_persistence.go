@@ -54,7 +54,25 @@ func saveConfig(path string, cfg *Config, persistence configPersistence) error {
 	next := *cfg
 	if cfg.Direct != nil {
 		directCopy := *cfg.Direct
+		directCopy.ArtifactJSON = append([]byte(nil), cfg.Direct.ArtifactJSON...)
 		next.Direct = &directCopy
+	}
+	if cfg.ControlArtifactPool != nil {
+		poolCopy := *cfg.ControlArtifactPool
+		if cfg.ControlArtifactPool.PendingTopUp != nil {
+			pendingCopy := *cfg.ControlArtifactPool.PendingTopUp
+			poolCopy.PendingTopUp = &pendingCopy
+		}
+		if cfg.ControlArtifactPool.LastTerminalTopUp != nil {
+			terminalCopy := *cfg.ControlArtifactPool.LastTerminalTopUp
+			poolCopy.LastTerminalTopUp = &terminalCopy
+		}
+		poolCopy.Entries = make([]ControlArtifactEntry, len(cfg.ControlArtifactPool.Entries))
+		copy(poolCopy.Entries, cfg.ControlArtifactPool.Entries)
+		for index := range poolCopy.Entries {
+			poolCopy.Entries[index].ArtifactJSON = append([]byte(nil), poolCopy.Entries[index].ArtifactJSON...)
+		}
+		next.ControlArtifactPool = &poolCopy
 	}
 	if err := persistence.writeConfig(path, &next); err != nil {
 		return err
@@ -97,5 +115,8 @@ func writeConfigAtomic(path string, cfg *Config) error {
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmpPath, path)
+	if err := os.Rename(tmpPath, path); err != nil {
+		return err
+	}
+	return syncDirectory(dir)
 }

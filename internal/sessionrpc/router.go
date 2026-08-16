@@ -38,6 +38,14 @@ func (err *Error) Error() string {
 // product contract; Flowersec owns the enclosing RPC transport.
 type Handler func(context.Context, json.RawMessage) (json.RawMessage, *Error)
 
+// RPCRegistrar is the smallest Flowersec registration boundary shared by an
+// endpoint-client RPCHandlers and an accepted-session SessionHandlers. Keeping
+// this interface role-neutral prevents client code from borrowing the
+// accepted-server stream facade.
+type RPCRegistrar interface {
+	HandleRPC(uint32, flowersec.RPCHandler) error
+}
+
 // Router collects immutable product handlers before Flowersec freezes the
 // session's handler registry.
 type Router struct {
@@ -87,7 +95,7 @@ func (router *Router) Register(typeID uint32, handler Handler) {
 
 // Bind installs the complete product handler set on Flowersec before a
 // session is established. Unknown type IDs remain Flowersec application errors.
-func (router *Router) Bind(handlers *flowersec.SessionHandlers) error {
+func (router *Router) Bind(handlers RPCRegistrar) error {
 	if router == nil || handlers == nil {
 		return errors.New("missing Redeven RPC handler registry")
 	}

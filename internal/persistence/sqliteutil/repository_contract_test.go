@@ -19,6 +19,7 @@ func TestRedevenOwnedSQLiteOpeningsUseMigrationEngine(t *testing.T) {
 	wantMigratingOpeners := map[string]struct{}{
 		"internal/ai/threadstore/store.go":          {},
 		"internal/codeapp/registry/registry.go":     {},
+		"internal/localui/authorization_store.go":   {},
 		"internal/notes/service.go":                 {},
 		"internal/portforward/registry/registry.go": {},
 		"internal/threadreadstate/store.go":         {},

@@ -4,7 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
+
+const MaxGrantArtifactLifetime = 5 * time.Minute
 
 // ValidateGrantServerNotifyRemote validates a remote control-plane grant notification.
 //
@@ -53,6 +56,17 @@ func ValidateGrantServerNotifyRemote(n *GrantServerNotify, expectedEndpointID st
 	}
 	if grantChannelID != channelID {
 		return fmt.Errorf("grant_server.channel_id mismatch: got %q want %q", grantChannelID, channelID)
+	}
+	if len(n.GrantServer.ArtifactJSON) == 0 {
+		return errors.New("missing grant_server.artifact_json")
+	}
+	now := time.Now()
+	expiresAt := time.Unix(n.GrantServer.ArtifactExpiresAtUnixS, 0)
+	if !expiresAt.After(now) {
+		return errors.New("grant_server.artifact_expires_at_unix_s must be in the future")
+	}
+	if expiresAt.After(now.Add(MaxGrantArtifactLifetime)) {
+		return errors.New("grant_server.artifact_expires_at_unix_s exceeds the maximum lifetime")
 	}
 	return nil
 }

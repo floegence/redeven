@@ -11,6 +11,8 @@
     "lint": "eslint \"src/**/*.{ts,tsx}\" \"scripts/**/*.mjs\" \"vite.config.ts\" \"vitest.browser.config.ts\" \"eslint.config.mjs\" --max-warnings=0 && cd ../../flower_ui && NODE_PATH=../envapp/ui_src/node_modules ../envapp/ui_src/node_modules/.bin/eslint -c eslint.config.mjs \"src/**/*.{ts,tsx}\" --max-warnings=0",
     "lint:fix": "eslint \"src/**/*.{ts,tsx}\" \"scripts/**/*.mjs\" \"vite.config.ts\" \"vitest.browser.config.ts\" \"eslint.config.mjs\" --fix && cd ../../flower_ui && NODE_PATH=../envapp/ui_src/node_modules ../envapp/ui_src/node_modules/.bin/eslint -c eslint.config.mjs \"src/**/*.{ts,tsx}\" --fix",
     "check:workbench-wheel": "node scripts/checkWorkbenchWheelContract.mjs",
+    "generate:wire-schemas": "node scripts/generateRedevenWireSchemas.mjs",
+    "check:wire-schemas": "node scripts/generateRedevenWireSchemas.mjs --check",
     "preview": "vite preview --host 0.0.0.0 --port 8096",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --test scripts/checkThemeColorSources.node-test.mjs scripts/initialBuildGraphPolicy.node-test.mjs scripts/redevpluginRuntimeFixture.node-test.mjs scripts/terminalAgentIconIntegrity.node-test.mjs scripts/terminalCarrierRunnerPolicy.node-test.mjs scripts/terminalCarrierThreshold.node-test.mjs && node scripts/checkThemeColorSources.mjs && vitest run --environment=node --exclude \"src/**/*.browser.test.tsx\" --maxWorkers=2 --testTimeout=10000",
@@ -22,11 +24,11 @@
   },
   "dependencies": {
     "@chenglou/pretext": "^0.0.5",
-    "@floegence/floe-webapp-boot": "0.40.21",
-    "@floegence/floe-webapp-core": "0.40.21",
-    "@floegence/floe-webapp-protocol": "0.40.21",
+    "@floegence/floe-webapp-boot": "0.41.0",
+    "@floegence/floe-webapp-core": "0.41.0",
+    "@floegence/floe-webapp-protocol": "0.41.0",
     "@floegence/floeterm-terminal-web": "0.16.4",
-    "@floegence/flowersec-core": "2.4.2",
+    "@floegence/flowersec-core": "2.5.0",
     "@floegence/redevplugin-contracts": "1.1.4",
     "@floegence/redevplugin-ui": "1.1.4",
     "@fontsource/iosevka": "^5.2.5",
@@ -49,7 +51,7 @@
     "solid-motionone": "^1.0.4"
   },
   "overrides": {
-    "@floegence/flowersec-core": "2.4.2",
+    "@floegence/flowersec-core": "2.5.0",
     "@babel/core": "^7.29.7",
     "brace-expansion": "^5.0.9",
     "dompurify": "^3.4.13",
@@ -71,7 +73,7 @@
   },
   "pnpm": {
     "overrides": {
-      "@floegence/flowersec-core": "2.4.2",
+      "@floegence/flowersec-core": "2.5.0",
       "@babel/core": "^7.29.7",
       "brace-expansion": "^5.0.9",
       "dompurify": "^3.4.13",
