@@ -658,6 +658,11 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     dispatchInteraction(() => props.transport.sendInput(sessionId, data));
   };
 
+  const sendPaste = (data: string) => {
+    if (!data || !props.connected() || !props.viewActive() || !props.active()) return;
+    dispatchInteraction(() => props.transport.sendPaste(sessionId, data));
+  };
+
   const sendInputIntent = (intent: TerminalKeyInputIntent) => {
     if (!props.connected() || !props.viewActive() || !props.active()) return;
     dispatchInteraction(() => props.transport.sendInputIntent(sessionId, intent));
@@ -1056,6 +1061,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       inputHost: canvas,
       inputElement,
       onData: sendInput,
+      onPaste: sendPaste,
       onInputIntent: sendInputIntent,
       hasSelection: () => renderer?.hasSelection() ?? false,
       copySelection,
