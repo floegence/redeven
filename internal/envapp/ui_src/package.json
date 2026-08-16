@@ -24,11 +24,11 @@
   },
   "dependencies": {
     "@chenglou/pretext": "^0.0.5",
-    "@floegence/floe-webapp-boot": "0.41.2",
-    "@floegence/floe-webapp-core": "0.41.2",
-    "@floegence/floe-webapp-protocol": "0.41.2",
+    "@floegence/floe-webapp-boot": "0.41.4",
+    "@floegence/floe-webapp-core": "0.41.4",
+    "@floegence/floe-webapp-protocol": "0.41.4",
     "@floegence/floeterm-terminal-web": "0.16.4",
-    "@floegence/flowersec-core": "2.5.1",
+    "@floegence/flowersec-core": "2.5.2",
     "@floegence/redevplugin-contracts": "1.1.4",
     "@floegence/redevplugin-ui": "1.1.4",
     "@fontsource/iosevka": "^5.2.5",
@@ -51,7 +51,7 @@
     "solid-motionone": "^1.0.4"
   },
   "overrides": {
-    "@floegence/flowersec-core": "2.5.1",
+    "@floegence/flowersec-core": "2.5.2",
     "@babel/core": "^7.29.7",
     "brace-expansion": "^5.0.9",
     "dompurify": "^3.4.13",
@@ -73,7 +73,7 @@
   },
   "pnpm": {
     "overrides": {
-      "@floegence/flowersec-core": "2.5.1",
+      "@floegence/flowersec-core": "2.5.2",
       "@babel/core": "^7.29.7",
       "brace-expansion": "^5.0.9",
       "dompurify": "^3.4.13",
