@@ -379,7 +379,10 @@ async function installCompatibilityPackage(page, sessionHeaders, packagePath, pl
 async function verifyIOSmokeRevoke(page, frame, sessionHeaders, catalog, config, pluginResponses, pluginInstanceID) {
   const plugin = enabledPlugins(catalog).find((candidate) => candidate.plugin_instance_id === pluginInstanceID) ?? enabledPlugins(catalog)[0];
   if (!plugin) throw new Error('v9 I/O revoke smoke requires an enabled plugin');
-  const holdPromise = frame.evaluate(() => window.__ioSmokeHold?.()).catch((error) => ({ error: String(error) }));
+  const holdRPCStart = pluginResponses.length;
+  const holdButton = frame.locator('[data-redevplugin-action="hold-smoke"]');
+  await holdButton.waitFor({ state: 'visible', timeout: 30_000 });
+  await holdButton.click();
   const stateURL = `http://127.0.0.1:${config.fixturePorts.http}/state`;
   const activeBefore = await waitFor(async () => {
     const response = await fetch(stateURL);
@@ -399,10 +402,11 @@ async function verifyIOSmokeRevoke(page, frame, sessionHeaders, catalog, config,
     return state.http_active === 0 && state.ws_active === 0 && state.tcp_active === 0
       && state.http_closed > 0 && state.ws_closed > 0 && state.tcp_closed > 0 ? state : null;
   }, 60_000, 'v9 resource closure after revoke');
-  const holdOutcome = await Promise.race([
-    holdPromise,
-    new Promise((resolve) => setTimeout(() => resolve({ timeout: true }), 30_000)),
-  ]);
+  const holdOutcome = await waitFor(() => pluginResponses.slice(holdRPCStart).find((entry) => (
+    entry.pathname.endsWith('/plugins/rpc')
+      && entry.rpc_plugin_instance_id === plugin.plugin_instance_id
+      && entry.rpc_method === 'smoke.hold'
+  )) ?? null, 30_000, 'v9 hold RPC revocation');
   const disabled = await waitFor(async () => {
     const response = await requestPluginJSON(page, '/_redevplugin/api/plugins/catalog/query', {}, sessionHeaders);
     if (response.status !== 200) return null;
@@ -417,8 +421,7 @@ async function verifyIOSmokeRevoke(page, frame, sessionHeaders, catalog, config,
   if (enableResponse.status !== 200) throw new Error(`v9 I/O re-enable failed: ${JSON.stringify(enableResponse)}`);
   return {
     disabled: true,
-    pending_rpc_rejected: holdOutcome?.timeout !== true
-      && (Boolean(holdOutcome?.error) || holdOutcome?.ok === false),
+    pending_rpc_rejected: holdOutcome.status !== 200 || holdOutcome.body?.ok === false,
     http_closed: closed.http_closed > activeBefore.http_active,
     websocket_closed: closed.ws_closed > activeBefore.ws_active,
     tcp_closed: closed.tcp_closed > activeBefore.tcp_active,

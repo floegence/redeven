@@ -98,6 +98,21 @@ test('Desktop smoke binds compatibility proof to a new frozen-package RPC withou
   assert.ok(source.indexOf("'frozen v1.1.4 RPC'") < source.lastIndexOf('assertExtensionIOEvidence(ioEvidence'));
 });
 
+test('v9 I/O smoke surface runs as an opaque worker and drives hold through rendered UI', async () => {
+  const fs = await import('node:fs/promises');
+  const [workerSource, browserSource] = await Promise.all([
+    fs.readFile(new URL('./fixtures/redevplugin_io_smoke/ui/app.js', import.meta.url), 'utf8'),
+    fs.readFile(new URL('./smoke_desktop_plugins.mjs', import.meta.url), 'utf8'),
+  ]);
+
+  assert.doesNotMatch(workerSource, /\b(?:document|window|location)\b/u);
+  assert.match(workerSource, /bridge\.render\(/u);
+  assert.match(workerSource, /data-redevplugin-action[^\n]*hold-smoke/u);
+  assert.match(workerSource, /bridge\.onAction\(['"]hold-smoke['"]/u);
+  assert.match(browserSource, /data-redevplugin-action="hold-smoke"/u);
+  assert.doesNotMatch(browserSource, /window\.__ioSmokeHold/u);
+});
+
 test('Desktop smoke redacts Local UI resume credentials from persisted unlock evidence', async () => {
   const source = await import('node:fs/promises').then((fs) => fs.readFile(
     new URL('./smoke_desktop_plugins.mjs', import.meta.url),
