@@ -350,6 +350,14 @@ export function canonicalEvidence(response) {
   };
 }
 
+export function assertAcceptedReceipt(status, body) {
+  const accepted = Number.isInteger(status) && status >= 200 && status < 300 && body?.ok !== false;
+  if (accepted) return body?.data ?? body ?? {};
+  const errorCode = String(body?.error_code ?? '').trim();
+  const error = String(body?.error ?? 'unknown error').trim().slice(0, 1000);
+  throw new Error(`Flower send rejected: status=${status}${errorCode ? ` code=${errorCode}` : ''} error=${error}`);
+}
+
 async function setPermission(page, permission) {
   const surface = flowerSurface(page);
   const trigger = surface.locator('.flower-permission-trigger').filter({ visible: true }).first();
@@ -398,8 +406,9 @@ async function sendPrompt(page, prompt, options = {}) {
   }, { timeout: 20_000 });
   const clickedAt = performance.now();
   await action.click();
-  const receiptBody = await (await receiptResponse).json();
-  const receipt = receiptBody?.data ?? receiptBody ?? {};
+  const response = await receiptResponse;
+  const receiptBody = await response.json();
+  const receipt = assertAcceptedReceipt(response.status(), receiptBody);
   const receiptThreadID = String(receipt.thread_id ?? '').trim();
   const user = surface.locator('[data-flower-message-role="user"]').filter({ hasText: options.visibleMarker ?? prompt.slice(0, 40) });
   if (receiptThreadID) {

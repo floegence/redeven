@@ -7,6 +7,7 @@ import test from 'node:test';
 
 import {
   assertPortsFree,
+  assertAcceptedReceipt,
   assertSmokeConfiguration,
   canonicalEvidence,
   findDeepSeekProvider,
@@ -76,6 +77,14 @@ test('canonical evidence unwraps the API envelope and preserves canonical IDs', 
     status: 'running', activity: 'active', item_ids: ['message-1', 'tool-1'],
     message_ids: ['message-1'], interaction_ids: ['approval-1'], error_code: '',
   });
+});
+
+test('send receipts fail immediately with the typed server rejection', () => {
+  assert.deepEqual(assertAcceptedReceipt(202, { ok: true, data: { thread_id: 'thread-1' } }), { thread_id: 'thread-1' });
+  assert.throws(
+    () => assertAcceptedReceipt(400, { ok: false, error: 'canonical request conflicts', error_code: 'request_conflict' }),
+    /status=400 code=request_conflict error=canonical request conflicts/u,
+  );
 });
 
 test('ordered checkpoint validation accepts stable prefixes and canonical DOM parity', () => {
