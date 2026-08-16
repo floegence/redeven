@@ -30,7 +30,7 @@ require (
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/ebitengine/purego v0.9.1 // indirect
-	github.com/floegence/floret/v4 v4.0.9
+	github.com/floegence/floret/v4 v4.0.10
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/libp2p/go-buffer-pool v0.0.2 // indirect
