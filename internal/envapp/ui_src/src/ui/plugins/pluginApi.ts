@@ -39,7 +39,8 @@ export function createPluginLifecycleAPI(
   loadInstalledIcon: (url: string, signal?: AbortSignal) => Promise<string> = loadInstalledPluginIcon,
 ) {
   let catalog: readonly OfficialPluginCatalogItem[] = catalogSeed ?? [];
-  const installedIconURLs = new Map<string, Promise<string>>();
+  const installedIconLoads = new Map<string, Promise<void>>();
+  const installedIconURLBySource = new Map<string, string>();
   const loadedInstalledIconURLs = new Set<string>();
   let disposed = false;
   const officialByPluginID = () => new Map(catalog.map((item) => [item.pluginID, item]));
@@ -119,32 +120,31 @@ export function createPluginLifecycleAPI(
       permissionRequirements,
       securityPolicies: securityPoliciesResult.status === 'fulfilled' ? securityPoliciesResult.value.security_policies : [],
     });
-    const items = await Promise.all(projection.items.map(async (item) => {
+    const items = projection.items.map((item) => {
       if (!item.pluginInstanceID || !item.iconURL?.startsWith('/_redevplugin/api/plugins/')) return item;
-      try {
-        const icon = installedIconURLs.get(item.iconURL)
-          ?? withAbortTimeout(
+      const sourceURL = item.iconURL;
+      const loadedIconURL = installedIconURLBySource.get(sourceURL);
+      if (loadedIconURL) return { ...item, iconURL: loadedIconURL };
+      if (!installedIconLoads.has(sourceURL)) {
+        const load = withAbortTimeout(
             (signal) => loadInstalledIcon(item.iconURL!, signal),
             options.signal,
             INVENTORY_ICON_TIMEOUT_MS,
             `Loading the icon for ${item.pluginInstanceID}`,
-          ).then((objectURL) => {
-            if (disposed) {
-              URL.revokeObjectURL(objectURL);
-            } else {
+          )
+          .then((objectURL) => {
+            if (disposed) URL.revokeObjectURL(objectURL);
+            else {
+              installedIconURLBySource.set(sourceURL, objectURL);
               loadedInstalledIconURLs.add(objectURL);
             }
-            return objectURL;
-          }).catch((error) => {
-            installedIconURLs.delete(item.iconURL!);
-            throw error;
-          });
-        installedIconURLs.set(item.iconURL, icon);
-        return { ...item, iconURL: await icon };
-      } catch {
-        return { ...item, iconURL: undefined };
+          })
+          .catch(() => undefined)
+          .finally(() => installedIconLoads.delete(sourceURL));
+        installedIconLoads.set(sourceURL, load);
       }
-    }));
+      return { ...item, iconURL: undefined };
+    });
     return {
       ...projection,
       items: items.map((item) => (
@@ -379,7 +379,8 @@ export function createPluginLifecycleAPI(
   const dispose = () => {
     if (disposed) return;
     disposed = true;
-    installedIconURLs.clear();
+    installedIconLoads.clear();
+    installedIconURLBySource.clear();
     for (const objectURL of loadedInstalledIconURLs) URL.revokeObjectURL(objectURL);
     loadedInstalledIconURLs.clear();
   };

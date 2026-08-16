@@ -132,7 +132,7 @@ const generatedContainersRecord: ReDevPluginRecord = {
 };
 
 describe('v1.1.4 plugin lifecycle client integration', () => {
-  it('preloads an installed package icon before publishing the inventory projection', async () => {
+  it('loads an installed package icon without blocking the first inventory projection', async () => {
     const { mocks } = createClientHarness();
     const iconDigest = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
     const iconPath = 'ui/assets/containers.png';
@@ -161,14 +161,17 @@ describe('v1.1.4 plugin lifecycle client integration', () => {
       loadInstalledIcon,
     );
 
-    const projection = await lifecycle.loadInventoryProjection();
-    await lifecycle.loadInventoryProjection();
+    const initialProjection = await lifecycle.loadInventoryProjection();
+    await Promise.resolve();
+    const enrichedProjection = await lifecycle.loadInventoryProjection();
 
     expect(loadInstalledIcon).toHaveBeenCalledWith(
       `/_redevplugin/api/plugins/${encodeURIComponent(generatedContainersInstanceID)}/icon/${iconDigest.slice(7)}`,
       expect.any(AbortSignal),
     );
-    expect(projection.items.find((item) => item.pluginInstanceID === generatedContainersInstanceID)?.iconURL)
+    expect(initialProjection.items.find((item) => item.pluginInstanceID === generatedContainersInstanceID)?.iconURL)
+      .toBeUndefined();
+    expect(enrichedProjection.items.find((item) => item.pluginInstanceID === generatedContainersInstanceID)?.iconURL)
       .toBe('blob:redeven-installed-icon');
     expect(loadInstalledIcon).toHaveBeenCalledOnce();
 
@@ -178,8 +181,7 @@ describe('v1.1.4 plugin lifecycle client integration', () => {
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:redeven-installed-icon');
   });
 
-  it('publishes installed inventory when icon decoding does not settle', async () => {
-    vi.useFakeTimers();
+  it('publishes installed inventory immediately when icon decoding does not settle', async () => {
     const { mocks } = createClientHarness();
     const iconDigest = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
     const iconPath = 'ui/assets/containers.png';
@@ -207,17 +209,15 @@ describe('v1.1.4 plugin lifecycle client integration', () => {
       loadInstalledIcon,
     );
 
-    const loading = lifecycle.loadInventoryProjection();
-    await vi.advanceTimersByTimeAsync(5_000);
+    const projection = await lifecycle.loadInventoryProjection();
 
-    await expect(loading).resolves.toMatchObject({
+    expect(projection).toMatchObject({
       items: [expect.objectContaining({
         pluginInstanceID: generatedContainersInstanceID,
         iconURL: undefined,
       })],
     });
     lifecycle.dispose();
-    vi.useRealTimers();
   });
 
   it('keeps an enabled registry record visible when lifecycle metadata reads fail', async () => {
