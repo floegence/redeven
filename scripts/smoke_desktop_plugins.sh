@@ -133,7 +133,9 @@ prepare_linux_target() {
   frozen_expected=$(awk '$2 == "worker.redevplugin" { print $1 }' "$LINUX_TARGET_ROOT/v1.1.4.SHA256SUMS")
   frozen_observed=$(shasum -a 256 "$LINUX_TARGET_ROOT/worker-v1.1.4.redevplugin" | awk '{print $1}')
   [[ "$frozen_expected" == "$frozen_observed" ]] || { echo "frozen v1.1.4 package checksum mismatch" >&2; return 1; }
-  LINUX_CONTAINER_ID=$(docker run -d --rm --platform linux/arm64 --name "redeven-plugin-smoke-${RANDOM}${RANDOM}" \
+  # The Host needs clone3(CLONE_PIDFD) before the runtime installs its own
+  # no-new-privileges and seccomp containment profile.
+  LINUX_CONTAINER_ID=$(docker run -d --rm --platform linux/arm64 --security-opt seccomp=unconfined --name "redeven-plugin-smoke-${RANDOM}${RANDOM}" \
     -p "127.0.0.1:$LINUX_UI_PORT:$LINUX_UI_PORT" \
     -p "127.0.0.1:$FIXTURE_HTTP_PORT:$FIXTURE_HTTP_PORT" \
     -p "127.0.0.1:$FIXTURE_TCP_PORT:$FIXTURE_TCP_PORT" \
@@ -169,8 +171,8 @@ start_linux_redeven() {
 const fs = require('node:fs');
 const [file, phase, runtimePID, previousRuntimePID] = process.argv.slice(2);
 const report = JSON.parse(fs.readFileSync(file, 'utf8'));
-if (previousRuntimePID) report.previous_runtime_pid = Number(previousRuntimePID);
-report.runtime_pid = Number(runtimePID);
+if (previousRuntimePID) report.previous_local_ui_pid = Number(previousRuntimePID);
+report.local_ui_pid = Number(runtimePID);
 report.runtime_starts.push({ phase, pid: Number(runtimePID), started_at: new Date().toISOString() });
 fs.writeFileSync(file, `${JSON.stringify(report, null, 2)}\n`);
 NODE
