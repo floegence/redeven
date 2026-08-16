@@ -634,6 +634,27 @@ function orderedDisplayItems(current) {
   ));
 }
 
+export function orderedToolPayload(item) {
+  const activity = item?.activity ?? {};
+  return activity?.presentation?.payload ?? activity?.payload ?? {};
+}
+
+export function orderedToolCommand(current, item) {
+  const direct = String(orderedToolPayload(item).command ?? '').trim();
+  if (direct) return direct;
+  const toolID = String(item?.activity?.tool_id ?? '').trim();
+  if (!toolID) return '';
+  const interactions = [
+    ...(Array.isArray(current?.interactions) ? current.interactions : []),
+    ...(Array.isArray(current?.items) ? current.items.map((entry) => entry?.interaction).filter(Boolean) : []),
+  ];
+  const approval = interactions.find((interaction) => (
+    interaction?.kind === 'approval'
+    && String(interaction?.tool_call_id || interaction?.approval?.tool_call_id || '').trim() === toolID
+  ))?.approval;
+  return String(approval?.command ?? '').trim();
+}
+
 export function validateOrderedPresentationCheckpoints(checkpoints) {
   if (!Array.isArray(checkpoints) || checkpoints.length === 0) {
     throw new Error('ordered presentation requires at least one checkpoint');
@@ -688,7 +709,7 @@ async function orderedPresentationCheckpoint(page, config, threadID, label, chec
     const canonicalDisplayIDs = displayItems.map((item) => String(item.id ?? ''));
     const displayIDSet = new Set(canonicalDisplayIDs);
     const items = (Array.isArray(current.items) ? current.items : []).map((item) => {
-      const payload = item?.activity?.presentation?.payload ?? {};
+      const payload = orderedToolPayload(item);
       const output = payload.stdout ?? payload.output ?? payload.latest_output ?? '';
       return {
         id: String(item?.id ?? ''),
@@ -701,7 +722,7 @@ async function orderedPresentationCheckpoint(page, config, threadID, label, chec
           activity_status: String(item?.activity?.status ?? ''),
           tool_id: String(item?.activity?.tool_id ?? ''),
           tool_name: String(item?.activity?.tool_name ?? ''),
-          command: String(payload.command ?? '').slice(0, 1000),
+          command: orderedToolCommand(current, item).slice(0, 1000),
           output_excerpt: String(output).slice(0, 1000),
         } : {}),
       };
@@ -754,6 +775,7 @@ async function runScenarios(page, config, telemetry) {
   telemetry.scenarios = results;
   const remember = async (id, operation) => {
     const started = performance.now();
+    telemetry.active_scenario = id;
     try {
       const evidence = await operation();
       const duplicates = await assertUIHealth(page);
@@ -1095,6 +1117,7 @@ async function runScenarios(page, config, telemetry) {
       `First reason about the first step, then call terminal.exec exactly once with command "sleep 2; printf ${firstToken}" and wait for its result.`,
       `Only after the first result, reason about the second step, then call terminal.exec exactly once with command "sleep 2; printf ${secondToken}" and wait for its result.`,
       `Only after both results, reply exactly ${firstToken}_${secondToken} as plain text.`,
+      'Do not emit assistant text before or between tool calls. Put planning only in reasoning. Emit assistant text only after both tool results.',
       'Do not call both tools together. Do not call task_complete or any other tool.',
     ].join(' '), { visibleMarker: firstToken });
 
@@ -1107,11 +1130,10 @@ async function runScenarios(page, config, telemetry) {
       page, config, sent.threadID, 's15-02-tool-1-waiting', checkpoints, scenarioStarted,
       (current) => {
         const tools = orderedDisplayItems(current).filter((item) => item.kind === 'tool');
-        const payload = tools[0]?.activity?.presentation?.payload ?? {};
         return tools.length === 1
           && tools[0]?.activity?.tool_name === 'terminal.exec'
           && tools[0]?.activity?.status === 'waiting'
-          && String(payload.command ?? '').includes(`printf ${firstToken}`);
+          && orderedToolCommand(current, tools[0]).includes(`printf ${firstToken}`);
       },
     );
     const firstTool = firstWaiting.canonical_items.find((item) => item.kind === 'tool');
@@ -1121,7 +1143,7 @@ async function runScenarios(page, config, telemetry) {
       page, config, sent.threadID, 's15-03-tool-1-complete', checkpoints, scenarioStarted,
       (current) => {
         const item = orderedDisplayItems(current).find((entry) => entry.id === firstTool.id);
-        const payload = item?.activity?.presentation?.payload ?? {};
+        const payload = orderedToolPayload(item);
         const output = payload.stdout ?? payload.output ?? payload.latest_output ?? '';
         return item?.activity?.status === 'success' && String(output).includes(firstToken);
       },
@@ -1140,12 +1162,11 @@ async function runScenarios(page, config, telemetry) {
       page, config, sent.threadID, 's15-05-tool-2-waiting', checkpoints, scenarioStarted,
       (current) => {
         const tools = orderedDisplayItems(current).filter((item) => item.kind === 'tool');
-        const payload = tools[1]?.activity?.presentation?.payload ?? {};
         return tools.length === 2
           && tools.every((item) => item?.activity?.tool_name === 'terminal.exec')
           && tools[0]?.activity?.status === 'success'
           && tools[1]?.activity?.status === 'waiting'
-          && String(payload.command ?? '').includes(`printf ${secondToken}`);
+          && orderedToolCommand(current, tools[1]).includes(`printf ${secondToken}`);
       },
     );
     const secondTool = secondWaiting.canonical_items.filter((item) => item.kind === 'tool')[1];
@@ -1155,7 +1176,7 @@ async function runScenarios(page, config, telemetry) {
       page, config, sent.threadID, 's15-06-tool-2-complete', checkpoints, scenarioStarted,
       (current) => {
         const item = orderedDisplayItems(current).find((entry) => entry.id === secondTool.id);
-        const payload = item?.activity?.presentation?.payload ?? {};
+        const payload = orderedToolPayload(item);
         const output = payload.stdout ?? payload.output ?? payload.latest_output ?? '';
         return item?.activity?.status === 'success' && String(output).includes(secondToken);
       },
@@ -1219,15 +1240,16 @@ async function runFlowerBrowserSmoke(config) {
   let browser = await connect();
   const telemetry = {
     console_errors: [], page_errors: [], browser_errors: [], failed_responses: [], requests: 0,
-    workspace_sse_connections: 0, workspace_sse_reconnect_reasons: [], scenarios: [],
+    workspace_sse_connections: 0, workspace_sse_reconnect_reasons: [], scenarios: [], active_scenario: 'startup',
   };
+  const browserStarted = performance.now();
   let page;
   let nativeViewport;
   try {
     ({ browser, page } = await acquireEnvPage(browser, connect, config.reportRoot));
     nativeViewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
-    page.on('console', (message) => { if (message.type() === 'error') telemetry.console_errors.push(message.text().slice(0, 2000)); });
-    page.on('pageerror', (error) => telemetry.page_errors.push(String(error).slice(0, 2000)));
+    page.on('console', (message) => { if (message.type() === 'error') telemetry.console_errors.push({ scenario: telemetry.active_scenario, elapsed_ms: Number((performance.now() - browserStarted).toFixed(1)), message: message.text().slice(0, 2000) }); });
+    page.on('pageerror', (error) => telemetry.page_errors.push({ scenario: telemetry.active_scenario, elapsed_ms: Number((performance.now() - browserStarted).toFixed(1)), message: String(error).slice(0, 2000) }));
     page.on('request', (request) => {
       telemetry.requests += 1;
       try { if (new URL(request.url()).pathname.endsWith('/api/ai/flower/stream')) telemetry.workspace_sse_connections += 1; } catch {}
