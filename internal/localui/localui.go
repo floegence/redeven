@@ -2017,40 +2017,6 @@ func (s *Server) resolveLocalCap() config.PermissionSet {
 	return *s.localPermissionCap
 }
 
-func (s *Server) resolvePending(channelID string) (pendingDirect, bool) {
-	if s == nil {
-		return pendingDirect{}, false
-	}
-	id := strings.TrimSpace(channelID)
-	if id == "" {
-		return pendingDirect{}, false
-	}
-	now := time.Now().Unix()
-
-	// Durable authority is the first and only source across process boundaries.
-	if s.authStore == nil {
-		return pendingDirect{}, false
-	}
-	if stored, _, found := s.authStore.bindingByChannel(id); found {
-		return stored, true
-	}
-	s.pendingMu.Lock()
-	p, ok := s.pending[id]
-	if !ok {
-		s.pendingMu.Unlock()
-		return pendingDirect{}, false
-	}
-	if p.initExpireAtUnixS <= 0 || now > p.initExpireAtUnixS {
-		delete(s.pending, id)
-		s.pendingMu.Unlock()
-		s.removePendingAccessBinding(p.accessSessionID, id)
-		s.releaseAcceptedSessionAuthorization(id)
-		return pendingDirect{}, false
-	}
-	s.pendingMu.Unlock()
-	return p, true
-}
-
 func (s *Server) releaseAcceptedSessionAuthorization(channelID string) {
 	if s == nil {
 		return

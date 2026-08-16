@@ -229,9 +229,6 @@ func ResolveProviderLinkConfig(ctx context.Context, args ProviderLinkBootstrapAr
 	if err != nil {
 		return nil, err
 	}
-	agentInstanceID := attempt.AgentInstanceID
-	localEnvironmentPublicID := attempt.LocalEnvironmentPublicID
-
 	exchange := func(delivery bootstrapDeliveryAttempt) (*bootstrapResponse, error) {
 		return exchangeBootstrapTicket(ctx, args.HTTPClient, baseURL, envID, bootstrapTicket, bootstrapTicketExchangeRequest{
 			EnvPublicID:                    envID,
@@ -256,8 +253,8 @@ func ResolveProviderLinkConfig(ctx context.Context, args ProviderLinkBootstrapAr
 	if err != nil {
 		return nil, err
 	}
-	agentInstanceID = attempt.AgentInstanceID
-	localEnvironmentPublicID = attempt.LocalEnvironmentPublicID
+	agentInstanceID := attempt.AgentInstanceID
+	localEnvironmentPublicID := attempt.LocalEnvironmentPublicID
 	binding := bootstrap.LocalEnvironmentBinding
 	if binding == nil {
 		return nil, errors.New("invalid bootstrap exchange response: missing local_environment_binding")

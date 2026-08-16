@@ -566,7 +566,7 @@ func TestLocalAuthorizationStorePhysicalAndPairCapacityLimits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	recordStatement, err := tx.Prepare(`INSERT INTO local_authorization_records(lookup_key, record_ciphertext, key_version, channel_id, access_session_id, generation, expires_at_unix_s, state, lease_id, created_at_unix_ms) VALUES(?,?,?,?,?,?,?,?,?,?)`)
 	if err != nil {
 		t.Fatal(err)

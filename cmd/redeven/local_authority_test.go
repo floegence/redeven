@@ -36,7 +36,7 @@ func TestLocalAuthorityRotateKeyRejectsActiveRuntime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer lock.Release()
+	defer func() { _ = lock.Release() }()
 	code, _, stderr := runCLITest(t, "local-authority", "rotate-key", "--state-root", stateRoot)
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
