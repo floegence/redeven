@@ -1968,9 +1968,8 @@ describe('EnvAppShell environment entry affordances', () => {
 
     try {
       await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 1, 40);
-      const pluginCredential = await import('./services/pluginSessionCredential');
-      pluginCredential.stagePluginSessionCredential('ch_replacement', 'replacement-plugin-session');
-      pluginCredential.activatePluginSessionCredential('ch_replacement');
+      protocolClient = { id: 'client-replaced-for-inventory' };
+      notifyProtocolStateChange();
       await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 2, 40);
 
       expect(requestSignals).toHaveLength(2);

@@ -1,5 +1,13 @@
 # Redeven OKF Update Log
 
+## 2026-08-16
+* **ReDevPlugin package-set readback**: Upgraded the complete published
+  ReDevPlugin v2.0.3 Go, npm, and Rust source package set. The Host now emits
+  required empty presentation arrays as arrays, while Redeven retains one
+  EnvAppShell-owned Plugin Panel state and no inventory or credential fallback
+  state machine. Linux smoke resolves frozen v1.1.4 fixtures from the exact
+  published Go module instead of a machine-specific module-cache path.
+
 ## 2026-08-15
 * **Canonical provider tool names**: Tool definitions, Floret history, current
   views, and Flower use dotted canonical names such as `terminal.read`.
