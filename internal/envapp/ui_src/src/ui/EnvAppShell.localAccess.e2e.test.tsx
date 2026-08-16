@@ -1968,8 +1968,11 @@ describe('EnvAppShell environment entry affordances', () => {
 
     try {
       await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 1, 40);
-      protocolClient = { id: 'client-replaced-for-inventory' };
-      notifyProtocolStateChange();
+      publishProtocolSnapshot({
+        ...protocolSnapshot,
+        state: 'connected',
+        currentSession: { id: 'client-replaced-for-inventory' },
+      });
       await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 2, 40);
 
       expect(requestSignals).toHaveLength(2);
