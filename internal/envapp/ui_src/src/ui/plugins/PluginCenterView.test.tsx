@@ -2071,6 +2071,39 @@ describe('PluginCenterView', () => {
     expect(onRefresh).toHaveBeenCalledTimes(1);
   });
 
+  it('disables only the refresh control while a background refresh is pending', async () => {
+    let releaseRefresh!: () => void;
+    const onRefresh = vi.fn(() => new Promise<void>((resolve) => {
+      releaseRefresh = resolve;
+    }));
+    const mount = document.createElement('div');
+    document.body.append(mount);
+
+    dispose = render(() => (
+      <PluginCenterView
+        projection={projection}
+        loading={false}
+        error={null}
+        canManagePlugins
+        canOpenPluginSurfaces={false}
+        onRefresh={onRefresh}
+        onCommand={vi.fn()}
+      />
+    ), mount);
+
+    const refresh = mount.querySelector('[data-plugin-center-refresh]') as HTMLButtonElement;
+    refresh.click();
+    await Promise.resolve();
+
+    expect(refresh.disabled).toBe(true);
+    expect(mount.querySelector('[data-plugin-center-loading]')).toBeNull();
+    expect(mount.querySelector('[data-plugin-center-item]')).not.toBeNull();
+
+    releaseRefresh();
+    await vi.waitFor(() => expect(refresh.disabled).toBe(false));
+    expect(onRefresh).toHaveBeenCalledOnce();
+  });
+
   it('keeps enabled surfaces closed and exposes an explicit retry after runtime recovery fails', () => {
     const onRetryRuntimeRecovery = vi.fn();
     const enabledProjection = containersPermissionProjection(true);

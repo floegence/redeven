@@ -74,6 +74,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const [selectedInventoryKey, setSelectedInventoryKey] = createSignal<string | undefined>();
   const [protectedSelectionInventoryKey, setProtectedSelectionInventoryKey] = createSignal<string | undefined>();
   const [commandError, setCommandError] = createSignal<string | null>(null);
+  const [refreshPending, setRefreshPending] = createSignal(false);
   const [pendingCommand, setPendingCommand] = createSignal<Readonly<{
     type: PluginPendingCommandType;
     target?: string;
@@ -542,6 +543,8 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   };
 
   const refreshInventory = async () => {
+    if (refreshPending()) return;
+    setRefreshPending(true);
     setCommandError(null);
     try {
       await props.onRefresh();
@@ -549,6 +552,8 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       setMarketDetailState(undefined);
     } catch (error) {
       setCommandError(messageFromUnknown(error));
+    } finally {
+      setRefreshPending(false);
     }
   };
 
@@ -570,6 +575,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     <PluginCenterShell
       query={query()}
       loading={loading()}
+      refreshing={refreshPending()}
       activeTab={tabSelection.visual()}
       installedCount={model().installed.length}
       discoverCount={model().discover.length}
@@ -945,6 +951,7 @@ export function PluginCenterShell(props: {
   trustFilter: PluginTrustFilter;
   lifecycleFilter: PluginLifecycleFilter;
   loading: boolean;
+  refreshing: boolean;
   activeTab: PluginCenterTab;
   installedCount: number;
   discoverCount: number;
@@ -1059,10 +1066,10 @@ export function PluginCenterShell(props: {
               class="inline-flex h-[44px] w-[44px] cursor-pointer items-center justify-center rounded-md border text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 sm:h-9 sm:w-9 motion-reduce:transition-none"
               aria-label={i18n.t('uiCopy.plugin.refreshOfficial')}
               title={i18n.t('uiCopy.plugin.refreshOfficial')}
-              disabled={props.loading}
+              disabled={props.loading || props.refreshing}
               onClick={props.onRefresh}
             >
-              <RefreshIcon class={cn('h-3.5 w-3.5', props.loading && 'animate-spin motion-reduce:animate-none')} />
+              <RefreshIcon class={cn('h-3.5 w-3.5', (props.loading || props.refreshing) && 'animate-spin motion-reduce:animate-none')} />
             </button>
             <Show when={props.onClose}>
               <button
