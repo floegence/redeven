@@ -16,6 +16,7 @@ import {
   isExpectedQueueOrderResponse,
   ownedManifestPIDs,
   orderedToolCommand,
+  orderedPendingApprovalForTool,
   orderedToolPayload,
   scanSecretLeaks,
   validateOrderedPresentationCheckpoints,
@@ -246,9 +247,20 @@ test('ordered tool evidence reads the typed activity payload and approval comman
   assert.equal(orderedToolCommand({}, flattened), 'printf second');
 
   const approvalOnly = { activity: { tool_id: 'call-3', presentation: { payload: {} } } };
-  assert.equal(orderedToolCommand({
-    interactions: [{ kind: 'approval', tool_call_id: 'call-3', approval: { command: 'printf third' } }],
-  }, approvalOnly), 'printf third');
+  const approvalCurrent = {
+    interactions: [{ kind: 'approval', tool_call_id: 'call-3', resolved: false, approval: { command: 'printf third' } }],
+  };
+  assert.equal(orderedToolCommand(approvalCurrent, approvalOnly), 'printf third');
+  assert.equal(orderedPendingApprovalForTool(approvalCurrent, approvalOnly)?.approval?.command, 'printf third');
+
+  const segmentOnly = { id: 'tool:turn-1:call-4', activity: { presentation: { payload: {} } } };
+  const segmentCurrent = {
+    interactions: [{ kind: 'approval', tool_call_id: 'call-4', resolved: false, approval: { command: 'printf fourth' } }],
+  };
+  assert.equal(orderedToolCommand(segmentCurrent, segmentOnly), 'printf fourth');
+  assert.equal(orderedPendingApprovalForTool({
+    interactions: [{ ...segmentCurrent.interactions[0], resolved: true }],
+  }, segmentOnly), undefined);
 });
 
 test('native viewport geometry rejects duplicate surfaces and document or preview overflow', () => {

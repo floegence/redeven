@@ -38,7 +38,14 @@ type CreateAgentVersionModelArgs = Readonly<{
 export function createAgentVersionModel(args: CreateAgentVersionModelArgs): AgentVersionModel {
   const [currentPingResource, { refetch: refetchCurrentPingResource }] = createResource<SysPingResponse | null, unknown | null>(
     () => args.currentPingSource(),
-    async (source) => (source == null ? null : await args.rpc.sys.ping()),
+    async (source) => {
+      if (source == null) return null;
+      try {
+        return await args.rpc.sys.ping();
+      } catch {
+        return null;
+      }
+    },
   );
 
   const [latestMeta, setLatestMeta] = createSignal<AgentLatestVersion | null>(null);

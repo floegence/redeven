@@ -22,7 +22,42 @@ async function flushUntil(predicate: () => boolean, maxTurns: number = 8): Promi
   throw new Error('Condition not met before timeout');
 }
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 describe('createAgentVersionModel', () => {
+  it('settles a runtime ping rejection that arrives after the model is disposed', async () => {
+    const getLatestVersionMock = vi.mocked(getAgentLatestVersion);
+    getLatestVersionMock.mockReset();
+    const pingResult = deferred<never>();
+    const [currentPingSource] = createSignal<unknown | null>({});
+    const ping = vi.fn(() => pingResult.promise);
+    let model!: ReturnType<typeof createAgentVersionModel>;
+    const dispose = createRoot((disposeRoot) => {
+      model = createAgentVersionModel({
+        latestVersionRequest: () => null,
+        currentPingSource,
+        rpc: { sys: { ping } },
+      });
+      return disposeRoot;
+    });
+
+    await flushUntil(() => ping.mock.calls.length === 1);
+    dispose();
+    pingResult.reject(new Error('RPC transport or response decode error'));
+    await flushAsync();
+
+    expect(model.currentPing()).toBeNull();
+    expect(getLatestVersionMock).not.toHaveBeenCalled();
+  });
+
   it('loads latest metadata only after runtime ping is available', async () => {
     const getLatestVersionMock = vi.mocked(getAgentLatestVersion);
     getLatestVersionMock.mockReset();
