@@ -3793,7 +3793,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     scheduleComposerFocus();
   });
 
-  const applyRuntimeCurrent = (current: FlowerTurnLaunchReceipt['current'], connectionEpoch = liveTransport.connectionEpoch()): boolean => {
+  const applyRuntimeCurrent = (
+    current: FlowerTurnLaunchReceipt['current'],
+    connectionEpoch = liveTransport.connectionEpoch(),
+    contextCompactions?: FlowerLiveStreamEnvelope['context_compactions'],
+    timelineDecorations?: FlowerLiveStreamEnvelope['timeline_decorations'],
+  ): boolean => {
     const threadID = trimString(current.thread_id);
     if (!threadID || retiredThreadIDs.has(threadID)) return false;
     const now = Date.now();
@@ -3823,7 +3828,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         },
       },
     } satisfies FlowerThreadSnapshot;
-    const projected = applyFlowerRuntimeCurrentView(base, current);
+    const contextualBase = {
+      ...base,
+      ...(contextCompactions ? { context_compactions: contextCompactions } : {}),
+      ...(timelineDecorations ? { timeline_decorations: timelineDecorations } : {}),
+    };
+    const projected = applyFlowerRuntimeCurrentView(contextualBase, current);
     setThreadCache((cache) => cache.replaceView({
       thread: projected,
       version: Math.max(1, Math.floor(Number(current.view_version) || 0)),
@@ -3857,7 +3867,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return;
     }
     if (envelope.current) {
-      applyRuntimeCurrent(envelope.current, connectionEpoch);
+      applyRuntimeCurrent(envelope.current, connectionEpoch, envelope.context_compactions, envelope.timeline_decorations);
       return;
     }
     if (envelope.kind === 'viewer.read_state') {

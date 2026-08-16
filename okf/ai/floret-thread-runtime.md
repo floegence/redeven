@@ -34,6 +34,24 @@ canonical permission snapshot before model dispatch.
 
 Redeven keeps one typed adapter over the published Floret v4 module. HTTP and RPC handlers perform product authorization, ResourceRef and attachment resolution, DTO mapping, and a typed call. They do not wait for provider work, register a legacy run handler, observe a receipt, acquire an authority barrier, or persist a lifecycle projection.
 
+A dynamic `ToolSurface` with registry tools and nil provider definitions inherits
+the registry definitions. A non-nil empty definitions slice intentionally exposes
+no registry tools to the provider. Redeven relies on the published Floret runtime
+to preserve that distinction; provider tool names that are absent from the
+resolved definitions remain rejected before dispatch.
+
+Redeven consumes Floret v4.0.7's public `ThreadContextReader` to recover the
+canonical merged compaction operations for detail reads and terminal workspace
+updates. A pure `/compact` input supplies one host-owned manual compaction request;
+the canonical user message anchors exactly one terminal `compacted` or `noop`
+divider after renderer reload. Context reads remain valid when `ask_user` resumes
+one turn through a later canonical run. Redeven does not persist a parallel
+compaction projection or inspect Floret storage.
+
+Floret queue item `id` is the canonical mutation identity for reorder, delete,
+and promote. Its `request_key` remains the send idempotency identity used only to
+settle the short-lived browser outbox; the two values are not interchangeable.
+
 # Boundaries
 
 Redeven never imports Floret internals, reads Floret storage, copies canonical lifecycle into product SQL, or uses sibling source wiring in formal validation. Product migrations may import retired queued inputs once into the typed runtime and then delete their staging rows.
@@ -43,6 +61,7 @@ Redeven never imports Floret internals, reads Floret storage, copies canonical l
 - `floret:runtime/thread_runtime.go` - Typed service, per-thread runtime, queue, interaction, cancellation, retry, and subscription boundary.
 - `floret:internal/sessiontree/backend_repo_journal.go` - Canonical journal persistence and stable fact identity.
 - `redeven:internal/ai/floret_runtime.go` - Published runtime composition.
+- `redeven:internal/ai/floret_thread_context.go` - Canonical compaction mapping and timeline anchoring.
 - `redeven:internal/ai/send_user_turn.go` - Thin product send mapping into typed Floret state.
 - `redeven:internal/ai/stop_thread.go` - Idempotent typed cancellation without handler lookup.
 - `redeven:internal/ai/retry_thread_effect.go` - Exact unknown-effect retry mapping.

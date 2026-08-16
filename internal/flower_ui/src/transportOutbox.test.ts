@@ -44,7 +44,7 @@ describe('TransportOutbox', () => {
     });
     outbox = outbox.confirm({
       thread_id: 'thread-a', view_version: 3,
-      queue: [{ request_key: 'request-queued', input: { text: 'later' } }],
+      queue: [{ id: 'queue:request-queued', request_key: 'request-queued', input: { text: 'later' } }],
     });
     expect(outbox.entries.size).toBe(0);
   });

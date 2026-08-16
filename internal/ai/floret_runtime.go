@@ -168,7 +168,15 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 		return attachmentResolver(ctx, runtimeAttachmentFromProvider(attachment))
 	}
 	flProvider.identity = gatewayIdentity
-	agent, err := buildFloretThreadAgent(r, initialSurface, contextWindow, req.Options, flProvider, toolSurfaceProvider)
+	agent, err := buildFloretThreadAgent(
+		r,
+		initialSurface,
+		contextWindow,
+		req.Options,
+		flProvider,
+		toolSurfaceProvider,
+		flowerManualCompactionSource(req.Input, r.executionKey),
+	)
 	if err != nil {
 		return floretHostedPreparation{}, r.failRun("Failed to initialize Floret host", err)
 	}
@@ -189,19 +197,26 @@ func buildFloretThreadAgent(
 	options RunOptions,
 	provider *floretProviderAdapter,
 	toolSurfaceProvider flruntime.ToolSurfaceProvider,
+	manualCompactions flruntime.ManualCompactionSource,
 ) (*flruntime.Agent, error) {
 	if r == nil || provider == nil {
 		return nil, errors.New("Floret effect adapter requires a run and provider")
 	}
-	return flruntime.NewAgent(
-		redevenFloretAgentConfig(surface.SystemPrompt, floretModelContextPolicy(contextWindow, options.MaxOutputTokens), options.ReasoningSelection),
-		provider,
+	agentOptions := []flruntime.AgentOption{
 		flruntime.WithAgentTools(surface.FloretToolItems...),
 		flruntime.WithAgentEffectAuthorization(floretEffectAuthorizationGateForRun(r)),
 		flruntime.WithAgentEventSink(floretEventSink{run: r}),
 		flruntime.WithAgentDynamicToolSurface(toolSurfaceProvider),
 		flruntime.WithAgentThreadTitleMode(flruntime.ThreadTitleModeProvider),
 		flruntime.WithAgentLoopLimits(flruntime.LoopLimits{NoProgressLimit: 2, DuplicateToolLimit: 3}),
+	}
+	if manualCompactions != nil {
+		agentOptions = append(agentOptions, flruntime.WithAgentManualCompactions(manualCompactions))
+	}
+	return flruntime.NewAgent(
+		redevenFloretAgentConfig(surface.SystemPrompt, floretModelContextPolicy(contextWindow, options.MaxOutputTokens), options.ReasoningSelection),
+		provider,
+		agentOptions...,
 	)
 }
 

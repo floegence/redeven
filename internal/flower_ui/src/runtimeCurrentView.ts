@@ -314,7 +314,7 @@ export function applyFlowerRuntimeCurrentView(
   const approvalActions = runtimeApprovalActions(base, current);
   const inputRequest = runtimeInputRequest(current);
   const queuedTurns = (current.queue ?? []).map((queued) => ({
-    queue_id: trim(queued.request_key),
+    queue_id: trim(queued.id),
     prompt: String(queued.input?.text ?? ''),
     created_at_ms: base.updated_at_ms,
   }));

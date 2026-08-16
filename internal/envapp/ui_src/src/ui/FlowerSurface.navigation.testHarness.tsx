@@ -437,7 +437,7 @@ export function launchReceipt(
       view_version: 1,
       activity: 'active',
       ...(kind === 'queued'
-        ? { queue: [{ request_key: canonicalID, input: { text: '' } }] }
+        ? { queue: [{ id: canonicalID, request_key: clientRequestID, input: { text: '' } }] }
         : {
             turn_id: canonicalID,
             items: [{
@@ -503,6 +503,7 @@ export function runtimeCurrentView(
     ...(threadValue.status === 'canceled' ? { last_outcome: 'cancelled' as const } : {}),
     items,
     queue: (threadValue.queued_turns ?? []).map((queued) => ({
+      id: queued.queue_id,
       request_key: queued.queue_id,
       input: { text: queued.prompt },
     })),

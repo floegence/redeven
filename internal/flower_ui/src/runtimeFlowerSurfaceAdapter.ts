@@ -32,8 +32,10 @@ import type {
   FlowerRuntimeCurrentView,
 } from './contracts/flowerSurfaceContracts';
 import {
+  mapFlowerContextCompactions,
   mapFlowerReadStatus,
   mapFlowerThread,
+  mapFlowerTimelineDecorations,
   type FlowerLiveThreadMapperOptions,
 } from './flowerLiveMapper';
 import { applyFlowerRuntimeCurrentView } from './runtimeCurrentView';
@@ -201,12 +203,16 @@ function mapRuntimeLiveStreamEnvelope(raw: unknown, options: RuntimeFlowerSurfac
   const current = value.current && typeof value.current === 'object'
     ? value.current as FlowerRuntimeCurrentView
     : undefined;
+  const contextCompactions = mapFlowerContextCompactions(value.context_compactions);
+  const timelineDecorations = mapFlowerTimelineDecorations(value.timeline_decorations);
   return {
     schema_version: Math.floor(Number(value.schema_version)),
     kind,
     ...(trim(value.thread_id) ? { thread_id: trim(value.thread_id) } : {}),
     ...(summaries ? { summaries } : {}),
     ...(current ? { current } : {}),
+    ...(contextCompactions ? { context_compactions: contextCompactions } : {}),
+    ...(timelineDecorations ? { timeline_decorations: timelineDecorations } : {}),
     ...(kind === 'viewer.read_state' ? { read_status: mapFlowerReadStatus(value.read_status) } : {}),
   } as FlowerLiveStreamEnvelope;
 }

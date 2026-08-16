@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -14,6 +15,139 @@ import (
 	"github.com/floegence/floret/v4/storage"
 	fltools "github.com/floegence/floret/v4/tools"
 )
+
+func TestPublishedFloretDynamicRegistryDefinitionsReachProviderAndDispatch(t *testing.T) {
+	const arguments = `{"command":"printf FLOWER_DYNAMIC_TOOL_OK","yield_ms":10000}`
+
+	var terminalDef ToolDef
+	for _, candidate := range builtInToolDefinitions() {
+		if candidate.Name == "terminal.exec" {
+			terminalDef = candidate
+			break
+		}
+	}
+	if terminalDef.Name == "" {
+		t.Fatal("missing Redeven terminal.exec definition")
+	}
+	presentation, err := floretToolDefinitionForSnapshot(
+		terminalDef,
+		buildPermissionSnapshot(FlowerPermissionApprovalRequired, []ToolDef{terminalDef}, nil),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var dispatched atomic.Bool
+	tool := fltools.Define[map[string]any](presentation, nil, nil, func(context.Context, fltools.Invocation[map[string]any]) (fltools.Result, error) {
+		dispatched.Store(true)
+		return fltools.Result{Text: "FLOWER_DYNAMIC_TOOL_OK"}, nil
+	})
+	registry := fltools.NewRegistry(tool)
+	gateway := florettest.NewScriptedGateway(
+		flprovider.Identity{Provider: "test", Model: "dynamic-registry", StateCompatibilityKey: "test:dynamic-registry:v1"},
+		flprovider.Capabilities{Reasoning: flprovider.ReasoningUnsupported},
+		florettest.Step{Events: []flprovider.Event{
+			{Type: flprovider.EventToolCalls, ToolCalls: []flprovider.ToolCall{{ID: "terminal-dynamic", Name: "terminal.exec", Args: arguments}}},
+			{Type: flprovider.EventDone, Reason: "tool_calls"},
+		}},
+		florettest.Step{Events: []flprovider.Event{
+			{Type: flprovider.EventDelta, Text: "terminal completed"},
+			{Type: flprovider.EventDone, Reason: "stop"},
+		}},
+	)
+	agent, err := flruntime.NewAgent(flconfig.AgentConfig{
+		Profile:      flconfig.AgentProfile{ID: "dynamic-registry", Name: "Dynamic Registry"},
+		SystemPrompt: "Test dynamic registry definition inheritance.",
+		Context:      flconfig.ContextPolicy{ContextWindowTokens: flconfig.DefaultContextWindowTokens},
+	}, gateway,
+		flruntime.WithAgentTools(tool),
+		flruntime.WithAgentDynamicToolSurface(func(context.Context, flruntime.ToolSurfaceRequest) (flruntime.ToolSurface, error) {
+			return flruntime.ToolSurface{Tools: registry, ToolDefinitions: nil, Epoch: "approval-required"}, nil
+		}),
+		flruntime.WithAgentEffectAuthorization(floretAllowTestEffect),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	host, err := flruntime.Open(t.Context(), flruntime.Options{Storage: storage.Memory()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = host.Shutdown(context.Background()) })
+	service, err := host.ThreadService(flruntime.AgentFactoryFunc(func(context.Context, flruntime.AgentRequest) (*flruntime.Agent, error) {
+		return agent, nil
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := service.Create(t.Context(), flruntime.CreateThreadInput{RequestKey: "create-dynamic-registry"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Send(t.Context(), flruntime.SendInput{
+		ThreadID: created.ThreadID, Input: flruntime.UserInput{Text: "run the terminal command"}, RequestKey: "send-dynamic-registry",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	requestCtx, cancelRequests := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancelRequests()
+	if err := gateway.WaitForRequests(requestCtx, 1); err != nil {
+		t.Fatal(err)
+	}
+	requests := gateway.Requests()
+	toolNames := make([]string, 0, len(requests[0].Tools))
+	for _, definition := range requests[0].Tools {
+		toolNames = append(toolNames, definition.Name)
+	}
+	slices.Sort(toolNames)
+	if want := []string{"ask_user", "terminal.exec"}; !slices.Equal(toolNames, want) {
+		t.Fatalf("provider tool definitions=%v, want %v", toolNames, want)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	var current flruntime.ThreadView
+	for time.Now().Before(deadline) {
+		current, err = service.View(t.Context(), created.ThreadID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(current.Interactions) == 1 && current.Interactions[0].Kind == flruntime.ThreadInteractionApproval && !current.Interactions[0].Resolved {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if len(current.Interactions) != 1 || current.Interactions[0].Approval == nil {
+		t.Fatalf("dynamic terminal call did not reach approval: %#v", current)
+	}
+	approved := true
+	if _, err := service.Respond(t.Context(), flruntime.RespondInput{
+		ThreadID: created.ThreadID, InteractionID: current.Interactions[0].ID,
+		Answers: []flruntime.InteractionAnswer{{Approved: &approved}}, RequestKey: "approve-dynamic-registry",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for time.Now().Before(deadline) {
+		current, err = service.View(t.Context(), created.ThreadID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if current.Activity == flruntime.ThreadActivityIdle && current.LastOutcome != nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !dispatched.Load() || current.Activity != flruntime.ThreadActivityIdle || current.LastOutcome == nil {
+		t.Fatalf("approved dynamic terminal call did not dispatch and complete: dispatched=%v current=%#v", dispatched.Load(), current)
+	}
+}
+
+var floretAllowTestEffect = flruntime.EffectAuthorizationGateFunc(func(ctx context.Context, request flruntime.EffectAuthorizationRequest, effect flruntime.AuthorizedEffect) (flruntime.EffectDispatchResult, error) {
+	return effect(ctx, flruntime.EffectAuthorizationProof{
+		EffectAttemptID: request.EffectAttemptID, RequestFingerprint: request.RequestFingerprint,
+		ThreadID: request.ThreadID, TurnID: request.TurnID, RunID: request.RunID, ToolCallID: request.ToolCallID,
+		PolicyRevision: "test-policy", AuditReference: "test-audit", AuditHash: "test-audit-hash", AuthorizedAt: time.Now().UTC(),
+	})
+})
 
 func TestPublishedFloretApprovalCurrentPresentsTerminalCommand(t *testing.T) {
 	const (
