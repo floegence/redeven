@@ -301,6 +301,46 @@ describe('TerminalSessionCatalogProvider', () => {
     },
   );
 
+  it('marks an in-flight stock Agent batch unread only after its last real reader leaves', async () => {
+    rpcState.sessions = [{
+      ...rpcState.sessions[0],
+      foregroundCommand: { phase: 'running', displayName: 'pi', revision: 2, updatedAtMs: 20 },
+      executionContext: {
+        location: { kind: 'local', phase: 'ready', label: '', authority: '', workingDirectory: '/', source: 'shell_integration' },
+        application: { kind: 'agent_cli', identity: 'pi', displayName: 'Pi' },
+        revision: 3,
+        updatedAtMs: 30,
+      },
+      outputActivity: { phase: 'settled', revision: 1, updatedAtMs: 40 },
+      workState: {
+        phase: 'unknown', source: '', contextRevision: 0,
+        foregroundCommandRevision: 0, revision: 0, updatedAtMs: 0,
+      },
+    }] as any;
+    rpcState.list.mockResolvedValue({ sessions: rpcState.sessions });
+    let latest: any = null;
+    const host = document.createElement('div');
+    const dispose = render(() => (
+      <TerminalSessionCatalogProvider>
+        <Consumer onValue={(value) => { latest = value; }} />
+      </TerminalSessionCatalogProvider>
+    ), host);
+    await vi.waitFor(() => expect(latest?.hydrated()).toBe(true));
+    latest.setAgentSessionReader('activity-reader', 's1');
+    latest.setAgentSessionReader('workbench-reader', 's1');
+
+    rpcState.outputActivityHandler?.({
+      sessionId: 's1',
+      outputActivity: { phase: 'streaming', revision: 2, updatedAtMs: 50 },
+    });
+    latest.setAgentSessionReader('activity-reader', null);
+    expect(latest.agentUnreadSessionIds()).toEqual(new Set());
+
+    latest.setAgentSessionReader('workbench-reader', null);
+    expect(latest.agentUnreadSessionIds()).toEqual(new Set(['s1']));
+    dispose();
+  });
+
   it('atomically replaces local path capabilities without deriving them from metadata', async () => {
     rpcState.sessions = [{
       id: 's1',
