@@ -1390,6 +1390,11 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
               event.currentTarget.releasePointerCapture(event.pointerId);
             }
           }}
+          onClick={(event) => {
+            if (event.detail < 2) return;
+            renderer?.beginSelection(event.clientX, event.clientY, event.detail);
+            renderer?.endSelection(event.clientX, event.clientY);
+          }}
         />
         <textarea
           ref={(node) => { inputElement = node; }}
