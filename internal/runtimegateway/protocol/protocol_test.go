@@ -69,6 +69,19 @@ func TestOpenSessionRequestValidation(t *testing.T) {
 	}
 }
 
+func TestRuntimeOperationIDValidationRejectsPathSyntaxAndNonCanonicalInput(t *testing.T) {
+	for _, value := range []string{"../escape", "nested/path", " operation", "operation ", strings.Repeat("a", 129)} {
+		if err := ValidateRuntimeOperationID(value); err == nil {
+			t.Fatalf("ValidateRuntimeOperationID(%q) accepted unsafe or non-canonical input", value)
+		}
+	}
+	for _, value := range []string{"op-1", "op.v2", "op:restart_01"} {
+		if err := ValidateRuntimeOperationID(value); err != nil {
+			t.Fatalf("ValidateRuntimeOperationID(%q) error = %v", value, err)
+		}
+	}
+}
+
 func TestEnvProfileInputRejectsRemovedLifecycleOwnershipField(t *testing.T) {
 	var input EnvProfileInput
 	err := json.Unmarshal([]byte(`{"display_name":"Demo","access_route":{"kind":"url","url":"https://example.com"},"control_owner":"gateway"}`), &input)

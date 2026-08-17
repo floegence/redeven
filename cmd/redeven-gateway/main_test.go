@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 )
@@ -34,5 +35,24 @@ func TestReadEnrollmentCodeUsesStdinWithoutEcho(t *testing.T) {
 	}
 	if strings.Contains(prompt.String(), secret) {
 		t.Fatal("stdin enrollment code was echoed")
+	}
+}
+
+func TestServiceProcessMatchesRejectsReusedPIDMetadata(t *testing.T) {
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	status := serviceStatus{
+		PID:                    os.Getpid(),
+		Executable:             executable,
+		ProcessStartedAtUnixMS: processStartedAtUnixMS(os.Getpid()),
+	}
+	if !serviceProcessMatches(status) {
+		t.Fatal("current Gateway process did not match its recorded identity")
+	}
+	status.ProcessStartedAtUnixMS++
+	if serviceProcessMatches(status) {
+		t.Fatal("service status accepted a reused PID with a different start time")
 	}
 }

@@ -1856,7 +1856,7 @@ describe('main routing', () => {
   it('discovers active Runtime operations through each card own management route', () => {
     const mainSrc = readMainSource();
 
-    expect(mainSrc).toContain('await refreshDirectGatewayRuntimeOperationAttachments(syncedRecord, catalog.environments, signal);');
+    expect(mainSrc).toContain('await refreshDirectGatewayRuntimeOperationAttachments(syncedRecord, catalogEnvironments, signal);');
     expect(mainSrc).toContain('gatewayLifecycleManager().listRuntimeOperations(record, {');
     expect(mainSrc).toContain("startPolicy: 'require_ready'");
     expect(mainSrc).toContain('await refreshProviderRuntimeOperationAttachments(');

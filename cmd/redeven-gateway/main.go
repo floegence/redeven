@@ -19,9 +19,11 @@ import (
 
 	"github.com/floegence/redeven/internal/desktopbridge"
 	"github.com/floegence/redeven/internal/gatewayservice"
+	"github.com/floegence/redeven/internal/lockfile"
 	"github.com/floegence/redeven/internal/processenv"
 	gatewaylifecycle "github.com/floegence/redeven/internal/runtimegateway/lifecycle"
 	gatewaysupervisor "github.com/floegence/redeven/internal/runtimegateway/supervisor"
+	processlib "github.com/shirou/gopsutil/v4/process"
 	"golang.org/x/term"
 )
 
@@ -40,12 +42,13 @@ type cli struct {
 }
 
 type serviceStatus struct {
-	Status       string `json:"status"`
-	PID          int    `json:"pid,omitempty"`
-	Listen       string `json:"listen,omitempty"`
-	StateRoot    string `json:"state_root"`
-	Executable   string `json:"executable,omitempty"`
-	ErrorMessage string `json:"error_message,omitempty"`
+	Status                 string `json:"status"`
+	PID                    int    `json:"pid,omitempty"`
+	Listen                 string `json:"listen,omitempty"`
+	StateRoot              string `json:"state_root"`
+	Executable             string `json:"executable,omitempty"`
+	ProcessStartedAtUnixMS int64  `json:"process_started_at_unix_ms,omitempty"`
+	ErrorMessage           string `json:"error_message,omitempty"`
 }
 
 func main() {
@@ -377,18 +380,24 @@ func (c *cli) serviceStopCmd(args []string) int {
 		_ = json.NewEncoder(c.stdout).Encode(serviceStatus{Status: "not_running", StateRoot: stateRootValue})
 		return 0
 	}
+	if !serviceProcessMatches(status) {
+		_ = removePIDFile(stateRootValue)
+		_ = removeManagedBridgeToken(stateRootValue)
+		_ = json.NewEncoder(c.stdout).Encode(serviceStatus{Status: "not_running", StateRoot: stateRootValue})
+		return 0
+	}
 	process, err := os.FindProcess(status.PID)
 	if err == nil {
 		_ = process.Signal(syscall.SIGTERM)
 	}
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		if !pidRunning(status.PID) {
+		if !serviceProcessMatches(status) {
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	if pidRunning(status.PID) {
+	if process != nil && serviceProcessMatches(status) {
 		_ = process.Kill()
 	}
 	_ = removePIDFile(stateRootValue)
@@ -399,6 +408,20 @@ func (c *cli) serviceStopCmd(args []string) int {
 
 func (c *cli) runGatewayService(ctx context.Context, stateRoot string, runtimeRoot string, listen string, desktopBridgeTransport bool, printListen bool, allowPrivateProfileTargets bool, enableProfileWrite bool, pairingCode string, managedBridgeToken string) int {
 	stateRootValue := normalizeStateRoot(stateRoot)
+	if err := os.MkdirAll(stateRootValue, 0o700); err != nil {
+		writeError(c.stderr, fmt.Sprintf("serve failed: initialize Gateway state root: %v", err))
+		return 1
+	}
+	serviceLock, err := lockfile.Acquire(filepath.Join(stateRootValue, "gateway-service.lock"))
+	if err != nil {
+		if errors.Is(err, lockfile.ErrAlreadyLocked) {
+			writeError(c.stderr, "serve failed: another Gateway service is already running for this state root")
+			return 1
+		}
+		writeError(c.stderr, fmt.Sprintf("serve failed: acquire Gateway service lock: %v", err))
+		return 1
+	}
+	defer serviceLock.Release()
 	bindingStore, err := gatewaysupervisor.OpenLocalBindingStore(stateRootValue, runtimeRoot)
 	if err != nil {
 		writeError(c.stderr, fmt.Sprintf("serve failed: initialize Runtime target binding: %v", err))
@@ -489,11 +512,12 @@ func writePIDFile(stateRoot string, pid int, listen string) error {
 	}
 	exe, _ := os.Executable()
 	body, err := json.MarshalIndent(serviceStatus{
-		Status:     "running",
-		PID:        pid,
-		Listen:     strings.TrimSpace(listen),
-		StateRoot:  stateRoot,
-		Executable: strings.TrimSpace(exe),
+		Status:                 "running",
+		PID:                    pid,
+		Listen:                 strings.TrimSpace(listen),
+		StateRoot:              stateRoot,
+		Executable:             strings.TrimSpace(exe),
+		ProcessStartedAtUnixMS: processStartedAtUnixMS(pid),
 	}, "", "  ")
 	if err != nil {
 		return err
@@ -560,7 +584,7 @@ func readServiceStatus(stateRoot string) serviceStatus {
 		return serviceStatus{Status: "error", StateRoot: stateRoot, ErrorMessage: "Gateway status file is invalid."}
 	}
 	status.StateRoot = stateRoot
-	if status.PID <= 0 || !pidRunning(status.PID) {
+	if status.PID <= 0 || !serviceProcessMatches(status) {
 		return serviceStatus{Status: "not_running", StateRoot: stateRoot}
 	}
 	if strings.TrimSpace(status.Listen) == "" || strings.TrimSpace(status.Listen) == "127.0.0.1:0" {
@@ -568,6 +592,47 @@ func readServiceStatus(stateRoot string) serviceStatus {
 	}
 	status.Status = "running"
 	return status
+}
+
+func processStartedAtUnixMS(pid int) int64 {
+	if pid <= 0 {
+		return 0
+	}
+	process, err := processlib.NewProcess(int32(pid))
+	if err != nil {
+		return 0
+	}
+	started, err := process.CreateTime()
+	if err != nil {
+		return 0
+	}
+	return started
+}
+
+func serviceProcessMatches(status serviceStatus) bool {
+	if status.PID <= 0 || !pidRunning(status.PID) || strings.TrimSpace(status.Executable) == "" {
+		return false
+	}
+	process, err := processlib.NewProcess(int32(status.PID))
+	if err != nil {
+		return false
+	}
+	if status.ProcessStartedAtUnixMS > 0 {
+		started, err := process.CreateTime()
+		if err != nil || started != status.ProcessStartedAtUnixMS {
+			return false
+		}
+	}
+	actual, err := process.Exe()
+	if err != nil {
+		return false
+	}
+	expectedPath, expectedErr := filepath.EvalSymlinks(status.Executable)
+	actualPath, actualErr := filepath.EvalSymlinks(actual)
+	if expectedErr == nil && actualErr == nil {
+		return filepath.Clean(expectedPath) == filepath.Clean(actualPath)
+	}
+	return filepath.Clean(status.Executable) == filepath.Clean(actual)
 }
 
 func waitServiceReady(stateRoot string, expectedPID int) (serviceStatus, error) {

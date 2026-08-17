@@ -112,6 +112,7 @@ import {
   defaultGatewayStorePath,
   gatewayBindingAudience,
   gatewayRecordToSource,
+  gatewayRecordToLocalEnvironment,
   gatewayRecordToSourceWithCatalog,
   gatewayRecordToSourceWithError,
   gatewayRecordSSHPasswordRef,
@@ -4479,10 +4480,20 @@ async function syncGatewayRecord(
       const syncedAtMS = Date.now();
       const syncedRecord = await gatewayStore().markCatalogSynced(currentRecord.gateway_id, syncedAtMS).catch(() => currentRecord);
       await assertSyncActive();
+      const catalogEnvironments = [...catalog.environments];
+      if (syncedRecord.runtime_environment_id && syncedRecord.connection.kind !== 'url') {
+        const localManagement = await gatewayLifecycleManager().runtimeManagementCapability(syncedRecord, {
+          gateway_env_id: 'env_local',
+        }, {
+          signal,
+          startPolicy: 'require_ready',
+        });
+        catalogEnvironments.push(gatewayRecordToLocalEnvironment(syncedRecord, localManagement));
+      }
       const source = mergeGatewaySourceRecord(gatewayRecordToSourceWithCatalog(syncedRecord, {
         status: catalog.gateway.status,
         capabilities: catalog.gateway.capabilities,
-        environments: catalog.environments,
+        environments: catalogEnvironments,
       }), syncedRecord, {
         gateway_id: syncedRecord.gateway_id,
         sync_state: 'ready',
@@ -4503,7 +4514,7 @@ async function syncGatewayRecord(
         source,
       });
       gatewayDiagnosisByID.delete(syncedRecord.gateway_id);
-      await refreshDirectGatewayRuntimeOperationAttachments(syncedRecord, catalog.environments, signal);
+      await refreshDirectGatewayRuntimeOperationAttachments(syncedRecord, catalogEnvironments, signal);
       return source;
     } catch (error) {
       if (error instanceof GatewaySyncCanceledError || isAbortLikeError(error)) {

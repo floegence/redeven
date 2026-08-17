@@ -399,6 +399,11 @@ func (s *Store) beginTargetMutation(lifecycleTargetID string, reload bool) (func
 			release()
 			return nil, loadErr
 		}
+		if validateErr := s.validateLoadedState(state); validateErr != nil {
+			s.mu.Unlock()
+			release()
+			return nil, validateErr
+		}
 		s.state = state
 	}
 	quarantinedBy := s.state.Quarantined[lifecycleTargetID]
@@ -541,6 +546,9 @@ func (s *Store) Confirm(_ context.Context, operationID string, clientKeyID strin
 func (s *Store) StageArtifact(ctx context.Context, operationID string, clientKeyID string, metadata gatewayprotocol.RuntimeArtifactMetadata, reader io.Reader) (gatewayprotocol.RuntimeOperation, error) {
 	operationID = strings.TrimSpace(operationID)
 	clientKeyID = strings.TrimSpace(clientKeyID)
+	if err := gatewayprotocol.ValidateRuntimeOperationID(operationID); err != nil {
+		return gatewayprotocol.RuntimeOperation{}, lifecycleError(ErrorInvalidRequest, err.Error(), false)
+	}
 	if reader == nil || metadata.SizeBytes <= 0 || metadata.SizeBytes > s.artifactMaxBytes ||
 		normalizeSHA256(metadata.ArchiveSHA256) == "" || normalizeSHA256(metadata.ExecutableSHA256) == "" || len(metadata.ManifestJSON) == 0 {
 		return gatewayprotocol.RuntimeOperation{}, lifecycleError(ErrorArtifactInvalid, "Runtime artifact metadata is invalid.", false)
@@ -569,7 +577,7 @@ func (s *Store) StageArtifact(ctx context.Context, operationID string, clientKey
 	}
 	s.mu.Unlock()
 
-	artifactDir := filepath.Join(s.stagingRoot, operationID)
+	artifactDir := s.artifactDirectory(operationID)
 	if err := os.MkdirAll(artifactDir, 0o700); err != nil {
 		return s.failStaging(operationID, fmt.Errorf("create artifact staging directory: %w", err))
 	}
@@ -619,6 +627,7 @@ func (s *Store) StageArtifact(ctx context.Context, operationID string, clientKey
 	defer s.mu.Unlock()
 	operation = s.state.Operations[operationID]
 	if operation.State != gatewayprotocol.RuntimeOperationStaging {
+		_ = s.removeArtifactDirectory(operationID)
 		return gatewayprotocol.RuntimeOperation{}, lifecycleError(ErrorOperationState, "Runtime operation changed while staging the artifact.", false)
 	}
 	next = cloneState(s.state)
@@ -777,6 +786,14 @@ func (s *Store) continueFencing(ctx context.Context, operationID string, recover
 
 func (s *Store) markSucceeded(operationID string) (gatewayprotocol.RuntimeOperation, error) {
 	s.mu.Lock()
+	token := s.state.FenceTokens[operationID]
+	s.mu.Unlock()
+	if token != "" {
+		if err := s.controller.ReleaseLifecycleFence(context.Background(), token); err != nil {
+			return s.enterManualRecovery(operationID, "Runtime lifecycle fence could not be released after a successful commit.")
+		}
+	}
+	s.mu.Lock()
 	defer s.mu.Unlock()
 	next := cloneState(s.state)
 	current, ok := next.Operations[operationID]
@@ -796,16 +813,22 @@ func (s *Store) markSucceeded(operationID string) (gatewayprotocol.RuntimeOperat
 }
 
 func (s *Store) Cancel(_ context.Context, operationID string, access Access) (gatewayprotocol.RuntimeOperation, error) {
+	operationID = strings.TrimSpace(operationID)
+	if err := gatewayprotocol.ValidateRuntimeOperationID(operationID); err != nil {
+		return gatewayprotocol.RuntimeOperation{}, lifecycleError(ErrorInvalidRequest, err.Error(), false)
+	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	operation, ok := s.state.Operations[strings.TrimSpace(operationID)]
+	operation, ok := s.state.Operations[operationID]
 	if !ok {
+		s.mu.Unlock()
 		return gatewayprotocol.RuntimeOperation{}, lifecycleError(ErrorOperationNotFound, "Runtime operation was not found.", false)
 	}
 	if operation.AuthorizedClientKeyID != strings.TrimSpace(access.ClientKeyID) {
+		s.mu.Unlock()
 		return gatewayprotocol.RuntimeOperation{}, lifecycleError(ErrorUnauthorized, "Runtime operation cancellation is not authorized.", false)
 	}
 	if !operation.State.Cancellable() {
+		s.mu.Unlock()
 		return gatewayprotocol.RuntimeOperation{}, lifecycleError(ErrorOperationState, "Runtime operation can no longer be cancelled.", false)
 	}
 	next := cloneState(s.state)
@@ -815,10 +838,17 @@ func (s *Store) Cancel(_ context.Context, operationID string, access Access) (ga
 	operation.UpdatedAtUnixMS = s.clock.Now().UnixMilli()
 	next.Operations[operation.OperationID] = operation
 	delete(next.TargetLocks, operation.LifecycleTargetID)
+	delete(next.ArtifactPaths, operation.OperationID)
 	if err := s.saveLocked(next); err != nil {
+		s.mu.Unlock()
 		return gatewayprotocol.RuntimeOperation{}, err
 	}
-	return cloneOperation(operation), nil
+	result := cloneOperation(operation)
+	s.mu.Unlock()
+	if err := s.removeArtifactDirectory(operation.OperationID); err != nil {
+		return result, lifecycleError(ErrorUnavailable, "Runtime artifact cleanup failed after cancellation.", true)
+	}
+	return result, nil
 }
 
 func (s *Store) Renew(_ context.Context, operationID string, clientKeyID string, requestedUnixMS int64) (gatewayprotocol.RuntimeOperation, error) {
@@ -883,6 +913,9 @@ func (s *Store) Reconcile(ctx context.Context, operationID string, access Access
 	if err := s.controller.Reconcile(ctx, operation); err != nil {
 		return gatewayprotocol.RuntimeOperation{}, lifecycleError(ErrorRecoveryFailed, "Runtime recovery did not verify a complete installation.", false)
 	}
+	if err := s.releaseStoredFence(ctx, operation.OperationID); err != nil {
+		return s.enterManualRecovery(operation.OperationID, "Runtime lifecycle fence could not be released after reconciliation.")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	next = cloneState(s.state)
@@ -933,6 +966,7 @@ func (s *Store) Expire(ctx context.Context) error {
 		}
 		s.mu.Lock()
 		current, ok := s.state.Operations[operation.OperationID]
+		cleanup := false
 		if ok && current.ExpiresAtUnixMS > 0 && current.ExpiresAtUnixMS <= now && (current.State.Cancellable() || current.State == gatewayprotocol.RuntimeOperationFencing) {
 			next := cloneState(s.state)
 			current = next.Operations[operation.OperationID]
@@ -942,12 +976,19 @@ func (s *Store) Expire(ctx context.Context) error {
 			next.Operations[current.OperationID] = current
 			delete(next.TargetLocks, current.LifecycleTargetID)
 			delete(next.FenceTokens, current.OperationID)
+			delete(next.ArtifactPaths, current.OperationID)
+			cleanup = true
 			if err := s.saveLocked(next); err != nil {
 				s.mu.Unlock()
 				return err
 			}
 		}
 		s.mu.Unlock()
+		if cleanup {
+			if err := s.removeArtifactDirectory(operation.OperationID); err != nil {
+				return fmt.Errorf("cleanup expired Runtime artifact: %w", err)
+			}
+		}
 	}
 	return nil
 }
@@ -1051,8 +1092,7 @@ func (s *Store) resumePreflight(ctx context.Context, operationID string) error {
 }
 
 func (s *Store) resetInterruptedStaging(operationID string) error {
-	artifactDir := filepath.Join(s.stagingRoot, operationID)
-	if err := os.RemoveAll(artifactDir); err != nil {
+	if err := s.removeArtifactDirectory(operationID); err != nil {
 		return err
 	}
 	s.mu.Lock()
@@ -1110,6 +1150,10 @@ func (s *Store) resumeRecovery(ctx context.Context, operationID string) error {
 		_, recoveryErr := s.enterManualRecovery(operationID, "Runtime recovery could not verify a complete installation after Gateway restart.")
 		return recoveryErr
 	}
+	if err := s.releaseStoredFence(ctx, operationID); err != nil {
+		_, recoveryErr := s.enterManualRecovery(operationID, "Runtime lifecycle fence could not be released after Gateway restart recovery.")
+		return recoveryErr
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	next := cloneState(s.state)
@@ -1133,6 +1177,7 @@ func (s *Store) prepareResponse(operation gatewayprotocol.RuntimeOperation) gate
 }
 
 func (s *Store) failStaging(operationID string, cause error) (gatewayprotocol.RuntimeOperation, error) {
+	_ = s.removeArtifactDirectory(operationID)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	operation, ok := s.state.Operations[operationID]
@@ -1184,6 +1229,9 @@ func (s *Store) recover(ctx context.Context, operation gatewayprotocol.RuntimeOp
 	s.mu.Unlock()
 	if err := s.controller.Recover(ctx, operation); err != nil {
 		return s.enterManualRecovery(operation.OperationID, "Runtime recovery could not verify a complete installation.")
+	}
+	if err := s.releaseStoredFence(ctx, operation.OperationID); err != nil {
+		return s.enterManualRecovery(operation.OperationID, "Runtime lifecycle fence could not be released after recovery.")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -1240,6 +1288,9 @@ func (s *Store) load() error {
 		if err != nil {
 			return err
 		}
+		if err := s.validateLoadedState(state); err != nil {
+			return err
+		}
 		s.state = state
 		return nil
 	case legacyStoreSchemaVersion:
@@ -1248,6 +1299,9 @@ func (s *Store) load() error {
 			return err
 		}
 		state := migrateStateFileV1(legacy, s.clock.Now().UnixMilli())
+		if err := s.validateLoadedState(state); err != nil {
+			return err
+		}
 		if err := writeStateFile(s.stateRoot, s.statePath, state); err != nil {
 			return fmt.Errorf("migrate Runtime operation store schema v1 to v2: %w", err)
 		}
@@ -1270,6 +1324,9 @@ func readStateFile(statePath string) (fileState, error) {
 }
 
 func (s *Store) saveLocked(next fileState) error {
+	if err := s.validateLoadedState(next); err != nil {
+		return err
+	}
 	appendTransitionEvents(s.state, &next, s.clock.Now().UnixMilli())
 	if err := writeStateFile(s.stateRoot, s.statePath, next); err != nil {
 		return err
@@ -1325,6 +1382,87 @@ func validateStateMaps[Operation any](operations map[string]Operation, artifactP
 	return nil
 }
 
+func (s *Store) validateLoadedState(state fileState) error {
+	if err := validateStateMaps(state.Operations, state.ArtifactPaths, state.Events, state.TargetLocks, state.PermitUses, state.FenceTokens, state.Quarantined); err != nil {
+		return err
+	}
+	for operationID, operation := range state.Operations {
+		if operationID != operation.OperationID {
+			return fmt.Errorf("Runtime operation map key %q does not match operation_id", operationID)
+		}
+		if err := gatewayprotocol.ValidateRuntimeOperationID(operationID); err != nil {
+			return fmt.Errorf("invalid Runtime operation %q: %w", operationID, err)
+		}
+		if strings.TrimSpace(operation.LifecycleTargetID) == "" || operation.TargetGeneration <= 0 || operation.State == "" {
+			return fmt.Errorf("Runtime operation %q has invalid target or state", operationID)
+		}
+	}
+	for operationID, path := range state.ArtifactPaths {
+		operation, ok := state.Operations[operationID]
+		if !ok || strings.TrimSpace(path) == "" || filepath.Base(path) != "runtime.artifact" {
+			return fmt.Errorf("Runtime artifact path %q is not bound to an operation", operationID)
+		}
+		if operation.Artifact == nil || operation.Kind != gatewayprotocol.RuntimeOperationUpdate {
+			return fmt.Errorf("Runtime artifact path %q has no update operation", operationID)
+		}
+		cleanPath, err := filepath.Abs(filepath.Clean(path))
+		if err != nil {
+			return fmt.Errorf("resolve Runtime artifact path %q: %w", operationID, err)
+		}
+		root, err := filepath.Abs(filepath.Clean(s.stagingRoot))
+		if err != nil {
+			return fmt.Errorf("resolve Runtime staging root: %w", err)
+		}
+		expectedPath, err := filepath.Abs(filepath.Join(s.artifactDirectory(operationID), "runtime.artifact"))
+		if err != nil {
+			return fmt.Errorf("resolve expected Runtime artifact path %q: %w", operationID, err)
+		}
+		if cleanPath != expectedPath {
+			return fmt.Errorf("Runtime artifact path %q is malformed", operationID)
+		}
+		if !strings.HasPrefix(cleanPath, root+string(os.PathSeparator)) {
+			return fmt.Errorf("Runtime artifact path %q escapes the staging root", operationID)
+		}
+	}
+	for targetID, operationID := range state.TargetLocks {
+		operation, ok := state.Operations[operationID]
+		if !ok || operation.LifecycleTargetID != targetID || operation.State.Terminal() {
+			return fmt.Errorf("Runtime target lock %q is stale (operation=%q exists=%t target=%q state=%q)", targetID, operationID, ok, operation.LifecycleTargetID, operation.State)
+		}
+	}
+	for targetID, operationID := range state.Quarantined {
+		operation, ok := state.Operations[operationID]
+		if !ok || operation.LifecycleTargetID != targetID || operation.State != gatewayprotocol.RuntimeOperationManualRecoveryRequired {
+			return fmt.Errorf("Runtime quarantine %q is stale", targetID)
+		}
+	}
+	for permitHash, operationID := range state.PermitUses {
+		if strings.TrimSpace(permitHash) == "" {
+			return errors.New("Runtime permit use has an empty digest")
+		}
+		if _, ok := state.Operations[operationID]; !ok {
+			return fmt.Errorf("Runtime permit use %q references a missing operation", permitHash)
+		}
+	}
+	for operationID, token := range state.FenceTokens {
+		operation, ok := state.Operations[operationID]
+		if !ok || strings.TrimSpace(token) == "" || (operation.State != gatewayprotocol.RuntimeOperationFencing && operation.State != gatewayprotocol.RuntimeOperationCommitting && operation.State != gatewayprotocol.RuntimeOperationRecovering && operation.State != gatewayprotocol.RuntimeOperationManualRecoveryRequired) {
+			return fmt.Errorf("Runtime fence token %q is stale", operationID)
+		}
+	}
+	for operationID, events := range state.Events {
+		if _, ok := state.Operations[operationID]; !ok {
+			return fmt.Errorf("Runtime event stream %q has no operation", operationID)
+		}
+		for _, event := range events {
+			if event.OperationID != operationID {
+				return fmt.Errorf("Runtime event stream %q contains a mismatched operation", operationID)
+			}
+		}
+	}
+	return nil
+}
+
 func migrateStateFileV1(legacy fileStateV1, migratedAtUnixMS int64) fileState {
 	state := fileState{
 		SchemaVersion: storeSchemaVersion,
@@ -1367,6 +1505,11 @@ func migrateStateFileV1(legacy fileStateV1, migratedAtUnixMS int64) fileState {
 		case gatewayprotocol.RuntimeOperationManualRecoveryRequired:
 			state.TargetLocks[operation.LifecycleTargetID] = operation.OperationID
 			state.Quarantined[operation.LifecycleTargetID] = operation.OperationID
+		}
+		if operation.State.Terminal() {
+			delete(state.TargetLocks, operation.LifecycleTargetID)
+			delete(state.Quarantined, operation.LifecycleTargetID)
+			delete(state.FenceTokens, operation.OperationID)
 		}
 		if transitioned {
 			operation.UpdatedAtUnixMS = migratedAtUnixMS
@@ -1504,9 +1647,36 @@ func (s *Store) operationWithPrivateState(operation gatewayprotocol.RuntimeOpera
 	return operation
 }
 
+func (s *Store) releaseStoredFence(ctx context.Context, operationID string) error {
+	s.mu.Lock()
+	token := s.state.FenceTokens[operationID]
+	s.mu.Unlock()
+	if strings.TrimSpace(token) == "" {
+		return nil
+	}
+	return s.controller.ReleaseLifecycleFence(ctx, token)
+}
+
+func (s *Store) artifactDirectory(operationID string) string {
+	digest := sha256.Sum256([]byte(strings.TrimSpace(operationID)))
+	return filepath.Join(s.stagingRoot, hex.EncodeToString(digest[:16]))
+}
+
+func (s *Store) removeArtifactDirectory(operationID string) error {
+	path := s.artifactDirectory(operationID)
+	if err := os.RemoveAll(path); err != nil {
+		return err
+	}
+	if err := syncRuntimeOperationDirectory(s.stagingRoot); errors.Is(err, os.ErrNotExist) {
+		return nil
+	} else {
+		return err
+	}
+}
+
 func requiresInitialConfirmation(kind gatewayprotocol.RuntimeOperationKind) bool {
 	switch kind {
-	case gatewayprotocol.RuntimeOperationStop, gatewayprotocol.RuntimeOperationRestart, gatewayprotocol.RuntimeOperationUpdate:
+	case gatewayprotocol.RuntimeOperationStart, gatewayprotocol.RuntimeOperationStop, gatewayprotocol.RuntimeOperationRestart, gatewayprotocol.RuntimeOperationUpdate:
 		return true
 	default:
 		return false

@@ -53,6 +53,10 @@ func TestControllerArtifactVersionProbeHasIndependentTimeout(t *testing.T) {
 	if elapsed := time.Since(startedAt); elapsed > 2*time.Second {
 		t.Fatalf("version probe exceeded bounded timeout: %v", elapsed)
 	}
+	stagingRoot := filepath.Join(runtimeRoot, "runtime", "staging", safeOperationID(operation.OperationID))
+	if _, statErr := os.Stat(stagingRoot); !os.IsNotExist(statErr) {
+		t.Fatalf("failed artifact extraction left staging residue: %v", statErr)
+	}
 }
 
 func writeRuntimeArchiveFixture(t *testing.T, path string, executable []byte) {
