@@ -1,9 +1,15 @@
-import { registerProxyAppWindow, type ProxyAppWindowHandle } from "@floegence/flowersec-core/proxy";
+import {
+  registerProxyAppWindow,
+  type ProxyAppWindowHandle,
+  type ProxyFetchRequest,
+  type ProxyRuntime,
+} from "@floegence/flowersec-core/proxy";
 
 export const REDEVEN_APP_PROXY_SW_SUFFIX = "/_redeven_app_sw.js";
 export const MAX_WS_FRAME_BYTES = 32 * 1024 * 1024;
 export const APP_BRIDGE_CAPABILITY_NONCE_STORAGE_KEY = "redeven_app_bridge_capability_nonce";
 export const APP_MAX_WS_FRAME_BYTES_STORAGE_KEY = "redeven_app_max_ws_frame_bytes";
+export const APP_PROXY_FETCH_MESSAGE_TYPE = "redeven:app_proxy_fetch_v2";
 
 export type OriginLocationLike = Readonly<{
   protocol: string;
@@ -20,6 +26,87 @@ type ProxyBridgeBootstrap = Readonly<{
   capabilityNonce: string;
   maxWsFrameBytes: number;
 }>;
+
+type MessageRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): MessageRecord | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value as MessageRecord
+    : null;
+}
+
+export function parseAppProxyFetchMessage(value: unknown): ProxyFetchRequest | null {
+  const message = asRecord(value);
+  if (message?.type !== APP_PROXY_FETCH_MESSAGE_TYPE) return null;
+
+  const raw = asRecord(message.req);
+  if (
+    !raw ||
+    typeof raw.id !== "string" ||
+    typeof raw.method !== "string" ||
+    typeof raw.path !== "string" ||
+    !Array.isArray(raw.headers)
+  ) {
+    throw new TypeError("invalid app proxy fetch request");
+  }
+
+  const headers = raw.headers.map((header) => {
+    const entry = asRecord(header);
+    if (!entry || typeof entry.name !== "string" || typeof entry.value !== "string") {
+      throw new TypeError("invalid app proxy fetch headers");
+    }
+    return Object.freeze({ name: entry.name, value: entry.value });
+  });
+
+  if (raw.body !== undefined && !(raw.body instanceof ArrayBuffer)) {
+    throw new TypeError("invalid app proxy fetch body");
+  }
+  if (raw.external_origin !== undefined && typeof raw.external_origin !== "string") {
+    throw new TypeError("invalid app proxy fetch origin");
+  }
+  if (raw.response_flow_control !== undefined && raw.response_flow_control !== "chunk_credit_v2") {
+    throw new TypeError("invalid app proxy fetch flow control");
+  }
+
+  return Object.freeze({
+    id: raw.id,
+    method: raw.method,
+    path: raw.path,
+    headers: Object.freeze(headers),
+    ...(typeof raw.external_origin === "string" ? { externalOrigin: raw.external_origin } : {}),
+    ...(raw.response_flow_control === "chunk_credit_v2" ? { responseFlowControl: "chunk_credit_v2" as const } : {}),
+    ...(raw.body instanceof ArrayBuffer ? { body: raw.body } : {}),
+  });
+}
+
+export function registerAppProxyServiceWorkerBridge(
+  runtime: ProxyRuntime,
+  serviceWorker: ServiceWorkerContainer = navigator.serviceWorker,
+): Readonly<{ dispose(): void }> {
+  const onMessage = (event: MessageEvent<unknown>): void => {
+    const port = event.ports?.[0];
+    if (!port) return;
+
+    try {
+      const request = parseAppProxyFetchMessage(event.data);
+      if (!request) return;
+      runtime.dispatchFetch(request, port);
+    } catch {
+      port.postMessage({
+        type: "flowersec-proxy:response_error",
+        status: 400,
+        code: "invalid_request",
+        message: "invalid proxy request",
+      });
+      port.close();
+    }
+  };
+
+  serviceWorker.addEventListener("message", onMessage);
+  return Object.freeze({
+    dispose: () => serviceWorker.removeEventListener("message", onMessage),
+  });
+}
 
 function splitHostname(hostname: string): string[] {
   return String(hostname ?? "")
@@ -90,9 +177,22 @@ function proxyBridgeBootstrapFromWindow(win: WindowLike): ProxyBridgeBootstrap {
 export function registerCodeAppProxyBridge(targetWindow: Window = window): ProxyAppWindowHandle {
   const win = targetWindow as unknown as WindowLike;
   const bootstrap = proxyBridgeBootstrapFromWindow(win);
-  return registerProxyAppWindow({
+  const app = registerProxyAppWindow({
     targetWindow,
     controllerOrigin: controllerOriginFromAppLocation(win.location),
     ...bootstrap,
   });
+  try {
+    const serviceWorker = registerAppProxyServiceWorkerBridge(app.runtime, targetWindow.navigator.serviceWorker);
+    return Object.freeze({
+      runtime: app.runtime,
+      dispose: () => {
+        serviceWorker.dispose();
+        app.dispose();
+      },
+    });
+  } catch (error) {
+    app.dispose();
+    throw error;
+  }
 }
