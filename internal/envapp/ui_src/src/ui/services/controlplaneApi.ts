@@ -798,10 +798,15 @@ async function commitLocalArtifactSpend(request: SpendCommitRequest, signal?: Ab
 async function commitRemoteArtifactSpend(request: SpendCommitRequest, signal?: AbortSignal): Promise<void> {
   const receipt = request.receipt.trim();
   if (!receipt) throw new Error('Missing artifact spend receipt');
-  await fetchJSON('/api/srv/v1/floeproxy/artifact/spend', {
+  const response = await fetch('/api/srv/v1/floeproxy/artifact/spend', {
     method: 'POST',
     signal,
-    bearerToken: receipt,
+    credentials: 'omit',
+    cache: 'no-store',
+    headers: {
+      Authorization: `Bearer ${receipt}`,
+      'Content-Type': 'application/json',
+    },
     body: JSON.stringify({
       v: 1,
       attempt_id: request.attemptId,
@@ -813,5 +818,21 @@ async function commitRemoteArtifactSpend(request: SpendCommitRequest, signal?: A
       target_binding: request.targetBinding,
       expires_at: request.expiresAt,
     }),
+  });
+  // This endpoint has an exact 204 contract. Reading a forbidden response body
+  // can turn a committed spend into an apparent client-side network failure.
+  if (response.status === 204) return;
+
+  let data: any = null;
+  try {
+    const text = await response.text();
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    // Preserve the HTTP status when the error response is not JSON.
+  }
+  throw new APIError({
+    status: parseStatusCodeBestEffort(response.status),
+    code: asString(data?.error?.code) || 'SPEND_COMMIT_FAILED',
+    message: asString(data?.error?.message) || `HTTP ${response.status}`,
   });
 }
