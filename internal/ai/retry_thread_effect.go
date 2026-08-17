@@ -26,15 +26,39 @@ func (s *Service) RetryThreadEffect(ctx context.Context, meta *session.Meta, thr
 	if meta == nil || strings.TrimSpace(meta.EndpointID) == "" || threadID == "" || effectAttemptID == "" || toolCallID == "" || !req.AcknowledgeUnknownRisk {
 		return RetryThreadEffectResponse{}, errors.New("invalid request")
 	}
-	if _, err := s.GetThread(ctx, meta, threadID); err != nil {
+	if err := s.requireEndpointThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
 		return RetryThreadEffectResponse{}, err
 	}
 	typed, err := s.typedFloretRuntime()
 	if err != nil {
 		return RetryThreadEffectResponse{}, err
 	}
+	view, err := typed.View(ctx, identity.ThreadID(threadID))
+	if err != nil {
+		return RetryThreadEffectResponse{}, err
+	}
 	requestID, err := newProductRequestID("retry_effect_")
 	if err != nil {
+		return RetryThreadEffectResponse{}, err
+	}
+	s.mu.Lock()
+	db := s.threadsDB
+	s.mu.Unlock()
+	if db == nil {
+		return RetryThreadEffectResponse{}, errors.New("threads store not ready")
+	}
+	sourceTurn := view.TurnID.String()
+	for _, interaction := range view.Interactions {
+		if interaction.Kind == flruntime.ThreadInteractionEffectRetry && interaction.EffectRetry != nil && interaction.EffectRetry.EffectAttemptID == effectAttemptID {
+			sourceTurn = interaction.TurnID.String()
+			break
+		}
+	}
+	authority, err := db.GetExecutionAuthorityByTurn(ctx, threadID, sourceTurn)
+	if err != nil {
+		return RetryThreadEffectResponse{}, err
+	}
+	if err := s.persistExecutionAuthorityRecord(ctx, authority, requestID, sourceTurn); err != nil {
 		return RetryThreadEffectResponse{}, err
 	}
 	_, err = typed.RetryEffect(ctx, flruntime.RetryEffectInput{

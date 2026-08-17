@@ -2773,6 +2773,13 @@ html.dark .flower-component-shell {
   white-space: nowrap;
 }
 
+.flower-transport-outbox-error {
+  margin-top: 0.45rem;
+  color: var(--destructive);
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
 .flower-queued-turn-meta {
   opacity: 0.88;
 }

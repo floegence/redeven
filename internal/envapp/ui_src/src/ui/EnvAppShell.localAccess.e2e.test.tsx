@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { For, Show, createContext, createEffect, createSignal, onCleanup, onMount, useContext, type JSX } from 'solid-js';
+import { For, Show, Suspense, createContext, createEffect, createSignal, onCleanup, onMount, useContext, type JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PluginPlatformRequestError, type PluginRecoverySnapshot } from '@floegence/redevplugin-ui';
@@ -486,7 +486,9 @@ vi.mock('@floegence/floe-webapp-core/app', () => ({
                 data-testid={`activity-view-${match.id}`}
                 style={{ display: activeId() === match.id ? 'block' : 'none' }}
               >
-                <Component />
+                <Suspense fallback={null}>
+                  <Component />
+                </Suspense>
               </div>
             );
           }}
@@ -495,9 +497,10 @@ vi.mock('@floegence/floe-webapp-core/app', () => ({
     );
   },
   FloeRegistryRuntime: (props: any) => {
-    createEffect(() => {
-      registeredComponentsState.components = Array.isArray(props.components) ? props.components : [];
-    });
+    // The real registry publishes components synchronously to its consumers.
+    // Keep the mock's registry snapshot available before ActivityAppsMain can
+    // observe a navigation event in the same render turn.
+    registeredComponentsState.components = Array.isArray(props.components) ? props.components : [];
     return <>{props.children}</>;
   },
 }));
@@ -1231,6 +1234,7 @@ vi.mock('./pages/EnvContext', () => ({
 async function flushAsync(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
+  await vi.dynamicImportSettled();
   if (vi.isFakeTimers()) {
     await vi.advanceTimersByTimeAsync(0);
     return;
@@ -1344,6 +1348,10 @@ afterEach(() => {
 
 beforeEach(async () => {
   vi.resetModules();
+  // EnvAppShell loads PluginCenterView through Solid's lazy boundary. Resolve
+  // the mocked module before each mount so the harness exercises the same
+  // registry handoff deterministically instead of racing the async mock.
+  await import('./plugins/PluginCenterView');
   vi.clearAllMocks();
   const pluginCredential = await import('./services/pluginSessionCredential');
   pluginCredential.stagePluginSessionCredential('ch_local', 'test-plugin-session');

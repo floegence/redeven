@@ -8,13 +8,17 @@ export type TransportOutboxEntry = Readonly<{
   input: TransportOutboxInput;
   attachmentLabels: readonly string[];
   createdAtMs: number;
+  /** A durable terminal state that must not be retried automatically. */
+  terminalError?: 'attachments_unavailable_after_restart';
 }>;
 
 export type TransportOutbox = Readonly<{
   entries: ReadonlyMap<string, TransportOutboxEntry>;
   put(entry: TransportOutboxEntry): TransportOutbox;
   assignThread(requestId: string, threadId: string): TransportOutbox;
+  dropThread(threadId: string): TransportOutbox;
   drop(requestId: string): TransportOutbox;
+  pruneExpired(nowMs?: number): TransportOutbox;
   confirm(current: FlowerRuntimeCurrentView): TransportOutbox;
   forThread(threadId: string): readonly TransportOutboxEntry[];
 }>;
@@ -22,6 +26,7 @@ export type TransportOutbox = Readonly<{
 const OUTBOX_DB = 'redeven-flower-transport';
 const OUTBOX_STORE = 'outbox';
 const OUTBOX_DB_VERSION = 1;
+const OUTBOX_ENTRY_TTL_MS = 24 * 60 * 60 * 1000;
 
 function clean(value: unknown): string {
   return String(value ?? '').trim();
@@ -85,6 +90,9 @@ function create(entries: ReadonlyMap<string, TransportOutboxEntry>): TransportOu
         threadId: clean(entry.threadId),
         input: { ...entry.input, client_request_id: requestId },
         attachmentLabels: entry.attachmentLabels.map(clean).filter(Boolean),
+        terminalError: entry.terminalError === 'attachments_unavailable_after_restart'
+          ? entry.terminalError
+          : undefined,
       });
       persist(next);
       return create(next);
@@ -99,11 +107,26 @@ function create(entries: ReadonlyMap<string, TransportOutboxEntry>): TransportOu
       persist(next);
       return create(next);
     },
+    dropThread(threadId) {
+      const id = clean(threadId);
+      if (!id) return this;
+      const next = new Map([...entries].filter(([, entry]) => entry.threadId !== id));
+      if (next.size === entries.size) return this;
+      persist(next);
+      return create(next);
+    },
     drop(requestId) {
       const id = clean(requestId);
       if (!id || !entries.has(id)) return this;
       const next = new Map(entries);
       next.delete(id);
+      persist(next);
+      return create(next);
+    },
+    pruneExpired(nowMs = Date.now()) {
+      const cutoff = Number.isFinite(nowMs) ? nowMs - OUTBOX_ENTRY_TTL_MS : Date.now() - OUTBOX_ENTRY_TTL_MS;
+      const next = new Map([...entries].filter(([, entry]) => Number.isFinite(entry.createdAtMs) && entry.createdAtMs >= cutoff));
+      if (next.size === entries.size) return this;
       persist(next);
       return create(next);
     },
@@ -162,7 +185,12 @@ export async function restoreTransportOutbox(): Promise<TransportOutbox> {
       attachmentLabels: Array.isArray(entry.attachmentLabels)
         ? entry.attachmentLabels.map(clean).filter(Boolean)
         : Array.isArray(legacy.attachmentNames) ? legacy.attachmentNames.map(clean).filter(Boolean) : [],
+      terminalError: entry.terminalError === 'attachments_unavailable_after_restart' ? entry.terminalError : (
+        (Array.isArray(input.attachment_ids) && input.attachment_ids.length > 0)
+          ? 'attachments_unavailable_after_restart'
+          : undefined
+      ),
     });
   }
-  return create(restored);
+  return create(restored).pruneExpired();
 }

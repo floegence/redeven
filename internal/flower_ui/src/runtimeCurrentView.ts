@@ -20,6 +20,7 @@ function trim(value: unknown): string {
 function messageStatus(view: FlowerRuntimeCurrentView, item: FlowerRuntimeCurrentItem): FlowerChatMessage['status'] {
   if (item.live) return 'streaming';
   if (view.last_outcome === 'cancelled' && item.turn_id === view.turn_id) return 'canceled';
+  if (view.last_outcome === 'interrupted' && item.turn_id === view.turn_id) return 'error';
   return 'complete';
 }
 
@@ -301,7 +302,7 @@ export function applyFlowerRuntimeCurrentView(
       ? 'waiting_approval'
       : current.activity === 'active'
         ? 'running'
-        : current.last_outcome === 'failed'
+        : current.last_outcome === 'failed' || current.last_outcome === 'interrupted'
           ? 'failed'
           : current.last_outcome === 'cancelled'
             ? 'canceled'

@@ -27,7 +27,7 @@ func (s *Service) StopThread(ctx context.Context, meta *session.Meta, threadID s
 	if strings.TrimSpace(meta.EndpointID) == "" || threadID == "" {
 		return StopThreadResponse{}, errors.New("invalid request")
 	}
-	if _, err := s.GetThread(ctx, meta, threadID); err != nil {
+	if err := s.requireEndpointThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
 		return StopThreadResponse{}, err
 	}
 	typed, err := s.typedFloretRuntime()

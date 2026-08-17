@@ -107,6 +107,9 @@ func (s *Service) importPendingInputGroup(ctx context.Context, records []threads
 	if settings == nil {
 		return fmt.Errorf("pending input thread %q is absent from the product catalog", threadID)
 	}
+	if err := s.requireEndpointThreadAuthority(ctx, endpointID, threadID); err != nil {
+		return fmt.Errorf("validate pending input thread %q authority: %w", threadID, err)
+	}
 	items := make([]flruntime.ImportedPendingInput, 0, len(records))
 	requestIDs := make([]string, 0, len(records))
 	for _, record := range records {

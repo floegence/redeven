@@ -15,7 +15,8 @@ func TestAdoptCanonicalRootSettingsIsExactAndIdempotent(t *testing.T) {
 	defer store.Close()
 	settings := ThreadSettings{
 		ThreadID: "thread_orphan", EndpointID: "env_a", NamespacePublicID: "ns_a", ModelID: "provider/model",
-		PermissionType: "approval_required", WorkingDir: t.TempDir(), CreatedByUserPublicID: "operator_a",
+		ReasoningSelectionJSON: `{"level":"high"}`,
+		PermissionType:         "approval_required", WorkingDir: t.TempDir(), CreatedByUserPublicID: "operator_a",
 		UpdatedByUserPublicID: "operator_a",
 	}
 	if err := store.AdoptCanonicalRootSettings(context.Background(), settings); err != nil {
@@ -32,8 +33,13 @@ func TestAdoptCanonicalRootSettingsIsExactAndIdempotent(t *testing.T) {
 	if err := store.AdoptCanonicalRootSettings(context.Background(), conflict); !errors.Is(err, ErrCanonicalThreadSettingsConflict) {
 		t.Fatalf("cross-endpoint conflict = %v", err)
 	}
+	reasoningConflict := settings
+	reasoningConflict.ReasoningSelectionJSON = `{"level":"low"}`
+	if err := store.AdoptCanonicalRootSettings(context.Background(), reasoningConflict); !errors.Is(err, ErrCanonicalThreadSettingsConflict) {
+		t.Fatalf("reasoning conflict = %v", err)
+	}
 	loaded, err := store.GetThreadSettingsByCanonicalThreadID(context.Background(), settings.ThreadID)
-	if err != nil || loaded == nil || loaded.EndpointID != settings.EndpointID || loaded.CreatedByUserPublicID != "operator_a" {
+	if err != nil || loaded == nil || loaded.EndpointID != settings.EndpointID || loaded.CreatedByUserPublicID != "operator_a" || loaded.ReasoningSelectionJSON != settings.ReasoningSelectionJSON {
 		t.Fatalf("stored adoption = %#v, %v", loaded, err)
 	}
 }

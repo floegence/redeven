@@ -25,7 +25,7 @@ func (s *Service) SubmitFlowerApproval(meta *session.Meta, req SubmitFlowerAppro
 	if threadID == "" || (!req.RejectAll && interactionID == "") || meta == nil || strings.TrimSpace(meta.EndpointID) == "" {
 		return SubmitFlowerApprovalResponse{}, errors.New("invalid request")
 	}
-	if _, err := s.GetThread(context.Background(), meta, threadID); err != nil {
+	if err := s.requireEndpointThreadAuthority(context.Background(), meta.EndpointID, threadID); err != nil {
 		return SubmitFlowerApprovalResponse{}, err
 	}
 	typed, err := s.typedFloretRuntime()
@@ -46,15 +46,17 @@ func (s *Service) SubmitFlowerApproval(meta *session.Meta, req SubmitFlowerAppro
 		}
 	}
 	var current flruntime.ThreadView
-	for _, id := range interactionIDs {
+	if len(interactionIDs) > 0 {
 		requestID, requestErr := newProductRequestID("approval_")
 		if requestErr != nil {
 			return SubmitFlowerApprovalResponse{}, requestErr
 		}
+		answers := make([]flruntime.InteractionAnswer, 0, len(interactionIDs))
+		for _, id := range interactionIDs {
+			answers = append(answers, flruntime.InteractionAnswer{InteractionID: id, Approved: &approved})
+		}
 		result, respondErr := typed.Respond(context.Background(), flruntime.RespondInput{
-			ThreadID: identity.ThreadID(threadID), InteractionID: id,
-			Answers:    []flruntime.InteractionAnswer{{InteractionID: id, Approved: &approved}},
-			RequestKey: flruntime.RequestKey(requestID),
+			ThreadID: identity.ThreadID(threadID), Answers: answers, RequestKey: flruntime.RequestKey(requestID),
 		})
 		if respondErr != nil {
 			return SubmitFlowerApprovalResponse{}, normalizeApprovalDecisionError(respondErr, "")

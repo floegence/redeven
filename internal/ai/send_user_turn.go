@@ -112,6 +112,9 @@ func (s *Service) SendUserTurn(ctx context.Context, meta *session.Meta, req Send
 	if threadID == "" {
 		return SendUserTurnResponse{}, errors.New("invalid request")
 	}
+	if err := s.requireEndpointThreadAuthority(ctx, endpointID, threadID); err != nil {
+		return SendUserTurnResponse{}, err
+	}
 	if strings.TrimSpace(req.ClientRequestID) == "" {
 		requestID, err := newProductRequestID("send_")
 		if err != nil {
@@ -177,6 +180,9 @@ func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Met
 	if turnInput, ok, inputErr := immediateTypedTurnInput(req.Input); inputErr != nil {
 		return finish(SendUserTurnResponse{}, inputErr)
 	} else if ok {
+		if err := s.persistExecutionAuthority(ctx, meta, req.ThreadID, executionKey, ""); err != nil {
+			return finish(SendUserTurnResponse{}, err)
+		}
 		s.floretEffects.put(identity.ThreadID(req.ThreadID), executionKey, floretEffectRequest{meta: *meta, req: req})
 		result, sendErr := s.threadRuntime.Send(ctx, flruntime.SendInput{
 			ThreadID: identity.ThreadID(req.ThreadID), Input: turnInput, RequestKey: flruntime.RequestKey(executionKey),
@@ -184,6 +190,11 @@ func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Met
 		if sendErr != nil {
 			s.floretEffects.drop(identity.ThreadID(req.ThreadID), executionKey)
 			return finish(SendUserTurnResponse{}, sendErr)
+		}
+		if result.TurnID != "" {
+			if err := s.persistExecutionAuthority(ctx, meta, req.ThreadID, executionKey, result.TurnID.String()); err != nil {
+				return finish(SendUserTurnResponse{}, err)
+			}
 		}
 		response := SendUserTurnResponse{
 			ClientRequestID: req.ClientRequestID,
@@ -213,6 +224,9 @@ func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Met
 	if err != nil {
 		return finish(SendUserTurnResponse{}, err)
 	}
+	if err := s.persistExecutionAuthority(ctx, meta, req.ThreadID, executionKey, ""); err != nil {
+		return finish(SendUserTurnResponse{}, err)
+	}
 	projection, err := floretContextProjectionForInputWithAuthority(effect.req.Input, effect.builder.canonicalReferenceAuthority)
 	if err != nil {
 		return finish(SendUserTurnResponse{}, err)
@@ -228,6 +242,11 @@ func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Met
 	if err != nil {
 		s.floretEffects.drop(identity.ThreadID(req.ThreadID), executionKey)
 		return finish(SendUserTurnResponse{}, err)
+	}
+	if result.TurnID != "" {
+		if err := s.persistExecutionAuthority(ctx, meta, req.ThreadID, executionKey, result.TurnID.String()); err != nil {
+			return finish(SendUserTurnResponse{}, err)
+		}
 	}
 	response := SendUserTurnResponse{
 		ClientRequestID: req.ClientRequestID,
@@ -306,6 +325,9 @@ func (s *Service) SubmitRequestUserInputResponse(ctx context.Context, meta *sess
 	if endpointID == "" || threadID == "" {
 		return SubmitRequestUserInputResponseResponse{}, errors.New("invalid request")
 	}
+	if err := s.requireEndpointThreadAuthority(ctx, endpointID, threadID); err != nil {
+		return SubmitRequestUserInputResponseResponse{}, err
+	}
 	typed, err := s.typedFloretRuntime()
 	if err != nil {
 		return SubmitRequestUserInputResponseResponse{}, err
@@ -330,6 +352,9 @@ func (s *Service) SubmitRequestUserInputResponse(ctx context.Context, meta *sess
 	}
 	if interactionID == "" {
 		return SubmitRequestUserInputResponseResponse{}, ErrWaitingPromptChanged
+	}
+	if err := s.persistExecutionAuthority(ctx, meta, threadID, "continue-input:"+interactionID, view.TurnID.String()); err != nil {
+		return SubmitRequestUserInputResponseResponse{}, err
 	}
 	answers := make(map[string]string, len(req.Response.Answers))
 	for questionID, answer := range req.Response.Answers {

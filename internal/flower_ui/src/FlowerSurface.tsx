@@ -1546,6 +1546,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 		if (!props.adapter.launchTurn) return;
 		for (const entry of transportOutbox().entries.values()) {
 			if (outboxResendInFlight.has(entry.requestId)) continue;
+			if (entry.terminalError) continue;
 			if ((entry.input.attachment_ids?.length ?? 0) > 0 && !trimString(entry.input.staging_scope?.capability)) continue;
 			outboxResendInFlight.add(entry.requestId);
 			void props.adapter.launchTurn(entry.input).then((receipt) => {
@@ -4615,6 +4616,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     releaseAttachmentStagingScope(tid);
 
     setThreadCache((cache) => cache.evict(tid));
+    setTransportOutbox((outbox) => outbox.dropThread(tid));
     draftSessionFor(tid).clear();
     setPendingPermissionPatch((current) => current?.threadID === tid ? null : current);
     setPendingModelPatch((current) => current?.threadID === tid ? null : current);
@@ -8659,6 +8661,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             <Show when={contextLabels().length > 0}>
               <div class="flower-transport-outbox-context">
                 <For each={contextLabels()}>{(label) => <span>{label}</span>}</For>
+              </div>
+            </Show>
+            <Show when={submission().terminalError}>
+              <div class="flower-message-error flower-transport-outbox-error" role="alert">
+                {copy().attachments.restoreFailed}
               </div>
             </Show>
           </div>

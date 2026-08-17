@@ -144,6 +144,28 @@ func (s *Service) readCanonicalThreadState(ctx context.Context, threadID string)
 	return typed.View(ctxOrBackground(ctx), identity.ThreadID(strings.TrimSpace(threadID)))
 }
 
+// requireEndpointThreadAuthority is the single product authorization boundary
+// before a handler may mutate a canonical Floret thread. The product catalog is
+// authoritative for endpoint ownership; a missing scoped row must fail closed
+// before the process-wide thread runtime sees the thread ID.
+func (s *Service) requireEndpointThreadAuthority(ctx context.Context, endpointID string, threadID string) error {
+	if s == nil {
+		return errors.New("nil service")
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	if endpointID == "" || threadID == "" {
+		return errors.New("invalid thread identity")
+	}
+	s.mu.Lock()
+	db := s.threadsDB
+	s.mu.Unlock()
+	if db == nil {
+		return errors.New("threads store not ready")
+	}
+	return db.RequireThreadSettingsWritable(ctxOrBackground(ctx), endpointID, threadID)
+}
+
 func (s *Service) lockCanonicalThreadSettingsMutation(ctx context.Context, endpointID string, threadID string) (*threadstore.Store, *threadstore.ThreadSettings, func(), error) {
 	if s == nil {
 		return nil, nil, nil, errors.New("nil service")
@@ -164,7 +186,7 @@ func (s *Service) lockCanonicalThreadSettingsMutation(ctx context.Context, endpo
 	if db == nil {
 		return fail(errors.New("threads store not ready"))
 	}
-	if err := db.RequireThreadSettingsWritable(ctxOrBackground(ctx), endpointID, threadID); err != nil {
+	if err := s.requireEndpointThreadAuthority(ctxOrBackground(ctx), endpointID, threadID); err != nil {
 		return fail(err)
 	}
 	settings, err := db.GetThreadSettings(ctxOrBackground(ctx), endpointID, threadID)
@@ -757,6 +779,9 @@ func (s *Service) SetThreadPinned(ctx context.Context, meta *session.Meta, threa
 	if db == nil {
 		return nil, errors.New("threads store not ready")
 	}
+	if err := s.requireEndpointThreadAuthority(ctx, endpointID, threadID); err != nil {
+		return nil, err
+	}
 	pinnedAt, err := db.SetThreadPinned(ctx, endpointID, threadID, pinned, meta.UserPublicID, meta.UserEmail)
 	if err != nil {
 		return nil, err
@@ -803,6 +828,9 @@ func (s *Service) ForkThreadWithOptions(ctx context.Context, meta *session.Meta,
 	clientRequestID := strings.TrimSpace(req.ClientRequestID)
 	if !validUploadStagingTargetID(clientRequestID) {
 		return nil, errors.New("invalid client_request_id")
+	}
+	if err := s.requireEndpointThreadAuthority(ctx, endpointID, sourceThreadID); err != nil {
+		return nil, err
 	}
 	title := strings.TrimSpace(req.Title)
 	source, err := db.GetThreadSettings(ctxOrBackground(ctx), endpointID, sourceThreadID)
@@ -1119,10 +1147,15 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 	if db == nil {
 		return errors.New("threads store not ready")
 	}
+	if err := db.RequireThreadDeleteAuthority(ctxOrBackground(ctx), endpointID, threadID); err != nil {
+		return err
+	}
 	settings, err := db.GetThreadSettings(ctxOrBackground(ctx), endpointID, threadID)
 	if err != nil {
 		return err
 	}
+	// An endpoint-scoped tombstone is the durable idempotency authority for a
+	// completed delete. It must not be confused with a foreign ownership miss.
 	if settings == nil {
 		return nil
 	}
@@ -1140,9 +1173,11 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 	}
 	requestKey := flruntime.RequestKey("delete:" + threadID)
 	if !canonicalDeleted && force {
-		_, _ = runtime.Cancel(ctxOrBackground(ctx), flruntime.CancelInput{
+		if _, cancelErr := runtime.Cancel(ctxOrBackground(ctx), flruntime.CancelInput{
 			ThreadID: identity.ThreadID(threadID), RequestKey: flruntime.RequestKey("delete-cancel:" + threadID),
-		})
+		}); cancelErr != nil && !errors.Is(cancelErr, flruntime.ErrThreadNotFound) && !errors.Is(cancelErr, flruntime.ErrThreadDeleted) {
+			return cancelErr
+		}
 	}
 	if !canonicalDeleted {
 		if err := runtime.Delete(ctxOrBackground(ctx), flruntime.DeleteThreadInput{

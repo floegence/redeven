@@ -8,6 +8,7 @@ import (
 
 	"github.com/floegence/floret/v4/identity"
 	flruntime "github.com/floegence/floret/v4/runtime"
+	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -118,16 +119,53 @@ func (s *Service) restoreFloretEffectRequest(ctx context.Context, request flrunt
 	if err != nil {
 		return floretEffectRequest{}, err
 	}
+	authority, err := s.executionAuthorityForRequest(ctx, request)
+	if err != nil {
+		return floretEffectRequest{}, err
+	}
+	if authority == nil {
+		return floretEffectRequest{}, errors.New("Flower execution authority is unavailable after restart")
+	}
 	meta := session.Meta{
-		ChannelID: "runtime:" + strings.TrimSpace(settings.EndpointID), EndpointID: strings.TrimSpace(settings.EndpointID),
-		NamespacePublicID: strings.TrimSpace(settings.NamespacePublicID), UserPublicID: strings.TrimSpace(settings.CreatedByUserPublicID),
-		UserEmail: strings.TrimSpace(settings.CreatedByUserEmail), CanRead: true,
+		ChannelID: strings.TrimSpace(authority.ChannelID), EndpointID: strings.TrimSpace(authority.EndpointID),
+		NamespacePublicID: strings.TrimSpace(authority.NamespacePublicID), UserPublicID: strings.TrimSpace(authority.UserPublicID),
+		UserEmail: strings.TrimSpace(authority.UserEmail), CanRead: true,
 		CanWrite: permission != FlowerPermissionReadonly, CanExecute: permission != FlowerPermissionReadonly,
 	}
 	return floretEffectRequest{meta: meta, req: SendUserTurnRequest{
 		ClientRequestID: request.RequestKey, ThreadID: request.ThreadID.String(), Model: settings.ModelID,
-		Input: RunInput{Text: request.Input.Text},
+		Input: runInputFromFloret(request.Input),
 	}}, nil
+}
+
+func runInputFromFloret(input flruntime.UserInput) RunInput {
+	out := RunInput{Text: input.Text}
+	for _, attachment := range input.Attachments {
+		if uploadID, err := uploadIDFromFloretResourceRef(attachment.ResourceRef); err == nil {
+			out.Attachments = append(out.Attachments, RunAttachmentIn{AttachmentID: uploadID})
+		}
+	}
+	return out
+}
+
+func (s *Service) executionAuthorityForRequest(ctx context.Context, request flruntime.AgentRequest) (*threadstore.ExecutionAuthority, error) {
+	if s == nil || s.threadsDB == nil {
+		return nil, errors.New("Flower execution authority store is unavailable")
+	}
+	if key := strings.TrimSpace(request.RequestKey); key != "" {
+		if authority, err := s.threadsDB.GetExecutionAuthority(ctxOrBackground(ctx), key); err != nil || authority != nil {
+			return authority, err
+		}
+	}
+	if request.TurnID != "" {
+		if authority, err := s.threadsDB.GetExecutionAuthorityByTurn(ctxOrBackground(ctx), request.ThreadID.String(), request.TurnID.String()); err != nil || authority != nil {
+			return authority, err
+		}
+	}
+	if request.RetrySource != "" {
+		return s.threadsDB.GetExecutionAuthorityByTurn(ctxOrBackground(ctx), request.ThreadID.String(), request.RetrySource.String())
+	}
+	return nil, nil
 }
 
 func configureFloretRuntime(host *flruntime.Host) (*floretBootstrapResult, error) {
