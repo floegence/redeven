@@ -70,8 +70,8 @@ describe('controlplaneApi controlplane helper usage', () => {
       headers: { 'content-type': 'application/json' },
       signal: controller.signal,
     };
-    await sourceOptions.fetch('http://localhost:3000/v1/connect/artifact/entry', init);
-    await sourceOptions.fetch('http://localhost:3000/v1/connect/artifact/entry', init);
+    await sourceOptions.fetch('https://v1/connect/artifact/entry', init);
+    await sourceOptions.fetch('https://v1/connect/artifact/entry', init);
 
     expect(prepareAcquire).toHaveBeenCalledTimes(2);
     expect(prepareAcquire).toHaveBeenNthCalledWith(1, {
@@ -80,6 +80,10 @@ describe('controlplaneApi controlplane helper usage', () => {
     });
     const artifactCalls = fetchMock.mock.calls.filter(([input]) => String(input).endsWith('/v1/connect/artifact/entry'));
     expect(artifactCalls).toHaveLength(2);
+    expect(artifactCalls.map(([input]) => String(input))).toEqual([
+      'http://localhost:3000/v1/connect/artifact/entry',
+      'http://localhost:3000/v1/connect/artifact/entry',
+    ]);
     expect(new Headers(artifactCalls[0]?.[1]?.headers).get('authorization')).toBe('Bearer ticket-1');
     expect(new Headers(artifactCalls[1]?.[1]?.headers).get('authorization')).toBe('Bearer ticket-2');
     expect(JSON.parse(String(artifactCalls[0]?.[1]?.body))).toEqual({
