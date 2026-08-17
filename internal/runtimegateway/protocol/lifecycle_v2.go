@@ -6,9 +6,21 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 )
+
+var runtimeOperationIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)
+
+// ValidateRuntimeOperationID keeps operation identifiers suitable for use as
+// durable map keys and rejects path syntax before it can reach staging paths.
+func ValidateRuntimeOperationID(value string) error {
+	if value != strings.TrimSpace(value) || !runtimeOperationIDPattern.MatchString(value) {
+		return errors.New("operation_id must contain 1-128 letters, digits, dot, underscore, colon, or hyphen")
+	}
+	return nil
+}
 
 const (
 	RuntimeServiceProtocolV2    = "redeven-runtime-v2"
@@ -460,6 +472,9 @@ func ValidateRuntimeOperationPrepareRequest(req RuntimeOperationPrepareRequest) 
 	}
 	if req.OperationID == "" || req.AuthorizedClientKeyID == "" || req.GatewayEnvID == "" || req.LifecycleTargetID == "" || req.IdempotencyKey == "" {
 		return errors.New("operation_id, authorized_client_key_id, gateway_env_id, lifecycle_target_id, and idempotency_key are required")
+	}
+	if err := ValidateRuntimeOperationID(req.OperationID); err != nil {
+		return err
 	}
 	if req.TargetGeneration <= 0 {
 		return errors.New("target_generation must be positive")

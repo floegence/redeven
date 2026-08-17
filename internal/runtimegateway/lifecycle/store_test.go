@@ -277,8 +277,18 @@ func TestCommitContinuesAfterClientTransportDisconnect(t *testing.T) {
 	request.Operation = gatewayprotocol.RuntimeOperationStart
 	request.DesiredRuntime = gatewayprotocol.DesiredRuntime{}
 	prepared, err := store.Prepare(context.Background(), request, prepareAuthorization("permit-detached"))
-	if err != nil || prepared.Operation.State != gatewayprotocol.RuntimeOperationCommitReady {
+	if err != nil || prepared.Operation.State != gatewayprotocol.RuntimeOperationAwaitingConfirmation {
 		t.Fatalf("Prepare() = %#v, %v", prepared, err)
+	}
+	snapshot := prepared.Operation.ExpectedSnapshot
+	if _, err := store.Confirm(context.Background(), request.OperationID, request.AuthorizedClientKeyID, gatewayprotocol.RuntimeOperationConfirmationRequest{
+		ProtocolVersion:        gatewayprotocol.Version,
+		SnapshotRevision:       snapshot.SnapshotRevision,
+		ProcessInventoryDigest: snapshot.ProcessInventoryDigest,
+		WorkloadIdentityDigest: snapshot.WorkloadIdentityDigest,
+		RiskSummaryDigest:      "sha256:risk",
+	}); err != nil {
+		t.Fatalf("Confirm() error = %v", err)
 	}
 	requestContext, cancel := context.WithCancel(context.Background())
 	result := make(chan error, 1)
@@ -933,6 +943,11 @@ func persistOperationState(t *testing.T, store *Store, operationID string, state
 	operation.State = state
 	operation.UpdatedAtUnixMS = store.clock.Now().UnixMilli()
 	next.Operations[operationID] = operation
+	if state.Terminal() {
+		delete(next.TargetLocks, operation.LifecycleTargetID)
+		delete(next.Quarantined, operation.LifecycleTargetID)
+		delete(next.FenceTokens, operation.OperationID)
+	}
 	if err := store.saveLocked(next); err != nil {
 		t.Fatal(err)
 	}

@@ -8,6 +8,7 @@ import {
   type DesktopGatewayConnectionKind,
   type DesktopGatewayEnvironment,
   type DesktopGatewayCapability,
+  type DesktopGatewayRuntimeManagementCapability,
   type DesktopGatewayServiceState,
   type DesktopGatewayStatus,
   type DesktopGatewaySource,
@@ -565,6 +566,38 @@ export function gatewayRecordToSourceWithCatalog(
         : 'Gateway catalog could not be refreshed.'),
     capabilities: [...new Set(catalog.capabilities ?? [])],
     environments: [...(catalog.environments ?? [])],
+  };
+}
+
+export function gatewayRecordToLocalEnvironment(
+  record: GatewayRecord,
+  runtimeManagement: DesktopGatewayRuntimeManagementCapability,
+): DesktopGatewayEnvironment {
+  const operations = new Set(runtimeManagement.operations ?? []);
+  const controls = (['start', 'stop', 'restart', 'update_runtime'] as const)
+    .filter((operation) => operations.has(operation));
+  const state: DesktopGatewayEnvironment['state'] = operations.has('stop') || operations.has('restart')
+    ? 'available'
+    : operations.has('start')
+      ? 'stopped'
+      : 'unknown';
+  const originKind: DesktopGatewayEnvironment['origin']['kind'] = record.connection.kind === 'local_host'
+    ? 'gateway_host'
+    : record.connection.kind === 'local_container' || record.connection.kind === 'ssh_container'
+      ? 'container'
+      : record.connection.kind === 'ssh_host'
+        ? 'ssh_target'
+        : 'network_target';
+  return {
+    gateway_env_id: 'env_local',
+    display_name: record.display_name,
+    env_kind: 'managed_local_env',
+    state,
+    capabilities: controls,
+    control_capabilities: controls,
+    runtime_management: runtimeManagement,
+    origin: { kind: originKind, label: record.display_name },
+    last_seen_at_unix_ms: runtimeManagement.checked_at_unix_ms,
   };
 }
 

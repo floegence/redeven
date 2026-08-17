@@ -985,7 +985,7 @@ function normalizeGatewayEnvironmentProfile(value: unknown): DesktopGatewayEnvir
   };
 }
 
-function normalizeGatewayRuntimeManagementCapability(value: unknown): DesktopGatewayEnvironment['runtime_management'] | undefined {
+export function normalizeGatewayRuntimeManagementCapability(value: unknown): DesktopGatewayEnvironment['runtime_management'] | undefined {
   if (!value || typeof value !== 'object') {
     return undefined;
   }
@@ -1058,24 +1058,27 @@ function normalizeGatewayRuntimeManagementCapability(value: unknown): DesktopGat
         ...(compact(compatibilityCandidate.runtime_artifact_sha256) ? { runtime_artifact_sha256: compact(compatibilityCandidate.runtime_artifact_sha256) } : {}),
       } as const
     : undefined;
+  const authorized = support === 'supported' && authorization === 'allowed';
+  const executableReady = authorized && readiness === 'ready';
+  const visibleGrants = authorized ? grants : [];
   return {
     support,
     authorization: {
       state: authorization,
-      ...(grants.length > 0 ? { grants: [...new Set(grants)] } : {}),
+      ...(visibleGrants.length > 0 ? { grants: [...new Set(visibleGrants)] } : {}),
     },
     readiness,
     presentation_state: presentationState,
-    ...(targetID && Number.isSafeInteger(targetGeneration) && targetGeneration > 0
+    ...(executableReady && targetID && Number.isSafeInteger(targetGeneration) && targetGeneration > 0
       ? { target: { lifecycle_target_id: targetID, target_generation: targetGeneration } }
       : {}),
-    ...(compatibility ? { compatibility } : {}),
-    ...(operations.length > 0 ? { operations: [...new Set(operations)] } : {}),
-    ...(artifactPolicies.length > 0 ? { artifact_policies: [...new Set(artifactPolicies)] } : {}),
-    ...(Array.isArray(candidate.binding_actions)
+    ...(executableReady && compatibility ? { compatibility } : {}),
+    ...(executableReady && operations.length > 0 ? { operations: [...new Set(operations)] } : {}),
+    ...(executableReady && artifactPolicies.length > 0 ? { artifact_policies: [...new Set(artifactPolicies)] } : {}),
+    ...(authorized && readiness === 'setup_required' && Array.isArray(candidate.binding_actions)
       ? { binding_actions: [...new Set(candidate.binding_actions.map(compact).filter(Boolean))] }
       : {}),
-    ...(compact(candidate.supervision_mode) ? { supervision_mode: compact(candidate.supervision_mode) } : {}),
+    ...(executableReady && compact(candidate.supervision_mode) ? { supervision_mode: compact(candidate.supervision_mode) } : {}),
     ...(compact(candidate.reason_code) ? { reason_code: compact(candidate.reason_code) } : {}),
     checked_at_unix_ms: Number.isSafeInteger(Number(candidate.checked_at_unix_ms)) ? Number(candidate.checked_at_unix_ms) : 0,
   };

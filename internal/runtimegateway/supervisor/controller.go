@@ -381,6 +381,9 @@ func (c *Controller) Commit(ctx context.Context, operation gatewayprotocol.Runti
 		if err := c.waitForRuntimeStopped(ctx); err != nil {
 			return err
 		}
+		if err := c.waitForNoRuntimeProcesses(ctx); err != nil {
+			return err
+		}
 	}
 	checkpoint.Phase = checkpointRuntimeStopped
 	if err := c.writeCheckpoint(checkpoint); err != nil {
@@ -674,6 +677,12 @@ func (c *Controller) extractRuntimeArtifact(ctx context.Context, operation gatew
 	if err := os.RemoveAll(stagingRoot); err != nil {
 		return "", err
 	}
+	completed := false
+	defer func() {
+		if !completed {
+			_ = durableRemoveAll(stagingRoot)
+		}
+	}()
 	if err := os.MkdirAll(filepath.Join(stagingRoot, "bin"), 0o700); err != nil {
 		return "", err
 	}
@@ -752,6 +761,7 @@ func (c *Controller) extractRuntimeArtifact(ctx context.Context, operation gatew
 	if err := syncDirectory(stagingRoot); err != nil {
 		return "", err
 	}
+	completed = true
 	return stagingRoot, nil
 }
 
@@ -900,10 +910,42 @@ func (c *Controller) readCheckpoint(operationID string) (operationCheckpoint, er
 	if err := json.Unmarshal(raw, &checkpoint); err != nil {
 		return operationCheckpoint{}, err
 	}
-	if checkpoint.OperationID != strings.TrimSpace(operationID) || checkpoint.ManagedRoot == "" || checkpoint.Phase == "" {
-		return operationCheckpoint{}, errors.New("Runtime supervisor checkpoint is invalid")
+	operationID = strings.TrimSpace(operationID)
+	binding := c.bindings.Binding()
+	expectedManagedRoot := filepath.Join(binding.RuntimeRoot, "runtime", "managed")
+	expectedStagingRoot := filepath.Join(binding.RuntimeRoot, "runtime", "staging", safeOperationID(operationID))
+	expectedPreviousRoot := expectedManagedRoot + ".previous." + safeOperationID(operationID)
+	if checkpoint.OperationID != operationID || !sameControllerPath(checkpoint.ManagedRoot, expectedManagedRoot) || checkpoint.Phase == "" ||
+		(checkpoint.StagingRoot != "" && !sameControllerPath(checkpoint.StagingRoot, expectedStagingRoot)) ||
+		(checkpoint.PreviousManagedRoot != "" && !sameControllerPath(checkpoint.PreviousManagedRoot, expectedPreviousRoot)) {
+		return operationCheckpoint{}, errors.New("Runtime supervisor checkpoint is invalid for the bound Runtime root")
 	}
 	return checkpoint, nil
+}
+
+func sameControllerPath(left string, right string) bool {
+	canonical := func(value string) string {
+		clean, err := filepath.Abs(filepath.Clean(value))
+		if err != nil {
+			return filepath.Clean(value)
+		}
+		missing := make([]string, 0, 4)
+		for {
+			if resolved, resolveErr := filepath.EvalSymlinks(clean); resolveErr == nil {
+				for index := len(missing) - 1; index >= 0; index-- {
+					resolved = filepath.Join(resolved, missing[index])
+				}
+				return filepath.Clean(resolved)
+			}
+			parent := filepath.Dir(clean)
+			if parent == clean {
+				return filepath.Clean(value)
+			}
+			missing = append(missing, filepath.Base(clean))
+			clean = parent
+		}
+	}
+	return canonical(left) == canonical(right)
 }
 
 func (c *Controller) captureCandidateIdentity(ctx context.Context, pid int, binaryPath string) (candidateProcessIdentity, error) {

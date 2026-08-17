@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   GatewayBridgeClient,
   GatewayURLClient,
+  normalizeGatewayRuntimeManagementCapability,
   normalizeGatewayRuntimeOperationListResponse,
   redactGatewayDiagnosticValue,
 } from './gatewayClient';
@@ -292,6 +293,57 @@ describe('GatewayURLClient', () => {
       await server.close();
       cleanupServers.delete(server);
     }));
+  });
+
+  it('redacts non-ready Runtime management capability fields while retaining setup actions', () => {
+    const capability = normalizeGatewayRuntimeManagementCapability({
+      support: 'supported',
+      authorization: { state: 'allowed', grants: ['manage_runtime', 'manage_runtime_binding'] },
+      readiness: 'setup_required',
+      target: { lifecycle_target_id: 'target-secret', target_generation: 7 },
+      operations: ['start', 'update_runtime', 'reconcile'],
+      artifact_policies: ['published_release', 'custom_build'],
+      supervision_mode: 'gateway_supervisor',
+      binding_actions: ['enroll'],
+      compatibility: { gateway_protocol: 'redeven-gateway-v2', runtime_service_protocol: 'redeven-runtime-v2', runtime_platform: 'linux', runtime_architecture: 'amd64', compatibility_epoch: 9 },
+      checked_at_unix_ms: 10,
+    });
+
+    expect(capability).toMatchObject({
+      readiness: 'setup_required',
+      authorization: { state: 'allowed', grants: ['manage_runtime', 'manage_runtime_binding'] },
+      binding_actions: ['enroll'],
+    });
+    expect(capability).not.toHaveProperty('target');
+    expect(capability).not.toHaveProperty('operations');
+    expect(capability).not.toHaveProperty('artifact_policies');
+    expect(capability).not.toHaveProperty('compatibility');
+    expect(capability).not.toHaveProperty('supervision_mode');
+  });
+
+  it('does not expose authorization grants or setup details when authorization is denied', () => {
+    const capability = normalizeGatewayRuntimeManagementCapability({
+      support: 'supported',
+      authorization: { state: 'denied', grants: ['manage_runtime'], },
+      readiness: 'unknown',
+      binding_actions: ['enroll'],
+      target: { lifecycle_target_id: 'target-secret', target_generation: 7 },
+      operations: ['start'],
+      artifact_policies: ['published_release'],
+      supervision_mode: 'gateway_supervisor',
+      checked_at_unix_ms: 10,
+    });
+
+    expect(capability).toMatchObject({
+      authorization: { state: 'denied' },
+      readiness: 'unknown',
+    });
+    expect(capability?.authorization.grants).toBeUndefined();
+    expect(capability).not.toHaveProperty('target');
+    expect(capability).not.toHaveProperty('operations');
+    expect(capability).not.toHaveProperty('artifact_policies');
+    expect(capability).not.toHaveProperty('binding_actions');
+    expect(capability).not.toHaveProperty('supervision_mode');
   });
 
   it('accepts redacted active operations without requiring hidden client or snapshot digests', () => {
