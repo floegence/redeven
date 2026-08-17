@@ -111,6 +111,12 @@ describe("Code App injection entry", () => {
     const runtime = {};
     const dispose = vi.fn();
     const uninstall = vi.fn();
+    const serviceWorker = {
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      getRegistration: vi.fn(async () => undefined),
+      getRegistrations: vi.fn(async () => []),
+    };
     let pageHideListener: ((event: PageTransitionEvent) => void) | undefined;
     const targetWindow = {
       document,
@@ -128,7 +134,7 @@ describe("Code App injection entry", () => {
           return null;
         }),
       },
-      navigator: {},
+      navigator: { serviceWorker },
       WebSocket: class {},
       stop: vi.fn(),
       addEventListener: vi.fn((type: string, listener: EventListener) => {
@@ -154,6 +160,7 @@ describe("Code App injection entry", () => {
 
     pageHideListener?.({ persisted: false } as PageTransitionEvent);
     expect(dispose).toHaveBeenCalledOnce();
+    expect(serviceWorker.removeEventListener).toHaveBeenCalledWith("message", expect.any(Function));
     expect(uninstall).not.toHaveBeenCalled();
   });
 });
