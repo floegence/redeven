@@ -14,7 +14,7 @@ import {
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-export const publicationAssetName = 'platform-package-publication-v2.json';
+export const releaseManifestAssetName = 'platform-release-manifest.json';
 export const runtimeMarkerName = '.redevplugin-release-artifacts-verified.json';
 export const runtimeNoticesName = 'REDEVPLUGIN_THIRD_PARTY_NOTICES.md';
 export const runtimeSBOMName = 'REDEVPLUGIN_RUNTIME.spdx.json';
@@ -34,13 +34,37 @@ const expectedNPM = Object.freeze([
   '@floegence/redevplugin-contracts',
   '@floegence/redevplugin-ui',
 ]);
-const expectedRust = Object.freeze([
-  ['redevplugin-runtime', 'runtime'],
-  ['redevplugin-worker-sdk', 'worker_sdk'],
-]);
-const expectedRuntimeRust = Object.freeze([
-  'redevplugin-runtime',
-]);
+const expectedRuntimeRust = Object.freeze(['redevplugin-runtime']);
+
+export function validateReleaseManifest(value, { tag } = {}) {
+  exactKeys(value, ['platform_version', 'plugin_api', 'internal_wire', 'artifacts'], 'platform release manifest');
+  semver(value.platform_version, 'platform release manifest version');
+  if (tag !== undefined && tag !== `v${value.platform_version}`) fail('release tag does not match platform release manifest');
+  if (value.plugin_api !== 1 || value.internal_wire !== 1) fail('platform release protocol identity is invalid');
+  if (!Array.isArray(value.artifacts) || value.artifacts.length < 5) fail('platform release artifacts are incomplete');
+  const seen = new Set();
+  let previous = '';
+  for (const artifact of value.artifacts) {
+    exactKeys(artifact, ['name', 'sha256'], 'platform release artifact');
+    if (typeof artifact.name !== 'string' || !/^(go|npm|crate|contract):[^\s=]+$/u.test(artifact.name)
+        || seen.has(artifact.name) || artifact.name <= previous) {
+      fail('platform release artifact ordering or identity is invalid');
+    }
+    digest(artifact.sha256, `platform release artifact ${artifact.name}`);
+    seen.add(artifact.name);
+    previous = artifact.name;
+  }
+  for (const name of [
+    'go:github.com/floegence/redevplugin/v3',
+    'npm:@floegence/redevplugin-contracts',
+    'npm:@floegence/redevplugin-ui',
+    'crate:redevplugin-runtime',
+    'crate:redevplugin-worker-sdk',
+  ]) {
+    if (!seen.has(name)) fail(`platform release artifact ${name} is missing`);
+  }
+  return structuredClone(value);
+}
 const markerFileNames = Object.freeze([
   runtimeNoticesName,
   runtimeSBOMName,
@@ -158,141 +182,36 @@ export function parseStrictJSON(raw, label = 'JSON', maximum = 256 * 1024) {
   return JSON.parse(source);
 }
 
-export function validatePackageSet(value) {
-  exactKeys(value, [
-    'schema_version', 'platform_version', 'go_module', 'npm_packages', 'rust_crates',
-    'contract_registry_version', 'contract_set_sha256',
-  ], 'package set');
-  if (value.schema_version !== 'redevplugin.platform_package_set.v3') fail('package set schema is invalid');
-  semver(value.platform_version, 'package set platform version');
-  digest(value.contract_set_sha256, 'package set contract digest');
-  if (value.contract_registry_version !== 'contract-registry-v2') fail('package set registry version is invalid');
-  exactKeys(value.go_module, ['module', 'version'], 'package set Go module');
-  if (value.go_module.module !== 'github.com/floegence/redevplugin/v2' || value.go_module.version !== `v${value.platform_version}`) {
-    fail('package set Go coordinate is invalid');
-  }
-  if (!Array.isArray(value.npm_packages) || value.npm_packages.length !== expectedNPM.length) {
-    fail('package set npm coordinates are incomplete');
-  }
-  value.npm_packages.forEach((coordinate, index) => {
-    exactKeys(coordinate, ['name', 'version'], `package set npm coordinate ${index}`);
-    if (coordinate.name !== expectedNPM[index] || coordinate.version !== value.platform_version) {
-      fail(`package set npm coordinate ${index} is invalid`);
-    }
-  });
-  if (!Array.isArray(value.rust_crates) || value.rust_crates.length !== expectedRust.length) {
-    fail('package set Rust coordinates are incomplete');
-  }
-  value.rust_crates.forEach((coordinate, index) => {
-    exactKeys(coordinate, ['name', 'version', 'role'], `package set Rust coordinate ${index}`);
-    if (coordinate.name !== expectedRust[index][0] || coordinate.role !== expectedRust[index][1]
-        || coordinate.version !== value.platform_version) {
-      fail(`package set Rust coordinate ${index} is invalid`);
-    }
-  });
-  return structuredClone(value);
-}
-
-export function validatePublication(value, packageSet, { tag, sourceCommit } = {}) {
-  packageSet = validatePackageSet(packageSet);
-  exactKeys(value, [
-    'schema_version', 'platform_version', 'source_commit', 'workflow', 'go_module',
-    'npm_packages', 'rust_crates', 'contract_set_sha256',
-  ], 'platform publication');
-  if (value.schema_version !== 'redevplugin.platform_package_publication.v2') fail('publication schema is invalid');
-  if (value.platform_version !== packageSet.platform_version) fail('publication platform version mismatch');
-  if (value.contract_set_sha256 !== packageSet.contract_set_sha256) fail('publication contract digest mismatch');
-  commit(value.source_commit, 'publication source commit');
-  if (sourceCommit !== undefined && value.source_commit !== sourceCommit) fail('publication source commit mismatch');
-  const expectedTag = `v${packageSet.platform_version}`;
-  if (tag !== undefined && tag !== expectedTag) fail('release tag does not match the package set');
-  exactKeys(value.workflow, ['repository', 'path', 'ref', 'sha'], 'publication workflow');
-  if (value.workflow.repository !== 'floegence/redevplugin'
-      || value.workflow.path !== '.github/workflows/release.yml'
-      || value.workflow.ref !== `refs/tags/${expectedTag}`
-      || value.workflow.sha !== value.source_commit) {
-    fail('publication workflow identity is invalid');
-  }
-  exactKeys(value.go_module, ['module', 'version', 'h1', 'go_mod_h1'], 'publication Go module');
-  if (value.go_module.module !== packageSet.go_module.module || value.go_module.version !== packageSet.go_module.version
-      || !h1Pattern.test(value.go_module.h1) || !h1Pattern.test(value.go_module.go_mod_h1)) {
-    fail('publication Go readback is invalid');
-  }
-  if (!Array.isArray(value.npm_packages) || value.npm_packages.length !== packageSet.npm_packages.length) {
-    fail('publication npm readbacks are incomplete');
-  }
-  value.npm_packages.forEach((readback, index) => {
-    exactKeys(readback, ['name', 'version', 'integrity', 'provenance_subject_sha512'], `publication npm readback ${index}`);
-    const coordinate = packageSet.npm_packages[index];
-    if (readback.name !== coordinate.name || readback.version !== coordinate.version
-        || !integrityPattern.test(readback.integrity) || !sha512Pattern.test(readback.provenance_subject_sha512)) {
-      fail(`publication npm readback ${index} is invalid`);
-    }
-    const integrityHex = Buffer.from(readback.integrity.slice('sha512-'.length), 'base64').toString('hex');
-    if (integrityHex !== readback.provenance_subject_sha512) fail(`publication npm readback ${index} digest mismatch`);
-  });
-  if (!Array.isArray(value.rust_crates) || value.rust_crates.length !== packageSet.rust_crates.length) {
-    fail('publication Rust readbacks are incomplete');
-  }
-  value.rust_crates.forEach((readback, index) => {
-    exactKeys(readback, ['name', 'version', 'registry_checksum_sha256'], `publication Rust readback ${index}`);
-    const coordinate = packageSet.rust_crates[index];
-    if (readback.name !== coordinate.name || readback.version !== coordinate.version) {
-      fail(`publication Rust readback ${index} coordinate mismatch`);
-    }
-    digest(readback.registry_checksum_sha256, `publication Rust readback ${index} checksum`);
-  });
-  return structuredClone(value);
-}
-
-export function createPublicationVerification(publication, packageSet, tag, publicationPath) {
-  publication = validatePublication(publication, packageSet, { tag });
+export function createReleaseVerification(manifest, tag, manifestPath) {
+  manifest = validateReleaseManifest(manifest, { tag });
   return {
-    schema_version: 'redeven.redevplugin_platform_publication_verification.v1',
+    schema_version: 'redeven.redevplugin_release_verification.v1',
     release_tag: tag,
-    publication: descriptor(publicationPath, publicationAssetName),
-    platform_version: publication.platform_version,
-    source_commit: publication.source_commit,
-    contract_set_sha256: publication.contract_set_sha256,
-    go_module: publication.go_module,
-    npm_packages: publication.npm_packages,
-    rust_crates: publication.rust_crates,
+    manifest: descriptor(manifestPath, releaseManifestAssetName),
+    platform_version: manifest.platform_version,
+    plugin_api: manifest.plugin_api,
+    internal_wire: manifest.internal_wire,
+    artifacts: manifest.artifacts,
   };
 }
 
-export function validatePublicationVerification(value, packageSet) {
-  exactKeys(value, [
-    'schema_version', 'release_tag', 'publication', 'platform_version', 'source_commit',
-    'contract_set_sha256', 'go_module', 'npm_packages', 'rust_crates',
-  ], 'publication verification');
-  if (value.schema_version !== 'redeven.redevplugin_platform_publication_verification.v1') {
-    fail('publication verification schema is invalid');
-  }
-  const publication = {
-    schema_version: 'redevplugin.platform_package_publication.v2',
+export function validateReleaseVerification(value) {
+  exactKeys(value, ['schema_version', 'release_tag', 'manifest', 'platform_version', 'plugin_api', 'internal_wire', 'artifacts'], 'release verification');
+  if (value.schema_version !== 'redeven.redevplugin_release_verification.v1') fail('release verification schema is invalid');
+  const manifest = validateReleaseManifest({
     platform_version: value.platform_version,
-    source_commit: value.source_commit,
-    workflow: {
-      repository: 'floegence/redevplugin',
-      path: '.github/workflows/release.yml',
-      ref: `refs/tags/${value.release_tag}`,
-      sha: value.source_commit,
-    },
-    go_module: value.go_module,
-    npm_packages: value.npm_packages,
-    rust_crates: value.rust_crates,
-    contract_set_sha256: value.contract_set_sha256,
-  };
-  validatePublication(publication, packageSet, { tag: value.release_tag });
-  validateDescriptor(value.publication, 'publication verification asset', publicationAssetName);
-  return structuredClone(value);
+    plugin_api: value.plugin_api,
+    internal_wire: value.internal_wire,
+    artifacts: value.artifacts,
+  }, { tag: value.release_tag });
+  validateDescriptor(value.manifest, 'release manifest evidence', releaseManifestAssetName);
+  return structuredClone({ ...value, ...manifest });
 }
 
 export function createRuntimeEvidence({
   profile,
   target,
-  publicationVerification,
-  packageSet,
+  releaseVerification,
   runtimePath,
   sbomPath,
   provenancePath,
@@ -305,8 +224,7 @@ export function createRuntimeEvidence({
 }) {
   if (!['release', 'development'].includes(profile)) fail('runtime evidence profile is invalid');
   targetIdentity(target);
-  packageSet = validatePackageSet(packageSet);
-  publicationVerification = validatePublicationVerification(publicationVerification, packageSet);
+  releaseVerification = validateReleaseVerification(releaseVerification);
   validateProductBuild(product, profile);
   if (typeof cargoVersion !== 'string' || !cargoVersion.startsWith(`cargo ${rustToolchain} `)) fail('cargo toolchain is invalid');
   if (typeof rustcVersion !== 'string' || !rustcVersion.startsWith(`rustc ${rustToolchain} `)) fail('rustc toolchain is invalid');
@@ -314,7 +232,7 @@ export function createRuntimeEvidence({
   return {
     schema_version: 'redeven.redevplugin_runtime_build.v1',
     profile,
-    platform_publication: publicationVerification,
+    platform_release: releaseVerification,
     product_build: structuredClone(product),
     runtime: {
       target,
@@ -339,13 +257,12 @@ export function createRuntimeEvidence({
 }
 
 export function validateRuntimeEvidence(value, root, { target, requireRelease = false } = {}) {
-  exactKeys(value, ['schema_version', 'profile', 'platform_publication', 'product_build', 'runtime'], 'runtime evidence');
+  exactKeys(value, ['schema_version', 'profile', 'platform_release', 'product_build', 'runtime'], 'runtime evidence');
   if (value.schema_version !== 'redeven.redevplugin_runtime_build.v1') fail('runtime evidence schema is invalid');
   if (!['release', 'development'].includes(value.profile) || (requireRelease && value.profile !== 'release')) {
     fail('runtime evidence profile is not permitted');
   }
-  const embeddedPackageSet = publicationVerificationPackageSet(value.platform_publication);
-  validatePublicationVerification(value.platform_publication, embeddedPackageSet);
+  validateReleaseVerification(value.platform_release);
   validateProductBuild(value.product_build, value.profile);
   exactKeys(value.runtime, [
     'target', 'rust_toolchain', 'cargo_version', 'rustc_version', 'binary', 'sbom',
@@ -381,12 +298,11 @@ export function validateRuntimeEvidence(value, root, { target, requireRelease = 
   return structuredClone(value);
 }
 
-export function createRuntimeProvenance({ publicationVerification, packageSet, product, target, runtimePath, metadata }) {
-  packageSet = validatePackageSet(packageSet);
-  publicationVerification = validatePublicationVerification(publicationVerification, packageSet);
+export function createRuntimeProvenance({ releaseVerification, product, target, runtimePath, metadata }) {
+  releaseVerification = validateReleaseVerification(releaseVerification);
   targetIdentity(target);
   validateProductBuild(product, product.ref.startsWith('refs/tags/') ? 'release' : 'development');
-  const registryPackages = validateCargoMetadata(metadata, packageSet)
+  const registryPackages = validateCargoMetadata(metadata, releaseVerification)
     .map((entry) => ({
       name: entry.name,
       version: entry.version,
@@ -400,12 +316,10 @@ export function createRuntimeProvenance({ publicationVerification, packageSet, p
     target,
     rust_toolchain: rustToolchain,
     upstream: {
-      release_tag: publicationVerification.release_tag,
-      platform_version: publicationVerification.platform_version,
-      source_commit: publicationVerification.source_commit,
-      publication: publicationVerification.publication,
-      contract_set_sha256: publicationVerification.contract_set_sha256,
-      rust_crates: publicationVerification.rust_crates,
+      release_tag: releaseVerification.release_tag,
+      platform_version: releaseVerification.platform_version,
+      manifest: releaseVerification.manifest,
+      artifacts: releaseVerification.artifacts,
     },
     resolved_registry_packages: registryPackages,
     runtime: descriptor(runtimePath, 'redevplugin-runtime'),
@@ -526,18 +440,6 @@ export function descriptor(pathname, name = path.basename(pathname)) {
   }
 }
 
-function publicationVerificationPackageSet(value) {
-  return validatePackageSet({
-    schema_version: 'redevplugin.platform_package_set.v3',
-    platform_version: value.platform_version,
-    go_module: { module: value.go_module.module, version: value.go_module.version },
-    npm_packages: value.npm_packages.map(({ name, version }) => ({ name, version })),
-    rust_crates: value.rust_crates.map(({ name, version }, index) => ({ name, version, role: expectedRust[index][1] })),
-    contract_registry_version: 'contract-registry-v2',
-    contract_set_sha256: value.contract_set_sha256,
-  });
-}
-
 export function projectRuntimeCargoMetadata(metadata) {
   if (!metadata || typeof metadata !== 'object' || !Array.isArray(metadata.packages)
       || !metadata.resolve || typeof metadata.resolve !== 'object'
@@ -600,7 +502,7 @@ export function projectRuntimeCargoMetadata(metadata) {
   };
 }
 
-function validateCargoMetadata(metadata, packageSet) {
+function validateCargoMetadata(metadata, releaseVerification) {
   if (!metadata || typeof metadata !== 'object' || !Array.isArray(metadata.packages)
       || !metadata.resolve || typeof metadata.resolve !== 'object'
       || typeof metadata.resolve.root !== 'string' || !Array.isArray(metadata.workspace_members)) {
@@ -612,24 +514,21 @@ function validateCargoMetadata(metadata, packageSet) {
       fail('Cargo metadata package identity is invalid');
     }
   }
-  const runtimeCoordinate = packageSet.rust_crates.find(({ role }) => role === 'runtime');
-  const runtimeMatches = metadata.packages.filter((entry) => entry.name === runtimeCoordinate.name
-    && entry.version === runtimeCoordinate.version);
+  const runtimeArtifact = releaseVerification.artifacts.find(({ name }) => name === 'crate:redevplugin-runtime');
+  if (!runtimeArtifact) fail('release manifest is missing the runtime crate');
+  const runtimeVersion = releaseVerification.platform_version;
+  const runtimeMatches = metadata.packages.filter((entry) => entry.name === 'redevplugin-runtime'
+    && entry.version === runtimeVersion);
   if (runtimeMatches.length !== 1 || metadata.resolve.root !== runtimeMatches[0].id
       || metadata.workspace_members.length !== 1 || metadata.workspace_members[0] !== runtimeMatches[0].id) {
     fail('Cargo metadata root is not the exact published runtime crate');
   }
-  const packageCoordinates = new Map(packageSet.rust_crates.map((coordinate) => [coordinate.name, coordinate]));
   const firstParty = metadata.packages.filter(({ name }) => name.startsWith('redevplugin-'));
   const actualRuntimeRust = firstParty
     .map(({ name, version }) => `${name}@${version}`)
     .sort();
   const expectedRuntimeCoordinates = expectedRuntimeRust
-    .map((name) => {
-      const coordinate = packageCoordinates.get(name);
-      if (!coordinate) fail(`package set is missing runtime dependency ${name}`);
-      return `${coordinate.name}@${coordinate.version}`;
-    })
+    .map((name) => `${name}@${runtimeVersion}`)
     .sort();
   if (JSON.stringify(actualRuntimeRust) !== JSON.stringify(expectedRuntimeCoordinates)) {
     fail('Cargo metadata ReDevPlugin runtime crate set mismatch');
@@ -737,23 +636,22 @@ function required(options, name) {
 
 async function main(args) {
   const [command, ...rest] = args;
+  if (command === 'verify-release-manifest' && rest.length === 2) {
+    const [manifestPath, tag] = rest;
+    const manifest = validateReleaseManifest(readJSON(manifestPath, 'platform release manifest'), { tag });
+    process.stdout.write(`${manifest.platform_version}\n`);
+    return;
+  }
   if (command === 'project-runtime-cargo-metadata' && rest.length === 2) {
     const [input, output] = rest;
     const metadata = readJSON(input, 'raw Cargo metadata', 8 * 1024 * 1024);
     writeJSON(output, projectRuntimeCargoMetadata(metadata));
     return;
   }
-  if (command === 'verify-publication' && rest.length === 3) {
-    const [publicationPath, packageSetPath, tag] = rest;
-    const publication = validatePublication(readJSON(publicationPath, 'platform publication'), readJSON(packageSetPath, 'package set'), { tag });
-    process.stdout.write(`${publication.source_commit}\n`);
-    return;
-  }
-  if (command === 'write-publication-verification' && rest.length === 4) {
-    const [publicationPath, packageSetPath, tag, output] = rest;
-    const packageSet = readJSON(packageSetPath, 'package set');
-    const publication = readJSON(publicationPath, 'platform publication');
-    writeJSON(output, createPublicationVerification(publication, packageSet, tag, publicationPath));
+  if (command === 'write-release-verification' && rest.length === 3) {
+    const [manifestPath, tag, output] = rest;
+    const manifest = readJSON(manifestPath, 'platform release manifest');
+    writeJSON(output, createReleaseVerification(manifest, tag, manifestPath));
     return;
   }
   if (command === 'verify-elf' && rest.length === 2) {
@@ -762,8 +660,7 @@ async function main(args) {
   }
   if (command === 'write-build-evidence') {
     const options = parseOptions(rest);
-    const packageSet = readJSON(required(options, '--package-set'), 'package set');
-    const publication = readJSON(required(options, '--publication-verification'), 'publication verification');
+    const releaseVerification = readJSON(required(options, '--release-verification'), 'release verification');
     const metadata = readJSON(required(options, '--cargo-metadata'), 'Cargo metadata');
     const product = {
       repository: required(options, '--product-repository'),
@@ -772,8 +669,7 @@ async function main(args) {
       source_commit: required(options, '--product-commit'),
     };
     const provenance = createRuntimeProvenance({
-      publicationVerification: publication,
-      packageSet,
+      releaseVerification,
       product,
       target: required(options, '--target'),
       runtimePath: required(options, '--runtime'),
@@ -795,8 +691,7 @@ async function main(args) {
     const marker = createRuntimeEvidence({
       profile: required(options, '--profile'),
       target: required(options, '--target'),
-      publicationVerification: readJSON(required(options, '--publication-verification'), 'publication verification'),
-      packageSet: readJSON(required(options, '--package-set'), 'package set'),
+      releaseVerification: readJSON(required(options, '--release-verification'), 'release verification'),
       runtimePath: required(options, '--runtime'),
       sbomPath: required(options, '--sbom'),
       provenancePath: required(options, '--provenance'),

@@ -37,8 +37,6 @@ Commands:
               Stop an already-running Desktop-managed runtime daemon.
   desktop-model-source
               Connect Desktop Local Environment models to runtime-control.
-  plugin-state-recovery
-              Inspect or explicitly recover copied plugin state.
   local-authority
               Maintain the stopped Local UI durable authority store.
   env         Inspect and plan Redeven environment lifecycle operations.
@@ -94,25 +92,6 @@ Usage:
 Flags:
   --state-root <path>              State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
   --probe-timeout <duration>       Runtime health probe timeout.
-`, "\n")
-}
-
-func pluginStateRecoveryHelpText() string {
-	return strings.TrimLeft(`
-redeven plugin-state-recovery
-
-Inspect an eligible copied ReDevPlugin state root or explicitly retain it as
-an inactive recovery archive and create a fresh empty active generation.
-
-Usage:
-  redeven plugin-state-recovery inspect --state-root <path>
-  redeven plugin-state-recovery recover --state-root <path> \
-    --expected-plan-sha256 <sha256> \
-    --confirm-retain-archive-and-reset-active-state
-
-The command takes the same agent.lock as the runtime. Recover rejects a stale
-plan digest and never activates plugins, grants, settings, secrets, or storage
-from the retained archive.
 `, "\n")
 }
 
@@ -810,8 +789,6 @@ func lookupHelpText(args []string) (string, bool) {
 		return desktopRuntimeStopHelpText(), true
 	case "desktop-model-source":
 		return desktopModelSourceHelpText(), true
-	case "plugin-state-recovery", "plugin-state-recovery inspect", "plugin-state-recovery recover":
-		return pluginStateRecoveryHelpText(), true
 	case "local-authority", "local-authority rotate-key":
 		return localAuthorityHelpText(), true
 	case "env":

@@ -10,7 +10,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/floegence/redevplugin/v2/pkg/capabilitycontract"
+	"github.com/floegence/redevplugin/v3/pkg/capabilitycontract"
 )
 
 // artifactFS contains only public verification material. Private signing keys

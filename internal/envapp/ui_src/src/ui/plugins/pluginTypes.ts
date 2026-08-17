@@ -324,7 +324,6 @@ export type PluginManagementCommand =
       type: 'install';
       pluginID: string;
       source: 'official_catalog';
-      approvedPermissionIDs?: readonly string[];
     }
   | { type: 'enable'; pluginInstanceID: string; expectedManagementRevision: number }
   | { type: 'disable'; pluginInstanceID: string; expectedManagementRevision: number }

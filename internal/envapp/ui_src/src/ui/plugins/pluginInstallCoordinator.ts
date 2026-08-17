@@ -27,7 +27,6 @@ export type PluginInstallCoordinator = Readonly<{
   start: (
     pluginID: string,
     pluginInstanceID: string,
-    approvedPermissionIDs?: readonly string[],
   ) => Promise<void>;
   resume: () => Promise<void>;
   retry: (pluginInstanceID: string) => Promise<void>;
@@ -150,7 +149,6 @@ export function createPluginInstallCoordinator(options: Readonly<{
   const start = (
     pluginID: string,
     pluginInstanceID: string,
-    approvedPermissionIDs: readonly string[] = [],
   ): Promise<void> => runExclusive(pluginInstanceID, async () => {
     const controller = new AbortController();
     controllers.get(pluginInstanceID)?.abort('Plugin installation submission superseded');
@@ -168,7 +166,6 @@ export function createPluginInstallCoordinator(options: Readonly<{
           type: 'install',
           pluginID,
           source: 'official_catalog',
-          ...(approvedPermissionIDs.length > 0 ? { approvedPermissionIDs } : {}),
         },
         options.createRequestID(),
         { signal: controller.signal },

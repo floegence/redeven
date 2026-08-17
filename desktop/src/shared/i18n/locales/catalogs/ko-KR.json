@@ -27,7 +27,13 @@
       "errorInvalidEncoding": "이 텍스트 파일은 유효한 UTF-8로 인코딩되어 있지 않습니다.",
       "errorUploadFailed": "업로드하지 못했습니다. 다시 시도하세요.",
       "errorUnavailable": "선택한 모델에서는 첨부 파일을 사용할 수 없습니다.",
-      "lines": { "kind": "plural", "forms": { "one": "{count}줄", "other": "{count}줄" } },
+      "lines": {
+        "kind": "plural",
+        "forms": {
+          "one": "{count}줄",
+          "other": "{count}줄"
+        }
+      },
       "added": "{name} 파일을 추가했습니다.",
       "converted": "긴 텍스트를 {name} 파일로 변환했습니다.",
       "uploaded": "{name} 파일을 업로드했습니다.",
@@ -690,16 +696,42 @@
     "useDarkTheme": "다크 테마 사용",
     "useLightTheme": "라이트 테마 사용",
     "themePicker": {
-      "openLabel": "화면 모양", "title": "화면 모양", "closeLabel": "화면 모양 설정 닫기", "modeLabel": "색상 모드",
-      "mode": { "system": "시스템", "light": "라이트", "dark": "다크" },
+      "openLabel": "화면 모양",
+      "title": "화면 모양",
+      "closeLabel": "화면 모양 설정 닫기",
+      "modeLabel": "색상 모드",
+      "mode": {
+        "system": "시스템",
+        "light": "라이트",
+        "dark": "다크"
+      },
       "systemResolvedLight": "현재 시스템에서 라이트 모드를 사용 중입니다",
       "systemResolvedDark": "현재 시스템에서 다크 모드를 사용 중입니다",
-      "themesLabel": "테마", "changeFailed": "화면 모양을 업데이트하지 못했습니다. 다시 시도하세요.",
+      "themesLabel": "테마",
+      "changeFailed": "화면 모양을 업데이트하지 못했습니다. 다시 시도하세요.",
       "presets": {
-        "classic-light": "클래식 라이트", "paper": "페이퍼", "mist": "미스트", "meadow": "메도우", "citrus": "시트러스", "lilac": "라일락",
-        "light-plus": "Light+", "quiet-light": "Quiet Light", "solarized-light": "Solarized Light", "github-light": "GitHub Light", "hc-light": "고대비 라이트",
-        "classic-dark": "클래식 다크", "ink": "잉크", "slate": "슬레이트", "forest": "포레스트", "ember": "엠버", "ocean": "오션",
-        "dark-plus": "Dark+", "monokai": "Monokai", "nord": "Nord", "dracula": "Dracula", "abyss": "어비스"
+        "classic-light": "클래식 라이트",
+        "paper": "페이퍼",
+        "mist": "미스트",
+        "meadow": "메도우",
+        "citrus": "시트러스",
+        "lilac": "라일락",
+        "light-plus": "Light+",
+        "quiet-light": "Quiet Light",
+        "solarized-light": "Solarized Light",
+        "github-light": "GitHub Light",
+        "hc-light": "고대비 라이트",
+        "classic-dark": "클래식 다크",
+        "ink": "잉크",
+        "slate": "슬레이트",
+        "forest": "포레스트",
+        "ember": "엠버",
+        "ocean": "오션",
+        "dark-plus": "Dark+",
+        "monokai": "Monokai",
+        "nord": "Nord",
+        "dracula": "Dracula",
+        "abyss": "어비스"
       }
     }
   },
@@ -768,8 +800,6 @@
     "attention": "확인 필요"
   },
   "issue": {
-    "pluginStateRecoveryTitle": "플러그인 상태 복구 검토",
-    "pluginStateRecoveryMessage": "Redeven이 복사된 플러그인 상태를 발견했습니다. 안전하게 시작하려면 기존 상태를 아카이브로 보존하는 복구가 먼저 필요합니다.",
     "remoteEnvironmentInvalidTitle": "환경 확인 URL",
     "remoteEnvironmentOpenTitle": "해당 환경을 열 수 없습니다.",
     "sshEnvironmentOpenTitle": "해당 SSH 환경을 열 수 없습니다.",
@@ -785,22 +815,6 @@
     "startupInvalidTitle": "로컬 환경 시작에 설정이 필요합니다.",
     "startupFailedTitle": "로컬 환경 시작에 실패했습니다.",
     "localEnvironmentAttentionTitle": "로컬 환경에 주의가 필요합니다."
-  },
-  "pluginStateRecovery": {
-    "title": "플러그인 상태 복구 검토",
-    "summary": "이 플러그인 상태는 파일 시스템 식별 정보가 다른 위치에서 복사되거나 복원되었습니다. Redeven은 복구를 위해 기존 상태를 보존한 뒤 새로운 빈 플러그인 세대에서 시작합니다.",
-    "archiveTitle": "이전 상태 보존",
-    "archiveBody": "전체 원본 상태를 비활성 복구 아카이브로 이동합니다.",
-    "freshTitle": "새 상태로 시작",
-    "freshBody": "아카이브에 있는 설치된 플러그인, 권한 부여 내역, 설정, 비밀 정보 및 저장소는 활성화되지 않습니다.",
-    "retentionTitle": "복구 증거 유지",
-    "retentionBody": "Redeven은 보존된 아카이브를 어떤 경우에도 자동으로 삭제하지 않습니다.",
-    "entriesLabel": "원본 항목 수",
-    "sizeLabel": "원본 바이트 수",
-    "planLabel": "복구 계획",
-    "confirm": "상태를 보관하고 다시 시작",
-    "failed": "플러그인 상태를 복구하지 못했습니다.",
-    "completed": "플러그인 상태를 보관하고 새 플러그인 세대로 로컬 환경을 다시 시작했습니다."
   },
   "blockedPage": {
     "stateDirLockedAttachTitle": "Redeven이 다른 곳에서 시작 중입니다",

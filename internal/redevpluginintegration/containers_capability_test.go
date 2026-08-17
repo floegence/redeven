@@ -12,9 +12,9 @@ import (
 
 	"github.com/floegence/redeven/internal/capabilities/containers"
 	redevpluginartifacts "github.com/floegence/redeven/spec/redevplugin"
-	"github.com/floegence/redevplugin/v2/pkg/capability"
-	"github.com/floegence/redevplugin/v2/pkg/capabilitycontract"
-	"github.com/floegence/redevplugin/v2/pkg/observability"
+	"github.com/floegence/redevplugin/v3/pkg/capability"
+	"github.com/floegence/redevplugin/v3/pkg/capabilitycontract"
+	"github.com/floegence/redevplugin/v3/pkg/observability"
 )
 
 const capabilityTestEndpointID containers.EndpointID = "endpoint_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"

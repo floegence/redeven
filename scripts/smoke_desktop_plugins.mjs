@@ -77,13 +77,6 @@ export function assertExtensionIOEvidence(evidence, { requireRevoke = true, requ
   if (!Number.isInteger(v9.websocket?.messages) || v9.websocket.messages < 100) throw new Error('v9 WebSocket evidence is incomplete');
   if (!Number.isInteger(v9.tcp?.exchanges) || v9.tcp.exchanges < 100) throw new Error('v9 TCP evidence is incomplete');
   if (!Number.isInteger(v9.udp?.datagrams) || v9.udp.datagrams < 100) throw new Error('v9 UDP evidence is incomplete');
-  const frozen = evidence?.frozen_v1_1_4;
-  if (!String(frozen?.package ?? '').endsWith('.redevplugin')
-    || !/^[0-9a-f]{64}$/u.test(String(frozen.expected_sha256 ?? ''))
-    || frozen.expected_sha256 !== frozen.observed_sha256 || frozen.rpc_ok !== true
-    || !String(frozen.plugin_instance_id ?? '').trim()) {
-    throw new Error('frozen v1.1.4 compatibility evidence is incomplete');
-  }
   if (requireRevoke) {
     const revoke = evidence?.revoke;
     if (revoke?.disabled !== true || revoke.pending_rpc_rejected !== true
@@ -333,7 +326,7 @@ async function verifyDisabledUpdateIntent(page, sessionHeaders, initialCatalog, 
     if (response.status !== 200) return null;
     const catalog = response.body?.data ?? response.body;
     return installedPlugins(catalog).find((plugin) => (
-      plugin.plugin_instance_id === initiallyEnabled.plugin_instance_id && plugin.enable_state === 'disabled'
+      plugin.plugin_instance_id === initiallyEnabled.plugin_instance_id && plugin.enable_state === 'disabled_by_user'
     )) ? catalog : null;
   }, 30_000, 'user-disabled plugin state');
   const disabled = installedPlugins(disabledCatalog).find(
@@ -350,7 +343,7 @@ async function verifyDisabledUpdateIntent(page, sessionHeaders, initialCatalog, 
     if (response.status !== 200) return null;
     const catalog = response.body?.data ?? response.body;
     const plugin = installedPlugins(catalog).find((candidate) => candidate.plugin_instance_id === disabled.plugin_instance_id);
-    return plugin?.enable_state === 'disabled' && plugin.management_revision > disabled.management_revision ? catalog : null;
+    return plugin?.enable_state === 'disabled_by_user' && plugin.management_revision > disabled.management_revision ? catalog : null;
   }, 120_000, 'disabled intent after signed release update');
   const preserved = installedPlugins(preservedCatalog).find(
     (plugin) => plugin.plugin_instance_id === initiallyEnabled.plugin_instance_id,
@@ -406,12 +399,9 @@ async function installUploadedSmokePlugin(page, sessionHeaders, config, pluginRe
   pluginResponses.push({ method: 'POST', pathname: '/_redevplugin/api/plugins/external-packages/upload/inspect', ...inspectionResponse });
   if (inspectionResponse.status !== 200) throw new Error(`I/O package inspection failed: ${JSON.stringify(inspectionResponse)}`);
   const inspection = inspectionResponse.body?.data ?? inspectionResponse.body;
-  const approvedPermissionIDs = [...new Set((inspection.security_summary?.permissions ?? []).map((permission) => permission.permission_id))];
   const installResponse = await requestPluginJSON(page, '/_redevplugin/api/plugins/external-packages/install', {
     inspection_id: inspection.inspection_id,
     expected_package_sha256: inspection.inspected_hashes.package_sha256,
-    activate_after_install: true,
-    approved_permission_ids: approvedPermissionIDs,
   }, sessionHeaders);
   pluginResponses.push({ method: 'POST', pathname: '/_redevplugin/api/plugins/external-packages/install', ...installResponse });
   if (installResponse.status !== 200) throw new Error(`I/O package install failed: ${JSON.stringify(installResponse)}`);
@@ -419,42 +409,8 @@ async function installUploadedSmokePlugin(page, sessionHeaders, config, pluginRe
     performed: true,
     enabledCount: 1,
     package_sha256: inspection.inspected_hashes.package_sha256,
-    approved_permission_ids: approvedPermissionIDs,
     plugin_instance_id: installResponse.body?.data?.plugin?.plugin_instance_id ?? installResponse.body?.plugin?.plugin_instance_id,
   };
-}
-
-async function installCompatibilityPackage(page, sessionHeaders, packagePath, pluginResponses) {
-  const bytes = (await fs.readFile(packagePath)).toString('base64');
-  const inspectionResponse = await page.evaluate(async (payload) => {
-    const raw = Uint8Array.from(atob(payload.bytes), (value) => value.charCodeAt(0));
-    const response = await fetch('/_redevplugin/api/plugins/external-packages/upload/inspect', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/vnd.redevplugin.package+zip',
-        'x-redevplugin-csrf': payload.csrf,
-        'x-redeven-plugin-session': payload.pluginSession,
-      },
-      body: raw,
-    });
-    return { status: response.status, body: await response.json().catch(() => null) };
-  }, {
-    bytes,
-    csrf: sessionHeaders['x-redevplugin-csrf'],
-    pluginSession: sessionHeaders['x-redeven-plugin-session'],
-  });
-  pluginResponses.push({ method: 'POST', pathname: '/_redevplugin/api/plugins/external-packages/upload/inspect', ...inspectionResponse });
-  if (inspectionResponse.status !== 200) throw new Error(`frozen v1.1.4 inspection failed: ${JSON.stringify(inspectionResponse)}`);
-  const inspection = inspectionResponse.body?.data ?? inspectionResponse.body;
-  const installResponse = await requestPluginJSON(page, '/_redevplugin/api/plugins/external-packages/install', {
-    inspection_id: inspection.inspection_id,
-    expected_package_sha256: inspection.inspected_hashes.package_sha256,
-    activate_after_install: true,
-    approved_permission_ids: [...new Set((inspection.security_summary?.permissions ?? []).map((permission) => permission.permission_id))],
-  }, sessionHeaders);
-  pluginResponses.push({ method: 'POST', pathname: '/_redevplugin/api/plugins/external-packages/install', ...installResponse });
-  if (installResponse.status !== 200) throw new Error(`frozen v1.1.4 install failed: ${JSON.stringify(installResponse)}`);
-  return installResponse.body?.data?.plugin?.plugin_instance_id ?? installResponse.body?.plugin?.plugin_instance_id;
 }
 
 async function verifyIOSmokeRevoke(page, frame, sessionHeaders, catalog, config, pluginResponses, pluginInstanceID) {
@@ -492,7 +448,7 @@ async function verifyIOSmokeRevoke(page, frame, sessionHeaders, catalog, config,
     const response = await requestPluginJSON(page, '/_redevplugin/api/plugins/catalog/query', {}, sessionHeaders);
     if (response.status !== 200) return null;
     const next = response.body?.data ?? response.body;
-    return installedPlugins(next).find((item) => item.plugin_instance_id === plugin.plugin_instance_id && item.enable_state === 'disabled') ?? null;
+    return installedPlugins(next).find((item) => item.plugin_instance_id === plugin.plugin_instance_id && item.enable_state === 'disabled_by_user') ?? null;
   }, 30_000, 'v9 disabled state');
   const enableResponse = await requestPluginJSON(page, '/_redevplugin/api/plugins/enable', {
     plugin_instance_id: disabled.plugin_instance_id,
@@ -541,21 +497,18 @@ async function ensureInitialEnabledPlugin(page, sessionHeaders, config, pluginRe
 
   if (config.ioPackagePath) {
     const installed = await installUploadedSmokePlugin(page, sessionHeaders, config, pluginResponses);
-    const frozenPluginInstanceID = await installCompatibilityPackage(page, sessionHeaders, config.frozenPackagePath, pluginResponses);
-    const expectedPluginInstanceIDs = [installed.plugin_instance_id, frozenPluginInstanceID];
-    if (expectedPluginInstanceIDs.some((pluginInstanceID) => !String(pluginInstanceID ?? '').trim())) {
-      throw new Error(`smoke package installation omitted plugin identity: ${JSON.stringify(expectedPluginInstanceIDs)}`);
+    if (!String(installed.plugin_instance_id ?? '').trim()) {
+      throw new Error('smoke package installation omitted plugin identity');
     }
     const enabled = await waitFor(async () => {
       const response = await queryCatalog();
       if (response.status !== 200) return null;
       const catalog = response.body?.data ?? response.body;
       const active = enabledPlugins(catalog);
-      return expectedPluginInstanceIDs.every((pluginInstanceID) => active.some((plugin) => (
-        plugin.plugin_instance_id === pluginInstanceID && plugin.action_state?.can_open === true
-      ))) ? catalog : null;
-    }, 120_000, 'v9 and frozen plugin activation');
-    return { ...installed, frozen_plugin_instance_id: frozenPluginInstanceID, enabledCount: enabledPlugins(enabled).length };
+      return active.some((plugin) => plugin.plugin_instance_id === installed.plugin_instance_id
+        && plugin.action_state?.can_open === true) ? catalog : null;
+    }, 120_000, 'v9 plugin activation');
+    return { ...installed, enabledCount: enabledPlugins(enabled).length };
   }
 
   const openCenter = page.locator('[data-plugin-center-market-action]').first();
@@ -1248,19 +1201,9 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
   let ioEvidence = null;
   if (config.ioPackagePath) {
     const workerResult = workerResultFromRPCResponse(rpc.result);
-    const frozenBytes = await fs.readFile(config.frozenPackagePath);
-    const frozenObservedHash = createHash('sha256').update(frozenBytes).digest('hex');
-    const frozenSums = await fs.readFile(config.frozenSHA256SumsPath, 'utf8');
-    const frozenExpectedHash = frozenSums.split('\n').map((line) => line.trim().split(/\s+/u))
-      .find(([, name]) => name === 'worker.redevplugin')?.[0];
-    if (!/^[0-9a-f]{64}$/u.test(String(frozenExpectedHash ?? ''))) {
-      throw new Error('frozen v1.1.4 SHA256SUMS does not contain worker.redevplugin');
-    }
     const initialEvidence = config.phase === 'cold_restart' && config.initialOutput
       ? JSON.parse(await fs.readFile(config.initialOutput, 'utf8')).io_evidence
       : null;
-    const frozenPluginInstanceID = bootstrap.frozen_plugin_instance_id
-      ?? initialEvidence?.frozen_v1_1_4?.plugin_instance_id;
     ioEvidence = {
       linux_target: {
         os: config.linuxTarget?.os,
@@ -1281,13 +1224,6 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
         tcp: workerResult.tcp,
         udp: workerResult.udp,
       },
-      frozen_v1_1_4: {
-        package: 'worker.redevplugin',
-        plugin_instance_id: frozenPluginInstanceID,
-        expected_sha256: frozenExpectedHash,
-        observed_sha256: frozenObservedHash,
-        rpc_ok: false,
-      },
       revoke: disabledUpdateIntent,
       cold_restart: config.phase === 'cold_restart' ? {
         runtime_restarted: true,
@@ -1295,46 +1231,6 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
         enabled_after_restart: bootstrap.enabledCount > 0,
       } : null,
     };
-    const surfaceHost = page.locator('[data-plugin-surface-host]').first();
-    if (await surfaceHost.count() > 0) {
-      const closeSurface = surfaceHost.locator('xpath=ancestor::*[@data-redeven-plugin-activity-window="true"]').getByRole('button', { name: /^(?:Close|关闭)$/u }).first();
-      if (await closeSurface.count() > 0) {
-        await closeSurface.click();
-        await surfaceHost.waitFor({ state: 'detached', timeout: 10_000 });
-      }
-    }
-    const frozenPanel = page.locator('[data-plugin-launcher-backdrop]').first();
-    if (!await frozenPanel.isVisible().catch(() => false)) {
-      await visiblePluginTrigger().click();
-      await frozenPanel.waitFor({ state: 'visible', timeout: 10_000 });
-    }
-    const frozenInventoryKey = `instance:${frozenPluginInstanceID}`;
-    const frozenTile = frozenPanel.locator(
-      `[data-plugin-panel-tile=${JSON.stringify(frozenInventoryKey)}]`,
-    ).first();
-    if (await frozenTile.count() > 0) {
-      const frozenRPCStart = pluginResponses.length;
-      await frozenTile.click();
-      const frozenFrame = await waitFor(async () => {
-        const iframe = page.locator('[data-plugin-surface-iframe]').first();
-        if (await iframe.count() === 0) return null;
-        const handle = await iframe.elementHandle();
-        return handle?.contentFrame() ?? null;
-      }, 30_000, 'frozen v1.1.4 surface');
-      await waitFor(async () => (await frozenFrame.locator('body').innerText()).trim().length > 0, 30_000, 'frozen v1.1.4 surface body');
-      const frozenRPC = await waitFor(() => pluginResponses.slice(frozenRPCStart).find((entry) => (
-        entry.pathname.endsWith('/plugins/rpc') && entry.status === 200
-        && entry.rpc_plugin_instance_id === frozenPluginInstanceID
-      )), 30_000, 'frozen v1.1.4 RPC');
-      ioEvidence.frozen_v1_1_4.rpc_ok = Boolean(frozenRPC);
-      ioEvidence.frozen_v1_1_4.rpc_method = frozenRPC.rpc_method;
-      ioEvidence.frozen_v1_1_4.surface_opened = true;
-    } else {
-      const availableTileKeys = await frozenPanel.locator('[data-plugin-panel-tile]').evaluateAll(
-        (tiles) => tiles.map((tile) => tile.getAttribute('data-plugin-panel-tile')),
-      );
-      throw new Error(`frozen v1.1.4 tile is not visible: expected ${frozenInventoryKey}, got ${JSON.stringify(availableTileKeys)}`);
-    }
     assertExtensionIOEvidence(ioEvidence, {
       requireRevoke: config.phase === 'initial',
       requireColdRestart: config.phase === 'cold_restart',

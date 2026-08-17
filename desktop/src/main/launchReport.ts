@@ -1,8 +1,4 @@
 import { parseStartupReport, type StartupReport } from './startup';
-import {
-  parseDesktopPluginStateRecoveryPlan,
-  type DesktopPluginStateRecoveryPlan,
-} from '../shared/pluginStateRecovery';
 
 export type LaunchReportDiagnostics = Readonly<{
   lock_path?: string;
@@ -41,7 +37,6 @@ export type LaunchBlockedReport = Readonly<{
   message: string;
   lock_owner?: LaunchReportLockOwner;
   diagnostics?: LaunchReportDiagnostics;
-  plugin_state_recovery?: DesktopPluginStateRecoveryPlan;
 }>;
 
 export type LaunchReport = LaunchReadyReport | LaunchBlockedReport;
@@ -84,13 +79,6 @@ export function parseLaunchReport(raw: string): LaunchReport {
 
   const lockOwnerRecord = parsed.lock_owner;
   const diagnosticsRecord = parsed.diagnostics;
-  const pluginStateRecovery = parsed.plugin_state_recovery;
-  if (code === 'plugin_state_recovery_required' && pluginStateRecovery === undefined) {
-    throw new Error('blocked launch report missing plugin_state_recovery');
-  }
-  if (code !== 'plugin_state_recovery_required' && pluginStateRecovery !== undefined) {
-    throw new Error('blocked launch report has unexpected plugin_state_recovery');
-  }
 
   return {
     status: 'blocked',
@@ -124,9 +112,6 @@ export function parseLaunchReport(raw: string): LaunchReport {
           command: normalizeOptionalString((diagnosticsRecord as Record<string, unknown>).command),
         }
       : undefined,
-    plugin_state_recovery: pluginStateRecovery === undefined
-      ? undefined
-      : parseDesktopPluginStateRecoveryPlan(pluginStateRecovery),
   };
 }
 
@@ -169,14 +154,6 @@ export function formatBlockedLaunchDiagnostics(report: LaunchBlockedReport): str
   }
   if (report.diagnostics?.target_url) {
     lines.push(`target url: ${report.diagnostics.target_url}`);
-  }
-  if (report.plugin_state_recovery) {
-    lines.push(`recovery plan sha256: ${report.plugin_state_recovery.plan_sha256}`);
-    lines.push(`recovery source snapshot sha256: ${report.plugin_state_recovery.source_snapshot_sha256}`);
-    lines.push(`recovery source entries: ${report.plugin_state_recovery.source_entry_count}`);
-    lines.push(`recovery source bytes: ${report.plugin_state_recovery.source_bytes}`);
-    lines.push(`recovery retained quarantine: ${String(report.plugin_state_recovery.has_retained_quarantine)}`);
-    lines.push(`recovery source recovery journal: ${String(report.plugin_state_recovery.has_source_recovery_journal)}`);
   }
 
   return lines.join('\n');

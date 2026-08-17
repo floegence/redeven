@@ -530,15 +530,11 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const confirmOfficialInstall = () => {
     const flow = officialInstallFlow();
     if (flow.status !== 'review_ready' || !flow.item.officialCatalog) return;
-    const approvedPermissionIDs = [...new Set(flow.inspection.security_summary.permissions
-      .filter((permission) => permission.required)
-      .map((permission) => permission.permission_id))];
     setOfficialInstallFlow({ status: 'installing', key: flow.key, item: flow.item });
     void runCommand({
       type: 'install',
       pluginID: flow.item.pluginID,
       source: 'official_catalog',
-      ...(approvedPermissionIDs.length > 0 ? { approvedPermissionIDs } : {}),
     });
   };
   const currentUpdateReviewItem = createMemo(() => {

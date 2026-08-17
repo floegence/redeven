@@ -48,7 +48,7 @@ const containersPlugin = {
     latestVersion: '2.0.0',
     stableVersion: '2.0.0',
     minRedevenVersion: '0.9.0',
-    minReDevPluginVersion: '0.6.5',
+    minReDevPluginVersion: '3.0.0',
     rolloutState: 'stable',
     defaultSurfaceID: 'containers.dashboard',
     iconFallback: 'generic',
@@ -204,7 +204,7 @@ function externalCommitForCenter(source: ExternalPluginInspection): ExternalPlug
           display_name: 'Toolbox Beta',
           version: source.version,
         },
-        api: { surface: 1, worker: 1 },
+        api: { major: 1 },
         permissions: [],
         presentation: { locales: { default: 'en-US' } },
         surfaces: [],
@@ -215,7 +215,6 @@ function externalCommitForCenter(source: ExternalPluginInspection): ExternalPlug
       installed_at: '2026-07-27T10:01:00Z',
       updated_at: '2026-07-27T10:01:00Z',
     },
-    activation: { status: 'enabled' },
     signature_assessment: source.signature_assessment,
     source_provenance: source.source_provenance,
     execution_approval: { ...source.execution_approval, state: 'user_approved' },
@@ -579,7 +578,7 @@ describe('PluginCenterView', () => {
       categories: ['infrastructure'],
       channels: ['stable'],
       repository: { provider: 'github', repository_id: 1, owner: 'example', name: 'plugin', url: 'https://github.com/example/plugin' },
-      compatibility: { min_redeven_version: '1.0.0', min_redevplugin_version: '0.7.1' },
+      compatibility: { min_redeven_version: '1.0.0', min_redevplugin_version: '3.0.0' },
       status: 'active',
       latest: [],
     }));
@@ -1296,7 +1295,7 @@ describe('PluginCenterView', () => {
       const issueEvidence = issue.querySelector('[data-plugin-issue-evidence]')?.textContent ?? '';
       for (const fact of evidence) expect(issueEvidence).toContain(fact);
       expect(issue.textContent).toContain('0.9.0');
-      expect(issue.textContent).toContain('0.6.5');
+      expect(issue.textContent).toContain('3.0.0');
     },
   );
 
@@ -1399,7 +1398,6 @@ describe('PluginCenterView', () => {
       type: 'install',
       pluginID: 'com.redeven.official.containers',
       source: 'official_catalog',
-      approvedPermissionIDs: ['containers.read'],
     }, expect.any(AbortSignal));
     expect(document.querySelector('[data-external-plugin-dialog]')).toBeNull();
   });

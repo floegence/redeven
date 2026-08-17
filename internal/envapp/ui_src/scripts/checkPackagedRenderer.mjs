@@ -203,7 +203,7 @@ function builtPluginMarketSnapshot() {
         asset: { url: builtPluginPackageURL },
         publisher_release_ref: { release_ref: builtPluginReleaseRef },
         signer_key_id: 'redeven_official_signing_2026',
-        compatibility: { min_redeven_version: '1.0.0', min_redevplugin_version: '0.7.16' },
+        compatibility: { min_redeven_version: '1.0.0', min_redevplugin_version: '3.0.0' },
       },
     }],
   };
@@ -267,7 +267,7 @@ function builtPluginMarketDetail() {
       name: 'plugin',
       url: 'https://github.com/fixture/plugin',
     },
-    compatibility: { min_redeven_version: '1.0.0', min_redevplugin_version: '0.7.1' },
+    compatibility: { min_redeven_version: '1.0.0', min_redevplugin_version: '3.0.0' },
     status: 'visible',
     latest: [{ channel: 'stable', version: builtPluginReleaseRef.version, availability_status: 'visible' }],
   };
@@ -296,23 +296,17 @@ function builtPluginInstalledPlugin() {
     management_revision: 1,
     revoke_epoch: 0,
     manifest: {
-      schema_version: 'redevplugin.manifest.v8',
+      schema_version: 'redevplugin.manifest.v9',
       publisher: { publisher_id: builtPluginReleaseRef.publisher_id, display_name: 'Fixture Publisher' },
       plugin: {
         plugin_id: builtPluginReleaseRef.plugin_id,
         display_name: 'Fixture Plugin',
         version: builtPluginReleaseRef.version,
-        api_version: 'plugin-v1',
-        min_runtime_version: '0.7.1',
-        ui_protocol_version: 'plugin-ui-v7',
       },
+      api: { major: 1 },
+      permissions: [],
       presentation: {
-        default_locale: 'en-US',
-        summary: 'A signed plugin fixture for renderer verification.',
-        description: ['This fixture exercises the signed plugin presentation path.'],
-        highlights: ['Provides deterministic renderer verification data.'],
-        keywords: ['fixture'],
-        localizations: [],
+        locales: { default: 'en-US' },
       },
       surfaces: [{
         surface_id: 'plugin.primary',
@@ -321,6 +315,8 @@ function builtPluginInstalledPlugin() {
         label: 'Fixture Surface',
         entry: 'ui/index.html',
       }],
+      workers: [],
+      methods: [],
     },
     presentation: builtPluginPresentationCatalog(),
     presentation_sha256: builtPluginPresentationSHA256,
@@ -377,9 +373,30 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
       }
       if (accessReady && requestURL.pathname === '/api/local/direct/connect_artifact') {
         jsonResponse(response, {
+          v: 1,
           plugin_session_credential: 'built-dist-plugin-session',
           channel_id: directArtifact.session.channel_id,
-          connect_artifact: directArtifact,
+          connect_artifact: JSON.stringify(directArtifact),
+          critical_scope_projection_json: '{"scope":"proxy.runtime"}',
+          spend_scope: {
+            v: 1,
+            receipt: 'r1.local.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+            artifact_digest_b64u: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+            projection_digest_b64u: 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+            launcher_origin: baseURL,
+            runtime_origin: baseURL,
+            app_origin: baseURL,
+            consumer: 'trusted',
+            target_binding: {
+              v: 1,
+              kind: 'env',
+              env_public_id: 'env_local',
+              floe_app: 'com.floegence.redeven.agent',
+              launcher_kind: 'env',
+              launcher_id: 'env_local',
+            },
+            expires_at: '2033-05-18T03:33:20Z',
+          },
         });
         return;
       }
@@ -498,8 +515,6 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
           request_id: body.request_id,
           plugin_instance_id: builtPluginInstanceID,
           release_ref: builtPluginReleaseRef,
-          activate_after_install: true,
-          approved_permission_ids: ['containers.read'],
         };
         if (!/^[0-9a-f-]{36}$/u.test(body.request_id)
           || JSON.stringify(body) !== JSON.stringify(expected)) {
@@ -841,10 +856,18 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
       const request = response.request();
       return request.method() === 'POST'
         && new URL(request.url()).pathname === '/_redevplugin/api/plugins/runtime/recover-enabled';
-    }, { timeout: 10_000 });
+    }, { timeout: 30_000 });
     await page.goto(entryURL, { waitUntil: 'load', timeout: 30_000 });
     await page.locator('#root > *').first().waitFor({ state: 'visible', timeout: 10_000 });
-    await runtimeRecoveryResponse;
+    try {
+      await runtimeRecoveryResponse;
+    } catch (error) {
+      throw new Error(`built plugin runtime recovery did not complete: ${JSON.stringify({
+        bodyText: (await page.locator('body').innerText()).slice(0, 2_000),
+        pageErrors,
+        pluginRequests,
+      })}`, { cause: error });
+    }
 
     await page.getByRole('button', { name: 'Plugins', exact: true }).click();
     const pluginCenterAction = page.locator('[data-plugin-center-market-action]');
@@ -945,8 +968,6 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
           request_id: ':requestID',
           plugin_instance_id: builtPluginInstanceID,
           release_ref: builtPluginReleaseRef,
-          activate_after_install: true,
-          approved_permission_ids: ['containers.read'],
         },
       },
       {

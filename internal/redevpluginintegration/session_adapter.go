@@ -11,9 +11,9 @@ import (
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/sessionhop"
-	"github.com/floegence/redevplugin/v2/pkg/host"
-	"github.com/floegence/redevplugin/v2/pkg/manifest"
-	"github.com/floegence/redevplugin/v2/pkg/sessionctx"
+	"github.com/floegence/redevplugin/v3/pkg/host"
+	"github.com/floegence/redevplugin/v3/pkg/manifest"
+	"github.com/floegence/redevplugin/v3/pkg/sessionctx"
 )
 
 type sessionPermissions struct {
@@ -361,7 +361,6 @@ func permissionsAllowAction(perms sessionPermissions, action host.ManagementActi
 		host.ManagementActionListIntents,
 		host.ManagementActionListPlugins,
 		host.ManagementActionListFeatures,
-		host.ManagementActionGetCompatibility,
 		host.ManagementActionListPermissionGrants,
 		host.ManagementActionGetPermissionRequirements,
 		host.ManagementActionGetSecurityPolicy,
@@ -386,7 +385,6 @@ func permissionsAllowAction(perms sessionPermissions, action host.ManagementActi
 		host.ManagementActionMintStorageHandleGrant:
 		return perms.execute
 	case host.ManagementActionDeleteRetainedData,
-		host.ManagementActionBindRetainedData,
 		host.ManagementActionCleanupExpiredRetainedData,
 		host.ManagementActionExportPluginData,
 		host.ManagementActionDeleteExportedPluginData,

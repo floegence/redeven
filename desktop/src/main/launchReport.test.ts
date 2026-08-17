@@ -142,42 +142,4 @@ describe('launchReport', () => {
     expect(diagnostics).toContain('target url: http://192.168.1.11:24000/');
   });
 
-  it('strictly parses a plugin state recovery proposal', () => {
-    const digest = 'a'.repeat(64);
-    expect(parseLaunchReport(JSON.stringify({
-      status: 'blocked',
-      code: 'plugin_state_recovery_required',
-      message: 'Plugin state recovery requires explicit review.',
-      plugin_state_recovery: {
-        plan_sha256: digest,
-        root_identity_sha256: 'b'.repeat(64),
-        source_snapshot_sha256: 'c'.repeat(64),
-        source_entry_count: 96,
-        source_bytes: 1132957,
-        has_retained_quarantine: true,
-        has_source_recovery_journal: false,
-      },
-    }))).toMatchObject({
-      status: 'blocked',
-      code: 'plugin_state_recovery_required',
-      plugin_state_recovery: {
-        plan_sha256: digest,
-        source_entry_count: 96,
-      },
-    });
-  });
-
-  it.each([
-    undefined,
-    { plan_sha256: 'A'.repeat(64), root_identity_sha256: 'b'.repeat(64), source_snapshot_sha256: 'c'.repeat(64), source_entry_count: 1, source_bytes: 0, has_retained_quarantine: false, has_source_recovery_journal: false },
-    { plan_sha256: 'a'.repeat(64), root_identity_sha256: 'b'.repeat(64), source_snapshot_sha256: 'c'.repeat(64), source_entry_count: 0, source_bytes: 0, has_retained_quarantine: false, has_source_recovery_journal: false },
-    { plan_sha256: 'a'.repeat(64), root_identity_sha256: 'b'.repeat(64), source_snapshot_sha256: 'c'.repeat(64), source_entry_count: 1, source_bytes: 0, has_retained_quarantine: false, has_source_recovery_journal: false, archive_path: '/secret' },
-  ])('rejects malformed plugin state recovery proposal %#', (pluginStateRecovery) => {
-    expect(() => parseLaunchReport(JSON.stringify({
-      status: 'blocked',
-      code: 'plugin_state_recovery_required',
-      message: 'review required',
-      ...(pluginStateRecovery === undefined ? {} : { plugin_state_recovery: pluginStateRecovery }),
-    }))).toThrow(/plugin_state_recovery/iu);
-  });
 });

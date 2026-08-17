@@ -35,28 +35,14 @@ JSON, query, plugin IPC, release metadata, and capability arguments cannot
 override any owner field.
 
 Persistent state follows ReDevPlugin `user` or `environment` scope; short-lived
-authority binds all four hashes. The released migration supplies the only active
-owner-scoped generation and retains recognized unprovable legacy state in
-quarantine. Unknown or invalid state blocks startup without mutation. Session
-removal uses the released durable four-hash fence and drain, and Redeven removes
-authentication only after exact acknowledgement. Guessed owner sweeps and local
-teardown registries are prohibited.
-
-Copied-root recovery is a separate, explicit maintenance action. Normal startup
-first fails closed, then the released inspector may project a recovery plan only
-for an exact supported copied-root state. Inspection is read-only. The proposal
-contains digests, counts, sizes, and retained-state flags, never absolute state or
-archive paths. Desktop binds it to the exact Local Environment, and recovery must
-hold that environment's runtime lock and present the exact reviewed plan digest.
-Cancellation has zero mutation. A stale digest, concurrent runtime, snapshot
-change, unsupported state, or unverifiable commit fails closed and requires a
-new inspection where applicable.
-
-Successful recovery preserves the complete source as an inactive archive and
-commits a fresh empty generation atomically. Redeven verifies both outcomes and
-reuses only the fresh generation on restart. Archived packages, grants, policy,
-settings, secrets, storage, and runtime state are not reactivated, and
-Redeven never deletes the archive or edits the migration journal.
+authority binds all four hashes. ReDevPlugin owns the current-only
+`redevplugin_control_v3` root and schema. Redeven supplies the explicit root but
+does not create an owner-scoped generation, inspect legacy files, or provide a
+copied-root recovery path. An unknown, invalid, legacy, drifted, tampered, or
+future root blocks startup without mutation. Session removal uses the released
+durable four-hash fence and drain, and Redeven removes authentication only after
+exact acknowledgement. Guessed owner sweeps and local teardown registries are
+prohibited.
 
 ## HTTP and direct authorization
 
@@ -232,8 +218,6 @@ tokens, weaken route policy, edit opaque state, or replace released brokers.
 # Evidence
 
 - `redeven:internal/redevpluginintegration/session_adapter.go:1` - Derives exact owner hashes and bounded permission cache entries.
-- `redeven:internal/redevpluginintegration/owner_scope_recovery_test.go:1` - Proves inspection is read-only and exact recovery retains the source while opening an empty reusable generation.
-- `redeven:cmd/redeven/plugin_state_recovery_test.go:1` - Proves confirmation, digest, runtime-lock, and path-redaction behavior.
 - `redeven:internal/redevpluginintegration/security_adapter.go:1` - Implements the four-step web security contract.
 - `redeven:internal/redevpluginintegration/adapters_test.go:1` - Covers origin, CSRF, session, and action denial.
 - `redeven:internal/redevpluginintegration/release_module.go:1` - Enforces official source, signature, revocation, and Host-known capability requirements.

@@ -275,19 +275,6 @@ export function buildControlPlaneIssue(
 }
 
 export function buildBlockedLaunchIssue(report: LaunchBlockedReport): DesktopWelcomeIssue {
-  if (report.code === 'plugin_state_recovery_required' && report.plugin_state_recovery) {
-    return {
-      scope: 'startup',
-      code: report.code,
-      title: 'Review plugin state recovery',
-      title_key: 'issue.pluginStateRecoveryTitle',
-      message: 'Redeven found copied plugin state that cannot be trusted on this device until you review a retained-archive recovery.',
-      message_key: 'issue.pluginStateRecoveryMessage',
-      diagnostics_copy: formatBlockedLaunchDiagnostics(report),
-      target_url: '',
-      plugin_state_recovery: report.plugin_state_recovery,
-    };
-  }
   if (report.code === 'state_dir_locked') {
     if (report.lock_owner?.local_ui_enabled === true) {
       return {

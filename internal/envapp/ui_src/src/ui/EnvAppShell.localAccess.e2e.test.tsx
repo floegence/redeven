@@ -175,7 +175,7 @@ const officialContainersCatalog = {
   latestVersion: '2.0.0',
   stableVersion: '2.0.0',
   minRedevenVersion: '0.9.0',
-  minReDevPluginVersion: '0.6.5',
+  minReDevPluginVersion: '3.0.0',
   rolloutState: 'stable',
   defaultSurfaceID: 'containers.dashboard',
   iconFallback: 'generic',

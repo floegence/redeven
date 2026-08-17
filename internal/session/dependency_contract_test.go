@@ -15,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	redevplugincontracts "github.com/floegence/redevplugin/v2/pkg/contracts"
+	platformversion "github.com/floegence/redevplugin/v3/pkg/version"
 	"golang.org/x/mod/modfile"
 	"gopkg.in/yaml.v3"
 )
@@ -126,23 +126,25 @@ func TestFlowersecDependencyUsesPublishedRelease(t *testing.T) {
 	assertNoticeDependency(t, notices, flowersecCorePackage, flowersecCoreVersion, "https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/"+flowersecCoreVersion)
 }
 
-func TestReDevPluginDependenciesMatchPublishedPackageSet(t *testing.T) {
+func TestReDevPluginDependenciesMatchPublishedPlatform(t *testing.T) {
 	t.Parallel()
 
 	root := repoRootForTest(t)
-	packageSet := redevplugincontracts.PackageSet()
+	platform := platformversion.CurrentPlatformVersion()
+	goModule := "github.com/floegence/redevplugin/v3"
+	goVersion := "v" + platform
 	parsedMod, err := modfile.Parse("go.mod", []byte(readRepoFile(t, root, "go.mod")), nil)
 	if err != nil {
 		t.Fatalf("parse go.mod: %v", err)
 	}
 	var goVersions []string
 	for _, requirement := range parsedMod.Require {
-		if requirement.Mod.Path == packageSet.GoModule.Module {
+		if requirement.Mod.Path == goModule {
 			goVersions = append(goVersions, requirement.Mod.Version)
 		}
 	}
-	if len(goVersions) != 1 || goVersions[0] != packageSet.GoModule.Version {
-		t.Fatalf("ReDevPlugin Go coordinate = %v, want %s", goVersions, packageSet.GoModule.Version)
+	if len(goVersions) != 1 || goVersions[0] != goVersion {
+		t.Fatalf("ReDevPlugin Go coordinate = %v, want %s", goVersions, goVersion)
 	}
 
 	type packageManifest struct {
@@ -181,8 +183,10 @@ func TestReDevPluginDependenciesMatchPublishedPackageSet(t *testing.T) {
 		t.Fatal("Env App pnpm lock is missing the root importer")
 	}
 	notices := readRepoFile(t, root, "THIRD_PARTY_NOTICES.md")
-	npmVersions := make(map[string]string, len(packageSet.NPMPackages))
-	for _, coordinate := range packageSet.NPMPackages {
+	npmCoordinates := []string{"@floegence/redevplugin-contracts", "@floegence/redevplugin-ui"}
+	npmVersions := make(map[string]string, len(npmCoordinates))
+	for _, name := range npmCoordinates {
+		coordinate := struct{ Name, Version string }{Name: name, Version: platform}
 		npmVersions[coordinate.Name] = coordinate.Version
 		if got := manifest.Dependencies[coordinate.Name]; got != coordinate.Version {
 			t.Fatalf("Env App package.json %s = %q, want %q", coordinate.Name, got, coordinate.Version)

@@ -15,13 +15,13 @@ import (
 	"github.com/floegence/redeven/internal/diagnostics"
 	"github.com/floegence/redeven/internal/pluginmarket"
 	"github.com/floegence/redeven/internal/session"
-	"github.com/floegence/redevplugin/v2/pkg/connectivity"
-	"github.com/floegence/redevplugin/v2/pkg/externalsource"
-	"github.com/floegence/redevplugin/v2/pkg/host"
-	"github.com/floegence/redevplugin/v2/pkg/httpadapter"
-	rpobservability "github.com/floegence/redevplugin/v2/pkg/observability"
-	"github.com/floegence/redevplugin/v2/pkg/pluginpkg"
-	"github.com/floegence/redevplugin/v2/pkg/secrets"
+	"github.com/floegence/redevplugin/v3/pkg/connectivity"
+	"github.com/floegence/redevplugin/v3/pkg/externalsource"
+	"github.com/floegence/redevplugin/v3/pkg/host"
+	"github.com/floegence/redevplugin/v3/pkg/httpadapter"
+	rpobservability "github.com/floegence/redevplugin/v3/pkg/observability"
+	"github.com/floegence/redevplugin/v3/pkg/pluginpkg"
+	"github.com/floegence/redevplugin/v3/pkg/secrets"
 )
 
 type Options struct {
@@ -86,11 +86,13 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		return nil, err
 	}
 
-	generation, err := PrepareOwnerScopeGeneration(ctx, stateAbs)
-	if err != nil {
+	// ReDevPlugin v3 owns the control database and its current-only schema.
+	// Redeven supplies the selected state root and must not maintain a second
+	// generation or migration protocol around it.
+	if err := os.MkdirAll(stateAbs, 0o700); err != nil {
 		return nil, err
 	}
-	root := generation.Path
+	root := stateAbs
 
 	var closers []func() error
 	closeOnError := func() { _ = closeAll(closers) }

@@ -75,6 +75,7 @@ import type { ContextActionExecutionContext } from './contextActions/protocol';
 import { createFlowerLinkedContextNavigation } from './flower/linkedContextNavigation';
 import { createAIReadinessController } from './flower/aiReadiness';
 import { buildPluginPanelModel } from './plugins/pluginInventoryProjection';
+import { PluginCenterView } from './plugins/PluginCenterView';
 import { PluginPanel } from './plugins/PluginPanel';
 import { addPluginDockPin, loadPluginDockPins, pluginDockPinsStorageKey, savePluginDockPins } from './plugins/pluginDockPins';
 import { createPluginLifecycleAPI } from './plugins/pluginApi';
@@ -272,7 +273,6 @@ const EnvPortForwardsPage = lazy(() => import('./pages/EnvPortForwardsPage').the
 const EnvAIPage = lazy(() => import('./pages/EnvAIPage').then((module) => ({ default: module.EnvAIPage })));
 const CodexActivitySurface = lazy(() => import('./codex/CodexActivitySurface').then((module) => ({ default: module.CodexActivitySurface })));
 const EnvSettingsPage = lazy(() => import('./pages/EnvSettingsPage').then((module) => ({ default: module.EnvSettingsPage })));
-const PluginCenterView = lazy(() => import('./plugins/PluginCenterView').then((module) => ({ default: module.PluginCenterView })));
 const ActivityPluginSurfaceWindow = lazy(() => import('./plugins/ActivityPluginSurfaceWindow').then((module) => ({ default: module.ActivityPluginSurfaceWindow })));
 const DebugConsoleWindow = lazy(() => import('./debugConsole/DebugConsoleWindow').then((module) => ({ default: module.DebugConsoleWindow })));
 
@@ -1486,21 +1486,7 @@ export function EnvAppShell() {
       : [];
     let mutationError: unknown;
     try {
-      if (command.type === 'enable' && pluginLifecycle.authorizeAndEnablePlugin) {
-        const item = pluginInventoryProjection()?.items.find((candidate) => (
-          candidate.pluginInstanceID === command.pluginInstanceID
-        ));
-        const requiredPermissionIDs = item?.authorization?.permissions
-          .filter((permission) => permission.requiredToOpen)
-          .map((permission) => permission.permissionID) ?? [];
-        await pluginLifecycle.authorizeAndEnablePlugin(
-          command.pluginInstanceID,
-          requiredPermissionIDs,
-          { signal },
-        );
-      } else {
-        await pluginLifecycle.execute(command, { signal });
-      }
+      await pluginLifecycle.execute(command, { signal });
     } catch (error) {
       mutationError = error;
     }
@@ -1610,7 +1596,6 @@ export function EnvAppShell() {
       return pluginInstallCoordinator!.start(
         command.pluginID,
         item.officialCatalog.pluginInstanceID,
-        command.approvedPermissionIDs,
       );
     }
     return serializePluginPlacementOperation(() => performPluginCenterManagementCommand(command, signal));

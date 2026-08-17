@@ -8,7 +8,7 @@ timestamp: 2026-07-25T00:00:00Z
 # Summary
 
 ReDevPlugin is an independently released plugin platform. Redeven consumes its
-coordinated `v2.0.10` Go, npm, Rust source-crate, and machine-contract artifacts;
+coordinated `v3.0.2` Go, npm, Rust source-crate, and machine-contract artifacts;
 it does not fork platform mechanics. Redeven owns authenticated session mapping,
 product source policy and review UX, UI placement, product runtime builds, and
 concrete business adapters. Missing or unverifiable upstream identity, lifecycle,
@@ -42,17 +42,17 @@ external-package inspection or receipt store.
 
 ## Published dependency set
 
-The current integration consumes the coordinated ReDevPlugin `v2.0.10` set:
+The current integration consumes the coordinated ReDevPlugin `v3.0.2` set:
 
-- `github.com/floegence/redevplugin/v2 v2.0.10`;
-- `@floegence/redevplugin-contracts@2.0.10` and
-  `@floegence/redevplugin-ui@2.0.10`;
-- `redevplugin-runtime@2.0.10` and `redevplugin-worker-sdk@2.0.10` as the exact
+- `github.com/floegence/redevplugin/v3 v3.0.2`;
+- `@floegence/redevplugin-contracts@3.0.2` and
+  `@floegence/redevplugin-ui@3.0.2`;
+- `redevplugin-runtime@3.0.2` and `redevplugin-worker-sdk@3.0.2` as the exact
   public Rust source-crate boundary;
-- the released contract registry, package-set contract, contract hashes, and
-  attested `platform-package-publication-v2.json` registry readback, whose
-  contract-set SHA-256 is
-  `f6cc158815ec2df3499681caf38b3b3bad8deea291ffffae6558fc1f5474d709`.
+- the released contract registry, release-manifest contract, contract hashes, and
+  attested `platform-release-manifest.json` registry readback, whose
+  SHA-256 is
+  `a1d8e28c2262f480b74b8ad8fee8e623b84c40f8ca7417994a1eab7f381d8ad7`.
 
 Redeven release tooling verifies the exact-one publication manifest against its
 tag, source commit, workflow, GitHub attestation, Go proxy and SumDB sums, npm
@@ -60,7 +60,7 @@ integrity and provenance, crates.io checksums and Cargo VCS identity, and closed
 package coordinates. Forbidden wiring includes `go.work`, `go.work.sum`, Go
 `replace`, package-manager links, sibling paths, Rust path overrides, copied
 contracts, and copied runtime binaries. Dependency checks use `GOWORK=off`.
-Redeven's dependency contract test reads the package set embedded in the
+Redeven's dependency contract test reads the release manifest embedded in the
 released Go module and requires the Go module, Env App manifest, npm and pnpm
 lockfiles, and third-party notices to carry its exact npm coordinates. A
 front-end package cannot be independently downgraded while the Host and runtime
@@ -78,7 +78,7 @@ platform state. Redeven may reconnect and refresh inventory, but must not create
 a local execution store, copy the state machine, invent progress, or cancel work
 when a panel closes.
 
-The `v2.0.10` release-package inspection is also the presentation authority for
+The `v3.0.2` release-package inspection is also the presentation authority for
 pre-install access review. Each permission carries its exact permission id,
 verified method set, explicit required status, and the stable
 `read|write|delete|execute|admin` effects derived from Host-verified capability
@@ -86,18 +86,13 @@ contracts. Redeven may localize and arrange those facts, but it must not recover
 permission meaning from the market catalog, infer required status, or replace
 different permissions with one generic fallback.
 
-Enabled-plugin startup recovery remains ReDevPlugin work. The `v2.0.10` Host
+Enabled-plugin startup recovery remains ReDevPlugin work. The `v3.0.2` Host
 revalidates the installed package identity, SHA-256 hashes, Ed25519 status,
 revocation, grants, policy fences, runtime admission, and session scope before it
 publishes a runnable result. Invalid or revoked evidence, schema drift, tampering,
 and stale fences fail closed. Redeven consumes the Host `RecoverySnapshot` and
 `recoverEnabled` result and must not inspect opaque control state, duplicate trust
 decisions, or treat local presentation state as fallback authorization.
-
-The v2.0.10 Host also preserves the verified manifest model across control-store
-JSON round trips. A durable v2.0.3 row whose model was omitted is recovered only
-from the immutable installed `manifest.json` after exact package identity and
-hash validation; missing, conflicting, or tampered evidence remains fail closed.
 
 Environment-scoped runtime invocations retain `owner_user_hash` in the signed
 short-lived lease audience while deriving the narrower resource scope without a
@@ -114,9 +109,9 @@ the ended leader context. Shared trust, revocation, fence, tamper, epoch, and
 transport failures remain authoritative and fail closed. A canceled leader
 cannot publish a lease.
 
-For the pre-release current-only baseline, Host admission accepts only
-`redevplugin.manifest.v8` and `redevplugin.release_metadata.v8`, with
-`plugin-ui-v7` and `bridge-v7`. Manifest presentation is signed author content:
+For the current-only v3 baseline, Host admission accepts only manifest v9 with
+`plugin_api=1`, `internal_wire=1`, the current plugin UI contract, and the
+current bridge contract. Manifest presentation is signed author content:
 the Host validates and returns the normalized catalog, and resolves a requested
 BCP 47 locale through the released resolver with RFC 4647 lookup and the
 declared default locale. Older manifest or release metadata state is rejected
@@ -126,8 +121,8 @@ read-only without a compatibility parser, synthetic copy, or English fallback.
 
 Redeven constructs the released Host with explicit core, official-release,
 runtime, connectivity, secrets, capability, and external-package modules.
-ReDevPlugin-owned stores remain opaque below the selected owner-scoped
-generation. Redeven supplies session, authorization, web-security, trust,
+ReDevPlugin-owned stores remain opaque below the selected control root. Redeven
+supplies session, authorization, web-security, trust,
 official release-source, observability, secret, external source, and business
 adapters; it never edits registry, inspection, token, lease,
 revoke-epoch, or plugin-data state directly.
@@ -192,14 +187,14 @@ second open gate and owns no catch-up identity state machine.
 
 On Linux, the runtime is exactly the `redevplugin-runtime` sibling of the
 canonical Redeven executable. Redeven builds it with Rust 1.88.0 from the
-attested package set as a static PIE, then emits SBOM, provenance, notices, and
+attested release manifest as a static PIE, then emits SBOM, provenance, notices, and
 signature evidence. The released ProcessManager owns launch, health, heartbeat,
 shutdown, leases, hostcalls, and restart. Darwin packages omit the runtime and
 worker execution. No target searches `PATH` or alternate runtime names.
 The expected runtime digest comes from the product release marker; startup must
 not hash the field binary and accept that value as its own trust anchor.
 
-Official Containers `4.4.4` is a signed manifest-v8 release-ref package over the
+Official Containers `4.4.4` is a signed manifest-v9 release-ref package over the
 `redeven.capability.container_resources@3.0.0` adapter. The latest-only market
 selects its immutable GitHub Release and complete transport, while ReDevPlugin
 verifies release and capability artifacts as one closed source. The market is
@@ -217,20 +212,10 @@ Flower may orchestrate released scaffold, validate, package, inspect, confirm, i
 enable, and open APIs. It must not write opaque state, mint tokens, manufacture
 trust, or grant storage/network/runtime authority.
 
-Before opening ReDevPlugin state, Redeven uses only the committed owner-scope
-generation returned by the released migration. Recognized legacy state with
-unprovable ownership is retained in quarantine while a fresh generation is
-committed. Unknown, corrupt, ambiguous, tampered, or future state blocks startup
-without mutation. Floret-owned state is outside this lifecycle.
-
-For an exact supported root copied across filesystem identities, Redeven may use
-the released read-only inspection and exact-plan recovery APIs from `v1.1.4`.
-The product presents the projected digests, counts, sizes, and retained-state
-facts, binds confirmation to one plan digest, and takes the normal Local
-Environment runtime lock. The released transaction retains the entire source as
-an inactive archive and commits a fresh empty generation atomically. Redeven
-does not edit the journal, reveal archive paths, delete retained state, reactivate
-archived authority or data, or recover unknown and unsupported state.
+ReDevPlugin owns the current-only `redevplugin_control_v3` control root. Redeven
+provides the explicit root but never reads or migrates its database, imports
+legacy plugin state, or implements copied-root recovery. Wrong, legacy, drifted,
+tampered, and future roots remain fail-closed without mutation.
 
 # Evidence
 
@@ -240,11 +225,10 @@ archived authority or data, or recover unknown and unsupported state.
 - `redeven:internal/redevpluginintegration/session_lifecycle.go:1` - Carries transient connection generation while Host owns durable teardown state.
 - `redeven:internal/agent/plugin_session_registry.go:1` - Owns process-local authenticated generation admission and exact access-session retirement.
 - `redeven:internal/localui/localui.go:1` - Binds Local UI access sessions, pending artifacts, credentials, and direct transports without persisting raw credentials.
-- `redeven:internal/redevpluginintegration/owner_scope_recovery.go:1` - Adapts the released copied-root inspection and recovery API without taking state ownership.
 - `redeven:internal/redevpluginintegration/trust_adapter.go:1` - Delegates package signature and freshness assessment to the released verifier.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginPlatform.ts:1` - Owns the released client, transport, shared scope, and slot placement adapter.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/redevenWorkbenchWidgets.tsx:300` - Registers the standard projected plugin widget.
 - `redeven:internal/workbenchlayout/types.go:21` - Declares the persisted `redeven.plugin` widget type.
 - `redeven:scripts/check_redevplugin_dependency_boundary.sh:1` - Rejects local wiring and platform duplication.
 - `redeven:scripts/check_redevplugin_release_artifacts.sh:1` - Verifies the coordinated public package publication.
-- `redeven:internal/session/dependency_contract_test.go:1` - Matches downstream Go and npm coordinates to the package set embedded in the released Go module.
+- `redeven:internal/session/dependency_contract_test.go:1` - Matches downstream Go and npm coordinates to the release manifest embedded in the released Go module.

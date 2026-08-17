@@ -116,7 +116,7 @@ const generatedContainersRecord: ReDevPluginRecord = {
       plugin_id: officialContainers.pluginID, display_name: officialContainers.displayName,
       version: OFFICIAL_CONTAINERS_RELEASE_REF.version,
     },
-    api: { surface: 1, worker: 1 },
+    api: { major: 1 },
     permissions: [],
     presentation: { locales: { default: 'en-US' } },
     surfaces: [{
@@ -131,7 +131,7 @@ const generatedContainersRecord: ReDevPluginRecord = {
   updated_at: '2026-07-04T10:01:00Z',
 };
 
-describe('v1.1.4 plugin lifecycle client integration', () => {
+describe('v3.0.2 plugin lifecycle client integration', () => {
   it('loads an installed package icon without blocking the first inventory projection', async () => {
     const { mocks } = createClientHarness();
     const iconDigest = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -442,7 +442,6 @@ describe('v1.1.4 plugin lifecycle client integration', () => {
       request_id: releaseInstallRequestID,
       plugin_instance_id: officialContainers.pluginInstanceID,
       release_ref: OFFICIAL_CONTAINERS_RELEASE_REF,
-      activate_after_install: true,
     }, {});
     expect(mocks.installReleaseRef).not.toHaveBeenCalled();
     expect(updates).toEqual([expect.objectContaining({ status: 'completed' })]);
@@ -569,23 +568,6 @@ describe('v1.1.4 plugin lifecycle client integration', () => {
     }, {});
   });
 
-  it('treats an already-enabled PluginRecord as the authoritative idempotent result', async () => {
-    const { lifecycle, mocks } = createClientHarness();
-    mocks.catalog.mockResolvedValueOnce({ plugins: [generatedContainersRecord] });
-
-    await expect(lifecycle.authorizeAndEnablePlugin(
-      generatedContainersInstanceID,
-      ['containers.read', 'containers.execute'],
-    )).resolves.toMatchObject({
-      plugin_instance_id: generatedContainersInstanceID,
-      enable_state: 'enabled',
-    });
-
-    expect(mocks.enablePlugin).not.toHaveBeenCalled();
-    expect(mocks.grantPermission).not.toHaveBeenCalled();
-    expect(mocks.getPermissionRequirements).not.toHaveBeenCalled();
-  });
-
   it('binds grant and revoke mutations to the exact authorization revisions', async () => {
     const { lifecycle, mocks } = createClientHarness();
     const revisions = {
@@ -698,8 +680,6 @@ describe('v1.1.4 plugin lifecycle client integration', () => {
     expect(mocks.installInspectedPackage).toHaveBeenCalledWith({
       inspection_id: inspection.inspection_id,
       expected_package_sha256: inspection.inspected_hashes.package_sha256,
-      activate_after_install: true,
-      approved_permission_ids: ['containers.read', 'containers.execute'],
     }, {});
   });
 

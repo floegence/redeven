@@ -49,15 +49,15 @@ case "$docker_arch" in
     ;;
 esac
 
-redevplugin_version=$(
+redevplugin_tag=$(
   cd "$ROOT_DIR"
-  GOWORK=off go run ./scripts/read_redevplugin_package_set.go |
-    node -e 'let input = ""; process.stdin.on("data", chunk => input += chunk); process.stdin.on("end", () => process.stdout.write(JSON.parse(input).platform_version));'
+  GOWORK=off go list -m -f '{{.Version}}' github.com/floegence/redevplugin/v3
 )
-if [[ ! "$redevplugin_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "docker runtime e2e failed: invalid ReDevPlugin version $redevplugin_version" >&2
+if [[ ! "$redevplugin_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "docker runtime e2e failed: invalid ReDevPlugin module version $redevplugin_tag" >&2
   exit 1
 fi
+redevplugin_version=${redevplugin_tag#v}
 
 cache_root="${XDG_CACHE_HOME:-$HOME/.cache}/redeven/docker-runtime-e2e"
 product_commit=$(git -C "$ROOT_DIR" rev-parse HEAD)
@@ -76,20 +76,16 @@ then
 	build_root=$(mktemp -d "${TMPDIR:-/tmp}/redeven-docker-runtime.XXXXXX")
 	runtime_evidence="$build_root/runtime-evidence"
 	mkdir -p "$runtime_evidence" "$build_root/upstream"
-	package_set="$build_root/platform-package-set-v3.json"
-	(
-		cd "$ROOT_DIR"
-		GOWORK=off go run ./scripts/read_redevplugin_package_set.go >"$package_set"
-	)
-	gh release download "v$redevplugin_version" \
+	gh release download "$redevplugin_tag" \
 		--repo floegence/redevplugin \
 		--dir "$build_root/upstream" \
-		--pattern platform-package-publication-v2.json
-	publication_verification="$build_root/platform-publication-verification-v1.json"
+		--pattern platform-release-manifest.json
+	release_verification="$build_root/redevplugin-release-verification-v1.json"
 	"$SCRIPT_DIR/check_redevplugin_release_artifacts.sh" \
 		--artifact-dir "$build_root/upstream" \
-		--tag "v$redevplugin_version" \
-		--write-marker "$publication_verification"
+		--tag "$redevplugin_tag"
+	node "$SCRIPT_DIR/redevplugin_release_contract.mjs" write-release-verification \
+		"$build_root/upstream/platform-release-manifest.json" "$redevplugin_tag" "$release_verification"
 
 	rustflags_key="CARGO_TARGET_$(printf '%s' "$rust_target" | tr '[:lower:]-' '[:upper:]_')_RUSTFLAGS"
 	docker run --rm \
@@ -125,8 +121,7 @@ then
 		"$runtime_evidence/redevplugin-runtime" "linux/$goarch"
 
 	node "$SCRIPT_DIR/redevplugin_release_contract.mjs" write-build-evidence \
-		--package-set "$package_set" \
-		--publication-verification "$publication_verification" \
+		--release-verification "$release_verification" \
 		--cargo-metadata "$build_root/cargo-metadata.json" \
 		--product-repository floegence/redeven \
 		--product-workflow .github/workflows/release.yml \
@@ -151,8 +146,7 @@ NODE
 
 	node "$SCRIPT_DIR/redevplugin_release_contract.mjs" write-runtime-marker \
 		--profile development \
-		--package-set "$package_set" \
-		--publication-verification "$publication_verification" \
+		--release-verification "$release_verification" \
 		--product-repository floegence/redeven \
 		--product-workflow .github/workflows/release.yml \
 		--product-ref "refs/heads/$product_branch" \

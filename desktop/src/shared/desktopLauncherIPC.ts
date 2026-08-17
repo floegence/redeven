@@ -34,7 +34,6 @@ import type {
 } from './desktopRuntimeProcessTakeover';
 import type { RuntimeServiceProviderConnectionState, RuntimeServiceSnapshot } from './runtimeService';
 import type { DesktopTranslationKey } from './i18n/desktopI18n';
-import { LOWER_SHA256_PATTERN, type DesktopPluginStateRecoveryPlan } from './pluginStateRecovery';
 import type {
   DesktopEnvironmentSource,
   DesktopGatewayConnectionKind,
@@ -183,8 +182,6 @@ export type DesktopLauncherActionFailureCode =
   | 'provider_invalid_response'
   | 'provider_link_failed'
   | 'runtime_start_failed'
-  | 'plugin_state_recovery_required'
-  | 'plugin_state_recovery_failed'
   | 'gateway_start_required'
   | 'gateway_not_manageable'
   | 'gateway_service_unreachable'
@@ -207,7 +204,6 @@ export type DesktopLauncherActionKind =
   | 'open_ssh_environment'
   | 'prepare_environment_open'
   | 'start_environment_runtime'
-  | 'recover_plugin_state'
   | 'restart_environment_runtime'
   | 'update_environment_runtime'
   | 'manage_desktop_update'
@@ -266,12 +262,6 @@ export type DesktopWelcomeIssue = Readonly<{
   target_url: string;
   environment_id?: string;
   ssh_details?: DesktopSSHEnvironmentDetails;
-  plugin_state_recovery?: DesktopPluginStateRecoveryPlan;
-}>;
-
-export type DesktopPluginStateRecoveryProposal = Readonly<{
-  environment_id: string;
-  plan: DesktopPluginStateRecoveryPlan;
 }>;
 
 export type DesktopOpenEnvironmentWindow = Readonly<{
@@ -695,11 +685,6 @@ export type DesktopLauncherActionRequest = Readonly<
   | ({
       kind: 'start_environment_runtime';
     } & DesktopLauncherRuntimeTarget)
-  | {
-      kind: 'recover_plugin_state';
-      environment_id: string;
-      expected_plan_sha256: string;
-    }
   | ({
       kind: 'restart_environment_runtime';
     } & DesktopLauncherRuntimeTarget)
@@ -1002,7 +987,6 @@ export type DesktopLauncherActionFailure = Readonly<{
   resolve_focus?: DesktopGatewayResolveFocus;
   gateway_start_required_payload?: DesktopGatewayStartRequiredPayload;
   runtime_process_takeover?: DesktopRuntimeProcessTakeoverProposal;
-  plugin_state_recovery?: DesktopPluginStateRecoveryProposal;
 }>;
 
 export type DesktopLauncherActionResult = DesktopLauncherActionSuccess | DesktopLauncherActionFailure;
@@ -1303,18 +1287,6 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         kind,
         ...target,
       } as DesktopLauncherActionRequest;
-    }
-    case 'recover_plugin_state': {
-      const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
-      const expectedPlanSHA256 = compact((candidate as { expected_plan_sha256?: unknown }).expected_plan_sha256);
-      if (environmentID === '' || !LOWER_SHA256_PATTERN.test(expectedPlanSHA256)) {
-        return null;
-      }
-      return {
-        kind,
-        environment_id: environmentID,
-        expected_plan_sha256: expectedPlanSHA256,
-      };
     }
     case 'start_environment_runtime':
     case 'refresh_environment_runtime': {

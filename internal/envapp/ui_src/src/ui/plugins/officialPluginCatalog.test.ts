@@ -25,7 +25,7 @@ describe('official plugin catalog contracts', () => {
   it('uses verified market icon metadata without embedding plugin-specific permissions', () => {
     expect(OFFICIAL_PLUGIN_CATALOG_SEED[0]).toMatchObject({ iconFallback: 'generic' });
     expect(OFFICIAL_PLUGIN_CATALOG_SEED[0]?.iconURL).toContain('/_redeven_proxy/api/plugins/market/plugins/com.redeven.official.containers/icon');
-    expect(officialPluginCatalog(OFFICIAL_PLUGIN_MARKET_SNAPSHOT)[0]?.permissions).toEqual([]);
+    expect(officialPluginCatalog(OFFICIAL_PLUGIN_MARKET_SNAPSHOT)[0]?.permissions).toBeUndefined();
   });
 
   it('projects the latest version from the current frozen market snapshot', () => {
