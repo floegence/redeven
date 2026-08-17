@@ -41,14 +41,14 @@ describe('external plugin security projection', () => {
   it('preserves added, changed, and removed declarations across updates', () => {
     const previous = summary({
       permissions: [
-        { permission_id: 'workspace.read', methods: ['workspace.list'] },
-        { permission_id: 'workspace.remove', methods: ['workspace.remove'] },
+        { permission_id: 'workspace.read', methods: ['workspace.list'], required: true, effects: ['read'] },
+        { permission_id: 'workspace.remove', methods: ['workspace.remove'], required: true, effects: ['delete'] },
       ],
     });
     const current = summary({
       permissions: [
-        { permission_id: 'workspace.read', methods: ['workspace.list', 'workspace.inspect'] },
-        { permission_id: 'workspace.write', methods: ['workspace.write'] },
+        { permission_id: 'workspace.read', methods: ['workspace.list', 'workspace.inspect'], required: true, effects: ['read'] },
+        { permission_id: 'workspace.write', methods: ['workspace.write'], required: true, effects: ['write'] },
       ],
     });
 

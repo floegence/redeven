@@ -1,6 +1,13 @@
 # Redeven OKF Update Log
 
 ## 2026-08-17
+* **Official install review continuity**: Upgraded the coordinated ReDevPlugin
+  v2.0.10 package set so Host release inspection exposes permission ids,
+  required status, verified methods, and stable effects. Plugin Center now
+  acknowledges install immediately, shares an exact-release inspection between
+  selected-detail prefetch and explicit install, opens only a complete review,
+  and keeps failure and cancellation retryable without inventing catalog
+  permission metadata.
 * **ReDevPlugin v2.0.9 package-set readback**: Upgraded the coordinated Go,
   npm, and Rust source package set after public registry and provenance
   verification. The Host now preserves the required `bytes_read` field for a

@@ -12,7 +12,7 @@ one validated snapshot during startup, and serves that snapshot only to the
 trusted Env App origin. The market identifies a candidate GitHub Release; it
 does not host plugin packages, preserve version history, grant trust, or install
 anything. Redeven downloads the exact GitHub assets declared by the snapshot and
-passes the complete signed release transport to released ReDevPlugin `1.1.4`.
+passes the complete signed release transport to released ReDevPlugin `v2.0.10`.
 An invalid current response fails closed. A valid last-known-good snapshot may
 keep discovery available as stale data, but it cannot authorize an automatic
 update.
@@ -54,6 +54,16 @@ market's validated `meta.generation` separately from author detail data; the
 Plugin Center accepts and caches a detail only when that generation matches the
 catalog snapshot generation. Missing, stale, or negative detail generations
 fail closed rather than allowing cross-generation presentation mixing.
+
+Selecting one uninstalled official plugin may prefetch its Host release-package
+inspection; Redeven never prefetches the full market. The process-local browser
+cache is keyed by plugin instance, market generation, every release-reference
+field, release-metadata digest, and expected package, manifest, and entries
+hash. Concurrent detail and install consumers share one request. Selection
+changes do not invalidate still-exact results, while release or generation
+changes, successful installation, uninstall, and Plugin Center disposal evict
+or abort the affected entry. Canceling a completed review returns the visible
+flow to idle without discarding its still-exact inspection.
 
 The market may expose one compact icon descriptor for the current verified
 release. Its URL, media type, dimensions, and digest are evidence-bound to the
@@ -101,6 +111,12 @@ observes ordered Events; it does not treat the market response, browser
 connection, or an Env App pending flag as installation authority. A failed or
 disconnected observer may reattach to the same Execution without selecting new
 assets or replaying the mutation.
+
+Before that mutation, release inspection is read-only and may download and
+verify the same exact package. Its result is presentation evidence only, not a
+durable receipt or authorization shortcut; install still revalidates the
+release, hashes, signature, runtime admission, and approved required permission
+ids.
 
 Market `latest`, signer labels, compatibility text, and listing status are not
 installation authorization. Redeven pins the official Ed25519 root public key in

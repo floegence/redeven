@@ -148,6 +148,25 @@ recovery flags.
 
 ## Official installation progress
 
+The pre-install interaction has one target-owned flow: `idle`, `inspecting`,
+`review_ready`, `installing`, then `installed`, with error or cancellation
+returning to a retryable state. A card or detail click enters `inspecting` in the
+same UI turn, disables only that target action, and shows package-checking
+feedback. Plugin Center does not mount a confirmation dialog until the exact
+Host inspection and permission presentation are complete, so the dialog's first
+visible frame already contains identity, permissions, required status, methods,
+effects, and actions. Inspection failure restores the action and presents an
+adjacent Retry; repeated clicks share one in-flight exact-release inspection.
+
+Selecting an uninstalled official detail may prefetch only that release. The
+cache identity includes the plugin instance, market generation, complete release
+reference, release-metadata digest, and all expected hashes. Selection changes
+retain a still-exact result, review cancellation retains that result, and stale
+release completion cannot open another plugin's dialog. Identity changes,
+successful install, uninstall, and Plugin Center disposal invalidate the
+affected cache. Confirmation approves only the deduplicated required permission
+ids from that exact inspection and keeps the existing default-enable Host path.
+
 Official installation uses the released durable Execution instead of a
 page-bound pending flag. Only the target plugin card and inspector show its
 queued, trust verification, release inspection, download, package verification,

@@ -13,8 +13,8 @@ import (
 
 func TestOfficialRuntimeVersionMatchesReleasedPlatform(t *testing.T) {
 	want := contracts.PackageSet().PlatformVersion
-	if want != "2.0.9" {
-		t.Fatalf("released package-set version = %q, want 2.0.9", want)
+	if want != "2.0.10" {
+		t.Fatalf("released package-set version = %q, want 2.0.10", want)
 	}
 	if officialRuntimeVersion != want {
 		t.Fatalf("official runtime version = %q, want package-set version %q", officialRuntimeVersion, want)

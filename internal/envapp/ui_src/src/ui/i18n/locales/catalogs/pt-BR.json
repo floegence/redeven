@@ -4459,6 +4459,18 @@
       "permissionsTitle": "Permissões de {plugin}",
       "permissionsDescription": "Escolha quais operações {plugin} pode solicitar. Operações sensíveis ainda exigem confirmação da plataforma.",
       "permissionsResolvedDuringInstall": "O Host verifica no pacote assinado as permissões obrigatórias exatas antes do commit. Confirmar a instalação concede as permissões permitidas pela política e habilita o plugin.",
+      "checkingPackage": "Verificando o pacote do plugin...",
+      "officialInspectionMismatch": "O resultado da inspeção não corresponde mais a esta versão oficial. Atualize a Central de Plugins e tente novamente.",
+      "noRequiredPermissions": "Este plugin não exige concessões de acesso para ser aberto.",
+      "officialPermissionEffects": "Acesso verificado: {effects}.",
+      "officialPermissionMethods": "Métodos declarados: {methods}.",
+      "permissionEffect": {
+        "read": "Ler dados",
+        "write": "Alterar dados",
+        "delete": "Excluir dados",
+        "execute": "Executar operações",
+        "admin": "Administrar recursos"
+      },
       "permissionsAdminRequired": "Um administrador do ambiente deve alterar essas permissões.",
       "policyConfigured": "Política configurada",
       "requiredToOpen": "Necessária para abrir",

@@ -4459,6 +4459,18 @@
       "permissionsTitle": "{plugin} 권한",
       "permissionsDescription": "{plugin} 플러그인이 요청할 수 있는 작업을 선택하세요. 민감한 작업은 여전히 플랫폼의 확인을 거쳐야 합니다.",
       "permissionsResolvedDuringInstall": "Host는 커밋 전에 서명된 패키지에서 정확한 필수 권한을 검증합니다. 설치를 확정하면 정책이 허용한 권한을 부여하고 플러그인을 활성화합니다.",
+      "checkingPackage": "플러그인 패키지를 확인하는 중...",
+      "officialInspectionMismatch": "검사 결과가 더 이상 이 공식 릴리스와 일치하지 않습니다. 플러그인 센터를 새로 고친 후 다시 시도하세요.",
+      "noRequiredPermissions": "이 플러그인을 열기 위해 접근 권한을 부여할 필요가 없습니다.",
+      "officialPermissionEffects": "검증된 접근 범위: {effects}.",
+      "officialPermissionMethods": "선언된 메서드: {methods}.",
+      "permissionEffect": {
+        "read": "데이터 읽기",
+        "write": "데이터 변경",
+        "delete": "데이터 삭제",
+        "execute": "작업 실행",
+        "admin": "리소스 관리"
+      },
       "permissionsAdminRequired": "이러한 권한은 환경 관리자만 변경할 수 있습니다.",
       "policyConfigured": "정책 설정됨",
       "requiredToOpen": "열려면 필요",

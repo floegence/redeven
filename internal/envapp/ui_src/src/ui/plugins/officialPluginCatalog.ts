@@ -131,7 +131,6 @@ function projectMarketSnapshot(snapshot: PluginMarketSnapshot): OfficialPluginCa
       category: marketCategory(plugin.categories),
       searchKeywords: [...new Set(presentation.locales.flatMap((locale) => locale.keywords))],
       trustedSigningKeyIDs: [plugin.release.signer_key_id],
-      permissions: [],
       distribution: {
         releaseRef,
         installSource: { sourceKind: 'package_url' as const, url: plugin.release.asset.url },

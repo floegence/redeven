@@ -20,10 +20,13 @@ export function PluginCenterItem(props: {
   onRetryRuntimeRecovery?: () => Promise<unknown> | unknown;
   managementDisabled: boolean;
   commandPendingType?: PluginPendingCommandType;
+  officialInstallPhase?: 'inspecting' | 'installing';
+  officialInstallError?: string;
   installOperation?: PluginInstallExecutionProjection;
   entranceDelayMs?: number;
   onOpenDetails: (target: HTMLButtonElement) => void;
   onInstall: () => void;
+  onRetryOfficialInstall: () => void;
   onUpdate: () => void;
   onEnable: () => void;
   onDisable: () => void;
@@ -49,7 +52,12 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
   let menuTrigger: HTMLButtonElement | undefined;
   const update = () => props.tab === 'updates' || props.item.lifecycleState === 'update_available';
   const primaryAction = () => actions().primaryAction;
-  const commandPending = () => props.commandPendingType !== undefined;
+  const commandPending = () => props.commandPendingType !== undefined || props.officialInstallPhase !== undefined;
+  const pendingLabel = () => props.officialInstallPhase === 'inspecting'
+    ? i18n.t('uiCopy.plugin.checkingPackage')
+    : props.commandPendingType
+      ? pluginPendingCommandLabel(props.commandPendingType, i18n)
+      : i18n.t('uiCopy.plugin.installOperation.starting');
   const runtimeRecovery = () => props.runtimeRecovery;
   const primaryLabel = () => {
     switch (primaryAction()) {
@@ -162,6 +170,24 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
           )}
         </Show>
       </button>
+      <Show when={props.officialInstallError}>
+        {(message) => (
+          <div
+            role="alert"
+            data-plugin-install-inspection-error={props.item.inventoryKey}
+            class="mt-2 flex min-w-0 items-center gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-2.5 py-2 text-xs text-destructive"
+          >
+            <span class="min-w-0 flex-1">{message()}</span>
+            <button
+              type="button"
+              class="shrink-0 cursor-pointer rounded-md border border-destructive/40 px-2 py-1 font-semibold hover:bg-muted"
+              onClick={props.onRetryOfficialInstall}
+            >
+              {i18n.t('common.actions.retry')}
+            </button>
+          </div>
+        )}
+      </Show>
       <Show when={props.installOperation}>
         {(operation) => (
           <div class="mt-3">
@@ -195,9 +221,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
                 : primaryAction() === 'enable' ? <Play class="h-4 w-4 shrink-0" />
                   : <MoreHorizontal class="h-4 w-4 shrink-0" />}
             <span data-plugin-center-card-primary-label class="shrink-0 whitespace-nowrap">
-              {props.commandPendingType
-                ? pluginPendingCommandLabel(props.commandPendingType, i18n)
-                : primaryLabel()}
+              {commandPending() ? pendingLabel() : primaryLabel()}
             </span>
           </button>
         )}>
@@ -213,7 +237,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
               <RefreshIcon class="h-4 w-4 shrink-0 animate-spin motion-reduce:animate-none" />
             </Show>
             <span data-plugin-center-card-primary-label class="shrink-0 whitespace-nowrap">
-              {commandPending() ? i18n.t('uiCopy.plugin.installOperation.starting') : i18n.t('uiCopy.plugin.install')}
+              {commandPending() ? pendingLabel() : i18n.t('uiCopy.plugin.install')}
             </span>
           </button>
         </Show>

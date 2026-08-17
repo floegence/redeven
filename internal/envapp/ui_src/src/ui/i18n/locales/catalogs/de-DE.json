@@ -4459,6 +4459,18 @@
       "permissionsTitle": "Berechtigungen für {plugin}",
       "permissionsDescription": "Wählen Sie aus, welche Vorgänge {plugin} anfordern darf. Für sensible Vorgänge ist weiterhin eine Bestätigung durch die Plattform erforderlich.",
       "permissionsResolvedDuringInstall": "Der Host prüft die exakt erforderlichen Berechtigungen vor dem Commit aus dem signierten Paket. Mit Installieren werden die von der Richtlinie erlaubten Berechtigungen erteilt und das Plugin aktiviert.",
+      "checkingPackage": "Plugin-Paket wird geprüft...",
+      "officialInspectionMismatch": "Das Prüfergebnis stimmt nicht mehr mit dieser offiziellen Version überein. Aktualisieren Sie das Plugin Center und versuchen Sie es erneut.",
+      "noRequiredPermissions": "Dieses Plugin benötigt zum Öffnen keine Zugriffsfreigaben.",
+      "officialPermissionEffects": "Geprüfter Zugriff: {effects}.",
+      "officialPermissionMethods": "Deklarierte Methoden: {methods}.",
+      "permissionEffect": {
+        "read": "Daten lesen",
+        "write": "Daten ändern",
+        "delete": "Daten löschen",
+        "execute": "Vorgänge ausführen",
+        "admin": "Ressourcen verwalten"
+      },
       "permissionsAdminRequired": "Ein Umgebungsadministrator muss diese Berechtigungen ändern.",
       "policyConfigured": "Richtlinie konfiguriert",
       "requiredToOpen": "Zum Öffnen erforderlich",

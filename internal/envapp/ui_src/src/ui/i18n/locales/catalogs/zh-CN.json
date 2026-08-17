@@ -4459,6 +4459,18 @@
       "permissionsTitle": "{plugin} 权限",
       "permissionsDescription": "选择 {plugin} 可以请求的操作。敏感操作仍需经过平台确认。",
       "permissionsResolvedDuringInstall": "Host 会在提交前从签名软件包验证确切的必需权限。确认安装即授予策略允许的权限并启用插件。",
+      "checkingPackage": "正在检查插件包...",
+      "officialInspectionMismatch": "检查结果已不再匹配此官方版本。请刷新插件中心后重试。",
+      "noRequiredPermissions": "此插件打开时不需要授予访问权限。",
+      "officialPermissionEffects": "已验证的访问范围：{effects}。",
+      "officialPermissionMethods": "声明的方法：{methods}。",
+      "permissionEffect": {
+        "read": "读取数据",
+        "write": "修改数据",
+        "delete": "删除数据",
+        "execute": "执行操作",
+        "admin": "管理资源"
+      },
       "permissionsAdminRequired": "需要由环境管理员更改这些权限。",
       "policyConfigured": "已配置策略",
       "requiredToOpen": "打开时必需",
