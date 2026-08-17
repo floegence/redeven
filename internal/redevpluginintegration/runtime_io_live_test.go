@@ -15,10 +15,10 @@ import (
 
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/sessionhop"
-	"github.com/floegence/redevplugin/v2/pkg/bridge"
-	"github.com/floegence/redevplugin/v2/pkg/host"
-	"github.com/floegence/redevplugin/v2/pkg/runtimetarget"
-	"github.com/floegence/redevplugin/v2/pkg/sessionctx"
+	"github.com/floegence/redevplugin/v3/pkg/bridge"
+	"github.com/floegence/redevplugin/v3/pkg/host"
+	"github.com/floegence/redevplugin/v3/pkg/runtimetarget"
+	"github.com/floegence/redevplugin/v3/pkg/sessionctx"
 )
 
 func TestRecoveredRuntimeFirstInvocationReachesWorkerAfterFilesystemHostcalls(t *testing.T) {

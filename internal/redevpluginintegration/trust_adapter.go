@@ -6,10 +6,10 @@ import (
 	"fmt"
 
 	redevpluginartifacts "github.com/floegence/redeven/spec/redevplugin"
-	"github.com/floegence/redevplugin/v2/pkg/host"
-	"github.com/floegence/redevplugin/v2/pkg/pluginpkg"
-	"github.com/floegence/redevplugin/v2/pkg/registry"
-	"github.com/floegence/redevplugin/v2/pkg/trust"
+	"github.com/floegence/redevplugin/v3/pkg/host"
+	"github.com/floegence/redevplugin/v3/pkg/pluginpkg"
+	"github.com/floegence/redevplugin/v3/pkg/registry"
+	"github.com/floegence/redevplugin/v3/pkg/trust"
 )
 
 const (

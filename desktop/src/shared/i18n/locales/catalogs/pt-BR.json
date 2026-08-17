@@ -27,7 +27,13 @@
       "errorInvalidEncoding": "Este arquivo de texto não está codificado corretamente em UTF-8.",
       "errorUploadFailed": "Falha no envio. Tente novamente.",
       "errorUnavailable": "Os anexos não estão disponíveis para o modelo selecionado.",
-      "lines": { "kind": "plural", "forms": { "one": "{count} linha", "other": "{count} linhas" } },
+      "lines": {
+        "kind": "plural",
+        "forms": {
+          "one": "{count} linha",
+          "other": "{count} linhas"
+        }
+      },
       "added": "{name} adicionado.",
       "converted": "O texto longo foi convertido em um anexo: {name}.",
       "uploaded": "{name} enviado.",
@@ -690,16 +696,42 @@
     "useDarkTheme": "Usar tema escuro",
     "useLightTheme": "Usar tema claro",
     "themePicker": {
-      "openLabel": "Aparência", "title": "Aparência", "closeLabel": "Fechar o painel de aparência", "modeLabel": "Modo de cor",
-      "mode": { "system": "Sistema", "light": "Claro", "dark": "Escuro" },
+      "openLabel": "Aparência",
+      "title": "Aparência",
+      "closeLabel": "Fechar o painel de aparência",
+      "modeLabel": "Modo de cor",
+      "mode": {
+        "system": "Sistema",
+        "light": "Claro",
+        "dark": "Escuro"
+      },
       "systemResolvedLight": "O sistema está usando o modo claro",
       "systemResolvedDark": "O sistema está usando o modo escuro",
-      "themesLabel": "Temas", "changeFailed": "Não foi possível atualizar a aparência. Tente novamente.",
+      "themesLabel": "Temas",
+      "changeFailed": "Não foi possível atualizar a aparência. Tente novamente.",
       "presets": {
-        "classic-light": "Clássico claro", "paper": "Papel", "mist": "Névoa", "meadow": "Prado", "citrus": "Cítrico", "lilac": "Lilás",
-        "light-plus": "Claro+", "quiet-light": "Suave Claro", "solarized-light": "Solar Claro", "github-light": "GitHub Light", "hc-light": "Alto Contraste Claro",
-        "classic-dark": "Clássico escuro", "ink": "Tinta", "slate": "Ardósia", "forest": "Floresta", "ember": "Brasa", "ocean": "Oceano",
-        "dark-plus": "Escuro+", "monokai": "Monokai", "nord": "Nord", "dracula": "Dracula", "abyss": "Abyss"
+        "classic-light": "Clássico claro",
+        "paper": "Papel",
+        "mist": "Névoa",
+        "meadow": "Prado",
+        "citrus": "Cítrico",
+        "lilac": "Lilás",
+        "light-plus": "Claro+",
+        "quiet-light": "Suave Claro",
+        "solarized-light": "Solar Claro",
+        "github-light": "GitHub Light",
+        "hc-light": "Alto Contraste Claro",
+        "classic-dark": "Clássico escuro",
+        "ink": "Tinta",
+        "slate": "Ardósia",
+        "forest": "Floresta",
+        "ember": "Brasa",
+        "ocean": "Oceano",
+        "dark-plus": "Escuro+",
+        "monokai": "Monokai",
+        "nord": "Nord",
+        "dracula": "Dracula",
+        "abyss": "Abyss"
       }
     }
   },
@@ -768,8 +800,6 @@
     "attention": "atenção"
   },
   "issue": {
-    "pluginStateRecoveryTitle": "Revisar a recuperação do estado dos plugins",
-    "pluginStateRecoveryMessage": "O Redeven encontrou um estado de plugins copiado que exige a retenção do estado anterior em um arquivo de recuperação inativo antes que a inicialização possa prosseguir com segurança.",
     "remoteEnvironmentInvalidTitle": "Verifique o ambiente URL",
     "remoteEnvironmentOpenTitle": "Não é possível abrir esse ambiente",
     "sshEnvironmentOpenTitle": "Não é possível abrir esse ambiente SSH",
@@ -785,22 +815,6 @@
     "startupInvalidTitle": "A inicialização do ambiente local precisa de uma configuração",
     "startupFailedTitle": "A inicialização do ambiente local falhou",
     "localEnvironmentAttentionTitle": "O ambiente local precisa de atenção"
-  },
-  "pluginStateRecovery": {
-    "title": "Revisar a recuperação do estado dos plugins",
-    "summary": "Este estado de plugins foi copiado ou restaurado a partir de outra identidade do sistema de arquivos. O Redeven o preservará em um arquivo de recuperação e, em seguida, iniciará com uma nova geração vazia de plugins.",
-    "archiveTitle": "Preservar o estado anterior",
-    "archiveBody": "Todo o estado de origem é movido para um arquivo de recuperação inativo e preservado.",
-    "freshTitle": "Começar do zero",
-    "freshBody": "Os plugins instalados, as concessões de acesso, as configurações, os segredos e os dados armazenados no arquivo de recuperação não serão ativados.",
-    "retentionTitle": "Preservar as evidências da recuperação",
-    "retentionBody": "O Redeven nunca exclui automaticamente o arquivo de recuperação preservado.",
-    "entriesLabel": "Entradas de origem",
-    "sizeLabel": "Bytes de origem",
-    "planLabel": "Plano de recuperação",
-    "confirm": "Arquivar o estado e reiniciar",
-    "failed": "Falha ao recuperar o estado dos plugins.",
-    "completed": "O estado dos plugins foi arquivado, e o ambiente local foi reiniciado com uma nova geração limpa de plugins."
   },
   "blockedPage": {
     "stateDirLockedAttachTitle": "Redeven já está iniciando em outro lugar",

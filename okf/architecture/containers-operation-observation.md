@@ -124,7 +124,7 @@ Containers source, tests, manifest, icon, and stable distribution are owned by
 `floegence/redeven-official-plugins`. Redeven consumes only the complete signed
 `4.4.4` release selected by the frozen latest-only market snapshot. ReDevPlugin
 verifies package signing, root delegation, source policy, revocation, release
-metadata, and package-set evidence before any
+metadata, and release-manifest evidence before any
 registry mutation. Unsigned, partial, or locally built bytes cannot substitute
 for those materials.
 
@@ -141,4 +141,4 @@ package and integration ownership remains in [Plugin platform integration](plugi
 
 - `redeven:internal/pluginmarket/service.go` - Freezes the latest-only production release selection and validated transport.
 - `redeven:internal/redevpluginintegration/release_module.go` - Installs the complete signed GitHub Release transport through ReDevPlugin.
-- `redeven:scripts/check_plugin_integration.sh` - Routes final ReDevPlugin integration validation through the published package-set and capability gates.
+- `redeven:scripts/check_plugin_integration.sh` - Routes final ReDevPlugin integration validation through the published release-manifest and capability gates.

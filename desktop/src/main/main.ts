@@ -9,11 +9,6 @@ import https from 'node:https';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import {
-  parsePluginStateRecoveryCLIReport,
-  PluginStateRecoveryCLIError,
-  type PluginStateRecoveryCLIReport,
-} from './pluginStateRecovery';
 import { safeLogText } from './logSafety';
 import {
   attachManagedRuntimeFromStatus,
@@ -2393,7 +2388,6 @@ function launcherActionFailure(
     resolveFocus?: DesktopLauncherActionFailure['resolve_focus'];
     gatewayStartRequiredPayload?: DesktopLauncherActionFailure['gateway_start_required_payload'];
     runtimeProcessTakeover?: DesktopLauncherActionFailure['runtime_process_takeover'];
-    pluginStateRecovery?: DesktopLauncherActionFailure['plugin_state_recovery'];
   }> = {},
 ): DesktopLauncherActionFailure {
   const failure = options.failure;
@@ -2417,7 +2411,6 @@ function launcherActionFailure(
     ...(options.resolveFocus ? { resolve_focus: options.resolveFocus } : {}),
     ...(options.gatewayStartRequiredPayload ? { gateway_start_required_payload: options.gatewayStartRequiredPayload } : {}),
     ...(options.runtimeProcessTakeover ? { runtime_process_takeover: options.runtimeProcessTakeover } : {}),
-    ...(options.pluginStateRecovery ? { plugin_state_recovery: options.pluginStateRecovery } : {}),
   };
 }
 
@@ -15086,22 +15079,9 @@ async function startLocalHostRuntimeWithLifecycleProgress(input: Readonly<{
           });
           scheduleCurrentLauncherOperationRemoval(operation.operation_key, lifecycleAttemptOwner);
           clearRuntimeLifecycleWorkflow(operationKey, lifecycleAttemptOwner);
-          throw launcherActionFailure(
-            prepared.issue.plugin_state_recovery
-              ? 'plugin_state_recovery_required'
-              : 'action_invalid',
-            'environment',
-            prepared.issue.message,
-            {
-              environmentID: environment.id,
-              pluginStateRecovery: prepared.issue.plugin_state_recovery
-                ? {
-                    environment_id: environment.id,
-                    plan: prepared.issue.plugin_state_recovery,
-                  }
-                : undefined,
-            },
-          );
+          throw launcherActionFailure('action_invalid', 'environment', prepared.issue.message, {
+            environmentID: environment.id,
+          });
         }
         const rejectCanceledReadyRuntime = async (): Promise<void> => {
           if (!signal.aborted) {
@@ -17590,90 +17570,6 @@ async function listRuntimeContainersFromLauncher(
   }
 }
 
-async function runPluginStateRecoveryCLI(stateRoot: string, expectedPlanSHA256: string): Promise<PluginStateRecoveryCLIReport> {
-  const executable = bundledRuntimeExecutablePath();
-  const args = [
-    'plugin-state-recovery',
-    'recover',
-    '--state-root',
-    stateRoot,
-    '--expected-plan-sha256',
-    expectedPlanSHA256,
-    '--confirm-retain-archive-and-reset-active-state',
-  ];
-  return await new Promise((resolve, reject) => {
-    const child = spawn(executable, args, {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: process.env,
-    });
-    let stdout = '';
-    let stderr = '';
-    const append = (current: string, chunk: string): string => (current + chunk).slice(-65_536);
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stdout.on('data', (chunk: string) => { stdout = append(stdout, chunk); });
-    child.stderr.on('data', (chunk: string) => { stderr = append(stderr, chunk); });
-    child.once('error', reject);
-    child.once('close', (code) => {
-      const raw = stdout.trim() || stderr.trim();
-      try {
-        resolve(parsePluginStateRecoveryCLIReport(raw, expectedPlanSHA256, code));
-      } catch (error) {
-        reject(error);
-      }
-    });
-  });
-}
-
-async function recoverPluginStateFromLauncher(
-  request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'recover_plugin_state' }>>,
-): Promise<DesktopLauncherActionResult> {
-  const preferences = await loadDesktopPreferencesCached();
-  const environment = findLocalEnvironmentByID(preferences, request.environment_id);
-  if (!environment) {
-    return launcherActionFailure('environment_missing', 'environment', 'This Local Environment is no longer available.', {
-      environmentID: request.environment_id,
-      shouldRefreshSnapshot: true,
-    });
-  }
-  const stateRoot = localEnvironmentStateRoot(environment);
-  if (!stateRoot) {
-    return launcherActionFailure('plugin_state_recovery_failed', 'environment', 'Desktop could not resolve this Local Environment state root.', {
-      environmentID: environment.id,
-    });
-  }
-  try {
-    await runPluginStateRecoveryCLI(stateRoot, request.expected_plan_sha256);
-  } catch (error) {
-    if (error instanceof PluginStateRecoveryCLIError && error.code === 'recovery_plan_changed') {
-      return startEnvironmentRuntimeFromLauncher({
-        kind: 'start_environment_runtime',
-        environment_id: environment.id,
-        label: environment.label,
-      });
-    }
-    return launcherActionFailure(
-      'plugin_state_recovery_failed',
-      'environment',
-      error instanceof Error ? error.message : String(error),
-      {
-        environmentID: environment.id,
-        shouldRefreshSnapshot: true,
-      },
-    );
-  }
-  resetLauncherIssueState();
-  const started = await startEnvironmentRuntimeFromLauncher({
-    kind: 'start_environment_runtime',
-    environment_id: environment.id,
-    label: environment.label,
-  });
-  if (!started.ok) {
-    return started;
-  }
-  return launcherActionSuccess('recovered_plugin_state');
-}
-
 async function performDesktopLauncherAction(request: DesktopLauncherActionRequest): Promise<DesktopLauncherActionResult> {
   switch (request.kind) {
     case 'open_local_environment':
@@ -17693,8 +17589,6 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
       );
     case 'start_environment_runtime':
       return startEnvironmentRuntimeFromLauncher(request);
-    case 'recover_plugin_state':
-      return recoverPluginStateFromLauncher(request);
     case 'restart_environment_runtime':
       return restartEnvironmentRuntimeFromLauncher(request);
     case 'update_environment_runtime':

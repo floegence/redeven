@@ -9,16 +9,14 @@ import (
 
 	"github.com/floegence/redeven/internal/pluginmarket"
 	redevpluginartifacts "github.com/floegence/redeven/spec/redevplugin"
-	"github.com/floegence/redevplugin/v2/pkg/capabilitycontract"
-	"github.com/floegence/redevplugin/v2/pkg/host"
-	"github.com/floegence/redevplugin/v2/pkg/releasetrust"
-	"github.com/floegence/redevplugin/v2/pkg/remoterelease"
+	"github.com/floegence/redevplugin/v3/pkg/host"
+	"github.com/floegence/redevplugin/v3/pkg/releasetrust"
+	"github.com/floegence/redevplugin/v3/pkg/remoterelease"
 )
 
 const (
 	officialReleaseSourceID   = "redeven_official"
 	officialReleaseChannel    = "stable"
-	officialHostID            = "redeven"
 	officialContainersVersion = "4.4.4"
 	officialMinHostVersion    = "1.0.0"
 )
@@ -26,7 +24,6 @@ const (
 type officialReleaseProvider struct {
 	releaseRef host.PluginReleaseRef
 	transport  *remoterelease.AssetSet
-	capability capabilitycontract.KnownContract
 }
 
 func newOfficialReleaseModuleWithClock(
@@ -47,9 +44,7 @@ func newOfficialReleaseModuleWithClock(
 	if err != nil {
 		return nil, host.PluginReleaseRef{}, nil, err
 	}
-	return &host.ReleaseModule{
-		Trust: trust, ReleaseArtifactResolver: provider, HostRequirements: provider,
-	}, provider.releaseRef, nil, nil
+	return &host.ReleaseModule{Trust: trust, ReleaseArtifactResolver: provider}, provider.releaseRef, nil, nil
 }
 
 func newOfficialReleaseProvider(release pluginmarket.LatestRelease, fetcher remoterelease.AssetFetcher) (*officialReleaseProvider, error) {
@@ -82,12 +77,8 @@ func newOfficialReleaseProvider(release pluginmarket.LatestRelease, fetcher remo
 	if err != nil {
 		return nil, fmt.Errorf("create official Containers remote transport: %w", err)
 	}
-	contract, err := redevpluginartifacts.ContainersCapabilityContract()
-	if err != nil {
-		return nil, fmt.Errorf("load official Containers capability: %w", err)
-	}
 	return &officialReleaseProvider{
-		releaseRef: ref, transport: transport, capability: contract,
+		releaseRef: ref, transport: transport,
 	}, nil
 }
 
@@ -138,28 +129,8 @@ func (p *officialReleaseProvider) ResolveReleaseArtifact(ctx context.Context, re
 	return p.transport.ResolveReleaseArtifact(ctx, req)
 }
 
-func (p *officialReleaseProvider) SelectHostRequirement(ctx context.Context, req host.HostRequirementSelectionRequest) (host.HostRequirementSelection, error) {
-	if err := ctx.Err(); err != nil {
-		return host.HostRequirementSelection{}, err
-	}
-	if p == nil || req.SourceID != officialReleaseSourceID || req.PublisherID != officialPublisherID ||
-		req.PluginID != officialContainersPluginID || req.PluginVersion != officialContainersVersion || len(req.Requirements) != 1 {
-		return host.HostRequirementSelection{}, officialReleaseVerificationError("host requirement is not declared")
-	}
-	requirement := req.Requirements[0]
-	if requirement.HostID != officialHostID || requirement.MinHostVersion != officialMinHostVersion || len(requirement.RequiredCapabilityContracts) != 1 {
-		return host.HostRequirementSelection{}, officialReleaseVerificationError("host requirement is invalid")
-	}
-	required := requirement.RequiredCapabilityContracts[0]
-	if required.CapabilityID != containersCapabilityID || required.CapabilityVersion != containersCapabilityVersion {
-		return host.HostRequirementSelection{}, officialReleaseVerificationError("host capability requirement is invalid")
-	}
-	return host.HostRequirementSelection{HostID: officialHostID}, nil
-}
-
 func officialReleaseVerificationError(reason string) error {
 	return fmt.Errorf("%w: %s", host.ErrReleaseRefVerificationFailed, reason)
 }
 
 var _ host.ReleaseArtifactResolver = (*officialReleaseProvider)(nil)
-var _ host.HostRequirementPolicy = (*officialReleaseProvider)(nil)

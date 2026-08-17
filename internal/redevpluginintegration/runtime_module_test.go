@@ -7,28 +7,22 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/floegence/redevplugin/v2/pkg/contracts"
-	"github.com/floegence/redevplugin/v2/pkg/version"
+	"github.com/floegence/redevplugin/v3/pkg/version"
 )
 
 func TestOfficialRuntimeVersionMatchesReleasedPlatform(t *testing.T) {
-	want := contracts.PackageSet().PlatformVersion
-	if want != "2.0.10" {
-		t.Fatalf("released package-set version = %q, want 2.0.10", want)
-	}
+	want := version.CurrentPlatformVersion()
 	if officialRuntimeVersion != want {
-		t.Fatalf("official runtime version = %q, want package-set version %q", officialRuntimeVersion, want)
+		t.Fatalf("official runtime version = %q, want release-manifest version %q", officialRuntimeVersion, want)
 	}
 }
 
 func TestBundledRuntimeDescriptorUsesReleasedDigest(t *testing.T) {
 	const releasedDigest = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	marker := map[string]any{
-		"schema_version": "redeven.redevplugin_runtime_build.v1",
-		"platform_publication": map[string]any{
-			"platform_version": officialRuntimeVersion, "contract_set_sha256": version.ContractSetSHA256,
-		},
-		"product_build": map[string]any{"ignored": true},
+		"schema_version":   "redeven.redevplugin_runtime_build.v1",
+		"platform_release": map[string]any{"platform_version": officialRuntimeVersion},
+		"product_build":    map[string]any{"ignored": true},
 		"runtime": map[string]any{
 			"target": "linux/amd64",
 			"binary": map[string]any{"path": "redevplugin-runtime", "sha256": releasedDigest, "size": 42},

@@ -5,8 +5,8 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
 ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)
 REPOSITORY="floegence/redevplugin"
 RUST_TOOLCHAIN="1.88.0"
-PUBLICATION_ASSET="platform-package-publication-v2.json"
-PUBLICATION_MARKER="platform-publication-verification-v1.json"
+RELEASE_MANIFEST_ASSET="platform-release-manifest.json"
+RELEASE_VERIFICATION="redevplugin-release-verification-v1.json"
 RUNTIME_MARKER=".redevplugin-release-artifacts-verified.json"
 RUNTIME_NOTICES="REDEVPLUGIN_THIRD_PARTY_NOTICES.md"
 RUNTIME_SBOM="REDEVPLUGIN_RUNTIME.spdx.json"
@@ -22,7 +22,7 @@ Usage:
     --runtime-out <file> [--profile development|release]
   ./scripts/stage_redevplugin_release_artifacts.sh --self-test
 
-Downloads and verifies the released ReDevPlugin package publication, builds the
+Downloads and verifies the released ReDevPlugin platform manifest, builds the
 runtime from the exact published Rust source crate with Rust 1.88.0, and emits
 Redeven-owned SBOM, provenance, notices, signature, and verification evidence.
 Only linux/amd64 and linux/arm64 are supported runtime targets.
@@ -99,19 +99,20 @@ runtime_out="$runtime_parent/$(basename -- "$runtime_out")"
 
 tmpdir=$(mktemp -d "$dest_parent/.redevplugin-stage.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT
-package_set="$tmpdir/package-set.json"
-(cd "$ROOT_DIR" && GOWORK=off go run ./scripts/read_redevplugin_package_set.go >"$package_set")
-version=$(jq -er '.platform_version' "$package_set")
-tag="v$version"
+tag=$(cd "$ROOT_DIR" && GOWORK=off go list -m -f '{{.Version}}' github.com/floegence/redevplugin/v3)
+[[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "invalid ReDevPlugin module version: $tag"
 
 mkdir -p "$tmpdir/upstream"
-gh release download "$tag" --repo "$REPOSITORY" --dir "$tmpdir/upstream" --pattern "$PUBLICATION_ASSET"
-publication="$tmpdir/upstream/$PUBLICATION_ASSET"
-publication_verification="$tmpdir/$PUBLICATION_MARKER"
+gh release download "$tag" --repo "$REPOSITORY" --dir "$tmpdir/upstream" --pattern "$RELEASE_MANIFEST_ASSET"
+manifest="$tmpdir/upstream/$RELEASE_MANIFEST_ASSET"
+version=$(jq -er '.platform_version' "$manifest")
+[[ "v$version" == "$tag" ]] || die "release manifest version does not match Go module version"
+release_verification="$tmpdir/$RELEASE_VERIFICATION"
 "$SCRIPT_DIR/check_redevplugin_release_artifacts.sh" \
   --artifact-dir "$tmpdir/upstream" \
-  --tag "$tag" \
-  --write-marker "$publication_verification"
+  --tag "$tag"
+node "$SCRIPT_DIR/redevplugin_release_contract.mjs" write-release-verification \
+  "$manifest" "$tag" "$release_verification"
 
 rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
 rustup target add --toolchain "$RUST_TOOLCHAIN" "$rust_target"
@@ -157,8 +158,7 @@ provenance="$tmpdir/$RUNTIME_PROVENANCE"
 sbom="$tmpdir/$RUNTIME_SBOM"
 notices="$tmpdir/$RUNTIME_NOTICES"
 node "$SCRIPT_DIR/redevplugin_release_contract.mjs" write-build-evidence \
-  --package-set "$package_set" \
-  --publication-verification "$publication_verification" \
+  --release-verification "$release_verification" \
   --cargo-metadata "$tmpdir/cargo-metadata.json" \
   --product-repository floegence/redeven \
   --product-workflow .github/workflows/release.yml \
@@ -190,8 +190,7 @@ fi
 marker="$tmpdir/$RUNTIME_MARKER"
 node "$SCRIPT_DIR/redevplugin_release_contract.mjs" write-runtime-marker \
   --profile "$profile" \
-  --package-set "$package_set" \
-  --publication-verification "$publication_verification" \
+  --release-verification "$release_verification" \
   --product-repository floegence/redeven \
   --product-workflow .github/workflows/release.yml \
   --product-ref "$product_ref" \
@@ -209,9 +208,8 @@ node "$SCRIPT_DIR/redevplugin_release_contract.mjs" write-runtime-marker \
 
 staged="$tmpdir/published"
 mkdir -p "$staged"
-install -m 0644 "$publication" "$staged/$PUBLICATION_ASSET"
-install -m 0644 "$publication_verification" "$staged/$PUBLICATION_MARKER"
-install -m 0644 "$package_set" "$staged/platform-package-set-v3.json"
+install -m 0644 "$manifest" "$staged/$RELEASE_MANIFEST_ASSET"
+install -m 0644 "$release_verification" "$staged/$RELEASE_VERIFICATION"
 install -m 0755 "$runtime" "$staged/redevplugin-runtime"
 for name in "$RUNTIME_MARKER" "$RUNTIME_NOTICES" "$RUNTIME_SBOM" "$RUNTIME_PROVENANCE" "$RUNTIME_SIGNATURE" "$RUNTIME_CERTIFICATE"; do
   install -m 0644 "$tmpdir/$name" "$staged/$name"

@@ -100,10 +100,6 @@ import {
   isDesktopLauncherActionSuccess,
   selectLatestDesktopWelcomeSnapshot,
 } from '../shared/desktopLauncherIPC';
-import {
-  pluginStateRecoveryDialogAfterFailure,
-  type PluginStateRecoveryDialogState,
-} from './pluginStateRecoveryDialog';
 import type { DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
 import type { DesktopRuntimeProcessTakeoverProposal } from '../shared/desktopRuntimeProcessTakeover';
 import {
@@ -2837,8 +2833,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [controlPlaneDialogState, setControlPlaneDialogState] = createSignal<ControlPlaneDialogState>(null);
   const [runtimeProcessTakeoverDialog, setRuntimeProcessTakeoverDialog] = createSignal<RuntimeProcessTakeoverDialogState | null>(null);
   const [runtimeProcessTakeoverSubmitting, setRuntimeProcessTakeoverSubmitting] = createSignal(false);
-  const [pluginStateRecoveryDialog, setPluginStateRecoveryDialog] = createSignal<PluginStateRecoveryDialogState | null>(null);
-  const [pluginStateRecoverySubmitting, setPluginStateRecoverySubmitting] = createSignal(false);
   const [deleteTarget, setDeleteTarget] = createSignal<DesktopEnvironmentEntry | null>(null);
   const [deleteGatewayTarget, setDeleteGatewayTarget] = createSignal<DesktopGatewaySource | null>(null);
   const [providerRuntimeLinkConfirmation, setProviderRuntimeLinkConfirmation] = createSignal<ProviderRuntimeLinkConfirmationState | null>(null);
@@ -3615,13 +3609,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     requestEnvID?: string,
     request?: DesktopLauncherActionRequest,
   ): Promise<void> {
-    if (failure.code === 'plugin_state_recovery_required' && failure.plugin_state_recovery) {
-      setPluginStateRecoveryDialog({
-        proposal: failure.plugin_state_recovery,
-        error: '',
-      });
-      return;
-    }
     if (
       failure.code === 'confirmation_required'
       && failure.runtime_process_takeover
@@ -4383,46 +4370,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       }
     } finally {
       setRuntimeProcessTakeoverSubmitting(false);
-    }
-  }
-
-  function cancelPluginStateRecovery(): void {
-    if (!pluginStateRecoverySubmitting()) {
-      setPluginStateRecoveryDialog(null);
-    }
-  }
-
-  async function confirmPluginStateRecovery(): Promise<void> {
-    const state = pluginStateRecoveryDialog();
-    if (!state || pluginStateRecoverySubmitting()) {
-      return;
-    }
-    setPluginStateRecoverySubmitting(true);
-    setPluginStateRecoveryDialog({ ...state, error: '' });
-    try {
-      const result = await props.runtime.launcher.performAction({
-        kind: 'recover_plugin_state',
-        environment_id: state.proposal.environment_id,
-        expected_plan_sha256: state.proposal.plan.plan_sha256,
-      });
-      if (isDesktopLauncherActionFailure(result)) {
-        setPluginStateRecoveryDialog(pluginStateRecoveryDialogAfterFailure(
-          state,
-          result,
-          i18n().t('pluginStateRecovery.failed'),
-        ));
-        return;
-      }
-      setPluginStateRecoveryDialog(null);
-      await refreshSnapshot();
-      showActionToast(i18n().t('pluginStateRecovery.completed'), 'success');
-    } catch (error) {
-      setPluginStateRecoveryDialog({
-        ...state,
-        error: getErrorMessage(error),
-      });
-    } finally {
-      setPluginStateRecoverySubmitting(false);
     }
   }
 
@@ -6270,34 +6217,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           <div class="flex items-center gap-2 font-sans">
             {/* Issue warning */}
             <Show when={snapshot().issue}>
-              <Show
-                when={snapshot().issue?.plugin_state_recovery && snapshot().issue?.environment_id}
-                fallback={(
-                  <span class="flex shrink-0 items-center gap-1 text-[10px] font-medium text-warning">
-                    <span class="h-2 w-2 shrink-0 border border-warning bg-warning/10" />
-                    <span class="truncate max-w-[200px]">{localizedIssueTitle(i18n(), snapshot().issue!)}</span>
-                  </span>
-                )}
-              >
-                <button
-                  type="button"
-                  class="flex shrink-0 cursor-pointer items-center gap-1 text-[10px] font-medium text-warning hover:text-foreground"
-                  aria-label={localizedIssueTitle(i18n(), snapshot().issue!)}
-                  onClick={() => {
-                    const issue = snapshot().issue!;
-                    setPluginStateRecoveryDialog({
-                      proposal: {
-                        environment_id: issue.environment_id!,
-                        plan: issue.plugin_state_recovery!,
-                      },
-                      error: '',
-                    });
-                  }}
-                >
-                  <span class="h-2 w-2 shrink-0 border border-warning bg-warning/10" />
-                  <span class="truncate max-w-[200px]">{localizedIssueTitle(i18n(), snapshot().issue!)}</span>
-                </button>
-              </Show>
+              <span class="flex shrink-0 items-center gap-1 text-[10px] font-medium text-warning">
+                <span class="h-2 w-2 shrink-0 border border-warning bg-warning/10" />
+                <span class="truncate max-w-[200px]">{localizedIssueTitle(i18n(), snapshot().issue!)}</span>
+              </span>
             </Show>
             {/* Close / Quit */}
             <BottomBarItem class="cursor-pointer" onClick={() => void closeLauncherOrQuit()}>
@@ -6559,73 +6482,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         updateField={updateControlPlaneDialogField}
         onConnect={connectControlPlaneFromDialog}
       />
-
-      <Dialog
-        open={pluginStateRecoveryDialog() !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            cancelPluginStateRecovery();
-          }
-        }}
-        title={i18n().t('pluginStateRecovery.title')}
-        class="max-w-2xl"
-        footer={(
-          <div class="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              data-floe-autofocus
-              disabled={pluginStateRecoverySubmitting()}
-              onClick={cancelPluginStateRecovery}
-            >
-              {i18n().t('common.cancel')}
-            </Button>
-            <Button
-              variant="destructive"
-              loading={pluginStateRecoverySubmitting()}
-              onClick={() => void confirmPluginStateRecovery()}
-            >
-              {i18n().t('pluginStateRecovery.confirm')}
-            </Button>
-          </div>
-        )}
-      >
-        <Show when={pluginStateRecoveryDialog()} keyed>
-          {(state) => (
-            <div class="space-y-5">
-              <p class="text-sm leading-6 text-muted-foreground">
-                {i18n().t('pluginStateRecovery.summary')}
-              </p>
-              <div class="grid gap-4 border-y border-border py-4 sm:grid-cols-3">
-                <div>
-                  <div class="text-xs font-semibold text-foreground">{i18n().t('pluginStateRecovery.archiveTitle')}</div>
-                  <p class="mt-1 text-xs leading-5 text-muted-foreground">{i18n().t('pluginStateRecovery.archiveBody')}</p>
-                </div>
-                <div>
-                  <div class="text-xs font-semibold text-foreground">{i18n().t('pluginStateRecovery.freshTitle')}</div>
-                  <p class="mt-1 text-xs leading-5 text-muted-foreground">{i18n().t('pluginStateRecovery.freshBody')}</p>
-                </div>
-                <div>
-                  <div class="text-xs font-semibold text-foreground">{i18n().t('pluginStateRecovery.retentionTitle')}</div>
-                  <p class="mt-1 text-xs leading-5 text-muted-foreground">{i18n().t('pluginStateRecovery.retentionBody')}</p>
-                </div>
-              </div>
-              <dl class="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)] gap-x-4 gap-y-2 text-xs">
-                <dt class="text-muted-foreground">{i18n().t('pluginStateRecovery.entriesLabel')}</dt>
-                <dd class="font-medium tabular-nums text-foreground">{i18n().formatNumber(state.proposal.plan.source_entry_count)}</dd>
-                <dt class="text-muted-foreground">{i18n().t('pluginStateRecovery.sizeLabel')}</dt>
-                <dd class="font-medium tabular-nums text-foreground">{i18n().formatNumber(state.proposal.plan.source_bytes)}</dd>
-                <dt class="text-muted-foreground">{i18n().t('pluginStateRecovery.planLabel')}</dt>
-                <dd class="min-w-0 break-all font-mono text-[11px] text-foreground">{state.proposal.plan.plan_sha256}</dd>
-              </dl>
-              <Show when={state.error !== ''}>
-                <div role="alert" class="border-l-2 border-destructive pl-3 text-xs leading-5 text-destructive">
-                  {state.error}
-                </div>
-              </Show>
-            </div>
-          )}
-        </Show>
-      </Dialog>
 
       <Dialog
         open={runtimeProcessTakeoverDialog() !== null}

@@ -1271,7 +1271,7 @@ function PostInstallFacts(props: {
   const update = () => props.operation !== 'install';
   const lifecycle = () => {
     if (props.committedEnableState === 'enabled') return i18n.t('uiCopy.plugin.enabled');
-    if (props.committedEnableState === 'disabled') return i18n.t('uiCopy.plugin.disabled');
+    if (props.committedEnableState === 'disabled_by_user') return i18n.t('uiCopy.plugin.disabled');
     return update() ? i18n.t('uiCopy.plugin.external.currentStateRetained') : i18n.t('uiCopy.plugin.enabled');
   };
   return (
@@ -1285,7 +1285,7 @@ function PostInstallFacts(props: {
         <dd class="mt-0.5 text-sm font-medium">
           {update()
             ? i18n.t('uiCopy.plugin.external.noNewPermissionGrants')
-            : props.committedEnableState === 'disabled'
+            : props.committedEnableState === 'disabled_by_user'
               ? i18n.t('uiCopy.plugin.permissionNotGranted')
               : i18n.t('uiCopy.plugin.permissionGranted')}
         </dd>

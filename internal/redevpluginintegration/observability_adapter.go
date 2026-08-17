@@ -6,8 +6,8 @@ import (
 
 	"github.com/floegence/redeven/internal/auditlog"
 	"github.com/floegence/redeven/internal/diagnostics"
-	"github.com/floegence/redevplugin/v2/pkg/mutation"
-	"github.com/floegence/redevplugin/v2/pkg/observability"
+	"github.com/floegence/redevplugin/v3/pkg/mutation"
+	"github.com/floegence/redevplugin/v3/pkg/observability"
 )
 
 const (

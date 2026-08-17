@@ -47,32 +47,6 @@ const testProvider = normalizeDesktopControlPlaneProvider({
   access_points: [testAccessPoint],
 });
 
-describe('plugin state recovery launch issue', () => {
-  it('keeps the reviewed recovery proposal attached to the blocked startup issue', () => {
-    const digest = 'a'.repeat(64);
-    expect(buildBlockedLaunchIssue({
-      status: 'blocked',
-      code: 'plugin_state_recovery_required',
-      message: 'review required',
-      plugin_state_recovery: {
-        plan_sha256: digest,
-        root_identity_sha256: 'b'.repeat(64),
-        source_snapshot_sha256: 'c'.repeat(64),
-        source_entry_count: 96,
-        source_bytes: 1132957,
-        has_retained_quarantine: true,
-        has_source_recovery_journal: true,
-      },
-    })).toMatchObject({
-      scope: 'startup',
-      code: 'plugin_state_recovery_required',
-      title_key: 'issue.pluginStateRecoveryTitle',
-      message_key: 'issue.pluginStateRecoveryMessage',
-      plugin_state_recovery: { plan_sha256: digest },
-    });
-  });
-});
-
 function providerRuntimeState(envPublicID = 'env_demo') {
   return {
     provider_origin: 'https://provider.example.invalid',

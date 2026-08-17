@@ -15,7 +15,6 @@ export type BusyAction =
   | 'open_ssh_environment'
   | 'prepare_environment_open'
   | 'start_environment_runtime'
-  | 'recover_plugin_state'
   | 'restart_environment_runtime'
   | 'update_environment_runtime'
   | 'manage_desktop_update'

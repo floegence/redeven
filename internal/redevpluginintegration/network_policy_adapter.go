@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/floegence/redevplugin/v2/pkg/host"
+	"github.com/floegence/redevplugin/v3/pkg/host"
 )
 
 var errNetworkPolicyDenied = errors.New("network policy denied")

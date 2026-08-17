@@ -128,7 +128,7 @@ running the final integration gate.
   link, build aliases, or sibling source imports.
 - Record the upstream commit used by each overlay and rebuild the overlay after
   every upstream change. An overlay proves local behavior only; it does not
-  prove release compatibility, provenance, or package-set integrity.
+  prove release compatibility, provenance, or release-manifest integrity.
 - Before committing or integrating Redeven, remove temporary workspaces and
   overlays, release the upstream change, upgrade Redeven to the published
   version, and repeat the affected checks with `GOWORK=off` against the
@@ -470,11 +470,11 @@ Rules:
   from those exact source crates with its fixed toolchain.
   A local `../redevplugin` worktree, branch, copied schema, or draft package is
   not a valid Redeven integration source.
-- The released package-set contract and attested
-  `platform-package-publication-v2.json` are the authoritative closed package
+- The released release-manifest contract and attested
+  `platform-release-manifest.json` are the authoritative closed package
   inventory. Upgrade verification must match their exact Go sums, npm
   integrity and provenance subjects, Rust registry checksums, source commit,
-  contract-set hash, and workflow identity. A partial hand-maintained package
+  artifact hashes, and workflow identity. A partial hand-maintained package
   list is not sufficient release evidence.
 - Required flow for reusable upstream capability work:
   - implement upstream first in the source repository;
@@ -535,8 +535,8 @@ The intended dependency shape is library consumption, not source sharing:
 - Redeven contributes product policy and concrete adapters around those
   imports; it does not become a source tree for ReDevPlugin implementation.
 
-For the current `v1.1.4` baseline, Redeven accepts only ReDevPlugin
-manifest v8, release metadata v8, `plugin-ui-v7`, and `bridge-v7`. Older
+For the current `v3.0.2` baseline, Redeven accepts only ReDevPlugin
+manifest v9, release metadata current, `current plugin UI contract`, and `current bridge contract`. Older
 manifest or release metadata state is not migrated, rewritten, or given a
 synthetic presentation; reads fail closed while the original bytes remain
 unchanged. Plugin names, publisher names, summaries, descriptions, highlights,
@@ -566,7 +566,7 @@ version, package hash, manifest hash, and entries hash exactly match the
 current signed market release, Redeven may reuse that release's bounded icon
 URL; any mismatch falls back to the generic placeholder, so a later market
 generation cannot replace an older installed package's icon. ReDevPlugin
-`v1.1.4` exposes the owner/session-protected installed-icon metadata needed by
+`v3.0.2` exposes the owner/session-protected installed-icon metadata needed by
 the host, so Redeven must not parse package bytes or invent a second icon
 transport.
 
@@ -575,28 +575,13 @@ The current released platform contract also fixes the host-integration shape:
 - Redeven derives ReDevPlugin resource ownership only from an authenticated
   session adapter. Persistent plugin resources use the released `user` or
   `environment` resource scope; request JSON, plugin IPC, and business adapters
-  must never supply or override owner hashes. Before opening any
-  ReDevPlugin-owned durable store, Redeven must invoke the released automatic
-  owner-scope migration API on the product-selected ReDevPlugin state root and
-  use only the committed generation it returns. Recognized supported legacy
-  state whose owner cannot be proven is atomically retained in quarantine while
-  startup creates a fresh owner-scoped generation; restart must reuse that
-  generation and preserve data created after migration. Redeven must never
-  delete the quarantine automatically. Unknown, corrupt, ambiguous, tampered,
-  or future state must fail closed without mutation. This lifecycle applies
-  only to ReDevPlugin-owned state and must not inspect or migrate Floret-owned
-  schemas.
-  A copied supported root whose migration journal no longer matches the current
-  filesystem identity may use only the released read-only recovery inspection
-  and exact-plan recovery APIs. Redeven must present the projected source digest,
-  entry count, byte count, retained-state facts, and exact plan digest before an
-  explicit user confirmation. Recovery takes the same Local Environment runtime
-  lock, atomically retains the complete source as an inactive archive, commits a
-  new empty active generation, and verifies both outcomes before startup retries.
-  Cancellation performs no mutation. A changed plan, active runtime, unsupported
-  state, or failed verification blocks recovery; Redeven must never delete or
-  edit the journal, guess a replacement identity, expose archive paths, or reuse
-  archived plugins, grants, settings, secrets, or storage as active state.
+  must never supply or override owner hashes. Redeven passes its explicit state
+  root to ReDevPlugin and keeps the `redevplugin_control_v3` control database
+  opaque. It must not maintain an owner-scope generation, legacy-state importer,
+  copied-root recovery workflow, or a second migration protocol. A wrong,
+  legacy, drifted, tampered, or future root fails closed without Redeven mutating
+  its bytes. This lifecycle applies only to ReDevPlugin-owned state and must not
+  inspect or migrate Floret-owned schemas.
 - Short-lived surfaces, Executions, Events, handles, confirmations, and token
   audiences bind the exact `owner_session_hash`, `owner_user_hash`,
   `owner_env_hash`, and `session_channel_id_hash` derived from the active
@@ -771,7 +756,7 @@ Redeven owns only product integration and business adapters:
   artifact resolution into `redevplugin` adapter interfaces;
 - integrating plugin surfaces into Env App, Activity Bar, Workbench, Settings,
   Desktop packaging, installer packaging, and runtime startup diagnostics;
-- pinning the released ReDevPlugin package set, building the Linux runtime from
+- pinning the released ReDevPlugin release manifest, building the Linux runtime from
   its exact Rust source crates with the fixed product toolchain, emitting SBOM,
   provenance, and signatures, and wiring the ReDevPlugin runtime manager into
   Redeven process startup/shutdown without replacing its IPC, lease, quota, or

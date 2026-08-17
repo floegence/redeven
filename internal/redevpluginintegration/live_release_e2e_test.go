@@ -19,12 +19,12 @@ import (
 	"github.com/floegence/redeven/internal/pluginmarket"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/sessionhop"
-	"github.com/floegence/redevplugin/v2/pkg/execution"
-	"github.com/floegence/redevplugin/v2/pkg/externalsource"
-	"github.com/floegence/redevplugin/v2/pkg/host"
-	"github.com/floegence/redevplugin/v2/pkg/pluginpkg"
-	"github.com/floegence/redevplugin/v2/pkg/releasecontract"
-	"github.com/floegence/redevplugin/v2/pkg/releasetrust"
+	"github.com/floegence/redevplugin/v3/pkg/execution"
+	"github.com/floegence/redevplugin/v3/pkg/externalsource"
+	"github.com/floegence/redevplugin/v3/pkg/host"
+	"github.com/floegence/redevplugin/v3/pkg/pluginpkg"
+	"github.com/floegence/redevplugin/v3/pkg/releasecontract"
+	"github.com/floegence/redevplugin/v3/pkg/releasetrust"
 )
 
 type localReleaseAssetFetcher struct {
@@ -91,10 +91,9 @@ func TestLiveOfficialContainersReleaseInstallCompletes(t *testing.T) {
 		}
 	})
 
-	activate := false
 	startBody, err := json.Marshal(map[string]any{
 		"request_id": "request_release_install", "plugin_instance_id": "catalog_com.redeven.official_com.redeven.official.containers",
-		"release_ref": releaseRef, "activate_after_install": activate,
+		"release_ref": releaseRef,
 	})
 	if err != nil {
 		t.Fatal(err)

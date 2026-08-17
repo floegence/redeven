@@ -27,7 +27,13 @@
       "errorInvalidEncoding": "Ce fichier texte n’est pas encodé correctement en UTF-8.",
       "errorUploadFailed": "Le téléversement a échoué. Réessayez.",
       "errorUnavailable": "Les pièces jointes ne sont pas disponibles pour le modèle sélectionné.",
-      "lines": { "kind": "plural", "forms": { "one": "{count} ligne", "other": "{count} lignes" } },
+      "lines": {
+        "kind": "plural",
+        "forms": {
+          "one": "{count} ligne",
+          "other": "{count} lignes"
+        }
+      },
       "added": "{name} ajouté.",
       "converted": "Le texte long a été converti en pièce jointe {name}.",
       "uploaded": "{name} téléversé.",
@@ -690,16 +696,42 @@
     "useDarkTheme": "Utiliser le thème sombre",
     "useLightTheme": "Utiliser le thème clair",
     "themePicker": {
-      "openLabel": "Apparence", "title": "Apparence", "closeLabel": "Fermer les réglages d’apparence", "modeLabel": "Mode de couleur",
-      "mode": { "system": "Système", "light": "Clair", "dark": "Sombre" },
+      "openLabel": "Apparence",
+      "title": "Apparence",
+      "closeLabel": "Fermer les réglages d’apparence",
+      "modeLabel": "Mode de couleur",
+      "mode": {
+        "system": "Système",
+        "light": "Clair",
+        "dark": "Sombre"
+      },
       "systemResolvedLight": "Le système utilise actuellement le mode clair",
       "systemResolvedDark": "Le système utilise actuellement le mode sombre",
-      "themesLabel": "Thèmes", "changeFailed": "Impossible de modifier l’apparence. Réessayez.",
+      "themesLabel": "Thèmes",
+      "changeFailed": "Impossible de modifier l’apparence. Réessayez.",
       "presets": {
-        "classic-light": "Classique clair", "paper": "Papier", "mist": "Brume", "meadow": "Prairie", "citrus": "Agrumes", "lilac": "Lilas",
-        "light-plus": "Light+", "quiet-light": "Quiet Light", "solarized-light": "Solarized Light", "github-light": "GitHub Light", "hc-light": "Clair à contraste élevé",
-        "classic-dark": "Classique sombre", "ink": "Encre", "slate": "Ardoise", "forest": "Forêt", "ember": "Braise", "ocean": "Océan",
-        "dark-plus": "Dark+", "monokai": "Monokai", "nord": "Nord", "dracula": "Dracula", "abyss": "Abîme"
+        "classic-light": "Classique clair",
+        "paper": "Papier",
+        "mist": "Brume",
+        "meadow": "Prairie",
+        "citrus": "Agrumes",
+        "lilac": "Lilas",
+        "light-plus": "Light+",
+        "quiet-light": "Quiet Light",
+        "solarized-light": "Solarized Light",
+        "github-light": "GitHub Light",
+        "hc-light": "Clair à contraste élevé",
+        "classic-dark": "Classique sombre",
+        "ink": "Encre",
+        "slate": "Ardoise",
+        "forest": "Forêt",
+        "ember": "Braise",
+        "ocean": "Océan",
+        "dark-plus": "Dark+",
+        "monokai": "Monokai",
+        "nord": "Nord",
+        "dracula": "Dracula",
+        "abyss": "Abîme"
       }
     }
   },
@@ -768,8 +800,6 @@
     "attention": "attention"
   },
   "issue": {
-    "pluginStateRecoveryTitle": "Examiner la récupération de l’état des plugins",
-    "pluginStateRecoveryMessage": "Redeven a détecté un état de plugins copié qui nécessite une récupération avec conservation d’une archive avant de pouvoir démarrer en toute sécurité.",
     "remoteEnvironmentInvalidTitle": "Vérifier l'environnement URL",
     "remoteEnvironmentOpenTitle": "Impossible d'ouvrir cet environnement",
     "sshEnvironmentOpenTitle": "Impossible d'ouvrir cet environnement SSH",
@@ -785,22 +815,6 @@
     "startupInvalidTitle": "nécessite un paramètre. Échec du démarrage de l'environnement local",
     "startupFailedTitle": "L'environnement local",
     "localEnvironmentAttentionTitle": "nécessite une attention particulière Le démarrage de l'environnement local"
-  },
-  "pluginStateRecovery": {
-    "title": "Examiner la récupération de l’état des plugins",
-    "summary": "Cet état de plugins a été copié ou restauré depuis un système de fichiers ayant une identité différente. Redeven le conservera pour récupération, puis démarrera avec une nouvelle génération de plugins vide.",
-    "archiveTitle": "Conserver l’ancien état",
-    "archiveBody": "L’intégralité de l’état source est déplacée dans une archive de récupération inactive.",
-    "freshTitle": "Repartir de zéro",
-    "freshBody": "Les plugins installés ainsi que les autorisations accordées, les réglages, les secrets et les données stockées provenant de l’archive ne seront pas activés.",
-    "retentionTitle": "Conserver les preuves de récupération",
-    "retentionBody": "Redeven ne supprime jamais automatiquement l’archive conservée.",
-    "entriesLabel": "Entrées source",
-    "sizeLabel": "Octets source",
-    "planLabel": "Plan de récupération",
-    "confirm": "Archiver l’état et redémarrer",
-    "failed": "La récupération de l’état des plugins a échoué.",
-    "completed": "L’état des plugins a été archivé et l’environnement local a redémarré avec une nouvelle génération de plugins."
   },
   "blockedPage": {
     "stateDirLockedAttachTitle": "Redeven démarre déjà ailleurs",

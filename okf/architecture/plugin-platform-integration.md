@@ -1,14 +1,14 @@
 ---
 type: Architecture Contract
 title: Plugin platform integration
-description: Redeven mounts ReDevPlugin v1.1.4 and adds authenticated host modules, copied-root recovery, market-backed official releases, external-source policy, localized plugin presentation, product placement, and business adapters.
+description: Redeven mounts ReDevPlugin v3.0.2 and adds authenticated host modules, market-backed official releases, external-source policy, localized plugin presentation, product placement, and business adapters.
 tags: [architecture, plugins, local-ui, redevplugin]
 timestamp: 2026-07-25T00:00:00Z
 quality_exception: Cross-domain host integration contract spanning identity, security, runtime, storage, routes, surfaces, and business adapters.
 ---
 # Summary
 
-Redeven integrates ReDevPlugin `v1.1.4` through one Go Host, one canonical HTTP
+Redeven integrates ReDevPlugin `v3.0.2` through one Go Host, one canonical HTTP
 namespace, one Env App `PluginPlatformClient`, one shared surface scope, and the
 released ProcessManager over a verified Redeven-built Linux runtime. Redeven
 adds authenticated session mapping, public-source admission policy, product
@@ -21,8 +21,8 @@ package, capability, runtime, or surface identity fails closed.
 
 ## Host construction and routes
 
-`internal/redevpluginintegration` prepares the released owner-scoped generation,
-opens ReDevPlugin stores, and constructs the Host with core, official release,
+`internal/redevpluginintegration` passes one explicit product-selected state root
+to ReDevPlugin and constructs the Host with core, official release,
 runtime, connectivity, secret, capability, and external-package modules. The
 external module uses the bounded public HTTPS fetcher, GitHub Release resolver,
 and package signature assessor. Inspections are process-local, opaque, and
@@ -71,30 +71,6 @@ terminal claim, migration, and reconciliation in its control database. Redeven's
 a second durable lifecycle owner. Shutdown closes Local UI admission and hijacked
 transports before canceling Agent sessions, waits for request leases and session
 handlers, and then invokes the released idempotent Host teardown path.
-
-## Copied owner-scope recovery
-
-Automatic owner-scope preparation remains the only normal startup path. When a
-supported copied root has a migration journal bound to another filesystem
-identity, Redeven invokes the released read-only recovery inspection only after
-normal preparation fails. Unknown, corrupt, ambiguous, tampered, unsupported,
-or future state still returns the original startup failure without a recovery
-proposal.
-
-An eligible Desktop startup report contains only the exact recovery-plan digest,
-root-identity digest, source-snapshot digest, source entry and byte counts, and
-retained-state flags. Desktop binds that proposal to the exact Local Environment
-and does not expose root or archive paths. Cancel performs no operation. Confirm
-runs the bundled `redeven plugin-state-recovery recover` command under the same
-Local Environment runtime lock and supplies the reviewed plan digest plus an
-explicit retained-archive/fresh-generation acknowledgement.
-
-The released recovery atomically retains the complete source tree as an inactive
-archive and commits a new empty active generation. Redeven verifies the returned
-plan, archive outcome, fresh generation, and restart reuse before opening stores.
-Archived plugins, grants, settings, secrets, and storage never become active. A
-stale plan triggers a new startup inspection and a new user review; it is never
-silently accepted or retried with broader authority.
 
 ## Package sources and lifecycle
 
@@ -147,7 +123,7 @@ user pin.
 The runtime module binds the canonical sibling executable, target, ReDevPlugin
 `1.1.4`, runtime-internal IPC and WASM ABI contracts, exact product-build descriptor, lease
 replay storage, and released limits. Linux runtime bytes are built with Rust
-1.88.0 from the attested package set and travel with SBOM, provenance, notices,
+1.88.0 from the attested release manifest and travel with SBOM, provenance, notices,
 and signature evidence. The expected binary digest comes from the product release
 marker; field binary bytes are never hashed and accepted as their own trust
 anchor. Missing, non-canonical, wrong-target, unsigned, or wrong-hash runtime
@@ -258,7 +234,7 @@ disposal alone is not revocation evidence.
 # Boundaries
 
 Canonical ownership is defined by [ReDevPlugin host integration boundary](redevplugin-boundary.md).
-This concept owns only Redeven's concrete `v1.1.4` assembly.
+This concept owns only Redeven's concrete `v3.0.2` assembly.
 
 Manifest surfaces remain `view|command|background` with semantic roles. Activity,
 Workbench, window, widget, inventory key, navigation, settings, and product layout
@@ -267,9 +243,6 @@ never become manifest fields.
 # Evidence
 
 - `redeven:internal/redevpluginintegration/integration.go:1` - Opens Host modules and the canonical handler.
-- `redeven:internal/redevpluginintegration/owner_scope_recovery.go:1` - Projects released copied-root inspection and exact-plan recovery without editing opaque state.
-- `redeven:cmd/redeven/plugin_state_recovery.go:1` - Requires the Local Environment lock and explicit retained-archive confirmation.
-- `redeven:desktop/src/main/pluginStateRecovery.ts:1` - Validates the bundled recovery command result and preserves stale-plan outcomes.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/ExternalPluginInstallDialog.test.tsx:1` - Exercises inspect, explicit confirmation, Host install, and disabled zero-grant presentation.
 - `redeven:spec/redevplugin/artifacts.go:1` - Pins official package keys and loads the generated known v4 capability contract.
 - `redeven:internal/redevpluginintegration/session_adapter.go:340` - Maps read and admin external-package actions to explicit product permissions.

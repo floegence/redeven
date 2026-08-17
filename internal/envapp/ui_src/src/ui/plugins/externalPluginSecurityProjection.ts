@@ -127,7 +127,7 @@ export function projectSecurityDeclarations(summary: PluginExternalPackageSecuri
   }
   for (const value of summary.workers) {
     add('workers', value.worker_id, [
-      `artifact=${value.artifact}; abi=${value.abi}; mode=${value.mode}; scope=${value.scope}`,
+      `artifact=${value.artifact}; mode=${value.mode}; scope=${value.scope}`,
       `memory_limit_bytes=${value.memory_limit_bytes}; idle_timeout_ms=${value.idle_timeout_ms}`,
     ], value);
   }

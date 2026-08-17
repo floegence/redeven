@@ -27,7 +27,13 @@
       "errorInvalidEncoding": "Diese Textdatei ist nicht UTF-8-konform.",
       "errorUploadFailed": "Der Upload ist fehlgeschlagen. Versuche es erneut.",
       "errorUnavailable": "Anhänge sind für das ausgewählte Modell nicht verfügbar.",
-      "lines": { "kind": "plural", "forms": { "one": "{count} Zeile", "other": "{count} Zeilen" } },
+      "lines": {
+        "kind": "plural",
+        "forms": {
+          "one": "{count} Zeile",
+          "other": "{count} Zeilen"
+        }
+      },
       "added": "{name} hinzugefügt.",
       "converted": "Langer Text wurde in den Anhang {name} umgewandelt.",
       "uploaded": "{name} hochgeladen.",
@@ -690,16 +696,42 @@
     "useDarkTheme": "Dunkles Theme verwenden",
     "useLightTheme": "Helles Theme verwenden",
     "themePicker": {
-      "openLabel": "Darstellung", "title": "Darstellung", "closeLabel": "Darstellung schließen", "modeLabel": "Farbmodus",
-      "mode": { "system": "System", "light": "Hell", "dark": "Dunkel" },
+      "openLabel": "Darstellung",
+      "title": "Darstellung",
+      "closeLabel": "Darstellung schließen",
+      "modeLabel": "Farbmodus",
+      "mode": {
+        "system": "System",
+        "light": "Hell",
+        "dark": "Dunkel"
+      },
       "systemResolvedLight": "Das System verwendet derzeit den hellen Modus",
       "systemResolvedDark": "Das System verwendet derzeit den dunklen Modus",
-      "themesLabel": "Themes", "changeFailed": "Die Darstellung konnte nicht aktualisiert werden. Versuchen Sie es erneut.",
+      "themesLabel": "Themes",
+      "changeFailed": "Die Darstellung konnte nicht aktualisiert werden. Versuchen Sie es erneut.",
       "presets": {
-        "classic-light": "Klassisch hell", "paper": "Papier", "mist": "Nebel", "meadow": "Wiese", "citrus": "Zitrus", "lilac": "Flieder",
-        "light-plus": "Light+", "quiet-light": "Quiet Light", "solarized-light": "Solarized Light", "github-light": "GitHub Light", "hc-light": "Hell (hoher Kontrast)",
-        "classic-dark": "Klassisch dunkel", "ink": "Tinte", "slate": "Schiefer", "forest": "Wald", "ember": "Glut", "ocean": "Ozean",
-        "dark-plus": "Dark+", "monokai": "Monokai", "nord": "Nord", "dracula": "Dracula", "abyss": "Abgrund"
+        "classic-light": "Klassisch hell",
+        "paper": "Papier",
+        "mist": "Nebel",
+        "meadow": "Wiese",
+        "citrus": "Zitrus",
+        "lilac": "Flieder",
+        "light-plus": "Light+",
+        "quiet-light": "Quiet Light",
+        "solarized-light": "Solarized Light",
+        "github-light": "GitHub Light",
+        "hc-light": "Hell (hoher Kontrast)",
+        "classic-dark": "Klassisch dunkel",
+        "ink": "Tinte",
+        "slate": "Schiefer",
+        "forest": "Wald",
+        "ember": "Glut",
+        "ocean": "Ozean",
+        "dark-plus": "Dark+",
+        "monokai": "Monokai",
+        "nord": "Nord",
+        "dracula": "Dracula",
+        "abyss": "Abgrund"
       }
     }
   },
@@ -768,8 +800,6 @@
     "attention": "Aufmerksamkeit"
   },
   "issue": {
-    "pluginStateRecoveryTitle": "Wiederherstellung des Plugin-Zustands prüfen",
-    "pluginStateRecoveryMessage": "Redeven hat einen kopierten Plugin-Zustand gefunden. Für einen sicheren Start muss der vollständige Zustand in einem beibehaltenen Wiederherstellungsarchiv gesichert werden.",
     "remoteEnvironmentInvalidTitle": "Überprüfen Sie die Umgebung. URL",
     "remoteEnvironmentOpenTitle": "Diese Umgebung kann nicht geöffnet werden",
     "sshEnvironmentOpenTitle": "Die SSH-Umgebung kann nicht geöffnet werden",
@@ -785,22 +815,6 @@
     "startupInvalidTitle": "Für den Start der lokalen Umgebung ist eine Einstellung erforderlich",
     "startupFailedTitle": "Der Start der lokalen Umgebung ist fehlgeschlagen",
     "localEnvironmentAttentionTitle": "Die lokale Umwelt braucht Aufmerksamkeit"
-  },
-  "pluginStateRecovery": {
-    "title": "Wiederherstellung des Plugin-Zustands prüfen",
-    "summary": "Dieser Plugin-Zustand wurde aus einer Umgebung mit einer anderen Dateisystemidentität kopiert oder wiederhergestellt. Redeven sichert ihn in einem Wiederherstellungsarchiv und startet anschließend mit einer neuen, leeren Plugin-Generation.",
-    "archiveTitle": "Alten Plugin-Zustand aufbewahren",
-    "archiveBody": "Der vollständige ursprüngliche Plugin-Zustand wird in ein inaktives Wiederherstellungsarchiv verschoben.",
-    "freshTitle": "Neu beginnen",
-    "freshBody": "Installierte Plugins, erteilte Berechtigungen, Einstellungen, Secrets und gespeicherte Plugin-Daten aus dem Archiv werden nicht aktiviert.",
-    "retentionTitle": "Wiederherstellungsnachweis aufbewahren",
-    "retentionBody": "Redeven löscht das aufbewahrte Archiv niemals automatisch.",
-    "entriesLabel": "Einträge im Quellzustand",
-    "sizeLabel": "Größe des Quellzustands (Bytes)",
-    "planLabel": "Wiederherstellungsplan",
-    "confirm": "Plugin-Zustand archivieren und mit leerem Zustand neu starten",
-    "failed": "Die Wiederherstellung des Plugin-Zustands ist fehlgeschlagen.",
-    "completed": "Der Plugin-Zustand wurde archiviert und die lokale Umgebung mit einer neuen Plugin-Generation neu gestartet."
   },
   "blockedPage": {
     "stateDirLockedAttachTitle": "Redeven startet bereits an anderer Stelle",

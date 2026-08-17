@@ -26,7 +26,13 @@
     "errorInvalidEncoding": "This text file is not valid UTF-8.",
     "errorUploadFailed": "The upload failed. Try again.",
     "errorUnavailable": "Attachments are unavailable for the selected model.",
-    "lines": { "kind": "plural", "forms": { "one": "{count} line", "other": "{count} lines" } },
+    "lines": {
+      "kind": "plural",
+      "forms": {
+        "one": "{count} line",
+        "other": "{count} lines"
+      }
+    },
     "added": "{name} added.",
     "converted": "Long text converted to attachment {name}.",
     "uploaded": "{name} uploaded.",

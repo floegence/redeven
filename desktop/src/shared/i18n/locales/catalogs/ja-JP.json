@@ -27,7 +27,13 @@
       "errorInvalidEncoding": "このテキストファイルは有効な UTF-8 ではありません。",
       "errorUploadFailed": "アップロードに失敗しました。もう一度お試しください。",
       "errorUnavailable": "選択したモデルでは添付ファイルを使用できません。",
-      "lines": { "kind": "plural", "forms": { "one": "{count} 行", "other": "{count} 行" } },
+      "lines": {
+        "kind": "plural",
+        "forms": {
+          "one": "{count} 行",
+          "other": "{count} 行"
+        }
+      },
       "added": "{name} を追加しました。",
       "converted": "長文を添付ファイル {name} に変換しました。",
       "uploaded": "{name} をアップロードしました。",
@@ -690,16 +696,42 @@
     "useDarkTheme": "ダークテーマを使用",
     "useLightTheme": "ライトテーマを使用",
     "themePicker": {
-      "openLabel": "外観", "title": "外観", "closeLabel": "外観設定を閉じる", "modeLabel": "カラーモード",
-      "mode": { "system": "システム", "light": "ライト", "dark": "ダーク" },
+      "openLabel": "外観",
+      "title": "外観",
+      "closeLabel": "外観設定を閉じる",
+      "modeLabel": "カラーモード",
+      "mode": {
+        "system": "システム",
+        "light": "ライト",
+        "dark": "ダーク"
+      },
       "systemResolvedLight": "現在、システムはライトモードを使用しています",
       "systemResolvedDark": "現在、システムはダークモードを使用しています",
-      "themesLabel": "テーマ", "changeFailed": "外観を更新できませんでした。もう一度お試しください。",
+      "themesLabel": "テーマ",
+      "changeFailed": "外観を更新できませんでした。もう一度お試しください。",
       "presets": {
-        "classic-light": "クラシック ライト", "paper": "ペーパー", "mist": "ミスト", "meadow": "メドウ", "citrus": "シトラス", "lilac": "ライラック",
-        "light-plus": "Light+", "quiet-light": "Quiet Light", "solarized-light": "Solarized Light", "github-light": "GitHub Light", "hc-light": "ハイコントラスト ライト",
-        "classic-dark": "クラシック ダーク", "ink": "インク", "slate": "スレート", "forest": "フォレスト", "ember": "エンバー", "ocean": "オーシャン",
-        "dark-plus": "Dark+", "monokai": "Monokai", "nord": "Nord", "dracula": "Dracula", "abyss": "アビス"
+        "classic-light": "クラシック ライト",
+        "paper": "ペーパー",
+        "mist": "ミスト",
+        "meadow": "メドウ",
+        "citrus": "シトラス",
+        "lilac": "ライラック",
+        "light-plus": "Light+",
+        "quiet-light": "Quiet Light",
+        "solarized-light": "Solarized Light",
+        "github-light": "GitHub Light",
+        "hc-light": "ハイコントラスト ライト",
+        "classic-dark": "クラシック ダーク",
+        "ink": "インク",
+        "slate": "スレート",
+        "forest": "フォレスト",
+        "ember": "エンバー",
+        "ocean": "オーシャン",
+        "dark-plus": "Dark+",
+        "monokai": "Monokai",
+        "nord": "Nord",
+        "dracula": "Dracula",
+        "abyss": "アビス"
       }
     }
   },
@@ -768,8 +800,6 @@
     "attention": "要対応"
   },
   "issue": {
-    "pluginStateRecoveryTitle": "プラグイン状態の復旧を確認",
-    "pluginStateRecoveryMessage": "Redeven がコピーされたプラグイン状態を検出しました。安全に起動するには、元の状態をアーカイブとして保持する復旧処理が必要です。",
     "remoteEnvironmentInvalidTitle": "環境 URL",
     "remoteEnvironmentOpenTitle": "その環境を開けません",
     "sshEnvironmentOpenTitle": "その SSH 環境を開けません",
@@ -785,22 +815,6 @@
     "startupInvalidTitle": "ローカル環境の起動には設定が必要です",
     "startupFailedTitle": "ローカル環境の起動に失敗しました",
     "localEnvironmentAttentionTitle": "ローカル環境には注意が必要です"
-  },
-  "pluginStateRecovery": {
-    "title": "プラグイン状態の復旧を確認",
-    "summary": "このプラグイン状態は、別のファイルシステム ID からコピーまたは復元されています。Redeven は復旧用に状態を保持し、その後、新しい空のプラグイン世代で起動します。",
-    "archiveTitle": "以前の状態を保持",
-    "archiveBody": "元の状態全体を、非アクティブな復旧アーカイブへ移動します。",
-    "freshTitle": "新しい状態で開始",
-    "freshBody": "アーカイブ内のインストール済みプラグイン、付与済み権限、設定、シークレット、ストレージは有効になりません。",
-    "retentionTitle": "復旧記録を保持",
-    "retentionBody": "Redeven が保持されたアーカイブを自動的に削除することはありません。",
-    "entriesLabel": "元の状態のエントリ数",
-    "sizeLabel": "元の状態のサイズ（バイト）",
-    "planLabel": "復旧プラン",
-    "confirm": "状態をアーカイブして再起動",
-    "failed": "プラグイン状態の復旧に失敗しました。",
-    "completed": "プラグイン状態をアーカイブし、新しいプラグイン世代でローカル環境を再起動しました。"
   },
   "blockedPage": {
     "stateDirLockedAttachTitle": "Redeven は別の場所で起動中です",

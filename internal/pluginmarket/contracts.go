@@ -11,9 +11,9 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/floegence/redevplugin/v2/pkg/host"
-	pluginmanifest "github.com/floegence/redevplugin/v2/pkg/manifest"
-	"github.com/floegence/redevplugin/v2/pkg/remoterelease"
+	"github.com/floegence/redevplugin/v3/pkg/host"
+	pluginmanifest "github.com/floegence/redevplugin/v3/pkg/manifest"
+	"github.com/floegence/redevplugin/v3/pkg/remoterelease"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 	"golang.org/x/text/unicode/norm"

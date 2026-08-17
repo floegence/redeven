@@ -66,7 +66,7 @@ function installedRecord(overrides: Partial<ReDevPluginRecord> = {}): ReDevPlugi
         display_name: officialContainers.displayName,
         version: officialContainers.stableVersion,
       },
-      api: { surface: 1, worker: 1 },
+      api: { major: 1 },
       permissions: [],
       presentation: { locales: { default: 'en-US' }, icon: { path: iconPath } },
       surfaces: [
@@ -95,7 +95,7 @@ function installedRecord(overrides: Partial<ReDevPluginRecord> = {}): ReDevPlugi
   };
 }
 
-describe('v1.1.4 plugin inventory projection', () => {
+describe('v3.0.2 plugin inventory projection', () => {
   it('keeps Plugin Center as the first panel tile', () => {
     const projection = projectPluginInventory({
       officialCatalog: [officialContainers],
@@ -413,7 +413,7 @@ describe('v1.1.4 plugin inventory projection', () => {
           assessed_at: '2026-07-24T10:00:00Z',
           approved_at: '2026-07-24T10:01:00Z',
         },
-        enable_state: 'disabled',
+        enable_state: 'disabled_by_user',
         enabled_at: undefined,
       })],
     });
@@ -597,7 +597,7 @@ describe('v1.1.4 plugin inventory projection', () => {
     const disabledProjection = projectPluginInventory({
       officialCatalog: [officialContainers],
       installedPlugins: [installedRecord({
-        enable_state: 'disabled',
+        enable_state: 'disabled_by_user',
         disabled_reason: 'user_disabled',
         action_state: {
           can_open: false,

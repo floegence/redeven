@@ -261,30 +261,6 @@
       "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
     },
     {
-      "path": "cmd/redeven/plugin_state_recovery.go",
-      "sha256": "6054b8ead247b96d4058acc1667665197cc2f187cdced572da44d3c0dc2f3fee",
-      "sink_kinds": [
-        "file",
-        "json_file"
-      ],
-      "review_status": "reviewed",
-      "owner": "redeven CLI",
-      "authority": "product_configuration",
-      "data_classes": [
-        "CLI transport, product configuration, or runtime handoff"
-      ],
-      "tables": [
-        "the"
-      ],
-      "codecs": [
-        "encoding/json.Marshal"
-      ],
-      "dtos": [
-        "report"
-      ],
-      "review_note": "Writes or invokes CLI-owned transport and product configuration only; Floret remains canonical after admission."
-    },
-    {
       "path": "cmd/redeven/search.go",
       "sha256": "072a27fdf5a65db7bb1031d7de6d9df3390754ebdafe89f8057e1cae2c3f1248",
       "sink_kinds": [
@@ -1043,7 +1019,7 @@
         "expression:threadDeleteOperationSelectSQL + `\nWHERE status = ?\nORDER BY updated_at_unix_ms ASC, operation_id ASC\nLIMIT 1`",
         "expression:threadDeleteOperationSelectSQL + ` WHERE endpoint_id = ? AND thread_id = ?`",
         "expression:threadDeleteOperationSelectSQL + ` WHERE operation_id = ?`",
-        "expression:threadDeleteOperationSelectSQL + ` WHERE status = ? AND operation_id \u003e ? ORDER BY operation_id ASC LIMIT ?`",
+        "expression:threadDeleteOperationSelectSQL + ` WHERE status = ? AND operation_id > ? ORDER BY operation_id ASC LIMIT ?`",
         "expression:threadDeleteOperationSelectSQL + ` WHERE status = ? ORDER BY updated_at_unix_ms ASC, operation_id ASC LIMIT ?`",
         "expression:updateSQL"
       ],
@@ -1241,7 +1217,7 @@
         "encoding/json.NewEncoder"
       ],
       "dtos": [
-        "\u0026e"
+        "&e"
       ],
       "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
     },
@@ -1623,7 +1599,7 @@
         "encoding/json.NewEncoder"
       ],
       "dtos": [
-        "\u0026e"
+        "&e"
       ],
       "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
     },

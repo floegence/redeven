@@ -10,8 +10,8 @@ import (
 
 	"github.com/floegence/redeven/internal/pluginmarket"
 	redevpluginartifacts "github.com/floegence/redeven/spec/redevplugin"
-	"github.com/floegence/redevplugin/v2/pkg/externalsource"
-	"github.com/floegence/redevplugin/v2/pkg/host"
+	"github.com/floegence/redevplugin/v3/pkg/externalsource"
+	"github.com/floegence/redevplugin/v3/pkg/host"
 )
 
 func officialReleaseFixtureTime() time.Time {
@@ -42,8 +42,7 @@ func TestOfficialReleaseModuleUsesValidatedMarketProjection(t *testing.T) {
 	if closeTrust != nil {
 		t.Cleanup(func() { _ = closeTrust() })
 	}
-	if ref != release.PublisherReleaseRef.ReleaseRef || module.Trust == nil || module.ReleaseArtifactResolver == nil ||
-		module.HostRequirements == nil {
+	if ref != release.PublisherReleaseRef.ReleaseRef || module.Trust == nil || module.ReleaseArtifactResolver == nil {
 		t.Fatalf("release module is incomplete: ref=%#v module=%#v", ref, module)
 	}
 
@@ -66,26 +65,6 @@ func TestOfficialReleaseProviderRejectsTrustAnchorDrift(t *testing.T) {
 	_, err := newOfficialReleaseProvider(release, rejectingReleaseAssetFetcher{})
 	if err == nil || !strings.Contains(err.Error(), "trust anchors") {
 		t.Fatalf("newOfficialReleaseProvider() error = %v", err)
-	}
-}
-
-func TestOfficialReleaseProviderPinsV4HostCapability(t *testing.T) {
-	provider, err := newOfficialReleaseProvider(officialMarketReleaseFixture(t), rejectingReleaseAssetFetcher{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	selection, err := provider.SelectHostRequirement(context.Background(), host.HostRequirementSelectionRequest{
-		SourceID: officialReleaseSourceID, PublisherID: officialPublisherID,
-		PluginID: officialContainersPluginID, PluginVersion: officialContainersVersion,
-		Requirements: []host.HostRequirement{{
-			HostID: officialHostID, MinHostVersion: officialMinHostVersion,
-			RequiredCapabilityContracts: []host.HostCapabilityRequirement{{
-				CapabilityID: containersCapabilityID, CapabilityVersion: containersCapabilityVersion,
-			}},
-		}},
-	})
-	if err != nil || selection.HostID != officialHostID {
-		t.Fatalf("host requirement selection = %#v, error = %v", selection, err)
 	}
 }
 

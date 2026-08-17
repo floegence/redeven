@@ -12,21 +12,20 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/floegence/redevplugin/v2/pkg/contracts"
-	"github.com/floegence/redevplugin/v2/pkg/host"
-	"github.com/floegence/redevplugin/v2/pkg/version"
+	"github.com/floegence/redevplugin/v3/pkg/host"
+	"github.com/floegence/redevplugin/v3/pkg/runtimetarget"
+	"github.com/floegence/redevplugin/v3/pkg/version"
 )
 
 const bundledRuntimeDescriptorName = ".redevplugin-release-artifacts-verified.json"
 
-var officialRuntimeVersion = contracts.PackageSet().PlatformVersion
+var officialRuntimeVersion = version.CurrentPlatformVersion()
 
 type bundledRuntimeReleaseDescriptor struct {
-	SchemaVersion       string `json:"schema_version"`
-	PlatformPublication struct {
-		PlatformVersion   string `json:"platform_version"`
-		ContractSetSHA256 string `json:"contract_set_sha256"`
-	} `json:"platform_publication"`
+	SchemaVersion   string `json:"schema_version"`
+	PlatformRelease struct {
+		PlatformVersion string `json:"platform_version"`
+	} `json:"platform_release"`
 	Runtime struct {
 		Target string `json:"target"`
 		Binary struct {
@@ -87,10 +86,10 @@ func newOfficialRuntimeModule(ctx context.Context, deps runtimeModuleDependencie
 	}
 	defer executionRoot.Close()
 	executable, err := host.OpenVerifiedExecutable(ctx, host.VerifiedExecutableOptions{
-		RootDir:            runtimeRoot,
-		ExecutionRoot:      executionRoot,
-		RelativeName:       binaryName,
-		ExpectedDescriptor: descriptor,
+		RootDir:                  runtimeRoot,
+		ExecutionRoot:            executionRoot,
+		RelativeName:             binaryName,
+		ExpectedArtifactIdentity: descriptor,
 	})
 	if err != nil {
 		return nil, err
@@ -103,56 +102,44 @@ func newOfficialRuntimeModule(ctx context.Context, deps runtimeModuleDependencie
 	return module, nil
 }
 
-func BundledRuntimeDescriptor(filename string) (host.RuntimeDescriptor, error) {
+func BundledRuntimeDescriptor(filename string) (host.RuntimeArtifactIdentity, error) {
 	return bundledRuntimeDescriptor(filename, runtime.GOOS+"/"+runtime.GOARCH)
 }
 
-func bundledRuntimeDescriptor(filename, expectedTarget string) (host.RuntimeDescriptor, error) {
+func bundledRuntimeDescriptor(filename, expectedTarget string) (host.RuntimeArtifactIdentity, error) {
 	raw, err := os.ReadFile(filename)
 	if err != nil {
-		return host.RuntimeDescriptor{}, err
+		return host.RuntimeArtifactIdentity{}, err
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	var release bundledRuntimeReleaseDescriptor
 	if err := decoder.Decode(&release); err != nil {
-		return host.RuntimeDescriptor{}, fmt.Errorf("decode bundled runtime descriptor: %w", err)
+		return host.RuntimeArtifactIdentity{}, fmt.Errorf("decode bundled runtime descriptor: %w", err)
 	}
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return host.RuntimeDescriptor{}, errors.New("bundled runtime descriptor contains trailing data")
+		return host.RuntimeArtifactIdentity{}, errors.New("bundled runtime descriptor contains trailing data")
 	}
 	if release.SchemaVersion != "redeven.redevplugin_runtime_build.v1" ||
-		release.PlatformPublication.PlatformVersion != officialRuntimeVersion ||
+		release.PlatformRelease.PlatformVersion != officialRuntimeVersion ||
 		release.Runtime.Target != expectedTarget ||
-		release.Runtime.Binary.Path != "redevplugin-runtime" || release.Runtime.Binary.Size <= 0 ||
-		release.PlatformPublication.ContractSetSHA256 != version.ContractSetSHA256 {
-		return host.RuntimeDescriptor{}, errors.New("bundled runtime descriptor identity is invalid")
+		release.Runtime.Binary.Path != "redevplugin-runtime" || release.Runtime.Binary.Size <= 0 {
+		return host.RuntimeArtifactIdentity{}, errors.New("bundled runtime descriptor identity is invalid")
 	}
-	platformVersion, err := version.ParseSemVer(release.PlatformPublication.PlatformVersion)
+	platformVersion, err := version.ParseSemVer(release.PlatformRelease.PlatformVersion)
 	if err != nil {
-		return host.RuntimeDescriptor{}, err
+		return host.RuntimeArtifactIdentity{}, err
 	}
-	target, err := host.ParseRuntimeAdmissionTarget(release.Runtime.Target)
+	target, err := runtimetarget.Parse(release.Runtime.Target)
 	if err != nil {
-		return host.RuntimeDescriptor{}, err
-	}
-	rustIPC, err := host.ParseRustIPCVersion(version.RustIPCVersion)
-	if err != nil {
-		return host.RuntimeDescriptor{}, err
-	}
-	wasmABI, err := host.ParseWASMABIVersion(version.WASMABIVersion)
-	if err != nil {
-		return host.RuntimeDescriptor{}, err
-	}
-	contractSetSHA256, err := host.ParseSHA256Digest(release.PlatformPublication.ContractSetSHA256)
-	if err != nil {
-		return host.RuntimeDescriptor{}, err
+		return host.RuntimeArtifactIdentity{}, err
 	}
 	binarySHA256, err := host.ParseSHA256Digest(release.Runtime.Binary.SHA256)
 	if err != nil {
-		return host.RuntimeDescriptor{}, err
+		return host.RuntimeArtifactIdentity{}, err
 	}
-	return host.NewRuntimeDescriptor(host.RuntimeDescriptorOptions{
-		PlatformVersion: platformVersion, Target: target, RustIPCVersion: rustIPC,
-		WASMABIVersion: wasmABI, ContractSetSHA256: contractSetSHA256, BinarySHA256: binarySHA256,
+	return host.NewRuntimeArtifactIdentity(host.RuntimeArtifactIdentityOptions{
+		PlatformVersion: platformVersion,
+		Target:          target,
+		BinarySHA256:    binarySHA256,
 	})
 }

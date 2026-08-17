@@ -43,13 +43,6 @@ const completeIOEvidence = {
     tcp: { exchanges: 100 },
     udp: { datagrams: 100 },
   },
-  frozen_v1_1_4: {
-    package: 'worker.redevplugin',
-    plugin_instance_id: 'plugini_frozen',
-    expected_sha256: 'c'.repeat(64),
-    observed_sha256: 'c'.repeat(64),
-    rpc_ok: true,
-  },
   revoke: {
     disabled: true,
     pending_rpc_rejected: true,
@@ -60,7 +53,7 @@ const completeIOEvidence = {
   },
 };
 
-test('Desktop smoke accepts complete Linux v9 I/O, frozen v1.1.4, and revoke evidence', () => {
+test('Desktop smoke accepts complete Linux v9 I/O and revoke evidence', () => {
   assert.doesNotThrow(() => assertExtensionIOEvidence(completeIOEvidence));
 });
 
@@ -160,7 +153,6 @@ test('Desktop smoke starts and retries workers installed after an empty startup 
   };
   const plugins = [
     { plugin_instance_id: 'plugini_io', enable_state: 'enabled', manifest: { workers: [{ worker_id: 'io' }] } },
-    { plugin_instance_id: 'plugini_frozen', enable_state: 'enabled', manifest: { workers: [{ worker_id: 'legacy' }] } },
     { plugin_instance_id: 'plugini_ui', enable_state: 'enabled', manifest: { workers: [] } },
   ];
 
@@ -172,7 +164,6 @@ test('Desktop smoke starts and retries workers installed after an empty startup 
     { pathname: '/_redevplugin/api/plugins/runtime/health/query', body: {} },
     { pathname: '/_redevplugin/api/plugins/runtime/start', body: { target: { os: 'linux', arch: 'arm64' } } },
     { pathname: '/_redevplugin/api/plugins/runtime/recover/retry', body: { plugin_instance_id: 'plugini_io' } },
-    { pathname: '/_redevplugin/api/plugins/runtime/recover/retry', body: { plugin_instance_id: 'plugini_frozen' } },
     { pathname: '/_redevplugin/api/plugins/runtime/health/query', body: {} },
   ]);
 });
@@ -188,21 +179,15 @@ test('Desktop smoke rejects Local UI agent identity as runtime PID evidence', ()
   }), /runtime process identity/u);
 });
 
-test('Desktop smoke binds compatibility proof to a new frozen-package RPC without leaking bridge credentials', async () => {
+test('Desktop smoke does not expose bridge credentials in observations', async () => {
   const source = await import('node:fs/promises').then((fs) => fs.readFile(
     new URL('./smoke_desktop_plugins.mjs', import.meta.url),
     'utf8',
   ));
-  assert.match(source, /pluginResponses\.slice\(frozenRPCStart\)/u);
-  assert.match(source, /rpc_plugin_instance_id === frozenPluginInstanceID/u);
   assert.doesNotMatch(source, /plugin_gateway_token.*observation/u);
   assert.doesNotMatch(source, /revoked_resources:[^\n]*\?\? 1/u);
   assert.match(source, /'x-redeven-plugin-session': payload\.pluginSession/u);
   assert.doesNotMatch(source, /plugin_session_credential.*observation/u);
-  assert.match(source, /const frozenInventoryKey = `instance:\$\{frozenPluginInstanceID\}`;/u);
-  assert.match(source, /await visiblePluginTrigger\(\)\.click\(\);[\s\S]*?data-plugin-panel-tile=\$\{JSON\.stringify\(frozenInventoryKey\)\}/u);
-  assert.doesNotMatch(source, /frozenPlugin\?\.display_name/u);
-  assert.ok(source.indexOf("'frozen v1.1.4 RPC'") < source.lastIndexOf('assertExtensionIOEvidence(ioEvidence'));
 });
 
 test('v9 I/O smoke surface runs as an opaque worker and drives hold through rendered UI', async () => {
@@ -409,13 +394,16 @@ test('the Activity Plugin Panel is an eagerly mounted core control', async () =>
   assert.doesNotMatch(panelSource, /openCommands|registerController|PLUGIN_PANEL_CONTROL_EVENT/u);
 });
 
-test('Linux fixture preparation resolves frozen packages from the published Go module', async () => {
+test('Linux fixture preparation resolves the current published Go module', async () => {
   const source = await import('node:fs/promises').then((fs) => fs.readFile(
     new URL('./smoke_desktop_plugins.sh', import.meta.url),
     'utf8',
   ));
-  assert.match(source, /GOWORK=off go list -m -f '\{\{\.Dir\}\}' "github\.com\/floegence\/redevplugin\/v2@v\$\{runtime_version\}"/u);
-  assert.match(source, /\$published_module_dir\/testdata\/compat\/v1\.1\.4\/worker\.redevplugin/u);
+  assert.match(source, /GOWORK=off go list -m -f '\{\{\.Version\}\}' github\.com\/floegence\/redevplugin\/v3/u);
+  assert.match(source, /runtime_version=\$\{runtime_tag#v\}/u);
+  assert.match(source, /GOWORK=off go list -m -f '\{\{\.Dir\}\}' "github\.com\/floegence\/redevplugin\/v3@\$\{runtime_tag\}"/u);
+  assert.doesNotMatch(source, /read_redevplugin_release_manifest/u);
+  assert.doesNotMatch(source, /testdata\/compat|v1\.1\.4/u);
   assert.doesNotMatch(source, /\/Users\/[^"]+\/go\/pkg\/mod\/github\.com\/floegence\/redevplugin/u);
 });
 
@@ -512,14 +500,13 @@ test('Desktop smoke installs through Plugin Center only for the initial isolated
   assert.match(source, /cold restart started without an enabled plugin/u);
 });
 
-test('Desktop smoke waits for both v9 and frozen plugin surfaces before fixing Panel expectations', async () => {
+test('Desktop smoke waits for the current plugin surface before fixing Panel expectations', async () => {
   const source = await import('node:fs/promises').then((fs) => fs.readFile(
     new URL('./smoke_desktop_plugins.mjs', import.meta.url),
     'utf8',
   ));
-  assert.match(source, /const expectedPluginInstanceIDs = \[installed\.plugin_instance_id, frozenPluginInstanceID\]/u);
-  assert.match(source, /expectedPluginInstanceIDs\.every\(\(pluginInstanceID\) => active\.some\(\(plugin\) => \([\s\S]*?plugin\.action_state\?\.can_open === true/u);
-  assert.match(source, /v9 and frozen plugin activation/u);
+  assert.match(source, /active\.some\(\(plugin\) => plugin\.plugin_instance_id === installed\.plugin_instance_id/u);
+  assert.match(source, /v9 plugin activation/u);
   assert.match(source, /panel-reopen-\$\{index \+ 1\}-diagnostics\.json/u);
 });
 
@@ -572,7 +559,7 @@ test('Desktop smoke verifies user-disabled intent through a real signed release 
   ));
   assert.match(source, /\/_redevplugin\/api\/plugins\/disable/u);
   assert.match(source, /\/_redevplugin\/api\/plugins\/update-release-ref/u);
-  assert.match(source, /plugin\?\.enable_state === 'disabled'/u);
+  assert.match(source, /plugin\?\.enable_state === 'disabled_by_user'/u);
   assert.match(source, /disabled_update_intent: disabledUpdateIntent/u);
   assert.match(source, /explicit re-enable before cold restart/u);
 });

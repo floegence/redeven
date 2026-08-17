@@ -100,9 +100,11 @@ prepare_linux_target() {
   FIXTURE_HTTP_PORT=${REDEVEN_PLUGIN_SMOKE_FIXTURE_HTTP_PORT:-$default_fixture_http_port}
   FIXTURE_TCP_PORT=${REDEVEN_PLUGIN_SMOKE_FIXTURE_TCP_PORT:-$default_fixture_tcp_port}
   FIXTURE_UDP_PORT=${REDEVEN_PLUGIN_SMOKE_FIXTURE_UDP_PORT:-$default_fixture_udp_port}
-  local image="debian:bookworm-slim" runtime_version runtime_cache published_module_dir
-  runtime_version=$(cd "$ROOT_DIR" && GOWORK=off go run ./scripts/read_redevplugin_package_set.go | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).platform_version))')
-  published_module_dir=$(cd "$ROOT_DIR" && GOWORK=off go list -m -f '{{.Dir}}' "github.com/floegence/redevplugin/v2@v${runtime_version}")
+  local image="debian:bookworm-slim" runtime_tag runtime_version runtime_cache published_module_dir
+  runtime_tag=$(cd "$ROOT_DIR" && GOWORK=off go list -m -f '{{.Version}}' github.com/floegence/redevplugin/v3)
+  [[ "$runtime_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "invalid ReDevPlugin module version: $runtime_tag" >&2; return 1; }
+  runtime_version=${runtime_tag#v}
+  published_module_dir=$(cd "$ROOT_DIR" && GOWORK=off go list -m -f '{{.Dir}}' "github.com/floegence/redevplugin/v3@${runtime_tag}")
   runtime_cache="${XDG_CACHE_HOME:-$HOME/.cache}/redeven/docker-runtime-e2e/redevplugin-runtime-${runtime_version}-rust-1.88.0-linux-arm64-$(git -C "$ROOT_DIR" rev-parse HEAD)-evidence-v1"
   if [[ ! -x "$runtime_cache/redevplugin-runtime" || ! -f "$runtime_cache/.redevplugin-release-artifacts-verified.json" ]]; then
     "$ROOT_DIR/scripts/check_docker_runtime_e2e.sh" >/dev/null
@@ -127,13 +129,7 @@ prepare_linux_target() {
   cp "$ROOT_DIR/assets/brand/redeven/png/app-icon-64.png" "$LINUX_TARGET_ROOT/io-package/dist/assets/icon.png"
   cp -a "$ROOT_DIR/scripts/fixtures/redevplugin_io_smoke/dist/ui/." "$LINUX_TARGET_ROOT/io-package/dist/ui/"
   cp "$LINUX_TARGET_ROOT/io.wasm" "$LINUX_TARGET_ROOT/io-package/dist/workers/io.wasm"
-  GOWORK=off go run "github.com/floegence/redevplugin/v2/cmd/redevplugin@v${runtime_version}" package "$LINUX_TARGET_ROOT/io-package/dist" "$LINUX_TARGET_ROOT/io-smoke.redevplugin" >/dev/null
-  cp "$published_module_dir/testdata/compat/v1.1.4/worker.redevplugin" "$LINUX_TARGET_ROOT/worker-v1.1.4.redevplugin"
-  cp "$published_module_dir/testdata/compat/v1.1.4/SHA256SUMS" "$LINUX_TARGET_ROOT/v1.1.4.SHA256SUMS"
-  local frozen_expected frozen_observed
-  frozen_expected=$(awk '$2 == "worker.redevplugin" { print $1 }' "$LINUX_TARGET_ROOT/v1.1.4.SHA256SUMS")
-  frozen_observed=$(shasum -a 256 "$LINUX_TARGET_ROOT/worker-v1.1.4.redevplugin" | awk '{print $1}')
-  [[ "$frozen_expected" == "$frozen_observed" ]] || { echo "frozen v1.1.4 package checksum mismatch" >&2; return 1; }
+  GOWORK=off go run "github.com/floegence/redevplugin/v3/cmd/redevplugin@v${runtime_version}" package "$LINUX_TARGET_ROOT/io-package/dist" "$LINUX_TARGET_ROOT/io-smoke.redevplugin" >/dev/null
   # The Host needs clone3(CLONE_PIDFD) before the runtime installs its own
   # no-new-privileges and seccomp containment profile.
   LINUX_CONTAINER_ID=$(docker run -d --rm --platform linux/arm64 --security-opt seccomp=unconfined --name "redeven-plugin-smoke-${RANDOM}${RANDOM}" \
@@ -565,7 +561,7 @@ run_phase() {
   node - "$config" <<JSON
 const fs = require('node:fs');
 const file = process.argv[2];
-fs.writeFileSync(file, JSON.stringify({phase:"$phase",root:"$SMOKE_ROOT",stateRoot:"$STATE_ROOT",reusedTaskState:$([[ "$REUSE_SEED_STATE" == "1" ]] && echo true || echo false),seed:$seed_meta,userDataRoot:"$USER_DATA_ROOT",cacheRoot:"$CACHE_ROOT",tempRoot:"$TEMP_ROOT",reportRoot:"$REPORT_ROOT",playwrightRoot:"$ROOT_DIR/internal/envapp/ui_src/node_modules",localUIPort:$LOCAL_UI_PORT,cdpPort:$CDP_PORT,inspectorPort:$INSPECTOR_PORT,ownerID:"$owner_id",commit:"$commit",dependencies:$versions,pids:$pids,output:"$output",initialOutput:"$REPORT_ROOT/initial.json",externalLocalUIURL:"http://127.0.0.1:$LOCAL_UI_PORT/",ioPackagePath:"$LINUX_TARGET_ROOT/io-smoke.redevplugin",frozenPackagePath:"$LINUX_TARGET_ROOT/worker-v1.1.4.redevplugin",frozenSHA256SumsPath:"$LINUX_TARGET_ROOT/v1.1.4.SHA256SUMS",fixturePorts:$FIXTURE_PORTS_JSON,linuxTarget:JSON.parse(require('node:fs').readFileSync("$LINUX_REPORT"))}, null, 2)+"\n");
+fs.writeFileSync(file, JSON.stringify({phase:"$phase",root:"$SMOKE_ROOT",stateRoot:"$STATE_ROOT",reusedTaskState:$([[ "$REUSE_SEED_STATE" == "1" ]] && echo true || echo false),seed:$seed_meta,userDataRoot:"$USER_DATA_ROOT",cacheRoot:"$CACHE_ROOT",tempRoot:"$TEMP_ROOT",reportRoot:"$REPORT_ROOT",playwrightRoot:"$ROOT_DIR/internal/envapp/ui_src/node_modules",localUIPort:$LOCAL_UI_PORT,cdpPort:$CDP_PORT,inspectorPort:$INSPECTOR_PORT,ownerID:"$owner_id",commit:"$commit",dependencies:$versions,pids:$pids,output:"$output",initialOutput:"$REPORT_ROOT/initial.json",externalLocalUIURL:"http://127.0.0.1:$LOCAL_UI_PORT/",ioPackagePath:"$LINUX_TARGET_ROOT/io-smoke.redevplugin",fixturePorts:$FIXTURE_PORTS_JSON,linuxTarget:JSON.parse(require('node:fs').readFileSync("$LINUX_REPORT"))}, null, 2)+"\n");
 JSON
   node "$ROOT_DIR/scripts/smoke_desktop_plugins.mjs" "$config"
   stop_owned
