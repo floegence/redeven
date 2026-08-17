@@ -117,7 +117,9 @@ describe('controlplaneApi controlplane helper usage', () => {
   });
 
   it('commits remote spend through the Portal exact bearer contract', async () => {
-    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(null, { status: 204 }));
+    const response = new Response(null, { status: 204 });
+    const readBody = vi.spyOn(response, 'text').mockRejectedValue(new Error('204 response body is unavailable'));
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => response);
     vi.stubGlobal('fetch', fetchMock);
     const mod = await import('./controlplaneApi');
     await mod.createEnvProxyArtifactSource({
@@ -157,6 +159,7 @@ describe('controlplaneApi controlplane helper usage', () => {
     expect(init?.signal).toBe(signal);
     expect(init?.credentials).toBe('omit');
     expect(new Headers(init?.headers).get('authorization')).toBe('Bearer receipt-token');
+    expect(readBody).not.toHaveBeenCalled();
     expect(JSON.parse(String(init?.body))).toEqual({
       v: 1,
       attempt_id: 'attempt-id',
