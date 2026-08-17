@@ -244,6 +244,37 @@ func TestBootstrapConfigSupportsBootstrapTicketExchange(t *testing.T) {
 	assertBootstrapAttemptRemoved(t, layout.ConfigPath)
 }
 
+func TestBootstrapConfigRejectsMismatchedBootstrapResponseEnvironment(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/.well-known/redeven-provider.json":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"provider_id":"example_control_plane"}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/api/rcpp/v2/runtime/bootstrap/exchange":
+			var payload bootstrapTicketExchangeRequest
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatal(err)
+			}
+			writeBootstrapTestResponseForEnvironment(t, w, r.Host, payload.LocalEnvironmentPublicID, 3, "env_other")
+		default:
+			t.Fatalf("unexpected request = %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	_, err := BootstrapConfig(context.Background(), BootstrapArgs{
+		ProviderOrigin:      "https://redeven.test",
+		ControlplaneBaseURL: server.URL,
+		EnvironmentID:       "env_123",
+		BootstrapTicket:     "ticket-123",
+		StateRoot:           t.TempDir(),
+		HTTPClient:          server.Client(),
+	})
+	if err == nil || !strings.Contains(err.Error(), "env_public_id mismatch") {
+		t.Fatalf("BootstrapConfig() error = %v, want env_public_id mismatch", err)
+	}
+}
+
 func TestBootstrapConfigReusesPendingDeliveryAttemptAfterUncertainResponse(t *testing.T) {
 	var mu sync.Mutex
 	requests := make([]bootstrapTicketExchangeRequest, 0, 2)
@@ -513,6 +544,10 @@ func TestBootstrapAndPersistedPoolsRejectSharedContractDrift(t *testing.T) {
 }
 
 func writeBootstrapTestResponse(t *testing.T, w http.ResponseWriter, host, localEnvironmentPublicID string, generation int64) {
+	writeBootstrapTestResponseForEnvironment(t, w, host, localEnvironmentPublicID, generation, "env_123")
+}
+
+func writeBootstrapTestResponseForEnvironment(t *testing.T, w http.ResponseWriter, host, localEnvironmentPublicID string, generation int64, envPublicID string) {
 	t.Helper()
 	w.Header().Set("Content-Type", "application/json")
 	response := bootstrapResponse{
@@ -520,6 +555,7 @@ func writeBootstrapTestResponse(t *testing.T, w http.ResponseWriter, host, local
 		ProviderOrigin:      "https://redeven.test",
 		AccessPointID:       "dev",
 		AccessPointOrigin:   "https://" + host,
+		EnvPublicID:         envPublicID,
 		ControlArtifactPool: bootstrapTestControlArtifactPool(t, generation),
 		LocalEnvironmentBinding: &LocalEnvironmentBinding{
 			LocalEnvironmentPublicID: localEnvironmentPublicID,

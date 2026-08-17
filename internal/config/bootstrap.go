@@ -73,6 +73,7 @@ type bootstrapResponse struct {
 	ProviderOrigin          string                        `json:"provider_origin"`
 	AccessPointID           string                        `json:"access_point_id"`
 	AccessPointOrigin       string                        `json:"access_point_origin"`
+	EnvPublicID             string                        `json:"env_public_id"`
 	ControlArtifactPool     *bootstrapControlArtifactPool `json:"control_artifact_pool"`
 	LocalEnvironmentBinding *LocalEnvironmentBinding      `json:"local_environment_binding"`
 }
@@ -252,6 +253,9 @@ func ResolveProviderLinkConfig(ctx context.Context, args ProviderLinkBootstrapAr
 	}
 	if err != nil {
 		return nil, err
+	}
+	if strings.TrimSpace(bootstrap.EnvPublicID) != envID {
+		return nil, errors.New("invalid bootstrap exchange response: env_public_id mismatch")
 	}
 	agentInstanceID := attempt.AgentInstanceID
 	localEnvironmentPublicID := attempt.LocalEnvironmentPublicID
