@@ -323,10 +323,14 @@ func (a *Agent) applyControlArtifactTopUp(pending *config.ControlArtifactPending
 	}
 	pool.LogicalBindingID = strings.TrimSpace(response.Pool.LogicalProviderBindingID)
 	for _, delivered := range response.Pool.Entries {
-		digest := sha256.Sum256(delivered.ArtifactJSON)
+		normalizedArtifact, err := config.NormalizeControlArtifactJSON(delivered.ArtifactJSON)
+		if err != nil {
+			return errors.New("invalid control artifact pool response artifact JSON")
+		}
+		digest := sha256.Sum256(normalizedArtifact)
 		pool.Entries = append(pool.Entries, config.ControlArtifactEntry{
 			Sequence:       delivered.ArtifactSequence,
-			ArtifactJSON:   append(json.RawMessage(nil), delivered.ArtifactJSON...),
+			ArtifactJSON:   normalizedArtifact,
 			ArtifactDigest: base64.RawURLEncoding.EncodeToString(digest[:]),
 			ChannelID:      strings.TrimSpace(delivered.ArtifactChannelID),
 			ExpiresAtUnixS: delivered.ExpiresAtUnixS,

@@ -2,6 +2,8 @@ package config
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"os"
@@ -56,6 +58,42 @@ func TestSaveAndLoadPreserveDirectArtifactSpentState(t *testing.T) {
 	}
 	if restarted.Direct == nil || !restarted.Direct.Spent {
 		t.Fatalf("Load() direct = %#v, want spent artifact", restarted.Direct)
+	}
+}
+
+func TestSaveAndLoadPreserveControlArtifactDigestAcrossRestart(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	artifact, err := NormalizeControlArtifactJSON(json.RawMessage(directArtifactFixture))
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(artifact)
+	cfg := configWithDirectArtifact(nil, false)
+	cfg.Direct = nil
+	cfg.ControlArtifactPool = NewControlArtifactPool(1)
+	cfg.ControlArtifactPool.LogicalBindingID = "redeven:user-1:local-1"
+	cfg.ControlArtifactPool.RecoveryState = ControlArtifactRecoveryReady
+	cfg.ControlArtifactPool.Entries = append(cfg.ControlArtifactPool.Entries, ControlArtifactEntry{
+		Sequence:       1,
+		ArtifactJSON:   artifact,
+		ArtifactDigest: base64.RawURLEncoding.EncodeToString(digest[:]),
+		ChannelID:      "channel-1",
+		ExpiresAtUnixS: 4102444800,
+	})
+
+	if err := Save(path, cfg); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	restarted, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if restarted.ControlArtifactPool == nil || len(restarted.ControlArtifactPool.Entries) != 1 {
+		t.Fatalf("Load() control artifact pool = %#v", restarted.ControlArtifactPool)
+	}
+	entry := restarted.ControlArtifactPool.Entries[0]
+	if !bytes.Equal(entry.ArtifactJSON, artifact) || entry.ArtifactDigest != base64.RawURLEncoding.EncodeToString(digest[:]) {
+		t.Fatalf("Load() control artifact entry = %#v", entry)
 	}
 }
 
