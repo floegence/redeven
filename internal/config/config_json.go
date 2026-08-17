@@ -52,8 +52,17 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 	}
 	if c.ControlArtifactPool != nil {
 		for index := range c.ControlArtifactPool.Entries {
-			if bytes.Equal(bytes.TrimSpace(c.ControlArtifactPool.Entries[index].ArtifactJSON), []byte("null")) {
-				c.ControlArtifactPool.Entries[index].ArtifactJSON = nil
+			entry := &c.ControlArtifactPool.Entries[index]
+			if bytes.Equal(bytes.TrimSpace(entry.ArtifactJSON), []byte("null")) {
+				entry.ArtifactJSON = nil
+				continue
+			}
+			if len(entry.ArtifactJSON) != 0 {
+				normalized, err := NormalizeControlArtifactJSON(entry.ArtifactJSON)
+				if err != nil {
+					return err
+				}
+				entry.ArtifactJSON = normalized
 			}
 		}
 	}

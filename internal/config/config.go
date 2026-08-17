@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
@@ -98,6 +99,16 @@ func NewControlArtifactPool(generation int64) *ControlArtifactPool {
 	}
 }
 
+// NormalizeControlArtifactJSON returns the stable compact representation used
+// by artifact digests and the durable spend ledger.
+func NormalizeControlArtifactJSON(raw json.RawMessage) (json.RawMessage, error) {
+	normalized, err := json.Marshal(raw)
+	if err != nil || len(normalized) == 0 || bytes.Equal(normalized, []byte("null")) {
+		return nil, errors.New("invalid control artifact JSON")
+	}
+	return json.RawMessage(normalized), nil
+}
+
 func (pool *ControlArtifactPool) Validate(nowUnixS int64) error {
 	if pool == nil {
 		return errors.New("missing control_artifact_pool")
@@ -176,11 +187,15 @@ func (pool *ControlArtifactPool) Validate(nowUnixS int64) error {
 		if strings.TrimSpace(entry.ChannelID) == "" || len(entry.ArtifactJSON) == 0 {
 			return errors.New("invalid control_artifact_pool entry")
 		}
-		digest := sha256.Sum256(entry.ArtifactJSON)
+		normalizedArtifact, err := NormalizeControlArtifactJSON(entry.ArtifactJSON)
+		if err != nil {
+			return err
+		}
+		digest := sha256.Sum256(normalizedArtifact)
 		if entry.ArtifactDigest != base64.RawURLEncoding.EncodeToString(digest[:]) {
 			return errors.New("control artifact digest mismatch")
 		}
-		if _, err := flowersec.ParseArtifact(entry.ArtifactJSON); err != nil {
+		if _, err := flowersec.ParseArtifact(normalizedArtifact); err != nil {
 			return fmt.Errorf("invalid control artifact: %w", err)
 		}
 	}

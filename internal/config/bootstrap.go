@@ -713,13 +713,17 @@ func controlArtifactPoolFromBootstrap(delivery bootstrapControlArtifactPool, gen
 			delivered.ExpiresAtUnixS > now.Add(5*time.Minute).Unix() {
 			return nil, errors.New("invalid control artifact pool entry")
 		}
-		if _, err := flowersec.ParseArtifact(delivered.ArtifactJSON); err != nil {
+		normalizedArtifact, err := NormalizeControlArtifactJSON(delivered.ArtifactJSON)
+		if err != nil {
+			return nil, errors.New("invalid control artifact pool artifact JSON")
+		}
+		if _, err := flowersec.ParseArtifact(normalizedArtifact); err != nil {
 			return nil, fmt.Errorf("invalid control artifact pool artifact: %w", err)
 		}
-		digest := sha256.Sum256(delivered.ArtifactJSON)
+		digest := sha256.Sum256(normalizedArtifact)
 		pool.Entries = append(pool.Entries, ControlArtifactEntry{
 			Sequence:       delivered.ArtifactSequence,
-			ArtifactJSON:   append(json.RawMessage(nil), delivered.ArtifactJSON...),
+			ArtifactJSON:   normalizedArtifact,
 			ArtifactDigest: base64.RawURLEncoding.EncodeToString(digest[:]),
 			ChannelID:      strings.TrimSpace(delivered.ArtifactChannelID),
 			ExpiresAtUnixS: delivered.ExpiresAtUnixS,
