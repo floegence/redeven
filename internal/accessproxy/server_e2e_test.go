@@ -213,3 +213,53 @@ func TestServer_E2E_PreservesExternalOriginContextAndInjectsSessionChannel(t *te
 		t.Fatalf("upstream channel_id = %q, want %q", got.ChannelID, meta.ChannelID)
 	}
 }
+
+func TestServer_E2E_ProjectsAuthorizedExternalOriginWhenCarrierOmitsBrowserHeaders(t *testing.T) {
+	t.Parallel()
+
+	type seen struct {
+		Host      string `json:"host"`
+		Proto     string `json:"proto"`
+		Origin    string `json:"origin"`
+		ChannelID string `json:"channel_id"`
+	}
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(seen{
+			Host: r.Host, Proto: r.Header.Get("X-Forwarded-Proto"),
+			Origin: r.Header.Get("Origin"), ChannelID: r.Header.Get(sessionhop.HeaderChannelID),
+		})
+	}))
+	defer upstream.Close()
+
+	meta := session.Meta{ChannelID: "ch-test"}
+	externalOrigin := "https://env-demo.ch-session.dev.redeven-sandbox.test"
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	srv, err := New(Options{Meta: meta, Upstream: upstream.URL, ExternalOrigin: externalOrigin})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	defer func() { _ = srv.Close() }()
+	if err := srv.Start(ctx); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+
+	resp, err := http.Get(srv.URL() + "/_redeven_proxy/env/")
+	if err != nil {
+		t.Fatalf("GET env shell error = %v", err)
+	}
+	defer resp.Body.Close()
+	var got seen
+	if err := json.NewDecoder(resp.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got.Host != "env-demo.ch-session.dev.redeven-sandbox.test" || got.Proto != "https" || got.Origin != externalOrigin {
+		t.Fatalf("external origin projection = %#v, want host/proto/origin from %q", got, externalOrigin)
+	}
+	if got.ChannelID != meta.ChannelID {
+		t.Fatalf("upstream channel_id = %q, want %q", got.ChannelID, meta.ChannelID)
+	}
+}

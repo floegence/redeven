@@ -1307,7 +1307,7 @@ func (a *Agent) serveCodeAppSession(ctx context.Context, sess flowersec.Session,
 		return errors.New("code app server not ready")
 	}
 
-	up, cleanupUpstream, err := a.prepareAccessProxyUpstream(ctx, meta, up)
+	up, cleanupUpstream, err := a.prepareAccessProxyUpstream(ctx, meta, up, origin)
 	if err != nil {
 		return err
 	}
@@ -1365,7 +1365,7 @@ func (a *Agent) servePortForwardSession(ctx context.Context, sess flowersec.Sess
 		return errors.New("code app server not ready")
 	}
 
-	up, cleanupUpstream, err := a.prepareAccessProxyUpstream(ctx, meta, up)
+	up, cleanupUpstream, err := a.prepareAccessProxyUpstream(ctx, meta, up, origin)
 	if err != nil {
 		return err
 	}
@@ -1421,11 +1421,6 @@ func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess flowersec.Ses
 		if up == "" {
 			return errors.New("code app server not ready")
 		}
-		up, cleanupUpstream, err := a.prepareAccessProxyUpstream(ctx, meta, up)
-		if err != nil {
-			return err
-		}
-		defer cleanupUpstream()
 		baseOrigin, err := a.code.ExternalOriginForEnvApp(meta.EndpointID)
 		if err != nil {
 			return err
@@ -1434,6 +1429,11 @@ func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess flowersec.Ses
 		if err != nil {
 			return err
 		}
+		up, cleanupUpstream, err := a.prepareAccessProxyUpstream(ctx, meta, up, origin)
+		if err != nil {
+			return err
+		}
+		defer cleanupUpstream()
 		proxyOpts := runtimeproxy.Options{
 			Upstream:               up,
 			UpstreamOrigin:         origin,
@@ -1524,15 +1524,16 @@ func (a *Agent) terminalLiveStreamHandler(meta *session.Meta) flowersec.StreamHa
 	}
 }
 
-func (a *Agent) prepareAccessProxyUpstream(ctx context.Context, meta *session.Meta, upstream string) (string, func(), error) {
+func (a *Agent) prepareAccessProxyUpstream(ctx context.Context, meta *session.Meta, upstream string, externalOrigin string) (string, func(), error) {
 	if a == nil {
 		return upstream, func() {}, nil
 	}
 	proxy, err := accessproxy.New(accessproxy.Options{
-		Logger:   a.log,
-		Gate:     a.accessGate,
-		Meta:     *meta,
-		Upstream: upstream,
+		Logger:         a.log,
+		Gate:           a.accessGate,
+		Meta:           *meta,
+		Upstream:       upstream,
+		ExternalOrigin: externalOrigin,
 	})
 	if err != nil {
 		return "", nil, err

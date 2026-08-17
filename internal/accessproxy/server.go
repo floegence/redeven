@@ -20,10 +20,11 @@ import (
 )
 
 type Options struct {
-	Logger   *slog.Logger
-	Gate     *accessgate.Gate
-	Meta     session.Meta
-	Upstream string
+	Logger         *slog.Logger
+	Gate           *accessgate.Gate
+	Meta           session.Meta
+	Upstream       string
+	ExternalOrigin string
 }
 
 type Server struct {
@@ -101,6 +102,16 @@ func New(opts Options) (*Server, error) {
 	if err != nil || upstreamURL == nil || strings.TrimSpace(upstreamURL.Scheme) == "" || strings.TrimSpace(upstreamURL.Host) == "" {
 		return nil, errors.New("invalid upstream")
 	}
+	var externalOrigin *url.URL
+	if raw := strings.TrimSpace(opts.ExternalOrigin); raw != "" {
+		externalOrigin, err = url.Parse(raw)
+		if err != nil || externalOrigin == nil ||
+			(externalOrigin.Scheme != "http" && externalOrigin.Scheme != "https") ||
+			strings.TrimSpace(externalOrigin.Host) == "" || externalOrigin.User != nil ||
+			externalOrigin.Path != "" || externalOrigin.RawQuery != "" || externalOrigin.Fragment != "" {
+			return nil, errors.New("invalid external origin")
+		}
+	}
 	logger := opts.Logger
 	if logger == nil {
 		logger = slog.Default()
@@ -108,14 +119,18 @@ func New(opts Options) (*Server, error) {
 	proxy := &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.SetURL(upstreamURL)
-			// Preserve the browser-visible origin context projected by flowersec-proxy.
-			// The app server uses this for origin-role isolation of Env / Codespace / Forward
-			// surfaces, so the trusted local hop must not collapse it back to 127.0.0.1.
-			pr.Out.Host = pr.In.Host
-			if proto := strings.TrimSpace(pr.In.Header.Get("X-Forwarded-Proto")); proto != "" {
-				pr.Out.Header.Set("X-Forwarded-Proto", proto)
+			// Preserve the authorized browser-visible origin across the trusted local hop.
+			if externalOrigin != nil {
+				pr.Out.Host = externalOrigin.Host
+				pr.Out.Header.Set("Origin", externalOrigin.String())
+				pr.Out.Header.Set("X-Forwarded-Proto", externalOrigin.Scheme)
 			} else {
-				pr.Out.Header.Del("X-Forwarded-Proto")
+				pr.Out.Host = pr.In.Host
+				if proto := strings.TrimSpace(pr.In.Header.Get("X-Forwarded-Proto")); proto != "" {
+					pr.Out.Header.Set("X-Forwarded-Proto", proto)
+				} else {
+					pr.Out.Header.Del("X-Forwarded-Proto")
+				}
 			}
 			// Recover session binding on the internal hop without relying on public host labels.
 			pr.Out.Header.Del(sessionhop.HeaderChannelID)
