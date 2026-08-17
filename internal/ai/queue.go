@@ -31,6 +31,9 @@ func (s *Service) DeleteQueuedInput(ctx context.Context, meta *session.Meta, thr
 	if threadID == "" || queueID == "" || s.threadRuntime == nil {
 		return errors.New("invalid request")
 	}
+	if err := s.requireEndpointThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
+		return err
+	}
 	_, err := s.threadRuntime.DeleteQueued(ctxOrBackground(ctx), flruntime.DeleteQueuedInput{ThreadID: identity.ThreadID(threadID), QueueItemID: queueID,
 		RequestKey: flruntime.RequestKey("delete-queue:" + queueID)})
 	return err
@@ -46,6 +49,9 @@ func (s *Service) PromoteQueuedInput(ctx context.Context, meta *session.Meta, th
 	threadID, queueID = strings.TrimSpace(threadID), strings.TrimSpace(queueID)
 	if threadID == "" || queueID == "" || s.threadRuntime == nil {
 		return flruntime.ThreadView{}, errors.New("invalid request")
+	}
+	if err := s.requireEndpointThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
+		return flruntime.ThreadView{}, err
 	}
 	result, err := s.threadRuntime.PromoteQueued(ctxOrBackground(ctx), flruntime.PromoteQueuedInput{
 		ThreadID: identity.ThreadID(threadID), QueueItemID: queueID,
@@ -64,6 +70,9 @@ func (s *Service) ReorderQueue(ctx context.Context, meta *session.Meta, threadID
 	threadID = strings.TrimSpace(threadID)
 	if threadID == "" || s.threadRuntime == nil {
 		return errors.New("invalid request")
+	}
+	if err := s.requireEndpointThreadAuthority(ctx, meta.EndpointID, threadID); err != nil {
+		return err
 	}
 	requestID, err := newProductRequestID("reorder_queue_")
 	if err != nil {

@@ -6,6 +6,20 @@ ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." &> /dev/null && pwd)
 
 source "$SCRIPT_DIR/ui_package_common.sh"
 
+# Node 26 exposes an experimental global localStorage getter that throws when
+# no backing file is configured. Give the gate an isolated temporary backing
+# file so Node's storage API remains available without requiring hidden caller
+# configuration, while preserving caller-provided Node options.
+flower_localstorage_file=""
+case " ${NODE_OPTIONS:-} " in
+  *" --localstorage-file="*|*" --localstorage-file "*) ;;
+  *)
+    flower_localstorage_file=$(mktemp "${TMPDIR:-/tmp}/redeven-flower-localstorage.XXXXXX")
+    trap 'rm -f -- "$flower_localstorage_file" "$flower_localstorage_file-wal" "$flower_localstorage_file-shm"' EXIT HUP INT TERM
+    export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--localstorage-file=$flower_localstorage_file"
+    ;;
+esac
+
 skip_browser=false
 if [ "${1:-}" = "--skip-browser" ]; then
   skip_browser=true
@@ -33,7 +47,9 @@ main() {
     fi
     ui_pkg_log ""
     ui_pkg_log "Flower UI: Env App interaction contracts..."
-    ui_pkg_run_pnpm exec vitest run --environment=node --maxWorkers=2 --testTimeout=10000 \
+    # EnvAppShell's integration fixtures intentionally share one module-level
+    # Solid/Vitest harness; running files in parallel races those reset hooks.
+    ui_pkg_run_pnpm exec vitest run --environment=node --maxWorkers=1 --testTimeout=10000 \
       src/ui/EnvAppShell.desktopFloatingSurfaces.e2e.test.tsx \
       src/ui/EnvAppShell.localAccess.e2e.test.tsx \
       src/ui/i18n/i18n.test.ts \

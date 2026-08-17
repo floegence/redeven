@@ -824,7 +824,7 @@ func TestFloretCapabilitiesAreMintedOnlyDuringBootstrap(t *testing.T) {
 			t.Fatalf("floret_bootstrap.go is missing typed runtime boundary %q", marker)
 		}
 	}
-	for _, marker := range []string{"TurnAdmissionReceipt", "Authority", "RecoveryHandle", "ProjectionDelta"} {
+	for _, marker := range []string{"TurnAdmissionReceipt", "RecoveryHandle", "ProjectionDelta"} {
 		if strings.Contains(bootstrap, marker) {
 			t.Fatalf("floret_bootstrap.go retained legacy lifecycle boundary %q", marker)
 		}

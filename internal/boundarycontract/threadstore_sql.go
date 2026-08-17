@@ -264,7 +264,7 @@ func ValidateThreadstoreBoundaryManifest(manifest ThreadstoreBoundaryManifest, s
 	allowedAuthorities := map[string]struct{}{
 		"schema_metadata": {}, "coordination_operation": {}, "permission_authorization": {},
 		"upload_physical_resource": {}, "pre_admission_queue": {}, "product_routing": {}, "product_settings": {},
-		"migration_input": {},
+		"migration_input": {}, "execution_authority": {},
 	}
 	tableContracts := make(map[string]ThreadstoreTableContract, len(manifest.Tables))
 	for _, contract := range manifest.Tables {

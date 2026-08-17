@@ -58,4 +58,43 @@ describe('TransportOutbox', () => {
     expect(outbox.forThread('thread-a')).toEqual([]);
     expect(outbox.forThread('thread-b').map((entry) => entry.requestId)).toEqual(['b']);
   });
+
+  it('removes every pending request when its thread is deleted', () => {
+    const outbox = createTransportOutbox()
+      .put({ requestId: 'a', threadId: 'thread-a', input: { client_request_id: 'a', thread_id: 'thread-a', prompt: 'A' }, attachmentLabels: [], createdAtMs: 1 })
+      .put({ requestId: 'b', threadId: 'thread-a', input: { client_request_id: 'b', thread_id: 'thread-a', prompt: 'B' }, attachmentLabels: [], createdAtMs: 2 })
+      .put({ requestId: 'c', threadId: 'thread-b', input: { client_request_id: 'c', thread_id: 'thread-b', prompt: 'C' }, attachmentLabels: [], createdAtMs: 3 })
+      .dropThread('thread-a');
+
+    expect([...outbox.entries.keys()]).toEqual(['c']);
+  });
+
+  it('prunes entries beyond the bounded retry lifetime', () => {
+    const now = 24 * 60 * 60 * 1000 + 100_000;
+    const outbox = createTransportOutbox()
+      .put({ requestId: 'fresh', threadId: 'thread-a', input: { client_request_id: 'fresh', thread_id: 'thread-a', prompt: 'fresh' }, attachmentLabels: [], createdAtMs: 100_000 })
+      .put({ requestId: 'expired', threadId: 'thread-a', input: { client_request_id: 'expired', thread_id: 'thread-a', prompt: 'expired' }, attachmentLabels: [], createdAtMs: 1 })
+      .pruneExpired(now);
+
+    expect([...outbox.entries.keys()]).toEqual(['fresh']);
+  });
+
+  it('retains an explicit attachment recovery failure without treating it as pending work', () => {
+    const outbox = createTransportOutbox().put({
+      requestId: 'attachment-request',
+      threadId: 'thread-a',
+      input: {
+        client_request_id: 'attachment-request',
+        thread_id: 'thread-a',
+        prompt: 'attached',
+        attachment_ids: ['attachment-1'],
+      },
+      attachmentLabels: ['notes.md'],
+      createdAtMs: 1,
+      terminalError: 'attachments_unavailable_after_restart',
+    });
+
+    expect(outbox.entries.get('attachment-request')?.terminalError)
+      .toBe('attachments_unavailable_after_restart');
+  });
 });

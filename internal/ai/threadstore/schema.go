@@ -9,7 +9,7 @@ import (
 
 const (
 	threadstoreSchemaKind           = "ai_threadstore_product_v1"
-	threadstoreCurrentSchemaVersion = 2
+	threadstoreCurrentSchemaVersion = 4
 )
 
 // CurrentSchemaVersion returns the product-only threadstore schema version.
@@ -26,6 +26,8 @@ func threadstoreSchemaSpec() sqliteutil.Spec {
 		Initialize:     createThreadstoreSchema,
 		Migrations: []sqliteutil.Migration{
 			{FromVersion: 1, ToVersion: 2, Apply: migrateThreadstoreV1ToV2},
+			{FromVersion: 2, ToVersion: 3, Apply: migrateThreadstoreV2ToV3},
+			{FromVersion: 3, ToVersion: 4, Apply: migrateThreadstoreV3ToV4},
 		},
 		Verify: verifyThreadstoreSchema,
 	}
@@ -61,6 +63,8 @@ CREATE INDEX idx_ai_thread_settings_endpoint_pinned_created ON ai_thread_setting
 		createUploadTablesTx,
 		createUploadStagingScopesTableTx,
 		createFlowerThreadRoutingTableTx,
+		createFlowerExecutionAuthorityTableTx,
+		createThreadDeleteAuthorityTableTx,
 	}
 	for _, build := range builders {
 		if err := build(tx); err != nil {
@@ -68,6 +72,51 @@ CREATE INDEX idx_ai_thread_settings_endpoint_pinned_created ON ai_thread_setting
 		}
 	}
 	return nil
+}
+
+func createThreadDeleteAuthorityTableTx(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+CREATE TABLE ai_thread_delete_authority (
+  endpoint_id TEXT NOT NULL,
+  thread_id TEXT NOT NULL,
+  deleted_at_unix_ms INTEGER NOT NULL,
+  PRIMARY KEY(endpoint_id, thread_id)
+);
+`)
+	return err
+}
+
+func createFlowerExecutionAuthorityTableTx(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+CREATE TABLE ai_flower_execution_authority (
+  request_key TEXT PRIMARY KEY,
+  thread_id TEXT NOT NULL,
+  turn_id TEXT NOT NULL DEFAULT '',
+  endpoint_id TEXT NOT NULL,
+  namespace_public_id TEXT NOT NULL DEFAULT '',
+  channel_id TEXT NOT NULL DEFAULT '',
+  user_public_id TEXT NOT NULL,
+  user_email TEXT NOT NULL DEFAULT '',
+  created_at_unix_ms INTEGER NOT NULL
+);
+CREATE INDEX idx_ai_flower_execution_authority_thread_turn ON ai_flower_execution_authority(thread_id, turn_id, created_at_unix_ms DESC);
+CREATE INDEX idx_ai_flower_execution_authority_endpoint_thread ON ai_flower_execution_authority(endpoint_id, thread_id, created_at_unix_ms DESC);
+`)
+	return err
+}
+
+func migrateThreadstoreV2ToV3(tx *sql.Tx) error {
+	if err := createFlowerExecutionAuthorityTableTx(tx); err != nil {
+		return err
+	}
+	return verifyProductSchemaVersion(tx, 3)
+}
+
+func migrateThreadstoreV3ToV4(tx *sql.Tx) error {
+	if err := createThreadDeleteAuthorityTableTx(tx); err != nil {
+		return err
+	}
+	return verifyProductSchemaVersion(tx, 4)
 }
 
 func createPendingInputImportsTableTx(tx *sql.Tx) error {

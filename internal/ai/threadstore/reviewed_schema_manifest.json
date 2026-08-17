@@ -32,13 +32,13 @@
           "type": "index",
           "name": "idx_ai_queued_turns_canonical_run",
           "table_name": "ai_queued_turns",
-          "sql": "CREATE UNIQUE INDEX idx_ai_queued_turns_canonical_run ON ai_queued_turns(run_id) WHERE run_id <> ''"
+          "sql": "CREATE UNIQUE INDEX idx_ai_queued_turns_canonical_run ON ai_queued_turns(run_id) WHERE run_id \u003c\u003e ''"
         },
         {
           "type": "index",
           "name": "idx_ai_queued_turns_canonical_turn",
           "table_name": "ai_queued_turns",
-          "sql": "CREATE UNIQUE INDEX idx_ai_queued_turns_canonical_turn ON ai_queued_turns(endpoint_id, thread_id, turn_id) WHERE turn_id <> ''"
+          "sql": "CREATE UNIQUE INDEX idx_ai_queued_turns_canonical_turn ON ai_queued_turns(endpoint_id, thread_id, turn_id) WHERE turn_id \u003c\u003e ''"
         },
         {
           "type": "index",
@@ -56,19 +56,19 @@
           "type": "index",
           "name": "idx_ai_subagent_publication_child_run",
           "table_name": "ai_subagent_publication_operations",
-          "sql": "CREATE UNIQUE INDEX idx_ai_subagent_publication_child_run ON ai_subagent_publication_operations(child_run_id) WHERE child_run_id <> ''"
+          "sql": "CREATE UNIQUE INDEX idx_ai_subagent_publication_child_run ON ai_subagent_publication_operations(child_run_id) WHERE child_run_id \u003c\u003e ''"
         },
         {
           "type": "index",
           "name": "idx_ai_subagent_publication_child_snapshot",
           "table_name": "ai_subagent_publication_operations",
-          "sql": "CREATE UNIQUE INDEX idx_ai_subagent_publication_child_snapshot ON ai_subagent_publication_operations(child_snapshot_id) WHERE child_snapshot_id <> ''"
+          "sql": "CREATE UNIQUE INDEX idx_ai_subagent_publication_child_snapshot ON ai_subagent_publication_operations(child_snapshot_id) WHERE child_snapshot_id \u003c\u003e ''"
         },
         {
           "type": "index",
           "name": "idx_ai_subagent_publication_child_thread",
           "table_name": "ai_subagent_publication_operations",
-          "sql": "CREATE UNIQUE INDEX idx_ai_subagent_publication_child_thread ON ai_subagent_publication_operations(child_thread_id) WHERE child_thread_id <> ''"
+          "sql": "CREATE UNIQUE INDEX idx_ai_subagent_publication_child_thread ON ai_subagent_publication_operations(child_thread_id) WHERE child_thread_id \u003c\u003e ''"
         },
         {
           "type": "index",
@@ -86,7 +86,7 @@
           "type": "index",
           "name": "idx_ai_thread_create_operations_canonical_thread",
           "table_name": "ai_thread_create_operations",
-          "sql": "CREATE UNIQUE INDEX idx_ai_thread_create_operations_canonical_thread ON ai_thread_create_operations(canonical_thread_id) WHERE canonical_thread_id <> ''"
+          "sql": "CREATE UNIQUE INDEX idx_ai_thread_create_operations_canonical_thread ON ai_thread_create_operations(canonical_thread_id) WHERE canonical_thread_id \u003c\u003e ''"
         },
         {
           "type": "index",
@@ -122,7 +122,7 @@
           "type": "index",
           "name": "idx_ai_thread_fork_operations_destination",
           "table_name": "ai_thread_fork_operations",
-          "sql": "CREATE UNIQUE INDEX idx_ai_thread_fork_operations_destination ON ai_thread_fork_operations(destination_thread_id) WHERE destination_thread_id <> ''"
+          "sql": "CREATE UNIQUE INDEX idx_ai_thread_fork_operations_destination ON ai_thread_fork_operations(destination_thread_id) WHERE destination_thread_id \u003c\u003e ''"
         },
         {
           "type": "index",
@@ -158,13 +158,13 @@
           "type": "index",
           "name": "idx_ai_turn_admission_receipts_entry",
           "table_name": "ai_turn_admission_receipts",
-          "sql": "CREATE UNIQUE INDEX idx_ai_turn_admission_receipts_entry ON ai_turn_admission_receipts(entry_id) WHERE entry_id <> ''"
+          "sql": "CREATE UNIQUE INDEX idx_ai_turn_admission_receipts_entry ON ai_turn_admission_receipts(entry_id) WHERE entry_id \u003c\u003e ''"
         },
         {
           "type": "index",
           "name": "idx_ai_turn_admission_receipts_run",
           "table_name": "ai_turn_admission_receipts",
-          "sql": "CREATE UNIQUE INDEX idx_ai_turn_admission_receipts_run ON ai_turn_admission_receipts(run_id) WHERE run_id <> ''"
+          "sql": "CREATE UNIQUE INDEX idx_ai_turn_admission_receipts_run ON ai_turn_admission_receipts(run_id) WHERE run_id \u003c\u003e ''"
         },
         {
           "type": "index",
@@ -176,7 +176,7 @@
           "type": "index",
           "name": "idx_ai_turn_admission_receipts_turn",
           "table_name": "ai_turn_admission_receipts",
-          "sql": "CREATE UNIQUE INDEX idx_ai_turn_admission_receipts_turn ON ai_turn_admission_receipts(turn_id) WHERE turn_id <> ''"
+          "sql": "CREATE UNIQUE INDEX idx_ai_turn_admission_receipts_turn ON ai_turn_admission_receipts(turn_id) WHERE turn_id \u003c\u003e ''"
         },
         {
           "type": "index",
@@ -362,7 +362,7 @@
           "type": "table",
           "name": "ai_subagent_publication_operations",
           "table_name": "ai_subagent_publication_operations",
-          "sql": "CREATE TABLE ai_subagent_publication_operations ( publication_id TEXT PRIMARY KEY, endpoint_id TEXT NOT NULL, parent_thread_id TEXT NOT NULL, parent_turn_id TEXT NOT NULL, parent_run_id TEXT NOT NULL, parent_snapshot_id TEXT NOT NULL, spawn_tool_call_id TEXT NOT NULL, child_thread_id TEXT NOT NULL DEFAULT '', child_run_id TEXT NOT NULL DEFAULT '', child_snapshot_id TEXT NOT NULL DEFAULT '', request_json TEXT NOT NULL, request_hash TEXT NOT NULL, session_meta_json TEXT NOT NULL, model_id TEXT NOT NULL, reasoning_selection_json TEXT NOT NULL DEFAULT '', state TEXT NOT NULL CHECK(state IN ('pending', 'committed', 'failed')), created_at_unix_ms INTEGER NOT NULL, committed_at_unix_ms INTEGER NOT NULL DEFAULT 0, failed_at_unix_ms INTEGER NOT NULL DEFAULT 0, CHECK((child_thread_id = '' AND child_run_id = '' AND child_snapshot_id = '') OR (child_thread_id <> '' AND child_run_id <> '' AND child_snapshot_id <> '')) )"
+          "sql": "CREATE TABLE ai_subagent_publication_operations ( publication_id TEXT PRIMARY KEY, endpoint_id TEXT NOT NULL, parent_thread_id TEXT NOT NULL, parent_turn_id TEXT NOT NULL, parent_run_id TEXT NOT NULL, parent_snapshot_id TEXT NOT NULL, spawn_tool_call_id TEXT NOT NULL, child_thread_id TEXT NOT NULL DEFAULT '', child_run_id TEXT NOT NULL DEFAULT '', child_snapshot_id TEXT NOT NULL DEFAULT '', request_json TEXT NOT NULL, request_hash TEXT NOT NULL, session_meta_json TEXT NOT NULL, model_id TEXT NOT NULL, reasoning_selection_json TEXT NOT NULL DEFAULT '', state TEXT NOT NULL CHECK(state IN ('pending', 'committed', 'failed')), created_at_unix_ms INTEGER NOT NULL, committed_at_unix_ms INTEGER NOT NULL DEFAULT 0, failed_at_unix_ms INTEGER NOT NULL DEFAULT 0, CHECK((child_thread_id = '' AND child_run_id = '' AND child_snapshot_id = '') OR (child_thread_id \u003c\u003e '' AND child_run_id \u003c\u003e '' AND child_snapshot_id \u003c\u003e '')) )"
         },
         {
           "type": "table",
@@ -392,7 +392,7 @@
           "type": "table",
           "name": "ai_turn_admission_receipts",
           "table_name": "ai_turn_admission_receipts",
-          "sql": "CREATE TABLE ai_turn_admission_receipts ( queue_id TEXT PRIMARY KEY, endpoint_id TEXT NOT NULL, thread_id TEXT NOT NULL, logical_request_id TEXT NOT NULL, command_fingerprint TEXT NOT NULL CHECK(length(command_fingerprint) = 64), turn_id TEXT NOT NULL DEFAULT '', run_id TEXT NOT NULL DEFAULT '', entry_id TEXT NOT NULL DEFAULT '', permission_snapshot_id TEXT NOT NULL DEFAULT '', permission_snapshot_hash TEXT NOT NULL DEFAULT '', stage TEXT NOT NULL CHECK(stage IN ('in_flight', 'settled')), created_at_unix_ms INTEGER NOT NULL, updated_at_unix_ms INTEGER NOT NULL, UNIQUE(endpoint_id, logical_request_id), CHECK((stage = 'in_flight' AND turn_id = '' AND run_id = '' AND entry_id = '' AND permission_snapshot_id = '' AND permission_snapshot_hash = '') OR (stage = 'settled' AND turn_id <> '' AND run_id <> '' AND entry_id <> '' AND permission_snapshot_id <> '' AND permission_snapshot_hash <> '')) )"
+          "sql": "CREATE TABLE ai_turn_admission_receipts ( queue_id TEXT PRIMARY KEY, endpoint_id TEXT NOT NULL, thread_id TEXT NOT NULL, logical_request_id TEXT NOT NULL, command_fingerprint TEXT NOT NULL CHECK(length(command_fingerprint) = 64), turn_id TEXT NOT NULL DEFAULT '', run_id TEXT NOT NULL DEFAULT '', entry_id TEXT NOT NULL DEFAULT '', permission_snapshot_id TEXT NOT NULL DEFAULT '', permission_snapshot_hash TEXT NOT NULL DEFAULT '', stage TEXT NOT NULL CHECK(stage IN ('in_flight', 'settled')), created_at_unix_ms INTEGER NOT NULL, updated_at_unix_ms INTEGER NOT NULL, UNIQUE(endpoint_id, logical_request_id), CHECK((stage = 'in_flight' AND turn_id = '' AND run_id = '' AND entry_id = '' AND permission_snapshot_id = '' AND permission_snapshot_hash = '') OR (stage = 'settled' AND turn_id \u003c\u003e '' AND run_id \u003c\u003e '' AND entry_id \u003c\u003e '' AND permission_snapshot_id \u003c\u003e '' AND permission_snapshot_hash \u003c\u003e '')) )"
         },
         {
           "type": "table",
@@ -416,7 +416,7 @@
           "type": "table",
           "name": "ai_uploads",
           "table_name": "ai_uploads",
-          "sql": "CREATE TABLE ai_uploads ( upload_id TEXT PRIMARY KEY, endpoint_id TEXT NOT NULL, owner_scope_kind TEXT NOT NULL CHECK(owner_scope_kind = 'user'), owner_user_hash TEXT NOT NULL CHECK(length(owner_user_hash) = 64), storage_relpath TEXT NOT NULL, name TEXT NOT NULL DEFAULT '', declared_media_type TEXT NOT NULL DEFAULT '', detected_media_type TEXT NOT NULL DEFAULT 'application/octet-stream', size_bytes INTEGER NOT NULL DEFAULT 0 CHECK(size_bytes >= 0), content_sha256 TEXT NOT NULL CHECK(length(content_sha256) = 64), unicode_code_points INTEGER CHECK(unicode_code_points IS NULL OR unicode_code_points >= 0), logical_line_count INTEGER CHECK(logical_line_count IS NULL OR logical_line_count >= 0), source TEXT NOT NULL DEFAULT 'uploaded_file' CHECK(source IN ('uploaded_file', 'long_text')), state TEXT NOT NULL DEFAULT 'staged' CHECK(state IN ('staged', 'live', 'deleting')), created_at_unix_ms INTEGER NOT NULL, claimed_at_unix_ms INTEGER NOT NULL DEFAULT 0, delete_after_unix_ms INTEGER NOT NULL DEFAULT 0 )"
+          "sql": "CREATE TABLE ai_uploads ( upload_id TEXT PRIMARY KEY, endpoint_id TEXT NOT NULL, owner_scope_kind TEXT NOT NULL CHECK(owner_scope_kind = 'user'), owner_user_hash TEXT NOT NULL CHECK(length(owner_user_hash) = 64), storage_relpath TEXT NOT NULL, name TEXT NOT NULL DEFAULT '', declared_media_type TEXT NOT NULL DEFAULT '', detected_media_type TEXT NOT NULL DEFAULT 'application/octet-stream', size_bytes INTEGER NOT NULL DEFAULT 0 CHECK(size_bytes \u003e= 0), content_sha256 TEXT NOT NULL CHECK(length(content_sha256) = 64), unicode_code_points INTEGER CHECK(unicode_code_points IS NULL OR unicode_code_points \u003e= 0), logical_line_count INTEGER CHECK(logical_line_count IS NULL OR logical_line_count \u003e= 0), source TEXT NOT NULL DEFAULT 'uploaded_file' CHECK(source IN ('uploaded_file', 'long_text')), state TEXT NOT NULL DEFAULT 'staged' CHECK(state IN ('staged', 'live', 'deleting')), created_at_unix_ms INTEGER NOT NULL, claimed_at_unix_ms INTEGER NOT NULL DEFAULT 0, delete_after_unix_ms INTEGER NOT NULL DEFAULT 0 )"
         },
         {
           "type": "table",
@@ -4544,7 +4544,7 @@
           "type": "table",
           "name": "ai_uploads",
           "table_name": "ai_uploads",
-          "sql": "CREATE TABLE ai_uploads ( upload_id TEXT PRIMARY KEY, endpoint_id TEXT NOT NULL, owner_scope_kind TEXT NOT NULL CHECK(owner_scope_kind = 'user'), owner_user_hash TEXT NOT NULL CHECK(length(owner_user_hash) = 64), storage_relpath TEXT NOT NULL, name TEXT NOT NULL DEFAULT '', declared_media_type TEXT NOT NULL DEFAULT '', detected_media_type TEXT NOT NULL DEFAULT 'application/octet-stream', size_bytes INTEGER NOT NULL DEFAULT 0 CHECK(size_bytes >= 0), content_sha256 TEXT NOT NULL CHECK(length(content_sha256) = 64), unicode_code_points INTEGER CHECK(unicode_code_points IS NULL OR unicode_code_points >= 0), logical_line_count INTEGER CHECK(logical_line_count IS NULL OR logical_line_count >= 0), source TEXT NOT NULL DEFAULT 'uploaded_file' CHECK(source IN ('uploaded_file', 'long_text')), state TEXT NOT NULL DEFAULT 'staged' CHECK(state IN ('staged', 'live', 'deleting')), created_at_unix_ms INTEGER NOT NULL, claimed_at_unix_ms INTEGER NOT NULL DEFAULT 0, delete_after_unix_ms INTEGER NOT NULL DEFAULT 0 )"
+          "sql": "CREATE TABLE ai_uploads ( upload_id TEXT PRIMARY KEY, endpoint_id TEXT NOT NULL, owner_scope_kind TEXT NOT NULL CHECK(owner_scope_kind = 'user'), owner_user_hash TEXT NOT NULL CHECK(length(owner_user_hash) = 64), storage_relpath TEXT NOT NULL, name TEXT NOT NULL DEFAULT '', declared_media_type TEXT NOT NULL DEFAULT '', detected_media_type TEXT NOT NULL DEFAULT 'application/octet-stream', size_bytes INTEGER NOT NULL DEFAULT 0 CHECK(size_bytes \u003e= 0), content_sha256 TEXT NOT NULL CHECK(length(content_sha256) = 64), unicode_code_points INTEGER CHECK(unicode_code_points IS NULL OR unicode_code_points \u003e= 0), logical_line_count INTEGER CHECK(logical_line_count IS NULL OR logical_line_count \u003e= 0), source TEXT NOT NULL DEFAULT 'uploaded_file' CHECK(source IN ('uploaded_file', 'long_text')), state TEXT NOT NULL DEFAULT 'staged' CHECK(state IN ('staged', 'live', 'deleting')), created_at_unix_ms INTEGER NOT NULL, claimed_at_unix_ms INTEGER NOT NULL DEFAULT 0, delete_after_unix_ms INTEGER NOT NULL DEFAULT 0 )"
         },
         {
           "type": "table",
@@ -6020,6 +6020,4142 @@
             },
             {
               "sequence": 1,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_ai_thread_settings_1",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 0,
+              "name": "thread_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_ai_upload_attempts_1",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 0,
+              "name": "endpoint_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": 1,
+              "name": "owner_user_hash",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 2,
+              "cid": 2,
+              "name": "upload_request_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 3,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_ai_upload_attempts_2",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 4,
+              "name": "upload_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_ai_upload_staging_scopes_1",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 0,
+              "name": "staging_scope_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_ai_uploads_1",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 0,
+              "name": "upload_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_provider_capabilities_1",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 0,
+              "name": "provider_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": 1,
+              "name": "model_name",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 2,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "version": 3,
+      "sqlite_master": [
+        {
+          "type": "index",
+          "name": "idx_ai_flower_execution_authority_endpoint_thread",
+          "table_name": "ai_flower_execution_authority",
+          "sql": "CREATE INDEX idx_ai_flower_execution_authority_endpoint_thread ON ai_flower_execution_authority(endpoint_id, thread_id, created_at_unix_ms DESC)"
+        },
+        {
+          "type": "index",
+          "name": "idx_ai_flower_execution_authority_thread_turn",
+          "table_name": "ai_flower_execution_authority",
+          "sql": "CREATE INDEX idx_ai_flower_execution_authority_thread_turn ON ai_flower_execution_authority(thread_id, turn_id, created_at_unix_ms DESC)"
+        },
+        {
+          "type": "index",
+          "name": "idx_ai_pending_input_imports_pending",
+          "table_name": "ai_pending_input_imports",
+          "sql": "CREATE INDEX idx_ai_pending_input_imports_pending ON ai_pending_input_imports(imported_at_unix_ms, endpoint_id, thread_id, created_at_unix_ms, request_id)"
+        },
+        {
+          "type": "index",
+          "name": "idx_ai_thread_settings_endpoint_pinned_created",
+          "table_name": "ai_thread_settings",
+          "sql": "CREATE INDEX idx_ai_thread_settings_endpoint_pinned_created ON ai_thread_settings(endpoint_id, pinned_at_unix_ms DESC, settings_created_at_unix_ms DESC, thread_id ASC)"
+        },
+        {
+          "type": "index",
+          "name": "idx_ai_thread_settings_endpoint_updated",
+          "table_name": "ai_thread_settings",
+          "sql": "CREATE INDEX idx_ai_thread_settings_endpoint_updated ON ai_thread_settings(endpoint_id, settings_updated_at_unix_ms DESC, thread_id DESC)"
+        },
+        {
+          "type": "index",
+          "name": "idx_ai_upload_attempts_status_updated",
+          "table_name": "ai_upload_attempts",
+          "sql": "CREATE INDEX idx_ai_upload_attempts_status_updated ON ai_upload_attempts(status, updated_at_unix_ms, upload_id)"
+        },
+        {
+          "type": "index",
+          "name": "idx_ai_upload_refs_thread_upload",
+          "table_name": "ai_upload_refs",
+          "sql": "CREATE INDEX idx_ai_upload_refs_thread_upload ON ai_upload_refs(endpoint_id, thread_id, upload_id)"
+        },
+        {
+          "type": "index",
+          "name": "idx_ai_upload_refs_unique_ref",
+          "table_name": "ai_upload_refs",
+          "sql": "CREATE UNIQUE INDEX idx_ai_upload_refs_unique_ref ON ai_upload_refs(endpoint_id, upload_id, ref_kind, ref_id)"
+        },
+        {
+          "type": "index",
+          "name": "idx_ai_upload_refs_upload",
+          "table_name": "ai_upload_refs",
+          "sql": "CREATE INDEX idx_ai_upload_refs_upload ON ai_upload_refs(endpoint_id, upload_id)"
+        },
+        {
+          "type": "index",
+          "name": "idx_ai_upload_staging_scopes_capability",
+          "table_name": "ai_upload_staging_scopes",
+          "sql": "CREATE UNIQUE INDEX idx_ai_upload_staging_scopes_capability ON ai_upload_staging_scopes(capability_hash)"
+        },
+        {
+          "type": "index",
+          "name": "idx_ai_upload_staging_scopes_expiry",
+          "table_name": "ai_upload_staging_scopes",
+          "sql": "CREATE INDEX idx_ai_upload_staging_scopes_expiry ON ai_upload_staging_scopes(expires_at_unix_ms, staging_scope_id)"
+        },
+        {
+          "type": "index",
+          "name": "idx_ai_uploads_endpoint_owner_created",
+          "table_name": "ai_uploads",
+          "sql": "CREATE INDEX idx_ai_uploads_endpoint_owner_created ON ai_uploads(endpoint_id, owner_user_hash, created_at_unix_ms DESC, upload_id DESC)"
+        },
+        {
+          "type": "index",
+          "name": "idx_ai_uploads_state_delete_after",
+          "table_name": "ai_uploads",
+          "sql": "CREATE INDEX idx_ai_uploads_state_delete_after ON ai_uploads(endpoint_id, state, delete_after_unix_ms, created_at_unix_ms)"
+        },
+        {
+          "type": "index",
+          "name": "sqlite_autoindex_ai_flower_execution_authority_1",
+          "table_name": "ai_flower_execution_authority",
+          "sql": ""
+        },
+        {
+          "type": "index",
+          "name": "sqlite_autoindex_ai_flower_thread_routing_1",
+          "table_name": "ai_flower_thread_routing",
+          "sql": ""
+        },
+        {
+          "type": "index",
+          "name": "sqlite_autoindex_ai_pending_input_imports_1",
+          "table_name": "ai_pending_input_imports",
+          "sql": ""
+        },
+        {
+          "type": "index",
+          "name": "sqlite_autoindex_ai_thread_settings_1",
+          "table_name": "ai_thread_settings",
+          "sql": ""
+        },
+        {
+          "type": "index",
+          "name": "sqlite_autoindex_ai_upload_attempts_1",
+          "table_name": "ai_upload_attempts",
+          "sql": ""
+        },
+        {
+          "type": "index",
+          "name": "sqlite_autoindex_ai_upload_attempts_2",
+          "table_name": "ai_upload_attempts",
+          "sql": ""
+        },
+        {
+          "type": "index",
+          "name": "sqlite_autoindex_ai_upload_staging_scopes_1",
+          "table_name": "ai_upload_staging_scopes",
+          "sql": ""
+        },
+        {
+          "type": "index",
+          "name": "sqlite_autoindex_ai_uploads_1",
+          "table_name": "ai_uploads",
+          "sql": ""
+        },
+        {
+          "type": "index",
+          "name": "sqlite_autoindex_provider_capabilities_1",
+          "table_name": "provider_capabilities",
+          "sql": ""
+        },
+        {
+          "type": "table",
+          "name": "__redeven_db_meta",
+          "table_name": "__redeven_db_meta",
+          "sql": "CREATE TABLE __redeven_db_meta ( singleton INTEGER PRIMARY KEY CHECK(singleton = 1), db_kind TEXT NOT NULL, created_at_unix_ms INTEGER NOT NULL DEFAULT 0, last_migrated_at_unix_ms INTEGER NOT NULL DEFAULT 0, last_migrated_from_version INTEGER NOT NULL DEFAULT 0, last_migrated_to_version INTEGER NOT NULL DEFAULT 0 )"
+        },
+        {
+          "type": "table",
+          "name": "ai_flower_execution_authority",
+          "table_name": "ai_flower_execution_authority",
+          "sql": "CREATE TABLE ai_flower_execution_authority ( request_key TEXT PRIMARY KEY, thread_id TEXT NOT NULL, turn_id TEXT NOT NULL DEFAULT '', endpoint_id TEXT NOT NULL, namespace_public_id TEXT NOT NULL DEFAULT '', channel_id TEXT NOT NULL DEFAULT '', user_public_id TEXT NOT NULL, user_email TEXT NOT NULL DEFAULT '', created_at_unix_ms INTEGER NOT NULL )"
+        },
+        {
+          "type": "table",
+          "name": "ai_flower_thread_routing",
+          "table_name": "ai_flower_thread_routing",
+          "sql": "CREATE TABLE ai_flower_thread_routing ( endpoint_id TEXT NOT NULL, thread_id TEXT NOT NULL, updated_at_unix_ms INTEGER NOT NULL DEFAULT 0, home_runtime_id TEXT NOT NULL DEFAULT '', home_runtime_kind TEXT NOT NULL DEFAULT '', origin_env_public_id TEXT NOT NULL DEFAULT '', primary_target_id TEXT NOT NULL DEFAULT '', active_target_ids_json TEXT NOT NULL DEFAULT '[]', PRIMARY KEY(endpoint_id, thread_id) )"
+        },
+        {
+          "type": "table",
+          "name": "ai_pending_input_imports",
+          "table_name": "ai_pending_input_imports",
+          "sql": "CREATE TABLE ai_pending_input_imports ( request_id TEXT PRIMARY KEY, endpoint_id TEXT NOT NULL, thread_id TEXT NOT NULL, model_id TEXT NOT NULL DEFAULT '', text_content TEXT NOT NULL DEFAULT '', attachments_json TEXT NOT NULL DEFAULT '[]', context_action_json TEXT NOT NULL DEFAULT '', options_json TEXT NOT NULL DEFAULT '{}', session_meta_json TEXT NOT NULL DEFAULT '{}', created_at_unix_ms INTEGER NOT NULL, imported_at_unix_ms INTEGER NOT NULL DEFAULT 0, error_message TEXT NOT NULL DEFAULT '' )"
+        },
+        {
+          "type": "table",
+          "name": "ai_thread_settings",
+          "table_name": "ai_thread_settings",
+          "sql": "CREATE TABLE ai_thread_settings ( thread_id TEXT PRIMARY KEY, parent_thread_id TEXT NOT NULL DEFAULT '', endpoint_id TEXT NOT NULL, namespace_public_id TEXT NOT NULL DEFAULT '', model_id TEXT NOT NULL DEFAULT '', reasoning_selection_json TEXT NOT NULL DEFAULT '', permission_type TEXT NOT NULL DEFAULT 'approval_required', working_dir TEXT NOT NULL DEFAULT '', pinned_at_unix_ms INTEGER NOT NULL DEFAULT 0, created_by_user_public_id TEXT NOT NULL DEFAULT '', created_by_user_email TEXT NOT NULL DEFAULT '', updated_by_user_public_id TEXT NOT NULL DEFAULT '', updated_by_user_email TEXT NOT NULL DEFAULT '', settings_created_at_unix_ms INTEGER NOT NULL, settings_updated_at_unix_ms INTEGER NOT NULL )"
+        },
+        {
+          "type": "table",
+          "name": "ai_upload_attempts",
+          "table_name": "ai_upload_attempts",
+          "sql": "CREATE TABLE ai_upload_attempts ( endpoint_id TEXT NOT NULL, owner_user_hash TEXT NOT NULL, upload_request_id TEXT NOT NULL, request_fingerprint TEXT NOT NULL, upload_id TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('receiving', 'complete', 'failed')), error_code TEXT NOT NULL DEFAULT '', created_at_unix_ms INTEGER NOT NULL, updated_at_unix_ms INTEGER NOT NULL, PRIMARY KEY(endpoint_id, owner_user_hash, upload_request_id), UNIQUE(upload_id) )"
+        },
+        {
+          "type": "table",
+          "name": "ai_upload_refs",
+          "table_name": "ai_upload_refs",
+          "sql": "CREATE TABLE ai_upload_refs ( id INTEGER PRIMARY KEY AUTOINCREMENT, endpoint_id TEXT NOT NULL, upload_id TEXT NOT NULL, thread_id TEXT NOT NULL, ref_kind TEXT NOT NULL, ref_id TEXT NOT NULL, created_at_unix_ms INTEGER NOT NULL )"
+        },
+        {
+          "type": "table",
+          "name": "ai_upload_staging_scopes",
+          "table_name": "ai_upload_staging_scopes",
+          "sql": "CREATE TABLE ai_upload_staging_scopes ( staging_scope_id TEXT PRIMARY KEY, endpoint_id TEXT NOT NULL, owner_user_hash TEXT NOT NULL CHECK(length(owner_user_hash) = 64), target_id TEXT NOT NULL, capability_hash TEXT NOT NULL CHECK(length(capability_hash) = 64), created_at_unix_ms INTEGER NOT NULL, expires_at_unix_ms INTEGER NOT NULL, released_at_unix_ms INTEGER NOT NULL DEFAULT 0 )"
+        },
+        {
+          "type": "table",
+          "name": "ai_uploads",
+          "table_name": "ai_uploads",
+          "sql": "CREATE TABLE ai_uploads ( upload_id TEXT PRIMARY KEY, endpoint_id TEXT NOT NULL, owner_scope_kind TEXT NOT NULL CHECK(owner_scope_kind = 'user'), owner_user_hash TEXT NOT NULL CHECK(length(owner_user_hash) = 64), storage_relpath TEXT NOT NULL, name TEXT NOT NULL DEFAULT '', declared_media_type TEXT NOT NULL DEFAULT '', detected_media_type TEXT NOT NULL DEFAULT 'application/octet-stream', size_bytes INTEGER NOT NULL DEFAULT 0 CHECK(size_bytes \u003e= 0), content_sha256 TEXT NOT NULL CHECK(length(content_sha256) = 64), unicode_code_points INTEGER CHECK(unicode_code_points IS NULL OR unicode_code_points \u003e= 0), logical_line_count INTEGER CHECK(logical_line_count IS NULL OR logical_line_count \u003e= 0), source TEXT NOT NULL DEFAULT 'uploaded_file' CHECK(source IN ('uploaded_file', 'long_text')), state TEXT NOT NULL DEFAULT 'staged' CHECK(state IN ('staged', 'live', 'deleting')), created_at_unix_ms INTEGER NOT NULL, claimed_at_unix_ms INTEGER NOT NULL DEFAULT 0, delete_after_unix_ms INTEGER NOT NULL DEFAULT 0 )"
+        },
+        {
+          "type": "table",
+          "name": "provider_capabilities",
+          "table_name": "provider_capabilities",
+          "sql": "CREATE TABLE provider_capabilities ( provider_id TEXT NOT NULL, model_name TEXT NOT NULL, capability_json TEXT NOT NULL DEFAULT '{}', updated_at_unix_ms INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(provider_id, model_name) )"
+        },
+        {
+          "type": "table",
+          "name": "sqlite_sequence",
+          "table_name": "sqlite_sequence",
+          "sql": "CREATE TABLE sqlite_sequence(name,seq)"
+        }
+      ],
+      "tables": [
+        {
+          "name": "__redeven_db_meta",
+          "table_xinfo": [
+            {
+              "cid": 0,
+              "name": "singleton",
+              "type": "INTEGER",
+              "not_null": 0,
+              "default_value": "",
+              "primary_key": 1,
+              "hidden": 0
+            },
+            {
+              "cid": 1,
+              "name": "db_kind",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 2,
+              "name": "created_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "0",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 3,
+              "name": "last_migrated_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "0",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 4,
+              "name": "last_migrated_from_version",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "0",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 5,
+              "name": "last_migrated_to_version",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "0",
+              "primary_key": 0,
+              "hidden": 0
+            }
+          ],
+          "index_list": null
+        },
+        {
+          "name": "ai_flower_execution_authority",
+          "table_xinfo": [
+            {
+              "cid": 0,
+              "name": "request_key",
+              "type": "TEXT",
+              "not_null": 0,
+              "default_value": "",
+              "primary_key": 1,
+              "hidden": 0
+            },
+            {
+              "cid": 1,
+              "name": "thread_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 2,
+              "name": "turn_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 3,
+              "name": "endpoint_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 4,
+              "name": "namespace_public_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 5,
+              "name": "channel_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 6,
+              "name": "user_public_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 7,
+              "name": "user_email",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 8,
+              "name": "created_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            }
+          ],
+          "index_list": [
+            {
+              "sequence": 0,
+              "name": "idx_ai_flower_execution_authority_endpoint_thread",
+              "unique": 0,
+              "origin": "c",
+              "partial": 0
+            },
+            {
+              "sequence": 1,
+              "name": "idx_ai_flower_execution_authority_thread_turn",
+              "unique": 0,
+              "origin": "c",
+              "partial": 0
+            },
+            {
+              "sequence": 2,
+              "name": "sqlite_autoindex_ai_flower_execution_authority_1",
+              "unique": 1,
+              "origin": "pk",
+              "partial": 0
+            }
+          ]
+        },
+        {
+          "name": "ai_flower_thread_routing",
+          "table_xinfo": [
+            {
+              "cid": 0,
+              "name": "endpoint_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 1,
+              "hidden": 0
+            },
+            {
+              "cid": 1,
+              "name": "thread_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 2,
+              "hidden": 0
+            },
+            {
+              "cid": 2,
+              "name": "updated_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "0",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 3,
+              "name": "home_runtime_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 4,
+              "name": "home_runtime_kind",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 5,
+              "name": "origin_env_public_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 6,
+              "name": "primary_target_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 7,
+              "name": "active_target_ids_json",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "'[]'",
+              "primary_key": 0,
+              "hidden": 0
+            }
+          ],
+          "index_list": [
+            {
+              "sequence": 0,
+              "name": "sqlite_autoindex_ai_flower_thread_routing_1",
+              "unique": 1,
+              "origin": "pk",
+              "partial": 0
+            }
+          ]
+        },
+        {
+          "name": "ai_pending_input_imports",
+          "table_xinfo": [
+            {
+              "cid": 0,
+              "name": "request_id",
+              "type": "TEXT",
+              "not_null": 0,
+              "default_value": "",
+              "primary_key": 1,
+              "hidden": 0
+            },
+            {
+              "cid": 1,
+              "name": "endpoint_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 2,
+              "name": "thread_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 3,
+              "name": "model_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 4,
+              "name": "text_content",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 5,
+              "name": "attachments_json",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "'[]'",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 6,
+              "name": "context_action_json",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 7,
+              "name": "options_json",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "'{}'",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 8,
+              "name": "session_meta_json",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "'{}'",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 9,
+              "name": "created_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 10,
+              "name": "imported_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "0",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 11,
+              "name": "error_message",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            }
+          ],
+          "index_list": [
+            {
+              "sequence": 0,
+              "name": "idx_ai_pending_input_imports_pending",
+              "unique": 0,
+              "origin": "c",
+              "partial": 0
+            },
+            {
+              "sequence": 1,
+              "name": "sqlite_autoindex_ai_pending_input_imports_1",
+              "unique": 1,
+              "origin": "pk",
+              "partial": 0
+            }
+          ]
+        },
+        {
+          "name": "ai_thread_settings",
+          "table_xinfo": [
+            {
+              "cid": 0,
+              "name": "thread_id",
+              "type": "TEXT",
+              "not_null": 0,
+              "default_value": "",
+              "primary_key": 1,
+              "hidden": 0
+            },
+            {
+              "cid": 1,
+              "name": "parent_thread_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 2,
+              "name": "endpoint_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 3,
+              "name": "namespace_public_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 4,
+              "name": "model_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 5,
+              "name": "reasoning_selection_json",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 6,
+              "name": "permission_type",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "'approval_required'",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 7,
+              "name": "working_dir",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 8,
+              "name": "pinned_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "0",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 9,
+              "name": "created_by_user_public_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 10,
+              "name": "created_by_user_email",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 11,
+              "name": "updated_by_user_public_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 12,
+              "name": "updated_by_user_email",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 13,
+              "name": "settings_created_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 14,
+              "name": "settings_updated_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            }
+          ],
+          "index_list": [
+            {
+              "sequence": 0,
+              "name": "idx_ai_thread_settings_endpoint_pinned_created",
+              "unique": 0,
+              "origin": "c",
+              "partial": 0
+            },
+            {
+              "sequence": 1,
+              "name": "idx_ai_thread_settings_endpoint_updated",
+              "unique": 0,
+              "origin": "c",
+              "partial": 0
+            },
+            {
+              "sequence": 2,
+              "name": "sqlite_autoindex_ai_thread_settings_1",
+              "unique": 1,
+              "origin": "pk",
+              "partial": 0
+            }
+          ]
+        },
+        {
+          "name": "ai_upload_attempts",
+          "table_xinfo": [
+            {
+              "cid": 0,
+              "name": "endpoint_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 1,
+              "hidden": 0
+            },
+            {
+              "cid": 1,
+              "name": "owner_user_hash",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 2,
+              "hidden": 0
+            },
+            {
+              "cid": 2,
+              "name": "upload_request_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 3,
+              "hidden": 0
+            },
+            {
+              "cid": 3,
+              "name": "request_fingerprint",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 4,
+              "name": "upload_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 5,
+              "name": "status",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 6,
+              "name": "error_code",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 7,
+              "name": "created_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 8,
+              "name": "updated_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            }
+          ],
+          "index_list": [
+            {
+              "sequence": 0,
+              "name": "idx_ai_upload_attempts_status_updated",
+              "unique": 0,
+              "origin": "c",
+              "partial": 0
+            },
+            {
+              "sequence": 2,
+              "name": "sqlite_autoindex_ai_upload_attempts_1",
+              "unique": 1,
+              "origin": "pk",
+              "partial": 0
+            },
+            {
+              "sequence": 1,
+              "name": "sqlite_autoindex_ai_upload_attempts_2",
+              "unique": 1,
+              "origin": "u",
+              "partial": 0
+            }
+          ]
+        },
+        {
+          "name": "ai_upload_refs",
+          "table_xinfo": [
+            {
+              "cid": 0,
+              "name": "id",
+              "type": "INTEGER",
+              "not_null": 0,
+              "default_value": "",
+              "primary_key": 1,
+              "hidden": 0
+            },
+            {
+              "cid": 1,
+              "name": "endpoint_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 2,
+              "name": "upload_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 3,
+              "name": "thread_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 4,
+              "name": "ref_kind",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 5,
+              "name": "ref_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 6,
+              "name": "created_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            }
+          ],
+          "index_list": [
+            {
+              "sequence": 1,
+              "name": "idx_ai_upload_refs_thread_upload",
+              "unique": 0,
+              "origin": "c",
+              "partial": 0
+            },
+            {
+              "sequence": 2,
+              "name": "idx_ai_upload_refs_unique_ref",
+              "unique": 1,
+              "origin": "c",
+              "partial": 0
+            },
+            {
+              "sequence": 0,
+              "name": "idx_ai_upload_refs_upload",
+              "unique": 0,
+              "origin": "c",
+              "partial": 0
+            }
+          ]
+        },
+        {
+          "name": "ai_upload_staging_scopes",
+          "table_xinfo": [
+            {
+              "cid": 0,
+              "name": "staging_scope_id",
+              "type": "TEXT",
+              "not_null": 0,
+              "default_value": "",
+              "primary_key": 1,
+              "hidden": 0
+            },
+            {
+              "cid": 1,
+              "name": "endpoint_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 2,
+              "name": "owner_user_hash",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 3,
+              "name": "target_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 4,
+              "name": "capability_hash",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 5,
+              "name": "created_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 6,
+              "name": "expires_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 7,
+              "name": "released_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "0",
+              "primary_key": 0,
+              "hidden": 0
+            }
+          ],
+          "index_list": [
+            {
+              "sequence": 0,
+              "name": "idx_ai_upload_staging_scopes_capability",
+              "unique": 1,
+              "origin": "c",
+              "partial": 0
+            },
+            {
+              "sequence": 1,
+              "name": "idx_ai_upload_staging_scopes_expiry",
+              "unique": 0,
+              "origin": "c",
+              "partial": 0
+            },
+            {
+              "sequence": 2,
+              "name": "sqlite_autoindex_ai_upload_staging_scopes_1",
+              "unique": 1,
+              "origin": "pk",
+              "partial": 0
+            }
+          ]
+        },
+        {
+          "name": "ai_uploads",
+          "table_xinfo": [
+            {
+              "cid": 0,
+              "name": "upload_id",
+              "type": "TEXT",
+              "not_null": 0,
+              "default_value": "",
+              "primary_key": 1,
+              "hidden": 0
+            },
+            {
+              "cid": 1,
+              "name": "endpoint_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 2,
+              "name": "owner_scope_kind",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 3,
+              "name": "owner_user_hash",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 4,
+              "name": "storage_relpath",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 5,
+              "name": "name",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 6,
+              "name": "declared_media_type",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 7,
+              "name": "detected_media_type",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "'application/octet-stream'",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 8,
+              "name": "size_bytes",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "0",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 9,
+              "name": "content_sha256",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 10,
+              "name": "unicode_code_points",
+              "type": "INTEGER",
+              "not_null": 0,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 11,
+              "name": "logical_line_count",
+              "type": "INTEGER",
+              "not_null": 0,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 12,
+              "name": "source",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "'uploaded_file'",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 13,
+              "name": "state",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "'staged'",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 14,
+              "name": "created_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 15,
+              "name": "claimed_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "0",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 16,
+              "name": "delete_after_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "0",
+              "primary_key": 0,
+              "hidden": 0
+            }
+          ],
+          "index_list": [
+            {
+              "sequence": 1,
+              "name": "idx_ai_uploads_endpoint_owner_created",
+              "unique": 0,
+              "origin": "c",
+              "partial": 0
+            },
+            {
+              "sequence": 0,
+              "name": "idx_ai_uploads_state_delete_after",
+              "unique": 0,
+              "origin": "c",
+              "partial": 0
+            },
+            {
+              "sequence": 2,
+              "name": "sqlite_autoindex_ai_uploads_1",
+              "unique": 1,
+              "origin": "pk",
+              "partial": 0
+            }
+          ]
+        },
+        {
+          "name": "provider_capabilities",
+          "table_xinfo": [
+            {
+              "cid": 0,
+              "name": "provider_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 1,
+              "hidden": 0
+            },
+            {
+              "cid": 1,
+              "name": "model_name",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 2,
+              "hidden": 0
+            },
+            {
+              "cid": 2,
+              "name": "capability_json",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "'{}'",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 3,
+              "name": "updated_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "0",
+              "primary_key": 0,
+              "hidden": 0
+            }
+          ],
+          "index_list": [
+            {
+              "sequence": 0,
+              "name": "sqlite_autoindex_provider_capabilities_1",
+              "unique": 1,
+              "origin": "pk",
+              "partial": 0
+            }
+          ]
+        },
+        {
+          "name": "sqlite_sequence",
+          "table_xinfo": [
+            {
+              "cid": 0,
+              "name": "name",
+              "type": "",
+              "not_null": 0,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 1,
+              "name": "seq",
+              "type": "",
+              "not_null": 0,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            }
+          ],
+          "index_list": null
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_ai_flower_execution_authority_endpoint_thread",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 3,
+              "name": "endpoint_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": 1,
+              "name": "thread_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 2,
+              "cid": 8,
+              "name": "created_at_unix_ms",
+              "desc": 1,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 3,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "idx_ai_flower_execution_authority_thread_turn",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 1,
+              "name": "thread_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": 2,
+              "name": "turn_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 2,
+              "cid": 8,
+              "name": "created_at_unix_ms",
+              "desc": 1,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 3,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "idx_ai_pending_input_imports_pending",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 10,
+              "name": "imported_at_unix_ms",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": 1,
+              "name": "endpoint_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 2,
+              "cid": 2,
+              "name": "thread_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 3,
+              "cid": 9,
+              "name": "created_at_unix_ms",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 4,
+              "cid": 0,
+              "name": "request_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 5,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "idx_ai_thread_settings_endpoint_pinned_created",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 2,
+              "name": "endpoint_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": 8,
+              "name": "pinned_at_unix_ms",
+              "desc": 1,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 2,
+              "cid": 13,
+              "name": "settings_created_at_unix_ms",
+              "desc": 1,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 3,
+              "cid": 0,
+              "name": "thread_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 4,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "idx_ai_thread_settings_endpoint_updated",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 2,
+              "name": "endpoint_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": 14,
+              "name": "settings_updated_at_unix_ms",
+              "desc": 1,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 2,
+              "cid": 0,
+              "name": "thread_id",
+              "desc": 1,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 3,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "idx_ai_upload_attempts_status_updated",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 5,
+              "name": "status",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": 8,
+              "name": "updated_at_unix_ms",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 2,
+              "cid": 4,
+              "name": "upload_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 3,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "idx_ai_upload_refs_thread_upload",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 1,
+              "name": "endpoint_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": 3,
+              "name": "thread_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 2,
+              "cid": 2,
+              "name": "upload_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 3,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "idx_ai_upload_refs_unique_ref",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 1,
+              "name": "endpoint_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": 2,
+              "name": "upload_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 2,
+              "cid": 4,
+              "name": "ref_kind",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 3,
+              "cid": 5,
+              "name": "ref_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 4,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "idx_ai_upload_refs_upload",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 1,
+              "name": "endpoint_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": 2,
+              "name": "upload_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 2,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "idx_ai_upload_staging_scopes_capability",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 4,
+              "name": "capability_hash",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "idx_ai_upload_staging_scopes_expiry",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 6,
+              "name": "expires_at_unix_ms",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": 0,
+              "name": "staging_scope_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 2,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "idx_ai_uploads_endpoint_owner_created",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 1,
+              "name": "endpoint_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": 3,
+              "name": "owner_user_hash",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 2,
+              "cid": 14,
+              "name": "created_at_unix_ms",
+              "desc": 1,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 3,
+              "cid": 0,
+              "name": "upload_id",
+              "desc": 1,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 4,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "idx_ai_uploads_state_delete_after",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 1,
+              "name": "endpoint_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": 13,
+              "name": "state",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 2,
+              "cid": 16,
+              "name": "delete_after_unix_ms",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 3,
+              "cid": 14,
+              "name": "created_at_unix_ms",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 4,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_ai_flower_execution_authority_1",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 0,
+              "name": "request_key",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_ai_flower_thread_routing_1",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 0,
+              "name": "endpoint_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": 1,
+              "name": "thread_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 2,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_ai_pending_input_imports_1",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 0,
+              "name": "request_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_ai_thread_settings_1",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 0,
+              "name": "thread_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_ai_upload_attempts_1",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 0,
+              "name": "endpoint_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": 1,
+              "name": "owner_user_hash",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 2,
+              "cid": 2,
+              "name": "upload_request_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 3,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_ai_upload_attempts_2",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 4,
+              "name": "upload_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_ai_upload_staging_scopes_1",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 0,
+              "name": "staging_scope_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_ai_uploads_1",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 0,
+              "name": "upload_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_provider_capabilities_1",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 0,
+              "name": "provider_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": 1,
+              "name": "model_name",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 2,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "version": 4,
+      "sqlite_master": [
+        {
+          "type": "index",
+          "name": "idx_ai_flower_execution_authority_endpoint_thread",
+          "table_name": "ai_flower_execution_authority",
+          "sql": "CREATE INDEX idx_ai_flower_execution_authority_endpoint_thread ON ai_flower_execution_authority(endpoint_id, thread_id, created_at_unix_ms DESC)"
+        },
+        {
+          "type": "index",
+          "name": "idx_ai_flower_execution_authority_thread_turn",
+          "table_name": "ai_flower_execution_authority",
+          "sql": "CREATE INDEX idx_ai_flower_execution_authority_thread_turn ON ai_flower_execution_authority(thread_id, turn_id, created_at_unix_ms DESC)"
+        },
+        {
+          "type": "index",
+          "name": "idx_ai_pending_input_imports_pending",
+          "table_name": "ai_pending_input_imports",
+          "sql": "CREATE INDEX idx_ai_pending_input_imports_pending ON ai_pending_input_imports(imported_at_unix_ms, endpoint_id, thread_id, created_at_unix_ms, request_id)"
+        },
+        {
+          "type": "index",
+          "name": "idx_ai_thread_settings_endpoint_pinned_created",
+          "table_name": "ai_thread_settings",
+          "sql": "CREATE INDEX idx_ai_thread_settings_endpoint_pinned_created ON ai_thread_settings(endpoint_id, pinned_at_unix_ms DESC, settings_created_at_unix_ms DESC, thread_id ASC)"
+        },
+        {
+          "type": "index",
+          "name": "idx_ai_thread_settings_endpoint_updated",
+          "table_name": "ai_thread_settings",
+          "sql": "CREATE INDEX idx_ai_thread_settings_endpoint_updated ON ai_thread_settings(endpoint_id, settings_updated_at_unix_ms DESC, thread_id DESC)"
+        },
+        {
+          "type": "index",
+          "name": "idx_ai_upload_attempts_status_updated",
+          "table_name": "ai_upload_attempts",
+          "sql": "CREATE INDEX idx_ai_upload_attempts_status_updated ON ai_upload_attempts(status, updated_at_unix_ms, upload_id)"
+        },
+        {
+          "type": "index",
+          "name": "idx_ai_upload_refs_thread_upload",
+          "table_name": "ai_upload_refs",
+          "sql": "CREATE INDEX idx_ai_upload_refs_thread_upload ON ai_upload_refs(endpoint_id, thread_id, upload_id)"
+        },
+        {
+          "type": "index",
+          "name": "idx_ai_upload_refs_unique_ref",
+          "table_name": "ai_upload_refs",
+          "sql": "CREATE UNIQUE INDEX idx_ai_upload_refs_unique_ref ON ai_upload_refs(endpoint_id, upload_id, ref_kind, ref_id)"
+        },
+        {
+          "type": "index",
+          "name": "idx_ai_upload_refs_upload",
+          "table_name": "ai_upload_refs",
+          "sql": "CREATE INDEX idx_ai_upload_refs_upload ON ai_upload_refs(endpoint_id, upload_id)"
+        },
+        {
+          "type": "index",
+          "name": "idx_ai_upload_staging_scopes_capability",
+          "table_name": "ai_upload_staging_scopes",
+          "sql": "CREATE UNIQUE INDEX idx_ai_upload_staging_scopes_capability ON ai_upload_staging_scopes(capability_hash)"
+        },
+        {
+          "type": "index",
+          "name": "idx_ai_upload_staging_scopes_expiry",
+          "table_name": "ai_upload_staging_scopes",
+          "sql": "CREATE INDEX idx_ai_upload_staging_scopes_expiry ON ai_upload_staging_scopes(expires_at_unix_ms, staging_scope_id)"
+        },
+        {
+          "type": "index",
+          "name": "idx_ai_uploads_endpoint_owner_created",
+          "table_name": "ai_uploads",
+          "sql": "CREATE INDEX idx_ai_uploads_endpoint_owner_created ON ai_uploads(endpoint_id, owner_user_hash, created_at_unix_ms DESC, upload_id DESC)"
+        },
+        {
+          "type": "index",
+          "name": "idx_ai_uploads_state_delete_after",
+          "table_name": "ai_uploads",
+          "sql": "CREATE INDEX idx_ai_uploads_state_delete_after ON ai_uploads(endpoint_id, state, delete_after_unix_ms, created_at_unix_ms)"
+        },
+        {
+          "type": "index",
+          "name": "sqlite_autoindex_ai_flower_execution_authority_1",
+          "table_name": "ai_flower_execution_authority",
+          "sql": ""
+        },
+        {
+          "type": "index",
+          "name": "sqlite_autoindex_ai_flower_thread_routing_1",
+          "table_name": "ai_flower_thread_routing",
+          "sql": ""
+        },
+        {
+          "type": "index",
+          "name": "sqlite_autoindex_ai_pending_input_imports_1",
+          "table_name": "ai_pending_input_imports",
+          "sql": ""
+        },
+        {
+          "type": "index",
+          "name": "sqlite_autoindex_ai_thread_delete_authority_1",
+          "table_name": "ai_thread_delete_authority",
+          "sql": ""
+        },
+        {
+          "type": "index",
+          "name": "sqlite_autoindex_ai_thread_settings_1",
+          "table_name": "ai_thread_settings",
+          "sql": ""
+        },
+        {
+          "type": "index",
+          "name": "sqlite_autoindex_ai_upload_attempts_1",
+          "table_name": "ai_upload_attempts",
+          "sql": ""
+        },
+        {
+          "type": "index",
+          "name": "sqlite_autoindex_ai_upload_attempts_2",
+          "table_name": "ai_upload_attempts",
+          "sql": ""
+        },
+        {
+          "type": "index",
+          "name": "sqlite_autoindex_ai_upload_staging_scopes_1",
+          "table_name": "ai_upload_staging_scopes",
+          "sql": ""
+        },
+        {
+          "type": "index",
+          "name": "sqlite_autoindex_ai_uploads_1",
+          "table_name": "ai_uploads",
+          "sql": ""
+        },
+        {
+          "type": "index",
+          "name": "sqlite_autoindex_provider_capabilities_1",
+          "table_name": "provider_capabilities",
+          "sql": ""
+        },
+        {
+          "type": "table",
+          "name": "__redeven_db_meta",
+          "table_name": "__redeven_db_meta",
+          "sql": "CREATE TABLE __redeven_db_meta ( singleton INTEGER PRIMARY KEY CHECK(singleton = 1), db_kind TEXT NOT NULL, created_at_unix_ms INTEGER NOT NULL DEFAULT 0, last_migrated_at_unix_ms INTEGER NOT NULL DEFAULT 0, last_migrated_from_version INTEGER NOT NULL DEFAULT 0, last_migrated_to_version INTEGER NOT NULL DEFAULT 0 )"
+        },
+        {
+          "type": "table",
+          "name": "ai_flower_execution_authority",
+          "table_name": "ai_flower_execution_authority",
+          "sql": "CREATE TABLE ai_flower_execution_authority ( request_key TEXT PRIMARY KEY, thread_id TEXT NOT NULL, turn_id TEXT NOT NULL DEFAULT '', endpoint_id TEXT NOT NULL, namespace_public_id TEXT NOT NULL DEFAULT '', channel_id TEXT NOT NULL DEFAULT '', user_public_id TEXT NOT NULL, user_email TEXT NOT NULL DEFAULT '', created_at_unix_ms INTEGER NOT NULL )"
+        },
+        {
+          "type": "table",
+          "name": "ai_flower_thread_routing",
+          "table_name": "ai_flower_thread_routing",
+          "sql": "CREATE TABLE ai_flower_thread_routing ( endpoint_id TEXT NOT NULL, thread_id TEXT NOT NULL, updated_at_unix_ms INTEGER NOT NULL DEFAULT 0, home_runtime_id TEXT NOT NULL DEFAULT '', home_runtime_kind TEXT NOT NULL DEFAULT '', origin_env_public_id TEXT NOT NULL DEFAULT '', primary_target_id TEXT NOT NULL DEFAULT '', active_target_ids_json TEXT NOT NULL DEFAULT '[]', PRIMARY KEY(endpoint_id, thread_id) )"
+        },
+        {
+          "type": "table",
+          "name": "ai_pending_input_imports",
+          "table_name": "ai_pending_input_imports",
+          "sql": "CREATE TABLE ai_pending_input_imports ( request_id TEXT PRIMARY KEY, endpoint_id TEXT NOT NULL, thread_id TEXT NOT NULL, model_id TEXT NOT NULL DEFAULT '', text_content TEXT NOT NULL DEFAULT '', attachments_json TEXT NOT NULL DEFAULT '[]', context_action_json TEXT NOT NULL DEFAULT '', options_json TEXT NOT NULL DEFAULT '{}', session_meta_json TEXT NOT NULL DEFAULT '{}', created_at_unix_ms INTEGER NOT NULL, imported_at_unix_ms INTEGER NOT NULL DEFAULT 0, error_message TEXT NOT NULL DEFAULT '' )"
+        },
+        {
+          "type": "table",
+          "name": "ai_thread_delete_authority",
+          "table_name": "ai_thread_delete_authority",
+          "sql": "CREATE TABLE ai_thread_delete_authority ( endpoint_id TEXT NOT NULL, thread_id TEXT NOT NULL, deleted_at_unix_ms INTEGER NOT NULL, PRIMARY KEY(endpoint_id, thread_id) )"
+        },
+        {
+          "type": "table",
+          "name": "ai_thread_settings",
+          "table_name": "ai_thread_settings",
+          "sql": "CREATE TABLE ai_thread_settings ( thread_id TEXT PRIMARY KEY, parent_thread_id TEXT NOT NULL DEFAULT '', endpoint_id TEXT NOT NULL, namespace_public_id TEXT NOT NULL DEFAULT '', model_id TEXT NOT NULL DEFAULT '', reasoning_selection_json TEXT NOT NULL DEFAULT '', permission_type TEXT NOT NULL DEFAULT 'approval_required', working_dir TEXT NOT NULL DEFAULT '', pinned_at_unix_ms INTEGER NOT NULL DEFAULT 0, created_by_user_public_id TEXT NOT NULL DEFAULT '', created_by_user_email TEXT NOT NULL DEFAULT '', updated_by_user_public_id TEXT NOT NULL DEFAULT '', updated_by_user_email TEXT NOT NULL DEFAULT '', settings_created_at_unix_ms INTEGER NOT NULL, settings_updated_at_unix_ms INTEGER NOT NULL )"
+        },
+        {
+          "type": "table",
+          "name": "ai_upload_attempts",
+          "table_name": "ai_upload_attempts",
+          "sql": "CREATE TABLE ai_upload_attempts ( endpoint_id TEXT NOT NULL, owner_user_hash TEXT NOT NULL, upload_request_id TEXT NOT NULL, request_fingerprint TEXT NOT NULL, upload_id TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('receiving', 'complete', 'failed')), error_code TEXT NOT NULL DEFAULT '', created_at_unix_ms INTEGER NOT NULL, updated_at_unix_ms INTEGER NOT NULL, PRIMARY KEY(endpoint_id, owner_user_hash, upload_request_id), UNIQUE(upload_id) )"
+        },
+        {
+          "type": "table",
+          "name": "ai_upload_refs",
+          "table_name": "ai_upload_refs",
+          "sql": "CREATE TABLE ai_upload_refs ( id INTEGER PRIMARY KEY AUTOINCREMENT, endpoint_id TEXT NOT NULL, upload_id TEXT NOT NULL, thread_id TEXT NOT NULL, ref_kind TEXT NOT NULL, ref_id TEXT NOT NULL, created_at_unix_ms INTEGER NOT NULL )"
+        },
+        {
+          "type": "table",
+          "name": "ai_upload_staging_scopes",
+          "table_name": "ai_upload_staging_scopes",
+          "sql": "CREATE TABLE ai_upload_staging_scopes ( staging_scope_id TEXT PRIMARY KEY, endpoint_id TEXT NOT NULL, owner_user_hash TEXT NOT NULL CHECK(length(owner_user_hash) = 64), target_id TEXT NOT NULL, capability_hash TEXT NOT NULL CHECK(length(capability_hash) = 64), created_at_unix_ms INTEGER NOT NULL, expires_at_unix_ms INTEGER NOT NULL, released_at_unix_ms INTEGER NOT NULL DEFAULT 0 )"
+        },
+        {
+          "type": "table",
+          "name": "ai_uploads",
+          "table_name": "ai_uploads",
+          "sql": "CREATE TABLE ai_uploads ( upload_id TEXT PRIMARY KEY, endpoint_id TEXT NOT NULL, owner_scope_kind TEXT NOT NULL CHECK(owner_scope_kind = 'user'), owner_user_hash TEXT NOT NULL CHECK(length(owner_user_hash) = 64), storage_relpath TEXT NOT NULL, name TEXT NOT NULL DEFAULT '', declared_media_type TEXT NOT NULL DEFAULT '', detected_media_type TEXT NOT NULL DEFAULT 'application/octet-stream', size_bytes INTEGER NOT NULL DEFAULT 0 CHECK(size_bytes \u003e= 0), content_sha256 TEXT NOT NULL CHECK(length(content_sha256) = 64), unicode_code_points INTEGER CHECK(unicode_code_points IS NULL OR unicode_code_points \u003e= 0), logical_line_count INTEGER CHECK(logical_line_count IS NULL OR logical_line_count \u003e= 0), source TEXT NOT NULL DEFAULT 'uploaded_file' CHECK(source IN ('uploaded_file', 'long_text')), state TEXT NOT NULL DEFAULT 'staged' CHECK(state IN ('staged', 'live', 'deleting')), created_at_unix_ms INTEGER NOT NULL, claimed_at_unix_ms INTEGER NOT NULL DEFAULT 0, delete_after_unix_ms INTEGER NOT NULL DEFAULT 0 )"
+        },
+        {
+          "type": "table",
+          "name": "provider_capabilities",
+          "table_name": "provider_capabilities",
+          "sql": "CREATE TABLE provider_capabilities ( provider_id TEXT NOT NULL, model_name TEXT NOT NULL, capability_json TEXT NOT NULL DEFAULT '{}', updated_at_unix_ms INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(provider_id, model_name) )"
+        },
+        {
+          "type": "table",
+          "name": "sqlite_sequence",
+          "table_name": "sqlite_sequence",
+          "sql": "CREATE TABLE sqlite_sequence(name,seq)"
+        }
+      ],
+      "tables": [
+        {
+          "name": "__redeven_db_meta",
+          "table_xinfo": [
+            {
+              "cid": 0,
+              "name": "singleton",
+              "type": "INTEGER",
+              "not_null": 0,
+              "default_value": "",
+              "primary_key": 1,
+              "hidden": 0
+            },
+            {
+              "cid": 1,
+              "name": "db_kind",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 2,
+              "name": "created_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "0",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 3,
+              "name": "last_migrated_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "0",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 4,
+              "name": "last_migrated_from_version",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "0",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 5,
+              "name": "last_migrated_to_version",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "0",
+              "primary_key": 0,
+              "hidden": 0
+            }
+          ],
+          "index_list": null
+        },
+        {
+          "name": "ai_flower_execution_authority",
+          "table_xinfo": [
+            {
+              "cid": 0,
+              "name": "request_key",
+              "type": "TEXT",
+              "not_null": 0,
+              "default_value": "",
+              "primary_key": 1,
+              "hidden": 0
+            },
+            {
+              "cid": 1,
+              "name": "thread_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 2,
+              "name": "turn_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 3,
+              "name": "endpoint_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 4,
+              "name": "namespace_public_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 5,
+              "name": "channel_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 6,
+              "name": "user_public_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 7,
+              "name": "user_email",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 8,
+              "name": "created_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            }
+          ],
+          "index_list": [
+            {
+              "sequence": 0,
+              "name": "idx_ai_flower_execution_authority_endpoint_thread",
+              "unique": 0,
+              "origin": "c",
+              "partial": 0
+            },
+            {
+              "sequence": 1,
+              "name": "idx_ai_flower_execution_authority_thread_turn",
+              "unique": 0,
+              "origin": "c",
+              "partial": 0
+            },
+            {
+              "sequence": 2,
+              "name": "sqlite_autoindex_ai_flower_execution_authority_1",
+              "unique": 1,
+              "origin": "pk",
+              "partial": 0
+            }
+          ]
+        },
+        {
+          "name": "ai_flower_thread_routing",
+          "table_xinfo": [
+            {
+              "cid": 0,
+              "name": "endpoint_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 1,
+              "hidden": 0
+            },
+            {
+              "cid": 1,
+              "name": "thread_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 2,
+              "hidden": 0
+            },
+            {
+              "cid": 2,
+              "name": "updated_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "0",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 3,
+              "name": "home_runtime_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 4,
+              "name": "home_runtime_kind",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 5,
+              "name": "origin_env_public_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 6,
+              "name": "primary_target_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 7,
+              "name": "active_target_ids_json",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "'[]'",
+              "primary_key": 0,
+              "hidden": 0
+            }
+          ],
+          "index_list": [
+            {
+              "sequence": 0,
+              "name": "sqlite_autoindex_ai_flower_thread_routing_1",
+              "unique": 1,
+              "origin": "pk",
+              "partial": 0
+            }
+          ]
+        },
+        {
+          "name": "ai_pending_input_imports",
+          "table_xinfo": [
+            {
+              "cid": 0,
+              "name": "request_id",
+              "type": "TEXT",
+              "not_null": 0,
+              "default_value": "",
+              "primary_key": 1,
+              "hidden": 0
+            },
+            {
+              "cid": 1,
+              "name": "endpoint_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 2,
+              "name": "thread_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 3,
+              "name": "model_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 4,
+              "name": "text_content",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 5,
+              "name": "attachments_json",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "'[]'",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 6,
+              "name": "context_action_json",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 7,
+              "name": "options_json",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "'{}'",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 8,
+              "name": "session_meta_json",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "'{}'",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 9,
+              "name": "created_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 10,
+              "name": "imported_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "0",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 11,
+              "name": "error_message",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            }
+          ],
+          "index_list": [
+            {
+              "sequence": 0,
+              "name": "idx_ai_pending_input_imports_pending",
+              "unique": 0,
+              "origin": "c",
+              "partial": 0
+            },
+            {
+              "sequence": 1,
+              "name": "sqlite_autoindex_ai_pending_input_imports_1",
+              "unique": 1,
+              "origin": "pk",
+              "partial": 0
+            }
+          ]
+        },
+        {
+          "name": "ai_thread_delete_authority",
+          "table_xinfo": [
+            {
+              "cid": 0,
+              "name": "endpoint_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 1,
+              "hidden": 0
+            },
+            {
+              "cid": 1,
+              "name": "thread_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 2,
+              "hidden": 0
+            },
+            {
+              "cid": 2,
+              "name": "deleted_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            }
+          ],
+          "index_list": [
+            {
+              "sequence": 0,
+              "name": "sqlite_autoindex_ai_thread_delete_authority_1",
+              "unique": 1,
+              "origin": "pk",
+              "partial": 0
+            }
+          ]
+        },
+        {
+          "name": "ai_thread_settings",
+          "table_xinfo": [
+            {
+              "cid": 0,
+              "name": "thread_id",
+              "type": "TEXT",
+              "not_null": 0,
+              "default_value": "",
+              "primary_key": 1,
+              "hidden": 0
+            },
+            {
+              "cid": 1,
+              "name": "parent_thread_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 2,
+              "name": "endpoint_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 3,
+              "name": "namespace_public_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 4,
+              "name": "model_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 5,
+              "name": "reasoning_selection_json",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 6,
+              "name": "permission_type",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "'approval_required'",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 7,
+              "name": "working_dir",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 8,
+              "name": "pinned_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "0",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 9,
+              "name": "created_by_user_public_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 10,
+              "name": "created_by_user_email",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 11,
+              "name": "updated_by_user_public_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 12,
+              "name": "updated_by_user_email",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 13,
+              "name": "settings_created_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 14,
+              "name": "settings_updated_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            }
+          ],
+          "index_list": [
+            {
+              "sequence": 0,
+              "name": "idx_ai_thread_settings_endpoint_pinned_created",
+              "unique": 0,
+              "origin": "c",
+              "partial": 0
+            },
+            {
+              "sequence": 1,
+              "name": "idx_ai_thread_settings_endpoint_updated",
+              "unique": 0,
+              "origin": "c",
+              "partial": 0
+            },
+            {
+              "sequence": 2,
+              "name": "sqlite_autoindex_ai_thread_settings_1",
+              "unique": 1,
+              "origin": "pk",
+              "partial": 0
+            }
+          ]
+        },
+        {
+          "name": "ai_upload_attempts",
+          "table_xinfo": [
+            {
+              "cid": 0,
+              "name": "endpoint_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 1,
+              "hidden": 0
+            },
+            {
+              "cid": 1,
+              "name": "owner_user_hash",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 2,
+              "hidden": 0
+            },
+            {
+              "cid": 2,
+              "name": "upload_request_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 3,
+              "hidden": 0
+            },
+            {
+              "cid": 3,
+              "name": "request_fingerprint",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 4,
+              "name": "upload_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 5,
+              "name": "status",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 6,
+              "name": "error_code",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 7,
+              "name": "created_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 8,
+              "name": "updated_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            }
+          ],
+          "index_list": [
+            {
+              "sequence": 0,
+              "name": "idx_ai_upload_attempts_status_updated",
+              "unique": 0,
+              "origin": "c",
+              "partial": 0
+            },
+            {
+              "sequence": 2,
+              "name": "sqlite_autoindex_ai_upload_attempts_1",
+              "unique": 1,
+              "origin": "pk",
+              "partial": 0
+            },
+            {
+              "sequence": 1,
+              "name": "sqlite_autoindex_ai_upload_attempts_2",
+              "unique": 1,
+              "origin": "u",
+              "partial": 0
+            }
+          ]
+        },
+        {
+          "name": "ai_upload_refs",
+          "table_xinfo": [
+            {
+              "cid": 0,
+              "name": "id",
+              "type": "INTEGER",
+              "not_null": 0,
+              "default_value": "",
+              "primary_key": 1,
+              "hidden": 0
+            },
+            {
+              "cid": 1,
+              "name": "endpoint_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 2,
+              "name": "upload_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 3,
+              "name": "thread_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 4,
+              "name": "ref_kind",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 5,
+              "name": "ref_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 6,
+              "name": "created_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            }
+          ],
+          "index_list": [
+            {
+              "sequence": 1,
+              "name": "idx_ai_upload_refs_thread_upload",
+              "unique": 0,
+              "origin": "c",
+              "partial": 0
+            },
+            {
+              "sequence": 2,
+              "name": "idx_ai_upload_refs_unique_ref",
+              "unique": 1,
+              "origin": "c",
+              "partial": 0
+            },
+            {
+              "sequence": 0,
+              "name": "idx_ai_upload_refs_upload",
+              "unique": 0,
+              "origin": "c",
+              "partial": 0
+            }
+          ]
+        },
+        {
+          "name": "ai_upload_staging_scopes",
+          "table_xinfo": [
+            {
+              "cid": 0,
+              "name": "staging_scope_id",
+              "type": "TEXT",
+              "not_null": 0,
+              "default_value": "",
+              "primary_key": 1,
+              "hidden": 0
+            },
+            {
+              "cid": 1,
+              "name": "endpoint_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 2,
+              "name": "owner_user_hash",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 3,
+              "name": "target_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 4,
+              "name": "capability_hash",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 5,
+              "name": "created_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 6,
+              "name": "expires_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 7,
+              "name": "released_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "0",
+              "primary_key": 0,
+              "hidden": 0
+            }
+          ],
+          "index_list": [
+            {
+              "sequence": 0,
+              "name": "idx_ai_upload_staging_scopes_capability",
+              "unique": 1,
+              "origin": "c",
+              "partial": 0
+            },
+            {
+              "sequence": 1,
+              "name": "idx_ai_upload_staging_scopes_expiry",
+              "unique": 0,
+              "origin": "c",
+              "partial": 0
+            },
+            {
+              "sequence": 2,
+              "name": "sqlite_autoindex_ai_upload_staging_scopes_1",
+              "unique": 1,
+              "origin": "pk",
+              "partial": 0
+            }
+          ]
+        },
+        {
+          "name": "ai_uploads",
+          "table_xinfo": [
+            {
+              "cid": 0,
+              "name": "upload_id",
+              "type": "TEXT",
+              "not_null": 0,
+              "default_value": "",
+              "primary_key": 1,
+              "hidden": 0
+            },
+            {
+              "cid": 1,
+              "name": "endpoint_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 2,
+              "name": "owner_scope_kind",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 3,
+              "name": "owner_user_hash",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 4,
+              "name": "storage_relpath",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 5,
+              "name": "name",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 6,
+              "name": "declared_media_type",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "''",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 7,
+              "name": "detected_media_type",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "'application/octet-stream'",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 8,
+              "name": "size_bytes",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "0",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 9,
+              "name": "content_sha256",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 10,
+              "name": "unicode_code_points",
+              "type": "INTEGER",
+              "not_null": 0,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 11,
+              "name": "logical_line_count",
+              "type": "INTEGER",
+              "not_null": 0,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 12,
+              "name": "source",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "'uploaded_file'",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 13,
+              "name": "state",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "'staged'",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 14,
+              "name": "created_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 15,
+              "name": "claimed_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "0",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 16,
+              "name": "delete_after_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "0",
+              "primary_key": 0,
+              "hidden": 0
+            }
+          ],
+          "index_list": [
+            {
+              "sequence": 1,
+              "name": "idx_ai_uploads_endpoint_owner_created",
+              "unique": 0,
+              "origin": "c",
+              "partial": 0
+            },
+            {
+              "sequence": 0,
+              "name": "idx_ai_uploads_state_delete_after",
+              "unique": 0,
+              "origin": "c",
+              "partial": 0
+            },
+            {
+              "sequence": 2,
+              "name": "sqlite_autoindex_ai_uploads_1",
+              "unique": 1,
+              "origin": "pk",
+              "partial": 0
+            }
+          ]
+        },
+        {
+          "name": "provider_capabilities",
+          "table_xinfo": [
+            {
+              "cid": 0,
+              "name": "provider_id",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 1,
+              "hidden": 0
+            },
+            {
+              "cid": 1,
+              "name": "model_name",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "",
+              "primary_key": 2,
+              "hidden": 0
+            },
+            {
+              "cid": 2,
+              "name": "capability_json",
+              "type": "TEXT",
+              "not_null": 1,
+              "default_value": "'{}'",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 3,
+              "name": "updated_at_unix_ms",
+              "type": "INTEGER",
+              "not_null": 1,
+              "default_value": "0",
+              "primary_key": 0,
+              "hidden": 0
+            }
+          ],
+          "index_list": [
+            {
+              "sequence": 0,
+              "name": "sqlite_autoindex_provider_capabilities_1",
+              "unique": 1,
+              "origin": "pk",
+              "partial": 0
+            }
+          ]
+        },
+        {
+          "name": "sqlite_sequence",
+          "table_xinfo": [
+            {
+              "cid": 0,
+              "name": "name",
+              "type": "",
+              "not_null": 0,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            },
+            {
+              "cid": 1,
+              "name": "seq",
+              "type": "",
+              "not_null": 0,
+              "default_value": "",
+              "primary_key": 0,
+              "hidden": 0
+            }
+          ],
+          "index_list": null
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_ai_flower_execution_authority_endpoint_thread",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 3,
+              "name": "endpoint_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": 1,
+              "name": "thread_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 2,
+              "cid": 8,
+              "name": "created_at_unix_ms",
+              "desc": 1,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 3,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "idx_ai_flower_execution_authority_thread_turn",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 1,
+              "name": "thread_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": 2,
+              "name": "turn_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 2,
+              "cid": 8,
+              "name": "created_at_unix_ms",
+              "desc": 1,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 3,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "idx_ai_pending_input_imports_pending",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 10,
+              "name": "imported_at_unix_ms",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": 1,
+              "name": "endpoint_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 2,
+              "cid": 2,
+              "name": "thread_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 3,
+              "cid": 9,
+              "name": "created_at_unix_ms",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 4,
+              "cid": 0,
+              "name": "request_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 5,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "idx_ai_thread_settings_endpoint_pinned_created",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 2,
+              "name": "endpoint_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": 8,
+              "name": "pinned_at_unix_ms",
+              "desc": 1,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 2,
+              "cid": 13,
+              "name": "settings_created_at_unix_ms",
+              "desc": 1,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 3,
+              "cid": 0,
+              "name": "thread_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 4,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "idx_ai_thread_settings_endpoint_updated",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 2,
+              "name": "endpoint_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": 14,
+              "name": "settings_updated_at_unix_ms",
+              "desc": 1,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 2,
+              "cid": 0,
+              "name": "thread_id",
+              "desc": 1,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 3,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "idx_ai_upload_attempts_status_updated",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 5,
+              "name": "status",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": 8,
+              "name": "updated_at_unix_ms",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 2,
+              "cid": 4,
+              "name": "upload_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 3,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "idx_ai_upload_refs_thread_upload",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 1,
+              "name": "endpoint_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": 3,
+              "name": "thread_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 2,
+              "cid": 2,
+              "name": "upload_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 3,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "idx_ai_upload_refs_unique_ref",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 1,
+              "name": "endpoint_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": 2,
+              "name": "upload_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 2,
+              "cid": 4,
+              "name": "ref_kind",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 3,
+              "cid": 5,
+              "name": "ref_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 4,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "idx_ai_upload_refs_upload",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 1,
+              "name": "endpoint_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": 2,
+              "name": "upload_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 2,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "idx_ai_upload_staging_scopes_capability",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 4,
+              "name": "capability_hash",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "idx_ai_upload_staging_scopes_expiry",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 6,
+              "name": "expires_at_unix_ms",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": 0,
+              "name": "staging_scope_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 2,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "idx_ai_uploads_endpoint_owner_created",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 1,
+              "name": "endpoint_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": 3,
+              "name": "owner_user_hash",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 2,
+              "cid": 14,
+              "name": "created_at_unix_ms",
+              "desc": 1,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 3,
+              "cid": 0,
+              "name": "upload_id",
+              "desc": 1,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 4,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "idx_ai_uploads_state_delete_after",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 1,
+              "name": "endpoint_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": 13,
+              "name": "state",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 2,
+              "cid": 16,
+              "name": "delete_after_unix_ms",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 3,
+              "cid": 14,
+              "name": "created_at_unix_ms",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 4,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_ai_flower_execution_authority_1",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 0,
+              "name": "request_key",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_ai_flower_thread_routing_1",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 0,
+              "name": "endpoint_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": 1,
+              "name": "thread_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 2,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_ai_pending_input_imports_1",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 0,
+              "name": "request_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": -1,
+              "name": "",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 0
+            }
+          ]
+        },
+        {
+          "name": "sqlite_autoindex_ai_thread_delete_authority_1",
+          "index_xinfo": [
+            {
+              "sequence": 0,
+              "cid": 0,
+              "name": "endpoint_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 1,
+              "cid": 1,
+              "name": "thread_id",
+              "desc": 0,
+              "collation": "BINARY",
+              "key": 1
+            },
+            {
+              "sequence": 2,
               "cid": -1,
               "name": "",
               "desc": 0,

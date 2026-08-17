@@ -24,6 +24,16 @@ describe('applyFlowerRuntimeCurrentView', () => {
     expect(result.messages.map((message) => message.content)).toEqual(['hello']);
   });
 
+  it('projects an interrupted runtime outcome as a visible failed turn', () => {
+    const result = applyFlowerRuntimeCurrentView(summary(), {
+      thread_id: 'thread-a', view_version: 8, activity: 'idle', turn_id: 'turn-a', last_outcome: 'interrupted',
+      items: [{ id: 'assistant:turn-a:1', turn_id: 'turn-a', ordinal: 1, kind: 'assistant', text: 'partial output' }],
+    });
+
+    expect(result.status).toBe('failed');
+    expect(result.messages[0]).toMatchObject({ id: 'assistant:turn-a:1', status: 'error' });
+  });
+
   it('preserves Floret ordered segments and stable IDs through approval, completion, and reload', () => {
     const tool = (id: string, ordinal: number, status: 'waiting' | 'running' | 'success') => ({
       id: `tool:turn-a:${id}`, turn_id: 'turn-a', ordinal, kind: 'tool' as const,

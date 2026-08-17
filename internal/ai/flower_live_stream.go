@@ -60,6 +60,7 @@ type flowerLiveSubscriber struct {
 	endpointID   string
 	userPublicID string
 	queue        chan *flowerLiveEncodedBatch
+	queueLimit   int
 	queuedBytes  int
 	initializing bool
 	buffered     []*flowerLiveEncodedBatch
@@ -99,7 +100,7 @@ func (s *Service) SubscribeFlowerLiveStream(ctx context.Context, meta *session.M
 	s.flowerLiveSubscriberSeq++
 	subscriber := &flowerLiveSubscriber{
 		id: s.flowerLiveSubscriberSeq, endpointID: endpointID, userPublicID: userPublicID,
-		queue: make(chan *flowerLiveEncodedBatch, flowerLiveSubscriberBatchLimit), initializing: true,
+		queue: make(chan *flowerLiveEncodedBatch, flowerLiveSubscriberBatchLimit), queueLimit: flowerLiveSubscriberBatchLimit, initializing: true,
 	}
 	s.flowerLiveSubscribers[subscriber.id] = subscriber
 	s.flowerLiveSubscribersByEndpoint[endpointID]++
@@ -138,19 +139,34 @@ func (s *Service) SubscribeFlowerLiveStream(ctx context.Context, meta *session.M
 		SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamReady, Summaries: summaries,
 	})
 	s.mu.Lock()
-	if !subscriber.closed {
-		enqueueFlowerLiveSubscriberDirectLocked(s, subscriber, ready)
-		for _, baseline := range currentBaselines {
-			enqueueFlowerLiveSubscriberDirectLocked(s, subscriber, baseline)
-		}
-		subscriber.initializing = false
-		for _, batch := range subscriber.buffered {
-			enqueueFlowerLiveSubscriberLocked(s, subscriber, batch)
-		}
-		subscriber.buffered = nil
-	}
+	finalizeFlowerLiveSubscriberInitializationLocked(s, subscriber, ready, currentBaselines)
 	s.mu.Unlock()
 	return &FlowerLiveStreamSubscription{service: s, subscriber: subscriber}, nil
+}
+
+func finalizeFlowerLiveSubscriberInitializationLocked(service *Service, subscriber *flowerLiveSubscriber, ready *flowerLiveEncodedBatch, baselines []*flowerLiveEncodedBatch) {
+	if service == nil || subscriber == nil || subscriber.closed || ready == nil {
+		return
+	}
+	initialQueueCapacity := 1 + len(baselines) + len(subscriber.buffered)
+	if initialQueueCapacity > cap(subscriber.queue) {
+		subscriber.queue = make(chan *flowerLiveEncodedBatch, initialQueueCapacity)
+	}
+	subscriber.queueLimit = initialQueueCapacity
+	if !enqueueFlowerLiveSubscriberDirectLocked(service, subscriber, ready) {
+		return
+	}
+	for _, baseline := range baselines {
+		if !enqueueFlowerLiveSubscriberDirectLocked(service, subscriber, baseline) {
+			return
+		}
+	}
+	subscriber.initializing = false
+	for _, batch := range subscriber.buffered {
+		enqueueFlowerLiveSubscriberLocked(service, subscriber, batch)
+	}
+	subscriber.buffered = nil
+	subscriber.queueLimit = flowerLiveSubscriberBatchLimit
 }
 
 func flowerLiveSummaryNeedsCurrentBaseline(summary ThreadView) bool {
@@ -262,13 +278,18 @@ func newFlowerLiveEncodedBatch(envelope FlowerLiveStreamEnvelope) *flowerLiveEnc
 }
 
 func enqueueFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveSubscriber, batch *flowerLiveEncodedBatch) bool {
-	if subscriber == nil || batch == nil || subscriber.closed || service == nil || len(batch.data) > flowerLiveSubscriberByteLimit {
+	if subscriber == nil || batch == nil || subscriber.closed || service == nil {
+		return false
+	}
+	if len(batch.data) > flowerLiveSubscriberByteLimit {
+		closeFlowerLiveSubscriberLocked(service, subscriber)
 		return false
 	}
 	if subscriber.initializing {
 		subscriber.buffered = append(subscriber.buffered, batch)
 		if len(subscriber.buffered) > flowerLiveSubscriberBatchLimit {
-			subscriber.buffered = append([]*flowerLiveEncodedBatch(nil), subscriber.buffered[len(subscriber.buffered)-flowerLiveSubscriberBatchLimit:]...)
+			closeFlowerLiveSubscriberLocked(service, subscriber)
+			return false
 		}
 		return true
 	}
@@ -276,14 +297,15 @@ func enqueueFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveS
 }
 
 func enqueueFlowerLiveSubscriberDirectLocked(service *Service, subscriber *flowerLiveSubscriber, batch *flowerLiveEncodedBatch) bool {
-	for len(subscriber.queue) >= flowerLiveSubscriberBatchLimit || subscriber.queuedBytes+len(batch.data) > flowerLiveSubscriberByteLimit || service.flowerLiveQueuedBytes+len(batch.data) > flowerLiveGlobalQueuedByteLimit {
-		select {
-		case dropped := <-subscriber.queue:
-			subscriber.queuedBytes -= len(dropped.data)
-			service.flowerLiveQueuedBytes -= len(dropped.data)
-		default:
-			return false
-		}
+	queueLimit := subscriber.queueLimit
+	if queueLimit <= 0 {
+		queueLimit = flowerLiveSubscriberBatchLimit
+	}
+	if len(batch.data) > flowerLiveSubscriberByteLimit || len(subscriber.queue) >= queueLimit ||
+		subscriber.queuedBytes+len(batch.data) > flowerLiveSubscriberByteLimit ||
+		service.flowerLiveQueuedBytes+len(batch.data) > flowerLiveGlobalQueuedByteLimit {
+		closeFlowerLiveSubscriberLocked(service, subscriber)
+		return false
 	}
 	subscriber.queue <- batch
 	subscriber.queuedBytes += len(batch.data)
@@ -296,6 +318,18 @@ func closeFlowerLiveSubscriberLocked(service *Service, subscriber *flowerLiveSub
 		return
 	}
 	subscriber.closed = true
+	subscriber.buffered = nil
+	for len(subscriber.queue) > 0 {
+		batch := <-subscriber.queue
+		subscriber.queuedBytes -= len(batch.data)
+		service.flowerLiveQueuedBytes -= len(batch.data)
+	}
+	if subscriber.queuedBytes < 0 {
+		subscriber.queuedBytes = 0
+	}
+	if service.flowerLiveQueuedBytes < 0 {
+		service.flowerLiveQueuedBytes = 0
+	}
 	delete(service.flowerLiveSubscribers, subscriber.id)
 	if service.flowerLiveSubscribersByEndpoint[subscriber.endpointID] > 0 {
 		service.flowerLiveSubscribersByEndpoint[subscriber.endpointID]--

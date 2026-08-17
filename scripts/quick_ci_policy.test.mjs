@@ -8,6 +8,7 @@ const releaseWorkflow = readFileSync(new URL("../.github/workflows/release.yml",
 const quickGate = readFileSync(new URL("./check_quick_ci.sh", import.meta.url), "utf8");
 const finalGate = readFileSync(new URL("./check_final_integration.sh", import.meta.url), "utf8");
 const uiGate = readFileSync(new URL("./check_ui_tests.sh", import.meta.url), "utf8");
+const flowerGate = readFileSync(new URL("./check_flower_ui.sh", import.meta.url), "utf8");
 const jobsSource = workflow.slice(workflow.indexOf("\njobs:\n") + "\njobs:\n".length);
 const releaseJobsSource = releaseWorkflow.slice(releaseWorkflow.indexOf("\njobs:\n") + "\njobs:\n".length);
 
@@ -156,6 +157,15 @@ test("exact-main pre-push owns complete UI and browser coverage", () => {
   assert.match(uiGate, /^\s*run_terminal_performance$/m);
   assert.match(uiGate, /^\s*npm test$/m);
   assert.match(uiGate, /pnpm run test:terminal-performance/);
+});
+
+test("Flower UI gate provisions Node 26 webstorage backing without discarding caller options", () => {
+  assert.match(flowerGate, /case " \$\{NODE_OPTIONS:-\} "/);
+  assert.match(flowerGate, /--localstorage-file=/);
+  assert.match(flowerGate, /mktemp .*redeven-flower-localstorage/);
+  assert.match(flowerGate, /export NODE_OPTIONS="\$\{NODE_OPTIONS:\+\$NODE_OPTIONS \}--localstorage-file=/);
+  assert.match(flowerGate, /trap 'rm -f -- "\$flower_localstorage_file" "\$flower_localstorage_file-wal" "\$flower_localstorage_file-shm"'/);
+  assert.doesNotMatch(flowerGate, /--no-experimental-webstorage/);
 });
 
 test("release workflow validates exact main and contains no test gate", () => {

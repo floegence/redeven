@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -486,7 +487,60 @@ func TestFlowerLiveStreamGlobalQueuedReferenceBudget(t *testing.T) {
 	}
 }
 
-func TestFlowerLiveStreamAdmissionAndSlowObserverIsolation(t *testing.T) {
+func TestFlowerLiveStreamOversizedFrameClosesSubscriberForReconnect(t *testing.T) {
+	svc := newFlowerLiveMemoryTestService()
+	subscriber := &flowerLiveSubscriber{
+		id: 1, endpointID: "env_live_oversized", queue: make(chan *flowerLiveEncodedBatch, flowerLiveSubscriberBatchLimit),
+		queueLimit: flowerLiveSubscriberBatchLimit,
+	}
+	svc.flowerLiveSubscribers[subscriber.id] = subscriber
+	svc.flowerLiveSubscribersByEndpoint[subscriber.endpointID] = 1
+	oversized := &flowerLiveEncodedBatch{kind: FlowerLiveStreamThreadBatch, data: make([]byte, flowerLiveSubscriberByteLimit+1)}
+	if enqueueFlowerLiveSubscriberLocked(svc, subscriber, oversized) {
+		t.Fatal("oversized frame was accepted")
+	}
+	if !subscriber.closed {
+		t.Fatal("oversized frame did not close subscriber")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	subscription := &FlowerLiveStreamSubscription{service: svc, subscriber: subscriber}
+	if frame, err := subscription.Next(ctx); !errors.Is(err, io.EOF) || frame != nil {
+		t.Fatalf("oversized subscriber next=(%#v, %v), want EOF", frame, err)
+	}
+}
+
+func TestFlowerLiveStreamInitializationKeepsLargeBaselineBeforeReady(t *testing.T) {
+	svc := newFlowerLiveMemoryTestService()
+	subscriber := &flowerLiveSubscriber{
+		id: 1, endpointID: "env_live_large_baseline", initializing: true,
+		queue:      make(chan *flowerLiveEncodedBatch, flowerLiveSubscriberBatchLimit),
+		queueLimit: flowerLiveSubscriberBatchLimit,
+	}
+	ready := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamReady})
+	baselines := make([]*flowerLiveEncodedBatch, 24)
+	for index := range baselines {
+		baselines[index] = newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{
+			SchemaVersion: FlowerLiveSchemaVersion, Kind: FlowerLiveStreamThreadBatch, ThreadID: fmt.Sprintf("thread-large-%d", index),
+		})
+	}
+	svc.flowerLiveSubscribers[subscriber.id] = subscriber
+	svc.flowerLiveSubscribersByEndpoint[subscriber.endpointID] = 1
+	svc.mu.Lock()
+	finalizeFlowerLiveSubscriberInitializationLocked(svc, subscriber, ready, baselines)
+	svc.mu.Unlock()
+	if subscriber.closed || subscriber.initializing {
+		t.Fatal("large baseline initialization closed or left subscriber initializing")
+	}
+	if got, want := len(subscriber.queue), 1+len(baselines); got != want {
+		t.Fatalf("queued initialization frames=%d, want %d", got, want)
+	}
+	if first := <-subscriber.queue; first != ready {
+		t.Fatal("ready frame was not retained as the first initialization frame")
+	}
+}
+
+func TestFlowerLiveStreamAdmissionAndSlowObserverReconnectFence(t *testing.T) {
 	t.Parallel()
 	svc := newFlowerLiveMemoryTestService()
 	meta := flowerLiveMemoryTestMeta("env_live_stream_admission")
@@ -524,15 +578,10 @@ func TestFlowerLiveStreamAdmissionAndSlowObserverIsolation(t *testing.T) {
 		_ = nextFlowerLiveStreamFrame(t, fast)
 	}
 
-	seenLatest := false
-	for range flowerLiveSubscriberBatchLimit {
-		frame := nextFlowerLiveStreamFrame(t, slow)
-		if strings.Contains(string(frame.Data), fmt.Sprintf("draft-%d", flowerLiveSubscriberBatchLimit)) {
-			seenLatest = true
-		}
-	}
-	if !seenLatest {
-		t.Fatal("slow observer did not retain the newest workspace update")
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if frame, err := slow.Next(ctx); !errors.Is(err, io.EOF) || frame != nil {
+		t.Fatalf("slow observer frame=%#v error=%v, want immediate reconnect fence", frame, err)
 	}
 
 	before := svc.flowerLiveSubscriberCount(meta.EndpointID)

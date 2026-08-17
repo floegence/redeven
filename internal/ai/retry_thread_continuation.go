@@ -30,7 +30,7 @@ func (s *Service) RetryThreadContinuation(ctx context.Context, meta *session.Met
 	if endpointID == "" || threadID == "" {
 		return RetryThreadContinuationResponse{}, errors.New("invalid request")
 	}
-	if _, err := s.GetThread(ctx, meta, threadID); err != nil {
+	if err := s.requireEndpointThreadAuthority(ctx, endpointID, threadID); err != nil {
 		return RetryThreadContinuationResponse{}, err
 	}
 	typed, err := s.typedFloretRuntime()
@@ -49,6 +49,19 @@ func (s *Service) RetryThreadContinuation(ctx context.Context, meta *session.Met
 		return RetryThreadContinuationResponse{}, err
 	}
 	requestKey := flruntime.RequestKey(requestID)
+	s.mu.Lock()
+	db := s.threadsDB
+	s.mu.Unlock()
+	if db == nil {
+		return RetryThreadContinuationResponse{}, errors.New("threads store not ready")
+	}
+	authority, err := db.GetExecutionAuthorityByTurn(ctx, threadID, view.TurnID.String())
+	if err != nil {
+		return RetryThreadContinuationResponse{}, err
+	}
+	if err := s.persistExecutionAuthorityRecord(ctx, authority, requestID, view.TurnID.String()); err != nil {
+		return RetryThreadContinuationResponse{}, err
+	}
 	if _, err := typed.Retry(ctx, flruntime.RetryInput{ThreadID: identity.ThreadID(threadID), SourceTurnID: view.TurnID, RequestKey: requestKey}); err != nil {
 		return RetryThreadContinuationResponse{}, err
 	}

@@ -3398,8 +3398,8 @@ func TestServer_AIThreadDeleteDoesNotWaitForReadStateCleanup(t *testing.T) {
 	}
 
 	missing := performServerRequest(srv, http.MethodDelete, "/_redeven_proxy/api/ai/threads/thread_missing_delete_operation", envOriginWithChannel(channelID), "")
-	if missing.Code != http.StatusOK {
-		t.Fatalf("second DELETE status=%d body=%s", missing.Code, missing.Body.String())
+	if missing.Code != http.StatusNotFound {
+		t.Fatalf("unknown DELETE status=%d body=%s", missing.Code, missing.Body.String())
 	}
 
 	detail := performServerRequest(srv, http.MethodGet, deletePath, envOriginWithChannel(channelID), "")
