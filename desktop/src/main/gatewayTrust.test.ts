@@ -37,7 +37,7 @@ function memorySecretStore(): GatewaySecretStore & { values: Map<string, string>
 
 function gatewayRecord(overrides: Partial<GatewayRecord> = {}): GatewayRecord {
   return {
-    schema_version: 1,
+    schema_version: 2,
     gateway_id: 'gw_demo',
     display_name: 'Demo Gateway',
     local_enabled: true,

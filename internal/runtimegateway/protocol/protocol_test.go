@@ -69,6 +69,14 @@ func TestOpenSessionRequestValidation(t *testing.T) {
 	}
 }
 
+func TestEnvProfileInputRejectsRemovedLifecycleOwnershipField(t *testing.T) {
+	var input EnvProfileInput
+	err := json.Unmarshal([]byte(`{"display_name":"Demo","access_route":{"kind":"url","url":"https://example.com"},"control_owner":"gateway"}`), &input)
+	if err == nil || !strings.Contains(err.Error(), `unknown field "control_owner"`) {
+		t.Fatalf("Unmarshal() error = %v, want removed control_owner rejection", err)
+	}
+}
+
 func TestCatalogNormalization(t *testing.T) {
 	resp := NewCatalogResponse(GatewayMetadata{
 		GatewayID:    " gateway_demo ",

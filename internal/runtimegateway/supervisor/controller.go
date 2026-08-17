@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -27,27 +28,56 @@ import (
 )
 
 type ControllerOptions struct {
-	BindingStore   *BindingStore
-	StartupWait    time.Duration
-	ShutdownWait   time.Duration
-	ControlTimeout time.Duration
+	BindingStore         *BindingStore
+	StartupWait          time.Duration
+	ShutdownWait         time.Duration
+	ControlTimeout       time.Duration
+	ArtifactProbeTimeout time.Duration
 }
 
 type Controller struct {
-	mu             sync.Mutex
-	offlineFences  map[string]gatewayprotocol.LifecycleTarget
-	bindings       *BindingStore
-	startupWait    time.Duration
-	shutdownWait   time.Duration
-	controlTimeout time.Duration
+	mu                   sync.Mutex
+	offlineFences        map[string]gatewayprotocol.LifecycleTarget
+	bindings             *BindingStore
+	startupWait          time.Duration
+	shutdownWait         time.Duration
+	controlTimeout       time.Duration
+	artifactProbeTimeout time.Duration
 }
 
 type operationCheckpoint struct {
-	OperationID         string `json:"operation_id"`
-	ManagedRoot         string `json:"managed_root"`
-	PreviousManagedRoot string `json:"previous_managed_root,omitempty"`
-	StagingRoot         string `json:"staging_root,omitempty"`
-	RuntimeWasRunning   bool   `json:"runtime_was_running"`
+	OperationID              string                    `json:"operation_id"`
+	Phase                    operationCheckpointPhase  `json:"phase"`
+	ManagedRoot              string                    `json:"managed_root"`
+	PreviousManagedRoot      string                    `json:"previous_managed_root,omitempty"`
+	PreviousManagedPresent   bool                      `json:"previous_managed_present"`
+	PreviousExecutableSHA256 string                    `json:"previous_executable_sha256,omitempty"`
+	StagingRoot              string                    `json:"staging_root,omitempty"`
+	RuntimeWasRunning        bool                      `json:"runtime_was_running"`
+	Candidate                *candidateProcessIdentity `json:"candidate,omitempty"`
+}
+
+type operationCheckpointPhase string
+
+const (
+	checkpointPrepared           operationCheckpointPhase = "prepared"
+	checkpointRuntimeStopped     operationCheckpointPhase = "runtime_stopped"
+	checkpointArtifactActive     operationCheckpointPhase = "artifact_active"
+	checkpointCandidateLaunching operationCheckpointPhase = "candidate_launching"
+	checkpointCandidateStarted   operationCheckpointPhase = "candidate_started"
+	checkpointVerified           operationCheckpointPhase = "verified"
+	checkpointRecovering         operationCheckpointPhase = "recovering"
+	checkpointRecovered          operationCheckpointPhase = "recovered"
+)
+
+type candidateProcessIdentity struct {
+	PID                    int    `json:"pid"`
+	ProcessStartedAtUnixMS int64  `json:"process_started_at_unix_ms"`
+	ExecutablePath         string `json:"executable_path"`
+	ExecutableDevice       uint64 `json:"executable_device"`
+	ExecutableInode        uint64 `json:"executable_inode"`
+	ExecutableSHA256       string `json:"executable_sha256"`
+	RuntimeInstanceID      string `json:"runtime_instance_id,omitempty"`
 }
 
 func NewController(options ControllerOptions) (*Controller, error) {
@@ -66,7 +96,14 @@ func NewController(options ControllerOptions) (*Controller, error) {
 	if controlTimeout <= 0 {
 		controlTimeout = 5 * time.Second
 	}
-	return &Controller{bindings: options.BindingStore, offlineFences: make(map[string]gatewayprotocol.LifecycleTarget), startupWait: startupWait, shutdownWait: shutdownWait, controlTimeout: controlTimeout}, nil
+	artifactProbeTimeout := options.ArtifactProbeTimeout
+	if artifactProbeTimeout <= 0 {
+		artifactProbeTimeout = 5 * time.Second
+	}
+	return &Controller{
+		bindings: options.BindingStore, offlineFences: make(map[string]gatewayprotocol.LifecycleTarget),
+		startupWait: startupWait, shutdownWait: shutdownWait, controlTimeout: controlTimeout, artifactProbeTimeout: artifactProbeTimeout,
+	}, nil
 }
 
 func (c *Controller) ValidateTarget(_ context.Context, gatewayEnvID string, target gatewayprotocol.LifecycleTarget) error {
@@ -79,7 +116,7 @@ func (c *Controller) RefreshRuntimeValidation(ctx context.Context) (RuntimeValid
 	}
 	identity, err := c.controlClient().identity(ctx)
 	if err != nil {
-		return RuntimeValidation{}, err
+		return c.persistedOfflineRuntimeValidation(ctx)
 	}
 	if err := c.validateAndRecordIdentity(identity); err != nil {
 		return RuntimeValidation{}, err
@@ -89,6 +126,24 @@ func (c *Controller) RefreshRuntimeValidation(ctx context.Context) (RuntimeValid
 		return RuntimeValidation{}, errors.New("Runtime validation facts were not persisted")
 	}
 	return *validation, nil
+}
+
+func (c *Controller) persistedOfflineRuntimeValidation(ctx context.Context) (RuntimeValidation, error) {
+	snapshot, err := c.offlineSnapshot(ctx)
+	if err != nil || snapshot.Impact.Knowledge != gatewayprotocol.WorkloadKnown || len(snapshot.WorkloadIdentities) != 0 {
+		return RuntimeValidation{}, errors.New("Runtime validation cannot be reused while the offline workload identity is unknown")
+	}
+	binding := c.bindings.Binding()
+	validated := binding.ValidatedRuntime
+	if !runtimeValidationCompatible(validated) {
+		return RuntimeValidation{}, errors.New("persisted Runtime validation is unavailable or incompatible")
+	}
+	managedBinary := filepath.Join(binding.RuntimeRoot, "runtime", "managed", "bin", "redeven")
+	digest, err := fileSHA256(managedBinary)
+	if err != nil || digest != normalizeSHA256(validated.ArtifactSHA256) {
+		return RuntimeValidation{}, errors.New("managed Runtime executable no longer matches persisted validation")
+	}
+	return *validated, nil
 }
 
 func (c *Controller) RuntimeManagementCapability(ctx context.Context, gatewayEnvID string, access gatewaylifecycle.Access) (gatewayprotocol.RuntimeManagementCapability, error) {
@@ -120,11 +175,13 @@ func (c *Controller) RuntimeManagementCapability(ctx context.Context, gatewayEnv
 		LifecycleTargetID: binding.LifecycleTargetID,
 		TargetGeneration:  binding.TargetGeneration,
 	}
+	capability.Compatibility = &gatewayprotocol.RuntimeManagementCompatibility{
+		GatewayProtocol: gatewayprotocol.Version, RuntimePlatform: runtime.GOOS, RuntimeArchitecture: runtime.GOARCH,
+		RuntimeServiceProtocol: gatewayprotocol.RuntimeServiceProtocolV2, CompatibilityEpoch: gatewayprotocol.RuntimeCompatibilityEpochV2,
+		Capabilities: providerSupervisorCapabilities(),
+	}
 	capability.SupervisionMode = "gateway_supervisor"
 	capability.ArtifactPolicies = []gatewayprotocol.ArtifactPolicy{gatewayprotocol.ArtifactPolicyPublishedRelease}
-	if hasControllerGrant(grants, gatewayprotocol.RuntimeGrantCustomBuild) {
-		capability.ArtifactPolicies = append(capability.ArtifactPolicies, gatewayprotocol.ArtifactPolicyCustomBuild)
-	}
 
 	identity, err := c.controlClient().identity(ctx)
 	if err == nil {
@@ -133,11 +190,16 @@ func (c *Controller) RuntimeManagementCapability(ctx context.Context, gatewayEnv
 			capability.ReasonCode = "runtime_identity_incompatible"
 			return gatewayprotocol.NormalizeRuntimeManagementCapability(capability), nil
 		}
+		capability.Compatibility.RuntimeBinaryVersion = identity.RuntimeBinaryVersion
+		capability.Compatibility.RuntimeArtifactSHA256 = normalizeSHA256(identity.ArtifactSHA256)
 		capability.Readiness = gatewayprotocol.ManagementReady
 		capability.Operations = []gatewayprotocol.RuntimeOperationKind{
 			gatewayprotocol.RuntimeOperationStop,
 			gatewayprotocol.RuntimeOperationRestart,
 			gatewayprotocol.RuntimeOperationUpdate,
+		}
+		if hasControllerGrant(grants, gatewayprotocol.RuntimeGrantManageBinding) {
+			capability.Operations = append(capability.Operations, gatewayprotocol.RuntimeOperationReconcile)
 		}
 		capability.ReasonCode = "runtime_management_ready"
 		return gatewayprotocol.NormalizeRuntimeManagementCapability(capability), nil
@@ -149,10 +211,34 @@ func (c *Controller) RuntimeManagementCapability(ctx context.Context, gatewayEnv
 		capability.ReasonCode = "runtime_supervisor_temporarily_unavailable"
 		return gatewayprotocol.NormalizeRuntimeManagementCapability(capability), nil
 	}
+	managedBinary := filepath.Join(binding.RuntimeRoot, "runtime", "managed", "bin", "redeven")
+	if c.runtimeInstalled() {
+		digest, digestErr := fileSHA256(managedBinary)
+		validated := binding.ValidatedRuntime
+		if digestErr != nil || validated == nil || normalizeSHA256(validated.ArtifactSHA256) != digest {
+			capability.Readiness = gatewayprotocol.ManagementTemporarilyUnavailable
+			capability.ReasonCode = "runtime_identity_validation_required"
+			return gatewayprotocol.NormalizeRuntimeManagementCapability(capability), nil
+		}
+		capability.Compatibility.RuntimeBinaryVersion = validated.RuntimeBinaryVersion
+		capability.Compatibility.RuntimePlatform = strings.ToLower(strings.TrimSpace(validated.Platform))
+		capability.Compatibility.RuntimeArchitecture = strings.ToLower(strings.TrimSpace(validated.Architecture))
+		capability.Compatibility.RuntimeServiceProtocol = strings.TrimSpace(validated.ServiceProtocol)
+		capability.Compatibility.CompatibilityEpoch = validated.CompatibilityEpoch
+		capability.Compatibility.RuntimeArtifactSHA256 = normalizeSHA256(validated.ArtifactSHA256)
+		if !runtimeValidationCompatible(validated) {
+			capability.Readiness = gatewayprotocol.ManagementTemporarilyUnavailable
+			capability.ReasonCode = "runtime_identity_incompatible"
+			return gatewayprotocol.NormalizeRuntimeManagementCapability(capability), nil
+		}
+	}
 	capability.Readiness = gatewayprotocol.ManagementReady
-	capability.Operations = []gatewayprotocol.RuntimeOperationKind{
-		gatewayprotocol.RuntimeOperationStart,
-		gatewayprotocol.RuntimeOperationUpdate,
+	capability.Operations = []gatewayprotocol.RuntimeOperationKind{gatewayprotocol.RuntimeOperationUpdate}
+	if c.runtimeInstalled() {
+		capability.Operations = append([]gatewayprotocol.RuntimeOperationKind{gatewayprotocol.RuntimeOperationStart}, capability.Operations...)
+	}
+	if hasControllerGrant(grants, gatewayprotocol.RuntimeGrantManageBinding) {
+		capability.Operations = append(capability.Operations, gatewayprotocol.RuntimeOperationReconcile)
 	}
 	capability.ReasonCode = "runtime_management_ready"
 	return gatewayprotocol.NormalizeRuntimeManagementCapability(capability), nil
@@ -249,6 +335,7 @@ func (c *Controller) Commit(ctx context.Context, operation gatewayprotocol.Runti
 	binding := c.bindings.Binding()
 	checkpoint := operationCheckpoint{
 		OperationID:       operation.OperationID,
+		Phase:             checkpointPrepared,
 		ManagedRoot:       filepath.Join(binding.RuntimeRoot, "runtime", "managed"),
 		RuntimeWasRunning: c.runtimeStatusPresent(),
 	}
@@ -264,6 +351,29 @@ func (c *Controller) Commit(ctx context.Context, operation gatewayprotocol.Runti
 			return errors.New("Runtime workload changed after the offline lifecycle fence was established")
 		}
 	}
+	if operation.Kind == gatewayprotocol.RuntimeOperationUpdate {
+		if operation.Artifact == nil || strings.TrimSpace(operation.Artifact.StagedPath) == "" {
+			return errors.New("staged Runtime artifact is unavailable")
+		}
+		stagingRoot, err := c.extractRuntimeArtifact(ctx, operation)
+		if err != nil {
+			return err
+		}
+		checkpoint.StagingRoot = stagingRoot
+		checkpoint.PreviousManagedRoot = checkpoint.ManagedRoot + ".previous." + safeOperationID(operation.OperationID)
+		previousBinary := filepath.Join(checkpoint.ManagedRoot, "bin", "redeven")
+		if digest, err := fileSHA256(previousBinary); err == nil {
+			checkpoint.PreviousManagedPresent = true
+			checkpoint.PreviousExecutableSHA256 = digest
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	// The complete recovery plan and verified staging root must be durable before
+	// crossing the Runtime shutdown boundary.
+	if err := c.writeCheckpoint(checkpoint); err != nil {
+		return err
+	}
 	if checkpoint.RuntimeWasRunning {
 		if err := c.controlClient().shutdown(ctx, fenceToken); err != nil {
 			return fmt.Errorf("request Runtime shutdown: %w", err)
@@ -272,35 +382,30 @@ func (c *Controller) Commit(ctx context.Context, operation gatewayprotocol.Runti
 			return err
 		}
 	}
+	checkpoint.Phase = checkpointRuntimeStopped
+	if err := c.writeCheckpoint(checkpoint); err != nil {
+		return err
+	}
 
 	switch operation.Kind {
 	case gatewayprotocol.RuntimeOperationStop:
-		return c.writeCheckpoint(checkpoint)
+		return nil
 	case gatewayprotocol.RuntimeOperationStart, gatewayprotocol.RuntimeOperationRestart:
-		if err := c.writeCheckpoint(checkpoint); err != nil {
-			return err
-		}
-		return c.startAndVerify(ctx, operation)
+		return c.startAndVerify(ctx, operation, &checkpoint)
 	case gatewayprotocol.RuntimeOperationUpdate:
-		if operation.Artifact == nil || strings.TrimSpace(operation.Artifact.StagedPath) == "" {
-			return errors.New("staged Runtime artifact is unavailable")
-		}
-		stagingRoot, err := c.extractRuntimeArtifact(operation)
-		if err != nil {
-			return err
-		}
-		checkpoint.StagingRoot = stagingRoot
-		checkpoint.PreviousManagedRoot = checkpoint.ManagedRoot + ".previous." + safeOperationID(operation.OperationID)
-		if err := c.writeCheckpoint(checkpoint); err != nil {
-			return err
-		}
 		if err := c.activateStaging(checkpoint); err != nil {
 			return err
 		}
-		if err := c.startAndVerify(ctx, operation); err != nil {
+		checkpoint.Phase = checkpointArtifactActive
+		if err := c.writeCheckpoint(checkpoint); err != nil {
 			return err
 		}
-		_ = os.RemoveAll(checkpoint.PreviousManagedRoot)
+		if err := c.startAndVerify(ctx, operation, &checkpoint); err != nil {
+			return err
+		}
+		if err := durableRemoveAll(checkpoint.PreviousManagedRoot); err != nil {
+			return err
+		}
 		return nil
 	default:
 		return errors.New("Runtime operation kind is unsupported by the target supervisor")
@@ -312,25 +417,108 @@ func (c *Controller) Recover(ctx context.Context, operation gatewayprotocol.Runt
 	if err != nil {
 		return err
 	}
+	if checkpoint.Phase == checkpointRecovered {
+		return c.cleanupRecoveryArtifacts(checkpoint)
+	}
+	if checkpoint.Phase == checkpointPrepared {
+		return c.recoverPrepared(ctx, &checkpoint)
+	}
+	if err := c.terminateCandidate(ctx, checkpoint); err != nil {
+		return err
+	}
+	checkpoint.Candidate = nil
+	checkpoint.Phase = checkpointRecovering
+	if err := c.writeCheckpoint(checkpoint); err != nil {
+		return err
+	}
 	if checkpoint.PreviousManagedRoot != "" {
-		failedRoot := checkpoint.ManagedRoot + ".failed." + safeOperationID(operation.OperationID)
-		_ = os.RemoveAll(failedRoot)
-		if _, err := os.Stat(checkpoint.ManagedRoot); err == nil {
-			if err := os.Rename(checkpoint.ManagedRoot, failedRoot); err != nil {
+		if !checkpoint.PreviousManagedPresent {
+			if err := durableRemoveAll(checkpoint.ManagedRoot); err != nil {
+				return err
+			}
+			if checkpoint.RuntimeWasRunning {
+				return errors.New("Runtime recovery plan is inconsistent: a running Runtime had no previous managed installation")
+			}
+			if err := c.cleanupRecoveryArtifacts(checkpoint); err != nil {
+				return err
+			}
+			checkpoint.Phase = checkpointRecovered
+			return c.writeCheckpoint(checkpoint)
+		}
+		if _, previousErr := os.Stat(checkpoint.PreviousManagedRoot); previousErr == nil {
+			failedRoot := checkpoint.ManagedRoot + ".failed." + safeOperationID(operation.OperationID)
+			if err := durableRemoveAll(failedRoot); err != nil {
+				return err
+			}
+			if _, managedErr := os.Stat(checkpoint.ManagedRoot); managedErr == nil {
+				if err := durableRename(checkpoint.ManagedRoot, failedRoot); err != nil {
+					return err
+				}
+			} else if !errors.Is(managedErr, os.ErrNotExist) {
+				return managedErr
+			}
+			if err := durableRename(checkpoint.PreviousManagedRoot, checkpoint.ManagedRoot); err != nil {
+				return err
+			}
+			if err := durableRemoveAll(failedRoot); err != nil {
+				return err
+			}
+		} else if !errors.Is(previousErr, os.ErrNotExist) {
+			return previousErr
+		} else {
+		}
+		restoredDigest, digestErr := fileSHA256(filepath.Join(checkpoint.ManagedRoot, "bin", "redeven"))
+		if digestErr != nil || restoredDigest == "" || restoredDigest != normalizeSHA256(checkpoint.PreviousExecutableSHA256) {
+			return errors.New("Runtime recovery cannot prove that the previous executable was restored")
+		}
+	}
+	if checkpoint.RuntimeWasRunning {
+		if err := c.startAndVerify(ctx, gatewayprotocol.RuntimeOperation{}, &checkpoint); err != nil {
+			return err
+		}
+	}
+	if err := c.cleanupRecoveryArtifacts(checkpoint); err != nil {
+		return err
+	}
+	checkpoint.Candidate = nil
+	checkpoint.Phase = checkpointRecovered
+	return c.writeCheckpoint(checkpoint)
+}
+
+func (c *Controller) recoverPrepared(ctx context.Context, checkpoint *operationCheckpoint) error {
+	if checkpoint.PreviousManagedPresent {
+		digest, err := fileSHA256(filepath.Join(checkpoint.ManagedRoot, "bin", "redeven"))
+		if err != nil || digest != normalizeSHA256(checkpoint.PreviousExecutableSHA256) {
+			return errors.New("Runtime recovery cannot prove that the pre-commit executable is intact")
+		}
+	}
+	if checkpoint.RuntimeWasRunning {
+		if c.runtimeStatusPresent() {
+			identity, err := c.controlClient().identity(ctx)
+			if err != nil {
+				return err
+			}
+			if err := c.validateAndRecordIdentity(identity); err != nil {
+				return err
+			}
+			if err := c.controlClient().health(ctx); err != nil {
+				return err
+			}
+		} else {
+			if err := c.waitForNoRuntimeProcesses(ctx); err != nil {
+				return err
+			}
+			if err := c.startAndVerify(ctx, gatewayprotocol.RuntimeOperation{}, checkpoint); err != nil {
 				return err
 			}
 		}
-		if err := os.Rename(checkpoint.PreviousManagedRoot, checkpoint.ManagedRoot); err != nil {
-			return err
-		}
-		_ = os.RemoveAll(failedRoot)
 	}
-	if checkpoint.RuntimeWasRunning {
-		if err := c.startAndVerify(ctx, gatewayprotocol.RuntimeOperation{}); err != nil {
-			return err
-		}
+	if err := c.cleanupRecoveryArtifacts(*checkpoint); err != nil {
+		return err
 	}
-	return nil
+	checkpoint.Candidate = nil
+	checkpoint.Phase = checkpointRecovered
+	return c.writeCheckpoint(*checkpoint)
 }
 
 func (c *Controller) Reconcile(ctx context.Context, operation gatewayprotocol.RuntimeOperation) error {
@@ -351,7 +539,7 @@ func (c *Controller) Reconcile(ctx context.Context, operation gatewayprotocol.Ru
 	if operation.DesiredRuntime.Version != "" && normalizeVersion(identity.RuntimeBinaryVersion) != normalizeVersion(operation.DesiredRuntime.Version) {
 		return errors.New("Runtime version does not match the operation target")
 	}
-	if operation.Artifact != nil && normalizeSHA256(identity.ArtifactSHA256) != normalizeSHA256(operation.Artifact.SHA256) {
+	if operation.Artifact != nil && normalizeSHA256(identity.ArtifactSHA256) != normalizeSHA256(operation.Artifact.ExecutableSHA256) {
 		return errors.New("Runtime artifact digest does not match the operation target")
 	}
 	if err := c.validateAndRecordIdentity(identity); err != nil {
@@ -365,22 +553,39 @@ func (c *Controller) controlClient() runtimeControlClient {
 }
 
 func (c *Controller) validateAndRecordIdentity(identity runtimeservice.RuntimeIdentity) error {
-	capability := false
-	for _, value := range identity.Capabilities {
-		if strings.TrimSpace(value) == "lifecycle_fence_v1" {
-			capability = true
-			break
-		}
-	}
-	if strings.TrimSpace(identity.RuntimeInstanceID) == "" || identity.ServiceProtocol != gatewayprotocol.RuntimeServiceProtocolV2 ||
-		identity.CompatibilityEpoch != gatewayprotocol.RuntimeCompatibilityEpochV2 || !capability || normalizeSHA256(identity.ArtifactSHA256) == "" {
-		return errors.New("Runtime identity, protocol, epoch, capabilities, or digest is incompatible with managed lifecycle")
-	}
-	return c.bindings.RecordRuntimeValidation(RuntimeValidation{
+	validation := RuntimeValidation{
 		RuntimeInstanceID: identity.RuntimeInstanceID, RuntimeBinaryVersion: identity.RuntimeBinaryVersion,
+		Platform: strings.ToLower(strings.TrimSpace(identity.Platform)), Architecture: strings.ToLower(strings.TrimSpace(identity.Architecture)),
 		ServiceProtocol: identity.ServiceProtocol, CompatibilityEpoch: identity.CompatibilityEpoch,
 		Capabilities: identity.Capabilities, ArtifactSHA256: normalizeSHA256(identity.ArtifactSHA256),
-	})
+	}
+	if !runtimeValidationCompatible(&validation) {
+		return errors.New("Runtime identity, protocol, epoch, capabilities, or digest is incompatible with managed lifecycle")
+	}
+	return c.bindings.RecordRuntimeValidation(validation)
+}
+
+func runtimeValidationCompatible(validation *RuntimeValidation) bool {
+	if validation == nil || strings.TrimSpace(validation.RuntimeInstanceID) == "" || strings.TrimSpace(validation.Platform) == "" || strings.TrimSpace(validation.Architecture) == "" ||
+		strings.TrimSpace(validation.ServiceProtocol) != gatewayprotocol.RuntimeServiceProtocolV2 || validation.CompatibilityEpoch != gatewayprotocol.RuntimeCompatibilityEpochV2 ||
+		!validSHA256(validation.ArtifactSHA256) {
+		return false
+	}
+	for _, value := range validation.Capabilities {
+		if strings.TrimSpace(value) == "lifecycle_fence_v1" {
+			return true
+		}
+	}
+	return false
+}
+
+func validSHA256(value string) bool {
+	value = normalizeSHA256(value)
+	if !strings.HasPrefix(value, "sha256:") || len(value) != len("sha256:")+sha256.Size*2 {
+		return false
+	}
+	_, err := hex.DecodeString(strings.TrimPrefix(value, "sha256:"))
+	return err == nil
 }
 
 func (c *Controller) runtimeInstalled() bool {
@@ -447,7 +652,23 @@ func (c *Controller) waitForRuntimeStopped(ctx context.Context) error {
 	return errors.New("Runtime did not stop before the supervisor deadline")
 }
 
-func (c *Controller) extractRuntimeArtifact(operation gatewayprotocol.RuntimeOperation) (string, error) {
+func (c *Controller) waitForNoRuntimeProcesses(ctx context.Context) error {
+	deadline := time.Now().Add(c.shutdownWait)
+	for time.Now().Before(deadline) {
+		snapshot, err := c.offlineSnapshot(ctx)
+		if err == nil && snapshot.Impact.Knowledge == gatewayprotocol.WorkloadKnown && len(snapshot.WorkloadIdentities) == 0 {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+	return errors.New("Runtime recovery cannot prove that the previous process exited before restart")
+}
+
+func (c *Controller) extractRuntimeArtifact(ctx context.Context, operation gatewayprotocol.RuntimeOperation) (string, error) {
 	binding := c.bindings.Binding()
 	stagingRoot := filepath.Join(binding.RuntimeRoot, "runtime", "staging", safeOperationID(operation.OperationID))
 	if err := os.RemoveAll(stagingRoot); err != nil {
@@ -455,6 +676,11 @@ func (c *Controller) extractRuntimeArtifact(operation gatewayprotocol.RuntimeOpe
 	}
 	if err := os.MkdirAll(filepath.Join(stagingRoot, "bin"), 0o700); err != nil {
 		return "", err
+	}
+	for _, directory := range []string{filepath.Dir(stagingRoot), stagingRoot, filepath.Join(stagingRoot, "bin")} {
+		if err := syncDirectory(directory); err != nil {
+			return "", err
+		}
 	}
 	archive, err := os.Open(operation.Artifact.StagedPath)
 	if err != nil {
@@ -486,8 +712,12 @@ func (c *Controller) extractRuntimeArtifact(operation gatewayprotocol.RuntimeOpe
 			return "", err
 		}
 		_, copyErr := io.Copy(file, io.LimitReader(tarReader, 512<<20))
+		syncErr := error(nil)
+		if copyErr == nil {
+			syncErr = file.Sync()
+		}
 		closeErr := file.Close()
-		if copyErr != nil || closeErr != nil {
+		if copyErr != nil || syncErr != nil || closeErr != nil {
 			return "", errors.New("extract Runtime binary failed")
 		}
 		found = true
@@ -496,36 +726,75 @@ func (c *Controller) extractRuntimeArtifact(operation gatewayprotocol.RuntimeOpe
 		return "", errors.New("Runtime artifact did not contain redeven")
 	}
 	binaryPath := filepath.Join(stagingRoot, "bin", "redeven")
-	versionOutput, err := exec.Command(binaryPath, "version").CombinedOutput()
+	binaryDigest, err := fileSHA256(binaryPath)
 	if err != nil {
+		return "", err
+	}
+	if operation.Artifact == nil || binaryDigest != normalizeSHA256(operation.Artifact.ExecutableSHA256) {
+		return "", errors.New("staged Runtime executable digest does not match the authorized artifact")
+	}
+	probeContext, cancelProbe := context.WithTimeout(ctx, c.artifactProbeTimeout)
+	defer cancelProbe()
+	versionOutput, err := exec.CommandContext(probeContext, binaryPath, "version").CombinedOutput()
+	if err != nil {
+		if errors.Is(probeContext.Err(), context.DeadlineExceeded) {
+			return "", errors.New("staged Runtime version check timed out")
+		}
 		return "", fmt.Errorf("staged Runtime version check failed: %s", strings.TrimSpace(string(versionOutput)))
 	}
 	fields := strings.Fields(string(versionOutput))
 	if len(fields) < 2 || fields[0] != "redeven" || normalizeVersion(fields[1]) != normalizeVersion(operation.DesiredRuntime.Version) {
 		return "", errors.New("staged Runtime version does not match the operation target")
 	}
+	if err := syncDirectory(filepath.Join(stagingRoot, "bin")); err != nil {
+		return "", err
+	}
+	if err := syncDirectory(stagingRoot); err != nil {
+		return "", err
+	}
 	return stagingRoot, nil
 }
 
+func (c *Controller) cleanupRecoveryArtifacts(checkpoint operationCheckpoint) error {
+	for _, path := range []string{
+		checkpoint.StagingRoot,
+		checkpoint.PreviousManagedRoot,
+		checkpoint.ManagedRoot + ".failed." + safeOperationID(checkpoint.OperationID),
+	} {
+		if err := durableRemoveAll(path); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (c *Controller) activateStaging(checkpoint operationCheckpoint) error {
-	if err := os.RemoveAll(checkpoint.PreviousManagedRoot); err != nil {
+	if err := durableRemoveAll(checkpoint.PreviousManagedRoot); err != nil {
 		return err
 	}
 	if _, err := os.Stat(checkpoint.ManagedRoot); err == nil {
-		if err := os.Rename(checkpoint.ManagedRoot, checkpoint.PreviousManagedRoot); err != nil {
+		if err := durableRename(checkpoint.ManagedRoot, checkpoint.PreviousManagedRoot); err != nil {
 			return err
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	if err := os.Rename(checkpoint.StagingRoot, checkpoint.ManagedRoot); err != nil {
-		_ = os.Rename(checkpoint.PreviousManagedRoot, checkpoint.ManagedRoot)
+	if err := durableRename(checkpoint.StagingRoot, checkpoint.ManagedRoot); err != nil {
+		rollbackErr := error(nil)
+		if _, previousErr := os.Stat(checkpoint.PreviousManagedRoot); previousErr == nil {
+			rollbackErr = durableRename(checkpoint.PreviousManagedRoot, checkpoint.ManagedRoot)
+		} else if !errors.Is(previousErr, os.ErrNotExist) {
+			rollbackErr = previousErr
+		}
+		if rollbackErr != nil {
+			return fmt.Errorf("activate staged Runtime: %w; restore previous Runtime: %v", err, rollbackErr)
+		}
 		return err
 	}
 	return nil
 }
 
-func (c *Controller) startAndVerify(ctx context.Context, operation gatewayprotocol.RuntimeOperation) error {
+func (c *Controller) startAndVerify(ctx context.Context, operation gatewayprotocol.RuntimeOperation, checkpoint *operationCheckpoint) error {
 	binding := c.bindings.Binding()
 	binaryPath := filepath.Join(binding.RuntimeRoot, "runtime", "managed", "bin", "redeven")
 	if info, err := os.Stat(binaryPath); err != nil || !info.Mode().IsRegular() || info.Mode()&0o111 == 0 {
@@ -543,9 +812,32 @@ func (c *Controller) startAndVerify(ctx context.Context, operation gatewayprotoc
 	cmd.Stdin = nil
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
+	if checkpoint != nil {
+		checkpoint.Candidate = nil
+		checkpoint.Phase = checkpointCandidateLaunching
+		if err := c.writeCheckpoint(*checkpoint); err != nil {
+			_ = logFile.Close()
+			return err
+		}
+	}
 	if err := cmd.Start(); err != nil {
 		_ = logFile.Close()
 		return err
+	}
+	candidate, err := c.captureCandidateIdentity(ctx, cmd.Process.Pid, binaryPath)
+	if err != nil {
+		_ = cmd.Process.Kill()
+		_ = logFile.Close()
+		return err
+	}
+	if checkpoint != nil {
+		checkpoint.Candidate = &candidate
+		checkpoint.Phase = checkpointCandidateStarted
+		if err := c.writeCheckpoint(*checkpoint); err != nil {
+			_ = cmd.Process.Kill()
+			_ = logFile.Close()
+			return err
+		}
 	}
 	_ = cmd.Process.Release()
 	_ = logFile.Close()
@@ -556,13 +848,23 @@ func (c *Controller) startAndVerify(ctx context.Context, operation gatewayprotoc
 			if operation.DesiredRuntime.Version != "" && normalizeVersion(identity.RuntimeBinaryVersion) != normalizeVersion(operation.DesiredRuntime.Version) {
 				return errors.New("started Runtime version does not match the operation target")
 			}
-			if operation.Artifact != nil && normalizeSHA256(identity.ArtifactSHA256) != normalizeSHA256(operation.Artifact.SHA256) {
+			if operation.Artifact != nil && normalizeSHA256(identity.ArtifactSHA256) != normalizeSHA256(operation.Artifact.ExecutableSHA256) {
 				return errors.New("started Runtime artifact digest does not match the operation target")
 			}
 			if err := c.validateAndRecordIdentity(identity); err != nil {
 				return err
 			}
-			return c.controlClient().health(ctx)
+			if err := c.controlClient().health(ctx); err != nil {
+				return err
+			}
+			if checkpoint != nil {
+				checkpoint.Candidate.RuntimeInstanceID = strings.TrimSpace(identity.RuntimeInstanceID)
+				checkpoint.Phase = checkpointVerified
+				if err := c.writeCheckpoint(*checkpoint); err != nil {
+					return err
+				}
+			}
+			return nil
 		}
 		select {
 		case <-ctx.Done():
@@ -586,11 +888,7 @@ func (c *Controller) writeCheckpoint(checkpoint operationCheckpoint) error {
 	if err != nil {
 		return err
 	}
-	temporaryPath := path + ".tmp"
-	if err := os.WriteFile(temporaryPath, append(raw, '\n'), 0o600); err != nil {
-		return err
-	}
-	return os.Rename(temporaryPath, path)
+	return writeFileDurably(path, append(raw, '\n'), 0o600)
 }
 
 func (c *Controller) readCheckpoint(operationID string) (operationCheckpoint, error) {
@@ -602,10 +900,212 @@ func (c *Controller) readCheckpoint(operationID string) (operationCheckpoint, er
 	if err := json.Unmarshal(raw, &checkpoint); err != nil {
 		return operationCheckpoint{}, err
 	}
-	if checkpoint.OperationID != strings.TrimSpace(operationID) || checkpoint.ManagedRoot == "" {
+	if checkpoint.OperationID != strings.TrimSpace(operationID) || checkpoint.ManagedRoot == "" || checkpoint.Phase == "" {
 		return operationCheckpoint{}, errors.New("Runtime supervisor checkpoint is invalid")
 	}
 	return checkpoint, nil
+}
+
+func (c *Controller) captureCandidateIdentity(ctx context.Context, pid int, binaryPath string) (candidateProcessIdentity, error) {
+	deadline := time.Now().Add(2 * time.Second)
+	options := runtimemanagement.RuntimeProcessInventoryOptions{
+		RuntimeRoot: c.bindings.Binding().RuntimeRoot, StateRoot: c.bindings.Binding().RuntimeRoot,
+		CurrentExecutables: []string{binaryPath},
+	}
+	for time.Now().Before(deadline) {
+		inventory, err := runtimemanagement.InspectRuntimeProcesses(ctx, options)
+		if err == nil {
+			for _, instance := range inventory.Instances {
+				if instance.PID == pid && instance.ProcessStartedAtUnixMS > 0 {
+					digest, digestErr := fileSHA256(binaryPath)
+					if digestErr != nil {
+						return candidateProcessIdentity{}, digestErr
+					}
+					return candidateProcessIdentity{
+						PID: pid, ProcessStartedAtUnixMS: instance.ProcessStartedAtUnixMS,
+						ExecutablePath: instance.ExecutablePath, ExecutableDevice: instance.ExecutableDevice,
+						ExecutableInode: instance.ExecutableInode, ExecutableSHA256: digest,
+					}, nil
+				}
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return candidateProcessIdentity{}, ctx.Err()
+		case <-time.After(25 * time.Millisecond):
+		}
+	}
+	return candidateProcessIdentity{}, errors.New("started Runtime candidate identity could not be captured")
+}
+
+func (c *Controller) terminateCandidate(ctx context.Context, checkpoint operationCheckpoint) error {
+	if checkpoint.Candidate == nil && checkpoint.Phase == checkpointCandidateLaunching {
+		candidate, err := c.discoverLaunchingCandidate(ctx, checkpoint)
+		if err != nil {
+			return err
+		}
+		checkpoint.Candidate = candidate
+	}
+	if checkpoint.Candidate == nil || checkpoint.Candidate.PID <= 0 {
+		return nil
+	}
+	options := runtimemanagement.RuntimeProcessInventoryOptions{
+		RuntimeRoot: c.bindings.Binding().RuntimeRoot, StateRoot: c.bindings.Binding().RuntimeRoot,
+		CurrentExecutables: candidateExecutablePaths(checkpoint),
+	}
+	inventory, err := runtimemanagement.InspectRuntimeProcesses(ctx, options)
+	if err != nil {
+		return err
+	}
+	for _, instance := range inventory.Instances {
+		if instance.PID != checkpoint.Candidate.PID {
+			continue
+		}
+		if instance.ProcessStartedAtUnixMS != checkpoint.Candidate.ProcessStartedAtUnixMS {
+			return errors.New("Runtime recovery refused to signal a reused candidate PID")
+		}
+		if checkpoint.Candidate.ExecutableDevice == 0 || checkpoint.Candidate.ExecutableInode == 0 ||
+			instance.ExecutableDevice != checkpoint.Candidate.ExecutableDevice || instance.ExecutableInode != checkpoint.Candidate.ExecutableInode {
+			return errors.New("Runtime recovery refused to signal a candidate with different executable bytes")
+		}
+		process, err := os.FindProcess(instance.PID)
+		if err != nil {
+			return err
+		}
+		if err := process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
+			return err
+		}
+		deadline := time.Now().Add(c.shutdownWait)
+		for time.Now().Before(deadline) {
+			observed, inspectErr := runtimemanagement.InspectRuntimeProcesses(ctx, options)
+			if inspectErr != nil {
+				return inspectErr
+			}
+			alive := false
+			for _, candidate := range observed.Instances {
+				if candidate.PID == instance.PID && candidate.ProcessStartedAtUnixMS == instance.ProcessStartedAtUnixMS {
+					alive = true
+					break
+				}
+			}
+			if !alive {
+				return nil
+			}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(50 * time.Millisecond):
+			}
+		}
+		return errors.New("failed Runtime candidate did not terminate before recovery")
+	}
+	return nil
+}
+
+func (c *Controller) discoverLaunchingCandidate(ctx context.Context, checkpoint operationCheckpoint) (*candidateProcessIdentity, error) {
+	options := runtimemanagement.RuntimeProcessInventoryOptions{
+		RuntimeRoot: c.bindings.Binding().RuntimeRoot, StateRoot: c.bindings.Binding().RuntimeRoot,
+		CurrentExecutables: candidateExecutablePaths(checkpoint),
+	}
+	inventory, err := runtimemanagement.InspectRuntimeProcesses(ctx, options)
+	if err != nil {
+		return nil, err
+	}
+	if len(inventory.Instances) == 0 {
+		return nil, nil
+	}
+	if len(inventory.Instances) != 1 {
+		return nil, errors.New("Runtime recovery cannot uniquely identify the candidate started after the durable launch intent")
+	}
+	instance := inventory.Instances[0]
+	if instance.IdentityStatus != runtimemanagement.RuntimeProcessIdentityVerified ||
+		instance.StopAuthority != runtimemanagement.RuntimeProcessStopAutomatic ||
+		instance.PID <= 0 || instance.ProcessStartedAtUnixMS <= 0 ||
+		instance.ExecutableDevice == 0 || instance.ExecutableInode == 0 {
+		return nil, errors.New("Runtime recovery cannot prove the identity of the candidate started after the durable launch intent")
+	}
+	digest, err := fileSHA256(instance.ExecutablePath)
+	if err != nil {
+		return nil, err
+	}
+	return &candidateProcessIdentity{
+		PID: instance.PID, ProcessStartedAtUnixMS: instance.ProcessStartedAtUnixMS,
+		ExecutablePath: instance.ExecutablePath, ExecutableDevice: instance.ExecutableDevice,
+		ExecutableInode: instance.ExecutableInode, ExecutableSHA256: digest,
+	}, nil
+}
+
+func candidateExecutablePaths(checkpoint operationCheckpoint) []string {
+	roots := []string{checkpoint.ManagedRoot, checkpoint.PreviousManagedRoot, checkpoint.StagingRoot}
+	if checkpoint.ManagedRoot != "" {
+		roots = append(roots, checkpoint.ManagedRoot+".failed."+safeOperationID(checkpoint.OperationID))
+	}
+	paths := make([]string, 0, len(roots)+1)
+	if checkpoint.Candidate != nil && strings.TrimSpace(checkpoint.Candidate.ExecutablePath) != "" {
+		paths = append(paths, checkpoint.Candidate.ExecutablePath)
+	}
+	for _, root := range roots {
+		if strings.TrimSpace(root) != "" {
+			paths = append(paths, filepath.Join(root, "bin", "redeven"))
+		}
+	}
+	return paths
+}
+
+func writeFileDurably(path string, value []byte, mode os.FileMode) error {
+	temporaryPath := path + ".tmp"
+	file, err := os.OpenFile(temporaryPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
+	if err != nil {
+		return err
+	}
+	if _, err = file.Write(value); err == nil {
+		err = file.Sync()
+	}
+	if closeErr := file.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		_ = os.Remove(temporaryPath)
+		return err
+	}
+	if err := os.Rename(temporaryPath, path); err != nil {
+		_ = os.Remove(temporaryPath)
+		return err
+	}
+	return syncDirectory(filepath.Dir(path))
+}
+
+func durableRename(from string, to string) error {
+	if err := os.Rename(from, to); err != nil {
+		return err
+	}
+	if err := syncDirectory(filepath.Dir(from)); err != nil {
+		return err
+	}
+	if filepath.Dir(to) != filepath.Dir(from) {
+		return syncDirectory(filepath.Dir(to))
+	}
+	return nil
+}
+
+func durableRemoveAll(path string) error {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return nil
+	}
+	if err := os.RemoveAll(path); err != nil {
+		return err
+	}
+	return syncDirectory(filepath.Dir(path))
+}
+
+func syncDirectory(path string) error {
+	directory, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer directory.Close()
+	return directory.Sync()
 }
 
 func safeOperationID(value string) string {
@@ -626,4 +1126,17 @@ func normalizeSHA256(value string) string {
 		return "sha256:" + value
 	}
 	return ""
+}
+
+func fileSHA256(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", err
+	}
+	return "sha256:" + hex.EncodeToString(hash.Sum(nil)), nil
 }

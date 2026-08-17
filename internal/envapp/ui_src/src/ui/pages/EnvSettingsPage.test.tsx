@@ -231,7 +231,7 @@ vi.mock('../maintenance/agentUpgradeState', () => ({
     policy: 'local',
     releasePageURL: '',
     actionLabel: 'Update Redeven',
-    actionMethod: 'runtime_rpc_upgrade',
+    actionMethod: 'manual',
   }),
 }));
 

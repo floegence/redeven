@@ -696,7 +696,11 @@ describe('desktopWelcomeState', () => {
         window_state: 'closed',
         open_action: 'open',
         runtime_operations: expect.objectContaining({
-          stop: expect.objectContaining({ availability: 'available' }),
+          stop: expect.objectContaining({
+            availability: 'blocked',
+            method: 'runtime_gateway',
+            reason_code: 'runtime_gateway_setup_required',
+          }),
         }),
         runtime_health: expect.objectContaining({
           status: 'online',
@@ -752,6 +756,18 @@ describe('desktopWelcomeState', () => {
         id: 'http://192.168.1.20:24000/',
         kind: 'external_local_ui',
         is_open: false,
+        runtime_management: {
+          support: 'unsupported',
+          authorization: { state: 'unknown', grants: [] },
+          readiness: 'unknown',
+          presentation_state: 'unsupported',
+          operations: [],
+          artifact_policies: [],
+          binding_actions: [],
+          supervision_mode: '',
+          reason_code: 'url_runtime_management_unsupported',
+          checked_at_unix_ms: 1000,
+        },
         runtime_service: expect.objectContaining({
           runtime_version: 'v1.7.0',
           open_readiness: { state: 'openable' },
@@ -1120,8 +1136,9 @@ describe('desktopWelcomeState', () => {
           method: 'ssh_host',
         }),
         update: expect.objectContaining({
-          availability: 'available',
-          method: 'ssh_host',
+          availability: 'blocked',
+          method: 'runtime_gateway',
+          reason_code: 'runtime_gateway_setup_required',
         }),
       }),
     });
@@ -1470,12 +1487,16 @@ describe('desktopWelcomeState', () => {
     expect(localEntry).toMatchObject({
       managed_runtime_target_id: 'local:local',
       runtime_operations: expect.objectContaining({
-        stop: expect.objectContaining({ availability: 'available' }),
+        stop: expect.objectContaining({
+          availability: 'blocked',
+          method: 'runtime_gateway',
+          reason_code: 'runtime_gateway_setup_required',
+        }),
       }),
     });
   });
 
-  it('projects compatibility update blocks as available Open operations for running local runtimes', () => {
+  it('keeps Open available while local Runtime management requires Gateway setup', () => {
     const presence = localRuntimePresence({
       openable: false,
       runtime_service: {
@@ -1515,8 +1536,9 @@ describe('desktopWelcomeState', () => {
           method: 'local_host',
         }),
         update: expect.objectContaining({
-          availability: 'available',
-          method: 'desktop_local_update_handoff',
+          availability: 'blocked',
+          method: 'runtime_gateway',
+          reason_code: 'runtime_gateway_setup_required',
         }),
       }),
     });
@@ -1662,8 +1684,9 @@ describe('desktopWelcomeState', () => {
       runtime_operations: expect.objectContaining({
         open: expect.objectContaining({ availability: 'available' }),
         start: expect.objectContaining({
-          availability: 'unavailable',
-          reason_code: 'runtime_already_running',
+          availability: 'blocked',
+          method: 'runtime_gateway',
+          reason_code: 'runtime_gateway_setup_required',
         }),
       }),
       provider_runtime_link_target: expect.objectContaining({
@@ -1737,11 +1760,13 @@ describe('desktopWelcomeState', () => {
         }),
         start: expect.objectContaining({
           availability: 'blocked',
-          reason_code: 'runtime_target_unavailable',
+          method: 'runtime_gateway',
+          reason_code: 'runtime_gateway_setup_required',
         }),
         update: expect.objectContaining({
           availability: 'blocked',
-          method: 'local_container_exec',
+          method: 'runtime_gateway',
+          reason_code: 'runtime_gateway_setup_required',
         }),
       }),
       provider_runtime_link_target: expect.objectContaining({
@@ -1804,7 +1829,9 @@ describe('desktopWelcomeState', () => {
           reason_code: 'runtime_not_started',
         }),
         start: expect.objectContaining({
-          availability: 'available',
+          availability: 'blocked',
+          method: 'runtime_gateway',
+          reason_code: 'runtime_gateway_setup_required',
         }),
       }),
       provider_runtime_link_target: expect.objectContaining({
@@ -2750,6 +2777,45 @@ describe('desktopWelcomeState', () => {
         can_disconnect_provider: true,
       }),
       provider_environment_candidates: [],
+    });
+  });
+
+  it('keeps offline Local and SSH cards eligible for explicit Gateway setup', () => {
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        saved_ssh_environments: [{
+          id: 'ssh:build',
+          label: 'Build host',
+          ssh_destination: 'alice@build.example',
+          ssh_port: 2222,
+          auth_mode: 'key_agent',
+          runtime_root: '/opt/redeven',
+          bootstrap_strategy: 'auto',
+          release_base_url: '',
+          connect_timeout_seconds: 15,
+          pinned: false,
+          auto_runtime_probe_enabled: false,
+          created_at_ms: 2,
+          last_used_at_ms: 2,
+        }],
+      }),
+    });
+
+    const localEntry = snapshot.environments.find((entry) => entry.kind === 'local_environment');
+    const sshEntry = snapshot.environments.find((entry) => entry.id === 'ssh:build');
+    expect(localEntry).toMatchObject({
+      managed_runtime_host_access: { kind: 'local_host' },
+      managed_runtime_placement: { kind: 'host_process' },
+    });
+    expect(sshEntry).toMatchObject({
+      managed_runtime_host_access: {
+        kind: 'ssh_host',
+        ssh: { ssh_destination: 'alice@build.example' },
+      },
+      managed_runtime_placement: {
+        kind: 'host_process',
+        runtime_root: '/opt/redeven',
+      },
     });
   });
 

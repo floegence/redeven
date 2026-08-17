@@ -64,13 +64,12 @@ type fileState struct {
 }
 
 type EnvironmentProfile struct {
-	GatewayEnvID    string                          `json:"gateway_env_id"`
-	DisplayName     string                          `json:"display_name"`
-	AccessRoute     protocol.EnvProfileAccessRoute  `json:"access_route"`
-	ControlOwner    protocol.EnvProfileControlOwner `json:"control_owner"`
-	SSHPasswordSet  bool                            `json:"ssh_password_set,omitempty"`
-	CreatedAtUnixMS int64                           `json:"created_at_unix_ms"`
-	UpdatedAtUnixMS int64                           `json:"updated_at_unix_ms"`
+	GatewayEnvID    string                         `json:"gateway_env_id"`
+	DisplayName     string                         `json:"display_name"`
+	AccessRoute     protocol.EnvProfileAccessRoute `json:"access_route"`
+	SSHPasswordSet  bool                           `json:"ssh_password_set,omitempty"`
+	CreatedAtUnixMS int64                          `json:"created_at_unix_ms"`
+	UpdatedAtUnixMS int64                          `json:"updated_at_unix_ms"`
 }
 
 func NewStore(filePath string) *Store {
@@ -213,14 +212,13 @@ func (s *Store) Delete(ctx context.Context, req protocol.EnvProfileDeleteRequest
 
 func EnvironmentFromProfile(profile EnvironmentProfile) protocol.Environment {
 	accessCapabilities := profileAccessCapabilities(profile)
-	controlCapabilities := profileControlCapabilities(profile)
 	env := protocol.Environment{
 		GatewayEnvID:        strings.TrimSpace(profile.GatewayEnvID),
 		DisplayName:         strings.TrimSpace(profile.DisplayName),
 		EnvKind:             protocol.EnvironmentKindReachableEnv,
 		State:               protocol.EnvironmentStateAvailable,
 		AccessCapabilities:  accessCapabilities,
-		ControlCapabilities: controlCapabilities,
+		ControlCapabilities: nil,
 		Profile: &protocol.EnvironmentProfile{
 			Managed:         true,
 			AccessRouteKind: profile.AccessRoute.Kind,
@@ -285,13 +283,6 @@ func profileAccessCapabilities(profile EnvironmentProfile) []protocol.Environmen
 	}
 }
 
-func profileControlCapabilities(profile EnvironmentProfile) []protocol.EnvironmentCapability {
-	if profile.ControlOwner != protocol.EnvProfileControlOwnerGateway {
-		return nil
-	}
-	return nil
-}
-
 func profileFromRequest(req protocol.EnvProfileUpsertRequest, policy URLTargetPolicy) (EnvironmentProfile, error) {
 	route := req.Profile.AccessRoute
 	switch route.Kind {
@@ -320,10 +311,6 @@ func profileFromRequest(req protocol.EnvProfileUpsertRequest, policy URLTargetPo
 	default:
 		return EnvironmentProfile{}, protocol.ErrMissingAccessRoute
 	}
-	controlOwner := req.Profile.ControlOwner
-	if route.Kind == protocol.EnvProfileAccessRouteKindURL {
-		controlOwner = protocol.EnvProfileControlOwnerNone
-	}
 	sshPasswordSet, err := sshPasswordSetFromRequest(route)
 	if err != nil {
 		return EnvironmentProfile{}, err
@@ -332,7 +319,6 @@ func profileFromRequest(req protocol.EnvProfileUpsertRequest, policy URLTargetPo
 		GatewayEnvID:   strings.TrimSpace(req.Profile.GatewayEnvID),
 		DisplayName:    strings.TrimSpace(req.Profile.DisplayName),
 		AccessRoute:    route,
-		ControlOwner:   controlOwner,
 		SSHPasswordSet: sshPasswordSet,
 	}, nil
 }
@@ -596,7 +582,6 @@ func normalizeProfile(profile EnvironmentProfile, policy URLTargetPolicy) (Envir
 			GatewayEnvID: profile.GatewayEnvID,
 			DisplayName:  profile.DisplayName,
 			AccessRoute:  profile.AccessRoute,
-			ControlOwner: profile.ControlOwner,
 		},
 	})
 	normalized, err := profileFromRequest(input, policy)

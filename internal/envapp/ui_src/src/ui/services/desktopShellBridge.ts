@@ -52,7 +52,6 @@ export interface DesktopShellBridge {
   getRuntimeMaintenanceContext?: () => Promise<DesktopShellRuntimeMaintenanceContext>;
   notifyRuntimeMaintenanceStarted?: (kind: 'restart' | 'update') => void;
   performRuntimeMaintenanceAction?: (request: unknown) => Promise<DesktopRuntimeMaintenanceResult>;
-  restartManagedRuntime?: () => Promise<DesktopRuntimeMaintenanceResult>;
   manageDesktopUpdate?: () => Promise<DesktopRuntimeMaintenanceResult>;
 }
 
@@ -87,7 +86,6 @@ function desktopShellBridge(): DesktopShellBridge | null {
       && typeof candidate.getRuntimeMaintenanceContext !== 'function'
       && typeof candidate.notifyRuntimeMaintenanceStarted !== 'function'
       && typeof candidate.performRuntimeMaintenanceAction !== 'function'
-      && typeof candidate.restartManagedRuntime !== 'function'
       && typeof candidate.manageDesktopUpdate !== 'function'
     )
   ) {
@@ -285,14 +283,6 @@ export async function performRuntimeMaintenanceActionInDesktopShell(
 
 export function runtimeMaintenanceMethodUsesDesktop(method: DesktopShellRuntimeMaintenanceMethod): boolean {
   return desktopShellRuntimeMaintenanceMethodUsesDesktop(method);
-}
-
-export async function restartRuntimeViaDesktop(): Promise<DesktopRuntimeMaintenanceResult | null> {
-  const bridge = desktopShellBridge();
-  if (!bridge || typeof bridge.restartManagedRuntime !== 'function') {
-    return null;
-  }
-  return bridge.restartManagedRuntime();
 }
 
 export async function manageDesktopUpdate(): Promise<DesktopRuntimeMaintenanceResult | null> {

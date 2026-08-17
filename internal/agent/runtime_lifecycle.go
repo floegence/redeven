@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 
 	gatewayprotocol "github.com/floegence/redeven/internal/runtimegateway/protocol"
@@ -28,6 +29,7 @@ func (a *Agent) RuntimeLifecycleIdentity() (runtimeservice.RuntimeIdentity, erro
 	contract := runtimeservice.CurrentCompatibilityContract()
 	return runtimeservice.RuntimeIdentity{
 		RuntimeInstanceID: strings.TrimSpace(a.instanceID), RuntimeBinaryVersion: strings.TrimSpace(a.version),
+		Platform: runtime.GOOS, Architecture: runtime.GOARCH,
 		ServiceProtocol: runtimeservice.ProtocolVersion, CompatibilityEpoch: contract.CompatibilityEpoch,
 		Capabilities: []string{"lifecycle_fence_v1"}, ArtifactSHA256: "sha256:" + hex.EncodeToString(hash.Sum(nil)),
 	}, nil

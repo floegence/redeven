@@ -7,7 +7,7 @@ import type { DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 
 function gatewayRecord(connection: GatewayRecord['connection']): GatewayRecord {
   return {
-    schema_version: 1,
+    schema_version: 2,
     gateway_id: 'gw_demo',
     display_name: 'Demo Gateway',
     local_enabled: true,

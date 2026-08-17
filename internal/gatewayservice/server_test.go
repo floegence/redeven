@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -50,6 +53,13 @@ func (gatewayLifecycleTestAuthorizer) AuthorizeAccess(_ context.Context, _ *http
 
 func (gatewayLifecycleTestAuthorizer) AuthorizeReconcile(_ context.Context, _ *http.Request, verified gatewayauth.VerifiedRequest, _ protocol.RuntimeOperation, _ string) (gatewaylifecycle.Access, error) {
 	return gatewaylifecycle.Access{ClientKeyID: verified.ClientKeyID, Grants: []protocol.RuntimeGrant{protocol.RuntimeGrantManageBinding}}, nil
+}
+
+func (gatewayLifecycleTestAuthorizer) AuthorizeProviderTunnel(_ context.Context, verified gatewayauth.VerifiedRequest, _ protocol.LifecycleTarget, _ string) error {
+	if !verified.ProviderTunnel {
+		return errors.New("provider tunnel authorization is required")
+	}
+	return nil
 }
 
 type gatewayLifecycleTestController struct {
@@ -153,6 +163,207 @@ func TestGatewayRuntimeReconcileDoesNotDiscloseUnknownOperation(t *testing.T) {
 	if response.Code != http.StatusForbidden || strings.Contains(response.Body.String(), "not found") {
 		t.Fatalf("unknown reconcile response = %d %s, want opaque authorization failure", response.Code, response.Body.String())
 	}
+}
+
+func TestProviderRuntimeManagementTunnelPreparesThroughAuthoritativeStore(t *testing.T) {
+	server := newProviderTunnelLifecycleTestServer(t)
+	client := newProviderTunnelTestClient(t)
+	prepare := providerTunnelPrepareRequest(client.keyID, "op-provider-prepare", protocol.RuntimeOperationRestart)
+	response, body := providerTunnelJSONCall(t, server, client, "nonce-provider-prepare", http.MethodPost, "/gateway/v2/runtime-operations/prepare", prepare, nil)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("provider prepare status = %d; body=%s", response.StatusCode, body)
+	}
+	var envelope struct {
+		OK   bool                                     `json:"ok"`
+		Data protocol.RuntimeOperationPrepareResponse `json:"data"`
+	}
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if !envelope.OK || envelope.Data.Operation.State != protocol.RuntimeOperationAwaitingConfirmation || !envelope.Data.Operation.Authorization.Linearized {
+		t.Fatalf("provider prepare response = %s", body)
+	}
+	stored, err := server.lifecycle.OperationForAuthorization("op-provider-prepare")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.AuthorizedClientKeyID != client.keyID || stored.OperationID != envelope.Data.Operation.OperationID {
+		t.Fatalf("stored operation = %#v", stored)
+	}
+}
+
+func TestProviderRuntimeManagementTunnelRejectsNonceReplay(t *testing.T) {
+	server := newProviderTunnelLifecycleTestServer(t)
+	client := newProviderTunnelTestClient(t)
+	prepare := providerTunnelPrepareRequest(client.keyID, "op-provider-replay", protocol.RuntimeOperationRestart)
+	forward := signedProviderTunnelRequest(t, client, "nonce-provider-replay", http.MethodPost, "/gateway/v2/runtime-operations/prepare", prepare, nil)
+
+	first, _ := serveProviderTunnelRequest(t, server, forward)
+	if first.StatusCode != http.StatusOK {
+		t.Fatalf("first provider request status = %d", first.StatusCode)
+	}
+	second, body := serveProviderTunnelRequest(t, server, forward)
+	if second.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("replayed provider request status = %d, want %d; body=%s", second.StatusCode, http.StatusUnauthorized, body)
+	}
+}
+
+func TestProviderRuntimeManagementTunnelStagesConsistentArtifactChunks(t *testing.T) {
+	server := newProviderTunnelLifecycleTestServer(t)
+	client := newProviderTunnelTestClient(t)
+	prepare := providerTunnelPrepareRequest(client.keyID, "op-provider-artifact", protocol.RuntimeOperationUpdate)
+	prepareResponse, prepareBody := providerTunnelJSONCall(t, server, client, "nonce-provider-artifact-prepare", http.MethodPost, "/gateway/v2/runtime-operations/prepare", prepare, nil)
+	if prepareResponse.StatusCode != http.StatusOK {
+		t.Fatalf("provider prepare status = %d; body=%s", prepareResponse.StatusCode, prepareBody)
+	}
+	confirm := protocol.RuntimeOperationConfirmationRequest{
+		ProtocolVersion: protocol.Version, SnapshotRevision: 4, ProcessInventoryDigest: "sha256:inventory",
+		WorkloadIdentityDigest: "sha256:workload", RiskSummaryDigest: "sha256:risk",
+	}
+	confirmResponse, confirmBody := providerTunnelJSONCall(t, server, client, "nonce-provider-artifact-confirm", http.MethodPost, "/gateway/v2/runtime-operations/op-provider-artifact/confirm", confirm, nil)
+	if confirmResponse.StatusCode != http.StatusOK {
+		t.Fatalf("provider confirm status = %d; body=%s", confirmResponse.StatusCode, confirmBody)
+	}
+
+	artifact := []byte("provider-runtime-artifact")
+	archiveDigest := sha256.Sum256(artifact)
+	metadata := protocol.RuntimeArtifactMetadata{
+		SizeBytes: int64(len(artifact)), ArchiveSHA256: "sha256:" + hex.EncodeToString(archiveDigest[:]),
+		ExecutableSHA256: "sha256:" + strings.Repeat("a", 64), ManifestJSON: json.RawMessage(`{"version":"v0.11.0"}`),
+	}
+	metadataJSON, err := json.Marshal(metadata)
+	if err != nil {
+		t.Fatal(err)
+	}
+	metadataB64u := base64.RawURLEncoding.EncodeToString(metadataJSON)
+	firstChunk := artifact[:8]
+	firstUpload := &protocol.ProviderRuntimeArtifactUpload{UploadID: "upload-provider-artifact", Offset: 0, TotalSize: int64(len(artifact)), MetadataB64u: metadataB64u}
+	firstResponse, firstBody := providerTunnelJSONCall(t, server, client, "nonce-provider-artifact-first", http.MethodPut, "/gateway/v2/runtime-operations/op-provider-artifact/artifact", firstChunk, firstUpload)
+	if firstResponse.StatusCode != http.StatusAccepted {
+		t.Fatalf("first artifact chunk status = %d; body=%s", firstResponse.StatusCode, firstBody)
+	}
+
+	mismatchUpload := &protocol.ProviderRuntimeArtifactUpload{UploadID: "upload-provider-artifact", Offset: 7, TotalSize: int64(len(artifact)), MetadataB64u: metadataB64u}
+	mismatchResponse, mismatchBody := providerTunnelJSONCall(t, server, client, "nonce-provider-artifact-mismatch", http.MethodPut, "/gateway/v2/runtime-operations/op-provider-artifact/artifact", artifact[8:], mismatchUpload)
+	if mismatchResponse.StatusCode != http.StatusConflict {
+		t.Fatalf("mismatched artifact chunk status = %d, want %d; body=%s", mismatchResponse.StatusCode, http.StatusConflict, mismatchBody)
+	}
+
+	finalUpload := &protocol.ProviderRuntimeArtifactUpload{UploadID: "upload-provider-artifact", Offset: int64(len(firstChunk)), TotalSize: int64(len(artifact)), Final: true, MetadataB64u: metadataB64u}
+	finalResponse, finalBody := providerTunnelJSONCall(t, server, client, "nonce-provider-artifact-final", http.MethodPut, "/gateway/v2/runtime-operations/op-provider-artifact/artifact", artifact[8:], finalUpload)
+	if finalResponse.StatusCode != http.StatusOK {
+		t.Fatalf("final artifact chunk status = %d; body=%s", finalResponse.StatusCode, finalBody)
+	}
+	var envelope struct {
+		OK   bool                      `json:"ok"`
+		Data protocol.RuntimeOperation `json:"data"`
+	}
+	if err := json.Unmarshal(finalBody, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if !envelope.OK || envelope.Data.State != protocol.RuntimeOperationCommitReady || envelope.Data.Artifact == nil || envelope.Data.Artifact.ArchiveSHA256 != metadata.ArchiveSHA256 {
+		t.Fatalf("final artifact response = %s", finalBody)
+	}
+}
+
+type providerTunnelTestClient struct {
+	keyID      string
+	publicKey  string
+	privateKey string
+}
+
+func newProviderTunnelTestClient(t *testing.T) providerTunnelTestClient {
+	t.Helper()
+	keys, err := security.GenerateKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	publicKey := strings.TrimSpace(keys.PublicKeyPEM)
+	return providerTunnelTestClient{keyID: security.ClientKeyID(publicKey), publicKey: publicKey, privateKey: strings.TrimSpace(keys.PrivateKeyPEM)}
+}
+
+func newProviderTunnelLifecycleTestServer(t *testing.T) *Server {
+	t.Helper()
+	count := 0
+	snapshot := protocol.NormalizeWorkloadSnapshot(protocol.WorkloadSnapshot{
+		SnapshotRevision: 4, ProcessInventoryDigest: "sha256:inventory", WorkloadIdentityDigest: "sha256:workload",
+		Impact: protocol.WorkloadImpact{Knowledge: protocol.WorkloadKnown, AffectedProcessCount: &count}, ObservedAtUnixMS: 1,
+	})
+	server, err := New(Options{
+		StateRoot: t.TempDir(), PairingCode: "pair-demo", LifecycleController: &gatewayLifecycleTestController{snapshot: snapshot},
+		LifecycleArtifactVerifier: gatewayLifecycleTestArtifactVerifier{}, LifecycleAuthorizer: gatewayLifecycleTestAuthorizer{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return server
+}
+
+func providerTunnelPrepareRequest(clientKeyID string, operationID string, operation protocol.RuntimeOperationKind) protocol.RuntimeOperationPrepareRequest {
+	request := protocol.RuntimeOperationPrepareRequest{
+		ProtocolVersion: protocol.Version, OperationID: operationID, AuthorizedClientKeyID: clientKeyID,
+		GatewayEnvID: "env_local", LifecycleTargetID: "target-provider", TargetGeneration: 7, Operation: operation,
+		IdempotencyKey: "idem-" + operationID,
+	}
+	if operation == protocol.RuntimeOperationUpdate {
+		request.DesiredRuntime = protocol.DesiredRuntime{Version: "v0.11.0", Platform: "linux", Architecture: "amd64", ArtifactPolicy: protocol.ArtifactPolicyPublishedRelease}
+	}
+	return request
+}
+
+func providerTunnelJSONCall(t *testing.T, server *Server, client providerTunnelTestClient, nonce string, method string, route string, input any, upload *protocol.ProviderRuntimeArtifactUpload) (protocol.ProviderRuntimeManagementTunnelResponse, []byte) {
+	t.Helper()
+	var body []byte
+	if raw, ok := input.([]byte); ok {
+		body = append([]byte(nil), raw...)
+	} else if input != nil {
+		var err error
+		body, err = json.Marshal(input)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	return serveProviderTunnelRequest(t, server, signedProviderTunnelRequest(t, client, nonce, method, route, body, upload))
+}
+
+func signedProviderTunnelRequest(t *testing.T, client providerTunnelTestClient, nonce string, method string, route string, input any, upload *protocol.ProviderRuntimeArtifactUpload) protocol.ProviderRuntimeManagementTunnelForwardRequest {
+	t.Helper()
+	var body []byte
+	if raw, ok := input.([]byte); ok {
+		body = append([]byte(nil), raw...)
+	} else if input != nil {
+		var err error
+		body, err = json.Marshal(input)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	digest := sha256.Sum256(body)
+	request := protocol.ProviderRuntimeManagementTunnelRequest{
+		ProtocolVersion: protocol.ProviderRuntimeManagementProtocolVersion, EnvPublicID: "env-provider", LifecycleTargetID: "target-provider",
+		TargetGeneration: 7, ClientKeyID: client.keyID, ClientPublicKey: client.publicKey, Method: method, Route: route,
+		BodySHA256: hex.EncodeToString(digest[:]), BodyB64u: base64.RawURLEncoding.EncodeToString(body), ArtifactUpload: upload,
+		Nonce: nonce, TimestampUnixMS: time.Now().UnixMilli(),
+	}
+	payload, err := protocol.CanonicalProviderRuntimeManagementTunnelPayload(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Signature, err = security.SignPayload(client.privateKey, string(payload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return protocol.ProviderRuntimeManagementTunnelForwardRequest{ProviderRuntimeManagementTunnelRequest: request, RuntimeGrants: []protocol.RuntimeGrant{protocol.RuntimeGrantManage}}
+}
+
+func serveProviderTunnelRequest(t *testing.T, server *Server, forward protocol.ProviderRuntimeManagementTunnelForwardRequest) (protocol.ProviderRuntimeManagementTunnelResponse, []byte) {
+	t.Helper()
+	tunnelResponse := server.ExecuteProviderRuntimeManagement(t.Context(), forward)
+	decoded, err := base64.RawURLEncoding.DecodeString(tunnelResponse.BodyB64u)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return tunnelResponse, decoded
 }
 
 type gatewayLifecycleTestArtifactVerifier struct{}
@@ -1792,5 +2003,14 @@ func assertNoCredentialWords(t *testing.T, body string) {
 		if strings.Contains(lower, needle) {
 			t.Fatalf("response leaked credential-shaped detail %q: %s", needle, body)
 		}
+	}
+}
+
+func TestProviderTunnelAllowsScopedActiveOperationList(t *testing.T) {
+	if !providerTunnelRouteAllowed(http.MethodPost, "/gateway/v2/runtime-operations/list") {
+		t.Fatal("Provider Runtime tunnel rejected the scoped active-operation list")
+	}
+	if providerTunnelRouteAllowed(http.MethodGet, "/gateway/v2/runtime-operations/list") {
+		t.Fatal("Provider Runtime tunnel accepted the active-operation list with the wrong method")
 	}
 }

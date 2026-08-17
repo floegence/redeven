@@ -25,7 +25,6 @@ func TestStoreUpsertURLProfileNormalizesAndPersistsAccessOnlyCatalogEntry(t *tes
 				URL:         "HTTPS://Example.COM:8443/some/path?token=secret#frag",
 				OriginLabel: " Lab Network ",
 			},
-			ControlOwner: protocol.EnvProfileControlOwnerGateway,
 		},
 	})
 	if err != nil {
@@ -63,9 +62,6 @@ func TestStoreUpsertURLProfileNormalizesAndPersistsAccessOnlyCatalogEntry(t *tes
 	profile := profiles[0]
 	if profile.AccessRoute.URL != "https://example.com:8443/" {
 		t.Fatalf("stored URL = %q, want normalized target base URL", profile.AccessRoute.URL)
-	}
-	if profile.ControlOwner != protocol.EnvProfileControlOwnerNone {
-		t.Fatalf("ControlOwner = %q, want none", profile.ControlOwner)
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -210,7 +206,6 @@ func TestStoreUpsertSSHProfilesPersistsGatewayOwnedRouteWithoutAdvertisedLifecyc
 				SSHAuthMode:    "key_agent",
 				SSHRuntimeRoot: "",
 			},
-			ControlOwner: protocol.EnvProfileControlOwnerGateway,
 		},
 	})
 	if err != nil {
@@ -247,7 +242,6 @@ func TestStoreUpsertSSHProfilesPersistsGatewayOwnedRouteWithoutAdvertisedLifecyc
 				ContainerID:          "workspace-1",
 				ContainerRuntimeRoot: "~/.redeven",
 			},
-			ControlOwner: protocol.EnvProfileControlOwnerGateway,
 		},
 	})
 	if err != nil {

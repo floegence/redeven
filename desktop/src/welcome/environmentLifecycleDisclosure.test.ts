@@ -130,7 +130,7 @@ describe('environmentLifecycleDisclosure', () => {
       kind: 'runtime_lifecycle',
       location: 'local_host',
       phase: 'checking_existing_runtime',
-      target_id: environment.id,
+      target_id: environment.managed_runtime_target_id,
       target_label: environment.label,
     }));
   });
@@ -477,13 +477,13 @@ describe('environmentLifecycleDisclosure', () => {
     expect(closeEnvironmentLifecycleDisclosure(state, environment.id)).toBeNull();
   });
 
-  it('does not create disclosure state for Desktop update handoff actions', () => {
+  it('creates disclosure state for every product-managed Runtime update', () => {
     expect(environmentActionStartsLifecycleDisclosure({
       intent: 'update_runtime',
-      label: 'Update Desktop',
+      label: 'Update Runtime',
       enabled: true,
       variant: 'outline',
-      runtime_operation_method: 'desktop_local_update_handoff',
-    })).toBe(false);
+      runtime_operation_method: 'runtime_gateway',
+    })).toBe(true);
   });
 });

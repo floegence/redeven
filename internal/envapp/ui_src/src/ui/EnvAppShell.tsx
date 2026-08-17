@@ -2612,8 +2612,10 @@ export function EnvAppShell() {
         message: result.message,
       };
     }
-
-    return rpc.sys.restart();
+    return {
+      ok: false,
+      message: restartPlan?.message || i18n.t('shell.notifications.runtimeRestartDesktopOnly'),
+    };
   };
 
   const startRuntimeUpgrade = async (targetVersion: string) => {
@@ -2636,7 +2638,10 @@ export function EnvAppShell() {
       };
     }
 
-    return rpc.sys.upgrade({ targetVersion });
+    return {
+      ok: false,
+      message: upgradePlan?.message || i18n.t('shell.notifications.runtimeUpdateDesktopOnly'),
+    };
   };
 
   const upgradeRequiresTargetVersion = () => {
@@ -2655,7 +2660,6 @@ export function EnvAppShell() {
     currentProcessStartedAtMs: agentVersionModel.currentProcessStartedAtMs,
     currentVersion: agentVersionModel.currentVersion,
     notify,
-    rpc,
     startRestartRequest: startRuntimeRestart,
     startUpgradeRequest: startRuntimeUpgrade,
     onMaintenanceStarted: (kind) => {

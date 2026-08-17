@@ -23,6 +23,8 @@ function operationNextActionKey(action: DesktopLauncherOperationNextAction): str
     case 'open_gateway_environment':
       return `${action.kind}:gateway:${action.gateway_id}:environment:${action.environment_id}:${action.start_policy ?? ''}`;
     case 'copy_diagnostics':
+    case 'confirm_runtime_operation':
+    case 'cancel_runtime_operation':
     case 'dismiss':
     case 'retry':
       return `${action.kind}:operation:${action.operation_key}`;
@@ -61,6 +63,8 @@ export function visibleOperationNextActions(
     push('restart_gateway');
     push('update_gateway');
   }
+  push('confirm_runtime_operation');
+  push('cancel_runtime_operation');
   push('copy_diagnostics');
   push('dismiss');
   return actions;
@@ -73,6 +77,7 @@ export type OperationNextActionLayoutGroup = Readonly<{
 
 function operationNextActionIsPrimary(action: DesktopLauncherOperationNextAction): boolean {
   return action.kind === 'refresh_status'
+    || action.kind === 'confirm_runtime_operation'
     || action.kind === 'update_runtime'
     || action.kind === 'manage_desktop_update'
     || action.kind === 'refresh_gateway'

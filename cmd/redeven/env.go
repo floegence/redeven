@@ -157,10 +157,6 @@ func (c *cli) envOperationCmd(operation string, args []string) int {
 	targetName := fs.String("target", "", "Environment target id, current, label, env_public_id, or recognized Redeven target shape.")
 	stateRoot := fs.String("state-root", "", "State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).")
 	probeTimeout := fs.Duration("probe-timeout", desktopRuntimeProbeTimeout, "Runtime health probe timeout.")
-	var gracePeriod *time.Duration
-	if operation == agentprotocol.EnvOperationStop {
-		gracePeriod = fs.Duration("grace-period", 5*time.Second, "Time to wait after requesting runtime shutdown.")
-	}
 	jsonOut := fs.Bool("json", false, "Write the protocol JSON envelope.")
 	helpText := envOperationHelpText(operation)
 
@@ -181,20 +177,6 @@ func (c *cli) envOperationCmd(operation string, args []string) int {
 	plan, ok := status.Operations[operation]
 	if !ok {
 		return c.writeAgentProtocolFailure(agentprotocol.ErrCodeEnvironmentOperation, "environment operation is not available", status.Target.ID, *jsonOut)
-	}
-	if operation == agentprotocol.EnvOperationStop && plan.Availability == agentprotocol.OperationAvailabilityAvailable {
-		stopGracePeriod := 5 * time.Second
-		if gracePeriod != nil {
-			stopGracePeriod = *gracePeriod
-		}
-		if err := stopDesktopRuntime(*stateRoot, *probeTimeout, stopGracePeriod); err != nil {
-			return c.writeAgentProtocolFailure(agentprotocol.ErrCodeEnvironmentOperation, err.Error(), status.Target.ID, *jsonOut)
-		}
-		after, loadErr := c.loadEnvironmentStatus(*stateRoot, *targetName, *probeTimeout, true)
-		if loadErr == nil {
-			status = after
-		}
-		plan = agentprotocol.MarkOperationPerformed(plan, "Runtime stopped.")
 	}
 	result := agentprotocol.EnvironmentOperationResultFromStatus(status, plan, true)
 	if *jsonOut {

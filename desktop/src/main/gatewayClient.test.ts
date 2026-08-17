@@ -3,7 +3,12 @@ import { randomBytes } from 'node:crypto';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { GatewayBridgeClient, GatewayURLClient, redactGatewayDiagnosticValue } from './gatewayClient';
+import {
+  GatewayBridgeClient,
+  GatewayURLClient,
+  normalizeGatewayRuntimeOperationListResponse,
+  redactGatewayDiagnosticValue,
+} from './gatewayClient';
 import {
   createGatewayPairingMaterial,
   gatewayConnectArtifactProofPayload,
@@ -76,7 +81,7 @@ function pairedURLRecord(baseURL: string, allowLoopbackHTTP = true): Readonly<{
   gatewayPrivateKey: string;
 }> {
   const base: GatewayRecord = {
-    schema_version: 1,
+    schema_version: 2,
     gateway_id: 'gw_demo',
     display_name: 'Demo Gateway',
     local_enabled: true,
@@ -289,6 +294,35 @@ describe('GatewayURLClient', () => {
     }));
   });
 
+  it('accepts redacted active operations without requiring hidden client or snapshot digests', () => {
+    const redacted = {
+      ...(testRuntimeOperation() as Record<string, unknown>),
+      observer_redacted: true,
+      authorized_client_key_id: '',
+      expected_snapshot: {
+        snapshot_revision: 3,
+        process_inventory_digest: '',
+        workload_identity_digest: '',
+        workload: {
+          knowledge: 'known',
+          affected_process_count: 1,
+          active_session_count: 0,
+          protected_workload_present: false,
+        },
+        observed_at_unix_ms: 1_800_000_000_000,
+      },
+    };
+
+    expect(normalizeGatewayRuntimeOperationListResponse({
+      protocol_version: 'redeven-gateway-v2',
+      operations: [redacted],
+    }).operations[0]).toMatchObject({
+      operation_id: 'op_reconcile',
+      observer_redacted: true,
+      authorized_client_key_id: '',
+    });
+  });
+
   it('fetches catalog over authenticated loopback URL without bearer credentials', async () => {
     let record!: GatewayRecord;
     const server = await startServer((_request, _body, response) => {
@@ -478,7 +512,7 @@ describe('GatewayURLClient', () => {
 
   it('preserves Gateway public key wire text in pairing challenges', async () => {
     const base: GatewayRecord = {
-      schema_version: 1,
+      schema_version: 2,
       gateway_id: 'gw_demo',
       display_name: 'Demo Gateway',
     local_enabled: true,
@@ -530,7 +564,7 @@ describe('GatewayURLClient', () => {
 
 	it('sends URL Gateway pairing codes in the pairing challenge body', async () => {
 	  const base: GatewayRecord = {
-	    schema_version: 1,
+	    schema_version: 2,
 	    gateway_id: 'gw_demo',
 	    display_name: 'Demo Gateway',
     local_enabled: true,
@@ -993,7 +1027,6 @@ describe('GatewayURLClient', () => {
         url: 'https://target.example/path?token=secret#frag',
         origin_label: 'target.example',
       },
-      control_owner: 'none',
     });
 
     expect(response.environment).toMatchObject({
@@ -1022,7 +1055,6 @@ describe('GatewayURLClient', () => {
           url: 'https://target.example/',
           origin_label: 'target.example',
         },
-        control_owner: 'none',
       },
     });
     expect(server.requests[0]?.headers['x-redeven-request-signature']).toBeTruthy();
@@ -1049,7 +1081,6 @@ describe('GatewayURLClient', () => {
         mode: 'replace',
         password: 'secret-password',
       },
-      control_owner: 'gateway',
     })).rejects.toThrow('Gateway profile SSH password auth is not supported.');
     expect(server.requests).toHaveLength(0);
   });
@@ -1068,7 +1099,6 @@ describe('GatewayURLClient', () => {
         kind: 'url',
         url: 'https://user:pass@target.example/path',
       },
-      control_owner: 'none',
     })).rejects.toMatchObject({ code: 'GATEWAY_PROFILE_URL_CREDENTIALS_UNSUPPORTED' });
     expect(server.requests).toHaveLength(0);
   });
@@ -1276,7 +1306,7 @@ describe('GatewayBridgeClient', () => {
 
   it('uses unauthenticated gateway_protocol bridge requests for pairing', async () => {
     const base: GatewayRecord = {
-      schema_version: 1,
+      schema_version: 2,
       gateway_id: 'gw_demo',
       display_name: 'Demo Gateway',
     local_enabled: true,
@@ -1393,7 +1423,6 @@ describe('GatewayBridgeClient', () => {
         container_id: 'workspace',
         container_runtime_root: '~/.redeven',
       },
-      control_owner: 'gateway',
     });
 
     expect(response.environment.gateway_env_id).toBe('env_container');
@@ -1415,7 +1444,6 @@ describe('GatewayBridgeClient', () => {
           container_id: 'workspace',
           container_runtime_root: '~/.redeven',
         },
-        control_owner: 'gateway',
       },
     });
     expect(harness.requests[0]?.headers['x-redeven-gateway-transport']).toBe('desktop_bridge');

@@ -30,22 +30,19 @@ const (
 	OperationAvailabilityUnavailable = "unavailable"
 	OperationAvailabilityHidden      = "hidden"
 
-	OperationMethodLocalHost                 = "local_host"
-	OperationMethodSSHHost                   = "ssh_host"
-	OperationMethodLocalContainerExec        = "local_container_exec"
-	OperationMethodSSHContainerExec          = "ssh_container_exec"
-	OperationMethodDesktopLocalUpdateHandoff = "desktop_local_update_handoff"
-	OperationMethodRuntimeControlRPC         = "runtime_control_rpc"
-	OperationMethodRuntimeGateway            = "runtime_gateway"
-	OperationMethodProviderTunnel            = "provider_tunnel"
-	OperationMethodNone                      = "none"
+	OperationMethodLocalHost          = "local_host"
+	OperationMethodSSHHost            = "ssh_host"
+	OperationMethodLocalContainerExec = "local_container_exec"
+	OperationMethodSSHContainerExec   = "ssh_container_exec"
+	OperationMethodRuntimeControlRPC  = "runtime_control_rpc"
+	OperationMethodRuntimeGateway     = "runtime_gateway"
+	OperationMethodProviderTunnel     = "provider_tunnel"
+	OperationMethodNone               = "none"
 
-	EnvReasonUnsupportedTargetKind = "unsupported_target_kind"
-	EnvReasonRuntimeNotStarted     = "runtime_not_started"
-	EnvReasonRuntimeAlreadyRunning = "runtime_already_running"
-	EnvReasonDesktopStartRequired  = "desktop_start_required"
-	EnvReasonDesktopUpdateRequired = "desktop_update_required"
-	EnvReasonCLIUpdateUnavailable  = "cli_update_unavailable"
+	EnvReasonUnsupportedTargetKind       = "unsupported_target_kind"
+	EnvReasonRuntimeNotStarted           = "runtime_not_started"
+	EnvReasonRuntimeAlreadyRunning       = "runtime_already_running"
+	EnvReasonRuntimeGatewaySetupRequired = "runtime_gateway_setup_required"
 )
 
 type EnvironmentTargetResolution struct {
@@ -272,7 +269,7 @@ func EnvironmentDiagnosticsFromAttach(status runtimemanagement.RuntimeAttachStat
 	return &diag
 }
 
-func EnvironmentOperationPlansFromRuntime(target TargetDescriptor, status runtimemanagement.RuntimeAttachStatus, runtime RuntimeStatusSummary) EnvironmentOperationPlans {
+func EnvironmentOperationPlansFromRuntime(target TargetDescriptor, _ runtimemanagement.RuntimeAttachStatus, _ RuntimeStatusSummary) EnvironmentOperationPlans {
 	targetID := strings.TrimSpace(target.ID)
 	if targetID == "" {
 		targetID = "local:local"
@@ -287,10 +284,9 @@ func EnvironmentOperationPlansFromRuntime(target TargetDescriptor, status runtim
 			argvForEnvOperation(EnvOperationDiagnose, targetID),
 		),
 	}
-	plans[EnvOperationStop] = stopOperationPlan(status, runtime, targetID)
-	plans[EnvOperationStart] = startOperationPlan(runtime, targetID)
-	plans[EnvOperationRestart] = restartOperationPlan(runtime, targetID)
-	plans[EnvOperationUpdate] = updateOperationPlan(runtime, targetID)
+	for _, operation := range []string{EnvOperationStart, EnvOperationStop, EnvOperationRestart, EnvOperationUpdate} {
+		plans[operation] = gatewaySetupRequiredOperationPlan(operation)
+	}
 	return plans
 }
 
@@ -316,16 +312,6 @@ func UnsupportedEnvironmentOperationPlans(target TargetDescriptor, message strin
 	return plans
 }
 
-func MarkOperationPerformed(plan EnvironmentOperationPlan, message string) EnvironmentOperationPlan {
-	plan.Performed = true
-	plan.Availability = OperationAvailabilityAvailable
-	plan.ReasonCode = ""
-	if strings.TrimSpace(message) != "" {
-		plan.Message = strings.TrimSpace(message)
-	}
-	return plan
-}
-
 func BlockedOperationPlan(operation string, method string, reasonCode string, message string) EnvironmentOperationPlan {
 	plan := operationPlan(operation, OperationAvailabilityBlocked, method, envOperationLabel(operation), nil)
 	plan.ReasonCode = strings.TrimSpace(reasonCode)
@@ -347,55 +333,11 @@ func runtimeAttachStateIsRunning(state runtimemanagement.AttachState) bool {
 	}
 }
 
-func stopOperationPlan(status runtimemanagement.RuntimeAttachStatus, runtime RuntimeStatusSummary, targetID string) EnvironmentOperationPlan {
-	plan := operationPlan(EnvOperationStop, OperationAvailabilityAvailable, OperationMethodLocalHost, "Stop runtime", argvForEnvOperation(EnvOperationStop, targetID))
-	if status.State == runtimemanagement.AttachStateNotRunning || status.State == "" {
-		plan.Availability = OperationAvailabilityUnavailable
-		plan.ReasonCode = EnvReasonRuntimeNotStarted
-		plan.Message = "Runtime is not running."
-		plan.Command = ""
-		plan.Argv = nil
-		return plan
-	}
-	plan.RequiresConfirmation = runtime.Running
-	return plan
-}
-
-func startOperationPlan(runtime RuntimeStatusSummary, targetID string) EnvironmentOperationPlan {
-	plan := operationPlan(EnvOperationStart, OperationAvailabilityUnavailable, OperationMethodLocalHost, "Start runtime", nil)
-	if runtime.Running || runtime.Ready {
-		plan.ReasonCode = EnvReasonRuntimeAlreadyRunning
-		plan.Message = "Runtime is already running."
-		return plan
-	}
-	plan.ReasonCode = EnvReasonDesktopStartRequired
-	plan.Message = "Start this runtime from Redeven Desktop. This CLI surface reports the required action but does not start Desktop runtime sessions in phase one."
-	plan.NextActions = []string{"Use the Start Runtime action in Redeven Desktop."}
-	_ = targetID
-	return plan
-}
-
-func restartOperationPlan(runtime RuntimeStatusSummary, targetID string) EnvironmentOperationPlan {
-	plan := operationPlan(EnvOperationRestart, OperationAvailabilityUnavailable, OperationMethodLocalHost, "Restart runtime", nil)
-	plan.ReasonCode = EnvReasonDesktopStartRequired
-	plan.Message = "Restart requires Redeven Desktop to start the runtime session after stop. This CLI surface reports the required action but does not restart Desktop runtime sessions in phase one."
-	plan.NextActions = []string{"Use the Restart Runtime or Start Runtime action in Redeven Desktop."}
-	_ = runtime
-	_ = targetID
-	return plan
-}
-
-func updateOperationPlan(runtime RuntimeStatusSummary, targetID string) EnvironmentOperationPlan {
-	plan := operationPlan(EnvOperationUpdate, OperationAvailabilityUnavailable, OperationMethodDesktopLocalUpdateHandoff, "Update runtime", nil)
-	if runtime.Running || runtime.Ready {
-		plan.ReasonCode = EnvReasonDesktopUpdateRequired
-		plan.Message = "Update this runtime through Redeven Desktop so bundled runtime compatibility and active work checks stay aligned."
-		plan.NextActions = []string{"Use the Update Runtime or Update Redeven Desktop action when Redeven Desktop offers it."}
-		return plan
-	}
-	plan.ReasonCode = EnvReasonCLIUpdateUnavailable
-	plan.Message = "No CLI runtime update is available for this target in phase one."
-	_ = targetID
+func gatewaySetupRequiredOperationPlan(operation string) EnvironmentOperationPlan {
+	plan := operationPlan(operation, OperationAvailabilityBlocked, OperationMethodRuntimeGateway, envOperationLabel(operation), nil)
+	plan.ReasonCode = EnvReasonRuntimeGatewaySetupRequired
+	plan.Message = "Set up Runtime management for this target before starting, stopping, restarting, or updating Runtime."
+	plan.NextActions = []string{"Use the selected connection card to set up Redeven Gateway for this target."}
 	return plan
 }
 
@@ -534,7 +476,7 @@ func unsupportedTargetMessage(kind string) string {
 	case TargetKindGatewayEnvironment:
 		return "Redeven recognized this Gateway target, but Gateway lifecycle execution is not available through `redeven env` in phase one. Use the Gateway surface in Redeven Desktop."
 	case TargetKindExternalLocalUI:
-		return "Redeven recognized this external Local UI target, but external lifecycle execution is not owned by this CLI."
+		return "Redeven recognized this external Local UI target, but this CLI cannot manage its lifecycle."
 	default:
 		return "Redeven recognized this target shape, but lifecycle execution is not available through `redeven env` in phase one."
 	}

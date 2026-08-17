@@ -130,9 +130,9 @@ import {
 } from '../../../internal/flower_ui/src';
 import { desktopEntryKindSupportsRuntimeManagement } from '../shared/environmentManagementPrinciples';
 import {
-  providerRuntimeGatewayCandidates,
-  type ProviderRuntimeLifecycleOperation,
-} from '../shared/providerRuntimeGatewaySelection';
+  providerRuntimeDirectSetupCandidates,
+  type ProviderRuntimeDirectSetupCandidate,
+} from './providerRuntimeEnrollment';
 import {
   openConnectionPhaseSequence,
   type DesktopOpenConnectionPhase,
@@ -449,7 +449,7 @@ type RuntimeContainerConnectionDialogState = Readonly<{
 type GatewayURLProfileConnectionDialogState = Readonly<{
   mode: 'create' | 'edit';
   connection_kind: 'gateway_url_profile';
-  profile_route_kind: DesktopGatewayConnectionKind;
+  profile_route_kind: DesktopGatewayEnvironmentProfileAccessRoute['kind'];
   environment_id: string;
   gateway_id: string;
   label: string;
@@ -523,6 +523,13 @@ type EnvironmentGuidanceActionResolution = Readonly<{
   next_session: EnvironmentGuidanceSessionState;
 }>;
 
+type RuntimeEnrollmentDialogState = NonNullable<DesktopLauncherActionSuccess['runtime_enrollment']>;
+type ProviderRuntimeSetupDialogState = Readonly<{
+  environment_id: string;
+  environment_label: string;
+  candidates: readonly ProviderRuntimeDirectSetupCandidate[];
+}>;
+
 const LOGO_LIGHT_URL = new URL('../../../internal/envapp/ui_src/public/logo.svg', import.meta.url).href;
 const LOGO_DARK_URL = new URL('../../../internal/envapp/ui_src/public/logo-dark.svg', import.meta.url).href;
 const OFFICIAL_PROVIDER_DOMAIN_PARTS = ['redeven', 'com'] as const;
@@ -582,11 +589,6 @@ type ProviderRuntimeLinkConfirmationState = Readonly<{
   action: ProviderRuntimeLinkConfirmationAction;
 }>;
 
-type ProviderRuntimeGatewaySelectionState = Readonly<{
-  provider_environment: DesktopEnvironmentEntry;
-  operation: ProviderRuntimeLifecycleOperation;
-  candidates: readonly DesktopEnvironmentEntry[];
-}>;
 
 type LauncherActionErrorTarget = 'connect' | 'settings' | 'dialog' | 'control_plane_dialog' | 'gateway_dialog';
 
@@ -906,6 +908,8 @@ function localizedEnvironmentActionLabel(i18n: DesktopI18n, label: string): stri
     'Restart Runtime': 'environmentAction.restartRuntime',
     'Update runtime': 'environmentAction.updateRuntime',
     'Update Runtime': 'environmentAction.updateRuntime',
+		'Set up Runtime management': 'runtimeEnrollment.title',
+		'Stop operation': 'progress.cancelRuntimeOperation',
     'Update and restart...': 'environmentAction.updateAndRestart',
     'Update and restart…': 'environmentAction.updateAndRestart',
     'Restart runtime...': 'environmentAction.restartRuntimeEllipsis',
@@ -2824,6 +2828,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [gatewaySetupDialogState, setGatewaySetupDialogState] = createSignal<GatewaySetupDialogState | null>(null);
   const [gatewaySetupDialogError, setGatewaySetupDialogError] = createSignal('');
   const [gatewaySetupDialogFieldErrors, setGatewaySetupDialogFieldErrors] = createSignal<Partial<Record<string, string>>>({});
+  const [runtimeEnrollmentDialog, setRuntimeEnrollmentDialog] = createSignal<RuntimeEnrollmentDialogState | null>(null);
+  const [providerRuntimeSetupDialog, setProviderRuntimeSetupDialog] = createSignal<ProviderRuntimeSetupDialogState | null>(null);
+  const [providerRuntimeSetupDirectEnvironmentID, setProviderRuntimeSetupDirectEnvironmentID] = createSignal('');
   const [sshConfigHosts, setSSHConfigHosts] = createSignal<readonly DesktopSSHConfigHost[]>([]);
   const [sshConfigHostsLoading, setSSHConfigHostsLoading] = createSignal(false);
   const [sshConfigHostsLoadError, setSSHConfigHostsLoadError] = createSignal(false);
@@ -2836,8 +2843,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [deleteGatewayTarget, setDeleteGatewayTarget] = createSignal<DesktopGatewaySource | null>(null);
   const [providerRuntimeLinkConfirmation, setProviderRuntimeLinkConfirmation] = createSignal<ProviderRuntimeLinkConfirmationState | null>(null);
   const [providerRuntimeLinkProviderEnvironmentID, setProviderRuntimeLinkProviderEnvironmentID] = createSignal('');
-  const [providerRuntimeGatewaySelection, setProviderRuntimeGatewaySelection] = createSignal<ProviderRuntimeGatewaySelectionState | null>(null);
-  const [providerRuntimeGatewayEnvironmentID, setProviderRuntimeGatewayEnvironmentID] = createSignal('');
   const [deleteControlPlaneTarget, setDeleteControlPlaneTarget] = createSignal<DesktopControlPlaneSummary | null>(null);
   const [flowerTurnLauncherOpen, setFlowerTurnLauncherOpen] = createSignal(false);
   const [flowerTurnLauncherIntent, setFlowerTurnLauncherIntent] = createSignal<FlowerTurnLauncherIntent | null>(null);
@@ -3051,6 +3056,16 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       providerRuntimeLinkConfirmation()?.action === 'connect'
       && providerRuntimeLinkSelectedPlan()?.canConnect !== true
     )
+  ));
+  const providerRuntimeSetupDialogOpen = createMemo(() => providerRuntimeSetupDialog() !== null);
+  const providerRuntimeSetupSelectedCandidate = createMemo(() => (
+    providerRuntimeSetupDialog()?.candidates.find((candidate) => (
+      candidate.environment_id === providerRuntimeSetupDirectEnvironmentID()
+    )) ?? null
+  ));
+  const providerRuntimeSetupBusy = createMemo(() => (
+    busyStateMatchesAction(busyState(), 'request_provider_runtime_enrollment_challenge')
+    || busyStateMatchesAction(busyState(), 'setup_provider_runtime_management_with_direct_card')
   ));
   const activeActionProgress = createMemo(() => [
     ...snapshot().action_progress,
@@ -4579,7 +4594,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   ): Promise<boolean> {
     const gatewayID = trimString(environment.gateway_id);
     const gatewayEnvID = trimString(environment.gateway_env_id);
-    if (environment.kind !== 'gateway_environment' || gatewayID === '' || gatewayEnvID === '') {
+    if (gatewayID === '' || gatewayEnvID === '') {
       setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', i18n().t('environmentCenter.resolveGatewayError'));
       return false;
     }
@@ -4594,52 +4609,33 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return result?.outcome === expectedOutcome;
   }
 
-  function requestProviderRuntimeGatewaySelection(
+  async function runProviderEnvironmentLifecycle(
     environment: DesktopEnvironmentEntry,
-    operation: ProviderRuntimeLifecycleOperation,
-  ): void {
-    const candidates = providerRuntimeGatewayCandidates(environment, snapshot().environments, operation);
-    setProviderRuntimeGatewayEnvironmentID('');
-    setProviderRuntimeGatewaySelection({
-      provider_environment: environment,
-      operation,
-      candidates,
-    });
-  }
-
-  async function confirmProviderRuntimeGatewaySelection(): Promise<void> {
-    const selection = providerRuntimeGatewaySelection();
-    if (!selection) {
-      return;
-    }
-    const gatewayEnvironment = selection.candidates.find((candidate) => (
-      candidate.id === providerRuntimeGatewayEnvironmentID()
-    ));
-    if (!gatewayEnvironment) {
-      return;
+    operation: Extract<DesktopLauncherActionRequest, { kind: 'run_provider_environment_lifecycle' }>['operation'],
+    expectedOutcome: DesktopLauncherActionSuccess['outcome'],
+    errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
+  ): Promise<boolean> {
+    if (environment.kind !== 'provider_environment') {
+      return false;
     }
     const result = await performLauncherAction({
-      kind: 'run_gateway_environment_lifecycle',
-      environment_id: selection.provider_environment.id,
-      provider_environment_id: selection.provider_environment.id,
-      gateway_id: trimString(gatewayEnvironment.gateway_id),
-      gateway_env_id: trimString(gatewayEnvironment.gateway_env_id),
-      operation: selection.operation,
-      label: selection.provider_environment.label,
-    }, 'connect');
-    if (!result || !isDesktopLauncherActionSuccess(result)) {
-      return;
+      kind: 'run_provider_environment_lifecycle',
+      environment_id: environment.id,
+      operation,
+      label: environment.label,
+    }, errorTarget);
+    if (result?.outcome !== expectedOutcome) {
+      return false;
     }
-    setProviderRuntimeGatewaySelection(null);
-    setProviderRuntimeGatewayEnvironmentID('');
-    const toastKey = selection.operation === 'start'
+    const toastKey = operation === 'start'
       ? 'environmentCenter.runtimeStartedToast'
-      : selection.operation === 'stop'
+      : operation === 'stop'
         ? 'environmentCenter.runtimeStoppedToast'
-        : selection.operation === 'restart'
+        : operation === 'restart'
           ? 'environmentCenter.runtimeRestartedToast'
           : 'environmentCenter.runtimeUpdatedToast';
-    showActionToast(i18n().t(toastKey, { label: selection.provider_environment.label }));
+    showActionToast(i18n().t(toastKey, { label: environment.label }));
+    return true;
   }
 
   async function startEnvironmentRuntime(
@@ -4650,10 +4646,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }> = {},
   ): Promise<boolean> {
     if (environment.kind === 'provider_environment') {
-      requestProviderRuntimeGatewaySelection(environment, 'start');
-      return true;
+      return runProviderEnvironmentLifecycle(environment, 'start', 'started_gateway_environment_runtime', errorTarget);
     }
-    if (environment.kind === 'gateway_environment') {
+    if (
+      environment.kind === 'gateway_environment'
+      || (environment.runtime_operations.start.method === 'runtime_gateway' && trimString(environment.gateway_id) !== '')
+    ) {
       const started = await runGatewayEnvironmentLifecycle(
         environment,
         'start',
@@ -4684,10 +4682,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
   ): Promise<boolean> {
     if (environment.kind === 'provider_environment') {
-      requestProviderRuntimeGatewaySelection(environment, 'update_runtime');
-      return true;
+      return runProviderEnvironmentLifecycle(environment, 'update_runtime', 'updated_gateway_environment_runtime', errorTarget);
     }
-    if (environment.kind === 'gateway_environment') {
+    if (
+      environment.kind === 'gateway_environment'
+      || (environment.runtime_operations.update.method === 'runtime_gateway' && trimString(environment.gateway_id) !== '')
+    ) {
       const updated = await runGatewayEnvironmentLifecycle(
         environment,
         'update_runtime',
@@ -4698,18 +4698,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         showActionToast(i18n().t('environmentCenter.runtimeUpdatedToast', { label: environment.label }));
       }
       return updated;
-    }
-    if (action?.runtime_operation_method === 'desktop_local_update_handoff') {
-      const result = await performLauncherAction({
-        kind: 'manage_desktop_update',
-        environment_id: environment.id,
-        label: environment.label,
-      }, errorTarget);
-      const opened = result?.outcome === 'opened_desktop_update_handoff';
-      if (opened) {
-        showActionToast(i18n().t('environmentCenter.desktopUpdateOpenedToast', { label: environment.label }), 'info');
-      }
-      return opened;
     }
     const request = runtimeActionRequest(environment, 'update_environment_runtime', {
       forceRuntimeUpdate: true,
@@ -4731,10 +4719,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
   ): Promise<boolean> {
     if (environment.kind === 'provider_environment') {
-      requestProviderRuntimeGatewaySelection(environment, 'restart');
-      return true;
+      return runProviderEnvironmentLifecycle(environment, 'restart', 'restarted_gateway_environment_runtime', errorTarget);
     }
-    if (environment.kind === 'gateway_environment') {
+    if (
+      environment.kind === 'gateway_environment'
+      || (environment.runtime_operations.restart.method === 'runtime_gateway' && trimString(environment.gateway_id) !== '')
+    ) {
       const restarted = await runGatewayEnvironmentLifecycle(
         environment,
         'restart',
@@ -4764,10 +4754,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
   ): Promise<boolean> {
     if (environment.kind === 'provider_environment') {
-      requestProviderRuntimeGatewaySelection(environment, 'stop');
-      return true;
+      return runProviderEnvironmentLifecycle(environment, 'stop', 'stopped_gateway_environment_runtime', errorTarget);
     }
-    if (environment.kind === 'gateway_environment') {
+    if (
+      environment.kind === 'gateway_environment'
+      || (environment.runtime_operations.stop.method === 'runtime_gateway' && trimString(environment.gateway_id) !== '')
+    ) {
       const stopped = await runGatewayEnvironmentLifecycle(
         environment,
         'stop',
@@ -4801,7 +4793,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
     options: Readonly<{ announceSuccess?: boolean }> = {},
   ): Promise<boolean> {
-    if (environment.kind === 'gateway_environment') {
+    if (environment.kind === 'gateway_environment' || trimString(environment.gateway_id) !== '') {
       const gatewayID = trimString(environment.gateway_id);
       if (gatewayID === '') {
         setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', i18n().t('environmentCenter.resolveGatewayError'));
@@ -5031,6 +5023,90 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return openRemoteEnvironment(environment.local_ui_url, errorTarget, environment);
   }
 
+  async function setupRuntimeManagement(
+    environment: DesktopEnvironmentEntry,
+    errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
+  ): Promise<boolean> {
+    if (environment.kind !== 'provider_environment') {
+      if (!environment.managed_runtime_host_access || !environment.managed_runtime_placement) {
+        setErrorMessage(
+          errorTarget === 'settings' ? 'settings' : errorTarget,
+          i18n().t('environmentCenter.resolveRuntimeTargetError'),
+        );
+        return false;
+      }
+      const directResult = await performLauncherAction({
+        kind: 'setup_direct_runtime_management',
+        environment_id: environment.id,
+        label: environment.label,
+        host_access: environment.managed_runtime_host_access,
+        placement: environment.managed_runtime_placement,
+      }, errorTarget);
+      if (directResult?.outcome !== 'setup_runtime_management') {
+        return false;
+      }
+      await refreshSnapshot();
+      showActionToast(i18n().t('runtimeEnrollment.setupCompleted', { label: environment.label }));
+      return true;
+    }
+    setConnectionDialogError('');
+    setProviderRuntimeSetupDirectEnvironmentID('');
+    setProviderRuntimeSetupDialog({
+      environment_id: environment.id,
+      environment_label: environment.label,
+      candidates: providerRuntimeDirectSetupCandidates(snapshot().environments, environment.id),
+    });
+    return true;
+  }
+
+  function closeProviderRuntimeSetupDialog(): void {
+    setProviderRuntimeSetupDialog(null);
+    setProviderRuntimeSetupDirectEnvironmentID('');
+    setConnectionDialogError('');
+  }
+
+  async function showProviderRuntimeEnrollmentCommand(): Promise<void> {
+    const state = providerRuntimeSetupDialog();
+    if (!state) {
+      return;
+    }
+    const result = await performLauncherAction({
+      kind: 'request_provider_runtime_enrollment_challenge',
+      environment_id: state.environment_id,
+    }, 'dialog');
+    if (
+      result?.outcome !== 'created_provider_runtime_enrollment_challenge'
+      || !result.runtime_enrollment
+    ) {
+      return;
+    }
+    closeProviderRuntimeSetupDialog();
+    setRuntimeEnrollmentDialog(result.runtime_enrollment);
+  }
+
+  async function setupProviderRuntimeManagementWithSelectedDirectCard(): Promise<void> {
+    const state = providerRuntimeSetupDialog();
+    const candidate = providerRuntimeSetupSelectedCandidate();
+    if (!state || !candidate) {
+      return;
+    }
+    const result = await performLauncherAction({
+      kind: 'setup_provider_runtime_management_with_direct_card',
+      environment_id: state.environment_id,
+      direct_environment_id: candidate.environment_id,
+      direct_label: candidate.label,
+      host_access: candidate.host_access,
+      placement: candidate.placement,
+    }, 'dialog');
+    if (result?.outcome !== 'setup_runtime_management') {
+      return;
+    }
+    const label = state.environment_label;
+    closeProviderRuntimeSetupDialog();
+    await refreshSnapshot();
+    showActionToast(i18n().t('runtimeEnrollment.setupCompleted', { label }));
+  }
+
   async function triggerLocalEnvironmentAction(
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
@@ -5048,6 +5124,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         return restartEnvironmentRuntime(environment, errorTarget);
       case 'update_runtime':
         return updateEnvironmentRuntime(environment, action, errorTarget);
+      case 'setup_runtime_management':
+        return setupRuntimeManagement(environment, errorTarget);
       case 'refresh_runtime':
         return refreshEnvironmentRuntime(environment, errorTarget);
       case 'review_network_exposure':
@@ -5488,7 +5566,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       label: string;
       access_route: DesktopGatewayEnvironmentProfileAccessRoute;
       ssh_secret?: Extract<DesktopLauncherActionRequest, { kind: 'upsert_gateway_environment_profile' }>['ssh_secret'];
-      control_owner: 'none' | 'gateway';
       errorTarget: 'connect' | 'dialog';
       successMessage: string;
     }>,
@@ -5506,7 +5583,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       display_name: trimString(request.label),
       access_route: request.access_route,
       ...(request.ssh_secret ? { ssh_secret: request.ssh_secret } : {}),
-      control_owner: request.control_owner,
     }, request.errorTarget);
     if (result?.outcome !== 'saved_gateway_environment') {
       return false;
@@ -5839,7 +5915,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         label: state.label,
         access_route: gatewayEnvironmentProfileAccessRouteFromState(state),
         ssh_secret: undefined,
-        control_owner: state.profile_route_kind === 'url' ? 'none' : 'gateway',
         errorTarget: 'dialog',
         successMessage: i18n().t('toast.gatewayEnvironmentSaved'),
       });
@@ -6310,6 +6385,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                   showActionToast(i18n().t('environmentCenter.desktopUpdateOpenedToast', { label: label || i18n().t('environmentCenter.thisEnvironment') }), 'info');
                 }
               }}
+              confirmRuntimeOperation={(operationKey) => {
+                void performLauncherAction({
+                  kind: 'confirm_runtime_operation',
+                  operation_key: operationKey,
+                });
+              }}
               toggleEnvironmentPinned={toggleEnvironmentPinned}
               copyEnvironmentValue={copyEnvironmentValue}
               editEnvironment={startEditingEnvironment}
@@ -6486,6 +6567,34 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         onSave={saveGatewayFromDialog}
       />
 
+      <RuntimeEnrollmentDialog
+        i18n={i18n()}
+        state={runtimeEnrollmentDialog()}
+        onOpenChange={(open) => {
+          if (!open) {
+            setRuntimeEnrollmentDialog(null);
+          }
+        }}
+        onCopy={(value, label) => copyEnvironmentValue(value, label)}
+      />
+
+      <ProviderRuntimeSetupDialog
+        i18n={i18n()}
+        open={providerRuntimeSetupDialogOpen()}
+        state={providerRuntimeSetupDialog()}
+        selectedEnvironmentID={providerRuntimeSetupDirectEnvironmentID()}
+        error={connectionDialogError()}
+        busy={providerRuntimeSetupBusy()}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeProviderRuntimeSetupDialog();
+          }
+        }}
+        onSelect={setProviderRuntimeSetupDirectEnvironmentID}
+        onUseCommand={showProviderRuntimeEnrollmentCommand}
+        onUseSelected={setupProviderRuntimeManagementWithSelectedDirectCard}
+      />
+
       <ControlPlaneDialog
         i18n={i18n()}
         state={controlPlaneDialogState()}
@@ -6576,84 +6685,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           </p>
         </div>
       </ConfirmDialog>
-
-      <Dialog
-        open={providerRuntimeGatewaySelection() !== null}
-        onOpenChange={(open) => {
-          if (!open && !busyStateMatchesAction(busyState(), 'run_gateway_environment_lifecycle')) {
-            setProviderRuntimeGatewaySelection(null);
-            setProviderRuntimeGatewayEnvironmentID('');
-          }
-        }}
-        title={i18n().t('environmentCenter.providerRuntimeGatewayTitle')}
-        class="max-w-xl"
-        footer={(
-          <div class="flex justify-end gap-2">
-            <Button
-              variant="ghost"
-              disabled={busyStateMatchesAction(busyState(), 'run_gateway_environment_lifecycle')}
-              onClick={() => {
-                setProviderRuntimeGatewaySelection(null);
-                setProviderRuntimeGatewayEnvironmentID('');
-              }}
-            >
-              {i18n().t('common.cancel')}
-            </Button>
-            <Button
-              variant="primary"
-              loading={busyStateMatchesAction(busyState(), 'run_gateway_environment_lifecycle')}
-              disabled={providerRuntimeGatewayEnvironmentID() === ''}
-              onClick={() => void confirmProviderRuntimeGatewaySelection()}
-            >
-              {i18n().t('environmentCenter.providerRuntimeGatewayContinue')}
-            </Button>
-          </div>
-        )}
-      >
-        <Show when={providerRuntimeGatewaySelection()} keyed>
-          {(selection) => (
-            <div class="space-y-4">
-              <p class="text-sm leading-6 text-muted-foreground">
-                {i18n().t('environmentCenter.providerRuntimeGatewayDescription', {
-                  label: selection.provider_environment.label,
-                })}
-              </p>
-              <Show
-                when={selection.candidates.length > 0}
-                fallback={(
-                  <div role="status" class="border-l-2 border-warning pl-3 text-sm leading-6 text-muted-foreground">
-                    {i18n().t('environmentCenter.providerRuntimeGatewayEmpty')}
-                  </div>
-                )}
-              >
-                <div class="space-y-2">
-                  <For each={selection.candidates}>
-                    {(candidate) => (
-                      <label class="flex cursor-pointer items-start justify-between gap-4 rounded-md border border-border px-3 py-3 hover:bg-muted/60">
-                        <span class="min-w-0">
-                          <span class="block truncate text-sm font-medium text-foreground">{candidate.label}</span>
-                          <span class="mt-1 block break-all text-xs leading-5 text-muted-foreground">
-                            {candidate.gateway_label} · {candidate.gateway_connection_kind} · {candidate.gateway_env_id}
-                          </span>
-                        </span>
-                        <input
-                          type="radio"
-                          name="provider-runtime-gateway"
-                          checked={providerRuntimeGatewayEnvironmentID() === candidate.id}
-                          onChange={() => setProviderRuntimeGatewayEnvironmentID(candidate.id)}
-                        />
-                      </label>
-                    )}
-                  </For>
-                </div>
-              </Show>
-              <p class="text-xs leading-5 text-muted-foreground">
-                {i18n().t('environmentCenter.providerRuntimeGatewayCredentialNote')}
-              </p>
-            </div>
-          )}
-        </Show>
-      </Dialog>
 
       <Dialog
         open={providerRuntimeLinkDialogOpen()}
@@ -6922,6 +6953,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
     action: EnvironmentActionModel,
   ) => Promise<EnvironmentGuidanceActionResolution>;
   runDesktopUpdateHandoff: (environmentID: string, label?: string) => Promise<void>;
+  confirmRuntimeOperation: (operationKey: string) => void;
   toggleEnvironmentPinned: (environment: DesktopEnvironmentEntry) => Promise<void>;
   copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
@@ -7277,6 +7309,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 openEnvironmentFlowerSurface={props.openEnvironmentFlowerSurface}
                 runEnvironmentGuidanceAction={props.runEnvironmentGuidanceAction}
                 runDesktopUpdateHandoff={props.runDesktopUpdateHandoff}
+                confirmRuntimeOperation={props.confirmRuntimeOperation}
                 runEnvironmentCardFactAction={props.runEnvironmentCardFactAction}
                 toggleEnvironmentPinned={props.toggleEnvironmentPinned}
                 copyEnvironmentValue={props.copyEnvironmentValue}
@@ -7359,6 +7392,7 @@ function EnvironmentCardsPanel(props: Readonly<{
     action: EnvironmentActionModel,
   ) => Promise<EnvironmentGuidanceActionResolution>;
   runDesktopUpdateHandoff: (environmentID: string, label?: string) => Promise<void>;
+  confirmRuntimeOperation: (operationKey: string) => void;
   runEnvironmentCardFactAction: (action: EnvironmentCardFactActionModel) => void;
   toggleEnvironmentPinned: (environment: DesktopEnvironmentEntry) => Promise<void>;
   copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
@@ -7644,6 +7678,7 @@ function EnvironmentCardsPanel(props: Readonly<{
                     openEnvironmentFlowerSurface={props.openEnvironmentFlowerSurface}
                     runEnvironmentGuidanceAction={props.runEnvironmentGuidanceAction}
                     runDesktopUpdateHandoff={props.runDesktopUpdateHandoff}
+                    confirmRuntimeOperation={props.confirmRuntimeOperation}
                     runEnvironmentCardFactAction={props.runEnvironmentCardFactAction}
                     toggleEnvironmentPinned={props.toggleEnvironmentPinned}
                     copyEnvironmentValue={props.copyEnvironmentValue}
@@ -7688,6 +7723,7 @@ function EnvironmentCardsPanel(props: Readonly<{
                     openEnvironmentFlowerSurface={props.openEnvironmentFlowerSurface}
                     runEnvironmentGuidanceAction={props.runEnvironmentGuidanceAction}
                     runDesktopUpdateHandoff={props.runDesktopUpdateHandoff}
+                    confirmRuntimeOperation={props.confirmRuntimeOperation}
                     runEnvironmentCardFactAction={props.runEnvironmentCardFactAction}
                     toggleEnvironmentPinned={props.toggleEnvironmentPinned}
                     copyEnvironmentValue={props.copyEnvironmentValue}
@@ -8238,17 +8274,17 @@ function isEnvironmentActionBusy(
         && busyState.provider_origin === action.provider_origin
         && busyState.action === 'start_control_plane_connect';
     case 'start_runtime':
-      return busyStateBlocksEnvironmentAction(busyState, environmentID, ['start_environment_runtime', 'run_gateway_environment_lifecycle'], runtimeLifecycleProgress);
+      return busyStateBlocksEnvironmentAction(busyState, environmentID, ['start_environment_runtime', 'run_gateway_environment_lifecycle', 'run_provider_environment_lifecycle'], runtimeLifecycleProgress);
     case 'restart_runtime':
-      return busyStateBlocksEnvironmentAction(busyState, environmentID, ['restart_environment_runtime', 'run_gateway_environment_lifecycle'], runtimeLifecycleProgress);
+      return busyStateBlocksEnvironmentAction(busyState, environmentID, ['restart_environment_runtime', 'run_gateway_environment_lifecycle', 'run_provider_environment_lifecycle'], runtimeLifecycleProgress);
     case 'update_runtime':
-      return busyStateBlocksEnvironmentAction(busyState, environmentID, ['update_environment_runtime', 'manage_desktop_update', 'run_gateway_environment_lifecycle'], runtimeLifecycleProgress);
+      return busyStateBlocksEnvironmentAction(busyState, environmentID, ['update_environment_runtime', 'manage_desktop_update', 'run_gateway_environment_lifecycle', 'run_provider_environment_lifecycle'], runtimeLifecycleProgress);
     case 'connect_provider_runtime':
       return busyStateMatchesEnvironment(busyState, environmentID, ['connect_provider_runtime']);
     case 'disconnect_provider_runtime':
       return busyStateMatchesEnvironment(busyState, environmentID, ['disconnect_provider_runtime']);
     case 'stop_runtime':
-      return busyStateBlocksEnvironmentAction(busyState, environmentID, ['stop_environment_runtime', 'run_gateway_environment_lifecycle'], runtimeLifecycleProgress);
+      return busyStateBlocksEnvironmentAction(busyState, environmentID, ['stop_environment_runtime', 'run_gateway_environment_lifecycle', 'run_provider_environment_lifecycle'], runtimeLifecycleProgress);
     case 'refresh_runtime':
       return busyStateBlocksEnvironmentAction(busyState, environmentID, ['refresh_environment_runtime'], runtimeLifecycleProgress)
         || busyStateMatchesAction(busyState, 'refresh_all_environment_runtimes');
@@ -8487,6 +8523,9 @@ function localizedGatewayCheckStepDetail(i18n: DesktopI18n, detail: string | und
 }
 
 function localizedProgressTitle(i18n: DesktopI18n, progress: DesktopLauncherActionProgress): string {
+  if (progress.title_key) {
+    return i18n.t(progress.title_key);
+  }
   const open = progress.open_progress;
   if (open) {
     switch (open.phase) {
@@ -8535,6 +8574,9 @@ function localizedProgressTitle(i18n: DesktopI18n, progress: DesktopLauncherActi
 }
 
 function localizedProgressDetail(i18n: DesktopI18n, progress: DesktopLauncherActionProgress): string {
+  if (progress.detail_key) {
+    return i18n.t(progress.detail_key);
+  }
   const open = progress.open_progress;
   if (open) {
     switch (open.phase) {
@@ -8656,7 +8698,14 @@ function localizedFailureNoticeTitle(i18n: DesktopI18n, progress: DesktopLaunche
 }
 
 function localizedNextActionLabel(i18n: DesktopI18n, action: DesktopLauncherOperationNextAction): string {
+  if ('label_key' in action && action.label_key) {
+    return i18n.t(action.label_key);
+  }
   switch (action.kind) {
+    case 'confirm_runtime_operation':
+      return i18n.t('progress.confirmRuntimeOperation');
+    case 'cancel_runtime_operation':
+      return i18n.t('progress.cancelRuntimeOperation');
     case 'refresh_status':
       return i18n.t('environmentAction.refreshStatus');
     case 'update_runtime':
@@ -8882,8 +8931,12 @@ function EnvironmentProgressPanel(props: Readonly<{
                   >
                     <Show
                       when={action.kind === 'refresh_status'}
-                      fallback={action.kind === 'update_runtime'
-                        ? <Refresh class="h-3.5 w-3.5" />
+                      fallback={action.kind === 'confirm_runtime_operation'
+                        ? <Check class="h-3.5 w-3.5" />
+                        : action.kind === 'cancel_runtime_operation'
+                          ? <Stop class="h-3.5 w-3.5" />
+                        : action.kind === 'update_runtime'
+                          ? <Refresh class="h-3.5 w-3.5" />
                         : action.kind === 'manage_desktop_update'
                           ? <ExternalLink class="h-3.5 w-3.5" />
                         : action.kind === 'copy_diagnostics'
@@ -8958,6 +9011,30 @@ function EnvironmentProgressPanel(props: Readonly<{
       </div>
       <Show when={progressLeadDetail()}>
         {(detail) => <div class="redeven-action-popover__detail">{detail()}</div>}
+      </Show>
+      <Show when={props.progress.runtime_confirmation}>
+        {(confirmation) => (
+          <div class="redeven-action-popover__failure-notice" data-tone="warning">
+            <div class="redeven-action-popover__failure-title">{props.i18n.t('progress.runtimeImpactTitle')}</div>
+            <div class="redeven-action-popover__failure-summary">
+              {confirmation().workload_knowledge === 'known'
+                ? props.i18n.t('progress.runtimeImpactKnown')
+                : props.i18n.t('progress.runtimeImpactUnknown')}
+            </div>
+            <div class="redeven-environment-progress__meta">
+              <Show when={confirmation().affected_process_count !== undefined}>
+                <span>{props.i18n.t('progress.affectedProcesses', { count: confirmation().affected_process_count ?? 0 })}</span>
+              </Show>
+              <Show when={confirmation().active_session_count !== undefined}>
+                <span>{props.i18n.t('progress.activeSessions', { count: confirmation().active_session_count ?? 0 })}</span>
+              </Show>
+              <Show when={confirmation().protected_workload_present}>
+                <span>{props.i18n.t('progress.protectedWorkloadPresent')}</span>
+              </Show>
+              <span>{props.i18n.t('progress.snapshotRevision', { revision: confirmation().snapshot_revision })}</span>
+            </div>
+          </div>
+        )}
       </Show>
       <Show when={!hasStepTimeline()}>
         {renderFailureNotice()}
@@ -9330,6 +9407,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
   copyOperationDiagnostics: (progress: DesktopLauncherActionProgress) => void;
   refreshEnvironmentRuntime: () => void;
   runDesktopUpdateHandoff: (environmentID: string, label?: string) => Promise<void>;
+  confirmRuntimeOperation: (operationKey: string) => void;
   onRunAction: (action: EnvironmentActionModel) => void;
   onRunGuidanceAction: (action: EnvironmentActionModel) => void;
 }>) {
@@ -9550,6 +9628,13 @@ function EnvironmentSplitActionButton(props: Readonly<{
                           copyOperationDiagnostics={props.copyOperationDiagnostics}
                           runNextAction={(action, progress) => {
                             switch (action.kind) {
+                              case 'confirm_runtime_operation':
+                                props.confirmRuntimeOperation(action.operation_key);
+                                break;
+                              case 'cancel_runtime_operation':
+                                props.dismissOperation(progress);
+                                props.onProgressOpenChange(false);
+                                break;
                               case 'refresh_status':
                                 props.refreshEnvironmentRuntime();
                                 break;
@@ -9561,14 +9646,6 @@ function EnvironmentSplitActionButton(props: Readonly<{
                                 break;
                               }
                               case 'manage_desktop_update': {
-                                const desktopUpdateAction = props.presentation.menu_actions.find((item) => (
-                                  item.action.intent === 'update_runtime'
-                                  && item.action.runtime_operation_method === 'desktop_local_update_handoff'
-                                ))?.action;
-                                if (desktopUpdateAction) {
-                                  props.onRunAction(desktopUpdateAction);
-                                  break;
-                                }
                                 void props.runDesktopUpdateHandoff(props.environmentID, props.environmentLabel);
                                 break;
                               }
@@ -9831,6 +9908,7 @@ function EnvironmentConnectionCard(props: Readonly<{
     action: EnvironmentActionModel,
   ) => Promise<EnvironmentGuidanceActionResolution>;
   runDesktopUpdateHandoff: (environmentID: string, label?: string) => Promise<void>;
+  confirmRuntimeOperation: (operationKey: string) => void;
   runEnvironmentCardFactAction: (action: EnvironmentCardFactActionModel) => void;
   toggleEnvironmentPinned: (environment: DesktopEnvironmentEntry) => Promise<void>;
   copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
@@ -9909,6 +9987,7 @@ function EnvironmentConnectionCard(props: Readonly<{
     'restart_environment_runtime',
     'update_environment_runtime',
     'run_gateway_environment_lifecycle',
+    'run_provider_environment_lifecycle',
     'manage_desktop_update',
     'stop_environment_runtime',
     'refresh_environment_runtime',
@@ -10059,6 +10138,7 @@ function EnvironmentConnectionCard(props: Readonly<{
           runDesktopUpdateHandoff={async (environmentID, label) => {
             await props.runDesktopUpdateHandoff(environmentID, label);
           }}
+          confirmRuntimeOperation={props.confirmRuntimeOperation}
           onRunAction={(action) => {
             if (environmentActionStartsLifecycleDisclosure(action)) {
               props.beginLifecycleDisclosure(action.intent);
@@ -12450,6 +12530,19 @@ function GatewaySourceCard(props: Readonly<{
                     copyOperationDiagnostics={props.copyOperationDiagnostics}
                     runNextAction={(action, currentProgress) => {
                       switch (action.kind) {
+                        case 'confirm_runtime_operation':
+                          void props.runGatewayLauncherAction({
+                            kind: 'confirm_runtime_operation',
+                            operation_key: action.operation_key,
+                          });
+                          break;
+                        case 'cancel_runtime_operation':
+                          closeActionPopoverAfterExit(() => {
+                            props.dismissOperation(currentProgress);
+                            setForegroundAction(null);
+                            setForegroundPendingProgress(null);
+                          });
+                          break;
                         case 'copy_diagnostics':
                           props.copyOperationDiagnostics(currentProgress);
                           break;
@@ -15596,6 +15689,233 @@ function OfficialProviderPicker(props: Readonly<{
         </DesktopAnchoredListbox>
       </Show>
     </div>
+  );
+}
+
+function RuntimeEnrollmentDialog(props: Readonly<{
+  i18n: DesktopI18n;
+  state: RuntimeEnrollmentDialogState | null;
+  onOpenChange: (open: boolean) => void;
+  onCopy: (value: string, label: string) => Promise<void>;
+}>) {
+  const isOpen = createMemo(() => props.state !== null);
+
+  return (
+    <Dialog
+      open={isOpen()}
+      onOpenChange={props.onOpenChange}
+      title={props.i18n.t('runtimeEnrollment.title')}
+      class="max-w-2xl"
+      footer={(
+        <div class="flex justify-end">
+          <Button size="sm" variant="default" onClick={() => props.onOpenChange(false)}>
+            {props.i18n.t('common.close')}
+          </Button>
+        </div>
+      )}
+    >
+      <Show when={props.state} keyed>
+        {(state) => (
+          <div class="space-y-5">
+            <p class="text-sm leading-6 text-muted-foreground">
+              {props.i18n.t('runtimeEnrollment.summary', { label: state.environment_label })}
+            </p>
+            <div class="space-y-2">
+              <div class="text-xs font-semibold text-foreground">{props.i18n.t('runtimeEnrollment.commandLabel')}</div>
+              <div class="flex items-start gap-2 rounded-md border border-border bg-muted/20 p-3">
+                <code class="min-w-0 flex-1 break-all text-xs leading-5 text-foreground">{state.command}</code>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  title={props.i18n.t('runtimeEnrollment.copyCommand')}
+                  aria-label={props.i18n.t('runtimeEnrollment.copyCommand')}
+                  onClick={() => void props.onCopy(state.command, props.i18n.t('runtimeEnrollment.commandCopyLabel'))}
+                >
+                  <Copy class="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+            <div class="space-y-2">
+              <div class="text-xs font-semibold text-foreground">{props.i18n.t('runtimeEnrollment.codeLabel')}</div>
+              <div class="flex items-center gap-2 rounded-md border border-primary/25 bg-primary/5 p-3">
+                <code class="min-w-0 flex-1 break-all font-mono text-sm font-semibold text-foreground">{state.enrollment_code}</code>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  title={props.i18n.t('runtimeEnrollment.copyCode')}
+                  aria-label={props.i18n.t('runtimeEnrollment.copyCode')}
+                  onClick={() => void props.onCopy(state.enrollment_code, props.i18n.t('runtimeEnrollment.codeCopyLabel'))}
+                >
+                  <Copy class="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              <p class="text-xs leading-5 text-muted-foreground">
+                {props.i18n.t('runtimeEnrollment.codeHelp', {
+                  expires: props.i18n.formatDateTime(state.expires_at_unix_ms, { dateStyle: 'medium', timeStyle: 'short' }),
+                })}
+              </p>
+            </div>
+            <div class="rounded-md border border-border bg-muted/15 px-3 py-2 text-xs leading-5 text-muted-foreground">
+              {props.i18n.t('runtimeEnrollment.securityNote')}
+            </div>
+          </div>
+        )}
+      </Show>
+    </Dialog>
+  );
+}
+
+function providerRuntimeSetupHost(candidate: ProviderRuntimeDirectSetupCandidate, i18n: DesktopI18n): string {
+  if (candidate.host_access.kind === 'local_host') {
+    return i18n.t('runtimeEnrollment.currentDevice');
+  }
+  const ssh = candidate.host_access.ssh;
+  return ssh.ssh_port == null
+    ? ssh.ssh_destination
+    : `${ssh.ssh_destination}:${ssh.ssh_port}`;
+}
+
+function providerRuntimeSetupConnectionType(
+  candidate: ProviderRuntimeDirectSetupCandidate,
+  i18n: DesktopI18n,
+): string {
+  switch (candidate.connection_kind) {
+    case 'local_host':
+      return i18n.t('runtimeEnrollment.localHost');
+    case 'ssh_host':
+      return i18n.t('runtimeEnrollment.sshHost');
+    case 'local_container':
+      return i18n.t('runtimeEnrollment.localContainer');
+    case 'ssh_container':
+      return i18n.t('runtimeEnrollment.sshContainer');
+  }
+}
+
+function providerRuntimeSetupContainer(candidate: ProviderRuntimeDirectSetupCandidate, i18n: DesktopI18n): string {
+  return candidate.placement.kind === 'container_process'
+    ? candidate.placement.container_label || candidate.placement.container_ref || candidate.placement.container_id
+    : i18n.t('runtimeEnrollment.hostProcess');
+}
+
+function providerRuntimeSetupOSUser(candidate: ProviderRuntimeDirectSetupCandidate, i18n: DesktopI18n): string {
+  if (candidate.placement.kind === 'container_process') {
+    return i18n.t('runtimeEnrollment.containerDefaultUser');
+  }
+  if (candidate.host_access.kind === 'local_host') {
+    return i18n.t('runtimeEnrollment.currentOSUser');
+  }
+  const destination = candidate.host_access.ssh.ssh_destination;
+  const separator = destination.lastIndexOf('@');
+  return separator > 0
+    ? destination.slice(0, separator)
+    : i18n.t('runtimeEnrollment.sshConfiguredUser');
+}
+
+function ProviderRuntimeSetupDialog(props: Readonly<{
+  i18n: DesktopI18n;
+  open: boolean;
+  state: ProviderRuntimeSetupDialogState | null;
+  selectedEnvironmentID: string;
+  error: string;
+  busy: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSelect: (environmentID: string) => void;
+  onUseCommand: () => Promise<void>;
+  onUseSelected: () => Promise<void>;
+}>) {
+  const isOpen = createMemo(() => props.open);
+  return (
+    <Dialog
+      open={isOpen()}
+      onOpenChange={props.onOpenChange}
+      title={props.i18n.t('runtimeEnrollment.title')}
+      class="max-w-2xl"
+      footer={(
+        <div class="flex flex-wrap justify-end gap-2">
+          <Button variant="ghost" onClick={() => props.onOpenChange(false)} disabled={props.busy}>
+            {props.i18n.t('common.cancel')}
+          </Button>
+          <Button variant="outline" onClick={() => void props.onUseCommand()} disabled={props.busy}>
+            {props.i18n.t('runtimeEnrollment.useCommand')}
+          </Button>
+          <Button
+            variant="default"
+            onClick={() => void props.onUseSelected()}
+            loading={props.busy}
+            disabled={props.busy || props.selectedEnvironmentID === ''}
+          >
+            {props.i18n.t('runtimeEnrollment.useSelectedConnection')}
+          </Button>
+        </div>
+      )}
+    >
+      <Show when={props.state} keyed>
+        {(state) => (
+          <div class="space-y-5">
+            <p class="text-sm leading-6 text-muted-foreground">
+              {props.i18n.t('runtimeEnrollment.methodSummary', { label: state.environment_label })}
+            </p>
+            <div class="space-y-2">
+              <div>
+                <div class="text-sm font-semibold text-foreground">{props.i18n.t('runtimeEnrollment.directTitle')}</div>
+                <p class="mt-1 text-xs leading-5 text-muted-foreground">{props.i18n.t('runtimeEnrollment.directDescription')}</p>
+              </div>
+              <Show
+                when={state.candidates.length > 0}
+                fallback={(
+                  <div class="rounded-md border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">
+                    {props.i18n.t('runtimeEnrollment.noDirectConnections')}
+                  </div>
+                )}
+              >
+                <div class="space-y-2">
+                  <For each={state.candidates}>
+                    {(candidate) => {
+                      const selected = () => candidate.environment_id === props.selectedEnvironmentID;
+                      return (
+                        <label class={cn(
+                          'flex cursor-pointer items-start gap-3 rounded-md border px-3 py-3 transition-colors',
+                          selected() ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50',
+                        )}>
+                          <input
+                            type="radio"
+                            name="provider-runtime-direct-connection"
+                            class="mt-1 h-4 w-4 shrink-0 accent-primary"
+                            checked={selected()}
+                            disabled={props.busy}
+                            onChange={() => props.onSelect(candidate.environment_id)}
+                          />
+                          <span class="min-w-0 flex-1">
+                            <span class="block truncate text-sm font-semibold text-foreground">{candidate.label}</span>
+                            <span class="mt-0.5 block text-xs text-muted-foreground">{candidate.secondary_text}</span>
+                            <span class="mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-2 xl:grid-cols-4">
+                              <span>{props.i18n.t('runtimeEnrollment.connectionTypeLabel')}: <span class="text-foreground">{providerRuntimeSetupConnectionType(candidate, props.i18n)}</span></span>
+                              <span>{props.i18n.t('runtimeEnrollment.hostLabel')}: <span class="text-foreground">{providerRuntimeSetupHost(candidate, props.i18n)}</span></span>
+                              <span>{props.i18n.t('runtimeEnrollment.containerLabel')}: <span class="text-foreground">{providerRuntimeSetupContainer(candidate, props.i18n)}</span></span>
+                              <span>{props.i18n.t('runtimeEnrollment.osUserLabel')}: <span class="text-foreground">{providerRuntimeSetupOSUser(candidate, props.i18n)}</span></span>
+                            </span>
+                          </span>
+                        </label>
+                      );
+                    }}
+                  </For>
+                </div>
+              </Show>
+              <p class="text-xs leading-5 text-muted-foreground">{props.i18n.t('runtimeEnrollment.newTargetNote')}</p>
+            </div>
+            <div class="border-t border-border pt-4">
+              <div class="text-sm font-semibold text-foreground">{props.i18n.t('runtimeEnrollment.manualTitle')}</div>
+              <p class="mt-1 text-xs leading-5 text-muted-foreground">{props.i18n.t('runtimeEnrollment.manualDescription')}</p>
+            </div>
+            <Show when={props.error !== ''}>
+              <div role="alert" class="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                {props.error}
+              </div>
+            </Show>
+          </div>
+        )}
+      </Show>
+    </Dialog>
   );
 }
 

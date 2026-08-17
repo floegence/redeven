@@ -1,14 +1,9 @@
 import { createMemo, createSignal, onCleanup, type Accessor } from 'solid-js';
 
-import type { RedevenV1Rpc } from '../protocol/redeven_v1/contract';
 import type { SysPingResponse, SysRestartResponse, SysUpgradeResponse } from '../protocol/redeven_v1/sdk/sys';
 import { getEnvironment, type EnvironmentDetail, type EnvironmentDetailRequest } from '../services/controlplaneApi';
 import { isReleaseVersion } from './agentVersion';
 import { formatUnknownError, sleep, type MaintenanceKind } from './shared';
-
-type MaintenanceRpc = Readonly<{
-  sys: Pick<RedevenV1Rpc['sys'], 'restart' | 'upgrade'>;
-}>;
 
 type NotificationApi = Readonly<{
   error: (title: string, message?: string) => void;
@@ -39,9 +34,8 @@ type CreateAgentMaintenanceControllerArgs = Readonly<{
   currentProcessStartedAtMs: Accessor<number | null>;
   currentVersion: Accessor<string>;
   notify: NotificationApi;
-  rpc: MaintenanceRpc;
-  startRestartRequest?: () => Promise<SysRestartResponse>;
-  startUpgradeRequest?: (targetVersion: string) => Promise<SysUpgradeResponse>;
+  startRestartRequest: () => Promise<SysRestartResponse>;
+  startUpgradeRequest: (targetVersion: string) => Promise<SysUpgradeResponse>;
   onMaintenanceStarted?: (kind: MaintenanceKind) => void | Promise<void>;
   upgradeRequiresTargetVersion?: Accessor<boolean>;
   refetchCurrentVersion: () => Promise<SysPingResponse | null>;
@@ -221,8 +215,8 @@ export function createAgentMaintenanceController(args: CreateAgentMaintenanceCon
 	try {
       const response: SysUpgradeResponse | SysRestartResponse =
         nextKind === 'upgrade'
-          ? await (args.startUpgradeRequest ? args.startUpgradeRequest(cleanTargetVersion) : args.rpc.sys.upgrade({ targetVersion: cleanTargetVersion }))
-          : await (args.startRestartRequest ? args.startRestartRequest() : args.rpc.sys.restart());
+          ? await args.startUpgradeRequest(cleanTargetVersion)
+          : await args.startRestartRequest();
 
       if (!response?.ok) {
         const message = response?.message

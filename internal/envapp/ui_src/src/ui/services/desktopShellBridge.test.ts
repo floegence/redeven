@@ -19,7 +19,6 @@ import {
   openDashboardInDesktopShell,
   openExternalURLInDesktopShell,
   performRuntimeMaintenanceActionInDesktopShell,
-  restartRuntimeViaDesktop,
   toggleDesktopWindowFullScreen,
   toggleDesktopWindowMaximize,
 } from './desktopShellBridge';
@@ -162,44 +161,25 @@ describe('desktopShellBridge', () => {
     expect(performWindowCommandBridge).toHaveBeenNthCalledWith(4, 'close');
   });
 
-  it('forwards managed runtime restart when the desktop bridge exposes it', async () => {
-    const restartManagedRuntimeBridge = vi.fn().mockResolvedValue({
-      ok: true,
-      started: true,
-      message: 'Desktop restarted the managed runtime.',
-    });
-    window.redevenDesktopShell = {
-      openConnectionCenter: vi.fn().mockResolvedValue(undefined),
-      restartManagedRuntime: restartManagedRuntimeBridge,
-    };
-
-    await expect(restartRuntimeViaDesktop()).resolves.toEqual({
-      ok: true,
-      started: true,
-      message: 'Desktop restarted the managed runtime.',
-    });
-    expect(restartManagedRuntimeBridge).toHaveBeenCalledTimes(1);
-  });
-
   it('forwards runtime maintenance context and action requests through the desktop bridge', async () => {
     const getRuntimeMaintenanceContextBridge = vi.fn().mockResolvedValue({
       available: true,
-      authority: 'desktop_ssh',
+      authority: 'gateway_supervisor',
       runtime_kind: 'ssh',
       upgrade_policy: 'desktop_release',
       restart: {
         availability: 'available',
-        method: 'desktop_ssh_restart',
-        label: 'Restart SSH runtime',
-        title: 'Restart SSH Runtime',
-        message: 'Desktop will restart the SSH runtime.',
+        method: 'gateway_supervisor',
+        label: 'Restart Runtime',
+        title: 'Restart Runtime',
+        message: 'Gateway will restart the Runtime.',
       },
       upgrade: {
         availability: 'available',
-        method: 'desktop_ssh_force_update',
-        label: 'Update SSH runtime',
-        title: 'Update SSH Runtime',
-        message: 'Desktop will reinstall the SSH runtime.',
+        method: 'gateway_supervisor',
+        label: 'Update Runtime',
+        title: 'Update Runtime',
+        message: 'Gateway will install the verified Runtime release.',
         requires_target_version: false,
       },
     });
@@ -214,7 +194,7 @@ describe('desktopShellBridge', () => {
     };
 
     await expect(getRuntimeMaintenanceContextFromDesktopShell()).resolves.toEqual(expect.objectContaining({
-      authority: 'desktop_ssh',
+      authority: 'gateway_supervisor',
       runtime_kind: 'ssh',
     }));
     await expect(performRuntimeMaintenanceActionInDesktopShell({ action: 'restart' })).resolves.toEqual({

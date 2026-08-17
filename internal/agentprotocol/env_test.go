@@ -56,6 +56,15 @@ func TestResolveEnvironmentTargetRecognizesUnsupportedRedevenTargetShapes(t *tes
 	}
 }
 
+func TestExternalLocalUITargetUsesCapabilityLanguage(t *testing.T) {
+	t.Parallel()
+
+	message := unsupportedTargetMessage(TargetKindExternalLocalUI)
+	if !strings.Contains(message, "cannot manage its lifecycle") || strings.Contains(strings.ToLower(message), "owned") {
+		t.Fatalf("external Local UI lifecycle message = %q", message)
+	}
+}
+
 func TestResolveEnvironmentTargetDoesNotTreatCatalogSSHAsLifecycleSupported(t *testing.T) {
 	t.Parallel()
 
@@ -132,8 +141,9 @@ func TestEnvironmentStatusFromAttachSanitizesRuntimeControlToken(t *testing.T) {
 	if status.Runtime.LocalUIURL == "" {
 		t.Fatalf("sanitized runtime summary lost expected public fields: %#v", status.Runtime)
 	}
-	if status.Operations[EnvOperationStop].Availability != OperationAvailabilityAvailable {
-		t.Fatalf("stop availability = %#v, want available", status.Operations[EnvOperationStop])
+	stop := status.Operations[EnvOperationStop]
+	if stop.Availability != OperationAvailabilityBlocked || stop.Method != OperationMethodRuntimeGateway || stop.ReasonCode != EnvReasonRuntimeGatewaySetupRequired {
+		t.Fatalf("stop plan = %#v, want Gateway setup required", stop)
 	}
 }
 
@@ -215,7 +225,7 @@ func TestEnvironmentOperationPlansKeepUnsupportedTargetsInRedevenContract(t *tes
 	}
 }
 
-func TestStopOperationPlanDoesNotExposeExecutableCommandWhenUnavailable(t *testing.T) {
+func TestLifecycleOperationPlansRequireGatewaySetupWithoutExecutableCommands(t *testing.T) {
 	t.Parallel()
 
 	target := TargetDescriptor{
@@ -224,27 +234,15 @@ func TestStopOperationPlanDoesNotExposeExecutableCommandWhenUnavailable(t *testi
 		Label:  "Local Environment",
 		Status: TargetStatusAvailable,
 	}
-	tests := []struct {
-		name       string
-		status     runtimemanagement.RuntimeAttachStatus
-		reasonCode string
-	}{
-		{
-			name:       "not running",
-			status:     runtimemanagement.RuntimeAttachStatus{State: runtimemanagement.AttachStateNotRunning},
-			reasonCode: EnvReasonRuntimeNotStarted,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			runtime := RuntimeStatusSummaryFromAttach(tt.status)
-			plan := EnvironmentOperationPlansFromRuntime(target, tt.status, runtime)[EnvOperationStop]
-			if plan.ReasonCode != tt.reasonCode {
-				t.Fatalf("reason_code = %q, want %q: %#v", plan.ReasonCode, tt.reasonCode, plan)
-			}
-			if plan.Command != "" || len(plan.Argv) != 0 {
-				t.Fatalf("unavailable stop plan exposed executable command: %#v", plan)
-			}
-		})
+	status := runtimemanagement.RuntimeAttachStatus{State: runtimemanagement.AttachStateReady}
+	plans := EnvironmentOperationPlansFromRuntime(target, status, RuntimeStatusSummaryFromAttach(status))
+	for _, operation := range []string{EnvOperationStart, EnvOperationStop, EnvOperationRestart, EnvOperationUpdate} {
+		plan := plans[operation]
+		if plan.Availability != OperationAvailabilityBlocked || plan.Method != OperationMethodRuntimeGateway || plan.ReasonCode != EnvReasonRuntimeGatewaySetupRequired {
+			t.Fatalf("%s plan = %#v, want Gateway setup required", operation, plan)
+		}
+		if plan.Command != "" || len(plan.Argv) != 0 {
+			t.Fatalf("%s plan exposed executable command: %#v", operation, plan)
+		}
 	}
 }

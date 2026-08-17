@@ -1,8 +1,8 @@
 import type { DesktopSSHEnvironmentDetails } from './desktopSSH';
 import type { DesktopContainerEngine } from './desktopRuntimePlacement';
 
-export type DesktopGatewayConnectionKind = 'url' | 'ssh_host' | 'ssh_container';
-export type DesktopGatewayManagementCapability = 'access_only' | 'managed_ssh_host' | 'managed_ssh_container';
+export type DesktopGatewayConnectionKind = 'url' | 'local_host' | 'local_container' | 'ssh_host' | 'ssh_container';
+export type DesktopGatewayManagementCapability = 'access_only' | 'managed_local_host' | 'managed_local_container' | 'managed_ssh_host' | 'managed_ssh_container';
 
 export type DesktopGatewayCapability =
   | 'env_catalog'
@@ -62,6 +62,17 @@ export type DesktopGatewayRuntimeManagementCapability = Readonly<{
     lifecycle_target_id: string;
     target_generation: number;
   }>;
+  compatibility?: Readonly<{
+    gateway_version?: string;
+    gateway_protocol: string;
+    runtime_binary_version?: string;
+    runtime_platform: 'linux' | 'darwin';
+    runtime_architecture: 'amd64' | 'arm64';
+    runtime_service_protocol: string;
+    compatibility_epoch: number;
+    capabilities: readonly string[];
+    runtime_artifact_sha256?: string;
+  }>;
   operations?: readonly ('start' | 'stop' | 'restart' | 'update_runtime' | 'reconcile')[];
   artifact_policies?: readonly ('published_release' | 'custom_build')[];
   binding_actions?: readonly string[];
@@ -77,7 +88,7 @@ export type DesktopGatewayEnvironmentOriginKind =
   | 'network_target';
 
 export type DesktopGatewayEnvironmentProfileAccessRoute = Readonly<{
-  kind: DesktopGatewayConnectionKind;
+  kind: 'url' | 'ssh_host' | 'ssh_container';
   url?: string;
   origin_label?: string;
   ssh_destination?: string;
@@ -223,6 +234,7 @@ export type DesktopGatewaySource = Readonly<{
   trust_state?: DesktopGatewayTrustState;
   status_message?: string;
   endpoint_label?: string;
+  runtime_root?: string;
   gateway_url?: string;
   allow_loopback_http?: boolean;
   ssh_details?: DesktopSSHEnvironmentDetails;
@@ -289,6 +301,10 @@ export function desktopGatewayConnectionKindLabel(kind: DesktopGatewayConnection
   switch (kind) {
     case 'url':
       return 'URL transport';
+    case 'local_host':
+      return 'Local host';
+    case 'local_container':
+      return 'Local container';
     case 'ssh_host':
       return 'SSH host';
     case 'ssh_container':
@@ -302,6 +318,10 @@ export function desktopGatewayManagementCapability(
   switch (kind) {
     case 'url':
       return 'access_only';
+    case 'local_host':
+      return 'managed_local_host';
+    case 'local_container':
+      return 'managed_local_container';
     case 'ssh_host':
       return 'managed_ssh_host';
     case 'ssh_container':
@@ -312,7 +332,9 @@ export function desktopGatewayManagementCapability(
 export function desktopGatewayCanManageService(
   gateway: Pick<DesktopGatewaySource, 'management_capability'>,
 ): boolean {
-  return gateway.management_capability === 'managed_ssh_host'
+  return gateway.management_capability === 'managed_local_host'
+    || gateway.management_capability === 'managed_local_container'
+    || gateway.management_capability === 'managed_ssh_host'
     || gateway.management_capability === 'managed_ssh_container';
 }
 

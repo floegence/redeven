@@ -16,6 +16,7 @@ import (
 	"github.com/creack/pty"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/processenv"
+	"github.com/floegence/redeven/internal/runtimeservice"
 )
 
 const (
@@ -41,9 +42,10 @@ const (
 )
 
 type terminalProcessManager struct {
-	mu        sync.Mutex
-	processes map[string]*terminalProcess
-	active    int
+	mu                sync.Mutex
+	processes         map[string]*terminalProcess
+	active            int
+	workloadAdmission WorkloadAdmission
 }
 
 type terminalProcessStartRequest struct {
@@ -129,12 +131,23 @@ type terminalProcess struct {
 	terminationRequested bool
 	initialInputFailed   bool
 	reapedDone           chan struct{}
+	workloadRelease      func()
+	workloadReleaseOnce  sync.Once
 }
 
 func newTerminalProcessManager() *terminalProcessManager {
 	return &terminalProcessManager{
 		processes: make(map[string]*terminalProcess),
 	}
+}
+
+func (m *terminalProcessManager) SetWorkloadAdmission(admit WorkloadAdmission) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	m.workloadAdmission = admit
+	m.mu.Unlock()
 }
 
 func (m *terminalProcessManager) Start(req terminalProcessStartRequest) (*terminalProcess, error) {
@@ -161,8 +174,25 @@ func (m *terminalProcessManager) Start(req terminalProcessStartRequest) (*termin
 		return nil, errors.New("terminal process id is required")
 	}
 	m.mu.Lock()
+	admit := m.workloadAdmission
+	m.mu.Unlock()
+	release := func() {}
+	if admit != nil {
+		var err error
+		release, err = admit(runtimeservice.ManagedWorkload{
+			Identity: "ai_terminal_process:" + processID, Kind: "ai_terminal_process", Protected: true,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if release == nil {
+			release = func() {}
+		}
+	}
+	m.mu.Lock()
 	if m.active >= terminalProcessMaxActive {
 		m.mu.Unlock()
+		release()
 		return nil, fmt.Errorf("terminal process limit reached")
 	}
 	m.active++
@@ -177,26 +207,28 @@ func (m *terminalProcessManager) Start(req terminalProcessStartRequest) (*termin
 		m.mu.Lock()
 		m.active--
 		m.mu.Unlock()
+		release()
 		return nil, err
 	}
 	proc := &terminalProcess{
-		manager:    m,
-		id:         processID,
-		endpointID: strings.TrimSpace(req.EndpointID),
-		threadID:   strings.TrimSpace(req.ThreadID),
-		runID:      strings.TrimSpace(req.RunID),
-		turnID:     strings.TrimSpace(req.TurnID),
-		toolID:     strings.TrimSpace(req.ToolID),
-		toolName:   firstNonEmptyString(req.ToolName, "terminal.exec"),
-		command:    command,
-		cwd:        cwd,
-		cmd:        cmd,
-		tty:        tty,
-		readDone:   make(chan struct{}),
-		reapedDone: make(chan struct{}),
-		startedAt:  time.Now(),
-		status:     terminalProcessStatusRunning,
-		exitCode:   0,
+		manager:         m,
+		id:              processID,
+		endpointID:      strings.TrimSpace(req.EndpointID),
+		threadID:        strings.TrimSpace(req.ThreadID),
+		runID:           strings.TrimSpace(req.RunID),
+		turnID:          strings.TrimSpace(req.TurnID),
+		toolID:          strings.TrimSpace(req.ToolID),
+		toolName:        firstNonEmptyString(req.ToolName, "terminal.exec"),
+		command:         command,
+		cwd:             cwd,
+		cmd:             cmd,
+		tty:             tty,
+		readDone:        make(chan struct{}),
+		reapedDone:      make(chan struct{}),
+		workloadRelease: release,
+		startedAt:       time.Now(),
+		status:          terminalProcessStatusRunning,
+		exitCode:        0,
 	}
 	proc.cond = sync.NewCond(&proc.mu)
 
@@ -644,6 +676,18 @@ func (p *terminalProcess) waitLoop() {
 	p.mu.Unlock()
 	close(p.reapedDone)
 	p.managerProcessEnded()
+	p.releaseWorkload()
+}
+
+func (p *terminalProcess) releaseWorkload() {
+	if p == nil {
+		return
+	}
+	p.workloadReleaseOnce.Do(func() {
+		if p.workloadRelease != nil {
+			p.workloadRelease()
+		}
+	})
 }
 
 func (p *terminalProcess) waitForOutputDrain() {

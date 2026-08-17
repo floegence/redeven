@@ -517,6 +517,13 @@ describe('desktopLauncherIPC', () => {
       operation_key: 'ssh:devbox:default:key_agent:remote_default',
     });
     expect(normalizeDesktopLauncherActionRequest({
+      kind: 'reconcile_runtime_operation',
+      operation_key: ' ssh:devbox:default:key_agent:remote_default:update_runtime ',
+    })).toEqual({
+      kind: 'reconcile_runtime_operation',
+      operation_key: 'ssh:devbox:default:key_agent:remote_default:update_runtime',
+    });
+    expect(normalizeDesktopLauncherActionRequest({
       kind: 'dismiss_launcher_operation',
       operation_key: ' ssh:devbox:default:key_agent:remote_default ',
     })).toEqual({
@@ -625,7 +632,7 @@ describe('desktopLauncherIPC', () => {
     })).toBeNull();
   });
 
-  it('preserves an explicitly selected Provider and Gateway pair for Runtime lifecycle', () => {
+  it('keeps Provider and Gateway Runtime lifecycle routes independent', () => {
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'run_gateway_environment_lifecycle',
       environment_id: 'provider-card',
@@ -637,12 +644,115 @@ describe('desktopLauncherIPC', () => {
     })).toEqual({
       kind: 'run_gateway_environment_lifecycle',
       environment_id: 'provider-card',
-      provider_environment_id: 'provider-card',
       gateway_id: 'gateway-demo',
       gateway_env_id: 'env_demo',
       operation: 'restart',
       label: 'Demo',
     });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'run_provider_environment_lifecycle',
+      environment_id: 'provider-card',
+      gateway_id: 'gateway-demo',
+      operation: 'restart',
+      label: 'Demo',
+    })).toEqual({
+      kind: 'run_provider_environment_lifecycle',
+      environment_id: 'provider-card',
+      operation: 'restart',
+      label: 'Demo',
+    });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'request_provider_runtime_enrollment_challenge',
+      environment_id: ' provider-card ',
+      gateway_id: 'gateway-demo',
+    })).toEqual({
+      kind: 'request_provider_runtime_enrollment_challenge',
+      environment_id: 'provider-card',
+    });
+  });
+
+  it('binds direct Runtime management setup to the selected card target', () => {
+    const selectedTarget = {
+      kind: 'setup_direct_runtime_management',
+      environment_id: ' local-container ',
+      label: ' Dev Container ',
+      host_access: { kind: 'local_host' },
+      placement: {
+        kind: 'container_process',
+        container_engine: 'docker',
+        container_id: 'dev',
+        container_ref: 'dev',
+        container_label: 'Dev',
+        runtime_root: '/workspace/.redeven',
+        bridge_strategy: 'exec_stream',
+      },
+    } as const;
+    expect(normalizeDesktopLauncherActionRequest(selectedTarget)).toEqual({
+      kind: 'setup_direct_runtime_management',
+      environment_id: 'local-container',
+      label: 'Dev Container',
+      host_access: { kind: 'local_host' },
+      placement: {
+        kind: 'container_process',
+        container_engine: 'docker',
+        container_id: 'dev',
+        container_ref: 'dev',
+        container_label: 'Dev',
+        runtime_root: '/workspace/.redeven',
+        bridge_strategy: 'exec_stream',
+      },
+    });
+    expect(normalizeDesktopLauncherActionRequest({
+      ...selectedTarget,
+      gateway_id: 'borrowed-gateway',
+    })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'setup_direct_runtime_management',
+      environment_id: 'direct',
+      host_access: { kind: 'local_host' },
+    })).toBeNull();
+  });
+
+  it('binds Provider supervisor enrollment to one explicitly selected direct card', () => {
+    const selectedTarget = {
+      kind: 'setup_provider_runtime_management_with_direct_card',
+      environment_id: ' provider-card ',
+      direct_environment_id: ' ssh-container ',
+      direct_label: ' Dev Container ',
+      host_access: {
+        kind: 'ssh_host',
+        ssh: {
+          ssh_destination: 'alice@build.example',
+          ssh_port: 2222,
+          auth_mode: 'key_agent',
+          connect_timeout_seconds: 15,
+        },
+      },
+      placement: {
+        kind: 'container_process',
+        container_engine: 'docker',
+        container_id: 'container-id',
+        container_ref: 'dev-container',
+        container_label: 'Dev Container',
+        runtime_root: '/workspace/.redeven',
+        bridge_strategy: 'exec_stream',
+      },
+    } as const;
+
+    expect(normalizeDesktopLauncherActionRequest(selectedTarget)).toEqual({
+      ...selectedTarget,
+      environment_id: 'provider-card',
+      direct_environment_id: 'ssh-container',
+      direct_label: 'Dev Container',
+    });
+    expect(normalizeDesktopLauncherActionRequest({
+      ...selectedTarget,
+      direct_environment_id: 'provider-card',
+    })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({
+      ...selectedTarget,
+      direct_environment_id: '',
+    })).toBeNull();
   });
 
   it('rejects unsupported or incomplete launcher actions', () => {
@@ -676,6 +786,7 @@ describe('desktopLauncherIPC', () => {
     })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'focus_environment_window', session_key: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'cancel_launcher_operation', operation_key: '   ' })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'reconcile_runtime_operation', operation_key: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'set_provider_environment_pinned',
       environment_id: '   ',

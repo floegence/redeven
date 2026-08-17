@@ -11,6 +11,10 @@ RCPP v3 is the Provider-side authorization contract in `docs/openapi/rcpp-v3.yam
 
 # Contract
 
+## Access and Runtime link
+
+RCPP v3 open-session is Access/Open only and rejects any response that contains the frozen v2 `bootstrap_ticket` field. Runtime link uses a separate one-time authorization and exchange. Lifecycle traffic uses the Provider Environment's signed management tunnel and never asks for another Gateway card, paired key, SSH credential, container credential, or public Runtime URL. The tunnel permits only Gateway lifecycle routes; ordinary access and data-plane traffic remain outside it.
+
 ## Capability projection
 
 Environment list and capability responses expose `support`, `authorization`, and `readiness` as independent dimensions. Projection always evaluates support first, authorization second, and readiness third. Unsupported URL access returns `unsupported`; an authorized but unbound local, SSH, or container target returns `setup_required`; an existing binding with a stale heartbeat returns `temporarily_unavailable`. An unauthorized response does not reveal target, generation, installation, or last-seen facts.
@@ -27,7 +31,7 @@ The binding records lifecycle target/generation, supervisor identity, installati
 
 # Boundaries
 
-RCPP v2 remains the frozen access/bootstrap surface. RCPP v3 adds management endpoints without reusing the v2 protocol name. Provider cards never borrow SSH/container credentials or use a public Environment URL as a control fallback. Runtime Connect, Workspace, and open-session continue when lifecycle support is unavailable.
+RCPP v2 remains a frozen access/bootstrap protocol, but v3 has its own DTOs and never falls back to v2 bootstrap. Provider cards never borrow Gateway/SSH/container credentials or use a public Environment URL as a control fallback. Runtime Connect, Workspace, and open-session continue when lifecycle support is unavailable.
 
 # Evidence
 

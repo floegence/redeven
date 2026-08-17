@@ -51,7 +51,9 @@ nZU84/9DZdnFvvxmAjBOt6QpBlc4J/0DxvkTCqpclvziL6BCCPnjdlIB3Pu3BxsP
 mygUY7Ii2zbdCdliiow=
 -----END CERTIFICATE-----`
 
-type ArtifactVerifier struct{}
+type ArtifactVerifier struct {
+	BindingStore *BindingStore
+}
 
 type compatibilityManifest struct {
 	SchemaVersion int    `json:"schema_version"`
@@ -84,15 +86,22 @@ type customBuildAttestation struct {
 	LifecycleTargetID string `json:"lifecycle_target_id"`
 	TargetGeneration  int64  `json:"target_generation"`
 	BuildInputsDigest string `json:"build_inputs_digest"`
-	ArtifactSHA256    string `json:"artifact_sha256"`
+	ArchiveSHA256     string `json:"archive_sha256"`
+	ExecutableSHA256  string `json:"executable_sha256"`
 	Platform          string `json:"platform"`
 	Architecture      string `json:"architecture"`
 }
 
-func (ArtifactVerifier) Verify(_ context.Context, operation gatewayprotocol.RuntimeOperation, metadata gatewayprotocol.RuntimeArtifactMetadata, _ string) error {
+func (verifier ArtifactVerifier) Verify(_ context.Context, operation gatewayprotocol.RuntimeOperation, metadata gatewayprotocol.RuntimeArtifactMetadata, _ string) error {
 	switch operation.DesiredRuntime.ArtifactPolicy {
 	case gatewayprotocol.ArtifactPolicyPublishedRelease:
-		return verifyPublishedArtifact(operation, metadata)
+		currentEpoch := 0
+		if verifier.BindingStore != nil {
+			if validation := verifier.BindingStore.Binding().ValidatedRuntime; validation != nil {
+				currentEpoch = validation.CompatibilityEpoch
+			}
+		}
+		return verifyPublishedArtifact(operation, metadata, currentEpoch)
 	case gatewayprotocol.ArtifactPolicyCustomBuild:
 		return verifyCustomBuildArtifact(operation, metadata)
 	default:
@@ -100,7 +109,7 @@ func (ArtifactVerifier) Verify(_ context.Context, operation gatewayprotocol.Runt
 	}
 }
 
-func verifyPublishedArtifact(operation gatewayprotocol.RuntimeOperation, metadata gatewayprotocol.RuntimeArtifactMetadata) error {
+func verifyPublishedArtifact(operation gatewayprotocol.RuntimeOperation, metadata gatewayprotocol.RuntimeArtifactMetadata, currentEpoch int) error {
 	if len(metadata.ManifestJSON) == 0 || strings.TrimSpace(metadata.ManifestSignature) == "" || strings.TrimSpace(metadata.ManifestCertificate) == "" {
 		return errors.New("published Runtime artifact is missing its signed compatibility manifest")
 	}
@@ -110,7 +119,7 @@ func verifyPublishedArtifact(operation gatewayprotocol.RuntimeOperation, metadat
 	if err := decoder.Decode(&manifest); err != nil {
 		return fmt.Errorf("parse Runtime compatibility manifest: %w", err)
 	}
-	if err := validateCompatibilityManifest(operation, metadata, manifest); err != nil {
+	if err := validateCompatibilityManifest(operation, metadata, manifest, currentEpoch); err != nil {
 		return err
 	}
 	certificate, err := parseReleaseCertificate(metadata.ManifestCertificate)
@@ -137,12 +146,13 @@ func verifyPublishedArtifact(operation gatewayprotocol.RuntimeOperation, metadat
 	return nil
 }
 
-func validateCompatibilityManifest(operation gatewayprotocol.RuntimeOperation, metadata gatewayprotocol.RuntimeArtifactMetadata, manifest compatibilityManifest) error {
+func validateCompatibilityManifest(operation gatewayprotocol.RuntimeOperation, metadata gatewayprotocol.RuntimeArtifactMetadata, manifest compatibilityManifest, currentEpoch int) error {
 	if manifest.SchemaVersion != 1 || strings.TrimSpace(manifest.ReleaseSetID) == "" ||
-		manifest.Gateway.Protocol != gatewayprotocol.Version || !containsString(manifest.Gateway.Capabilities, "runtime_operations_v2") ||
+		normalizeSHA256(manifest.Gateway.SHA256) == "" || manifest.Gateway.Protocol != gatewayprotocol.Version || !containsString(manifest.Gateway.Capabilities, "runtime_operations_v2") ||
 		!containsString(manifest.Gateway.Capabilities, "manual_recovery_v1") ||
+		!containsString(manifest.Gateway.Capabilities, "signed_artifact_policy_v1") ||
 		normalizeVersion(manifest.Runtime.Version) != normalizeVersion(operation.DesiredRuntime.Version) ||
-		normalizeSHA256(manifest.Runtime.SHA256) != normalizeSHA256(metadata.SHA256) ||
+		normalizeSHA256(manifest.Runtime.SHA256) != normalizeSHA256(metadata.ExecutableSHA256) ||
 		manifest.Runtime.ServiceProtocol != gatewayprotocol.RuntimeServiceProtocolV2 ||
 		manifest.Runtime.CompatibilityEpoch != gatewayprotocol.RuntimeCompatibilityEpochV2 ||
 		!containsString(manifest.Runtime.Capabilities, "lifecycle_fence_v1") ||
@@ -152,6 +162,9 @@ func validateCompatibilityManifest(operation gatewayprotocol.RuntimeOperation, m
 		!containsInt(manifest.Compatibility.GatewayRuntimeEpochs, gatewayprotocol.RuntimeCompatibilityEpochV2) ||
 		len(manifest.Compatibility.RequiredUpgradeOrder) != 2 || manifest.Compatibility.RequiredUpgradeOrder[0] != "gateway" || manifest.Compatibility.RequiredUpgradeOrder[1] != "runtime" {
 		return errors.New("Runtime compatibility manifest does not authorize this protocol, epoch, capability, platform, or artifact")
+	}
+	if currentEpoch > 0 && currentEpoch != manifest.Runtime.CompatibilityEpoch && !containsInt(manifest.Compatibility.UpgradeFromRuntimeEpochs, currentEpoch) {
+		return errors.New("Runtime compatibility manifest does not authorize a managed upgrade from the current Runtime epoch")
 	}
 	return nil
 }
@@ -172,7 +185,8 @@ func verifyCustomBuildArtifact(operation gatewayprotocol.RuntimeOperation, metad
 	}
 	if attestation.OperationID != operation.OperationID || attestation.LifecycleTargetID != operation.LifecycleTargetID ||
 		attestation.TargetGeneration != operation.TargetGeneration || attestation.BuildInputsDigest != buildInputsDigest ||
-		normalizeSHA256(attestation.ArtifactSHA256) != normalizeSHA256(metadata.SHA256) ||
+		normalizeSHA256(attestation.ArchiveSHA256) != normalizeSHA256(metadata.ArchiveSHA256) ||
+		normalizeSHA256(attestation.ExecutableSHA256) != normalizeSHA256(metadata.ExecutableSHA256) ||
 		strings.ToLower(strings.TrimSpace(attestation.Platform)) != operation.DesiredRuntime.Platform ||
 		strings.ToLower(strings.TrimSpace(attestation.Architecture)) != operation.DesiredRuntime.Architecture {
 		return errors.New("custom Runtime build attestation does not match the authorized operation")

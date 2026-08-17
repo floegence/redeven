@@ -422,7 +422,7 @@ func (c *cli) runGatewayService(ctx context.Context, stateRoot string, runtimeRo
 		PairingCode:                 pairingCode,
 		ManagedBridgeToken:          managedBridgeToken,
 		LifecycleController:         lifecycleController,
-		LifecycleArtifactVerifier:   gatewaysupervisor.ArtifactVerifier{},
+		LifecycleArtifactVerifier:   gatewaysupervisor.ArtifactVerifier{BindingStore: bindingStore},
 		LifecycleAuthorizer:         lifecycleAuthorizer,
 		LifecycleCapabilityProvider: lifecycleController,
 	})
@@ -437,6 +437,7 @@ func (c *cli) runGatewayService(ctx context.Context, stateRoot string, runtimeRo
 	}
 	defer srv.Close()
 	go gatewaysupervisor.MaintainProviderHeartbeat(ctx, bindingStore, lifecycleController, Version)
+	go gatewaysupervisor.MaintainProviderRuntimeManagementTransport(ctx, nil, bindingStore, svc)
 	if len(listeners) > 0 {
 		actualListen := listeners[0].Addr().String()
 		_ = writePIDFile(stateRootValue, os.Getpid(), actualListen)

@@ -165,7 +165,7 @@ func providerLinkTestServer(t *testing.T, handler func(http.ResponseWriter, *htt
 	}))
 }
 
-type providerLinkBootstrapPoolEntry struct {
+type providerLinkRuntimeLinkPoolEntry struct {
 	ArtifactJSON      json.RawMessage `json:"artifact_json"`
 	ArtifactChannelID string          `json:"artifact_channel_id"`
 	BindingGeneration int64           `json:"binding_generation"`
@@ -173,26 +173,27 @@ type providerLinkBootstrapPoolEntry struct {
 	ExpiresAtUnixS    int64           `json:"expires_at_unix_s"`
 }
 
-type providerLinkBootstrapPool struct {
-	Version                       string                           `json:"version"`
-	LogicalProviderBindingID      string                           `json:"logical_provider_binding_id"`
-	BindingGeneration             int64                            `json:"binding_generation"`
-	TargetWaterline               int                              `json:"target_waterline"`
-	RefreshHorizonSeconds         int64                            `json:"refresh_horizon_seconds"`
-	ServerHighestArtifactSequence uint64                           `json:"server_highest_artifact_sequence"`
-	Entries                       []providerLinkBootstrapPoolEntry `json:"entries"`
-	ResponseDigestB64u            string                           `json:"response_digest_b64u"`
+type providerLinkRuntimeLinkPool struct {
+	Version                       string                             `json:"version"`
+	LogicalProviderBindingID      string                             `json:"logical_provider_binding_id"`
+	BindingGeneration             int64                              `json:"binding_generation"`
+	TargetWaterline               int                                `json:"target_waterline"`
+	RefreshHorizonSeconds         int64                              `json:"refresh_horizon_seconds"`
+	ServerHighestArtifactSequence uint64                             `json:"server_highest_artifact_sequence"`
+	Entries                       []providerLinkRuntimeLinkPoolEntry `json:"entries"`
+	ResponseDigestB64u            string                             `json:"response_digest_b64u"`
 }
 
-func writeProviderLinkBootstrapResponse(t *testing.T, w http.ResponseWriter, r *http.Request, channelPrefix string) {
+func writeProviderRuntimeLinkResponse(t *testing.T, w http.ResponseWriter, r *http.Request, channelPrefix string) {
 	t.Helper()
-	if r.Method != http.MethodPost || r.URL.Path != "/api/rcpp/v2/runtime/bootstrap/exchange" {
+	if r.Method != http.MethodPost || r.URL.Path != "/api/rcpp/v3/runtime-link/exchange" {
 		t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
 	}
 	if got := r.Header.Get("Authorization"); got != "Bearer ticket-123" {
 		t.Fatalf("Authorization = %q, want %q", got, "Bearer ticket-123")
 	}
 	var payload struct {
+		ProtocolVersion          string `json:"protocol_version"`
 		EnvPublicID              string `json:"env_public_id"`
 		ProviderOrigin           string `json:"provider_origin"`
 		LocalEnvironmentPublicID string `json:"local_environment_public_id"`
@@ -200,7 +201,7 @@ func writeProviderLinkBootstrapResponse(t *testing.T, w http.ResponseWriter, r *
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		t.Fatalf("Decode(request) error = %v", err)
 	}
-	if payload.ProviderOrigin == "" {
+	if payload.ProtocolVersion != "rcpp-v3" || payload.ProviderOrigin == "" {
 		t.Fatalf("ProviderOrigin is empty")
 	}
 	endpoints, err := flowercontrol.NewEndpointSet("wss://example.com/flowersec/v2/direct")
@@ -208,14 +209,14 @@ func writeProviderLinkBootstrapResponse(t *testing.T, w http.ResponseWriter, r *
 		t.Fatal(err)
 	}
 	expires := time.Now().Add(4 * time.Minute).Truncate(time.Second)
-	pool := providerLinkBootstrapPool{
+	pool := providerLinkRuntimeLinkPool{
 		Version:                       config.ControlArtifactPoolContractVersion,
 		LogicalProviderBindingID:      "binding-7",
 		BindingGeneration:             7,
 		TargetWaterline:               config.ControlArtifactTargetWaterline,
 		RefreshHorizonSeconds:         config.ControlArtifactRefreshHorizonS,
 		ServerHighestArtifactSequence: config.ControlArtifactTargetWaterline,
-		Entries:                       make([]providerLinkBootstrapPoolEntry, 0, config.ControlArtifactTargetWaterline),
+		Entries:                       make([]providerLinkRuntimeLinkPoolEntry, 0, config.ControlArtifactTargetWaterline),
 	}
 	for sequence := 1; sequence <= config.ControlArtifactTargetWaterline; sequence++ {
 		channelID := fmt.Sprintf("%s-%d", channelPrefix, sequence)
@@ -232,7 +233,7 @@ func writeProviderLinkBootstrapResponse(t *testing.T, w http.ResponseWriter, r *
 		if issueErr != nil {
 			t.Fatal(issueErr)
 		}
-		pool.Entries = append(pool.Entries, providerLinkBootstrapPoolEntry{
+		pool.Entries = append(pool.Entries, providerLinkRuntimeLinkPoolEntry{
 			ArtifactJSON:      issued.ArtifactJSON(),
 			ArtifactChannelID: channelID,
 			BindingGeneration: 7,
@@ -248,10 +249,12 @@ func writeProviderLinkBootstrapResponse(t *testing.T, w http.ResponseWriter, r *
 	pool.ResponseDigestB64u = base64.RawURLEncoding.EncodeToString(digest[:])
 	w.Header().Set("Content-Type", "application/json")
 	response := map[string]any{
+		"protocol_version":      "rcpp-v3",
 		"provider_id":           "example_control_plane",
 		"provider_origin":       payload.ProviderOrigin,
 		"access_point_id":       "dev",
 		"access_point_origin":   "https://" + r.Host,
+		"env_public_id":         payload.EnvPublicID,
 		"control_artifact_pool": pool,
 		"local_environment_binding": map[string]any{
 			"local_environment_public_id": payload.LocalEnvironmentPublicID,
@@ -264,7 +267,7 @@ func writeProviderLinkBootstrapResponse(t *testing.T, w http.ResponseWriter, r *
 	}
 }
 
-func TestConnectProviderPersistsConfigOnlyAfterBootstrapSucceeds(t *testing.T) {
+func TestConnectProviderPersistsConfigOnlyAfterRuntimeLinkExchangeSucceeds(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.json")
 	a := newProviderLinkTestAgent(t, cfgPath, nil)
 	server := providerLinkTestServer(t, func(w http.ResponseWriter, r *http.Request) {
@@ -273,19 +276,19 @@ func TestConnectProviderPersistsConfigOnlyAfterBootstrapSucceeds(t *testing.T) {
 	defer server.Close()
 
 	_, err := a.ConnectProvider(context.Background(), ProviderLinkRequest{
-		ProviderOrigin:      "https://redeven.test",
-		ProviderID:          "example_control_plane",
-		EnvPublicID:         "env_demo",
-		AccessPointOrigin:   server.URL,
-		BootstrapTicket:     "ticket-123",
-		bootstrapHTTPClient: server.Client(),
+		ProviderOrigin:        "https://redeven.test",
+		ProviderID:            "example_control_plane",
+		EnvPublicID:           "env_demo",
+		AccessPointOrigin:     server.URL,
+		RuntimeLinkTicket:     "ticket-123",
+		runtimeLinkHTTPClient: server.Client(),
 	})
 	if err == nil {
-		t.Fatalf("ConnectProvider() error = nil, want bootstrap failure")
+		t.Fatalf("ConnectProvider() error = nil, want Runtime link exchange failure")
 	}
 	var linkErr *ProviderLinkError
-	if !errors.As(err, &linkErr) || linkErr.Code != ProviderLinkErrorBootstrapFailed {
-		t.Fatalf("ConnectProvider() error = %v, want %s", err, ProviderLinkErrorBootstrapFailed)
+	if !errors.As(err, &linkErr) || linkErr.Code != ProviderLinkErrorExchangeFailed {
+		t.Fatalf("ConnectProvider() error = %v, want %s", err, ProviderLinkErrorExchangeFailed)
 	}
 	if binding := a.ProviderLinkBinding(); binding.State != runtimeservice.ProviderLinkStateUnbound {
 		t.Fatalf("ProviderLinkBinding() = %#v, want unbound", binding)
@@ -317,7 +320,7 @@ func TestConnectProviderRechecksActiveWorkBeforePersistingConfig(t *testing.T) {
 	server := providerLinkTestServer(t, func(w http.ResponseWriter, r *http.Request) {
 		close(exchangeStarted)
 		<-releaseExchange
-		writeProviderLinkBootstrapResponse(t, w, r, "ch_new")
+		writeProviderRuntimeLinkResponse(t, w, r, "ch_new")
 	})
 	defer server.Close()
 
@@ -328,14 +331,14 @@ func TestConnectProviderRechecksActiveWorkBeforePersistingConfig(t *testing.T) {
 			ProviderID:                "example_control_plane",
 			EnvPublicID:               "env_new",
 			AccessPointOrigin:         server.URL,
-			BootstrapTicket:           "ticket-123",
+			RuntimeLinkTicket:         "ticket-123",
 			AllowRelinkWhenIdle:       true,
 			ExpectedProviderOrigin:    initial.ProviderOrigin,
 			ExpectedProviderID:        initial.ControlplaneProviderID,
 			ExpectedEnvPublicID:       initial.EnvironmentID,
 			ExpectedAccessPointOrigin: initial.ControlplaneBaseURL,
 			ExpectedGeneration:        initial.BindingGeneration,
-			bootstrapHTTPClient:       server.Client(),
+			runtimeLinkHTTPClient:     server.Client(),
 		})
 		errCh <- err
 	}()
@@ -380,7 +383,7 @@ func TestConnectProviderRechecksActiveWorkBeforePersistingConfig(t *testing.T) {
 
 func TestConnectProviderRefreshesExistingMatchingBindingWhenExplicitlyRequested(t *testing.T) {
 	server := providerLinkTestServer(t, func(w http.ResponseWriter, r *http.Request) {
-		writeProviderLinkBootstrapResponse(t, w, r, "ch_refreshed")
+		writeProviderRuntimeLinkResponse(t, w, r, "ch_refreshed")
 	})
 	defer server.Close()
 
@@ -413,12 +416,12 @@ func TestConnectProviderRefreshesExistingMatchingBindingWhenExplicitlyRequested(
 	}
 
 	resp, err := a.ConnectProvider(context.Background(), ProviderLinkRequest{
-		ProviderOrigin:      "https://redeven.test",
-		ProviderID:          "example_control_plane",
-		EnvPublicID:         "env_demo",
-		AccessPointOrigin:   server.URL,
-		BootstrapTicket:     "ticket-123",
-		bootstrapHTTPClient: server.Client(),
+		ProviderOrigin:        "https://redeven.test",
+		ProviderID:            "example_control_plane",
+		EnvPublicID:           "env_demo",
+		AccessPointOrigin:     server.URL,
+		RuntimeLinkTicket:     "ticket-123",
+		runtimeLinkHTTPClient: server.Client(),
 	})
 	if err != nil {
 		t.Fatalf("ConnectProvider() error = %v", err)

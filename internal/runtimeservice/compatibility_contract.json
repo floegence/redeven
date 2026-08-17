@@ -26,6 +26,7 @@
   },
   "runtime_protocol_version": "redeven-runtime-v2",
   "compatibility_epoch": 9,
+  "upgrade_from_runtime_epochs": [8],
   "minimum_desktop_version": "v0.11.0",
   "minimum_runtime_version": "v0.11.0"
 }

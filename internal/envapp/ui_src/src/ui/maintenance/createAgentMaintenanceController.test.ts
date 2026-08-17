@@ -31,8 +31,7 @@ describe('createAgentMaintenanceController', () => {
     const [currentProcessStartedAtMs] = createSignal<number | null>(100);
     const [currentVersion] = createSignal('v1.0.0');
 
-    const upgrade = vi.fn(async (req?: { targetVersion?: string }) => {
-      const targetVersion = req?.targetVersion;
+    const upgrade = vi.fn(async (targetVersion: string) => {
       expect(targetVersion).toBe('v1.1.0');
       setProtocolStatus('disconnected');
       return { ok: true };
@@ -65,12 +64,8 @@ describe('createAgentMaintenanceController', () => {
         currentProcessStartedAtMs,
         currentVersion,
         notify,
-        rpc: {
-          sys: {
-            upgrade,
-            restart: vi.fn(async () => ({ ok: true })),
-          },
-        },
+        startUpgradeRequest: upgrade,
+        startRestartRequest: vi.fn(async () => ({ ok: true })),
         refetchCurrentVersion,
         refetchEnvironment,
         onMaintenanceStarted,
@@ -128,12 +123,8 @@ describe('createAgentMaintenanceController', () => {
         currentProcessStartedAtMs,
         currentVersion,
         notify,
-        rpc: {
-          sys: {
-            upgrade,
-            restart: vi.fn(async () => ({ ok: true })),
-          },
-        },
+        startUpgradeRequest: upgrade,
+        startRestartRequest: vi.fn(async () => ({ ok: true })),
         refetchCurrentVersion: async () => null,
         onMaintenanceStarted,
       });
@@ -170,12 +161,7 @@ describe('createAgentMaintenanceController', () => {
         currentProcessStartedAtMs: () => 100,
         currentVersion: () => 'v1.0.0',
         notify,
-        rpc: {
-          sys: {
-            upgrade: vi.fn(async () => ({ ok: true })),
-            restart: vi.fn(async () => ({ ok: true })),
-          },
-        },
+        startRestartRequest: vi.fn(async () => ({ ok: true })),
         startUpgradeRequest: async () => {
           setProtocolStatus('disconnected');
           throw new Error('connection closed');
@@ -257,12 +243,7 @@ describe('createAgentMaintenanceController', () => {
         currentProcessStartedAtMs,
         currentVersion,
         notify,
-        rpc: {
-          sys: {
-            upgrade: vi.fn(async () => ({ ok: true })),
-            restart: vi.fn(async () => ({ ok: true })),
-          },
-        },
+        startRestartRequest: vi.fn(async () => ({ ok: true })),
         startUpgradeRequest,
         upgradeRequiresTargetVersion,
         refetchCurrentVersion,
@@ -334,12 +315,8 @@ describe('createAgentMaintenanceController', () => {
         currentProcessStartedAtMs,
         currentVersion,
         notify,
-        rpc: {
-          sys: {
-            upgrade,
-            restart: vi.fn(async () => ({ ok: true })),
-          },
-        },
+        startUpgradeRequest: upgrade,
+        startRestartRequest: vi.fn(async () => ({ ok: true })),
         refetchCurrentVersion,
         getEnvironment: getEnvironment as any,
       });
@@ -391,12 +368,8 @@ describe('createAgentMaintenanceController', () => {
         currentProcessStartedAtMs,
         currentVersion,
         notify,
-        rpc: {
-          sys: {
-            upgrade: vi.fn(async () => ({ ok: true })),
-            restart: vi.fn(async () => ({ ok: true })),
-          },
-        },
+        startUpgradeRequest: vi.fn(async () => ({ ok: true })),
+        startRestartRequest: vi.fn(async () => ({ ok: true })),
         refetchCurrentVersion,
         getEnvironment: vi.fn().mockResolvedValue({ status: 'online' }) as any,
       });
@@ -454,12 +427,8 @@ describe('createAgentMaintenanceController', () => {
         currentProcessStartedAtMs,
         currentVersion,
         notify,
-        rpc: {
-          sys: {
-            upgrade: vi.fn(async () => ({ ok: true })),
-            restart,
-          },
-        },
+        startUpgradeRequest: vi.fn(async () => ({ ok: true })),
+        startRestartRequest: restart,
         refetchCurrentVersion,
         getEnvironment: getEnvironment as any,
       });
@@ -525,12 +494,8 @@ describe('createAgentMaintenanceController', () => {
         currentProcessStartedAtMs,
         currentVersion,
         notify,
-        rpc: {
-          sys: {
-            upgrade,
-            restart: vi.fn(async () => ({ ok: true })),
-          },
-        },
+        startUpgradeRequest: upgrade,
+        startRestartRequest: vi.fn(async () => ({ ok: true })),
         refetchCurrentVersion,
         getEnvironment: getEnvironment as any,
       });
@@ -592,12 +557,8 @@ describe('createAgentMaintenanceController', () => {
         currentProcessStartedAtMs,
         currentVersion,
         notify,
-        rpc: {
-          sys: {
-            upgrade: vi.fn(async () => ({ ok: true })),
-            restart: vi.fn(async () => ({ ok: true })),
-          },
-        },
+        startUpgradeRequest: vi.fn(async () => ({ ok: true })),
+        startRestartRequest: vi.fn(async () => ({ ok: true })),
         refetchCurrentVersion,
         getEnvironment: vi.fn().mockResolvedValue({ status: 'online' }) as any,
       });

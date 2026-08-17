@@ -69,18 +69,31 @@ type LifecycleTarget struct {
 	TargetGeneration  int64  `json:"target_generation"`
 }
 
+type RuntimeManagementCompatibility struct {
+	GatewayVersion         string   `json:"gateway_version,omitempty"`
+	GatewayProtocol        string   `json:"gateway_protocol"`
+	RuntimeBinaryVersion   string   `json:"runtime_binary_version,omitempty"`
+	RuntimePlatform        string   `json:"runtime_platform"`
+	RuntimeArchitecture    string   `json:"runtime_architecture"`
+	RuntimeServiceProtocol string   `json:"runtime_service_protocol"`
+	CompatibilityEpoch     int      `json:"compatibility_epoch"`
+	Capabilities           []string `json:"capabilities"`
+	RuntimeArtifactSHA256  string   `json:"runtime_artifact_sha256,omitempty"`
+}
+
 type RuntimeManagementCapability struct {
-	Authorization     RuntimeManagementAuthorization `json:"authorization"`
-	Support           CapabilitySupport              `json:"support"`
-	Readiness         ManagementReadiness            `json:"readiness"`
-	PresentationState ManagementPresentationState    `json:"presentation_state"`
-	Target            *LifecycleTarget               `json:"target,omitempty"`
-	Operations        []RuntimeOperationKind         `json:"operations,omitempty"`
-	ArtifactPolicies  []ArtifactPolicy               `json:"artifact_policies,omitempty"`
-	BindingActions    []string                       `json:"binding_actions,omitempty"`
-	SupervisionMode   string                         `json:"supervision_mode,omitempty"`
-	ReasonCode        string                         `json:"reason_code,omitempty"`
-	CheckedAtUnixMS   int64                          `json:"checked_at_unix_ms"`
+	Authorization     RuntimeManagementAuthorization  `json:"authorization"`
+	Support           CapabilitySupport               `json:"support"`
+	Readiness         ManagementReadiness             `json:"readiness"`
+	PresentationState ManagementPresentationState     `json:"presentation_state"`
+	Target            *LifecycleTarget                `json:"target,omitempty"`
+	Compatibility     *RuntimeManagementCompatibility `json:"compatibility,omitempty"`
+	Operations        []RuntimeOperationKind          `json:"operations,omitempty"`
+	ArtifactPolicies  []ArtifactPolicy                `json:"artifact_policies,omitempty"`
+	BindingActions    []string                        `json:"binding_actions,omitempty"`
+	SupervisionMode   string                          `json:"supervision_mode,omitempty"`
+	ReasonCode        string                          `json:"reason_code,omitempty"`
+	CheckedAtUnixMS   int64                           `json:"checked_at_unix_ms"`
 }
 
 type RuntimeManagementCapabilityRequest struct {
@@ -136,6 +149,7 @@ func NormalizeRuntimeManagementCapability(value RuntimeManagementCapability) Run
 	if value.Support != CapabilitySupportSupported || value.Authorization.State != AuthorizationAllowed {
 		value.Readiness = ManagementReadinessUnknown
 		value.Target = nil
+		value.Compatibility = nil
 		value.Operations = nil
 		value.ArtifactPolicies = nil
 		value.BindingActions = nil
@@ -309,11 +323,12 @@ type RuntimeOperationActor struct {
 }
 
 type RuntimeArtifact struct {
-	SizeBytes      int64          `json:"size_bytes"`
-	SHA256         string         `json:"sha256"`
-	ManifestSHA256 string         `json:"manifest_sha256"`
-	Policy         ArtifactPolicy `json:"policy"`
-	StagedPath     string         `json:"-"`
+	SizeBytes        int64          `json:"size_bytes"`
+	ArchiveSHA256    string         `json:"archive_sha256"`
+	ExecutableSHA256 string         `json:"executable_sha256"`
+	ManifestSHA256   string         `json:"manifest_sha256"`
+	Policy           ArtifactPolicy `json:"policy"`
+	StagedPath       string         `json:"-"`
 }
 
 type RuntimeOperationFailure struct {
@@ -354,6 +369,7 @@ type RuntimeOperation struct {
 	Failure                    *RuntimeOperationFailure      `json:"failure,omitempty"`
 	CreatedAtUnixMS            int64                         `json:"created_at_unix_ms"`
 	UpdatedAtUnixMS            int64                         `json:"updated_at_unix_ms"`
+	ObserverRedacted           bool                          `json:"observer_redacted,omitempty"`
 }
 
 type RuntimeOperationPrepareResponse struct {
@@ -361,6 +377,18 @@ type RuntimeOperationPrepareResponse struct {
 	Operation            RuntimeOperation `json:"operation"`
 	ConfirmationRequired bool             `json:"confirmation_required"`
 	ArtifactMaxBytes     int64            `json:"artifact_max_bytes"`
+}
+
+type RuntimeOperationListRequest struct {
+	ProtocolVersion   string `json:"protocol_version"`
+	GatewayEnvID      string `json:"gateway_env_id"`
+	LifecycleTargetID string `json:"lifecycle_target_id"`
+	TargetGeneration  int64  `json:"target_generation"`
+}
+
+type RuntimeOperationListResponse struct {
+	ProtocolVersion string             `json:"protocol_version"`
+	Operations      []RuntimeOperation `json:"operations"`
 }
 
 type RuntimeOperationEvent struct {
@@ -390,7 +418,8 @@ type RuntimeOperationConfirmationRequest struct {
 
 type RuntimeArtifactMetadata struct {
 	SizeBytes           int64           `json:"size_bytes"`
-	SHA256              string          `json:"sha256"`
+	ArchiveSHA256       string          `json:"archive_sha256"`
+	ExecutableSHA256    string          `json:"executable_sha256"`
 	ManifestJSON        json.RawMessage `json:"manifest"`
 	ManifestSignature   string          `json:"manifest_signature,omitempty"`
 	ManifestCertificate string          `json:"manifest_certificate,omitempty"`

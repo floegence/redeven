@@ -372,7 +372,7 @@ type runtimeControlProviderLinkRequest struct {
 	ProviderID             string `json:"provider_id"`
 	EnvPublicID            string `json:"env_public_id"`
 	AccessPointOrigin      string `json:"access_point_origin"`
-	BootstrapTicket        string `json:"bootstrap_ticket"`
+	RuntimeLinkTicket      string `json:"runtime_link_ticket"`
 	AllowRelinkWhenIdle    bool   `json:"allow_relink_when_idle"`
 	ExpectedCurrentBinding *struct {
 		ProviderOrigin    string `json:"provider_origin"`
@@ -403,7 +403,7 @@ func (s *runtimeControlServer) handleProviderLinkConnect(w http.ResponseWriter, 
 		ProviderID:          body.ProviderID,
 		EnvPublicID:         body.EnvPublicID,
 		AccessPointOrigin:   body.AccessPointOrigin,
-		BootstrapTicket:     body.BootstrapTicket,
+		RuntimeLinkTicket:   body.RuntimeLinkTicket,
 		AllowRelinkWhenIdle: body.AllowRelinkWhenIdle,
 	}
 	if body.ExpectedCurrentBinding != nil {

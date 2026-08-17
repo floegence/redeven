@@ -88,7 +88,6 @@ export type GatewayEnvProfileUpsertRequest = Readonly<{
     mode: 'keep' | 'replace' | 'clear';
     password?: string;
   }>;
-  control_owner?: 'none' | 'gateway';
 }>;
 
 export type GatewayEnvProfileUpsertResponse = Readonly<{
@@ -178,13 +177,15 @@ export type GatewayRuntimeOperation = Readonly<{
   confirmed_risk_summary_digest?: string;
   artifact?: Readonly<{
     size_bytes: number;
-    sha256: string;
+    archive_sha256: string;
+    executable_sha256: string;
     manifest_sha256: string;
     policy: GatewayRuntimeArtifactPolicy;
   }>;
   failure?: Readonly<{ code: string; message: string; retryable?: boolean }>;
   created_at_unix_ms: number;
   updated_at_unix_ms: number;
+  observer_redacted?: boolean;
 }>;
 
 export type GatewayRuntimeOperationPrepareResponse = Readonly<{
@@ -192,6 +193,17 @@ export type GatewayRuntimeOperationPrepareResponse = Readonly<{
   operation: GatewayRuntimeOperation;
   confirmation_required: boolean;
   artifact_max_bytes: number;
+}>;
+
+export type GatewayRuntimeOperationListRequest = Readonly<{
+  gateway_env_id: string;
+  lifecycle_target_id: string;
+  target_generation: number;
+}>;
+
+export type GatewayRuntimeOperationListResponse = Readonly<{
+  protocol_version: 'redeven-gateway-v2';
+  operations: readonly GatewayRuntimeOperation[];
 }>;
 
 export type GatewayRuntimeOperationConfirmationRequest = Readonly<{
@@ -207,7 +219,8 @@ export type GatewayRuntimeOperationReconcileRequest = Readonly<{
 
 export type GatewayRuntimeArtifactMetadata = Readonly<{
   size_bytes: number;
-  sha256: string;
+  archive_sha256: string;
+  executable_sha256: string;
   manifest: unknown;
   manifest_signature?: string;
   manifest_certificate?: string;
@@ -259,6 +272,7 @@ type GatewayRouteTemplate =
   | 'gateway/v2/env-profiles/delete'
   | 'gateway/v2/runtime-management/capability'
   | 'gateway/v2/runtime-operations/prepare'
+  | 'gateway/v2/runtime-operations/list'
   | 'gateway/v2/runtime-operations/{operation_id}'
   | 'gateway/v2/runtime-operations/{operation_id}/confirm'
   | 'gateway/v2/runtime-operations/{operation_id}/artifact'
@@ -832,7 +846,7 @@ function requestGatewayBridgeArtifact(
   });
 }
 
-function normalizeProtocolVersion(value: unknown): string {
+function normalizeProtocolVersion(value: unknown): typeof GATEWAY_PROTOCOL_VERSION {
   const protocolVersion = typeof value === 'string' ? value : '';
   if (protocolVersion !== GATEWAY_PROTOCOL_VERSION) {
     throw new GatewayClientError('GATEWAY_PROTOCOL_VERSION_UNSUPPORTED', 'Gateway protocol version is not supported.');
@@ -1018,6 +1032,32 @@ function normalizeGatewayRuntimeManagementCapability(value: unknown): DesktopGat
   const artifactPolicies = Array.isArray(candidate.artifact_policies)
     ? candidate.artifact_policies.map(compact).filter((policy): policy is GatewayRuntimeArtifactPolicy => policy === 'published_release' || policy === 'custom_build')
     : [];
+  const compatibilityCandidate = candidate.compatibility && typeof candidate.compatibility === 'object'
+    ? candidate.compatibility as Record<string, unknown>
+    : null;
+  const runtimePlatform = compact(compatibilityCandidate?.runtime_platform);
+  const runtimeArchitecture = compact(compatibilityCandidate?.runtime_architecture);
+  const compatibilityEpoch = Number(compatibilityCandidate?.compatibility_epoch);
+  const compatibility = authorization === 'allowed' && compatibilityCandidate
+    && (runtimePlatform === 'linux' || runtimePlatform === 'darwin')
+    && (runtimeArchitecture === 'amd64' || runtimeArchitecture === 'arm64')
+    && compact(compatibilityCandidate.gateway_protocol) !== ''
+    && compact(compatibilityCandidate.runtime_service_protocol) !== ''
+    && Number.isSafeInteger(compatibilityEpoch) && compatibilityEpoch > 0
+    ? {
+        ...(compact(compatibilityCandidate.gateway_version) ? { gateway_version: compact(compatibilityCandidate.gateway_version) } : {}),
+        gateway_protocol: compact(compatibilityCandidate.gateway_protocol),
+        ...(compact(compatibilityCandidate.runtime_binary_version) ? { runtime_binary_version: compact(compatibilityCandidate.runtime_binary_version) } : {}),
+        runtime_platform: runtimePlatform,
+        runtime_architecture: runtimeArchitecture,
+        runtime_service_protocol: compact(compatibilityCandidate.runtime_service_protocol),
+        compatibility_epoch: compatibilityEpoch,
+        capabilities: Array.isArray(compatibilityCandidate.capabilities)
+          ? [...new Set(compatibilityCandidate.capabilities.map(compact).filter(Boolean))].sort()
+          : [],
+        ...(compact(compatibilityCandidate.runtime_artifact_sha256) ? { runtime_artifact_sha256: compact(compatibilityCandidate.runtime_artifact_sha256) } : {}),
+      } as const
+    : undefined;
   return {
     support,
     authorization: {
@@ -1029,6 +1069,7 @@ function normalizeGatewayRuntimeManagementCapability(value: unknown): DesktopGat
     ...(targetID && Number.isSafeInteger(targetGeneration) && targetGeneration > 0
       ? { target: { lifecycle_target_id: targetID, target_generation: targetGeneration } }
       : {}),
+    ...(compatibility ? { compatibility } : {}),
     ...(operations.length > 0 ? { operations: [...new Set(operations)] } : {}),
     ...(artifactPolicies.length > 0 ? { artifact_policies: [...new Set(artifactPolicies)] } : {}),
     ...(Array.isArray(candidate.binding_actions)
@@ -1166,7 +1207,7 @@ function finiteInteger(value: unknown, field: string): number {
   return number;
 }
 
-function normalizeGatewayRuntimeOperation(value: unknown): GatewayRuntimeOperation {
+export function normalizeGatewayRuntimeOperation(value: unknown): GatewayRuntimeOperation {
   if (!value || typeof value !== 'object') {
     throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway Runtime operation response is invalid.');
   }
@@ -1175,6 +1216,7 @@ function normalizeGatewayRuntimeOperation(value: unknown): GatewayRuntimeOperati
   const gatewayEnvID = compact(candidate.gateway_env_id);
   const lifecycleTargetID = compact(candidate.lifecycle_target_id);
   const authorizedClientKeyID = compact(candidate.authorized_client_key_id);
+  const observerRedacted = candidate.observer_redacted === true;
   const desired = candidate.desired_runtime && typeof candidate.desired_runtime === 'object'
     ? candidate.desired_runtime as Record<string, unknown>
     : {};
@@ -1184,7 +1226,7 @@ function normalizeGatewayRuntimeOperation(value: unknown): GatewayRuntimeOperati
   const workload = snapshot.workload && typeof snapshot.workload === 'object'
     ? snapshot.workload as Record<string, unknown>
     : {};
-  if (!operationID || !gatewayEnvID || !lifecycleTargetID || !authorizedClientKeyID) {
+  if (!operationID || !gatewayEnvID || !lifecycleTargetID || (!observerRedacted && !authorizedClientKeyID)) {
     throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway Runtime operation identity is incomplete.');
   }
   const artifactPolicy = compact(desired.artifact_policy);
@@ -1243,7 +1285,8 @@ function normalizeGatewayRuntimeOperation(value: unknown): GatewayRuntimeOperati
     ...(artifact ? {
       artifact: {
         size_bytes: finiteInteger(artifact.size_bytes, 'artifact.size_bytes'),
-        sha256: compact(artifact.sha256),
+        archive_sha256: compact(artifact.archive_sha256),
+        executable_sha256: compact(artifact.executable_sha256),
         manifest_sha256: compact(artifact.manifest_sha256),
         policy: compact(artifact.policy) as GatewayRuntimeArtifactPolicy,
       },
@@ -1257,10 +1300,25 @@ function normalizeGatewayRuntimeOperation(value: unknown): GatewayRuntimeOperati
     } : {}),
     created_at_unix_ms: finiteInteger(candidate.created_at_unix_ms, 'created_at_unix_ms'),
     updated_at_unix_ms: finiteInteger(candidate.updated_at_unix_ms, 'updated_at_unix_ms'),
+    ...(observerRedacted ? { observer_redacted: true } : {}),
   };
 }
 
-function normalizeGatewayRuntimeOperationPrepareResponse(value: unknown): GatewayRuntimeOperationPrepareResponse {
+export function normalizeGatewayRuntimeOperationListResponse(value: unknown): GatewayRuntimeOperationListResponse {
+  if (!value || typeof value !== 'object') {
+    throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway Runtime operation list response is invalid.');
+  }
+  const candidate = value as Record<string, unknown>;
+  if (!Array.isArray(candidate.operations)) {
+    throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway Runtime operation list is invalid.');
+  }
+  return {
+    protocol_version: normalizeProtocolVersion(candidate.protocol_version),
+    operations: candidate.operations.map(normalizeGatewayRuntimeOperation),
+  };
+}
+
+export function normalizeGatewayRuntimeOperationPrepareResponse(value: unknown): GatewayRuntimeOperationPrepareResponse {
   if (!value || typeof value !== 'object') {
     throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway Runtime prepare response is invalid.');
   }
@@ -1273,7 +1331,7 @@ function normalizeGatewayRuntimeOperationPrepareResponse(value: unknown): Gatewa
   };
 }
 
-function normalizeGatewayRuntimeOperationEventsResponse(value: unknown): GatewayRuntimeOperationEventsResponse {
+export function normalizeGatewayRuntimeOperationEventsResponse(value: unknown): GatewayRuntimeOperationEventsResponse {
   if (!value || typeof value !== 'object') {
     throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway Runtime events response is invalid.');
   }
@@ -1350,7 +1408,6 @@ function gatewayEnvProfilePayload(request: GatewayEnvProfileUpsertRequest): unkn
         ...(compact(request.access_route.container_id) ? { container_id: compact(request.access_route.container_id) } : {}),
         ...(compact(request.access_route.container_runtime_root) ? { container_runtime_root: compact(request.access_route.container_runtime_root) } : {}),
       },
-      control_owner: request.control_owner === 'gateway' ? 'gateway' : 'none',
     },
   };
 }
@@ -1642,6 +1699,14 @@ export class GatewayURLClient {
     return normalizeGatewayRuntimeOperationPrepareResponse(data.data);
   }
 
+  async listRuntimeOperations(record: GatewayRecord, request: GatewayRuntimeOperationListRequest, options: GatewayRequestOptions = {}): Promise<GatewayRuntimeOperationListResponse> {
+    const data = await requestGatewayJSON(record, 'gateway/v2/runtime-operations/list', {
+      protocol_version: GATEWAY_PROTOCOL_VERSION,
+      ...request,
+    }, { secretStore: this.secretStore, ...options });
+    return normalizeGatewayRuntimeOperationListResponse(data.data);
+  }
+
   async runtimeManagementCapability(
     record: GatewayRecord,
     request: GatewayRuntimeManagementCapabilityRequest,
@@ -1856,6 +1921,14 @@ export class GatewayBridgeClient {
       signal: options.signal,
     });
     return normalizeGatewayRuntimeOperationPrepareResponse(data.data);
+  }
+
+  async listRuntimeOperations(record: GatewayRecord, request: GatewayRuntimeOperationListRequest, options: GatewayRequestOptions = {}): Promise<GatewayRuntimeOperationListResponse> {
+    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v2/runtime-operations/list', {
+      protocol_version: GATEWAY_PROTOCOL_VERSION,
+      ...request,
+    }, { secretStore: this.secretStore, ...options });
+    return normalizeGatewayRuntimeOperationListResponse(data.data);
   }
 
   async runtimeManagementCapability(

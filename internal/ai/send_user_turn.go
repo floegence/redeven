@@ -96,7 +96,18 @@ func (s *Service) SendUserTurn(ctx context.Context, meta *session.Meta, req Send
 		if threadID != "" {
 			return SendUserTurnResponse{}, errors.New("thread_id must be omitted for thread creation")
 		}
-		return s.sendInitialUserTurn(ctx, meta, req)
+		requestID := strings.TrimSpace(req.Create.ClientRequestID)
+		leaseKey, newlyAdmitted, err := s.admitAIUserTurn(endpointID, "", requestID)
+		if err != nil {
+			return SendUserTurnResponse{}, err
+		}
+		response, err := s.sendInitialUserTurn(ctx, meta, req)
+		if err != nil {
+			s.rejectAIUserTurnLease(leaseKey, newlyAdmitted)
+			return SendUserTurnResponse{}, err
+		}
+		s.acceptAIUserTurnLease(leaseKey, response.ThreadID, response.Current)
+		return response, nil
 	}
 	if threadID == "" {
 		return SendUserTurnResponse{}, errors.New("invalid request")
@@ -108,9 +119,19 @@ func (s *Service) SendUserTurn(ctx context.Context, meta *session.Meta, req Send
 		}
 		req.ClientRequestID = requestID
 	}
+	leaseKey, newlyAdmitted, err := s.admitAIUserTurn(endpointID, threadID, req.ClientRequestID)
+	if err != nil {
+		return SendUserTurnResponse{}, err
+	}
 	if response, handled, err := s.sendTypedExistingThread(ctx, meta, req); handled {
+		if err != nil {
+			s.rejectAIUserTurnLease(leaseKey, newlyAdmitted)
+			return response, err
+		}
+		s.acceptAIUserTurnLease(leaseKey, response.ThreadID, response.Current)
 		return response, err
 	}
+	s.rejectAIUserTurnLease(leaseKey, newlyAdmitted)
 	return SendUserTurnResponse{}, errors.New("floret thread runtime not ready")
 }
 

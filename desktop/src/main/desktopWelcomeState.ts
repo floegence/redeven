@@ -1277,10 +1277,15 @@ function buildLocalEnvironmentEntry(
     localRuntimeFallbackHealth,
   );
   const runtimeMaintenance = runtimeMaintenanceFromHealth(runtimeHealth);
+  const effectiveHostAccess = presence?.host_access ?? { kind: 'local_host' as const };
+  const effectivePlacement = presence?.placement ?? {
+    kind: 'host_process' as const,
+    runtime_root: environment.local_hosting.state_dir,
+  };
   const runtimeOperations = managedRuntimeOperations({
     presence,
-    hostAccess: { kind: 'local_host' },
-    placement: { kind: 'host_process', runtime_root: environment.local_hosting.state_dir },
+    hostAccess: effectiveHostAccess,
+    placement: effectivePlacement,
     running: runtimeHealth.status === 'online',
     openable: runtimeServiceIsOpenable(runtimeService),
     openConnectionRequired: presence?.open_connection_required === true,
@@ -1334,6 +1339,12 @@ function buildLocalEnvironmentEntry(
     provider_runtime_link_target: providerRuntimeLinkTarget,
     provider_environment_candidates: providerEnvironmentCandidates,
     ...managedRuntimeEntryFields(presence),
+    managed_runtime_target_id: presence?.target_id
+      ?? desktopRuntimeTargetID(effectiveHostAccess, effectivePlacement),
+    managed_runtime_placement_target_id: presence?.placement_target_id
+      ?? desktopRuntimeTargetID(effectiveHostAccess, effectivePlacement, environment.id),
+    managed_runtime_host_access: effectiveHostAccess,
+    managed_runtime_placement: effectivePlacement,
     local_environment_has_local_hosting: true,
     local_environment_has_remote_desktop: false,
     local_environment_preferred_open_route: 'local_host',
@@ -1773,6 +1784,18 @@ function buildSavedEnvironmentEntry(
     runtime_service: preferredRuntimeService(openSession?.startup?.runtime_service, savedRuntimeHealth),
     runtime_started_at_unix_ms: startedAtUnixMS,
     runtime_maintenance: runtimeMaintenanceFromHealth(runtimeHealth),
+    runtime_management: {
+      support: 'unsupported',
+      authorization: { state: 'unknown', grants: [] },
+      readiness: 'unknown',
+      presentation_state: 'unsupported',
+      operations: [],
+      artifact_policies: [],
+      binding_actions: [],
+      supervision_mode: '',
+      reason_code: 'url_runtime_management_unsupported',
+      checked_at_unix_ms: runtimeHealth.checked_at_unix_ms,
+    },
     runtime_operations: externalLocalUIRuntimeOperations(externalOpenable),
     auto_runtime_probe_enabled: environment.auto_runtime_probe_enabled,
     open_session_key: openSession?.session_key ?? '',
@@ -1869,6 +1892,14 @@ function buildSavedSSHEnvironmentEntry(
     provider_runtime_link_target: providerRuntimeLinkTarget,
     provider_environment_candidates: providerEnvironmentCandidates,
     ...managedRuntimeEntryFields(presence),
+    managed_runtime_target_id: presence?.target_id ?? desktopRuntimeTargetID(
+      presence?.host_access ?? hostAccess,
+      presence?.placement ?? placement,
+    ),
+    managed_runtime_placement_target_id: presence?.placement_target_id
+      ?? desktopRuntimeTargetID(presence?.host_access ?? hostAccess, presence?.placement ?? placement, environment.id),
+    managed_runtime_host_access: presence?.host_access ?? hostAccess,
+    managed_runtime_placement: presence?.placement ?? placement,
     runtime_operations: runtimeOperations,
     auto_runtime_probe_enabled: environment.auto_runtime_probe_enabled,
     open_session_key: openSession?.session_key ?? '',

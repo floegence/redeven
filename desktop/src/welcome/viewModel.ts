@@ -188,6 +188,7 @@ export type EnvironmentActionIntent =
   | 'stop_runtime'
   | 'restart_runtime'
   | 'update_runtime'
+  | 'setup_runtime_management'
   | 'refresh_runtime'
   | 'review_network_exposure'
   | 'unavailable';
@@ -249,12 +250,8 @@ export type ProviderBackedEnvironmentActionModel = Readonly<{
 }>;
 
 type RuntimeUpdatePresentation = Readonly<{
-  uses_desktop_update_handoff: boolean;
   status_label: string;
   required_title: string;
-  continue_title: string;
-  blocked_detail: string;
-  recovery_detail: string;
 }>;
 
 export type ControlPlaneStatusModel = Readonly<{
@@ -885,28 +882,10 @@ export function splitPinnedEnvironmentEntries(
   };
 }
 
-function environmentUsesDesktopUpdateHandoff(environment: DesktopEnvironmentEntry): boolean {
-  return environment.runtime_operations.update.method === 'desktop_local_update_handoff';
-}
-
-function runtimeUpdatePresentation(environment: DesktopEnvironmentEntry): RuntimeUpdatePresentation {
-  if (environmentUsesDesktopUpdateHandoff(environment)) {
-    return {
-      uses_desktop_update_handoff: true,
-      status_label: 'DESKTOP UPDATE REQUIRED',
-      required_title: 'Redeven Desktop update required',
-      continue_title: 'Update Redeven Desktop to continue',
-      blocked_detail: 'This Local Environment uses the runtime bundled with Redeven Desktop. Open becomes available after the Desktop update handoff refreshes the app and bundled local runtime.',
-      recovery_detail: 'Open becomes available after the Desktop update handoff refreshes the app and bundled local runtime.',
-    };
-  }
+function runtimeUpdatePresentation(): RuntimeUpdatePresentation {
   return {
-    uses_desktop_update_handoff: false,
     status_label: 'RUNTIME NEEDS UPDATE',
     required_title: 'Runtime update required',
-    continue_title: 'Update the runtime to continue',
-    blocked_detail: '',
-    recovery_detail: '',
   };
 }
 
@@ -1088,11 +1067,11 @@ function environmentDisplayStatusLabel(
       if (maintenance) {
         return desktopRuntimeMaintenanceRequiresRestart(maintenance)
           ? 'RESTART REQUIRED'
-          : runtimeUpdatePresentation(environment).status_label;
+          : runtimeUpdatePresentation().status_label;
       }
       const snapshot = environmentRuntimeService(environment);
       return snapshot?.open_readiness?.state === 'blocked' && runtimeServiceNeedsRuntimeUpdate(snapshot)
-        ? runtimeUpdatePresentation(environment).status_label
+        ? runtimeUpdatePresentation().status_label
         : 'RUNTIME BLOCKED';
     }
   }
@@ -1264,8 +1243,8 @@ function providerPrimaryRoute(environment: DesktopEnvironmentEntry): DesktopLoca
   if (environment.kind !== 'provider_environment') {
     return '';
   }
-  // IMPORTANT: Provider Open always uses the provider tunnel. Runtime management
-  // is a separate action that requires an explicitly selected matching Gateway.
+  // IMPORTANT: Provider Open and Runtime management use separate Provider
+  // routes; neither may borrow credentials or transport from another card.
   return desktopProviderEnvironmentOpenRoute();
 }
 
@@ -1459,6 +1438,9 @@ function runtimeOperationMenuItem(plan: DesktopRuntimeOperationPlan | undefined)
   if (!plan || !desktopRuntimeOperationIsVisible(plan) || plan.menu_visibility === 'hidden') {
     return null;
   }
+  if (plan.reason_code === 'runtime_gateway_setup_required') {
+    return null;
+  }
   if (plan.menu_visibility === 'contextual' && plan.availability === 'unavailable') {
     return null;
   }
@@ -1478,6 +1460,36 @@ function runtimeOperationMenuItem(plan: DesktopRuntimeOperationPlan | undefined)
         runtime_operation_method: plan.method,
         ...(plan.message ? { disabled_reason: plan.message } : {}),
       },
+  };
+}
+
+function runtimeManagementSetupRequired(environment: DesktopEnvironmentEntry): boolean {
+  const directSetupRequired = environment.kind !== 'provider_environment'
+    && environment.kind !== 'gateway_environment'
+    && environment.kind !== 'external_local_ui'
+    && environment.runtime_operations.start.reason_code === 'runtime_gateway_setup_required';
+  const providerSetupRequired = environment.kind === 'provider_environment'
+    && environment.runtime_management?.support === 'supported'
+    && environment.runtime_management.authorization.state === 'allowed'
+    && environment.runtime_management.readiness === 'setup_required';
+  return directSetupRequired || providerSetupRequired;
+}
+
+function runtimeManagementSetupMenuItem(
+  environment: DesktopEnvironmentEntry,
+): EnvironmentActionMenuItemModel | null {
+  if (!runtimeManagementSetupRequired(environment)) {
+    return null;
+  }
+  return {
+    id: 'setup_runtime_management',
+    label: 'Set up Runtime management',
+    action: {
+      intent: 'setup_runtime_management',
+      label: 'Set up Runtime management',
+      enabled: true,
+      variant: 'outline',
+    },
   };
 }
 
@@ -1511,6 +1523,10 @@ function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly Envi
   if (runtimeProviderLinkAction) {
     items.push(runtimeProviderLinkAction);
   }
+  const runtimeManagementSetup = runtimeManagementSetupMenuItem(environment);
+  if (runtimeManagementSetup) {
+    items.push(runtimeManagementSetup);
+  }
   if (desktopEntryKindCanInitiateRuntimeManagement(environment.kind)) {
     for (const operation of runtimeOperationMenuOrder) {
       const item = runtimeOperationMenuItem(environment.runtime_operations[operation]);
@@ -1539,6 +1555,7 @@ function blockedPrimaryActionGuidanceAction(
   menuActions: readonly EnvironmentActionMenuItemModel[],
 ): EnvironmentGuidanceActionModel | null {
   const recoveryIntents: readonly EnvironmentActionIntent[] = [
+    'setup_runtime_management',
     'start_runtime',
     'update_runtime',
     'restart_runtime',
@@ -1567,6 +1584,8 @@ function primaryGuidanceActionLabel(action: EnvironmentActionModel): string {
       return 'Restart runtime';
     case 'connect_provider_runtime':
       return 'Connect to provider';
+    case 'setup_runtime_management':
+      return 'Set up Runtime management';
     default:
       return 'Continue';
   }
@@ -1594,23 +1613,22 @@ function blockedRuntimePrimaryActionGuidanceActions(
   const restartSource = menuActions.find((item) => item.action.enabled && item.action.intent === 'restart_runtime');
   const startSource = menuActions.find((item) => item.action.enabled && item.action.intent === 'start_runtime');
   const stopSource = menuActions.find((item) => item.action.enabled && item.action.intent === 'stop_runtime');
+  const setupSource = menuActions.find((item) => item.action.enabled && item.action.intent === 'setup_runtime_management');
   const refreshSource = menuActions.find((item) => item.action.intent === 'refresh_runtime');
   const maintenance = environmentRuntimeMaintenance(environment);
-  const primarySource = maintenance?.recovery_action === 'start_runtime'
+  const requestedSource = maintenance?.recovery_action === 'start_runtime'
     ? startSource
     : maintenance?.recovery_action === 'restart_runtime'
       ? restartSource
       : maintenance?.recovery_action === 'update_runtime'
         ? updateSource
         : updateSource ?? restartSource ?? startSource ?? stopSource;
+  const primarySource = requestedSource ?? setupSource;
   const primaryLabel = (() => {
     if (!primarySource) {
       return '';
     }
     if (primarySource.action.intent === 'update_runtime') {
-      if (primarySource.action.runtime_operation_method === 'desktop_local_update_handoff') {
-        return primarySource.action.label;
-      }
       return environment.runtime_health.status === 'online' || maintenance?.has_active_work === true
         ? 'Update and restart…'
         : primarySource.action.label;
@@ -1620,6 +1638,9 @@ function blockedRuntimePrimaryActionGuidanceActions(
     }
     if (primarySource.action.intent === 'start_runtime') {
       return 'Start runtime';
+    }
+    if (primarySource.action.intent === 'setup_runtime_management') {
+      return 'Set up Runtime management';
     }
     return primarySource.action.label;
   })();
@@ -1662,6 +1683,9 @@ function blockedRuntimePrimaryActionTitle(
   _snapshot: RuntimeServiceSnapshot | undefined,
 ): string {
   const maintenance = environmentRuntimeMaintenance(environment);
+  if (runtimeManagementSetupRequired(environment)) {
+    return 'Set up Runtime management to continue';
+  }
   if (maintenance?.kind === 'desktop_model_source_requires_runtime_update') {
     return 'Desktop model source needs update';
   }
@@ -1672,7 +1696,7 @@ function blockedRuntimePrimaryActionTitle(
     return 'Runtime restart required';
   }
   if (desktopRuntimeMaintenanceRequiresUpdate(maintenance)) {
-    return runtimeUpdatePresentation(environment).required_title;
+    return runtimeUpdatePresentation().required_title;
   }
   return 'Runtime cannot open yet';
 }
@@ -1682,6 +1706,9 @@ function blockedRuntimePrimaryActionDetail(
   snapshot: RuntimeServiceSnapshot | undefined,
 ): string {
   const maintenance = environmentRuntimeMaintenance(environment);
+  if (runtimeManagementSetupRequired(environment)) {
+    return 'Set up the Gateway supervisor for this target first. Runtime access remains independent; after setup, use the card to start or repair Runtime and then open it when ready.';
+  }
   if (maintenance) {
     if (maintenance.kind === 'desktop_model_source_requires_runtime_update') {
       return `This ${runtimeMaintenanceSubject(environment)} needs an update before Desktop can make your local model settings available here. Update and restart the runtime first; Open stays separate and becomes available after the runtime is ready.`;
@@ -1691,10 +1718,6 @@ function blockedRuntimePrimaryActionDetail(
     }
     if (desktopRuntimeMaintenanceRequiresRestart(maintenance)) {
       return `This ${runtimeMaintenanceSubject(environment)} needs a successful restart before it can open this environment. Restart the runtime, then open it again after it reports ready.`;
-    }
-    const presentation = runtimeUpdatePresentation(environment);
-    if (presentation.uses_desktop_update_handoff) {
-      return presentation.blocked_detail;
     }
     const updateAction = environment.runtime_health.status === 'online' || maintenance.has_active_work
       ? 'Update and restart the runtime first'
@@ -1711,10 +1734,10 @@ function blockedPrimaryActionTitle(
   if (action.intent === 'connect_provider_runtime') {
     return 'Connect to provider to continue';
   }
+  if (action.intent === 'setup_runtime_management') {
+    return 'Set up Runtime management to continue';
+  }
   if (action.intent === 'update_runtime') {
-    if (action.runtime_operation_method === 'desktop_local_update_handoff') {
-      return runtimeUpdatePresentation(environment).continue_title;
-    }
     return 'Update the runtime to continue';
   }
   if (action.intent === 'restart_runtime') {
@@ -1732,10 +1755,10 @@ function blockedPrimaryActionDetail(
   if (action.intent === 'connect_provider_runtime') {
     return 'Connect this runtime to a provider Environment first. Open stays separate and becomes available after the link is ready.';
   }
+  if (action.intent === 'setup_runtime_management') {
+    return 'Set up the Gateway supervisor for this target first. Runtime access remains independent; after setup, use the card to start or repair Runtime and then open it when ready.';
+  }
   if (action.intent === 'update_runtime') {
-    if (action.runtime_operation_method === 'desktop_local_update_handoff') {
-      return runtimeUpdatePresentation(environment).recovery_detail;
-    }
     if (environment.managed_runtime_placement?.kind === 'container_process') {
       return 'Open becomes available after Desktop updates the runtime package in this running container and the runtime reports ready.';
     }

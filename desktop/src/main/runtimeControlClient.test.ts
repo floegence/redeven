@@ -117,7 +117,7 @@ describe('runtimeControlClient', () => {
       provider_id: 'provider-1',
       env_public_id: 'env-1',
       access_point_origin: 'https://dev.provider.example.invalid',
-      bootstrap_ticket: 'ticket-1',
+      runtime_link_ticket: 'ticket-1',
     });
 
     expect(result.binding.state).toBe('linked');

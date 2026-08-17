@@ -47,9 +47,6 @@ function compact(value: unknown): string {
 export function environmentActionStartsLifecycleDisclosure(
   action: EnvironmentActionModel,
 ): action is EnvironmentActionModel & Readonly<{ intent: EnvironmentLifecycleDisclosureIntent }> {
-  if (action.intent === 'update_runtime' && action.runtime_operation_method === 'desktop_local_update_handoff') {
-    return false;
-  }
   return action.intent === 'start_runtime'
     || action.intent === 'stop_runtime'
     || action.intent === 'restart_runtime'

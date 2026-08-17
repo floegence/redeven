@@ -1590,7 +1590,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("kind: 'dismiss_launcher_operation'");
     expect(appSrc).toContain('IMPORTANT: Provider-link confirmation is intentionally reachable only from');
     expect(appSrc).toContain('desktopEntryKindSupportsRuntimeManagement(environment.kind)');
-    expect(appSrc).toContain("action?.runtime_operation_method === 'desktop_local_update_handoff'");
+    expect(appSrc).not.toContain('desktop_local_update_handoff');
     expect(appSrc).toContain("kind: 'manage_desktop_update'");
     expect(appSrc).toContain("result?.outcome === 'opened_desktop_update_handoff'");
     expect(appSrc).toContain("i18n().t('environmentCenter.desktopUpdateOpenedToast'");
@@ -1745,7 +1745,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('props.progress.error_message');
     expect(appSrc).toContain('const panelProgress = createMemo(() => selectEnvironmentPanelProgress(primaryProgress(), runtimeMenuProgress()));');
     expect(appSrc).toContain('runtimeLifecycleProgress={runtimeMenuProgress()}');
-    expect(appSrc).toContain('busyStateBlocksEnvironmentAction(busyState, environmentID, [\'stop_environment_runtime\', \'run_gateway_environment_lifecycle\'], runtimeLifecycleProgress)');
+    expect(appSrc).toContain('busyStateBlocksEnvironmentAction(busyState, environmentID, [\'stop_environment_runtime\', \'run_gateway_environment_lifecycle\', \'run_provider_environment_lifecycle\'], runtimeLifecycleProgress)');
     expect(appSrc).toContain('const progressPanelVisible = createMemo(() => props.progressOpen && hasPanelProgress());');
     expect(appSrc).toContain('const primaryProgressPresentation = createMemo(() => localizedPrimaryProgressPresentation(');
     expect(appSrc).toContain('primaryProgressPresentation() || progressPanelVisible()');
@@ -2152,7 +2152,7 @@ describe('DesktopWelcomeShell', () => {
 
     expect(appSrc).toContain('type ConnectionDialogState = ExternalURLConnectionDialogState | SSHConnectionDialogState | RuntimeContainerConnectionDialogState | GatewayURLProfileConnectionDialogState | null;');
     expect(appSrc).toContain('props.switchKind(value as ConnectionDialogKind)');
-    expect(appSrc).toContain("profile_route_kind: DesktopGatewayConnectionKind;");
+    expect(appSrc).toContain("profile_route_kind: DesktopGatewayEnvironmentProfileAccessRoute['kind'];");
     expect(appSrc).toContain("props.updateField('profile_route_kind', value);");
     expect(appSrc).toContain("props.i18n.t('connectionDialog.gatewayEnvironmentRouteType')");
     expect(appSrc).toContain("props.i18n.t('connectionDialog.gatewayEnvironmentManagedNotice')");
@@ -2422,6 +2422,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toMatch(/<Dialog\b[^>]*open=\{props\.state\s*!==\s*null\}/);
     expect(appSrc).toMatch(/const isOpen = createMemo\(\(\) => props\.state !== null\)/);
     expect(appSrc).toMatch(/const isOpen = createMemo\(\(\) => props\.open\)/);
+    expect(appSrc).toContain('function RuntimeEnrollmentDialog');
 
     // Provider runtime link dialog: selecting a provider environment is an
     // in-dialog choice, not an open/close transition. Keep it out of the

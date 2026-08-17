@@ -102,9 +102,6 @@ export function bootstrapDesktopShellBridge(): void {
         await ipcRenderer.invoke(DESKTOP_SHELL_RUNTIME_ACTION_CHANNEL, normalized),
       );
     },
-    restartManagedRuntime: async () => normalizeDesktopShellRuntimeActionResponse(
-      await ipcRenderer.invoke(DESKTOP_SHELL_RUNTIME_ACTION_CHANNEL, { action: 'restart_managed_runtime' }),
-    ),
     manageDesktopUpdate: async () => normalizeDesktopShellRuntimeActionResponse(
       await ipcRenderer.invoke(DESKTOP_SHELL_RUNTIME_ACTION_CHANNEL, { action: 'manage_desktop_update' }),
     ),

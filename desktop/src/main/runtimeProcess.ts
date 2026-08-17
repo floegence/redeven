@@ -14,7 +14,6 @@ import { parseLaunchReport, type LaunchBlockedReport, type LaunchReport } from '
 import { type StartupReport } from './startup';
 import {
   runtimeServiceAllowsOpenAttempt,
-  runtimeServiceHasActiveWork,
   runtimeServiceOpenReadinessLabel,
   runtimeServiceIsOpenable,
 } from '../shared/runtimeService';
@@ -594,11 +593,6 @@ function runtimeExitedReadinessFailure(
 function runtimePIDExited(startup: StartupReport): boolean {
   const pid = Number(startup.pid ?? Number.NaN);
   return Number.isInteger(pid) && pid > 0 && !processExists(pid);
-}
-
-function runtimeReportsStoppablePID(startup: StartupReport): boolean {
-  const pid = Number(startup.pid ?? Number.NaN);
-  return Number.isInteger(pid) && pid > 0;
 }
 
 function assertRuntimePIDAlive(startup: StartupReport, logs: RecentLogs): void {

@@ -17,6 +17,13 @@ x-redeven-signature-payload:
     - binding_audience
     - nonce
     - timestamp_unix_ms
+x-redeven-provider-management-transport:
+  protocol: rcpp-v3
+  owner: redeven-gateway supervisor
+  delivery: signed poll/respond reverse transport to the bound Provider access point
+  runtime_process_dependency: false
+  portal_operation_state: forbidden
+  runtime_agent_rpc_fallback: forbidden
 info:
   title: Redeven Gateway Protocol
   version: redeven-gateway-v2
@@ -255,6 +262,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RuntimeOperationPrepareEnvelope'
+        default:
+          $ref: '#/components/responses/GatewayError'
+  /gateway/v2/runtime-operations/list:
+    post:
+      tags: [Lifecycle]
+      operationId: listActiveRuntimeOperations
+      summary: List non-terminal Runtime operations for one exact authorized lifecycle target.
+      security:
+        - GatewayID: []
+          GatewayBindingAudience: []
+          GatewayClientKeyID: []
+          GatewayClientNonce: []
+          GatewayRequestTimestamp: []
+          GatewayRequestSignature: []
+      parameters:
+        - $ref: '#/components/parameters/GatewayTransportHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimeOperationListRequest'
+      responses:
+        '200':
+          description: Active operations, redacted when observed by a different authorized management client.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeOperationListEnvelope'
         default:
           $ref: '#/components/responses/GatewayError'
   /gateway/v2/runtime-operations/{operation_id}:
@@ -1000,13 +1036,6 @@ components:
           type: string
         access_route:
           $ref: '#/components/schemas/EnvProfileAccessRoute'
-        control_owner:
-          $ref: '#/components/schemas/EnvProfileControlOwner'
-    EnvProfileControlOwner:
-      type: string
-      enum:
-        - none
-        - gateway
     EnvProfileAccessRoute:
       oneOf:
         - $ref: '#/components/schemas/EnvProfileURLAccessRoute'
@@ -1047,7 +1076,7 @@ components:
           maximum: 65535
         auth_mode:
           type: string
-          description: key_agent is the only supported SSH auth mode in Gateway v1.
+          description: SSH authentication mode used by this Gateway connection.
           enum:
             - key_agent
         ssh_password_configured:
@@ -1074,7 +1103,7 @@ components:
           maximum: 65535
         auth_mode:
           type: string
-          description: key_agent is the only supported SSH auth mode in Gateway v1.
+          description: SSH authentication mode used by this Gateway connection.
           enum:
             - key_agent
         ssh_password_configured:
@@ -1226,6 +1255,21 @@ components:
           type: string
         risk_summary_digest:
           type: string
+    RuntimeOperationListRequest:
+      type: object
+      required: [protocol_version, gateway_env_id, lifecycle_target_id, target_generation]
+      additionalProperties: false
+      properties:
+        protocol_version:
+          $ref: '#/components/schemas/ProtocolVersion'
+        gateway_env_id:
+          type: string
+        lifecycle_target_id:
+          type: string
+        target_generation:
+          type: integer
+          format: int64
+          minimum: 1
     RuntimeOperationRenewRequest:
       type: object
       required: [protocol_version, expires_at_unix_ms]
@@ -1249,14 +1293,18 @@ components:
           writeOnly: true
     RuntimeArtifactMetadata:
       type: object
-      required: [size_bytes, sha256, manifest]
+      required: [size_bytes, archive_sha256, executable_sha256, manifest]
       additionalProperties: false
       properties:
         size_bytes:
           type: integer
           format: int64
           minimum: 1
-        sha256:
+        archive_sha256:
+          description: SHA-256 of the uploaded archive bytes.
+          type: string
+        executable_sha256:
+          description: SHA-256 of the final redeven executable bytes after extraction.
           type: string
         manifest:
           description: Signed compatibility and capability manifest JSON.
@@ -1286,6 +1334,16 @@ components:
           const: true
         data:
           $ref: '#/components/schemas/RuntimeOperation'
+    RuntimeOperationListEnvelope:
+      type: object
+      required: [ok, data]
+      additionalProperties: false
+      properties:
+        ok:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/RuntimeOperationListResponse'
     RuntimeOperationEventsEnvelope:
       type: object
       required: [ok, data]
@@ -1311,6 +1369,17 @@ components:
           type: integer
           format: int64
           minimum: 0
+    RuntimeOperationListResponse:
+      type: object
+      required: [protocol_version, operations]
+      additionalProperties: false
+      properties:
+        protocol_version:
+          $ref: '#/components/schemas/ProtocolVersion'
+        operations:
+          type: array
+          items:
+            $ref: '#/components/schemas/RuntimeOperation'
     RuntimeOperation:
       type: object
       required:
@@ -1385,6 +1454,8 @@ components:
         updated_at_unix_ms:
           type: integer
           format: int64
+        observer_redacted:
+          type: boolean
     RuntimeOperationKind:
       type: string
       enum: [start, stop, restart, update_runtime, reconcile]
@@ -1573,13 +1644,15 @@ components:
           type: boolean
     RuntimeArtifact:
       type: object
-      required: [size_bytes, sha256, manifest_sha256, policy]
+      required: [size_bytes, archive_sha256, executable_sha256, manifest_sha256, policy]
       additionalProperties: false
       properties:
         size_bytes:
           type: integer
           format: int64
-        sha256:
+        archive_sha256:
+          type: string
+        executable_sha256:
           type: string
         manifest_sha256:
           type: string

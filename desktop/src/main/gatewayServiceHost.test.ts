@@ -7,6 +7,7 @@ import {
   gatewayReleasePackageName,
   gatewayReleasePackageURL,
   gatewayServiceBinaryPath,
+  gatewaySupervisorEnrollmentInvocation,
 } from './gatewayServiceHost';
 import { DEFAULT_DESKTOP_SSH_RUNTIME_ROOT } from '../shared/desktopSSH';
 import type { DesktopRuntimePlacement } from '../shared/desktopRuntimePlacement';
@@ -63,5 +64,24 @@ describe('gatewayServiceHost', () => {
     expect(source).not.toContain('gatewayLegacyCleanupScript');
     expect(source).not.toContain('desktop-runtime-stop');
     expect(source).not.toContain('legacy_runtime_pids');
+  });
+
+  it('passes the one-time enrollment code only through stdin', () => {
+    const invocation = gatewaySupervisorEnrollmentInvocation({
+      kind: 'host_process',
+      runtime_root: '/opt/redeven',
+    }, {
+      state_root: '/opt/redeven/gateways/gw_target/state',
+      release_tag: 'v1.2.3',
+      provider_origin: 'https://provider.example',
+      environment_id: 'env_demo',
+      enrollment_code: 'enrollment-secret',
+    });
+
+    expect(invocation.stdin_data.toString('utf8')).toBe('enrollment-secret\n');
+    expect(invocation.argv.join(' ')).toContain('supervisor enroll');
+    expect(invocation.argv).toContain('https://provider.example');
+    expect(invocation.argv).toContain('env_demo');
+    expect(invocation.argv.join(' ')).not.toContain('enrollment-secret');
   });
 });

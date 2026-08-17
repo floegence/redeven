@@ -30,6 +30,7 @@ type VerifiedRequest struct {
 	TimestampUnixMS int64
 	ProfileWrite    bool
 	RuntimeGrants   []protocol.RuntimeGrant
+	ProviderTunnel  bool
 }
 
 func NewVerifier(store *trust.Store) *Verifier {
