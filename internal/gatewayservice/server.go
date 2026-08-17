@@ -54,6 +54,7 @@ type LifecycleAuthorizer interface {
 	AuthorizePrepare(context.Context, *http.Request, gatewayauth.VerifiedRequest, gatewayprotocol.RuntimeOperationPrepareRequest) (gatewaylifecycle.Authorization, error)
 	AuthorizeAccess(context.Context, *http.Request, gatewayauth.VerifiedRequest) (gatewaylifecycle.Access, error)
 	AuthorizeReconcile(context.Context, *http.Request, gatewayauth.VerifiedRequest, gatewayprotocol.RuntimeOperation, string) (gatewaylifecycle.Access, error)
+	AuthorizeProviderTunnel(context.Context, gatewayauth.VerifiedRequest, gatewayprotocol.LifecycleTarget, string) error
 }
 
 type LifecycleCapabilityProvider interface {
@@ -78,6 +79,9 @@ type Server struct {
 	profileSessionsMu sync.Mutex
 	profileSessions   map[string]*profileSession
 	proxyTransport    http.RoundTripper
+	providerTunnelMu  sync.Mutex
+	providerNonces    map[string]int64
+	providerUploads   map[string]providerArtifactUpload
 }
 
 type profileSession struct {
@@ -136,6 +140,8 @@ func New(options Options) (*Server, error) {
 		lifecycleCapabilityProvider: options.LifecycleCapabilityProvider,
 		lifecycleAvailable:          options.LifecycleController != nil && options.LifecycleArtifactVerifier != nil && options.LifecycleAuthorizer != nil,
 		profileSessions:             make(map[string]*profileSession),
+		providerNonces:              make(map[string]int64),
+		providerUploads:             make(map[string]providerArtifactUpload),
 		proxyTransport: gatewayProfileProxyTransport(gatewayenvprofiles.URLTargetPolicy{
 			AllowPrivateNetworkTargets: options.AllowPrivateProfileTargets,
 		}),
@@ -166,6 +172,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /gateway/v2/env-profiles/upsert", s.handleEnvProfileUpsert)
 	mux.HandleFunc("POST /gateway/v2/env-profiles/delete", s.handleEnvProfileDelete)
 	mux.HandleFunc("POST /gateway/v2/runtime-operations/prepare", s.handleRuntimeOperationPrepare)
+	mux.HandleFunc("POST /gateway/v2/runtime-operations/list", s.handleRuntimeOperationList)
 	mux.HandleFunc("GET /gateway/v2/runtime-operations/{operation_id}", s.handleRuntimeOperationGet)
 	mux.HandleFunc("POST /gateway/v2/runtime-operations/{operation_id}/confirm", s.handleRuntimeOperationConfirm)
 	mux.HandleFunc("PUT /gateway/v2/runtime-operations/{operation_id}/artifact", s.handleRuntimeOperationArtifact)
@@ -175,6 +182,23 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /gateway/v2/runtime-operations/{operation_id}/reconcile", s.handleRuntimeOperationReconcile)
 	mux.HandleFunc("GET /gateway/v2/runtime-operations/{operation_id}/events", s.handleRuntimeOperationEvents)
 	return mux
+}
+
+func (s *Server) handleRuntimeOperationList(w http.ResponseWriter, r *http.Request) {
+	body, verified, ok := s.readAuthenticatedBody(w, r)
+	if !ok {
+		return
+	}
+	var request gatewayprotocol.RuntimeOperationListRequest
+	if !decodeJSONBytes(w, body, &request) {
+		return
+	}
+	response, err := s.lifecycle.List(r.Context(), request, s.lifecycleAccess(r, verified))
+	if err != nil {
+		writeLifecycleError(w, err)
+		return
+	}
+	writeGatewayData(w, http.StatusOK, response)
 }
 
 func (s *Server) handleRuntimeManagementCapability(w http.ResponseWriter, r *http.Request) {
@@ -229,6 +253,7 @@ func (s *Server) Start(ctx context.Context, listen string) (*http.Server, []net.
 		Handler:           s.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
+	listeners := []net.Listener{ln}
 	go func() {
 		<-ctx.Done()
 		s.closeAllProfileSessions()
@@ -239,7 +264,7 @@ func (s *Server) Start(ctx context.Context, listen string) (*http.Server, []net.
 		s.closeAllProfileSessions()
 	}()
 	go s.sweepLoop(ctx)
-	return srv, []net.Listener{ln}, nil
+	return srv, listeners, nil
 }
 
 func (s *Server) trustStore() *gatewaytrust.Store {

@@ -18,7 +18,7 @@ import (
 
 const (
 	ProviderLinkErrorActiveWork         = "PROVIDER_LINK_ACTIVE_WORK"
-	ProviderLinkErrorBootstrapFailed    = "PROVIDER_LINK_BOOTSTRAP_FAILED"
+	ProviderLinkErrorExchangeFailed     = "PROVIDER_LINK_EXCHANGE_FAILED"
 	ProviderLinkErrorAlreadyLinked      = "PROVIDER_LINK_ALREADY_CONNECTED"
 	ProviderLinkErrorDisconnectFailed   = "PROVIDER_LINK_DISCONNECT_FAILED"
 	ProviderLinkErrorDisconnectRejected = "PROVIDER_LINK_DISCONNECT_REJECTED"
@@ -103,14 +103,14 @@ type ProviderLinkRequest struct {
 	ProviderID                string
 	EnvPublicID               string
 	AccessPointOrigin         string
-	BootstrapTicket           string
+	RuntimeLinkTicket         string
 	ExpectedProviderOrigin    string
 	ExpectedProviderID        string
 	ExpectedEnvPublicID       string
 	ExpectedAccessPointOrigin string
 	ExpectedGeneration        int64
 	AllowRelinkWhenIdle       bool
-	bootstrapHTTPClient       *http.Client
+	runtimeLinkHTTPClient     *http.Client
 }
 
 type ProviderLinkResponse struct {
@@ -271,11 +271,11 @@ func (a *Agent) ConnectProvider(ctx context.Context, req ProviderLinkRequest) (*
 	providerOrigin := strings.TrimSpace(req.ProviderOrigin)
 	accessPointOrigin := strings.TrimSpace(req.AccessPointOrigin)
 	envPublicID := strings.TrimSpace(req.EnvPublicID)
-	bootstrapTicket := strings.TrimSpace(req.BootstrapTicket)
-	if providerOrigin == "" || accessPointOrigin == "" || envPublicID == "" || bootstrapTicket == "" {
+	runtimeLinkTicket := strings.TrimSpace(req.RuntimeLinkTicket)
+	if providerOrigin == "" || accessPointOrigin == "" || envPublicID == "" || runtimeLinkTicket == "" {
 		return nil, &ProviderLinkError{
 			Code:    "PROVIDER_LINK_INVALID_REQUEST",
-			Message: "Provider origin, access point origin, environment id, and bootstrap ticket are required.",
+			Message: "Provider origin, access point origin, environment id, and Runtime link ticket are required.",
 		}
 	}
 	normalizedProviderOrigin, err := normalizeProviderOrigin(providerOrigin)
@@ -322,24 +322,24 @@ func (a *Agent) ConnectProvider(ctx context.Context, req ProviderLinkRequest) (*
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	cfg, err := config.ResolveProviderLinkConfig(ctx, config.ProviderLinkBootstrapArgs{
+	cfg, err := config.ResolveProviderRuntimeLinkConfig(ctx, config.ProviderRuntimeLinkArgs{
 		ConfigPath:               a.configPath,
 		ProviderOrigin:           providerOrigin,
 		ControlplaneBaseURL:      accessPointOrigin,
 		ControlplaneProviderID:   strings.TrimSpace(req.ProviderID),
 		EnvironmentID:            envPublicID,
-		BootstrapTicket:          bootstrapTicket,
+		RuntimeLinkTicket:        runtimeLinkTicket,
 		RuntimeVersion:           strings.TrimSpace(a.version),
 		RuntimeGOOS:              runtime.GOOS,
 		RuntimeGOARCH:            runtime.GOARCH,
 		RuntimeHostname:          hostnameBestEffort(),
 		PreservePermissionPolicy: true,
-		HTTPClient:               req.bootstrapHTTPClient,
+		HTTPClient:               req.runtimeLinkHTTPClient,
 	})
 	if err != nil {
 		return nil, &ProviderLinkError{
-			Code:    ProviderLinkErrorBootstrapFailed,
-			Message: fmt.Sprintf("Provider link bootstrap failed: %v", err),
+			Code:    ProviderLinkErrorExchangeFailed,
+			Message: fmt.Sprintf("Provider link exchange failed: %v", err),
 			Err:     err,
 		}
 	}
@@ -352,7 +352,7 @@ func (a *Agent) ConnectProvider(ctx context.Context, req ProviderLinkRequest) (*
 	if err := config.SaveProviderLinkConfig(a.configPath, cfg); err != nil {
 		a.mu.Unlock()
 		return nil, &ProviderLinkError{
-			Code:    ProviderLinkErrorBootstrapFailed,
+			Code:    ProviderLinkErrorExchangeFailed,
 			Message: fmt.Sprintf("Persist provider link config failed: %v", err),
 			Err:     err,
 		}

@@ -73,6 +73,9 @@ func (a *Authorizer) AuthorizePrepare(_ context.Context, _ *http.Request, verifi
 	}
 	binding := a.bindings.Binding()
 	if strings.TrimSpace(request.AuthorizationPermit) == "" {
+		if verified.ProviderTunnel {
+			return gatewaylifecycle.Authorization{}, &gatewaylifecycle.Error{Code: gatewaylifecycle.ErrorUnauthorized, Message: "Provider Runtime operations require a one-time authorization permit."}
+		}
 		grants := normalizePermitGrants(verified.RuntimeGrants)
 		if !hasPermitGrant(grants, gatewayprotocol.RuntimeGrantManage) {
 			return gatewaylifecycle.Authorization{}, &gatewaylifecycle.Error{Code: gatewaylifecycle.ErrorUnauthorized, Message: "Runtime management permission is required."}
@@ -95,6 +98,18 @@ func (a *Authorizer) AuthorizePrepare(_ context.Context, _ *http.Request, verifi
 	}, nil
 }
 
+func (a *Authorizer) AuthorizeProviderTunnel(_ context.Context, verified gatewayauth.VerifiedRequest, target gatewayprotocol.LifecycleTarget, envPublicID string) error {
+	if a == nil || a.bindings == nil || !verified.ProviderTunnel || strings.TrimSpace(verified.ClientKeyID) == "" {
+		return &gatewaylifecycle.Error{Code: gatewaylifecycle.ErrorUnauthorized, Message: "Provider Runtime management tunnel is unauthorized."}
+	}
+	binding := a.bindings.Binding()
+	if strings.TrimSpace(binding.EnvironmentPublicID) == "" || strings.TrimSpace(binding.EnvironmentPublicID) != strings.TrimSpace(envPublicID) ||
+		binding.LifecycleTargetID != strings.TrimSpace(target.LifecycleTargetID) || binding.TargetGeneration != target.TargetGeneration {
+		return &gatewaylifecycle.Error{Code: gatewaylifecycle.ErrorTargetChanged, Message: "Provider Runtime lifecycle target changed before routing."}
+	}
+	return nil
+}
+
 func (a *Authorizer) AuthorizeAccess(_ context.Context, _ *http.Request, verified gatewayauth.VerifiedRequest) (gatewaylifecycle.Access, error) {
 	access := gatewaylifecycle.Access{ClientKeyID: strings.TrimSpace(verified.ClientKeyID), Grants: normalizePermitGrants(verified.RuntimeGrants)}
 	if access.ClientKeyID == "" {
@@ -105,23 +120,19 @@ func (a *Authorizer) AuthorizeAccess(_ context.Context, _ *http.Request, verifie
 
 func (a *Authorizer) AuthorizeReconcile(_ context.Context, _ *http.Request, verified gatewayauth.VerifiedRequest, operation gatewayprotocol.RuntimeOperation, permit string) (gatewaylifecycle.Access, error) {
 	access := gatewaylifecycle.Access{ClientKeyID: strings.TrimSpace(verified.ClientKeyID)}
-	if a == nil || a.bindings == nil || access.ClientKeyID == "" || access.ClientKeyID != strings.TrimSpace(operation.AuthorizedClientKeyID) {
+	if a == nil || a.bindings == nil || access.ClientKeyID == "" {
 		return access, &gatewaylifecycle.Error{Code: gatewaylifecycle.ErrorUnauthorized, Message: "Runtime reconcile authorization is invalid."}
 	}
 	if err := a.bindings.Validate(operation.GatewayEnvID, gatewayprotocol.LifecycleTarget{LifecycleTargetID: operation.LifecycleTargetID, TargetGeneration: operation.TargetGeneration}); err != nil {
 		return access, &gatewaylifecycle.Error{Code: gatewaylifecycle.ErrorTargetChanged, Message: "Runtime lifecycle target changed before reconcile authorization."}
 	}
 	if strings.TrimSpace(permit) == "" {
-		access.Grants = normalizePermitGrants(verified.RuntimeGrants)
-		if !hasPermitGrant(access.Grants, gatewayprotocol.RuntimeGrantManageBinding) {
-			return gatewaylifecycle.Access{}, &gatewaylifecycle.Error{Code: gatewaylifecycle.ErrorUnauthorized, Message: "Runtime binding management permission is required."}
-		}
-		return access, nil
+		return gatewaylifecycle.Access{}, &gatewaylifecycle.Error{Code: gatewaylifecycle.ErrorUnauthorized, Message: "An exact Runtime recovery authorization permit is required."}
 	}
 	claims, err := parseRuntimeOperationPermit(permit, a.bindings.Binding(), a.currentTime())
 	if err != nil || claims.Action != "reconcile" || claims.Operation != gatewayprotocol.RuntimeOperationReconcile ||
 		claims.LifecycleTargetID != operation.LifecycleTargetID || claims.TargetGeneration != operation.TargetGeneration ||
-		claims.OperationID != operation.OperationID || claims.AuthorizedClientKeyID != operation.AuthorizedClientKeyID ||
+		claims.OperationID != operation.OperationID || claims.AuthorizedClientKeyID != access.ClientKeyID ||
 		claims.Audience != operation.RouteBindingID || claims.DesiredRuntimeVersion != "" || claims.ArtifactPolicy != "" || claims.BuildInputsDigest != "" ||
 		!hasPermitGrant(claims.Grants, gatewayprotocol.RuntimeGrantManageBinding) {
 		return access, &gatewaylifecycle.Error{Code: gatewaylifecycle.ErrorUnauthorized, Message: "Runtime reconcile authorization permit is invalid or does not match this operation."}

@@ -3,6 +3,9 @@ package supervisor
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,7 +24,10 @@ import (
 const (
 	providerEnrollmentExchangePath = "/api/rcpp/v3/runtime-management/enrollment/exchange"
 	providerHeartbeatPathPrefix    = "/api/rcpp/v3/runtime-management/bindings/"
+	providerTransportPathPrefix    = "/api/rcpp/v3/runtime-management/bindings/"
 	providerHeartbeatInterval      = 30 * time.Second
+	providerTransportPollTimeout   = 35 * time.Second
+	providerTransportRetryDelay    = time.Second
 )
 
 type EnrollmentCodeScope struct {
@@ -65,6 +71,8 @@ type providerEnrollmentExchangeRequest struct {
 	GatewayVersion           string   `json:"gateway_version"`
 	GatewayProtocol          string   `json:"gateway_protocol"`
 	RuntimeBinaryVersion     string   `json:"runtime_binary_version"`
+	RuntimePlatform          string   `json:"runtime_platform"`
+	RuntimeArchitecture      string   `json:"runtime_architecture"`
 	RuntimeServiceProtocol   string   `json:"runtime_service_protocol"`
 	CompatibilityEpoch       int      `json:"compatibility_epoch"`
 	Capabilities             []string `json:"capabilities"`
@@ -84,6 +92,8 @@ type providerEnrollmentBinding struct {
 	GatewayVersion         string                `json:"gateway_version"`
 	GatewayProtocol        string                `json:"gateway_protocol"`
 	RuntimeBinaryVersion   string                `json:"runtime_binary_version"`
+	RuntimePlatform        string                `json:"runtime_platform"`
+	RuntimeArchitecture    string                `json:"runtime_architecture"`
 	RuntimeServiceProtocol string                `json:"runtime_service_protocol"`
 	CompatibilityEpoch     int                   `json:"compatibility_epoch"`
 	Capabilities           []string              `json:"capabilities"`
@@ -107,6 +117,8 @@ type providerHeartbeatRequest struct {
 	GatewayVersion         string   `json:"gateway_version"`
 	GatewayProtocol        string   `json:"gateway_protocol"`
 	RuntimeBinaryVersion   string   `json:"runtime_binary_version"`
+	RuntimePlatform        string   `json:"runtime_platform"`
+	RuntimeArchitecture    string   `json:"runtime_architecture"`
 	RuntimeServiceProtocol string   `json:"runtime_service_protocol"`
 	CompatibilityEpoch     int      `json:"compatibility_epoch"`
 	Capabilities           []string `json:"capabilities"`
@@ -119,6 +131,10 @@ type providerHeartbeatRequest struct {
 type providerHeartbeatResponse struct {
 	ProtocolVersion  string `json:"protocol_version"`
 	AcceptedAtUnixMS int64  `json:"accepted_at_unix_ms"`
+}
+
+type ProviderRuntimeManagementExecutor interface {
+	ExecuteProviderRuntimeManagement(context.Context, gatewayprotocol.ProviderRuntimeManagementTunnelForwardRequest) gatewayprotocol.ProviderRuntimeManagementTunnelResponse
 }
 
 type providerErrorEnvelope struct {
@@ -207,7 +223,8 @@ func EnrollProvider(ctx context.Context, options ProviderEnrollmentOptions) (Tar
 		SupervisorInstanceID: binding.SupervisorInstanceID, SupervisorPublicKey: binding.SupervisorPublicKey,
 		InstallationRootDigest: binding.InstallationRootDigest, SupervisorProofSignature: localProof.Signature,
 		GatewayVersion: gatewayVersion, GatewayProtocol: gatewayprotocol.Version,
-		RuntimeBinaryVersion: validation.RuntimeBinaryVersion, RuntimeServiceProtocol: validation.ServiceProtocol,
+		RuntimeBinaryVersion: validation.RuntimeBinaryVersion, RuntimePlatform: validation.Platform,
+		RuntimeArchitecture: validation.Architecture, RuntimeServiceProtocol: validation.ServiceProtocol,
 		CompatibilityEpoch: validation.CompatibilityEpoch, Capabilities: providerSupervisorCapabilities(),
 		RuntimeArtifactSHA256: validation.ArtifactSHA256,
 	}
@@ -226,7 +243,8 @@ func EnrollProvider(ctx context.Context, options ProviderEnrollmentOptions) (Tar
 		result.LifecycleTargetID != binding.LifecycleTargetID || result.TargetGeneration != targetGeneration ||
 		result.SupervisorInstanceID != binding.SupervisorInstanceID || result.InstallationRootDigest != binding.InstallationRootDigest ||
 		result.GatewayVersion != gatewayVersion || result.GatewayProtocol != gatewayprotocol.Version ||
-		result.RuntimeBinaryVersion != validation.RuntimeBinaryVersion || result.RuntimeServiceProtocol != validation.ServiceProtocol ||
+		result.RuntimeBinaryVersion != validation.RuntimeBinaryVersion || result.RuntimePlatform != validation.Platform ||
+		result.RuntimeArchitecture != validation.Architecture || result.RuntimeServiceProtocol != validation.ServiceProtocol ||
 		result.CompatibilityEpoch != validation.CompatibilityEpoch || result.RuntimeArtifactSHA256 != validation.ArtifactSHA256 ||
 		result.PermitVerificationKey.KeyID == "" || result.PermitVerificationKey.Algorithm != "EdDSA" || result.PermitVerificationKey.PublicKey == "" {
 		return TargetBinding{}, errors.New("Provider Runtime enrollment response is invalid")
@@ -236,6 +254,9 @@ func EnrollProvider(ctx context.Context, options ProviderEnrollmentOptions) (Tar
 		result.EnvPublicID, result.PermitVerificationKey, targetGeneration,
 	); err != nil {
 		return TargetBinding{}, fmt.Errorf("persist Provider Runtime binding: %w", err)
+	}
+	if err := options.BindingStore.RecordRuntimeValidation(validation); err != nil {
+		return TargetBinding{}, fmt.Errorf("persist Provider Runtime validation: %w", err)
 	}
 	if err := SendProviderHeartbeat(ctx, options.HTTPClient, options.BindingStore, gatewayVersion, validation); err != nil {
 		return TargetBinding{}, fmt.Errorf("confirm Provider Runtime binding readiness: %w", err)
@@ -281,6 +302,116 @@ func MaintainProviderHeartbeat(ctx context.Context, store *BindingStore, control
 	}
 }
 
+func MaintainProviderRuntimeManagementTransport(ctx context.Context, client *http.Client, store *BindingStore, executor ProviderRuntimeManagementExecutor) {
+	if store == nil || executor == nil {
+		return
+	}
+	for ctx.Err() == nil {
+		_ = store.Reload()
+		binding := store.Binding()
+		if binding.AccessPointOrigin == "" || binding.EnvironmentPublicID == "" {
+			if !waitProviderTransportRetry(ctx) {
+				return
+			}
+			continue
+		}
+		if err := runProviderRuntimeManagementTransportOnce(ctx, client, store, executor, binding); err != nil {
+			if !waitProviderTransportRetry(ctx) {
+				return
+			}
+		}
+	}
+}
+
+func runProviderRuntimeManagementTransportOnce(ctx context.Context, client *http.Client, store *BindingStore, executor ProviderRuntimeManagementExecutor, binding TargetBinding) error {
+	poll := gatewayprotocol.ProviderRuntimeManagementTransportPollRequest{
+		ProtocolVersion: gatewayprotocol.ProviderRuntimeManagementProtocolVersion,
+		EnvPublicID:     binding.EnvironmentPublicID, BindingID: binding.BindingID,
+		LifecycleTargetID: binding.LifecycleTargetID, TargetGeneration: binding.TargetGeneration,
+		SupervisorInstanceID: binding.SupervisorInstanceID, TimestampUnixMS: time.Now().UnixMilli(),
+	}
+	var err error
+	poll.Nonce, err = randomID("rtp_")
+	if err != nil {
+		return err
+	}
+	payload, err := gatewayprotocol.CanonicalProviderRuntimeManagementTransportPollPayload(poll)
+	if err != nil {
+		return err
+	}
+	poll.Signature, err = security.SignPayload(binding.SupervisorPrivateKey, string(payload))
+	if err != nil {
+		return err
+	}
+	pollContext, cancel := context.WithTimeout(ctx, providerTransportPollTimeout)
+	defer cancel()
+	path := providerTransportPathPrefix + url.PathEscape(binding.BindingID) + "/transport/poll"
+	var dispatch gatewayprotocol.ProviderRuntimeManagementTransportPollResponse
+	status, err := providerPostJSONWithStatus(pollContext, client, binding.AccessPointOrigin, path, poll, &dispatch)
+	if err != nil || status == http.StatusNoContent {
+		return err
+	}
+	if status != http.StatusOK || dispatch.ProtocolVersion != gatewayprotocol.ProviderRuntimeManagementProtocolVersion || strings.TrimSpace(dispatch.RequestID) == "" {
+		return errors.New("Provider Runtime management transport poll response is invalid")
+	}
+	if err := store.Reload(); err != nil {
+		return err
+	}
+	current := store.Binding()
+	if current.BindingID != binding.BindingID || current.EnvironmentPublicID != binding.EnvironmentPublicID ||
+		current.LifecycleTargetID != binding.LifecycleTargetID || current.TargetGeneration != binding.TargetGeneration ||
+		current.SupervisorInstanceID != binding.SupervisorInstanceID {
+		return errors.New("Provider Runtime management binding changed")
+	}
+
+	result := executor.ExecuteProviderRuntimeManagement(ctx, dispatch.Request)
+	responseBytes, err := json.Marshal(result)
+	if err != nil {
+		return err
+	}
+	digest := sha256.Sum256(responseBytes)
+	responseRequest := gatewayprotocol.ProviderRuntimeManagementTransportResponseRequest{
+		ProtocolVersion: gatewayprotocol.ProviderRuntimeManagementProtocolVersion,
+		EnvPublicID:     binding.EnvironmentPublicID, BindingID: binding.BindingID,
+		LifecycleTargetID: binding.LifecycleTargetID, TargetGeneration: binding.TargetGeneration,
+		SupervisorInstanceID: binding.SupervisorInstanceID, RequestID: dispatch.RequestID,
+		ResponseSHA256: hex.EncodeToString(digest[:]), ResponseB64u: base64.RawURLEncoding.EncodeToString(responseBytes),
+		TimestampUnixMS: time.Now().UnixMilli(),
+	}
+	responseRequest.Nonce, err = randomID("rtr_")
+	if err != nil {
+		return err
+	}
+	payload, err = gatewayprotocol.CanonicalProviderRuntimeManagementTransportResponsePayload(responseRequest)
+	if err != nil {
+		return err
+	}
+	responseRequest.Signature, err = security.SignPayload(binding.SupervisorPrivateKey, string(payload))
+	if err != nil {
+		return err
+	}
+	var accepted gatewayprotocol.ProviderRuntimeManagementTransportResponse
+	path = providerTransportPathPrefix + url.PathEscape(binding.BindingID) + "/transport/respond"
+	if err := providerPostJSON(ctx, client, binding.AccessPointOrigin, path, responseRequest, &accepted); err != nil {
+		return err
+	}
+	if accepted.ProtocolVersion != gatewayprotocol.ProviderRuntimeManagementProtocolVersion || accepted.AcceptedAtUnixMS <= 0 {
+		return errors.New("Provider Runtime management transport response acknowledgement is invalid")
+	}
+	return nil
+}
+
+func waitProviderTransportRetry(ctx context.Context) bool {
+	timer := time.NewTimer(providerTransportRetryDelay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
+}
+
 func SendProviderHeartbeat(ctx context.Context, client *http.Client, store *BindingStore, gatewayVersion string, validation RuntimeValidation) error {
 	if store == nil {
 		return errors.New("Runtime target binding is unavailable")
@@ -299,6 +430,7 @@ func SendProviderHeartbeat(ctx context.Context, client *http.Client, store *Bind
 		LifecycleTargetID: binding.LifecycleTargetID, TargetGeneration: binding.TargetGeneration,
 		SupervisorInstanceID: binding.SupervisorInstanceID, GatewayVersion: strings.TrimSpace(gatewayVersion),
 		GatewayProtocol: gatewayprotocol.Version, RuntimeBinaryVersion: validation.RuntimeBinaryVersion,
+		RuntimePlatform: validation.Platform, RuntimeArchitecture: validation.Architecture,
 		RuntimeServiceProtocol: validation.ServiceProtocol, CompatibilityEpoch: validation.CompatibilityEpoch,
 		Capabilities: providerSupervisorCapabilities(), RuntimeArtifactSHA256: validation.ArtifactSHA256,
 		Nonce: nonce, TimestampUnixMS: time.Now().UnixMilli(),
@@ -329,7 +461,8 @@ func canonicalProviderHeartbeatPayload(request providerHeartbeatRequest) (string
 		"gateway_protocol": request.GatewayProtocol, "gateway_version": request.GatewayVersion,
 		"lifecycle_target_id": request.LifecycleTargetID, "nonce": request.Nonce,
 		"protocol_version": request.ProtocolVersion, "runtime_artifact_sha256": request.RuntimeArtifactSHA256,
-		"runtime_binary_version": request.RuntimeBinaryVersion, "runtime_service_protocol": request.RuntimeServiceProtocol,
+		"runtime_architecture": request.RuntimeArchitecture, "runtime_binary_version": request.RuntimeBinaryVersion,
+		"runtime_platform": request.RuntimePlatform, "runtime_service_protocol": request.RuntimeServiceProtocol,
 		"supervisor_instance_id": request.SupervisorInstanceID, "target_generation": request.TargetGeneration,
 		"timestamp_unix_ms": request.TimestampUnixMS,
 	})
@@ -355,49 +488,63 @@ func normalizeProviderAccessPointOrigin(value string) (string, error) {
 }
 
 func providerPostJSON(ctx context.Context, client *http.Client, origin string, path string, input any, output any) error {
-	origin, err := normalizeProviderAccessPointOrigin(origin)
+	status, err := providerPostJSONWithStatus(ctx, client, origin, path, input, output)
 	if err != nil {
 		return err
+	}
+	if status == http.StatusNoContent {
+		return errors.New("Provider Runtime response body is missing")
+	}
+	return nil
+}
+
+func providerPostJSONWithStatus(ctx context.Context, client *http.Client, origin string, path string, input any, output any) (int, error) {
+	origin, err := normalizeProviderAccessPointOrigin(origin)
+	if err != nil {
+		return 0, err
 	}
 	body, err := json.Marshal(input)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, origin+path, bytes.NewReader(body))
 	if err != nil {
-		return err
+		return 0, err
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Cache-Control", "no-store")
 	if client == nil {
-		client = &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error {
+		client = &http.Client{Timeout: 40 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error {
 			return errors.New("Provider Runtime request redirect is not allowed")
 		}}
 	}
 	response, err := client.Do(request)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer response.Body.Close()
 	raw, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
 	if err != nil {
-		return err
+		return response.StatusCode, err
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		var envelope providerErrorEnvelope
 		_ = json.Unmarshal(raw, &envelope)
 		if envelope.Error != nil && strings.TrimSpace(envelope.Error.Code) != "" {
-			return fmt.Errorf("Provider Runtime request rejected (%s): %s", strings.TrimSpace(envelope.Error.Code), strings.TrimSpace(envelope.Error.Message))
+			return response.StatusCode, fmt.Errorf("Provider Runtime request rejected (%s): %s", strings.TrimSpace(envelope.Error.Code), strings.TrimSpace(envelope.Error.Message))
 		}
-		return fmt.Errorf("Provider Runtime request returned HTTP %d", response.StatusCode)
+		return response.StatusCode, fmt.Errorf("Provider Runtime request returned HTTP %d", response.StatusCode)
+	}
+	if response.StatusCode == http.StatusNoContent || output == nil {
+		return response.StatusCode, nil
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(output); err != nil {
-		return fmt.Errorf("decode Provider Runtime response: %w", err)
+		return response.StatusCode, fmt.Errorf("decode Provider Runtime response: %w", err)
 	}
 	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		return errors.New("Provider Runtime response contains trailing data")
+		return response.StatusCode, errors.New("Provider Runtime response contains trailing data")
 	}
-	return nil
+	return response.StatusCode, nil
 }

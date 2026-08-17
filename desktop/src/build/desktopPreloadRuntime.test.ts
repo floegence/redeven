@@ -429,8 +429,7 @@ function snapshotBridgeState() {
       && typeof window.redevenDesktopShell?.minimizeWindow === 'function'
       && typeof window.redevenDesktopShell?.toggleFullScreenWindow === 'function'
       && typeof window.redevenDesktopShell?.getRuntimeMaintenanceContext === 'function'
-      && typeof window.redevenDesktopShell?.performRuntimeMaintenanceAction === 'function'
-      && typeof window.redevenDesktopShell?.restartManagedRuntime === 'function',
+      && typeof window.redevenDesktopShell?.performRuntimeMaintenanceAction === 'function',
     hasDesktopDownloadsBridge: typeof window.redevenDesktopDownloads === 'object'
       && typeof window.redevenDesktopDownloads?.prepare === 'function'
       && typeof window.redevenDesktopDownloads?.write === 'function'

@@ -57,6 +57,33 @@ describe('LauncherOperationRegistry', () => {
     })).not.toThrow();
   });
 
+  it('preserves a confirmation summary when attaching an existing Runtime operation', () => {
+    const registry = new LauncherOperationRegistry();
+    const confirmation = {
+      operation: 'restart' as const,
+      snapshot_revision: 4,
+      workload_knowledge: 'known' as const,
+      affected_process_count: 2,
+      active_session_count: 1,
+      protected_workload_present: true,
+    };
+
+    const operation = registry.create({
+      operation_key: 'runtime-attached-confirmation',
+      action: 'run_gateway_environment_lifecycle',
+      subject_kind: 'gateway',
+      subject_id: 'gateway-a',
+      status: 'needs_confirmation',
+      phase: 'runtime_operation_confirmation_required',
+      title: 'Review Runtime impact',
+      detail: 'Review the verified Runtime workload.',
+      runtime_confirmation: confirmation,
+    });
+
+    expect(operation.runtime_confirmation).toEqual(confirmation);
+    expect(registry.progressItems()[0]?.runtime_confirmation).toEqual(confirmation);
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
   });

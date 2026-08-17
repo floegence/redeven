@@ -12,6 +12,7 @@ import {
   fetchProviderRuntimeManagementCapability,
   exchangeProviderDesktopConnectAuthorization,
   requestProviderRuntimeEnrollmentChallenge,
+  requestProviderRuntimeLinkAuthorization,
   requestDesktopOpenSession,
 } from './controlPlaneProviderClient';
 import { normalizeDesktopControlPlaneProvider } from '../shared/controlPlaneProvider';
@@ -177,7 +178,6 @@ describe('controlPlaneProviderClient', () => {
     const normalizedProvider = provider();
 
     const transport = vi.fn<DesktopProviderTransport>().mockResolvedValueOnce(response(200, JSON.stringify({
-      bootstrap_ticket: 'boot_ticket_demo',
       remote_session_url: 'https://env.dev.redeven.test/_redeven_boot/#redeven=abc',
       access_point_origin: 'https://dev.redeven.test',
       expires_at_unix_ms: 1_710_000_000_000,
@@ -190,7 +190,6 @@ describe('controlPlaneProviderClient', () => {
       ' env_demo ',
       { transport },
     )).resolves.toEqual({
-      bootstrap_ticket: 'boot_ticket_demo',
       remote_session_url: 'https://env.dev.redeven.test/_redeven_boot/#redeven=abc',
       access_point_origin: 'https://dev.redeven.test',
       expires_at_unix_ms: 1_710_000_000_000,
@@ -203,6 +202,19 @@ describe('controlPlaneProviderClient', () => {
         authorization: 'Bearer access-token',
       }),
     }));
+  });
+
+  it('rejects v2 bootstrap semantics in a v3 open-session response', async () => {
+    const normalizedProvider = provider();
+    const transport = vi.fn<DesktopProviderTransport>().mockResolvedValueOnce(response(200, JSON.stringify({
+      bootstrap_ticket: 'legacy-ticket',
+      remote_session_url: 'https://env.dev.redeven.test/_redeven_boot/#redeven=abc',
+      access_point_origin: 'https://dev.redeven.test',
+      expires_at_unix_ms: 1_710_000_000_000,
+    })));
+    await expect(requestDesktopOpenSession(
+      normalizedProvider, normalizedProvider.access_points[0]!, 'access-token', 'env_demo', { transport },
+    )).rejects.toMatchObject({ code: 'provider_invalid_response' });
   });
 
   it('rejects desktop connect exchange responses for a different provider identity', async () => {
@@ -374,5 +386,40 @@ describe('controlPlaneProviderClient', () => {
       expected_target_generation: 8,
       expires_at_unix_ms: expiresAt,
     });
+  });
+
+  it('requests an independent v3 Runtime link ticket without accepting bootstrap semantics', async () => {
+    const normalizedProvider = provider();
+    const expiresAt = Date.now() + 60_000;
+    const transport = vi.fn<DesktopProviderTransport>().mockResolvedValueOnce(response(200, JSON.stringify({
+      protocol_version: 'rcpp-v3',
+      runtime_link_ticket: 'runtime-link-ticket',
+      expires_at_unix_ms: expiresAt,
+    })));
+    await expect(requestProviderRuntimeLinkAuthorization(
+      normalizedProvider,
+      normalizedProvider.access_points[0]!,
+      'access-token',
+      'env_demo',
+      { transport },
+    )).resolves.toEqual({ runtime_link_ticket: 'runtime-link-ticket', expires_at_unix_ms: expiresAt });
+    expect(transport).toHaveBeenCalledWith(expect.objectContaining({
+      url: 'https://dev.redeven.test/api/rcpp/v3/environments/env_demo/runtime-link/authorizations',
+      body_text: JSON.stringify({ protocol_version: 'rcpp-v3', env_public_id: 'env_demo' }),
+    }));
+
+    const legacyTransport = vi.fn<DesktopProviderTransport>().mockResolvedValueOnce(response(200, JSON.stringify({
+      protocol_version: 'rcpp-v3',
+      runtime_link_ticket: 'runtime-link-ticket',
+      bootstrap_ticket: 'legacy-ticket',
+      expires_at_unix_ms: expiresAt,
+    })));
+    await expect(requestProviderRuntimeLinkAuthorization(
+      normalizedProvider,
+      normalizedProvider.access_points[0]!,
+      'access-token',
+      'env_demo',
+      { transport: legacyTransport },
+    )).rejects.toMatchObject({ code: 'provider_invalid_response' });
   });
 });

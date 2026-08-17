@@ -379,12 +379,185 @@ export function aggregateDesktopEnvironmentEntries(
   }
   const gatewayOpenSessions = input.entries.filter((entry) => entry.kind === 'gateway_environment');
   const nonGatewayEntries = input.entries.filter((entry) => entry.kind !== 'gateway_environment');
+  const gatewaySources = input.gatewaySources ?? [];
+  const projectedDirectEntries = nonGatewayEntries.map((entry) => (
+    projectDirectRuntimeManagement(entry, gatewaySources)
+  ));
+  const gatewaySourcesForCards = gatewaySources.map((gateway) => {
+    const projectedOntoDirectCard = nonGatewayEntries.some((entry) => (
+      entry.kind !== 'provider_environment'
+      && entry.kind !== 'external_local_ui'
+      && gatewayMatchesDirectRuntimeTarget(gateway, entry)
+    ));
+    return projectedOntoDirectCard
+      ? {
+          ...gateway,
+          environments: gateway.environments.filter((environment) => environment.gateway_env_id !== 'env_local'),
+        }
+      : gateway;
+  });
   return [
-    ...attachEnvironmentSources(nonGatewayEntries, sources),
+    ...attachEnvironmentSources(projectedDirectEntries, sources),
     ...buildGatewayEnvironmentEntries({
-      gatewaySources: input.gatewaySources ?? [],
+      gatewaySources: gatewaySourcesForCards,
       openSessions: gatewayOpenSessions,
       createdAtMS: input.gatewayEntriesCreatedAtMS,
     }),
   ];
+}
+
+function gatewayMatchesDirectRuntimeTarget(
+  gateway: DesktopGatewaySource,
+  entry: DesktopEnvironmentEntry,
+): boolean {
+  const hostAccess = entry.managed_runtime_host_access;
+  const placement = entry.managed_runtime_placement;
+  if (!hostAccess || !placement || compact(gateway.runtime_root) !== compact(placement.runtime_root)) {
+    return false;
+  }
+  if (hostAccess.kind === 'local_host') {
+    if (placement.kind === 'host_process') {
+      return gateway.connection_kind === 'local_host';
+    }
+    return gateway.connection_kind === 'local_container'
+      && gateway.container_engine === placement.container_engine
+      && gateway.container_id === placement.container_id;
+  }
+  const gatewaySSH = gateway.ssh_details;
+  if (!gatewaySSH
+    || gatewaySSH.ssh_destination !== hostAccess.ssh.ssh_destination
+    || (gatewaySSH.ssh_port ?? null) !== (hostAccess.ssh.ssh_port ?? null)) {
+    return false;
+  }
+  if (placement.kind === 'host_process') {
+    return gateway.connection_kind === 'ssh_host';
+  }
+  return gateway.connection_kind === 'ssh_container'
+    && gateway.container_engine === placement.container_engine
+    && gateway.container_id === placement.container_id;
+}
+
+function directRuntimeGatewayOperations(
+  entry: DesktopEnvironmentEntry,
+  gateway: DesktopGatewaySource,
+  environment: DesktopGatewayEnvironment | undefined,
+): DesktopRuntimeOperationPlans {
+  if (!environment || gateway.status !== 'online') {
+    const message = gateway.status === 'pairing_required'
+      ? 'Complete Runtime management setup for this target.'
+      : 'Runtime management is temporarily unavailable. Restore the Gateway supervisor and try again.';
+    const reasonCode = gateway.status === 'pairing_required'
+      ? 'runtime_gateway_setup_required'
+      : 'runtime_gateway_temporarily_unavailable';
+    const blocked = (operation: 'start' | 'stop' | 'restart' | 'update') => desktopRuntimeOperationPlan(
+      operation,
+      'blocked',
+      'runtime_gateway',
+      {
+        reasonCode,
+        message,
+        menuVisibility: operation === 'start' ? 'contextual' : 'stable',
+      },
+    );
+    return {
+      ...entry.runtime_operations,
+      start: blocked('start'),
+      stop: blocked('stop'),
+      restart: blocked('restart'),
+      update: blocked('update'),
+    };
+  }
+  const hasLifecycle = gateway.capabilities.includes('env_lifecycle');
+  const gatewayOperations = gatewayRuntimeOperations({
+    openable: false,
+    canStart: hasLifecycle
+      && environment.state === 'stopped'
+      && desktopGatewayEnvironmentHasControlCapability(environment, 'start'),
+    canStop: hasLifecycle
+      && environment.state === 'available'
+      && desktopGatewayEnvironmentHasControlCapability(environment, 'stop'),
+    canRestart: hasLifecycle
+      && (environment.state === 'available' || environment.state === 'stopped')
+      && desktopGatewayEnvironmentHasControlCapability(environment, 'restart'),
+    canUpdate: hasLifecycle
+      && (environment.state === 'available' || environment.state === 'stopped')
+      && desktopGatewayEnvironmentHasControlCapability(environment, 'update_runtime'),
+    needsResolve: false,
+  });
+  return {
+    ...entry.runtime_operations,
+    start: gatewayOperations.start,
+    stop: gatewayOperations.stop,
+    restart: gatewayOperations.restart,
+    update: gatewayOperations.update,
+  };
+}
+
+function projectDirectRuntimeManagement(
+  entry: DesktopEnvironmentEntry,
+  gatewaySources: readonly DesktopGatewaySource[],
+): DesktopEnvironmentEntry {
+  if (
+    entry.kind === 'provider_environment'
+    || entry.kind === 'gateway_environment'
+    || entry.kind === 'external_local_ui'
+  ) {
+    return entry;
+  }
+  const gateway = gatewaySources.find((candidate) => gatewayMatchesDirectRuntimeTarget(candidate, entry));
+  if (!gateway) {
+    return {
+      ...entry,
+      runtime_management: {
+        support: 'supported',
+        authorization: {
+          state: 'allowed',
+          grants: ['manage_runtime', 'deploy_custom_runtime', 'manage_runtime_binding'],
+        },
+        readiness: 'setup_required',
+        presentation_state: 'setup_required',
+        operations: [],
+        artifact_policies: [],
+        binding_actions: ['setup_gateway'],
+        supervision_mode: 'redeven_gateway',
+        reason_code: 'runtime_gateway_setup_required',
+        checked_at_unix_ms: Date.now(),
+      },
+    };
+  }
+  const environment = gateway.environments.find((candidate) => candidate.gateway_env_id === 'env_local');
+  const fallbackManagement = {
+    support: 'supported' as const,
+    authorization: {
+      state: gateway.trust_state === 'paired' ? 'allowed' as const : 'unknown' as const,
+      ...(gateway.trust_state === 'paired' ? {
+        grants: ['manage_runtime', 'deploy_custom_runtime', 'manage_runtime_binding'] as const,
+      } : {}),
+    },
+    readiness: gateway.status === 'pairing_required' ? 'setup_required' as const : 'temporarily_unavailable' as const,
+    presentation_state: gateway.status === 'pairing_required' ? 'setup_required' as const : 'temporarily_unavailable' as const,
+    reason_code: gateway.status === 'pairing_required'
+      ? 'runtime_gateway_setup_required'
+      : 'runtime_gateway_temporarily_unavailable',
+    checked_at_unix_ms: Date.now(),
+  };
+  return {
+    ...entry,
+    gateway_id: gateway.gateway_id,
+    gateway_label: gateway.display_name,
+    gateway_env_id: environment?.gateway_env_id ?? 'env_local',
+    gateway_status: gateway.status,
+    gateway_connection_kind: gateway.connection_kind,
+    gateway_trust_state: gateway.trust_state,
+    gateway_status_message: gateway.status_message,
+    gateway_endpoint_label: gateway.endpoint_label,
+    gateway_environment_state: environment?.state,
+    gateway_environment_kind: environment?.env_kind,
+    gateway_environment_capabilities: environment?.capabilities,
+    gateway_environment_access_capabilities: environment?.access_capabilities,
+    gateway_environment_control_capabilities: environment?.control_capabilities,
+    gateway_environment_origin: environment?.origin,
+    runtime_management: environment?.runtime_management ?? fallbackManagement,
+    runtime_operations: directRuntimeGatewayOperations(entry, gateway, environment),
+  };
 }

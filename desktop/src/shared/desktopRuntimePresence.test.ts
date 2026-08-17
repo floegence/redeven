@@ -17,8 +17,21 @@ const localContainerPlacement = {
   bridge_strategy: 'exec_stream' as const,
 };
 
+function expectGatewaySetupRequired(
+  plans: ReturnType<typeof buildDesktopRuntimeOperationPlans>,
+  operations: readonly ('start' | 'stop' | 'restart' | 'update')[] = ['start', 'stop', 'restart', 'update'],
+): void {
+  for (const operation of operations) {
+    expect(plans[operation]).toMatchObject({
+      availability: 'blocked',
+      method: 'runtime_gateway',
+      reason_code: 'runtime_gateway_setup_required',
+    });
+  }
+}
+
 describe('desktopRuntimePresence', () => {
-  it('uses explicit operation plans for running managed runtimes', () => {
+  it('requires Gateway setup for lifecycle while keeping direct access available', () => {
     const plans = buildDesktopRuntimeOperationPlans({
       surface: 'managed_runtime_card',
       host_access: { kind: 'local_host' },
@@ -28,29 +41,15 @@ describe('desktopRuntimePresence', () => {
       runtime_control_status: desktopRuntimeControlStatusAvailable(),
     });
 
-    expect(plans.stop).toMatchObject({
-      availability: 'available',
-      label: 'Stop runtime',
-      method: 'local_host',
-      menu_visibility: 'stable',
-    });
-    expect(plans.start.availability).toBe('unavailable');
-    expect(plans.start.menu_visibility).toBe('hidden');
-    expect(plans.restart).toMatchObject({
+    expect(plans.open).toMatchObject({
       availability: 'available',
       method: 'local_host',
-      menu_visibility: 'stable',
     });
-    expect(plans.update).toMatchObject({
-      availability: 'available',
-      label: 'Update Redeven Desktop',
-      method: 'desktop_local_update_handoff',
-      menu_visibility: 'stable',
-    });
+    expectGatewaySetupRequired(plans);
     expect(plans.refresh.availability).toBe('available');
   });
 
-  it('keeps host lifecycle available when runtime-control is not reported', () => {
+  it('keeps SSH access independent when Runtime management is not set up', () => {
     const plans = buildDesktopRuntimeOperationPlans({
       surface: 'managed_runtime_card',
       host_access: { kind: 'ssh_host', ssh: {
@@ -68,17 +67,11 @@ describe('desktopRuntimePresence', () => {
       ),
     });
 
-    expect(plans.stop).toMatchObject({
+    expect(plans.open).toMatchObject({
       availability: 'available',
       method: 'ssh_host',
-      menu_visibility: 'stable',
     });
-    expect(plans.update).toMatchObject({
-      availability: 'available',
-      method: 'ssh_host',
-      label: 'Update runtime',
-      menu_visibility: 'stable',
-    });
+    expectGatewaySetupRequired(plans);
     expect(plans.connect_provider).toMatchObject({
       availability: 'blocked',
       reason_code: 'runtime_control_missing',
@@ -102,29 +95,7 @@ describe('desktopRuntimePresence', () => {
       ),
     });
 
-    expect(plans.start).toMatchObject({
-      availability: 'blocked',
-      reason_code: 'runtime_target_unavailable',
-      message: 'Container web is not running.',
-      menu_visibility: 'contextual',
-    });
-    expect(plans.stop).toMatchObject({
-      availability: 'unavailable',
-      menu_visibility: 'stable',
-      message: 'Runtime is not running.',
-    });
-    expect(plans.restart).toMatchObject({
-      availability: 'blocked',
-      reason_code: 'runtime_target_unavailable',
-      menu_visibility: 'stable',
-      message: 'Container web is not running.',
-    });
-    expect(plans.update).toMatchObject({
-      availability: 'blocked',
-      method: 'local_container_exec',
-      menu_visibility: 'stable',
-      message: 'Container web is not running.',
-    });
+    expectGatewaySetupRequired(plans);
   });
 
   it('blocks container lifecycle actions when the local container engine CLI is unavailable', () => {
@@ -149,20 +120,11 @@ describe('desktopRuntimePresence', () => {
       reason_code: 'runtime_target_unavailable',
       message: 'Docker CLI was not found. Install Docker Desktop or make docker available to Redeven Desktop, then refresh and try again.',
     });
-    expect(plans.start).toMatchObject({
-      availability: 'blocked',
-      reason_code: 'runtime_target_unavailable',
-      message: 'Docker CLI was not found. Install Docker Desktop or make docker available to Redeven Desktop, then refresh and try again.',
-    });
-    expect(plans.update).toMatchObject({
-      availability: 'blocked',
-      method: 'local_container_exec',
-      message: 'Docker CLI was not found. Install Docker Desktop or make docker available to Redeven Desktop, then refresh and try again.',
-    });
+    expectGatewaySetupRequired(plans);
     expect(plans.refresh.availability).toBe('available');
   });
 
-  it('offers Start for a stopped container runtime when the container target is reachable', () => {
+  it('keeps a reachable stopped container at setup required before lifecycle', () => {
     const plans = buildDesktopRuntimeOperationPlans({
       surface: 'managed_runtime_card',
       host_access: { kind: 'local_host' },
@@ -181,28 +143,10 @@ describe('desktopRuntimePresence', () => {
       reason_code: 'runtime_not_started',
       message: 'Start this runtime before opening it.',
     });
-    expect(plans.start).toMatchObject({
-      availability: 'available',
-      method: 'local_container_exec',
-      menu_visibility: 'contextual',
-    });
-    expect(plans.stop).toMatchObject({
-      availability: 'unavailable',
-      reason_code: 'runtime_not_started',
-      menu_visibility: 'stable',
-    });
-    expect(plans.restart).toMatchObject({
-      availability: 'available',
-      menu_visibility: 'stable',
-    });
-    expect(plans.update).toMatchObject({
-      availability: 'available',
-      method: 'local_container_exec',
-      menu_visibility: 'stable',
-    });
+    expectGatewaySetupRequired(plans);
   });
 
-  it('keeps Start and Restart available while exposing outdated runtime update as a separate action', () => {
+  it('preserves outdated package facts while lifecycle waits for Gateway setup', () => {
     const plans = buildDesktopRuntimeOperationPlans({
       surface: 'managed_runtime_card',
       host_access: { kind: 'local_host' },
@@ -225,20 +169,14 @@ describe('desktopRuntimePresence', () => {
       method: 'local_container_exec',
       message: 'Start this runtime before opening it.',
     });
-    expect(plans.start).toMatchObject({
-      availability: 'available',
-      method: 'local_container_exec',
-    });
-    expect(plans.restart).toMatchObject({
-      availability: 'available',
-      method: 'local_container_exec',
-    });
     expect(plans.update).toMatchObject({
-      availability: 'available',
-      method: 'local_container_exec',
-      reason_code: 'runtime_update_required',
-      menu_visibility: 'stable',
+      package_state: {
+        state: 'outdated',
+        current_version: 'v0.5.9',
+        target_version: 'v0.6.7',
+      },
     });
+    expectGatewaySetupRequired(plans);
   });
 
   it('keeps Open available for compatibility update blocks while preserving Update as a separate operation', () => {
@@ -277,8 +215,9 @@ describe('desktopRuntimePresence', () => {
         method: 'local_host',
       });
       expect(plans.update).toMatchObject({
-        availability: 'available',
-        method: 'desktop_local_update_handoff',
+        availability: 'blocked',
+        method: 'runtime_gateway',
+        reason_code: 'runtime_gateway_setup_required',
         menu_visibility: 'stable',
       });
     }
@@ -361,7 +300,7 @@ describe('desktopRuntimePresence', () => {
     });
   });
 
-  it('guides running container runtime-control failures through Restart while preserving Stop and Update', () => {
+  it('keeps Runtime recovery guidance behind Gateway setup', () => {
     const maintenance = {
       kind: 'runtime_restart_required' as const,
       required_for: 'open' as const,
@@ -394,26 +333,10 @@ describe('desktopRuntimePresence', () => {
       message: maintenance.message,
       maintenance,
     });
-    expect(plans.stop).toMatchObject({
-      availability: 'available',
-      method: 'local_container_exec',
-      menu_visibility: 'stable',
-    });
-    expect(plans.restart).toMatchObject({
-      availability: 'available',
-      method: 'local_container_exec',
-      message: maintenance.message,
-      menu_visibility: 'stable',
-    });
-    expect(plans.update).toMatchObject({
-      availability: 'available',
-      method: 'local_container_exec',
-      message: maintenance.message,
-      menu_visibility: 'stable',
-    });
+    expectGatewaySetupRequired(plans);
   });
 
-  it('treats stale lock container recovery as stopped-like runtime management', () => {
+  it('does not turn stale lock recovery into a direct lifecycle executor', () => {
     const plans = buildDesktopRuntimeOperationPlans({
       surface: 'managed_runtime_card',
       host_access: { kind: 'local_host' },
@@ -444,15 +367,7 @@ describe('desktopRuntimePresence', () => {
       method: 'local_container_exec',
       message: 'Start this runtime before opening it.',
     });
-    expect(plans.start).toMatchObject({
-      availability: 'available',
-      method: 'local_container_exec',
-      menu_visibility: 'contextual',
-    });
-    expect(plans.restart).toMatchObject({
-      availability: 'available',
-      menu_visibility: 'stable',
-    });
+    expectGatewaySetupRequired(plans);
   });
 
   it('keeps provider cards out of runtime lifecycle management', () => {
@@ -494,7 +409,7 @@ describe('desktopRuntimePresence', () => {
     expect(JSON.stringify(plans)).not.toContain('provider_tunnel');
   });
 
-  it('routes container updates through the host/container management channel', () => {
+  it('reserves SSH container exec for access while lifecycle waits for Gateway setup', () => {
     const plans = buildDesktopRuntimeOperationPlans({
       surface: 'managed_runtime_card',
       host_access: { kind: 'ssh_host', ssh: {
@@ -514,9 +429,10 @@ describe('desktopRuntimePresence', () => {
     });
 
     expect(plans.update).toMatchObject({
-      availability: 'available',
+      availability: 'blocked',
       label: 'Update runtime',
-      method: 'ssh_container_exec',
+      method: 'runtime_gateway',
+      reason_code: 'runtime_gateway_setup_required',
       menu_visibility: 'stable',
     });
   });
@@ -540,8 +456,9 @@ describe('desktopRuntimePresence', () => {
       method: 'local_container_exec',
     });
     expect(plans.start).toMatchObject({
-      availability: 'unavailable',
-      reason_code: 'runtime_already_running',
+      availability: 'blocked',
+      method: 'runtime_gateway',
+      reason_code: 'runtime_gateway_setup_required',
     });
     expect(plans.connect_provider).toMatchObject({
       availability: 'blocked',

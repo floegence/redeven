@@ -950,8 +950,11 @@ func TestEnvCommandJSON(t *testing.T) {
 		}
 		operations := data["operations"].(map[string]any)
 		stop := operations["stop"].(map[string]any)
-		if stop["availability"] != "available" || stop["command"] != "redeven env stop --target local:local --json" {
+		if stop["availability"] != "blocked" || stop["method"] != "runtime_gateway" || stop["reason_code"] != "runtime_gateway_setup_required" {
 			t.Fatalf("unexpected stop plan: %#v", stop)
+		}
+		if _, ok := stop["command"]; ok {
+			t.Fatalf("blocked stop plan exposed executable command: %#v", stop)
 		}
 	})
 
@@ -1047,8 +1050,9 @@ func TestEnvRestartStoppedLocalRuntimeReturnsDesktopHandoffPlan(t *testing.T) {
 		t.Fatalf("runtime state = %#v, want not_running", runtime["state"])
 	}
 	operation := data["operation"].(map[string]any)
-	if operation["availability"] != agentprotocol.OperationAvailabilityUnavailable ||
-		operation["reason_code"] != agentprotocol.EnvReasonDesktopStartRequired ||
+	if operation["availability"] != agentprotocol.OperationAvailabilityBlocked ||
+		operation["method"] != agentprotocol.OperationMethodRuntimeGateway ||
+		operation["reason_code"] != agentprotocol.EnvReasonRuntimeGatewaySetupRequired ||
 		operation["performed"] == true {
 		t.Fatalf("unexpected restart operation: %#v", operation)
 	}

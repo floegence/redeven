@@ -29,13 +29,12 @@ const PROVIDER_DESKTOP_CONNECT_EXCHANGE_PATH = '/api/rcpp/v3/desktop/connect/exc
 const PROVIDER_DESKTOP_TOKEN_REFRESH_PATH = '/api/rcpp/v3/desktop/token/refresh';
 const PROVIDER_DESKTOP_TOKEN_REVOKE_PATH = '/api/rcpp/v3/desktop/token/revoke';
 const PROVIDER_DESKTOP_OPEN_SESSION_PATH_SUFFIX = '/desktop/open-session';
-const PROVIDER_BOOTSTRAP_EXCHANGE_PATH = '/api/rcpp/v2/runtime/bootstrap/exchange';
+const PROVIDER_RUNTIME_LINK_AUTHORIZATION_PATH_SUFFIX = '/runtime-link/authorizations';
 const PROVIDER_PROTOCOL_VERSION = 'rcpp-v3';
 const DEFAULT_PROVIDER_TIMEOUT_MS = 15_000;
 
 export type ProviderDesktopOpenSession = Readonly<{
-  bootstrap_ticket?: string;
-  remote_session_url?: string;
+  remote_session_url: string;
   access_point_origin: string;
   expires_at_unix_ms: number;
 }>;
@@ -71,7 +70,7 @@ export type ProviderRuntimeOperationAuthorizationRequest = Readonly<{
   operation_id: string;
   operation: 'start' | 'stop' | 'restart' | 'update_runtime' | 'reconcile';
   desired_runtime_version?: string;
-  artifact_policy: 'published_release' | 'custom_build';
+  artifact_policy?: 'published_release' | 'custom_build';
   build_inputs_digest?: string;
   authorized_client_key_id: string;
 }>;
@@ -96,6 +95,11 @@ export type ProviderRuntimeEnrollmentChallenge = Readonly<{
   proof_nonce: string;
   control_binding_generation: number;
   expected_target_generation: number;
+  expires_at_unix_ms: number;
+}>;
+
+export type ProviderRuntimeLinkAuthorization = Readonly<{
+  runtime_link_ticket: string;
   expires_at_unix_ms: number;
 }>;
 
@@ -274,7 +278,9 @@ function normalizeProviderOpenSessionResponse(
   }
 
   const candidate = body as Record<string, unknown>;
-  const bootstrapTicket = compact(candidate.bootstrap_ticket);
+  if (Object.prototype.hasOwnProperty.call(candidate, 'bootstrap_ticket')) {
+    throw invalidProviderResponseError(accessPointOrigin, message);
+  }
   const remoteSessionURL = compact(candidate.remote_session_url);
   let responseAccessPointOrigin = '';
   try {
@@ -282,15 +288,14 @@ function normalizeProviderOpenSessionResponse(
   } catch {
     throw invalidProviderResponseError(accessPointOrigin, message);
   }
-  if (bootstrapTicket === '' && remoteSessionURL === '') {
+  if (remoteSessionURL === '') {
     throw invalidProviderResponseError(accessPointOrigin, message);
   }
   if (responseAccessPointOrigin !== normalizeControlPlaneOrigin(accessPointOrigin)) {
     throw invalidProviderResponseError(accessPointOrigin, message);
   }
   return {
-    bootstrap_ticket: bootstrapTicket || undefined,
-    remote_session_url: remoteSessionURL || undefined,
+    remote_session_url: remoteSessionURL,
     access_point_origin: responseAccessPointOrigin,
     expires_at_unix_ms: normalizeProviderUnixMS(accessPointOrigin, candidate.expires_at_unix_ms, message),
   };
@@ -676,6 +681,42 @@ export async function requestProviderRuntimeEnrollmentChallenge(
   };
 }
 
+export async function requestProviderRuntimeLinkAuthorization(
+  provider: DesktopControlPlaneProvider,
+  accessPoint: DesktopProviderAccessPoint,
+  accessToken: string,
+  envPublicID: string,
+  requestOptions: ProviderClientRequestOptions = {},
+): Promise<ProviderRuntimeLinkAuthorization> {
+  const cleanEnvPublicID = compact(envPublicID);
+  if (cleanEnvPublicID === '') throw new Error('Environment ID is required.');
+  const accessPointOrigin = accessPoint.access_point_origin;
+  const { body } = await fetchProviderJSON(accessPointRequestURL(
+    accessPointOrigin,
+    `${PROVIDER_ENVIRONMENTS_PATH}/${encodeURIComponent(cleanEnvPublicID)}${PROVIDER_RUNTIME_LINK_AUTHORIZATION_PATH_SUFFIX}`,
+  ), {
+    method: 'POST',
+    bearerToken: accessToken,
+    body: { protocol_version: PROVIDER_PROTOCOL_VERSION, env_public_id: cleanEnvPublicID },
+    operationLabel: 'the Runtime link authorization',
+    transport: requestOptions.transport,
+  });
+  if (!body || typeof body !== 'object') {
+    throw invalidProviderResponseError(accessPointOrigin, 'The Runtime link authorization response is invalid.');
+  }
+  const candidate = body as Record<string, unknown>;
+  requireProviderProtocolVersion(accessPointOrigin, candidate.protocol_version, 'The Runtime link authorization protocol is invalid.');
+  if (Object.prototype.hasOwnProperty.call(candidate, 'bootstrap_ticket')) {
+    throw invalidProviderResponseError(accessPointOrigin, 'The Runtime link authorization response is invalid.');
+  }
+  const runtimeLinkTicket = compact(candidate.runtime_link_ticket);
+  const expiresAtUnixMS = Number(candidate.expires_at_unix_ms);
+  if (runtimeLinkTicket === '' || !Number.isSafeInteger(expiresAtUnixMS) || expiresAtUnixMS <= Date.now()) {
+    throw invalidProviderResponseError(accessPointOrigin, 'The Runtime link authorization response is invalid.');
+  }
+  return { runtime_link_ticket: runtimeLinkTicket, expires_at_unix_ms: expiresAtUnixMS };
+}
+
 export async function queryProviderEnvironmentRuntimeHealth(
   provider: DesktopControlPlaneProvider,
   accessPoint: DesktopProviderAccessPoint,
@@ -740,10 +781,6 @@ export async function requestDesktopOpenSession(
     body,
     'The provider desktop open session response is invalid.',
   );
-}
-
-export function providerBootstrapExchangeURL(accessPointOrigin: string): string {
-  return accessPointRequestURL(accessPointOrigin, PROVIDER_BOOTSTRAP_EXCHANGE_PATH);
 }
 
 export function providerFloeproxyBootExchangeURL(accessPointOrigin: string): string {

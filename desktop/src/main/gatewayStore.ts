@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import {
   desktopGatewayConnectionKindLabel,
@@ -24,7 +24,7 @@ import {
 } from '../shared/desktopSSH';
 import type { DesktopContainerEngine } from '../shared/desktopRuntimePlacement';
 
-export const GATEWAY_STORE_SCHEMA_VERSION = 1;
+export const GATEWAY_STORE_SCHEMA_VERSION = 2;
 
 export type GatewayURLConnection = Readonly<{
   kind: 'url';
@@ -62,8 +62,24 @@ export type GatewaySSHContainerConnection = Readonly<{
   runtime_root: string;
 }>;
 
+export type GatewayLocalHostConnection = Readonly<{
+  kind: 'local_host';
+  runtime_root: string;
+}>;
+
+export type GatewayLocalContainerConnection = Readonly<{
+  kind: 'local_container';
+  container_engine: DesktopContainerEngine;
+  container_id: string;
+  container_ref?: string;
+  container_label?: string;
+  runtime_root: string;
+}>;
+
 export type GatewayConnection =
   | GatewayURLConnection
+  | GatewayLocalHostConnection
+  | GatewayLocalContainerConnection
   | GatewaySSHHostConnection
   | GatewaySSHContainerConnection;
 
@@ -81,9 +97,10 @@ export type GatewayTrustProfile = Readonly<{
 }>;
 
 export type GatewayRecord = Readonly<{
-  schema_version: 1;
+  schema_version: 2;
   gateway_id: string;
   display_name: string;
+  runtime_environment_id?: string;
   local_enabled: boolean;
   connection: GatewayConnection;
   trust_profile?: GatewayTrustProfile;
@@ -93,7 +110,7 @@ export type GatewayRecord = Readonly<{
 }>;
 
 export type GatewayStoreSnapshot = Readonly<{
-  schema_version: 1;
+  schema_version: 2;
   gateways: readonly GatewayRecord[];
 }>;
 
@@ -101,6 +118,8 @@ type GatewayStoreFile = Readonly<{
   schema_version?: unknown;
   gateways?: readonly unknown[];
 }>;
+
+type GatewayStorePersistence = (filePath: string, snapshot: GatewayStoreSnapshot) => Promise<void>;
 
 export class GatewayStoreError extends Error {
   constructor(
@@ -165,7 +184,9 @@ function normalizeGatewaySSHPasswordState(value: Record<string, unknown>): Reado
   };
 }
 
-function gatewayConnectionSSHDetails(connection: Exclude<GatewayConnection, GatewayURLConnection>): DesktopSSHEnvironmentDetails {
+function gatewayConnectionSSHDetails(
+  connection: GatewaySSHHostConnection | GatewaySSHContainerConnection,
+): DesktopSSHEnvironmentDetails {
   return {
     ssh_destination: connection.ssh_destination,
     ssh_port: connection.ssh_port ?? null,
@@ -183,14 +204,19 @@ function gatewayConnectionSSHDetails(connection: Exclude<GatewayConnection, Gate
 
 export function gatewayRecordSSHPasswordRef(record: GatewayRecord): string {
   const connection = record.connection;
-  if (connection.kind === 'url' || connection.auth_mode !== 'password') {
+  if (
+    connection.kind === 'url'
+    || connection.kind === 'local_host'
+    || connection.kind === 'local_container'
+    || connection.auth_mode !== 'password'
+  ) {
     return '';
   }
   return connection.ssh_password_ref ?? gatewaySSHPasswordSecretRef(record.gateway_id);
 }
 
 function normalizeGatewaySSHPasswordRefForRecord(connection: GatewayConnection, gatewayID: string): GatewayConnection {
-  if (connection.kind === 'url') {
+  if (connection.kind === 'url' || connection.kind === 'local_host' || connection.kind === 'local_container') {
     return connection;
   }
   if (connection.auth_mode !== 'password') {
@@ -318,6 +344,27 @@ function normalizeSSHContainerConnection(value: Record<string, unknown>): Gatewa
   };
 }
 
+function normalizeLocalHostConnection(value: Record<string, unknown>): GatewayLocalHostConnection | null {
+  const runtimeRoot = compact(value.runtime_root);
+  return runtimeRoot ? { kind: 'local_host', runtime_root: runtimeRoot } : null;
+}
+
+function normalizeLocalContainerConnection(value: Record<string, unknown>): GatewayLocalContainerConnection | null {
+  const runtimeRoot = compact(value.runtime_root);
+  const containerID = compact(value.container_id);
+  if (!runtimeRoot || !containerID) {
+    return null;
+  }
+  return {
+    kind: 'local_container',
+    container_engine: normalizeGatewayContainerEngine(value.container_engine),
+    container_id: containerID,
+    ...(compact(value.container_ref) ? { container_ref: compact(value.container_ref) } : {}),
+    ...(compact(value.container_label) ? { container_label: compact(value.container_label) } : {}),
+    runtime_root: runtimeRoot,
+  };
+}
+
 export function normalizeGatewayConnection(value: unknown): GatewayConnection | null {
   if (!value || typeof value !== 'object') {
     return null;
@@ -326,6 +373,10 @@ export function normalizeGatewayConnection(value: unknown): GatewayConnection | 
   switch (compact(candidate.kind)) {
     case 'url':
       return normalizeURLConnection(candidate);
+    case 'local_host':
+      return normalizeLocalHostConnection(candidate);
+    case 'local_container':
+      return normalizeLocalContainerConnection(candidate);
     case 'ssh_host':
       return normalizeSSHHostConnection(candidate);
     case 'ssh_container':
@@ -339,6 +390,10 @@ export function gatewayBindingAudience(connection: GatewayConnection): string {
   switch (connection.kind) {
     case 'url':
       return connection.base_url;
+    case 'local_host':
+      return `local://${connection.runtime_root}`;
+    case 'local_container':
+      return `local-container://${connection.container_id}${connection.runtime_root}`;
     case 'ssh_host':
       return `ssh://${connection.username ? `${connection.username}@` : ''}${connection.ssh_destination}:${connection.ssh_port ?? 22}${connection.runtime_root}`;
     case 'ssh_container':
@@ -350,6 +405,10 @@ export function gatewayEndpointLabel(connection: GatewayConnection): string {
   switch (connection.kind) {
     case 'url':
       return connection.base_url;
+    case 'local_host':
+      return 'This device';
+    case 'local_container':
+      return `${connection.container_label || connection.container_id} on this device`;
     case 'ssh_host':
       return `${connection.ssh_destination}:${connection.ssh_port ?? 22}`;
     case 'ssh_container':
@@ -402,9 +461,10 @@ export function normalizeGatewayRecord(value: unknown, now = Date.now()): Gatewa
     ? rawTrustProfile
     : undefined;
   return {
-    schema_version: 1,
+    schema_version: GATEWAY_STORE_SCHEMA_VERSION,
     gateway_id: gatewayID,
     display_name: compact(candidate.display_name) || gatewayID,
+    ...(compact(candidate.runtime_environment_id) ? { runtime_environment_id: compact(candidate.runtime_environment_id) } : {}),
     local_enabled: candidate.local_enabled !== false,
     connection,
     ...(trustProfile ? { trust_profile: trustProfile } : {}),
@@ -440,9 +500,17 @@ export function gatewayRecordToSource(record: GatewayRecord): DesktopGatewaySour
       ? 'Gateway status has not been checked yet.'
       : 'Pair this Gateway before listing environments.',
     endpoint_label: gatewayEndpointLabel(record.connection),
+    ...(record.connection.kind === 'url' ? {} : { runtime_root: record.connection.runtime_root }),
     ...(record.connection.kind === 'url' ? {
       gateway_url: record.connection.base_url,
       allow_loopback_http: record.connection.allow_loopback_http === true,
+    } : record.connection.kind === 'local_host' || record.connection.kind === 'local_container' ? {
+      ...(record.connection.kind === 'local_container' ? {
+        container_engine: record.connection.container_engine,
+        container_id: record.connection.container_id,
+        container_ref: record.connection.container_ref,
+        container_label: record.connection.container_label,
+      } : {}),
     } : {
       ssh_details: gatewayConnectionSSHDetails(record.connection),
       ssh_password_configured: record.connection.auth_mode === 'password'
@@ -551,12 +619,104 @@ export function normalizeGatewayStoreSnapshot(value: unknown, now = Date.now()):
     }
   }
   return {
-    schema_version: 1,
+    schema_version: GATEWAY_STORE_SCHEMA_VERSION,
     gateways: [...byID.values()].sort((left, right) => (
       left.display_name.toLowerCase().localeCompare(right.display_name.toLowerCase())
       || left.gateway_id.localeCompare(right.gateway_id)
     )),
   };
+}
+
+function migrateGatewayStoreFile(value: unknown, now = Date.now()): Readonly<{
+  snapshot: GatewayStoreSnapshot;
+  migrated: boolean;
+}> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new GatewayStoreError('GATEWAY_STORE_SCHEMA_DRIFT', 'Gateway store root must be an object.');
+  }
+  const candidate = value as GatewayStoreFile;
+  const schemaVersion = Number(candidate.schema_version);
+  if (!Number.isInteger(schemaVersion) || schemaVersion < 1) {
+    throw new GatewayStoreError('GATEWAY_STORE_SCHEMA_DRIFT', 'Gateway store schema version is invalid.');
+  }
+  if (schemaVersion > GATEWAY_STORE_SCHEMA_VERSION) {
+    throw new GatewayStoreError('GATEWAY_STORE_FUTURE_SCHEMA', 'Gateway store was created by a newer Redeven Desktop.');
+  }
+  if (schemaVersion !== 1 && schemaVersion !== GATEWAY_STORE_SCHEMA_VERSION) {
+    throw new GatewayStoreError('GATEWAY_STORE_SCHEMA_UNSUPPORTED', 'Gateway store schema version is unsupported.');
+  }
+  if (!Array.isArray(candidate.gateways)) {
+    throw new GatewayStoreError('GATEWAY_STORE_SCHEMA_DRIFT', 'Gateway store gateways must be an array.');
+  }
+
+  const records: GatewayRecord[] = [];
+  const gatewayIDs = new Set<string>();
+  for (const rawRecord of candidate.gateways) {
+    if (!rawRecord || typeof rawRecord !== 'object' || Array.isArray(rawRecord)) {
+      throw new GatewayStoreError('GATEWAY_STORE_SCHEMA_DRIFT', 'Gateway store contains an invalid record.');
+    }
+    const persisted = rawRecord as Record<string, unknown>;
+    if (persisted.schema_version !== schemaVersion
+      || typeof persisted.display_name !== 'string'
+      || typeof persisted.local_enabled !== 'boolean'
+      || !positiveInteger(persisted.created_at_ms)
+      || !positiveInteger(persisted.updated_at_ms)) {
+      throw new GatewayStoreError('GATEWAY_STORE_SCHEMA_DRIFT', 'Gateway store record shape does not match its schema version.');
+    }
+    const rawConnection = persisted.connection && typeof persisted.connection === 'object'
+      ? persisted.connection as Record<string, unknown>
+      : null;
+    if (!rawConnection) {
+      throw new GatewayStoreError('GATEWAY_STORE_SCHEMA_DRIFT', 'Gateway store connection is invalid.');
+    }
+    const connectionKind = compact(rawConnection.kind);
+    if (schemaVersion === 1 && connectionKind !== 'url' && connectionKind !== 'ssh_host' && connectionKind !== 'ssh_container') {
+      throw new GatewayStoreError('GATEWAY_STORE_SCHEMA_DRIFT', 'Gateway store v1 contains a connection kind that did not exist in v1.');
+    }
+    const record = normalizeGatewayRecord(rawRecord, now);
+    if (!record || (persisted.trust_profile !== undefined && record.trust_profile === undefined)) {
+      throw new GatewayStoreError('GATEWAY_STORE_SCHEMA_DRIFT', 'Gateway store contains data that cannot be normalized without loss.');
+    }
+    if (gatewayIDs.has(record.gateway_id)) {
+      throw new GatewayStoreError('GATEWAY_STORE_SCHEMA_DRIFT', 'Gateway store contains duplicate gateway ids.');
+    }
+    gatewayIDs.add(record.gateway_id);
+    records.push(record);
+  }
+
+  return {
+    snapshot: normalizeGatewayStoreSnapshot({ gateways: records }, now),
+    migrated: schemaVersion !== GATEWAY_STORE_SCHEMA_VERSION,
+  };
+}
+
+async function persistGatewayStoreSnapshot(filePath: string, snapshot: GatewayStoreSnapshot): Promise<void> {
+  const directory = path.dirname(filePath);
+  await fs.mkdir(directory, { recursive: true, mode: 0o700 });
+  const temporaryPath = path.join(directory, `.${path.basename(filePath)}.${process.pid}.${randomUUID()}.tmp`);
+  let temporaryCreated = false;
+  try {
+    const handle = await fs.open(temporaryPath, 'wx', 0o600);
+    temporaryCreated = true;
+    try {
+      await handle.writeFile(`${JSON.stringify(snapshot, null, 2)}\n`, 'utf8');
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    await fs.rename(temporaryPath, filePath);
+    temporaryCreated = false;
+    const directoryHandle = await fs.open(directory, 'r');
+    try {
+      await directoryHandle.sync();
+    } finally {
+      await directoryHandle.close();
+    }
+  } finally {
+    if (temporaryCreated) {
+      await fs.rm(temporaryPath, { force: true });
+    }
+  }
 }
 
 export function defaultGatewayStorePath(stateRoot: string): string {
@@ -565,7 +725,7 @@ export function defaultGatewayStorePath(stateRoot: string): string {
 
 function replaceGatewayRecord(snapshot: GatewayStoreSnapshot, record: GatewayRecord, now: number): GatewayStoreSnapshot {
   return {
-    schema_version: 1,
+    schema_version: GATEWAY_STORE_SCHEMA_VERSION,
     gateways: normalizeGatewayStoreSnapshot({
       gateways: [
         ...snapshot.gateways.filter((item) => item.gateway_id !== record.gateway_id),
@@ -579,7 +739,10 @@ export class GatewayStore {
   private snapshot: GatewayStoreSnapshot | null = null;
   private mutationQueue: Promise<void> = Promise.resolve();
 
-  constructor(private readonly filePath: string) {}
+  constructor(
+    private readonly filePath: string,
+    private readonly persistSnapshot: GatewayStorePersistence = persistGatewayStoreSnapshot,
+  ) {}
 
   async load(): Promise<GatewayStoreSnapshot> {
     if (this.snapshot) {
@@ -587,7 +750,11 @@ export class GatewayStore {
     }
     try {
       const raw = await fs.readFile(this.filePath, 'utf8');
-      this.snapshot = normalizeGatewayStoreSnapshot(JSON.parse(raw));
+      const migration = migrateGatewayStoreFile(JSON.parse(raw));
+      if (migration.migrated) {
+        await this.persistSnapshot(this.filePath, migration.snapshot);
+      }
+      this.snapshot = migration.snapshot;
       return this.snapshot;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -616,6 +783,7 @@ export class GatewayStore {
   async upsert(input: Readonly<{
     gateway_id: string;
     display_name?: string;
+    runtime_environment_id?: string | null;
     connection: GatewayConnection;
     trust_profile?: GatewayTrustProfile;
     now_ms?: number;
@@ -634,9 +802,12 @@ export class GatewayStore {
         ? existing.trust_profile
         : undefined;
       const record = normalizeGatewayRecord({
-        schema_version: 1,
+        schema_version: GATEWAY_STORE_SCHEMA_VERSION,
         gateway_id: gatewayID,
         display_name: compact(input.display_name) || existing?.display_name || defaultGatewayDisplayName(input.connection),
+        runtime_environment_id: input.runtime_environment_id === null
+          ? undefined
+          : compact(input.runtime_environment_id) || existing?.runtime_environment_id,
         local_enabled: existing?.local_enabled ?? true,
         connection: input.connection,
         trust_profile: input.trust_profile ?? existingTrustProfile,
@@ -647,8 +818,7 @@ export class GatewayStore {
       if (!record) {
         throw new GatewayStoreError('GATEWAY_RECORD_INVALID', 'Gateway record is invalid.');
       }
-      this.snapshot = replaceGatewayRecord(snapshot, record, now);
-      await this.persist();
+      await this.commitSnapshot(replaceGatewayRecord(snapshot, record, now));
       return record;
     });
   }
@@ -670,8 +840,7 @@ export class GatewayStore {
       if (!record) {
         throw new GatewayStoreError('GATEWAY_RECORD_INVALID', 'Gateway record is invalid.');
       }
-      this.snapshot = replaceGatewayRecord(snapshot, record, now);
-      await this.persist();
+      await this.commitSnapshot(replaceGatewayRecord(snapshot, record, now));
       return record;
     });
   }
@@ -693,8 +862,7 @@ export class GatewayStore {
       if (!record) {
         throw new GatewayStoreError('GATEWAY_RECORD_INVALID', 'Gateway record is invalid.');
       }
-      this.snapshot = replaceGatewayRecord(snapshot, record, now);
-      await this.persist();
+      await this.commitSnapshot(replaceGatewayRecord(snapshot, record, now));
       return record;
     });
   }
@@ -716,8 +884,7 @@ export class GatewayStore {
       if (!record) {
         throw new GatewayStoreError('GATEWAY_RECORD_INVALID', 'Gateway record is invalid.');
       }
-      this.snapshot = replaceGatewayRecord(snapshot, record, now);
-      await this.persist();
+      await this.commitSnapshot(replaceGatewayRecord(snapshot, record, now));
       return record;
     });
   }
@@ -730,19 +897,18 @@ export class GatewayStore {
       if (!existing) {
         return null;
       }
-      this.snapshot = {
-        schema_version: 1,
+      const nextSnapshot: GatewayStoreSnapshot = {
+        schema_version: GATEWAY_STORE_SCHEMA_VERSION,
         gateways: snapshot.gateways.filter((record) => record.gateway_id !== cleanGatewayID),
       };
-      await this.persist();
+      await this.commitSnapshot(nextSnapshot);
       return existing;
     });
   }
 
-  private async persist(): Promise<void> {
-    const snapshot = await this.load();
-    await fs.mkdir(path.dirname(this.filePath), { recursive: true, mode: 0o700 });
-    await fs.writeFile(this.filePath, `${JSON.stringify(snapshot, null, 2)}\n`, { mode: 0o600 });
+  private async commitSnapshot(snapshot: GatewayStoreSnapshot): Promise<void> {
+    await this.persistSnapshot(this.filePath, snapshot);
+    this.snapshot = snapshot;
   }
 
   private mutate<T>(callback: () => Promise<T>): Promise<T> {

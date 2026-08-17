@@ -33,6 +33,8 @@ type PermitVerificationKey struct {
 type RuntimeValidation struct {
 	RuntimeInstanceID    string   `json:"runtime_instance_id"`
 	RuntimeBinaryVersion string   `json:"runtime_binary_version"`
+	Platform             string   `json:"platform"`
+	Architecture         string   `json:"architecture"`
 	ServiceProtocol      string   `json:"service_protocol"`
 	CompatibilityEpoch   int      `json:"compatibility_epoch"`
 	Capabilities         []string `json:"capabilities"`
@@ -183,7 +185,7 @@ func (s *BindingStore) RecordRuntimeValidation(validation RuntimeValidation) err
 		return errors.New("Runtime target binding is unavailable")
 	}
 	validation = normalizeRuntimeValidation(validation)
-	if validation.RuntimeInstanceID == "" || validation.ServiceProtocol == "" || validation.CompatibilityEpoch <= 0 ||
+	if validation.RuntimeInstanceID == "" || validation.Platform == "" || validation.Architecture == "" || validation.ServiceProtocol == "" || validation.CompatibilityEpoch <= 0 ||
 		validation.ArtifactSHA256 == "" || len(validation.Capabilities) == 0 {
 		return errors.New("Runtime validation facts are incomplete")
 	}
@@ -437,6 +439,8 @@ func acquireTargetRegistrationLock(runtimeRoot string) (func(), error) {
 func normalizeRuntimeValidation(validation RuntimeValidation) RuntimeValidation {
 	validation.RuntimeInstanceID = strings.TrimSpace(validation.RuntimeInstanceID)
 	validation.RuntimeBinaryVersion = strings.TrimSpace(validation.RuntimeBinaryVersion)
+	validation.Platform = strings.ToLower(strings.TrimSpace(validation.Platform))
+	validation.Architecture = strings.ToLower(strings.TrimSpace(validation.Architecture))
 	validation.ServiceProtocol = strings.TrimSpace(validation.ServiceProtocol)
 	validation.ArtifactSHA256 = strings.ToLower(strings.TrimSpace(validation.ArtifactSHA256))
 	validation.Capabilities = compactSorted(validation.Capabilities)

@@ -1498,15 +1498,15 @@
         "title": "AI tool runtime",
         "type": "AI Tool Contract"
       },
-      "body_length": 2508,
+      "body_length": 3065,
       "summary": "Redeven exposes typed AI tools through product-owned registration, policy, presentation, and concrete execution adapters while Floret owns admitted conversation, turn, invocation, approval, and projection lifecycle. This overview is the canonical navigation point for the focused tool, terminal, model/context, thread, and subagent contracts. Detailed behavior belongs in those concepts rather than one cross-domain implementation inventory.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Mechanism\n\nThis concept is the stable overview for the subject. Detailed contracts are maintained in the focused concepts below:\n\n- [AI tool permissions and dispatch](tool-permission-runtime.md)\n- [AI tool approval runtime](tool-approval-runtime.md)\n- [AI terminal tool runtime](terminal-tool-runtime.md)\n- [AI model and context runtime](model-context-runtime.md)\n- [Floret thread runtime integration](floret-thread-runtime.md)\n- [Flower subagent runtime](subagent-runtime.md)\n\nFloret receives user-visible linked context through ordered `TurnInput.References` and current-turn model-only `TurnSupplementalContextItem` values through `TurnRequest.SupplementalContext`; Redeven creates both in one admission mapping pass and stores neither after admission. File and directory references keep their opaque `ResourceRef` only in Floret, while the browser receives no locator or path authority. Structured message attachments travel separately through `TurnInput.Attachments`. Floret owns canonical history, references, attachments, provider-visible history, and continuation state.",
-          "char_count": 1081
+          "body": "## Mechanism\n\nThis concept is the stable overview for the subject. Detailed contracts are maintained in the focused concepts below:\n\n- [AI tool permissions and dispatch](tool-permission-runtime.md)\n- [AI tool approval runtime](tool-approval-runtime.md)\n- [AI terminal tool runtime](terminal-tool-runtime.md)\n- [AI model and context runtime](model-context-runtime.md)\n- [Floret thread runtime integration](floret-thread-runtime.md)\n- [Flower subagent runtime](subagent-runtime.md)\n\nFloret receives user-visible linked context through ordered `TurnInput.References` and current-turn model-only `TurnSupplementalContextItem` values through `TurnRequest.SupplementalContext`; Redeven creates both in one admission mapping pass and stores neither after admission. File and directory references keep their opaque `ResourceRef` only in Floret, while the browser receives no locator or path authority. Structured message attachments travel separately through `TurnInput.Attachments`. Floret owns canonical history, references, attachments, provider-visible history, and continuation state.\n\nEvery accepted AI user turn holds a Runtime lifecycle workload lease from admission until the canonical thread view has no active turn and no queued input. A lifecycle fence rejects a new turn before Floret mutation. Lease release follows the canonical terminal view, not the HTTP response or Desktop connection lifetime, so an existing session cannot admit hidden work after the final lifecycle snapshot.",
+          "char_count": 1488
         },
         {
           "id": "boundaries",
@@ -1546,6 +1546,12 @@
           "source": "redeven:internal/codeapp/appserver/server.go",
           "line": 4232,
           "description": "Appserver exposes the parent-scoped subagent detail route."
+        },
+        {
+          "id": "redeven:internal/ai/runtime_lifecycle_admission.go:1:binds ai admission and canonical terminal settlement to runtime lifecycle workload leases.",
+          "source": "redeven:internal/ai/runtime_lifecycle_admission.go",
+          "line": 1,
+          "description": "Binds AI admission and canonical terminal settlement to Runtime lifecycle workload leases."
         }
       ],
       "snippet": "Redeven exposes typed AI tools through product-owned registration, policy, presentation, and concrete execution adapters while Floret owns admitted conversation, turn, invocation, approval, and projection lifecycle. This overview is the can",
@@ -2730,15 +2736,15 @@
         "title": "Redeven environment operations",
         "type": "AI Operation Contract"
       },
-      "body_length": 4733,
+      "body_length": 4716,
       "summary": "Redeven environment lifecycle requests must go through the Redeven product surface, not through inferred container, SSH, systemd, launchctl, or process-manager commands. Flower learns this boundary through the standard `redeven-environment` system skill, not through a bespoke environment workflow embedded in the global prompt.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Mechanism\n\nThe `redeven env` CLI surface exposes machine-readable environment status, diagnostics, and lifecycle operation plans through the shared agent protocol envelope. `list`, `resolve`, `status`, `diagnose`, and `stop` are executable for the supported default Local Environment path. `start`, `restart`, and `update` are phase-one planning entries: they return structured availability, reason codes, and next actions rather than pretending the CLI can start or update Desktop runtime sessions. When the target catalog contains SSH, container, provider, Gateway, or external Local UI entries, `redeven env` may resolve the target but still returns the lifecycle request as `supported=false` with `reason_code=unsupported_target_kind` unless the target is the default Local Environment.\n\nAsk Flower environment context supplies routing data through the standard context action. When the accepted turn starts, Redeven can project these fields into Floret current-turn supplemental context metadata, but they remain product context and UI/audit facts rather than permission, remote execution proof, builtin target routing, or Redeven-owned provider history. The `redeven-environment` skill tells Flower to choose targets in this order: `execution_context.current_target_id`, then `target.target_id`, then `execution_context.source_env_public_id`, then `current`. The literal target `current` is accepted by Redeven target resolution as the current default environment alias.\n\nFor arbitrary target OS diagnostics, Flower should use `redeven targets exec --target \u003ctarget\u003e --command \u003cagent-selected command\u003e --json`. This command lets the agent choose OS-appropriate probes such as `date`, `uname`, uptime, disk, process, package manager, or service checks while Redeven owns target resolution, execution location, timeout, stdout/stderr, and exit-code provenance. The command supports the default Local Environment shell and saved local/SSH host runtime targets with key or agent SSH auth. Password SSH targets, container placements, provider environments, Gateway environments, and external Local UI targets return structured unsupported or unavailable results instead of falling back to ad hoc low-level commands.",
-          "char_count": 2219
+          "body": "## Mechanism\n\nThe `redeven env` CLI surface exposes machine-readable environment status, diagnostics, and lifecycle operation plans through the shared agent protocol envelope. `list`, `resolve`, `status`, and `diagnose` remain executable for the supported default Local Environment path. `start`, `stop`, `restart`, and `update` never execute Runtime lifecycle directly: until the selected target has a usable Gateway supervisor route they return `blocked`, `method=runtime_gateway`, and `reason_code=runtime_gateway_setup_required`. When the target catalog contains SSH, container, Provider, Gateway, or external Local UI entries that this CLI cannot route, resolution remains structured and lifecycle returns `unsupported_target_kind` without inventing direct host commands.\n\nAsk Flower environment context supplies routing data through the standard context action. When the accepted turn starts, Redeven can project these fields into Floret current-turn supplemental context metadata, but they remain product context and UI/audit facts rather than permission, remote execution proof, builtin target routing, or Redeven-owned provider history. The `redeven-environment` skill tells Flower to choose targets in this order: `execution_context.current_target_id`, then `target.target_id`, then `execution_context.source_env_public_id`, then `current`. The literal target `current` is accepted by Redeven target resolution as the current default environment alias.\n\nFor arbitrary target OS diagnostics, Flower should use `redeven targets exec --target \u003ctarget\u003e --command \u003cagent-selected command\u003e --json`. This command lets the agent choose OS-appropriate probes such as `date`, `uname`, uptime, disk, process, package manager, or service checks while Redeven owns target resolution, execution location, timeout, stdout/stderr, and exit-code provenance. The command supports the default Local Environment shell and saved local/SSH host runtime targets with key or agent SSH auth. Password SSH targets, container placements, provider environments, Gateway environments, and external Local UI targets return structured unsupported or unavailable results instead of falling back to ad hoc low-level commands.",
+          "char_count": 2202
         },
         {
           "id": "boundaries",
@@ -2905,15 +2911,15 @@
         "title": "AI terminal tool runtime",
         "type": "AI Tool Contract"
       },
-      "body_length": 2924,
+      "body_length": 3392,
       "summary": "Redeven owns PTY process resources and bounded output retention. Floret v4 owns the canonical tool call, interaction, effect attempt, result, and Activity. One effect adapter authorizes execution once and publishes stable current-view updates; Redeven does not persist a parallel terminal lifecycle or recover effects from product SQL.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "`terminal.exec` starts a local PTY after the Floret invocation provides the exact thread, turn, tool-call, and effect-attempt identity. Redeven publishes the public process id and sanitized shell presentation through the invocation Activity update. Provider and tool I/O run outside the ThreadRuntime lock. Only the minimal irreversible tool intent fence is durable before process creation; a result whose side effect is uncertain is not automatically replayed.\n\nThe process manager retains monotonic output chunks with fixed byte limits. `terminal.read` returns output after the caller's sequence, `terminal.write` writes bounded stdin, and `terminal.terminate` requests process-tree termination and waits for reap and output drain. These process operations do not invent canonical Activity state. The effect adapter settles the exact Floret effect attempt once; duplicate or late completion cannot append a second canonical tool result.\n\nTool approval is a typed Floret interaction. Accept continues only the matching effect; reject resolves that interaction and renders the outcome on the tool row without a global model failure. Cancel terminates active process resources and asks Floret to cancel the thread turn idempotently. Runtime restart resumes only canonically safe input and queue work; an uncertain terminal side effect remains on its tool row with an explicit Retry Effect action.\n\nPresentation is derived from the typed Floret Activity payload. A parseable but schema-invalid call may retain sanitized command presentation, but it fails before authorization or PTY creation. Browser payloads exclude local working paths, stdin, authorization proofs, and effect internals.",
-          "char_count": 1687
+          "body": "`terminal.exec` starts a local PTY after the Floret invocation provides the exact thread, turn, tool-call, and effect-attempt identity. Before spawning, it acquires a protected Runtime lifecycle workload lease for that exact hosted process; a closed lifecycle admission rejects the process without changing manager state. The lease remains held through process reap and output drain and is released exactly once from the real process terminal path. Redeven publishes the public process id and sanitized shell presentation through the invocation Activity update. Provider and tool I/O run outside the ThreadRuntime lock. Only the minimal irreversible tool intent fence is durable before process creation; a result whose side effect is uncertain is not automatically replayed.\n\nThe process manager retains monotonic output chunks with fixed byte limits. `terminal.read` returns output after the caller's sequence, `terminal.write` writes bounded stdin, and `terminal.terminate` requests process-tree termination and waits for reap and output drain. These process operations do not invent canonical Activity state. The effect adapter settles the exact Floret effect attempt once; duplicate or late completion cannot append a second canonical tool result.\n\nTool approval is a typed Floret interaction. Accept continues only the matching effect; reject resolves that interaction and renders the outcome on the tool row without a global model failure. Cancel terminates active process resources and asks Floret to cancel the thread turn idempotently. Runtime restart resumes only canonically safe input and queue work; an uncertain terminal side effect remains on its tool row with an explicit Retry Effect action.\n\nPresentation is derived from the typed Floret Activity payload. A parseable but schema-invalid call may retain sanitized command presentation, but it fails before authorization or PTY creation. Browser payloads exclude local working paths, stdin, authorization proofs, and effect internals.",
+          "char_count": 2000
         },
         {
           "id": "boundaries",
@@ -2933,6 +2939,11 @@
           "id": "redeven:internal/ai/terminal_process.go:0:owns bounded pty resources, output, reap, and termination.",
           "source": "redeven:internal/ai/terminal_process.go",
           "description": "Owns bounded PTY resources, output, reap, and termination."
+        },
+        {
+          "id": "redeven:internal/ai/runtime_lifecycle_admission_test.go:0:proves post-fence rejection and release only after canonical turn or process terminal state.",
+          "source": "redeven:internal/ai/runtime_lifecycle_admission_test.go",
+          "description": "Proves post-fence rejection and release only after canonical turn or process terminal state."
         },
         {
           "id": "redeven:internal/ai/terminal_process_service.go:0:adapts process completion to the canonical effect result.",
@@ -5540,15 +5551,15 @@
         "title": "Desktop runtime process lifecycle",
         "type": "Desktop Contract"
       },
-      "body_length": 2977,
+      "body_length": 4229,
       "summary": "Desktop discovers Runtime process facts and initiates user-facing operations, but it does not own Runtime lifecycle state. Every product-managed start, stop, restart, or update is authorized and executed by the target OS user's Gateway supervisor. Desktop uses `lifecycle_target_id` plus `target_generation` and attaches to the durable Gateway operation from any authorized client.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Identity and inventory\n\nThe Runtime inventory records PID/create time, user, namespace, state root, executable identity, Runtime version, workload identities, snapshot revision, and an inventory digest. Missing, malformed, stale, or incompatible inventory is `unknown`; it is never coerced to zero. Target identity is stable across Desktop clients and transport changes. A changed OS principal, container instance, or installation root creates a new target id; a supervisor key rotation advances generation under the same target lock.\n\n## Operation ordering\n\nDesktop performs support, authorization, readiness, target, generation, compatibility, and artifact-policy checks before invoking a builder or uploader. The Gateway `prepare` response creates or attaches to one durable operation. User confirmation precedes artifact staging. Commit acquires the Runtime lifecycle fence, compares the exact confirmed workload identity set, atomically replaces the artifact, checks health, and records recovery. Identity replacement, added risk, or `known -\u003e unknown` requires `confirmation_required`. A conflicting operation returns `operation_in_progress`; it is never queued or forcefully taken over.\n\nDesktop closes an attached Env App session only after a destructive operation is accepted by the shared coordinator. A transport disconnect does not cancel a Gateway operation; reopening the card attaches to its redacted progress. Connect, Workspace, terminal, files, and web sessions remain separate from the lifecycle operation store.",
-          "char_count": 1534
+          "body": "## Identity and inventory\n\nThe Runtime inventory records PID/create time, user, namespace, state root, executable identity, Runtime version, workload identities, snapshot revision, and an inventory digest. Missing, malformed, stale, or incompatible inventory is `unknown`; it is never coerced to zero. Target identity is stable across Desktop clients and transport changes. A changed OS principal, container instance, or installation root creates a new target id; a supervisor key rotation advances generation under the same target lock.\n\n## Operation ordering\n\nDesktop performs support, authorization, readiness, target, generation, compatibility, and artifact-policy checks before invoking a builder or uploader. The Gateway `prepare` response creates or attaches to one durable operation. User confirmation precedes artifact staging. Commit acquires the Runtime lifecycle fence, compares the exact confirmed workload identity set, atomically replaces the artifact, checks health, and records recovery. Identity replacement, added risk, or `known -\u003e unknown` requires `confirmation_required`. A conflicting operation returns `operation_in_progress`; it is never queued or forcefully taken over.\n\nDesktop closes an attached Env App session only after a destructive operation is accepted by the shared coordinator. A transport disconnect does not cancel a Gateway operation; reopening either a direct or Provider card queries the exact target and attaches to active Gateway progress. Only the original operation client can resume confirmation, artifact upload, or commit. Another authorized manager receives redacted progress, while a current binding administrator may start the separate permit-bound reconcile action for quarantine. Connect, Workspace, terminal, files, and web sessions remain separate from the lifecycle operation store.\n\nProvider cards use a Provider-scoped management client key and their own protected management tunnel. The bound Gateway, not the Runtime Agent, maintains that reverse transport, so stopping Runtime does not remove the supervisor management route. Provider cards never ask the user to select another Gateway card and never read its paired key or transport. Direct cards use their own explicit setup flow to install/enroll the target supervisor; access-only URL cards remain unsupported for managed lifecycle. The planner first projects support, then authorization, then readiness, and does not mark an action available until that route can execute it.",
+          "char_count": 2491
         },
         {
           "id": "boundaries",
@@ -5588,6 +5599,18 @@
           "source": "redeven:desktop/src/main/sshRuntime.ts",
           "line": 1,
           "description": "SSH placement delegates lifecycle execution to the Gateway boundary."
+        },
+        {
+          "id": "redeven:desktop/src/main/runtimeLifecycleAttachment.ts:1:cross-client confirmation, redacted observation, resume, and recovery projection.",
+          "source": "redeven:desktop/src/main/runtimeLifecycleAttachment.ts",
+          "line": 1,
+          "description": "Cross-client confirmation, redacted observation, resume, and recovery projection."
+        },
+        {
+          "id": "redeven:desktop/src/main/providerRuntimeLifecycleClient.ts:1:provider-scoped signed lifecycle tunnel without gateway-card credential borrowing.",
+          "source": "redeven:desktop/src/main/providerRuntimeLifecycleClient.ts",
+          "line": 1,
+          "description": "Provider-scoped signed lifecycle tunnel without Gateway-card credential borrowing."
         }
       ],
       "snippet": "Desktop discovers Runtime process facts and initiates user-facing operations, but it does not own Runtime lifecycle state. Every product-managed start, stop, restart, or update is authorized and executed by the target OS user's Gateway supe",
@@ -6161,15 +6184,15 @@
         "title": "Gateway service",
         "type": "Gateway Contract"
       },
-      "body_length": 2630,
+      "body_length": 5004,
       "summary": "`redeven-gateway` is an independent process and component version. It is optional for Runtime access but is the only executor and durable authority for Redeven-managed Runtime lifecycle operations. It runs as the target OS user, owns target locks and recovery, and exposes ordinary Gateway open-session separately from lifecycle control.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Supervisor and compatibility\n\nGateway persists its supervisor identity, installation marker, target id/generation, binding, operation store, checkpoint, and quarantine state. Registration rejects an installation-root alias that names another target. Gateway and Runtime versions need not match; a signed compatibility manifest, stable Gateway protocol, Runtime service protocol/epoch, capabilities, and artifact digest decide compatibility. Gateway-first setup is performed by Desktop installer or an administrator and has no self-update state machine.\n\n## Lifecycle\n\n`prepare` validates its action-scoped permit and client key before build, upload, staging, stop, or lock acquisition. One target mutation lock serializes prepare with enrollment; a same-target rebind advances generation from `n` to `n+1` and is rejected while an active operation or quarantine exists. One target lock protects each durable operation. Checkpoints survive Gateway restart; pre-commit deadlines expire safely, while committing/recovering/quarantined operations do not silently expire. Atomic replacement, health verification, rollback, and persistent manual recovery are one Gateway state machine. Reconcile requires a separate binding-admin permit with no artifact or build scope; Gateway persists its one-time consumption before recovery, and response-loss retry can only return the same terminal result.\n\n## Access boundary\n\nCatalog and explicit open-session continue to provide Gateway-card access. Terminal, files, web, and workspace data do not pass through the lifecycle operation store. Gateway is not a container/Provider Environment lifecycle manager, and Runtime continues to start and serve ordinary access without a Gateway process.",
-          "char_count": 1730
+          "body": "## Supervisor and compatibility\n\nGateway persists its supervisor identity, installation marker, target id/generation, binding, operation store, checkpoint, and quarantine state. Registration rejects an installation-root alias that names another target. Gateway and Runtime versions need not match; a signed compatibility manifest, stable Gateway protocol, Runtime service protocol/epoch, capabilities, and artifact digest decide compatibility. Gateway-first setup is performed by Desktop installer or an administrator and has no self-update state machine.\n\nFor a Provider binding, the Gateway process itself maintains the signed RCPP v3 supervisor poll/respond transport and dispatches accepted lifecycle frames directly to the Gateway-owned operation service. This transport remains available while Runtime and its Agent are stopped. An offline heartbeat may reuse persisted Runtime compatibility facts only when exact process inventory is empty and the managed executable digest still matches those facts; external byte replacement stops readiness projection. There is no Runtime control RPC, local management socket, or self-RPC fallback for Provider lifecycle. A transport disconnect does not cancel an already authorized durable operation; reconnect resumes polling and authorized clients attach to Gateway state.\n\n## Lifecycle\n\n`prepare` validates its action-scoped permit and client key before build, upload, staging, stop, or lock acquisition. One target mutation lock serializes prepare with enrollment; a same-target rebind advances generation from `n` to `n+1` and is rejected while an active operation or quarantine exists. One target lock protects each durable operation. Checkpoints survive Gateway restart; pre-commit deadlines expire safely, while committing/recovering/quarantined operations do not silently expire. Atomic replacement, health verification, rollback, and persistent manual recovery are one Gateway state machine. Reconcile requires a separate binding-admin permit with no artifact or build scope; Gateway persists its one-time consumption before recovery, and response-loss retry can only return the same terminal result.\n\nPublished artifacts carry distinct archive and executable digests. Gateway verifies the archive before extraction, verifies the final executable bytes in staging before activation, and compares the running Runtime identity with that executable digest after start. The complete recovery plan, previous-installation identity, verified staging root, and exact candidate process identity are durably persisted and parent-directory synced before shutdown. Recovery first terminates only the recorded candidate process, then advances idempotent phases to restore and verify the previous installation; an unverifiable result remains `manual_recovery_required` instead of unlocking or accepting mixed state.\n\nAuthorized managers list active operations by exact environment, target, and generation. The original authorized client receives the mutation fields it needs to resume confirmation, artifact upload, or commit. Another current manager receives only a redacted observation DTO and can attach to progress without inheriting mutation authority. A binding administrator can reconcile a quarantined operation with a new exact permit; historical Desktop client identity is not required for that separate action.\n\n## Access boundary\n\nCatalog and explicit open-session continue to provide Gateway-card access. Terminal, files, web, and workspace data do not pass through the lifecycle operation store. Gateway is not a container/Provider Environment lifecycle manager, and Runtime continues to start and serve ordinary access without a Gateway process.",
+          "char_count": 3700
         }
       ],
       "evidence": [
@@ -6189,6 +6212,24 @@
           "id": "redeven:internal/runtimegateway/supervisor/:0:target lock, durable operation, checkpoint, deadline, and recovery implementation.",
           "source": "redeven:internal/runtimegateway/supervisor/",
           "description": "Target lock, durable operation, checkpoint, deadline, and recovery implementation."
+        },
+        {
+          "id": "redeven:internal/runtimegateway/supervisor/provider.go:1:gateway-owned provider heartbeat and signed reverse management transport.",
+          "source": "redeven:internal/runtimegateway/supervisor/provider.go",
+          "line": 1,
+          "description": "Gateway-owned Provider heartbeat and signed reverse management transport."
+        },
+        {
+          "id": "redeven:internal/gatewayservice/provider_tunnel.go:1:direct dispatch into the single gateway operation authority.",
+          "source": "redeven:internal/gatewayservice/provider_tunnel.go",
+          "line": 1,
+          "description": "Direct dispatch into the single Gateway operation authority."
+        },
+        {
+          "id": "redeven:internal/runtimegateway/lifecycle/store.go:390:exact active-operation listing, observer redaction, and binding-admin reconciliation.",
+          "source": "redeven:internal/runtimegateway/lifecycle/store.go",
+          "line": 390,
+          "description": "Exact active-operation listing, observer redaction, and binding-admin reconciliation."
         },
         {
           "id": "redeven:spec/openapi/gateway-v2.yaml:1:gateway v2 machine contract.",
@@ -6239,15 +6280,15 @@
         "title": "Gateway v2 protocol",
         "type": "Protocol Contract"
       },
-      "body_length": 3831,
+      "body_length": 4711,
       "summary": "`redeven-gateway` exposes the stable `redeven-gateway-v2` HTTP JSON protocol. Gateway is an optional Runtime lifecycle supervisor and an independent process; it is not required for Runtime Connect, Workspace, or Runtime UI access. Gateway owns Runtime operation progress, target locking, checkpoints, fencing, and recovery. Desktop is a client that observes or starts an operation and never represents Runtime lifecycle ownership.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Wire surface\n\nThe machine-readable source is `spec/openapi/gateway-v2.yaml`. It defines pairing, catalog, open-session, profile writes, capability discovery, operation prepare/confirm/artifact/commit/cancel/deadline/reconcile, and event reads under `/gateway/v2/*`. Signed requests bind protocol, method, route, body digest, gateway identity, binding audience, nonce, and timestamp. Pairing and profile-write bridge tokens are transport credentials, not Runtime operation authority.\n\nRuntime lifecycle requests require an exact `lifecycle_target_id`, `target_generation`, authorized client key, operation scope, and (for updates) a published-release or custom-build artifact policy. `prepare` is the authorization linearization point and occurs before staging, upload, process stop, or local build. Repeating the same normalized scope attaches to the durable operation; a conflicting operation returns `operation_in_progress` instead of queueing or reassigning control.\n\nThe Gateway operation store is the only lifecycle progress authority. It persists pre-commit deadlines, workload snapshots, artifact staging, lifecycle fence tokens, commit checkpoints, recovery, and `manual_recovery_required` quarantine. Commit rechecks target generation and exact workload identities; unknown inventory is never treated as empty. A successful commit performs atomic replacement and health verification, while an unverifiable recovery remains quarantined until a binding administrator reconciles it.\n\nGateway and Runtime versions are independent. Lifecycle compatibility is decided by the signed compatibility manifest, Gateway protocol, Runtime service protocol/epoch, and capabilities. A version string match is neither necessary nor sufficient. Gateway updates are performed by Desktop installer or administrator setup; the Gateway protocol contains no self-update operation.\n\nCatalog/open-session and ordinary terminal, files, web, and workspace traffic remain separate from lifecycle operations. An explicit Gateway card may use its own open-session transport, but ordinary data never enters the Runtime operation store and does not consume a lifecycle permit.",
-          "char_count": 2157
+          "body": "## Wire surface\n\nThe machine-readable source is `spec/openapi/gateway-v2.yaml`. It defines pairing, catalog, open-session, profile writes, capability discovery, operation prepare/list/get/confirm/artifact/commit/cancel/deadline/reconcile, and event reads under `/gateway/v2/*`. Signed requests bind protocol, method, route, body digest, gateway identity, binding audience, nonce, and timestamp. Pairing and profile-write bridge tokens are transport credentials, not Runtime operation authority.\n\nRuntime lifecycle requests require an exact `lifecycle_target_id`, `target_generation`, authorized client key, operation scope, and (for updates) a published-release or custom-build artifact policy. `prepare` is the authorization linearization point and occurs before staging, upload, process stop, or local build. Repeating the same normalized scope attaches to the durable operation; a conflicting operation returns `operation_in_progress` instead of queueing or reassigning control.\n\nThe Gateway operation store is the only lifecycle progress authority. It persists pre-commit deadlines, workload snapshots, distinct archive/executable digests, artifact staging, lifecycle fence tokens, durable commit checkpoints, exact candidate process identity, recovery phases, and `manual_recovery_required` quarantine. Commit rechecks target generation and exact workload identities; unknown inventory is never treated as empty. A successful commit verifies staged executable bytes before activation and running identity afterward. Recovery terminates a recorded failed candidate before idempotently restoring the previous installation; an unverifiable result remains quarantined until a binding administrator reconciles it with a new exact permit.\n\nList, Get, and Events authorize before exposing operation existence. The original authorized client receives the full operation needed for mutation; any other current `manage_runtime` client receives a redacted DTO without actor, client key, idempotency, build, artifact, workload-identity, checkpoint, or desired-runtime details. Reconcile is not an ownership takeover and never accepts force unlock.\n\nGateway and Runtime versions are independent. Lifecycle compatibility is decided by the signed compatibility manifest, Gateway protocol, Runtime service protocol/epoch, and capabilities. A version string match is neither necessary nor sufficient. Cross-epoch updates additionally require the signed manifest to list the discovered current Runtime epoch in `upgrade_from_runtime_epochs`; the v0.11.0 release contract explicitly admits the reviewed epoch 8 to epoch 9 transition. Gateway updates are performed by Desktop installer or administrator setup; the Gateway protocol contains no self-update operation.\n\nCatalog/open-session and ordinary terminal, files, web, and workspace traffic remain separate from lifecycle operations. An explicit Gateway card may use its own open-session transport, but ordinary data never enters the Runtime operation store and does not consume a lifecycle permit.",
+          "char_count": 3037
         },
         {
           "id": "boundaries",
@@ -6329,22 +6370,22 @@
         "title": "RCPP v3 provider API",
         "type": "Protocol Contract"
       },
-      "body_length": 3760,
+      "body_length": 4269,
       "summary": "RCPP v3 is the Provider-side authorization contract in `docs/openapi/rcpp-v3.yaml` and `shared/contracts/providerprotocol/rcpp.go`. Connect and Workspace access are separate from Runtime management. The Portal exposes `manage_runtime`, `deploy_custom_runtime`, and `manage_runtime_binding` independently, signs a precise one-time permit, and stores only binding and audit facts. The target Gateway remains the sole Runtime operation authority.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Capability projection\n\nEnvironment list and capability responses expose `support`, `authorization`, and `readiness` as independent dimensions. Projection always evaluates support first, authorization second, and readiness third. Unsupported URL access returns `unsupported`; an authorized but unbound local, SSH, or container target returns `setup_required`; an existing binding with a stale heartbeat returns `temporarily_unavailable`. An unauthorized response does not reveal target, generation, installation, or last-seen facts.\n\n## Authorization and permits\n\n`POST .../runtime-management/authorizations` signs an explicit `prepare` or binding-admin `reconcile` action. Prepare binds the exact actor, access point, environment, lifecycle target, generation, operation, desired Runtime version, artifact policy, build-input digest, authorized client key, current Gateway binding, and expiry. Gateway exchanges that permit once during prepare; later Provider token expiry or revocation does not re-authorize an already linearized operation. Reconcile carries only `manage_runtime_binding`, has no desired-version, artifact-policy, or build-input scope, and is durably consumed by Gateway before recovery. Any action or scope mismatch is rejected.\n\n## Enrollment and fencing\n\nEnrollment is either an explicitly selected direct card or an interactive one-time code. The challenge persists a proof nonce, target generation, and the full `ControlChannelFence`: logical binding, control binding generation, artifact sequence, authorization lease, and control owner instance. The supervisor signs the canonical proof payload with its Ed25519 key. Existing control bindings require a live same-scope RPC proof and an unchanged fence; first binding has no prior fence and establishes a new trust record. Rebinding the same target advances its generation from `n` to `n+1`; Gateway serializes it with prepare under one target mutation lock and rejects it while an operation is active or the target is quarantined. A challenge is single-use, expires, and cannot be replayed.\n\nThe binding records lifecycle target/generation, supervisor identity, installation digest, independent Gateway and Runtime versions, protocol, compatibility epoch, capabilities, artifact digest, and heartbeat freshness. These observations determine readiness only; Portal does not store operation steps, checkpoints, locks, or recovery projections.",
-          "char_count": 2418
+          "body": "## Access and Runtime link\n\nRCPP v3 open-session is Access/Open only and rejects any response that contains the frozen v2 `bootstrap_ticket` field. Runtime link uses a separate one-time authorization and exchange. Lifecycle traffic uses the Provider Environment's signed management tunnel and never asks for another Gateway card, paired key, SSH credential, container credential, or public Runtime URL. The tunnel permits only Gateway lifecycle routes; ordinary access and data-plane traffic remain outside it.\n\n## Capability projection\n\nEnvironment list and capability responses expose `support`, `authorization`, and `readiness` as independent dimensions. Projection always evaluates support first, authorization second, and readiness third. Unsupported URL access returns `unsupported`; an authorized but unbound local, SSH, or container target returns `setup_required`; an existing binding with a stale heartbeat returns `temporarily_unavailable`. An unauthorized response does not reveal target, generation, installation, or last-seen facts.\n\n## Authorization and permits\n\n`POST .../runtime-management/authorizations` signs an explicit `prepare` or binding-admin `reconcile` action. Prepare binds the exact actor, access point, environment, lifecycle target, generation, operation, desired Runtime version, artifact policy, build-input digest, authorized client key, current Gateway binding, and expiry. Gateway exchanges that permit once during prepare; later Provider token expiry or revocation does not re-authorize an already linearized operation. Reconcile carries only `manage_runtime_binding`, has no desired-version, artifact-policy, or build-input scope, and is durably consumed by Gateway before recovery. Any action or scope mismatch is rejected.\n\n## Enrollment and fencing\n\nEnrollment is either an explicitly selected direct card or an interactive one-time code. The challenge persists a proof nonce, target generation, and the full `ControlChannelFence`: logical binding, control binding generation, artifact sequence, authorization lease, and control owner instance. The supervisor signs the canonical proof payload with its Ed25519 key. Existing control bindings require a live same-scope RPC proof and an unchanged fence; first binding has no prior fence and establishes a new trust record. Rebinding the same target advances its generation from `n` to `n+1`; Gateway serializes it with prepare under one target mutation lock and rejects it while an operation is active or the target is quarantined. A challenge is single-use, expires, and cannot be replayed.\n\nThe binding records lifecycle target/generation, supervisor identity, installation digest, independent Gateway and Runtime versions, protocol, compatibility epoch, capabilities, artifact digest, and heartbeat freshness. These observations determine readiness only; Portal does not store operation steps, checkpoints, locks, or recovery projections.",
+          "char_count": 2930
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "RCPP v2 remains the frozen access/bootstrap surface. RCPP v3 adds management endpoints without reusing the v2 protocol name. Provider cards never borrow SSH/container credentials or use a public Environment URL as a control fallback. Runtime Connect, Workspace, and open-session continue when lifecycle support is unavailable.",
-          "char_count": 326
+          "body": "RCPP v2 remains a frozen access/bootstrap protocol, but v3 has its own DTOs and never falls back to v2 bootstrap. Provider cards never borrow Gateway/SSH/container credentials or use a public Environment URL as a control fallback. Runtime Connect, Workspace, and open-session continue when lifecycle support is unavailable.",
+          "char_count": 323
         }
       ],
       "evidence": [
@@ -9223,5 +9264,5 @@
       ]
     }
   ],
-  "source_sha256": "15a80872521626aa795464cafe032bf95ccbf8db35b241f7654cabb87973748f"
+  "source_sha256": "5c7d7426b2e8c42615dca75a129331e76e3f839e2e58a6e7dfb29b50a234e556"
 }

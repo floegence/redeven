@@ -44,10 +44,10 @@ function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
 
-// IMPORTANT: Provider Open remains a provider-tunnel access path. Provider Runtime
-// management is a separate authorization path and may execute only through the
-// exact Gateway card selected by the user; it must not select another card,
-// borrow that card's credentials, or use the public Environment URL as fallback.
+// IMPORTANT: Provider Open and Runtime management use separate Provider-scoped
+// tunnels. A direct card may be used only when the user explicitly selects it for
+// supervisor setup; routine lifecycle must never borrow that card's credentials
+// or use the public Environment URL as fallback.
 export function desktopEnvironmentManagementSurface(
   kind: DesktopEnvironmentEntryKind,
 ): DesktopEnvironmentManagementSurface {

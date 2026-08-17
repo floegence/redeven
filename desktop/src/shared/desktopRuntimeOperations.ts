@@ -22,7 +22,6 @@ export type DesktopRuntimeOperationMethod =
   | 'ssh_host'
   | 'local_container_exec'
   | 'ssh_container_exec'
-  | 'desktop_local_update_handoff'
   | 'runtime_control_rpc'
   | 'runtime_gateway'
   | 'provider_tunnel'

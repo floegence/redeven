@@ -61,6 +61,8 @@ type LifecycleFenceSnapshot struct {
 type RuntimeIdentity struct {
 	RuntimeInstanceID    string   `json:"runtime_instance_id"`
 	RuntimeBinaryVersion string   `json:"runtime_binary_version"`
+	Platform             string   `json:"platform"`
+	Architecture         string   `json:"architecture"`
 	ServiceProtocol      string   `json:"service_protocol"`
 	CompatibilityEpoch   int      `json:"compatibility_epoch"`
 	Capabilities         []string `json:"capabilities"`

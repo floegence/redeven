@@ -219,6 +219,7 @@ func assertGatewayPaths(t *testing.T, contract openAPIContract, root string) {
 		"/gateway/v2/env-profiles/delete":                              "post",
 		"/gateway/v2/runtime-management/capability":                    "post",
 		"/gateway/v2/runtime-operations/prepare":                       "post",
+		"/gateway/v2/runtime-operations/list":                          "post",
 		"/gateway/v2/runtime-operations/{operation_id}":                "get",
 		"/gateway/v2/runtime-operations/{operation_id}/confirm":        "post",
 		"/gateway/v2/runtime-operations/{operation_id}/artifact":       "put",
@@ -364,6 +365,7 @@ func assertRequestResponseEnvelopes(t *testing.T, contract openAPIContract) {
 		"/gateway/v2/env-profiles/delete":                         {"EnvProfileDeleteRequest", "EnvProfileDeleteEnvelope", "EnvProfileDeleteResponse"},
 		"/gateway/v2/runtime-management/capability":               {"RuntimeManagementCapabilityRequest", "RuntimeManagementCapabilityEnvelope", "RuntimeManagementCapability"},
 		"/gateway/v2/runtime-operations/prepare":                  {"RuntimeOperationPrepareRequest", "RuntimeOperationPrepareEnvelope", "RuntimeOperationPrepareResponse"},
+		"/gateway/v2/runtime-operations/list":                     {"RuntimeOperationListRequest", "RuntimeOperationListEnvelope", "RuntimeOperationListResponse"},
 		"/gateway/v2/runtime-operations/{operation_id}/reconcile": {"RuntimeOperationReconcileRequest", "RuntimeOperationEnvelope", "RuntimeOperation"},
 	}
 	operationResponses := map[string]struct {
@@ -476,7 +478,6 @@ func assertGatewayEnums(t *testing.T, contract openAPIContract) {
 		EnvProfileAccessRouteKindSSHHost,
 		EnvProfileAccessRouteKindSSHContainer,
 	))
-	assertEnum(t, contract, "EnvProfileControlOwner", constants(EnvProfileControlOwnerNone, EnvProfileControlOwnerGateway))
 	assertEnum(t, contract, "RuntimeOperationKind", constants(
 		RuntimeOperationStart,
 		RuntimeOperationStop,
@@ -523,7 +524,7 @@ func assertGatewayEnums(t *testing.T, contract openAPIContract) {
 		GatewayStatusUnknown,
 	))
 	if _, ok := contract.Components.Schemas["EnvProfileSSHSecret"]; ok {
-		t.Fatal("Gateway v1 OpenAPI must not expose ssh_secret until SSH password auth is implemented")
+		t.Fatal("Gateway v2 OpenAPI must not expose ssh_secret until SSH password auth is implemented")
 	}
 }
 

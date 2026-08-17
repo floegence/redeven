@@ -26,6 +26,8 @@ import {
   type GatewayRuntimeArtifactMetadata,
   type GatewayRuntimeManagementCapabilityRequest,
   type GatewayRuntimeOperation,
+  type GatewayRuntimeOperationListRequest,
+  type GatewayRuntimeOperationListResponse,
   type GatewayRuntimeOperationConfirmationRequest,
   type GatewayRuntimeOperationEventsResponse,
   type GatewayRuntimeOperationPrepareRequest,
@@ -39,6 +41,7 @@ import type { DesktopGatewayServiceState } from '../shared/desktopGateway';
 import type { DesktopGatewayRuntimeManagementCapability } from '../shared/desktopGateway';
 import {
   ensureManagedGatewayServiceReady,
+  enrollManagedGatewaySupervisor,
   gatewayServiceBinaryPath,
   probeManagedGatewayServiceDeep,
   probeManagedGatewayServiceStatus,
@@ -102,6 +105,7 @@ export type GatewayServiceLifecycleProgress = Readonly<{
     | 'opening_bridge'
     | 'stopping_gateway'
     | 'verifying_gateway_stopped'
+    | 'enrolling_gateway'
     | 'gateway_ready';
   title: string;
   detail: string;
@@ -262,6 +266,10 @@ export class GatewayLifecycleManager {
     return (await this.runtimeOperationClient(record, options)).getRuntimeOperation(record, operationID, options);
   }
 
+  async listRuntimeOperations(record: GatewayRecord, request: GatewayRuntimeOperationListRequest, options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; startPolicy?: GatewayStartPolicy }> = {}): Promise<GatewayRuntimeOperationListResponse> {
+    return (await this.runtimeOperationClient(record, options)).listRuntimeOperations(record, request, options);
+  }
+
   async confirmRuntimeOperation(record: GatewayRecord, operationID: string, request: GatewayRuntimeOperationConfirmationRequest, options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; startPolicy?: GatewayStartPolicy }> = {}): Promise<GatewayRuntimeOperation> {
     return (await this.runtimeOperationClient(record, options)).confirmRuntimeOperation(record, operationID, request, options);
   }
@@ -333,6 +341,7 @@ export class GatewayLifecycleManager {
         sshTransportManager: this.options.ssh_transport_manager,
         sshCredentialScope: record.gateway_id,
         target: gatewaySSHDetails(record),
+        hostAccess: gatewayHostAccess(record),
         placement: gatewayPlacement(record),
         stateRoot: gatewayServiceStateRoot(record),
         gatewayID: record.gateway_id,
@@ -372,7 +381,7 @@ export class GatewayLifecycleManager {
         message: probe.message,
       });
     } catch (error) {
-      return manageableServiceState(record, record.connection.kind === 'ssh_container' ? 'container_unavailable' : 'ssh_unreachable', {
+      return manageableServiceState(record, record.connection.kind === 'ssh_container' || record.connection.kind === 'local_container' ? 'container_unavailable' : record.connection.kind === 'ssh_host' ? 'ssh_unreachable' : 'error', {
         serviceTargetID: targetID,
         serviceStateRoot: gatewayServiceStateRoot(record),
         message: error instanceof Error ? error.message : String(error),
@@ -389,6 +398,7 @@ export class GatewayLifecycleManager {
       sshTransportManager: this.options.ssh_transport_manager,
       sshCredentialScope: record.gateway_id,
       target: gatewaySSHDetails(record),
+      hostAccess: gatewayHostAccess(record),
       placement: gatewayPlacement(record),
       stateRoot: gatewayServiceStateRoot(record),
       gatewayID: record.gateway_id,
@@ -482,6 +492,34 @@ export class GatewayLifecycleManager {
     return this.runLifecycle(record, 'update', options, (signal) => this.updateGatewayUncoordinated(record, { ...options, signal }));
   }
 
+  async enrollProviderSupervisor(
+    record: GatewayRecord,
+    enrollment: Readonly<{
+      provider_origin: string;
+      environment_id: string;
+      enrollment_code: string;
+    }>,
+    options: Readonly<{ signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink; operationKey?: string }> = {},
+  ): Promise<GatewayLifecycleSession> {
+    if (record.connection.kind === 'url') {
+      throw new GatewayNotManageableError('Provider enrollment requires an explicitly selected direct connection.');
+    }
+    const targetID = gatewayLifecycleTargetID(record);
+    return this.options.lifecycle_coordinator.run({
+      target_key: gatewayLifecycleCoordinatorTargetKey(record),
+      intent: 'update',
+      fingerprint: runtimeLifecycleFingerprint({
+        intent: 'provider_enrollment',
+        gateway_id: record.gateway_id,
+        provider_origin: enrollment.provider_origin,
+        environment_id: enrollment.environment_id,
+      }),
+      operation_key: options.operationKey ?? targetID,
+      signal: options.signal,
+      execute: (signal) => this.enrollProviderSupervisorUncoordinated(record, enrollment, { ...options, signal }),
+    });
+  }
+
   private async stopGatewayUncoordinated(record: GatewayRecord, options: Readonly<{ signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink }> = {}): Promise<void> {
     await this.clear(record);
     const sshPassword = await this.gatewaySSHPassword(record);
@@ -489,6 +527,7 @@ export class GatewayLifecycleManager {
       sshTransportManager: this.options.ssh_transport_manager,
       sshCredentialScope: record.gateway_id,
       target: gatewaySSHDetails(record),
+      hostAccess: gatewayHostAccess(record),
       placement: gatewayPlacement(record),
       stateRoot: gatewayServiceStateRoot(record),
       releaseTag: this.options.runtime_release_tag,
@@ -511,6 +550,7 @@ export class GatewayLifecycleManager {
       sshTransportManager: this.options.ssh_transport_manager,
       sshCredentialScope: record.gateway_id,
       target: gatewaySSHDetails(record),
+      hostAccess: gatewayHostAccess(record),
       placement,
       stateRoot: gatewayServiceStateRoot(record),
       releaseTag: this.options.runtime_release_tag,
@@ -525,6 +565,78 @@ export class GatewayLifecycleManager {
     });
     const gatewayBinaryPath = await this.ensureServiceReady(record, placement, sshPassword, options.signal, {
       forceUpdate: true,
+      onProgress: options.onProgress,
+    });
+    return this.openBridgeSession(record, gatewayBinaryPath, {
+      signal: options.signal,
+      onProgress: options.onProgress,
+    });
+  }
+
+  private async enrollProviderSupervisorUncoordinated(
+    record: GatewayRecord,
+    enrollment: Readonly<{
+      provider_origin: string;
+      environment_id: string;
+      enrollment_code: string;
+    }>,
+    options: Readonly<{ signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink }> = {},
+  ): Promise<GatewayLifecycleSession> {
+    const placement = gatewayPlacement(record);
+    const sshPassword = await this.gatewaySSHPassword(record);
+    await this.clear(record);
+    await this.ensureServiceReady(record, placement, sshPassword, options.signal, {
+      onProgress: options.onProgress,
+    });
+    await stopManagedGatewayService({
+      sshTransportManager: this.options.ssh_transport_manager,
+      sshCredentialScope: record.gateway_id,
+      target: gatewaySSHDetails(record),
+      hostAccess: gatewayHostAccess(record),
+      placement,
+      stateRoot: gatewayServiceStateRoot(record),
+      releaseTag: this.options.runtime_release_tag,
+      releaseBaseURL: this.options.release_base_url,
+      assetCacheRoot: this.options.asset_cache_root,
+      sourceRuntimeRoot: this.options.source_runtime_root,
+      targetCommit: this.options.target_commit,
+      sshPassword,
+      tempRoot: this.options.temp_root,
+      signal: options.signal,
+      onProgress: (progress) => this.emitFromServiceProgress(options.onProgress, progress),
+    });
+    try {
+      await enrollManagedGatewaySupervisor({
+        sshTransportManager: this.options.ssh_transport_manager,
+        sshCredentialScope: record.gateway_id,
+        target: gatewaySSHDetails(record),
+        hostAccess: gatewayHostAccess(record),
+        placement,
+        stateRoot: gatewayServiceStateRoot(record),
+        releaseTag: this.options.runtime_release_tag,
+        releaseBaseURL: this.options.release_base_url,
+        assetCacheRoot: this.options.asset_cache_root,
+        sourceRuntimeRoot: this.options.source_runtime_root,
+        targetCommit: this.options.target_commit,
+        sshPassword,
+        tempRoot: this.options.temp_root,
+        signal: options.signal,
+        onProgress: (progress) => this.emitFromServiceProgress(options.onProgress, progress),
+      }, enrollment);
+    } catch (enrollmentError) {
+      try {
+        await this.ensureServiceReady(record, placement, sshPassword, options.signal, {
+          onProgress: options.onProgress,
+        });
+      } catch (restoreError) {
+        throw new AggregateError(
+          [enrollmentError, restoreError],
+          'Provider enrollment failed and Desktop could not restart the previous Gateway service.',
+        );
+      }
+      throw enrollmentError;
+    }
+    const gatewayBinaryPath = await this.ensureServiceReady(record, placement, sshPassword, options.signal, {
       onProgress: options.onProgress,
     });
     return this.openBridgeSession(record, gatewayBinaryPath, {
@@ -646,6 +758,7 @@ export class GatewayLifecycleManager {
         sshTransportManager: this.options.ssh_transport_manager,
         sshCredentialScope: record.gateway_id,
         target: gatewaySSHDetails(record),
+        hostAccess: gatewayHostAccess(record),
         placement,
         stateRoot: gatewayServiceStateRoot(record),
         gatewayID: record.gateway_id,
@@ -662,7 +775,9 @@ export class GatewayLifecycleManager {
       });
     } catch (error) {
       throw new GatewayServiceUnavailableError(
-        record.connection.kind === 'ssh_container' ? 'gateway_container_unavailable' : 'gateway_service_start_failed',
+        record.connection.kind === 'ssh_container' || record.connection.kind === 'local_container'
+          ? 'gateway_container_unavailable'
+          : 'gateway_service_start_failed',
         error instanceof Error ? error.message : String(error),
       );
     }
@@ -702,10 +817,10 @@ export function gatewayServiceTargetDescriptor(record: GatewayRecord): GatewaySe
   };
 }
 
-function gatewaySSHDetails(record: GatewayRecord): DesktopSSHEnvironmentDetails {
+function gatewaySSHDetails(record: GatewayRecord): DesktopSSHEnvironmentDetails | undefined {
   const connection = record.connection;
-  if (connection.kind === 'url') {
-    throw new Error('URL Gateways do not have SSH details.');
+  if (connection.kind === 'url' || connection.kind === 'local_host' || connection.kind === 'local_container') {
+    return undefined;
   }
   return {
     ssh_destination: connection.ssh_destination,
@@ -723,23 +838,34 @@ function gatewaySSHDetails(record: GatewayRecord): DesktopSSHEnvironmentDetails 
 }
 
 function gatewayHostAccess(record: GatewayRecord): DesktopRuntimeHostAccess {
+  if (record.connection.kind === 'local_host' || record.connection.kind === 'local_container') {
+    return { kind: 'local_host' };
+  }
+  const ssh = gatewaySSHDetails(record);
+  if (!ssh) {
+    throw new Error('URL Gateways do not use runtime host access.');
+  }
   return {
     kind: 'ssh_host',
-    ssh: gatewaySSHDetails(record),
+    ssh,
   };
 }
 
 function gatewayPlacement(record: GatewayRecord): DesktopRuntimePlacement {
-  if (record.connection.kind === 'ssh_host') {
+  if (record.connection.kind === 'ssh_host' || record.connection.kind === 'local_host') {
     return {
       kind: 'host_process',
       runtime_root: record.connection.runtime_root,
       runtime_state_root: gatewayServiceStateRoot(record),
-      bootstrap_strategy: record.connection.bootstrap_strategy ?? DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
-      release_base_url: record.connection.release_base_url ?? DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL,
+      bootstrap_strategy: record.connection.kind === 'ssh_host'
+        ? record.connection.bootstrap_strategy ?? DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY
+        : DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
+      release_base_url: record.connection.kind === 'ssh_host'
+        ? record.connection.release_base_url ?? DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL
+        : DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL,
     };
   }
-  if (record.connection.kind === 'ssh_container') {
+  if (record.connection.kind === 'ssh_container' || record.connection.kind === 'local_container') {
     return {
       kind: 'container_process',
       container_engine: record.connection.container_engine,

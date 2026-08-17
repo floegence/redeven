@@ -80,6 +80,32 @@ function placeholderFact(label: string, value = 'None') {
   };
 }
 
+function expectRuntimeManagementSetup(
+  actionModel: ReturnType<typeof buildProviderBackedEnvironmentActionModel>,
+): void {
+  expect(actionModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      id: 'setup_runtime_management',
+      action: expect.objectContaining({
+        intent: 'setup_runtime_management',
+        enabled: true,
+      }),
+    }),
+    expect.objectContaining({
+      id: 'refresh_runtime',
+      action: expect.objectContaining({
+        intent: 'refresh_runtime',
+        enabled: true,
+      }),
+    }),
+  ]));
+  const actionIDs = actionModel.action_presentation.menu_actions.map((item) => item.id);
+  expect(actionIDs).not.toContain('start_runtime');
+  expect(actionIDs).not.toContain('stop_runtime');
+  expect(actionIDs).not.toContain('restart_runtime');
+  expect(actionIDs).not.toContain('update_runtime');
+}
+
 function buildProvider(providerOrigin = 'https://redeven.test') {
   return {
     protocol_version: 'rcpp-v3' as const,
@@ -1124,42 +1150,15 @@ describe('buildEnvironmentCardModel', () => {
       }),
     ]));
     const actionModel = buildProviderBackedEnvironmentActionModel(localEntry!);
-    expect(actionModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'start_runtime',
-        action: expect.objectContaining({
-          intent: 'start_runtime',
-          enabled: false,
-          disabled_reason: 'Container dev-container was not found. Choose a running container, then try again.',
-        }),
-      }),
-      expect.objectContaining({
-        id: 'stop_runtime',
-        action: expect.objectContaining({
-          intent: 'stop_runtime',
-          enabled: false,
-          disabled_reason: 'Runtime is not running.',
-        }),
-      }),
-      expect.objectContaining({
-        id: 'update_runtime',
-        action: expect.objectContaining({
-          intent: 'update_runtime',
-          enabled: false,
-          disabled_reason: 'Container dev-container was not found. Choose a running container, then try again.',
-        }),
-      }),
-      expect.objectContaining({
-        id: 'refresh_runtime',
-        action: expect.objectContaining({
-          intent: 'refresh_runtime',
-          enabled: true,
-        }),
-      }),
-    ]));
+    expectRuntimeManagementSetup(actionModel);
     expect(actionModel.action_presentation.primary_action_overlay).toMatchObject({
-      kind: 'tooltip',
-      message: 'Container dev-container was not found. Choose a running container, then try again.',
+      kind: 'popover',
+      title: 'Set up Runtime management to continue',
+      actions: expect.arrayContaining([
+        expect.objectContaining({
+          label: 'Set up Runtime management',
+        }),
+      ]),
     });
   });
 
@@ -1201,27 +1200,13 @@ describe('buildEnvironmentCardModel', () => {
         primary_action: {
           enabled: false,
         },
-        primary_action_overlay: {
-          kind: 'tooltip',
-          message,
-        },
+        primary_action_overlay: expect.objectContaining({
+          kind: 'popover',
+          title: 'Set up Runtime management to continue',
+        }),
       },
     });
-    expect(actionModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'start_runtime',
-        action: expect.objectContaining({
-          enabled: false,
-          disabled_reason: message,
-        }),
-      }),
-      expect.objectContaining({
-        id: 'refresh_runtime',
-        action: expect.objectContaining({
-          enabled: true,
-        }),
-      }),
-    ]));
+    expectRuntimeManagementSetup(actionModel);
   });
 
   it('shows Start runtime for a running container target without an active bridge', () => {
@@ -1255,22 +1240,13 @@ describe('buildEnvironmentCardModel', () => {
     const localEntry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
     const actionModel = buildProviderBackedEnvironmentActionModel(localEntry!);
 
-    expect(actionModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'start_runtime',
-        action: expect.objectContaining({
-          intent: 'start_runtime',
-          enabled: true,
-        }),
-      }),
-    ]));
+    expectRuntimeManagementSetup(actionModel);
     expect(actionModel.action_presentation.primary_action_overlay).toMatchObject({
       kind: 'popover',
-      title: 'Start the local runtime to continue',
-      detail: 'Open becomes available once the runtime package is ready in this running container.',
+      title: 'Set up Runtime management to continue',
       actions: expect.arrayContaining([
         expect.objectContaining({
-          label: 'Start runtime',
+          label: 'Set up Runtime management',
         }),
       ]),
     });
@@ -1446,31 +1422,15 @@ describe('buildEnvironmentCardModel', () => {
     const localEntry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
     const actionModel = buildProviderBackedEnvironmentActionModel(localEntry!);
 
-    expect(actionModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'start_runtime',
-        action: expect.objectContaining({
-          intent: 'start_runtime',
-          enabled: true,
-        }),
-      }),
-      expect.objectContaining({
-        id: 'update_runtime',
-        action: expect.objectContaining({
-          intent: 'update_runtime',
-          label: 'Update runtime',
-          enabled: true,
-        }),
-      }),
-    ]));
+    expectRuntimeManagementSetup(actionModel);
     expect(actionModel.action_presentation.primary_action_overlay).toMatchObject({
       kind: 'popover',
-      title: 'Runtime update required',
+      title: 'Set up Runtime management to continue',
       actions: expect.arrayContaining([
         expect.objectContaining({
-          label: 'Update runtime',
+          label: 'Set up Runtime management',
           action: expect.objectContaining({
-            intent: 'update_runtime',
+            intent: 'setup_runtime_management',
             enabled: true,
           }),
         }),
@@ -1526,13 +1486,12 @@ describe('buildEnvironmentCardModel', () => {
     expect(actionModel.status_label).toBe('RUNTIME OFFLINE');
     expect(actionModel.action_presentation.primary_action_overlay).toMatchObject({
       kind: 'popover',
-      title: 'Start the runtime to continue',
-      detail: 'This local container runtime is not running. Start the runtime again; Open becomes available after the runtime reports ready.',
+      title: 'Set up Runtime management to continue',
       actions: expect.arrayContaining([
         expect.objectContaining({
-          label: 'Start runtime',
+          label: 'Set up Runtime management',
           action: expect.objectContaining({
-            intent: 'start_runtime',
+            intent: 'setup_runtime_management',
             enabled: true,
           }),
         }),
@@ -1545,15 +1504,7 @@ describe('buildEnvironmentCardModel', () => {
         }),
       ]),
     });
-    expect(actionModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'restart_runtime',
-        action: expect.objectContaining({
-          intent: 'restart_runtime',
-          enabled: true,
-        }),
-      }),
-    ]));
+    expectRuntimeManagementSetup(actionModel);
   });
 
   it('guides stopped local container runtimes through Start while keeping other lifecycle actions explicit', () => {
@@ -1599,15 +1550,13 @@ describe('buildEnvironmentCardModel', () => {
         },
         primary_action_overlay: {
           kind: 'popover',
-          title: 'Start the local runtime to continue',
-          detail: 'Open becomes available once the runtime package is ready in this running container.',
+          title: 'Set up Runtime management to continue',
           actions: expect.arrayContaining([
             expect.objectContaining({
-              label: 'Start runtime',
+              label: 'Set up Runtime management',
               action: expect.objectContaining({
-                intent: 'start_runtime',
+                intent: 'setup_runtime_management',
                 enabled: true,
-                runtime_operation_method: 'local_container_exec',
               }),
             }),
             expect.objectContaining({
@@ -1621,40 +1570,7 @@ describe('buildEnvironmentCardModel', () => {
         },
       },
     });
-    expect(actionModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'start_runtime',
-        action: expect.objectContaining({
-          intent: 'start_runtime',
-          enabled: true,
-          runtime_operation_method: 'local_container_exec',
-        }),
-      }),
-      expect.objectContaining({
-        id: 'stop_runtime',
-        action: expect.objectContaining({
-          intent: 'stop_runtime',
-          enabled: false,
-          disabled_reason: 'Runtime is not running.',
-        }),
-      }),
-      expect.objectContaining({
-        id: 'restart_runtime',
-        action: expect.objectContaining({
-          intent: 'restart_runtime',
-          enabled: true,
-          runtime_operation_method: 'local_container_exec',
-        }),
-      }),
-      expect.objectContaining({
-        id: 'update_runtime',
-        action: expect.objectContaining({
-          intent: 'update_runtime',
-          enabled: true,
-          runtime_operation_method: 'local_container_exec',
-        }),
-      }),
-    ]));
+    expectRuntimeManagementSetup(actionModel);
   });
 
   it('keeps an online SSH runtime openable while offering Update runtime separately when it needs an update', () => {
@@ -1743,32 +1659,7 @@ describe('buildEnvironmentCardModel', () => {
         primary_action_overlay: undefined,
       },
     });
-    expect(actionModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'stop_runtime',
-        action: expect.objectContaining({
-          intent: 'stop_runtime',
-          enabled: true,
-          runtime_operation_method: 'ssh_host',
-        }),
-      }),
-      expect.objectContaining({
-        id: 'restart_runtime',
-        action: expect.objectContaining({
-          intent: 'restart_runtime',
-          enabled: true,
-        }),
-      }),
-      expect.objectContaining({
-        id: 'update_runtime',
-        action: expect.objectContaining({
-          intent: 'update_runtime',
-          label: 'Update runtime',
-          enabled: true,
-          runtime_operation_method: 'ssh_host',
-        }),
-      }),
-    ]));
+    expectRuntimeManagementSetup(actionModel);
   });
 
   it('treats a missing Env App shell as an update-required SSH runtime block', () => {
@@ -1875,7 +1766,7 @@ describe('buildEnvironmentCardModel', () => {
     expect(actionModel.status_label).toBe('RESTART REQUIRED');
     expect(overlay).toMatchObject({
       kind: 'popover',
-      title: 'Runtime restart required',
+      title: 'Set up Runtime management to continue',
     });
     expect(overlay?.kind).toBe('popover');
     if (overlay?.kind !== 'popover') {
@@ -1883,23 +1774,14 @@ describe('buildEnvironmentCardModel', () => {
     }
     expect(overlay.actions).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        label: 'Restart runtime…',
+        label: 'Set up Runtime management',
         action: expect.objectContaining({
-          intent: 'restart_runtime',
-          label: 'Restart runtime…',
+          intent: 'setup_runtime_management',
           enabled: true,
         }),
       }),
     ]));
-    expect(actionModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'restart_runtime',
-        action: expect.objectContaining({
-          intent: 'restart_runtime',
-          enabled: true,
-        }),
-      }),
-    ]));
+    expectRuntimeManagementSetup(actionModel);
   });
 
   it('keeps Stop, Restart, and Update available for running local container restart maintenance', () => {
@@ -1953,45 +1835,18 @@ describe('buildEnvironmentCardModel', () => {
     expect(actionModel.status_label).toBe('RESTART REQUIRED');
     expect(actionModel.action_presentation.primary_action_overlay).toMatchObject({
       kind: 'popover',
-      title: 'Runtime restart required',
-      detail: 'This local container runtime needs a successful restart before it can open this environment. Restart the runtime, then open it again after it reports ready.',
+      title: 'Set up Runtime management to continue',
       actions: expect.arrayContaining([
         expect.objectContaining({
-          label: 'Restart runtime…',
+          label: 'Set up Runtime management',
           action: expect.objectContaining({
-            intent: 'restart_runtime',
+            intent: 'setup_runtime_management',
             enabled: true,
-            runtime_operation_method: 'local_container_exec',
           }),
         }),
       ]),
     });
-    expect(actionModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'stop_runtime',
-        action: expect.objectContaining({
-          intent: 'stop_runtime',
-          enabled: true,
-          runtime_operation_method: 'local_container_exec',
-        }),
-      }),
-      expect.objectContaining({
-        id: 'restart_runtime',
-        action: expect.objectContaining({
-          intent: 'restart_runtime',
-          enabled: true,
-          runtime_operation_method: 'local_container_exec',
-        }),
-      }),
-      expect.objectContaining({
-        id: 'update_runtime',
-        action: expect.objectContaining({
-          intent: 'update_runtime',
-          enabled: true,
-          runtime_operation_method: 'local_container_exec',
-        }),
-      }),
-    ]));
+    expectRuntimeManagementSetup(actionModel);
   });
 
   it('does not render stale restart maintenance when the runtime is openable', () => {
@@ -2039,15 +1894,7 @@ describe('buildEnvironmentCardModel', () => {
       enabled: true,
     });
     expect(actionModel.action_presentation.primary_action_overlay).toBeUndefined();
-    expect(actionModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'restart_runtime',
-        action: expect.objectContaining({
-          intent: 'restart_runtime',
-          enabled: true,
-        }),
-      }),
-    ]));
+    expectRuntimeManagementSetup(actionModel);
   });
 
   it('lets NOT CHECKED runtime cards start Open-owned status preflight', () => {
@@ -2132,15 +1979,13 @@ describe('buildEnvironmentCardModel', () => {
         },
         primary_action_overlay: {
           kind: 'popover',
-          title: 'Start the local runtime to continue',
-          detail: 'Open becomes available once the runtime is ready on this device.',
+          title: 'Set up Runtime management to continue',
           actions: expect.arrayContaining([
             expect.objectContaining({
-              label: 'Start runtime',
+              label: 'Set up Runtime management',
               action: expect.objectContaining({
-                intent: 'start_runtime',
+                intent: 'setup_runtime_management',
                 enabled: true,
-                runtime_operation_method: 'local_host',
               }),
             }),
             expect.objectContaining({
@@ -2464,7 +2309,8 @@ describe('buildEnvironmentCardModel', () => {
     const managedLocalEntry = observeOnlySnapshot.environments.find((environment) => environment.kind === 'local_environment');
     const managedMenuActionIDs = buildProviderBackedEnvironmentActionModel(managedLocalEntry!)
       .action_presentation.menu_actions.map((item) => item.id);
-    expect(managedMenuActionIDs).toContain('stop_runtime');
+    expect(managedMenuActionIDs).toContain('setup_runtime_management');
+    expect(managedMenuActionIDs).not.toContain('stop_runtime');
     expect(managedMenuActionIDs).not.toContain('runtime_managed_externally');
     expect(managedMenuActionIDs).not.toContain('start_runtime');
 
@@ -3006,33 +2852,7 @@ describe('buildEnvironmentCardModel', () => {
         primary_action_overlay: undefined,
       },
     });
-    expect(actionModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'stop_runtime',
-        action: expect.objectContaining({
-          intent: 'stop_runtime',
-          enabled: true,
-          runtime_operation_method: 'local_host',
-        }),
-      }),
-      expect.objectContaining({
-        id: 'restart_runtime',
-        action: expect.objectContaining({
-          intent: 'restart_runtime',
-          enabled: true,
-          runtime_operation_method: 'local_host',
-        }),
-      }),
-      expect.objectContaining({
-        id: 'update_runtime',
-        label: 'Update Redeven Desktop',
-        action: expect.objectContaining({
-          intent: 'update_runtime',
-          enabled: true,
-          runtime_operation_method: 'desktop_local_update_handoff',
-        }),
-      }),
-    ]));
+    expectRuntimeManagementSetup(actionModel);
   });
 
   it('keeps Open available when the Local Environment bundled runtime may need an update', () => {

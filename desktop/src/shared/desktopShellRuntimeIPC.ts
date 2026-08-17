@@ -14,27 +14,19 @@ export type DesktopShellRuntimeMaintenanceStartedNotification = Readonly<{
 }>;
 
 export type DesktopShellRuntimeAction =
-  | 'restart_managed_runtime'
   | 'manage_desktop_update'
   | 'restart_runtime'
   | 'upgrade_runtime';
 
 export type DesktopShellRuntimeMaintenanceAuthority =
-  | 'runtime_rpc'
-  | 'desktop_local'
-  | 'desktop_ssh'
+  | 'gateway_supervisor'
   | 'host_device'
   | 'manual';
 
 export type DesktopShellRuntimeMaintenanceAvailability = 'available' | 'unavailable' | 'external';
 
 export type DesktopShellRuntimeMaintenanceMethod =
-  | 'runtime_rpc_restart'
-  | 'runtime_rpc_upgrade'
-  | 'desktop_local_restart'
-  | 'desktop_local_update_handoff'
-  | 'desktop_ssh_restart'
-  | 'desktop_ssh_force_update'
+  | 'gateway_supervisor'
   | 'host_device_handoff'
   | 'manual';
 
@@ -106,9 +98,6 @@ function compactRaw(value: unknown): string {
 
 export function normalizeDesktopShellRuntimeAction(value: unknown): DesktopShellRuntimeAction | '' {
   const action = compact(value);
-  if (action === 'restart_managed_runtime') {
-    return 'restart_managed_runtime';
-  }
   if (action === 'manage_desktop_update' || action === 'desktop_update') {
     return 'manage_desktop_update';
   }
@@ -181,9 +170,7 @@ export function normalizeDesktopShellRuntimeActionResponse(value: unknown): Desk
 function normalizeAuthority(value: unknown): DesktopShellRuntimeMaintenanceAuthority {
   const authority = compact(value);
   switch (authority) {
-    case 'runtime_rpc':
-    case 'desktop_local':
-    case 'desktop_ssh':
+    case 'gateway_supervisor':
     case 'host_device':
     case 'manual':
       return authority;
@@ -232,12 +219,7 @@ function normalizeAvailability(value: unknown): DesktopShellRuntimeMaintenanceAv
 function normalizeMethod(value: unknown): DesktopShellRuntimeMaintenanceMethod {
   const method = compact(value);
   switch (method) {
-    case 'runtime_rpc_restart':
-    case 'runtime_rpc_upgrade':
-    case 'desktop_local_restart':
-    case 'desktop_local_update_handoff':
-    case 'desktop_ssh_restart':
-    case 'desktop_ssh_force_update':
+    case 'gateway_supervisor':
     case 'host_device_handoff':
     case 'manual':
       return method;
@@ -300,11 +282,7 @@ function normalizeActionPlan(
     detail: compactRaw(record.detail) || undefined,
     unavailable_reason_code: compactRaw(record.unavailable_reason_code) || undefined,
     release_page_url: compactRaw(record.release_page_url) || undefined,
-    requires_target_version: record.requires_target_version === true || (
-      record.requires_target_version !== false
-      && kind === 'upgrade'
-      && method === 'runtime_rpc_upgrade'
-    ),
+    requires_target_version: record.requires_target_version ?? kind === 'upgrade',
   };
 }
 
@@ -380,8 +358,5 @@ function normalizeRuntimeManagementCapability(value: unknown): DesktopShellRunti
 export function desktopShellRuntimeMaintenanceMethodUsesDesktop(
   method: DesktopShellRuntimeMaintenanceMethod,
 ): boolean {
-  return method === 'desktop_local_restart'
-    || method === 'desktop_local_update_handoff'
-    || method === 'desktop_ssh_restart'
-    || method === 'desktop_ssh_force_update';
+  return method === 'gateway_supervisor';
 }

@@ -12,7 +12,6 @@ import type {
 import type { RuntimeServiceSnapshot } from './runtimeService';
 import {
   runtimeServiceAllowsOpenAttempt,
-  runtimeServiceHasActiveWork,
   runtimeServiceIsOpenable,
 } from './runtimeService';
 import {
@@ -54,39 +53,6 @@ function managementMethod(
     return hostAccess.kind === 'ssh_host' ? 'ssh_container_exec' : 'local_container_exec';
   }
   return hostAccess.kind === 'ssh_host' ? 'ssh_host' : 'local_host';
-}
-
-function packageRequiresUpdate(packageState: DesktopRuntimePackageState | undefined): boolean {
-  return packageState?.state === 'outdated' || packageState?.state === 'incompatible';
-}
-
-function updateRequiredMessage(packageState: DesktopRuntimePackageState | undefined): string {
-  if (!packageState) {
-    return 'Update this runtime before continuing.';
-  }
-  if (packageState.state === 'outdated') {
-    return `Update this runtime from ${packageState.current_version} to ${packageState.target_version} before continuing.`;
-  }
-  if (packageState.state === 'incompatible') {
-    return packageState.reason || 'Update this incompatible runtime before continuing.';
-  }
-  return 'Update this runtime before continuing.';
-}
-
-function localDesktopUpdateMessage(packageState: DesktopRuntimePackageState | undefined): string {
-  if (packageState?.state === 'outdated') {
-    return `Update Redeven Desktop to bring the bundled runtime from ${packageState.current_version} to ${packageState.target_version}.`;
-  }
-  if (packageState?.state === 'incompatible') {
-    return packageState.reason || 'Update Redeven Desktop before continuing with this local runtime.';
-  }
-  return 'Update Redeven Desktop before continuing with this local runtime.';
-}
-
-function activeWorkMessage(runtimeService: RuntimeServiceSnapshot | undefined): string {
-  return runtimeServiceHasActiveWork(runtimeService)
-    ? 'Active work may be interrupted. Confirm before changing this runtime.'
-    : '';
 }
 
 function runtimeTargetUnavailableStatus(
@@ -152,30 +118,23 @@ export function buildDesktopRuntimeOperationPlans(
   }
 
   const method = managementMethod(input.host_access, input.placement);
-  const updateMethod: DesktopRuntimeOperationMethod = method === 'local_host'
-    ? 'desktop_local_update_handoff'
-    : method;
   const hasManagement = method !== 'none';
-  const requiresUpdate = packageRequiresUpdate(input.package_state);
   const maintenance = input.maintenance;
   const restartMaintenance = desktopRuntimeMaintenanceRequiresRestart(maintenance);
   const updateMaintenance = desktopRuntimeMaintenanceRequiresUpdate(maintenance);
   const openConnectionRequired = input.open_connection_required === true;
-  const updateAvailable = requiresUpdate || updateMaintenance;
   const optimisticOpenMaintenance = Boolean(
     maintenance?.required_for === 'open'
     && updateMaintenance
     && runtimeServiceAllowsOpenAttempt(input.runtime_service),
   );
-  const updateMessage = updateMethod === 'desktop_local_update_handoff'
-    ? localDesktopUpdateMessage(input.package_state)
-    : updateRequiredMessage(input.package_state);
   const canOpen = input.openable
     || openConnectionRequired
     || updateMaintenance
     || runtimeServiceAllowsOpenAttempt(input.runtime_service);
   const managementBlockedStatus = runtimeTargetUnavailableStatus(input.runtime_control_status, openConnectionRequired);
   const managementBlocked = !!managementBlockedStatus;
+  const lifecycleSetupMessage = 'Set up Runtime management for this target before starting, stopping, restarting, or updating Runtime.';
   const blockedByRecoveryMaintenance = restartMaintenance && !optimisticOpenMaintenance;
   const openAvailability = input.running && canOpen && !blockedByRecoveryMaintenance && !managementBlocked
     ? 'available'
@@ -208,47 +167,33 @@ export function buildDesktopRuntimeOperationPlans(
     }),
     start: desktopRuntimeOperationPlan(
       'start',
-      hasManagement
-        ? input.running
-          ? 'unavailable'
-          : managementBlocked
-            ? 'blocked'
-            : 'available'
-        : 'hidden',
-      method,
+      hasManagement ? 'blocked' : 'hidden',
+      hasManagement ? 'runtime_gateway' : 'none',
       {
-        reasonCode: managementBlocked ? 'runtime_target_unavailable' : input.running ? 'runtime_already_running' : undefined,
-        message: managementBlocked ? managementBlockedStatus.message : undefined,
+        reasonCode: hasManagement ? 'runtime_gateway_setup_required' : undefined,
+        message: hasManagement ? lifecycleSetupMessage : undefined,
         packageState: input.package_state,
         maintenance,
-        menuVisibility: hasManagement && !input.running ? 'contextual' : 'hidden',
+        menuVisibility: hasManagement ? 'contextual' : 'hidden',
       },
     ),
     stop: desktopRuntimeOperationPlan(
       'stop',
-      hasManagement ? input.running ? 'available' : 'unavailable' : 'hidden',
-      method,
+      hasManagement ? 'blocked' : 'hidden',
+      hasManagement ? 'runtime_gateway' : 'none',
       {
-        reasonCode: input.running ? undefined : 'runtime_not_started',
-        message: input.running ? activeWorkMessage(input.runtime_service) : 'Runtime is not running.',
+        reasonCode: hasManagement ? 'runtime_gateway_setup_required' : undefined,
+        message: hasManagement ? lifecycleSetupMessage : undefined,
         menuVisibility: hasManagement ? 'stable' : 'hidden',
       },
     ),
     restart: desktopRuntimeOperationPlan(
       'restart',
-      hasManagement
-        ? managementBlocked
-          ? 'blocked'
-          : 'available'
-        : 'hidden',
-      method,
+      hasManagement ? 'blocked' : 'hidden',
+      hasManagement ? 'runtime_gateway' : 'none',
       {
-        reasonCode: managementBlocked
-          ? 'runtime_target_unavailable'
-          : undefined,
-        message: managementBlocked
-          ? managementBlockedStatus.message
-          : maintenance?.message ?? activeWorkMessage(input.runtime_service),
+        reasonCode: hasManagement ? 'runtime_gateway_setup_required' : undefined,
+        message: hasManagement ? lifecycleSetupMessage : undefined,
         packageState: input.package_state,
         maintenance,
         menuVisibility: hasManagement ? 'stable' : 'hidden',
@@ -256,16 +201,11 @@ export function buildDesktopRuntimeOperationPlans(
     ),
     update: desktopRuntimeOperationPlan(
       'update',
-      hasManagement
-        ? managementBlocked
-          ? 'blocked'
-          : 'available'
-        : 'hidden',
-      updateMethod,
+      hasManagement ? 'blocked' : 'hidden',
+      hasManagement ? 'runtime_gateway' : 'none',
       {
-        reasonCode: updateAvailable ? 'runtime_update_required' : undefined,
-        label: updateMethod === 'desktop_local_update_handoff' ? 'Update Redeven Desktop' : undefined,
-        message: managementBlocked ? managementBlockedStatus.message : maintenance?.message ?? updateMessage,
+        reasonCode: hasManagement ? 'runtime_gateway_setup_required' : undefined,
+        message: hasManagement ? lifecycleSetupMessage : undefined,
         packageState: input.package_state,
         maintenance,
         menuVisibility: hasManagement ? 'stable' : 'hidden',

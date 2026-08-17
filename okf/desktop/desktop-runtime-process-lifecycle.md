@@ -20,7 +20,9 @@ The Runtime inventory records PID/create time, user, namespace, state root, exec
 
 Desktop performs support, authorization, readiness, target, generation, compatibility, and artifact-policy checks before invoking a builder or uploader. The Gateway `prepare` response creates or attaches to one durable operation. User confirmation precedes artifact staging. Commit acquires the Runtime lifecycle fence, compares the exact confirmed workload identity set, atomically replaces the artifact, checks health, and records recovery. Identity replacement, added risk, or `known -> unknown` requires `confirmation_required`. A conflicting operation returns `operation_in_progress`; it is never queued or forcefully taken over.
 
-Desktop closes an attached Env App session only after a destructive operation is accepted by the shared coordinator. A transport disconnect does not cancel a Gateway operation; reopening the card attaches to its redacted progress. Connect, Workspace, terminal, files, and web sessions remain separate from the lifecycle operation store.
+Desktop closes an attached Env App session only after a destructive operation is accepted by the shared coordinator. A transport disconnect does not cancel a Gateway operation; reopening either a direct or Provider card queries the exact target and attaches to active Gateway progress. Only the original operation client can resume confirmation, artifact upload, or commit. Another authorized manager receives redacted progress, while a current binding administrator may start the separate permit-bound reconcile action for quarantine. Connect, Workspace, terminal, files, and web sessions remain separate from the lifecycle operation store.
+
+Provider cards use a Provider-scoped management client key and their own protected management tunnel. The bound Gateway, not the Runtime Agent, maintains that reverse transport, so stopping Runtime does not remove the supervisor management route. Provider cards never ask the user to select another Gateway card and never read its paired key or transport. Direct cards use their own explicit setup flow to install/enroll the target supervisor; access-only URL cards remain unsupported for managed lifecycle. The planner first projects support, then authorization, then readiness, and does not mark an action available until that route can execute it.
 
 # Boundaries
 
@@ -33,3 +35,5 @@ External shell, systemd, launchd, or container-entrypoint maintenance is outside
 - `redeven:internal/gatewayservice/server.go:188` - Gateway operation authorization and target checks.
 - `redeven:desktop/src/shared/desktopRuntimeOperationPlanner.ts:1` - Desktop preflight and operation projection.
 - `redeven:desktop/src/main/sshRuntime.ts:1` - SSH placement delegates lifecycle execution to the Gateway boundary.
+- `redeven:desktop/src/main/runtimeLifecycleAttachment.ts:1` - Cross-client confirmation, redacted observation, resume, and recovery projection.
+- `redeven:desktop/src/main/providerRuntimeLifecycleClient.ts:1` - Provider-scoped signed lifecycle tunnel without Gateway-card credential borrowing.

@@ -134,21 +134,27 @@ func TestAuthorizerVerifiesProviderReconcilePermit(t *testing.T) {
 		ProviderOrigin: binding.ProviderOrigin, AccessPointID: binding.AccessPointID, EnvironmentPublicID: binding.EnvironmentPublicID,
 		LifecycleTargetID: operation.LifecycleTargetID, TargetGeneration: operation.TargetGeneration,
 		OperationID: operation.OperationID, Operation: gatewayprotocol.RuntimeOperationReconcile,
-		AuthorizedClientKeyID: operation.AuthorizedClientKeyID, Audience: binding.BindingID,
+		AuthorizedClientKeyID: "gck_recovery_admin", Audience: binding.BindingID,
 		Grants: []gatewayprotocol.RuntimeGrant{gatewayprotocol.RuntimeGrantManageBinding},
 		Iat:    time.Now().Add(-time.Second).Unix(), Exp: time.Now().Add(time.Minute).Unix(), JTI: "rop_reconcile_jti",
 	}
 	permit := signTestPermit(t, privateKey, binding.PermitVerificationKey.KeyID, claims)
 	authorizer, _ := NewAuthorizer(bindings)
-	access, err := authorizer.AuthorizeReconcile(context.Background(), nil, gatewayauth.VerifiedRequest{ClientKeyID: "gck_demo"}, operation, permit)
+	if _, err := authorizer.AuthorizeReconcile(context.Background(), nil, gatewayauth.VerifiedRequest{
+		ClientKeyID:   "gck_recovery_admin",
+		RuntimeGrants: []gatewayprotocol.RuntimeGrant{gatewayprotocol.RuntimeGrantManageBinding},
+	}, operation, ""); err == nil {
+		t.Fatal("AuthorizeReconcile accepted binding permission without an exact recovery permit")
+	}
+	access, err := authorizer.AuthorizeReconcile(context.Background(), nil, gatewayauth.VerifiedRequest{ClientKeyID: "gck_recovery_admin"}, operation, permit)
 	if err != nil {
 		t.Fatalf("AuthorizeReconcile() error = %v", err)
 	}
-	if access.PermitJTI != claims.JTI || len(access.Grants) != 1 || access.Grants[0] != gatewayprotocol.RuntimeGrantManageBinding {
+	if access.ClientKeyID != "gck_recovery_admin" || access.PermitJTI != claims.JTI || len(access.Grants) != 1 || access.Grants[0] != gatewayprotocol.RuntimeGrantManageBinding {
 		t.Fatalf("reconcile access = %#v", access)
 	}
 	claims.Action = "prepare"
-	if _, err := authorizer.AuthorizeReconcile(context.Background(), nil, gatewayauth.VerifiedRequest{ClientKeyID: "gck_demo"}, operation, signTestPermit(t, privateKey, binding.PermitVerificationKey.KeyID, claims)); err == nil {
+	if _, err := authorizer.AuthorizeReconcile(context.Background(), nil, gatewayauth.VerifiedRequest{ClientKeyID: "gck_recovery_admin"}, operation, signTestPermit(t, privateKey, binding.PermitVerificationKey.KeyID, claims)); err == nil {
 		t.Fatal("AuthorizeReconcile accepted a prepare permit")
 	}
 }

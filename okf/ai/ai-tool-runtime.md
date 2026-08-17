@@ -24,6 +24,8 @@ This concept is the stable overview for the subject. Detailed contracts are main
 
 Floret receives user-visible linked context through ordered `TurnInput.References` and current-turn model-only `TurnSupplementalContextItem` values through `TurnRequest.SupplementalContext`; Redeven creates both in one admission mapping pass and stores neither after admission. File and directory references keep their opaque `ResourceRef` only in Floret, while the browser receives no locator or path authority. Structured message attachments travel separately through `TurnInput.Attachments`. Floret owns canonical history, references, attachments, provider-visible history, and continuation state.
 
+Every accepted AI user turn holds a Runtime lifecycle workload lease from admission until the canonical thread view has no active turn and no queued input. A lifecycle fence rejects a new turn before Floret mutation. Lease release follows the canonical terminal view, not the HTTP response or Desktop connection lifetime, so an existing session cannot admit hidden work after the final lifecycle snapshot.
+
 # Boundaries
 
 Redeven must consume published Floret releases and must not persist a second copy of Floret-owned conversation, tool, approval, todo, context, projection, or provider state. Tool and execution provenance must come from explicit contracts and results rather than inference.
@@ -35,3 +37,4 @@ Redeven must consume published Floret releases and must not persist a second cop
 - `redeven:internal/ai/tools/types.go:126` - `ToolPresentationSpec` carries renderer, operation, label, fallback, compact payload, result payload, and activity chip fields.
 - `redeven:internal/ai/builtin_tool_handlers.go:21` - Tool success summaries are normalized by builtin name or semantic activity category.
 - `redeven:internal/codeapp/appserver/server.go:4232` - Appserver exposes the parent-scoped subagent detail route.
+- `redeven:internal/ai/runtime_lifecycle_admission.go:1` - Binds AI admission and canonical terminal settlement to Runtime lifecycle workload leases.

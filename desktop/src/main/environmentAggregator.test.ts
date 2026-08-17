@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
+import { buildDesktopRuntimeOperationPlans } from '../shared/desktopRuntimeOperationPlanner';
+import type { DesktopRuntimePresence } from '../shared/desktopRuntimePresence';
 import {
   testDesktopPreferences,
   testLocalEnvironment,
@@ -30,6 +32,35 @@ function gatewaySource(overrides: Partial<DesktopGatewaySource> = {}): DesktopGa
       origin: { kind: 'network_target', label: 'Bastion network' },
     }],
     ...overrides,
+  };
+}
+
+function localPresence(): DesktopRuntimePresence {
+  const presence = {
+    target_id: 'local:local' as DesktopRuntimePresence['target_id'],
+    placement_target_id: 'local:host:local' as DesktopRuntimePresence['placement_target_id'],
+    kind: 'local_environment' as const,
+    environment_id: 'local',
+    label: 'Local Environment',
+    runtime_key: 'local',
+    host_access: { kind: 'local_host' as const },
+    placement: { kind: 'host_process' as const, runtime_root: '/tmp/redeven' },
+    running: true,
+    local_ui_url: 'http://127.0.0.1:24001/',
+    openable: true,
+    runtime_control_status: { state: 'available' as const },
+    checked_at_unix_ms: 1,
+  };
+  return {
+    ...presence,
+    operations: buildDesktopRuntimeOperationPlans({
+      surface: 'managed_runtime_card',
+      host_access: presence.host_access,
+      placement: presence.placement,
+      running: presence.running,
+      openable: presence.openable,
+      runtime_control_status: presence.runtime_control_status,
+    }),
   };
 }
 
@@ -350,6 +381,125 @@ describe('environmentAggregator', () => {
     expect(withGatewayLifecycle?.runtime_operations.start).toMatchObject({
       availability: 'available',
       method: 'runtime_gateway',
+    });
+  });
+
+  it('projects the matching local supervisor onto the direct card without changing Open routing', () => {
+    const entry = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences(),
+      managedRuntimePresenceByTargetID: { 'local:local': localPresence() },
+      gatewaySources: [gatewaySource({
+        gateway_id: 'local-supervisor',
+        display_name: 'Local Runtime management',
+        connection_kind: 'local_host',
+        management_capability: 'managed_local_host',
+        runtime_root: '/tmp/redeven',
+        capabilities: ['env_lifecycle'],
+        environments: [{
+          gateway_env_id: 'env_local',
+          display_name: 'Local Environment',
+          env_kind: 'managed_local_env',
+          state: 'available',
+          capabilities: ['open', 'stop', 'restart', 'update_runtime'],
+          access_capabilities: ['open'],
+          control_capabilities: ['stop', 'restart', 'update_runtime'],
+          runtime_management: {
+            support: 'supported',
+            authorization: { state: 'allowed', grants: ['manage_runtime'] },
+            readiness: 'ready',
+            presentation_state: 'allowed',
+            target: { lifecycle_target_id: 'rlt_local', target_generation: 3 },
+            operations: ['stop', 'restart', 'update_runtime'],
+            artifact_policies: ['published_release'],
+            checked_at_unix_ms: 10,
+          },
+          origin: { kind: 'gateway_host', label: 'This device' },
+        }],
+      })],
+    }).environments.find((candidate) => candidate.kind === 'local_environment');
+
+    expect(entry).toMatchObject({
+      kind: 'local_environment',
+      gateway_id: 'local-supervisor',
+      gateway_env_id: 'env_local',
+      runtime_management: {
+        readiness: 'ready',
+        target: { lifecycle_target_id: 'rlt_local', target_generation: 3 },
+      },
+      runtime_operations: {
+        open: { method: 'local_host', availability: 'available' },
+        stop: { method: 'runtime_gateway', availability: 'available' },
+        restart: { method: 'runtime_gateway', availability: 'available' },
+        update: { method: 'runtime_gateway', availability: 'available' },
+      },
+    });
+    const allEntries = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences(),
+      managedRuntimePresenceByTargetID: { 'local:local': localPresence() },
+      gatewaySources: [gatewaySource({
+        gateway_id: 'local-supervisor',
+        connection_kind: 'local_host',
+        management_capability: 'managed_local_host',
+        runtime_root: '/tmp/redeven',
+        capabilities: ['env_lifecycle'],
+        environments: [{
+          gateway_env_id: 'env_local',
+          display_name: 'Local Environment',
+          env_kind: 'managed_local_env',
+          state: 'available',
+          capabilities: ['open'],
+          origin: { kind: 'gateway_host', label: 'This device' },
+        }],
+      })],
+    }).environments;
+    expect(allEntries.filter((candidate) => candidate.kind === 'gateway_environment')).toHaveLength(0);
+  });
+
+  it('projects supported setup-required management before a direct target has a Gateway', () => {
+    const entry = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences(),
+      managedRuntimePresenceByTargetID: { 'local:local': localPresence() },
+      gatewaySources: [],
+    }).environments.find((candidate) => candidate.kind === 'local_environment');
+
+    expect(entry?.runtime_management).toMatchObject({
+      support: 'supported',
+      authorization: { state: 'allowed' },
+      readiness: 'setup_required',
+      presentation_state: 'setup_required',
+      reason_code: 'runtime_gateway_setup_required',
+    });
+    expect(entry?.runtime_operations.update).toMatchObject({
+      availability: 'blocked',
+      method: 'runtime_gateway',
+      reason_code: 'runtime_gateway_setup_required',
+    });
+  });
+
+  it('keeps an existing direct binding temporarily unavailable when its supervisor is offline', () => {
+    const entry = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences(),
+      managedRuntimePresenceByTargetID: { 'local:local': localPresence() },
+      gatewaySources: [gatewaySource({
+        gateway_id: 'local-supervisor',
+        connection_kind: 'local_host',
+        management_capability: 'managed_local_host',
+        runtime_root: '/tmp/redeven',
+        status: 'offline',
+        environments: [],
+      })],
+    }).environments.find((candidate) => candidate.kind === 'local_environment');
+
+    expect(entry?.runtime_management).toMatchObject({
+      support: 'supported',
+      authorization: { state: 'allowed' },
+      readiness: 'temporarily_unavailable',
+      presentation_state: 'temporarily_unavailable',
+    });
+    expect(entry?.runtime_operations.restart).toMatchObject({
+      availability: 'blocked',
+      method: 'runtime_gateway',
+      reason_code: 'runtime_gateway_temporarily_unavailable',
     });
   });
 

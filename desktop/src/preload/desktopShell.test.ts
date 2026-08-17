@@ -44,7 +44,6 @@ describe('bootstrapDesktopShellBridge', () => {
     expect(typeof bridge.getRuntimeMaintenanceContext).toBe('function');
     expect(typeof bridge.notifyRuntimeMaintenanceStarted).toBe('function');
     expect(typeof bridge.performRuntimeMaintenanceAction).toBe('function');
-    expect(typeof bridge.restartManagedRuntime).toBe('function');
 
     await bridge.openConnectionCenter();
     await bridge.openAdvancedSettings();
@@ -72,7 +71,6 @@ describe('bootstrapDesktopShellBridge', () => {
     bridge.notifyRuntimeMaintenanceStarted('update');
     bridge.notifyRuntimeMaintenanceStarted('invalid');
     await bridge.performRuntimeMaintenanceAction({ action: 'restart' });
-    await bridge.restartManagedRuntime();
 
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(1, 'redeven-desktop:shell-open-window', { kind: 'connection_center' });
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(2, 'redeven-desktop:shell-open-window', { kind: 'settings' });
@@ -95,8 +93,7 @@ describe('bootstrapDesktopShellBridge', () => {
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(15, 'redeven-desktop:shell-open-dashboard');
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(16, 'redeven-desktop:shell-runtime-maintenance-context');
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(17, 'redeven-desktop:shell-runtime-action', { action: 'restart_runtime' });
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(18, 'redeven-desktop:shell-runtime-action', { action: 'restart_managed_runtime' });
-    expect(ipcRendererInvoke).toHaveBeenCalledTimes(18);
+    expect(ipcRendererInvoke).toHaveBeenCalledTimes(17);
     expect(ipcRendererSend).toHaveBeenNthCalledWith(1, 'redeven-desktop:shell-runtime-maintenance-started', { kind: 'restart' });
     expect(ipcRendererSend).toHaveBeenNthCalledWith(2, 'redeven-desktop:shell-runtime-maintenance-started', { kind: 'update' });
     expect(ipcRendererSend).toHaveBeenCalledTimes(2);

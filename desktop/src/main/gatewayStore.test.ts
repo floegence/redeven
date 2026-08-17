@@ -85,6 +85,201 @@ describe('GatewayStore', () => {
     });
   });
 
+  it('initializes fresh stores at schema v2', async () => {
+    const root = await createTempRoot();
+    cleanupRoots.add(root);
+    const filePath = defaultGatewayStorePath(root);
+    const store = new GatewayStore(filePath);
+
+    expect(await store.load()).toEqual({ schema_version: 2, gateways: [] });
+    await store.upsert({
+      gateway_id: 'gw_fresh',
+      display_name: 'Fresh Gateway',
+      connection: { kind: 'local_host', runtime_root: '/tmp/redeven' },
+      now_ms: 10,
+    });
+
+    expect(JSON.parse(await fs.readFile(filePath, 'utf8'))).toMatchObject({
+      schema_version: 2,
+      gateways: [expect.objectContaining({ schema_version: 2, gateway_id: 'gw_fresh' })],
+    });
+  });
+
+  it('persists the originating direct Runtime card without exposing it on ordinary Gateway records', async () => {
+    const root = await createTempRoot();
+    cleanupRoots.add(root);
+    const filePath = defaultGatewayStorePath(root);
+    const store = new GatewayStore(filePath);
+
+    await store.upsert({
+      gateway_id: 'gw_direct',
+      display_name: 'Devbox Runtime management',
+      runtime_environment_id: 'ssh:devbox:default:key_agent:remote_default',
+      connection: {
+        kind: 'ssh_host',
+        ssh_destination: 'devbox',
+        auth_mode: 'key_agent',
+        runtime_root: '~/.redeven',
+      },
+      now_ms: 10,
+    });
+    await store.upsert({
+      gateway_id: 'gw_ordinary',
+      display_name: 'Shared Gateway',
+      connection: {
+        kind: 'url',
+        base_url: 'https://gateway.example/',
+      },
+      now_ms: 20,
+    });
+
+    const reloaded = new GatewayStore(filePath);
+    expect(await reloaded.get('gw_direct')).toMatchObject({
+      runtime_environment_id: 'ssh:devbox:default:key_agent:remote_default',
+    });
+    expect(await reloaded.get('gw_ordinary')).not.toHaveProperty('runtime_environment_id');
+  });
+
+  it('clears a direct Runtime card mapping when the same Gateway becomes an explicit record', async () => {
+	const root = await createTempRoot();
+	cleanupRoots.add(root);
+	const store = new GatewayStore(defaultGatewayStorePath(root));
+
+	await store.upsert({
+	  gateway_id: 'gw_reused',
+	  display_name: 'Direct Runtime management',
+	  runtime_environment_id: 'ssh:devbox:default:key_agent:remote_default',
+	  connection: { kind: 'ssh_host', ssh_destination: 'devbox', runtime_root: '~/.redeven' },
+	  now_ms: 10,
+	});
+	const explicit = await store.upsert({
+	  gateway_id: 'gw_reused',
+	  display_name: 'Shared Gateway',
+	  runtime_environment_id: null,
+	  connection: { kind: 'ssh_host', ssh_destination: 'devbox', runtime_root: '~/.redeven' },
+	  now_ms: 20,
+	});
+
+	expect(explicit).not.toHaveProperty('runtime_environment_id');
+	expect(await new GatewayStore(defaultGatewayStorePath(root)).get('gw_reused')).not.toHaveProperty('runtime_environment_id');
+  });
+
+  it('migrates the exact v1 store to v2 and preserves user records', async () => {
+    const root = await createTempRoot();
+    cleanupRoots.add(root);
+    const filePath = defaultGatewayStorePath(root);
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, `${JSON.stringify({
+      schema_version: 1,
+      gateways: [{
+        schema_version: 1,
+        gateway_id: 'gw_v1',
+        display_name: 'Existing Gateway',
+        local_enabled: false,
+        connection: { kind: 'url', base_url: 'https://gateway.example/' },
+        created_at_ms: 10,
+        updated_at_ms: 20,
+      }],
+    }, null, 2)}\n`, 'utf8');
+
+    const snapshot = await new GatewayStore(filePath).load();
+
+    expect(snapshot).toMatchObject({
+      schema_version: 2,
+      gateways: [{
+        schema_version: 2,
+        gateway_id: 'gw_v1',
+        display_name: 'Existing Gateway',
+        local_enabled: false,
+        created_at_ms: 10,
+        updated_at_ms: 20,
+      }],
+    });
+    expect(JSON.parse(await fs.readFile(filePath, 'utf8'))).toEqual(snapshot);
+  });
+
+  it('rejects v1 schema drift without changing the file', async () => {
+    const root = await createTempRoot();
+    cleanupRoots.add(root);
+    const filePath = defaultGatewayStorePath(root);
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    const original = `${JSON.stringify({
+      schema_version: 1,
+      gateways: [{
+        schema_version: 1,
+        gateway_id: 'gw_drift',
+        display_name: 'Drifted Gateway',
+        local_enabled: true,
+        connection: { kind: 'local_host', runtime_root: '/tmp/redeven' },
+        created_at_ms: 10,
+        updated_at_ms: 20,
+      }],
+    }, null, 2)}\n`;
+    await fs.writeFile(filePath, original, 'utf8');
+
+    await expect(new GatewayStore(filePath).load()).rejects.toMatchObject({
+      code: 'GATEWAY_STORE_SCHEMA_DRIFT',
+    });
+    expect(await fs.readFile(filePath, 'utf8')).toBe(original);
+  });
+
+  it('rejects future schemas without changing the file', async () => {
+    const root = await createTempRoot();
+    cleanupRoots.add(root);
+    const filePath = defaultGatewayStorePath(root);
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    const original = '{"schema_version":3,"gateways":[]}\n';
+    await fs.writeFile(filePath, original, 'utf8');
+
+    await expect(new GatewayStore(filePath).load()).rejects.toMatchObject({
+      code: 'GATEWAY_STORE_FUTURE_SCHEMA',
+    });
+    expect(await fs.readFile(filePath, 'utf8')).toBe(original);
+  });
+
+  it('leaves v1 bytes intact when the v2 migration cannot commit', async () => {
+    const root = await createTempRoot();
+    cleanupRoots.add(root);
+    const filePath = defaultGatewayStorePath(root);
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    const original = '{"schema_version":1,"gateways":[]}\n';
+    await fs.writeFile(filePath, original, 'utf8');
+    const store = new GatewayStore(filePath, async () => {
+      throw new Error('injected persistence failure');
+    });
+
+    await expect(store.load()).rejects.toThrow('injected persistence failure');
+    expect(await fs.readFile(filePath, 'utf8')).toBe(original);
+  });
+
+  it('keeps the last committed snapshot when a v2 mutation cannot persist', async () => {
+    const root = await createTempRoot();
+    cleanupRoots.add(root);
+    const filePath = defaultGatewayStorePath(root);
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    const original = `${JSON.stringify({
+      schema_version: 2,
+      gateways: [{
+        schema_version: 2,
+        gateway_id: 'gw_committed',
+        display_name: 'Committed Gateway',
+        local_enabled: true,
+        connection: { kind: 'url', base_url: 'https://gateway.example/', allow_loopback_http: false },
+        created_at_ms: 10,
+        updated_at_ms: 20,
+      }],
+    }, null, 2)}\n`;
+    await fs.writeFile(filePath, original, 'utf8');
+    const store = new GatewayStore(filePath, async () => {
+      throw new Error('injected persistence failure');
+    });
+    await store.load();
+
+    await expect(store.setLocalEnabled('gw_committed', false, 30)).rejects.toThrow('injected persistence failure');
+    expect((await store.get('gw_committed'))?.local_enabled).toBe(true);
+    expect(await fs.readFile(filePath, 'utf8')).toBe(original);
+  });
+
   it('normalizes duplicate records and projects source rows without env secrets', () => {
     const snapshot = normalizeGatewayStoreSnapshot({
       gateways: [
@@ -245,6 +440,44 @@ describe('GatewayStore', () => {
       container_label: 'Dev',
     });
     expect(source.service_state).toBeUndefined();
+  });
+
+  it('normalizes managed local host and container Gateway records', () => {
+    const snapshot = normalizeGatewayStoreSnapshot({
+      gateways: [{
+        gateway_id: 'gw_local',
+        display_name: 'Local Gateway',
+        connection: { kind: 'local_host', runtime_root: '/tmp/redeven' },
+      }, {
+        gateway_id: 'gw_local_container',
+        display_name: 'Local Container Gateway',
+        connection: {
+          kind: 'local_container',
+          container_engine: 'podman',
+          container_id: 'dev-id',
+          container_ref: 'dev',
+          container_label: 'Dev',
+          runtime_root: '/workspace/.redeven',
+        },
+      }],
+    }, 1);
+
+    expect(snapshot.gateways.map(gatewayRecordToSource)).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        connection_kind: 'local_host',
+        management_capability: 'managed_local_host',
+        endpoint_label: 'This device',
+        runtime_root: '/tmp/redeven',
+      }),
+      expect.objectContaining({
+        connection_kind: 'local_container',
+        management_capability: 'managed_local_container',
+        container_engine: 'podman',
+        container_id: 'dev-id',
+        runtime_root: '/workspace/.redeven',
+      }),
+    ]));
+    expect(gatewayBindingAudience(snapshot.gateways[0]!.connection)).toMatch(/^local(?:-container)?:\/\//u);
   });
 
   it('drops stale trust profiles when the Gateway connection identity changes', async () => {

@@ -83,13 +83,6 @@ const (
 	EnvProfileAccessRouteKindSSHContainer EnvProfileAccessRouteKind = "ssh_container"
 )
 
-type EnvProfileControlOwner string
-
-const (
-	EnvProfileControlOwnerNone    EnvProfileControlOwner = "none"
-	EnvProfileControlOwnerGateway EnvProfileControlOwner = "gateway"
-)
-
 type ConnectArtifactKind string
 
 const (
@@ -185,11 +178,10 @@ type EnvProfileUpsertRequest struct {
 }
 
 type EnvProfileInput struct {
-	GatewayEnvID string                 `json:"gateway_env_id,omitempty"`
-	DisplayName  string                 `json:"display_name"`
-	AccessRoute  EnvProfileAccessRoute  `json:"access_route"`
-	ControlOwner EnvProfileControlOwner `json:"control_owner,omitempty"`
-	SSHSecret    *EnvProfileSSHSecret   `json:"ssh_secret,omitempty"`
+	GatewayEnvID string                `json:"gateway_env_id,omitempty"`
+	DisplayName  string                `json:"display_name"`
+	AccessRoute  EnvProfileAccessRoute `json:"access_route"`
+	SSHSecret    *EnvProfileSSHSecret  `json:"ssh_secret,omitempty"`
 
 	sshSecretFieldPresent bool
 }
@@ -322,7 +314,7 @@ func (input *EnvProfileInput) UnmarshalJSON(data []byte) error {
 	}
 	for key := range raw {
 		switch key {
-		case "gateway_env_id", "display_name", "access_route", "control_owner", "ssh_secret":
+		case "gateway_env_id", "display_name", "access_route", "ssh_secret":
 		default:
 			return fmt.Errorf("unknown field %q", key)
 		}
@@ -503,7 +495,6 @@ func NormalizeEnvProfileUpsertRequest(req EnvProfileUpsertRequest) EnvProfileUps
 	req.Profile.AccessRoute.ContainerEngine = strings.TrimSpace(req.Profile.AccessRoute.ContainerEngine)
 	req.Profile.AccessRoute.ContainerID = strings.TrimSpace(req.Profile.AccessRoute.ContainerID)
 	req.Profile.AccessRoute.ContainerRuntimeRoot = strings.TrimSpace(req.Profile.AccessRoute.ContainerRuntimeRoot)
-	req.Profile.ControlOwner = normalizeEnvProfileControlOwner(req.Profile.ControlOwner)
 	return req
 }
 
@@ -798,15 +789,6 @@ func normalizeEnvProfileAccessRouteForCatalog(route EnvProfileAccessRoute) EnvPr
 		}
 	default:
 		return EnvProfileAccessRoute{}
-	}
-}
-
-func normalizeEnvProfileControlOwner(owner EnvProfileControlOwner) EnvProfileControlOwner {
-	switch owner {
-	case EnvProfileControlOwnerGateway:
-		return owner
-	default:
-		return EnvProfileControlOwnerNone
 	}
 }
 

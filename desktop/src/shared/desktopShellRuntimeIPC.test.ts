@@ -13,7 +13,7 @@ describe('desktopShellRuntimeIPC', () => {
   it('normalizes supported runtime actions', () => {
     expect(normalizeDesktopShellRuntimeAction(' restart ')).toBe('restart_runtime');
     expect(normalizeDesktopShellRuntimeAction('RESTART_RUNTIME')).toBe('restart_runtime');
-    expect(normalizeDesktopShellRuntimeAction('restart_managed_runtime')).toBe('restart_managed_runtime');
+    expect(normalizeDesktopShellRuntimeAction('restart_managed_runtime')).toBe('');
     expect(normalizeDesktopShellRuntimeAction('update')).toBe('upgrade_runtime');
     expect(normalizeDesktopShellRuntimeAction('desktop_update')).toBe('manage_desktop_update');
   });
@@ -101,7 +101,7 @@ describe('desktopShellRuntimeIPC', () => {
   it('normalizes explicit runtime maintenance contexts', () => {
     const context = normalizeDesktopShellRuntimeMaintenanceContext({
       available: true,
-      authority: 'desktop_ssh',
+      authority: 'gateway_supervisor',
       runtime_kind: 'ssh',
       upgrade_policy: 'desktop_release',
       current_version: ' v1.0.0 ',
@@ -113,22 +113,22 @@ describe('desktopShellRuntimeIPC', () => {
       },
       restart: {
         availability: 'available',
-        method: 'desktop_ssh_restart',
-        label: 'Restart SSH runtime',
-        title: 'Restart SSH Runtime',
-        message: 'Desktop will restart the SSH runtime.',
+        method: 'gateway_supervisor',
+        label: 'Restart Runtime',
+        title: 'Restart Runtime',
+        message: 'Gateway will restart the Runtime.',
       },
       upgrade: {
         availability: 'available',
-        method: 'desktop_ssh_force_update',
-        label: 'Update SSH runtime',
-        title: 'Update SSH Runtime',
-        message: 'Desktop will reinstall the SSH runtime.',
+        method: 'gateway_supervisor',
+        label: 'Update Runtime',
+        title: 'Update Runtime',
+        message: 'Gateway will install the verified Runtime release.',
         requires_target_version: false,
       },
     });
 
-    expect(context.authority).toBe('desktop_ssh');
+    expect(context.authority).toBe('gateway_supervisor');
     expect(context.runtime_kind).toBe('ssh');
     expect(context.current_version).toBe('v1.0.0');
     expect(context.active_workload).toEqual({

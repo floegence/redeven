@@ -43,6 +43,18 @@ export type DesktopProviderRuntimeManagementAuthorizationState = 'allowed' | 'de
 export type DesktopProviderRuntimeManagementReadiness = 'ready' | 'setup_required' | 'temporarily_unavailable' | 'unknown';
 export type DesktopProviderRuntimeManagementPresentationState = 'allowed' | 'denied' | 'setup_required' | 'temporarily_unavailable' | 'unsupported' | 'unknown';
 
+export type DesktopProviderRuntimeManagementCompatibility = Readonly<{
+  gateway_version: string;
+  gateway_protocol: string;
+  runtime_binary_version: string;
+  runtime_platform: 'linux' | 'darwin';
+  runtime_architecture: 'amd64' | 'arm64';
+  runtime_service_protocol: string;
+  compatibility_epoch: number;
+  capabilities: readonly string[];
+  runtime_artifact_sha256: string;
+}>;
+
 export type DesktopProviderEnvironmentAccess = Readonly<{
   can_connect: boolean;
   workspace_read: boolean;
@@ -62,6 +74,7 @@ export type DesktopProviderRuntimeManagementCapability = Readonly<{
     lifecycle_target_id: string;
     target_generation: number;
   }>;
+  compatibility?: DesktopProviderRuntimeManagementCompatibility;
   operations: readonly ('start' | 'stop' | 'restart' | 'update_runtime' | 'reconcile')[];
   artifact_policies: readonly ('published_release' | 'custom_build')[];
   binding_actions: readonly string[];
@@ -276,12 +289,40 @@ export function normalizeDesktopProviderRuntimeManagementCapability(
     ? { lifecycle_target_id: lifecycleTargetID, target_generation: targetGeneration }
     : undefined;
   const canDiscloseManagementFacts = support === 'supported' && authorizationState === 'allowed';
+  const compatibilityCandidate = canDiscloseManagementFacts && candidate.compatibility && typeof candidate.compatibility === 'object'
+    ? candidate.compatibility as Record<string, unknown>
+    : null;
+  const runtimePlatform = compact(compatibilityCandidate?.runtime_platform);
+  const runtimeArchitecture = compact(compatibilityCandidate?.runtime_architecture);
+  const compatibilityEpoch = Number(compatibilityCandidate?.compatibility_epoch);
+  const compatibility = compatibilityCandidate
+    && (runtimePlatform === 'linux' || runtimePlatform === 'darwin')
+    && (runtimeArchitecture === 'amd64' || runtimeArchitecture === 'arm64')
+    && Number.isSafeInteger(compatibilityEpoch) && compatibilityEpoch > 0
+    && compact(compatibilityCandidate.gateway_protocol) !== ''
+    && compact(compatibilityCandidate.runtime_service_protocol) !== ''
+    && compact(compatibilityCandidate.runtime_artifact_sha256) !== ''
+    ? {
+        gateway_version: compact(compatibilityCandidate.gateway_version),
+        gateway_protocol: compact(compatibilityCandidate.gateway_protocol),
+        runtime_binary_version: compact(compatibilityCandidate.runtime_binary_version),
+        runtime_platform: runtimePlatform,
+        runtime_architecture: runtimeArchitecture,
+        runtime_service_protocol: compact(compatibilityCandidate.runtime_service_protocol),
+        compatibility_epoch: compatibilityEpoch,
+        capabilities: normalizeStringSet(compatibilityCandidate.capabilities, (Array.isArray(compatibilityCandidate.capabilities)
+          ? compatibilityCandidate.capabilities.map(compact).filter(Boolean)
+          : []) as readonly string[]),
+        runtime_artifact_sha256: compact(compatibilityCandidate.runtime_artifact_sha256),
+      } satisfies DesktopProviderRuntimeManagementCompatibility
+    : undefined;
   return {
     support,
     authorization: { state: authorizationState, grants },
     readiness: disclosedReadiness,
     presentation_state: presentationState,
     ...(target ? { target } : {}),
+    ...(compatibility ? { compatibility } : {}),
     operations: canDiscloseManagementFacts
       ? normalizeStringSet(candidate.operations, ['start', 'stop', 'restart', 'update_runtime', 'reconcile'] as const)
       : [],

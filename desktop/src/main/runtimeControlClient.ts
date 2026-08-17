@@ -45,7 +45,7 @@ export type RuntimeControlProviderLinkRequest = Readonly<{
   provider_id: string;
   env_public_id: string;
   access_point_origin: string;
-  bootstrap_ticket: string;
+	runtime_link_ticket: string;
   allow_relink_when_idle?: boolean;
   expected_current_binding?: Readonly<{
     provider_origin?: string;

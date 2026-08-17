@@ -54,6 +54,7 @@ type Options struct {
 	ToolTargetPolicy       ToolTargetPolicy
 	TargetToolExecutor     TargetToolExecutor
 	ToolTargetPolicyForRun func(meta *session.Meta, thread threadstore.ThreadSettings, routing *threadstore.FlowerThreadRouting) ToolTargetPolicy
+	WorkloadAdmission      WorkloadAdmission
 
 	// PersistOpTimeout is the per-operation timeout for threadstore persistence
 	// (SQLite reads/writes). It must NOT be tied to a run's overall lifetime, since
@@ -122,6 +123,10 @@ type Service struct {
 
 	typedSendMu  sync.Mutex
 	typedSendOps map[string]*typedSendOperation
+
+	workloadMu        sync.Mutex
+	workloadAdmission WorkloadAdmission
+	workloadLeases    map[string]*aiWorkloadLease
 
 	flowerLiveSubscriberSeq         uint64
 	flowerLiveSubscribersByEndpoint map[string]int
@@ -287,6 +292,8 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		toolTargetPolicy:                toolTargetPolicy,
 		targetToolExecutor:              opts.TargetToolExecutor,
 		toolTargetPolicyForRun:          opts.ToolTargetPolicyForRun,
+		workloadAdmission:               opts.WorkloadAdmission,
+		workloadLeases:                  make(map[string]*aiWorkloadLease),
 		flowerLiveSubscribersByEndpoint: make(map[string]int),
 		flowerLiveSubscribers:           make(map[uint64]*flowerLiveSubscriber),
 		uploadsDir:                      uploadsDir,
@@ -304,6 +311,7 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		lifecycleCancel:                 lifecycleCancel,
 	}
 	svc.terminalProcesses = newTerminalProcessManager()
+	svc.terminalProcesses.SetWorkloadAdmission(opts.WorkloadAdmission)
 	if svc.skillManager != nil {
 		svc.skillManager.Discover()
 	}
@@ -370,6 +378,7 @@ func (s *Service) startFlowerRuntimeViewPump() {
 			if threadID == "" || s.threadsDB == nil {
 				continue
 			}
+			s.reconcileAIWorkloadLeases(threadID, current)
 			lookupCtx, cancel := context.WithTimeout(s.lifecycleCtx, s.persistTimeout())
 			settings, lookupErr := s.threadsDB.GetThreadSettingsByCanonicalThreadID(lookupCtx, threadID)
 			cancel()
@@ -409,6 +418,7 @@ func (s *Service) Close() error {
 	if lifecycleCancel != nil {
 		lifecycleCancel()
 	}
+	s.releaseAllAIWorkloadLeases()
 
 	waitTO := s.persistOpTO
 	if waitTO <= 0 {

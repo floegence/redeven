@@ -22,12 +22,13 @@ type CompatibilityReview struct {
 }
 
 type CompatibilityContract struct {
-	SchemaVersion          int                 `json:"schema_version"`
-	ReleaseReview          CompatibilityReview `json:"release_review"`
-	RuntimeProtocolVersion string              `json:"runtime_protocol_version"`
-	CompatibilityEpoch     int                 `json:"compatibility_epoch"`
-	MinimumDesktopVersion  string              `json:"minimum_desktop_version"`
-	MinimumRuntimeVersion  string              `json:"minimum_runtime_version"`
+	SchemaVersion            int                 `json:"schema_version"`
+	ReleaseReview            CompatibilityReview `json:"release_review"`
+	RuntimeProtocolVersion   string              `json:"runtime_protocol_version"`
+	CompatibilityEpoch       int                 `json:"compatibility_epoch"`
+	UpgradeFromRuntimeEpochs []int               `json:"upgrade_from_runtime_epochs,omitempty"`
+	MinimumDesktopVersion    string              `json:"minimum_desktop_version"`
+	MinimumRuntimeVersion    string              `json:"minimum_runtime_version"`
 }
 
 var (
@@ -114,6 +115,16 @@ func (c CompatibilityContract) Validate() error {
 	}
 	if c.CompatibilityEpoch <= 0 {
 		return fmt.Errorf("runtime compatibility contract compatibility_epoch must be positive")
+	}
+	seenUpgradeEpochs := make(map[int]struct{}, len(c.UpgradeFromRuntimeEpochs))
+	for _, epoch := range c.UpgradeFromRuntimeEpochs {
+		if epoch <= 0 || epoch >= c.CompatibilityEpoch {
+			return fmt.Errorf("runtime compatibility contract upgrade_from_runtime_epochs contains invalid epoch %d", epoch)
+		}
+		if _, exists := seenUpgradeEpochs[epoch]; exists {
+			return fmt.Errorf("runtime compatibility contract upgrade_from_runtime_epochs contains duplicate epoch %d", epoch)
+		}
+		seenUpgradeEpochs[epoch] = struct{}{}
 	}
 	if c.ReleaseReview.ReleaseVersion == "" {
 		return fmt.Errorf("runtime compatibility contract release_review.release_version is required")

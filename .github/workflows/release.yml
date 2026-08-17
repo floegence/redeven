@@ -425,6 +425,21 @@ jobs:
       - name: Validate ReDevPlugin consumption gate
         run: ./scripts/check_redevplugin_consumption_gate.sh --scan-root dist --require-release
 
+      - name: Generate and sign Runtime compatibility manifests
+        run: |
+          set -euo pipefail
+          node --test scripts/generate_runtime_compatibility_manifests.test.mjs
+          node scripts/generate_runtime_compatibility_manifests.mjs \
+            --dist dist \
+            --tag "${GITHUB_REF_NAME}"
+          for manifest in dist/redeven-runtime-compatibility_*.json; do
+            base="${manifest%.json}"
+            cosign sign-blob --yes \
+              --output-signature "${base}.sig" \
+              --output-certificate "${base}.pem" \
+              "$manifest"
+          done
+
       - name: Generate checksums
         run: |
           set -euo pipefail
@@ -432,6 +447,7 @@ jobs:
           sha256sum \
             redeven_*.tar.gz \
             redeven-gateway_*.tar.gz \
+            redeven-runtime-compatibility_*.json \
             Redeven-Desktop-*.deb \
             Redeven-Desktop-*.rpm \
             Redeven-Desktop-*.dmg \
@@ -502,6 +518,9 @@ jobs:
 
           assets=(
             dist/redeven_*.tar.gz
+            dist/redeven-runtime-compatibility_*.json
+            dist/redeven-runtime-compatibility_*.sig
+            dist/redeven-runtime-compatibility_*.pem
             dist/redeven-gateway_*.tar.gz
             dist/Redeven-Desktop-*.deb
             dist/Redeven-Desktop-*.rpm

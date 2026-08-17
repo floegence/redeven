@@ -4,6 +4,7 @@ import {
   type DesktopSSHEnvironmentDetails,
 } from '../shared/desktopSSH';
 import type {
+  DesktopRuntimeHostAccess,
   DesktopRuntimePlacement,
 } from '../shared/desktopRuntimePlacement';
 import {
@@ -16,7 +17,7 @@ import {
   prepareDesktopRuntimeUploadAsset,
   runtimeReleaseFetchPolicy,
 } from './runtimePackageCache';
-import { createSSHRuntimeHostExecutor, type RuntimeHostAccessExecutor } from './runtimeHostAccess';
+import { createLocalRuntimeHostExecutor, createSSHRuntimeHostExecutor, type RuntimeHostAccessExecutor } from './runtimeHostAccess';
 import type { DesktopSSHTransportManager } from './sshTransportManager';
 import {
   buildDesktopSSHReleaseAssetURL,
@@ -74,6 +75,7 @@ export type GatewayServiceProgressPhase =
   | 'starting_gateway'
   | 'stopping_gateway'
   | 'verifying_gateway_stopped'
+  | 'enrolling_gateway'
   | 'gateway_ready';
 
 export type GatewayServiceProgress = Readonly<{
@@ -85,7 +87,8 @@ export type GatewayServiceProgress = Readonly<{
 export type GatewayServiceHostOptions = Readonly<{
   sshTransportManager: DesktopSSHTransportManager;
   sshCredentialScope: string;
-  target: DesktopSSHEnvironmentDetails;
+  target?: DesktopSSHEnvironmentDetails;
+  hostAccess?: DesktopRuntimeHostAccess;
   placement: DesktopRuntimePlacement;
   stateRoot: string;
   gatewayID?: string;
@@ -425,6 +428,19 @@ function gatewayServiceStopScript(rootShell: string): string {
   ].join('\n');
 }
 
+function gatewaySupervisorEnrollmentScript(rootShell: string): string {
+  return [
+    'set -eu',
+    rootShell,
+    managedGatewayPathShell(),
+    'if [ ! -x "$binary" ]; then',
+    '  echo "managed Gateway binary is not installed" >&2',
+    '  exit 1',
+    'fi',
+    'exec "$binary" supervisor enroll --provider "$4" --environment "$5" --state-root "$state_root" --runtime-root "$runtime_root"',
+  ].join('\n');
+}
+
 function gatewayDeepProbeScript(rootShell: string): string {
   return [
     'set -eu',
@@ -508,6 +524,12 @@ function rootShellForPlacement(placement: DesktopRuntimePlacement): string {
 }
 
 function executorFor(options: GatewayServiceHostOptions): RuntimeHostAccessExecutor {
+  if (options.hostAccess?.kind === 'local_host') {
+    return createLocalRuntimeHostExecutor();
+  }
+  if (!options.target) {
+    throw new Error('SSH Gateway service management requires SSH target details.');
+  }
   return createSSHRuntimeHostExecutor(options.sshTransportManager, options.target, {
     sshPassword: options.sshPassword,
     credentialScope: options.sshCredentialScope,
@@ -865,6 +887,63 @@ export async function stopManagedGatewayService(options: GatewayServiceHostOptio
     if (probe?.status === 'running') {
       throw new Error('Desktop could not stop the Gateway service because it still reports running.');
     }
+  });
+}
+
+export function gatewaySupervisorEnrollmentInvocation(
+  placement: DesktopRuntimePlacement,
+  input: Readonly<{
+    state_root: string;
+    release_tag: string;
+    provider_origin: string;
+    environment_id: string;
+    enrollment_code: string;
+  }>,
+): Readonly<{ argv: readonly string[]; stdin_data: Buffer }> {
+  const providerOrigin = compact(input.provider_origin);
+  const environmentID = compact(input.environment_id);
+  const enrollmentCode = compact(input.enrollment_code);
+  if (providerOrigin === '' || environmentID === '' || enrollmentCode === '') {
+    throw new Error('Provider origin, Environment ID, and enrollment code are required.');
+  }
+  if (/[\r\n]/u.test(input.enrollment_code)) {
+    throw new Error('Runtime enrollment code must be one line.');
+  }
+  return {
+    argv: commandForPlacement(placement, gatewaySupervisorEnrollmentScript(rootShellForPlacement(placement)), [
+      placement.runtime_root,
+      input.state_root,
+      normalizeReleaseTag(input.release_tag),
+      providerOrigin,
+      environmentID,
+    ]),
+    stdin_data: Buffer.from(`${enrollmentCode}\n`, 'utf8'),
+  };
+}
+
+export async function enrollManagedGatewaySupervisor(
+  options: GatewayServiceHostOptions,
+  input: Readonly<{
+    provider_origin: string;
+    environment_id: string;
+    enrollment_code: string;
+  }>,
+): Promise<void> {
+  await withGatewayExecutor(options, async (executor) => {
+    const invocation = gatewaySupervisorEnrollmentInvocation(options.placement, {
+      state_root: options.stateRoot,
+      release_tag: options.releaseTag,
+      ...input,
+    });
+    options.onProgress?.({
+      phase: 'enrolling_gateway',
+      title: 'Enrolling Gateway supervisor',
+      detail: 'Desktop is binding the selected target to this Provider Environment.',
+    });
+    await executor.run(invocation.argv, {
+      stdinData: invocation.stdin_data,
+      signal: options.signal,
+    });
   });
 }
 

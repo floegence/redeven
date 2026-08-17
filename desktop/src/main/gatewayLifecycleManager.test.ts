@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const lifecycleMocks = vi.hoisted(() => ({
   ensureManagedGatewayServiceReady: vi.fn(),
+  enrollManagedGatewaySupervisor: vi.fn(),
   probeManagedGatewayServiceDeep: vi.fn(),
   probeManagedGatewayServiceStatus: vi.fn(),
   stopManagedGatewayService: vi.fn(),
@@ -13,6 +14,7 @@ vi.mock('./gatewayServiceHost', async () => {
   return {
     ...actual,
     ensureManagedGatewayServiceReady: lifecycleMocks.ensureManagedGatewayServiceReady,
+    enrollManagedGatewaySupervisor: lifecycleMocks.enrollManagedGatewaySupervisor,
     probeManagedGatewayServiceDeep: lifecycleMocks.probeManagedGatewayServiceDeep,
     probeManagedGatewayServiceStatus: lifecycleMocks.probeManagedGatewayServiceStatus,
     stopManagedGatewayService: lifecycleMocks.stopManagedGatewayService,
@@ -113,7 +115,7 @@ function manager(progress: string[] = [], secretStore = memorySecretStore()): Ga
 
 function sshGateway(overrides: Partial<GatewayRecord> = {}): GatewayRecord {
   return {
-    schema_version: 1,
+    schema_version: 2,
     gateway_id: 'gw_bastion',
     display_name: 'Bastion',
     local_enabled: true,
@@ -135,7 +137,7 @@ function sshGateway(overrides: Partial<GatewayRecord> = {}): GatewayRecord {
 
 function containerGateway(): GatewayRecord {
   return {
-    schema_version: 1,
+    schema_version: 2,
     gateway_id: 'gw_container',
     display_name: 'Container Gateway',
     local_enabled: true,
@@ -158,11 +160,13 @@ function containerGateway(): GatewayRecord {
 describe('GatewayLifecycleManager', () => {
   beforeEach(() => {
     lifecycleMocks.ensureManagedGatewayServiceReady.mockReset();
+    lifecycleMocks.enrollManagedGatewaySupervisor.mockReset();
     lifecycleMocks.probeManagedGatewayServiceDeep.mockReset();
     lifecycleMocks.probeManagedGatewayServiceStatus.mockReset();
     lifecycleMocks.stopManagedGatewayService.mockReset();
     lifecycleMocks.startRuntimePlacementBridgeSession.mockReset();
     lifecycleMocks.ensureManagedGatewayServiceReady.mockResolvedValue('/opt/redeven/gateway/managed/bin/redeven-gateway');
+    lifecycleMocks.enrollManagedGatewaySupervisor.mockResolvedValue(undefined);
     lifecycleMocks.probeManagedGatewayServiceDeep.mockResolvedValue({
       binary_path: '/opt/redeven/gateway/managed/bin/redeven-gateway',
       state_root: '/opt/redeven/gateways/gw_bastion/state',
@@ -656,9 +660,55 @@ describe('GatewayLifecycleManager', () => {
     );
   });
 
+  it('stops the selected Gateway, enrolls through stdin, then restarts the supervisor', async () => {
+    const record = sshGateway();
+
+    await manager().enrollProviderSupervisor(record, {
+      provider_origin: 'https://provider.example',
+      environment_id: 'env_demo',
+      enrollment_code: 'rec_demo.0.rpn_demo.ren_secret',
+    });
+
+    expect(lifecycleMocks.enrollManagedGatewaySupervisor).toHaveBeenCalledWith(
+      expect.objectContaining({
+        target: expect.objectContaining({ ssh_destination: 'bastion.internal' }),
+        stateRoot: '/opt/redeven/gateways/gw_bastion/state',
+      }),
+      {
+        provider_origin: 'https://provider.example',
+        environment_id: 'env_demo',
+        enrollment_code: 'rec_demo.0.rpn_demo.ren_secret',
+      },
+    );
+    expect(lifecycleMocks.ensureManagedGatewayServiceReady).toHaveBeenCalledTimes(2);
+    expect(lifecycleMocks.stopManagedGatewayService.mock.invocationCallOrder[0]).toBeLessThan(
+      lifecycleMocks.enrollManagedGatewaySupervisor.mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(lifecycleMocks.enrollManagedGatewaySupervisor.mock.invocationCallOrder[0]).toBeLessThan(
+      lifecycleMocks.ensureManagedGatewayServiceReady.mock.invocationCallOrder[1] ?? 0,
+    );
+  });
+
+  it('restarts the previous Gateway service when Provider enrollment fails', async () => {
+    lifecycleMocks.enrollManagedGatewaySupervisor.mockRejectedValue(new Error('challenge rejected'));
+    const record = sshGateway();
+
+    await expect(manager().enrollProviderSupervisor(record, {
+      provider_origin: 'https://provider.example',
+      environment_id: 'env_demo',
+      enrollment_code: 'rec_demo.0.rpn_demo.ren_secret',
+    })).rejects.toThrow('challenge rejected');
+
+    expect(lifecycleMocks.ensureManagedGatewayServiceReady).toHaveBeenCalledTimes(2);
+    expect(lifecycleMocks.ensureManagedGatewayServiceReady.mock.invocationCallOrder[1]).toBeGreaterThan(
+      lifecycleMocks.enrollManagedGatewaySupervisor.mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(lifecycleMocks.startRuntimePlacementBridgeSession).not.toHaveBeenCalled();
+  });
+
   it('does not allow Desktop to manage URL Gateways as local services', async () => {
     const record: GatewayRecord = {
-      schema_version: 1,
+      schema_version: 2,
       gateway_id: 'gw_url',
       display_name: 'URL Gateway',
     local_enabled: true,

@@ -21,10 +21,11 @@ import (
 )
 
 const (
-	storeSchemaVersion      = 1
-	defaultPrecommitTTL     = 30 * time.Minute
-	defaultMaximumOperation = 2 * time.Hour
-	defaultArtifactMaxBytes = int64(512 << 20)
+	storeSchemaVersion       = 2
+	legacyStoreSchemaVersion = 1
+	defaultPrecommitTTL      = 30 * time.Minute
+	defaultMaximumOperation  = 2 * time.Hour
+	defaultArtifactMaxBytes  = int64(512 << 20)
 )
 
 type ErrorCode string
@@ -126,6 +127,51 @@ type Store struct {
 type fileState struct {
 	SchemaVersion int                                                `json:"schema_version"`
 	Operations    map[string]gatewayprotocol.RuntimeOperation        `json:"operations"`
+	ArtifactPaths map[string]string                                  `json:"artifact_paths"`
+	Events        map[string][]gatewayprotocol.RuntimeOperationEvent `json:"events"`
+	TargetLocks   map[string]string                                  `json:"target_locks"`
+	PermitUses    map[string]string                                  `json:"permit_uses"`
+	FenceTokens   map[string]string                                  `json:"fence_tokens"`
+	Quarantined   map[string]string                                  `json:"quarantined_targets"`
+}
+
+type runtimeArtifactV1 struct {
+	SizeBytes      int64                          `json:"size_bytes"`
+	SHA256         string                         `json:"sha256"`
+	ManifestSHA256 string                         `json:"manifest_sha256"`
+	Policy         gatewayprotocol.ArtifactPolicy `json:"policy"`
+}
+
+type runtimeOperationV1 struct {
+	ProtocolVersion            string                                        `json:"protocol_version"`
+	OperationID                string                                        `json:"operation_id"`
+	IdempotencyKey             string                                        `json:"idempotency_key"`
+	LifecycleTargetID          string                                        `json:"lifecycle_target_id"`
+	TargetGeneration           int64                                         `json:"target_generation"`
+	GatewayEnvID               string                                        `json:"gateway_env_id"`
+	Kind                       gatewayprotocol.RuntimeOperationKind          `json:"kind"`
+	RequestedActor             gatewayprotocol.RuntimeOperationActor         `json:"requested_actor"`
+	RouteBindingID             string                                        `json:"route_binding_id,omitempty"`
+	AuthorizedClientKeyID      string                                        `json:"authorized_client_key_id"`
+	DesiredRuntime             gatewayprotocol.DesiredRuntime                `json:"desired_runtime"`
+	BuildInputs                json.RawMessage                               `json:"build_inputs,omitempty"`
+	PrepareScopeDigest         string                                        `json:"prepare_scope_digest"`
+	State                      gatewayprotocol.RuntimeOperationState         `json:"state"`
+	ExpiresAtUnixMS            int64                                         `json:"expires_at_unix_ms,omitempty"`
+	MaximumExpiresAtUnixMS     int64                                         `json:"maximum_expires_at_unix_ms,omitempty"`
+	ExpectedSnapshot           gatewayprotocol.WorkloadSnapshot              `json:"expected_snapshot"`
+	ConfirmedRiskSummaryDigest string                                        `json:"confirmed_risk_summary_digest,omitempty"`
+	Artifact                   *runtimeArtifactV1                            `json:"artifact,omitempty"`
+	Authorization              gatewayprotocol.RuntimeOperationAuthorization `json:"authorization"`
+	Checkpoint                 *gatewayprotocol.RuntimeCommitCheckpoint      `json:"checkpoint,omitempty"`
+	Failure                    *gatewayprotocol.RuntimeOperationFailure      `json:"failure,omitempty"`
+	CreatedAtUnixMS            int64                                         `json:"created_at_unix_ms"`
+	UpdatedAtUnixMS            int64                                         `json:"updated_at_unix_ms"`
+}
+
+type fileStateV1 struct {
+	SchemaVersion int                                                `json:"schema_version"`
+	Operations    map[string]runtimeOperationV1                      `json:"operations"`
 	ArtifactPaths map[string]string                                  `json:"artifact_paths"`
 	Events        map[string][]gatewayprotocol.RuntimeOperationEvent `json:"events"`
 	TargetLocks   map[string]string                                  `json:"target_locks"`
@@ -372,14 +418,53 @@ func (s *Store) beginTargetMutation(lifecycleTargetID string, reload bool) (func
 func (s *Store) Get(_ context.Context, operationID string, access Access) (gatewayprotocol.RuntimeOperation, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	manager := hasGrant(normalizeGrants(access.Grants), gatewayprotocol.RuntimeGrantManage)
 	operation, ok := s.state.Operations[strings.TrimSpace(operationID)]
 	if !ok {
+		if !manager {
+			return gatewayprotocol.RuntimeOperation{}, lifecycleError(ErrorUnauthorized, "Runtime management permission is required.", false)
+		}
 		return gatewayprotocol.RuntimeOperation{}, lifecycleError(ErrorOperationNotFound, "Runtime operation was not found.", false)
 	}
 	if !canObserve(operation, access) {
 		return gatewayprotocol.RuntimeOperation{}, lifecycleError(ErrorUnauthorized, "Runtime management permission is required.", false)
 	}
+	if strings.TrimSpace(access.ClientKeyID) != operation.AuthorizedClientKeyID {
+		return redactOperationForObserver(operation), nil
+	}
 	return cloneOperation(operation), nil
+}
+
+func (s *Store) List(_ context.Context, request gatewayprotocol.RuntimeOperationListRequest, access Access) (gatewayprotocol.RuntimeOperationListResponse, error) {
+	if !hasGrant(normalizeGrants(access.Grants), gatewayprotocol.RuntimeGrantManage) {
+		return gatewayprotocol.RuntimeOperationListResponse{}, lifecycleError(ErrorUnauthorized, "Runtime management permission is required.", false)
+	}
+	request.GatewayEnvID = strings.TrimSpace(request.GatewayEnvID)
+	request.LifecycleTargetID = strings.TrimSpace(request.LifecycleTargetID)
+	if request.ProtocolVersion != gatewayprotocol.Version || request.GatewayEnvID == "" || request.LifecycleTargetID == "" || request.TargetGeneration <= 0 {
+		return gatewayprotocol.RuntimeOperationListResponse{}, lifecycleError(ErrorInvalidRequest, "Runtime operation list scope is invalid.", false)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	operations := make([]gatewayprotocol.RuntimeOperation, 0)
+	for _, operation := range s.state.Operations {
+		if operation.GatewayEnvID != request.GatewayEnvID || operation.LifecycleTargetID != request.LifecycleTargetID ||
+			operation.TargetGeneration != request.TargetGeneration || operation.State.Terminal() {
+			continue
+		}
+		if strings.TrimSpace(access.ClientKeyID) == operation.AuthorizedClientKeyID {
+			operations = append(operations, cloneOperation(operation))
+		} else {
+			operations = append(operations, redactOperationForObserver(operation))
+		}
+	}
+	sort.Slice(operations, func(i, j int) bool {
+		if operations[i].UpdatedAtUnixMS != operations[j].UpdatedAtUnixMS {
+			return operations[i].UpdatedAtUnixMS > operations[j].UpdatedAtUnixMS
+		}
+		return operations[i].OperationID < operations[j].OperationID
+	})
+	return gatewayprotocol.RuntimeOperationListResponse{ProtocolVersion: gatewayprotocol.Version, Operations: operations}, nil
 }
 
 func (s *Store) OperationForAuthorization(operationID string) (gatewayprotocol.RuntimeOperation, error) {
@@ -399,8 +484,12 @@ func (s *Store) Events(_ context.Context, operationID string, access Access) (ga
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	operationID = strings.TrimSpace(operationID)
+	manager := hasGrant(normalizeGrants(access.Grants), gatewayprotocol.RuntimeGrantManage)
 	operation, ok := s.state.Operations[operationID]
 	if !ok {
+		if !manager {
+			return gatewayprotocol.RuntimeOperationEventsResponse{}, lifecycleError(ErrorUnauthorized, "Runtime management permission is required.", false)
+		}
 		return gatewayprotocol.RuntimeOperationEventsResponse{}, lifecycleError(ErrorOperationNotFound, "Runtime operation was not found.", false)
 	}
 	if !canObserve(operation, access) {
@@ -452,7 +541,8 @@ func (s *Store) Confirm(_ context.Context, operationID string, clientKeyID strin
 func (s *Store) StageArtifact(ctx context.Context, operationID string, clientKeyID string, metadata gatewayprotocol.RuntimeArtifactMetadata, reader io.Reader) (gatewayprotocol.RuntimeOperation, error) {
 	operationID = strings.TrimSpace(operationID)
 	clientKeyID = strings.TrimSpace(clientKeyID)
-	if reader == nil || metadata.SizeBytes <= 0 || metadata.SizeBytes > s.artifactMaxBytes || strings.TrimSpace(metadata.SHA256) == "" || len(metadata.ManifestJSON) == 0 {
+	if reader == nil || metadata.SizeBytes <= 0 || metadata.SizeBytes > s.artifactMaxBytes ||
+		normalizeSHA256(metadata.ArchiveSHA256) == "" || normalizeSHA256(metadata.ExecutableSHA256) == "" || len(metadata.ManifestJSON) == 0 {
 		return gatewayprotocol.RuntimeOperation{}, lifecycleError(ErrorArtifactInvalid, "Runtime artifact metadata is invalid.", false)
 	}
 	s.mu.Lock()
@@ -491,13 +581,21 @@ func (s *Store) StageArtifact(ctx context.Context, operationID string, clientKey
 	}
 	hash := sha256.New()
 	written, copyErr := io.Copy(io.MultiWriter(file, hash), io.LimitReader(reader, metadata.SizeBytes+1))
+	syncErr := error(nil)
+	if copyErr == nil {
+		syncErr = file.Sync()
+	}
 	closeErr := file.Close()
-	if copyErr != nil || closeErr != nil || written != metadata.SizeBytes {
+	if copyErr != nil || syncErr != nil || closeErr != nil || written != metadata.SizeBytes {
 		_ = os.Remove(temporaryPath)
+		_ = syncRuntimeOperationDirectory(artifactDir)
+		if syncErr != nil {
+			return s.failStaging(operationID, fmt.Errorf("sync Runtime artifact staging file: %w", syncErr))
+		}
 		return s.failStaging(operationID, errors.New("Runtime artifact length does not match declared size"))
 	}
 	digest := "sha256:" + hex.EncodeToString(hash.Sum(nil))
-	if digest != normalizeSHA256(metadata.SHA256) {
+	if digest != normalizeSHA256(metadata.ArchiveSHA256) {
 		_ = os.Remove(temporaryPath)
 		return s.failStaging(operationID, errors.New("Runtime artifact digest does not match declared SHA-256"))
 	}
@@ -513,6 +611,9 @@ func (s *Store) StageArtifact(ctx context.Context, operationID string, clientKey
 		_ = os.Remove(temporaryPath)
 		return s.failStaging(operationID, fmt.Errorf("commit artifact staging file: %w", err))
 	}
+	if err := syncRuntimeOperationDirectory(artifactDir); err != nil {
+		return s.failStaging(operationID, fmt.Errorf("sync Runtime artifact staging directory: %w", err))
+	}
 	manifestDigest := SHA256Digest(metadata.ManifestJSON)
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -522,7 +623,10 @@ func (s *Store) StageArtifact(ctx context.Context, operationID string, clientKey
 	}
 	next = cloneState(s.state)
 	operation = next.Operations[operationID]
-	operation.Artifact = &gatewayprotocol.RuntimeArtifact{SizeBytes: written, SHA256: digest, ManifestSHA256: manifestDigest, Policy: operation.DesiredRuntime.ArtifactPolicy}
+	operation.Artifact = &gatewayprotocol.RuntimeArtifact{
+		SizeBytes: written, ArchiveSHA256: digest, ExecutableSHA256: normalizeSHA256(metadata.ExecutableSHA256),
+		ManifestSHA256: manifestDigest, Policy: operation.DesiredRuntime.ArtifactPolicy,
+	}
 	operation.State = gatewayprotocol.RuntimeOperationCommitReady
 	operation.UpdatedAtUnixMS = s.clock.Now().UnixMilli()
 	next.Operations[operationID] = operation
@@ -578,7 +682,9 @@ func (s *Store) Commit(ctx context.Context, operationID string, clientKeyID stri
 		return gatewayprotocol.RuntimeOperation{}, err
 	}
 	s.mu.Unlock()
-	return s.continueFencing(ctx, operationID, false)
+	// Once fencing is durable, Gateway owns execution. A client transport loss
+	// only loses the response; it must not cancel the accepted operation.
+	return s.continueFencing(context.WithoutCancel(ctx), operationID, false)
 }
 
 func (s *Store) continueFencing(ctx context.Context, operationID string, recovering bool) (gatewayprotocol.RuntimeOperation, error) {
@@ -696,7 +802,7 @@ func (s *Store) Cancel(_ context.Context, operationID string, access Access) (ga
 	if !ok {
 		return gatewayprotocol.RuntimeOperation{}, lifecycleError(ErrorOperationNotFound, "Runtime operation was not found.", false)
 	}
-	if operation.AuthorizedClientKeyID != strings.TrimSpace(access.ClientKeyID) && !hasGrant(normalizeGrants(access.Grants), gatewayprotocol.RuntimeGrantManageBinding) {
+	if operation.AuthorizedClientKeyID != strings.TrimSpace(access.ClientKeyID) {
 		return gatewayprotocol.RuntimeOperation{}, lifecycleError(ErrorUnauthorized, "Runtime operation cancellation is not authorized.", false)
 	}
 	if !operation.State.Cancellable() {
@@ -750,31 +856,27 @@ func (s *Store) Reconcile(ctx context.Context, operationID string, access Access
 		s.mu.Unlock()
 		return gatewayprotocol.RuntimeOperation{}, lifecycleError(ErrorUnauthorized, "Runtime binding management permission is required.", false)
 	}
-	if operation.AuthorizedClientKeyID != strings.TrimSpace(access.ClientKeyID) {
-		s.mu.Unlock()
-		return gatewayprotocol.RuntimeOperation{}, lifecycleError(ErrorUnauthorized, "Only the authorized Runtime operation client can reconcile this operation.", false)
-	}
 	permitHash := digestOptional(access.PermitJTI)
-	if permitHash != "" {
-		if usedBy := s.state.PermitUses[permitHash]; usedBy != "" {
-			s.mu.Unlock()
-			if usedBy == operation.OperationID && operation.State.Terminal() {
-				return cloneOperation(operation), nil
-			}
-			return gatewayprotocol.RuntimeOperation{}, lifecycleError(ErrorPermitConsumed, "The Runtime reconcile authorization permit was already consumed.", false)
+	if permitHash == "" {
+		s.mu.Unlock()
+		return gatewayprotocol.RuntimeOperation{}, lifecycleError(ErrorUnauthorized, "An exact Runtime recovery authorization permit is required.", false)
+	}
+	if usedBy := s.state.PermitUses[permitHash]; usedBy != "" {
+		s.mu.Unlock()
+		if usedBy == operation.OperationID && operation.State.Terminal() {
+			return cloneOperation(operation), nil
 		}
+		return gatewayprotocol.RuntimeOperation{}, lifecycleError(ErrorPermitConsumed, "The Runtime reconcile authorization permit was already consumed.", false)
 	}
 	if operation.State != gatewayprotocol.RuntimeOperationManualRecoveryRequired {
 		s.mu.Unlock()
 		return gatewayprotocol.RuntimeOperation{}, lifecycleError(ErrorOperationState, "Runtime operation does not require manual recovery.", false)
 	}
-	if permitHash != "" {
-		next := cloneState(s.state)
-		next.PermitUses[permitHash] = operation.OperationID
-		if err := s.saveLocked(next); err != nil {
-			s.mu.Unlock()
-			return gatewayprotocol.RuntimeOperation{}, err
-		}
+	next := cloneState(s.state)
+	next.PermitUses[permitHash] = operation.OperationID
+	if err := s.saveLocked(next); err != nil {
+		s.mu.Unlock()
+		return gatewayprotocol.RuntimeOperation{}, err
 	}
 	s.mu.Unlock()
 	operation = s.operationWithPrivateState(operation)
@@ -783,7 +885,7 @@ func (s *Store) Reconcile(ctx context.Context, operationID string, access Access
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	next := cloneState(s.state)
+	next = cloneState(s.state)
 	operation = next.Operations[operation.OperationID]
 	operation.State = gatewayprotocol.RuntimeOperationFailed
 	operation.Failure = &gatewayprotocol.RuntimeOperationFailure{Code: string(ErrorRecoveryFailed), Message: "Runtime installation was reconciled after a failed update."}
@@ -1118,12 +1220,42 @@ func (s *Store) enterManualRecovery(operationID string, message string) (gateway
 }
 
 func (s *Store) load() error {
-	state, err := readStateFile(s.statePath)
-	if err != nil {
-		return err
+	raw, err := os.ReadFile(s.statePath)
+	if errors.Is(err, os.ErrNotExist) {
+		s.state = newFileState()
+		return nil
 	}
-	s.state = state
-	return nil
+	if err != nil {
+		return fmt.Errorf("read Runtime operation store: %w", err)
+	}
+	var envelope struct {
+		SchemaVersion int `json:"schema_version"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		return fmt.Errorf("parse Runtime operation store schema envelope: %w", err)
+	}
+	switch envelope.SchemaVersion {
+	case storeSchemaVersion:
+		state, err := decodeStateFile(raw)
+		if err != nil {
+			return err
+		}
+		s.state = state
+		return nil
+	case legacyStoreSchemaVersion:
+		legacy, err := decodeStateFileV1(raw)
+		if err != nil {
+			return err
+		}
+		state := migrateStateFileV1(legacy, s.clock.Now().UnixMilli())
+		if err := writeStateFile(s.stateRoot, s.statePath, state); err != nil {
+			return fmt.Errorf("migrate Runtime operation store schema v1 to v2: %w", err)
+		}
+		s.state = state
+		return nil
+	default:
+		return fmt.Errorf("Runtime operation store schema_version=%d is unsupported", envelope.SchemaVersion)
+	}
 }
 
 func readStateFile(statePath string) (fileState, error) {
@@ -1134,43 +1266,206 @@ func readStateFile(statePath string) (fileState, error) {
 	if err != nil {
 		return fileState{}, fmt.Errorf("read Runtime operation store: %w", err)
 	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	var state fileState
-	if err := decoder.Decode(&state); err != nil {
-		return fileState{}, fmt.Errorf("parse Runtime operation store: %w", err)
-	}
-	if decoder.Decode(&struct{}{}) != io.EOF {
-		return fileState{}, errors.New("Runtime operation store contains trailing data")
-	}
-	if state.SchemaVersion != storeSchemaVersion {
-		return fileState{}, fmt.Errorf("Runtime operation store schema_version=%d is unsupported", state.SchemaVersion)
-	}
-	if state.Operations == nil || state.ArtifactPaths == nil || state.Events == nil || state.TargetLocks == nil || state.PermitUses == nil || state.FenceTokens == nil || state.Quarantined == nil {
-		return fileState{}, errors.New("Runtime operation store shape is incomplete")
-	}
-	return state, nil
+	return decodeStateFile(raw)
 }
 
 func (s *Store) saveLocked(next fileState) error {
 	appendTransitionEvents(s.state, &next, s.clock.Now().UnixMilli())
-	if err := os.MkdirAll(s.stateRoot, 0o700); err != nil {
+	if err := writeStateFile(s.stateRoot, s.statePath, next); err != nil {
+		return err
+	}
+	s.state = next
+	return nil
+}
+
+func decodeStateFile(raw []byte) (fileState, error) {
+	var state fileState
+	if err := decodeStrictStateJSON(raw, &state); err != nil {
+		return fileState{}, fmt.Errorf("parse Runtime operation store: %w", err)
+	}
+	if state.SchemaVersion != storeSchemaVersion {
+		return fileState{}, fmt.Errorf("Runtime operation store schema_version=%d is unsupported", state.SchemaVersion)
+	}
+	if err := validateStateMaps(state.Operations, state.ArtifactPaths, state.Events, state.TargetLocks, state.PermitUses, state.FenceTokens, state.Quarantined); err != nil {
+		return fileState{}, err
+	}
+	return state, nil
+}
+
+func decodeStateFileV1(raw []byte) (fileStateV1, error) {
+	var state fileStateV1
+	if err := decodeStrictStateJSON(raw, &state); err != nil {
+		return fileStateV1{}, fmt.Errorf("parse Runtime operation store schema v1: %w", err)
+	}
+	if state.SchemaVersion != legacyStoreSchemaVersion {
+		return fileStateV1{}, fmt.Errorf("Runtime operation store schema_version=%d is not schema v1", state.SchemaVersion)
+	}
+	if err := validateStateMaps(state.Operations, state.ArtifactPaths, state.Events, state.TargetLocks, state.PermitUses, state.FenceTokens, state.Quarantined); err != nil {
+		return fileStateV1{}, err
+	}
+	return state, nil
+}
+
+func decodeStrictStateJSON(raw []byte, target any) error {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		return err
+	}
+	if decoder.Decode(&struct{}{}) != io.EOF {
+		return errors.New("Runtime operation store contains trailing data")
+	}
+	return nil
+}
+
+func validateStateMaps[Operation any](operations map[string]Operation, artifactPaths map[string]string, events map[string][]gatewayprotocol.RuntimeOperationEvent, targetLocks, permitUses, fenceTokens, quarantined map[string]string) error {
+	if operations == nil || artifactPaths == nil || events == nil || targetLocks == nil || permitUses == nil || fenceTokens == nil || quarantined == nil {
+		return errors.New("Runtime operation store shape is incomplete")
+	}
+	return nil
+}
+
+func migrateStateFileV1(legacy fileStateV1, migratedAtUnixMS int64) fileState {
+	state := fileState{
+		SchemaVersion: storeSchemaVersion,
+		Operations:    make(map[string]gatewayprotocol.RuntimeOperation, len(legacy.Operations)),
+		ArtifactPaths: cloneStringMap(legacy.ArtifactPaths),
+		Events:        cloneEventMap(legacy.Events),
+		TargetLocks:   cloneStringMap(legacy.TargetLocks),
+		PermitUses:    cloneStringMap(legacy.PermitUses),
+		FenceTokens:   cloneStringMap(legacy.FenceTokens),
+		Quarantined:   cloneStringMap(legacy.Quarantined),
+	}
+	for operationID, legacyOperation := range legacy.Operations {
+		operation := migrateRuntimeOperationV1(legacyOperation)
+		transitioned := false
+		switch operation.State {
+		case gatewayprotocol.RuntimeOperationCommitReady:
+			if operation.Kind == gatewayprotocol.RuntimeOperationUpdate && operation.Artifact != nil && operation.Artifact.ExecutableSHA256 == "" {
+				operation.State = gatewayprotocol.RuntimeOperationFailed
+				operation.ExpiresAtUnixMS = 0
+				operation.Failure = &gatewayprotocol.RuntimeOperationFailure{
+					Code: string(ErrorArtifactInvalid), Message: "Runtime update must be restarted because the stored artifact predates executable digest verification.", Retryable: true,
+				}
+				delete(state.TargetLocks, operation.LifecycleTargetID)
+				delete(state.FenceTokens, operation.OperationID)
+				delete(state.Quarantined, operation.LifecycleTargetID)
+				delete(state.ArtifactPaths, operation.OperationID)
+				transitioned = true
+			}
+		case gatewayprotocol.RuntimeOperationFencing, gatewayprotocol.RuntimeOperationCommitting, gatewayprotocol.RuntimeOperationRecovering:
+			if operation.Kind == gatewayprotocol.RuntimeOperationUpdate && operation.Artifact != nil && operation.Artifact.ExecutableSHA256 == "" {
+				operation.State = gatewayprotocol.RuntimeOperationManualRecoveryRequired
+				operation.ExpiresAtUnixMS = 0
+				operation.Failure = &gatewayprotocol.RuntimeOperationFailure{
+					Code: string(ErrorRecoveryFailed), Message: "Runtime recovery requires administrator reconciliation because the stored operation predates executable digest verification.",
+				}
+				state.TargetLocks[operation.LifecycleTargetID] = operation.OperationID
+				state.Quarantined[operation.LifecycleTargetID] = operation.OperationID
+				transitioned = true
+			}
+		case gatewayprotocol.RuntimeOperationManualRecoveryRequired:
+			state.TargetLocks[operation.LifecycleTargetID] = operation.OperationID
+			state.Quarantined[operation.LifecycleTargetID] = operation.OperationID
+		}
+		if transitioned {
+			operation.UpdatedAtUnixMS = migratedAtUnixMS
+			appendMigratedTransitionEvent(state.Events, operation, migratedAtUnixMS)
+		}
+		state.Operations[operationID] = operation
+	}
+	return state
+}
+
+func migrateRuntimeOperationV1(legacy runtimeOperationV1) gatewayprotocol.RuntimeOperation {
+	operation := gatewayprotocol.RuntimeOperation{
+		ProtocolVersion: legacy.ProtocolVersion, OperationID: legacy.OperationID, IdempotencyKey: legacy.IdempotencyKey,
+		LifecycleTargetID: legacy.LifecycleTargetID, TargetGeneration: legacy.TargetGeneration, GatewayEnvID: legacy.GatewayEnvID,
+		Kind: legacy.Kind, RequestedActor: legacy.RequestedActor, RouteBindingID: legacy.RouteBindingID,
+		AuthorizedClientKeyID: legacy.AuthorizedClientKeyID, DesiredRuntime: legacy.DesiredRuntime, BuildInputs: cloneRaw(legacy.BuildInputs),
+		PrepareScopeDigest: legacy.PrepareScopeDigest, State: legacy.State, ExpiresAtUnixMS: legacy.ExpiresAtUnixMS,
+		MaximumExpiresAtUnixMS: legacy.MaximumExpiresAtUnixMS, ExpectedSnapshot: legacy.ExpectedSnapshot,
+		ConfirmedRiskSummaryDigest: legacy.ConfirmedRiskSummaryDigest, Authorization: legacy.Authorization,
+		Checkpoint: legacy.Checkpoint, Failure: legacy.Failure, CreatedAtUnixMS: legacy.CreatedAtUnixMS, UpdatedAtUnixMS: legacy.UpdatedAtUnixMS,
+	}
+	if legacy.Artifact != nil {
+		operation.Artifact = &gatewayprotocol.RuntimeArtifact{
+			SizeBytes: legacy.Artifact.SizeBytes, ArchiveSHA256: normalizeSHA256(legacy.Artifact.SHA256),
+			ManifestSHA256: legacy.Artifact.ManifestSHA256, Policy: legacy.Artifact.Policy,
+		}
+	}
+	return operation
+}
+
+func appendMigratedTransitionEvent(events map[string][]gatewayprotocol.RuntimeOperationEvent, operation gatewayprotocol.RuntimeOperation, timestampUnixMS int64) {
+	operationEvents := events[operation.OperationID]
+	reasonCode := ""
+	if operation.Failure != nil {
+		reasonCode = strings.TrimSpace(operation.Failure.Code)
+	}
+	events[operation.OperationID] = append(operationEvents, gatewayprotocol.RuntimeOperationEvent{
+		Sequence: int64(len(operationEvents) + 1), OperationID: operation.OperationID,
+		LifecycleTargetID: operation.LifecycleTargetID, TargetGeneration: operation.TargetGeneration,
+		Operation: operation.Kind, State: operation.State, ReasonCode: reasonCode, TimestampUnixMS: timestampUnixMS,
+	})
+}
+
+func writeStateFile(stateRoot, statePath string, state fileState) error {
+	if err := os.MkdirAll(stateRoot, 0o700); err != nil {
 		return fmt.Errorf("create Runtime operation state root: %w", err)
 	}
-	raw, err := json.MarshalIndent(next, "", "  ")
+	raw, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal Runtime operation store: %w", err)
 	}
 	raw = append(raw, '\n')
-	temporaryPath := s.statePath + ".tmp"
-	if err := os.WriteFile(temporaryPath, raw, 0o600); err != nil {
+	temporaryPath := statePath + ".tmp"
+	file, err := os.OpenFile(temporaryPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
 		return fmt.Errorf("write Runtime operation store: %w", err)
 	}
-	if err := os.Rename(temporaryPath, s.statePath); err != nil {
+	if _, err = file.Write(raw); err == nil {
+		err = file.Sync()
+	}
+	if closeErr := file.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		_ = os.Remove(temporaryPath)
+		return fmt.Errorf("write Runtime operation store: %w", err)
+	}
+	if err := os.Rename(temporaryPath, statePath); err != nil {
 		return fmt.Errorf("commit Runtime operation store: %w", err)
 	}
-	s.state = next
+	directory, err := os.Open(stateRoot)
+	if err != nil {
+		return fmt.Errorf("open Runtime operation state root: %w", err)
+	}
+	syncErr := directory.Sync()
+	closeErr := directory.Close()
+	if syncErr != nil {
+		return fmt.Errorf("sync Runtime operation state root: %w", syncErr)
+	}
+	if closeErr != nil {
+		return fmt.Errorf("close Runtime operation state root: %w", closeErr)
+	}
 	return nil
+}
+
+func cloneStringMap(source map[string]string) map[string]string {
+	clone := make(map[string]string, len(source))
+	for key, value := range source {
+		clone[key] = value
+	}
+	return clone
+}
+
+func cloneEventMap(source map[string][]gatewayprotocol.RuntimeOperationEvent) map[string][]gatewayprotocol.RuntimeOperationEvent {
+	clone := make(map[string][]gatewayprotocol.RuntimeOperationEvent, len(source))
+	for key, value := range source {
+		clone[key] = append([]gatewayprotocol.RuntimeOperationEvent(nil), value...)
+	}
+	return clone
 }
 
 func appendTransitionEvents(previous fileState, next *fileState, timestampUnixMS int64) {
@@ -1242,8 +1537,31 @@ func snapshotWithinConfirmation(expected gatewayprotocol.WorkloadSnapshot, obser
 	return true
 }
 
-func canObserve(operation gatewayprotocol.RuntimeOperation, access Access) bool {
-	return strings.TrimSpace(access.ClientKeyID) == operation.AuthorizedClientKeyID || hasGrant(normalizeGrants(access.Grants), gatewayprotocol.RuntimeGrantManage)
+func canObserve(_ gatewayprotocol.RuntimeOperation, access Access) bool {
+	return hasGrant(normalizeGrants(access.Grants), gatewayprotocol.RuntimeGrantManage)
+}
+
+func redactOperationForObserver(operation gatewayprotocol.RuntimeOperation) gatewayprotocol.RuntimeOperation {
+	redacted := cloneOperation(operation)
+	redacted.ObserverRedacted = true
+	redacted.IdempotencyKey = ""
+	redacted.RequestedActor = gatewayprotocol.RuntimeOperationActor{}
+	redacted.RouteBindingID = ""
+	redacted.AuthorizedClientKeyID = ""
+	redacted.DesiredRuntime = gatewayprotocol.DesiredRuntime{}
+	redacted.BuildInputs = nil
+	redacted.PrepareScopeDigest = ""
+	redacted.ExpectedSnapshot.ProcessInventoryDigest = ""
+	redacted.ExpectedSnapshot.WorkloadIdentityDigest = ""
+	redacted.ExpectedSnapshot.WorkloadIdentities = nil
+	redacted.ConfirmedRiskSummaryDigest = ""
+	redacted.Artifact = nil
+	redacted.Authorization = gatewayprotocol.RuntimeOperationAuthorization{}
+	redacted.Checkpoint = nil
+	if redacted.Failure != nil {
+		redacted.Failure.Message = ""
+	}
+	return redacted
 }
 
 func normalizeGrants(values []gatewayprotocol.RuntimeGrant) []gatewayprotocol.RuntimeGrant {
@@ -1274,6 +1592,19 @@ func digestOptional(value string) string {
 		return ""
 	}
 	return SHA256Digest([]byte(value))
+}
+
+func syncRuntimeOperationDirectory(path string) error {
+	directory, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	syncErr := directory.Sync()
+	closeErr := directory.Close()
+	if syncErr != nil {
+		return syncErr
+	}
+	return closeErr
 }
 
 func SHA256Digest(value []byte) string {

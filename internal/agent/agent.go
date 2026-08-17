@@ -378,10 +378,17 @@ func New(opts Options) (*Agent, error) {
 		FilesystemScope:        filesystemScope,
 		Shell:                  shell,
 		AIConfig:               opts.Config.AI,
-		Audit:                  auditStore,
-		Diagnostics:            a.diag,
-		Terminal:               a.term,
-		LocalUIEnabled:         a.localUIEnabled,
+		AIWorkloadAdmission: func(workload runtimeservice.ManagedWorkload) (func(), error) {
+			lease, err := a.admitRuntimeWorkload(workload)
+			if err != nil {
+				return nil, err
+			}
+			return lease.Release, nil
+		},
+		Audit:          auditStore,
+		Diagnostics:    a.diag,
+		Terminal:       a.term,
+		LocalUIEnabled: a.localUIEnabled,
 		ResolveSessionMeta: func(channelID string) (*session.Meta, bool) {
 			if a == nil {
 				return nil, false

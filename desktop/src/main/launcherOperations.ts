@@ -36,6 +36,7 @@ type CreateLauncherOperationInput = Readonly<{
   step_progress?: DesktopLauncherOperationSnapshot['step_progress'];
   gateway_diagnosis?: DesktopLauncherOperationSnapshot['gateway_diagnosis'];
   presentation_context?: DesktopLauncherOperationSnapshot['presentation_context'];
+  runtime_confirmation?: DesktopLauncherOperationSnapshot['runtime_confirmation'];
   cancelable?: boolean;
   interrupt_label?: string;
   interrupt_label_key?: DesktopTranslationKey;
@@ -108,6 +109,7 @@ function operationProgress(snapshot: DesktopLauncherOperationSnapshot): DesktopL
     ...(snapshot.step_progress ? { step_progress: snapshot.step_progress } : {}),
     ...(snapshot.gateway_diagnosis ? { gateway_diagnosis: snapshot.gateway_diagnosis } : {}),
     ...(snapshot.presentation_context ? { presentation_context: snapshot.presentation_context } : {}),
+    ...(snapshot.runtime_confirmation ? { runtime_confirmation: snapshot.runtime_confirmation } : {}),
     cancelable: snapshot.cancelable,
     interrupt_label: snapshot.interrupt_label,
     interrupt_label_key: snapshot.interrupt_label_key,
@@ -331,6 +333,7 @@ export class LauncherOperationRegistry {
       ...(input.step_progress ? { step_progress: input.step_progress } : {}),
       ...(input.gateway_diagnosis ? { gateway_diagnosis: input.gateway_diagnosis } : {}),
       ...(input.presentation_context ? { presentation_context: input.presentation_context } : {}),
+      ...(input.runtime_confirmation ? { runtime_confirmation: input.runtime_confirmation } : {}),
       cancelable: input.cancelable === true,
       interrupt_label: compact(input.interrupt_label) || undefined,
       interrupt_label_key: input.interrupt_label_key,

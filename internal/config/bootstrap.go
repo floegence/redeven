@@ -68,6 +68,55 @@ type ProviderLinkBootstrapArgs struct {
 	PreservePermissionPolicy bool
 }
 
+// ProviderRuntimeLinkArgs is the explicit RCPP v3 Runtime-link input used by
+// Desktop-managed linking. It is intentionally separate from the frozen v2
+// bootstrap contract.
+type ProviderRuntimeLinkArgs struct {
+	ConfigPath string
+
+	ProviderOrigin         string
+	ControlplaneBaseURL    string
+	ControlplaneProviderID string
+	EnvironmentID          string
+	RuntimeLinkTicket      string
+	RuntimeVersion         string
+	PermissionPolicyPreset string
+	AgentHomeDir           string
+	Shell                  string
+	LogFormat              string
+	LogLevel               string
+	HTTPClient             *http.Client
+
+	RuntimeHostname string
+	RuntimeGOOS     string
+	RuntimeGOARCH   string
+
+	PreservePermissionPolicy bool
+}
+
+type providerLinkResolveArgs struct {
+	ConfigPath string
+
+	ProviderOrigin         string
+	ControlplaneBaseURL    string
+	ControlplaneProviderID string
+	EnvironmentID          string
+	Credential             string
+	RuntimeVersion         string
+	PermissionPolicyPreset string
+	AgentHomeDir           string
+	Shell                  string
+	LogFormat              string
+	LogLevel               string
+	HTTPClient             *http.Client
+
+	RuntimeHostname string
+	RuntimeGOOS     string
+	RuntimeGOARCH   string
+
+	PreservePermissionPolicy bool
+}
+
 type bootstrapResponse struct {
 	ProviderID              string                        `json:"provider_id"`
 	ProviderOrigin          string                        `json:"provider_origin"`
@@ -119,6 +168,30 @@ type bootstrapTicketExchangeRequest struct {
 	OS                             string `json:"os,omitempty"`
 	Arch                           string `json:"arch,omitempty"`
 	RuntimeVersion                 string `json:"runtime_version,omitempty"`
+}
+
+type runtimeLinkExchangeRequest struct {
+	ProtocolVersion          string `json:"protocol_version"`
+	EnvPublicID              string `json:"env_public_id"`
+	ProviderOrigin           string `json:"provider_origin"`
+	LocalEnvironmentPublicID string `json:"local_environment_public_id"`
+	AgentInstanceID          string `json:"agent_instance_id"`
+	DeliveryRequestIDB64u    string `json:"delivery_request_id_b64u"`
+	Hostname                 string `json:"hostname,omitempty"`
+	OS                       string `json:"os,omitempty"`
+	Arch                     string `json:"arch,omitempty"`
+	RuntimeVersion           string `json:"runtime_version,omitempty"`
+}
+
+type runtimeLinkExchangeResponse struct {
+	ProtocolVersion         string                        `json:"protocol_version"`
+	ProviderID              string                        `json:"provider_id"`
+	ProviderOrigin          string                        `json:"provider_origin"`
+	AccessPointID           string                        `json:"access_point_id"`
+	AccessPointOrigin       string                        `json:"access_point_origin"`
+	EnvPublicID             string                        `json:"env_public_id"`
+	ControlArtifactPool     *bootstrapControlArtifactPool `json:"control_artifact_pool"`
+	LocalEnvironmentBinding *LocalEnvironmentBinding      `json:"local_environment_binding"`
 }
 
 const bootstrapDeliveryAttemptVersion = 1
@@ -199,10 +272,40 @@ func BootstrapProviderLink(ctx context.Context, args ProviderLinkBootstrapArgs) 
 }
 
 func ResolveProviderLinkConfig(ctx context.Context, args ProviderLinkBootstrapArgs) (*Config, error) {
+	if normalizeBearerToken(args.BootstrapTicket) == "" {
+		return nil, errors.New("missing bootstrap ticket")
+	}
+	return resolveProviderLinkConfig(ctx, providerLinkResolveArgs{
+		ConfigPath: args.ConfigPath, ProviderOrigin: args.ProviderOrigin, ControlplaneBaseURL: args.ControlplaneBaseURL,
+		ControlplaneProviderID: args.ControlplaneProviderID, EnvironmentID: args.EnvironmentID,
+		Credential: args.BootstrapTicket, RuntimeVersion: args.RuntimeVersion, PermissionPolicyPreset: args.PermissionPolicyPreset,
+		AgentHomeDir: args.AgentHomeDir, Shell: args.Shell, LogFormat: args.LogFormat, LogLevel: args.LogLevel,
+		HTTPClient: args.HTTPClient, RuntimeHostname: args.RuntimeHostname, RuntimeGOOS: args.RuntimeGOOS, RuntimeGOARCH: args.RuntimeGOARCH,
+		PreservePermissionPolicy: args.PreservePermissionPolicy,
+	}, exchangeProviderBootstrapCredential)
+}
+
+func ResolveProviderRuntimeLinkConfig(ctx context.Context, args ProviderRuntimeLinkArgs) (*Config, error) {
+	if normalizeBearerToken(args.RuntimeLinkTicket) == "" {
+		return nil, errors.New("missing Runtime link ticket")
+	}
+	return resolveProviderLinkConfig(ctx, providerLinkResolveArgs{
+		ConfigPath: args.ConfigPath, ProviderOrigin: args.ProviderOrigin, ControlplaneBaseURL: args.ControlplaneBaseURL,
+		ControlplaneProviderID: args.ControlplaneProviderID, EnvironmentID: args.EnvironmentID,
+		Credential: args.RuntimeLinkTicket, RuntimeVersion: args.RuntimeVersion, PermissionPolicyPreset: args.PermissionPolicyPreset,
+		AgentHomeDir: args.AgentHomeDir, Shell: args.Shell, LogFormat: args.LogFormat, LogLevel: args.LogLevel,
+		HTTPClient: args.HTTPClient, RuntimeHostname: args.RuntimeHostname, RuntimeGOOS: args.RuntimeGOOS, RuntimeGOARCH: args.RuntimeGOARCH,
+		PreservePermissionPolicy: args.PreservePermissionPolicy,
+	}, exchangeRuntimeLinkTicket)
+}
+
+type providerLinkExchangeFunc func(context.Context, providerLinkResolveArgs, string, string, string, bootstrapDeliveryAttempt) (*bootstrapResponse, error)
+
+func resolveProviderLinkConfig(ctx context.Context, args providerLinkResolveArgs, exchangeProviderLink providerLinkExchangeFunc) (*Config, error) {
 	baseURL := strings.TrimSpace(args.ControlplaneBaseURL)
 	providerOrigin := strings.TrimSpace(args.ProviderOrigin)
 	envID := strings.TrimSpace(args.EnvironmentID)
-	bootstrapTicket := normalizeBearerToken(args.BootstrapTicket)
+	credential := normalizeBearerToken(args.Credential)
 	cfgPath := strings.TrimSpace(args.ConfigPath)
 	if cfgPath == "" {
 		return nil, errors.New("missing config path")
@@ -210,8 +313,8 @@ func ResolveProviderLinkConfig(ctx context.Context, args ProviderLinkBootstrapAr
 	if providerOrigin == "" || baseURL == "" || envID == "" {
 		return nil, errors.New("missing provider/controlplane/env-id")
 	}
-	if bootstrapTicket == "" {
-		return nil, errors.New("missing bootstrap ticket")
+	if credential == "" {
+		return nil, errors.New("missing provider link credential")
 	}
 	providerOrigin, err := normalizeControlplaneBaseURL(providerOrigin)
 	if err != nil {
@@ -230,26 +333,13 @@ func ResolveProviderLinkConfig(ctx context.Context, args ProviderLinkBootstrapAr
 	if err != nil {
 		return nil, err
 	}
-	exchange := func(delivery bootstrapDeliveryAttempt) (*bootstrapResponse, error) {
-		return exchangeBootstrapTicket(ctx, args.HTTPClient, baseURL, envID, bootstrapTicket, bootstrapTicketExchangeRequest{
-			EnvPublicID:                    envID,
-			ProviderOrigin:                 providerOrigin,
-			LocalEnvironmentPublicID:       delivery.LocalEnvironmentPublicID,
-			AgentInstanceID:                delivery.AgentInstanceID,
-			BootstrapDeliveryRequestIDB64u: delivery.BootstrapDeliveryRequestIDB64u,
-			Hostname:                       firstNonEmpty(args.RuntimeHostname, hostnameBestEffort()),
-			OS:                             firstNonEmpty(args.RuntimeGOOS, runtime.GOOS),
-			Arch:                           firstNonEmpty(args.RuntimeGOARCH, runtime.GOARCH),
-			RuntimeVersion:                 strings.TrimSpace(args.RuntimeVersion),
-		})
-	}
-	bootstrap, err := exchange(attempt)
+	bootstrap, err := exchangeProviderLink(ctx, args, baseURL, envID, credential, attempt)
 	if errors.Is(err, errBootstrapDeliveryExpired) {
 		attempt, err = rotateExpiredBootstrapDeliveryAttempt(attemptPath, attempt)
 		if err != nil {
 			return nil, fmt.Errorf("retire expired bootstrap delivery attempt: %w", err)
 		}
-		bootstrap, err = exchange(attempt)
+		bootstrap, err = exchangeProviderLink(ctx, args, baseURL, envID, credential, attempt)
 	}
 	if err != nil {
 		return nil, err
@@ -363,6 +453,99 @@ func ResolveProviderLinkConfig(ctx context.Context, args ProviderLinkBootstrapAr
 		cfg.CodeServerPortMax = prev.CodeServerPortMax
 	}
 	return cfg, nil
+}
+
+func exchangeProviderBootstrapCredential(ctx context.Context, args providerLinkResolveArgs, baseURL string, envID string, bootstrapTicket string, delivery bootstrapDeliveryAttempt) (*bootstrapResponse, error) {
+	return exchangeBootstrapTicket(ctx, args.HTTPClient, baseURL, envID, bootstrapTicket, bootstrapTicketExchangeRequest{
+		EnvPublicID: envID, ProviderOrigin: delivery.ProviderOrigin,
+		LocalEnvironmentPublicID: delivery.LocalEnvironmentPublicID, AgentInstanceID: delivery.AgentInstanceID,
+		BootstrapDeliveryRequestIDB64u: delivery.BootstrapDeliveryRequestIDB64u,
+		Hostname:                       firstNonEmpty(args.RuntimeHostname, hostnameBestEffort()), OS: firstNonEmpty(args.RuntimeGOOS, runtime.GOOS),
+		Arch: firstNonEmpty(args.RuntimeGOARCH, runtime.GOARCH), RuntimeVersion: strings.TrimSpace(args.RuntimeVersion),
+	})
+}
+
+func exchangeRuntimeLinkTicket(ctx context.Context, args providerLinkResolveArgs, baseURL string, envID string, runtimeLinkTicket string, delivery bootstrapDeliveryAttempt) (*bootstrapResponse, error) {
+	u, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil {
+		return nil, fmt.Errorf("invalid controlplane url: %w", err)
+	}
+	if !strings.EqualFold(u.Scheme, "https") || strings.TrimSpace(u.Hostname()) == "" {
+		return nil, errors.New("Runtime link exchange requires an HTTPS origin")
+	}
+	u.Path = strings.TrimRight(u.Path, "/") + "/api/rcpp/v3/runtime-link/exchange"
+	u.RawQuery = ""
+	if !validCanonicalBase64URL32(delivery.BootstrapDeliveryRequestIDB64u) {
+		return nil, errors.New("invalid Runtime link delivery request id")
+	}
+	payload, err := json.Marshal(runtimeLinkExchangeRequest{
+		ProtocolVersion: "rcpp-v3", EnvPublicID: strings.TrimSpace(envID), ProviderOrigin: delivery.ProviderOrigin,
+		LocalEnvironmentPublicID: delivery.LocalEnvironmentPublicID, AgentInstanceID: delivery.AgentInstanceID,
+		DeliveryRequestIDB64u: delivery.BootstrapDeliveryRequestIDB64u,
+		Hostname:              firstNonEmpty(args.RuntimeHostname, hostnameBestEffort()), OS: firstNonEmpty(args.RuntimeGOOS, runtime.GOOS),
+		Arch: firstNonEmpty(args.RuntimeGOARCH, runtime.GOARCH), RuntimeVersion: strings.TrimSpace(args.RuntimeVersion),
+	})
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), bytes.NewReader(payload))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+runtimeLinkTicket)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	client := secureBootstrapHTTPClient(args.HTTPClient, u)
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, ControlArtifactMaxResponseBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("read Runtime link exchange response: %w", err)
+	}
+	if len(body) > ControlArtifactMaxResponseBytes {
+		return nil, errors.New("Runtime link exchange response exceeds exact byte bound")
+	}
+	if resp.StatusCode != http.StatusOK {
+		var failure bootstrapExchangeErrorResponse
+		if decodeErr := decodeExactBootstrapExchangeError(body, &failure); decodeErr == nil {
+			if resp.StatusCode == http.StatusConflict && failure.Error.Code == "RUNTIME_LINK_DELIVERY_EXPIRED" {
+				return nil, errBootstrapDeliveryExpired
+			}
+			return nil, fmt.Errorf("Runtime link exchange failed with HTTP %d/%s", resp.StatusCode, failure.Error.Code)
+		}
+		return nil, fmt.Errorf("Runtime link exchange failed with HTTP %d", resp.StatusCode)
+	}
+	var out runtimeLinkExchangeResponse
+	if err := decodeExactRuntimeLinkResponse(body, &out); err != nil {
+		return nil, fmt.Errorf("invalid Runtime link exchange json: %w", err)
+	}
+	if out.ProtocolVersion != "rcpp-v3" || out.ControlArtifactPool == nil {
+		return nil, errors.New("invalid Runtime link exchange response contract")
+	}
+	return &bootstrapResponse{
+		ProviderID: out.ProviderID, ProviderOrigin: out.ProviderOrigin, AccessPointID: out.AccessPointID,
+		AccessPointOrigin: out.AccessPointOrigin, EnvPublicID: out.EnvPublicID,
+		ControlArtifactPool: out.ControlArtifactPool, LocalEnvironmentBinding: out.LocalEnvironmentBinding,
+	}, nil
+}
+
+func decodeExactRuntimeLinkResponse(raw []byte, response *runtimeLinkExchangeResponse) error {
+	if response == nil {
+		return errors.New("nil Runtime link response")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(response); err != nil {
+		return err
+	}
+	var extra any
+	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
+		return errors.New("Runtime link response contains multiple JSON values")
+	}
+	return nil
 }
 
 func firstNonEmpty(values ...string) string {

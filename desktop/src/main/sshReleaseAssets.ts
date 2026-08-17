@@ -13,9 +13,9 @@ export const DEFAULT_DESKTOP_SSH_RELEASE_FETCH_TIMEOUT_MS = 30_000;
 export type DesktopSSHReleasePackageKind = 'runtime' | 'gateway';
 
 export type DesktopSSHRemotePlatform = Readonly<{
-  goos: 'linux';
+  goos: 'linux' | 'darwin';
   goarch: 'amd64' | 'arm64';
-  platform_id: 'linux_amd64' | 'linux_arm64';
+  platform_id: 'linux_amd64' | 'linux_arm64' | 'darwin_amd64' | 'darwin_arm64';
   release_package_name: string;
   platform_label: string;
 }>;
@@ -55,6 +55,12 @@ type EnsureDesktopSSHVerifiedReleaseManifestArgs = Readonly<{
   releaseBaseURL: string;
   cacheRoot: string;
   fetchPolicy?: DesktopSSHReleaseFetchPolicy;
+}>;
+
+export type DesktopSSHSignedReleaseJSONAsset = Readonly<{
+  json_text: string;
+  signature: string;
+  certificate: string;
 }>;
 
 type EnsureDesktopSSHReleaseArchiveArgs = Readonly<{
@@ -381,6 +387,52 @@ export async function ensureDesktopSSHVerifiedReleaseManifest(
     writePrivateFileAtomically(certificatePath, certificate),
   ]);
   return manifest;
+}
+
+export async function fetchDesktopSSHSignedReleaseJSONAsset(args: Readonly<{
+  manifest: DesktopSSHVerifiedReleaseManifest;
+  asset_name: string;
+  signature_name: string;
+  certificate_name: string;
+  fetchPolicy?: DesktopSSHReleaseFetchPolicy;
+}>): Promise<DesktopSSHSignedReleaseJSONAsset> {
+  const expectedSHA256 = args.manifest.sha256_by_asset_name.get(args.asset_name);
+  if (!expectedSHA256) {
+    throw new Error(`SHA256SUMS did not include ${args.asset_name}.`);
+  }
+  const [jsonBuffer, signature, certificate] = await Promise.all([
+    downloadBuffer(buildDesktopSSHReleaseAssetURL(
+      args.manifest.release_base_url,
+      args.manifest.release_tag,
+      args.asset_name,
+    ), args.fetchPolicy),
+    downloadBuffer(buildDesktopSSHReleaseAssetURL(
+      args.manifest.release_base_url,
+      args.manifest.release_tag,
+      args.signature_name,
+    ), args.fetchPolicy),
+    downloadBuffer(buildDesktopSSHReleaseAssetURL(
+      args.manifest.release_base_url,
+      args.manifest.release_tag,
+      args.certificate_name,
+    ), args.fetchPolicy),
+  ]);
+  const actualSHA256 = createHash('sha256').update(jsonBuffer).digest('hex');
+  if (actualSHA256 !== expectedSHA256.toLowerCase()) {
+    throw new Error(`Release asset checksum mismatch for ${args.asset_name}.`);
+  }
+  const jsonText = jsonBuffer.toString('utf8');
+  verifyDesktopSSHReleaseManifestSignature({
+    releaseTag: args.manifest.release_tag,
+    sumsText: jsonText,
+    signature,
+    certificate,
+  });
+  return {
+    json_text: jsonText,
+    signature: signature.toString('base64'),
+    certificate: certificate.toString('utf8'),
+  };
 }
 
 export async function ensureDesktopSSHReleaseArchive(

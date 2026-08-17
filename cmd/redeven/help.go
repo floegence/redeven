@@ -606,9 +606,8 @@ func envStopHelpText() string {
 	return strings.TrimLeft(`
 redeven env stop
 
-Stop a supported Local Environment Runtime, or return a structured
-unavailable/blocked plan when the target is unsupported or its identity cannot
-be verified safely.
+Return the structured Runtime stop plan. Product-managed lifecycle requires the
+target Gateway supervisor; this CLI does not stop Runtime directly.
 
 Usage:
   redeven env stop [flags]
@@ -618,7 +617,6 @@ Flags:
   --json                            Write the protocol JSON envelope.
   --state-root <path>               State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
   --probe-timeout <duration>        Runtime health probe timeout.
-  --grace-period <duration>         Time to wait after requesting runtime shutdown.
 
 Examples:
   redeven env stop --target local --json
@@ -629,9 +627,9 @@ func envStartHelpText() string {
 	return strings.TrimLeft(`
 redeven env start
 
-Return the structured start plan for an environment target. Phase one does not
-start Desktop runtime sessions from this CLI; use Redeven Desktop when the plan
-requires Desktop handoff.
+Return the structured start plan for an environment target. Product-managed
+lifecycle requires the target Gateway supervisor; this CLI does not start
+Runtime directly.
 
 Usage:
   redeven env start [flags]

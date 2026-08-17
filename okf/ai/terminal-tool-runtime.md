@@ -11,7 +11,7 @@ Redeven owns PTY process resources and bounded output retention. Floret v4 owns 
 
 # Contract
 
-`terminal.exec` starts a local PTY after the Floret invocation provides the exact thread, turn, tool-call, and effect-attempt identity. Redeven publishes the public process id and sanitized shell presentation through the invocation Activity update. Provider and tool I/O run outside the ThreadRuntime lock. Only the minimal irreversible tool intent fence is durable before process creation; a result whose side effect is uncertain is not automatically replayed.
+`terminal.exec` starts a local PTY after the Floret invocation provides the exact thread, turn, tool-call, and effect-attempt identity. Before spawning, it acquires a protected Runtime lifecycle workload lease for that exact hosted process; a closed lifecycle admission rejects the process without changing manager state. The lease remains held through process reap and output drain and is released exactly once from the real process terminal path. Redeven publishes the public process id and sanitized shell presentation through the invocation Activity update. Provider and tool I/O run outside the ThreadRuntime lock. Only the minimal irreversible tool intent fence is durable before process creation; a result whose side effect is uncertain is not automatically replayed.
 
 The process manager retains monotonic output chunks with fixed byte limits. `terminal.read` returns output after the caller's sequence, `terminal.write` writes bounded stdin, and `terminal.terminate` requests process-tree termination and waits for reap and output drain. These process operations do not invent canonical Activity state. The effect adapter settles the exact Floret effect attempt once; duplicate or late completion cannot append a second canonical tool result.
 
@@ -27,6 +27,7 @@ Redeven does not wait on authority barriers, admission receipts, recovery handle
 
 - `redeven:internal/ai/floret_effect_authorization.go` - Binds one-shot effect authorization to the exact Floret attempt.
 - `redeven:internal/ai/terminal_process.go` - Owns bounded PTY resources, output, reap, and termination.
+- `redeven:internal/ai/runtime_lifecycle_admission_test.go` - Proves post-fence rejection and release only after canonical turn or process terminal state.
 - `redeven:internal/ai/terminal_process_service.go` - Adapts process completion to the canonical effect result.
 - `redeven:internal/ai/builtin_tool_handlers.go` - Declares terminal schemas and safe presentation.
 - `redeven:internal/flower_ui/src/flowerActivityPresentation.ts` - Maps typed Activity presentation into the Shell row.
