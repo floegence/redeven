@@ -4459,6 +4459,18 @@
       "permissionsTitle": "{plugin} の権限",
       "permissionsDescription": "{plugin} が要求できる操作を選択します。影響の大きい操作には、引き続きプラットフォームでの確認が必要です。",
       "permissionsResolvedDuringInstall": "Host はコミット前に署名済みパッケージから正確な必須権限を検証します。インストールを確定すると、ポリシーで許可された権限が付与され、プラグインが有効になります。",
+      "checkingPackage": "プラグインパッケージを確認しています...",
+      "officialInspectionMismatch": "検査結果がこの公式リリースと一致しなくなりました。プラグインセンターを更新して、もう一度お試しください。",
+      "noRequiredPermissions": "このプラグインを開くためにアクセス権を付与する必要はありません。",
+      "officialPermissionEffects": "検証済みのアクセス範囲：{effects}。",
+      "officialPermissionMethods": "宣言されたメソッド：{methods}。",
+      "permissionEffect": {
+        "read": "データの読み取り",
+        "write": "データの変更",
+        "delete": "データの削除",
+        "execute": "操作の実行",
+        "admin": "リソースの管理"
+      },
       "permissionsAdminRequired": "これらの権限は環境管理者が変更する必要があります。",
       "policyConfigured": "ポリシー設定済み",
       "requiredToOpen": "開くために必要",

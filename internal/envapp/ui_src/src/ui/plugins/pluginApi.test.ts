@@ -50,7 +50,7 @@ function createClientHarness() {
       presentation_sha256: 'sha256:' + 'a'.repeat(64),
       security_summary: {
         summary_sha256: 'sha256:' + 'b'.repeat(64),
-        permissions: [{ permission_id: 'containers.read', methods: ['containers.list'] }],
+        permissions: [{ permission_id: 'containers.read', methods: ['containers.list'], required: true, effects: ['read'] }],
         methods: [], capability_contracts: [], workers: [], network: [], storage: [], secret_refs: [], core_actions: [], intents: [], surfaces: [],
       },
     })),

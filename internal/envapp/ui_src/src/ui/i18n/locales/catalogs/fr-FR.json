@@ -4459,6 +4459,18 @@
       "permissionsTitle": "Autorisations de {plugin}",
       "permissionsDescription": "Choisissez les opérations que {plugin} peut demander. Les opérations sensibles nécessitent toujours une confirmation de la plateforme.",
       "permissionsResolvedDuringInstall": "L’Host vérifie les autorisations exactes requises dans le paquet signé avant validation. Confirmer l’installation accorde les autorisations permises par la stratégie et active le plugin.",
+      "checkingPackage": "Vérification du paquet du plugin...",
+      "officialInspectionMismatch": "Le résultat de l’inspection ne correspond plus à cette version officielle. Actualisez le centre de plugins et réessayez.",
+      "noRequiredPermissions": "Ce plugin ne nécessite aucune autorisation d’accès pour s’ouvrir.",
+      "officialPermissionEffects": "Accès vérifié : {effects}.",
+      "officialPermissionMethods": "Méthodes déclarées : {methods}.",
+      "permissionEffect": {
+        "read": "Lire les données",
+        "write": "Modifier les données",
+        "delete": "Supprimer les données",
+        "execute": "Exécuter des opérations",
+        "admin": "Administrer les ressources"
+      },
       "permissionsAdminRequired": "Un administrateur de l’environnement doit modifier ces autorisations.",
       "policyConfigured": "Stratégie configurée",
       "requiredToOpen": "Requise pour l’ouverture",

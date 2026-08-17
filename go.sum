@@ -62,8 +62,8 @@ github.com/floegence/floret/v4 v4.0.11 h1:xbkRKqg1UGMPTNtsTUBI7CqJBjdQnFGd7953Gp
 github.com/floegence/floret/v4 v4.0.11/go.mod h1:m+DABWdcBY9k00zBZaPwNqNhueEBG6KampyMUtJpxG8=
 github.com/floegence/flowersec/flowersec-go/v2 v2.5.2 h1:RZYbPbWdY+2uTjDllpEwzCDsYmFjLFBgBG9lHUPF2WE=
 github.com/floegence/flowersec/flowersec-go/v2 v2.5.2/go.mod h1:ckIsgP/gYpsNSth3BUFbJ0qGx6YDBnqHIKgourW/eKE=
-github.com/floegence/redevplugin/v2 v2.0.9 h1:xuhm2iN75+KaVKEMYMDWZLJnrU4D3iQ/Zzc8jiFm/s4=
-github.com/floegence/redevplugin/v2 v2.0.9/go.mod h1:XqVjxMDEo/j9r3y72+SZqbPppL3HTAevcZ4BhBVQiAw=
+github.com/floegence/redevplugin/v2 v2.0.10 h1:QWnqe+wkLxdaasAli8Lq44YkTXvHL06ArgSqFJfjihw=
+github.com/floegence/redevplugin/v2 v2.0.10/go.mod h1:XqVjxMDEo/j9r3y72+SZqbPppL3HTAevcZ4BhBVQiAw=
 github.com/go-logr/logr v1.4.2 h1:6pFjapn8bFcIbiKo3XT4j/BhANplGihG6tvd+8rYgrY=
 github.com/go-logr/logr v1.4.2/go.mod h1:9T104GzyrTigFIr8wt5mBrctHMim0Nb2HLGrmQ40KvY=
 github.com/go-logr/stdr v1.2.2 h1:hSWxHoqTgW2S2qGc0LTAI563KZ5YKYRhT3MFKZMbjag=

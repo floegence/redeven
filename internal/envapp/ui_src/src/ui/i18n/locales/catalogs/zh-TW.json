@@ -4459,6 +4459,18 @@
       "permissionsTitle": "{plugin} 權限",
       "permissionsDescription": "選擇 {plugin} 可要求的操作。敏感操作仍需經過平台確認。",
       "permissionsResolvedDuringInstall": "Host 會在提交前從簽署套件驗證確切的必要權限。確認安裝即授予原則允許的權限並啟用外掛程式。",
+      "checkingPackage": "正在檢查外掛程式套件...",
+      "officialInspectionMismatch": "檢查結果已不再符合此官方版本。請重新整理外掛程式中心後再試。",
+      "noRequiredPermissions": "此外掛程式開啟時不需要授予存取權限。",
+      "officialPermissionEffects": "已驗證的存取範圍：{effects}。",
+      "officialPermissionMethods": "宣告的方法：{methods}。",
+      "permissionEffect": {
+        "read": "讀取資料",
+        "write": "修改資料",
+        "delete": "刪除資料",
+        "execute": "執行操作",
+        "admin": "管理資源"
+      },
       "permissionsAdminRequired": "需要由環境管理員變更這些權限。",
       "policyConfigured": "已設定原則",
       "requiredToOpen": "開啟時必須授予",

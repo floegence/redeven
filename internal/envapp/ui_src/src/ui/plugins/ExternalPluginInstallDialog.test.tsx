@@ -10,6 +10,7 @@ import { ExternalPackageInspectionTerminalError } from './pluginApi';
 import type {
   ExternalPluginCommitResult,
   ExternalPluginInspection,
+  PluginExternalPackageSecuritySummary,
   PluginInventoryItem,
 } from './pluginTypes';
 
@@ -534,7 +535,7 @@ describe('ExternalPluginInstallDialog', () => {
     dispose?.();
     document.body.innerHTML = '';
     const standard = inspection('absent');
-    standard.security_summary.permissions = [{ permission_id: 'workspace.read', methods: ['workspace.list'] }];
+    standard.security_summary.permissions = [{ permission_id: 'workspace.read', methods: ['workspace.list'], required: true, effects: ['read'] }];
     renderDialog({ onInspect: vi.fn(async () => standard) });
     typeInto(inputWithPlaceholder('https://example.com/plugin.redevplugin'), 'https://plugins.example.com/standard.redevplugin');
     button('Review package').click();
@@ -557,7 +558,7 @@ describe('ExternalPluginInstallDialog', () => {
       expected_management_revision: updateItem.managementRevision,
     };
     inspected.version = '1.2.4';
-    inspected.security_summary.permissions = [{ permission_id: 'workspace.read', methods: ['workspace.list'] }];
+    inspected.security_summary.permissions = [{ permission_id: 'workspace.read', methods: ['workspace.list'], required: true, effects: ['read'] }];
     renderDialog({ updateItem, onInspect: vi.fn(async () => inspected) });
 
     const upload = document.querySelector<HTMLInputElement>('input[type="file"]')!;
@@ -588,7 +589,7 @@ describe('ExternalPluginInstallDialog', () => {
     };
     inspected.security_summary = {
       summary_sha256: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
-      permissions: [{ permission_id: 'workspace.read', methods: ['workspace.list'] }],
+      permissions: [{ permission_id: 'workspace.read', methods: ['workspace.list'], required: true, effects: ['read'] }],
       methods: [{
         method: 'workspace.list',
         route: { kind: 'capability', binding_id: 'workspace-v1', target_method: 'files.list' },
@@ -643,9 +644,9 @@ describe('ExternalPluginInstallDialog', () => {
         default_size: { width: 960, height: 640 },
       }],
     };
-    const previousSummary = {
+    const previousSummary: PluginExternalPackageSecuritySummary = {
       ...inspected.security_summary,
-      permissions: [{ permission_id: 'workspace.write', methods: ['workspace.write'] }],
+      permissions: [{ permission_id: 'workspace.write', methods: ['workspace.write'], required: true, effects: ['write'] }],
       network: [{
         ...inspected.security_summary.network[0],
         destinations: ['legacy.example.com:443'],
@@ -724,7 +725,7 @@ describe('ExternalPluginInstallDialog', () => {
     const inspected = inspection('absent');
     inspected.security_summary = {
       ...inspected.security_summary,
-      permissions: [{ permission_id: 'workspace.read', methods: ['workspace.list'] }],
+      permissions: [{ permission_id: 'workspace.read', methods: ['workspace.list'], required: true, effects: ['read'] }],
       network: [{
         connector_id: 'github-api',
         transport: 'http',
