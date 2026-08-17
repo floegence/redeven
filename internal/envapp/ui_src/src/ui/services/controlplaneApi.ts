@@ -694,10 +694,11 @@ export async function createEnvProxyArtifactSource(args: EnvProxyArtifactSourceO
   const codeSpaceId = args.codeSpaceId.trim();
   if (!floeApp || !codeSpaceId) throw new Error('Invalid request');
   const fetchImpl = globalThis.fetch;
+  const artifactEndpoint = new URL('/v1/connect/artifact/entry', window.location.origin).toString();
   const { createControlplaneArtifactSource } = await import('@floegence/floe-webapp-boot/artifact-source');
 
   return createControlplaneArtifactSource({
-    baseUrl: controlPlaneOriginFromSandboxOriginBestEffort(),
+    baseUrl: window.location.origin,
     endpointId: 'dynamic_env',
     entryTicket: 'dynamic_entry_ticket',
     payload: {
@@ -705,7 +706,7 @@ export async function createEnvProxyArtifactSource(args: EnvProxyArtifactSourceO
     },
     ...(args.traceId === undefined ? {} : { correlation: { traceId: args.traceId } }),
     ...(args.allowLoopbackHTTP === true ? { allowLoopbackHTTP: true } : {}),
-    fetch: async (input, init) => {
+    fetch: async (_input, init) => {
       if (typeof fetchImpl !== 'function') throw new Error('Fetch unavailable');
       const signal = init?.signal ?? new AbortController().signal;
       const endpointId = args.endpointId().trim();
@@ -719,7 +720,7 @@ export async function createEnvProxyArtifactSource(args: EnvProxyArtifactSourceO
       });
       const headers = new Headers(init?.headers);
       headers.set('authorization', `Bearer ${entryTicket}`);
-      return fetchImpl(input, {
+      return fetchImpl(artifactEndpoint, {
         ...init,
         headers,
         signal,
