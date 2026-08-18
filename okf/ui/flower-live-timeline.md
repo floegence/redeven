@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower live current state
 description: One workspace stream, typed current views, and bounded browser caches.
 tags: [ui, flower, live, threads]
-timestamp: 2026-08-14T00:00:00Z
+timestamp: 2026-08-18T00:00:00Z
 ---
 # Summary
 
@@ -14,6 +14,15 @@ Flower uses one workspace SSE for every thread. The stream carries a baseline of
 `ThreadCache` owns selected ID, summary map, and a bounded LRU of typed detail views. Summary updates are stripped of messages and interaction detail and can never overwrite a cached view. Only a detail GET or `LiveCurrent` update replaces detail, and older view versions are ignored.
 
 `LiveTransport` owns the single connection and a process-local `connectionEpoch`. Every reconnect invalidates callbacks from the prior connection. Normal network failures reconnect quietly with bounded backoff; authorization failure is terminal and visible. There is no browser event log, cursor, generation graph, replay endpoint, retention-gap reducer, polling loop, or per-selection SSE.
+
+The server never silently drops an authoritative frame. An initial baseline
+contains the complete active and waiting inventory even when it exceeds the
+ordinary live-frame count. If one subscriber exceeds its byte budget, or one
+encoded frame is itself oversized, the server closes that subscriber. The
+client treats the disconnect as loss of cache authority and reconnects; the new
+baseline restores summaries and the selected current view. This fail-fast
+resynchronization contract avoids a second replay protocol while ensuring a
+lost terminal update cannot leave the UI permanently running or waiting.
 
 Canonical terminal updates and reconnect baselines converge the current view. Background running, waiting_user, waiting_approval, and completed summaries update without pointer or focus events. A missing detail may show a local loading state, but it never clears the rail or cached transcript.
 
@@ -34,3 +43,4 @@ so a provider update cannot flash empty or wait for transcript replacement.
 - `redeven:internal/flower_ui/src/threadCache.ts` - Summary/detail separation and bounded view cache.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Selection, current-view application, and quiet reconnect integration.
 - `redeven:internal/flower_ui/src/flowerThreadTitle.ts` - Shared canonical title consumption and legacy first-message derivation.
+- `redeven:internal/ai/flower_live_stream_test.go` - Complete baseline, byte-budget, oversized-frame, terminal-state, and reconnect coverage.

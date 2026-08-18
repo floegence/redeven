@@ -874,7 +874,7 @@
               "runtime",
               "threads"
             ],
-            "summary": "Floret v4 `ThreadService` is the sole owner of active and canonical thread lifecycle. Redeven owns product catalog authorization, attachment resource resolution, provider and tool effects, and browser-safe mapping. Send, Respond, Cancel, Retry, and RetryEffect return the current typed view without waiting for provider continuation. Canonical journal facts prevent duplicate user, assistant, tool, and interaction records; transient drafts and execution tokens remain in memory.",
+            "summary": "Floret v4 `ThreadService` is the sole owner of active and canonical thread lifecycle. Redeven owns endpoint authorization, attachment resource resolution, provider and tool effects, and browser-safe mapping. Every existing-thread mutation proves that the ThreadID belongs to the authenticated endpoint before entering Floret. Send, Respond, Cancel, Retry, and RetryEffect return the current typed view without waiting for provider continuation. Canonical journal facts prevent duplicate user, assistant, tool, and interaction records; transient drafts and execution tokens remain in memory.",
             "section_count": 2
           },
           {
@@ -1619,7 +1619,7 @@
         "runtime",
         "threads"
       ],
-      "timestamp": "2026-08-14T00:00:00Z",
+      "timestamp": "2026-08-18T00:00:00Z",
       "frontmatter": {
         "description": "Typed Floret v4 thread runtime ownership and Redeven product boundaries.",
         "tags": [
@@ -1628,19 +1628,19 @@
           "runtime",
           "threads"
         ],
-        "timestamp": "2026-08-14T00:00:00Z",
+        "timestamp": "2026-08-18T00:00:00Z",
         "title": "Floret thread runtime integration",
         "type": "AI Runtime Contract"
       },
-      "body_length": 6700,
-      "summary": "Floret v4 `ThreadService` is the sole owner of active and canonical thread lifecycle. Redeven owns product catalog authorization, attachment resource resolution, provider and tool effects, and browser-safe mapping. Send, Respond, Cancel, Retry, and RetryEffect return the current typed view without waiting for provider continuation. Canonical journal facts prevent duplicate user, assistant, tool, and interaction records; transient drafts and execution tokens remain in memory.",
+      "body_length": 8437,
+      "summary": "Floret v4 `ThreadService` is the sole owner of active and canonical thread lifecycle. Redeven owns endpoint authorization, attachment resource resolution, provider and tool effects, and browser-safe mapping. Every existing-thread mutation proves that the ThreadID belongs to the authenticated endpoint before entering Floret. Send, Respond, Cancel, Retry, and RetryEffect return the current typed view without waiting for provider continuation. Canonical journal facts prevent duplicate user, assistant, tool, and interaction records; transient drafts and execution tokens remain in memory.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Typed runtime\n\nOne `ThreadRuntime` plus mutex owns each active thread. Provider and tool I/O run outside that mutex and return through a stable execution token; late results for a replaced or canceled token are ignored. The public boundary is typed `Create`, `Fork`, `Delete`, `View`, `Send`, `Respond`, `Cancel`, `Retry`, `RetryEffect`, queue mutation, and workspace `Subscribe`. There is no public generic command receipt, event replay cursor, execution handle, or projection delta.\n\n`Send` validates a stable `(thread_id, request_key)` and completes canonical turn acceptance before returning or publishing the user segment. Acceptance failure leaves the in-memory view unchanged; provider work starts asynchronously only after the accepted receipt. The canonical journal is the only durable lifecycle fact source. Unique request, turn, tool-call, effect-attempt, and terminal keys make repeated provider dispatch safe without duplicating the visible timeline. Irreversible effects alone require a minimal durable intent before dispatch; an unknown effect outcome is never replayed automatically and exposes RetryEffect on the original tool row.\n\n`Respond` resolves the exact pending interaction. `Cancel` is idempotent for every known thread, clears pending interactions, cancels active execution, and produces at most one terminal cancellation. `Retry` preserves logical request lineage without appending another user message. Restart hydration restores accepted input, queue items, unresolved interactions, and canonical outputs, then resumes provider-safe work from the last canonical boundary. Unknown effects remain unresolved.\n\nChild agents are ordinary child threads with parent identity and independent runtime ownership. No product-owned SubAgent lifecycle, recovery handle, or publication state may become a second authority.\n\nThe first accepted canonical user message and its fallback title commit in the\nsame Floret boundary. Pending or failed automatic-title work keeps that\nfallback; provider success or an explicit host rename is the only replacement.\nFallback title truncation remains whitespace-normalized and trim-stable at the\ncanonical length boundary, so a long first message cannot invalidate otherwise\nhealthy session-tree authority.\nRedeven sends Floret's tool-free `thread_title` provider request through the\nrun lifetime admission without requiring the main turn's canonical permission\nowner, because the title request cannot dispatch tools. Ordinary provider\nrequests, including any request with tool definitions, still require the\ncanonical permission snapshot before model dispatch.\n\n## Redeven adapter\n\nRedeven keeps one typed adapter over the published Floret v4 module. HTTP and RPC handlers perform product authorization, ResourceRef and attachment resolution, DTO mapping, and a typed call. They do not wait for provider work, register a legacy run handler, observe a receipt, acquire an authority barrier, or persist a lifecycle projection.\n\nA dynamic `ToolSurface` with registry tools and nil provider definitions inherits\nthe registry definitions. A non-nil empty definitions slice intentionally exposes\nno registry tools to the provider. Redeven relies on the published Floret runtime\nto preserve that distinction; provider tool names that are absent from the\nresolved definitions remain rejected before dispatch.\n\nRedeven consumes Floret v4.0.11's public ordered `ThreadView.Items` and\n`ThreadContextReader`. User, thinking, assistant, tool, and independent\ninteraction segments retain Floret-assigned IDs and ordinals across live\nupdates, approval settlement, canonical reload, and renderer recovery. Redeven\nmaps the sequence directly and does not consume the deprecated global draft\nfields, infer order from timestamps or tool identity, or persist a second\npresentation order.\n\nFlower thread navigation assigns the selection generation synchronously with\nthe user's rail intent. Deferred presentation work carries that generation,\nand an older bootstrap is rejected before it can update `ThreadCache` detail.\nRapid A to B to A navigation therefore keeps the latest selected identity and\ntranscript even when earlier detail requests settle out of order.\n\n`ThreadContextReader` recovers the\ncanonical merged compaction operations for detail reads and terminal workspace\nupdates. A pure `/compact` input supplies one host-owned manual compaction request;\nthe canonical user message anchors exactly one terminal `compacted` or `noop`\ndivider after renderer reload. Context reads remain valid when `ask_user` resumes\none turn through a later canonical run. Redeven does not persist a parallel\ncompaction projection or inspect Floret storage.\n\nFloret queue item `id` is the canonical mutation identity for reorder, delete,\nand promote. Its `request_key` remains the send idempotency identity used only to\nsettle the short-lived browser outbox; the two values are not interchangeable.",
-          "char_count": 4926
+          "body": "## Typed runtime\n\nOne `ThreadRuntime` plus mutex owns each active thread. Provider and tool I/O run outside that mutex and return through a stable execution token; late results for a replaced or canceled token are ignored. The public boundary is typed `Create`, `Fork`, `Delete`, `View`, `Send`, `Respond`, `Cancel`, `Retry`, `RetryEffect`, queue mutation, and workspace `Subscribe`. There is no public generic command receipt, event replay cursor, execution handle, or projection delta.\n\n`Send` validates a stable `(thread_id, request_key)` and completes canonical turn acceptance before returning or publishing the user segment. Acceptance failure leaves the in-memory view unchanged; provider work starts asynchronously only after the accepted receipt. The canonical journal is the only durable lifecycle fact source. Unique request, turn, tool-call, effect-attempt, and terminal keys make repeated provider dispatch safe without duplicating the visible timeline. Irreversible effects alone require a minimal durable intent before dispatch; an unknown effect outcome is never replayed automatically and exposes RetryEffect on the original tool row.\n\nQueue admission and mutation, `Respond`, and `Cancel` commit their minimum\ncanonical fact before publishing success. `Respond` resolves the exact pending\ninteraction, including one atomic Answers batch for Reject All. `Cancel` is\nidempotent for every known thread, clears pending interactions, cancels active\nexecution, and produces at most one terminal cancellation. `Retry` preserves\nlogical request lineage without appending another user message. `RetryEffect`\nclaims the stable unknown source once before any irreversible handler dispatch.\nDelete and shutdown fence new effect work, cancel and join the active subtree,\nand prevent late output from outranking a tombstone.\n\nRestart hydration restores accepted input, queue items, unresolved interactions,\nretry-specific input, and canonical outputs, then resumes provider-safe work\nfrom the last canonical boundary. Unknown effects remain unresolved. Floret owns\nthe permanent domain migration lineage from v2 through v5; migration, logical\nversion update, and final verification commit in one backend transaction, while\ncurrent canonical bytes remain unchanged.\n\nChild agents are ordinary child threads with parent identity and independent runtime ownership. No product-owned SubAgent lifecycle, recovery handle, or publication state may become a second authority.\n\nThe first accepted canonical user message and its fallback title commit in the\nsame Floret boundary. Pending or failed automatic-title work keeps that\nfallback; provider success or an explicit host rename is the only replacement.\nFallback title truncation remains whitespace-normalized and trim-stable at the\ncanonical length boundary, so a long first message cannot invalidate otherwise\nhealthy session-tree authority.\nRedeven sends Floret's tool-free `thread_title` provider request through the\nrun lifetime admission without requiring the main turn's canonical permission\nowner, because the title request cannot dispatch tools. Ordinary provider\nrequests, including any request with tool definitions, still require the\ncanonical permission snapshot before model dispatch.\n\n## Redeven adapter\n\nRedeven keeps one typed adapter over the published Floret v4 module. HTTP and RPC handlers perform product authorization, ResourceRef and attachment resolution, DTO mapping, and a typed call. They do not wait for provider work, register a legacy run handler, observe a receipt, acquire an authority barrier, or persist a lifecycle projection.\n\nA dynamic `ToolSurface` with registry tools and nil provider definitions inherits\nthe registry definitions. A non-nil empty definitions slice intentionally exposes\nno registry tools to the provider. Redeven relies on the published Floret runtime\nto preserve that distinction; provider tool names that are absent from the\nresolved definitions remain rejected before dispatch.\n\nRedeven consumes Floret v4.0.12's public ordered `ThreadView.Items` and\n`ThreadContextReader`. User, thinking, assistant, tool, and independent\ninteraction segments retain Floret-assigned IDs and ordinals across live\nupdates, approval settlement, canonical reload, and renderer recovery. Redeven\nmaps the sequence directly and does not consume the deprecated global draft\nfields, infer order from timestamps or tool identity, or persist a second\npresentation order.\n\nOne endpoint/thread authority boundary resolves the product catalog record and\nrejects an absent, tombstoned, or foreign thread before every canonical\nmutation. A shared endpoint may contain turns from multiple users, so Redeven\npersists only the submitting turn's minimum host authorization and audit facts:\nendpoint, namespace, channel, user, and request, turn, and thread identities.\nFloret remains the owner of canonical input, attachment references, and retry\nsource. Restart redispatch combines those Floret facts with the matching host\nauthority record instead of using the thread creator, and never stores a second\ntranscript or lifecycle projection.\n\nFlower thread navigation assigns the selection generation synchronously with\nthe user's rail intent. Deferred presentation work carries that generation,\nand an older bootstrap is rejected before it can update `ThreadCache` detail.\nRapid A to B to A navigation therefore keeps the latest selected identity and\ntranscript even when earlier detail requests settle out of order.\n\n`ThreadContextReader` recovers the\ncanonical merged compaction operations for detail reads and terminal workspace\nupdates. A pure `/compact` input supplies one host-owned manual compaction request;\nthe canonical user message anchors exactly one terminal `compacted` or `noop`\ndivider after renderer reload. Context reads remain valid when `ask_user` resumes\none turn through a later canonical run. Redeven does not persist a parallel\ncompaction projection or inspect Floret storage.\n\nFloret queue item `id` is the canonical mutation identity for reorder, delete,\nand promote. Its `request_key` remains the send idempotency identity used only to\nsettle the short-lived browser outbox; the two values are not interchangeable.",
+          "char_count": 6215
         },
         {
           "id": "boundaries",
@@ -1677,6 +1677,21 @@
           "description": "Thin product send mapping into typed Floret state."
         },
         {
+          "id": "redeven:internal/ai/threads.go:0:single endpoint/thread ownership boundary before canonical mutation.",
+          "source": "redeven:internal/ai/threads.go",
+          "description": "Single endpoint/thread ownership boundary before canonical mutation."
+        },
+        {
+          "id": "redeven:internal/ai/execution_authority.go:0:current submitting-user authority capture for restart recovery.",
+          "source": "redeven:internal/ai/execution_authority.go",
+          "description": "Current submitting-user authority capture for restart recovery."
+        },
+        {
+          "id": "redeven:internal/ai/threadstore/execution_authority.go:0:minimal host authorization facts for restart redispatch.",
+          "source": "redeven:internal/ai/threadstore/execution_authority.go",
+          "description": "Minimal host authorization facts for restart redispatch."
+        },
+        {
           "id": "redeven:internal/ai/stop_thread.go:0:idempotent typed cancellation without handler lookup.",
           "source": "redeven:internal/ai/stop_thread.go",
           "description": "Idempotent typed cancellation without handler lookup."
@@ -1697,7 +1712,7 @@
           "description": "Deterministic out-of-order A to B to A navigation coverage."
         }
       ],
-      "snippet": "Floret v4 `ThreadService` is the sole owner of active and canonical thread lifecycle. Redeven owns product catalog authorization, attachment resource resolution, provider and tool effects, and browser-safe mapping. Send, Respond, Cancel, Re",
+      "snippet": "Floret v4 `ThreadService` is the sole owner of active and canonical thread lifecycle. Redeven owns endpoint authorization, attachment resource resolution, provider and tool effects, and browser-safe mapping. Every existing-thread mutation p",
       "backlinks": [
         {
           "label": "AI tool runtime",
@@ -7758,7 +7773,7 @@
         "threads",
         "ui"
       ],
-      "timestamp": "2026-08-14T00:00:00Z",
+      "timestamp": "2026-08-18T00:00:00Z",
       "frontmatter": {
         "description": "One workspace stream, typed current views, and bounded browser caches.",
         "tags": [
@@ -7767,19 +7782,19 @@
           "threads",
           "ui"
         ],
-        "timestamp": "2026-08-14T00:00:00Z",
+        "timestamp": "2026-08-18T00:00:00Z",
         "title": "Flower live current state",
         "type": "UI Contract"
       },
-      "body_length": 2632,
+      "body_length": 3381,
       "summary": "Flower uses one workspace SSE for every thread. The stream carries a baseline of summaries, summary replacements, active-thread current views, and viewer read state. Selecting a thread changes only `ThreadCache.selectedId`; it never reconnects transport or cancels background execution. Disconnect recovery refreshes summaries and the selected typed view without cursor replay or polling.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "`ThreadCache` owns selected ID, summary map, and a bounded LRU of typed detail views. Summary updates are stripped of messages and interaction detail and can never overwrite a cached view. Only a detail GET or `LiveCurrent` update replaces detail, and older view versions are ignored.\n\n`LiveTransport` owns the single connection and a process-local `connectionEpoch`. Every reconnect invalidates callbacks from the prior connection. Normal network failures reconnect quietly with bounded backoff; authorization failure is terminal and visible. There is no browser event log, cursor, generation graph, replay endpoint, retention-gap reducer, polling loop, or per-selection SSE.\n\nCanonical terminal updates and reconnect baselines converge the current view. Background running, waiting_user, waiting_approval, and completed summaries update without pointer or focus events. A missing detail may show a local loading state, but it never clears the rail or cached transcript.\n\nFloret installs a canonical fallback title with the first accepted user message.\nAutomatic-title pending and failure summaries retain it, provider success\nreplaces it through the existing summary stream, and a host rename remains\nauthoritative. Flower never renders an untitled label: list and switcher rows\nwithout a canonical title are omitted, while a legacy detail snapshot with an\nempty title may derive the same whitespace-normalized, 200-rune fallback from\nits first canonical user message or first attachment/reference label. The\nselected header reads the latest summary title before its cached detail title,\nso a provider update cannot flash empty or wait for transcript replacement.",
-          "char_count": 1665
+          "body": "`ThreadCache` owns selected ID, summary map, and a bounded LRU of typed detail views. Summary updates are stripped of messages and interaction detail and can never overwrite a cached view. Only a detail GET or `LiveCurrent` update replaces detail, and older view versions are ignored.\n\n`LiveTransport` owns the single connection and a process-local `connectionEpoch`. Every reconnect invalidates callbacks from the prior connection. Normal network failures reconnect quietly with bounded backoff; authorization failure is terminal and visible. There is no browser event log, cursor, generation graph, replay endpoint, retention-gap reducer, polling loop, or per-selection SSE.\n\nThe server never silently drops an authoritative frame. An initial baseline\ncontains the complete active and waiting inventory even when it exceeds the\nordinary live-frame count. If one subscriber exceeds its byte budget, or one\nencoded frame is itself oversized, the server closes that subscriber. The\nclient treats the disconnect as loss of cache authority and reconnects; the new\nbaseline restores summaries and the selected current view. This fail-fast\nresynchronization contract avoids a second replay protocol while ensuring a\nlost terminal update cannot leave the UI permanently running or waiting.\n\nCanonical terminal updates and reconnect baselines converge the current view. Background running, waiting_user, waiting_approval, and completed summaries update without pointer or focus events. A missing detail may show a local loading state, but it never clears the rail or cached transcript.\n\nFloret installs a canonical fallback title with the first accepted user message.\nAutomatic-title pending and failure summaries retain it, provider success\nreplaces it through the existing summary stream, and a host rename remains\nauthoritative. Flower never renders an untitled label: list and switcher rows\nwithout a canonical title are omitted, while a legacy detail snapshot with an\nempty title may derive the same whitespace-normalized, 200-rune fallback from\nits first canonical user message or first attachment/reference label. The\nselected header reads the latest summary title before its cached detail title,\nso a provider update cannot flash empty or wait for transcript replacement.",
+          "char_count": 2272
         }
       ],
       "evidence": [
@@ -7807,6 +7822,11 @@
           "id": "redeven:internal/flower_ui/src/flowerThreadTitle.ts:0:shared canonical title consumption and legacy first-message derivation.",
           "source": "redeven:internal/flower_ui/src/flowerThreadTitle.ts",
           "description": "Shared canonical title consumption and legacy first-message derivation."
+        },
+        {
+          "id": "redeven:internal/ai/flower_live_stream_test.go:0:complete baseline, byte-budget, oversized-frame, terminal-state, and reconnect coverage.",
+          "source": "redeven:internal/ai/flower_live_stream_test.go",
+          "description": "Complete baseline, byte-budget, oversized-frame, terminal-state, and reconnect coverage."
         }
       ],
       "snippet": "Flower uses one workspace SSE for every thread. The stream carries a baseline of summaries, summary replacements, active-thread current views, and viewer read state. Selecting a thread changes only `ThreadCache.selectedId`; it never reconne",
@@ -8268,7 +8288,7 @@
         "flower",
         "ui"
       ],
-      "timestamp": "2026-08-14T00:00:00Z",
+      "timestamp": "2026-08-18T00:00:00Z",
       "frontmatter": {
         "description": "Immediate typed commands, durable transport outbox, and always-available navigation.",
         "tags": [
@@ -8277,19 +8297,19 @@
           "flower",
           "ui"
         ],
-        "timestamp": "2026-08-14T00:00:00Z",
+        "timestamp": "2026-08-18T00:00:00Z",
         "title": "Flower command and composer flow",
         "type": "UI Contract"
       },
-      "body_length": 2178,
+      "body_length": 2581,
       "summary": "Flower sends ordinary input through a stable request ID and receives a typed current view immediately. The composer, thread rail, Stop, interaction controls, and thread switching remain usable while provider work continues. A short-lived IndexedDB outbox retains only ordinary launch input until the canonical view confirms its request ID; secret interaction answers never enter it.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "`ComposerDraftStore` owns text, references, attachments, per-question input drafts, model/reasoning choices, and upload staging for each thread. Switching A-to-B-to-A changes selection immediately and restores each draft without transferring execution ownership. Sending captures immutable input, writes the transport outbox, clears only the accepted draft content, and invokes typed Send. If the thread is busy, Floret places the input directly in its canonical queue; Flower does not move a locally rendered message between transcript and queue.\n\n`TransportOutbox` is transport recovery only. It stores request ID and original non-secret launch input, retries the same request identity after reconnect, and deletes the entry when a typed view contains the matching canonical user item or queue request. It has no turn, approval, receipt, operation, or lifecycle state.\n\nRespond, Approve, Reject, Stop, Retry, and RetryEffect are ordinary idempotent commands. Their progress never applies `inert`, a pointer overlay, or a shared busy state to the rail, surface, or composer. Approval and waiting-user controls coexist with navigation and editable draft state. RetryEffect stays on the exact unknown tool row and requires explicit acknowledgement; it does not resend the user turn.",
-          "char_count": 1281
+          "body": "`ComposerDraftStore` owns text, references, attachments, per-question input drafts, model/reasoning choices, and upload staging for each thread. Switching A-to-B-to-A changes selection immediately and restores each draft without transferring execution ownership. Sending captures immutable input, writes the transport outbox, clears only the accepted draft content, and invokes typed Send. If the thread is busy, Floret places the input directly in its canonical queue; Flower does not move a locally rendered message between transcript and queue.\n\n`TransportOutbox` is transport recovery only. It stores request ID and original non-secret launch input, retries the same request identity after reconnect, and deletes the entry when a typed view contains the matching canonical user item or queue request. Entries expire under a bounded TTL, terminal attachment capability loss settles instead of retrying forever after restart, and deleting a thread clears its remaining entries. It has no turn, approval, receipt, operation, or lifecycle state.\n\nRespond, Approve, Reject, Stop, Retry, and RetryEffect are ordinary idempotent commands. Reject All submits one Floret Answers batch so the visible approval set cannot partially settle. Their progress never applies `inert`, a pointer overlay, or a shared busy state to the rail, surface, or composer. Approval and waiting-user controls coexist with navigation and editable draft state. RetryEffect stays on the exact unknown tool row and requires explicit acknowledgement; it does not resend the user turn.",
+          "char_count": 1553
         }
       ],
       "evidence": [
@@ -8302,6 +8322,11 @@
           "id": "redeven:internal/flower_ui/src/transportOutbox.ts:0:indexeddb request recovery without secret answers.",
           "source": "redeven:internal/flower_ui/src/transportOutbox.ts",
           "description": "IndexedDB request recovery without secret answers."
+        },
+        {
+          "id": "redeven:internal/flower_ui/src/transportOutbox.test.ts:0:ttl, terminal attachment, reload, and thread-delete cleanup coverage.",
+          "source": "redeven:internal/flower_ui/src/transportOutbox.test.ts",
+          "description": "TTL, terminal attachment, reload, and thread-delete cleanup coverage."
         },
         {
           "id": "redeven:internal/flower_ui/src/FlowerSurface.tsx:0:immediate selection, queue rendering, interaction commands, and unlocked navigation.",
@@ -9264,5 +9289,5 @@
       ]
     }
   ],
-  "source_sha256": "977567403df940e5417991f0fa2877f73ac545055f06117c93742776ba252e81"
+  "source_sha256": "9bf25bde48991964fcd275592ea0d0ab0bcc7e2a76903e13bb01f4cac7c6f20d"
 }
