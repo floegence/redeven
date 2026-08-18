@@ -2,7 +2,7 @@
   "schema_version": 1,
   "release_review": {
     "release_version": "v0.11.0",
-    "previous_release": "v0.10.1",
+    "previous_release": "v0.10.0",
     "reviewed_at": "2026-08-17",
     "review_id": "runtime-permission-lifecycle-v2",
     "summary": "Redeven v0.11.0 separates Connect, Workspace, and Runtime management authority, moves managed Runtime operations to the durable Gateway v2 supervisor, and introduces Runtime Service v2 lifecycle fencing at compatibility epoch 9 without making ordinary Runtime access depend on Gateway.",
