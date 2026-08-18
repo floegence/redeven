@@ -12,6 +12,7 @@ import {
   ensureDesktopSSHReleaseArchive,
   ensureDesktopSSHVerifiedReleaseManifest,
   parseDesktopSSHReleaseSHA256,
+  resolveDesktopHostPlatform,
   resolveDesktopSSHRemotePlatform,
   verifyDesktopSSHReleaseManifest,
   type DesktopSSHVerifiedReleaseManifest,
@@ -109,6 +110,23 @@ describe('sshReleaseAssets', () => {
       platform_id: 'linux_arm64',
       release_package_name: 'redeven_linux_arm64.tar.gz',
       platform_label: 'linux/arm64',
+    });
+  });
+
+  it('maps local host uname values to published macOS release package names', () => {
+    expect(resolveDesktopHostPlatform('Darwin', 'arm64')).toEqual({
+      goos: 'darwin',
+      goarch: 'arm64',
+      platform_id: 'darwin_arm64',
+      release_package_name: 'redeven_darwin_arm64.tar.gz',
+      platform_label: 'darwin/arm64',
+    });
+    expect(resolveDesktopHostPlatform('Darwin', 'x86_64')).toEqual({
+      goos: 'darwin',
+      goarch: 'amd64',
+      platform_id: 'darwin_amd64',
+      release_package_name: 'redeven_darwin_amd64.tar.gz',
+      platform_label: 'darwin/amd64',
     });
   });
 

@@ -5461,7 +5461,7 @@
         "process",
         "runtime"
       ],
-      "timestamp": "2026-08-17T00:00:00Z",
+      "timestamp": "2026-08-18T00:00:00Z",
       "frontmatter": {
         "description": "Target-scoped Runtime inventory, lifecycle fencing, and Gateway execution boundaries.",
         "quality_exception": "Cross-placement Runtime process contract spanning identity, reconciliation, lifecycle ordering, and Gateway delegation.",
@@ -5473,19 +5473,19 @@
           "process",
           "runtime"
         ],
-        "timestamp": "2026-08-17T00:00:00Z",
+        "timestamp": "2026-08-18T00:00:00Z",
         "title": "Desktop runtime process lifecycle",
         "type": "Desktop Contract"
       },
-      "body_length": 4229,
+      "body_length": 4557,
       "summary": "Desktop discovers Runtime process facts and initiates user-facing operations, but it does not own Runtime lifecycle state. Every product-managed start, stop, restart, or update is authorized and executed by the target OS user's Gateway supervisor. Desktop uses `lifecycle_target_id` plus `target_generation` and attaches to the durable Gateway operation from any authorized client.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Identity and inventory\n\nThe Runtime inventory records PID/create time, user, namespace, state root, executable identity, Runtime version, workload identities, snapshot revision, and an inventory digest. Missing, malformed, stale, or incompatible inventory is `unknown`; it is never coerced to zero. Target identity is stable across Desktop clients and transport changes. A changed OS principal, container instance, or installation root creates a new target id; a supervisor key rotation advances generation under the same target lock.\n\n## Operation ordering\n\nDesktop performs support, authorization, readiness, target, generation, compatibility, and artifact-policy checks before invoking a builder or uploader. The Gateway `prepare` response creates or attaches to one durable operation. User confirmation precedes artifact staging. Commit acquires the Runtime lifecycle fence, compares the exact confirmed workload identity set, atomically replaces the artifact, checks health, and records recovery. Identity replacement, added risk, or `known -\u003e unknown` requires `confirmation_required`. A conflicting operation returns `operation_in_progress`; it is never queued or forcefully taken over.\n\nDesktop closes an attached Env App session only after a destructive operation is accepted by the shared coordinator. A transport disconnect does not cancel a Gateway operation; reopening either a direct or Provider card queries the exact target and attaches to active Gateway progress. Only the original operation client can resume confirmation, artifact upload, or commit. Another authorized manager receives redacted progress, while a current binding administrator may start the separate permit-bound reconcile action for quarantine. Connect, Workspace, terminal, files, and web sessions remain separate from the lifecycle operation store.\n\nProvider cards use a Provider-scoped management client key and their own protected management tunnel. The bound Gateway, not the Runtime Agent, maintains that reverse transport, so stopping Runtime does not remove the supervisor management route. Provider cards never ask the user to select another Gateway card and never read its paired key or transport. Direct cards use their own explicit setup flow to install/enroll the target supervisor; access-only URL cards remain unsupported for managed lifecycle. The planner first projects support, then authorization, then readiness, and does not mark an action available until that route can execute it.",
-          "char_count": 2491
+          "body": "## Identity and inventory\n\nThe Runtime inventory records PID/create time, user, namespace, state root, executable identity, Runtime version, workload identities, snapshot revision, and an inventory digest. Missing, malformed, stale, or incompatible inventory is `unknown`; it is never coerced to zero. Target identity is stable across Desktop clients and transport changes. A changed OS principal, container instance, or installation root creates a new target id; a supervisor key rotation advances generation under the same target lock.\n\n## Operation ordering\n\nDesktop performs support, authorization, readiness, target, generation, compatibility, and artifact-policy checks before invoking a builder or uploader. The Gateway `prepare` response creates or attaches to one durable operation. User confirmation precedes artifact staging. Commit acquires the Runtime lifecycle fence, compares the exact confirmed workload identity set, atomically replaces the artifact, checks health, and records recovery. Identity replacement, added risk, or `known -\u003e unknown` requires `confirmation_required`. A conflicting operation returns `operation_in_progress`; it is never queued or forcefully taken over.\n\nDesktop closes an attached Env App session only after a destructive operation is accepted by the shared coordinator. A transport disconnect does not cancel a Gateway operation; reopening either a direct or Provider card queries the exact target and attaches to active Gateway progress. Only the original operation client can resume confirmation, artifact upload, or commit. Another authorized manager receives redacted progress, while a current binding administrator may start the separate permit-bound reconcile action for quarantine. Connect, Workspace, terminal, files, and web sessions remain separate from the lifecycle operation store.\n\nProvider cards use a Provider-scoped management client key and their own protected management tunnel. The bound Gateway, not the Runtime Agent, maintains that reverse transport, so stopping Runtime does not remove the supervisor management route. Provider cards never ask the user to select another Gateway card and never read its paired key or transport. Direct cards use their own explicit setup flow to install/enroll the target supervisor; a local-host Gateway package is selected for the actual Linux or Darwin host and CPU architecture, while SSH and container bootstrap remain Linux-only. Access-only URL cards remain unsupported for managed lifecycle. The planner first projects support, then authorization, then readiness, and does not mark an action available until that route can execute it.",
+          "char_count": 2643
         },
         {
           "id": "boundaries",
@@ -5537,6 +5537,12 @@
           "source": "redeven:desktop/src/main/providerRuntimeLifecycleClient.ts",
           "line": 1,
           "description": "Provider-scoped signed lifecycle tunnel without Gateway-card credential borrowing."
+        },
+        {
+          "id": "redeven:desktop/src/main/gatewayServiceHost.test.ts:1:local-host platform selection permits published darwin gateway packages without widening the ssh platform boundary.",
+          "source": "redeven:desktop/src/main/gatewayServiceHost.test.ts",
+          "line": 1,
+          "description": "Local-host platform selection permits published Darwin Gateway packages without widening the SSH platform boundary."
         }
       ],
       "snippet": "Desktop discovers Runtime process facts and initiates user-facing operations, but it does not own Runtime lifecycle state. Every product-managed start, stop, restart, or update is authorized and executed by the target OS user's Gateway supe",
@@ -9238,5 +9244,5 @@
       ]
     }
   ],
-  "source_sha256": "7621a9676ecae6ebb6106ff5c4739e5090ec4ecd168ac1391b48f54f165620af"
+  "source_sha256": "6aea8bf1d621d6f8d3ee9210b627101aa285211296a4687f17ece52d7af77a7c"
 }
