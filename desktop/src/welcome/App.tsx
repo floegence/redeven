@@ -82,11 +82,12 @@ import type {
   DesktopEnvironmentEntry,
   DesktopEnvironmentOpenAction,
   DesktopLauncherActionProgress,
+  DesktopLauncherActionFailureCode,
+  DesktopLauncherActionSuccess,
   DesktopLauncherActionKind,
   DesktopGatewayResolveFocus,
   DesktopLauncherActionResult,
   DesktopLauncherActionRequest,
-  DesktopLauncherActionSuccess,
   DesktopLauncherCloseAction,
   DesktopLauncherOperationNextAction,
   DesktopLauncherSurface,
@@ -130,8 +131,7 @@ import {
 } from '../../../internal/flower_ui/src';
 import { desktopEntryKindSupportsRuntimeManagement } from '../shared/environmentManagementPrinciples';
 import {
-  providerRuntimeDirectSetupCandidates,
-  type ProviderRuntimeDirectSetupCandidate,
+  providerRuntimeDirectSetupCandidate,
 } from './providerRuntimeEnrollment';
 import {
   openConnectionPhaseSequence,
@@ -195,6 +195,7 @@ import {
   ICON_ENDPOINTS,
   buildControlPlaneStatusModel,
   buildProviderBackedEnvironmentActionModel,
+  environmentOpenFlow,
   environmentLibraryCount,
   environmentProviderFilterValue,
   filterGatewayEnvironmentEntries,
@@ -295,10 +296,12 @@ import {
   operationNextActionsByKind,
 } from './operationNextActions';
 import {
+  advanceEnvironmentOpenFlowStage,
   completeEnvironmentGuidanceRefresh,
   failEnvironmentGuidanceIntent,
   guidanceSessionKeepsPopoverOpen,
   guidanceSessionNotice,
+  guidanceSessionOwnsOpenFlowPanel,
   guidanceSessionShouldAutoDismiss,
   isEnvironmentGuidancePendingIntent,
   openEnvironmentGuidanceSession,
@@ -521,13 +524,6 @@ type ControlPlaneDialogState = Readonly<{
 type EnvironmentGuidanceActionResolution = Readonly<{
   close_panel: boolean;
   next_session: EnvironmentGuidanceSessionState;
-}>;
-
-type RuntimeEnrollmentDialogState = NonNullable<DesktopLauncherActionSuccess['runtime_enrollment']>;
-type ProviderRuntimeSetupDialogState = Readonly<{
-  environment_id: string;
-  environment_label: string;
-  candidates: readonly ProviderRuntimeDirectSetupCandidate[];
 }>;
 
 const LOGO_LIGHT_URL = new URL('../../../internal/envapp/ui_src/public/logo.svg', import.meta.url).href;
@@ -859,7 +855,10 @@ function localizedEnvironmentActionLabel(i18n: DesktopI18n, label: string): stri
     'Focus remote window': 'environmentAction.focusRemoteWindow',
     'Remote window opening...': 'environmentAction.remoteWindowOpening',
     'Remote window opening…': 'environmentAction.remoteWindowOpening',
-    'Reconnect Provider': 'environmentAction.reconnectProvider',
+    'Initialize and open': 'environmentAction.initializeAndOpen',
+    'Start and open': 'environmentAction.startAndOpen',
+    'Request access': 'environmentAction.requestAccess',
+    'Retry initialization': 'environmentAction.retryInitialization',
     'Runtime actions': 'environmentAction.runtimeActions',
     'Refresh status': 'environmentAction.refreshStatus',
     'Refresh runtime status': 'environmentAction.refreshRuntimeStatus',
@@ -908,8 +907,7 @@ function localizedEnvironmentActionLabel(i18n: DesktopI18n, label: string): stri
     'Restart Runtime': 'environmentAction.restartRuntime',
     'Update runtime': 'environmentAction.updateRuntime',
     'Update Runtime': 'environmentAction.updateRuntime',
-		'Set up Runtime management': 'runtimeEnrollment.title',
-		'Stop operation': 'progress.cancelRuntimeOperation',
+    'Stop operation': 'progress.cancelRuntimeOperation',
     'Update and restart...': 'environmentAction.updateAndRestart',
     'Update and restart…': 'environmentAction.updateAndRestart',
     'Restart runtime...': 'environmentAction.restartRuntimeEllipsis',
@@ -1338,6 +1336,19 @@ function localizedRuntimeMessage(i18n: DesktopI18n, message: string): string {
     'Desktop is probing the latest runtime health for this environment.': 'runtimeMessage.checkingRuntimeStatusDetail',
     'Desktop is requesting a provider link ticket and connecting the selected runtime.': 'runtimeMessage.connectingRuntimeDetail',
     'Desktop is disconnecting the selected runtime from its provider.': 'runtimeMessage.disconnectingRuntimeDetail',
+    'Redeven will check access, prepare this environment, start it, and open the workspace.': 'environmentOpenFlow.initializeDetail',
+    'Redeven will start this environment and open the workspace when it is ready.': 'environmentOpenFlow.startDetail',
+    'Redeven needs permission to reach this environment before it can open the workspace.': 'environmentOpenFlow.accessRequiredDetail',
+    'Redeven is checking access before changing this environment.': 'environmentOpenFlow.checkingAccessDetail',
+    'Redeven is preparing the environment so it can start safely.': 'environmentOpenFlow.preparingEnvironmentDetail',
+    'Redeven is starting the environment.': 'environmentOpenFlow.startingEnvironmentDetail',
+    'Redeven is opening the workspace now.': 'environmentOpenFlow.openingWorkspaceDetail',
+    'Redeven is requesting access before opening the workspace.': 'environmentOpenFlow.requestingAccessDetail',
+    'Redeven could not prepare this environment. Try again.': 'environmentOpenFlow.initializationFailedDetail',
+    'Redeven could not start this environment. Try again.': 'environmentOpenFlow.startFailedDetail',
+    'The environment started, but Redeven could not open the workspace. Try again.': 'environmentOpenFlow.openFailedDetail',
+    'Redeven could not request access to this environment. Try again.': 'environmentOpenFlow.accessRequestFailedDetail',
+    'Access is not available for this environment yet. Check the connection and try again.': 'environmentOpenFlow.accessUnavailableDetail',
     'Refreshing the latest environment status from this provider.': 'runtimeMessage.providerRefreshingDetail',
     'Desktop authorization expired. Reconnect in your browser to refresh environments again.': 'runtimeMessage.providerAuthorizationExpiredDetail',
     'Desktop could not reach this provider.': 'runtimeMessage.providerReachFailedDetail',
@@ -1413,6 +1424,17 @@ function localizedOverlayTitle(i18n: DesktopI18n, title: string): string {
     'Start the local runtime to continue': 'runtimeMessage.startLocalRuntimeTitle',
     'Desktop model source needs update': 'runtimeMessage.desktopModelSourceNeedsUpdate',
     'Runtime ready': 'progress.titleRuntimeReady',
+    'Initialize and open': 'environmentOpenFlow.initializeTitle',
+    'Start and open': 'environmentOpenFlow.startTitle',
+    'Request access': 'environmentOpenFlow.accessRequiredTitle',
+    'Checking access': 'environmentOpenFlow.checkingAccessTitle',
+    'Preparing environment': 'environmentOpenFlow.preparingEnvironmentTitle',
+    'Starting environment': 'environmentOpenFlow.startingEnvironmentTitle',
+    'Opening workspace': 'environmentOpenFlow.openingWorkspaceTitle',
+    'Requesting access': 'environmentOpenFlow.requestingAccessTitle',
+    'Initialization failed': 'environmentOpenFlow.initializationFailedTitle',
+    'Start failed': 'environmentOpenFlow.startFailedTitle',
+    'Access request failed': 'environmentOpenFlow.accessRequestFailedTitle',
     'Runtime restart required': 'runtimeMessage.runtimeRestartRequired',
     'Runtime update required': 'runtimeMessage.runtimeUpdateRequired',
     'Redeven Desktop update required': 'runtimeMessage.desktopUpdateRequired',
@@ -1437,6 +1459,9 @@ function localizedOverlayEyebrow(i18n: DesktopI18n, eyebrow: string): string {
     'Runtime blocked': 'runtimeMessage.runtimeBlockedTitle',
     'Remote route unavailable': 'runtimeMessage.remoteRouteUnavailable',
     'Status not checked': 'runtimeMessage.statusNotChecked',
+    'Environment setup': 'environmentOpenFlow.initializeEyebrow',
+    'Environment ready to start': 'environmentOpenFlow.startEyebrow',
+    'Access required': 'environmentOpenFlow.accessRequiredEyebrow',
   });
 }
 
@@ -1800,6 +1825,7 @@ function retainedGatewayFailureProgress(
 
 type SilentLauncherActionFailure = Readonly<{
   ok: false;
+  code?: DesktopLauncherActionFailureCode;
   message: string;
   failure?: DesktopOperationFailurePresentation;
 }>;
@@ -2828,9 +2854,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [gatewaySetupDialogState, setGatewaySetupDialogState] = createSignal<GatewaySetupDialogState | null>(null);
   const [gatewaySetupDialogError, setGatewaySetupDialogError] = createSignal('');
   const [gatewaySetupDialogFieldErrors, setGatewaySetupDialogFieldErrors] = createSignal<Partial<Record<string, string>>>({});
-  const [runtimeEnrollmentDialog, setRuntimeEnrollmentDialog] = createSignal<RuntimeEnrollmentDialogState | null>(null);
-  const [providerRuntimeSetupDialog, setProviderRuntimeSetupDialog] = createSignal<ProviderRuntimeSetupDialogState | null>(null);
-  const [providerRuntimeSetupDirectEnvironmentID, setProviderRuntimeSetupDirectEnvironmentID] = createSignal('');
   const [sshConfigHosts, setSSHConfigHosts] = createSignal<readonly DesktopSSHConfigHost[]>([]);
   const [sshConfigHostsLoading, setSSHConfigHostsLoading] = createSignal(false);
   const [sshConfigHostsLoadError, setSSHConfigHostsLoadError] = createSignal(false);
@@ -3056,16 +3079,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       providerRuntimeLinkConfirmation()?.action === 'connect'
       && providerRuntimeLinkSelectedPlan()?.canConnect !== true
     )
-  ));
-  const providerRuntimeSetupDialogOpen = createMemo(() => providerRuntimeSetupDialog() !== null);
-  const providerRuntimeSetupSelectedCandidate = createMemo(() => (
-    providerRuntimeSetupDialog()?.candidates.find((candidate) => (
-      candidate.environment_id === providerRuntimeSetupDirectEnvironmentID()
-    )) ?? null
-  ));
-  const providerRuntimeSetupBusy = createMemo(() => (
-    busyStateMatchesAction(busyState(), 'request_provider_runtime_enrollment_challenge')
-    || busyStateMatchesAction(busyState(), 'setup_provider_runtime_management_with_direct_card')
   ));
   const activeActionProgress = createMemo(() => [
     ...snapshot().action_progress,
@@ -3734,6 +3747,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         }
         return {
           ok: false,
+          code: result.code,
           message: presentation.message || i18n().t('toast.actionFailedFallback'),
           ...(result.failure ? { failure: result.failure } : {}),
         };
@@ -4552,35 +4566,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     });
   }
 
-  async function reconnectProviderForEnvironment(
-    environment: DesktopEnvironmentEntry,
-    action: EnvironmentActionModel,
-    errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
-  ): Promise<boolean> {
-    const providerOrigin = trimString(action.provider_origin) || trimString(environment.provider_origin);
-    if (providerOrigin === '') {
-      setErrorMessage(errorTarget === 'settings' ? 'settings' : errorTarget, i18n().t('environmentCenter.resolveProviderError'));
-      return false;
-    }
-    const controlPlane = snapshot().control_planes.find((candidate) => (
-      candidate.provider.provider_origin === providerOrigin
-      && (
-        trimString(action.provider_id) === ''
-        || candidate.provider.provider_id === action.provider_id
-      )
-    ));
-    const result = await performLauncherAction({
-      kind: 'start_control_plane_connect',
-      provider_origin: providerOrigin,
-      display_label: controlPlane?.display_label ?? environment.control_plane_label,
-    }, errorTarget);
-    if (result?.outcome === 'started_control_plane_connect') {
-      showActionToast(i18n().t('environmentCenter.continueBrowserReconnectProvider'), 'info');
-      return true;
-    }
-    return false;
-  }
-
   async function loadLatestEnvironmentEntry(environmentID: string): Promise<DesktopEnvironmentEntry | null> {
     const nextSnapshot = await refreshSnapshot();
     return nextSnapshot.environments.find((entry) => entry.id === environmentID) ?? null;
@@ -4674,6 +4659,50 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       showActionToast(i18n().t('environmentCenter.runtimeStartedToast', { label: environment.label }));
     }
     return started;
+  }
+
+  async function startEnvironmentRuntimeSilently(
+    environment: DesktopEnvironmentEntry,
+  ): Promise<Extract<DesktopLauncherActionResult, Readonly<{ ok: true }>> | SilentLauncherActionFailure> {
+    let request: DesktopLauncherActionRequest | null = null;
+    let expectedOutcome: DesktopLauncherActionSuccess['outcome'] = 'started_environment_runtime';
+    if (environment.kind === 'provider_environment') {
+      request = {
+        kind: 'run_provider_environment_lifecycle',
+        environment_id: environment.id,
+        operation: 'start',
+        label: environment.label,
+      };
+      expectedOutcome = 'started_gateway_environment_runtime';
+    } else if (
+      environment.kind === 'gateway_environment'
+      || (environment.runtime_operations.start.method === 'runtime_gateway' && trimString(environment.gateway_id) !== '')
+    ) {
+      const gatewayID = trimString(environment.gateway_id);
+      const gatewayEnvID = trimString(environment.gateway_env_id);
+      if (gatewayID === '' || gatewayEnvID === '') {
+        return { ok: false, message: i18n().t('environmentCenter.resolveRuntimeTargetError') };
+      }
+      request = {
+        kind: 'run_gateway_environment_lifecycle',
+        environment_id: environment.id,
+        gateway_id: gatewayID,
+        gateway_env_id: gatewayEnvID,
+        operation: 'start',
+        label: environment.label,
+      };
+      expectedOutcome = 'started_gateway_environment_runtime';
+    } else {
+      request = runtimeActionRequest(environment, 'start_environment_runtime');
+    }
+    if (!request) {
+      return { ok: false, message: i18n().t('environmentCenter.resolveRuntimeTargetError') };
+    }
+    const result = await performLauncherActionSilently(request);
+    if (!result.ok || result.outcome === expectedOutcome) {
+      return result;
+    }
+    return { ok: false, message: i18n().t('toast.unexpectedLauncherResult') };
   }
 
   async function updateEnvironmentRuntime(
@@ -5023,90 +5052,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return openRemoteEnvironment(environment.local_ui_url, errorTarget, environment);
   }
 
-  async function setupRuntimeManagement(
-    environment: DesktopEnvironmentEntry,
-    errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
-  ): Promise<boolean> {
-    if (environment.kind !== 'provider_environment') {
-      if (!environment.managed_runtime_host_access || !environment.managed_runtime_placement) {
-        setErrorMessage(
-          errorTarget === 'settings' ? 'settings' : errorTarget,
-          i18n().t('environmentCenter.resolveRuntimeTargetError'),
-        );
-        return false;
-      }
-      const directResult = await performLauncherAction({
-        kind: 'setup_direct_runtime_management',
-        environment_id: environment.id,
-        label: environment.label,
-        host_access: environment.managed_runtime_host_access,
-        placement: environment.managed_runtime_placement,
-      }, errorTarget);
-      if (directResult?.outcome !== 'setup_runtime_management') {
-        return false;
-      }
-      await refreshSnapshot();
-      showActionToast(i18n().t('runtimeEnrollment.setupCompleted', { label: environment.label }));
-      return true;
-    }
-    setConnectionDialogError('');
-    setProviderRuntimeSetupDirectEnvironmentID('');
-    setProviderRuntimeSetupDialog({
-      environment_id: environment.id,
-      environment_label: environment.label,
-      candidates: providerRuntimeDirectSetupCandidates(snapshot().environments, environment.id),
-    });
-    return true;
-  }
-
-  function closeProviderRuntimeSetupDialog(): void {
-    setProviderRuntimeSetupDialog(null);
-    setProviderRuntimeSetupDirectEnvironmentID('');
-    setConnectionDialogError('');
-  }
-
-  async function showProviderRuntimeEnrollmentCommand(): Promise<void> {
-    const state = providerRuntimeSetupDialog();
-    if (!state) {
-      return;
-    }
-    const result = await performLauncherAction({
-      kind: 'request_provider_runtime_enrollment_challenge',
-      environment_id: state.environment_id,
-    }, 'dialog');
-    if (
-      result?.outcome !== 'created_provider_runtime_enrollment_challenge'
-      || !result.runtime_enrollment
-    ) {
-      return;
-    }
-    closeProviderRuntimeSetupDialog();
-    setRuntimeEnrollmentDialog(result.runtime_enrollment);
-  }
-
-  async function setupProviderRuntimeManagementWithSelectedDirectCard(): Promise<void> {
-    const state = providerRuntimeSetupDialog();
-    const candidate = providerRuntimeSetupSelectedCandidate();
-    if (!state || !candidate) {
-      return;
-    }
-    const result = await performLauncherAction({
-      kind: 'setup_provider_runtime_management_with_direct_card',
-      environment_id: state.environment_id,
-      direct_environment_id: candidate.environment_id,
-      direct_label: candidate.label,
-      host_access: candidate.host_access,
-      placement: candidate.placement,
-    }, 'dialog');
-    if (result?.outcome !== 'setup_runtime_management') {
-      return;
-    }
-    const label = state.environment_label;
-    closeProviderRuntimeSetupDialog();
-    await refreshSnapshot();
-    showActionToast(i18n().t('runtimeEnrollment.setupCompleted', { label }));
-  }
-
   async function triggerLocalEnvironmentAction(
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
@@ -5116,6 +5061,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       case 'open':
       case 'focus':
         return openEnvironment(environment, errorTarget === 'settings' ? 'connect' : errorTarget, action.route ?? 'auto');
+      case 'initialize_and_open':
+      case 'start_and_open':
+      case 'request_open_access': {
+        const resolution = await runEnvironmentGuidanceAction(environment, action);
+        return resolution.close_panel;
+      }
       case 'start_runtime':
         return startEnvironmentRuntime(environment, errorTarget);
       case 'stop_runtime':
@@ -5124,15 +5075,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         return restartEnvironmentRuntime(environment, errorTarget);
       case 'update_runtime':
         return updateEnvironmentRuntime(environment, action, errorTarget);
-      case 'setup_runtime_management':
-        return setupRuntimeManagement(environment, errorTarget);
       case 'refresh_runtime':
         return refreshEnvironmentRuntime(environment, errorTarget);
       case 'review_network_exposure':
         openSettingsSurface(environment.id);
         return true;
-      case 'reconnect_provider':
-        return reconnectProviderForEnvironment(environment, action, errorTarget);
       case 'connect_provider_runtime':
         requestProviderRuntimeLinkConfirmation(environment, 'connect');
         return true;
@@ -5157,7 +5104,136 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   async function runEnvironmentGuidanceAction(
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
+    updateSession?: (state: EnvironmentGuidanceSessionState) => void,
   ): Promise<EnvironmentGuidanceActionResolution> {
+    const currentSession = isEnvironmentGuidancePendingIntent(action.intent)
+      ? startEnvironmentGuidanceIntent(null, environment.id, action.intent)
+      : openEnvironmentGuidanceSession(environment.id);
+    const publishSession = (state: EnvironmentGuidanceSessionState): void => {
+      updateSession?.(state);
+    };
+    const failOpenFlow = (state: EnvironmentGuidanceSessionState, detail: string): EnvironmentGuidanceActionResolution => {
+      const nextSession = failEnvironmentGuidanceIntent(state, detail);
+      publishSession(nextSession);
+      return { close_panel: false, next_session: nextSession };
+    };
+    const startAndOpenEnvironment = async (
+      state: EnvironmentGuidanceSessionState,
+    ): Promise<EnvironmentGuidanceActionResolution> => {
+      const starting = advanceEnvironmentOpenFlowStage(state, 'starting_environment');
+      publishSession(starting);
+      const latestBeforeStart = await loadLatestEnvironmentEntry(environment.id) ?? environment;
+      const started = await startEnvironmentRuntimeSilently(latestBeforeStart);
+      if (!started.ok) {
+        return failOpenFlow(starting, started.message);
+      }
+      const latestBeforeOpen = await loadLatestEnvironmentEntry(environment.id) ?? latestBeforeStart;
+      const opening = advanceEnvironmentOpenFlowStage(starting, 'opening_workspace');
+      publishSession(opening);
+      const opened = await openEnvironment(latestBeforeOpen, 'connect');
+      if (!opened) {
+        return failOpenFlow(opening, 'The environment started, but Redeven could not open the workspace. Try again.');
+      }
+      return { close_panel: true, next_session: null };
+    };
+
+    if (action.intent === 'initialize_and_open') {
+      const checking = advanceEnvironmentOpenFlowStage(currentSession, 'checking_access');
+      publishSession(checking);
+      let initializationEnvironment = environment;
+      try {
+        initializationEnvironment = await loadLatestEnvironmentEntry(environment.id) ?? environment;
+      } catch (error) {
+        return failOpenFlow(checking, getErrorMessage(error) || i18n().t('environmentOpenFlow.accessUnavailableDetail'));
+      }
+      const refreshedFlow = environmentOpenFlow(initializationEnvironment);
+      if (refreshedFlow === 'request_access') {
+        const requestingAccess = startEnvironmentGuidanceIntent(null, environment.id, 'request_open_access');
+        return failOpenFlow(requestingAccess, i18n().t('environmentOpenFlow.accessRequiredDetail'));
+      }
+      if (refreshedFlow === 'start') {
+        return startAndOpenEnvironment(checking);
+      }
+      if (refreshedFlow === 'direct') {
+        const opening = advanceEnvironmentOpenFlowStage(checking, 'opening_workspace');
+        publishSession(opening);
+        const opened = await openEnvironment(initializationEnvironment, 'connect');
+        return opened
+          ? { close_panel: true, next_session: null }
+          : failOpenFlow(opening, i18n().t('environmentOpenFlow.openFailedDetail'));
+      }
+      let request: DesktopLauncherActionRequest | null = null;
+      if (initializationEnvironment.kind === 'provider_environment') {
+        const candidate = providerRuntimeDirectSetupCandidate(snapshot().environments, initializationEnvironment.id);
+        if (candidate) {
+          request = {
+            kind: 'setup_provider_runtime_management_with_direct_card',
+            environment_id: initializationEnvironment.id,
+            direct_environment_id: candidate.environment_id,
+            direct_label: candidate.label,
+            host_access: candidate.host_access,
+            placement: candidate.placement,
+          };
+        }
+      } else if (initializationEnvironment.managed_runtime_host_access && initializationEnvironment.managed_runtime_placement) {
+        request = {
+          kind: 'setup_direct_runtime_management',
+          environment_id: initializationEnvironment.id,
+          label: initializationEnvironment.label,
+          host_access: initializationEnvironment.managed_runtime_host_access,
+          placement: initializationEnvironment.managed_runtime_placement,
+        };
+      }
+      if (!request) {
+        if (initializationEnvironment.kind === 'provider_environment') {
+          const requestingAccess = startEnvironmentGuidanceIntent(null, environment.id, 'request_open_access');
+          return failOpenFlow(requestingAccess, i18n().t('environmentOpenFlow.accessUnavailableDetail'));
+        }
+        return failOpenFlow(checking, i18n().t('environmentOpenFlow.accessUnavailableDetail'));
+      }
+      const preparing = advanceEnvironmentOpenFlowStage(checking, 'preparing_environment');
+      publishSession(preparing);
+      const initialized = await performLauncherActionSilently(request);
+      if (!initialized.ok) {
+        if (initialized.code === 'control_plane_auth_required') {
+          const requestingAccess = startEnvironmentGuidanceIntent(null, environment.id, 'request_open_access');
+          return failOpenFlow(requestingAccess, i18n().t('environmentOpenFlow.accessRequiredDetail'));
+        }
+        return failOpenFlow(preparing, initialized.message);
+      }
+      return startAndOpenEnvironment(preparing);
+    }
+
+    if (action.intent === 'start_and_open') {
+      const checking = advanceEnvironmentOpenFlowStage(currentSession, 'checking_access');
+      publishSession(checking);
+      return startAndOpenEnvironment(checking);
+    }
+
+    if (action.intent === 'request_open_access') {
+      if (environment.kind === 'provider_environment' && environment.provider_origin) {
+        const result = await performLauncherAction({
+          kind: 'start_control_plane_connect',
+          provider_origin: environment.provider_origin,
+          display_label: environment.label,
+        }, 'connect');
+        return {
+          close_panel: result?.outcome === 'started_control_plane_connect',
+          next_session: result?.outcome === 'started_control_plane_connect'
+            ? null
+            : failEnvironmentGuidanceIntent(currentSession, 'Redeven could not request access to this environment. Try again.'),
+        };
+      }
+      if (environment.kind === 'gateway_environment') {
+        const gateway = snapshot().gateway_sources.find((source) => source.gateway_id === (environment.gateway_id ?? ''));
+        if (gateway) {
+          openCreateGatewaySetup(gateway);
+          return { close_panel: true, next_session: null };
+        }
+      }
+      return failOpenFlow(currentSession, 'Access is not available for this environment yet. Check the connection and try again.');
+    }
+
     if (
       action.intent === 'start_runtime'
       || action.intent === 'stop_runtime'
@@ -5170,10 +5246,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         next_session: null,
       };
     }
-
-    const currentSession = isEnvironmentGuidancePendingIntent(action.intent)
-      ? startEnvironmentGuidanceIntent(null, environment.id, action.intent)
-      : openEnvironmentGuidanceSession(environment.id);
 
     if (action.intent === 'refresh_runtime') {
       const request = runtimeActionRequest(environment, 'refresh_environment_runtime');
@@ -6567,34 +6639,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         onSave={saveGatewayFromDialog}
       />
 
-      <RuntimeEnrollmentDialog
-        i18n={i18n()}
-        state={runtimeEnrollmentDialog()}
-        onOpenChange={(open) => {
-          if (!open) {
-            setRuntimeEnrollmentDialog(null);
-          }
-        }}
-        onCopy={(value, label) => copyEnvironmentValue(value, label)}
-      />
-
-      <ProviderRuntimeSetupDialog
-        i18n={i18n()}
-        open={providerRuntimeSetupDialogOpen()}
-        state={providerRuntimeSetupDialog()}
-        selectedEnvironmentID={providerRuntimeSetupDirectEnvironmentID()}
-        error={connectionDialogError()}
-        busy={providerRuntimeSetupBusy()}
-        onOpenChange={(open) => {
-          if (!open) {
-            closeProviderRuntimeSetupDialog();
-          }
-        }}
-        onSelect={setProviderRuntimeSetupDirectEnvironmentID}
-        onUseCommand={showProviderRuntimeEnrollmentCommand}
-        onUseSelected={setupProviderRuntimeManagementWithSelectedDirectCard}
-      />
-
       <ControlPlaneDialog
         i18n={i18n()}
         state={controlPlaneDialogState()}
@@ -6951,6 +6995,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
   runEnvironmentGuidanceAction: (
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
+    updateSession?: (state: EnvironmentGuidanceSessionState) => void,
   ) => Promise<EnvironmentGuidanceActionResolution>;
   runDesktopUpdateHandoff: (environmentID: string, label?: string) => Promise<void>;
   confirmRuntimeOperation: (operationKey: string) => void;
@@ -7390,6 +7435,7 @@ function EnvironmentCardsPanel(props: Readonly<{
   runEnvironmentGuidanceAction: (
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
+    updateSession?: (state: EnvironmentGuidanceSessionState) => void,
   ) => Promise<EnvironmentGuidanceActionResolution>;
   runDesktopUpdateHandoff: (environmentID: string, label?: string) => Promise<void>;
   confirmRuntimeOperation: (operationKey: string) => void;
@@ -8269,7 +8315,7 @@ function isEnvironmentActionBusy(
     return false;
   }
   switch (action.intent) {
-    case 'reconnect_provider':
+    case 'request_open_access':
       return busyState.provider_origin !== ''
         && busyState.provider_origin === action.provider_origin
         && busyState.action === 'start_control_plane_connect';
@@ -9186,16 +9232,44 @@ function EnvironmentPrimaryActionPanel(props: Readonly<{
   ));
   const localizedNotice = createMemo(() => {
     const current = notice();
-    return current
-      ? {
-          ...current,
-          title: localizedOverlayTitle(props.i18n, current.title),
-          detail: localizedRuntimeMessage(props.i18n, current.detail),
-        }
-      : null;
+    if (!current) {
+      return null;
+    }
+    const localized = {
+      ...current,
+      title: localizedOverlayTitle(props.i18n, current.title),
+      detail: localizedRuntimeMessage(props.i18n, current.detail),
+    };
+    return localized.title === props.overlay.title && localized.detail === props.overlay.detail
+      ? null
+      : localized;
   });
   const panelBusy = createMemo(() => props.session?.pending_intent !== null);
   const iconTone = createMemo(() => overlayStatusIconTone(props.overlay.tone));
+  const openFlowSteps = createMemo(() => {
+    const intent = props.session?.pending_intent;
+    if (intent !== 'initialize_and_open' && intent !== 'start_and_open') {
+      return [] as const;
+    }
+    const active = props.session?.open_flow_stage ?? 'checking_access';
+    const steps = [
+      { key: 'checking_access', label: props.i18n.t('environmentOpenFlow.checkAccess') },
+      ...(intent === 'initialize_and_open'
+        ? [{ key: 'preparing_environment', label: props.i18n.t('environmentOpenFlow.prepareEnvironment') }]
+        : []),
+      { key: 'starting_environment', label: props.i18n.t('environmentOpenFlow.startEnvironment') },
+      { key: 'opening_workspace', label: props.i18n.t('environmentOpenFlow.openWorkspace') },
+    ];
+    const activeIndex = steps.findIndex((candidate) => candidate.key === active);
+    return steps.map((step, index) => ({
+      ...step,
+      state: index < activeIndex
+        ? 'complete'
+        : step.key === active
+          ? 'running'
+          : 'pending',
+    }));
+  });
 
   return (
     <div class="redeven-action-popover" tabIndex={-1}>
@@ -9218,6 +9292,18 @@ function EnvironmentPrimaryActionPanel(props: Readonly<{
             <div class="redeven-action-popover__notice-detail">{currentNotice().detail}</div>
           </div>
         )}
+      </Show>
+      <Show when={openFlowSteps().length > 0}>
+        <div class="redeven-environment-progress__steps mt-3" aria-label={props.i18n.t('environmentOpenFlow.progressLabel')}>
+          <For each={openFlowSteps()}>
+            {(step) => (
+              <div class="redeven-environment-progress__step" data-state={step.state}>
+                <span class="redeven-environment-progress__step-dot" data-state={step.state} aria-hidden="true" />
+                <span class="redeven-environment-progress__step-label" data-state={step.state}>{step.label}</span>
+              </div>
+            )}
+          </For>
+        </div>
       </Show>
       <Show when={props.overlay.actions.length > 0}>
         <div class="redeven-action-popover__actions">
@@ -9418,18 +9504,43 @@ function EnvironmentSplitActionButton(props: Readonly<{
     if (!notice) {
       return undefined;
     }
+    const retryIntent = props.guidanceSession?.retry_intent;
+    const retryAction = retryIntent
+      ? {
+          label: retryIntent === 'request_open_access'
+            ? props.i18n.t('environmentAction.requestAccess')
+            : retryIntent === 'start_and_open'
+              ? props.i18n.t('environmentAction.startAndOpen')
+              : props.i18n.t('environmentAction.retryInitialization'),
+          emphasis: 'primary' as const,
+          action: {
+            intent: retryIntent,
+            label: retryIntent === 'request_open_access'
+              ? props.i18n.t('environmentAction.requestAccess')
+              : retryIntent === 'start_and_open'
+                ? props.i18n.t('environmentAction.startAndOpen')
+                : props.i18n.t('environmentAction.retryInitialization'),
+            enabled: true,
+            variant: 'default' as const,
+          },
+        }
+      : null;
     return {
       kind: 'popover',
       tone: notice.tone === 'warning' ? 'warning' : 'neutral',
       eyebrow: notice.tone === 'success' ? props.i18n.t('progress.ready') : notice.tone === 'error' ? props.i18n.t('progress.needsAttention') : props.i18n.t('progress.running'),
       title: localizedOverlayTitle(props.i18n, notice.title),
       detail: localizedRuntimeMessage(props.i18n, notice.detail),
-      actions: [],
+      actions: retryAction ? [retryAction] : [],
     };
   });
   const primaryProgress = createMemo(() => props.openConnectionProgress ?? null);
   const runtimeMenuProgress = createMemo(() => props.runtimeLifecycleProgress ?? null);
-  const panelProgress = createMemo(() => selectEnvironmentPanelProgress(primaryProgress(), runtimeMenuProgress()));
+  const panelProgress = createMemo(() => (
+    guidanceSessionOwnsOpenFlowPanel(props.guidanceSession)
+      ? null
+      : selectEnvironmentPanelProgress(primaryProgress(), runtimeMenuProgress())
+  ));
   const hasPanelProgress = createMemo(() => panelProgress() !== null);
   const progressPanelVisible = createMemo(() => props.progressOpen && hasPanelProgress());
   const primaryProgressPresentation = createMemo(() => localizedPrimaryProgressPresentation(
@@ -9439,7 +9550,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
   const primaryActionOverlay = createMemo(() => (
     primaryProgressPresentation() || progressPanelVisible()
       ? undefined
-      : props.presentation.primary_action_overlay ?? sessionPopoverOverlay()
+      : sessionPopoverOverlay() ?? props.presentation.primary_action_overlay
   ));
   const tooltipOverlay = createMemo<Extract<EnvironmentPrimaryActionOverlayModel, Readonly<{ kind: 'tooltip' }>> | undefined>(() => {
     const overlay = primaryActionOverlay();
@@ -9469,7 +9580,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
     cn('w-full justify-center', hasMenuActions() && 'rounded-r-none border-r-0')
   ));
   const renderPrimaryActionIcon = () => (
-    props.presentation.primary_action.intent === 'reconnect_provider'
+    props.presentation.primary_action.intent === 'request_open_access'
       ? <ShieldCheck class="mr-1 h-3.5 w-3.5" />
       : null
   );
@@ -9712,7 +9823,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
                     fallback={props.presentation.primary_action.label}
                   >
                     <span class="redeven-split-action-trigger__content">
-                      {props.presentation.primary_action.intent === 'reconnect_provider'
+                      {props.presentation.primary_action.intent === 'request_open_access'
                         ? <ShieldCheck class="redeven-split-action-trigger__icon h-3.5 w-3.5" />
                         : <Lock class="redeven-split-action-trigger__icon h-3.5 w-3.5" />}
                       <span>{props.presentation.primary_action.label}</span>
@@ -9906,6 +10017,7 @@ function EnvironmentConnectionCard(props: Readonly<{
   runEnvironmentGuidanceAction: (
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
+    updateSession?: (state: EnvironmentGuidanceSessionState) => void,
   ) => Promise<EnvironmentGuidanceActionResolution>;
   runDesktopUpdateHandoff: (environmentID: string, label?: string) => Promise<void>;
   confirmRuntimeOperation: (operationKey: string) => void;
@@ -10168,7 +10280,11 @@ function EnvironmentConnectionCard(props: Readonly<{
                   action.intent,
                 ));
               }
-              const resolution = await props.runEnvironmentGuidanceAction(props.environment, action);
+              const resolution = await props.runEnvironmentGuidanceAction(
+                props.environment,
+                action,
+                props.setGuidanceSession,
+              );
               props.setGuidanceSession(startsLifecycleDisclosure ? null : resolution.next_session);
               if (resolution.close_panel) {
                 props.onPrimaryActionGuidanceOpenChange(false);
@@ -15689,233 +15805,6 @@ function OfficialProviderPicker(props: Readonly<{
         </DesktopAnchoredListbox>
       </Show>
     </div>
-  );
-}
-
-function RuntimeEnrollmentDialog(props: Readonly<{
-  i18n: DesktopI18n;
-  state: RuntimeEnrollmentDialogState | null;
-  onOpenChange: (open: boolean) => void;
-  onCopy: (value: string, label: string) => Promise<void>;
-}>) {
-  const isOpen = createMemo(() => props.state !== null);
-
-  return (
-    <Dialog
-      open={isOpen()}
-      onOpenChange={props.onOpenChange}
-      title={props.i18n.t('runtimeEnrollment.title')}
-      class="max-w-2xl"
-      footer={(
-        <div class="flex justify-end">
-          <Button size="sm" variant="default" onClick={() => props.onOpenChange(false)}>
-            {props.i18n.t('common.close')}
-          </Button>
-        </div>
-      )}
-    >
-      <Show when={props.state} keyed>
-        {(state) => (
-          <div class="space-y-5">
-            <p class="text-sm leading-6 text-muted-foreground">
-              {props.i18n.t('runtimeEnrollment.summary', { label: state.environment_label })}
-            </p>
-            <div class="space-y-2">
-              <div class="text-xs font-semibold text-foreground">{props.i18n.t('runtimeEnrollment.commandLabel')}</div>
-              <div class="flex items-start gap-2 rounded-md border border-border bg-muted/20 p-3">
-                <code class="min-w-0 flex-1 break-all text-xs leading-5 text-foreground">{state.command}</code>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  title={props.i18n.t('runtimeEnrollment.copyCommand')}
-                  aria-label={props.i18n.t('runtimeEnrollment.copyCommand')}
-                  onClick={() => void props.onCopy(state.command, props.i18n.t('runtimeEnrollment.commandCopyLabel'))}
-                >
-                  <Copy class="h-3.5 w-3.5" />
-                </Button>
-              </div>
-            </div>
-            <div class="space-y-2">
-              <div class="text-xs font-semibold text-foreground">{props.i18n.t('runtimeEnrollment.codeLabel')}</div>
-              <div class="flex items-center gap-2 rounded-md border border-primary/25 bg-primary/5 p-3">
-                <code class="min-w-0 flex-1 break-all font-mono text-sm font-semibold text-foreground">{state.enrollment_code}</code>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  title={props.i18n.t('runtimeEnrollment.copyCode')}
-                  aria-label={props.i18n.t('runtimeEnrollment.copyCode')}
-                  onClick={() => void props.onCopy(state.enrollment_code, props.i18n.t('runtimeEnrollment.codeCopyLabel'))}
-                >
-                  <Copy class="h-3.5 w-3.5" />
-                </Button>
-              </div>
-              <p class="text-xs leading-5 text-muted-foreground">
-                {props.i18n.t('runtimeEnrollment.codeHelp', {
-                  expires: props.i18n.formatDateTime(state.expires_at_unix_ms, { dateStyle: 'medium', timeStyle: 'short' }),
-                })}
-              </p>
-            </div>
-            <div class="rounded-md border border-border bg-muted/15 px-3 py-2 text-xs leading-5 text-muted-foreground">
-              {props.i18n.t('runtimeEnrollment.securityNote')}
-            </div>
-          </div>
-        )}
-      </Show>
-    </Dialog>
-  );
-}
-
-function providerRuntimeSetupHost(candidate: ProviderRuntimeDirectSetupCandidate, i18n: DesktopI18n): string {
-  if (candidate.host_access.kind === 'local_host') {
-    return i18n.t('runtimeEnrollment.currentDevice');
-  }
-  const ssh = candidate.host_access.ssh;
-  return ssh.ssh_port == null
-    ? ssh.ssh_destination
-    : `${ssh.ssh_destination}:${ssh.ssh_port}`;
-}
-
-function providerRuntimeSetupConnectionType(
-  candidate: ProviderRuntimeDirectSetupCandidate,
-  i18n: DesktopI18n,
-): string {
-  switch (candidate.connection_kind) {
-    case 'local_host':
-      return i18n.t('runtimeEnrollment.localHost');
-    case 'ssh_host':
-      return i18n.t('runtimeEnrollment.sshHost');
-    case 'local_container':
-      return i18n.t('runtimeEnrollment.localContainer');
-    case 'ssh_container':
-      return i18n.t('runtimeEnrollment.sshContainer');
-  }
-}
-
-function providerRuntimeSetupContainer(candidate: ProviderRuntimeDirectSetupCandidate, i18n: DesktopI18n): string {
-  return candidate.placement.kind === 'container_process'
-    ? candidate.placement.container_label || candidate.placement.container_ref || candidate.placement.container_id
-    : i18n.t('runtimeEnrollment.hostProcess');
-}
-
-function providerRuntimeSetupOSUser(candidate: ProviderRuntimeDirectSetupCandidate, i18n: DesktopI18n): string {
-  if (candidate.placement.kind === 'container_process') {
-    return i18n.t('runtimeEnrollment.containerDefaultUser');
-  }
-  if (candidate.host_access.kind === 'local_host') {
-    return i18n.t('runtimeEnrollment.currentOSUser');
-  }
-  const destination = candidate.host_access.ssh.ssh_destination;
-  const separator = destination.lastIndexOf('@');
-  return separator > 0
-    ? destination.slice(0, separator)
-    : i18n.t('runtimeEnrollment.sshConfiguredUser');
-}
-
-function ProviderRuntimeSetupDialog(props: Readonly<{
-  i18n: DesktopI18n;
-  open: boolean;
-  state: ProviderRuntimeSetupDialogState | null;
-  selectedEnvironmentID: string;
-  error: string;
-  busy: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSelect: (environmentID: string) => void;
-  onUseCommand: () => Promise<void>;
-  onUseSelected: () => Promise<void>;
-}>) {
-  const isOpen = createMemo(() => props.open);
-  return (
-    <Dialog
-      open={isOpen()}
-      onOpenChange={props.onOpenChange}
-      title={props.i18n.t('runtimeEnrollment.title')}
-      class="max-w-2xl"
-      footer={(
-        <div class="flex flex-wrap justify-end gap-2">
-          <Button variant="ghost" onClick={() => props.onOpenChange(false)} disabled={props.busy}>
-            {props.i18n.t('common.cancel')}
-          </Button>
-          <Button variant="outline" onClick={() => void props.onUseCommand()} disabled={props.busy}>
-            {props.i18n.t('runtimeEnrollment.useCommand')}
-          </Button>
-          <Button
-            variant="default"
-            onClick={() => void props.onUseSelected()}
-            loading={props.busy}
-            disabled={props.busy || props.selectedEnvironmentID === ''}
-          >
-            {props.i18n.t('runtimeEnrollment.useSelectedConnection')}
-          </Button>
-        </div>
-      )}
-    >
-      <Show when={props.state} keyed>
-        {(state) => (
-          <div class="space-y-5">
-            <p class="text-sm leading-6 text-muted-foreground">
-              {props.i18n.t('runtimeEnrollment.methodSummary', { label: state.environment_label })}
-            </p>
-            <div class="space-y-2">
-              <div>
-                <div class="text-sm font-semibold text-foreground">{props.i18n.t('runtimeEnrollment.directTitle')}</div>
-                <p class="mt-1 text-xs leading-5 text-muted-foreground">{props.i18n.t('runtimeEnrollment.directDescription')}</p>
-              </div>
-              <Show
-                when={state.candidates.length > 0}
-                fallback={(
-                  <div class="rounded-md border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">
-                    {props.i18n.t('runtimeEnrollment.noDirectConnections')}
-                  </div>
-                )}
-              >
-                <div class="space-y-2">
-                  <For each={state.candidates}>
-                    {(candidate) => {
-                      const selected = () => candidate.environment_id === props.selectedEnvironmentID;
-                      return (
-                        <label class={cn(
-                          'flex cursor-pointer items-start gap-3 rounded-md border px-3 py-3 transition-colors',
-                          selected() ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50',
-                        )}>
-                          <input
-                            type="radio"
-                            name="provider-runtime-direct-connection"
-                            class="mt-1 h-4 w-4 shrink-0 accent-primary"
-                            checked={selected()}
-                            disabled={props.busy}
-                            onChange={() => props.onSelect(candidate.environment_id)}
-                          />
-                          <span class="min-w-0 flex-1">
-                            <span class="block truncate text-sm font-semibold text-foreground">{candidate.label}</span>
-                            <span class="mt-0.5 block text-xs text-muted-foreground">{candidate.secondary_text}</span>
-                            <span class="mt-2 grid gap-1 text-xs text-muted-foreground sm:grid-cols-2 xl:grid-cols-4">
-                              <span>{props.i18n.t('runtimeEnrollment.connectionTypeLabel')}: <span class="text-foreground">{providerRuntimeSetupConnectionType(candidate, props.i18n)}</span></span>
-                              <span>{props.i18n.t('runtimeEnrollment.hostLabel')}: <span class="text-foreground">{providerRuntimeSetupHost(candidate, props.i18n)}</span></span>
-                              <span>{props.i18n.t('runtimeEnrollment.containerLabel')}: <span class="text-foreground">{providerRuntimeSetupContainer(candidate, props.i18n)}</span></span>
-                              <span>{props.i18n.t('runtimeEnrollment.osUserLabel')}: <span class="text-foreground">{providerRuntimeSetupOSUser(candidate, props.i18n)}</span></span>
-                            </span>
-                          </span>
-                        </label>
-                      );
-                    }}
-                  </For>
-                </div>
-              </Show>
-              <p class="text-xs leading-5 text-muted-foreground">{props.i18n.t('runtimeEnrollment.newTargetNote')}</p>
-            </div>
-            <div class="border-t border-border pt-4">
-              <div class="text-sm font-semibold text-foreground">{props.i18n.t('runtimeEnrollment.manualTitle')}</div>
-              <p class="mt-1 text-xs leading-5 text-muted-foreground">{props.i18n.t('runtimeEnrollment.manualDescription')}</p>
-            </div>
-            <Show when={props.error !== ''}>
-              <div role="alert" class="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-                {props.error}
-              </div>
-            </Show>
-          </div>
-        )}
-      </Show>
-    </Dialog>
   );
 }
 

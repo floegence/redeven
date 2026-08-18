@@ -180,15 +180,16 @@ export type EnvironmentActionIntent =
   | 'open'
   | 'focus'
   | 'opening'
+  | 'initialize_and_open'
+  | 'start_and_open'
+  | 'request_open_access'
   | 'resolve_gateway'
-  | 'reconnect_provider'
   | 'connect_provider_runtime'
   | 'disconnect_provider_runtime'
   | 'start_runtime'
   | 'stop_runtime'
   | 'restart_runtime'
   | 'update_runtime'
-  | 'setup_runtime_management'
   | 'refresh_runtime'
   | 'review_network_exposure'
   | 'unavailable';
@@ -233,7 +234,9 @@ export type EnvironmentPrimaryActionOverlayModel =
       title: string;
       detail: string;
       actions: readonly EnvironmentGuidanceActionModel[];
-    }>;
+  }>;
+
+export type EnvironmentOpenFlow = 'direct' | 'initialize' | 'start' | 'request_access';
 
 export type EnvironmentActionPresentation = Readonly<{
   kind: 'split_button';
@@ -1171,7 +1174,7 @@ function primaryWindowAction(environment: DesktopEnvironmentEntry): EnvironmentA
   if (environment.local_environment_network_exposure_review_required === true) {
     return {
       intent: 'review_network_exposure',
-      label: 'Review network exposure',
+      label: 'Open',
       enabled: true,
       variant: 'default',
     };
@@ -1180,7 +1183,7 @@ function primaryWindowAction(environment: DesktopEnvironmentEntry): EnvironmentA
     if (desktopGatewayNeedsResolution(environment.gateway_status ?? 'unknown')) {
       return {
         intent: 'resolve_gateway',
-        label: 'Resolve',
+        label: 'Open',
         enabled: true,
         variant: 'default',
       };
@@ -1199,8 +1202,8 @@ function primaryWindowAction(environment: DesktopEnvironmentEntry): EnvironmentA
     const startPlan = environment.runtime_operations.start;
     if (environment.gateway_environment_state === 'stopped' && startPlan.availability === 'available') {
       return {
-        intent: 'start_runtime',
-        label: startPlan.label || 'Start',
+        intent: 'start_and_open',
+        label: 'Open',
         enabled: true,
         variant: 'default',
         runtime_operation: startPlan.operation,
@@ -1208,9 +1211,9 @@ function primaryWindowAction(environment: DesktopEnvironmentEntry): EnvironmentA
       };
     }
     return {
-      intent: 'unavailable',
-      label: environment.gateway_environment_state === 'stopped' ? 'Start' : 'Open',
-      enabled: false,
+      intent: 'open',
+      label: 'Open',
+      enabled: true,
       variant: 'default',
       runtime_operation: openPlan.operation,
       runtime_operation_method: openPlan.method,
@@ -1218,18 +1221,10 @@ function primaryWindowAction(environment: DesktopEnvironmentEntry): EnvironmentA
     };
   }
   const primaryRoute = environment.kind === 'provider_environment' ? providerPrimaryRoute(environment) : '';
-  const canOpenProviderRemoteRoute = environment.kind === 'provider_environment'
-    && providerRemoteOpenLooksAvailable(environment);
   return {
     intent: 'open',
     label: 'Open',
-    enabled: canOpenProviderRemoteRoute
-      || (environment.kind !== 'provider_environment'
-        && (
-          ((environment.runtime_health.status === 'online' || environment.kind === 'external_local_ui')
-            && environmentOpenOperationAvailable(environment))
-          || environmentOpenPreflightAvailable(environment)
-        )),
+    enabled: true,
     variant: 'default',
     ...(environment.kind === 'provider_environment'
       ? { route: desktopProviderEnvironmentOpenRoute() }
@@ -1237,6 +1232,39 @@ function primaryWindowAction(environment: DesktopEnvironmentEntry): EnvironmentA
       ? { route: primaryRoute }
       : {}),
   };
+}
+
+export function environmentOpenFlow(environment: DesktopEnvironmentEntry): EnvironmentOpenFlow {
+  if (environment.window_state === 'open' || environment.kind === 'external_local_ui') {
+    return 'direct';
+  }
+  if (environment.kind === 'provider_environment' && environment.control_plane_sync_state === 'auth_required') {
+    return 'request_access';
+  }
+  if (environment.runtime_health.offline_reason_code === 'auth_required'
+    || environment.runtime_management?.authorization.state === 'denied') {
+    return 'request_access';
+  }
+  if (environment.kind === 'gateway_environment' && desktopGatewayNeedsResolution(environment.gateway_status ?? 'unknown')) {
+    return 'request_access';
+  }
+  if (environment.runtime_health.status === 'online'
+    || environmentOpenOperationAvailable(environment)
+    || providerRemoteOpenLooksAvailable(environment)
+    || environmentOpenPreflightAvailable(environment)) {
+    return 'direct';
+  }
+  if (runtimeManagementSetupRequired(environment)) {
+    return 'initialize';
+  }
+  if (environment.gateway_environment_state === 'stopped'
+    && environment.runtime_operations.start.availability === 'available') {
+    return 'start';
+  }
+  if (environment.runtime_operations.start.availability === 'available') {
+    return 'start';
+  }
+  return 'direct';
 }
 
 function providerPrimaryRoute(environment: DesktopEnvironmentEntry): DesktopLocalEnvironmentStateRoute | '' {
@@ -1475,24 +1503,6 @@ function runtimeManagementSetupRequired(environment: DesktopEnvironmentEntry): b
   return directSetupRequired || providerSetupRequired;
 }
 
-function runtimeManagementSetupMenuItem(
-  environment: DesktopEnvironmentEntry,
-): EnvironmentActionMenuItemModel | null {
-  if (!runtimeManagementSetupRequired(environment)) {
-    return null;
-  }
-  return {
-    id: 'setup_runtime_management',
-    label: 'Set up Runtime management',
-    action: {
-      intent: 'setup_runtime_management',
-      label: 'Set up Runtime management',
-      enabled: true,
-      variant: 'outline',
-    },
-  };
-}
-
 function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly EnvironmentActionMenuItemModel[] {
   const items: EnvironmentActionMenuItemModel[] = [];
   if (environment.kind === 'gateway_environment') {
@@ -1523,10 +1533,6 @@ function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly Envi
   if (runtimeProviderLinkAction) {
     items.push(runtimeProviderLinkAction);
   }
-  const runtimeManagementSetup = runtimeManagementSetupMenuItem(environment);
-  if (runtimeManagementSetup) {
-    items.push(runtimeManagementSetup);
-  }
   if (desktopEntryKindCanInitiateRuntimeManagement(environment.kind)) {
     for (const operation of runtimeOperationMenuOrder) {
       const item = runtimeOperationMenuItem(environment.runtime_operations[operation]);
@@ -1555,7 +1561,6 @@ function blockedPrimaryActionGuidanceAction(
   menuActions: readonly EnvironmentActionMenuItemModel[],
 ): EnvironmentGuidanceActionModel | null {
   const recoveryIntents: readonly EnvironmentActionIntent[] = [
-    'setup_runtime_management',
     'start_runtime',
     'update_runtime',
     'restart_runtime',
@@ -1584,8 +1589,6 @@ function primaryGuidanceActionLabel(action: EnvironmentActionModel): string {
       return 'Restart runtime';
     case 'connect_provider_runtime':
       return 'Connect to provider';
-    case 'setup_runtime_management':
-      return 'Set up Runtime management';
     default:
       return 'Continue';
   }
@@ -1613,7 +1616,6 @@ function blockedRuntimePrimaryActionGuidanceActions(
   const restartSource = menuActions.find((item) => item.action.enabled && item.action.intent === 'restart_runtime');
   const startSource = menuActions.find((item) => item.action.enabled && item.action.intent === 'start_runtime');
   const stopSource = menuActions.find((item) => item.action.enabled && item.action.intent === 'stop_runtime');
-  const setupSource = menuActions.find((item) => item.action.enabled && item.action.intent === 'setup_runtime_management');
   const refreshSource = menuActions.find((item) => item.action.intent === 'refresh_runtime');
   const maintenance = environmentRuntimeMaintenance(environment);
   const requestedSource = maintenance?.recovery_action === 'start_runtime'
@@ -1623,7 +1625,7 @@ function blockedRuntimePrimaryActionGuidanceActions(
       : maintenance?.recovery_action === 'update_runtime'
         ? updateSource
         : updateSource ?? restartSource ?? startSource ?? stopSource;
-  const primarySource = requestedSource ?? setupSource;
+  const primarySource = requestedSource;
   const primaryLabel = (() => {
     if (!primarySource) {
       return '';
@@ -1638,9 +1640,6 @@ function blockedRuntimePrimaryActionGuidanceActions(
     }
     if (primarySource.action.intent === 'start_runtime') {
       return 'Start runtime';
-    }
-    if (primarySource.action.intent === 'setup_runtime_management') {
-      return 'Set up Runtime management';
     }
     return primarySource.action.label;
   })();
@@ -1683,9 +1682,6 @@ function blockedRuntimePrimaryActionTitle(
   _snapshot: RuntimeServiceSnapshot | undefined,
 ): string {
   const maintenance = environmentRuntimeMaintenance(environment);
-  if (runtimeManagementSetupRequired(environment)) {
-    return 'Set up Runtime management to continue';
-  }
   if (maintenance?.kind === 'desktop_model_source_requires_runtime_update') {
     return 'Desktop model source needs update';
   }
@@ -1706,9 +1702,6 @@ function blockedRuntimePrimaryActionDetail(
   snapshot: RuntimeServiceSnapshot | undefined,
 ): string {
   const maintenance = environmentRuntimeMaintenance(environment);
-  if (runtimeManagementSetupRequired(environment)) {
-    return 'Set up the Gateway supervisor for this target first. Runtime access remains independent; after setup, use the card to start or repair Runtime and then open it when ready.';
-  }
   if (maintenance) {
     if (maintenance.kind === 'desktop_model_source_requires_runtime_update') {
       return `This ${runtimeMaintenanceSubject(environment)} needs an update before Desktop can make your local model settings available here. Update and restart the runtime first; Open stays separate and becomes available after the runtime is ready.`;
@@ -1734,9 +1727,6 @@ function blockedPrimaryActionTitle(
   if (action.intent === 'connect_provider_runtime') {
     return 'Connect to provider to continue';
   }
-  if (action.intent === 'setup_runtime_management') {
-    return 'Set up Runtime management to continue';
-  }
   if (action.intent === 'update_runtime') {
     return 'Update the runtime to continue';
   }
@@ -1754,9 +1744,6 @@ function blockedPrimaryActionDetail(
 ): string {
   if (action.intent === 'connect_provider_runtime') {
     return 'Connect this runtime to a provider Environment first. Open stays separate and becomes available after the link is ready.';
-  }
-  if (action.intent === 'setup_runtime_management') {
-    return 'Set up the Gateway supervisor for this target first. Runtime access remains independent; after setup, use the card to start or repair Runtime and then open it when ready.';
   }
   if (action.intent === 'update_runtime') {
     if (environment.managed_runtime_placement?.kind === 'container_process') {
@@ -1793,6 +1780,74 @@ function primaryActionOverlay(
 ): EnvironmentPrimaryActionOverlayModel | undefined {
   if (environment.window_state !== 'closed') {
     return undefined;
+  }
+  const openFlow = environmentOpenFlow(environment);
+  if (openFlow === 'initialize') {
+    const refreshAction = blockedPrimaryActionRefreshGuidanceAction(menuActions);
+    return {
+      kind: 'popover',
+      tone: 'neutral',
+      eyebrow: 'Environment setup',
+      title: 'Initialize and open',
+      detail: 'Redeven will check access, prepare this environment, start it, and open the workspace.',
+      actions: [
+        {
+          label: 'Initialize and open',
+          emphasis: 'primary',
+          action: {
+            intent: 'initialize_and_open',
+            label: 'Initialize and open',
+            enabled: true,
+            variant: 'default',
+          },
+        },
+        ...(refreshAction ? [{ ...refreshAction, emphasis: 'secondary' as const }] : []),
+      ],
+    };
+  }
+  if (openFlow === 'start') {
+    const refreshAction = blockedPrimaryActionRefreshGuidanceAction(menuActions);
+    return {
+      kind: 'popover',
+      tone: 'neutral',
+      eyebrow: 'Environment ready to start',
+      title: 'Start and open',
+      detail: 'Redeven will start this environment and open the workspace when it is ready.',
+      actions: [
+        {
+          label: 'Start and open',
+          emphasis: 'primary',
+          action: {
+            intent: 'start_and_open',
+            label: 'Start and open',
+            enabled: true,
+            variant: 'default',
+          },
+        },
+        ...(refreshAction ? [{ ...refreshAction, emphasis: 'secondary' as const }] : []),
+      ],
+    };
+  }
+  if (openFlow === 'request_access') {
+    return {
+      kind: 'popover',
+      tone: 'warning',
+      eyebrow: 'Access required',
+      title: 'Request access',
+      detail: 'Redeven needs permission to reach this environment before it can open the workspace.',
+      actions: [{
+        label: 'Request access',
+        emphasis: 'primary',
+        action: {
+          intent: 'request_open_access',
+          label: 'Request access',
+          enabled: true,
+          variant: 'default',
+          provider_origin: environment.provider_origin,
+          provider_id: environment.provider_id,
+        },
+      }],
+    };
   }
   if (environment.kind === 'provider_environment' && environment.control_plane_sync_state === 'auth_required') {
     return {
@@ -1922,21 +1977,19 @@ export function buildProviderBackedEnvironmentActionModel(
 ): ProviderBackedEnvironmentActionModel {
   const displayState = buildEnvironmentDisplayStateModel(environment);
   const syncState = _controlPlaneSyncState;
-  const primaryAction = syncState === 'auth_required' && environment.kind === 'provider_environment'
-    ? {
-        intent: 'reconnect_provider' as const,
-        label: 'Reconnect Provider',
-        enabled: true,
-        variant: 'default' as const,
-        provider_origin: environment.provider_origin,
-        provider_id: environment.provider_id,
-      }
-    : primaryWindowAction(environment);
+  const primaryAction = primaryWindowAction(environment);
   const menuActions = syncState === 'auth_required' && environment.kind === 'provider_environment'
     ? [{
-        id: 'reconnect_provider',
-        label: 'Reconnect Provider',
-        action: primaryAction,
+        id: 'request_open_access',
+        label: 'Request access',
+        action: {
+          intent: 'request_open_access' as const,
+          label: 'Request access',
+          enabled: true,
+          variant: 'outline' as const,
+          provider_origin: environment.provider_origin,
+          provider_id: environment.provider_id,
+        },
       }]
     : runtimeMenuActions(environment);
   return {

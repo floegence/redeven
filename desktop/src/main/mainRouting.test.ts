@@ -761,7 +761,7 @@ describe('main routing', () => {
     const directLifecycleEnd = mainSrc.indexOf('async function startEnvironmentRuntimeFromLauncher(', directLifecycleStart);
     const directLifecycleSrc = mainSrc.slice(directLifecycleStart, directLifecycleEnd);
     expect(directLifecycleSrc).toContain("'runtime_not_ready'");
-    expect(directLifecycleSrc).toContain('Set up Redeven Gateway for this target before managing Runtime.');
+    expect(directLifecycleSrc).toContain('Initialize this environment before using lifecycle actions.');
     expect(directLifecycleSrc).not.toContain('ensureRuntimePlacementReadyRecordFromLauncher(');
     expect(directLifecycleSrc).not.toContain('ensureSSHRuntimeReadyRecord(');
     expect(directLifecycleSrc).not.toContain('startLocalHostRuntimeWithLifecycleProgress(');
@@ -800,6 +800,19 @@ describe('main routing', () => {
     expect(providerLifecycleSrc.indexOf('authorizeProviderRuntimeOperation(')).toBeLessThan(
       providerLifecycleSrc.indexOf('client.prepareRuntimeOperation(resolved.scope'),
     );
+
+    const providerInitializationStart = mainSrc.indexOf('async function setupProviderRuntimeManagementWithDirectCardFromLauncher(');
+    const providerInitializationEnd = mainSrc.indexOf('async function runProviderEnvironmentLifecycleFromLauncher(', providerInitializationStart);
+    expect(providerInitializationStart).toBeGreaterThanOrEqual(0);
+    expect(providerInitializationEnd).toBeGreaterThan(providerInitializationStart);
+    const providerInitializationSrc = mainSrc.slice(providerInitializationStart, providerInitializationEnd);
+    expect(providerInitializationSrc.indexOf('authorizeProviderRuntimeEnrollment(preferences, environment)')).toBeLessThan(
+      providerInitializationSrc.indexOf('gatewayLifecycleManager().startGateway(record'),
+    );
+    expect(providerInitializationSrc.indexOf('gatewayLifecycleManager().startGateway(record')).toBeLessThan(
+      providerInitializationSrc.indexOf('gatewayLifecycleManager().enrollProviderSupervisor(record'),
+    );
+    expect(providerInitializationSrc).not.toContain('Runtime Management Setup Failed');
   });
 
   it('uses fresh provider health and SSH runtime-affecting settings for launcher routing', () => {
@@ -915,7 +928,7 @@ describe('main routing', () => {
     const startRuntimeEnd = mainSrc.indexOf('async function connectProviderRuntimeFromLauncher(', startRuntimeStart);
     const startRuntimeSrc = mainSrc.slice(startRuntimeStart, startRuntimeEnd);
     expect(startRuntimeSrc).toContain("'runtime_not_ready'");
-    expect(startRuntimeSrc).toContain('Set up Redeven Gateway for this target before managing Runtime.');
+    expect(startRuntimeSrc).toContain('Initialize this environment before using lifecycle actions.');
     expect(startRuntimeSrc).not.toContain('ensureRuntimePlacementReadyRecordFromLauncher(request)');
     expect(startRuntimeSrc).not.toContain('startRuntimePlacementBridgeSession({');
     expect(startRuntimeSrc).not.toContain('const normalizedSSHTarget = sshDetailsFromRuntimeTargetRequest(request);');
@@ -924,7 +937,7 @@ describe('main routing', () => {
     const stopRuntimeEnd = mainSrc.indexOf('async function refreshEnvironmentRuntimeFromLauncher(', stopRuntimeStart);
     const stopRuntimeSrc = mainSrc.slice(stopRuntimeStart, stopRuntimeEnd);
     expect(stopRuntimeSrc).toContain("request.external_local_ui_url ? 'action_invalid' : 'runtime_not_ready'");
-    expect(stopRuntimeSrc).toContain('Runtime management is not supported for URL connections.');
+    expect(stopRuntimeSrc).toContain('URL connections open directly and do not support lifecycle actions.');
     expect(stopRuntimeSrc).not.toContain('stopEnvironmentRuntimeFromLauncherUncoordinated(request');
 
     const refreshRuntimeStart = mainSrc.indexOf('async function refreshEnvironmentRuntimeFromLauncher(');
@@ -1198,7 +1211,7 @@ describe('main routing', () => {
     expect(ensureSrc).toContain('buildDesktopLocalRuntimeOpenPlan(');
     expect(ensureSrc).toContain('if (runtimePlan.requires_restart)');
     expect(ensureSrc).toContain('assertRuntimeFlowerRecordOpenable(attached);');
-    expect(ensureSrc).toContain('Set up Redeven Gateway for this target before restarting Runtime.');
+    expect(ensureSrc).toContain('Initialize this environment before restarting it.');
     expect(ensureSrc).not.toContain('startLocalHostRuntimeWithLifecycleProgress({');
     expect(ensureSrc).not.toContain('runtimeLifecycleCoordinator.');
 
@@ -1225,7 +1238,7 @@ describe('main routing', () => {
     expect(startRuntimeEnd).toBeGreaterThan(startRuntimeStart);
     const startRuntimeSrc = mainSrc.slice(startRuntimeStart, startRuntimeEnd);
     expect(startRuntimeSrc).not.toContain('syncLinkedProviderRuntimeHealthFromService(');
-    expect(startRuntimeSrc).toContain('Set up Redeven Gateway for this target before managing Runtime.');
+    expect(startRuntimeSrc).toContain('Initialize this environment before using lifecycle actions.');
 
     const connectStart = mainSrc.indexOf('async function connectProviderRuntimeFromLauncher(');
     const connectEnd = mainSrc.indexOf('async function disconnectProviderRuntimeFromLauncher(', connectStart);

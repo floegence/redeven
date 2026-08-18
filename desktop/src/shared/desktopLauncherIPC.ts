@@ -151,8 +151,7 @@ export type DesktopLauncherActionOutcome =
   | 'stopped_gateway_environment_runtime'
   | 'restarted_gateway_environment_runtime'
   | 'updated_gateway_environment_runtime'
-  | 'created_provider_runtime_enrollment_challenge'
-  | 'setup_runtime_management'
+  | 'initialized_environment'
   | 'reconciled_runtime_operation'
   | 'saved_environment'
   | 'deleted_environment'
@@ -239,7 +238,6 @@ export type DesktopLauncherActionKind =
   | 'delete_gateway_environment_profile'
   | 'run_gateway_environment_lifecycle'
   | 'run_provider_environment_lifecycle'
-  | 'request_provider_runtime_enrollment_challenge'
   | 'setup_provider_runtime_management_with_direct_card'
   | 'setup_direct_runtime_management'
   | 'confirm_runtime_operation'
@@ -926,10 +924,6 @@ export type DesktopLauncherActionRequest = Readonly<
       operation: 'start' | 'stop' | 'restart' | 'update_runtime';
       label?: string;
     }
-  | {
-      kind: 'request_provider_runtime_enrollment_challenge';
-      environment_id: string;
-    }
   | ({
       kind: 'setup_provider_runtime_management_with_direct_card';
       environment_id: string;
@@ -1017,16 +1011,6 @@ export type DesktopLauncherActionSuccess = Readonly<{
   outcome: DesktopLauncherActionOutcome;
   session_key?: string;
   utility_window_kind?: 'launcher' | 'environment_settings';
-  runtime_enrollment?: Readonly<{
-    environment_id: string;
-    environment_label: string;
-    provider_origin: string;
-    access_point_origin: string;
-    env_public_id: string;
-    enrollment_code: string;
-    command: string;
-    expires_at_unix_ms: number;
-  }>;
 }>;
 
 export type DesktopLauncherActionFailure = Readonly<{
@@ -1272,10 +1256,6 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
           return 'auto';
         })(),
       };
-    }
-    case 'request_provider_runtime_enrollment_challenge': {
-      const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
-      return environmentID === '' ? null : { kind, environment_id: environmentID };
     }
     case 'setup_provider_runtime_management_with_direct_card': {
       const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);

@@ -444,8 +444,8 @@ function directRuntimeGatewayOperations(
 ): DesktopRuntimeOperationPlans {
   if (!environment || gateway.status !== 'online') {
     const message = gateway.status === 'pairing_required'
-      ? 'Complete Runtime management setup for this target.'
-      : 'Runtime management is temporarily unavailable. Restore the Gateway supervisor and try again.';
+      ? 'Initialize this environment before using lifecycle actions.'
+      : 'Lifecycle actions are temporarily unavailable. Try again shortly.';
     const reasonCode = gateway.status === 'pairing_required'
       ? 'runtime_gateway_setup_required'
       : 'runtime_gateway_temporarily_unavailable';

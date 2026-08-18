@@ -24,7 +24,7 @@ describe('desktopRuntimeOperationPlanner', () => {
         method: 'runtime_gateway',
         reason_code: 'runtime_gateway_setup_required',
       });
-      expect(plans[operation].message).toContain('Set up Runtime management');
+      expect(plans[operation].message).toContain('Initialize this environment');
     }
   });
 

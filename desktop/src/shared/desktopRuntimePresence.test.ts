@@ -49,7 +49,7 @@ describe('desktopRuntimePresence', () => {
     expect(plans.refresh.availability).toBe('available');
   });
 
-  it('keeps SSH access independent when Runtime management is not set up', () => {
+  it('keeps SSH access independent while lifecycle initialization is incomplete', () => {
     const plans = buildDesktopRuntimeOperationPlans({
       surface: 'managed_runtime_card',
       host_access: { kind: 'ssh_host', ssh: {

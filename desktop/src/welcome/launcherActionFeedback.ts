@@ -44,7 +44,7 @@ function reconnectControlPlaneAction(
   }
   return {
     kind: 'reconnect_control_plane',
-    label: i18n.t('environmentAction.reconnectProvider'),
+    label: i18n.t('environmentAction.requestAccess'),
     provider_origin: providerOrigin,
     provider_id: compact(failure.provider_id) || undefined,
   };

@@ -1743,7 +1743,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('loading={action().loading}');
     expect(appSrc).toContain('disabled={action().disabled}');
     expect(appSrc).not.toContain('props.progress.error_message');
-    expect(appSrc).toContain('const panelProgress = createMemo(() => selectEnvironmentPanelProgress(primaryProgress(), runtimeMenuProgress()));');
+    expect(appSrc).toContain('guidanceSessionOwnsOpenFlowPanel(props.guidanceSession)\n      ? null\n      : selectEnvironmentPanelProgress(primaryProgress(), runtimeMenuProgress())');
     expect(appSrc).toContain('runtimeLifecycleProgress={runtimeMenuProgress()}');
     expect(appSrc).toContain('busyStateBlocksEnvironmentAction(busyState, environmentID, [\'stop_environment_runtime\', \'run_gateway_environment_lifecycle\', \'run_provider_environment_lifecycle\'], runtimeLifecycleProgress)');
     expect(appSrc).toContain('const progressPanelVisible = createMemo(() => props.progressOpen && hasPanelProgress());');
@@ -2369,7 +2369,7 @@ describe('DesktopWelcomeShell', () => {
     expect((styles.match(/100dvh/g) ?? []).length).toBe(2);
 
     expect((appSrc.match(/<ConfirmDialog\b/g) ?? []).length).toBe(3);
-    expect((appSrc.match(/<Dialog\b/g) ?? []).length).toBe(7);
+    expect((appSrc.match(/<Dialog\b/g) ?? []).length).toBe(5);
     expect((appSrc.match(/class=\{LOCAL_ENVIRONMENT_SETTINGS_DIALOG_CLASS\}/g) ?? []).length).toBe(1);
     expect((appSrc.match(/class=\{CONNECTION_DIALOG_CLASS\}/g) ?? []).length).toBe(2);
     expect(appSrc).toContain('function ControlPlaneDialog');
@@ -2422,7 +2422,10 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toMatch(/<Dialog\b[^>]*open=\{props\.state\s*!==\s*null\}/);
     expect(appSrc).toMatch(/const isOpen = createMemo\(\(\) => props\.state !== null\)/);
     expect(appSrc).toMatch(/const isOpen = createMemo\(\(\) => props\.open\)/);
-    expect(appSrc).toContain('function RuntimeEnrollmentDialog');
+    expect(appSrc).not.toContain('function RuntimeEnrollmentDialog');
+    expect(appSrc).not.toContain('function ProviderRuntimeSetupDialog');
+    expect(appSrc).not.toContain("environmentInitialization.");
+    expect(appSrc).not.toContain('Set up Runtime management');
 
     // Provider runtime link dialog: selecting a provider environment is an
     // in-dialog choice, not an open/close transition. Keep it out of the

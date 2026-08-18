@@ -134,7 +134,7 @@ export function buildDesktopRuntimeOperationPlans(
     || runtimeServiceAllowsOpenAttempt(input.runtime_service);
   const managementBlockedStatus = runtimeTargetUnavailableStatus(input.runtime_control_status, openConnectionRequired);
   const managementBlocked = !!managementBlockedStatus;
-  const lifecycleSetupMessage = 'Set up Runtime management for this target before starting, stopping, restarting, or updating Runtime.';
+  const lifecycleSetupMessage = 'Initialize this environment before using lifecycle actions.';
   const blockedByRecoveryMaintenance = restartMaintenance && !optimisticOpenMaintenance;
   const openAvailability = input.running && canOpen && !blockedByRecoveryMaintenance && !managementBlocked
     ? 'available'

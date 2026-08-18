@@ -7,8 +7,19 @@ import {
 
 export type EnvironmentGuidancePendingIntent = Extract<
   EnvironmentActionIntent,
-  'refresh_runtime' | 'connect_provider_runtime' | 'disconnect_provider_runtime'
+  | 'refresh_runtime'
+  | 'connect_provider_runtime'
+  | 'disconnect_provider_runtime'
+  | 'initialize_and_open'
+  | 'start_and_open'
+  | 'request_open_access'
 >;
+
+export type EnvironmentOpenFlowStage =
+  | 'checking_access'
+  | 'preparing_environment'
+  | 'starting_environment'
+  | 'opening_workspace';
 
 export type EnvironmentGuidanceFeedbackTone = 'info' | 'warning' | 'error' | 'success';
 
@@ -21,6 +32,8 @@ export type EnvironmentGuidanceFeedback = Readonly<{
 export type EnvironmentGuidanceSessionState = Readonly<{
   environment_id: string;
   pending_intent: EnvironmentGuidancePendingIntent | null;
+  open_flow_stage?: EnvironmentOpenFlowStage;
+  retry_intent?: Extract<EnvironmentGuidancePendingIntent, 'initialize_and_open' | 'start_and_open' | 'request_open_access'>;
   feedback: EnvironmentGuidanceFeedback | null;
 }> | null;
 
@@ -31,7 +44,10 @@ export function isEnvironmentGuidancePendingIntent(
 ): intent is EnvironmentGuidancePendingIntent {
   return intent === 'refresh_runtime'
     || intent === 'connect_provider_runtime'
-    || intent === 'disconnect_provider_runtime';
+    || intent === 'disconnect_provider_runtime'
+    || intent === 'initialize_and_open'
+    || intent === 'start_and_open'
+    || intent === 'request_open_access';
 }
 
 export function openEnvironmentGuidanceSession(
@@ -59,8 +75,21 @@ export function startEnvironmentGuidanceIntent(
   return {
     environment_id: session.environment_id,
     pending_intent: intent,
+    ...(intent === 'initialize_and_open' || intent === 'start_and_open'
+      ? { open_flow_stage: 'checking_access' as const }
+      : {}),
     feedback: null,
   };
+}
+
+export function advanceEnvironmentOpenFlowStage(
+  state: EnvironmentGuidanceSessionState,
+  stage: EnvironmentOpenFlowStage,
+): EnvironmentGuidanceSessionState {
+  if (!state || (state.pending_intent !== 'initialize_and_open' && state.pending_intent !== 'start_and_open')) {
+    return state;
+  }
+  return { ...state, open_flow_stage: stage };
 }
 
 export function failEnvironmentGuidanceIntent(
@@ -83,6 +112,21 @@ export function failEnvironmentGuidanceIntent(
           title: 'Provider unlink failed',
           detail: 'Desktop could not disconnect this runtime from its provider Environment.',
         };
+      case 'initialize_and_open':
+        return {
+          title: 'Initialization failed',
+          detail: 'Redeven could not prepare this environment. Try again.',
+        };
+      case 'start_and_open':
+        return {
+          title: 'Start failed',
+          detail: 'Redeven could not start this environment. Try again.',
+        };
+      case 'request_open_access':
+        return {
+          title: 'Request access',
+          detail: 'Redeven could not request access to this environment. Try again.',
+        };
       default:
         return {
           title: 'Status refresh failed',
@@ -94,6 +138,11 @@ export function failEnvironmentGuidanceIntent(
   return {
     ...state,
     pending_intent: null,
+    ...(state.pending_intent === 'initialize_and_open'
+      || state.pending_intent === 'start_and_open'
+      || state.pending_intent === 'request_open_access'
+      ? { retry_intent: state.pending_intent }
+      : {}),
     feedback: {
       tone: 'error',
       title: fallback.title,
@@ -191,6 +240,15 @@ export function guidanceSessionKeepsPopoverOpen(
   return Boolean(state?.pending_intent || state?.feedback);
 }
 
+export function guidanceSessionOwnsOpenFlowPanel(
+  state: EnvironmentGuidanceSessionState,
+): boolean {
+  const intent = state?.pending_intent ?? state?.retry_intent;
+  return intent === 'initialize_and_open'
+    || intent === 'start_and_open'
+    || intent === 'request_open_access';
+}
+
 export function guidanceSessionShouldAutoDismiss(
   state: EnvironmentGuidanceSessionState,
 ): boolean {
@@ -204,6 +262,35 @@ export function guidanceSessionNotice(
     return null;
   }
   switch (state.pending_intent) {
+    case 'initialize_and_open':
+    case 'start_and_open': {
+      const stage = state.open_flow_stage ?? 'checking_access';
+      const stageCopy: Record<EnvironmentOpenFlowStage, Readonly<{ title: string; detail: string }>> = {
+        checking_access: {
+          title: 'Checking access',
+          detail: 'Redeven is checking access before changing this environment.',
+        },
+        preparing_environment: {
+          title: 'Preparing environment',
+          detail: 'Redeven is preparing the environment so it can start safely.',
+        },
+        starting_environment: {
+          title: 'Starting environment',
+          detail: 'Redeven is starting the environment.',
+        },
+        opening_workspace: {
+          title: 'Opening workspace',
+          detail: 'Redeven is opening the workspace now.',
+        },
+      };
+      return { tone: 'info', ...stageCopy[stage] };
+    }
+    case 'request_open_access':
+      return {
+        tone: 'info',
+        title: 'Requesting access',
+        detail: 'Redeven is requesting access before opening the workspace.',
+      };
     case 'refresh_runtime':
       return {
         tone: 'info',
@@ -237,6 +324,9 @@ export function reconcileEnvironmentGuidanceSession(
   const environment = entries.find((entry) => entry.id === state.environment_id);
   if (!environment) {
     return null;
+  }
+  if (guidanceSessionOwnsOpenFlowPanel(state)) {
+    return state;
   }
   if (!environmentSupportsGuidancePopover(environment)) {
     return guidanceSessionKeepsPopoverOpen(state)
