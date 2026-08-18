@@ -17,8 +17,12 @@ describe('Redeven v1 terminal notifications', () => {
 
   it('keeps terminal metadata notifications on unique consecutive type IDs', () => {
     const notifyHandlers = new Map<number, (payload: unknown) => void>();
-    const onNotify = vi.fn((typeId: number, handler: (payload: unknown) => void) => {
-      notifyHandlers.set(typeId, handler);
+    const onNotify = vi.fn((
+      typeId: number,
+      decodePayload: (payload: unknown) => unknown,
+      handler: (payload: unknown) => void,
+    ) => {
+      notifyHandlers.set(typeId, (payload) => handler(decodePayload(payload)));
       return () => notifyHandlers.delete(typeId);
     });
     const rpc = createRedevenV1Rpc({
@@ -75,8 +79,14 @@ describe('Redeven v1 terminal notifications', () => {
     let outputNotify: ((payload: unknown) => void) | undefined;
     const rpc = createRedevenV1Rpc({
       call: vi.fn(),
-      onNotify: (typeId: number, handler: (payload: unknown) => void) => {
-        if (typeId === 2014) outputNotify = handler;
+      onNotify: (
+        typeId: number,
+        decodePayload: (payload: unknown) => unknown,
+        handler: (payload: unknown) => void,
+      ) => {
+        if (typeId === 2014) {
+          outputNotify = (payload) => handler(decodePayload(payload));
+        }
         return () => undefined;
       },
     } as any);
@@ -135,8 +145,14 @@ describe('Redeven v1 terminal notifications', () => {
     let notify: ((payload: unknown) => void) | undefined;
     const rpc = createRedevenV1Rpc({
       call: vi.fn(),
-      onNotify: (candidateTypeId: number, handler: (candidate: unknown) => void) => {
-        if (candidateTypeId === typeId) notify = handler;
+      onNotify: (
+        candidateTypeId: number,
+        decodePayload: (candidate: unknown) => unknown,
+        handler: (candidate: unknown) => void,
+      ) => {
+        if (candidateTypeId === typeId) {
+          notify = (candidate) => handler(decodePayload(candidate));
+        }
         return () => undefined;
       },
     } as any);

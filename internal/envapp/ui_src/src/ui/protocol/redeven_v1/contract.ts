@@ -185,6 +185,21 @@ function decodeWire<Wire, Result>(
   return (value: JsonValue) => decoder(validateRedevenWireValue<Wire>(schemaName, value));
 }
 
+function decodeNotificationWire<Wire, Result>(
+  schemaName: RedevenWireSchemaName,
+  decoder: (value: Wire) => Result,
+): (value: JsonValue) => Result | null {
+  return (value: JsonValue) => {
+    let wire: Wire;
+    try {
+      wire = validateRedevenWireValue<Wire>(schemaName, value);
+    } catch {
+      return null;
+    }
+    return decoder(wire);
+  };
+}
+
 export type RedevenV1Rpc = {
   fs: {
     getPathContext: () => Promise<FsPathContextResponse>;
@@ -511,7 +526,7 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
           if (ev) handler(ev);
         }),
       onOutputActivityUpdate: (handler) =>
-        helpers.onNotify(redevenV1TypeIds.terminal.outputActivityUpdate, decodeWire(redevenWireSchemaNames.fromWireTerminalOutputActivityUpdateNotify, fromWireTerminalOutputActivityUpdateNotify), (ev) => {
+        helpers.onNotify(redevenV1TypeIds.terminal.outputActivityUpdate, decodeNotificationWire(redevenWireSchemaNames.fromWireTerminalOutputActivityUpdateNotify, fromWireTerminalOutputActivityUpdateNotify), (ev) => {
           if (ev) {
             handler(ev);
             return;
@@ -530,7 +545,7 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
           });
         }),
       onExecutionContextUpdate: (handler) =>
-        helpers.onNotify(redevenV1TypeIds.terminal.executionContextUpdate, decodeWire(redevenWireSchemaNames.fromWireTerminalExecutionContextUpdateNotify, fromWireTerminalExecutionContextUpdateNotify), (ev) => {
+        helpers.onNotify(redevenV1TypeIds.terminal.executionContextUpdate, decodeNotificationWire(redevenWireSchemaNames.fromWireTerminalExecutionContextUpdateNotify, fromWireTerminalExecutionContextUpdateNotify), (ev) => {
           if (ev) {
             handler(ev);
             return;
@@ -549,7 +564,7 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
           });
         }),
       onWorkStateUpdate: (handler) =>
-        helpers.onNotify(redevenV1TypeIds.terminal.workStateUpdate, decodeWire(redevenWireSchemaNames.fromWireTerminalWorkStateUpdateNotify, fromWireTerminalWorkStateUpdateNotify), (ev) => {
+        helpers.onNotify(redevenV1TypeIds.terminal.workStateUpdate, decodeNotificationWire(redevenWireSchemaNames.fromWireTerminalWorkStateUpdateNotify, fromWireTerminalWorkStateUpdateNotify), (ev) => {
           if (ev) {
             handler(ev);
             return;
