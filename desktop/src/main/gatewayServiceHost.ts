@@ -22,6 +22,7 @@ import type { DesktopSSHTransportManager } from './sshTransportManager';
 import {
   buildDesktopSSHReleaseAssetURL,
   desktopSSHReleasePackageName,
+  resolveDesktopHostPlatform,
   resolveDesktopSSHRemotePlatform,
   type DesktopSSHRemotePlatform,
 } from './sshReleaseAssets';
@@ -695,7 +696,17 @@ async function probeGatewayPlatform(
   if (lines.length < 2) {
     throw new Error('Gateway target platform probe did not include operating system and architecture.');
   }
-  return resolveDesktopSSHRemotePlatform(lines[0] ?? '', lines[1] ?? '');
+  return resolveGatewayHostPlatform(options.hostAccess?.kind, lines[0] ?? '', lines[1] ?? '');
+}
+
+export function resolveGatewayHostPlatform(
+  hostAccessKind: DesktopRuntimeHostAccess['kind'] | undefined,
+  rawOS: string,
+  rawArch: string,
+): DesktopSSHRemotePlatform {
+  return hostAccessKind === 'local_host'
+    ? resolveDesktopHostPlatform(rawOS, rawArch)
+    : resolveDesktopSSHRemotePlatform(rawOS, rawArch);
 }
 
 async function installGatewayPackage(

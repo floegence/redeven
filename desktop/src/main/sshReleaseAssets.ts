@@ -95,7 +95,7 @@ function parseRemoteUnameOS(rawOS: string): 'linux' {
   throw new Error(`Unsupported remote operating system for SSH bootstrap: ${rawOS}`);
 }
 
-function parseRemoteUnameArch(rawArch: string): 'amd64' | 'arm64' {
+function parseUnameArch(rawArch: string, targetLabel: 'host' | 'remote'): 'amd64' | 'arm64' {
   const clean = compact(rawArch).toLowerCase();
   switch (clean) {
     case 'x86_64':
@@ -105,23 +105,40 @@ function parseRemoteUnameArch(rawArch: string): 'amd64' | 'arm64' {
     case 'arm64':
       return 'arm64';
     default:
-      throw new Error(`Unsupported remote architecture for SSH bootstrap: ${rawArch}`);
+      throw new Error(targetLabel === 'remote'
+        ? `Unsupported remote architecture for SSH bootstrap: ${rawArch}`
+        : `Unsupported host architecture for Desktop package bootstrap: ${rawArch}`);
   }
 }
 
-export function resolveDesktopSSHRemotePlatform(rawOS: string, rawArch: string): DesktopSSHRemotePlatform {
-  const goos = parseRemoteUnameOS(rawOS);
-  const goarch = parseRemoteUnameArch(rawArch);
-  const platformID: DesktopSSHRemotePlatform['platform_id'] = goarch === 'amd64'
-    ? 'linux_amd64'
-    : 'linux_arm64';
+function desktopReleasePlatform(
+  goos: DesktopSSHRemotePlatform['goos'],
+  goarch: DesktopSSHRemotePlatform['goarch'],
+): DesktopSSHRemotePlatform {
   return {
     goos,
     goarch,
-    platform_id: platformID,
+    platform_id: `${goos}_${goarch}`,
     release_package_name: `redeven_${goos}_${goarch}.tar.gz`,
     platform_label: `${goos}/${goarch}`,
   };
+}
+
+export function resolveDesktopHostPlatform(rawOS: string, rawArch: string): DesktopSSHRemotePlatform {
+  const cleanOS = compact(rawOS).toLowerCase();
+  const goos = cleanOS === 'linux'
+    ? 'linux'
+    : cleanOS === 'darwin'
+      ? 'darwin'
+      : null;
+  if (!goos) {
+    throw new Error(`Unsupported host operating system for Desktop package bootstrap: ${rawOS}`);
+  }
+  return desktopReleasePlatform(goos, parseUnameArch(rawArch, 'host'));
+}
+
+export function resolveDesktopSSHRemotePlatform(rawOS: string, rawArch: string): DesktopSSHRemotePlatform {
+  return desktopReleasePlatform(parseRemoteUnameOS(rawOS), parseUnameArch(rawArch, 'remote'));
 }
 
 export function desktopSSHReleasePackageName(

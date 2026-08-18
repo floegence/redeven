@@ -8,6 +8,7 @@ import {
   gatewayReleasePackageURL,
   gatewayServiceBinaryPath,
   gatewaySupervisorEnrollmentInvocation,
+  resolveGatewayHostPlatform,
 } from './gatewayServiceHost';
 import { DEFAULT_DESKTOP_SSH_RUNTIME_ROOT } from '../shared/desktopSSH';
 import type { DesktopRuntimePlacement } from '../shared/desktopRuntimePlacement';
@@ -42,6 +43,16 @@ describe('gatewayServiceHost', () => {
     expect(gatewayReleasePackageURL('https://mirror.example/releases/', '1.2.3', platform)).toBe(
       'https://mirror.example/releases/download/v1.2.3/redeven-gateway_linux_amd64.tar.gz',
     );
+  });
+
+  it('supports published macOS Gateway packages only for the local host', () => {
+    expect(resolveGatewayHostPlatform('local_host', 'Darwin', 'arm64')).toMatchObject({
+      goos: 'darwin',
+      goarch: 'arm64',
+      platform_id: 'darwin_arm64',
+    });
+    expect(() => resolveGatewayHostPlatform('ssh_host', 'Darwin', 'arm64')).toThrow('Unsupported remote');
+    expect(() => resolveGatewayHostPlatform(undefined, 'Darwin', 'arm64')).toThrow('Unsupported remote');
   });
 
   it('keeps Check Gateway deep probe read-only and bridge-free', () => {
