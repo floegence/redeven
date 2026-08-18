@@ -79,4 +79,63 @@ describe('Runtime lifecycle completion', () => {
     expect(calls).toEqual(['prepare', 'upload', 'commit']);
     expect(result).toBe(succeeded);
   });
+
+  it('continues after an artifact response is lost once the durable operation advances', async () => {
+    const artifact = Buffer.from('runtime archive');
+    const uploadError = new Error('artifact response lost');
+    const observed = [operation('staging'), operation('commit_ready')];
+    const commit = vi.fn(async () => operation('succeeded'));
+
+    await expect(advanceGatewayRuntimeOperation(operation('awaiting_artifact'), {
+      prepareArtifact: vi.fn(async () => ({
+        artifact,
+        metadata: {
+          size_bytes: artifact.length,
+          archive_sha256: 'a'.repeat(64),
+          executable_sha256: 'b'.repeat(64),
+          manifest: {},
+        },
+      })),
+      upload: vi.fn(async () => { throw uploadError; }),
+      commit,
+      observe: vi.fn(async () => observed.shift() ?? operation('commit_ready')),
+      wait: vi.fn(async () => undefined),
+    })).resolves.toMatchObject({ state: 'succeeded' });
+
+    expect(commit).toHaveBeenCalledOnce();
+  });
+
+  it('waits for a durable commit after its response is lost', async () => {
+    const commitError = new Error('commit response lost');
+    const observed = [operation('committing'), operation('succeeded')];
+
+    await expect(advanceGatewayRuntimeOperation(operation('commit_ready'), {
+      prepareArtifact: vi.fn(),
+      upload: vi.fn(),
+      commit: vi.fn(async () => { throw commitError; }),
+      observe: vi.fn(async () => observed.shift() ?? operation('succeeded')),
+      wait: vi.fn(async () => undefined),
+    })).resolves.toMatchObject({ state: 'succeeded' });
+  });
+
+  it('preserves the transport failure when the operation did not advance', async () => {
+    const uploadError = new Error('upload was not accepted');
+    const artifact = Buffer.from('runtime archive');
+
+    await expect(advanceGatewayRuntimeOperation(operation('awaiting_artifact'), {
+      prepareArtifact: vi.fn(async () => ({
+        artifact,
+        metadata: {
+          size_bytes: artifact.length,
+          archive_sha256: 'a'.repeat(64),
+          executable_sha256: 'b'.repeat(64),
+          manifest: {},
+        },
+      })),
+      upload: vi.fn(async () => { throw uploadError; }),
+      commit: vi.fn(),
+      observe: vi.fn(async () => operation('awaiting_artifact')),
+      wait: vi.fn(async () => undefined),
+    })).rejects.toBe(uploadError);
+  });
 });

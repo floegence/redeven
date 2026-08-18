@@ -20,6 +20,7 @@ vi.mock('./runtimeHostAccess', async () => {
 import {
   encodeRuntimePlacementBridgeFrame,
   readRuntimePlacementBridgeFrame,
+  RUNTIME_PLACEMENT_BRIDGE_MAX_PAYLOAD_BYTES,
 } from './runtimePlacementBridgeProtocol';
 import { startRuntimePlacementBridgeSession } from './runtimePlacementBridgeSession';
 import { observeRuntimePlacementBridge } from './runtimePlacementBridgeObservation';
@@ -263,6 +264,33 @@ describe('runtimePlacementBridgeSession lifecycle', () => {
     const session = await startMockedSession(command);
     try {
       expect(session.startup.started_at_unix_ms).toBe(1778751234567);
+    } finally {
+      await session.disconnect();
+    }
+  });
+
+  it('chunks large stream writes into bounded bridge frames without changing bytes', async () => {
+    const command = createMockBridgeCommand();
+    const session = await startMockedSession(command);
+    try {
+      const stream = session.openStream('gateway_protocol');
+      const openFrame = await readRuntimePlacementBridgeFrame(command.stdin);
+      expect(openFrame?.header.type).toBe('stream_open');
+
+      const payload = Buffer.alloc(RUNTIME_PLACEMENT_BRIDGE_MAX_PAYLOAD_BYTES + 17, 0x5a);
+      const framesTask = (async () => [
+        await readRuntimePlacementBridgeFrame(command.stdin),
+        await readRuntimePlacementBridgeFrame(command.stdin),
+      ] as const)();
+      const writeTask = stream.write(payload);
+      await writeTask;
+      const [first, second] = await framesTask;
+
+      expect(first?.header).toMatchObject({ type: 'stream_data', stream_id: stream.id });
+      expect(first?.payload).toHaveLength(RUNTIME_PLACEMENT_BRIDGE_MAX_PAYLOAD_BYTES);
+      expect(second?.header).toMatchObject({ type: 'stream_data', stream_id: stream.id });
+      expect(second?.payload).toHaveLength(17);
+      expect(Buffer.concat([first?.payload ?? Buffer.alloc(0), second?.payload ?? Buffer.alloc(0)]).equals(payload)).toBe(true);
     } finally {
       await session.disconnect();
     }

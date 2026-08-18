@@ -17,7 +17,7 @@ Local, SSH, local-container, and SSH-container paths with a clear supervisor set
 
 ## Startup and access
 
-Local UI password and network exposure acknowledgement are startup configuration, not Runtime lifecycle ownership. Health probes are read-only and do not start, stop, or reconnect a service. SSH/container bridge startup performs one typed health and open-readiness probe before opening a window; failed probes end that open attempt without selecting another transport. Existing bridge recovery validates exact process, token, target, and protocol identity, and never migrates a session to a different Runtime.
+Local UI password and network exposure acknowledgement are startup configuration, not Runtime lifecycle ownership. The Local Environment catalog `local_hosting.state_dir` is the Runtime state root itself; attach, status, lifecycle, and Open must not reinterpret its parent as another root. Long Unix control-socket paths resolve through a stable `/tmp` digest path so independently launched Desktop, Gateway, and Runtime processes address the same socket even when their inherited `TMPDIR` values differ. Health probes are read-only and do not start, stop, or reconnect a service. SSH/container bridge startup performs one typed health and open-readiness probe before opening a window; failed probes end that open attempt without selecting another transport. Existing bridge recovery validates exact process, token, target, and protocol identity, and never migrates a session to a different Runtime.
 
 An accepted destructive lifecycle operation closes the attached Env App session through the shared operation coordinator. A disconnected Desktop leaves the Gateway operation running; a later open attaches to the durable progress. Lifecycle incompatibility disables only the management area; Connect, Workspace, and Runtime UI remain available.
 
@@ -25,7 +25,7 @@ An accepted destructive lifecycle operation closes the attached Env App session 
 
 Every Environment row uses `Open` as its primary action. URL and other access-only connections open directly. A running Runtime also opens directly, even when lifecycle setup facts are unavailable or stale. When a Local or SSH Runtime has not been observed yet, that same Open click owns one transient access preflight: successful access opens immediately, while a failed attempt refreshes the Environment and continues in the same panel as initialization, start, or access guidance. It must not surface the obsolete offline error before evaluating that refreshed lifecycle state. For a lifecycle-capable Environment, a confirmed missing setup opens one `Initialize and open` panel; an initialized but stopped Runtime opens one `Start and open` panel. An existing binding whose managed service stopped with Desktop is still initialized: `Start and open` uses the authorized lifecycle entrypoint, which restores that service before starting the Runtime, instead of falling back to a direct offline Open. Provider authorization denial is resolved before initialization work begins and presents `Request access`.
 
-The initialization panel owns its interaction until completion. It reports `Check access`, `Prepare environment`, `Start environment`, and `Open workspace` in execution order while the internal Gateway progress remains hidden. The start-only path omits the preparation stage. Success opens the workspace and closes the panel. Failure preserves the exact user-facing reason in that panel and exposes `Retry initialization`; an access failure exposes `Request access`. Snapshot refresh and lower-level operation progress cannot prematurely replace or complete this session.
+The initialization panel owns its interaction until completion. It reports `Check access`, `Prepare environment`, `Start environment`, and `Open workspace` in execution order while the internal Gateway progress remains hidden. The start-only path omits the preparation stage. A lifecycle success is not enough to complete the action: Desktop waits for a fresh Runtime health sample with open readiness before opening, and waits for a fresh offline sample after stop. The final Open request remains authoritative when the first renderer snapshot is stale. Success opens the workspace and closes the panel. Failure preserves the exact user-facing reason in that panel and exposes `Retry initialization`; an access failure exposes `Request access`. Snapshot refresh and lower-level operation progress cannot prematurely replace or complete this session.
 
 # Boundaries
 
@@ -36,8 +36,11 @@ Environment open guidance does not display Gateway, Desktop ownership, target bi
 - `redeven:desktop/src/shared/desktopRuntimeOperationPlanner.ts:1` - Shared support/authorization/readiness projection and preflight.
 - `redeven:desktop/src/shared/desktopRuntimeHealth.ts:1` - Typed health observation independent from lifecycle commands.
 - `redeven:desktop/src/main/runtimePlacementBridgeSession.ts:337` - One exact bridge session identity for SSH and container access.
+- `redeven:desktop/src/main/runtimeLifecycleReadiness.ts:1` - Fresh online/openable and offline completion barriers.
+- `redeven:desktop/src/main/statePaths.ts:1` - Stable cross-process Unix control-socket fallback.
 - `redeven:desktop/src/welcome/viewModel.ts:1239` - Direct, preflight, initialize, start, and request-access open-flow decision.
 - `redeven:desktop/src/welcome/environmentOpenPreflight.ts:1` - Unknown-state Open preflight and refreshed lifecycle routing.
 - `redeven:desktop/src/welcome/environmentOpenPreflight.smoke.test.ts:1` - Open, initialize, start, and authorization smoke outcomes.
 - `redeven:desktop/src/welcome/environmentGuidanceSession.ts:1` - Panel ownership, ordered stages, failure retention, and retry state.
 - `redeven:desktop/src/welcome/App.tsx:5104` - One localized initialize/start/open orchestrator.
+- `redeven:scripts/smoke_desktop_runtime_lifecycle.mjs:1` - Real Local and SSH Remote Open and lifecycle outcomes.

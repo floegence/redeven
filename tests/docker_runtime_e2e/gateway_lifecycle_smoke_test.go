@@ -77,8 +77,8 @@ type gatewayLifecycleClient struct {
 	nonceCounter  uint64
 }
 
-func TestDockerUbuntuLocalGatewayStartsRuntimeAfterDesktopRestart(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
+func TestDockerUbuntuLocalGatewayRuntimeLifecycle(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 7*time.Minute)
 	defer cancel()
 
 	f := newFixture(t)
@@ -88,20 +88,54 @@ func TestDockerUbuntuLocalGatewayStartsRuntimeAfterDesktopRestart(t *testing.T) 
 	f.detectContainerArch(ctx)
 	f.buildBinaries(ctx)
 
-	f.startRuntime(ctx)
-	initial := f.waitReady(ctx)
-	initialIdentity := f.runtimeLifecycleIdentity(ctx, initial)
+	initialVersion := f.containerRuntimeVersion(ctx, containerRedeven)
+	f.startRuntimeFromExecutable(ctx, containerRedeven)
+	standalone := f.waitReady(ctx)
+	standaloneIdentity := f.runtimeLifecycleIdentity(ctx, standalone)
+	f.openBridgeAndAssertRequests(ctx, standalone)
+	f.stopRuntime(ctx)
+	f.removeManagedRuntime(ctx)
+
 	service := f.startGatewayService(ctx)
 	bridge := f.startGatewayBridge(ctx)
+	defer bridge.close()
 	client := pairGatewayLifecycleClient(t, bridge, service.Listen)
-	capability := readRuntimeCapability(t, client)
-	if capability.Readiness != gatewayprotocol.ManagementReady || capability.Target == nil || capability.Compatibility == nil {
-		t.Fatalf("Linux Local Env management capability is not ready: %#v", capability)
+	missing := readRuntimeCapability(t, client)
+	if missing.Readiness != gatewayprotocol.ManagementReady || missing.Target == nil || missing.Compatibility == nil ||
+		!containsRuntimeOperation(missing.Operations, gatewayprotocol.RuntimeOperationUpdate) ||
+		containsRuntimeOperation(missing.Operations, gatewayprotocol.RuntimeOperationStart) ||
+		!containsArtifactPolicy(missing.ArtifactPolicies, gatewayprotocol.ArtifactPolicyCustomBuild) {
+		t.Fatalf("Linux Local Env missing Runtime capability does not expose initialization without start: %#v", missing)
 	}
+	initializeID := "linux-local-initialize"
+	initializeMetadata := runDockerCustomRuntimeUpdate(
+		t,
+		f,
+		client,
+		*missing.Target,
+		*missing.Compatibility,
+		initializeID,
+		initialVersion,
+		filepath.Join(f.tempRoot, "redeven-linux"),
+	)
+	initial := f.waitReady(ctx)
+	initialIdentity := f.runtimeLifecycleIdentity(ctx, initial)
+	if initialIdentity.RuntimeInstanceID == standaloneIdentity.RuntimeInstanceID ||
+		initialIdentity.ArtifactSHA256 != initializeMetadata.ExecutableSHA256 {
+		t.Fatalf("Linux Local Env initialization did not install and start the authorized Runtime: standalone=%#v initialized=%#v", standaloneIdentity, initialIdentity)
+	}
+	f.openBridgeAndAssertRequests(ctx, initial)
+
+	capability := readRuntimeCapability(t, client)
+	if capability.Target == nil || capability.Compatibility == nil ||
+		!containsRuntimeOperation(capability.Operations, gatewayprotocol.RuntimeOperationStop) {
+		t.Fatalf("Linux Local Env initialized capability is incomplete: %#v", capability)
+	}
+	runDockerLifecycleOperation(t, client, *capability.Target, *capability.Compatibility, "linux-local-stop", gatewayprotocol.RuntimeOperationStop)
+	f.stopRuntime(ctx)
 
 	bridge.close()
 	f.stopGatewayService(ctx)
-	f.stopRuntime(ctx)
 	if status, err := f.readGatewayServiceStatus(ctx); err != nil || status.Status != "not_running" {
 		t.Fatalf("Linux Local Env Gateway remained active across simulated Desktop restart: %#v, %v", status, err)
 	}
@@ -111,7 +145,6 @@ func TestDockerUbuntuLocalGatewayStartsRuntimeAfterDesktopRestart(t *testing.T) 
 		t.Fatalf("Linux Local Env Gateway did not restart with a new process identity: before=%#v after=%#v", service, restartedService)
 	}
 	bridge = f.startGatewayBridge(ctx)
-	defer bridge.close()
 	client.bridge = bridge
 	offlineCapability := readRuntimeCapability(t, client)
 	if offlineCapability.Readiness != gatewayprotocol.ManagementReady ||
@@ -122,40 +155,145 @@ func TestDockerUbuntuLocalGatewayStartsRuntimeAfterDesktopRestart(t *testing.T) 
 	}
 
 	operationID := "linux-local-start-after-desktop-restart"
-	prepared := prepareRuntimeOperation(
-		t,
-		client,
-		*offlineCapability.Target,
-		*offlineCapability.Compatibility,
-		operationID,
-		gatewayprotocol.RuntimeOperationStart,
-		gatewayprotocol.ArtifactPolicyPublishedRelease,
-		nil,
-	)
-	if prepared.Operation.State != gatewayprotocol.RuntimeOperationAwaitingConfirmation {
-		t.Fatalf("Linux Local Env start prepare state = %q, want awaiting_confirmation", prepared.Operation.State)
-	}
-	confirmed := confirmRuntimeOperation(t, client, prepared.Operation)
-	if confirmed.State != gatewayprotocol.RuntimeOperationCommitReady {
-		t.Fatalf("Linux Local Env start confirmation state = %q, want commit_ready", confirmed.State)
-	}
-	committed := decodeOperationResponse(t, client.call(t, http.MethodPost, "/gateway/v2/runtime-operations/"+operationID+"/commit", []byte(`{}`), nil, nil))
-	if committed.State != gatewayprotocol.RuntimeOperationSucceeded {
-		t.Fatalf("Linux Local Env start commit state = %q, want succeeded", committed.State)
-	}
+	runDockerLifecycleOperation(t, client, *offlineCapability.Target, *offlineCapability.Compatibility, operationID, gatewayprotocol.RuntimeOperationStart)
 	afterStart := f.waitReady(ctx)
 	afterStartIdentity := f.runtimeLifecycleIdentity(ctx, afterStart)
 	if afterStart.PID == initial.PID || afterStartIdentity.RuntimeInstanceID == initialIdentity.RuntimeInstanceID {
 		t.Fatalf("Linux Local Env lifecycle start reused the stopped Runtime identity: before=%#v/%#v after=%#v/%#v", initial, initialIdentity, afterStart, afterStartIdentity)
 	}
-	assertLifecycleEvents(t, client, operationID, []gatewayprotocol.RuntimeOperationState{
+	f.openBridgeAndAssertRequests(ctx, afterStart)
+	afterStartPing := f.runHelper(ctx, afterStart.LocalUIURL, "ping", "")
+	if afterStartPing.Ping == nil {
+		t.Fatalf("Linux Local Env started Runtime did not answer ping: %#v", afterStartPing)
+	}
+
+	capability = readRuntimeCapability(t, client)
+	runDockerLifecycleOperation(t, client, *capability.Target, *capability.Compatibility, "linux-local-restart", gatewayprotocol.RuntimeOperationRestart)
+	afterRestart := f.waitPingAfter(ctx, afterStartPing.Ping.ProcessStartedAtMs)
+	afterRestartStatus := f.waitReady(ctx)
+	afterRestartIdentity := f.runtimeLifecycleIdentity(ctx, afterRestartStatus)
+	if afterRestartIdentity.RuntimeInstanceID == afterStartIdentity.RuntimeInstanceID || afterRestartStatus.PID == afterStart.PID {
+		t.Fatalf("Linux Local Env restart reused the Runtime identity: before=%#v/%#v after=%#v/%#v", afterStartIdentity, afterStart, afterRestartIdentity, afterRestartStatus)
+	}
+	f.openBridgeAndAssertRequests(ctx, afterRestartStatus)
+
+	capability = readRuntimeCapability(t, client)
+	updateID := "linux-local-update"
+	updateMetadata := runDockerCustomRuntimeUpdate(
+		t,
+		f,
+		client,
+		*capability.Target,
+		*capability.Compatibility,
+		updateID,
+		targetVersion,
+		filepath.Join(f.tempRoot, "redeven-linux-upgraded"),
+	)
+	afterUpdate := f.waitPingAfter(ctx, afterRestart.ProcessStartedAtMs)
+	afterUpdateStatus := f.waitReady(ctx)
+	afterUpdateIdentity := f.runtimeLifecycleIdentity(ctx, afterUpdateStatus)
+	if afterUpdate.Version != targetVersion ||
+		afterUpdateIdentity.RuntimeInstanceID == afterRestartIdentity.RuntimeInstanceID ||
+		afterUpdateIdentity.RuntimeBinaryVersion != targetVersion ||
+		afterUpdateIdentity.ArtifactSHA256 != updateMetadata.ExecutableSHA256 {
+		t.Fatalf("Linux Local Env update did not replace Runtime version, identity, and digest: before=%#v after=%#v", afterRestartIdentity, afterUpdateIdentity)
+	}
+	f.openBridgeAndAssertRequests(ctx, afterUpdateStatus)
+
+	bridge.close()
+	f.stopGatewayService(ctx)
+	restartedService = f.startGatewayService(ctx)
+	bridge = f.startGatewayBridge(ctx)
+	client.bridge = bridge
+	persisted := decodeOperationResponse(t, client.call(t, http.MethodGet, "/gateway/v2/runtime-operations/"+updateID, nil, nil, nil))
+	if persisted.State != gatewayprotocol.RuntimeOperationSucceeded {
+		t.Fatalf("Linux Local Env update state after Gateway restart = %q, want succeeded", persisted.State)
+	}
+	assertLifecycleEvents(t, client, updateID, customUpdateEvents())
+	f.openBridgeAndAssertRequests(ctx, afterUpdateStatus)
+	bridge.close()
+}
+
+func runDockerLifecycleOperation(
+	t *testing.T,
+	client *gatewayLifecycleClient,
+	target gatewayprotocol.LifecycleTarget,
+	compatibility gatewayprotocol.RuntimeManagementCompatibility,
+	operationID string,
+	kind gatewayprotocol.RuntimeOperationKind,
+) {
+	t.Helper()
+	prepared := prepareRuntimeOperation(t, client, target, compatibility, operationID, kind, gatewayprotocol.ArtifactPolicyPublishedRelease, nil)
+	if prepared.Operation.State != gatewayprotocol.RuntimeOperationAwaitingConfirmation {
+		t.Fatalf("%s prepare state = %q, want awaiting_confirmation", kind, prepared.Operation.State)
+	}
+	if confirmed := confirmRuntimeOperation(t, client, prepared.Operation); confirmed.State != gatewayprotocol.RuntimeOperationCommitReady {
+		t.Fatalf("%s confirmation state = %q, want commit_ready", kind, confirmed.State)
+	}
+	if committed := decodeOperationResponse(t, client.call(t, http.MethodPost, "/gateway/v2/runtime-operations/"+operationID+"/commit", []byte(`{}`), nil, nil)); committed.State != gatewayprotocol.RuntimeOperationSucceeded {
+		t.Fatalf("%s commit state = %q, want succeeded", kind, committed.State)
+	}
+	assertLifecycleEvents(t, client, operationID, lifecycleCommitEvents())
+}
+
+func runDockerCustomRuntimeUpdate(
+	t *testing.T,
+	f *fixture,
+	client *gatewayLifecycleClient,
+	target gatewayprotocol.LifecycleTarget,
+	compatibility gatewayprotocol.RuntimeManagementCompatibility,
+	operationID string,
+	desiredVersion string,
+	binaryPath string,
+) gatewayprotocol.RuntimeArtifactMetadata {
+	t.Helper()
+	buildInputs := json.RawMessage(`{"source":"docker-local-lifecycle-smoke","target_version":` + fmt.Sprintf("%q", desiredVersion) + `}`)
+	prepared := prepareRuntimeOperationWithVersion(
+		t, client, target, compatibility, operationID, gatewayprotocol.RuntimeOperationUpdate,
+		gatewayprotocol.ArtifactPolicyCustomBuild, buildInputs, desiredVersion,
+	)
+	if prepared.Operation.State != gatewayprotocol.RuntimeOperationAwaitingConfirmation {
+		t.Fatalf("custom update prepare state = %q, want awaiting_confirmation", prepared.Operation.State)
+	}
+	if confirmed := confirmRuntimeOperation(t, client, prepared.Operation); confirmed.State != gatewayprotocol.RuntimeOperationAwaitingArtifact {
+		t.Fatalf("custom update confirmation state = %q, want awaiting_artifact", confirmed.State)
+	}
+	artifact, metadata := makeCustomRuntimeArtifactFromBinary(t, f, binaryPath, operationID, target, compatibility, buildInputs)
+	metadataJSON := mustJSON(t, metadata)
+	staged := client.call(t, http.MethodPut, "/gateway/v2/runtime-operations/"+operationID+"/artifact", artifact,
+		map[string]string{"X-Redeven-Runtime-Artifact-Metadata": base64.RawURLEncoding.EncodeToString(metadataJSON)}, metadataJSON)
+	if !staged.OK || decodeOperationResponse(t, staged).State != gatewayprotocol.RuntimeOperationCommitReady {
+		t.Fatalf("custom update artifact upload failed: %#v", staged)
+	}
+	if committed := decodeOperationResponse(t, client.call(t, http.MethodPost, "/gateway/v2/runtime-operations/"+operationID+"/commit", []byte(`{}`), nil, nil)); committed.State != gatewayprotocol.RuntimeOperationSucceeded {
+		t.Fatalf("custom update commit state = %q, want succeeded", committed.State)
+	}
+	assertLifecycleEvents(t, client, operationID, customUpdateEvents())
+	return metadata
+}
+
+func lifecycleCommitEvents() []gatewayprotocol.RuntimeOperationState {
+	return []gatewayprotocol.RuntimeOperationState{
 		gatewayprotocol.RuntimeOperationPreflighting,
 		gatewayprotocol.RuntimeOperationAwaitingConfirmation,
 		gatewayprotocol.RuntimeOperationCommitReady,
 		gatewayprotocol.RuntimeOperationFencing,
 		gatewayprotocol.RuntimeOperationCommitting,
 		gatewayprotocol.RuntimeOperationSucceeded,
-	})
+	}
+}
+
+func customUpdateEvents() []gatewayprotocol.RuntimeOperationState {
+	return []gatewayprotocol.RuntimeOperationState{
+		gatewayprotocol.RuntimeOperationPreflighting,
+		gatewayprotocol.RuntimeOperationAwaitingConfirmation,
+		gatewayprotocol.RuntimeOperationAwaitingArtifact,
+		gatewayprotocol.RuntimeOperationStaging,
+		gatewayprotocol.RuntimeOperationCommitReady,
+		gatewayprotocol.RuntimeOperationFencing,
+		gatewayprotocol.RuntimeOperationCommitting,
+		gatewayprotocol.RuntimeOperationSucceeded,
+	}
 }
 
 func TestDockerUbuntuGatewayRuntimeLifecycle(t *testing.T) {
@@ -175,17 +313,23 @@ func TestDockerUbuntuGatewayRuntimeLifecycle(t *testing.T) {
 		t.Fatalf("Gateway service status before startup = %#v, %v", serviceBeforeStart, err)
 	}
 	// Runtime data flow remains available before Gateway starts.
-	f.startRuntime(ctx)
-	initial := f.waitReady(ctx)
-	initialPing := f.runHelper(ctx, initial.LocalUIURL, "ping", "")
-	if initialPing.Ping == nil || initialPing.Ping.ProcessStartedAtMs <= 0 {
-		t.Fatalf("Runtime is not independently usable before Gateway startup: %#v", initialPing)
+	initialVersion := f.containerRuntimeVersion(ctx, containerRedeven)
+	f.startRuntimeFromExecutable(ctx, containerRedeven)
+	standalone := f.waitReady(ctx)
+	standalonePing := f.runHelper(ctx, standalone.LocalUIURL, "ping", "")
+	if standalonePing.Ping == nil || standalonePing.Ping.ProcessStartedAtMs <= 0 {
+		t.Fatalf("Runtime is not independently usable before Gateway startup: %#v", standalonePing)
 	}
-	initialIdentity := f.runtimeLifecycleIdentity(ctx, initial)
-	if !containsString(initialIdentity.Capabilities, "lifecycle_fence_v1") {
-		t.Fatalf("Runtime identity does not expose lifecycle fencing: %#v", initialIdentity)
+	standaloneIdentity := f.runtimeLifecycleIdentity(ctx, standalone)
+	if !containsString(standaloneIdentity.Capabilities, "lifecycle_fence_v1") {
+		t.Fatalf("Runtime identity does not expose lifecycle fencing: %#v", standaloneIdentity)
 	}
-	f.openBridgeAndAssertRequests(ctx, initial)
+	f.openBridgeAndAssertRequests(ctx, standalone)
+	f.stopRuntime(ctx)
+	f.removeManagedRuntime(ctx)
+	if result := f.dockerExec(ctx, nil, "test", "!", "-e", managedRedeven); strings.TrimSpace(result.Stdout) != "" {
+		t.Fatalf("managed Runtime unexpectedly exists before initialization: %s", result.Stdout)
+	}
 
 	service := f.startGatewayServiceOverSSH(ctx)
 	if service.Status != "running" || service.PID <= 0 || service.Listen == "" {
@@ -195,27 +339,98 @@ func TestDockerUbuntuGatewayRuntimeLifecycle(t *testing.T) {
 	defer bridge.close()
 	lifecycleClient := pairGatewayLifecycleClient(t, bridge, service.Listen)
 
-	capability := readRuntimeCapability(t, lifecycleClient)
-	if capability.Support != gatewayprotocol.CapabilitySupportSupported ||
-		capability.Authorization.State != gatewayprotocol.AuthorizationAllowed ||
-		capability.Readiness != gatewayprotocol.ManagementReady ||
-		capability.Target == nil || capability.Target.LifecycleTargetID == "" || capability.Target.TargetGeneration <= 0 || capability.Compatibility == nil {
-		t.Fatalf("unexpected Runtime management capability: %#v", capability)
+	missingCapability := readRuntimeCapability(t, lifecycleClient)
+	if missingCapability.Support != gatewayprotocol.CapabilitySupportSupported ||
+		missingCapability.Authorization.State != gatewayprotocol.AuthorizationAllowed ||
+		missingCapability.Readiness != gatewayprotocol.ManagementReady ||
+		missingCapability.Target == nil || missingCapability.Target.LifecycleTargetID == "" || missingCapability.Target.TargetGeneration <= 0 || missingCapability.Compatibility == nil ||
+		!containsRuntimeOperation(missingCapability.Operations, gatewayprotocol.RuntimeOperationUpdate) ||
+		containsRuntimeOperation(missingCapability.Operations, gatewayprotocol.RuntimeOperationStart) ||
+		!containsArtifactPolicy(missingCapability.ArtifactPolicies, gatewayprotocol.ArtifactPolicyCustomBuild) {
+		t.Fatalf("missing Runtime capability does not expose initialization without start: %#v", missingCapability)
 	}
-	if capability.SupervisionMode != "gateway_supervisor" ||
-		capability.Compatibility.GatewayProtocol != gatewayprotocol.Version ||
-		capability.Compatibility.RuntimeServiceProtocol != runtimeservice.ProtocolVersion ||
-		capability.Compatibility.CompatibilityEpoch != runtimeservice.CurrentCompatibilityContract().CompatibilityEpoch ||
-		!containsString(capability.Compatibility.Capabilities, "runtime_operations_v2") ||
-		!containsString(capability.Compatibility.Capabilities, "signed_artifact_policy_v1") ||
-		capability.Compatibility.RuntimeArtifactSHA256 != initialIdentity.ArtifactSHA256 ||
-		capability.Compatibility.RuntimeBinaryVersion != initialIdentity.RuntimeBinaryVersion {
-		t.Fatalf("capability does not expose Gateway target identity and Runtime digest: %#v", capability)
+	if missingCapability.SupervisionMode != "gateway_supervisor" ||
+		missingCapability.Compatibility.GatewayProtocol != gatewayprotocol.Version ||
+		missingCapability.Compatibility.RuntimeServiceProtocol != runtimeservice.ProtocolVersion ||
+		missingCapability.Compatibility.CompatibilityEpoch != runtimeservice.CurrentCompatibilityContract().CompatibilityEpoch ||
+		!containsString(missingCapability.Compatibility.Capabilities, "runtime_operations_v2") ||
+		!containsString(missingCapability.Compatibility.Capabilities, "signed_artifact_policy_v1") ||
+		missingCapability.Compatibility.RuntimeArtifactSHA256 != "" ||
+		missingCapability.Compatibility.RuntimeBinaryVersion != "" {
+		t.Fatalf("missing Runtime capability leaked an installed identity: %#v", missingCapability)
 	}
 
-	target := *capability.Target
-	compatibility := *capability.Compatibility
+	target := *missingCapability.Target
+	compatibility := *missingCapability.Compatibility
+	initializeInputs := json.RawMessage(`{"source":"docker-runtime-e2e-initialize","target_version":"` + initialVersion + `"}`)
+	initializeID := "gateway-e2e-initialize"
+	initializePrepare := prepareRuntimeOperationWithVersion(t, lifecycleClient, target, compatibility, initializeID, gatewayprotocol.RuntimeOperationUpdate, gatewayprotocol.ArtifactPolicyCustomBuild, initializeInputs, initialVersion)
+	if initializePrepare.Operation.State != gatewayprotocol.RuntimeOperationAwaitingConfirmation {
+		t.Fatalf("initialize prepare state = %q, want awaiting_confirmation", initializePrepare.Operation.State)
+	}
+	if confirmed := confirmRuntimeOperation(t, lifecycleClient, initializePrepare.Operation); confirmed.State != gatewayprotocol.RuntimeOperationAwaitingArtifact {
+		t.Fatalf("initialize confirmation state = %q, want awaiting_artifact", confirmed.State)
+	}
+	initializeArtifact, initializeMetadata := makeCustomRuntimeArtifactFromBinary(
+		t, f, filepath.Join(f.tempRoot, "redeven-linux"), initializeID, target, compatibility, initializeInputs,
+	)
+	initializeMetadataJSON := mustJSON(t, initializeMetadata)
+	initializeStaged := lifecycleClient.call(t, http.MethodPut, "/gateway/v2/runtime-operations/"+initializeID+"/artifact", initializeArtifact,
+		map[string]string{"X-Redeven-Runtime-Artifact-Metadata": base64.RawURLEncoding.EncodeToString(initializeMetadataJSON)}, initializeMetadataJSON)
+	if !initializeStaged.OK || decodeOperationResponse(t, initializeStaged).State != gatewayprotocol.RuntimeOperationCommitReady {
+		t.Fatalf("initialize artifact upload failed: %#v", initializeStaged)
+	}
+	initialized := decodeOperationResponse(t, lifecycleClient.call(t, http.MethodPost, "/gateway/v2/runtime-operations/"+initializeID+"/commit", []byte(`{}`), nil, nil))
+	if initialized.State != gatewayprotocol.RuntimeOperationSucceeded {
+		t.Fatalf("initialize commit state = %q, want succeeded", initialized.State)
+	}
+	initial := f.waitReady(ctx)
+	initialIdentity := f.runtimeLifecycleIdentity(ctx, initial)
+	if initialIdentity.RuntimeInstanceID == standaloneIdentity.RuntimeInstanceID || initialIdentity.ArtifactSHA256 != initializeMetadata.ExecutableSHA256 {
+		t.Fatalf("initialization did not install and start the authorized Runtime: standalone=%#v initialized=%#v", standaloneIdentity, initialIdentity)
+	}
+	f.openBridgeAndAssertRequests(ctx, initial)
+	assertLifecycleEvents(t, lifecycleClient, initializeID, []gatewayprotocol.RuntimeOperationState{
+		gatewayprotocol.RuntimeOperationPreflighting,
+		gatewayprotocol.RuntimeOperationAwaitingConfirmation,
+		gatewayprotocol.RuntimeOperationAwaitingArtifact,
+		gatewayprotocol.RuntimeOperationStaging,
+		gatewayprotocol.RuntimeOperationCommitReady,
+		gatewayprotocol.RuntimeOperationFencing,
+		gatewayprotocol.RuntimeOperationCommitting,
+		gatewayprotocol.RuntimeOperationSucceeded,
+	})
+
+	capability := readRuntimeCapability(t, lifecycleClient)
+	if capability.Target == nil || capability.Compatibility == nil ||
+		capability.Compatibility.RuntimeArtifactSHA256 != initialIdentity.ArtifactSHA256 ||
+		capability.Compatibility.RuntimeBinaryVersion != initialIdentity.RuntimeBinaryVersion ||
+		!containsRuntimeOperation(capability.Operations, gatewayprotocol.RuntimeOperationStop) {
+		t.Fatalf("initialized Runtime capability does not expose its verified identity: %#v", capability)
+	}
+	target = *capability.Target
+	compatibility = *capability.Compatibility
+	stopID := "gateway-e2e-stop"
+	stopPrepare := prepareRuntimeOperation(t, lifecycleClient, target, compatibility, stopID, gatewayprotocol.RuntimeOperationStop, gatewayprotocol.ArtifactPolicyPublishedRelease, nil)
+	if stopPrepare.Operation.State != gatewayprotocol.RuntimeOperationAwaitingConfirmation {
+		t.Fatalf("stop prepare state = %q, want awaiting_confirmation", stopPrepare.Operation.State)
+	}
+	if confirmed := confirmRuntimeOperation(t, lifecycleClient, stopPrepare.Operation); confirmed.State != gatewayprotocol.RuntimeOperationCommitReady {
+		t.Fatalf("stop confirmation state = %q, want commit_ready", confirmed.State)
+	}
+	if stopped := decodeOperationResponse(t, lifecycleClient.call(t, http.MethodPost, "/gateway/v2/runtime-operations/"+stopID+"/commit", []byte(`{}`), nil, nil)); stopped.State != gatewayprotocol.RuntimeOperationSucceeded {
+		t.Fatalf("stop commit state = %q, want succeeded", stopped.State)
+	}
 	f.stopRuntime(ctx)
+	assertLifecycleEvents(t, lifecycleClient, stopID, []gatewayprotocol.RuntimeOperationState{
+		gatewayprotocol.RuntimeOperationPreflighting,
+		gatewayprotocol.RuntimeOperationAwaitingConfirmation,
+		gatewayprotocol.RuntimeOperationCommitReady,
+		gatewayprotocol.RuntimeOperationFencing,
+		gatewayprotocol.RuntimeOperationCommitting,
+		gatewayprotocol.RuntimeOperationSucceeded,
+	})
+
 	offlineCapability := readRuntimeCapability(t, lifecycleClient)
 	if offlineCapability.Readiness != gatewayprotocol.ManagementReady ||
 		offlineCapability.Target == nil || offlineCapability.Compatibility == nil ||
@@ -244,6 +459,7 @@ func TestDockerUbuntuGatewayRuntimeLifecycle(t *testing.T) {
 	if afterStartPing.Ping == nil || afterStartIdentity.RuntimeInstanceID == initialIdentity.RuntimeInstanceID || afterStartStatus.PID == initial.PID {
 		t.Fatalf("Gateway start did not produce a new Runtime process identity: initial=%#v/%#v after=%#v/%#v", initialIdentity, initial, afterStartIdentity, afterStartStatus)
 	}
+	f.openBridgeAndAssertRequests(ctx, afterStartStatus)
 	assertLifecycleEvents(t, lifecycleClient, startID, []gatewayprotocol.RuntimeOperationState{
 		gatewayprotocol.RuntimeOperationPreflighting,
 		gatewayprotocol.RuntimeOperationAwaitingConfirmation,
@@ -414,6 +630,15 @@ func TestDockerUbuntuGatewayRuntimeLifecycle(t *testing.T) {
 }
 
 func containsRuntimeOperation(values []gatewayprotocol.RuntimeOperationKind, expected gatewayprotocol.RuntimeOperationKind) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
+}
+
+func containsArtifactPolicy(values []gatewayprotocol.ArtifactPolicy, expected gatewayprotocol.ArtifactPolicy) bool {
 	for _, value := range values {
 		if value == expected {
 			return true
@@ -824,8 +1049,12 @@ func (c *gatewayLifecycleClient) call(t *testing.T, method, path string, body []
 }
 
 func prepareRuntimeOperation(t *testing.T, client *gatewayLifecycleClient, target gatewayprotocol.LifecycleTarget, compatibility gatewayprotocol.RuntimeManagementCompatibility, operationID string, kind gatewayprotocol.RuntimeOperationKind, policy gatewayprotocol.ArtifactPolicy, buildInputs json.RawMessage) gatewayprotocol.RuntimeOperationPrepareResponse {
+	return prepareRuntimeOperationWithVersion(t, client, target, compatibility, operationID, kind, policy, buildInputs, "")
+}
+
+func prepareRuntimeOperationWithVersion(t *testing.T, client *gatewayLifecycleClient, target gatewayprotocol.LifecycleTarget, compatibility gatewayprotocol.RuntimeManagementCompatibility, operationID string, kind gatewayprotocol.RuntimeOperationKind, policy gatewayprotocol.ArtifactPolicy, buildInputs json.RawMessage, desiredVersion string) gatewayprotocol.RuntimeOperationPrepareResponse {
 	t.Helper()
-	response := prepareRuntimeOperationResponse(t, client, target, compatibility, operationID, kind, policy, buildInputs)
+	response := prepareRuntimeOperationResponseWithVersion(t, client, target, compatibility, operationID, kind, policy, buildInputs, desiredVersion)
 	if !response.OK {
 		t.Fatalf("prepare Runtime operation %q failed: %#v", operationID, response.Error)
 	}
@@ -835,10 +1064,17 @@ func prepareRuntimeOperation(t *testing.T, client *gatewayLifecycleClient, targe
 }
 
 func prepareRuntimeOperationResponse(t *testing.T, client *gatewayLifecycleClient, target gatewayprotocol.LifecycleTarget, compatibility gatewayprotocol.RuntimeManagementCompatibility, operationID string, kind gatewayprotocol.RuntimeOperationKind, policy gatewayprotocol.ArtifactPolicy, buildInputs json.RawMessage) gatewayEnvelope {
+	return prepareRuntimeOperationResponseWithVersion(t, client, target, compatibility, operationID, kind, policy, buildInputs, "")
+}
+
+func prepareRuntimeOperationResponseWithVersion(t *testing.T, client *gatewayLifecycleClient, target gatewayprotocol.LifecycleTarget, compatibility gatewayprotocol.RuntimeManagementCompatibility, operationID string, kind gatewayprotocol.RuntimeOperationKind, policy gatewayprotocol.ArtifactPolicy, buildInputs json.RawMessage, desiredVersion string) gatewayEnvelope {
 	t.Helper()
 	desired := gatewayprotocol.DesiredRuntime{Platform: compatibility.RuntimePlatform, Architecture: compatibility.RuntimeArchitecture, ArtifactPolicy: policy}
 	if kind == gatewayprotocol.RuntimeOperationUpdate {
-		desired.Version = targetVersion
+		desired.Version = strings.TrimSpace(desiredVersion)
+		if desired.Version == "" {
+			desired.Version = targetVersion
+		}
 	} else {
 		desired.Version = compatibility.RuntimeBinaryVersion
 	}
@@ -873,19 +1109,41 @@ func readRuntimeCapability(t *testing.T, client *gatewayLifecycleClient) gateway
 }
 
 func makeCustomRuntimeArtifact(t *testing.T, f *fixture, operationID string, target gatewayprotocol.LifecycleTarget, compatibility gatewayprotocol.RuntimeManagementCompatibility, buildInputs json.RawMessage) ([]byte, gatewayprotocol.RuntimeArtifactMetadata) {
+	return makeCustomRuntimeArtifactFromBinary(t, f, filepath.Join(f.tempRoot, "redeven-linux-upgraded"), operationID, target, compatibility, buildInputs)
+}
+
+func makeCustomRuntimeArtifactFromBinary(t *testing.T, f *fixture, binaryPath string, operationID string, target gatewayprotocol.LifecycleTarget, compatibility gatewayprotocol.RuntimeManagementCompatibility, buildInputs json.RawMessage) ([]byte, gatewayprotocol.RuntimeArtifactMetadata) {
 	t.Helper()
-	binary, err := os.ReadFile(filepath.Join(f.tempRoot, "redeven-linux-upgraded"))
+	binary, err := os.ReadFile(binaryPath)
 	if err != nil {
-		t.Fatalf("read upgraded Runtime binary: %v", err)
+		t.Fatalf("read Runtime binary: %v", err)
+	}
+	plugin, err := os.ReadFile(f.pluginRuntime)
+	if err != nil {
+		t.Fatalf("read ReDevPlugin Runtime binary: %v", err)
+	}
+	descriptor, err := os.ReadFile(f.pluginDescriptor)
+	if err != nil {
+		t.Fatalf("read ReDevPlugin Runtime descriptor: %v", err)
 	}
 	var archive bytes.Buffer
 	gzipWriter := gzip.NewWriter(&archive)
 	tarWriter := tar.NewWriter(gzipWriter)
-	if err := tarWriter.WriteHeader(&tar.Header{Name: "redeven", Mode: 0o755, Size: int64(len(binary)), Typeflag: tar.TypeReg}); err != nil {
-		t.Fatalf("write Runtime artifact header: %v", err)
-	}
-	if _, err := tarWriter.Write(binary); err != nil {
-		t.Fatalf("write Runtime artifact binary: %v", err)
+	for _, file := range []struct {
+		name string
+		mode int64
+		data []byte
+	}{
+		{name: "redeven", mode: 0o755, data: binary},
+		{name: "redevplugin-runtime", mode: 0o755, data: plugin},
+		{name: ".redevplugin-release-artifacts-verified.json", mode: 0o644, data: descriptor},
+	} {
+		if err := tarWriter.WriteHeader(&tar.Header{Name: file.name, Mode: file.mode, Size: int64(len(file.data)), Typeflag: tar.TypeReg}); err != nil {
+			t.Fatalf("write Runtime artifact header for %s: %v", file.name, err)
+		}
+		if _, err := tarWriter.Write(file.data); err != nil {
+			t.Fatalf("write Runtime artifact file %s: %v", file.name, err)
+		}
 	}
 	if err := tarWriter.Close(); err != nil {
 		t.Fatalf("close Runtime artifact tar: %v", err)

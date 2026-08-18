@@ -30,6 +30,7 @@ import type { RuntimePlacementBridgeSessionHandle } from './runtimePlacementBrid
 
 const GATEWAY_PROTOCOL_VERSION = 'redeven-gateway-v2';
 const DEFAULT_GATEWAY_REQUEST_TIMEOUT_MS = 20_000;
+const DEFAULT_GATEWAY_ARTIFACT_UPLOAD_TIMEOUT_MS = 5 * 60_000;
 
 type GatewayRequestOptions = Readonly<{
   timeoutMs?: number;
@@ -170,6 +171,7 @@ export type GatewayRuntimeOperation = Readonly<{
   kind: GatewayRuntimeOperationKind;
   authorized_client_key_id: string;
   desired_runtime: GatewayRuntimeOperationPrepareRequest['desired_runtime'];
+  build_inputs?: unknown;
   state: GatewayRuntimeOperationState;
   expected_snapshot: GatewayRuntimeWorkloadSnapshot;
   expires_at_unix_ms?: number;
@@ -352,6 +354,10 @@ function gatewayTimeoutMs(value: unknown): number {
   return Math.max(1, Math.floor(Number(value) || DEFAULT_GATEWAY_REQUEST_TIMEOUT_MS));
 }
 
+function gatewayArtifactUploadTimeoutMs(value: unknown): number {
+  return Math.max(1, Math.floor(Number(value) || DEFAULT_GATEWAY_ARTIFACT_UPLOAD_TIMEOUT_MS));
+}
+
 function throwIfCanceled(signal: AbortSignal | undefined): void {
   if (signal?.aborted) {
     throw abortError();
@@ -397,6 +403,46 @@ function responseBody(raw: string): string {
     return body;
   }
   return decodeChunkedResponseBody(body);
+}
+
+function completeGatewayHTTPResponse(raw: string): boolean {
+  const splitAt = raw.indexOf('\r\n\r\n');
+  if (splitAt < 0 || !/^HTTP\/1\.[01]\s+\d{3}\b/u.test(raw)) {
+    return false;
+  }
+  const header = raw.slice(0, splitAt);
+  const body = raw.slice(splitAt + 4);
+  const contentLengthMatch = /(?:^|\r\n)content-length:\s*(\d+)\s*(?:\r\n|$)/iu.exec(header);
+  if (contentLengthMatch) {
+    const expectedBytes = Number(contentLengthMatch[1]);
+    return Number.isSafeInteger(expectedBytes) && Buffer.byteLength(body, 'utf8') >= expectedBytes;
+  }
+  if (/(?:^|\r\n)transfer-encoding:\s*chunked\b/iu.test(header)) {
+    return completeChunkedResponseBody(body);
+  }
+  const statusCode = responseStatusCode(raw);
+  return (statusCode >= 100 && statusCode < 200) || statusCode === 204 || statusCode === 304;
+}
+
+function completeChunkedResponseBody(body: string): boolean {
+  let offset = 0;
+  while (offset < body.length) {
+    const lineEnd = body.indexOf('\r\n', offset);
+    if (lineEnd < 0) return false;
+    const sizeText = body.slice(offset, lineEnd).split(';', 1)[0]?.trim() ?? '';
+    const size = Number.parseInt(sizeText, 16);
+    if (!Number.isFinite(size) || size < 0) return false;
+    offset = lineEnd + 2;
+    if (size === 0) {
+      const trailerEnd = body.indexOf('\r\n\r\n', offset);
+      return body.startsWith('\r\n', offset) || trailerEnd >= offset;
+    }
+    if (body.length < offset + size + 2 || body.slice(offset + size, offset + size + 2) !== '\r\n') {
+      return false;
+    }
+    offset += size + 2;
+  }
+  return false;
 }
 
 function decodeChunkedResponseBody(body: string): string {
@@ -640,6 +686,16 @@ function requestGatewayBridgeJSON(
     });
     stream.onError((error) => {
       settle(() => {
+        if (completeGatewayHTTPResponse(raw)) {
+          try {
+            resolve({
+              data: parseGatewayHTTPResponse(responseBody(raw), responseStatusCode(raw)),
+            });
+          } catch (responseError) {
+            reject(responseError);
+          }
+          return;
+        }
         reject(new GatewayClientError('GATEWAY_BRIDGE_FAILED', error.message || 'Gateway bridge stream failed.', null, true));
       });
     });
@@ -728,7 +784,7 @@ function requestGatewayURLArtifact(
     }).then((authHeaders) => {
       const req = requestImpl(url, {
         method: 'PUT',
-        timeout: gatewayTimeoutMs(options.timeoutMs),
+        timeout: gatewayArtifactUploadTimeoutMs(options.timeoutMs),
         headers: {
           Accept: 'application/json',
           ...authHeaders,
@@ -796,7 +852,7 @@ function requestGatewayBridgeArtifact(
     timer = setTimeout(() => settle(() => {
       closeStream();
       reject(new GatewayClientError('GATEWAY_TIMEOUT', 'Gateway artifact upload timed out.', null, true));
-    }), gatewayTimeoutMs(options.timeoutMs));
+    }), gatewayArtifactUploadTimeoutMs(options.timeoutMs));
     stream.onData((chunk) => { raw += chunk.toString('utf8'); });
     stream.onClose(() => settle(() => {
       try {
@@ -805,7 +861,17 @@ function requestGatewayBridgeArtifact(
         reject(error);
       }
     }));
-    stream.onError((error) => settle(() => reject(new GatewayClientError('GATEWAY_BRIDGE_FAILED', error.message, null, true))));
+    stream.onError((error) => settle(() => {
+      if (completeGatewayHTTPResponse(raw)) {
+        try {
+          resolve({ data: parseGatewayHTTPResponse(responseBody(raw), responseStatusCode(raw)) });
+        } catch (responseError) {
+          reject(responseError);
+        }
+        return;
+      }
+      reject(new GatewayClientError('GATEWAY_BRIDGE_FAILED', error.message, null, true));
+    }));
     void (async () => {
       try {
         const authHeaders = await createGatewayAuthHeaders({
@@ -1261,6 +1327,7 @@ export function normalizeGatewayRuntimeOperation(value: unknown): GatewayRuntime
       architecture: compact(desired.architecture),
       artifact_policy: artifactPolicy,
     },
+    ...(candidate.build_inputs !== undefined ? { build_inputs: candidate.build_inputs } : {}),
     state: normalizeGatewayRuntimeOperationState(candidate.state),
     expected_snapshot: {
       ...(compact(snapshot.runtime_binary_version) ? { runtime_binary_version: compact(snapshot.runtime_binary_version) } : {}),

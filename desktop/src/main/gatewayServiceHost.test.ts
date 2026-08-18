@@ -51,8 +51,8 @@ describe('gatewayServiceHost', () => {
       goarch: 'arm64',
       platform_id: 'darwin_arm64',
     });
-    expect(() => resolveGatewayHostPlatform('ssh_host', 'Darwin', 'arm64')).toThrow('Unsupported remote');
-    expect(() => resolveGatewayHostPlatform(undefined, 'Darwin', 'arm64')).toThrow('Unsupported remote');
+    expect(resolveGatewayHostPlatform('ssh_host', 'Darwin', 'arm64').platform_id).toBe('darwin_arm64');
+    expect(resolveGatewayHostPlatform(undefined, 'Darwin', 'arm64').platform_id).toBe('darwin_arm64');
   });
 
   it('keeps Check Gateway deep probe read-only and bridge-free', () => {

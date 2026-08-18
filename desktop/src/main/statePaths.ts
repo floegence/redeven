@@ -1,7 +1,10 @@
+import { createHash } from 'node:crypto';
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
 const LOCAL_ENVIRONMENT_DIR = 'local-environment';
+const MAX_UNIX_SOCKET_PATH_BYTES = 100;
 export const DESKTOP_TEMP_ROOT_ENV_NAME = 'REDEVEN_DESKTOP_TEMP_ROOT';
 export const DESKTOP_USER_DATA_ROOT_ENV_NAME = 'REDEVEN_DESKTOP_USER_DATA_ROOT';
 export const DESKTOP_CACHE_ROOT_ENV_NAME = 'REDEVEN_DESKTOP_CACHE_ROOT';
@@ -73,12 +76,44 @@ function stateLayoutForResolvedStateRoot(
     secretsFile: path.join(stateDir, 'secrets.json'),
     lockFile: path.join(stateDir, 'agent.lock'),
     stateDir,
-    runtimeControlSocket: path.join(stateDir, 'runtime', 'control.sock'),
+    runtimeControlSocket: runtimeControlSocketPath(stateDir),
     diagnosticsDir: path.join(stateDir, 'diagnostics'),
     auditDir: path.join(stateDir, 'audit'),
     appsDir: path.join(stateDir, 'apps'),
     gatewayDir: path.join(stateDir, 'gateway'),
   };
+}
+
+export function runtimeControlSocketPath(
+  stateDir: string,
+  platform: NodeJS.Platform = process.platform,
+): string {
+  const cleanStateDir = path.normalize(String(stateDir ?? '').trim());
+  const localPath = path.join(cleanStateDir, 'runtime', 'control.sock');
+  if ((platform !== 'darwin' && platform !== 'linux') || Buffer.byteLength(localPath) <= MAX_UNIX_SOCKET_PATH_BYTES) {
+    return localPath;
+  }
+  const digest = createHash('sha256').update(canonicalPathForDigest(cleanStateDir)).digest('hex').slice(0, 24);
+  const fileName = `redeven-runtime-${digest}.sock`;
+  return path.join('/tmp', fileName);
+}
+
+function canonicalPathForDigest(targetPath: string): string {
+  let cursor = path.normalize(targetPath);
+  const suffix: string[] = [];
+  while (!fs.existsSync(cursor)) {
+    const parent = path.dirname(cursor);
+    if (parent === cursor) {
+      return path.normalize(targetPath);
+    }
+    suffix.unshift(path.basename(cursor));
+    cursor = parent;
+  }
+  try {
+    return path.join(fs.realpathSync.native(cursor), ...suffix);
+  } catch {
+    return path.normalize(targetPath);
+  }
 }
 
 export function defaultLocalEnvironmentStateLayout(

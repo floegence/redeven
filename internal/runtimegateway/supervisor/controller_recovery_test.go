@@ -97,7 +97,7 @@ func TestControllerArtifactStagingPreservesRequiredRuntimeCompanions(t *testing.
 	}
 	operation := gatewayprotocol.RuntimeOperation{
 		OperationID:    "op-preserve-companions",
-		DesiredRuntime: gatewayprotocol.DesiredRuntime{Version: "v9.9.9-e2e"},
+		DesiredRuntime: gatewayprotocol.DesiredRuntime{Version: "v9.9.9-e2e", Platform: "linux", Architecture: "amd64"},
 		Artifact:       &gatewayprotocol.RuntimeArtifact{StagedPath: archivePath, ExecutableSHA256: candidateDigest},
 	}
 	stagingRoot, err := controller.extractRuntimeArtifact(context.Background(), operation)
@@ -118,6 +118,133 @@ func TestControllerArtifactStagingPreservesRequiredRuntimeCompanions(t *testing.
 	}
 	if _, err := os.Stat(filepath.Join(stagingRoot, "managed-runtime.stamp")); !os.IsNotExist(err) {
 		t.Fatalf("obsolete managed Runtime stamp was preserved: %v", err)
+	}
+}
+
+func TestControllerArtifactStagingInstallsFreshLinuxRuntimeSuite(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("executable fixture is a POSIX shell script")
+	}
+	stateRoot := t.TempDir()
+	runtimeRoot := filepath.Join(t.TempDir(), "runtime-root")
+	bindings, err := OpenLocalBindingStore(stateRoot, runtimeRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	controller, err := NewController(ControllerOptions{BindingStore: bindings})
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidate := []byte("#!/bin/sh\nprintf 'redeven v9.9.9-e2e\\n'\n")
+	plugin := []byte("#!/bin/sh\nexit 0\n")
+	descriptor := []byte("{\"verified\":true}\n")
+	archivePath := filepath.Join(t.TempDir(), "runtime-suite.tar.gz")
+	writeRuntimeSuiteArchiveFixture(t, archivePath, map[string]runtimeArchiveFixture{
+		"redeven":             {data: candidate, mode: 0o700},
+		"redevplugin-runtime": {data: plugin, mode: 0o700},
+		".redevplugin-release-artifacts-verified.json": {data: descriptor, mode: 0o600},
+	})
+	candidatePath := filepath.Join(t.TempDir(), "redeven")
+	if err := os.WriteFile(candidatePath, candidate, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	candidateDigest, err := fileSHA256(candidatePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	operation := gatewayprotocol.RuntimeOperation{
+		OperationID: "op-fresh-linux-suite",
+		DesiredRuntime: gatewayprotocol.DesiredRuntime{
+			Version: "v9.9.9-e2e", Platform: "linux", Architecture: "amd64",
+		},
+		Artifact: &gatewayprotocol.RuntimeArtifact{StagedPath: archivePath, ExecutableSHA256: candidateDigest},
+	}
+	stagingRoot, err := controller.extractRuntimeArtifact(context.Background(), operation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, expected := range map[string][]byte{
+		"redeven":             candidate,
+		"redevplugin-runtime": plugin,
+		".redevplugin-release-artifacts-verified.json": descriptor,
+	} {
+		actual, err := os.ReadFile(filepath.Join(stagingRoot, "bin", name))
+		if err != nil {
+			t.Fatalf("read staged Runtime suite file %q: %v", name, err)
+		}
+		if !bytes.Equal(actual, expected) {
+			t.Fatalf("staged Runtime suite file %q = %q, want %q", name, actual, expected)
+		}
+	}
+}
+
+func TestControllerArtifactStagingRejectsIncompleteFreshLinuxRuntimeSuite(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("executable fixture is a POSIX shell script")
+	}
+	stateRoot := t.TempDir()
+	runtimeRoot := filepath.Join(t.TempDir(), "runtime-root")
+	bindings, err := OpenLocalBindingStore(stateRoot, runtimeRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	controller, err := NewController(ControllerOptions{BindingStore: bindings})
+	if err != nil {
+		t.Fatal(err)
+	}
+	candidate := []byte("#!/bin/sh\nprintf 'redeven v9.9.9-e2e\\n'\n")
+	archivePath := filepath.Join(t.TempDir(), "runtime.tar.gz")
+	writeRuntimeArchiveFixture(t, archivePath, candidate)
+	candidatePath := filepath.Join(t.TempDir(), "redeven")
+	if err := os.WriteFile(candidatePath, candidate, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	candidateDigest, err := fileSHA256(candidatePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	operation := gatewayprotocol.RuntimeOperation{
+		OperationID: "op-incomplete-linux-suite",
+		DesiredRuntime: gatewayprotocol.DesiredRuntime{
+			Version: "v9.9.9-e2e", Platform: "linux", Architecture: "amd64",
+		},
+		Artifact: &gatewayprotocol.RuntimeArtifact{StagedPath: archivePath, ExecutableSHA256: candidateDigest},
+	}
+	if _, err := controller.extractRuntimeArtifact(context.Background(), operation); err == nil || err.Error() != "fresh Linux Runtime artifact is missing required ReDevPlugin companions" {
+		t.Fatalf("extractRuntimeArtifact() error = %v", err)
+	}
+}
+
+type runtimeArchiveFixture struct {
+	data []byte
+	mode int64
+}
+
+func writeRuntimeSuiteArchiveFixture(t *testing.T, path string, files map[string]runtimeArchiveFixture) {
+	t.Helper()
+	var archive bytes.Buffer
+	gzipWriter := gzip.NewWriter(&archive)
+	tarWriter := tar.NewWriter(gzipWriter)
+	for _, name := range []string{"redeven", "redevplugin-runtime", ".redevplugin-release-artifacts-verified.json"} {
+		file, ok := files[name]
+		if !ok {
+			continue
+		}
+		if err := tarWriter.WriteHeader(&tar.Header{Name: name, Mode: file.mode, Size: int64(len(file.data)), Typeflag: tar.TypeReg}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := tarWriter.Write(file.data); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := tarWriter.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gzipWriter.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, archive.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 

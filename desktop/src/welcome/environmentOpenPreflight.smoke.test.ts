@@ -8,7 +8,11 @@ import {
   testDesktopPreferences,
   testLocalEnvironment,
 } from '../testSupport/desktopTestHelpers';
-import { runEnvironmentOpenPreflight } from './environmentOpenPreflight';
+import {
+  continueEnvironmentOpenAfterLifecycle,
+  runConfirmedEnvironmentStart,
+  runEnvironmentOpenPreflight,
+} from './environmentOpenPreflight';
 import {
   buildProviderBackedEnvironmentActionModel,
   environmentOpenFlow,
@@ -173,6 +177,103 @@ function stoppedRuntimeEnvironment(testCase: DirectRuntimeSmokeCase): DesktopEnv
 }
 
 describe('environment Open click smoke', () => {
+  it.each([
+    'initialization',
+    'start',
+  ] as const)(
+    'continues %s into the real Open request when the first post-lifecycle snapshot is still offline',
+    async () => {
+      const staleOffline = environment({
+        runtime_health: {
+          ...environment().runtime_health,
+          status: 'offline',
+          freshness: 'fresh',
+          offline_reason_code: 'not_started',
+        },
+      });
+      const attemptOpen = vi.fn(async () => ({ opened: true, message: '' }));
+
+      await expect(continueEnvironmentOpenAfterLifecycle({
+        environment: staleOffline,
+        loadLatestEnvironment: async () => staleOffline,
+        attemptOpen,
+      })).resolves.toEqual({ kind: 'opened' });
+      expect(attemptOpen).toHaveBeenCalledOnce();
+      expect(attemptOpen).toHaveBeenCalledWith(staleOffline);
+    },
+  );
+
+  it('keeps the real Open failure after a successful lifecycle operation', async () => {
+    const staleOffline = environment();
+
+    await expect(continueEnvironmentOpenAfterLifecycle({
+      environment: staleOffline,
+      loadLatestEnvironment: async () => staleOffline,
+      attemptOpen: async () => ({
+        opened: false,
+        message: 'The Runtime did not become ready before the Open request completed.',
+      }),
+    })).resolves.toEqual({
+      kind: 'failed',
+      message: 'The Runtime did not become ready before the Open request completed.',
+    });
+  });
+
+  it('continues a user-confirmed Start and open through the Gateway confirmation', async () => {
+    const calls: unknown[] = [];
+    const perform = vi.fn(async (request) => {
+      calls.push(request);
+      if (request.kind === 'confirm_runtime_operation') {
+        return { ok: true as const, outcome: 'started_gateway_environment_runtime' as const };
+      }
+      return {
+        ok: false as const,
+        code: 'confirmation_required' as const,
+        scope: 'environment' as const,
+        message: 'Review the Runtime impact and confirm before this operation can continue.',
+      };
+    });
+
+    await expect(runConfirmedEnvironmentStart({
+      environmentID: 'env_local',
+      request: {
+        kind: 'run_gateway_environment_lifecycle',
+        environment_id: 'env_local',
+        gateway_id: 'gw_local',
+        gateway_env_id: 'env_local',
+        operation: 'start',
+      },
+      perform,
+    })).resolves.toEqual({ ok: true, outcome: 'started_gateway_environment_runtime' });
+    expect(calls).toEqual([
+      expect.objectContaining({ kind: 'run_gateway_environment_lifecycle', operation: 'start' }),
+      { kind: 'confirm_runtime_operation', operation_key: 'env_local:start' },
+    ]);
+  });
+
+  it('does not turn an ordinary start failure into a confirmation', async () => {
+    const perform = vi.fn(async () => ({
+      ok: false as const,
+      code: 'runtime_start_failed' as const,
+      scope: 'environment' as const,
+      message: 'Runtime failed to start.',
+    }));
+    const request = {
+      kind: 'run_gateway_environment_lifecycle' as const,
+      environment_id: 'env_local',
+      gateway_id: 'gw_local',
+      gateway_env_id: 'env_local',
+      operation: 'start' as const,
+    };
+
+    await expect(runConfirmedEnvironmentStart({
+      environmentID: 'env_local',
+      request,
+      perform,
+    })).resolves.toMatchObject({ ok: false, code: 'runtime_start_failed' });
+    expect(perform).toHaveBeenCalledTimes(1);
+  });
+
   it.each(directRuntimeSmokeCases)(
     'offers Start and open for $label after Desktop restarts with the managed service and Runtime stopped',
     (testCase) => {

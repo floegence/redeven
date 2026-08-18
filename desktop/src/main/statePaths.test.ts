@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -6,6 +8,7 @@ import {
   resolveConfiguredDesktopCacheRoot,
   resolveConfiguredDesktopTempRoot,
   resolveConfiguredDesktopUserDataRoot,
+  runtimeControlSocketPath,
 } from './statePaths';
 
 describe('statePaths', () => {
@@ -63,6 +66,17 @@ describe('statePaths', () => {
     expect(resolveConfiguredDesktopCacheRoot(env)).toBe('/tmp/redeven-scope/cache');
     expect(resolveConfiguredDesktopUserDataRoot({})).toBeNull();
     expect(resolveConfiguredDesktopCacheRoot({})).toBeNull();
+  });
+
+  it.each(['darwin', 'linux'] as const)('uses a stable short control socket for long %s state roots', (platform) => {
+    const stateRoot = path.join('/private/tmp', 'redeven-state-segment-'.repeat(8));
+    const stateDir = path.join(stateRoot, 'local-environment');
+    const socketPath = runtimeControlSocketPath(stateDir, platform);
+
+    expect(Buffer.byteLength(path.join(stateDir, 'runtime', 'control.sock'))).toBeGreaterThan(100);
+    expect(Buffer.byteLength(socketPath)).toBeLessThanOrEqual(100);
+    expect(socketPath).toMatch(/^\/tmp\/redeven-runtime-[a-f0-9]{24}\.sock$/);
+    expect(runtimeControlSocketPath(stateDir, platform)).toBe(socketPath);
   });
 
   it('does not expose a second local Flower state layout', async () => {

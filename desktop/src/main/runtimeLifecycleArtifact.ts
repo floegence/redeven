@@ -1,7 +1,10 @@
 import { createHash } from 'node:crypto';
 import { gunzipSync } from 'node:zlib';
 
-import type { GatewayRuntimeArtifactMetadata } from './gatewayClient';
+import type {
+  GatewayRuntimeArtifactMetadata,
+  GatewayRuntimeOperation,
+} from './gatewayClient';
 import { prepareDesktopRuntimeUploadAsset, runtimeReleaseFetchPolicy } from './runtimePackageCache';
 import {
   ensureDesktopSSHVerifiedReleaseManifest,
@@ -65,6 +68,26 @@ function sha256(value: Buffer): string {
   return createHash('sha256').update(value).digest('hex');
 }
 
+function canonicalJSONValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(canonicalJSONValue);
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, entry]) => [key, canonicalJSONValue(entry)]),
+    );
+  }
+  return value;
+}
+
+function canonicalJSONDigest(value: unknown): string {
+  return createHash('sha256')
+    .update(JSON.stringify(canonicalJSONValue(value)))
+    .digest('base64url');
+}
+
 function tarString(block: Buffer, offset: number, length: number): string {
   const end = block.subarray(offset, offset + length).indexOf(0);
   return block.subarray(offset, offset + (end < 0 ? length : end)).toString('utf8').trim();
@@ -114,6 +137,68 @@ export function runtimeExecutableFromArchive(archive: Buffer): Buffer {
     throw new Error('Runtime release archive does not contain the redeven executable.');
   }
   return executable;
+}
+
+export function buildCustomRuntimeArtifactMetadata(
+  operation: GatewayRuntimeOperation,
+  artifact: Buffer,
+): GatewayRuntimeArtifactMetadata {
+  if (operation.kind !== 'update_runtime'
+    || operation.desired_runtime.artifact_policy !== 'custom_build'
+    || operation.build_inputs === undefined) {
+    throw new Error('Custom Runtime artifact metadata requires a bound custom-build update operation.');
+  }
+  const archiveSHA256 = sha256(artifact);
+  const executableSHA256 = sha256(runtimeExecutableFromArchive(artifact));
+  return {
+    size_bytes: artifact.length,
+    archive_sha256: archiveSHA256,
+    executable_sha256: executableSHA256,
+    manifest: {
+      schema_version: 1,
+      source: 'desktop_source_build',
+    },
+    build_attestation: {
+      operation_id: operation.operation_id,
+      lifecycle_target_id: operation.lifecycle_target_id,
+      target_generation: operation.target_generation,
+      build_inputs_digest: canonicalJSONDigest(operation.build_inputs),
+      archive_sha256: archiveSHA256,
+      executable_sha256: executableSHA256,
+      platform: operation.desired_runtime.platform,
+      architecture: operation.desired_runtime.architecture,
+    },
+  };
+}
+
+export async function prepareCustomRuntimeLifecycleArtifact(input: Readonly<{
+  operation: GatewayRuntimeOperation;
+  runtimeReleaseTag: string;
+  releaseBaseURL: string;
+  assetCacheRoot: string;
+  sourceRuntimeRoot: string;
+  signal?: AbortSignal;
+}>): Promise<PreparedRuntimeLifecycleArtifact> {
+  const platform = releasePlatform(
+    input.operation.desired_runtime.platform,
+    input.operation.desired_runtime.architecture,
+  );
+  const prepared = await prepareDesktopRuntimeUploadAsset({
+    runtimeReleaseTag: input.runtimeReleaseTag,
+    releaseBaseURL: input.releaseBaseURL,
+    assetCacheRoot: input.assetCacheRoot,
+    sourceRuntimeRoot: input.sourceRuntimeRoot,
+    platform,
+    fetchPolicy: runtimeReleaseFetchPolicy(30_000, input.signal),
+    signal: input.signal,
+  });
+  if (prepared.source !== 'source_build' && prepared.source !== 'source_build_cache') {
+    throw new Error('Managed custom Runtime updates require an artifact built from the current Desktop source.');
+  }
+  return {
+    artifact: prepared.archiveData,
+    metadata: buildCustomRuntimeArtifactMetadata(input.operation, prepared.archiveData),
+  };
 }
 
 function stringList(value: unknown): readonly string[] {

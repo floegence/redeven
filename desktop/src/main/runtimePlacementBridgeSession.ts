@@ -35,6 +35,7 @@ import {
   parseRuntimePlacementBridgeHello,
   parseRuntimePlacementBridgeStreamError,
   readRuntimePlacementBridgeFrame,
+  RUNTIME_PLACEMENT_BRIDGE_MAX_PAYLOAD_BYTES,
   runtimeControlEndpointFromBridgeHello,
   runtimePlacementBridgeStreamID,
   writeRuntimePlacementBridgeFrame,
@@ -469,6 +470,7 @@ export async function startRuntimePlacementBridgeSession(
         throw error;
       });
       callbacks.ready = ready;
+      let writeTail: Promise<void> = ready;
       return {
         id: streamID,
         onData: (callback) => {
@@ -486,23 +488,36 @@ export async function startRuntimePlacementBridgeSession(
             callback(callbacks.error);
           }
         },
-        write: async (chunk) => {
-          await ready;
-          if (
-            closed
-            || currentTransport?.id !== transport.id
-            || !streams.has(streamID)
-          ) {
-            throw new Error('Runtime Placement Bridge stream is closed.');
-          }
-          await writeRuntimePlacementBridgeFrame(transport.command.stdin, {
-            type: 'stream_data',
-            stream_id: streamID,
-            payload: chunk,
+        write: (chunk) => {
+          const writeTask = writeTail.then(async () => {
+            if (
+              closed
+              || currentTransport?.id !== transport.id
+              || !streams.has(streamID)
+            ) {
+              throw new Error('Runtime Placement Bridge stream is closed.');
+            }
+            if (chunk.length === 0) {
+              await writeRuntimePlacementBridgeFrame(transport.command.stdin, {
+                type: 'stream_data',
+                stream_id: streamID,
+                payload: chunk,
+              });
+              return;
+            }
+            for (let offset = 0; offset < chunk.length; offset += RUNTIME_PLACEMENT_BRIDGE_MAX_PAYLOAD_BYTES) {
+              await writeRuntimePlacementBridgeFrame(transport.command.stdin, {
+                type: 'stream_data',
+                stream_id: streamID,
+                payload: chunk.subarray(offset, offset + RUNTIME_PLACEMENT_BRIDGE_MAX_PAYLOAD_BYTES),
+              });
+            }
           });
+          writeTail = writeTask.catch(() => undefined);
+          return writeTask;
         },
         close: async () => {
-          await ready.catch(() => undefined);
+          await writeTail.catch(() => undefined);
           const wasOpen = streams.delete(streamID);
           if (closed || !wasOpen || currentTransport?.id !== transport.id) {
             return;

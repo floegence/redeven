@@ -309,7 +309,11 @@ import {
   startEnvironmentGuidanceIntent,
   type EnvironmentGuidanceSessionState,
 } from './environmentGuidanceSession';
-import { runEnvironmentOpenPreflight } from './environmentOpenPreflight';
+import {
+  continueEnvironmentOpenAfterLifecycle,
+  runConfirmedEnvironmentStart,
+  runEnvironmentOpenPreflight,
+} from './environmentOpenPreflight';
 import {
   beginEnvironmentLifecycleDisclosure,
   closeEnvironmentLifecycleDisclosure,
@@ -4701,7 +4705,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (!request) {
       return { ok: false, message: i18n().t('environmentCenter.resolveRuntimeTargetError') };
     }
-    const result = await performLauncherActionSilently(request);
+    const result = await runConfirmedEnvironmentStart({
+      environmentID: environment.id,
+      request,
+      perform: performLauncherActionSilently,
+    });
     if (!result.ok || result.outcome === expectedOutcome) {
       return result;
     }
@@ -5175,12 +5183,15 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       if (!started.ok) {
         return failOpenFlow(starting, started.message);
       }
-      const latestBeforeOpen = await loadLatestEnvironmentEntry(environment.id) ?? latestBeforeStart;
       const opening = advanceEnvironmentOpenFlowStage(starting, 'opening_workspace');
       publishSession(opening);
-      const opened = await openEnvironment(latestBeforeOpen, 'connect');
-      if (!opened) {
-        return failOpenFlow(opening, 'The environment started, but Redeven could not open the workspace. Try again.');
+      const resolution = await continueEnvironmentOpenAfterLifecycle({
+        environment: latestBeforeStart,
+        loadLatestEnvironment: loadLatestEnvironmentEntry,
+        attemptOpen: attemptEnvironmentOpenSilently,
+      });
+      if (resolution.kind === 'failed') {
+        return failOpenFlow(opening, resolution.message || i18n().t('environmentOpenFlow.openFailedDetail'));
       }
       return { close_panel: true, next_session: null };
     };
@@ -5265,7 +5276,18 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         }
         return failOpenFlow(preparing, initialized.message);
       }
-      return startAndOpenEnvironment(preparing);
+      const starting = advanceEnvironmentOpenFlowStage(preparing, 'starting_environment');
+      publishSession(starting);
+      const opening = advanceEnvironmentOpenFlowStage(starting, 'opening_workspace');
+      publishSession(opening);
+      const resolution = await continueEnvironmentOpenAfterLifecycle({
+        environment: initializationEnvironment,
+        loadLatestEnvironment: loadLatestEnvironmentEntry,
+        attemptOpen: attemptEnvironmentOpenSilently,
+      });
+      return resolution.kind === 'opened'
+        ? { close_panel: true, next_session: null }
+        : failOpenFlow(opening, resolution.message || i18n().t('environmentOpenFlow.openFailedDetail'));
     }
 
     if (action.intent === 'start_and_open') {

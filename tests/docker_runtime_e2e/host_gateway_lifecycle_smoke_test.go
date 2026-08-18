@@ -3,9 +3,14 @@
 package docker_runtime_e2e
 
 import (
+	"archive/tar"
 	"bufio"
 	"bytes"
+	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -14,11 +19,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/floegence/redeven/internal/desktopbridge"
 	gatewayprotocol "github.com/floegence/redeven/internal/runtimegateway/protocol"
+	"github.com/floegence/redeven/internal/runtimegateway/security"
 	"github.com/floegence/redeven/internal/runtimeservice"
 )
 
@@ -29,6 +36,7 @@ type nativeGatewayLifecycleFixture struct {
 	runtimeRoot      string
 	gatewayStateRoot string
 	runtimeBinary    string
+	upgradedRuntime  string
 	managedRuntime   string
 	gatewayBinary    string
 	runtimeCommand   *exec.Cmd
@@ -36,51 +44,64 @@ type nativeGatewayLifecycleFixture struct {
 	runtimeLog       *os.File
 }
 
-func TestNativeHostGatewayStartsLocalRuntimeAfterDesktopRestart(t *testing.T) {
-	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
-		t.Skipf("native Local Env lifecycle smoke is supported on macOS and Linux, not %s", runtime.GOOS)
+func TestNativeMacOSLocalGatewayRuntimeLifecycle(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skipf("native macOS Local Env lifecycle smoke requires macOS, not %s", runtime.GOOS)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 7*time.Minute)
 	defer cancel()
 
 	f := newNativeGatewayLifecycleFixture(t)
 	f.buildBinaries(ctx)
-	f.installManagedRuntime()
 	t.Cleanup(func() {
 		f.cleanup(context.Background())
 	})
 
-	f.startRuntime(ctx)
-	initial := f.waitRuntimeReady(ctx, 0)
-	service := f.startGatewayService(ctx)
-	bridge := f.startGatewayBridge(ctx)
-	client := pairGatewayLifecycleClient(t, bridge, service.Listen)
-	capability := readRuntimeCapability(t, client)
-	if capability.Readiness != gatewayprotocol.ManagementReady || capability.Target == nil || capability.Compatibility == nil {
-		t.Fatalf("native Runtime management capability is not ready: %#v", capability)
+	if _, err := os.Stat(f.managedRuntime); !os.IsNotExist(err) {
+		t.Fatalf("managed Runtime exists before initialization: %v", err)
 	}
-	if capability.Compatibility.RuntimePlatform != runtime.GOOS ||
-		capability.Compatibility.RuntimeArchitecture != runtime.GOARCH ||
-		capability.Compatibility.RuntimeArtifactSHA256 == "" {
-		t.Fatalf("native Runtime capability identity does not match host %s/%s: %#v", runtime.GOOS, runtime.GOARCH, capability.Compatibility)
-	}
-	initialIdentity := f.runtimeIdentityAndWorkspace(ctx, initial)
-
-	bridge.close()
-	f.stopGatewayService(ctx)
+	f.startRuntimeExecutable(ctx, f.runtimeBinary)
+	standalone := f.waitRuntimeReady(ctx, 0)
+	standaloneIdentity := f.runtimeIdentityAndWorkspace(ctx, standalone)
 	f.stopTrackedRuntime(ctx)
 	f.waitRuntimeStopped(ctx)
-	if status := f.gatewayServiceStatus(ctx); status.Status != "not_running" {
-		t.Fatalf("Gateway service remained active across simulated Desktop restart: %#v", status)
+
+	service := f.startGatewayService(ctx)
+	bridge := f.startGatewayBridge(ctx)
+	defer bridge.close()
+	client := pairGatewayLifecycleClient(t, bridge, service.Listen)
+	missing := readRuntimeCapability(t, client)
+	if missing.Readiness != gatewayprotocol.ManagementReady || missing.Target == nil || missing.Compatibility == nil ||
+		!containsRuntimeOperation(missing.Operations, gatewayprotocol.RuntimeOperationUpdate) ||
+		containsRuntimeOperation(missing.Operations, gatewayprotocol.RuntimeOperationStart) ||
+		!containsArtifactPolicy(missing.ArtifactPolicies, gatewayprotocol.ArtifactPolicyCustomBuild) {
+		t.Fatalf("native missing Runtime capability does not expose initialization without start: %#v", missing)
+	}
+	if missing.Compatibility.RuntimePlatform != runtime.GOOS ||
+		missing.Compatibility.RuntimeArchitecture != runtime.GOARCH ||
+		missing.Compatibility.RuntimeArtifactSHA256 != "" ||
+		missing.Compatibility.RuntimeBinaryVersion != "" {
+		t.Fatalf("native missing Runtime capability leaked an installed identity: %#v", missing.Compatibility)
+	}
+	initialVersion := f.runtimeVersion(ctx, f.runtimeBinary)
+	initializeID := "native-macos-initialize"
+	runNativeCustomUpdate(t, client, *missing.Target, *missing.Compatibility, initializeID, initialVersion, f.runtimeBinary)
+	initial := f.waitRuntimeReady(ctx, standalone.PID)
+	initialIdentity := f.runtimeIdentityAndWorkspace(ctx, initial)
+	if initialIdentity.RuntimeInstanceID == standaloneIdentity.RuntimeInstanceID {
+		t.Fatalf("native initialization reused the standalone Runtime identity: before=%#v after=%#v", standaloneIdentity, initialIdentity)
 	}
 
-	restartedService := f.startGatewayService(ctx)
-	if restartedService.PID == service.PID || restartedService.ProcessStartedAtUnixMS <= service.ProcessStartedAtUnixMS {
-		t.Fatalf("native Gateway service did not restart with a new process identity: before=%#v after=%#v", service, restartedService)
+	capability := readRuntimeCapability(t, client)
+	if capability.Target == nil || capability.Compatibility == nil ||
+		capability.Compatibility.RuntimeArtifactSHA256 != initialIdentity.ArtifactSHA256 ||
+		!containsRuntimeOperation(capability.Operations, gatewayprotocol.RuntimeOperationStop) {
+		t.Fatalf("native initialized Runtime capability is incomplete: %#v", capability)
 	}
-	bridge = f.startGatewayBridge(ctx)
-	defer bridge.close()
-	client.bridge = bridge
+	target := *capability.Target
+	compatibility := *capability.Compatibility
+	runNativeLifecycleOperation(t, client, target, compatibility, "native-macos-stop", gatewayprotocol.RuntimeOperationStop)
+	f.waitRuntimeStopped(ctx)
 	offlineCapability := readRuntimeCapability(t, client)
 	if offlineCapability.Readiness != gatewayprotocol.ManagementReady ||
 		offlineCapability.Target == nil || offlineCapability.Compatibility == nil ||
@@ -89,32 +110,71 @@ func TestNativeHostGatewayStartsLocalRuntimeAfterDesktopRestart(t *testing.T) {
 		t.Fatalf("native stopped Runtime does not expose its verified start operation: %#v", offlineCapability)
 	}
 
-	operationID := "native-host-start-after-desktop-restart"
-	prepared := prepareRuntimeOperation(
-		t,
-		client,
-		*offlineCapability.Target,
-		*offlineCapability.Compatibility,
-		operationID,
-		gatewayprotocol.RuntimeOperationStart,
-		gatewayprotocol.ArtifactPolicyPublishedRelease,
-		nil,
-	)
-	if prepared.Operation.State != gatewayprotocol.RuntimeOperationAwaitingConfirmation {
-		t.Fatalf("native start prepare state = %q, want awaiting_confirmation", prepared.Operation.State)
-	}
-	confirmed := confirmRuntimeOperation(t, client, prepared.Operation)
-	if confirmed.State != gatewayprotocol.RuntimeOperationCommitReady {
-		t.Fatalf("native start confirmation state = %q, want commit_ready", confirmed.State)
-	}
-	committed := decodeOperationResponse(t, client.call(t, http.MethodPost, "/gateway/v2/runtime-operations/"+operationID+"/commit", []byte(`{}`), nil, nil))
-	if committed.State != gatewayprotocol.RuntimeOperationSucceeded {
-		t.Fatalf("native start commit state = %q, want succeeded", committed.State)
-	}
+	runNativeLifecycleOperation(t, client, *offlineCapability.Target, *offlineCapability.Compatibility, "native-macos-start", gatewayprotocol.RuntimeOperationStart)
 	afterStart := f.waitRuntimeReady(ctx, initial.PID)
 	afterStartIdentity := f.runtimeIdentityAndWorkspace(ctx, afterStart)
 	if afterStart.PID == initial.PID || afterStartIdentity.RuntimeInstanceID == initialIdentity.RuntimeInstanceID {
 		t.Fatalf("native lifecycle start reused the stopped Runtime identity: before=%#v/%#v after=%#v/%#v", initial, initialIdentity, afterStart, afterStartIdentity)
+	}
+
+	capability = readRuntimeCapability(t, client)
+	target = *capability.Target
+	compatibility = *capability.Compatibility
+	runNativeLifecycleOperation(t, client, target, compatibility, "native-macos-restart", gatewayprotocol.RuntimeOperationRestart)
+	afterRestart := f.waitRuntimeReady(ctx, afterStart.PID)
+	afterRestartIdentity := f.runtimeIdentityAndWorkspace(ctx, afterRestart)
+	if afterRestartIdentity.RuntimeInstanceID == afterStartIdentity.RuntimeInstanceID {
+		t.Fatalf("native restart reused the Runtime identity: before=%#v after=%#v", afterStartIdentity, afterRestartIdentity)
+	}
+
+	capability = readRuntimeCapability(t, client)
+	target = *capability.Target
+	compatibility = *capability.Compatibility
+	updateID := "native-macos-update"
+	runNativeCustomUpdate(t, client, target, compatibility, updateID, targetVersion, f.upgradedRuntime)
+	afterUpdate := f.waitRuntimeReady(ctx, afterRestart.PID)
+	afterUpdateIdentity := f.runtimeIdentityAndWorkspace(ctx, afterUpdate)
+	if afterUpdateIdentity.RuntimeInstanceID == afterRestartIdentity.RuntimeInstanceID ||
+		afterUpdateIdentity.RuntimeBinaryVersion != targetVersion {
+		t.Fatalf("native update did not replace Runtime version and identity: before=%#v after=%#v", afterRestartIdentity, afterUpdateIdentity)
+	}
+
+	bridge.close()
+	f.stopGatewayService(ctx)
+	restartedService := f.startGatewayService(ctx)
+	if restartedService.PID == service.PID || restartedService.ProcessStartedAtUnixMS <= service.ProcessStartedAtUnixMS {
+		t.Fatalf("native Gateway service did not restart with a new process identity: before=%#v after=%#v", service, restartedService)
+	}
+	bridge = f.startGatewayBridge(ctx)
+	client.bridge = bridge
+	persisted := decodeOperationResponse(t, client.call(t, http.MethodGet, "/gateway/v2/runtime-operations/"+updateID, nil, nil, nil))
+	if persisted.State != gatewayprotocol.RuntimeOperationSucceeded {
+		t.Fatalf("native update state after Gateway restart = %q, want succeeded", persisted.State)
+	}
+	assertLifecycleEvents(t, client, updateID, nativeCustomUpdateEvents())
+	f.runtimeIdentityAndWorkspace(ctx, afterUpdate)
+}
+
+func runNativeLifecycleOperation(
+	t *testing.T,
+	client *gatewayLifecycleClient,
+	target gatewayprotocol.LifecycleTarget,
+	compatibility gatewayprotocol.RuntimeManagementCompatibility,
+	operationID string,
+	kind gatewayprotocol.RuntimeOperationKind,
+) {
+	t.Helper()
+	prepared := prepareRuntimeOperation(t, client, target, compatibility, operationID, kind, gatewayprotocol.ArtifactPolicyPublishedRelease, nil)
+	if prepared.Operation.State != gatewayprotocol.RuntimeOperationAwaitingConfirmation {
+		t.Fatalf("native %s prepare state = %q, want awaiting_confirmation", kind, prepared.Operation.State)
+	}
+	confirmed := confirmRuntimeOperation(t, client, prepared.Operation)
+	if confirmed.State != gatewayprotocol.RuntimeOperationCommitReady {
+		t.Fatalf("native %s confirmation state = %q, want commit_ready", kind, confirmed.State)
+	}
+	committed := decodeOperationResponse(t, client.call(t, http.MethodPost, "/gateway/v2/runtime-operations/"+operationID+"/commit", []byte(`{}`), nil, nil))
+	if committed.State != gatewayprotocol.RuntimeOperationSucceeded {
+		t.Fatalf("native %s commit state = %q, want succeeded", kind, committed.State)
 	}
 	assertLifecycleEvents(t, client, operationID, []gatewayprotocol.RuntimeOperationState{
 		gatewayprotocol.RuntimeOperationPreflighting,
@@ -124,6 +184,104 @@ func TestNativeHostGatewayStartsLocalRuntimeAfterDesktopRestart(t *testing.T) {
 		gatewayprotocol.RuntimeOperationCommitting,
 		gatewayprotocol.RuntimeOperationSucceeded,
 	})
+}
+
+func nativeCustomUpdateEvents() []gatewayprotocol.RuntimeOperationState {
+	return []gatewayprotocol.RuntimeOperationState{
+		gatewayprotocol.RuntimeOperationPreflighting,
+		gatewayprotocol.RuntimeOperationAwaitingConfirmation,
+		gatewayprotocol.RuntimeOperationAwaitingArtifact,
+		gatewayprotocol.RuntimeOperationStaging,
+		gatewayprotocol.RuntimeOperationCommitReady,
+		gatewayprotocol.RuntimeOperationFencing,
+		gatewayprotocol.RuntimeOperationCommitting,
+		gatewayprotocol.RuntimeOperationSucceeded,
+	}
+}
+
+func runNativeCustomUpdate(
+	t *testing.T,
+	client *gatewayLifecycleClient,
+	target gatewayprotocol.LifecycleTarget,
+	compatibility gatewayprotocol.RuntimeManagementCompatibility,
+	operationID string,
+	desiredVersion string,
+	binaryPath string,
+) {
+	t.Helper()
+	buildInputs := json.RawMessage(`{"source":"native-macos-smoke","target_version":` + fmt.Sprintf("%q", desiredVersion) + `}`)
+	prepared := prepareRuntimeOperationWithVersion(
+		t, client, target, compatibility, operationID, gatewayprotocol.RuntimeOperationUpdate,
+		gatewayprotocol.ArtifactPolicyCustomBuild, buildInputs, desiredVersion,
+	)
+	if prepared.Operation.State != gatewayprotocol.RuntimeOperationAwaitingConfirmation {
+		t.Fatalf("native custom update prepare state = %q, want awaiting_confirmation", prepared.Operation.State)
+	}
+	if confirmed := confirmRuntimeOperation(t, client, prepared.Operation); confirmed.State != gatewayprotocol.RuntimeOperationAwaitingArtifact {
+		t.Fatalf("native custom update confirmation state = %q, want awaiting_artifact", confirmed.State)
+	}
+	artifact, metadata := makeNativeCustomRuntimeArtifact(t, binaryPath, operationID, target, compatibility, buildInputs)
+	metadataJSON := mustJSON(t, metadata)
+	staged := client.call(t, http.MethodPut, "/gateway/v2/runtime-operations/"+operationID+"/artifact", artifact,
+		map[string]string{"X-Redeven-Runtime-Artifact-Metadata": base64.RawURLEncoding.EncodeToString(metadataJSON)}, metadataJSON)
+	if !staged.OK || decodeOperationResponse(t, staged).State != gatewayprotocol.RuntimeOperationCommitReady {
+		t.Fatalf("native custom update artifact upload failed: %#v", staged)
+	}
+	committed := decodeOperationResponse(t, client.call(t, http.MethodPost, "/gateway/v2/runtime-operations/"+operationID+"/commit", []byte(`{}`), nil, nil))
+	if committed.State != gatewayprotocol.RuntimeOperationSucceeded {
+		t.Fatalf("native custom update commit state = %q, want succeeded", committed.State)
+	}
+	assertLifecycleEvents(t, client, operationID, nativeCustomUpdateEvents())
+}
+
+func makeNativeCustomRuntimeArtifact(
+	t *testing.T,
+	binaryPath string,
+	operationID string,
+	target gatewayprotocol.LifecycleTarget,
+	compatibility gatewayprotocol.RuntimeManagementCompatibility,
+	buildInputs json.RawMessage,
+) ([]byte, gatewayprotocol.RuntimeArtifactMetadata) {
+	t.Helper()
+	binary, err := os.ReadFile(binaryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var archive bytes.Buffer
+	gzipWriter := gzip.NewWriter(&archive)
+	tarWriter := tar.NewWriter(gzipWriter)
+	if err := tarWriter.WriteHeader(&tar.Header{Name: "redeven", Mode: 0o755, Size: int64(len(binary)), Typeflag: tar.TypeReg}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tarWriter.Write(binary); err != nil {
+		t.Fatal(err)
+	}
+	if err := tarWriter.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gzipWriter.Close(); err != nil {
+		t.Fatal(err)
+	}
+	archiveBytes := archive.Bytes()
+	archiveSum := sha256.Sum256(archiveBytes)
+	binarySum := sha256.Sum256(binary)
+	buildInputsDigest, err := security.CanonicalJSONDigestFromBytes(buildInputs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	archiveDigest := "sha256:" + hex.EncodeToString(archiveSum[:])
+	binaryDigest := "sha256:" + hex.EncodeToString(binarySum[:])
+	attestation := map[string]any{
+		"operation_id": operationID, "lifecycle_target_id": target.LifecycleTargetID,
+		"target_generation": target.TargetGeneration, "build_inputs_digest": buildInputsDigest,
+		"archive_sha256": archiveDigest, "executable_sha256": binaryDigest,
+		"platform": compatibility.RuntimePlatform, "architecture": compatibility.RuntimeArchitecture,
+	}
+	return archiveBytes, gatewayprotocol.RuntimeArtifactMetadata{
+		SizeBytes: int64(len(archiveBytes)), ArchiveSHA256: archiveDigest, ExecutableSHA256: binaryDigest,
+		ManifestJSON:     mustJSON(t, map[string]any{"schema_version": 1, "source": "native-macos-smoke"}),
+		BuildAttestation: mustJSON(t, attestation),
+	}
 }
 
 func newNativeGatewayLifecycleFixture(t *testing.T) *nativeGatewayLifecycleFixture {
@@ -151,6 +309,7 @@ func newNativeGatewayLifecycleFixture(t *testing.T) *nativeGatewayLifecycleFixtu
 		runtimeRoot:      runtimeRoot,
 		gatewayStateRoot: filepath.Join(tempRoot, "gateway-state"),
 		runtimeBinary:    filepath.Join(tempRoot, "redeven"),
+		upgradedRuntime:  filepath.Join(tempRoot, "redeven-upgraded"),
 		managedRuntime:   filepath.Join(runtimeRoot, "runtime", "managed", "bin", "redeven"),
 		gatewayBinary:    filepath.Join(tempRoot, "redeven-gateway"),
 	}
@@ -160,24 +319,24 @@ func (f *nativeGatewayLifecycleFixture) buildBinaries(ctx context.Context) {
 	f.t.Helper()
 	environment := append(os.Environ(), "GOWORK=off", "CGO_ENABLED=0")
 	f.run(ctx, environment, "go", "build", "-o", f.runtimeBinary, "./cmd/redeven")
+	f.run(ctx, environment, "go", "build", "-ldflags", "-X main.Version="+targetVersion, "-o", f.upgradedRuntime, "./cmd/redeven")
 	f.run(ctx, environment, "go", "build", "-o", f.gatewayBinary, "./cmd/redeven-gateway")
 }
 
-func (f *nativeGatewayLifecycleFixture) installManagedRuntime() {
+func (f *nativeGatewayLifecycleFixture) runtimeVersion(ctx context.Context, executable string) string {
 	f.t.Helper()
-	if err := os.MkdirAll(filepath.Dir(f.managedRuntime), 0o755); err != nil {
-		f.t.Fatalf("create native managed Runtime directory: %v", err)
+	fields := strings.Fields(string(f.run(ctx, nil, executable, "version")))
+	if len(fields) < 2 || fields[0] != "redeven" || fields[1] == "" {
+		f.t.Fatalf("invalid native Runtime version output: %q", strings.Join(fields, " "))
 	}
-	runtimeBytes, err := os.ReadFile(f.runtimeBinary)
-	if err != nil {
-		f.t.Fatalf("read native Runtime binary: %v", err)
-	}
-	if err := os.WriteFile(f.managedRuntime, runtimeBytes, 0o755); err != nil {
-		f.t.Fatalf("install native managed Runtime binary: %v", err)
-	}
+	return fields[1]
 }
 
 func (f *nativeGatewayLifecycleFixture) startRuntime(ctx context.Context) {
+	f.startRuntimeExecutable(ctx, f.managedRuntime)
+}
+
+func (f *nativeGatewayLifecycleFixture) startRuntimeExecutable(ctx context.Context, executable string) {
 	f.t.Helper()
 	logFile, err := os.Create(filepath.Join(f.tempRoot, "native-runtime.log"))
 	if err != nil {
@@ -185,7 +344,7 @@ func (f *nativeGatewayLifecycleFixture) startRuntime(ctx context.Context) {
 	}
 	command := exec.CommandContext(
 		ctx,
-		f.managedRuntime,
+		executable,
 		"run",
 		"--mode", "desktop",
 		"--state-root", f.runtimeRoot,

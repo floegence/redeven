@@ -1,7 +1,7 @@
 import http from 'node:http';
 import { randomBytes } from 'node:crypto';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   GatewayBridgeClient,
@@ -281,6 +281,30 @@ function createBridgeHandle(handler: (request: CapturedBridgeRequest) => Buffer)
           close: async () => undefined,
         };
       },
+    },
+  };
+}
+
+function createBridgeHandleEndingWithError(response: Buffer): RuntimePlacementBridgeSessionHandle {
+  return {
+    openStream: () => {
+      let dataCallback: ((chunk: Buffer) => void | Promise<void>) | undefined;
+      let errorCallback: ((error: Error) => void) | undefined;
+      return {
+        id: 'gateway-reset-1',
+        onData: (callback) => {
+          dataCallback = callback;
+        },
+        onClose: () => undefined,
+        onError: (callback) => {
+          errorCallback = callback;
+        },
+        write: async () => {
+          await dataCallback?.(response);
+          errorCallback?.(new Error('STREAM_READ_FAILED: connection reset by peer'));
+        },
+        close: async () => undefined,
+      };
     },
   };
 }
@@ -1307,6 +1331,88 @@ describe('GatewayURLClient', () => {
 });
 
 describe('GatewayBridgeClient', () => {
+  it('accepts a complete artifact response delivered before a bridge reset', async () => {
+    const paired = pairedURLRecord('https://gateway.example/');
+    const artifact = Buffer.from('runtime artifact');
+    const bridge = createBridgeHandleEndingWithError(bridgeHTTPResponse(testRuntimeOperation()));
+
+    await expect(new GatewayBridgeClient(paired.secretStore, bridge).uploadRuntimeOperationArtifact(
+      paired.record,
+      'op_artifact',
+      {
+        size_bytes: artifact.length,
+        archive_sha256: 'a'.repeat(64),
+        executable_sha256: 'b'.repeat(64),
+        manifest: { schema_version: 1 },
+      },
+      artifact,
+    )).resolves.toMatchObject({ operation_id: 'op_reconcile', state: 'failed' });
+  });
+
+  it('rejects a truncated artifact response followed by a bridge reset', async () => {
+    const paired = pairedURLRecord('https://gateway.example/');
+    const artifact = Buffer.from('runtime artifact');
+    const bridge = createBridgeHandleEndingWithError(Buffer.from(
+      'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 100\r\n\r\n{"ok":',
+      'utf8',
+    ));
+
+    await expect(new GatewayBridgeClient(paired.secretStore, bridge).uploadRuntimeOperationArtifact(
+      paired.record,
+      'op_artifact',
+      {
+        size_bytes: artifact.length,
+        archive_sha256: 'a'.repeat(64),
+        executable_sha256: 'b'.repeat(64),
+        manifest: { schema_version: 1 },
+      },
+      artifact,
+    )).rejects.toMatchObject({ code: 'GATEWAY_BRIDGE_FAILED' });
+  });
+
+  it('does not apply the short control-request timeout to Runtime artifact uploads', async () => {
+    vi.useFakeTimers();
+    const paired = pairedURLRecord('https://gateway.example/');
+    const bridge: RuntimePlacementBridgeSessionHandle = {
+      openStream: () => ({
+        id: 'gateway-artifact-1',
+        onData: () => undefined,
+        onClose: () => undefined,
+        onError: () => undefined,
+        write: () => new Promise<void>(() => undefined),
+        close: async () => undefined,
+      }),
+    };
+    const artifact = Buffer.from('runtime artifact');
+    let settled = false;
+    const observed = new GatewayBridgeClient(paired.secretStore, bridge).uploadRuntimeOperationArtifact(
+      paired.record,
+      'op_artifact',
+      {
+        size_bytes: artifact.length,
+        archive_sha256: 'a'.repeat(64),
+        executable_sha256: 'b'.repeat(64),
+        manifest: { schema_version: 1 },
+      },
+      artifact,
+    ).then(
+      () => null,
+      (error: unknown) => error,
+    ).finally(() => {
+      settled = true;
+    });
+    try {
+      await vi.advanceTimersByTimeAsync(20_001);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      await expect(observed).resolves.toMatchObject({ code: 'GATEWAY_TIMEOUT' });
+    } finally {
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      await observed;
+      vi.useRealTimers();
+    }
+  });
+
   it('sends the reconcile permit through the authenticated bridge request body', async () => {
     const paired = pairedURLRecord('https://gateway.example/');
     const harness = createBridgeHandle(() => bridgeHTTPResponse(testRuntimeOperation()));

@@ -182,6 +182,9 @@ func (c *Controller) RuntimeManagementCapability(ctx context.Context, gatewayEnv
 	}
 	capability.SupervisionMode = "gateway_supervisor"
 	capability.ArtifactPolicies = []gatewayprotocol.ArtifactPolicy{gatewayprotocol.ArtifactPolicyPublishedRelease}
+	if hasControllerGrant(grants, gatewayprotocol.RuntimeGrantCustomBuild) {
+		capability.ArtifactPolicies = append(capability.ArtifactPolicies, gatewayprotocol.ArtifactPolicyCustomBuild)
+	}
 
 	identity, err := c.controlClient().identity(ctx)
 	if err == nil {
@@ -617,19 +620,20 @@ func (c *Controller) offlineSnapshot(ctx context.Context) (gatewayprotocol.Workl
 	for _, instance := range inventory.Instances {
 		identities = append(identities, fmt.Sprintf("process:%d:%d:%s", instance.PID, instance.ProcessStartedAtUnixMS, instance.ExecutablePath))
 	}
+	observedAt := time.Now().UnixMilli()
 	if len(identities) > 0 {
 		return gatewayprotocol.NormalizeWorkloadSnapshot(gatewayprotocol.WorkloadSnapshot{
-			SnapshotRevision: time.Now().UnixNano(), ProcessInventoryDigest: "sha256:" + inventory.InventoryDigest,
+			SnapshotRevision: observedAt, ProcessInventoryDigest: "sha256:" + inventory.InventoryDigest,
 			WorkloadIdentityDigest: digestStrings(identities), WorkloadIdentities: identities,
-			Impact: gatewayprotocol.WorkloadImpact{Knowledge: gatewayprotocol.WorkloadUnknown}, ObservedAtUnixMS: time.Now().UnixMilli(),
+			Impact: gatewayprotocol.WorkloadImpact{Knowledge: gatewayprotocol.WorkloadUnknown}, ObservedAtUnixMS: observedAt,
 		}), nil
 	}
 	zero := 0
 	return gatewayprotocol.NormalizeWorkloadSnapshot(gatewayprotocol.WorkloadSnapshot{
-		SnapshotRevision: time.Now().UnixNano(), ProcessInventoryDigest: "sha256:" + inventory.InventoryDigest,
+		SnapshotRevision: observedAt, ProcessInventoryDigest: "sha256:" + inventory.InventoryDigest,
 		WorkloadIdentityDigest: digestStrings(nil), WorkloadIdentities: []string{},
 		Impact:           gatewayprotocol.WorkloadImpact{Knowledge: gatewayprotocol.WorkloadKnown, AffectedProcessCount: &zero, ActiveSessionCount: &zero},
-		ObservedAtUnixMS: time.Now().UnixMilli(),
+		ObservedAtUnixMS: observedAt,
 	}), nil
 }
 
@@ -701,7 +705,25 @@ func (c *Controller) extractRuntimeArtifact(ctx context.Context, operation gatew
 	}
 	defer gzipReader.Close()
 	tarReader := tar.NewReader(gzipReader)
-	found := false
+	allowedFiles := map[string]bool{
+		"redeven":             true,
+		"redevplugin-runtime": true,
+		".redevplugin-release-artifacts-verified.json": false,
+		"REDEVPLUGIN_THIRD_PARTY_NOTICES.md":           false,
+		"REDEVPLUGIN_RUNTIME.spdx.json":                false,
+		"redevplugin-runtime.provenance.json":          false,
+		"redevplugin-runtime.sig":                      false,
+		"redevplugin-runtime.pem":                      false,
+		"LICENSE":                                      false,
+		"THIRD_PARTY_NOTICES.md":                       false,
+	}
+	darwinFiles := map[string]struct{}{
+		"redeven":                {},
+		"LICENSE":                {},
+		"THIRD_PARTY_NOTICES.md": {},
+	}
+	found := make(map[string]struct{}, len(allowedFiles))
+	var totalSize int64
 	for {
 		header, err := tarReader.Next()
 		if errors.Is(err, io.EOF) {
@@ -711,26 +733,43 @@ func (c *Controller) extractRuntimeArtifact(ctx context.Context, operation gatew
 			return "", err
 		}
 		name := strings.TrimPrefix(filepath.ToSlash(filepath.Clean(header.Name)), "./")
-		if name != "redeven" || header.Typeflag != tar.TypeReg || found {
-			return "", errors.New("Runtime artifact must contain exactly one regular redeven binary")
+		executable, allowed := allowedFiles[name]
+		if !allowed || header.Typeflag != tar.TypeReg {
+			return "", errors.New("Runtime artifact contains an unsupported entry")
 		}
-		binaryPath := filepath.Join(stagingRoot, "bin", "redeven")
-		file, err := os.OpenFile(binaryPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o700)
+		if _, duplicate := found[name]; duplicate {
+			return "", errors.New("Runtime artifact contains a duplicate entry")
+		}
+		if operation.DesiredRuntime.Platform == "darwin" {
+			if _, allowedOnDarwin := darwinFiles[name]; !allowedOnDarwin {
+				return "", errors.New("Darwin Runtime artifact contains Linux-only companion evidence")
+			}
+		}
+		if header.Size < 0 || totalSize > (512<<20)-header.Size {
+			return "", errors.New("Runtime artifact exceeds the extraction size limit")
+		}
+		totalSize += header.Size
+		mode := os.FileMode(0o600)
+		if executable {
+			mode = 0o700
+		}
+		destinationPath := filepath.Join(stagingRoot, "bin", name)
+		file, err := os.OpenFile(destinationPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
 		if err != nil {
 			return "", err
 		}
-		_, copyErr := io.Copy(file, io.LimitReader(tarReader, 512<<20))
+		_, copyErr := io.CopyN(file, tarReader, header.Size)
 		syncErr := error(nil)
 		if copyErr == nil {
 			syncErr = file.Sync()
 		}
 		closeErr := file.Close()
 		if copyErr != nil || syncErr != nil || closeErr != nil {
-			return "", errors.New("extract Runtime binary failed")
+			return "", errors.New("extract Runtime suite file failed")
 		}
-		found = true
+		found[name] = struct{}{}
 	}
-	if !found {
+	if _, ok := found["redeven"]; !ok {
 		return "", errors.New("Runtime artifact did not contain redeven")
 	}
 	binaryPath := filepath.Join(stagingRoot, "bin", "redeven")
@@ -754,9 +793,10 @@ func (c *Controller) extractRuntimeArtifact(ctx context.Context, operation gatew
 	if len(fields) < 2 || fields[0] != "redeven" || normalizeVersion(fields[1]) != normalizeVersion(operation.DesiredRuntime.Version) {
 		return "", errors.New("staged Runtime version does not match the operation target")
 	}
-	if err := preserveRequiredRuntimeCompanions(
+	if err := ensureRequiredRuntimeCompanions(
 		filepath.Join(binding.RuntimeRoot, "runtime", "managed"),
 		stagingRoot,
+		operation.DesiredRuntime.Platform,
 	); err != nil {
 		return "", err
 	}
@@ -770,7 +810,10 @@ func (c *Controller) extractRuntimeArtifact(ctx context.Context, operation gatew
 	return stagingRoot, nil
 }
 
-func preserveRequiredRuntimeCompanions(managedRoot string, stagingRoot string) error {
+func ensureRequiredRuntimeCompanions(managedRoot string, stagingRoot string, platform string) error {
+	if strings.ToLower(strings.TrimSpace(platform)) != "linux" {
+		return nil
+	}
 	companions := []struct {
 		name       string
 		executable bool
@@ -779,9 +822,20 @@ func preserveRequiredRuntimeCompanions(managedRoot string, stagingRoot string) e
 		{name: ".redevplugin-release-artifacts-verified.json"},
 	}
 	for _, companion := range companions {
-		sourcePath := filepath.Join(managedRoot, "bin", companion.name)
 		destinationPath := filepath.Join(stagingRoot, "bin", companion.name)
+		if info, err := os.Lstat(destinationPath); err == nil {
+			if !info.Mode().IsRegular() || (companion.executable && info.Mode().Perm()&0o111 == 0) {
+				return errors.New("fresh Linux Runtime artifact contains invalid ReDevPlugin companions")
+			}
+			continue
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+		sourcePath := filepath.Join(managedRoot, "bin", companion.name)
 		if err := copyRuntimeCompanion(sourcePath, destinationPath, companion.executable); err != nil {
+			if os.IsNotExist(err) {
+				return errors.New("fresh Linux Runtime artifact is missing required ReDevPlugin companions")
+			}
 			return fmt.Errorf("preserve managed Runtime companion %q: %w", companion.name, err)
 		}
 	}

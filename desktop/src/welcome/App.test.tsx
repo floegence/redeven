@@ -1805,7 +1805,8 @@ describe('DesktopWelcomeShell', () => {
   it('routes unchecked Open through silent preflight and keeps lifecycle guidance in the same popup', () => {
     const appSrc = readWelcomeSource();
 
-    expect(appSrc).toContain("import { runEnvironmentOpenPreflight } from './environmentOpenPreflight';");
+    expect(appSrc).toContain('runEnvironmentOpenPreflight,');
+    expect(appSrc).toContain("} from './environmentOpenPreflight';");
     expect(appSrc).toContain("if (action.intent === 'open_with_preflight') {");
     expect(appSrc).toContain('const resolution = await runEnvironmentOpenPreflight({');
     expect(appSrc).toContain('attemptOpen: attemptEnvironmentOpenSilently,');

@@ -2,6 +2,7 @@ package supervisor
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/floegence/redeven/internal/config"
 	gatewayprotocol "github.com/floegence/redeven/internal/runtimegateway/protocol"
 	"github.com/floegence/redeven/internal/runtimegateway/security"
 )
@@ -78,6 +80,44 @@ func TestOpenLocalBindingStorePersistsStableCanonicalTarget(t *testing.T) {
 		LifecycleTargetID: got.LifecycleTargetID, TargetGeneration: got.TargetGeneration + 1,
 	}); err == nil {
 		t.Fatal("Validate accepted a stale target generation")
+	}
+}
+
+func TestOpenLocalBindingStoreMigratesLegacyLongRuntimeControlSocket(t *testing.T) {
+	root := filepath.Join(t.TempDir(), strings.Repeat("long-runtime-root-", 8))
+	stateRoot := filepath.Join(root, "gateway-state")
+	runtimeRoot := filepath.Join(root, "runtime-root")
+	first, err := OpenLocalBindingStore(stateRoot, runtimeRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	initial := first.Binding()
+	legacySocket := filepath.Join(initial.RuntimeRoot, "local-environment", "runtime", "control.sock")
+	wantSocket := config.RuntimeControlSocketPathForStateDir(filepath.Join(initial.RuntimeRoot, "local-environment"))
+	if wantSocket == legacySocket {
+		t.Fatalf("fixture did not require a shortened socket path: %q", legacySocket)
+	}
+
+	legacy := initial
+	legacy.RuntimeControlSocketPath = legacySocket
+	raw, err := json.MarshalIndent(bindingFile{SchemaVersion: bindingSchemaVersion, Binding: legacy}, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(stateRoot, "runtime-target-binding-v1.json"), append(raw, '\n'), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	migratedStore, err := OpenLocalBindingStore(stateRoot, runtimeRoot)
+	if err != nil {
+		t.Fatalf("OpenLocalBindingStore(legacy long socket) error = %v", err)
+	}
+	migrated := migratedStore.Binding()
+	if migrated.RuntimeControlSocketPath != wantSocket {
+		t.Fatalf("migrated RuntimeControlSocketPath = %q, want %q", migrated.RuntimeControlSocketPath, wantSocket)
+	}
+	if migrated.LifecycleTargetID != initial.LifecycleTargetID || migrated.TargetGeneration != initial.TargetGeneration {
+		t.Fatalf("socket migration changed target identity: before=%#v after=%#v", initial, migrated)
 	}
 }
 

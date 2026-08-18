@@ -1,5 +1,3 @@
-import path from 'node:path';
-
 import { loadManagedRuntimeStartupFromStatus } from './runtimeProcess';
 import { probeExternalLocalUIHealth } from './runtimeState';
 import type { StartupReport } from './startup';
@@ -114,7 +112,7 @@ async function currentRuntimeFromProbeStateDir(
   }
   const startup = await loadManagedRuntimeStartupFromStatus({
     executablePath: cleanExecutablePath,
-    stateRoot: path.dirname(cleanStateDir),
+    stateRoot: cleanStateDir,
     env: process.env,
     timeoutMs: probeTimeoutMs,
   });

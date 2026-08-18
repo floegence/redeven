@@ -168,6 +168,58 @@ describe('environment open flow decisions', () => {
       title: 'Start and open',
     });
 
+    const gatewayReadyButRuntimeMissing = {
+      ...setupRequired,
+      gateway_id: 'gw_local',
+      gateway_env_id: 'env_local',
+      runtime_management: {
+        support: 'supported' as const,
+        authorization: {
+          state: 'allowed' as const,
+          grants: ['manage_runtime', 'deploy_custom_runtime', 'manage_runtime_binding'] as const,
+        },
+        readiness: 'ready' as const,
+        presentation_state: 'allowed' as const,
+        target: { lifecycle_target_id: 'rlt_local', target_generation: 1 },
+        compatibility: {
+          gateway_protocol: 'redeven-gateway-v2',
+          runtime_platform: 'darwin' as const,
+          runtime_architecture: 'arm64' as const,
+          runtime_service_protocol: 'redeven-runtime-v2',
+          compatibility_epoch: 9,
+          capabilities: ['runtime_operations_v2'],
+        },
+        operations: ['update_runtime', 'reconcile'] as const,
+        artifact_policies: ['published_release', 'custom_build'] as const,
+        checked_at_unix_ms: 10,
+      },
+      runtime_operations: {
+        ...setupRequired.runtime_operations,
+        start: {
+          ...setupRequired.runtime_operations.start,
+          availability: 'hidden' as const,
+          method: 'runtime_gateway' as const,
+          reason_code: undefined,
+        },
+        update: {
+          ...setupRequired.runtime_operations.update,
+          availability: 'available' as const,
+          method: 'runtime_gateway' as const,
+          reason_code: undefined,
+        },
+      },
+    };
+    expect(environmentOpenFlow(gatewayReadyButRuntimeMissing)).toBe('initialize');
+    expect(buildProviderBackedEnvironmentActionModel(gatewayReadyButRuntimeMissing).action_presentation.primary_action_overlay).toMatchObject({
+      kind: 'popover',
+      title: 'Initialize and open',
+      actions: expect.arrayContaining([
+        expect.objectContaining({
+          action: expect.objectContaining({ intent: 'initialize_and_open' }),
+        }),
+      ]),
+    });
+
     const stoppedAfterDesktopRestart = {
       ...setupRequired,
       gateway_id: 'gw_local',
