@@ -1984,6 +1984,7 @@
     "accessRequestFailedDetail": "Redeven 无法请求此环境的访问权限，请重试。",
     "accessUnavailableDetail": "暂时无法访问此环境。请检查连接后重试。",
     "startFailedDetail": "Redeven 无法启动此环境，请重试。",
-    "openFailedDetail": "环境已启动，但 Redeven 无法打开工作区，请重试。"
+    "openFailedDetail": "环境已启动，但 Redeven 无法打开工作区，请重试。",
+    "preflightFailedDetail": "Redeven 无法检查此环境，请重试。"
   }
 }

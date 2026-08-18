@@ -1802,6 +1802,26 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).not.toContain('.redeven-ssh-runtime-activity');
   });
 
+  it('routes unchecked Open through silent preflight and keeps lifecycle guidance in the same popup', () => {
+    const appSrc = readWelcomeSource();
+
+    expect(appSrc).toContain("import { runEnvironmentOpenPreflight } from './environmentOpenPreflight';");
+    expect(appSrc).toContain("if (action.intent === 'open_with_preflight') {");
+    expect(appSrc).toContain('const resolution = await runEnvironmentOpenPreflight({');
+    expect(appSrc).toContain('attemptOpen: attemptEnvironmentOpenSilently,');
+    expect(appSrc).toContain('loadLatestEnvironment: loadLatestEnvironmentEntry,');
+    expect(appSrc).toContain("case 'open_with_preflight':");
+    expect(appSrc).toContain('props.onPrimaryActionGuidanceOpenChange(true);');
+    expect(appSrc).not.toContain("case 'open_with_preflight':\n        return openEnvironment(");
+    const clickHandler = appSrc.slice(
+      appSrc.indexOf("if (action.intent === 'open_with_preflight') {", appSrc.indexOf('function EnvironmentConnectionCard')),
+      appSrc.indexOf('if (environmentActionStartsLifecycleDisclosure(action))', appSrc.indexOf('function EnvironmentConnectionCard')),
+    );
+    expect(clickHandler.indexOf('props.onPrimaryActionGuidanceOpenChange(true);')).toBeLessThan(
+      clickHandler.indexOf('props.setGuidanceSession(nextSession);'),
+    );
+  });
+
   it('shows structured operation failures in a compact card with scrollable technical details', () => {
     const appSrc = readWelcomeSource();
     const styles = readWelcomeStyles();

@@ -1984,6 +1984,7 @@
     "accessRequestFailedDetail": "Redeven 無法要求此環境的存取權，請重試。",
     "accessUnavailableDetail": "暫時無法存取此環境。請檢查連線後重試。",
     "startFailedDetail": "Redeven 無法啟動此環境，請重試。",
-    "openFailedDetail": "環境已啟動，但 Redeven 無法開啟工作區，請重試。"
+    "openFailedDetail": "環境已啟動，但 Redeven 無法開啟工作區，請重試。",
+    "preflightFailedDetail": "Redeven 無法檢查此環境，請重試。"
   }
 }

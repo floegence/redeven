@@ -59,6 +59,7 @@ export const enUS = {
     initializationFailedDetail: 'Redeven could not prepare this environment. Try again.',
     startFailedTitle: 'Start failed',
     startFailedDetail: 'Redeven could not start this environment. Try again.',
+    preflightFailedDetail: 'Redeven could not check this environment. Try again.',
     openFailedDetail: 'The environment started, but Redeven could not open the workspace. Try again.',
   },
   webServiceBrowser: {

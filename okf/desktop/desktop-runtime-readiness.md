@@ -23,7 +23,7 @@ An accepted destructive lifecycle operation closes the attached Env App session 
 
 ## Unified open flow
 
-Every Environment row uses `Open` as its primary action. URL and other access-only connections open directly. A running Runtime also opens directly, even when lifecycle setup facts are unavailable or stale. For a lifecycle-capable Environment, a confirmed missing setup opens one `Initialize and open` panel; an initialized but stopped Runtime opens one `Start and open` panel. Provider authorization denial is resolved before initialization work begins and presents `Request access`.
+Every Environment row uses `Open` as its primary action. URL and other access-only connections open directly. A running Runtime also opens directly, even when lifecycle setup facts are unavailable or stale. When a Local or SSH Runtime has not been observed yet, that same Open click owns one transient access preflight: successful access opens immediately, while a failed attempt refreshes the Environment and continues in the same panel as initialization, start, or access guidance. It must not surface the obsolete offline error before evaluating that refreshed lifecycle state. For a lifecycle-capable Environment, a confirmed missing setup opens one `Initialize and open` panel; an initialized but stopped Runtime opens one `Start and open` panel. Provider authorization denial is resolved before initialization work begins and presents `Request access`.
 
 The initialization panel owns its interaction until completion. It reports `Check access`, `Prepare environment`, `Start environment`, and `Open workspace` in execution order while the internal Gateway progress remains hidden. The start-only path omits the preparation stage. Success opens the workspace and closes the panel. Failure preserves the exact user-facing reason in that panel and exposes `Retry initialization`; an access failure exposes `Request access`. Snapshot refresh and lower-level operation progress cannot prematurely replace or complete this session.
 
@@ -36,6 +36,8 @@ Environment open guidance does not display Gateway, Desktop ownership, target bi
 - `redeven:desktop/src/shared/desktopRuntimeOperationPlanner.ts:1` - Shared support/authorization/readiness projection and preflight.
 - `redeven:desktop/src/shared/desktopRuntimeHealth.ts:1` - Typed health observation independent from lifecycle commands.
 - `redeven:desktop/src/main/runtimePlacementBridgeSession.ts:337` - One exact bridge session identity for SSH and container access.
-- `redeven:desktop/src/welcome/viewModel.ts:1237` - Direct, initialize, start, and request-access open-flow decision.
+- `redeven:desktop/src/welcome/viewModel.ts:1239` - Direct, preflight, initialize, start, and request-access open-flow decision.
+- `redeven:desktop/src/welcome/environmentOpenPreflight.ts:1` - Unknown-state Open preflight and refreshed lifecycle routing.
+- `redeven:desktop/src/welcome/environmentOpenPreflight.smoke.test.ts:1` - Open, initialize, start, and authorization smoke outcomes.
 - `redeven:desktop/src/welcome/environmentGuidanceSession.ts:1` - Panel ownership, ordered stages, failure retention, and retry state.
 - `redeven:desktop/src/welcome/App.tsx:5104` - One localized initialize/start/open orchestrator.

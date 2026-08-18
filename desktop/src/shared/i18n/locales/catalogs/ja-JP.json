@@ -1984,6 +1984,7 @@
     "accessRequestFailedDetail": "Redeven はこの環境へのアクセスをリクエストできませんでした。もう一度お試しください。",
     "accessUnavailableDetail": "この環境にはまだアクセスできません。接続を確認して、もう一度お試しください。",
     "startFailedDetail": "Redeven はこの環境を起動できませんでした。もう一度お試しください。",
-    "openFailedDetail": "環境は起動しましたが、Redeven はワークスペースを開けませんでした。もう一度お試しください。"
+    "openFailedDetail": "環境は起動しましたが、Redeven はワークスペースを開けませんでした。もう一度お試しください。",
+    "preflightFailedDetail": "Redeven はこの環境を確認できませんでした。もう一度お試しください。"
   }
 }

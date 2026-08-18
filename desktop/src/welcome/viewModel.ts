@@ -178,6 +178,7 @@ export type EnvironmentLibrarySummaryModel = Readonly<{
 
 export type EnvironmentActionIntent =
   | 'open'
+  | 'open_with_preflight'
   | 'focus'
   | 'opening'
   | 'initialize_and_open'
@@ -236,7 +237,7 @@ export type EnvironmentPrimaryActionOverlayModel =
       actions: readonly EnvironmentGuidanceActionModel[];
   }>;
 
-export type EnvironmentOpenFlow = 'direct' | 'initialize' | 'start' | 'request_access';
+export type EnvironmentOpenFlow = 'direct' | 'preflight' | 'initialize' | 'start' | 'request_access';
 
 export type EnvironmentActionPresentation = Readonly<{
   kind: 'split_button';
@@ -1221,8 +1222,9 @@ function primaryWindowAction(environment: DesktopEnvironmentEntry): EnvironmentA
     };
   }
   const primaryRoute = environment.kind === 'provider_environment' ? providerPrimaryRoute(environment) : '';
+  const openFlow = environmentOpenFlow(environment);
   return {
-    intent: 'open',
+    intent: openFlow === 'preflight' ? 'open_with_preflight' : 'open',
     label: 'Open',
     enabled: true,
     variant: 'default',
@@ -1234,7 +1236,10 @@ function primaryWindowAction(environment: DesktopEnvironmentEntry): EnvironmentA
   };
 }
 
-export function environmentOpenFlow(environment: DesktopEnvironmentEntry): EnvironmentOpenFlow {
+function resolveEnvironmentOpenFlow(
+  environment: DesktopEnvironmentEntry,
+  allowUncheckedPreflight: boolean,
+): EnvironmentOpenFlow {
   if (environment.window_state === 'open' || environment.kind === 'external_local_ui') {
     return 'direct';
   }
@@ -1250,9 +1255,11 @@ export function environmentOpenFlow(environment: DesktopEnvironmentEntry): Envir
   }
   if (environment.runtime_health.status === 'online'
     || environmentOpenOperationAvailable(environment)
-    || providerRemoteOpenLooksAvailable(environment)
-    || environmentOpenPreflightAvailable(environment)) {
+    || providerRemoteOpenLooksAvailable(environment)) {
     return 'direct';
+  }
+  if (allowUncheckedPreflight && environmentOpenPreflightAvailable(environment)) {
+    return 'preflight';
   }
   if (runtimeManagementSetupRequired(environment)) {
     return 'initialize';
@@ -1265,6 +1272,14 @@ export function environmentOpenFlow(environment: DesktopEnvironmentEntry): Envir
     return 'start';
   }
   return 'direct';
+}
+
+export function environmentOpenFlow(environment: DesktopEnvironmentEntry): EnvironmentOpenFlow {
+  return resolveEnvironmentOpenFlow(environment, true);
+}
+
+export function environmentOpenFlowAfterPreflight(environment: DesktopEnvironmentEntry): EnvironmentOpenFlow {
+  return resolveEnvironmentOpenFlow(environment, false);
 }
 
 function providerPrimaryRoute(environment: DesktopEnvironmentEntry): DesktopLocalEnvironmentStateRoute | '' {

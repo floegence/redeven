@@ -134,6 +134,23 @@ describe('environment open flow decisions', () => {
     });
     expect(JSON.stringify(initializationPresentation.primary_action_overlay)).not.toMatch(/Gateway|Runtime management|Desktop ownership|binding target/u);
 
+    const uncheckedSetup = {
+      ...setupRequired,
+      runtime_health: {
+        ...setupRequired.runtime_health,
+        freshness: 'unknown' as const,
+      },
+    };
+    expect(environmentOpenFlow(uncheckedSetup)).toBe('preflight');
+    expect(buildProviderBackedEnvironmentActionModel(uncheckedSetup).action_presentation).toMatchObject({
+      primary_action: {
+        intent: 'open_with_preflight',
+        label: 'Open',
+        enabled: true,
+      },
+      primary_action_overlay: undefined,
+    });
+
     const initializedButStopped = {
       ...setupRequired,
       runtime_operations: {
@@ -1956,7 +1973,7 @@ describe('buildEnvironmentCardModel', () => {
       status_tone: 'neutral',
       action_presentation: {
         primary_action: {
-          intent: 'open',
+          intent: 'open_with_preflight',
           label: 'Open',
           enabled: true,
           variant: 'default',

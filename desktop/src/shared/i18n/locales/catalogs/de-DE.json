@@ -1988,6 +1988,7 @@
     "accessRequestFailedDetail": "Redeven konnte keinen Zugriff auf diese Umgebung anfordern. Versuchen Sie es erneut.",
     "accessUnavailableDetail": "Der Zugriff auf diese Umgebung ist noch nicht verfügbar. Prüfen Sie die Verbindung und versuchen Sie es erneut.",
     "startFailedDetail": "Redeven konnte diese Umgebung nicht starten. Versuchen Sie es erneut.",
-    "openFailedDetail": "Die Umgebung wurde gestartet, aber Redeven konnte den Arbeitsbereich nicht öffnen. Versuchen Sie es erneut."
+    "openFailedDetail": "Die Umgebung wurde gestartet, aber Redeven konnte den Arbeitsbereich nicht öffnen. Versuchen Sie es erneut.",
+    "preflightFailedDetail": "Redeven konnte den Status dieser Umgebung nicht prüfen. Versuchen Sie es erneut."
   }
 }

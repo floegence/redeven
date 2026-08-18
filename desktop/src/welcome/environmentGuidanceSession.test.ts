@@ -73,6 +73,32 @@ describe('environmentGuidanceSession', () => {
     expect(guidanceSessionOwnsOpenFlowPanel(failed)).toBe(true);
   });
 
+  it('keeps an unchecked Open preflight inside the open-flow panel and offers Open again on failure', () => {
+    const checking = startEnvironmentGuidanceIntent(null, 'env_demo', 'open_with_preflight');
+
+    expect(checking).toEqual({
+      environment_id: 'env_demo',
+      pending_intent: 'open_with_preflight',
+      open_flow_stage: 'checking_access',
+      feedback: null,
+    });
+    expect(guidanceSessionNotice(checking)).toEqual({
+      tone: 'info',
+      title: 'Checking access',
+      detail: 'Redeven is checking access before changing this environment.',
+    });
+    expect(guidanceSessionOwnsOpenFlowPanel(checking)).toBe(true);
+    expect(failEnvironmentGuidanceIntent(checking, 'The environment could not be reached.')).toMatchObject({
+      pending_intent: null,
+      retry_intent: 'open_with_preflight',
+      feedback: {
+        tone: 'error',
+        title: 'Open failed',
+        detail: 'The environment could not be reached.',
+      },
+    });
+  });
+
   it('turns an early authorization failure into a request-access retry', () => {
     const checking = startEnvironmentGuidanceIntent(null, 'env_demo', 'request_open_access');
     expect(failEnvironmentGuidanceIntent(checking, 'Access is required.')).toMatchObject({
@@ -98,6 +124,7 @@ describe('environmentGuidanceSession', () => {
   });
 
   it('does not claim runtime lifecycle operations as guidance pending intents', () => {
+    expect(isEnvironmentGuidancePendingIntent('open_with_preflight')).toBe(true);
     expect(isEnvironmentGuidancePendingIntent('start_runtime')).toBe(false);
     expect(isEnvironmentGuidancePendingIntent('stop_runtime')).toBe(false);
     expect(isEnvironmentGuidancePendingIntent('restart_runtime')).toBe(false);
