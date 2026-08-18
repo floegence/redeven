@@ -133,7 +133,7 @@ describe('launcherActionFeedback', () => {
       delivery: 'toast',
       action: {
         kind: 'reconnect_control_plane',
-        label: 'Reconnect Provider',
+        label: 'Request access',
         provider_origin: 'https://provider.example.invalid',
         provider_id: 'example_control_plane',
       },
@@ -155,7 +155,7 @@ describe('launcherActionFeedback', () => {
       title: 'Provider 授权已过期',
       message: 'Desktop 需要新的 Provider 授权才能打开或连接此 Provider 环境。',
       action: {
-        label: '重新连接 Provider',
+        label: '请求访问',
       },
     });
 

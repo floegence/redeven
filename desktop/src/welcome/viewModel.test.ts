@@ -40,6 +40,7 @@ import {
   buildGatewaySourceRowModel,
   FACT_LABEL_ICONS,
   buildProviderBackedEnvironmentActionModel,
+  environmentOpenFlow,
   buildEnvironmentDisplayStateModel,
   buildEnvironmentLibrarySummaryModel,
   environmentLibraryCount,
@@ -80,17 +81,10 @@ function placeholderFact(label: string, value = 'None') {
   };
 }
 
-function expectRuntimeManagementSetup(
+function expectEnvironmentInitialization(
   actionModel: ReturnType<typeof buildProviderBackedEnvironmentActionModel>,
 ): void {
   expect(actionModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
-    expect.objectContaining({
-      id: 'setup_runtime_management',
-      action: expect.objectContaining({
-        intent: 'setup_runtime_management',
-        enabled: true,
-      }),
-    }),
     expect.objectContaining({
       id: 'refresh_runtime',
       action: expect.objectContaining({
@@ -100,11 +94,80 @@ function expectRuntimeManagementSetup(
     }),
   ]));
   const actionIDs = actionModel.action_presentation.menu_actions.map((item) => item.id);
+  expect(actionIDs).not.toContain('initialize_and_open');
   expect(actionIDs).not.toContain('start_runtime');
   expect(actionIDs).not.toContain('stop_runtime');
   expect(actionIDs).not.toContain('restart_runtime');
   expect(actionIDs).not.toContain('update_runtime');
 }
+
+describe('environment open flow decisions', () => {
+  it('keeps URL connections direct and routes managed states through the unified open flow', () => {
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({ local_environment: testLocalEnvironment() }),
+    });
+    const base = snapshot.environments.find((entry) => entry.kind === 'local_environment');
+    expect(base).toBeTruthy();
+    const external = { ...base!, kind: 'external_local_ui' as const };
+    expect(environmentOpenFlow(external)).toBe('direct');
+
+    const setupRequired = {
+      ...base!,
+      kind: 'local_environment' as const,
+      runtime_health: {
+        ...base!.runtime_health,
+        status: 'offline' as const,
+        freshness: 'fresh' as const,
+      },
+      runtime_operations: {
+        ...base!.runtime_operations,
+        open: { ...base!.runtime_operations.open, availability: 'blocked' as const },
+        start: { ...base!.runtime_operations.start, reason_code: 'runtime_gateway_setup_required' },
+      },
+    };
+    expect(environmentOpenFlow(setupRequired)).toBe('initialize');
+    const initializationPresentation = buildProviderBackedEnvironmentActionModel(setupRequired).action_presentation;
+    expect(initializationPresentation.primary_action.label).toBe('Open');
+    expect(initializationPresentation.primary_action_overlay).toMatchObject({
+      kind: 'popover',
+      title: 'Initialize and open',
+    });
+    expect(JSON.stringify(initializationPresentation.primary_action_overlay)).not.toMatch(/Gateway|Runtime management|Desktop ownership|binding target/u);
+
+    const initializedButStopped = {
+      ...setupRequired,
+      runtime_operations: {
+        ...setupRequired.runtime_operations,
+        start: {
+          ...setupRequired.runtime_operations.start,
+          availability: 'available' as const,
+          reason_code: undefined,
+        },
+      },
+    };
+    expect(environmentOpenFlow(initializedButStopped)).toBe('start');
+    expect(buildProviderBackedEnvironmentActionModel(initializedButStopped).action_presentation.primary_action_overlay).toMatchObject({
+      kind: 'popover',
+      title: 'Start and open',
+    });
+
+    expect(environmentOpenFlow({
+      ...setupRequired,
+      runtime_health: { ...setupRequired.runtime_health, status: 'online' as const },
+    })).toBe('direct');
+  });
+
+  it('requests access before opening an unauthorized environment', () => {
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({ local_environment: testLocalEnvironment() }),
+    });
+    const base = snapshot.environments[0]!;
+    expect(environmentOpenFlow({
+      ...base,
+      runtime_health: { ...base.runtime_health, offline_reason_code: 'auth_required' },
+    })).toBe('request_access');
+  });
+});
 
 function buildProvider(providerOrigin = 'https://redeven.test') {
   return {
@@ -1150,13 +1213,13 @@ describe('buildEnvironmentCardModel', () => {
       }),
     ]));
     const actionModel = buildProviderBackedEnvironmentActionModel(localEntry!);
-    expectRuntimeManagementSetup(actionModel);
+    expectEnvironmentInitialization(actionModel);
     expect(actionModel.action_presentation.primary_action_overlay).toMatchObject({
       kind: 'popover',
-      title: 'Set up Runtime management to continue',
+      title: 'Initialize and open',
       actions: expect.arrayContaining([
         expect.objectContaining({
-          label: 'Set up Runtime management',
+          label: 'Initialize and open',
         }),
       ]),
     });
@@ -1198,15 +1261,15 @@ describe('buildEnvironmentCardModel', () => {
       status_label: 'SETUP REQUIRED',
       action_presentation: {
         primary_action: {
-          enabled: false,
+          enabled: true,
         },
         primary_action_overlay: expect.objectContaining({
           kind: 'popover',
-          title: 'Set up Runtime management to continue',
+          title: 'Initialize and open',
         }),
       },
     });
-    expectRuntimeManagementSetup(actionModel);
+    expectEnvironmentInitialization(actionModel);
   });
 
   it('shows Start runtime for a running container target without an active bridge', () => {
@@ -1240,13 +1303,13 @@ describe('buildEnvironmentCardModel', () => {
     const localEntry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
     const actionModel = buildProviderBackedEnvironmentActionModel(localEntry!);
 
-    expectRuntimeManagementSetup(actionModel);
+    expectEnvironmentInitialization(actionModel);
     expect(actionModel.action_presentation.primary_action_overlay).toMatchObject({
       kind: 'popover',
-      title: 'Set up Runtime management to continue',
+      title: 'Initialize and open',
       actions: expect.arrayContaining([
         expect.objectContaining({
-          label: 'Set up Runtime management',
+          label: 'Initialize and open',
         }),
       ]),
     });
@@ -1422,15 +1485,15 @@ describe('buildEnvironmentCardModel', () => {
     const localEntry = snapshot.environments.find((environment) => environment.kind === 'local_environment');
     const actionModel = buildProviderBackedEnvironmentActionModel(localEntry!);
 
-    expectRuntimeManagementSetup(actionModel);
+    expectEnvironmentInitialization(actionModel);
     expect(actionModel.action_presentation.primary_action_overlay).toMatchObject({
       kind: 'popover',
-      title: 'Set up Runtime management to continue',
+      title: 'Initialize and open',
       actions: expect.arrayContaining([
         expect.objectContaining({
-          label: 'Set up Runtime management',
+          label: 'Initialize and open',
           action: expect.objectContaining({
-            intent: 'setup_runtime_management',
+            intent: 'initialize_and_open',
             enabled: true,
           }),
         }),
@@ -1486,12 +1549,12 @@ describe('buildEnvironmentCardModel', () => {
     expect(actionModel.status_label).toBe('RUNTIME OFFLINE');
     expect(actionModel.action_presentation.primary_action_overlay).toMatchObject({
       kind: 'popover',
-      title: 'Set up Runtime management to continue',
+      title: 'Initialize and open',
       actions: expect.arrayContaining([
         expect.objectContaining({
-          label: 'Set up Runtime management',
+          label: 'Initialize and open',
           action: expect.objectContaining({
-            intent: 'setup_runtime_management',
+            intent: 'initialize_and_open',
             enabled: true,
           }),
         }),
@@ -1504,7 +1567,7 @@ describe('buildEnvironmentCardModel', () => {
         }),
       ]),
     });
-    expectRuntimeManagementSetup(actionModel);
+    expectEnvironmentInitialization(actionModel);
   });
 
   it('guides stopped local container runtimes through Start while keeping other lifecycle actions explicit', () => {
@@ -1546,16 +1609,16 @@ describe('buildEnvironmentCardModel', () => {
         primary_action: {
           intent: 'open',
           label: 'Open',
-          enabled: false,
+          enabled: true,
         },
         primary_action_overlay: {
           kind: 'popover',
-          title: 'Set up Runtime management to continue',
+          title: 'Initialize and open',
           actions: expect.arrayContaining([
             expect.objectContaining({
-              label: 'Set up Runtime management',
+              label: 'Initialize and open',
               action: expect.objectContaining({
-                intent: 'setup_runtime_management',
+                intent: 'initialize_and_open',
                 enabled: true,
               }),
             }),
@@ -1570,7 +1633,7 @@ describe('buildEnvironmentCardModel', () => {
         },
       },
     });
-    expectRuntimeManagementSetup(actionModel);
+    expectEnvironmentInitialization(actionModel);
   });
 
   it('keeps an online SSH runtime openable while offering Update runtime separately when it needs an update', () => {
@@ -1659,7 +1722,7 @@ describe('buildEnvironmentCardModel', () => {
         primary_action_overlay: undefined,
       },
     });
-    expectRuntimeManagementSetup(actionModel);
+    expectEnvironmentInitialization(actionModel);
   });
 
   it('treats a missing Env App shell as an update-required SSH runtime block', () => {
@@ -1721,7 +1784,7 @@ describe('buildEnvironmentCardModel', () => {
     expect(buildProviderBackedEnvironmentActionModel(entry!).action_presentation.primary_action_overlay).toBeUndefined();
   });
 
-  it('guides SSH runtime-control maintenance through Restart instead of Start', () => {
+  it('keeps SSH runtime-control restart maintenance separate from initialization', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         saved_ssh_environments: [{
@@ -1766,25 +1829,17 @@ describe('buildEnvironmentCardModel', () => {
     expect(actionModel.status_label).toBe('RESTART REQUIRED');
     expect(overlay).toMatchObject({
       kind: 'popover',
-      title: 'Set up Runtime management to continue',
+      title: 'Runtime restart required',
     });
     expect(overlay?.kind).toBe('popover');
     if (overlay?.kind !== 'popover') {
       throw new Error('expected runtime-control maintenance overlay to be a popover');
     }
-    expect(overlay.actions).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        label: 'Set up Runtime management',
-        action: expect.objectContaining({
-          intent: 'setup_runtime_management',
-          enabled: true,
-        }),
-      }),
-    ]));
-    expectRuntimeManagementSetup(actionModel);
+    expect(overlay.actions.map((item) => item.action.intent)).not.toContain('initialize_and_open');
+    expect(actionModel.action_presentation.menu_actions.map((item) => item.id)).not.toContain('initialize_and_open');
   });
 
-  it('keeps Stop, Restart, and Update available for running local container restart maintenance', () => {
+  it('keeps running local container restart maintenance separate from initialization', () => {
     const restartMaintenance = {
       kind: 'runtime_restart_required' as const,
       required_for: 'open' as const,
@@ -1835,18 +1890,9 @@ describe('buildEnvironmentCardModel', () => {
     expect(actionModel.status_label).toBe('RESTART REQUIRED');
     expect(actionModel.action_presentation.primary_action_overlay).toMatchObject({
       kind: 'popover',
-      title: 'Set up Runtime management to continue',
-      actions: expect.arrayContaining([
-        expect.objectContaining({
-          label: 'Set up Runtime management',
-          action: expect.objectContaining({
-            intent: 'setup_runtime_management',
-            enabled: true,
-          }),
-        }),
-      ]),
+      title: 'Runtime restart required',
     });
-    expectRuntimeManagementSetup(actionModel);
+    expect(actionModel.action_presentation.menu_actions.map((item) => item.id)).not.toContain('initialize_and_open');
   });
 
   it('does not render stale restart maintenance when the runtime is openable', () => {
@@ -1894,7 +1940,7 @@ describe('buildEnvironmentCardModel', () => {
       enabled: true,
     });
     expect(actionModel.action_presentation.primary_action_overlay).toBeUndefined();
-    expectRuntimeManagementSetup(actionModel);
+    expectEnvironmentInitialization(actionModel);
   });
 
   it('lets NOT CHECKED runtime cards start Open-owned status preflight', () => {
@@ -1975,16 +2021,16 @@ describe('buildEnvironmentCardModel', () => {
         primary_action: {
           intent: 'open',
           label: 'Open',
-          enabled: false,
+          enabled: true,
         },
         primary_action_overlay: {
           kind: 'popover',
-          title: 'Set up Runtime management to continue',
+          title: 'Initialize and open',
           actions: expect.arrayContaining([
             expect.objectContaining({
-              label: 'Set up Runtime management',
+              label: 'Initialize and open',
               action: expect.objectContaining({
-                intent: 'setup_runtime_management',
+                intent: 'initialize_and_open',
                 enabled: true,
               }),
             }),
@@ -2108,7 +2154,7 @@ describe('buildEnvironmentCardModel', () => {
         primary_action: {
           intent: 'open',
           label: 'Open',
-          enabled: false,
+          enabled: true,
           variant: 'default',
           route: 'remote_desktop',
         },
@@ -2265,7 +2311,7 @@ describe('buildEnvironmentCardModel', () => {
         primary_action: {
           intent: 'open',
           label: 'Open',
-          enabled: false,
+          enabled: true,
           route: 'remote_desktop',
         },
         menu_actions: [
@@ -2309,7 +2355,7 @@ describe('buildEnvironmentCardModel', () => {
     const managedLocalEntry = observeOnlySnapshot.environments.find((environment) => environment.kind === 'local_environment');
     const managedMenuActionIDs = buildProviderBackedEnvironmentActionModel(managedLocalEntry!)
       .action_presentation.menu_actions.map((item) => item.id);
-    expect(managedMenuActionIDs).toContain('setup_runtime_management');
+    expect(managedMenuActionIDs).not.toContain('initialize_and_open');
     expect(managedMenuActionIDs).not.toContain('stop_runtime');
     expect(managedMenuActionIDs).not.toContain('runtime_managed_externally');
     expect(managedMenuActionIDs).not.toContain('start_runtime');
@@ -2356,7 +2402,7 @@ describe('buildEnvironmentCardModel', () => {
         primary_action: {
           intent: 'open',
           route: 'remote_desktop',
-          enabled: false,
+          enabled: true,
         },
         menu_actions: [
           expect.objectContaining({ id: 'refresh_runtime' }),
@@ -2590,7 +2636,7 @@ describe('buildEnvironmentCardModel', () => {
         primary_action: {
           intent: 'open',
           label: 'Open',
-          enabled: false,
+          enabled: true,
           route: 'remote_desktop',
         },
         primary_action_overlay: {
@@ -2637,7 +2683,7 @@ describe('buildEnvironmentCardModel', () => {
     });
   });
 
-  it('uses provider reconnect as the provider-card action when authorization expired', () => {
+  it('uses request access as the provider-card action when authorization expired', () => {
     const controlPlane = buildControlPlaneSummary({
       status: 'offline',
       lifecycleStatus: 'suspended',
@@ -2653,33 +2699,38 @@ describe('buildEnvironmentCardModel', () => {
     const entry = snapshot.environments.find((environment) => environment.kind === 'provider_environment');
 
     expect(entry?.control_plane_sync_state).toBe('auth_required');
-    expect(buildProviderBackedEnvironmentActionModel(entry!)).toEqual({
+    expect(buildProviderBackedEnvironmentActionModel(entry!)).toMatchObject({
       status_label: 'RECONNECT REQUIRED',
       status_tone: 'warning',
       action_presentation: {
         kind: 'split_button',
         primary_action: {
-          intent: 'reconnect_provider',
-          label: 'Reconnect Provider',
+          intent: 'open',
+          label: 'Open',
           enabled: true,
           variant: 'default',
-          provider_origin: 'https://redeven.test',
-          provider_id: 'example_control_plane',
+          route: 'remote_desktop',
         },
         primary_action_overlay: {
-          kind: 'tooltip',
+          kind: 'popover',
           tone: 'warning',
-          message: 'Desktop needs fresh provider authorization before it can open or connect this provider Environment.',
+          title: 'Request access',
+          actions: expect.arrayContaining([
+            expect.objectContaining({
+              label: 'Request access',
+              action: expect.objectContaining({ intent: 'request_open_access' }),
+            }),
+          ]),
         },
         menu_button_label: 'Runtime actions',
         menu_actions: [{
-          id: 'reconnect_provider',
-          label: 'Reconnect Provider',
+          id: 'request_open_access',
+          label: 'Request access',
           action: {
-            intent: 'reconnect_provider',
-            label: 'Reconnect Provider',
+            intent: 'request_open_access',
+            label: 'Request access',
             enabled: true,
-            variant: 'default',
+            variant: 'outline',
             provider_origin: 'https://redeven.test',
             provider_id: 'example_control_plane',
           },
@@ -2720,7 +2771,7 @@ describe('buildEnvironmentCardModel', () => {
         primary_action: {
           intent: 'open',
           label: 'Open',
-          enabled: false,
+          enabled: true,
           variant: 'default',
           route: 'remote_desktop',
         },
@@ -2852,7 +2903,7 @@ describe('buildEnvironmentCardModel', () => {
         primary_action_overlay: undefined,
       },
     });
-    expectRuntimeManagementSetup(actionModel);
+    expectEnvironmentInitialization(actionModel);
   });
 
   it('keeps Open available when the Local Environment bundled runtime may need an update', () => {
@@ -3211,7 +3262,7 @@ describe('Gateway view models', () => {
       status_tone: 'warning',
       primary_action: expect.objectContaining({
         intent: 'resolve_gateway',
-        label: 'Resolve',
+        label: 'Open',
         enabled: true,
       }),
     });

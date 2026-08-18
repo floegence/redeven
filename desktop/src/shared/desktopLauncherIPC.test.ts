@@ -661,17 +661,9 @@ describe('desktopLauncherIPC', () => {
       operation: 'restart',
       label: 'Demo',
     });
-    expect(normalizeDesktopLauncherActionRequest({
-      kind: 'request_provider_runtime_enrollment_challenge',
-      environment_id: ' provider-card ',
-      gateway_id: 'gateway-demo',
-    })).toEqual({
-      kind: 'request_provider_runtime_enrollment_challenge',
-      environment_id: 'provider-card',
-    });
   });
 
-  it('binds direct Runtime management setup to the selected card target', () => {
+  it('binds direct environment initialization to the selected card target', () => {
     const selectedTarget = {
       kind: 'setup_direct_runtime_management',
       environment_id: ' local-container ',

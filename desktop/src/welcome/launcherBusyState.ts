@@ -46,7 +46,6 @@ export type BusyAction =
   | 'delete_gateway_environment_profile'
   | 'run_gateway_environment_lifecycle'
   | 'run_provider_environment_lifecycle'
-  | 'request_provider_runtime_enrollment_challenge'
   | 'setup_provider_runtime_management_with_direct_card'
   | 'setup_direct_runtime_management'
   | 'confirm_runtime_operation'

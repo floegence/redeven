@@ -340,7 +340,7 @@
               "runtime",
               "startup"
             ],
-            "summary": "Desktop keeps Connect, Workspace, Runtime UI, and Runtime management readiness independent. A Runtime may start and serve ordinary access without Gateway. Management UI projects support, authorization, and readiness in that order, so missing Gateway is setup guidance rather than Runtime offline state.",
+            "summary": "Desktop keeps Connect, Workspace, Runtime UI, and managed lifecycle readiness independent. A Runtime may start and serve ordinary access without Gateway. Environment rows present the user outcome `Open`; support, authorization, readiness, and lifecycle authority remain internal facts that decide whether Open is direct or requires one confirmation flow.",
             "section_count": 2
           },
           {
@@ -5477,15 +5477,15 @@
         "title": "Desktop runtime process lifecycle",
         "type": "Desktop Contract"
       },
-      "body_length": 4557,
+      "body_length": 5557,
       "summary": "Desktop discovers Runtime process facts and initiates user-facing operations, but it does not own Runtime lifecycle state. Every product-managed start, stop, restart, or update is authorized and executed by the target OS user's Gateway supervisor. Desktop uses `lifecycle_target_id` plus `target_generation` and attaches to the durable Gateway operation from any authorized client.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Identity and inventory\n\nThe Runtime inventory records PID/create time, user, namespace, state root, executable identity, Runtime version, workload identities, snapshot revision, and an inventory digest. Missing, malformed, stale, or incompatible inventory is `unknown`; it is never coerced to zero. Target identity is stable across Desktop clients and transport changes. A changed OS principal, container instance, or installation root creates a new target id; a supervisor key rotation advances generation under the same target lock.\n\n## Operation ordering\n\nDesktop performs support, authorization, readiness, target, generation, compatibility, and artifact-policy checks before invoking a builder or uploader. The Gateway `prepare` response creates or attaches to one durable operation. User confirmation precedes artifact staging. Commit acquires the Runtime lifecycle fence, compares the exact confirmed workload identity set, atomically replaces the artifact, checks health, and records recovery. Identity replacement, added risk, or `known -\u003e unknown` requires `confirmation_required`. A conflicting operation returns `operation_in_progress`; it is never queued or forcefully taken over.\n\nDesktop closes an attached Env App session only after a destructive operation is accepted by the shared coordinator. A transport disconnect does not cancel a Gateway operation; reopening either a direct or Provider card queries the exact target and attaches to active Gateway progress. Only the original operation client can resume confirmation, artifact upload, or commit. Another authorized manager receives redacted progress, while a current binding administrator may start the separate permit-bound reconcile action for quarantine. Connect, Workspace, terminal, files, and web sessions remain separate from the lifecycle operation store.\n\nProvider cards use a Provider-scoped management client key and their own protected management tunnel. The bound Gateway, not the Runtime Agent, maintains that reverse transport, so stopping Runtime does not remove the supervisor management route. Provider cards never ask the user to select another Gateway card and never read its paired key or transport. Direct cards use their own explicit setup flow to install/enroll the target supervisor; a local-host Gateway package is selected for the actual Linux or Darwin host and CPU architecture, while SSH and container bootstrap remain Linux-only. Access-only URL cards remain unsupported for managed lifecycle. The planner first projects support, then authorization, then readiness, and does not mark an action available until that route can execute it.",
-          "char_count": 2643
+          "body": "## Identity and inventory\n\nThe Runtime inventory records PID/create time, user, namespace, state root, executable identity, Runtime version, workload identities, snapshot revision, and an inventory digest. Missing, malformed, stale, or incompatible inventory is `unknown`; it is never coerced to zero. Target identity is stable across Desktop clients and transport changes. A changed OS principal, container instance, or installation root creates a new target id; a supervisor key rotation advances generation under the same target lock.\n\n## Operation ordering\n\nDesktop performs support, authorization, readiness, target, generation, compatibility, and artifact-policy checks before invoking a builder or uploader. The Gateway `prepare` response creates or attaches to one durable operation. User confirmation precedes artifact staging. Commit acquires the Runtime lifecycle fence, compares the exact confirmed workload identity set, atomically replaces the artifact, checks health, and records recovery. Identity replacement, added risk, or `known -\u003e unknown` requires `confirmation_required`. A conflicting operation returns `operation_in_progress`; it is never queued or forcefully taken over.\n\nDesktop closes an attached Env App session only after a destructive operation is accepted by the shared coordinator. A transport disconnect does not cancel a Gateway operation; reopening either a direct or Provider card queries the exact target and attaches to active Gateway progress. Only the original operation client can resume confirmation, artifact upload, or commit. Another authorized manager receives redacted progress, while a current binding administrator may start the separate permit-bound reconcile action for quarantine. Connect, Workspace, terminal, files, and web sessions remain separate from the lifecycle operation store.\n\nProvider cards use a Provider-scoped management client key and their own protected management tunnel. The bound Gateway, not the Runtime Agent, maintains that reverse transport, so stopping Runtime does not remove the supervisor management route. Provider cards never ask the user to select another Gateway card and never read its paired key or transport. Direct cards use their own explicit setup flow to install/enroll the target supervisor; a local-host Gateway package is selected for the actual Linux or Darwin host and CPU architecture, while SSH and container bootstrap remain Linux-only. Access-only URL cards remain unsupported for managed lifecycle. The planner first projects support, then authorization, then readiness, and does not mark an action available until that route can execute it.\n\nThe product smoke starts the real Runtime without Gateway and verifies ordinary ping and Desktop bridge access first. It then starts the real `redeven-gateway` service, enters only through `desktop-bridge`, completes the signed Gateway protocol pairing chain, and validates capability target/generation, compatibility epoch, Runtime identity, version, and executable digest. Restart and custom-build update traverse prepare, confirmation, artifact staging where required, commit, and succeeded states against the real Runtime process. Operation and event history must survive a Gateway service restart. Commit-before-confirmation, same-target lock conflict, and executable-digest tampering fail closed. Tests do not use `serve`, pairing-code shortcuts, fake controllers, direct Runtime replacement, or legacy stamp writes as lifecycle evidence.",
+          "char_count": 3489
         },
         {
           "id": "boundaries",
@@ -5543,6 +5543,12 @@
           "source": "redeven:desktop/src/main/gatewayServiceHost.test.ts",
           "line": 1,
           "description": "Local-host platform selection permits published Darwin Gateway packages without widening the SSH platform boundary."
+        },
+        {
+          "id": "redeven:tests/docker_runtime_e2e/gateway_lifecycle_smoke_test.go:1:real service, desktop bridge, signed lifecycle, persistence, and negative smoke.",
+          "source": "redeven:tests/docker_runtime_e2e/gateway_lifecycle_smoke_test.go",
+          "line": 1,
+          "description": "Real service, Desktop bridge, signed lifecycle, persistence, and negative smoke."
         }
       ],
       "snippet": "Desktop discovers Runtime process facts and initiates user-facing operations, but it does not own Runtime lifecycle state. Every product-managed start, stop, restart, or update is authorized and executed by the target OS user's Gateway supe",
@@ -5579,22 +5585,22 @@
         "title": "Desktop runtime readiness",
         "type": "Desktop Contract"
       },
-      "body_length": 2417,
-      "summary": "Desktop keeps Connect, Workspace, Runtime UI, and Runtime management readiness independent. A Runtime may start and serve ordinary access without Gateway. Management UI projects support, authorization, and readiness in that order, so missing Gateway is setup guidance rather than Runtime offline state.",
+      "body_length": 3856,
+      "summary": "Desktop keeps Connect, Workspace, Runtime UI, and managed lifecycle readiness independent. A Runtime may start and serve ordinary access without Gateway. Environment rows present the user outcome `Open`; support, authorization, readiness, and lifecycle authority remain internal facts that decide whether Open is direct or requires one confirmation flow.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Capability projection\n\nLocal, SSH, local-container, and SSH-container paths with a clear supervisor setup route report `support=supported`; URL paths report `unsupported`. With a grant, no binding is `setup_required`, and an existing binding with an unavailable Gateway is `temporarily_unavailable`. Without a grant, target, generation, operations, artifact policies, and supervisor facts remain hidden. Provider uses the same projection from RCPP v3.\n\n## Startup and access\n\nLocal UI password and network exposure acknowledgement are startup configuration, not Runtime lifecycle ownership. Health probes are read-only and do not start, stop, or reconnect a service. SSH/container bridge startup performs one typed health and open-readiness probe before opening a window; failed probes end that open attempt without selecting another transport. Existing bridge recovery validates exact process, token, target, and protocol identity, and never migrates a session to a different Runtime.\n\nAn accepted destructive lifecycle operation closes the attached Env App session through the shared operation coordinator. A disconnected Desktop leaves the Gateway operation running; a later open attaches to the durable progress. Lifecycle incompatibility disables only the management area; Connect, Workspace, and Runtime UI remain available.",
-          "char_count": 1333
+          "body": "## Capability projection\n\nLocal, SSH, local-container, and SSH-container paths with a clear supervisor setup route report `support=supported`; URL paths report `unsupported`. With a grant, no binding is `setup_required`, and an existing binding with an unavailable Gateway is `temporarily_unavailable`. Without a grant, target, generation, operations, artifact policies, and supervisor facts remain hidden. Provider uses the same projection from RCPP v3.\n\n## Startup and access\n\nLocal UI password and network exposure acknowledgement are startup configuration, not Runtime lifecycle ownership. Health probes are read-only and do not start, stop, or reconnect a service. SSH/container bridge startup performs one typed health and open-readiness probe before opening a window; failed probes end that open attempt without selecting another transport. Existing bridge recovery validates exact process, token, target, and protocol identity, and never migrates a session to a different Runtime.\n\nAn accepted destructive lifecycle operation closes the attached Env App session through the shared operation coordinator. A disconnected Desktop leaves the Gateway operation running; a later open attaches to the durable progress. Lifecycle incompatibility disables only the management area; Connect, Workspace, and Runtime UI remain available.\n\n## Unified open flow\n\nEvery Environment row uses `Open` as its primary action. URL and other access-only connections open directly. A running Runtime also opens directly, even when lifecycle setup facts are unavailable or stale. For a lifecycle-capable Environment, a confirmed missing setup opens one `Initialize and open` panel; an initialized but stopped Runtime opens one `Start and open` panel. Provider authorization denial is resolved before initialization work begins and presents `Request access`.\n\nThe initialization panel owns its interaction until completion. It reports `Check access`, `Prepare environment`, `Start environment`, and `Open workspace` in execution order while the internal Gateway progress remains hidden. The start-only path omits the preparation stage. Success opens the workspace and closes the panel. Failure preserves the exact user-facing reason in that panel and exposes `Retry initialization`; an access failure exposes `Request access`. Snapshot refresh and lower-level operation progress cannot prematurely replace or complete this session.",
+          "char_count": 2414
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Desktop does not display Desktop ownership, takeover, or another lifecycle controller. Provider setup requires an explicit direct card or one-time interactive code and never borrows another card's credentials or a public URL control path.",
-          "char_count": 238
+          "body": "Environment open guidance does not display Gateway, Desktop ownership, target binding, takeover, or lifecycle-controller terminology. Provider setup never borrows another card's credentials or a public URL control path; authorization and target selection remain enforced behind the product action.",
+          "char_count": 297
         }
       ],
       "evidence": [
@@ -5617,13 +5623,25 @@
           "description": "One exact bridge session identity for SSH and container access."
         },
         {
-          "id": "redeven:desktop/src/welcome/App.tsx:1:localized management readiness and operation presentation.",
-          "source": "redeven:desktop/src/welcome/App.tsx",
+          "id": "redeven:desktop/src/welcome/viewModel.ts:1237:direct, initialize, start, and request-access open-flow decision.",
+          "source": "redeven:desktop/src/welcome/viewModel.ts",
+          "line": 1237,
+          "description": "Direct, initialize, start, and request-access open-flow decision."
+        },
+        {
+          "id": "redeven:desktop/src/welcome/environmentGuidanceSession.ts:1:panel ownership, ordered stages, failure retention, and retry state.",
+          "source": "redeven:desktop/src/welcome/environmentGuidanceSession.ts",
           "line": 1,
-          "description": "Localized management readiness and operation presentation."
+          "description": "Panel ownership, ordered stages, failure retention, and retry state."
+        },
+        {
+          "id": "redeven:desktop/src/welcome/App.tsx:5104:one localized initialize/start/open orchestrator.",
+          "source": "redeven:desktop/src/welcome/App.tsx",
+          "line": 5104,
+          "description": "One localized initialize/start/open orchestrator."
         }
       ],
-      "snippet": "Desktop keeps Connect, Workspace, Runtime UI, and Runtime management readiness independent. A Runtime may start and serve ordinary access without Gateway. Management UI projects support, authorization, and readiness in that order, so missin",
+      "snippet": "Desktop keeps Connect, Workspace, Runtime UI, and managed lifecycle readiness independent. A Runtime may start and serve ordinary access without Gateway. Environment rows present the user outcome `Open`; support, authorization, readiness, a",
       "backlinks": [
         {
           "label": "Desktop runtime bridge",
@@ -9244,5 +9262,5 @@
       ]
     }
   ],
-  "source_sha256": "6aea8bf1d621d6f8d3ee9210b627101aa285211296a4687f17ece52d7af77a7c"
+  "source_sha256": "055a8aa230913346e4063eb2c9386c7af99951edc136d2788aafdedc22d9ab22"
 }

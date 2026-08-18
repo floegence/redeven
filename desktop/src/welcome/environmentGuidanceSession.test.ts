@@ -14,6 +14,7 @@ import {
   environmentSupportsGuidancePopover,
   failEnvironmentGuidanceIntent,
   guidanceSessionNotice,
+  guidanceSessionOwnsOpenFlowPanel,
   isEnvironmentGuidancePendingIntent,
   openEnvironmentGuidanceSession,
   reconcileEnvironmentGuidanceSession,
@@ -42,6 +43,57 @@ describe('environmentGuidanceSession', () => {
       tone: 'info',
       title: 'Checking runtime status…',
       detail: 'Desktop is probing the latest runtime health for this environment.',
+    });
+  });
+
+  it('tracks open-flow stages and preserves a retry action after initialization fails', () => {
+    const state = startEnvironmentGuidanceIntent(null, 'env_demo', 'initialize_and_open');
+    expect(state).toEqual({
+      environment_id: 'env_demo',
+      pending_intent: 'initialize_and_open',
+      open_flow_stage: 'checking_access',
+      feedback: null,
+    });
+    expect(guidanceSessionNotice(state)).toEqual({
+      tone: 'info',
+      title: 'Checking access',
+      detail: 'Redeven is checking access before changing this environment.',
+    });
+    const failed = failEnvironmentGuidanceIntent(state, 'Permission denied.');
+    expect(failed).toMatchObject({
+      pending_intent: null,
+      retry_intent: 'initialize_and_open',
+      feedback: {
+        tone: 'error',
+        title: 'Initialization failed',
+        detail: 'Permission denied.',
+      },
+    });
+    expect(guidanceSessionOwnsOpenFlowPanel(state)).toBe(true);
+    expect(guidanceSessionOwnsOpenFlowPanel(failed)).toBe(true);
+  });
+
+  it('turns an early authorization failure into a request-access retry', () => {
+    const checking = startEnvironmentGuidanceIntent(null, 'env_demo', 'request_open_access');
+    expect(failEnvironmentGuidanceIntent(checking, 'Access is required.')).toMatchObject({
+      pending_intent: null,
+      retry_intent: 'request_open_access',
+      feedback: {
+        tone: 'error',
+        title: 'Request access',
+        detail: 'Access is required.',
+      },
+    });
+  });
+
+  it('keeps start failures distinct from initialization failures', () => {
+    const starting = startEnvironmentGuidanceIntent(null, 'env_demo', 'start_and_open');
+    expect(failEnvironmentGuidanceIntent(starting, 'The environment did not start.')).toMatchObject({
+      retry_intent: 'start_and_open',
+      feedback: {
+        title: 'Start failed',
+        detail: 'The environment did not start.',
+      },
     });
   });
 

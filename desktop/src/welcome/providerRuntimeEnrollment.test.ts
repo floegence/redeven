@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
-import { providerRuntimeDirectSetupCandidates } from './providerRuntimeEnrollment';
+import {
+  providerRuntimeDirectSetupCandidate,
+  providerRuntimeDirectSetupCandidates,
+} from './providerRuntimeEnrollment';
 
 function entry(overrides: Partial<DesktopEnvironmentEntry>): DesktopEnvironmentEntry {
   return {
@@ -87,5 +90,88 @@ describe('providerRuntimeDirectSetupCandidates', () => {
         host_access: expect.objectContaining({ kind: 'ssh_host' }),
       }),
     ]);
+  });
+
+  it('uses an existing Provider association instead of list order', () => {
+    const linkedTarget = {
+      id: 'ssh:linked' as const,
+      kind: 'ssh_environment' as const,
+      environment_id: 'ssh-linked',
+      label: 'Linked host',
+      runtime_key: 'linked',
+      runtime_url: '',
+      runtime_running: false,
+      runtime_openable: false,
+      runtime_control_status: {
+        state: 'missing' as const,
+        reason_code: 'not_started' as const,
+        message: 'Not started.',
+      },
+      provider_connection_state: 'unlinked' as const,
+      provider_link_state: 'linked' as const,
+      provider_origin: 'https://provider.example',
+      provider_id: 'provider-demo',
+      env_public_id: 'env-demo',
+      can_connect_provider: false,
+      can_disconnect_provider: true,
+    };
+    const entries = [
+      entry({
+        id: 'provider',
+        kind: 'provider_environment',
+        provider_origin: 'https://provider.example',
+        provider_id: 'provider-demo',
+        env_public_id: 'env-demo',
+        provider_linked_runtime_summary: {
+          runtime_target_id: linkedTarget.id,
+          runtime_kind: linkedTarget.kind,
+          label: linkedTarget.label,
+          provider_connection_state: linkedTarget.provider_connection_state,
+        },
+      }),
+      entry({
+        id: 'local-first',
+        kind: 'local_environment',
+        managed_runtime_host_access: { kind: 'local_host' },
+        managed_runtime_placement: { kind: 'host_process', runtime_root: '/tmp/local' },
+      }),
+      entry({
+        id: 'ssh-linked',
+        kind: 'ssh_environment',
+        provider_runtime_link_target: linkedTarget,
+        managed_runtime_host_access: {
+          kind: 'ssh_host',
+          ssh: {
+            ssh_destination: 'dev@example.test',
+            ssh_port: null,
+            auth_mode: 'key_agent',
+            connect_timeout_seconds: null,
+          },
+        },
+        managed_runtime_placement: { kind: 'host_process', runtime_root: '/opt/redeven' },
+      }),
+    ];
+
+    expect(providerRuntimeDirectSetupCandidate(entries, 'provider')?.environment_id).toBe('ssh-linked');
+  });
+
+  it('refuses to select between unrelated candidate connections', () => {
+    const entries = [
+      entry({ id: 'provider', kind: 'provider_environment' }),
+      entry({
+        id: 'local-a',
+        kind: 'local_environment',
+        managed_runtime_host_access: { kind: 'local_host' },
+        managed_runtime_placement: { kind: 'host_process', runtime_root: '/tmp/a' },
+      }),
+      entry({
+        id: 'local-b',
+        kind: 'local_environment',
+        managed_runtime_host_access: { kind: 'local_host' },
+        managed_runtime_placement: { kind: 'host_process', runtime_root: '/tmp/b' },
+      }),
+    ];
+
+    expect(providerRuntimeDirectSetupCandidate(entries, 'provider')).toBeNull();
   });
 });

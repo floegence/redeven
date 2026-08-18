@@ -56,3 +56,41 @@ export function providerRuntimeDirectSetupCandidates(
     }];
   });
 }
+
+export function providerRuntimeDirectSetupCandidate(
+  entries: readonly DesktopEnvironmentEntry[],
+  providerEnvironmentID: string,
+): ProviderRuntimeDirectSetupCandidate | null {
+  const providerEnvironment = entries.find((entry) => (
+    entry.id === providerEnvironmentID && entry.kind === 'provider_environment'
+  ));
+  if (!providerEnvironment) {
+    return null;
+  }
+  const candidates = providerRuntimeDirectSetupCandidates(entries, providerEnvironmentID);
+  const linkedTargetID = providerEnvironment.provider_linked_runtime_summary?.runtime_target_id;
+  if (linkedTargetID) {
+    const linkedCandidate = candidates.find((candidate) => (
+      entries.find((entry) => entry.id === candidate.environment_id)
+        ?.provider_runtime_link_target?.id === linkedTargetID
+    ));
+    if (linkedCandidate) {
+      return linkedCandidate;
+    }
+  }
+  const identityMatches = candidates.filter((candidate) => {
+    const target = entries.find((entry) => entry.id === candidate.environment_id)
+      ?.provider_runtime_link_target;
+    return !!target
+      && !!providerEnvironment.provider_origin
+      && !!providerEnvironment.provider_id
+      && !!providerEnvironment.env_public_id
+      && target.provider_origin === providerEnvironment.provider_origin
+      && target.provider_id === providerEnvironment.provider_id
+      && target.env_public_id === providerEnvironment.env_public_id;
+  });
+  if (identityMatches.length === 1) {
+    return identityMatches[0];
+  }
+  return candidates.length === 1 ? candidates[0] : null;
+}

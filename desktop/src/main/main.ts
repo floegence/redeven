@@ -2261,7 +2261,6 @@ function launcherActionSuccess(
   options: Readonly<{
     sessionKey?: string;
     utilityWindowKind?: DesktopLauncherActionSuccess['utility_window_kind'];
-    runtimeEnrollment?: DesktopLauncherActionSuccess['runtime_enrollment'];
   }> = {},
 ): DesktopLauncherActionSuccess {
   return {
@@ -2269,7 +2268,6 @@ function launcherActionSuccess(
     outcome,
     session_key: options.sessionKey,
     utility_window_kind: options.utilityWindowKind,
-    runtime_enrollment: options.runtimeEnrollment,
   };
 }
 
@@ -5756,12 +5754,12 @@ async function runGatewayEnvironmentLifecycleFromLauncher(
   const management = preflightEnvironment?.runtime_management;
   if (!management || management.presentation_state !== 'allowed' || !management.target) {
     const reason = management?.presentation_state === 'denied'
-      ? 'Runtime management permission is required.'
+      ? 'Access is required before changing this environment.'
       : management?.presentation_state === 'temporarily_unavailable'
-        ? 'Runtime management is temporarily unavailable. Check the Gateway supervisor and retry.'
+        ? 'Lifecycle actions are temporarily unavailable. Try again shortly.'
         : management?.presentation_state === 'unsupported'
-          ? 'This connection does not support managed Runtime lifecycle operations.'
-          : 'Set up Runtime management for this target before starting a lifecycle operation.';
+          ? 'This connection does not support lifecycle actions.'
+          : 'Initialize this environment before starting a lifecycle operation.';
     return launcherActionFailure(
       'runtime_not_ready',
       'environment',
@@ -5977,14 +5975,14 @@ async function resolveProviderRuntimeLifecycleScope(
   );
   if (capability.presentation_state !== 'allowed' || !capability.target || !capability.compatibility) {
     const reason = capability.presentation_state === 'denied'
-      ? 'Runtime management permission is required for this Provider Environment.'
+      ? 'Access is required before changing this Provider Environment.'
       : capability.presentation_state === 'setup_required'
-        ? 'Set up the Runtime supervisor for this Provider Environment before starting an operation.'
+        ? 'Initialize this Provider Environment before using lifecycle actions.'
         : capability.presentation_state === 'temporarily_unavailable'
-          ? 'The Provider Runtime supervisor is temporarily unavailable.'
+          ? 'Lifecycle actions are temporarily unavailable for this Provider Environment.'
           : capability.presentation_state === 'unsupported'
-            ? 'This Provider Environment does not support managed Runtime lifecycle operations.'
-            : 'Runtime management compatibility could not be verified for this Provider Environment.';
+            ? 'This Provider Environment does not support lifecycle actions.'
+            : 'Redeven could not verify lifecycle compatibility for this Provider Environment.';
     throw new GatewayClientError('PROVIDER_RUNTIME_NOT_READY', reason);
   }
   return {
@@ -6003,10 +6001,6 @@ async function resolveProviderRuntimeLifecycleScope(
       target_generation: capability.target.target_generation,
     },
   };
-}
-
-function enrollmentCommandArgument(value: string): string {
-  return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 async function authorizeProviderRuntimeEnrollment(
@@ -6032,70 +6026,19 @@ async function authorizeProviderRuntimeEnrollment(
     || capability.readiness !== 'setup_required'
   ) {
     throw new GatewayClientError(
-      'PROVIDER_RUNTIME_ENROLLMENT_NOT_ALLOWED',
       capability.authorization.state !== 'allowed'
-        ? 'Runtime management binding permission is required for this Provider Environment.'
+        || !capability.authorization.grants.includes('manage_runtime_binding')
+        ? 'PROVIDER_RUNTIME_ACCESS_REQUIRED'
+        : 'PROVIDER_RUNTIME_INITIALIZATION_NOT_ALLOWED',
+      capability.authorization.state !== 'allowed'
+        || !capability.authorization.grants.includes('manage_runtime_binding')
+        ? 'Access is required to initialize this environment.'
         : capability.readiness === 'temporarily_unavailable'
-          ? 'This Runtime supervisor is already bound but temporarily unavailable. Restore the existing supervisor instead of enrolling another target.'
-          : 'This Provider Environment does not currently require Runtime management setup.',
+          ? 'This environment is temporarily unavailable. Try again shortly.'
+          : 'This environment does not require initialization.',
     );
   }
   return { authorized, accessPoint };
-}
-
-async function requestProviderRuntimeEnrollmentChallengeFromLauncher(
-  request: Extract<DesktopLauncherActionRequest, { kind: 'request_provider_runtime_enrollment_challenge' }>,
-): Promise<DesktopLauncherActionResult> {
-  const preferences = await loadDesktopPreferencesCached();
-  const environment = findProviderEnvironmentByID(preferences, request.environment_id);
-  if (!environment) {
-    return launcherActionFailure(
-      'environment_missing',
-      'environment',
-      'This Provider Environment is no longer available. Refresh the Provider and try again.',
-      { environmentID: request.environment_id, shouldRefreshSnapshot: true },
-    );
-  }
-  try {
-    const { authorized, accessPoint } = await authorizeProviderRuntimeEnrollment(preferences, environment);
-    const challenge = await requestProviderRuntimeEnrollmentChallenge(
-      authorized.controlPlane.provider,
-      accessPoint,
-      authorized.accessToken,
-      environment.env_public_id,
-      { mode: 'interactive_code' },
-    );
-    const command = [
-      'redeven-gateway supervisor enroll',
-      `--provider ${enrollmentCommandArgument(accessPoint.access_point_origin)}`,
-      `--environment ${enrollmentCommandArgument(environment.env_public_id)}`,
-    ].join(' ');
-    return launcherActionSuccess('created_provider_runtime_enrollment_challenge', {
-      runtimeEnrollment: {
-        environment_id: environment.id,
-        environment_label: environment.label,
-        provider_origin: environment.provider_origin,
-        access_point_origin: accessPoint.access_point_origin,
-        env_public_id: environment.env_public_id,
-        enrollment_code: challenge.enrollment_code,
-        command,
-        expires_at_unix_ms: challenge.expires_at_unix_ms,
-      },
-    });
-  } catch (error) {
-    return launcherActionFailure(
-      error instanceof DesktopProviderRequestError ? error.code as DesktopLauncherActionFailureCode : 'action_invalid',
-      'environment',
-      error instanceof Error ? error.message : String(error),
-      {
-        environmentID: environment.id,
-        providerOrigin: environment.provider_origin,
-        providerID: environment.provider_id,
-        envPublicID: environment.env_public_id,
-        shouldRefreshSnapshot: true,
-      },
-    );
-  }
 }
 
 function directRuntimeGatewayConnection(
@@ -6157,7 +6100,7 @@ async function upsertDirectRuntimeGateway(
   const targetID = desktopRuntimeTargetID(hostAccess, placement, environmentID);
   const connectionDraft = directRuntimeGatewayConnection(hostAccess, placement);
   const gatewayID = stableGatewayID(gatewayBindingAudience(connectionDraft));
-  const displayName = `${compact(label) || environmentID} Runtime management`;
+  const displayName = `${compact(label) || environmentID} environment service`;
   const existing = await gatewayStore().get(gatewayID);
   let connection: GatewayRecord['connection'] = connectionDraft;
   if (connectionDraft.kind === 'ssh_host' || connectionDraft.kind === 'ssh_container') {
@@ -6207,7 +6150,7 @@ async function setupDirectRuntimeManagementFromLauncher(
       startPolicy: 'start_if_needed',
     });
     broadcastDesktopWelcomeSnapshots();
-    return launcherActionSuccess('setup_runtime_management');
+    return launcherActionSuccess('initialized_environment');
   } catch (error) {
     return launcherActionFailure(
       gatewayServiceFailureCode(error),
@@ -6218,7 +6161,7 @@ async function setupDirectRuntimeManagementFromLauncher(
         shouldRefreshSnapshot: true,
         failure: desktopFailureFromError(error, {
           code: 'operation_failed',
-          title: 'Runtime Management Setup Failed',
+          title: 'Environment Initialization Failed',
           summary: error instanceof Error ? error.message : String(error),
           targetLabel: compact(request.label) || request.environment_id,
         }),
@@ -6299,10 +6242,16 @@ async function setupProviderRuntimeManagementWithDirectCardFromLauncher(
       { force: true },
     );
     broadcastDesktopWelcomeSnapshots();
-    return launcherActionSuccess('setup_runtime_management');
+    return launcherActionSuccess('initialized_environment');
   } catch (error) {
+    const accessRequired = error instanceof GatewayClientError
+      && error.code === 'PROVIDER_RUNTIME_ACCESS_REQUIRED';
     return launcherActionFailure(
-      error instanceof DesktopProviderRequestError ? error.code as DesktopLauncherActionFailureCode : gatewayServiceFailureCode(error),
+      error instanceof DesktopProviderRequestError
+        ? error.code as DesktopLauncherActionFailureCode
+        : accessRequired
+          ? 'control_plane_auth_required'
+          : gatewayServiceFailureCode(error),
       'environment',
       error instanceof Error ? error.message : String(error),
       {
@@ -6313,7 +6262,7 @@ async function setupProviderRuntimeManagementWithDirectCardFromLauncher(
         shouldRefreshSnapshot: true,
         failure: desktopFailureFromError(error, {
           code: 'operation_failed',
-          title: 'Runtime Management Setup Failed',
+          title: 'Environment Initialization Failed',
           summary: error instanceof Error ? error.message : String(error),
           targetLabel: compact(request.direct_label) || request.direct_environment_id,
         }),
@@ -10238,7 +10187,7 @@ async function ensureRuntimeFlowerRecord(): Promise<LocalEnvironmentRuntimeRecor
       attached.startup,
     );
     if (runtimePlan.requires_restart) {
-      throw new Error('Set up Redeven Gateway for this target before restarting Runtime.');
+      throw new Error('Initialize this environment before restarting it.');
     }
     if (!runtimePlan.can_open) {
       throw new Error(runtimePlan.message || 'Local Runtime is not ready to open Flower.');
@@ -10246,7 +10195,7 @@ async function ensureRuntimeFlowerRecord(): Promise<LocalEnvironmentRuntimeRecor
     assertRuntimeFlowerRecordOpenable(attached);
     return attached;
   }
-  throw new Error('Local Runtime is not running. Set up Redeven Gateway for this target before starting it from Desktop.');
+  throw new Error('The local environment is not running. Initialize it before starting it from Desktop.');
 }
 
 function runtimeFlowerEnvelopeError(parsed: unknown, status: number): RuntimeFlowerError | null {
@@ -14392,7 +14341,7 @@ async function runEnvironmentRuntimeLifecycleFromLauncher(
   return launcherActionFailure(
     'runtime_not_ready',
     'environment',
-    'Set up Redeven Gateway for this target before managing Runtime.',
+    'Initialize this environment before using lifecycle actions.',
     {
       environmentID: runtimeTargetEnvironmentIDFromRequest(request),
       shouldRefreshSnapshot: true,
@@ -14767,8 +14716,8 @@ async function stopEnvironmentRuntimeFromLauncher(
     request.external_local_ui_url ? 'action_invalid' : 'runtime_not_ready',
     'environment',
     request.external_local_ui_url
-      ? 'Runtime management is not supported for URL connections.'
-      : 'Set up Redeven Gateway for this target before managing Runtime.',
+      ? 'URL connections open directly and do not support lifecycle actions.'
+      : 'Initialize this environment before using lifecycle actions.',
     {
       environmentID: runtimeTargetEnvironmentIDFromRequest(request),
       shouldRefreshSnapshot: true,
@@ -15131,10 +15080,10 @@ function runtimeMaintenanceContextFromSession(
     || (sessionRecord.target.kind === 'local_environment' && sessionRecord.target.route === 'local_host');
   const unsupported = sessionRecord.target.kind === 'external_local_ui';
   const message = unsupported
-    ? 'Runtime management is not supported for URL connections.'
+    ? 'URL connections open directly and do not support lifecycle actions.'
     : directTarget
-      ? 'Set up Redeven Gateway for this target before managing Runtime.'
-      : 'Runtime management authorization and Gateway readiness are not available for this session.';
+      ? 'Initialize this environment before using lifecycle actions.'
+      : 'Lifecycle actions are not available for this session.';
   const reasonCode = unsupported
     ? 'runtime_management_unsupported'
     : directTarget
@@ -15189,7 +15138,7 @@ async function showDesktopUpdateHandoffDialog(args: Readonly<{
     cancelId: 1,
     title: 'Manage Desktop Update',
     message: `Update Redeven Desktop for ${args.label}.`,
-    detail: `${args.detail}\n\nRelated Runtime target: ${args.environmentKindLabel} for this profile.\n\nRuntime management remains a separate Gateway-supervised operation.`,
+    detail: `${args.detail}\n\nEnvironment type: ${args.environmentKindLabel}.`,
   };
   const parentWindow = currentParentWindow();
   const result = parentWindow
@@ -15220,7 +15169,7 @@ async function manageDesktopUpdateFromShell(webContentsID: number): Promise<Desk
     return {
       ok: false,
       started: false,
-      message: 'Desktop could not resolve a local runtime management channel for this environment.',
+      message: 'Desktop could not prepare this environment for an update.',
     };
   }
 
@@ -15788,8 +15737,6 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
       return runGatewayEnvironmentLifecycleFromLauncher(request);
     case 'run_provider_environment_lifecycle':
       return runProviderEnvironmentLifecycleFromLauncher(request);
-    case 'request_provider_runtime_enrollment_challenge':
-      return requestProviderRuntimeEnrollmentChallengeFromLauncher(request);
     case 'setup_provider_runtime_management_with_direct_card':
       return setupProviderRuntimeManagementWithDirectCardFromLauncher(request);
     case 'setup_direct_runtime_management':
