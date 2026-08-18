@@ -4,23 +4,20 @@ title: Plugin surfaces
 description: Env App manages official and external plugins through an accessible Launcher, searchable category discovery, exact inventory identities, explicit review, SDK-owned surfaces, Activity windows, and Workbench widgets.
 tags: [ui, plugins, activity, workbench, plugin-center]
 timestamp: 2026-07-29T00:00:00Z
-quality_exception: Cross-surface UI contract spanning exact plugin identity, Launcher discovery, Center governance, Activity placement, and Workbench placement.
+quality_exception: Cross-surface plugin UX contract spanning exact inventory, discovery, package review, lifecycle governance, and Activity and Workbench placement.
 ---
 # Summary
 
-Plugin UI embeds released ReDevPlugin sandbox surfaces in Redeven chrome.
-Activity opens Shell-root windows; Workbench opens `redeven.plugin` widgets. The
-Activity Bar Launcher provides stable categories, keyboard navigation, search,
-and exact inventory routing, while Plugin Center presents trust, lifecycle,
-access, and launch state. External installs require explicit source review and
-Host confirmation; fresh installs enable in the same Host transaction when all
-required permissions are approved, otherwise they remain disabled with an
-explicit attention result. Updates require a side-effect-free, target-bound
-review and retain Host-managed enable intent and grants without adding any.
-Redeven owns navigation, review, placement, and filters;
-ReDevPlugin owns admission, sandbox and bridge lifecycle, confirmations, Events,
-and revocation. Failed exact-surface close remains retryable without wider
-authority.
+Plugin UI uses released ReDevPlugin sandbox surfaces inside Redeven-owned
+navigation and placement. The Launcher and Plugin Center route exact inventory
+identities through discovery, trust and lifecycle review, recovery, permissions,
+installation, and updates. Activity opens Shell-root windows and Workbench opens
+`redeven.plugin` widgets, always with fresh SDK slots. ReDevPlugin remains the
+authority for package admission, lifecycle `action_state`, confirmations,
+Events, bridge sessions, exact-surface close, and revocation; Redeven owns the
+accessible product presentation, filters, and serialized placement. Unknown
+mutation or close outcomes invalidate stale local authority and require platform
+reconciliation rather than wider teardown or blind retry.
 
 # Contract
 

@@ -33,6 +33,10 @@ Authorized managers list active operations by exact environment, target, and gen
 
 Catalog and explicit open-session continue to provide Gateway-card access. Terminal, files, web, and workspace data do not pass through the lifecycle operation store. Gateway is not a container/Provider Environment lifecycle manager, and Runtime continues to start and serve ordinary access without a Gateway process.
 
+# Boundaries
+
+Gateway owns only Redeven-managed Runtime lifecycle state for its registered target and generation. Ordinary session access, terminal, files, web, workspace traffic, Runtime service execution, and Provider or container environment lifecycle remain outside that operation store. Desktop and Provider transports may authorize or observe Gateway operations, but they cannot bypass its target lock, permits, checkpoints, or recovery state.
+
 # Evidence
 
 - `redeven:cmd/redeven-gateway/main.go:1` - Independent Gateway CLI and persistent service identity.
