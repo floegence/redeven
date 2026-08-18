@@ -168,6 +168,15 @@ test("Flower UI gate provisions Node 26 webstorage backing without discarding ca
   assert.doesNotMatch(flowerGate, /--no-experimental-webstorage/);
 });
 
+test("complete UI gate provisions Node 26 webstorage backing without discarding caller options", () => {
+  assert.match(uiGate, /case " \$\{NODE_OPTIONS:-\} "/);
+  assert.match(uiGate, /--localstorage-file=/);
+  assert.match(uiGate, /mktemp .*redeven-ui-localstorage/);
+  assert.match(uiGate, /export NODE_OPTIONS="\$\{NODE_OPTIONS:\+\$NODE_OPTIONS \}--localstorage-file=/);
+  assert.match(uiGate, /trap 'rm -f -- "\$ui_localstorage_file" "\$ui_localstorage_file-wal" "\$ui_localstorage_file-shm"'/);
+  assert.doesNotMatch(uiGate, /--no-experimental-webstorage/);
+});
+
 test("release workflow validates exact main and contains no test gate", () => {
   assert.match(releaseWorkflow, /^  release-ref:$/m);
   assert.match(releaseWorkflow, /refs\/remotes\/origin\/main/);

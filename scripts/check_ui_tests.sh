@@ -8,6 +8,20 @@ CODE_UI_DIR="$ROOT_DIR/internal/codeapp/ui_src"
 
 source "$SCRIPT_DIR/ui_package_common.sh"
 
+# Node 26 exposes an experimental global localStorage getter that throws when
+# no backing file is configured. Give the gate an isolated temporary backing
+# file so Node's storage API remains available without requiring hidden caller
+# configuration, while preserving caller-provided Node options.
+ui_localstorage_file=""
+case " ${NODE_OPTIONS:-} " in
+  *" --localstorage-file="*|*" --localstorage-file "*) ;;
+  *)
+    ui_localstorage_file=$(mktemp "${TMPDIR:-/tmp}/redeven-ui-localstorage.XXXXXX")
+    trap 'rm -f -- "$ui_localstorage_file" "$ui_localstorage_file-wal" "$ui_localstorage_file-shm"' EXIT HUP INT TERM
+    export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--localstorage-file=$ui_localstorage_file"
+    ;;
+esac
+
 run_terminal_performance() {
   command -v corepack >/dev/null 2>&1 || ui_pkg_die "corepack not found (install Node.js)"
   corepack pnpm run test:terminal-performance
