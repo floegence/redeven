@@ -1,40 +1,33 @@
 ---
 type: AI Persistence Contract
 title: Flower thread fork coordination
-description: Floret forks canonical Agent state first, then Redeven materializes a fixed host-settings and thread-resource snapshot.
+description: Redeven authorizes a source thread, calls Floret's typed fork, and adopts product settings for the returned canonical destination.
 tags: [ai, threads, persistence, floret]
 timestamp: 2026-07-18T00:00:00Z
 ---
 # Summary
 
-- Authority: Floret owns the forked journal, title, lifecycle, turns, projections, todos, context, and SubAgent state; Redeven owns copied host settings, thread-level upload ownership, and product routing.
-- Outcome: one replayable operation creates one fixed destination without copying or persisting a Floret rewrite result.
-- Invariants: product materialization uses the prepared snapshot, not live source state; a pending fork claims both source and destination against product writes and competing create/fork intent; upload ownership is copied at thread scope only.
-- Failure boundary: identity conflicts fail explicitly; transient Floret or product commit errors remain replayable under the same operation id.
+- Authority: Floret owns the forked journal and canonical destination identity; Redeven owns endpoint authorization and the destination's product settings.
+- Outcome: one stable client request forks the authorized source, adopts settings for the returned destination, and optionally sets an explicit title.
+- Invariants: source ownership is proven before Floret mutation, the returned destination is the only product adoption target, and the product stores no fork receipt, saga, or canonical lifecycle copy.
+- Failure boundary: invalid request identity, foreign source authority, Floret failure, or conflicting destination settings fails explicitly without a recovery coordinator or compensating canonical delete.
 
 # Contract
 
-`PrepareForkOperation` runs under the source thread lifecycle gate. Before preparation, Redeven exhaustively keyset-pages queued commands and exact-reads only rows that already carry Floret-assigned TurnID values. An admitted command settles; typed not-found leaves the unadmitted command unchanged; any other canonical read or host settlement failure aborts without creating a new fork operation. It then rejects active runs, finalization, and idle compaction, validates source settings, and persists an immutable snapshot in `ai_thread_fork_operations`, keyed by a stable product operation id and `client_request_id`. The snapshot contains source `ThreadSettings`, thread-owned upload refs, product routing, explicit title intent, and host audit identity. The canonical destination is empty at preparation time. Product routing is limited to home runtime, runtime kind, origin environment, primary target, active target ids, and update time. It contains no Agent owner, parent, action, context, conversation, title copy, turn/run state, projection, approval, todo, provider state, tool lifecycle, or Floret result.
+`ForkThreadWithOptions` validates RWX access, the source ThreadID, endpoint identity, and a stable `client_request_id`. The shared endpoint/thread authority boundary must find a live product settings row for that exact endpoint before any Floret call. Redeven then reads the source's current product settings and invokes published Floret v4 `Fork` with the source ThreadID and client request key.
 
-Snapshot replay accepts only the strict first-release snapshot shape. It verifies operation-row identity, `client_request_id`, source settings identity, request fingerprint, and a second fingerprint over the complete immutable snapshot before calling Floret or materializing settings. Unknown fields, trailing JSON values, empty payloads, identity drift, request drift, and any source-settings/resource/routing payload drift fail closed. There is no legacy snapshot migration or compatibility parser. Once preparation succeeds, the source rejects settings, queue, admission, upload-ownership, permission-audit, and product-routing writes until the operation commits. After Floret binds the canonical destination, that destination rejects competing settings or lifecycle writes. Replay of the same request remains idempotent.
+Floret returns the canonical destination. Redeven copies only product-owned settings into a new root settings value, preserves the source endpoint, namespace, model, reasoning selection, permission, and working directory, clears pin state, and records the current requesting user as the destination creator/updater. `AdoptCanonicalRootSettings` inserts that exact destination or accepts an identical existing record; a conflicting record fails closed. A non-empty requested title is then sent through typed `SetTitle` with a derived stable key.
 
-Redeven calls Floret v4 typed `Fork` with the source ThreadID and stable request key. Floret assigns and canonically records the destination child identity; Redeven then materializes only its product catalog row and resource ownership for that exact returned thread. A repeated request returns the same canonical destination without creating another thread.
-
-After canonical fork succeeds, one Redeven transaction materializes destination settings from the fixed snapshot, copies thread-level upload ownership to the destination thread, copies product routing, and advances the product stage. The independent title stage then converges through its own LogicalRequestID before the operation becomes completed. No source reread can change a pending operation. Restart replay uses the same request identities, verifies the same Floret destination, and resumes only the incomplete saga stage.
-
-Committed source and destination summary publication is separately acknowledged and may be retried. Each summary must still resolve current host settings plus public Floret canonical state before broadcast.
+The response is rebuilt from the returned Floret current view plus the adopted product settings. There is no durable fork operation table, immutable resource snapshot, lifecycle gate, stage replay, upload-copy protocol, summary acknowledgement receipt, or fork recovery coordinator. Product settings adoption is deliberately small; canonical fork idempotency remains owned by Floret's request key.
 
 # Boundaries
 
-Redeven never stores a source/destination turn or run identity mapping, Floret fork result, canonical title, or Agent lifecycle snapshot. It does not create conversation rows, infer a title from preview text, silently omit malformed resources, compensate by deleting a valid Floret destination, treat an unrelated existing destination as recovery success, or let source product state mutate around a pending snapshot.
+Redeven never stores a fork saga, source/destination turn or run identity mapping, Floret fork result, canonical title, or Agent lifecycle snapshot. Product adoption cannot authorize a foreign source, choose a different destination, reconstruct canonical content, or compensate by deleting a valid Floret destination.
 
 # Evidence
 
-- `redeven:internal/ai/threadstore/fork_operation.go` - The fork receipt stores stable product and Floret request identities, a nullable canonical destination, immutable host snapshot, and saga stages.
-- `redeven:internal/ai/threadstore/fork_operation.go:392` - Snapshot capture selects only thread-owned uploads.
-- `redeven:internal/ai/thread_fork_operation.go:41` - Replay forks Floret and applies explicit title before product commit.
-- `redeven:internal/ai/threadstore/fork_operation.go:488` - Product materialization uses the immutable snapshot and persists no Floret result.
-- `redeven:internal/ai/thread_fork_operation_test.go:91` - Restart tests recover canonical-first fork boundaries.
-- `redeven:internal/ai/thread_lifecycle_gate_test.go:215` - Deterministic tests cover operation-first lifecycle serialization.
-- `redeven:internal/ai/thread_lifecycle_gate_test.go:254` - Deterministic tests cover admission-first lifecycle serialization.
-- `redeven:internal/ai/thread_lifecycle_gate_test.go:309` - Deterministic tests prove failed settlement keeps exclusive lifecycle work blocked.
+- `redeven:internal/ai/threads.go:807` - Authorizes the source, calls typed Floret Fork, adopts returned product settings, and applies an optional title.
+- `redeven:internal/ai/threadstore/orphan_adoption.go` - Inserts exact canonical-root settings idempotently and rejects conflicting settings.
+- `redeven:internal/ai/threadstore/orphan_adoption_test.go` - Covers exact adoption and conflict handling.
+- `redeven:internal/ai/thread_authority_boundary_test.go` - Proves foreign endpoint ThreadIDs fail before canonical mutation.
+- `redeven:internal/session/floret_v4_dependency_contract_test.go` - Enforces the released typed v4 dependency boundary.

@@ -17,6 +17,10 @@ Flower sends ordinary input through a stable request ID and receives a typed cur
 
 Respond, Approve, Reject, Stop, Retry, and RetryEffect are ordinary idempotent commands. Reject All submits one Floret Answers batch so the visible approval set cannot partially settle. Their progress never applies `inert`, a pointer overlay, or a shared busy state to the rail, surface, or composer. Approval and waiting-user controls coexist with navigation and editable draft state. RetryEffect stays on the exact unknown tool row and requires explicit acknowledgement; it does not resend the user turn.
 
+# Boundaries
+
+Composer drafts and the transport outbox own only unconfirmed browser input and stable request identity. They never become canonical queue, interaction, effect, turn, or Agent lifecycle state. Secret answers bypass the outbox, and canonical confirmation or terminal cleanup removes transport state instead of projecting a second durable command.
+
 # Evidence
 
 - `redeven:internal/flower_ui/src/composer/createFlowerComposerDraftCoordinator.ts` - Per-thread composer draft owner.

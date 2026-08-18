@@ -39,6 +39,10 @@ its first canonical user message or first attachment/reference label. The
 selected header reads the latest summary title before its cached detail title,
 so a provider update cannot flash empty or wait for transcript replacement.
 
+# Boundaries
+
+`LiveTransport` and `ThreadCache` are bounded observation state, not a durable event log or lifecycle mirror. A disconnect, byte-budget closure, or stale version discards local authority and triggers baseline refresh; the browser cannot replay, settle, reorder, or synthesize canonical thread state.
+
 # Evidence
 
 - `redeven:internal/ai/flower_live_stream.go` - Workspace baseline and current-state stream.

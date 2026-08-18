@@ -45,7 +45,6 @@ Connection recovery must not be implemented independently inside Workbench widge
 - `redeven:internal/envapp/ui_src/src/ui/workbench/surface/RedevenWorkbenchSurface.interaction.test.tsx` - Product integration tests keep projected filtered and visible widget ids stable across lock changes through the published floe-webapp surface.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/runtimeWorkbenchLayout.test.ts` - Local-preferences tests preserve false filter entries across unlock and relock persistence projections.
 - `redeven:internal/flower_ui/src/threads/FlowerThreadList.tsx:287` - Flower thread context menus render through the shared surface floating layer.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.navigation.threads.test.tsx:1730` - Tests assert the thread context menu is hosted by a local interaction floating layer.
 - `redeven:AGENTS.md:651` - Repository rules define Workbench floating UI and coordinate ownership.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/redevenWorkbenchWidgets.tsx:20` - Workbench feature bodies use independent lazy imports while widget definitions remain stable.
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:3480` - Workbench connection recovery is composed above the kept-alive page root.

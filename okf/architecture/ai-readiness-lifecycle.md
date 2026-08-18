@@ -7,10 +7,10 @@ timestamp: 2026-07-25T00:00:00Z
 ---
 # Summary
 
-- Authority: Floret remains the only authority for durable Agent lifecycle and Store facts; Redeven owns only current-process AI availability and product presentation.
-- Outcome: Code App, Settings, Notes, Workbench, terminal, files, and Codex start and remain usable when AI startup is inspecting, migrating, verifying, or blocked.
-- Invariants: one controller owns AI service construction, retry serialization, generation publication, request leases, draining, and close; each AI request uses one generation for its complete lifetime.
-- Failure boundary: a blocked generation returns one typed unavailable envelope, never publishes partial runtime authority, never repairs Store data, and never turns readiness into durable Agent state. Short-lived storage contention remains a bounded recovering state instead of being presented as unavailable.
+- Authority: Floret owns durable Agent and Store facts; Redeven owns process-local AI availability and presentation.
+- Outcome: non-AI product surfaces remain usable while AI startup inspects, migrates, verifies, recovers, or blocks.
+- Invariants: one controller owns construction, retry, generation publication, request leases, drain, and close; each AI request stays on one generation.
+- Failure boundary: unavailable or blocked startup returns a sanitized typed envelope, publishes no partial service, repairs no Store data, and never becomes durable Agent state.
 
 # Contract
 
@@ -42,14 +42,13 @@ most one startup owner.
 ## Generation leases
 
 Every ready service is published as one monotonically identified generation.
-An HTTP AI request, ordinary RPC call, runtime snapshot, or Desktop model-source
-call acquires exactly one scoped lease and reuses its service and generation
-context in all helpers. A realtime RPC subscription keeps one separate binding
-lease for as long as its current generation remains active. A generation
-entering drain stops new leases and cancels its shared generation context. The
-controller waits for every idempotent release, closes the old service once, and
-only then constructs and publishes a replacement. Two `NewServiceContext`
-calls therefore cannot compete for the same Floret `runtime.Host` and backend.
+An HTTP AI request, RPC call, runtime snapshot, or Desktop model-source call
+acquires exactly one scoped lease and reuses its service and generation context
+in all helpers. A generation entering drain stops new leases and cancels its
+shared generation context. The controller waits for every idempotent release,
+closes the old service once, and only then constructs and publishes a
+replacement. Two `NewServiceContext` calls therefore cannot compete for the
+same Floret `runtime.Host` and backend.
 
 The controller derives its lifecycle from Code App rather than a background
 context. Parent cancellation stops startup, cancels the generation, drains
@@ -59,14 +58,11 @@ process-local startup snapshot. Every attempt reads that snapshot; a service
 created from an obsolete revision is closed before the controller retries with
 the latest values.
 
-RPC routes are registered against the provider rather than one service. A
+RPC routes are registered against the service provider rather than one fixed
+service pointer. Each request acquires the then-current generation, so a
 connection established while AI is blocked can use a later ready generation
-without reconnecting. When an active subscription's generation context is
-cancelled, its manager detaches the sink while it still owns the binding lease,
-releases that lease, and retries acquisition until it can replay the summary
-and thread subscriptions on a ready replacement. Connection cleanup uses the
-same idempotent detach-and-release ownership path; no service pointer remains
-after its lease ends. Long-lived model-source calls receive the generation
+without reconnecting. There is no realtime subscription binding or replay
+lifecycle in this owner. Long-lived model-source calls receive the generation
 context so replacement can cancel their work before waiting for release.
 
 ## Route availability
@@ -91,15 +87,11 @@ resource, and cannot be presented as `ready`.
 
 ## Env App maintenance presentation
 
-Env App shares one Redeven-owned readiness controller across its Activity,
-Workbench, and Settings consumers. A Flower surface keeps the same component
-instance mounted, but hides that local subtree from layout, focus, and assistive
-technology until the sanitized snapshot is `ready`. A flat sibling maintenance
-section occupies only the Flower slot. It never sets `inert`, `aria-hidden`, a
-modal role, or a pointer trap on the Env App shell, Workbench canvas, terminal,
-files, Settings, or any shared ancestor. Only the visible Flower placement may
-move or restore focus; a retained Activity placement cannot compete with the
-active Workbench placement.
+Env App shares one readiness controller across Activity, Workbench, and
+Settings. Flower stays mounted while a sibling maintenance section occupies
+only its visible slot. The boundary never disables or hides the shell,
+Workbench, terminal, files, Settings, or a shared ancestor. Only the visible
+Flower placement may move or restore focus.
 
 Env App begins readiness inspection only after the HTTP access status has been
 checked and access is granted. The readiness HTTP route remains available while
@@ -113,35 +105,20 @@ replaces the recovery presentation while the existing Activity Flower component
 remains mounted and inert; a successful regrant may complete the prior failed
 recovery generation.
 
-Transient inspection waits briefly before presenting progress, does not invent
-a percentage, and shows the next bounded check without announcing a countdown
-every second. A typed busy or temporary I/O failure enters `recovering`; the
-readiness controller retries with bounded exponential backoff and jitter, honors
-cancellation, and publishes `blocked` only after the retry window is exhausted.
-The existing process-level `agent.lock` remains the single state-root owner
-coordination boundary, so a second runtime attaches or reports an owner conflict
-instead of opening an empty Store. Client-side automatic retries remain limited
-to typed safe failures, require current product admin authority, slow down while
-the document is hidden, and reset their allowance only after that blocked episode settles.
-Manual retry is single-flight and is offered only when the current user and the
-mapped reason policy allow a new generation. Update and environment-access actions route
-to Redeven-owned Settings. No force, reset, repair, ignore, or backend mutation
-action exists. Returning to `ready` reveals the same Flower DOM and restores the
-previous valid target without a success notification.
+Transient inspection delays progress presentation and never invents a
+percentage. Typed busy or temporary I/O failures enter bounded `recovering`;
+unsafe failures block. The process-level `agent.lock` remains the state-root
+owner, so another runtime attaches or reports conflict instead of opening an
+empty Store. Automatic retry requires typed safety and current admin authority;
+manual retry is single-flight. No force, reset, repair, ignore, or backend
+mutation action exists. Returning to `ready` reveals the retained Flower DOM.
 
-Displayed diagnostics and clipboard output iterate the same projection of the
-sanitized readiness fields. Readiness responses may carry a bounded trace id,
-startup phase, and retry reason for structured support diagnostics. The
-projection maps reason codes to localized copy and never includes a raw reason,
-path, schema or SQL detail, credential,
-message, provider state, or tool output. Unknown states, reasons, and
-contradictory retry, commit, or rollback facts become one non-retryable contract
-failure. Settings groups the Floret backend separately from Redeven product stores
-and other upstream stores; only Floret receives a readiness result, while the
-other owners are explicitly marked as outside this check instead of receiving a
-fabricated health claim. All interactive controls publish pending state in the
-input turn, keep visible focus and pointer/disabled cursors, and provide explicit
-localized copy for clipboard failure.
+Displayed diagnostics and clipboard output use the same sanitized projection.
+A bounded trace id, startup phase, and retry reason may support diagnosis, but
+raw paths, schema or SQL details, credentials, provider state, and tool output
+never cross the boundary. Unknown or contradictory facts become one
+non-retryable contract failure. Settings reports only Floret readiness and marks
+other store owners outside the check instead of fabricating health.
 
 # Boundaries
 
@@ -165,12 +142,12 @@ integrity check succeeds. Readiness history is not recovery authority.
 - `redeven:internal/codeapp/ai_readiness.go:1` - Owns serialized startup, sanitized state, generation cancellation, drain, replacement, and close.
 - `redeven:internal/codeapp/appserver/ai_readiness.go:1` - Defines the narrow lease provider, readiness DTO, route classification, and unavailable envelope.
 - `redeven:internal/codeapp/appserver/server.go:2277` - Acquires one request lease and propagates its service through request context.
-- `redeven:internal/ai/rpc.go:123` - Registers AI RPC handlers against scoped call and realtime-subscription leases.
+- `redeven:internal/ai/rpc.go:103` - Registers stable AI RPC handlers that acquire one scoped service lease per request.
 - `redeven:internal/agent/desktop_model_source.go:10` - Holds one generation lease for each Desktop model-source operation.
 - `redeven:internal/codeapp/ai_readiness_test.go:16` - Covers drain ordering, close failure, parent cancellation, current startup options, replacement, duplicate release, late startup, phases, and sanitized failures.
 - `redeven:internal/ai/floret_store_maintenance_test.go:1` - Proves that one service startup opens exactly one retained Floret Host and preserves typed failure classification.
 - `redeven:internal/codeapp/appserver/ai_readiness_test.go:78` - Covers unified unavailable responses, optional Settings projection, exact permission ordering, invalid leases, and secrets-only routes.
-- `redeven:internal/ai/rpc_readiness_test.go:15` - Covers dynamic recovery, generation lease counts, invalid leases, and concurrent connection cleanup.
+- `redeven:internal/agent/ai_rpc_registration_test.go:13` - Proves the stable RPC inventory remains registered and returns structured unavailability without a service.
 - `redeven:internal/envapp/ui_src/src/ui/flower/aiReadiness.ts:1` - Strictly normalizes the sanitized wire facts and owns bounded, permission-aware polling and retry state.
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx:1` - Verifies initial lock, grant, revocation, stable Activity ownership, and one fresh readiness request after local or remote regrant.
 - `redeven:internal/envapp/ui_src/src/ui/flower/AIReadinessBoundary.tsx:1` - Keeps maintenance presentation local to Flower with focus restoration and same-source diagnostics.

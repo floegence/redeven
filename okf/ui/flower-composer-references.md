@@ -32,15 +32,15 @@ The index bounds recursion depth, listed directories, entries per directory, tot
 
 The connection-local composer stores ordered file/directory chips with a product-local identity, host-derived label, and opaque normalized path. It is never written to Redeven, Floret, local storage, IndexedDB, or another connection. The first-release product v1 baseline has no server draft, draft migration, or compatibility reader; [Flower storage ownership and migrations](../ai/flower-storage-ownership-and-migrations.md) defines that boundary.
 
-Send freezes the ordered references with the text, attachments, model, and stable product request identity. It creates one strict Ask Flower action whose source surface is `flower_composer`; each context item contains exactly `kind=file_path`, `path`, and `is_directory`. Unknown envelope, target, source, presentation, execution-context, or item fields are invalid. The action never accepts a client-authored root, display label, TurnID, or RunID. Prepare, direct admission, queued creation, and queued replacement carry the same normalized JSON.
+Send freezes the ordered references with the text, attachments, model, and stable product request identity. It creates one strict Ask Flower action whose source surface is `flower_composer`; each context item contains exactly `kind=file_path`, `path`, and `is_directory`. Unknown envelope, target, source, presentation, execution-context, or item fields are invalid. The action never accepts a client-authored root, display label, TurnID, or RunID. The typed Send mapping converts that one frozen action into canonical Floret references whether the runtime accepts an immediate turn or canonical queue input.
 
-The host freezes the editor value and strict context action under the exact `client_request_id` or `queue_id` before admission. Path, order, directory bit, action source, or JSON changes under the same product identity reject the attempt without replacing the accepted command. After admission, the one-pass mapping defined by [AI tool runtime](../ai/ai-tool-runtime.md) gives Floret the canonical ordered `MessageReference` values and current-turn supplemental context.
+The browser transport outbox may retain the original ordinary launch input under its exact `client_request_id` until canonical confirmation. Retry uses that same transport identity; it does not create a Redeven backend command row or use Floret's queue item ID as an idempotency key. After admission, the one-pass mapping defined by [AI tool runtime](../ai/ai-tool-runtime.md) gives Floret the canonical ordered `MessageReference` values and current-turn supplemental context.
 
 # Boundaries
 
 Search results and persisted paths are display and navigation metadata, not filesystem authorization. Discovery observes only what the current authorized host adapter returns under the current runtime and working directory. A reference does not read or attach file contents, grant future filesystem access, or substitute for an explicit attachment upload.
 
-Before Send, Redeven does not persist the ordered editable reference snapshot. After Send, Redeven may retain the immutable unadmitted command and its strict ordered action for retry and settlement; the product-local chip identity and label are not canonical identity or admission authority. Once admitted, Redeven does not retain a second queryable message-reference record, and canonical reference presentation and navigation derive from Floret reads plus current host authorization.
+Before Send, Redeven does not persist the ordered editable reference snapshot. After Send, only the browser transport outbox may retain the original ordinary launch payload until canonical confirmation or terminal cleanup; the product-local chip identity and label are not canonical identity or admission authority. Once admitted, Redeven does not retain a second queryable message-reference record, and canonical reference presentation and navigation derive from Floret reads plus current host authorization.
 
 # Evidence
 
@@ -52,4 +52,6 @@ Before Send, Redeven does not persist the ordered editable reference snapshot. A
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.flowerCompanion.browser.test.tsx` - Chromium verifies the retained Activity Flower product root remains the floating surface host across companion and full-page placement.
 - `redeven:internal/flower_ui/src/contextActionWire.ts` - The shared parser applies strict `flower_composer` envelope and item allowlists.
 - `redeven:internal/ai/context_action.go` - Runtime validation restricts composer context to normalized file-path items without client-authored labels.
-- `redeven:internal/ai/context_action_test.go` - Tests reject shape, path, order, directory-kind, source, and JSON changes without weakening the strict action contract.
+- `redeven:internal/flower_ui/src/contextActionWire.test.ts` - Browser contract tests reject unknown envelope and item fields and preserve file/directory kind.
+- `redeven:internal/ai/context_action_floret_test.go:258` - Host tests map exact context items into typed Floret references.
+- `redeven:internal/ai/context_action_floret_test.go:361` - Canonical turn input retains references without persisting the host action envelope.

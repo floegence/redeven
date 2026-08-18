@@ -17,16 +17,14 @@ Runtime transport uses Flowersec sessions while terminal lifecycle is delegated 
 ## AI Flower RPC registration
 
 The local direct and remote agent production session profiles register the
-complete AI request inventory before Flowersec freezes a session. The shared
-inventory covers send, summary/thread subscription, message listing, Stop,
-input response, and context compaction; the event type is explicitly a server
-notification rather than a request handler. A declared AI method therefore
-cannot fail at the router with a missing-handler 404. If the AI service or a
-local realtime peer is not ready, the registered handler returns a structured
-503 and the session remains usable. Env Local live timeline ownership is
-HTTP/SSE, so its turn admission does not issue a second best-effort thread
-subscription RPC. Stop remains a single AI RPC lifecycle command and does not
-fall back to another transport.
+complete AI inventory before Flowersec freezes a session. The closed request
+set is send user turn, list messages, stop thread, and submit user-input
+response; the AI event type is explicitly a server notification. A declared
+method therefore cannot fail at the router with a missing-handler 404. Each
+request acquires the current AI service generation and returns structured 503
+when unavailable while the session remains usable. Workspace live timeline is
+owned by the Env Local HTTP stream, not an RPC summary/thread subscription.
+Stop remains one RPC lifecycle command without a fallback transport.
 
 ## Mechanism
 
@@ -96,9 +94,8 @@ Compatibility depends on these published transport and terminal interfaces stayi
 - `redeven:internal/config/bootstrap.go:215` - Bootstrap persists and reuses the delivery request and runtime identity attempt before exchange.
 - `redeven:internal/agent/local_direct_test.go:56` - Local direct sessions prove authorized channel registration, terminal notification attachment and detachment, and admission rejection during shutdown.
 - `redeven:internal/agent/agent.go:1339` - Remote and local production session assembly share AI registration and detach cleanup.
-- `redeven:internal/ai/rpc_inventory.go:1` - Canonical AI request/notification type inventory.
-- `redeven:internal/agent/ai_rpc_registration_test.go:1` - Production local session registration and structured-unavailable coverage.
-- `redeven:internal/ai/rpc_readiness_test.go:35` - Realtime RPC without a peer returns structured 503.
+- `redeven:internal/ai/rpc_inventory.go:20` - Canonical closed AI request and notification inventory.
+- `redeven:internal/agent/ai_rpc_registration_test.go:13` - Production registration and structured-unavailable coverage for every request method.
 - `redeven:internal/terminal/manager.go:14` - Runtime terminal manager wraps floeterm terminal-go plus Flowersec RPC types.
 - `redeven:scripts/build_runtime_binary.sh:1` - One target-aware native-CGO builder owns Desktop bundle and SSH source Runtime compilation.
 - `redeven:internal/terminal/manager_test.go` - Tests cover authorized terminal metadata notification broadcast, snapshot mapping, normalization, and payload isolation.

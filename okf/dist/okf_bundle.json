@@ -42,7 +42,7 @@
               "lifecycle",
               "readiness"
             ],
-            "summary": "- Authority: Floret remains the only authority for durable Agent lifecycle and Store facts; Redeven owns only current-process AI availability and product presentation.\n- Outcome: Code App, Settings, Notes, Workbench, terminal, files, and Codex start and remain usable when AI startup is inspecting, migrating, verifying, or blocked.\n- Invariants: one controller owns AI service construction, retry serialization, generation publication, request leases, draining, and close; each AI request uses one generation for its complete lifetime.\n- Failure boundary: a blocked generation returns one typed unavailable envelope, never publishes partial runtime authority, never repairs Store data, and never turns readiness into durable Agent state. Short-lived storage contention remains a bounded recovering state instead of being presented as unavailable.",
+            "summary": "- Authority: Floret owns durable Agent and Store facts; Redeven owns process-local AI availability and presentation.\n- Outcome: non-AI product surfaces remain usable while AI startup inspects, migrates, verifies, recovers, or blocks.\n- Invariants: one controller owns construction, retry, generation publication, request leases, drain, and close; each AI request stays on one generation.\n- Failure boundary: unavailable or blocked startup returns a sanitized typed envelope, publishes no partial service, repairs no Store data, and never becomes durable Agent state.",
             "section_count": 2
           },
           {
@@ -607,7 +607,7 @@
               "ui"
             ],
             "summary": "Flower sends ordinary input through a stable request ID and receives a typed current view immediately. The composer, thread rail, Stop, interaction controls, and thread switching remain usable while provider work continues. A short-lived IndexedDB outbox retains only ordinary launch input until the canonical view confirms its request ID; secret interaction answers never enter it.",
-            "section_count": 1
+            "section_count": 2
           },
           {
             "concept_id": "ui.flower-composer-references",
@@ -655,7 +655,7 @@
               "ui"
             ],
             "summary": "Flower uses one workspace SSE for every thread. The stream carries a baseline of summaries, summary replacements, active-thread current views, and viewer read state. Selecting a thread changes only `ThreadCache.selectedId`; it never reconnects transport or cancels background execution. Disconnect recovery refreshes summaries and the selected typed view without cursor replay or polling.",
-            "section_count": 1
+            "section_count": 2
           },
           {
             "concept_id": "ui.flower-timeline-ordering",
@@ -670,7 +670,7 @@
               "ui"
             ],
             "summary": "Flower renders the ordered items in Floret's typed current view. Canonical stable IDs determine user, assistant, tool, interaction, queue, and terminal rows. A short-lived transport outbox may show an unconfirmed user input at its final transcript position, but canonical confirmation removes it instead of moving or duplicating it. Summaries never write timeline detail.",
-            "section_count": 1
+            "section_count": 2
           },
           {
             "concept_id": "ui.flower-model-navigation",
@@ -731,8 +731,8 @@
               "input",
               "ui"
             ],
-            "summary": "Approval and waiting-user prompts are projections of Floret typed pending interactions. The bottom action mode is one mutually exclusive surface with fixed priority `input_request` then `approval` then `chat`, while the ordinary thread rail always remains interactive; decision surfaces never make a shared ancestor inert or install a pointer-blocking overlay. Automatic context compression remains canonical timeline presentation, but Flower exposes no manual compaction command.",
-            "section_count": 1
+            "summary": "Approval and waiting-user prompts are projections of Floret typed pending interactions. The bottom action mode is one mutually exclusive surface with fixed priority `input_request` then `approval` then `chat`, while the ordinary thread rail always remains interactive; decision surfaces never make a shared ancestor inert or install a pointer-blocking overlay.",
+            "section_count": 2
           },
           {
             "concept_id": "ui.flower-subagent-detail",
@@ -783,7 +783,7 @@
               "sqlite",
               "storage"
             ],
-            "summary": "Floret owns its canonical journal and migration lineage. Redeven owns `ai_threadstore_product_v1`, whose current version is 2 and whose contiguous v1-to-v2 migration removes retired lifecycle tables after importing queued user input. Neither repository reads or mutates the other's schema. Drift, future versions, or failed verification stop startup without reset or repair.",
+            "summary": "Floret owns its opaque backend, logical schema, and session-tree domain migration lineage. Redeven owns `ai_threadstore_product_v1`, whose current version is 4 and whose contiguous migrations import retired queue data, add execution authority, and add delete authority. Neither repository reads or mutates the other's schema. Drift, future versions, or failed verification stop startup without reset or repair.",
             "section_count": 2
           },
           {
@@ -829,8 +829,8 @@
               "flower",
               "tools"
             ],
-            "summary": "Pending approval and user input are typed Floret thread interactions. Redeven authorizes the product request and maps safe presentation; it does not persist, project, hand off, or recover a second approval lifecycle. Resolve updates the in-memory current view immediately and appends the canonical interaction result. Rejection and cancellation are normal row-local outcomes, never global message failures.",
-            "section_count": 1
+            "summary": "Pending approval and user input are typed Floret thread interactions. Redeven authorizes the product request and maps safe presentation; it does not persist or recover a second approval lifecycle. Resolve commits the canonical interaction-result batch before updating and publishing the current view. Persistence failure returns an error and leaves the live interaction unresolved. Rejection and cancellation are row-local outcomes, never global message failures.",
+            "section_count": 2
           },
           {
             "concept_id": "ai.terminal-tool-runtime",
@@ -897,14 +897,14 @@
             "path": "ai/flower-thread-fork-coordination.md",
             "type": "AI Persistence Contract",
             "title": "Flower thread fork coordination",
-            "description": "Floret forks canonical Agent state first, then Redeven materializes a fixed host-settings and thread-resource snapshot.",
+            "description": "Redeven authorizes a source thread, calls Floret's typed fork, and adopts product settings for the returned canonical destination.",
             "tags": [
               "ai",
               "floret",
               "persistence",
               "threads"
             ],
-            "summary": "- Authority: Floret owns the forked journal, title, lifecycle, turns, projections, todos, context, and SubAgent state; Redeven owns copied host settings, thread-level upload ownership, and product routing.\n- Outcome: one replayable operation creates one fixed destination without copying or persisting a Floret rewrite result.\n- Invariants: product materialization uses the prepared snapshot, not live source state; a pending fork claims both source and destination against product writes and competing create/fork intent; upload ownership is copied at thread scope only.\n- Failure boundary: identity conflicts fail explicitly; transient Floret or product commit errors remain replayable under the same operation id.",
+            "summary": "- Authority: Floret owns the forked journal and canonical destination identity; Redeven owns endpoint authorization and the destination's product settings.\n- Outcome: one stable client request forks the authorized source, adopts settings for the returned destination, and optionally sets an explicit title.\n- Invariants: source ownership is proven before Floret mutation, the returned destination is the only product adoption target, and the product stores no fork receipt, saga, or canonical lifecycle copy.\n- Failure boundary: invalid request identity, foreign source authority, Floret failure, or conflicting destination settings fails explicitly without a recovery coordinator or compensating canonical delete.",
             "section_count": 2
           },
           {
@@ -1604,6 +1604,12 @@
           "path": "ui/flower-composer-references.md",
           "concept_id": "ui.flower-composer-references",
           "title": "Flower composer references"
+        },
+        {
+          "label": "Flower terminal activity presentation",
+          "path": "ui/flower-terminal-activity.md",
+          "concept_id": "ui.flower-terminal-activity",
+          "title": "Flower terminal activity presentation"
         }
       ]
     },
@@ -1632,7 +1638,7 @@
         "title": "Floret thread runtime integration",
         "type": "AI Runtime Contract"
       },
-      "body_length": 9081,
+      "body_length": 9328,
       "summary": "Floret v4 `ThreadService` is the sole owner of active and canonical thread lifecycle. Redeven owns endpoint authorization, attachment resource resolution, provider and tool effects, and browser-safe mapping. Every existing-thread mutation proves that the ThreadID belongs to the authenticated endpoint before entering Floret. Send, Respond, Cancel, Retry, and RetryEffect return the current typed view without waiting for provider continuation. Canonical journal facts prevent duplicate user, assistant, tool, and interaction records; transient drafts and execution tokens remain in memory.",
       "sections": [
         {
@@ -1652,14 +1658,14 @@
       ],
       "evidence": [
         {
-          "id": "floret:runtime/thread_runtime.go:0:typed service, per-thread runtime, queue, interaction, cancellation, retry, and subscription boundary.",
-          "source": "floret:runtime/thread_runtime.go",
-          "description": "Typed service, per-thread runtime, queue, interaction, cancellation, retry, and subscription boundary."
+          "id": "redeven:go.mod:0:pins the released floret v4.0.12 typed runtime without local replacement.",
+          "source": "redeven:go.mod",
+          "description": "Pins the released Floret v4.0.12 typed runtime without local replacement."
         },
         {
-          "id": "floret:internal/sessiontree/backend_repo_journal.go:0:canonical journal persistence and stable fact identity.",
-          "source": "floret:internal/sessiontree/backend_repo_journal.go",
-          "description": "Canonical journal persistence and stable fact identity."
+          "id": "redeven:internal/session/floret_v4_dependency_contract_test.go:0:enforces exact published-v4 adoption and rejects retired imports.",
+          "source": "redeven:internal/session/floret_v4_dependency_contract_test.go",
+          "description": "Enforces exact published-v4 adoption and rejects retired imports."
         },
         {
           "id": "redeven:internal/ai/floret_runtime.go:0:published runtime composition.",
@@ -1707,6 +1713,16 @@
           "description": "Exact unknown-effect retry mapping."
         },
         {
+          "id": "redeven:internal/ai/send_user_turn_flow_test.go:0:covers typed canonical send and queue behavior through the published runtime.",
+          "source": "redeven:internal/ai/send_user_turn_flow_test.go",
+          "description": "Covers typed canonical send and queue behavior through the published runtime."
+        },
+        {
+          "id": "redeven:internal/ai/floret_ask_user_integration_test.go:0:covers typed interaction settlement without waiting for provider continuation.",
+          "source": "redeven:internal/ai/floret_ask_user_integration_test.go",
+          "description": "Covers typed interaction settlement without waiting for provider continuation."
+        },
+        {
           "id": "redeven:internal/flower_ui/src/FlowerSurface.tsx:0:latest-selection generation fence before detail cache mutation.",
           "source": "redeven:internal/flower_ui/src/FlowerSurface.tsx",
           "description": "Latest-selection generation fence before detail cache mutation."
@@ -1729,6 +1745,12 @@
           "label": "Redeven OKF Bundle",
           "path": "index.md",
           "title": "Redeven OKF Bundle"
+        },
+        {
+          "label": "Flower terminal activity presentation",
+          "path": "ui/flower-terminal-activity.md",
+          "concept_id": "ui.flower-terminal-activity",
+          "title": "Flower terminal activity presentation"
         }
       ]
     },
@@ -2074,15 +2096,15 @@
         "title": "Flower storage ownership and migrations",
         "type": "Storage Contract"
       },
-      "body_length": 2899,
-      "summary": "Floret owns its canonical journal and migration lineage. Redeven owns `ai_threadstore_product_v1`, whose current version is 2 and whose contiguous v1-to-v2 migration removes retired lifecycle tables after importing queued user input. Neither repository reads or mutates the other's schema. Drift, future versions, or failed verification stop startup without reset or repair.",
+      "body_length": 3510,
+      "summary": "Floret owns its opaque backend, logical schema, and session-tree domain migration lineage. Redeven owns `ai_threadstore_product_v1`, whose current version is 4 and whose contiguous migrations import retired queue data, add execution authority, and add delete authority. Neither repository reads or mutates the other's schema. Drift, future versions, or failed verification stop startup without reset or repair.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Fresh product databases initialize version 2 with thread settings, pending-input migration staging, uploads, upload staging scopes, provider capabilities, and Flower routing. Version 1 upgrades atomically: queued inputs are copied to `ai_pending_input_imports` using their stable request IDs, obsolete receipt, queue, operation, permission snapshot, and publication tables are dropped, `queue_revision` is removed, metadata advances to version 2, and the exact target shape is verified before commit.\n\nDuring service startup, after the Floret effect adapter is bound and before live subscriptions or maintenance start, the pending-input importer synchronously converts each migration row into Floret typed queue input. Only a successful canonical import is marked complete. If completion marking fails, startup fails and a restart repeats the same stable request keys; Floret idempotency prevents duplicates. Canonical import failure also stops startup and leaves staging intact. The legacy codecs live only beside that importer. Production handlers cannot create, read, reorder, settle, or recover a Redeven queue row.\n\nFloret v4 migrates its own canonical journal to schema version 5 through its published open path. Canonical user input, queue intent, interactions, effect intent/results, assistant output, and terminal facts stay upstream. High-frequency deltas, subscribers, and execution tokens are in memory and are not mirrored into Redeven SQL.",
-          "char_count": 1453
+          "body": "Fresh product databases initialize version 4 with thread settings, pending-input migration staging, uploads, upload staging scopes, provider capabilities, Flower routing, execution authority, and delete authority. Version 1 upgrades atomically to version 2: queued inputs are copied to `ai_pending_input_imports` using their stable request IDs, retired lifecycle tables are dropped, `queue_revision` is removed, and the exact target shape is verified. Version 2 to 3 adds the minimum submitting-user authority needed for restart redispatch. Version 3 to 4 adds endpoint-scoped delete authority. Every edge verifies its exact target before the shared schema owner advances metadata and commits.\n\nDuring service startup, after the Floret effect adapter is bound and before live subscriptions or maintenance start, the pending-input importer synchronously converts each migration row into Floret typed queue input. Only a successful canonical import is marked complete. If completion marking fails, startup fails and a restart repeats the same stable request keys; Floret idempotency prevents duplicates. Canonical import failure also stops startup and leaves staging intact. The legacy codecs live only beside that importer. Production handlers cannot create, read, reorder, settle, or recover a Redeven queue row.\n\nPublished Floret v4.0.12 opens its own physical backend and migrates logical and session-tree domain state through its public runtime boundary. Those layers have independent versions and remain opaque to Redeven; Redeven neither labels them as one product journal schema nor inspects their records. Canonical user input, queue intent, interactions, effect intent/results, assistant output, and terminal facts stay upstream. High-frequency deltas, subscribers, and execution tokens are in memory and are not mirrored into Redeven SQL.",
+          "char_count": 1847
         },
         {
           "id": "boundaries",
@@ -2094,9 +2116,9 @@
       ],
       "evidence": [
         {
-          "id": "redeven:internal/ai/threadstore/schema.go:0:version 2 initializer and atomic v1-to-v2 migration.",
+          "id": "redeven:internal/ai/threadstore/schema.go:0:version 4 initializer and contiguous v1-to-v2, v2-to-v3, and v3-to-v4 migrations.",
           "source": "redeven:internal/ai/threadstore/schema.go",
-          "description": "Version 2 initializer and atomic v1-to-v2 migration."
+          "description": "Version 4 initializer and contiguous v1-to-v2, v2-to-v3, and v3-to-v4 migrations."
         },
         {
           "id": "redeven:internal/ai/pending_input_import.go:0:migration-only decoding and typed floret import.",
@@ -2124,12 +2146,17 @@
           "description": "Closed product SQL ownership inventory."
         },
         {
-          "id": "floret:internal/storage/sqlite/schema.go:0:upstream-owned canonical schema version.",
-          "source": "floret:internal/storage/sqlite/schema.go",
-          "description": "Upstream-owned canonical schema version."
+          "id": "redeven:go.mod:0:pins the released floret v4.0.12 module without local source wiring.",
+          "source": "redeven:go.mod",
+          "description": "Pins the released Floret v4.0.12 module without local source wiring."
+        },
+        {
+          "id": "redeven:internal/session/floret_v4_dependency_contract_test.go:0:enforces exact published-v4 adoption and rejects replacement or retired imports.",
+          "source": "redeven:internal/session/floret_v4_dependency_contract_test.go",
+          "description": "Enforces exact published-v4 adoption and rejects replacement or retired imports."
         }
       ],
-      "snippet": "Floret owns its canonical journal and migration lineage. Redeven owns `ai_threadstore_product_v1`, whose current version is 2 and whose contiguous v1-to-v2 migration removes retired lifecycle tables after importing queued user input. Neithe",
+      "snippet": "Floret owns its opaque backend, logical schema, and session-tree domain migration lineage. Redeven owns `ai_threadstore_product_v1`, whose current version is 4 and whose contiguous migrations import retired queue data, add execution authori",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -2235,7 +2262,7 @@
       "concept_id": "ai.flower-thread-fork-coordination",
       "type": "AI Persistence Contract",
       "title": "Flower thread fork coordination",
-      "description": "Floret forks canonical Agent state first, then Redeven materializes a fixed host-settings and thread-resource snapshot.",
+      "description": "Redeven authorizes a source thread, calls Floret's typed fork, and adopts product settings for the returned canonical destination.",
       "tags": [
         "ai",
         "floret",
@@ -2244,7 +2271,7 @@
       ],
       "timestamp": "2026-07-18T00:00:00Z",
       "frontmatter": {
-        "description": "Floret forks canonical Agent state first, then Redeven materializes a fixed host-settings and thread-resource snapshot.",
+        "description": "Redeven authorizes a source thread, calls Floret's typed fork, and adopts product settings for the returned canonical destination.",
         "tags": [
           "ai",
           "floret",
@@ -2255,74 +2282,53 @@
         "title": "Flower thread fork coordination",
         "type": "AI Persistence Contract"
       },
-      "body_length": 5320,
-      "summary": "- Authority: Floret owns the forked journal, title, lifecycle, turns, projections, todos, context, and SubAgent state; Redeven owns copied host settings, thread-level upload ownership, and product routing.\n- Outcome: one replayable operation creates one fixed destination without copying or persisting a Floret rewrite result.\n- Invariants: product materialization uses the prepared snapshot, not live source state; a pending fork claims both source and destination against product writes and competing create/fork intent; upload ownership is copied at thread scope only.\n- Failure boundary: identity conflicts fail explicitly; transient Floret or product commit errors remain replayable under the same operation id.",
+      "body_length": 3076,
+      "summary": "- Authority: Floret owns the forked journal and canonical destination identity; Redeven owns endpoint authorization and the destination's product settings.\n- Outcome: one stable client request forks the authorized source, adopts settings for the returned destination, and optionally sets an explicit title.\n- Invariants: source ownership is proven before Floret mutation, the returned destination is the only product adoption target, and the product stores no fork receipt, saga, or canonical lifecycle copy.\n- Failure boundary: invalid request identity, foreign source authority, Floret failure, or conflicting destination settings fails explicitly without a recovery coordinator or compensating canonical delete.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "`PrepareForkOperation` runs under the source thread lifecycle gate. Before preparation, Redeven exhaustively keyset-pages queued commands and exact-reads only rows that already carry Floret-assigned TurnID values. An admitted command settles; typed not-found leaves the unadmitted command unchanged; any other canonical read or host settlement failure aborts without creating a new fork operation. It then rejects active runs, finalization, and idle compaction, validates source settings, and persists an immutable snapshot in `ai_thread_fork_operations`, keyed by a stable product operation id and `client_request_id`. The snapshot contains source `ThreadSettings`, thread-owned upload refs, product routing, explicit title intent, and host audit identity. The canonical destination is empty at preparation time. Product routing is limited to home runtime, runtime kind, origin environment, primary target, active target ids, and update time. It contains no Agent owner, parent, action, context, conversation, title copy, turn/run state, projection, approval, todo, provider state, tool lifecycle, or Floret result.\n\nSnapshot replay accepts only the strict first-release snapshot shape. It verifies operation-row identity, `client_request_id`, source settings identity, request fingerprint, and a second fingerprint over the complete immutable snapshot before calling Floret or materializing settings. Unknown fields, trailing JSON values, empty payloads, identity drift, request drift, and any source-settings/resource/routing payload drift fail closed. There is no legacy snapshot migration or compatibility parser. Once preparation succeeds, the source rejects settings, queue, admission, upload-ownership, permission-audit, and product-routing writes until the operation commits. After Floret binds the canonical destination, that destination rejects competing settings or lifecycle writes. Replay of the same request remains idempotent.\n\nRedeven calls Floret v4 typed `Fork` with the source ThreadID and stable request key. Floret assigns and canonically records the destination child identity; Redeven then materializes only its product catalog row and resource ownership for that exact returned thread. A repeated request returns the same canonical destination without creating another thread.\n\nAfter canonical fork succeeds, one Redeven transaction materializes destination settings from the fixed snapshot, copies thread-level upload ownership to the destination thread, copies product routing, and advances the product stage. The independent title stage then converges through its own LogicalRequestID before the operation becomes completed. No source reread can change a pending operation. Restart replay uses the same request identities, verifies the same Floret destination, and resumes only the incomplete saga stage.\n\nCommitted source and destination summary publication is separately acknowledged and may be retried. Each summary must still resolve current host settings plus public Floret canonical state before broadcast.",
-          "char_count": 3040
+          "body": "`ForkThreadWithOptions` validates RWX access, the source ThreadID, endpoint identity, and a stable `client_request_id`. The shared endpoint/thread authority boundary must find a live product settings row for that exact endpoint before any Floret call. Redeven then reads the source's current product settings and invokes published Floret v4 `Fork` with the source ThreadID and client request key.\n\nFloret returns the canonical destination. Redeven copies only product-owned settings into a new root settings value, preserves the source endpoint, namespace, model, reasoning selection, permission, and working directory, clears pin state, and records the current requesting user as the destination creator/updater. `AdoptCanonicalRootSettings` inserts that exact destination or accepts an identical existing record; a conflicting record fails closed. A non-empty requested title is then sent through typed `SetTitle` with a derived stable key.\n\nThe response is rebuilt from the returned Floret current view plus the adopted product settings. There is no durable fork operation table, immutable resource snapshot, lifecycle gate, stage replay, upload-copy protocol, summary acknowledgement receipt, or fork recovery coordinator. Product settings adoption is deliberately small; canonical fork idempotency remains owned by Floret's request key.",
+          "char_count": 1341
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Redeven never stores a source/destination turn or run identity mapping, Floret fork result, canonical title, or Agent lifecycle snapshot. It does not create conversation rows, infer a title from preview text, silently omit malformed resources, compensate by deleting a valid Floret destination, treat an unrelated existing destination as recovery success, or let source product state mutate around a pending snapshot.",
-          "char_count": 417
+          "body": "Redeven never stores a fork saga, source/destination turn or run identity mapping, Floret fork result, canonical title, or Agent lifecycle snapshot. Product adoption cannot authorize a foreign source, choose a different destination, reconstruct canonical content, or compensate by deleting a valid Floret destination.",
+          "char_count": 317
         }
       ],
       "evidence": [
         {
-          "id": "redeven:internal/ai/threadstore/fork_operation.go:0:the fork receipt stores stable product and floret request identities, a nullable canonical destination, immutable host snapshot, and saga stages.",
-          "source": "redeven:internal/ai/threadstore/fork_operation.go",
-          "description": "The fork receipt stores stable product and Floret request identities, a nullable canonical destination, immutable host snapshot, and saga stages."
+          "id": "redeven:internal/ai/threads.go:807:authorizes the source, calls typed floret fork, adopts returned product settings, and applies an optional title.",
+          "source": "redeven:internal/ai/threads.go",
+          "line": 807,
+          "description": "Authorizes the source, calls typed Floret Fork, adopts returned product settings, and applies an optional title."
         },
         {
-          "id": "redeven:internal/ai/threadstore/fork_operation.go:392:snapshot capture selects only thread-owned uploads.",
-          "source": "redeven:internal/ai/threadstore/fork_operation.go",
-          "line": 392,
-          "description": "Snapshot capture selects only thread-owned uploads."
+          "id": "redeven:internal/ai/threadstore/orphan_adoption.go:0:inserts exact canonical-root settings idempotently and rejects conflicting settings.",
+          "source": "redeven:internal/ai/threadstore/orphan_adoption.go",
+          "description": "Inserts exact canonical-root settings idempotently and rejects conflicting settings."
         },
         {
-          "id": "redeven:internal/ai/thread_fork_operation.go:41:replay forks floret and applies explicit title before product commit.",
-          "source": "redeven:internal/ai/thread_fork_operation.go",
-          "line": 41,
-          "description": "Replay forks Floret and applies explicit title before product commit."
+          "id": "redeven:internal/ai/threadstore/orphan_adoption_test.go:0:covers exact adoption and conflict handling.",
+          "source": "redeven:internal/ai/threadstore/orphan_adoption_test.go",
+          "description": "Covers exact adoption and conflict handling."
         },
         {
-          "id": "redeven:internal/ai/threadstore/fork_operation.go:488:product materialization uses the immutable snapshot and persists no floret result.",
-          "source": "redeven:internal/ai/threadstore/fork_operation.go",
-          "line": 488,
-          "description": "Product materialization uses the immutable snapshot and persists no Floret result."
+          "id": "redeven:internal/ai/thread_authority_boundary_test.go:0:proves foreign endpoint threadids fail before canonical mutation.",
+          "source": "redeven:internal/ai/thread_authority_boundary_test.go",
+          "description": "Proves foreign endpoint ThreadIDs fail before canonical mutation."
         },
         {
-          "id": "redeven:internal/ai/thread_fork_operation_test.go:91:restart tests recover canonical-first fork boundaries.",
-          "source": "redeven:internal/ai/thread_fork_operation_test.go",
-          "line": 91,
-          "description": "Restart tests recover canonical-first fork boundaries."
-        },
-        {
-          "id": "redeven:internal/ai/thread_lifecycle_gate_test.go:215:deterministic tests cover operation-first lifecycle serialization.",
-          "source": "redeven:internal/ai/thread_lifecycle_gate_test.go",
-          "line": 215,
-          "description": "Deterministic tests cover operation-first lifecycle serialization."
-        },
-        {
-          "id": "redeven:internal/ai/thread_lifecycle_gate_test.go:254:deterministic tests cover admission-first lifecycle serialization.",
-          "source": "redeven:internal/ai/thread_lifecycle_gate_test.go",
-          "line": 254,
-          "description": "Deterministic tests cover admission-first lifecycle serialization."
-        },
-        {
-          "id": "redeven:internal/ai/thread_lifecycle_gate_test.go:309:deterministic tests prove failed settlement keeps exclusive lifecycle work blocked.",
-          "source": "redeven:internal/ai/thread_lifecycle_gate_test.go",
-          "line": 309,
-          "description": "Deterministic tests prove failed settlement keeps exclusive lifecycle work blocked."
+          "id": "redeven:internal/session/floret_v4_dependency_contract_test.go:0:enforces the released typed v4 dependency boundary.",
+          "source": "redeven:internal/session/floret_v4_dependency_contract_test.go",
+          "description": "Enforces the released typed v4 dependency boundary."
         }
       ],
-      "snippet": "- Authority: Floret owns the forked journal, title, lifecycle, turns, projections, todos, context, and SubAgent state; Redeven owns copied host settings, thread-level upload ownership, and product routing. - Outcome: one replayable operatio",
+      "snippet": "- Authority: Floret owns the forked journal and canonical destination identity; Redeven owns endpoint authorization and the destination's product settings. - Outcome: one stable client request forks the authorized source, adopts settings fo",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -2356,22 +2362,22 @@
         "title": "AI model and context runtime",
         "type": "AI Runtime Contract"
       },
-      "body_length": 12103,
+      "body_length": 11257,
       "summary": "Redeven persists product model and reasoning preferences, provider credentials, and model-source selection, while Floret owns provider-visible context and opaque continuation state. Environment and Desktop model sources remain distinct, context and compaction presentation come from typed Floret observations, and input/output token limits preserve their separate meanings. Product configuration updates merge permission and model state without overwriting unrelated settings.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Mechanism\n\nOpenAI-compatible Chat reasoning is capability-driven. Redeven reads only response fields named by the resolved model capability, emits their fragments as reasoning without trimming provider whitespace, and never treats reasoning-only output as assistant body text. Assistant reasoning is replayed through provider-specific history fields only when the same capability declares that requirement; unsupported models receive no synthetic reasoning field.\n\nFlower configuration has three independent states. The default `permission_type` is valid without any model configuration and initializes only future threads. An environment `AIModelProfile` exists only when both the provider registry and `current_model_id` are present and the selected model belongs to that registry; either field without the other is invalid. A Desktop model source is a separate runtime catalog and may coexist with that environment profile in one Flower settings snapshot. Env App exposes it only when the required Desktop session route is exactly `remote_desktop`; `local_host` and ordinary browser sessions do not expose Desktop diagnostics. Its status is a strict discriminated union: `ready` owns a non-empty validated catalog, `missing_keys` owns provider ids, `empty` represents a successfully loaded empty catalog, `connecting`, `unbound`, `expired`, and `unsupported` are explicit binding states, and `error` may carry one diagnostic. A missing Runtime declaration maps to `unsupported`; catalog transport or validation failures map to `error` and are never swallowed. Catalog entries enter `ready` only when `source` is exactly `desktop_model_source` and the id matches the opaque `desktop:model_\u003c64 lowercase hex\u003e` contract. The environment profile remains the persisted default and wins initial new-chat selection whenever it exists. Selecting a Desktop model affects only the current mounted Flower surface's new-chat draft or the selected thread and never calls the environment default-model persistence path, so remounting Flower restores the environment default. `AIConfig.HasModelProfile()` is the canonical environment-profile predicate, and the existing `ai_runtime.remote_configured` wire field reports that predicate rather than the presence of an `AIConfig` object. The focused default-permission update merges under the AI service state lock, while provider-bundle updates replace only the model profile under the same lock, so concurrent writes preserve permission and recovery settings. Generic settings updates do not accept `ai`.\n\nProvider adapters are model gateways, not Flower renderers or lifecycle stores. `floretProviderAdapter` directly maps typed Floret messages and provider stream bytes, including `PreviousState` and `ResponseState`, without grouping, repairing, deduplicating, or reordering the Floret contract. Assistant text, reasoning deltas, and model-generated tool-call stream observations are emitted as provider-neutral Floret model events before Redeven projects them into Flower live state. Floret persists opaque response state internally after journal finalization and reloads it only when the journal leaf and non-sensitive gateway compatibility key match. Redeven computes that key from provider id/type, normalized endpoint, wire model, and transport route; it stores no continuation envelope or matching fields.\n\nTool names use one dotted canonical vocabulary across Redeven definitions, Floret, canonical history, current views, and Flower presentation; `terminal.read` and `terminal.exec` never acquire underscore-form canonical aliases. OpenAI-compatible request serialization builds one bidirectional alias table from the current tool definitions and canonical continuation history, rejects collisions, and uses that same table for definitions, historical calls/results, streamed call events, and final ToolCalls. A wire-only name such as `terminal_read` is translated back before any event enters Floret, while an unregistered response name fails at the gateway without emitting a tool event. Anthropic receives canonical dotted names directly. Published Floret v4.0.3 keeps schema-invalid calls and ordered validation results only inside the same-run provider correction loop; they do not dispatch handlers, enter canonical thread history, or create Flower tool-failure rows. Redeven keeps `terminal.read.description` required rather than weakening the schema to avoid correction.\n\nProvider tool-call generation has a private `omit` or `enable` wire mode. `enable` serializes `parallel_tool_calls:true`; it allows a provider model to return more than one call but does not require the model to do so and is never read by the executor. Redeven enables it only for known HTTPS official OpenAI Responses/Chat, Qwen DashScope, OpenRouter, xAI, and Groq endpoints. Anthropic, DeepSeek, Moonshot, ChatGLM, Ollama, generic `openai_compatible`, Desktop opaque sources, proxies, and custom base URLs omit the field. No request path sends a false value. Hosted-turn diagnostics record the selected wire mode, and Floret lifecycle audit events carry batch index, batch size, event type, and observation time so operators can distinguish model serialization, provider single-call output, approval wait, dispatch, and completion without feeding diagnostics back into scheduling.\n\nThread model and reasoning defaults are Redeven product state. `ai_thread_settings` persists `model_id` and `reasoning_selection_json`; there is no separate model-lock state. Existing thread model changes validate the requested model against the allowed runtime or Desktop model source list, require an idle mutable thread, and normalize the thread reasoning selection for the new model. Redeven does not clear provider continuation: the next Floret Host uses a different gateway compatibility key when provider type, endpoint, wire model, or route changes, and Floret invalidates incompatible continuation internally. The configured `current_model_id` is only the persisted environment default for future threads; it must not be synced back into existing thread defaults. Turn launch resolves and stores product model/reasoning choices before execution, while Floret owns execution, provider-visible context, and opaque state persistence; it does not own thread preferences, provider credentials, provider profiles, UI policy, or product model switching.\n\nContext pressure and compaction presentation come from structured Floret runtime observations and the identity-bound context reader. During a live process, Redeven maps typed context status and compaction events into in-memory Flower events only; it does not persist those events, compaction debug lifecycle, mapped context DTOs, or a context run cursor. Bootstrap and reconnect use a provider-free reader issued by the composition-root `runtime.Host`, read the canonical `ThreadContextSnapshot`, validate it, and map usage plus terminal compaction facts into the response. Manual `/compact` requests enter Redeven only as Flower UI/RPC coordination signals. The command response exposes the Redeven `request_id`, never a provisional Floret operation id; canonical operation identity appears only in validated Floret events and results. Active compaction stays inside the current Floret turn. Idle compaction keeps only Redeven command admission, queueing, mutual exclusion, cancellation, and shutdown coordination; `CompactThreadResult.Validate()` and its typed compaction event provide the operation id and terminal outcome. Redeven never synthesizes a Floret lifecycle or commits provider state.\n\nRun token limits preserve distinct field semantics across the Redeven/Floret boundary. Redeven passes `RunOptions.MaxInputTokens` directly to Floret `TurnLimits.MaxInputTokens`, where it limits cumulative provider input usage across the entire hosted run. `MaxOutputTokens` remains a per-provider-request output ceiling used by Floret context policy and `ModelRequest.MaxOutputTokens`. Redeven does not add input and output limits into a derived `MaxTotalTokens`, and an unset input limit does not create an implicit cumulative token budget.",
-          "char_count": 8114
+          "body": "## Mechanism\n\nOpenAI-compatible Chat reasoning is capability-driven. Redeven reads only response fields named by the resolved model capability, emits their fragments as reasoning without trimming provider whitespace, and never treats reasoning-only output as assistant body text. Assistant reasoning is replayed through provider-specific history fields only when the same capability declares that requirement; unsupported models receive no synthetic reasoning field.\n\nFlower configuration has three independent states. The default `permission_type` is valid without model configuration and initializes only future threads. An environment `AIModelProfile` requires a provider registry plus a valid `current_model_id`. A Desktop source is a separate runtime catalog exposed only for the exact `remote_desktop` route. Its strict status union distinguishes ready, empty, missing-key, binding, unsupported, and error states; only `desktop_model_source` entries with opaque `desktop:model_\u003c64 lowercase hex\u003e` ids enter the ready catalog. The environment profile remains the persisted new-chat default. Desktop selection changes only the mounted new-chat draft or selected thread, so remount restores the environment default. `AIConfig.HasModelProfile()` is the sole environment-profile predicate. Permission and provider updates merge under the service lock, preserving unrelated settings, and generic settings updates do not accept `ai`.\n\nProvider adapters are model gateways, not Flower renderers or lifecycle stores. `floretProviderAdapter` directly maps typed Floret messages and provider stream bytes, including `PreviousState` and `ResponseState`, without grouping, repairing, deduplicating, or reordering the Floret contract. Assistant text, reasoning deltas, and model-generated tool-call stream observations are emitted as provider-neutral Floret model events before Redeven projects them into Flower live state. Floret persists opaque response state internally after journal finalization and reloads it only when the journal leaf and non-sensitive gateway compatibility key match. Redeven computes that key from provider id/type, normalized endpoint, wire model, and transport route; it stores no continuation envelope or matching fields.\n\nTool names use one dotted canonical vocabulary across Redeven definitions, Floret, canonical history, current views, and Flower presentation; `terminal.read` and `terminal.exec` never acquire underscore-form canonical aliases. OpenAI-compatible request serialization builds one bidirectional alias table from the current tool definitions and canonical continuation history, rejects collisions, and uses that same table for definitions, historical calls/results, streamed call events, and final ToolCalls. A wire-only name such as `terminal_read` is translated back before any event enters Floret, while an unregistered response name fails at the gateway without emitting a tool event. Anthropic receives canonical dotted names directly. Published Floret v4.0.12 keeps schema-invalid calls and ordered validation results only inside the same-run provider correction loop; they do not dispatch handlers, enter canonical thread history, or create Flower tool-failure rows. Redeven keeps `terminal.read.description` required rather than weakening the schema to avoid correction.\n\nProvider tool-call generation has a private `omit` or `enable` wire mode. `enable` serializes `parallel_tool_calls:true`; it allows a provider model to return more than one call but does not require the model to do so and is never read by the executor. Redeven enables it only for known HTTPS official OpenAI Responses/Chat, Qwen DashScope, OpenRouter, xAI, and Groq endpoints. Anthropic, DeepSeek, Moonshot, ChatGLM, Ollama, generic `openai_compatible`, Desktop opaque sources, proxies, and custom base URLs omit the field. No request path sends a false value. Hosted-turn diagnostics record the selected wire mode, and Floret lifecycle audit events carry batch index, batch size, event type, and observation time so operators can distinguish model serialization, provider single-call output, approval wait, dispatch, and completion without feeding diagnostics back into scheduling.\n\nThread model and reasoning defaults are Redeven product state. `ai_thread_settings` persists `model_id` and `reasoning_selection_json`; there is no separate model-lock state. Existing thread model changes validate the requested model against the allowed runtime or Desktop model source list, require an idle mutable thread, and normalize the thread reasoning selection for the new model. Redeven does not clear provider continuation: the next Floret Host uses a different gateway compatibility key when provider type, endpoint, wire model, or route changes, and Floret invalidates incompatible continuation internally. The configured `current_model_id` is only the persisted environment default for future threads; it must not be synced back into existing thread defaults. Turn launch resolves and stores product model/reasoning choices before execution, while Floret owns execution, provider-visible context, and opaque state persistence; it does not own thread preferences, provider credentials, provider profiles, UI policy, or product model switching.\n\nContext pressure and compaction presentation come from structured Floret runtime observations and the identity-bound context reader. During a live process, Redeven maps typed context status and compaction events into in-memory Flower events only; it does not persist those events, mapped context DTOs, or a context run cursor. Bootstrap and reconnect use the provider-free reader issued by the composition-root `runtime.Host`, validate the canonical `ThreadContextSnapshot`, and map usage plus terminal compaction facts into the response. A pure `/compact` turn with no attachment, context action, structured response, or secret answer receives one run-local `ManualCompactionSource` carrying the stable request identity. That source can be consumed once by the hosted turn; Redeven does not expose a separate idle compaction coordinator, public Host command, receipt, or lifecycle. Canonical operation identity and terminal outcome come only from validated Floret events and context reads.\n\nRun token limits preserve distinct field semantics across the Redeven/Floret boundary. Redeven passes `RunOptions.MaxInputTokens` directly to Floret `TurnLimits.MaxInputTokens`, where it limits cumulative provider input usage across the entire hosted run. `MaxOutputTokens` remains a per-provider-request output ceiling used by Floret context policy and `ModelRequest.MaxOutputTokens`. Redeven does not add input and output limits into a derived `MaxTotalTokens`, and an unset input limit does not create an implicit cumulative token budget.",
+          "char_count": 6795
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "No additional boundary is declared for this concept.",
-          "char_count": 52
+          "body": "Redeven owns model preferences, credentials, gateway selection, and the one-shot `/compact` input mapping. Floret owns provider-visible context, canonical compaction identity and result, and opaque continuation. Live context events and UI usage projections are observations, not durable lifecycle or provider-state authority.",
+          "char_count": 325
         }
       ],
       "evidence": [
@@ -2400,16 +2406,16 @@
           "description": "Flower execution runs through Floret hosted turns with a Floret approver, event sink, and dynamic tool surface provider."
         },
         {
-          "id": "redeven:internal/ai/compact_thread_context.go:17:manual context compaction is exposed as a serialized thread action.",
-          "source": "redeven:internal/ai/compact_thread_context.go",
-          "line": 17,
-          "description": "Manual context compaction is exposed as a serialized thread action."
+          "id": "redeven:internal/ai/floret_manual_compaction.go:18:pure `/compact` input creates one run-local manual compaction request.",
+          "source": "redeven:internal/ai/floret_manual_compaction.go",
+          "line": 18,
+          "description": "Pure `/compact` input creates one run-local manual compaction request."
         },
         {
-          "id": "redeven:internal/ai/run.go:548:active runs implement floret's manual compaction source.",
-          "source": "redeven:internal/ai/run.go",
-          "line": 548,
-          "description": "Active runs implement Floret's manual compaction source."
+          "id": "redeven:internal/ai/floret_manual_compaction_test.go:10:covers exact command admission and one-shot consumption.",
+          "source": "redeven:internal/ai/floret_manual_compaction_test.go",
+          "line": 10,
+          "description": "Covers exact command admission and one-shot consumption."
         },
         {
           "id": "redeven:internal/ai/model_gateway.go:37:redeven's remaining hard execution protection is the tool-call count constant.",
@@ -2454,16 +2460,22 @@
           "description": "`SetThreadModel` validates product model preferences without managing provider continuation."
         },
         {
-          "id": "redeven:internal/ai/service.go:2093:`resolverunmodel` chooses explicit request model, thread model, desktop model-source defaults, then config current model.",
+          "id": "redeven:internal/ai/service.go:1301:turn preparation resolves and binds the effective model before execution.",
           "source": "redeven:internal/ai/service.go",
-          "line": 2093,
-          "description": "`resolveRunModel` chooses explicit request model, thread model, Desktop model-source defaults, then config current model."
+          "line": 1301,
+          "description": "Turn preparation resolves and binds the effective model before execution."
         },
         {
-          "id": "redeven:internal/ai/thread_actor.go:607:`senduserturn` resolves the effective model before starting or enqueueing a turn.",
-          "source": "redeven:internal/ai/thread_actor.go",
-          "line": 607,
-          "description": "`SendUserTurn` resolves the effective model before starting or enqueueing a turn."
+          "id": "redeven:internal/ai/service.go:1347:`resolverunmodel` chooses thread, environment, or desktop model authority and validates capabilities.",
+          "source": "redeven:internal/ai/service.go",
+          "line": 1347,
+          "description": "`resolveRunModel` chooses thread, environment, or Desktop model authority and validates capabilities."
+        },
+        {
+          "id": "redeven:internal/ai/send_user_turn.go:145:typed send maps the admitted product request into the floret run boundary.",
+          "source": "redeven:internal/ai/send_user_turn.go",
+          "line": 145,
+          "description": "Typed send maps the admitted product request into the Floret run boundary."
         },
         {
           "id": "redeven:internal/ai/threadstore/store.go:951:threadstore updates `model_id` and `reasoning_selection_json` as the thread default preference.",
@@ -2484,10 +2496,16 @@
           "description": "Desktop model-source capabilities are sanitized to the opaque Desktop provider and model identity."
         },
         {
-          "id": "redeven:internal/ai/tool_concurrency_contract_test.go:20:provider matrix and http request tests prove supported endpoints send true and all other paths omit the field.",
-          "source": "redeven:internal/ai/tool_concurrency_contract_test.go",
-          "line": 20,
-          "description": "Provider matrix and HTTP request tests prove supported endpoints send true and all other paths omit the field."
+          "id": "redeven:internal/ai/model_gateway.go:171:request serialization emits `parallel_tool_calls:true` only for enabled wire modes.",
+          "source": "redeven:internal/ai/model_gateway.go",
+          "line": 171,
+          "description": "Request serialization emits `parallel_tool_calls:true` only for enabled wire modes."
+        },
+        {
+          "id": "redeven:internal/ai/model_gateway.go:2358:one resolver owns the provider and endpoint allowlist for that wire mode.",
+          "source": "redeven:internal/ai/model_gateway.go",
+          "line": 2358,
+          "description": "One resolver owns the provider and endpoint allowlist for that wire mode."
         },
         {
           "id": "redeven:internal/envapp/ui_src/src/ui/flower/envLocalFlowerSurfaceAdapter.ts:288:the stable desktop session route gates whether env app loads and exposes desktop models.",
@@ -2520,6 +2538,12 @@
           "label": "Redeven OKF Bundle",
           "path": "index.md",
           "title": "Redeven OKF Bundle"
+        },
+        {
+          "label": "Flower interactions and context state",
+          "path": "ui/flower-approval-context.md",
+          "concept_id": "ui.flower-approval-context",
+          "title": "Flower interactions and context state"
         }
       ]
     },
@@ -3021,8 +3045,8 @@
         "title": "AI tool approval and interaction runtime",
         "type": "AI Runtime Contract"
       },
-      "body_length": 2123,
-      "summary": "Pending approval and user input are typed Floret thread interactions. Redeven authorizes the product request and maps safe presentation; it does not persist, project, hand off, or recover a second approval lifecycle. Resolve updates the in-memory current view immediately and appends the canonical interaction result. Rejection and cancellation are normal row-local outcomes, never global message failures.",
+      "body_length": 2865,
+      "summary": "Pending approval and user input are typed Floret thread interactions. Redeven authorizes the product request and maps safe presentation; it does not persist or recover a second approval lifecycle. Resolve commits the canonical interaction-result batch before updating and publishing the current view. Persistence failure returns an error and leaves the live interaction unresolved. Rejection and cancellation are row-local outcomes, never global message failures.",
       "sections": [
         {
           "id": "contract",
@@ -3030,18 +3054,25 @@
           "level": 1,
           "body": "Each interaction has one stable identity and belongs to one thread and tool call or input request. Respond validates all required answers and keeps secret values out of browser persistence and logs. Approval acceptance obtains an exact one-shot effect authorization before irreversible execution. Rejection resolves only the matching interaction, records a quiet declined tool result, and allows provider continuation without producing `MESSAGE FAILED` or a Flower-wide error card.\n\nEffect attempts have stable identities. Canonical effect intent is written before an irreversible operation. A known result is canonical and deduplicated. A crash with unknown outcome does not replay automatically; Flower keeps the original tool row and exposes RetryEffect with explicit risk acknowledgement. Normal provider retry may repeat dispatch, but stable canonical identities prevent duplicate visible output.\n\nCancel clears unresolved interactions and produces one terminal canceled turn. Resolve and Cancel races converge through the single thread runtime owner. Redeven handlers return the typed current view without waiting for provider continuation, receipt observation, authority release, or a legacy local handler.",
           "char_count": 1213
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "Floret owns canonical interaction identity, atomic answer settlement, effect-attempt state, cancellation, and retry claims. Redeven owns endpoint authorization, current product permission revalidation, safe DTO mapping, and the concrete effect handler. Browser interaction state is presentation only and cannot authorize, settle, or replay an effect.",
+          "char_count": 350
         }
       ],
       "evidence": [
         {
-          "id": "floret:runtime/thread_runtime.go:0:typed respond, cancel, and retryeffect commands.",
-          "source": "floret:runtime/thread_runtime.go",
-          "description": "Typed Respond, Cancel, and RetryEffect commands."
+          "id": "redeven:go.mod:0:pins the released floret v4.0.12 typed runtime.",
+          "source": "redeven:go.mod",
+          "description": "Pins the released Floret v4.0.12 typed runtime."
         },
         {
-          "id": "floret:internal/agentharness/effect_authorization.go:0:one-shot effect authorization.",
-          "source": "floret:internal/agentharness/effect_authorization.go",
-          "description": "One-shot effect authorization."
+          "id": "redeven:internal/session/floret_v4_dependency_contract_test.go:0:enforces published-v4 adoption without local replacement.",
+          "source": "redeven:internal/session/floret_v4_dependency_contract_test.go",
+          "description": "Enforces published-v4 adoption without local replacement."
         },
         {
           "id": "redeven:internal/ai/approval_command.go:0:product approval authorization and typed mapping.",
@@ -3054,12 +3085,22 @@
           "description": "Unknown-effect retry boundary."
         },
         {
+          "id": "redeven:internal/ai/floret_effect_authorization.go:0:revalidates product policy and transfers an invocation-bound proof exactly once.",
+          "source": "redeven:internal/ai/floret_effect_authorization.go",
+          "description": "Revalidates product policy and transfers an invocation-bound proof exactly once."
+        },
+        {
+          "id": "redeven:internal/ai/floret_approval_command_integration_test.go:0:exercises canonical approval and provider-correction behavior through the published runtime.",
+          "source": "redeven:internal/ai/floret_approval_command_integration_test.go",
+          "description": "Exercises canonical approval and provider-correction behavior through the published runtime."
+        },
+        {
           "id": "redeven:internal/flower_ui/src/FlowerSurface.tsx:0:row-local interaction controls and nonblocking composer.",
           "source": "redeven:internal/flower_ui/src/FlowerSurface.tsx",
           "description": "Row-local interaction controls and nonblocking composer."
         }
       ],
-      "snippet": "Pending approval and user input are typed Floret thread interactions. Redeven authorizes the product request and maps safe presentation; it does not persist, project, hand off, or recover a second approval lifecycle. Resolve updates the in-",
+      "snippet": "Pending approval and user input are typed Floret thread interactions. Redeven authorizes the product request and maps safe presentation; it does not persist or recover a second approval lifecycle. Resolve commits the canonical interaction-r",
       "backlinks": [
         {
           "label": "AI tool runtime",
@@ -3099,15 +3140,15 @@
         "title": "AI tool permissions and dispatch",
         "type": "AI Tool Contract"
       },
-      "body_length": 12173,
+      "body_length": 9942,
       "summary": "Redeven owns the product tool registry, presentation metadata, concrete handlers, current permission setting, and approval UX, while Floret owns the generic invocation lifecycle. Visible tools are rebuilt from the exact current thread setting before provider steps and local dispatch. Missing, unreadable, empty, invalid, or unauditable permission state fails closed; no previous snapshot or default permission can authorize execution. Ordinary calls in one model response may execute concurrently, while dependent work must wait for a later response.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Mechanism\n\nThe builtin registry includes readonly file/search/fetch helpers, standard mutation, patch, terminal, web search, OKF, todo, interaction, skill, and subagent tools. Flower's product permission is `permission_type`, with `readonly`, `approval_required`, and `full_access` as the only current values. Readonly-exclusive file/search/fetch helpers appear only on the `readonly` surface; the other modes expose the standard host tools. Redeven projects builtins into Floret definitions with effects, read-only/destructive/open-world flags, resource extractors, dynamic permission, and Activity projection. `ToolPresentationSpec` remains the single Redeven display policy, while Floret remains the lifecycle authority; Flower renders only allowlisted semantic detail and never falls back to raw tool-state field tables.\n\nOrdinary tool scheduling follows the model's response boundaries. When one model response contains multiple ordinary tool calls, published Floret v0.8.0 starts the whole batch concurrently; each call independently validates arguments, extracts resources, checks permission, waits for approval when required, dispatches, projects output, and records audit facts. Result arrays and provider transcript entries retain the model's original call order, while dispatch and result observations retain actual start and completion order. A failed, rejected, or timed-out call does not stop an independent sibling. A dependent call must be emitted by the model in a later response after the prerequisite result is visible. Neither Floret nor Redeven infers dependencies or conflicts from tool names, arguments, effects, resources, filesystem paths, shell commands, permissions, or approval requirements, and the tool registry contains no scheduling-safety metadata. Main and subagent prompts state this response-boundary contract. `MaxToolCalls=200`, context cancellation, per-call timeouts, permission and approval gates, output limits, terminal active-process capacity, and other resource limits remain protections; they are not ordering policies. Ordinary calls in a mixed response close before Floret reevaluates control signals such as `ask_user` or `task_complete`.\n\nFloret owns the generic permission, approval, invocation, and effect lifecycle. Redeven decides product policy from `ai_thread_settings.permission_type` and tool metadata, then exposes that decision through Floret `PermissionSpec` and an `EffectAuthorizationGate`. `currentThreadPermissionType` has no fallback: store absence, query failure, missing settings, empty value, or unknown value returns an error. Each hosted turn installs a dynamic surface provider that performs that read before every provider step and Floret dispatch, rebuilds tools/signals/prompt/host context, validates a non-empty snapshot, and persists the exact version-2 snapshot before using it. Initial snapshot persistence occurs only after Floret has validated the existing canonical thread authority. No stale in-memory surface, previous audit row, schema hash, or `approval_required` default is an authorization source.\n\nImmediately before an irreversible local effect, Redeven's gate validates the complete Floret request and lease identity, loads the strict persisted v2 snapshot, binds root or parent-child product policy authority, and acquires a shared effect lease on the root thread lifecycle gate. Under that lease it rejects durable delete intent, rereads the current permission, rejects a stale admitted mode, waits for the exact approval when required, rereads permission after the wait, records audit evidence, and registers one temporary proof containing the exact effect-attempt, thread, turn, run, tool call, lease owner/generation, effect fingerprint, policy revision, approval, audit hash, and authorization time. The concrete invocation consumes that proof exactly once, constructs its exact run context, and completes the handler while the shared lease remains held. Permission changes, fork/delete intent, and other lifecycle mutations take the exclusive side of the same gate, so none can cross the final authorization-to-effect window. Parent and child effects can hold shared leases concurrently. `subagents close` registers one exact target-child join scope, `wait` registers the normalized exact requested-child set, and only `close_all` registers the canonical descendant scope. If a lifecycle writer queues, only those required child effects may join; unrelated root/child effects and direct PTY writes are fenced. Once the cohort reaches zero, the queued writer takes exclusive authority before new effects, avoiding both handler/child deadlock and writer starvation. Read-only `subagents list` and `inspect` release their lease after the final check and before their handler. `wait` remains gated because Floret may admit pending child input and start provider work while waiting; spawn, input, and close actions also remain gated. Failure before proof consumption calls neither provider nor handler and creates no authorization substitute.\n\nConcurrent ordinary handlers never authorize from a shared mutable snapshot after refresh. Each effect request receives its own lifecycle-gated, invocation-bound proof and may run concurrently under the shared effect side of the gate. One concurrent tool therefore cannot overwrite or consume another tool's authorization evidence, and an exclusive permission downgrade or lifecycle intent cannot interleave between final authorization and the concrete effect.\n\nPermission snapshot v2 is append-only security audit and pending-approval evidence. Its visible tools, approval decisions, registry/schema/presentation hashes, identity, and epoch explain what was authorized for one step, but current permission changes are always read from settings. Decoding rejects v1, unknown fields, multiple JSON values, missing snapshot id/hash, inconsistent content/hash, empty JSON, empty state, and invalid provisional/finalized timestamps; persistence never fills omitted values. Approval creation also requires the active snapshot and never rebuilds authorization from the current permission value, host context, or tool metadata. Malformed, conflicting, or unpersistable snapshots fail closed. In `approval_required`, shell and mutating host actions ask before running; in `full_access`, per-tool approval is skipped while schema validation, resource extraction, target routing, output limits, product audit, and Floret activity projection still apply. Terminal process operations additionally require effective write and execute permission.\n\nAlready-sent provider requests cannot be rewritten retroactively, but a saved permission change affects the next provider step and the next local dispatch. `subagents` control actions do not require approval, while each child tool invocation receives a surface derived from the latest parent setting and still flows through Floret permission/resource/approval lifecycle. Tool handlers execute only already-approved domain actions. Floret remains the sole persistent source for tool identity, arguments, lifecycle, result, error, completion output, and Activity; Redeven audit never becomes a tool-state or Flower display source.\n\nReadonly-exclusive helpers are not general convenience aliases. `read_file`, `read_files`, `rgrep`, `find`, and `web_fetch` are visible only in `readonly`; `approval_required` and `full_access` use the standard host surface instead. `web_fetch` is a host-provided Redeven tool with SSRF protections, manual redirect validation, resolver and dial-time public IP checks, proxy suppression, body and MIME limits, and public-network-only semantics. DNS-derived VPN fake-IP answers in `198.18.0.0/15` are allowed for named hosts so common transparent-proxy/VPN setups can fetch public pages, but literal `198.18.0.0/15` URL hosts and other blocked local/private/reserved targets remain denied. It is not a Floret builtin and must not appear as a Floret core tool or a capability available to non-readonly permission types.\n\nWhen a thread is configured for explicit target routing, the runtime forwards target-scoped builtin calls through `TargetToolExecutor`. The target executor receives a `TargetToolCall` containing `target_id`, `tool_name`, sanitized arguments, and required capabilities. The run layer returns a result payload that preserves or injects `target_id` and `execution_location`, so target-routed tool results cannot lose provenance before they reach the model or activity timeline.",
-          "char_count": 8497
+          "body": "## Mechanism\n\nThe builtin registry includes readonly file/search/fetch helpers, standard mutation, patch, terminal, web search, OKF, todo, interaction, skill, and subagent tools. Flower's product permission is `permission_type`, with `readonly`, `approval_required`, and `full_access` as the only current values. Readonly-exclusive file/search/fetch helpers appear only on the `readonly` surface; the other modes expose the standard host tools. Redeven projects builtins into Floret definitions with effects, read-only/destructive/open-world flags, resource extractors, dynamic permission, and Activity projection. `ToolPresentationSpec` remains the single Redeven display policy, while Floret remains the lifecycle authority; Flower renders only allowlisted semantic detail and never falls back to raw tool-state field tables.\n\nOrdinary tool scheduling follows the model's response boundaries. When one model response contains multiple ordinary tool calls, published Floret v4.0.12 starts the batch concurrently; each call independently validates arguments, extracts resources, checks permission, waits for approval when required, dispatches, projects output, and records canonical facts. Result arrays and provider transcript entries retain the model's original call order, while observations retain actual start and completion order. A failed, rejected, or timed-out call does not stop an independent sibling. A dependent call must be emitted in a later response after the prerequisite result is visible. Neither Floret nor Redeven infers dependencies or conflicts from tool names, arguments, effects, resources, filesystem paths, shell commands, permissions, or approval requirements. `MaxToolCalls=200`, cancellation, timeouts, permission and approval gates, output limits, and terminal capacity remain protections; they are not ordering policies.\n\nFloret owns the generic permission, approval, invocation, and effect lifecycle. Redeven decides product policy from `ai_thread_settings.permission_type` and tool metadata, then exposes that decision through Floret `PermissionSpec` and an `EffectAuthorizationGate`. `currentThreadPermissionType` has no fallback: store absence, query failure, missing settings, empty value, or unknown value returns an error. Each hosted turn installs a dynamic surface provider that rereads current product settings, rebuilds tools, signals, prompt, and host context, and validates a non-empty in-memory snapshot before each provider step and Floret dispatch. The snapshot is bound to the current run and canonical thread identity; it is not a durable permission ledger or recovery source. No stale surface, deleted audit row, or `approval_required` default can authorize execution.\n\nImmediately before an irreversible local effect, Redeven validates the complete Floret effect request against the admitted run snapshot, rereads the current product permission, and rejects a tool or permission mode that is no longer authorized. Floret has already made its canonical approval decision; Redeven never creates or waits for a second approval. The gate registers one process-local authorization entry keyed by exact thread, turn, run, tool call, argument hash, and effect-attempt identity, then enters the run's existing execution admission boundary. The concrete invocation consumes that entry exactly once and receives the exact Floret proof. Failure or cancellation before consumption calls no handler and creates no fallback authorization. Delete and shutdown effect fencing remain Floret runtime responsibilities rather than a Redeven lifecycle lease or recovery protocol.\n\nConcurrent ordinary handlers do not consume a shared proof. Each effect request receives its own invocation-bound entry, and one call cannot overwrite or consume another call's authorization. A saved permission change affects the next dynamic surface and the dispatch-time reread; it cannot rewrite a provider request already sent.\n\nThe permission snapshot is a strict in-memory description of one run surface. Its visible tools, decisions, registry/schema/presentation hashes, identity, and epoch bind provider exposure to later dispatch validation, but current permission always comes from product settings. Missing owner identity, empty hashes, inconsistent surface state, or a mismatched epoch fails closed. In `approval_required`, mutating host actions ask through Floret's canonical interaction; in `full_access`, per-tool approval is skipped while schema validation, resource extraction, target routing, output limits, dispatch-time policy, and Floret activity projection still apply. Terminal process operations additionally require effective write and execute permission.\n\n`subagents` control actions do not require approval, while each child tool invocation receives a surface derived from the latest parent setting and still flows through Floret permission, resource, approval, and effect lifecycle. Tool handlers execute only already-authorized domain actions. Floret remains the sole persistent source for tool identity, arguments, lifecycle, result, error, completion output, and Activity; Redeven's process-local permission snapshot never becomes a tool-state or Flower display source.\n\nReadonly-exclusive helpers are not general convenience aliases. `read_file`, `read_files`, `rgrep`, `find`, and `web_fetch` are visible only in `readonly`; `approval_required` and `full_access` use the standard host surface instead. `web_fetch` is a host-provided Redeven tool with SSRF protections, manual redirect validation, resolver and dial-time public IP checks, proxy suppression, body and MIME limits, and public-network-only semantics. DNS-derived VPN fake-IP answers in `198.18.0.0/15` are allowed for named hosts so common transparent-proxy/VPN setups can fetch public pages, but literal `198.18.0.0/15` URL hosts and other blocked local/private/reserved targets remain denied. It is not a Floret builtin and must not appear as a Floret core tool or a capability available to non-readonly permission types.\n\nWhen a thread is configured for explicit target routing, the runtime forwards target-scoped builtin calls through `TargetToolExecutor`. The target executor receives a `TargetToolCall` containing `target_id`, `tool_name`, sanitized arguments, and required capabilities. The run layer returns a result payload that preserves or injects `target_id` and `execution_location`, so target-routed tool results cannot lose provenance before they reach the model or activity timeline.",
+          "char_count": 6507
         },
         {
           "id": "boundaries",
@@ -3143,12 +3184,6 @@
           "description": "Target tool calls and results carry target id and execution location fields."
         },
         {
-          "id": "redeven:internal/ai/compact_thread_context.go:812:idle manual compaction calls floret `host.compactthread` instead of compacting redeven prompt history.",
-          "source": "redeven:internal/ai/compact_thread_context.go",
-          "line": 812,
-          "description": "Idle manual compaction calls Floret `Host.CompactThread` instead of compacting Redeven prompt history."
-        },
-        {
           "id": "redeven:internal/ai/subagents_floret.go:3301:flower child prompts forbid nested subagents and direct user input while requesting a complete final handoff.",
           "source": "redeven:internal/ai/subagents_floret.go",
           "line": 3301,
@@ -3161,28 +3196,27 @@
           "description": "Hosted turns rebuild the current permission-derived tool surface from the latest thread permission."
         },
         {
-          "id": "redeven:internal/ai/permission_snapshot.go:19:only strict permission snapshot v2 is decoded and persistence errors are returned.",
+          "id": "redeven:internal/ai/permission_snapshot.go:27:run-local snapshots bind exact surface and canonical owner identity without durable lifecycle storage.",
           "source": "redeven:internal/ai/permission_snapshot.go",
-          "line": 19,
-          "description": "Only strict permission snapshot v2 is decoded and persistence errors are returned."
+          "line": 27,
+          "description": "Run-local snapshots bind exact surface and canonical owner identity without durable lifecycle storage."
         },
         {
-          "id": "redeven:internal/ai/floret_effect_authorization.go:42:effect dispatch binds exact authority, transfers one one-shot proof, and shares the root gate until the concrete handler completes.",
+          "id": "redeven:internal/ai/floret_effect_authorization.go:115:dispatch revalidates current policy and transfers one invocation-bound proof.",
           "source": "redeven:internal/ai/floret_effect_authorization.go",
-          "line": 42,
-          "description": "Effect dispatch binds exact authority, transfers one one-shot proof, and shares the root gate until the concrete handler completes."
+          "line": 115,
+          "description": "Dispatch revalidates current policy and transfers one invocation-bound proof."
         },
         {
-          "id": "redeven:internal/ai/floret_runtime.go:146:canonical host authority is validated before initial permission audit persistence and provider execution.",
+          "id": "redeven:internal/ai/floret_runtime.go:146:canonical host authority is validated before provider execution.",
           "source": "redeven:internal/ai/floret_runtime.go",
           "line": 146,
-          "description": "Canonical host authority is validated before initial permission audit persistence and provider execution."
+          "description": "Canonical host authority is validated before provider execution."
         },
         {
-          "id": "redeven:internal/ai/threadstore/permission_snapshot.go:149:threadstore finalizes child permission snapshots with identity checks and provisional-state cas.",
-          "source": "redeven:internal/ai/threadstore/permission_snapshot.go",
-          "line": 149,
-          "description": "Threadstore finalizes child permission snapshots with identity checks and provisional-state CAS."
+          "id": "redeven:internal/ai/floret_approval_command_integration_test.go:0:published-runtime integration covers canonical approval and fail-closed correction.",
+          "source": "redeven:internal/ai/floret_approval_command_integration_test.go",
+          "description": "Published-runtime integration covers canonical approval and fail-closed correction."
         },
         {
           "id": "redeven:internal/ai/readonly_web_fetch.go:208:`web_fetch` validates scheme, userinfo, port, host, dns resolution, and blocked addresses before fetching.",
@@ -3251,15 +3285,15 @@
         "title": "AI readiness and service generation lifecycle",
         "type": "Architecture Contract"
       },
-      "body_length": 12616,
-      "summary": "- Authority: Floret remains the only authority for durable Agent lifecycle and Store facts; Redeven owns only current-process AI availability and product presentation.\n- Outcome: Code App, Settings, Notes, Workbench, terminal, files, and Codex start and remain usable when AI startup is inspecting, migrating, verifying, or blocked.\n- Invariants: one controller owns AI service construction, retry serialization, generation publication, request leases, draining, and close; each AI request uses one generation for its complete lifetime.\n- Failure boundary: a blocked generation returns one typed unavailable envelope, never publishes partial runtime authority, never repairs Store data, and never turns readiness into durable Agent state. Short-lived storage contention remains a bounded recovering state instead of being presented as unavailable.",
+      "body_length": 10543,
+      "summary": "- Authority: Floret owns durable Agent and Store facts; Redeven owns process-local AI availability and presentation.\n- Outcome: non-AI product surfaces remain usable while AI startup inspects, migrates, verifies, recovers, or blocks.\n- Invariants: one controller owns construction, retry, generation publication, request leases, drain, and close; each AI request stays on one generation.\n- Failure boundary: unavailable or blocked startup returns a sanitized typed envelope, publishes no partial service, repairs no Store data, and never becomes durable Agent state.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Process-local readiness\n\nThe Code App composition layer owns the only AI readiness controller. Its\nclosed state set is `unavailable`, `inspecting`, `migrating`, `verifying`,\n`recovering`, `ready`, and `blocked`. Store inspection, automatic domain migration, and\nverification occur only inside the single published Floret `runtime.Open` call\nthat creates the actual Host retained by the new service generation. Redeven\nreports `inspecting` before that call and `verifying` after it returns while\nproduct composition and startup recovery finish; it must not open and close a\ndisposable probe Host before opening the retained Host. Failures are mapped from\nthe typed Redeven startup projection into sanitized product reason codes plus\n`retryable`, `safe_to_retry`, `committed`, and `rolled_back` facts. Generic\nservice construction failures use `ai_service_startup_error`; raw errors,\npaths, schema identities, fingerprints, SQL, and backend content are not exposed.\nAn old generation close failure is terminal for the process: the controller\npublishes a sanitized blocked snapshot, refuses retry, and never opens another\nservice against a Floret backend whose previous owner did not close successfully.\n\nReadiness is memory-only. It is not written to threadstore, audit records, or a\nFloret backend, and it cannot reconstruct a thread, turn, approval, todo, tool,\nprovider, or Activity lifecycle. `GET /_redeven_proxy/api/ai/readiness` returns\nthe sanitized snapshot. Settings includes the same snapshot while keeping its\nnon-AI configuration readable. Retry is explicit, asynchronous, and admits at\nmost one startup owner.\n\n## Generation leases\n\nEvery ready service is published as one monotonically identified generation.\nAn HTTP AI request, ordinary RPC call, runtime snapshot, or Desktop model-source\ncall acquires exactly one scoped lease and reuses its service and generation\ncontext in all helpers. A realtime RPC subscription keeps one separate binding\nlease for as long as its current generation remains active. A generation\nentering drain stops new leases and cancels its shared generation context. The\ncontroller waits for every idempotent release, closes the old service once, and\nonly then constructs and publishes a replacement. Two `NewServiceContext`\ncalls therefore cannot compete for the same Floret `runtime.Host` and backend.\n\nThe controller derives its lifecycle from Code App rather than a background\ncontext. Parent cancellation stops startup, cancels the generation, drains\nleases, and closes the service. Redeven Settings publishes the latest model\nconfiguration, effective home, shell, and filesystem scope into a versioned\nprocess-local startup snapshot. Every attempt reads that snapshot; a service\ncreated from an obsolete revision is closed before the controller retries with\nthe latest values.\n\nRPC routes are registered against the provider rather than one service. A\nconnection established while AI is blocked can use a later ready generation\nwithout reconnecting. When an active subscription's generation context is\ncancelled, its manager detaches the sink while it still owns the binding lease,\nreleases that lease, and retries acquisition until it can replay the summary\nand thread subscriptions on a ready replacement. Connection cleanup uses the\nsame idempotent detach-and-release ownership path; no service pointer remains\nafter its lease ends. Long-lived model-source calls receive the generation\ncontext so replacement can cancel their work before waiting for release.\n\n## Route availability\n\nAI lifecycle routes return HTTP 503 with machine code\n`AI_SERVICE_UNAVAILABLE` and the current sanitized snapshot when no generation\ncan be leased. Model-not-configured remains a distinct ready-service error.\nReadiness and retry never acquire a service. Provider-key and web-search-key\nstatus/update routes remain Redeven secrets operations and do not acquire AI,\nso users can repair credentials while runtime AI is blocked.\n\nSettings and every unrelated product route remain available. Settings may use\nan optional lease to project current runtime details, but absence of a lease\ndoes not hide product configuration or fail the request. This isolation does\nnot create a second Agent source of truth: ready thread and lifecycle reads\nstill call the exact Floret-backed `ai.Service` generation.\n\nHTTP acquisition happens only after the exact route permission succeeds.\nDenied admin or full-access requests and unknown AI routes never obtain a\ngeneration lease. Incomplete provider leases fail closed, release any supplied\nresource, and cannot be presented as `ready`.\n\n## Env App maintenance presentation\n\nEnv App shares one Redeven-owned readiness controller across its Activity,\nWorkbench, and Settings consumers. A Flower surface keeps the same component\ninstance mounted, but hides that local subtree from layout, focus, and assistive\ntechnology until the sanitized snapshot is `ready`. A flat sibling maintenance\nsection occupies only the Flower slot. It never sets `inert`, `aria-hidden`, a\nmodal role, or a pointer trap on the Env App shell, Workbench canvas, terminal,\nfiles, Settings, or any shared ancestor. Only the visible Flower placement may\nmove or restore focus; a retained Activity placement cannot compete with the\nactive Workbench placement.\n\nEnv App begins readiness inspection only after the HTTP access status has been\nchecked and access is granted. The readiness HTTP route remains available while\nthe encrypted direct RPC transport connects, resumes, or reconnects, so\nreadiness refresh must not wait for RPC or access-resume UI state. Initial lock\nand every later grant revocation pause the controller, invalidate in-flight\npublication, clear polling and automatic retry state, and reject manual refresh\nor retry without issuing HTTP requests. A later grant resumes exactly one fresh\ninspection. When a Runtime restart invalidates local access, the password gate\nreplaces the recovery presentation while the existing Activity Flower component\nremains mounted and inert; a successful regrant may complete the prior failed\nrecovery generation.\n\nTransient inspection waits briefly before presenting progress, does not invent\na percentage, and shows the next bounded check without announcing a countdown\nevery second. A typed busy or temporary I/O failure enters `recovering`; the\nreadiness controller retries with bounded exponential backoff and jitter, honors\ncancellation, and publishes `blocked` only after the retry window is exhausted.\nThe existing process-level `agent.lock` remains the single state-root owner\ncoordination boundary, so a second runtime attaches or reports an owner conflict\ninstead of opening an empty Store. Client-side automatic retries remain limited\nto typed safe failures, require current product admin authority, slow down while\nthe document is hidden, and reset their allowance only after that blocked episode settles.\nManual retry is single-flight and is offered only when the current user and the\nmapped reason policy allow a new generation. Update and environment-access actions route\nto Redeven-owned Settings. No force, reset, repair, ignore, or backend mutation\naction exists. Returning to `ready` reveals the same Flower DOM and restores the\nprevious valid target without a success notification.\n\nDisplayed diagnostics and clipboard output iterate the same projection of the\nsanitized readiness fields. Readiness responses may carry a bounded trace id,\nstartup phase, and retry reason for structured support diagnostics. The\nprojection maps reason codes to localized copy and never includes a raw reason,\npath, schema or SQL detail, credential,\nmessage, provider state, or tool output. Unknown states, reasons, and\ncontradictory retry, commit, or rollback facts become one non-retryable contract\nfailure. Settings groups the Floret backend separately from Redeven product stores\nand other upstream stores; only Floret receives a readiness result, while the\nother owners are explicitly marked as outside this check instead of receiving a\nfabricated health claim. All interactive controls publish pending state in the\ninput turn, keep visible focus and pointer/disabled cursors, and provide explicit\nlocalized copy for clipboard failure.",
-          "char_count": 8229
+          "body": "## Process-local readiness\n\nThe Code App composition layer owns the only AI readiness controller. Its\nclosed state set is `unavailable`, `inspecting`, `migrating`, `verifying`,\n`recovering`, `ready`, and `blocked`. Store inspection, automatic domain migration, and\nverification occur only inside the single published Floret `runtime.Open` call\nthat creates the actual Host retained by the new service generation. Redeven\nreports `inspecting` before that call and `verifying` after it returns while\nproduct composition and startup recovery finish; it must not open and close a\ndisposable probe Host before opening the retained Host. Failures are mapped from\nthe typed Redeven startup projection into sanitized product reason codes plus\n`retryable`, `safe_to_retry`, `committed`, and `rolled_back` facts. Generic\nservice construction failures use `ai_service_startup_error`; raw errors,\npaths, schema identities, fingerprints, SQL, and backend content are not exposed.\nAn old generation close failure is terminal for the process: the controller\npublishes a sanitized blocked snapshot, refuses retry, and never opens another\nservice against a Floret backend whose previous owner did not close successfully.\n\nReadiness is memory-only. It is not written to threadstore, audit records, or a\nFloret backend, and it cannot reconstruct a thread, turn, approval, todo, tool,\nprovider, or Activity lifecycle. `GET /_redeven_proxy/api/ai/readiness` returns\nthe sanitized snapshot. Settings includes the same snapshot while keeping its\nnon-AI configuration readable. Retry is explicit, asynchronous, and admits at\nmost one startup owner.\n\n## Generation leases\n\nEvery ready service is published as one monotonically identified generation.\nAn HTTP AI request, RPC call, runtime snapshot, or Desktop model-source call\nacquires exactly one scoped lease and reuses its service and generation context\nin all helpers. A generation entering drain stops new leases and cancels its\nshared generation context. The controller waits for every idempotent release,\ncloses the old service once, and only then constructs and publishes a\nreplacement. Two `NewServiceContext` calls therefore cannot compete for the\nsame Floret `runtime.Host` and backend.\n\nThe controller derives its lifecycle from Code App rather than a background\ncontext. Parent cancellation stops startup, cancels the generation, drains\nleases, and closes the service. Redeven Settings publishes the latest model\nconfiguration, effective home, shell, and filesystem scope into a versioned\nprocess-local startup snapshot. Every attempt reads that snapshot; a service\ncreated from an obsolete revision is closed before the controller retries with\nthe latest values.\n\nRPC routes are registered against the service provider rather than one fixed\nservice pointer. Each request acquires the then-current generation, so a\nconnection established while AI is blocked can use a later ready generation\nwithout reconnecting. There is no realtime subscription binding or replay\nlifecycle in this owner. Long-lived model-source calls receive the generation\ncontext so replacement can cancel their work before waiting for release.\n\n## Route availability\n\nAI lifecycle routes return HTTP 503 with machine code\n`AI_SERVICE_UNAVAILABLE` and the current sanitized snapshot when no generation\ncan be leased. Model-not-configured remains a distinct ready-service error.\nReadiness and retry never acquire a service. Provider-key and web-search-key\nstatus/update routes remain Redeven secrets operations and do not acquire AI,\nso users can repair credentials while runtime AI is blocked.\n\nSettings and every unrelated product route remain available. Settings may use\nan optional lease to project current runtime details, but absence of a lease\ndoes not hide product configuration or fail the request. This isolation does\nnot create a second Agent source of truth: ready thread and lifecycle reads\nstill call the exact Floret-backed `ai.Service` generation.\n\nHTTP acquisition happens only after the exact route permission succeeds.\nDenied admin or full-access requests and unknown AI routes never obtain a\ngeneration lease. Incomplete provider leases fail closed, release any supplied\nresource, and cannot be presented as `ready`.\n\n## Env App maintenance presentation\n\nEnv App shares one readiness controller across Activity, Workbench, and\nSettings. Flower stays mounted while a sibling maintenance section occupies\nonly its visible slot. The boundary never disables or hides the shell,\nWorkbench, terminal, files, Settings, or a shared ancestor. Only the visible\nFlower placement may move or restore focus.\n\nEnv App begins readiness inspection only after the HTTP access status has been\nchecked and access is granted. The readiness HTTP route remains available while\nthe encrypted direct RPC transport connects, resumes, or reconnects, so\nreadiness refresh must not wait for RPC or access-resume UI state. Initial lock\nand every later grant revocation pause the controller, invalidate in-flight\npublication, clear polling and automatic retry state, and reject manual refresh\nor retry without issuing HTTP requests. A later grant resumes exactly one fresh\ninspection. When a Runtime restart invalidates local access, the password gate\nreplaces the recovery presentation while the existing Activity Flower component\nremains mounted and inert; a successful regrant may complete the prior failed\nrecovery generation.\n\nTransient inspection delays progress presentation and never invents a\npercentage. Typed busy or temporary I/O failures enter bounded `recovering`;\nunsafe failures block. The process-level `agent.lock` remains the state-root\nowner, so another runtime attaches or reports conflict instead of opening an\nempty Store. Automatic retry requires typed safety and current admin authority;\nmanual retry is single-flight. No force, reset, repair, ignore, or backend\nmutation action exists. Returning to `ready` reveals the retained Flower DOM.\n\nDisplayed diagnostics and clipboard output use the same sanitized projection.\nA bounded trace id, startup phase, and retry reason may support diagnosis, but\nraw paths, schema or SQL details, credentials, provider state, and tool output\nnever cross the boundary. Unknown or contradictory facts become one\nnon-retryable contract failure. Settings reports only Floret readiness and marks\nother store owners outside the check instead of fabricating health.",
+          "char_count": 6417
         },
         {
           "id": "boundaries",
@@ -3289,10 +3323,10 @@
           "description": "Acquires one request lease and propagates its service through request context."
         },
         {
-          "id": "redeven:internal/ai/rpc.go:123:registers ai rpc handlers against scoped call and realtime-subscription leases.",
+          "id": "redeven:internal/ai/rpc.go:103:registers stable ai rpc handlers that acquire one scoped service lease per request.",
           "source": "redeven:internal/ai/rpc.go",
-          "line": 123,
-          "description": "Registers AI RPC handlers against scoped call and realtime-subscription leases."
+          "line": 103,
+          "description": "Registers stable AI RPC handlers that acquire one scoped service lease per request."
         },
         {
           "id": "redeven:internal/agent/desktop_model_source.go:10:holds one generation lease for each desktop model-source operation.",
@@ -3319,10 +3353,10 @@
           "description": "Covers unified unavailable responses, optional Settings projection, exact permission ordering, invalid leases, and secrets-only routes."
         },
         {
-          "id": "redeven:internal/ai/rpc_readiness_test.go:15:covers dynamic recovery, generation lease counts, invalid leases, and concurrent connection cleanup.",
-          "source": "redeven:internal/ai/rpc_readiness_test.go",
-          "line": 15,
-          "description": "Covers dynamic recovery, generation lease counts, invalid leases, and concurrent connection cleanup."
+          "id": "redeven:internal/agent/ai_rpc_registration_test.go:13:proves the stable rpc inventory remains registered and returns structured unavailability without a service.",
+          "source": "redeven:internal/agent/ai_rpc_registration_test.go",
+          "line": 13,
+          "description": "Proves the stable RPC inventory remains registered and returns structured unavailability without a service."
         },
         {
           "id": "redeven:internal/envapp/ui_src/src/ui/flower/aiReadiness.ts:1:strictly normalizes the sanitized wire facts and owns bounded, permission-aware polling and retry state.",
@@ -3361,7 +3395,7 @@
           "description": "Rejects fixed service pointers, raw accessors, misplaced constructors, and readiness storage coupling."
         }
       ],
-      "snippet": "- Authority: Floret remains the only authority for durable Agent lifecycle and Store facts; Redeven owns only current-process AI availability and product presentation. - Outcome: Code App, Settings, Notes, Workbench, terminal, files, and Co",
+      "snippet": "- Authority: Floret owns durable Agent and Store facts; Redeven owns process-local AI availability and presentation. - Outcome: non-AI product surfaces remain usable while AI startup inspects, migrates, verifies, recovers, or blocks.",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -4786,15 +4820,15 @@
         "title": "Runtime transport dependencies",
         "type": "Runtime Contract"
       },
-      "body_length": 25830,
+      "body_length": 25631,
       "summary": "Redeven runtime builds control and data sessions on Flowersec v2 artifact, lease, connection-controller, session, RPC, and byte-stream primitives, while terminal lifecycle inside the runtime is delegated to Floeterm's terminal-go manager. Floeterm preserves valid user Bash prompt commands as independent syntax units; invalid user scripts remain Bash errors and are not normalized or hidden.\n\nRuntime transport uses Flowersec sessions while terminal lifecycle is delegated to Floeterm managers.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## AI Flower RPC registration\n\nThe local direct and remote agent production session profiles register the\ncomplete AI request inventory before Flowersec freezes a session. The shared\ninventory covers send, summary/thread subscription, message listing, Stop,\ninput response, and context compaction; the event type is explicitly a server\nnotification rather than a request handler. A declared AI method therefore\ncannot fail at the router with a missing-handler 404. If the AI service or a\nlocal realtime peer is not ready, the registered handler returns a structured\n503 and the session remains usable. Env Local live timeline ownership is\nHTTP/SSE, so its turn admission does not issue a second best-effort thread\nsubscription RPC. Stop remains a single AI RPC lifecycle command and does not\nfall back to another transport.\n\n## Mechanism\n\nThe released runtime dependency set includes Floeterm terminal-go v0.11.2 and Flowersec Go v2.5.2. Flowersec v2.5.2 also places standalone WSS sessions behind a close-before-wait shutdown barrier: shutdown stops admission, closes active hijacked WebSocket sessions, and waits for lease-release retries before the runtime process may exit. Redeven relies on that published lifecycle instead of duplicating it.\n\nEvery shipped Redeven Runtime enables terminal-go's `floeterm_native` build tag\nwith cgo. The published module carries the target-specific Ghostty static\narchive, generated adapter, public headers, and provenance for Darwin and Linux\non amd64 and arm64. Release builds run on a matching native runner for each\ntarget. One shared Runtime binary builder owns the Desktop bundle and SSH source\nbuild commands. It uses the native C toolchain only when host and target match;\na cross-platform Linux source build selects Zig's explicit GNU target for the\nrequested architecture, disables Go workspaces, and fails before source copying\nor asset generation when Zig is unavailable. It never lets cgo fall back to the\nhost compiler or SDK. Desktop source builds and the exact-main semantic carrier\nuse the same native build contract. Terminal-go's no-tag engine is retained only\nas a fail-closed boundary test and is never a shippable Runtime fallback.\n\nRedeven pins released `flowersec-go` and `terminal-go` versions in `go.mod`. The runtime consumes Flowersec Go v2.5.2 and the browser surfaces consume Flowersec Core v2.5.2 through published packages only. The agent owns connection and retry lifecycle through Flowersec's `ConnectionController` and `Connect` APIs, while Env App tunnel reconnects select the matching TypeScript policy. Local UI direct reconnects first resolve the hostname with `resolveLocalTransportSecurityPolicy` and permit plaintext only for canonical loopback authorities; non-loopback direct admission fails closed. When the public page uses plaintext `localhost`, Redeven maps its already validated listener identity to the actual same-port loopback IP authority before issuing the direct artifact, and uses that one authority for both the Flowersec candidate and upstream address. This is a product adapter to Flowersec v2.5.2's published IP-literal plaintext contract, not an alternate URL validator or a relaxation of that contract. The Docker Local UI integration client applies the same selection so its two-container network test proves the host-scoped admission boundary rather than unrestricted plaintext. Product code therefore does not depend on a permissive library default and cannot silently accept unrelated remote `ws://` transport.\n\nRemote data sessions are Flowersec endpoint clients. Redeven constructs the complete business `RPCHandlers` before `Connect`, passes them through `ConnectorOptions`, and registers application streams and `ProxyServer` on Flowersec v2.5.2's role-neutral `StreamHandlers`; the connected session starts exactly one published stream dispatcher. Inbound terminal RPC handlers are registered in that pre-connect plan without a placeholder outbound peer. Only after `Connect` returns does Redeven attach the real session `RPCPeer`, which immediately replays current terminal metadata. `StreamHandlers.Serve` performs its internal session close before returning; Redeven then detaches the peer, invokes the outer idempotent close, and cleans up the plan. Redeven does not use accepted-server `SessionHandlers` for this client role, proxy outbound notifications through a second peer owner, or copy an `AcceptStream` loop. The control-plane `grant_server` message is a notification with exact bounded decoding and an issuer-provided future artifact expiry; it has no request/response fallback. Before any remote data or control artifact can be spent, its Lease callback creates and fsyncs one no-overwrite ledger tombstone keyed only by the artifact's SHA-256 digest. Product channel, generation, sequence, and wrapper labels cannot create a second burn identity for the same opaque artifact. Each tombstone records the signed expiry and a one-hour post-expiry retention boundary; cleanup removes only valid records past that boundary, while malformed records remain fail-closed and a fixed entry cap rejects new spends instead of deleting live authority.\n\nThe remote control source persists a bounded `control_artifact_pool_v1` rather than one reusable artifact. Bootstrap sends a canonical 32-byte delivery request ID and persists that ID together with the local environment and agent identities in a sidecar before the request; an uncertain retry replays the same tuple, and a sidecar for another provider or environment fails closed rather than being overwritten. Only exact HTTP `409/BOOTSTRAP_DELIVERY_EXPIRED` atomically rotates that request ID and receives one automatic retry; another expiry or an ambiguous failure stops. A newly issued recovery ticket survives the Provider's pre-claim expired-delivery lookup and can authorize the rotated request, while a ticket already claimed by the original issuance is rejected and requires the caller to obtain another newly issued ticket. The response is exact-decoded within the 512 KiB pool limit, rejects unknown or retired `direct` fields, and requires mutually unique artifact digests and channels. The sidecar is unlinked only after the returned configuration commits. An unlink directory-sync error is completion-safe: the caller succeeds, and a crash can at most restore the same idempotent request tuple.\n\nEach pool entry has a Portal-owned sequence, independent artifact channel, digest, expiry, and terminal tombstone. Acquisition selects the lowest usable sequence beyond the fixed refresh horizon, commits the digest-global spend ledger before connecting, then atomically matches generation, sequence, digest, expiry, and bytes while erasing opaque material. On restart, ledger reconciliation converts any stale unspent config entry into a spent tombstone before another entry can be selected. An authenticated control session tops up through the versioned pool RPC and acknowledges an applied response before clearing its persisted pending request. The exact top-up response echoes the persisted `top_up_request_id_b64u`; Runtime verifies that identity before applying entries, and the response digest covers both the echoed ID and the unsigned pool. Response entries must be internally contiguous and above retained local sequences. They may begin after a missing range when an expired, undelivered outbox already advanced Portal's durable counter; Runtime accepts that forward gap only through the authenticated `server_highest_artifact_sequence`. Response or ACK loss replays the same request and exact response bytes. Portal's exact `top_up_request_expired` RPC error atomically records the latest bounded local terminal request tombstone and clears pending state so a later maintenance tick can allocate a fresh request ID. The Provider accepts at most 65,536 bootstrap and top-up delivery IDs for one logical binding generation, always resolving an accepted ID before checking the bound. Exact RPC `409/control_pool_relink_required` leaves the current pending request terminal and moves Runtime to `relink_required`; it never retries that ID or deletes a Portal replay fence. Other invalid responses also require relinking. Retired `credential-renew` is not a production recovery path. A legacy local `Direct` config has no matching Portal-side durable sequence authority, so Redeven erases it into a revoked digest tombstone and requires relinking instead of importing it as usable capacity.\n\nFlowersec proxy requests use the validated browser source and origin context; payload-provided external origins are ignored, and opaque origins do not become forwarded request metadata. The Go HTTP proxy returns the first 3xx response with its original `Location` instead of following redirects. Browser Service Worker streams use one outstanding `chunk_credit_v1` credit per pull when both sides advertise the capability, while legacy workers retain their previous behavior; cancellation wakes waiting consumers. The optional Yamux stream write queue budget defaults to 4 MiB and is released after each write so an exhausted stream can recover. Reconnect paths share the active promise for the same configuration, including during backoff, preventing duplicate connection attempts without adding a global scheduler.\n\nCode App and Port Forward sessions expose only Flowersec proxy handlers to product callers, but their server still registers an empty Flowersec RPC router because the released high-level connector creates and retains an `rpc` bootstrap stream for the connection lifetime. Unknown RPC types return the standard 404 response and do not close that bootstrap stream. These sessions do not register Redeven business RPC handlers, and they use the same private server constructor so the required transport lifecycle cannot drift between the two proxy products.\n\nThe control Direct session replaces record-level keepalive writes with acknowledged Yamux liveness probes at a 15-second interval and a 10-second timeout. Tunnel sessions keep Flowersec's idle-timeout-derived liveness policy. Runtime client, endpoint, and Local UI Direct server setup all select 64 KiB outbound encrypted-record chunks and explicit Yamux limits: 64 active streams, 32 inbound streams, 256 KiB frames and per-stream receive memory, 64 KiB preferred outbound frames, and 16 MiB session receive memory. Runtime RPC streams start request handlers only when work is available, run at most 32 handlers concurrently, and hold at most 128 pending requests in FIFO order; notification queues remain bounded at 128 entries. Desktop SSH streaming commands distinguish caller-requested termination from an unexpected remote exit: explicit termination waits for the command's complete close lifecycle and does not start a post-termination control health probe, while unexpected failures still verify the reusable control transport before classification. Redeven's runtime proxy product adapter blocks only CSP, CSP Report Only, and X-Frame-Options because those embedding policies conflict with proxied product surfaces; Flowersec continues forwarding the remaining default security headers. These are transport and product-policy controls; Redeven does not copy Flowersec framing, multiplexing, RPC scheduling, proxy filtering, or protocol implementation.\n\nThe runtime wraps `termgo.NewManager` so one terminal-go `SessionActor` owns each PTY, native Ghostty VT, canonical geometry, controller epoch, input encoding, semantic history, clear/reset, and atomic Presentation. Redeven supplies product permission and visibility admission, session metadata projection, and lifecycle integration; it does not parse terminal bytes or keep another history. Shell integration reports authenticated or explicit legacy command lifecycle, output activity, execution context, and semantic work as revisioned display metadata. The private bootstrap nonce never reaches arguments, environment, shared files, logs, output, live subscribers, or terminal-web. Those snapshots are not filesystem or authorization boundaries. Bash preserves a valid user `PROMPT_COMMAND` as its own syntax unit, Zsh installs both hook arrays transactionally, and unsupported shells remain explicit legacy sources.\n\nRealtime terminal traffic uses only Floeterm `terminal/live_v1` on a Flowersec named Yamux stream. Attach, structured input, bounded paste, acknowledged resize, atomic Presentations, geometry, session close, and structured errors use Floeterm framing. A paste is fully reassembled under the transport budget before one SessionActor admission, where the native VT owner applies the current bracketed-paste mode and newline encoding. Redeven does not register legacy live RPC ids 2003 through 2006, keep per-RPC attachment routing, enqueue JSON/Base64 output, or silently drop events. Catalog, semantic history, actor-owned clear, delete, and lifecycle/name/foreground-command/output-activity/execution-context/work-state controls remain bounded RPC operations. History requests separate scroll distance, canonical viewport rows, and compact transport chunks. A direct target offset is fenced by the server snapshot identity; every continuation remains on the same browse or search lane and is assembled before projection. History and clear bind to the current connection, transport generation, attachment, and process permission; stale generations have zero effect.\n\nEvery live stream owns one attachment and is removed when the stream ends. Multiple browser pages and simultaneously visible Activity and Workbench views may attach to one session. All receive the same advancing Presentation. Only the current controller attachment may write input or propose canonical geometry. A selected or directly interacted same-principal view sends an explicit activation with the grid measured from its untransformed host layout content box and the current controller epoch; terminal-go atomically transfers ownership, applies that grid, and captures the matching Presentation before Redeven focuses the input bridge or admits ordered input. The outer display mode and selected Workbench widget gate interaction, while observer resize only records local intent and cannot steal control. Stale generations, stale epochs, and cross-principal activation have zero effect. Resize success means terminal-go applied the geometry and emitted a matching Presentation, not that Redeven replayed a stored frame. Disconnect opens a new named stream; ordinary resize never detaches or auto-reattaches.\n\nFloeterm performs shell resolution, environment construction, initialization, argument selection, and PTY startup outside the session lock and owns activation cancellation. Redeven's session delete lifecycle hides a closing session immediately and shares one in-flight delete result across callers; Floeterm closes the attached live streams as part of the terminal session lifecycle. Env App removes a session and its projected capabilities synchronously when a validated lifecycle event reason is `closing` or `close_failed_hidden`; the redundant `hidden` field is informational and cannot weaken that reason-derived revocation. An asynchronous catalog refresh is convergence only and cannot restore authority after a refresh failure. A strict operation with only non-widget participants restores an open, visible, retryable lifecycle and retains its product capability when cleanup fails. Any widget participant atomically promotes the shared operation to widget-owned failure semantics regardless of caller order: failure remains hidden as `close_failed_hidden`, revokes its local-path capability, blocks interaction and catalog projection, and emits the matching lifecycle event so the product can report delayed cleanup without resurrecting a session the widget already removed. Failure-state selection, capability revocation, operation removal, and participant completion resolve under one manager lock. A participant joining after Floeterm has already emitted successful close cannot recreate the removed lifecycle record or capability, and successful completion clears both as a final invariant. Redeven retains no attachment-generation high-water, sink lifecycle token, connection-ownership map, or rollback state machine outside Floeterm.\n\nSemantic terminal verification is layered and automated without starting Redeven Desktop. Go tests cover permission admission, actor-owned clear, same-size quiet reattach, session lifecycle, and real PTY shell integration. Browser tests cover one canvas, semantic input, IME, selection/copy, search, history, theme, cursor-facing geometry, links, and resize. A production-dist carrier starts a temporary Runtime and real PTY, then drives Activity and Workbench across reused and fresh Chromium contexts. It verifies clear, bounded history projection, controller transfer, refresh, twenty `top` resizes under 150 ms, DPR backing, nontransparent canvas paint, and zero page, console, request, response, or semantic errors.\n\nFor every product carrier sample, refresh forgets only the view attachment, preserves the existing semantic canvas, and requires a new current Presentation even when geometry is unchanged. The carrier then proves real input still reaches the PTY. This is the Runtime/PTTY/browser boundary rather than a mocked renderer lifecycle.\n\nRedeven consumes terminal-web v0.16.4. Each mounted view uses one `RendererSurface`, one `TerminalInputBridge`, one `HistoryViewportController`, and one isolated `HistorySearchController` over complete semantic Presentations and atomic history viewports. Host bounds, DPR, view-local palette, typography, occurrence-level search decoration, cell-aware word and row selection, IME anchor, bounded semantic-frame cache, and history projection are browser concerns; PTY state, frame geometry, cursor, inverse cells, grapheme width, hyperlinks, graphics, snapshots, and history remain terminal-go facts. Hidden keep-mounted views fence their canvas until a render commit matches current host bounds and DPR, preventing browser scaling of an old backing store. The browser has no Ghostty WebAssembly, TerminalCore, checkpoint worker, Beamterm renderer, raw replay fallback, or Redeven-owned history state machine.\n\nThe production carrier records runtime, surface, CSS canvas, client, and backing-store dimensions immediately after refresh and again after focus. Overflow fixtures may exceed the 8 MiB ring-buffer cap; they must recover the retained tail, preserve the stable renderer geometry after focus, and accept subsequent PTY input.\n\n## Terminal startup and warmup\n\nEnv App hydrates one terminal session catalog after protocol connection, environment readiness, and process permission. The catalog owns canonical session metadata, notification convergence, connection epoch, permission clearing, stale-on-disconnect state, and bounded early latest values. It remains renderer-free and does not warm browser VT state. Activity and Workbench consume the same catalog while each mounted view owns only its attachment, semantic canvas, palette, focus, selection, and local history projection. Permission loss clears catalog and local-path capability immediately and prevents stale notifications from restoring them.\n\nHistory is requested only by a mounted semantic Runtime when its user scrolls or searches outside the latest Presentation. Each request is bound to the current connection, transport generation, attachment, session, content epoch, geometry generation, lane, and snapshot frontier. The actor captures one complete canonical viewport at one cut; compact chunks are reassembled and validated before one atomic projection. Ordinary live output updates the latest Presentation and total-row summary without replacing the immutable visible history viewport. Clear/reset, geometry or content-epoch change, detach, permission loss, and structural snapshot failure return the view to the latest complete Presentation. Each view keeps a bounded semantic-frame cache only; hidden views stop prefetch and are preferred for eviction. The browser keeps no shared prepared-history cache, background warmup queue, raw-byte replay, parser snapshot, or second scrollback authority. Activity and Workbench views may independently browse and search without changing the PTY, canonical geometry, controller, or another view. Diagnostics retain aggregate phase and field-presence facts only and never record session identifiers, paths, remote identity, commands, or terminal content.",
-          "char_count": 20489
+          "body": "## AI Flower RPC registration\n\nThe local direct and remote agent production session profiles register the\ncomplete AI inventory before Flowersec freezes a session. The closed request\nset is send user turn, list messages, stop thread, and submit user-input\nresponse; the AI event type is explicitly a server notification. A declared\nmethod therefore cannot fail at the router with a missing-handler 404. Each\nrequest acquires the current AI service generation and returns structured 503\nwhen unavailable while the session remains usable. Workspace live timeline is\nowned by the Env Local HTTP stream, not an RPC summary/thread subscription.\nStop remains one RPC lifecycle command without a fallback transport.\n\n## Mechanism\n\nThe released runtime dependency set includes Floeterm terminal-go v0.11.2 and Flowersec Go v2.5.2. Flowersec v2.5.2 also places standalone WSS sessions behind a close-before-wait shutdown barrier: shutdown stops admission, closes active hijacked WebSocket sessions, and waits for lease-release retries before the runtime process may exit. Redeven relies on that published lifecycle instead of duplicating it.\n\nEvery shipped Redeven Runtime enables terminal-go's `floeterm_native` build tag\nwith cgo. The published module carries the target-specific Ghostty static\narchive, generated adapter, public headers, and provenance for Darwin and Linux\non amd64 and arm64. Release builds run on a matching native runner for each\ntarget. One shared Runtime binary builder owns the Desktop bundle and SSH source\nbuild commands. It uses the native C toolchain only when host and target match;\na cross-platform Linux source build selects Zig's explicit GNU target for the\nrequested architecture, disables Go workspaces, and fails before source copying\nor asset generation when Zig is unavailable. It never lets cgo fall back to the\nhost compiler or SDK. Desktop source builds and the exact-main semantic carrier\nuse the same native build contract. Terminal-go's no-tag engine is retained only\nas a fail-closed boundary test and is never a shippable Runtime fallback.\n\nRedeven pins released `flowersec-go` and `terminal-go` versions in `go.mod`. The runtime consumes Flowersec Go v2.5.2 and the browser surfaces consume Flowersec Core v2.5.2 through published packages only. The agent owns connection and retry lifecycle through Flowersec's `ConnectionController` and `Connect` APIs, while Env App tunnel reconnects select the matching TypeScript policy. Local UI direct reconnects first resolve the hostname with `resolveLocalTransportSecurityPolicy` and permit plaintext only for canonical loopback authorities; non-loopback direct admission fails closed. When the public page uses plaintext `localhost`, Redeven maps its already validated listener identity to the actual same-port loopback IP authority before issuing the direct artifact, and uses that one authority for both the Flowersec candidate and upstream address. This is a product adapter to Flowersec v2.5.2's published IP-literal plaintext contract, not an alternate URL validator or a relaxation of that contract. The Docker Local UI integration client applies the same selection so its two-container network test proves the host-scoped admission boundary rather than unrestricted plaintext. Product code therefore does not depend on a permissive library default and cannot silently accept unrelated remote `ws://` transport.\n\nRemote data sessions are Flowersec endpoint clients. Redeven constructs the complete business `RPCHandlers` before `Connect`, passes them through `ConnectorOptions`, and registers application streams and `ProxyServer` on Flowersec v2.5.2's role-neutral `StreamHandlers`; the connected session starts exactly one published stream dispatcher. Inbound terminal RPC handlers are registered in that pre-connect plan without a placeholder outbound peer. Only after `Connect` returns does Redeven attach the real session `RPCPeer`, which immediately replays current terminal metadata. `StreamHandlers.Serve` performs its internal session close before returning; Redeven then detaches the peer, invokes the outer idempotent close, and cleans up the plan. Redeven does not use accepted-server `SessionHandlers` for this client role, proxy outbound notifications through a second peer owner, or copy an `AcceptStream` loop. The control-plane `grant_server` message is a notification with exact bounded decoding and an issuer-provided future artifact expiry; it has no request/response fallback. Before any remote data or control artifact can be spent, its Lease callback creates and fsyncs one no-overwrite ledger tombstone keyed only by the artifact's SHA-256 digest. Product channel, generation, sequence, and wrapper labels cannot create a second burn identity for the same opaque artifact. Each tombstone records the signed expiry and a one-hour post-expiry retention boundary; cleanup removes only valid records past that boundary, while malformed records remain fail-closed and a fixed entry cap rejects new spends instead of deleting live authority.\n\nThe remote control source persists a bounded `control_artifact_pool_v1` rather than one reusable artifact. Bootstrap sends a canonical 32-byte delivery request ID and persists that ID together with the local environment and agent identities in a sidecar before the request; an uncertain retry replays the same tuple, and a sidecar for another provider or environment fails closed rather than being overwritten. Only exact HTTP `409/BOOTSTRAP_DELIVERY_EXPIRED` atomically rotates that request ID and receives one automatic retry; another expiry or an ambiguous failure stops. A newly issued recovery ticket survives the Provider's pre-claim expired-delivery lookup and can authorize the rotated request, while a ticket already claimed by the original issuance is rejected and requires the caller to obtain another newly issued ticket. The response is exact-decoded within the 512 KiB pool limit, rejects unknown or retired `direct` fields, and requires mutually unique artifact digests and channels. The sidecar is unlinked only after the returned configuration commits. An unlink directory-sync error is completion-safe: the caller succeeds, and a crash can at most restore the same idempotent request tuple.\n\nEach pool entry has a Portal-owned sequence, independent artifact channel, digest, expiry, and terminal tombstone. Acquisition selects the lowest usable sequence beyond the fixed refresh horizon, commits the digest-global spend ledger before connecting, then atomically matches generation, sequence, digest, expiry, and bytes while erasing opaque material. On restart, ledger reconciliation converts any stale unspent config entry into a spent tombstone before another entry can be selected. An authenticated control session tops up through the versioned pool RPC and acknowledges an applied response before clearing its persisted pending request. The exact top-up response echoes the persisted `top_up_request_id_b64u`; Runtime verifies that identity before applying entries, and the response digest covers both the echoed ID and the unsigned pool. Response entries must be internally contiguous and above retained local sequences. They may begin after a missing range when an expired, undelivered outbox already advanced Portal's durable counter; Runtime accepts that forward gap only through the authenticated `server_highest_artifact_sequence`. Response or ACK loss replays the same request and exact response bytes. Portal's exact `top_up_request_expired` RPC error atomically records the latest bounded local terminal request tombstone and clears pending state so a later maintenance tick can allocate a fresh request ID. The Provider accepts at most 65,536 bootstrap and top-up delivery IDs for one logical binding generation, always resolving an accepted ID before checking the bound. Exact RPC `409/control_pool_relink_required` leaves the current pending request terminal and moves Runtime to `relink_required`; it never retries that ID or deletes a Portal replay fence. Other invalid responses also require relinking. Retired `credential-renew` is not a production recovery path. A legacy local `Direct` config has no matching Portal-side durable sequence authority, so Redeven erases it into a revoked digest tombstone and requires relinking instead of importing it as usable capacity.\n\nFlowersec proxy requests use the validated browser source and origin context; payload-provided external origins are ignored, and opaque origins do not become forwarded request metadata. The Go HTTP proxy returns the first 3xx response with its original `Location` instead of following redirects. Browser Service Worker streams use one outstanding `chunk_credit_v1` credit per pull when both sides advertise the capability, while legacy workers retain their previous behavior; cancellation wakes waiting consumers. The optional Yamux stream write queue budget defaults to 4 MiB and is released after each write so an exhausted stream can recover. Reconnect paths share the active promise for the same configuration, including during backoff, preventing duplicate connection attempts without adding a global scheduler.\n\nCode App and Port Forward sessions expose only Flowersec proxy handlers to product callers, but their server still registers an empty Flowersec RPC router because the released high-level connector creates and retains an `rpc` bootstrap stream for the connection lifetime. Unknown RPC types return the standard 404 response and do not close that bootstrap stream. These sessions do not register Redeven business RPC handlers, and they use the same private server constructor so the required transport lifecycle cannot drift between the two proxy products.\n\nThe control Direct session replaces record-level keepalive writes with acknowledged Yamux liveness probes at a 15-second interval and a 10-second timeout. Tunnel sessions keep Flowersec's idle-timeout-derived liveness policy. Runtime client, endpoint, and Local UI Direct server setup all select 64 KiB outbound encrypted-record chunks and explicit Yamux limits: 64 active streams, 32 inbound streams, 256 KiB frames and per-stream receive memory, 64 KiB preferred outbound frames, and 16 MiB session receive memory. Runtime RPC streams start request handlers only when work is available, run at most 32 handlers concurrently, and hold at most 128 pending requests in FIFO order; notification queues remain bounded at 128 entries. Desktop SSH streaming commands distinguish caller-requested termination from an unexpected remote exit: explicit termination waits for the command's complete close lifecycle and does not start a post-termination control health probe, while unexpected failures still verify the reusable control transport before classification. Redeven's runtime proxy product adapter blocks only CSP, CSP Report Only, and X-Frame-Options because those embedding policies conflict with proxied product surfaces; Flowersec continues forwarding the remaining default security headers. These are transport and product-policy controls; Redeven does not copy Flowersec framing, multiplexing, RPC scheduling, proxy filtering, or protocol implementation.\n\nThe runtime wraps `termgo.NewManager` so one terminal-go `SessionActor` owns each PTY, native Ghostty VT, canonical geometry, controller epoch, input encoding, semantic history, clear/reset, and atomic Presentation. Redeven supplies product permission and visibility admission, session metadata projection, and lifecycle integration; it does not parse terminal bytes or keep another history. Shell integration reports authenticated or explicit legacy command lifecycle, output activity, execution context, and semantic work as revisioned display metadata. The private bootstrap nonce never reaches arguments, environment, shared files, logs, output, live subscribers, or terminal-web. Those snapshots are not filesystem or authorization boundaries. Bash preserves a valid user `PROMPT_COMMAND` as its own syntax unit, Zsh installs both hook arrays transactionally, and unsupported shells remain explicit legacy sources.\n\nRealtime terminal traffic uses only Floeterm `terminal/live_v1` on a Flowersec named Yamux stream. Attach, structured input, bounded paste, acknowledged resize, atomic Presentations, geometry, session close, and structured errors use Floeterm framing. A paste is fully reassembled under the transport budget before one SessionActor admission, where the native VT owner applies the current bracketed-paste mode and newline encoding. Redeven does not register legacy live RPC ids 2003 through 2006, keep per-RPC attachment routing, enqueue JSON/Base64 output, or silently drop events. Catalog, semantic history, actor-owned clear, delete, and lifecycle/name/foreground-command/output-activity/execution-context/work-state controls remain bounded RPC operations. History requests separate scroll distance, canonical viewport rows, and compact transport chunks. A direct target offset is fenced by the server snapshot identity; every continuation remains on the same browse or search lane and is assembled before projection. History and clear bind to the current connection, transport generation, attachment, and process permission; stale generations have zero effect.\n\nEvery live stream owns one attachment and is removed when the stream ends. Multiple browser pages and simultaneously visible Activity and Workbench views may attach to one session. All receive the same advancing Presentation. Only the current controller attachment may write input or propose canonical geometry. A selected or directly interacted same-principal view sends an explicit activation with the grid measured from its untransformed host layout content box and the current controller epoch; terminal-go atomically transfers ownership, applies that grid, and captures the matching Presentation before Redeven focuses the input bridge or admits ordered input. The outer display mode and selected Workbench widget gate interaction, while observer resize only records local intent and cannot steal control. Stale generations, stale epochs, and cross-principal activation have zero effect. Resize success means terminal-go applied the geometry and emitted a matching Presentation, not that Redeven replayed a stored frame. Disconnect opens a new named stream; ordinary resize never detaches or auto-reattaches.\n\nFloeterm performs shell resolution, environment construction, initialization, argument selection, and PTY startup outside the session lock and owns activation cancellation. Redeven's session delete lifecycle hides a closing session immediately and shares one in-flight delete result across callers; Floeterm closes the attached live streams as part of the terminal session lifecycle. Env App removes a session and its projected capabilities synchronously when a validated lifecycle event reason is `closing` or `close_failed_hidden`; the redundant `hidden` field is informational and cannot weaken that reason-derived revocation. An asynchronous catalog refresh is convergence only and cannot restore authority after a refresh failure. A strict operation with only non-widget participants restores an open, visible, retryable lifecycle and retains its product capability when cleanup fails. Any widget participant atomically promotes the shared operation to widget-owned failure semantics regardless of caller order: failure remains hidden as `close_failed_hidden`, revokes its local-path capability, blocks interaction and catalog projection, and emits the matching lifecycle event so the product can report delayed cleanup without resurrecting a session the widget already removed. Failure-state selection, capability revocation, operation removal, and participant completion resolve under one manager lock. A participant joining after Floeterm has already emitted successful close cannot recreate the removed lifecycle record or capability, and successful completion clears both as a final invariant. Redeven retains no attachment-generation high-water, sink lifecycle token, connection-ownership map, or rollback state machine outside Floeterm.\n\nSemantic terminal verification is layered and automated without starting Redeven Desktop. Go tests cover permission admission, actor-owned clear, same-size quiet reattach, session lifecycle, and real PTY shell integration. Browser tests cover one canvas, semantic input, IME, selection/copy, search, history, theme, cursor-facing geometry, links, and resize. A production-dist carrier starts a temporary Runtime and real PTY, then drives Activity and Workbench across reused and fresh Chromium contexts. It verifies clear, bounded history projection, controller transfer, refresh, twenty `top` resizes under 150 ms, DPR backing, nontransparent canvas paint, and zero page, console, request, response, or semantic errors.\n\nFor every product carrier sample, refresh forgets only the view attachment, preserves the existing semantic canvas, and requires a new current Presentation even when geometry is unchanged. The carrier then proves real input still reaches the PTY. This is the Runtime/PTTY/browser boundary rather than a mocked renderer lifecycle.\n\nRedeven consumes terminal-web v0.16.4. Each mounted view uses one `RendererSurface`, one `TerminalInputBridge`, one `HistoryViewportController`, and one isolated `HistorySearchController` over complete semantic Presentations and atomic history viewports. Host bounds, DPR, view-local palette, typography, occurrence-level search decoration, cell-aware word and row selection, IME anchor, bounded semantic-frame cache, and history projection are browser concerns; PTY state, frame geometry, cursor, inverse cells, grapheme width, hyperlinks, graphics, snapshots, and history remain terminal-go facts. Hidden keep-mounted views fence their canvas until a render commit matches current host bounds and DPR, preventing browser scaling of an old backing store. The browser has no Ghostty WebAssembly, TerminalCore, checkpoint worker, Beamterm renderer, raw replay fallback, or Redeven-owned history state machine.\n\nThe production carrier records runtime, surface, CSS canvas, client, and backing-store dimensions immediately after refresh and again after focus. Overflow fixtures may exceed the 8 MiB ring-buffer cap; they must recover the retained tail, preserve the stable renderer geometry after focus, and accept subsequent PTY input.\n\n## Terminal startup and warmup\n\nEnv App hydrates one terminal session catalog after protocol connection, environment readiness, and process permission. The catalog owns canonical session metadata, notification convergence, connection epoch, permission clearing, stale-on-disconnect state, and bounded early latest values. It remains renderer-free and does not warm browser VT state. Activity and Workbench consume the same catalog while each mounted view owns only its attachment, semantic canvas, palette, focus, selection, and local history projection. Permission loss clears catalog and local-path capability immediately and prevents stale notifications from restoring them.\n\nHistory is requested only by a mounted semantic Runtime when its user scrolls or searches outside the latest Presentation. Each request is bound to the current connection, transport generation, attachment, session, content epoch, geometry generation, lane, and snapshot frontier. The actor captures one complete canonical viewport at one cut; compact chunks are reassembled and validated before one atomic projection. Ordinary live output updates the latest Presentation and total-row summary without replacing the immutable visible history viewport. Clear/reset, geometry or content-epoch change, detach, permission loss, and structural snapshot failure return the view to the latest complete Presentation. Each view keeps a bounded semantic-frame cache only; hidden views stop prefetch and are preferred for eviction. The browser keeps no shared prepared-history cache, background warmup queue, raw-byte replay, parser snapshot, or second scrollback authority. Activity and Workbench views may independently browse and search without changing the PTY, canonical geometry, controller, or another view. Diagnostics retain aggregate phase and field-presence facts only and never record session identifiers, paths, remote identity, commands, or terminal content.",
+          "char_count": 20374
         },
         {
           "id": "boundaries",
@@ -4860,22 +4894,16 @@
           "description": "Remote and local production session assembly share AI registration and detach cleanup."
         },
         {
-          "id": "redeven:internal/ai/rpc_inventory.go:1:canonical ai request/notification type inventory.",
+          "id": "redeven:internal/ai/rpc_inventory.go:20:canonical closed ai request and notification inventory.",
           "source": "redeven:internal/ai/rpc_inventory.go",
-          "line": 1,
-          "description": "Canonical AI request/notification type inventory."
+          "line": 20,
+          "description": "Canonical closed AI request and notification inventory."
         },
         {
-          "id": "redeven:internal/agent/ai_rpc_registration_test.go:1:production local session registration and structured-unavailable coverage.",
+          "id": "redeven:internal/agent/ai_rpc_registration_test.go:13:production registration and structured-unavailable coverage for every request method.",
           "source": "redeven:internal/agent/ai_rpc_registration_test.go",
-          "line": 1,
-          "description": "Production local session registration and structured-unavailable coverage."
-        },
-        {
-          "id": "redeven:internal/ai/rpc_readiness_test.go:35:realtime rpc without a peer returns structured 503.",
-          "source": "redeven:internal/ai/rpc_readiness_test.go",
-          "line": 35,
-          "description": "Realtime RPC without a peer returns structured 503."
+          "line": 13,
+          "description": "Production registration and structured-unavailable coverage for every request method."
         },
         {
           "id": "redeven:internal/terminal/manager.go:14:runtime terminal manager wraps floeterm terminal-go plus flowersec rpc types.",
@@ -7395,15 +7423,22 @@
         "title": "Flower interactions and context state",
         "type": "UI Contract"
       },
-      "body_length": 3212,
-      "summary": "Approval and waiting-user prompts are projections of Floret typed pending interactions. The bottom action mode is one mutually exclusive surface with fixed priority `input_request` then `approval` then `chat`, while the ordinary thread rail always remains interactive; decision surfaces never make a shared ancestor inert or install a pointer-blocking overlay. Automatic context compression remains canonical timeline presentation, but Flower exposes no manual compaction command.",
+      "body_length": 3438,
+      "summary": "Approval and waiting-user prompts are projections of Floret typed pending interactions. The bottom action mode is one mutually exclusive surface with fixed priority `input_request` then `approval` then `chat`, while the ordinary thread rail always remains interactive; decision surfaces never make a shared ancestor inert or install a pointer-blocking overlay.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "Ask User keeps explicit choice-versus-custom draft identity per question. Secret answers use a password field and are sent directly to Respond; they are excluded from ComposerDraft persistence, IndexedDB outbox, diagnostics, and timeline text. A successful response applies the returned current view immediately. Duplicate response requests resolve idempotently and never append duplicate user content.\n\nApproval actions share one compact action row for batch rejection, rejection, one-time approval, and Stop. Every pending, requested primary approval remains visible even when its action reports `can_approve=false`, the adapter cannot mutate, the selected thread is read-only, or detail is pending; those states disable every decision action and present the canonical unavailable or read-only reason instead of falling back to chat. Accept or Reject calls the typed interaction boundary and applies its current view. A resolved approval interaction never creates a standalone timeline row: its lifecycle state merges only into the canonical tool item with the same `tool_call_id`, and an unmatched resolved interaction renders no tool shell. Rejection is a quiet tool-row outcome. Batch rejection resolves only the listed pending interactions. The approval surface does not mount the ordinary textarea, password input, attachment or reference lane, working-directory, permission, model, reasoning, context-usage, or composer-footer controls. Per-thread text, attachment, and reference drafts remain owned by `ComposerDraftStore` while unmounted and return unchanged when the last approval resolves back to chat. Stop remains available directly in the approval action row instead of depending on the ordinary composer footer. No local handoff, consumed-interaction set, approval generation, or command busy reducer controls canonical visibility.\n\nAutomatic context compression may render canonical checkpoint dividers and usage. It is initiated by Floret context policy, not a slash command or composer action. Runtime restart recovery is quiet unless content cannot be recovered, in which case the affected row offers a nonblocking retry.",
-          "char_count": 2141
+          "body": "Ask User keeps explicit choice-versus-custom draft identity per question. Secret answers use a password field and are sent directly to Respond; they are excluded from ComposerDraft persistence, IndexedDB outbox, diagnostics, and timeline text. A successful response applies the returned current view immediately. Duplicate response requests resolve idempotently and never append duplicate user content.\n\nApproval actions share one compact action row for batch rejection, rejection, one-time approval, and Stop. Every pending, requested primary approval remains visible even when its action reports `can_approve=false`, the adapter cannot mutate, the selected thread is read-only, or detail is pending; those states disable every decision action and present the canonical unavailable or read-only reason instead of falling back to chat. Accept or Reject calls the typed interaction boundary and applies its current view. A resolved approval interaction never creates a standalone timeline row: its lifecycle state merges only into the canonical tool item with the same `tool_call_id`, and an unmatched resolved interaction renders no tool shell. Rejection is a quiet tool-row outcome. Batch rejection resolves only the listed pending interactions. The approval surface does not mount the ordinary textarea, password input, attachment or reference lane, working-directory, permission, model, reasoning, context-usage, or composer-footer controls. Per-thread text, attachment, and reference drafts remain owned by `ComposerDraftStore` while unmounted and return unchanged when the last approval resolves back to chat. Stop remains available directly in the approval action row instead of depending on the ordinary composer footer. No local handoff, consumed-interaction set, approval generation, or command busy reducer controls canonical visibility.\n\nRuntime restart recovery is quiet unless content cannot be recovered, in which case the affected row offers a nonblocking retry. Context usage, automatic compression, and the pure `/compact` mapping are owned by [AI model and context runtime](../ai/model-context-runtime.md), not by the approval surface.",
+          "char_count": 2153
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "The decision surface owns drafts, disabled reasons, focus, and row-local commands only. It cannot authorize from rendered state, persist secret answers, settle an interaction locally, create a lifecycle row, or block navigation. Floret's typed current view remains the canonical interaction and tool outcome authority.",
+          "char_count": 318
         }
       ],
       "evidence": [
@@ -7434,6 +7469,14 @@
         }
       ],
       "snippet": "Approval and waiting-user prompts are projections of Floret typed pending interactions. The bottom action mode is one mutually exclusive surface with fixed priority `input_request` then `approval` then `chat`, while the ordinary thread rail",
+      "links": [
+        {
+          "label": "AI model and context runtime",
+          "path": "ai/model-context-runtime.md",
+          "concept_id": "ai.model-context-runtime",
+          "title": "AI model and context runtime"
+        }
+      ],
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -7590,22 +7633,22 @@
         "title": "Flower composer references",
         "type": "UI Contract"
       },
-      "body_length": 8631,
+      "body_length": 8983,
       "summary": "- Authority: Redeven owns reference discovery and unadmitted draft editing; Floret is the sole canonical source after admission.\n- Outcome: a whitespace-boundary `@` token selects one working-directory file or directory as an ordered reference chip without adding prompt text or file content.\n- Invariants: discovery uses the host's authorized filesystem adapter, all visible placements in one connection share one in-memory scope, and one strict `flower_composer` context action preserves the frozen order and directory kind.\n- Failure boundary: stale search generations, malformed wire data, or admission mismatches fail without discarding the connection-local editor, creating a different queued command, or writing canonical Floret state.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Composer interaction\n\nThe full composer recognizes an editable `@` token only at a whitespace boundary with a collapsed caret. IME composition and range selections suppress discovery. Selecting a candidate removes the complete token, preserves surrounding Unicode text and spacing, and adds a separate file or directory chip; the removed token is not sent as prompt text. Selecting an existing reference does not duplicate it. Chip removal restores focus predictably, and add and remove mutate the exact connection-local composer scope synchronously. Activity, Workbench, and retained companion placements observe the same scope without an editor lease, takeover, conflict state, or persistence recovery path.\n\nThe combobox keeps focus in the textarea while Arrow keys move one stable active candidate. Enter or a pointer action on the main row adds the active file or directory as a reference. Tab completes a file token without adding it; for a directory, Tab, ArrowRight, or the row's separate localized Chevron action completes the relative token with a trailing slash and enters that directory without adding a reference. Shift+Tab retains ordinary focus navigation, and Escape dismisses the current token result. Pointer selection, retry, loading, empty, and error states use the same active identity and ARIA listbox contract. The composer announces add, duplicate, and removal outcomes through a polite live region. Reference chips remain separate from attachment previews. In the bottom command row the attachment button is fixed immediately before the More overflow control, while compact context controls retain their existing overflow behavior.\n\nThe menu is a compact opaque popover projected through the shared surface-aware floating layer. Activity companion and full-page placements expose their retained Flower product root as the floating surface host, so the menu stays in the same stacking and clipping boundary instead of falling behind the product surface. Desktop candidate rows remain 32-34 CSS pixels, directory navigation uses one persistent 28-pixel icon target, and narrow layouts may use 36-pixel rows without changing semantics. The menu measures its rendered height and stays 4-8 pixels from the composer across result and viewport changes. Its one-pixel border falls back to the shared theme border when a Flower-local token is absent. Composer focus preserves the same one-pixel geometry and shadow, changing only to a restrained border color; candidate and directory-action focus-visible states remain explicit.\n\n## Bounded discovery\n\nDiscovery searches the current thread's immutable working directory or the new-thread working-directory draft. `FlowerSurfaceAdapter.listWorkingDirectoryEntries` is the only search capability: Env App and Desktop implement it through their existing authenticated runtime filesystem bridges. The shared UI does not read a local path directly.\n\nThe index bounds recursion depth, listed directories, entries per directory, total candidates, path length, visible results, and cache lifetime. It skips generated and dependency directories, stays within the normalized root, and ranks exact name, name prefix, name substring, then relative-path fuzzy matches with deterministic depth/path tie breaking. A token without a slash uses that bounded global matching behavior. A token with a slash treats the normalized prefix as a browsing scope and returns only that directory's direct children, filtered by the suffix after the final slash; nested descendants and global matches do not leak into the scoped list. Runtime/root cache identity and monotonically changing search generations prevent a late or aborted scan from replacing a newer query. Root read errors are visible and retryable; inaccessible descendants are skipped within the same bounded scan.\n\n## Draft and admission\n\nThe connection-local composer stores ordered file/directory chips with a product-local identity, host-derived label, and opaque normalized path. It is never written to Redeven, Floret, local storage, IndexedDB, or another connection. The first-release product v1 baseline has no server draft, draft migration, or compatibility reader; [Flower storage ownership and migrations](../ai/flower-storage-ownership-and-migrations.md) defines that boundary.\n\nSend freezes the ordered references with the text, attachments, model, and stable product request identity. It creates one strict Ask Flower action whose source surface is `flower_composer`; each context item contains exactly `kind=file_path`, `path`, and `is_directory`. Unknown envelope, target, source, presentation, execution-context, or item fields are invalid. The action never accepts a client-authored root, display label, TurnID, or RunID. Prepare, direct admission, queued creation, and queued replacement carry the same normalized JSON.\n\nThe host freezes the editor value and strict context action under the exact `client_request_id` or `queue_id` before admission. Path, order, directory bit, action source, or JSON changes under the same product identity reject the attempt without replacing the accepted command. After admission, the one-pass mapping defined by [AI tool runtime](../ai/ai-tool-runtime.md) gives Floret the canonical ordered `MessageReference` values and current-turn supplemental context.",
-          "char_count": 5316
+          "body": "## Composer interaction\n\nThe full composer recognizes an editable `@` token only at a whitespace boundary with a collapsed caret. IME composition and range selections suppress discovery. Selecting a candidate removes the complete token, preserves surrounding Unicode text and spacing, and adds a separate file or directory chip; the removed token is not sent as prompt text. Selecting an existing reference does not duplicate it. Chip removal restores focus predictably, and add and remove mutate the exact connection-local composer scope synchronously. Activity, Workbench, and retained companion placements observe the same scope without an editor lease, takeover, conflict state, or persistence recovery path.\n\nThe combobox keeps focus in the textarea while Arrow keys move one stable active candidate. Enter or a pointer action on the main row adds the active file or directory as a reference. Tab completes a file token without adding it; for a directory, Tab, ArrowRight, or the row's separate localized Chevron action completes the relative token with a trailing slash and enters that directory without adding a reference. Shift+Tab retains ordinary focus navigation, and Escape dismisses the current token result. Pointer selection, retry, loading, empty, and error states use the same active identity and ARIA listbox contract. The composer announces add, duplicate, and removal outcomes through a polite live region. Reference chips remain separate from attachment previews. In the bottom command row the attachment button is fixed immediately before the More overflow control, while compact context controls retain their existing overflow behavior.\n\nThe menu is a compact opaque popover projected through the shared surface-aware floating layer. Activity companion and full-page placements expose their retained Flower product root as the floating surface host, so the menu stays in the same stacking and clipping boundary instead of falling behind the product surface. Desktop candidate rows remain 32-34 CSS pixels, directory navigation uses one persistent 28-pixel icon target, and narrow layouts may use 36-pixel rows without changing semantics. The menu measures its rendered height and stays 4-8 pixels from the composer across result and viewport changes. Its one-pixel border falls back to the shared theme border when a Flower-local token is absent. Composer focus preserves the same one-pixel geometry and shadow, changing only to a restrained border color; candidate and directory-action focus-visible states remain explicit.\n\n## Bounded discovery\n\nDiscovery searches the current thread's immutable working directory or the new-thread working-directory draft. `FlowerSurfaceAdapter.listWorkingDirectoryEntries` is the only search capability: Env App and Desktop implement it through their existing authenticated runtime filesystem bridges. The shared UI does not read a local path directly.\n\nThe index bounds recursion depth, listed directories, entries per directory, total candidates, path length, visible results, and cache lifetime. It skips generated and dependency directories, stays within the normalized root, and ranks exact name, name prefix, name substring, then relative-path fuzzy matches with deterministic depth/path tie breaking. A token without a slash uses that bounded global matching behavior. A token with a slash treats the normalized prefix as a browsing scope and returns only that directory's direct children, filtered by the suffix after the final slash; nested descendants and global matches do not leak into the scoped list. Runtime/root cache identity and monotonically changing search generations prevent a late or aborted scan from replacing a newer query. Root read errors are visible and retryable; inaccessible descendants are skipped within the same bounded scan.\n\n## Draft and admission\n\nThe connection-local composer stores ordered file/directory chips with a product-local identity, host-derived label, and opaque normalized path. It is never written to Redeven, Floret, local storage, IndexedDB, or another connection. The first-release product v1 baseline has no server draft, draft migration, or compatibility reader; [Flower storage ownership and migrations](../ai/flower-storage-ownership-and-migrations.md) defines that boundary.\n\nSend freezes the ordered references with the text, attachments, model, and stable product request identity. It creates one strict Ask Flower action whose source surface is `flower_composer`; each context item contains exactly `kind=file_path`, `path`, and `is_directory`. Unknown envelope, target, source, presentation, execution-context, or item fields are invalid. The action never accepts a client-authored root, display label, TurnID, or RunID. The typed Send mapping converts that one frozen action into canonical Floret references whether the runtime accepts an immediate turn or canonical queue input.\n\nThe browser transport outbox may retain the original ordinary launch input under its exact `client_request_id` until canonical confirmation. Retry uses that same transport identity; it does not create a Redeven backend command row or use Floret's queue item ID as an idempotency key. After admission, the one-pass mapping defined by [AI tool runtime](../ai/ai-tool-runtime.md) gives Floret the canonical ordered `MessageReference` values and current-turn supplemental context.",
+          "char_count": 5383
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Search results and persisted paths are display and navigation metadata, not filesystem authorization. Discovery observes only what the current authorized host adapter returns under the current runtime and working directory. A reference does not read or attach file contents, grant future filesystem access, or substitute for an explicit attachment upload.\n\nBefore Send, Redeven does not persist the ordered editable reference snapshot. After Send, Redeven may retain the immutable unadmitted command and its strict ordered action for retry and settlement; the product-local chip identity and label are not canonical identity or admission authority. Once admitted, Redeven does not retain a second queryable message-reference record, and canonical reference presentation and navigation derive from Floret reads plus current host authorization.",
-          "char_count": 842
+          "body": "Search results and persisted paths are display and navigation metadata, not filesystem authorization. Discovery observes only what the current authorized host adapter returns under the current runtime and working directory. A reference does not read or attach file contents, grant future filesystem access, or substitute for an explicit attachment upload.\n\nBefore Send, Redeven does not persist the ordered editable reference snapshot. After Send, only the browser transport outbox may retain the original ordinary launch payload until canonical confirmation or terminal cleanup; the product-local chip identity and label are not canonical identity or admission authority. Once admitted, Redeven does not retain a second queryable message-reference record, and canonical reference presentation and navigation derive from Floret reads plus current host authorization.",
+          "char_count": 866
         }
       ],
       "evidence": [
@@ -7650,9 +7693,21 @@
           "description": "Runtime validation restricts composer context to normalized file-path items without client-authored labels."
         },
         {
-          "id": "redeven:internal/ai/context_action_test.go:0:tests reject shape, path, order, directory-kind, source, and json changes without weakening the strict action contract.",
-          "source": "redeven:internal/ai/context_action_test.go",
-          "description": "Tests reject shape, path, order, directory-kind, source, and JSON changes without weakening the strict action contract."
+          "id": "redeven:internal/flower_ui/src/contextActionWire.test.ts:0:browser contract tests reject unknown envelope and item fields and preserve file/directory kind.",
+          "source": "redeven:internal/flower_ui/src/contextActionWire.test.ts",
+          "description": "Browser contract tests reject unknown envelope and item fields and preserve file/directory kind."
+        },
+        {
+          "id": "redeven:internal/ai/context_action_floret_test.go:258:host tests map exact context items into typed floret references.",
+          "source": "redeven:internal/ai/context_action_floret_test.go",
+          "line": 258,
+          "description": "Host tests map exact context items into typed Floret references."
+        },
+        {
+          "id": "redeven:internal/ai/context_action_floret_test.go:361:canonical turn input retains references without persisting the host action envelope.",
+          "source": "redeven:internal/ai/context_action_floret_test.go",
+          "line": 361,
+          "description": "Canonical turn input retains references without persisting the host action envelope."
         }
       ],
       "snippet": "- Authority: Redeven owns reference discovery and unadmitted draft editing; Floret is the sole canonical source after admission. - Outcome: a whitespace-boundary `@` token selects one working-directory file or directory as an ordered refere",
@@ -7703,7 +7758,7 @@
         "title": "Flower live current state",
         "type": "UI Contract"
       },
-      "body_length": 3560,
+      "body_length": 3875,
       "summary": "Flower uses one workspace SSE for every thread. The stream carries a baseline of summaries, summary replacements, active-thread current views, and viewer read state. Selecting a thread changes only `ThreadCache.selectedId`; it never reconnects transport or cancels background execution. Disconnect recovery refreshes summaries and the selected typed view without cursor replay or polling.",
       "sections": [
         {
@@ -7712,6 +7767,13 @@
           "level": 1,
           "body": "`ThreadCache` owns selected ID, summary map, and a bounded LRU of typed detail views. Summary updates are stripped of messages and interaction detail and can never overwrite a cached view. Only a detail GET or `LiveCurrent` update replaces detail, and older view versions are ignored.\n\n`LiveTransport` owns the single connection and a process-local `connectionEpoch`. Every reconnect invalidates callbacks from the prior connection. Normal network failures reconnect quietly with bounded backoff; authorization failure is terminal and visible. There is no browser event log, cursor, generation graph, replay endpoint, retention-gap reducer, polling loop, or per-selection SSE.\n\nThe server never silently drops an authoritative frame. An initial baseline\npaginates the complete workspace summary inventory and includes current views\nfor active and waiting threads, even when the inventory exceeds one catalog\npage or the ordinary live-frame count. A missing, repeated, or non-advancing\npage cursor fails the subscription before `ready`. If one subscriber exceeds\nits byte budget, or one encoded frame is itself oversized, the server closes\nthat subscriber. The client treats the disconnect as loss of cache authority\nand reconnects; the new baseline restores summaries and the selected current\nview. This fail-fast resynchronization contract avoids a second replay protocol\nwhile ensuring a lost terminal update cannot leave the UI permanently running\nor waiting.\n\nCanonical terminal updates and reconnect baselines converge the current view. Background running, waiting_user, waiting_approval, and completed summaries update without pointer or focus events. A missing detail may show a local loading state, but it never clears the rail or cached transcript.\n\nFloret installs a canonical fallback title with the first accepted user message.\nAutomatic-title pending and failure summaries retain it, provider success\nreplaces it through the existing summary stream, and a host rename remains\nauthoritative. Flower never renders an untitled label: list and switcher rows\nwithout a canonical title are omitted, while a legacy detail snapshot with an\nempty title may derive the same whitespace-normalized, 200-rune fallback from\nits first canonical user message or first attachment/reference label. The\nselected header reads the latest summary title before its cached detail title,\nso a provider update cannot flash empty or wait for transcript replacement.",
           "char_count": 2451
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "`LiveTransport` and `ThreadCache` are bounded observation state, not a durable event log or lifecycle mirror. A disconnect, byte-budget closure, or stale version discards local authority and triggers baseline refresh; the browser cannot replay, settle, reorder, or synthesize canonical thread state.",
+          "char_count": 299
         }
       ],
       "evidence": [
@@ -7780,7 +7842,7 @@
         "title": "Flower model and navigation presentation",
         "type": "UI Contract"
       },
-      "body_length": 9293,
+      "body_length": 9290,
       "summary": "Flower keeps environment and Desktop model sources explicit, preserves thread-owned model and reasoning defaults, and presents unavailable selections without replacing the ordinary conversation layout. Thread selection separates immediate visual intent from committed content and rejects stale loads. Transient operation failures use host notifications instead of transcript content, while canonical run and tool failures stay with their owning timeline renderers.",
       "sections": [
         {
@@ -7836,16 +7898,16 @@
           "description": "The shared settings surface always renders the environment model and provider editor."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.navigation.activity.test.tsx:2134:approval interaction tests cover timeout promotion and refreshed same-action retry.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.navigation.activity.test.tsx",
-          "line": 2134,
-          "description": "Approval interaction tests cover timeout promotion and refreshed same-action retry."
+          "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.navigation.test.tsx:460:combined navigation coverage rejects late detail loads across rapid a-to-b-to-a selection.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.navigation.test.tsx",
+          "line": 460,
+          "description": "Combined navigation coverage rejects late detail loads across rapid A-to-B-to-A selection."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.navigation.threads.test.tsx:301:warm thread tests verify the complete ui-first event sequence and no reload on revisit.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.navigation.threads.test.tsx",
-          "line": 301,
-          "description": "Warm thread tests verify the complete UI-first event sequence and no reload on revisit."
+          "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.navigation.structuredInput.test.tsx:412:summary-only refresh coverage preserves cached detail for non-selected threads.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.navigation.structuredInput.test.tsx",
+          "line": 412,
+          "description": "Summary-only refresh coverage preserves cached detail for non-selected threads."
         },
         {
           "id": "redeven:internal/envapp/ui_src/src/ui/pages/settings/sections/FlowerSection.tsx:219:env settings selects the remote desktop model-source layout from stable session routing rather than transient binding state.",
@@ -7985,15 +8047,15 @@
         "title": "Flower terminal activity presentation",
         "type": "UI Contract"
       },
-      "body_length": 13230,
+      "body_length": 10352,
       "summary": "Terminal activity is a renderer-first view over canonical Floret v4 Activity items, not a second process lifecycle. Redeven maps display data only from typed `ActivityItem.presentation`, so the compact row shows `Shell` and the authored command instead of a protocol name. Approval state remains available to the actionable composer but never becomes ordinary activity presentation. Stable activity identity preserves user disclosure and viewport state across current-view replacements. Terminal output may refresh Redeven process handles, but canonical status and completion remain Floret-owned. Measured disclosure, local scrolling, transcript following, and reduced-motion handling preserve reading intent.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Mechanism\n\nTerminal process activity remains part of the canonical current view. The Floret v4 contract keeps `label`, `description`, `renderer`, `chips`, `target_refs`, and `payload` under `ActivityItem.presentation`; identity and lifecycle remain on the item itself. Redeven accepts only the typed nested presentation and maps it consistently from bootstrap and live current replacement. A terminal row receives its command, status, process id, retained snapshot, and sequence facts from that presentation. Its compact trigger always renders `Shell` plus the real command. `terminal.exec` publishes the process id when the PTY starts, so `yield_ms` affects only provider waiting, not when the user can inspect progress. The public payload excludes host-local `cwd`, `workdir`, and `stdin`.\n\nExpanded terminal rows are read-only product presentation. Completed status, output, exit code, and duration come directly from the canonical Floret Activity payload and never call a Redeven completion-output endpoint. Historical completed payloads that contain canonical output but predate sequence metadata render that output as an unsequenced static snapshot; only replacement accepts this `first_seq=last_seq=0` form, while live deltas remain sequence-strict. The shared terminal store applies two explicit sequence operations while the Activity remains running: a newer exec snapshot replaces the cumulative view, while a contiguous PTY process-read delta appends to it. Equal or older snapshots are ignored by sequence, an empty delta does not clear existing exec output, and an explicit `truncated=true` gap replaces the unavailable prefix with the retained delta. The store never decides cumulative-versus-incremental behavior with string prefix or substring checks. Flower and Env App send only the required `after_seq` process-read query for a running Activity with a public process id; server-owned waits and page limits are not UI options. Polling may continue while details are collapsed so a stored delta is not lost merely because it was not visible when it arrived. A valid process read can return a terminal `success`, `error`, or `canceled` snapshot when the PTY finishes between polls, including an empty delta whose `last_seq` remains equal to `after_seq`; that response stops local polling but can never change canonical Activity status, create lifecycle facts, or trigger settlement. Raw AppServer errors are logged for diagnostics and render only localized live-output or terminal-action failure text. The surface exposes icon-only actions to reveal and copy the full raw command and caps output at five visual line boxes using explicit font size, line height, padding, and border-box sizing; shorter output uses its natural height, while later lines increase only the local scroll height. Every pending terminal process binds its complete Floret settlement target and creating top-level or subagent Host before launch. After the pending handle is exposed and PTY reap completes, one finalizer performs one settlement through that owner; process reads, writes, cleanup, and later UI access never trigger or retry settlement, and no maintenance Host fallback exists. A ready settlement projection advances the same `ThroughOrdinal` cursor as every other projection and publishes the canonical `timeline.replaced` snapshot. An unavailable settlement projection remains committed Floret state, produces diagnostic logging, and is not read back or synthesized locally. `terminal.terminate` waits for process-tree exit, output drain, and finalization before returning, while `Service.Close` completes finalizers before releasing Floret Hosts and stores. Consequently, canonical terminal ordering and completion facts come only from durable Floret projections rather than a terminal-specific database, retry path, floor, refresh, or UI repair mechanism.",
-          "char_count": 3866
+          "body": "## Mechanism\n\nTerminal process activity remains part of the canonical current view. The Floret v4 contract keeps `label`, `description`, `renderer`, `chips`, `target_refs`, and `payload` under `ActivityItem.presentation`; identity and lifecycle remain on the item itself. Redeven accepts only the typed nested presentation and maps it consistently from bootstrap and live current replacement. A terminal row receives its command, status, process id, retained snapshot, and sequence facts from that presentation. Its compact trigger always renders `Shell` plus the real command. `terminal.exec` publishes the process id when the PTY starts, so `yield_ms` affects only provider waiting, not when the user can inspect progress. The public payload excludes host-local `cwd`, `workdir`, and `stdin`.\n\nExpanded terminal rows are read-only product presentation. Completed status, output, exit code, and duration come from the canonical Floret Activity payload. Historical completed payloads that contain canonical output but predate sequence metadata render as an unsequenced static snapshot; live deltas remain sequence-strict. While an Activity is running, a newer exec snapshot replaces the cumulative view and a contiguous process-read delta appends to it. Equal or older snapshots are ignored, an empty delta does not clear output, and an explicit truncated gap replaces the unavailable prefix. Flower requests only `after_seq` for a running Activity with a public process id. A terminal process-read response may stop local polling but cannot change canonical Activity status or create lifecycle facts. Raw AppServer errors map to localized live-output or terminal-action failures. The surface offers icon actions to reveal and copy the command and caps output at five visual lines. Terminal execution and settlement belong to [AI tool runtime](../ai/ai-tool-runtime.md) and [Floret thread runtime integration](../ai/floret-thread-runtime.md), not this UI concept.",
+          "char_count": 1963
         },
         {
           "id": "boundaries",
@@ -8046,30 +8108,6 @@
           "description": "Appserver reads latest terminal process output by run and process id."
         },
         {
-          "id": "redeven:internal/ai/compact_thread_context.go:676:idle compaction calls floret and validates its canonical terminal result.",
-          "source": "redeven:internal/ai/compact_thread_context.go",
-          "line": 676,
-          "description": "Idle compaction calls Floret and validates its canonical terminal result."
-        },
-        {
-          "id": "redeven:internal/ai/threadstore/schema.go:12:the canonical threadstore schema contains redeven-owned flower activity snapshot fields.",
-          "source": "redeven:internal/ai/threadstore/schema.go",
-          "line": 12,
-          "description": "The canonical threadstore schema contains Redeven-owned Flower activity snapshot fields."
-        },
-        {
-          "id": "redeven:internal/ai/threadstore/store.go:1260:threadstore generates the next flower activity snapshot from the canonical next thread state.",
-          "source": "redeven:internal/ai/threadstore/store.go",
-          "line": 1260,
-          "description": "Threadstore generates the next Flower activity snapshot from the canonical next thread state."
-        },
-        {
-          "id": "redeven:internal/codeapp/appserver/thread_read_state.go:384:appserver validates mark-read snapshots against the current canonical flower activity snapshot.",
-          "source": "redeven:internal/codeapp/appserver/thread_read_state.go",
-          "line": 384,
-          "description": "Appserver validates mark-read snapshots against the current canonical Flower activity snapshot."
-        },
-        {
           "id": "redeven:internal/flower_ui/src/SubagentDetailWindow.tsx:126:the detail component classifies projected entries into instruction, constraint, analysis, activity, and outcome ledger sections.",
           "source": "redeven:internal/flower_ui/src/SubagentDetailWindow.tsx",
           "line": 126,
@@ -8088,18 +8126,6 @@
           "description": "The shared terminal viewport controller applies the 24 px near-bottom following contract and reports every output presentation frame."
         },
         {
-          "id": "redeven:internal/ai/terminal_process.go:575:terminal settlement publication waits for any in-flight transaction and acknowledges the process only after the completion callback succeeds.",
-          "source": "redeven:internal/ai/terminal_process.go",
-          "line": 575,
-          "description": "Terminal settlement publication waits for any in-flight transaction and acknowledges the process only after the completion callback succeeds."
-        },
-        {
-          "id": "redeven:internal/ai/terminal_process_service.go:25:terminal process read, write, and terminate routes propagate settlement publication errors instead of exposing an unacknowledged terminal snapshot.",
-          "source": "redeven:internal/ai/terminal_process_service.go",
-          "line": 25,
-          "description": "Terminal process read, write, and terminate routes propagate settlement publication errors instead of exposing an unacknowledged terminal snapshot."
-        },
-        {
           "id": "redeven:internal/flower_ui/src/styles/flower.css:4227:flower terminal output uses an explicit five-line border-box height cap.",
           "source": "redeven:internal/flower_ui/src/styles/flower.css",
           "line": 4227,
@@ -8113,6 +8139,20 @@
         }
       ],
       "snippet": "Terminal activity is a renderer-first view over canonical Floret v4 Activity items, not a second process lifecycle. Redeven maps display data only from typed `ActivityItem.presentation`, so the compact row shows `Shell` and the authored com",
+      "links": [
+        {
+          "label": "AI tool runtime",
+          "path": "ai/ai-tool-runtime.md",
+          "concept_id": "ai.ai-tool-runtime",
+          "title": "AI tool runtime"
+        },
+        {
+          "label": "Floret thread runtime integration",
+          "path": "ai/floret-thread-runtime.md",
+          "concept_id": "ai.floret-thread-runtime",
+          "title": "Floret thread runtime integration"
+        }
+      ],
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -8146,7 +8186,7 @@
         "title": "Flower timeline ordering",
         "type": "UI Contract"
       },
-      "body_length": 1816,
+      "body_length": 2389,
       "summary": "Flower renders the ordered items in Floret's typed current view. Canonical stable IDs determine user, assistant, tool, interaction, queue, and terminal rows. A short-lived transport outbox may show an unconfirmed user input at its final transcript position, but canonical confirmation removes it instead of moving or duplicating it. Summaries never write timeline detail.",
       "sections": [
         {
@@ -8155,13 +8195,25 @@
           "level": 1,
           "body": "Floret canonical journal order is authoritative for durable rows. Current-process assistant and thinking drafts arrive only inside the typed current view and disappear when canonical terminal output replaces them. Repeated provider attempts use the same stable output identity, so late or duplicate completion cannot append a second assistant or tool row.\n\nQueued input is canonical Floret state and appears exactly once in the queue lane. An idle Send appears as the user row; a busy Send appears directly in the queue. Flower never guesses ordering from timestamps, prompt equality, or a local operation reducer.\n\nThreadCache accepts detail only from detail GET and LiveCurrent. It rejects an older view version and retains cached A and B views across A-to-B-to-A selection. Summary refresh, disconnect, hidden-page recovery, and slow responses cannot clear messages. Cancel and Reject update the corresponding turn or tool row without a global failure card.",
           "char_count": 960
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "Stable row identity and order come only from the published Floret current view. The outbox, cache, live transport, renderer keys, and summaries may present or temporarily confirm those rows but cannot assign a canonical item ID, ordinal, queue identity, terminal state, or lower `ViewVersion`.",
+          "char_count": 293
         }
       ],
       "evidence": [
         {
-          "id": "floret:runtime/thread_runtime.go:0:typed current view and stable queue/item identities.",
-          "source": "floret:runtime/thread_runtime.go",
-          "description": "Typed current view and stable queue/item identities."
+          "id": "redeven:go.mod:0:pins the published floret v4.0.12 ordered current-view contract.",
+          "source": "redeven:go.mod",
+          "description": "Pins the published Floret v4.0.12 ordered current-view contract."
+        },
+        {
+          "id": "redeven:internal/ai/floret_timeline_messages_test.go:0:proves redeven preserves public ordered items and live markers from the typed view.",
+          "source": "redeven:internal/ai/floret_timeline_messages_test.go",
+          "description": "Proves Redeven preserves public ordered items and live markers from the typed view."
         },
         {
           "id": "redeven:internal/flower_ui/src/runtimeCurrentView.ts:0:current-view projection.",
@@ -8182,6 +8234,11 @@
           "id": "redeven:internal/flower_ui/src/flowerTimelineProjection.ts:0:stable row projection.",
           "source": "redeven:internal/flower_ui/src/flowerTimelineProjection.ts",
           "description": "Stable row projection."
+        },
+        {
+          "id": "redeven:internal/flower_ui/src/runtimeCurrentView.test.ts:0:covers explicit live state and canonical lifecycle projection.",
+          "source": "redeven:internal/flower_ui/src/runtimeCurrentView.test.ts",
+          "description": "Covers explicit live state and canonical lifecycle projection."
         }
       ],
       "snippet": "Flower renders the ordered items in Floret's typed current view. Canonical stable IDs determine user, assistant, tool, interaction, queue, and terminal rows. A short-lived transport outbox may show an unconfirmed user input at its final tra",
@@ -8218,7 +8275,7 @@
         "title": "Flower command and composer flow",
         "type": "UI Contract"
       },
-      "body_length": 2894,
+      "body_length": 3255,
       "summary": "Flower sends ordinary input through a stable request ID and receives a typed current view immediately. The composer, thread rail, Stop, interaction controls, and thread switching remain usable while provider work continues. A short-lived IndexedDB outbox retains only ordinary launch input until the canonical view confirms its request ID; secret interaction answers never enter it.",
       "sections": [
         {
@@ -8227,6 +8284,13 @@
           "level": 1,
           "body": "`ComposerDraftStore` owns text, references, attachments, per-question input drafts, model/reasoning choices, and upload staging for each thread. Switching A-to-B-to-A changes selection immediately and restores each draft without transferring execution ownership. Sending captures immutable input and completes the transport-outbox write before invoking typed Send, then clears only the accepted draft content. A persistence failure is visible and prevents network admission, so an unknown result cannot lose its stable recovery identity on reload. If the thread is busy, Floret places the input directly in its canonical queue; Flower does not move a locally rendered message between transcript and queue.\n\n`TransportOutbox` is transport recovery only. It stores request ID and original non-secret launch input, retries the same request identity after reconnect, and deletes the entry when a typed view contains the matching canonical user item or queue request. Entries expire under a bounded TTL during long-lived sessions as well as restore, terminal attachment capability loss settles instead of retrying forever after restart, deleting a thread clears its remaining entries, and surface teardown stops cleanup timers. IndexedDB read and write errors are propagated rather than swallowed. It has no turn, approval, receipt, operation, or lifecycle state.\n\nRespond, Approve, Reject, Stop, Retry, and RetryEffect are ordinary idempotent commands. Reject All submits one Floret Answers batch so the visible approval set cannot partially settle. Their progress never applies `inert`, a pointer overlay, or a shared busy state to the rail, surface, or composer. Approval and waiting-user controls coexist with navigation and editable draft state. RetryEffect stays on the exact unknown tool row and requires explicit acknowledgement; it does not resend the user turn.",
           "char_count": 1866
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "Composer drafts and the transport outbox own only unconfirmed browser input and stable request identity. They never become canonical queue, interaction, effect, turn, or Agent lifecycle state. Secret answers bypass the outbox, and canonical confirmation or terminal cleanup removes transport state instead of projecting a second durable command.",
+          "char_count": 345
         }
       ],
       "evidence": [
@@ -8963,7 +9027,7 @@
         "title": "Workbench surface lifecycle",
         "type": "UI Contract"
       },
-      "body_length": 10508,
+      "body_length": 10331,
       "summary": "Workbench keeps widget identity and state stable while visual selection, input routing, committed activation, lazy feature loading, and connection recovery follow explicit presentation ownership. A selected Terminal's declared local scroll viewport owns pointer wheel input without requiring terminal DOM focus, while unselected widgets remain under Canvas ownership. Recovery is mounted above the canvas and makes retained content inert instead of creating per-widget reconnect state. Pointer-anchored overlays use the shared surface layer, and lazy module delivery cannot replace permission, keep-alive, or lifecycle contracts.",
       "sections": [
         {
@@ -9015,12 +9079,6 @@
           "source": "redeven:internal/flower_ui/src/threads/FlowerThreadList.tsx",
           "line": 287,
           "description": "Flower thread context menus render through the shared surface floating layer."
-        },
-        {
-          "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.navigation.threads.test.tsx:1730:tests assert the thread context menu is hosted by a local interaction floating layer.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.navigation.threads.test.tsx",
-          "line": 1730,
-          "description": "Tests assert the thread context menu is hosted by a local interaction floating layer."
         },
         {
           "id": "redeven:AGENTS.md:651:repository rules define workbench floating ui and coordinate ownership.",
@@ -9221,5 +9279,5 @@
       ]
     }
   ],
-  "source_sha256": "3ed2b54cc8d921e52887a8971a3351d52d9176db443f6ad16a9724fa53223127"
+  "source_sha256": "ab24f1f2d03a030a9e6394281cbd93c2fd92747d8e56bbb16f8aa2e557c0a6b6"
 }
