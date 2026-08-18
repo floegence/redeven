@@ -295,6 +295,7 @@ func newShellLifecycleTestManagerWithRecorder(t *testing.T, root string, shellPa
 		scope:            mustTestFilesystemScope(t, root),
 		log:              logger,
 		sessionLifecycle: make(map[string]SessionLifecycleRecord),
+		workloadReleases: make(map[string]func()),
 	}
 
 	manager.term = termgo.NewManager(termgo.ManagerConfig{
