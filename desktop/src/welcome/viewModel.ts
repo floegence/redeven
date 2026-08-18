@@ -1264,6 +1264,9 @@ function resolveEnvironmentOpenFlow(
   if (runtimeManagementSetupRequired(environment)) {
     return 'initialize';
   }
+  if (runtimeManagementStartRecoveryAvailable(environment)) {
+    return 'start';
+  }
   if (environment.gateway_environment_state === 'stopped'
     && environment.runtime_operations.start.availability === 'available') {
     return 'start';
@@ -1516,6 +1519,19 @@ function runtimeManagementSetupRequired(environment: DesktopEnvironmentEntry): b
     && environment.runtime_management.authorization.state === 'allowed'
     && environment.runtime_management.readiness === 'setup_required';
   return directSetupRequired || providerSetupRequired;
+}
+
+function runtimeManagementStartRecoveryAvailable(environment: DesktopEnvironmentEntry): boolean {
+  const management = environment.runtime_management;
+  return environment.kind !== 'provider_environment'
+    && environment.kind !== 'gateway_environment'
+    && environment.kind !== 'external_local_ui'
+    && management?.support === 'supported'
+    && management.authorization.state === 'allowed'
+    && management.readiness === 'temporarily_unavailable'
+    && environment.runtime_operations.start.method === 'runtime_gateway'
+    && compact(environment.gateway_id) !== ''
+    && compact(environment.gateway_env_id) !== '';
 }
 
 function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly EnvironmentActionMenuItemModel[] {
