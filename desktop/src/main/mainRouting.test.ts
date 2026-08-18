@@ -991,6 +991,17 @@ describe('main routing', () => {
     expect(refreshRuntimeSrc).toContain('const runtimeRecord = await verifyCurrentLocalEnvironmentRuntimeRecord(localEnvironment)\n      ?? await attachLocalEnvironmentRuntime(localEnvironment);');
   });
 
+  it('uses the Local Environment state directory itself as the Runtime root', () => {
+    const mainSrc = readMainSource();
+    const helperStart = mainSrc.indexOf('function localEnvironmentStateRoot(');
+    const helperEnd = mainSrc.indexOf('\n}\n', helperStart);
+    expect(helperStart).toBeGreaterThanOrEqual(0);
+    expect(helperEnd).toBeGreaterThan(helperStart);
+    const helperSrc = mainSrc.slice(helperStart, helperEnd);
+    expect(helperSrc).toContain('return compact(environment.local_hosting.state_dir);');
+    expect(helperSrc).not.toContain('path.dirname(');
+  });
+
   it('keeps provider-link tickets separate from remote open route readiness', () => {
     const mainSrc = readMainSource();
 
@@ -1549,6 +1560,68 @@ describe('main routing', () => {
     expect(syncSrc).toContain("supersedeGatewaySyncTask(record.gateway_id);");
     expect(syncSrc).toContain('if (!latestRecord.local_enabled) {');
     expect(syncSrc).toContain('throw new GatewaySyncCanceledError(\'Gateway sync was canceled because this Gateway is disabled on this Desktop.\');');
+  });
+
+  it('uses the post-pairing Gateway record for first-click Runtime initialization', () => {
+    const mainSrc = readMainSource();
+    const initializeStart = mainSrc.indexOf('async function setupDirectRuntimeManagementFromLauncher(');
+    const initializeEnd = mainSrc.indexOf(
+      'async function setupProviderRuntimeManagementWithDirectCardFromLauncher(',
+      initializeStart,
+    );
+    expect(initializeStart).toBeGreaterThanOrEqual(0);
+    expect(initializeEnd).toBeGreaterThan(initializeStart);
+    const initializeSrc = mainSrc.slice(initializeStart, initializeEnd);
+
+    expect(initializeSrc.match(/syncGatewayRecord\(/g)).toHaveLength(2);
+    expect(initializeSrc).toContain('const authorizedRecord = await gatewayStore().get(record.gateway_id);');
+    expect(initializeSrc).toContain('const trustProfile = authorizedRecord?.trust_profile;');
+    expect(initializeSrc).toContain('if (!authorizedRecord || !trustProfile) {');
+    expect(initializeSrc).toContain('gatewayLifecycleManager().prepareRuntimeOperation(\n          authorizedRecord,');
+    expect(initializeSrc).toContain('gatewayLifecycleManager().confirmRuntimeOperation(\n          authorizedRecord,');
+    expect(initializeSrc).toContain('gatewayLifecycleManager().uploadRuntimeOperationArtifact(\n          authorizedRecord,');
+    expect(initializeSrc).toContain('gatewayLifecycleManager().commitRuntimeOperation(\n          authorizedRecord,');
+    expect(initializeSrc).toContain('gatewayLifecycleManager().getRuntimeOperation(\n          authorizedRecord,');
+    expect(initializeSrc).toContain("await awaitEnvironmentRuntimeLifecycleReadiness(request.environment_id, 'initialize');");
+    expect(initializeSrc).not.toContain('refreshGatewaySourceForAuthorizedAction(record, {');
+  });
+
+  it('waits for the real Desktop Runtime health projection after Gateway lifecycle success', () => {
+    const mainSrc = readMainSource();
+    const lifecycleStart = mainSrc.indexOf('async function runGatewayEnvironmentLifecycleFromLauncher(');
+    const lifecycleEnd = mainSrc.indexOf('async function resolveProviderRuntimeLifecycleScope(', lifecycleStart);
+    const lifecycleSrc = mainSrc.slice(lifecycleStart, lifecycleEnd);
+
+    expect(lifecycleSrc.match(/await awaitEnvironmentRuntimeLifecycleReadiness\(request\.environment_id, request\.operation\);/g)).toHaveLength(2);
+    expect(lifecycleSrc).toContain('after_success: async () => {');
+  });
+
+  it('keeps foreground Runtime operations authoritative over persistence attachment recovery', () => {
+    const mainSrc = readMainSource();
+    const completionStart = mainSrc.indexOf('async function completeRuntimeOperation(');
+    const completionEnd = mainSrc.indexOf('type AttachedRuntimeOperationAdapter', completionStart);
+    const attachmentStart = mainSrc.indexOf('function upsertRuntimeOperationAttachment(');
+    const attachmentEnd = mainSrc.indexOf('async function refreshDirectGatewayRuntimeOperationAttachments(', attachmentStart);
+    const initializationStart = mainSrc.indexOf('async function setupDirectRuntimeManagementFromLauncher(');
+    const initializationEnd = mainSrc.indexOf(
+      'async function setupProviderRuntimeManagementWithDirectCardFromLauncher(',
+      initializationStart,
+    );
+    expect(completionStart).toBeGreaterThanOrEqual(0);
+    expect(completionEnd).toBeGreaterThan(completionStart);
+    expect(attachmentStart).toBeGreaterThanOrEqual(0);
+    expect(attachmentEnd).toBeGreaterThan(attachmentStart);
+    expect(initializationStart).toBeGreaterThanOrEqual(0);
+    expect(initializationEnd).toBeGreaterThan(initializationStart);
+    const completionSrc = mainSrc.slice(completionStart, completionEnd);
+    const attachmentSrc = mainSrc.slice(attachmentStart, attachmentEnd);
+    const initializationSrc = mainSrc.slice(initializationStart, initializationEnd);
+
+    expect(mainSrc).toContain('const locallyDrivenRuntimeOperationIDs = new Set<string>();');
+    expect(mainSrc).toContain('async function driveRuntimeOperation<T>(');
+    expect(completionSrc).toContain('return driveRuntimeOperation(operation.operation_id, () => advanceGatewayRuntimeOperation(operation, {');
+    expect(attachmentSrc).toContain('if (locallyDrivenRuntimeOperationIDs.has(operation.operation_id)) {');
+    expect(initializationSrc).toContain('await driveRuntimeOperation(operationID, () => initializeGatewayRuntime({');
   });
 
   it('routes legacy Gateway refresh requests through the unified Refresh workflow', () => {

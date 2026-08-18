@@ -93,6 +93,7 @@ check_shell_syntax() {
   bash -n scripts/check_desktop_electron_test_runtime.sh
   bash -n scripts/check_docker_runtime_e2e.sh
   bash -n scripts/smoke_desktop_plugins.sh
+  bash -n scripts/smoke_desktop_runtime_lifecycle.sh
   bash -n scripts/check_final_integration.sh
   bash -n scripts/check_quick_ci.sh
   bash -n scripts/check_renderer_e2e.sh
@@ -163,6 +164,7 @@ run_step "checking Flower live protocol" ./scripts/check_flower_live_protocol.sh
 run_step "checking built renderer and terminal recovery E2E" ./scripts/check_renderer_e2e.sh
 run_step "checking Flower UI" ./scripts/check_flower_ui.sh --skip-browser
 run_step "checking Desktop" ./scripts/check_desktop.sh --full
+run_step "checking real Desktop Runtime lifecycle" ./scripts/smoke_desktop_runtime_lifecycle.sh
 run_step "checking Docker Runtime E2E" ./scripts/check_docker_runtime_e2e.sh
 run_step "checking open-source hygiene" ./scripts/open_source_hygiene_check.sh --all
 run_step "checking OKF source integrity" ./scripts/okf/check_source_integrity.sh

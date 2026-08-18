@@ -635,11 +635,15 @@ func (f *fixture) waitNetworkExposureReady(ctx context.Context, reportPath strin
 }
 
 func (f *fixture) startRuntime(ctx context.Context) {
+	f.startRuntimeFromExecutable(ctx, managedRedeven)
+}
+
+func (f *fixture) startRuntimeFromExecutable(ctx context.Context, executable string) {
 	f.t.Helper()
 	args := []string{
 		"exec", "-d",
 		f.containerName,
-		managedRedeven,
+		executable,
 		"run",
 		"--mode", "desktop",
 		"--state-root", containerStateRoot,
@@ -648,6 +652,20 @@ func (f *fixture) startRuntime(ctx context.Context) {
 	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", args...); err != nil {
 		f.t.Fatalf("start runtime: %v", err)
 	}
+}
+
+func (f *fixture) removeManagedRuntime(ctx context.Context) {
+	f.t.Helper()
+	f.dockerExec(ctx, nil, "rm", "-rf", filepath.Dir(filepath.Dir(managedRedeven)))
+}
+
+func (f *fixture) containerRuntimeVersion(ctx context.Context, executable string) string {
+	f.t.Helper()
+	fields := strings.Fields(strings.TrimSpace(f.dockerExec(ctx, nil, executable, "version").Stdout))
+	if len(fields) < 2 || fields[0] != "redeven" || fields[1] == "" {
+		f.t.Fatalf("invalid Runtime version output for %s: %q", executable, strings.Join(fields, " "))
+	}
+	return fields[1]
 }
 
 func (f *fixture) assertInventoryScopesVerifiedRuntime(ctx context.Context) {

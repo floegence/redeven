@@ -330,6 +330,9 @@ func (s *Store) Prepare(ctx context.Context, request gatewayprotocol.RuntimeOper
 		TargetGeneration:  operation.TargetGeneration,
 	})
 	snapshot = gatewayprotocol.NormalizeWorkloadSnapshot(snapshot)
+	if snapshotErr == nil && snapshot.SnapshotRevision > gatewayprotocol.MaxJSONSafeInteger {
+		snapshotErr = errors.New("Runtime workload snapshot revision exceeds the protocol integer range")
+	}
 	s.mu.Lock()
 	current, ok := s.state.Operations[operation.OperationID]
 	if !ok || current.State != gatewayprotocol.RuntimeOperationPreflighting {
@@ -787,8 +790,14 @@ func (s *Store) continueFencing(ctx context.Context, operationID string, recover
 func (s *Store) markSucceeded(operationID string) (gatewayprotocol.RuntimeOperation, error) {
 	s.mu.Lock()
 	token := s.state.FenceTokens[operationID]
+	operation, ok := s.state.Operations[operationID]
 	s.mu.Unlock()
-	if token != "" {
+	if !ok {
+		return gatewayprotocol.RuntimeOperation{}, lifecycleError(ErrorOperationNotFound, "Runtime operation was not found.", false)
+	}
+	// Stop consumes the live fence as part of the verified Runtime shutdown.
+	// There is no Runtime control endpoint left to accept a separate release.
+	if token != "" && operation.Kind != gatewayprotocol.RuntimeOperationStop {
 		if err := s.controller.ReleaseLifecycleFence(context.Background(), token); err != nil {
 			return s.enterManualRecovery(operationID, "Runtime lifecycle fence could not be released after a successful commit.")
 		}

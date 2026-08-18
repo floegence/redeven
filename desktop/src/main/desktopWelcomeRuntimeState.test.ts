@@ -381,7 +381,9 @@ describe('desktopWelcomeRuntimeState', () => {
       await fs.writeFile(
         executablePath,
         `#!/usr/bin/env node
-process.stdout.write(${JSON.stringify(JSON.stringify({
+	const stateRoot = process.argv[process.argv.indexOf('--state-root') + 1];
+	if (stateRoot !== ${JSON.stringify(stateDir)}) process.exit(1);
+	process.stdout.write(${JSON.stringify(JSON.stringify({
           status: 'ready',
           local_ui_url: `http://127.0.0.1:${address.port}/`,
           local_ui_urls: [`http://127.0.0.1:${address.port}/`],

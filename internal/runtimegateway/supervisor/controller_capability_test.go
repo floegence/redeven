@@ -64,8 +64,22 @@ func TestRuntimeManagementCapabilityAllowsInstallWhenInventoryProvesRuntimeAbsen
 		t.Fatalf("capability target = %#v, want %#v", capability.Target, binding)
 	}
 	assertRuntimeOperationKinds(t, capability.Operations, gatewayprotocol.RuntimeOperationUpdate)
-	if len(capability.ArtifactPolicies) != 1 || capability.ArtifactPolicies[0] != gatewayprotocol.ArtifactPolicyPublishedRelease {
+	if len(capability.ArtifactPolicies) != 2 ||
+		capability.ArtifactPolicies[0] != gatewayprotocol.ArtifactPolicyCustomBuild ||
+		capability.ArtifactPolicies[1] != gatewayprotocol.ArtifactPolicyPublishedRelease {
 		t.Fatalf("artifact policies = %#v", capability.ArtifactPolicies)
+	}
+}
+
+func TestOfflineRuntimeSnapshotRevisionIsJSONSafe(t *testing.T) {
+	controller, _ := newCapabilityTestController(t)
+
+	snapshot, err := controller.offlineSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("offlineSnapshot() error = %v", err)
+	}
+	if snapshot.SnapshotRevision < 0 || snapshot.SnapshotRevision > gatewayprotocol.MaxJSONSafeInteger {
+		t.Fatalf("offline snapshot revision %d cannot round-trip through Desktop JavaScript", snapshot.SnapshotRevision)
 	}
 }
 

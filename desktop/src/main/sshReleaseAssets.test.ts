@@ -111,6 +111,20 @@ describe('sshReleaseAssets', () => {
       release_package_name: 'redeven_linux_arm64.tar.gz',
       platform_label: 'linux/arm64',
     });
+    expect(resolveDesktopSSHRemotePlatform('Darwin', 'x86_64')).toEqual({
+      goos: 'darwin',
+      goarch: 'amd64',
+      platform_id: 'darwin_amd64',
+      release_package_name: 'redeven_darwin_amd64.tar.gz',
+      platform_label: 'darwin/amd64',
+    });
+    expect(resolveDesktopSSHRemotePlatform('Darwin', 'arm64')).toEqual({
+      goos: 'darwin',
+      goarch: 'arm64',
+      platform_id: 'darwin_arm64',
+      release_package_name: 'redeven_darwin_arm64.tar.gz',
+      platform_label: 'darwin/arm64',
+    });
   });
 
   it('maps local host uname values to published macOS release package names', () => {
@@ -131,7 +145,6 @@ describe('sshReleaseAssets', () => {
   });
 
   it.each([
-    ['Darwin', 'arm64'],
     ['LinuxGNU', 'amd64'],
     ['Linux', 'armv7l'],
     ['Linux', 'armv6l'],

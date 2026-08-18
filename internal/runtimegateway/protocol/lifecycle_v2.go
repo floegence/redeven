@@ -299,6 +299,10 @@ func NormalizeWorkloadSnapshot(snapshot WorkloadSnapshot) WorkloadSnapshot {
 
 const unknownDigest = "unknown"
 
+// MaxJSONSafeInteger is the largest integer that protocol clients implemented
+// in JavaScript can round-trip without losing confirmation identity.
+const MaxJSONSafeInteger int64 = 1<<53 - 1
+
 type DesiredRuntime struct {
 	Version        string         `json:"version"`
 	Platform       string         `json:"platform"`

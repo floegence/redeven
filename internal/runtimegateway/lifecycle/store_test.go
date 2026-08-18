@@ -314,6 +314,38 @@ func TestCommitContinuesAfterClientTransportDisconnect(t *testing.T) {
 	}
 }
 
+func TestStopCommitConsumesFenceWithTheStoppedRuntime(t *testing.T) {
+	clock := &fakeClock{now: time.Unix(226, 0)}
+	controller := &fakeController{
+		snapshot: knownSnapshot(4), fenced: knownSnapshot(4), token: "fence-stop",
+	}
+	store := newTestStore(t, controller, clock)
+	request := prepareRequest("op-stop", "idem-stop")
+	request.Operation = gatewayprotocol.RuntimeOperationStop
+	request.DesiredRuntime = gatewayprotocol.DesiredRuntime{}
+	prepared, err := store.Prepare(context.Background(), request, prepareAuthorization("permit-stop"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := prepared.Operation.ExpectedSnapshot
+	if _, err := store.Confirm(context.Background(), request.OperationID, request.AuthorizedClientKeyID, gatewayprotocol.RuntimeOperationConfirmationRequest{
+		ProtocolVersion:        gatewayprotocol.Version,
+		SnapshotRevision:       snapshot.SnapshotRevision,
+		ProcessInventoryDigest: snapshot.ProcessInventoryDigest,
+		WorkloadIdentityDigest: snapshot.WorkloadIdentityDigest,
+		RiskSummaryDigest:      "sha256:risk",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	committed, err := store.Commit(context.Background(), request.OperationID, request.AuthorizedClientKeyID)
+	if err != nil || committed.State != gatewayprotocol.RuntimeOperationSucceeded {
+		t.Fatalf("Stop Commit() = %#v, %v", committed, err)
+	}
+	if controller.released != 0 {
+		t.Fatalf("Stop Commit() released a fence through the Runtime after that Runtime exited: %d", controller.released)
+	}
+}
+
 func (c *fakeController) Recover(context.Context, gatewayprotocol.RuntimeOperation) error {
 	c.recoveries++
 	return c.recoverErr

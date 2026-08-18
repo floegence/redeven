@@ -1249,6 +1249,7 @@ components:
           type: integer
           format: int64
           minimum: 0
+          maximum: 9007199254740991
         process_inventory_digest:
           type: string
         workload_identity_digest:
@@ -1612,6 +1613,8 @@ components:
         snapshot_revision:
           type: integer
           format: int64
+          minimum: 0
+          maximum: 9007199254740991
         process_inventory_digest:
           type: string
         workload_identity_digest:

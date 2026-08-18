@@ -265,10 +265,19 @@ import {
 import { PUBLIC_REDEVEN_RELEASE_BASE_URL } from './sshReleaseAssets';
 import {
   preflightPublishedRuntimeLifecycleArtifact,
+  prepareCustomRuntimeLifecycleArtifact,
   preparePublishedRuntimeLifecycleArtifact,
   type PublishedRuntimeLifecyclePreflight,
 } from './runtimeLifecycleArtifact';
 import { advanceGatewayRuntimeOperation } from './runtimeLifecycleCompletion';
+import {
+  waitForDesktopRuntimeLifecycleReadiness,
+  type DesktopRuntimeLifecycleReadinessOperation,
+} from './runtimeLifecycleReadiness';
+import {
+  initializeGatewayRuntime,
+  selectGatewayRuntimeArtifactPlan,
+} from './gatewayRuntimeInitialization';
 import { projectAttachedRuntimeOperation } from './runtimeLifecycleAttachment';
 import { installStdioBrokenPipeGuards } from './stdio';
 import type { StartupReport } from './startup';
@@ -869,6 +878,7 @@ type PendingRuntimeOperationReconciliation = Readonly<{
 }>;
 const pendingRuntimeOperationReconciliations = new Map<string, PendingRuntimeOperationReconciliation>();
 const attachedRuntimeOperationResumeTasks = new Map<string, Promise<void>>();
+const locallyDrivenRuntimeOperationIDs = new Set<string>();
 const gatewaySyncStateByID = new Map<string, GatewaySyncRecord>();
 const gatewayDiagnosisByID = new Map<string, DesktopGatewayDiagnosis>();
 const gatewaySyncTaskByID = new Map<string, GatewaySyncTaskRecord>();
@@ -1120,8 +1130,7 @@ async function refreshStartupReportFromLocalUI(
 }
 
 function localEnvironmentStateRoot(environment: DesktopLocalEnvironmentState): string {
-  const stateDir = compact(environment.local_hosting.state_dir);
-  return stateDir === '' ? '' : path.dirname(stateDir);
+  return compact(environment.local_hosting.state_dir);
 }
 
 function localRuntimeMatchesProvider(
@@ -3673,6 +3682,33 @@ async function refreshWelcomeRuntimeHealthForEnvironment(
   });
 }
 
+function welcomeRuntimeHealthForEnvironment(environmentID: string): DesktopRuntimeHealth | undefined {
+  const health = welcomeRuntimeHealthStore.snapshot();
+  return health.localRuntimeHealth[environmentID]
+    ?? health.savedSSHRuntimeHealth[environmentID]
+    ?? health.savedRuntimeTargetHealth[environmentID]
+    ?? health.savedExternalRuntimeHealth[environmentID];
+}
+
+async function awaitEnvironmentRuntimeLifecycleReadiness(
+  environmentID: string,
+  operation: DesktopRuntimeLifecycleReadinessOperation,
+): Promise<void> {
+  const preferences = await loadDesktopPreferencesCached();
+  const tracked = buildWelcomeRuntimeHealthTargets(preferences, openSessionSummaries())
+    .some((target) => target.environment_id === environmentID && target.slot !== 'external_local_ui');
+  if (!tracked) {
+    return;
+  }
+  await waitForDesktopRuntimeLifecycleReadiness({
+    operation,
+    observe: async () => {
+      await refreshWelcomeRuntimeHealthForEnvironment(environmentID, { force: true });
+      return welcomeRuntimeHealthForEnvironment(environmentID);
+    },
+  });
+}
+
 function savedRuntimeTargetHealthForOpenPreflight(
   environmentID: string,
   targetID: DesktopRuntimeTargetID,
@@ -4769,6 +4805,28 @@ function runtimeOperationConfirmationRequest(
   };
 }
 
+async function driveRuntimeOperation<T>(
+  operationID: string,
+  execute: () => Promise<T>,
+): Promise<T> {
+  const normalizedOperationID = compact(operationID);
+  if (normalizedOperationID === '') {
+    throw new Error('Runtime operation id is required before Desktop can drive it.');
+  }
+  if (locallyDrivenRuntimeOperationIDs.has(normalizedOperationID)) {
+    throw new GatewayClientError(
+      'GATEWAY_RUNTIME_OPERATION_IN_PROGRESS',
+      'Desktop is already completing this Runtime operation.',
+    );
+  }
+  locallyDrivenRuntimeOperationIDs.add(normalizedOperationID);
+  try {
+    return await execute();
+  } finally {
+    locallyDrivenRuntimeOperationIDs.delete(normalizedOperationID);
+  }
+}
+
 async function completeRuntimeOperation(
   operation: GatewayRuntimeOperation,
   input: Readonly<{
@@ -4776,23 +4834,34 @@ async function completeRuntimeOperation(
     artifact_preflight?: PublishedRuntimeLifecyclePreflight;
     upload: (metadata: import('./gatewayClient').GatewayRuntimeArtifactMetadata, artifact: Buffer) => Promise<GatewayRuntimeOperation>;
     commit: () => Promise<GatewayRuntimeOperation>;
+    observe: () => Promise<GatewayRuntimeOperation>;
     signal?: AbortSignal;
   }>,
 ): Promise<GatewayRuntimeOperation> {
-  return advanceGatewayRuntimeOperation(operation, {
-    prepareArtifact: (current) => preparePublishedRuntimeLifecycleArtifact({
-      runtimeReleaseTag: current.desired_runtime.version,
-      releaseBaseURL: PUBLIC_REDEVEN_RELEASE_BASE_URL,
-      assetCacheRoot: desktopRuntimePackageCacheRoot(),
-      platform: current.desired_runtime.platform,
-      architecture: current.desired_runtime.architecture,
-      currentRuntimeEpoch: input.current_runtime_epoch,
-      ...(input.artifact_preflight ? { preflight: input.artifact_preflight } : {}),
-      ...(input.signal ? { signal: input.signal } : {}),
-    }),
+  return driveRuntimeOperation(operation.operation_id, () => advanceGatewayRuntimeOperation(operation, {
+    prepareArtifact: (current) => current.desired_runtime.artifact_policy === 'custom_build'
+      ? prepareCustomRuntimeLifecycleArtifact({
+          operation: current,
+          runtimeReleaseTag: current.desired_runtime.version,
+          releaseBaseURL: PUBLIC_REDEVEN_RELEASE_BASE_URL,
+          assetCacheRoot: desktopRuntimePackageCacheRoot(),
+          sourceRuntimeRoot: compact(process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT),
+          ...(input.signal ? { signal: input.signal } : {}),
+        })
+      : preparePublishedRuntimeLifecycleArtifact({
+          runtimeReleaseTag: current.desired_runtime.version,
+          releaseBaseURL: PUBLIC_REDEVEN_RELEASE_BASE_URL,
+          assetCacheRoot: desktopRuntimePackageCacheRoot(),
+          platform: current.desired_runtime.platform,
+          architecture: current.desired_runtime.architecture,
+          currentRuntimeEpoch: input.current_runtime_epoch,
+          ...(input.artifact_preflight ? { preflight: input.artifact_preflight } : {}),
+          ...(input.signal ? { signal: input.signal } : {}),
+        }),
     upload: input.upload,
     commit: input.commit,
-  });
+    observe: input.observe,
+  }));
 }
 
 type AttachedRuntimeOperationAdapter = Readonly<{
@@ -4907,6 +4976,9 @@ function upsertRuntimeOperationAttachment(
   adapter: AttachedRuntimeOperationAdapter,
 ): void {
   if (operation.kind === 'reconcile') {
+    return;
+  }
+  if (locallyDrivenRuntimeOperationIDs.has(operation.operation_id)) {
     return;
   }
   const operationKey = attachedRuntimeOperationKey(surface.environment_id, operation);
@@ -5045,6 +5117,11 @@ async function refreshDirectGatewayRuntimeOperationAttachments(
             operation.operation_id,
             { startPolicy: 'require_ready' },
           ),
+          observe: () => gatewayLifecycleManager().getRuntimeOperation(
+            record,
+            operation.operation_id,
+            { startPolicy: 'require_ready' },
+          ),
         }),
         cancel: async () => {
           await gatewayLifecycleManager().cancelRuntimeOperation(record, operation.operation_id, { startPolicy: 'require_ready' });
@@ -5131,6 +5208,7 @@ async function refreshProviderRuntimeOperationAttachments(
           artifact,
         ),
         commit: () => client.commitRuntimeOperation(scope, operation.operation_id),
+        observe: () => client.getRuntimeOperation(scope, operation.operation_id),
       }),
       cancel: async () => {
         await client.cancelRuntimeOperation(scope, operation.operation_id);
@@ -5779,11 +5857,8 @@ async function runGatewayEnvironmentLifecycleFromLauncher(
       gatewayEnvironmentID: request.gateway_env_id,
     });
   }
-  if (request.operation === 'update_runtime' && (
-    !management.compatibility
-    || !management.artifact_policies?.includes('published_release')
-  )) {
-    return gatewayCapabilityFailure(record, 'This Runtime supervisor cannot verify a published update for the target platform.', {
+  if (request.operation === 'update_runtime' && !management.compatibility) {
+    return gatewayCapabilityFailure(record, 'This Runtime supervisor cannot verify an update for the target platform.', {
       environmentID: request.environment_id,
       gatewayEnvironmentID: request.gateway_env_id,
     });
@@ -5814,7 +5889,19 @@ async function runGatewayEnvironmentLifecycleFromLauncher(
     const operationID = `rop_${crypto.randomUUID()}`;
     const authorizedClientKeyID = compact(record.trust_profile?.paired_client_key_id);
     const desiredVersion = request.operation === 'update_runtime' ? resolveSSHRuntimeReleaseTag() : '';
+    const sourceRuntimeRoot = compact(process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT);
+    const artifactPlan = request.operation === 'update_runtime'
+      ? selectGatewayRuntimeArtifactPlan({
+          artifactPolicies: management.artifact_policies ?? [],
+          sourceBuildAvailable: sourceRuntimeRoot !== '',
+          sourceCommit: compact(process.env.REDEVEN_DESKTOP_BUNDLE_COMMIT) || 'unknown',
+          desiredVersion,
+          platform: management.compatibility!.runtime_platform,
+          architecture: management.compatibility!.runtime_architecture,
+        })
+      : { artifact_policy: 'published_release' as const };
     const artifactPreflight = request.operation === 'update_runtime'
+      && artifactPlan.artifact_policy === 'published_release'
       ? await preflightPublishedRuntimeLifecycleArtifact({
           runtimeReleaseTag: desiredVersion,
           releaseBaseURL: PUBLIC_REDEVEN_RELEASE_BASE_URL,
@@ -5836,8 +5923,9 @@ async function runGatewayEnvironmentLifecycleFromLauncher(
         version: desiredVersion,
         platform: request.operation === 'update_runtime' ? management.compatibility!.runtime_platform : '',
         architecture: request.operation === 'update_runtime' ? management.compatibility!.runtime_architecture : '',
-        artifact_policy: 'published_release',
+        artifact_policy: artifactPlan.artifact_policy,
       },
+      ...(artifactPlan.build_inputs ? { build_inputs: artifactPlan.build_inputs } : {}),
       idempotency_key: `runtime-operation:${operationID}`,
     }, {
       signal,
@@ -5870,6 +5958,11 @@ async function runGatewayEnvironmentLifecycleFromLauncher(
               operationID,
               { startPolicy: actionStartPolicy },
             ),
+            observe: () => gatewayLifecycleManager().getRuntimeOperation(
+              record,
+              operationID,
+              { startPolicy: actionStartPolicy },
+            ),
           });
         },
         cancel: async () => {
@@ -5881,6 +5974,7 @@ async function runGatewayEnvironmentLifecycleFromLauncher(
             mode: 'refresh_catalog',
             startPolicy: actionStartPolicy,
           }).catch(() => undefined);
+          await awaitEnvironmentRuntimeLifecycleReadiness(request.environment_id, request.operation);
         },
       });
     }
@@ -5895,6 +5989,11 @@ async function runGatewayEnvironmentLifecycleFromLauncher(
         { signal, startPolicy: actionStartPolicy },
       ),
       commit: () => gatewayLifecycleManager().commitRuntimeOperation(
+        record,
+        operationID,
+        { signal, startPolicy: actionStartPolicy },
+      ),
+      observe: () => gatewayLifecycleManager().getRuntimeOperation(
         record,
         operationID,
         { signal, startPolicy: actionStartPolicy },
@@ -5920,6 +6019,7 @@ async function runGatewayEnvironmentLifecycleFromLauncher(
       mode: 'refresh_catalog',
       startPolicy: actionStartPolicy,
     }).catch(() => undefined);
+    await awaitEnvironmentRuntimeLifecycleReadiness(request.environment_id, request.operation);
     return launcherActionSuccess(gatewayEnvLifecycleOutcome(request.operation));
   } catch (error) {
     const failure = desktopFailureFromError(error, {
@@ -6143,12 +6243,104 @@ async function setupDirectRuntimeManagementFromLauncher(
       request.host_access,
       request.placement,
     );
-    await syncGatewayRecord(record, {
+    const source = await syncGatewayRecord(record, {
       force: true,
       mode: 'sync',
       priority: 'foreground',
       startPolicy: 'start_if_needed',
     });
+    const authorizedRecord = await gatewayStore().get(record.gateway_id);
+    const trustProfile = authorizedRecord?.trust_profile;
+    if (!authorizedRecord || !trustProfile) {
+      throw new GatewayClientError(
+        'GATEWAY_PAIRING_REQUIRED',
+        'Desktop could not authorize environment initialization.',
+      );
+    }
+    const gatewayEnvironment = source.environments.find((candidate) => candidate.gateway_env_id === 'env_local');
+    const management = gatewayEnvironment?.runtime_management;
+    if (!management || management.presentation_state !== 'allowed' || !management.target || !management.compatibility) {
+      const message = management?.presentation_state === 'denied'
+        ? 'Access is required before initializing this environment.'
+        : 'This environment is not ready for initialization yet.';
+      throw new GatewayClientError('RUNTIME_INITIALIZATION_UNAVAILABLE', message);
+    }
+    const target = management.target;
+    const compatibility = management.compatibility;
+    const operations = management.operations ?? [];
+    const runtimeMissing = operations.includes('update_runtime')
+      && !operations.includes('start')
+      && !operations.includes('stop')
+      && !operations.includes('restart');
+    if (runtimeMissing) {
+      const operationID = `rop_${crypto.randomUUID()}`;
+      const sourceRuntimeRoot = compact(process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT);
+      await driveRuntimeOperation(operationID, () => initializeGatewayRuntime({
+        operationID,
+        authorizedClientKeyID: compact(trustProfile.paired_client_key_id),
+        gatewayEnvironmentID: gatewayEnvironment.gateway_env_id,
+        desiredVersion: resolveSSHRuntimeReleaseTag(),
+        sourceCommit: compact(process.env.REDEVEN_DESKTOP_BUNDLE_COMMIT) || 'unknown',
+        sourceBuildAvailable: sourceRuntimeRoot !== '',
+        capability: {
+          target,
+          compatibility,
+          operations,
+          artifact_policies: management.artifact_policies ?? [],
+        },
+        prepare: (prepareRequest) => gatewayLifecycleManager().prepareRuntimeOperation(
+          authorizedRecord,
+          prepareRequest,
+          { startPolicy: 'start_if_needed' },
+        ),
+        confirm: (runtimeOperation) => gatewayLifecycleManager().confirmRuntimeOperation(
+          authorizedRecord,
+          operationID,
+          runtimeOperationConfirmationRequest(runtimeOperation),
+          { startPolicy: 'start_if_needed' },
+        ),
+        prepareArtifact: (runtimeOperation) => runtimeOperation.desired_runtime.artifact_policy === 'custom_build'
+          ? prepareCustomRuntimeLifecycleArtifact({
+              operation: runtimeOperation,
+              runtimeReleaseTag: runtimeOperation.desired_runtime.version,
+              releaseBaseURL: PUBLIC_REDEVEN_RELEASE_BASE_URL,
+              assetCacheRoot: desktopRuntimePackageCacheRoot(),
+              sourceRuntimeRoot,
+            })
+          : preparePublishedRuntimeLifecycleArtifact({
+              runtimeReleaseTag: runtimeOperation.desired_runtime.version,
+              releaseBaseURL: PUBLIC_REDEVEN_RELEASE_BASE_URL,
+              assetCacheRoot: desktopRuntimePackageCacheRoot(),
+              platform: runtimeOperation.desired_runtime.platform,
+              architecture: runtimeOperation.desired_runtime.architecture,
+              currentRuntimeEpoch: compatibility.compatibility_epoch,
+            }),
+        upload: (metadata, artifact) => gatewayLifecycleManager().uploadRuntimeOperationArtifact(
+          authorizedRecord,
+          operationID,
+          metadata,
+          artifact,
+          { startPolicy: 'start_if_needed' },
+        ),
+        commit: () => gatewayLifecycleManager().commitRuntimeOperation(
+          authorizedRecord,
+          operationID,
+          { startPolicy: 'start_if_needed' },
+        ),
+        observe: () => gatewayLifecycleManager().getRuntimeOperation(
+          authorizedRecord,
+          operationID,
+          { startPolicy: 'start_if_needed' },
+        ),
+      }));
+      await syncGatewayRecord(authorizedRecord, {
+        force: true,
+        mode: 'refresh_catalog',
+        priority: 'foreground',
+        startPolicy: 'start_if_needed',
+      });
+    }
+    await awaitEnvironmentRuntimeLifecycleReadiness(request.environment_id, 'initialize');
     broadcastDesktopWelcomeSnapshots();
     return launcherActionSuccess('initialized_environment');
   } catch (error) {
@@ -6386,6 +6578,7 @@ async function runProviderEnvironmentLifecycleFromLauncher(
               artifact,
             ),
             commit: () => client.commitRuntimeOperation(resolved.scope, operationID),
+            observe: () => client.getRuntimeOperation(resolved.scope, operationID),
           });
         },
         cancel: async () => {
@@ -6410,6 +6603,7 @@ async function runProviderEnvironmentLifecycleFromLauncher(
         artifact,
       ),
       commit: () => client.commitRuntimeOperation(resolved.scope, operationID),
+      observe: () => client.getRuntimeOperation(resolved.scope, operationID),
       signal,
     });
     if (response.state !== 'succeeded') {

@@ -120,7 +120,7 @@ func (s *Server) handleStreamData(out io.Writer, streamID string, payload []byte
 	if len(payload) == 0 {
 		return
 	}
-	if _, err := conn.Write(payload); err != nil {
+	if err := writeAll(conn, payload); err != nil {
 		_ = s.writeStreamError(out, streamID, "STREAM_WRITE_FAILED", err.Error())
 		s.closeStream(streamID)
 	}
@@ -273,29 +273,34 @@ func (c *gatewayProtocolHeaderConn) Write(p []byte) (int, error) {
 		return c.Conn.Write(p)
 	}
 	const maxHandshakeBytes = 64 * 1024
-	if len(p) > maxHandshakeBytes-len(c.buffer) {
+	c.buffer = append(c.buffer, p...)
+	headerEnd := bytes.Index(c.buffer, []byte("\r\n\r\n"))
+	if headerEnd < 0 {
+		if len(c.buffer) <= maxHandshakeBytes {
+			return len(p), nil
+		}
 		c.buffer = nil
 		c.injected = true
 		return 0, fmt.Errorf("gateway handshake exceeds %d bytes", maxHandshakeBytes)
 	}
-	c.buffer = append(c.buffer, p...)
-	headerEnd := bytes.Index(c.buffer, []byte("\r\n\r\n"))
-	if headerEnd < 0 && len(c.buffer) < 64*1024 {
-		return len(p), nil
+	if headerEnd+len("\r\n\r\n") > maxHandshakeBytes {
+		c.buffer = nil
+		c.injected = true
+		return 0, fmt.Errorf("gateway handshake exceeds %d bytes", maxHandshakeBytes)
 	}
-	out := c.buffer
-	if headerEnd >= 0 {
-		header := []byte("X-Redeven-Gateway-Managed-Bridge-Token: " + c.token)
-		next := make([]byte, len(c.buffer)+len(header)+2)
-		n := copy(next, c.buffer[:headerEnd])
-		n += copy(next[n:], "\r\n")
-		n += copy(next[n:], header)
-		copy(next[n:], c.buffer[headerEnd:])
-		out = next
-	}
+	managedHeader := []byte("X-Redeven-Gateway-Managed-Bridge-Token: " + c.token)
+	header := make([]byte, 0, headerEnd+len(managedHeader)+len("\r\n\r\n\r\n"))
+	header = append(header, c.buffer[:headerEnd]...)
+	header = append(header, '\r', '\n')
+	header = append(header, managedHeader...)
+	header = append(header, c.buffer[headerEnd:headerEnd+len("\r\n\r\n")]...)
+	body := c.buffer[headerEnd+len("\r\n\r\n"):]
 	c.injected = true
 	c.buffer = nil
-	if err := writeAll(c.Conn, out); err != nil {
+	if err := writeAll(c.Conn, header); err != nil {
+		return 0, err
+	}
+	if err := writeAll(c.Conn, body); err != nil {
 		return 0, err
 	}
 	return len(p), nil

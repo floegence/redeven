@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -82,6 +83,64 @@ func TestLocalEnvironmentStateLayoutUsesStateRootOverride(t *testing.T) {
 	}
 	if layout.ConfigPath != filepath.Join(wantStateDir, "config.json") {
 		t.Fatalf("ConfigPath = %q", layout.ConfigPath)
+	}
+}
+
+func TestLocalEnvironmentStateLayoutShortensLongRuntimeControlSocketPath(t *testing.T) {
+	stateRoot := filepath.Join(t.TempDir(), strings.Repeat("long-state-segment-", 8))
+	layout, err := LocalEnvironmentStateLayout(stateRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	legacyPath := filepath.Join(layout.StateDir, "runtime", "control.sock")
+	if len([]byte(legacyPath)) <= maxUnixSocketPathBytes {
+		t.Fatalf("test fixture path length = %d, want > %d", len([]byte(legacyPath)), maxUnixSocketPathBytes)
+	}
+	if layout.RuntimeControlSocketPath == legacyPath {
+		t.Fatalf("RuntimeControlSocketPath retained overlong path %q", layout.RuntimeControlSocketPath)
+	}
+	if len([]byte(layout.RuntimeControlSocketPath)) > maxUnixSocketPathBytes {
+		t.Fatalf("RuntimeControlSocketPath length = %d, want <= %d: %q", len([]byte(layout.RuntimeControlSocketPath)), maxUnixSocketPathBytes, layout.RuntimeControlSocketPath)
+	}
+	if filepath.Ext(layout.RuntimeControlSocketPath) != ".sock" {
+		t.Fatalf("RuntimeControlSocketPath = %q, want .sock suffix", layout.RuntimeControlSocketPath)
+	}
+	if got := RuntimeControlSocketPathFromConfigPath(layout.ConfigPath); got != layout.RuntimeControlSocketPath {
+		t.Fatalf("RuntimeControlSocketPathFromConfigPath() = %q, want %q", got, layout.RuntimeControlSocketPath)
+	}
+
+	second, err := LocalEnvironmentStateLayout(stateRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.RuntimeControlSocketPath != layout.RuntimeControlSocketPath {
+		t.Fatalf("short Runtime control socket is not deterministic: first=%q second=%q", layout.RuntimeControlSocketPath, second.RuntimeControlSocketPath)
+	}
+	if filepath.Dir(layout.RuntimeControlSocketPath) != "/tmp" {
+		t.Fatalf("RuntimeControlSocketPath directory = %q, want /tmp", filepath.Dir(layout.RuntimeControlSocketPath))
+	}
+}
+
+func TestLongRuntimeControlSocketPathDoesNotDependOnProcessTempEnvironment(t *testing.T) {
+	stateRoot := filepath.Join(t.TempDir(), strings.Repeat("cross-process-state-segment-", 8))
+	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "gateway-temp"))
+	gatewayLayout, err := LocalEnvironmentStateLayout(stateRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TMPDIR", filepath.Join(t.TempDir(), "desktop-temp"))
+	desktopLayout, err := LocalEnvironmentStateLayout(stateRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if gatewayLayout.RuntimeControlSocketPath != desktopLayout.RuntimeControlSocketPath {
+		t.Fatalf(
+			"Runtime control socket changed across process temp environments: gateway=%q desktop=%q",
+			gatewayLayout.RuntimeControlSocketPath,
+			desktopLayout.RuntimeControlSocketPath,
+		)
 	}
 }
 

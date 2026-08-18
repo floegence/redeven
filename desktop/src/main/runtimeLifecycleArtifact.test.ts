@@ -1,10 +1,13 @@
+import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildCustomRuntimeArtifactMetadata,
   runtimeExecutableFromArchive,
   validateRuntimeCompatibilityManifest,
 } from './runtimeLifecycleArtifact';
+import type { GatewayRuntimeOperation } from './gatewayClient';
 
 function writeOctal(header: Buffer, value: number, offset: number, length: number): void {
   const text = value.toString(8).padStart(length - 1, '0');
@@ -121,5 +124,63 @@ describe('runtime lifecycle artifact', () => {
       },
       currentRuntimeEpoch: 8,
     })).toThrow('does not authorize');
+  });
+
+  it('binds a custom source build to the operation, target, inputs, archive, and executable', () => {
+    const executable = Buffer.from('custom-runtime');
+    const tarGzip = archive([{ name: 'redeven', data: executable }]);
+    const operation: GatewayRuntimeOperation = {
+      protocol_version: 'redeven-gateway-v2',
+      operation_id: 'rop_custom',
+      idempotency_key: 'runtime-initialization:rop_custom',
+      lifecycle_target_id: 'rlt_local',
+      target_generation: 7,
+      gateway_env_id: 'env_local',
+      kind: 'update_runtime',
+      authorized_client_key_id: 'gck_desktop',
+      desired_runtime: {
+        version: 'v0.0.0-dev',
+        platform: 'darwin',
+        architecture: 'arm64',
+        artifact_policy: 'custom_build',
+      },
+      build_inputs: {
+        version: 'v0.0.0-dev',
+        source: 'desktop_source_build',
+        commit: 'abc123',
+        architecture: 'arm64',
+        platform: 'darwin',
+      },
+      state: 'awaiting_artifact',
+      expected_snapshot: {
+        snapshot_revision: 1,
+        process_inventory_digest: 'sha256:inventory',
+        workload_identity_digest: 'sha256:workload',
+        workload: { knowledge: 'known', protected_workload_present: false },
+        observed_at_unix_ms: 1,
+      },
+      created_at_unix_ms: 1,
+      updated_at_unix_ms: 1,
+    };
+
+    const metadata = buildCustomRuntimeArtifactMetadata(operation, tarGzip);
+    expect(metadata.executable_sha256).toBe(createHash('sha256').update(executable).digest('hex'));
+    expect(metadata.archive_sha256).toBe(createHash('sha256').update(tarGzip).digest('hex'));
+    expect(metadata.build_attestation).toEqual({
+      operation_id: 'rop_custom',
+      lifecycle_target_id: 'rlt_local',
+      target_generation: 7,
+      build_inputs_digest: createHash('sha256').update(JSON.stringify({
+        architecture: 'arm64',
+        commit: 'abc123',
+        platform: 'darwin',
+        source: 'desktop_source_build',
+        version: 'v0.0.0-dev',
+      })).digest('base64url'),
+      archive_sha256: metadata.archive_sha256,
+      executable_sha256: metadata.executable_sha256,
+      platform: 'darwin',
+      architecture: 'arm64',
+    });
   });
 });

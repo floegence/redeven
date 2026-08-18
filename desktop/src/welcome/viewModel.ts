@@ -1514,11 +1514,21 @@ function runtimeManagementSetupRequired(environment: DesktopEnvironmentEntry): b
     && environment.kind !== 'gateway_environment'
     && environment.kind !== 'external_local_ui'
     && environment.runtime_operations.start.reason_code === 'runtime_gateway_setup_required';
+  const managedRuntimeMissing = environment.kind !== 'provider_environment'
+    && environment.kind !== 'gateway_environment'
+    && environment.kind !== 'external_local_ui'
+    && environment.runtime_management?.support === 'supported'
+    && environment.runtime_management.authorization.state === 'allowed'
+    && environment.runtime_management.readiness === 'ready'
+    && environment.runtime_management.operations?.includes('update_runtime') === true
+    && environment.runtime_management.operations?.includes('start') !== true
+    && compact(environment.gateway_id) !== ''
+    && compact(environment.gateway_env_id) !== '';
   const providerSetupRequired = environment.kind === 'provider_environment'
     && environment.runtime_management?.support === 'supported'
     && environment.runtime_management.authorization.state === 'allowed'
     && environment.runtime_management.readiness === 'setup_required';
-  return directSetupRequired || providerSetupRequired;
+  return directSetupRequired || managedRuntimeMissing || providerSetupRequired;
 }
 
 function runtimeManagementStartRecoveryAvailable(environment: DesktopEnvironmentEntry): boolean {

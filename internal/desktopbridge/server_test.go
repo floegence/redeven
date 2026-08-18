@@ -148,6 +148,81 @@ func TestServerRoutesStreamOpenAndDataThroughSurfaceConn(t *testing.T) {
 	}
 }
 
+func TestGatewayProtocolHeaderConnLimitsOnlyHTTPHeadersWhenFirstWriteIncludesLargeBody(t *testing.T) {
+	clientConn, serverConn := net.Pipe()
+	defer clientConn.Close()
+	defer serverConn.Close()
+	wrapped := &gatewayProtocolHeaderConn{Conn: clientConn, token: "managed-token"}
+	header := []byte("PUT /gateway/v2/runtime-operations/op/artifact HTTP/1.1\r\nHost: gateway.local\r\n\r\n")
+	body := bytes.Repeat([]byte{0x5a}, 128*1024)
+	request := append(append([]byte(nil), header...), body...)
+	injectedHeader := []byte("X-Redeven-Gateway-Managed-Bridge-Token: managed-token\r\n")
+	expectedBytes := len(request) + len(injectedHeader)
+
+	type writeResult struct {
+		n   int
+		err error
+	}
+	writeDone := make(chan writeResult, 1)
+	readDone := make(chan []byte, 1)
+	go func() {
+		buffer := make([]byte, expectedBytes)
+		_, err := io.ReadFull(serverConn, buffer)
+		if err != nil {
+			readDone <- nil
+			return
+		}
+		readDone <- buffer
+	}()
+	go func() {
+		n, err := wrapped.Write(request)
+		writeDone <- writeResult{n: n, err: err}
+	}()
+
+	result := <-writeDone
+	if result.err != nil {
+		t.Fatalf("large first gateway write error = %v", result.err)
+	}
+	if result.n != len(request) {
+		t.Fatalf("large first gateway write bytes = %d, want %d", result.n, len(request))
+	}
+	forwarded := <-readDone
+	if !bytes.Contains(forwarded[:len(header)+len(injectedHeader)], injectedHeader) {
+		t.Fatal("managed bridge token was not injected into the bounded HTTP header")
+	}
+	if !bytes.Equal(forwarded[len(forwarded)-len(body):], body) {
+		t.Fatal("large Runtime lifecycle request body changed while injecting the managed bridge token")
+	}
+}
+
+type shortWriterConn struct {
+	net.Conn
+	maxWrite int
+	written  bytes.Buffer
+}
+
+func (c *shortWriterConn) Write(p []byte) (int, error) {
+	if len(p) > c.maxWrite {
+		p = p[:c.maxWrite]
+	}
+	return c.written.Write(p)
+}
+
+func TestHandleStreamDataCompletesShortSurfaceWrites(t *testing.T) {
+	conn := &shortWriterConn{maxWrite: 7}
+	server := &Server{streams: map[string]net.Conn{"stream-a": conn}}
+	payload := bytes.Repeat([]byte("bridge-payload-"), 32)
+
+	server.handleStreamData(io.Discard, "stream-a", payload)
+
+	if !bytes.Equal(conn.written.Bytes(), payload) {
+		t.Fatalf("surface received %d bytes, want %d", conn.written.Len(), len(payload))
+	}
+	if server.streamByID("stream-a") == nil {
+		t.Fatal("bridge closed a healthy stream after a short write")
+	}
+}
+
 func TestServerShutdownFrameEndsBridgeContext(t *testing.T) {
 	inReader, inWriter := io.Pipe()
 	defer inReader.Close()

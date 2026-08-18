@@ -1,11 +1,14 @@
 package config
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -15,6 +18,7 @@ const (
 	DefaultLocalEnvironmentID = "local"
 	localEnvironmentDirName   = "local-environment"
 	stateRootEnvName          = "REDEVEN_STATE_ROOT"
+	maxUnixSocketPathBytes    = 100
 )
 
 var (
@@ -91,11 +95,45 @@ func stateLayoutForResolvedRoot(stateRoot string) StateLayout {
 		SecretsPath:              filepath.Join(stateDir, "secrets.json"),
 		LockPath:                 filepath.Join(stateDir, "agent.lock"),
 		StateDir:                 stateDir,
-		RuntimeControlSocketPath: filepath.Join(runtimeDir, "control.sock"),
+		RuntimeControlSocketPath: RuntimeControlSocketPathForStateDir(stateDir),
 		RuntimeMaintenancePath:   filepath.Join(runtimeDir, "maintenance", "current.json"),
 		DiagnosticsDir:           filepath.Join(stateDir, "diagnostics"),
 		AuditDir:                 filepath.Join(stateDir, "audit"),
 		AppsDir:                  filepath.Join(stateDir, "apps"),
+	}
+}
+
+// RuntimeControlSocketPathForStateDir keeps the default state-local path when
+// the host can represent it and otherwise derives one stable short Unix path.
+func RuntimeControlSocketPathForStateDir(stateDir string) string {
+	cleanStateDir := filepath.Clean(strings.TrimSpace(stateDir))
+	localPath := filepath.Join(cleanStateDir, "runtime", "control.sock")
+	if (runtime.GOOS != "darwin" && runtime.GOOS != "linux") || len([]byte(localPath)) <= maxUnixSocketPathBytes {
+		return localPath
+	}
+	digest := sha256.Sum256([]byte(canonicalPathForDigest(cleanStateDir)))
+	fileName := "redeven-runtime-" + hex.EncodeToString(digest[:12]) + ".sock"
+	return filepath.Join("/tmp", fileName)
+}
+
+func canonicalPathForDigest(path string) string {
+	cursor := filepath.Clean(path)
+	suffix := make([]string, 0)
+	for {
+		if _, err := os.Lstat(cursor); err == nil {
+			canonicalParent, canonicalErr := filepath.EvalSymlinks(cursor)
+			if canonicalErr == nil {
+				parts := append([]string{canonicalParent}, suffix...)
+				return filepath.Join(parts...)
+			}
+			return filepath.Clean(path)
+		}
+		parent := filepath.Dir(cursor)
+		if parent == cursor {
+			return filepath.Clean(path)
+		}
+		suffix = append([]string{filepath.Base(cursor)}, suffix...)
+		cursor = parent
 	}
 }
 
@@ -104,7 +142,7 @@ func RuntimeControlSocketPathFromConfigPath(configPath string) string {
 	if configPath == "" {
 		return filepath.Join("runtime", "control.sock")
 	}
-	return filepath.Join(filepath.Dir(configPath), "runtime", "control.sock")
+	return RuntimeControlSocketPathForStateDir(filepath.Dir(configPath))
 }
 
 func RuntimeMaintenancePathFromConfigPath(configPath string) string {

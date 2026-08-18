@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/lockfile"
 	gatewayprotocol "github.com/floegence/redeven/internal/runtimegateway/protocol"
 	"github.com/floegence/redeven/internal/runtimegateway/security"
@@ -107,7 +108,9 @@ func OpenLocalBindingStore(stateRoot string, runtimeRoot string) (*BindingStore,
 	if err != nil {
 		return nil, err
 	}
-	controlSocket := filepath.Join(runtimeRoot, "local-environment", "runtime", "control.sock")
+	runtimeStateDir := filepath.Join(runtimeRoot, "local-environment")
+	legacyControlSocket := filepath.Join(runtimeStateDir, "runtime", "control.sock")
+	controlSocket := config.RuntimeControlSocketPathForStateDir(runtimeStateDir)
 	if store.binding.LifecycleTargetID == "" {
 		targetID, err := randomID("rlt_")
 		if err != nil {
@@ -144,6 +147,16 @@ func OpenLocalBindingStore(stateRoot string, runtimeRoot string) (*BindingStore,
 			return nil, err
 		}
 		return store, nil
+	}
+	if store.binding.RuntimeControlSocketPath == legacyControlSocket && controlSocket != legacyControlSocket &&
+		store.binding.GatewayEnvID == gatewayprotocol.ReservedLocalEnvironmentID && store.binding.TargetGeneration > 0 &&
+		store.binding.OSPrincipal == principal && store.binding.RuntimeRoot == runtimeRoot &&
+		store.binding.InstallationRootDigest == installationRootDigest(runtimeRoot) {
+		next := cloneBinding(store.binding)
+		next.RuntimeControlSocketPath = controlSocket
+		if err := store.saveLocked(next); err != nil {
+			return nil, fmt.Errorf("migrate Runtime target control socket: %w", err)
+		}
 	}
 	if store.binding.GatewayEnvID != gatewayprotocol.ReservedLocalEnvironmentID || store.binding.TargetGeneration <= 0 ||
 		store.binding.OSPrincipal != principal || store.binding.RuntimeRoot != runtimeRoot ||

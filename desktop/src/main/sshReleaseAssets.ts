@@ -87,10 +87,10 @@ function releaseBaseURL(rawURL: string): string {
   return parsed.toString().replace(/\/$/u, '');
 }
 
-function parseRemoteUnameOS(rawOS: string): 'linux' {
+function parseRemoteUnameOS(rawOS: string): 'linux' | 'darwin' {
   const clean = compact(rawOS).toLowerCase();
-  if (clean === 'linux') {
-    return 'linux';
+  if (clean === 'linux' || clean === 'darwin') {
+    return clean;
   }
   throw new Error(`Unsupported remote operating system for SSH bootstrap: ${rawOS}`);
 }
