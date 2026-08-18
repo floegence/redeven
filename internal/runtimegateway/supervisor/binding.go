@@ -195,7 +195,7 @@ func (s *BindingStore) RecordRuntimeValidation(validation RuntimeValidation) err
 	if err != nil {
 		return fmt.Errorf("lock Runtime target binding: %w", err)
 	}
-	defer mutationLock.Release()
+	defer func() { _ = mutationLock.Release() }()
 	if err := s.loadLocked(); err != nil {
 		return err
 	}
@@ -226,7 +226,7 @@ func (s *BindingStore) ConfigureProvider(bindingID string, providerOrigin string
 	if err != nil {
 		return fmt.Errorf("lock Runtime target binding: %w", err)
 	}
-	defer mutationLock.Release()
+	defer func() { _ = mutationLock.Release() }()
 	if err := s.loadLocked(); err != nil {
 		return err
 	}

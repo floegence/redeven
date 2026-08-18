@@ -468,7 +468,6 @@ func (c *Controller) Recover(ctx context.Context, operation gatewayprotocol.Runt
 			}
 		} else if !errors.Is(previousErr, os.ErrNotExist) {
 			return previousErr
-		} else {
 		}
 		restoredDigest, digestErr := fileSHA256(filepath.Join(checkpoint.ManagedRoot, "bin", "redeven"))
 		if digestErr != nil || restoredDigest == "" || restoredDigest != normalizeSHA256(checkpoint.PreviousExecutableSHA256) {

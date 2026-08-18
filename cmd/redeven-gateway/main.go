@@ -421,7 +421,7 @@ func (c *cli) runGatewayService(ctx context.Context, stateRoot string, runtimeRo
 		writeError(c.stderr, fmt.Sprintf("serve failed: acquire Gateway service lock: %v", err))
 		return 1
 	}
-	defer serviceLock.Release()
+	defer func() { _ = serviceLock.Release() }()
 	bindingStore, err := gatewaysupervisor.OpenLocalBindingStore(stateRootValue, runtimeRoot)
 	if err != nil {
 		writeError(c.stderr, fmt.Sprintf("serve failed: initialize Runtime target binding: %v", err))

@@ -357,16 +357,6 @@ func inferredOpenReadiness(snapshot Snapshot) OpenReadiness {
 	return OpenReadiness{State: OpenReadinessOpenable}
 }
 
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value != "" {
-			return value
-		}
-	}
-	return ""
-}
-
 func normalizeCount(value int) int {
 	if value < 0 {
 		return 0

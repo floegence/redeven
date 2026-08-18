@@ -3,9 +3,7 @@ package supervisor
 import (
 	"context"
 	"crypto/ed25519"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -268,9 +266,4 @@ func hasPermitGrant(values []gatewayprotocol.RuntimeGrant, expected gatewayproto
 		}
 	}
 	return false
-}
-
-func permitJTIHash(value string) string {
-	sum := sha256.Sum256([]byte(strings.TrimSpace(value)))
-	return hex.EncodeToString(sum[:])
 }
