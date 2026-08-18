@@ -34,6 +34,21 @@ describe('applyFlowerRuntimeCurrentView', () => {
     expect(result.messages[0]).toMatchObject({ id: 'assistant:turn-a:1', status: 'error' });
   });
 
+  it('uses the explicit live item marker as the only streaming authority', () => {
+    const result = applyFlowerRuntimeCurrentView(summary(), {
+      thread_id: 'thread-a', view_version: 9, activity: 'active', turn_id: 'turn-a',
+      items: [
+        { id: 'assistant:turn-a:1', turn_id: 'turn-a', ordinal: 1, kind: 'assistant', text: 'sealed segment' },
+        { id: 'assistant:turn-a:2', turn_id: 'turn-a', ordinal: 2, kind: 'assistant', text: 'live segment', live: true },
+      ],
+    });
+
+    expect(result.messages).toMatchObject([
+      { id: 'assistant:turn-a:1', status: 'complete' },
+      { id: 'assistant:turn-a:2', status: 'streaming', live: true, active_cursor: true },
+    ]);
+  });
+
   it('preserves Floret ordered segments and stable IDs through approval, completion, and reload', () => {
     const tool = (id: string, ordinal: number, status: 'waiting' | 'running' | 'success') => ({
       id: `tool:turn-a:${id}`, turn_id: 'turn-a', ordinal, kind: 'tool' as const,

@@ -34,6 +34,12 @@ func TestTypedThreadItemsPreserveOrderedPresentation(t *testing.T) {
 		{ID: "tool:turn:call-2", TurnID: identity.TurnID(turnID), Ordinal: 5, Kind: flruntime.ThreadItemTool, Activity: activity("call-2", observation.ActivityStatusSuccess), CreatedAt: createdAt},
 		{ID: "assistant:turn:1", TurnID: identity.TurnID(turnID), Ordinal: 6, Kind: flruntime.ThreadItemAssistant, Text: "done", CreatedAt: createdAt, Live: true},
 	}
+	projected := publicFloretThreadView(flruntime.ThreadView{Items: items})
+	for index := range items {
+		if projected.Items[index].Live != items[index].Live {
+			t.Fatalf("public current item %s live=%v, want %v", items[index].ID, projected.Items[index].Live, items[index].Live)
+		}
+	}
 
 	var gotIDs []string
 	for _, item := range items {
