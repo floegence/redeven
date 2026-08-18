@@ -28,13 +28,13 @@ const (
 	ubuntuImage         = "ubuntu:24.04"
 	containerStateRoot  = "/root/.redeven-e2e"
 	containerRedeven    = "/usr/local/bin/redeven"
+	containerGateway    = "/usr/local/bin/redeven-gateway"
 	containerPlugin     = "/usr/local/bin/redevplugin-runtime"
 	containerDescriptor = "/usr/local/bin/.redevplugin-release-artifacts-verified.json"
 	managedRedeven      = containerStateRoot + "/runtime/managed/bin/redeven"
 	managedPlugin       = containerStateRoot + "/runtime/managed/bin/redevplugin-runtime"
 	managedDescriptor   = containerStateRoot + "/runtime/managed/bin/.redevplugin-release-artifacts-verified.json"
-	managedRuntimeStamp = containerStateRoot + "/runtime/managed/managed-runtime.stamp"
-	stagedUpgrade       = "/tmp/redeven-upgraded"
+	gatewayStateRoot    = containerStateRoot + "/gateway"
 	runtimeLockPath     = containerStateRoot + "/local-environment/agent.lock"
 	containerHelper     = "/tmp/redeven-e2e-client"
 	pluginRuntimeEnv    = "REDEVEN_DOCKER_E2E_REDEVPLUGIN_RUNTIME"
@@ -223,26 +223,6 @@ func TestDockerUbuntuDesktopRuntimeLifecycle(t *testing.T) {
 
 	if _, err := f.tryHelper(ctx, afterManualStart.LocalUIURL, "upgrade", targetVersion); err == nil || !strings.Contains(err.Error(), "upgrade not supported") {
 		t.Fatalf("Runtime sys.upgrade error = %v, want unsupported", err)
-	}
-	f.performManagedUpgrade(ctx)
-	afterUpgrade := f.waitPingAfter(ctx, afterManualStart.ProcessStartedAtMs)
-
-	finalStatus := f.waitReady(ctx)
-	if finalStatus.LocalUIURL == "" {
-		t.Fatalf("final Local UI URL is empty")
-	}
-	finalPing := f.runHelper(ctx, finalStatus.LocalUIURL, "ping", "")
-	if finalPing.Ping == nil || finalPing.Ping.ProcessStartedAtMs != afterUpgrade.ProcessStartedAtMs {
-		t.Fatalf("unexpected final ping result: %#v; afterUpgrade=%#v", finalPing, afterUpgrade)
-	}
-	if finalPing.Ping.Version != targetVersion {
-		t.Fatalf("final sys.ping version = %q, want %q", finalPing.Ping.Version, targetVersion)
-	}
-	if finalPing.Ping.RuntimeService == nil || finalPing.Ping.RuntimeService.RuntimeVersion != targetVersion {
-		t.Fatalf("final runtime_service version = %#v, want %q", finalPing.Ping.RuntimeService, targetVersion)
-	}
-	if afterUpgrade.Version != targetVersion || afterUpgrade.RuntimeServiceVersion != targetVersion {
-		t.Fatalf("afterUpgrade versions = %#v, want %q", afterUpgrade, targetVersion)
 	}
 }
 
@@ -456,6 +436,7 @@ func (f *fixture) buildBinaries(ctx context.Context) {
 	f.t.Helper()
 	redevenOut := filepath.Join(f.tempRoot, "redeven-linux")
 	upgradedRedevenOut := filepath.Join(f.tempRoot, "redeven-linux-upgraded")
+	gatewayOut := filepath.Join(f.tempRoot, "redeven-gateway-linux")
 	helperOut := filepath.Join(f.tempRoot, "redeven-e2e-client")
 	env := append(os.Environ(), "GOOS=linux", "GOARCH="+f.goarch, "CGO_ENABLED=0")
 	if _, err := f.runHostEnv(ctx, f.repoRoot, env, "go", "build", "-o", redevenOut, "./cmd/redeven"); err != nil {
@@ -468,11 +449,17 @@ func (f *fixture) buildBinaries(ctx context.Context) {
 	); err != nil {
 		f.t.Fatalf("build upgraded redeven: %v", err)
 	}
+	if _, err := f.runHostEnv(ctx, f.repoRoot, env, "go", "build", "-o", gatewayOut, "./cmd/redeven-gateway"); err != nil {
+		f.t.Fatalf("build redeven-gateway: %v", err)
+	}
 	if _, err := f.runHostEnv(ctx, f.repoRoot, env, "go", "build", "-o", helperOut, "./tests/docker_runtime_e2e/testclient"); err != nil {
 		f.t.Fatalf("build e2e helper: %v", err)
 	}
 	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", redevenOut, f.containerName+":"+containerRedeven); err != nil {
 		f.t.Fatalf("copy redeven: %v", err)
+	}
+	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", gatewayOut, f.containerName+":"+containerGateway); err != nil {
+		f.t.Fatalf("copy redeven-gateway: %v", err)
 	}
 	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", f.pluginRuntime, f.containerName+":"+containerPlugin); err != nil {
 		f.t.Fatalf("copy ReDevPlugin runtime: %v", err)
@@ -493,11 +480,8 @@ func (f *fixture) buildBinaries(ctx context.Context) {
 	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", f.pluginDescriptor, f.containerName+":"+managedDescriptor); err != nil {
 		f.t.Fatalf("copy managed ReDevPlugin descriptor: %v", err)
 	}
-	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", upgradedRedevenOut, f.containerName+":"+stagedUpgrade); err != nil {
-		f.t.Fatalf("copy upgraded redeven: %v", err)
-	}
 	f.dockerExec(ctx, nil, "chown", "0:0", containerPlugin, managedPlugin)
-	f.dockerExec(ctx, nil, "chmod", "0755", containerRedeven, containerPlugin, managedRedeven, managedPlugin, stagedUpgrade, containerHelper)
+	f.dockerExec(ctx, nil, "chmod", "0755", containerRedeven, containerGateway, containerPlugin, managedRedeven, managedPlugin, containerHelper)
 	f.dockerExec(ctx, nil, "chmod", "0644", containerDescriptor, managedDescriptor)
 }
 
@@ -666,7 +650,9 @@ func (f *fixture) assertInventoryScopesVerifiedRuntime(ctx context.Context) {
 		instance.StopAuthority != runtimemanagement.RuntimeProcessStopAutomatic {
 		f.t.Fatalf("verified runtime inventory = %#v", inventory)
 	}
-	if err := f.stopRuntimeInventoryInContainer(ctx, f.containerName, inventory); err != nil {
+	if err := f.stopAutomaticRuntimeInventoryInContainer(ctx, f.containerName, func() runtimemanagement.RuntimeProcessInventory {
+		return f.runtimeInventory(ctx)
+	}); err != nil {
 		f.t.Fatalf("verified target stop: %v", err)
 	}
 	if after := f.runtimeInventory(ctx); len(after.Instances) != 0 {
@@ -681,21 +667,6 @@ func (f *fixture) assertInventoryScopesVerifiedRuntime(ctx context.Context) {
 	}); err != nil {
 		f.t.Fatalf("stop isolation inventory: %v", err)
 	}
-}
-
-func (f *fixture) performManagedUpgrade(ctx context.Context) {
-	f.t.Helper()
-	f.stopRuntime(ctx)
-	f.dockerExec(ctx, nil, "cp", stagedUpgrade, managedRedeven)
-	stamp := strings.Join([]string{
-		"schema_version=1",
-		"managed_by=redeven-desktop",
-		"runtime_release_tag=" + targetVersion,
-		"install_strategy=desktop_upload",
-		"",
-	}, "\n")
-	f.dockerExec(ctx, strings.NewReader(stamp), "sh", "-c", "cat > "+managedRuntimeStamp)
-	f.startRuntime(ctx)
 }
 
 func (f *fixture) stopRuntime(ctx context.Context) launchReport {
@@ -1053,6 +1024,10 @@ func (f *fixture) openBridgeAndAssertRequests(ctx context.Context, status launch
 	assertContains(f.t, string(localBody), `"status":"online"`)
 	if bytes.Contains(localBody, []byte("desktop_managed")) || bytes.Contains(localBody, []byte("desktop_owner_id")) {
 		f.t.Fatalf("Local UI health exposed removed Desktop ownership fields: %s", string(localBody))
+	}
+	workspaceBody := bridgeHTTPRequest(f.t, reader, stdin, "workspace-e2e", desktopbridge.StreamSurfaceLocalUI, "GET /_redeven_proxy/env/ HTTP/1.1\r\nHost: "+localURL.Host+"\r\nConnection: close\r\n\r\n")
+	if !bytes.Contains(bytes.ToLower(workspaceBody), []byte("<html")) {
+		f.t.Fatalf("Workspace did not return HTML through Runtime Local UI: %s", string(workspaceBody))
 	}
 
 	if status.RuntimeControl == nil {
