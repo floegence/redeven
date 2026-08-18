@@ -32,6 +32,11 @@ scheduled CodeQL run. An unchanged SHA skips the language matrix; an API lookup
 failure fails safe by scanning. This preserves daily detection for changed code
 without making hosted analysis part of the normal development gate.
 
+The hosted source job and exact-main gate both reject non-canonical formatting
+in any tracked Go file. The exact-main check reports every affected path before
+the expensive integration stages begin, and a source-only policy test prevents
+the local gate from drifting behind the cloud formatting contract.
+
 The main pre-push hook owns final integration. It requires the checked-out local
 main tip to be the pushed tip, verifies fast-forward ancestry against the
 remote handshake, rejects merge commits in the unpublished range, and invokes
@@ -263,7 +268,9 @@ not become a fallback, shim, or local artifact path.
 
 - `redeven:.githooks/pre-commit:1` - Defines the fast staged gate.
 - `redeven:.githooks/pre-push:1` - Binds full validation to the exact main push.
+- `redeven:scripts/check_quick_ci.sh:1` - Defines the bounded hosted source and Go formatting checks.
 - `redeven:scripts/check_final_integration.sh:1` - Defines the complete local integration gate.
+- `redeven:scripts/quick_ci_policy.test.mjs:1` - Keeps the hosted and exact-main Go formatting contracts aligned.
 - `redeven:scripts/check_go_version_consistency.mjs:1` - Binds Go workflows, capability checks, public prerequisites, and the local gate runtime to `go.mod`.
 - `redeven:scripts/check_desktop_electron_test_runtime.sh:1` - Fails closed when the exact npm Electron runtime cannot execute without modifying host trust.
 - `redeven:desktop/src/build/desktopPreloadRuntime.test.ts:1` - Runs real Electron preload bridges in isolated working and user-data directories.

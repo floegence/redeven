@@ -103,6 +103,11 @@ test("quick gate checks the committed tree instead of trusting a clean checkout"
   assert.match(quickGate, /git diff-tree --check --root -r --no-commit-id HEAD/);
 });
 
+test("exact-main gate enforces the cloud Go formatting contract", () => {
+  assert.match(finalGate, /unformatted="\$\(gofmt -l \$\(git ls-files '\*\.go'\)\)"/);
+  assert.match(finalGate, /run_step "checking Go formatting" check_go_formatting/);
+});
+
 test("README localization gates enforce synchronization without reviewer flags", () => {
   assert.match(quickGate, /^node scripts\/check_readme_localizations\.mjs$/m);
   assert.match(
