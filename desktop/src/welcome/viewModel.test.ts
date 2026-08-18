@@ -168,6 +168,49 @@ describe('environment open flow decisions', () => {
       title: 'Start and open',
     });
 
+    const stoppedAfterDesktopRestart = {
+      ...setupRequired,
+      gateway_id: 'gw_local',
+      gateway_env_id: 'env_local',
+      runtime_management: {
+        support: 'supported' as const,
+        authorization: {
+          state: 'allowed' as const,
+          grants: ['manage_runtime', 'deploy_custom_runtime', 'manage_runtime_binding'] as const,
+        },
+        readiness: 'temporarily_unavailable' as const,
+        presentation_state: 'temporarily_unavailable' as const,
+        reason_code: 'runtime_gateway_temporarily_unavailable',
+        checked_at_unix_ms: 10,
+      },
+      runtime_operations: {
+        ...setupRequired.runtime_operations,
+        start: {
+          ...setupRequired.runtime_operations.start,
+          availability: 'blocked' as const,
+          method: 'runtime_gateway' as const,
+          reason_code: 'runtime_gateway_temporarily_unavailable',
+          message: 'Lifecycle actions are temporarily unavailable. Try again shortly.',
+        },
+      },
+    };
+    expect(environmentOpenFlow(stoppedAfterDesktopRestart)).toBe('start');
+    expect(buildProviderBackedEnvironmentActionModel(stoppedAfterDesktopRestart).action_presentation).toMatchObject({
+      primary_action: {
+        intent: 'open',
+        label: 'Open',
+      },
+      primary_action_overlay: {
+        kind: 'popover',
+        title: 'Start and open',
+        actions: expect.arrayContaining([
+          expect.objectContaining({
+            action: expect.objectContaining({ intent: 'start_and_open' }),
+          }),
+        ]),
+      },
+    });
+
     expect(environmentOpenFlow({
       ...setupRequired,
       runtime_health: { ...setupRequired.runtime_health, status: 'online' as const },

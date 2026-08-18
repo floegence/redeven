@@ -77,14 +77,96 @@ type gatewayLifecycleClient struct {
 	nonceCounter  uint64
 }
 
-func TestDockerUbuntuGatewayRuntimeLifecycle(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 7*time.Minute)
+func TestDockerUbuntuLocalGatewayStartsRuntimeAfterDesktopRestart(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 	defer cancel()
 
 	f := newFixture(t)
 	f.requireDocker(ctx)
 	f.startContainer(ctx)
 	defer f.cleanup(context.Background())
+	f.detectContainerArch(ctx)
+	f.buildBinaries(ctx)
+
+	f.startRuntime(ctx)
+	initial := f.waitReady(ctx)
+	initialIdentity := f.runtimeLifecycleIdentity(ctx, initial)
+	service := f.startGatewayService(ctx)
+	bridge := f.startGatewayBridge(ctx)
+	client := pairGatewayLifecycleClient(t, bridge, service.Listen)
+	capability := readRuntimeCapability(t, client)
+	if capability.Readiness != gatewayprotocol.ManagementReady || capability.Target == nil || capability.Compatibility == nil {
+		t.Fatalf("Linux Local Env management capability is not ready: %#v", capability)
+	}
+
+	bridge.close()
+	f.stopGatewayService(ctx)
+	f.stopRuntime(ctx)
+	if status, err := f.readGatewayServiceStatus(ctx); err != nil || status.Status != "not_running" {
+		t.Fatalf("Linux Local Env Gateway remained active across simulated Desktop restart: %#v, %v", status, err)
+	}
+
+	restartedService := f.startGatewayService(ctx)
+	if restartedService.PID == service.PID || restartedService.ProcessStartedAtUnixMS <= service.ProcessStartedAtUnixMS {
+		t.Fatalf("Linux Local Env Gateway did not restart with a new process identity: before=%#v after=%#v", service, restartedService)
+	}
+	bridge = f.startGatewayBridge(ctx)
+	defer bridge.close()
+	client.bridge = bridge
+	offlineCapability := readRuntimeCapability(t, client)
+	if offlineCapability.Readiness != gatewayprotocol.ManagementReady ||
+		offlineCapability.Target == nil || offlineCapability.Compatibility == nil ||
+		!containsRuntimeOperation(offlineCapability.Operations, gatewayprotocol.RuntimeOperationStart) ||
+		offlineCapability.Compatibility.RuntimeArtifactSHA256 != initialIdentity.ArtifactSHA256 {
+		t.Fatalf("Linux stopped Local Env does not expose its verified start operation: %#v", offlineCapability)
+	}
+
+	operationID := "linux-local-start-after-desktop-restart"
+	prepared := prepareRuntimeOperation(
+		t,
+		client,
+		*offlineCapability.Target,
+		*offlineCapability.Compatibility,
+		operationID,
+		gatewayprotocol.RuntimeOperationStart,
+		gatewayprotocol.ArtifactPolicyPublishedRelease,
+		nil,
+	)
+	if prepared.Operation.State != gatewayprotocol.RuntimeOperationAwaitingConfirmation {
+		t.Fatalf("Linux Local Env start prepare state = %q, want awaiting_confirmation", prepared.Operation.State)
+	}
+	confirmed := confirmRuntimeOperation(t, client, prepared.Operation)
+	if confirmed.State != gatewayprotocol.RuntimeOperationCommitReady {
+		t.Fatalf("Linux Local Env start confirmation state = %q, want commit_ready", confirmed.State)
+	}
+	committed := decodeOperationResponse(t, client.call(t, http.MethodPost, "/gateway/v2/runtime-operations/"+operationID+"/commit", []byte(`{}`), nil, nil))
+	if committed.State != gatewayprotocol.RuntimeOperationSucceeded {
+		t.Fatalf("Linux Local Env start commit state = %q, want succeeded", committed.State)
+	}
+	afterStart := f.waitReady(ctx)
+	afterStartIdentity := f.runtimeLifecycleIdentity(ctx, afterStart)
+	if afterStart.PID == initial.PID || afterStartIdentity.RuntimeInstanceID == initialIdentity.RuntimeInstanceID {
+		t.Fatalf("Linux Local Env lifecycle start reused the stopped Runtime identity: before=%#v/%#v after=%#v/%#v", initial, initialIdentity, afterStart, afterStartIdentity)
+	}
+	assertLifecycleEvents(t, client, operationID, []gatewayprotocol.RuntimeOperationState{
+		gatewayprotocol.RuntimeOperationPreflighting,
+		gatewayprotocol.RuntimeOperationAwaitingConfirmation,
+		gatewayprotocol.RuntimeOperationCommitReady,
+		gatewayprotocol.RuntimeOperationFencing,
+		gatewayprotocol.RuntimeOperationCommitting,
+		gatewayprotocol.RuntimeOperationSucceeded,
+	})
+}
+
+func TestDockerUbuntuGatewayRuntimeLifecycle(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 7*time.Minute)
+	defer cancel()
+
+	f := newFixture(t)
+	f.requireDocker(ctx)
+	f.startSSHContainer(ctx)
+	defer f.cleanup(context.Background())
+	f.startSSHServer(ctx)
 	f.detectContainerArch(ctx)
 	f.buildBinaries(ctx)
 
@@ -105,11 +187,11 @@ func TestDockerUbuntuGatewayRuntimeLifecycle(t *testing.T) {
 	}
 	f.openBridgeAndAssertRequests(ctx, initial)
 
-	service := f.startGatewayService(ctx)
+	service := f.startGatewayServiceOverSSH(ctx)
 	if service.Status != "running" || service.PID <= 0 || service.Listen == "" {
 		t.Fatalf("Gateway service status = %#v", service)
 	}
-	bridge := f.startGatewayBridge(ctx)
+	bridge := f.startGatewayBridgeOverSSH(ctx)
 	defer bridge.close()
 	lifecycleClient := pairGatewayLifecycleClient(t, bridge, service.Listen)
 
@@ -133,6 +215,50 @@ func TestDockerUbuntuGatewayRuntimeLifecycle(t *testing.T) {
 
 	target := *capability.Target
 	compatibility := *capability.Compatibility
+	f.stopRuntime(ctx)
+	offlineCapability := readRuntimeCapability(t, lifecycleClient)
+	if offlineCapability.Readiness != gatewayprotocol.ManagementReady ||
+		offlineCapability.Target == nil || offlineCapability.Compatibility == nil ||
+		!containsRuntimeOperation(offlineCapability.Operations, gatewayprotocol.RuntimeOperationStart) ||
+		offlineCapability.Compatibility.RuntimeArtifactSHA256 != initialIdentity.ArtifactSHA256 {
+		t.Fatalf("stopped Runtime does not expose a verified start operation: %#v", offlineCapability)
+	}
+	target = *offlineCapability.Target
+	compatibility = *offlineCapability.Compatibility
+	startID := "gateway-e2e-start"
+	startPrepare := prepareRuntimeOperation(t, lifecycleClient, target, compatibility, startID, gatewayprotocol.RuntimeOperationStart, gatewayprotocol.ArtifactPolicyPublishedRelease, nil)
+	if startPrepare.Operation.State != gatewayprotocol.RuntimeOperationAwaitingConfirmation {
+		t.Fatalf("start prepare state = %q, want awaiting_confirmation", startPrepare.Operation.State)
+	}
+	confirmedStart := confirmRuntimeOperation(t, lifecycleClient, startPrepare.Operation)
+	if confirmedStart.State != gatewayprotocol.RuntimeOperationCommitReady {
+		t.Fatalf("start confirmation state = %q, want commit_ready", confirmedStart.State)
+	}
+	committedStart := decodeOperationResponse(t, lifecycleClient.call(t, http.MethodPost, "/gateway/v2/runtime-operations/"+startID+"/commit", []byte(`{}`), nil, nil))
+	if committedStart.State != gatewayprotocol.RuntimeOperationSucceeded {
+		t.Fatalf("start commit state = %q, want succeeded", committedStart.State)
+	}
+	afterStartStatus := f.waitReady(ctx)
+	afterStartIdentity := f.runtimeLifecycleIdentity(ctx, afterStartStatus)
+	afterStartPing := f.runHelper(ctx, afterStartStatus.LocalUIURL, "ping", "")
+	if afterStartPing.Ping == nil || afterStartIdentity.RuntimeInstanceID == initialIdentity.RuntimeInstanceID || afterStartStatus.PID == initial.PID {
+		t.Fatalf("Gateway start did not produce a new Runtime process identity: initial=%#v/%#v after=%#v/%#v", initialIdentity, initial, afterStartIdentity, afterStartStatus)
+	}
+	assertLifecycleEvents(t, lifecycleClient, startID, []gatewayprotocol.RuntimeOperationState{
+		gatewayprotocol.RuntimeOperationPreflighting,
+		gatewayprotocol.RuntimeOperationAwaitingConfirmation,
+		gatewayprotocol.RuntimeOperationCommitReady,
+		gatewayprotocol.RuntimeOperationFencing,
+		gatewayprotocol.RuntimeOperationCommitting,
+		gatewayprotocol.RuntimeOperationSucceeded,
+	})
+	capability = readRuntimeCapability(t, lifecycleClient)
+	if capability.Target == nil || capability.Compatibility == nil {
+		t.Fatalf("started Runtime capability lost target identity: %#v", capability)
+	}
+	target = *capability.Target
+	compatibility = *capability.Compatibility
+
 	restartID := "gateway-e2e-restart"
 	restartPrepare := prepareRuntimeOperation(t, lifecycleClient, target, compatibility, restartID, gatewayprotocol.RuntimeOperationRestart, gatewayprotocol.ArtifactPolicyPublishedRelease, nil)
 	if restartPrepare.Operation.State != gatewayprotocol.RuntimeOperationAwaitingConfirmation {
@@ -154,12 +280,12 @@ func TestDockerUbuntuGatewayRuntimeLifecycle(t *testing.T) {
 	if committedRestart.State != gatewayprotocol.RuntimeOperationSucceeded {
 		t.Fatalf("restart commit state = %q, want succeeded", committedRestart.State)
 	}
-	afterRestart := f.waitPingAfter(ctx, initialPing.Ping.ProcessStartedAtMs)
+	afterRestart := f.waitPingAfter(ctx, afterStartPing.Ping.ProcessStartedAtMs)
 	afterRestartStatus := f.waitReady(ctx)
 	afterRestartIdentity := f.runtimeLifecycleIdentity(ctx, afterRestartStatus)
 	afterRestartPing := f.runHelper(ctx, afterRestart.LocalUIURL, "ping", "")
-	if afterRestartPing.Ping == nil || afterRestartIdentity.RuntimeInstanceID == initialIdentity.RuntimeInstanceID || afterRestartPing.Ping.ProcessStartedAtMs <= initialPing.Ping.ProcessStartedAtMs || afterRestartStatus.PID == initial.PID {
-		t.Fatalf("Gateway restart did not produce a new Runtime process identity: initial=%#v/%#v after=%#v/%#v", initialIdentity, initial, afterRestartIdentity, afterRestartStatus)
+	if afterRestartPing.Ping == nil || afterRestartIdentity.RuntimeInstanceID == afterStartIdentity.RuntimeInstanceID || afterRestartPing.Ping.ProcessStartedAtMs <= afterStartPing.Ping.ProcessStartedAtMs || afterRestartStatus.PID == afterStartStatus.PID {
+		t.Fatalf("Gateway restart did not produce a new Runtime process identity: before=%#v/%#v after=%#v/%#v", afterStartIdentity, afterStartStatus, afterRestartIdentity, afterRestartStatus)
 	}
 	assertLifecycleEvents(t, lifecycleClient, restartID, []gatewayprotocol.RuntimeOperationState{
 		gatewayprotocol.RuntimeOperationPreflighting,
@@ -257,12 +383,12 @@ func TestDockerUbuntuGatewayRuntimeLifecycle(t *testing.T) {
 	})
 
 	bridge.close()
-	f.stopGatewayService(ctx)
-	restartedService := f.startGatewayService(ctx)
+	f.stopGatewayServiceOverSSH(ctx)
+	restartedService := f.startGatewayServiceOverSSH(ctx)
 	if restartedService.PID == service.PID || restartedService.ProcessStartedAtUnixMS <= service.ProcessStartedAtUnixMS {
 		t.Fatalf("Gateway service did not restart with a new process identity: before=%#v after=%#v", service, restartedService)
 	}
-	bridge = f.startGatewayBridge(ctx)
+	bridge = f.startGatewayBridgeOverSSH(ctx)
 	lifecycleClient.bridge = bridge
 	persisted := decodeOperationResponse(t, lifecycleClient.call(t, http.MethodGet, "/gateway/v2/runtime-operations/"+updateID, nil, nil, nil))
 	if persisted.State != gatewayprotocol.RuntimeOperationSucceeded {
@@ -279,12 +405,21 @@ func TestDockerUbuntuGatewayRuntimeLifecycle(t *testing.T) {
 		gatewayprotocol.RuntimeOperationSucceeded,
 	})
 	bridge.close()
-	f.stopGatewayService(ctx)
+	f.stopGatewayServiceOverSSH(ctx)
 	finalPing := f.runHelper(ctx, afterUpdate.LocalUIURL, "ping", "")
 	if finalPing.Ping == nil || finalPing.Ping.Version != targetVersion {
 		t.Fatalf("Runtime stopped responding after Gateway shutdown: %#v", finalPing)
 	}
 	f.openBridgeAndAssertRequests(ctx, afterUpdateStatus)
+}
+
+func containsRuntimeOperation(values []gatewayprotocol.RuntimeOperationKind, expected gatewayprotocol.RuntimeOperationKind) bool {
+	for _, value := range values {
+		if value == expected {
+			return true
+		}
+	}
+	return false
 }
 
 func (f *fixture) startGatewayService(ctx context.Context) gatewayServiceStatus {
@@ -316,6 +451,27 @@ func (f *fixture) startGatewayService(ctx context.Context) gatewayServiceStatus 
 		f.readContainerFile(ctx, statusPath), f.readContainerFile(ctx, stderrPath), f.readContainerFile(ctx, exitPath),
 		f.readContainerFile(ctx, gatewayStateRoot+"/gateway-service.log"))
 	return gatewayServiceStatus{}
+}
+
+func (f *fixture) startGatewayServiceOverSSH(ctx context.Context) gatewayServiceStatus {
+	f.t.Helper()
+	result, err := f.runHost(ctx, f.repoRoot, nil, "ssh", f.sshClientArgs(
+		containerGateway,
+		"service-start",
+		"--state-root", gatewayStateRoot,
+		"--runtime-root", containerStateRoot,
+		"--listen", "127.0.0.1:0",
+		"--enable-profile-write",
+	)...)
+	if err != nil {
+		f.dumpContainerDiagnostics(ctx)
+		f.t.Fatalf("start remote Gateway service over SSH: %v", err)
+	}
+	var status gatewayServiceStatus
+	if err := json.Unmarshal([]byte(strings.TrimSpace(result.Stdout)), &status); err != nil || status.Status != "running" || status.PID <= 0 || status.Listen == "" {
+		f.t.Fatalf("remote Gateway service status = %#v, %v; output=%q", status, err, result.Stdout)
+	}
+	return status
 }
 
 func (f *fixture) readGatewayServiceStatus(ctx context.Context) (gatewayServiceStatus, error) {
@@ -399,6 +555,21 @@ func (f *fixture) stopGatewayService(ctx context.Context) {
 	}
 }
 
+func (f *fixture) stopGatewayServiceOverSSH(ctx context.Context) {
+	f.t.Helper()
+	if _, err := f.runHost(ctx, f.repoRoot, nil, "ssh", f.sshClientArgs(
+		containerGateway,
+		"service-stop",
+		"--state-root", gatewayStateRoot,
+	)...); err != nil {
+		f.t.Fatalf("stop remote Gateway service over SSH: %v", err)
+	}
+	status, err := f.readGatewayServiceStatus(ctx)
+	if err != nil || status.Status != "not_running" {
+		f.t.Fatalf("remote Gateway service status after stop = %#v, %v", status, err)
+	}
+}
+
 func (f *fixture) stopGatewayServiceWrapper(ctx context.Context) {
 	f.t.Helper()
 	rawPID := f.readContainerFile(ctx, gatewayServiceWrapperPIDPath)
@@ -418,9 +589,25 @@ func (f *fixture) stopGatewayServiceWrapper(ctx context.Context) {
 }
 
 func (f *fixture) startGatewayBridge(ctx context.Context) *gatewayBridgeClient {
+	return f.startGatewayBridgeProcess(ctx, func(bridgeCtx context.Context) *exec.Cmd {
+		return exec.CommandContext(bridgeCtx, "docker", "exec", "-i", f.containerName, containerGateway, "desktop-bridge", "--state-root", gatewayStateRoot)
+	})
+}
+
+func (f *fixture) startGatewayBridgeOverSSH(ctx context.Context) *gatewayBridgeClient {
+	return f.startGatewayBridgeProcess(ctx, func(bridgeCtx context.Context) *exec.Cmd {
+		return exec.CommandContext(bridgeCtx, "ssh", f.sshClientArgs(
+			containerGateway,
+			"desktop-bridge",
+			"--state-root", gatewayStateRoot,
+		)...)
+	})
+}
+
+func (f *fixture) startGatewayBridgeProcess(ctx context.Context, command func(context.Context) *exec.Cmd) *gatewayBridgeClient {
 	f.t.Helper()
 	bridgeCtx, cancel := context.WithCancel(ctx)
-	cmd := exec.CommandContext(bridgeCtx, "docker", "exec", "-i", f.containerName, containerGateway, "desktop-bridge", "--state-root", gatewayStateRoot)
+	cmd := command(bridgeCtx)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		cancel()

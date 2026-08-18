@@ -171,6 +171,8 @@ type fixture struct {
 	tempRoot         string
 	containerName    string
 	goarch           string
+	sshPrivateKey    string
+	sshPort          string
 	pluginRuntime    string
 	pluginDescriptor string
 }
@@ -407,6 +409,83 @@ func (f *fixture) startContainer(ctx context.Context) {
 	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "run", "-d", "--name", f.containerName, ubuntuImage, "sleep", "infinity"); err != nil {
 		f.t.Fatalf("start container: %v", err)
 	}
+}
+
+func (f *fixture) startSSHContainer(ctx context.Context) {
+	f.t.Helper()
+	f.ensureUbuntuImage(ctx)
+	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "run", "-d", "--name", f.containerName, "-p", "127.0.0.1::22", ubuntuImage, "sleep", "infinity"); err != nil {
+		f.t.Fatalf("start SSH container: %v", err)
+	}
+	portResult, err := f.runHost(ctx, f.repoRoot, nil, "docker", "port", f.containerName, "22/tcp")
+	if err != nil {
+		f.t.Fatalf("resolve SSH container port: %v", err)
+	}
+	portAddress := strings.TrimSpace(portResult.Stdout)
+	separator := strings.LastIndex(portAddress, ":")
+	if separator < 0 || separator == len(portAddress)-1 {
+		f.t.Fatalf("invalid SSH container port mapping %q", portAddress)
+	}
+	f.sshPort = portAddress[separator+1:]
+}
+
+func (f *fixture) startSSHServer(ctx context.Context) {
+	f.t.Helper()
+	f.sshPrivateKey = filepath.Join(f.tempRoot, "ssh", "id_ed25519")
+	if err := os.MkdirAll(filepath.Dir(f.sshPrivateKey), 0o700); err != nil {
+		f.t.Fatalf("create SSH key directory: %v", err)
+	}
+	if _, err := f.runHost(ctx, f.repoRoot, nil, "ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", f.sshPrivateKey); err != nil {
+		f.t.Fatalf("generate SSH smoke key: %v", err)
+	}
+	f.dockerExec(ctx, nil, "apt-get", "update")
+	f.dockerExec(ctx, nil, "apt-get", "install", "-y", "--no-install-recommends", "openssh-server")
+	f.dockerExec(ctx, nil, "mkdir", "-p", "/run/sshd", "/root/.ssh")
+	f.dockerExec(ctx, nil, "passwd", "-d", "root")
+	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", f.sshPrivateKey+".pub", f.containerName+":/root/.ssh/authorized_keys"); err != nil {
+		f.t.Fatalf("install SSH authorized key: %v", err)
+	}
+	f.dockerExec(ctx, nil, "chown", "root:root", "/root/.ssh", "/root/.ssh/authorized_keys")
+	f.dockerExec(ctx, nil, "chmod", "0700", "/root/.ssh")
+	f.dockerExec(ctx, nil, "chmod", "0600", "/root/.ssh/authorized_keys")
+	if _, err := f.runHost(ctx, f.repoRoot, nil,
+		"docker", "exec", "-d", f.containerName,
+		"/usr/sbin/sshd", "-D", "-E", "/tmp/redeven-sshd.log",
+		"-o", "PermitRootLogin=prohibit-password",
+		"-o", "PasswordAuthentication=no",
+		"-o", "PubkeyAuthentication=yes",
+		"-o", "AuthorizedKeysFile=.ssh/authorized_keys",
+		"-o", "LogLevel=VERBOSE",
+	); err != nil {
+		f.t.Fatalf("start SSH server: %v", err)
+	}
+	deadline := time.Now().Add(15 * time.Second)
+	var lastErr error
+	for time.Now().Before(deadline) {
+		if _, err := f.runHost(ctx, f.repoRoot, nil, "ssh", append(f.sshClientArgs(), "true")...); err == nil {
+			return
+		} else {
+			lastErr = err
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	f.t.Fatalf("SSH server did not become ready: %v; sshd_log=%s", lastErr, f.readContainerFile(ctx, "/tmp/redeven-sshd.log"))
+}
+
+func (f *fixture) sshClientArgs(remoteCommand ...string) []string {
+	args := []string{
+		"-T",
+		"-x",
+		"-i", f.sshPrivateKey,
+		"-p", f.sshPort,
+		"-o", "BatchMode=yes",
+		"-o", "IdentitiesOnly=yes",
+		"-o", "StrictHostKeyChecking=no",
+		"-o", "UserKnownHostsFile=/dev/null",
+		"-o", "LogLevel=ERROR",
+		"root@127.0.0.1",
+	}
+	return append(args, remoteCommand...)
 }
 
 func (f *fixture) ensureUbuntuImage(ctx context.Context) {
