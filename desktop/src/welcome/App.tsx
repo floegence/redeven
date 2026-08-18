@@ -309,6 +309,7 @@ import {
   startEnvironmentGuidanceIntent,
   type EnvironmentGuidanceSessionState,
 } from './environmentGuidanceSession';
+import { runEnvironmentOpenPreflight } from './environmentOpenPreflight';
 import {
   beginEnvironmentLifecycleDisclosure,
   closeEnvironmentLifecycleDisclosure,
@@ -1346,6 +1347,7 @@ function localizedRuntimeMessage(i18n: DesktopI18n, message: string): string {
     'Redeven is requesting access before opening the workspace.': 'environmentOpenFlow.requestingAccessDetail',
     'Redeven could not prepare this environment. Try again.': 'environmentOpenFlow.initializationFailedDetail',
     'Redeven could not start this environment. Try again.': 'environmentOpenFlow.startFailedDetail',
+    'Redeven could not check this environment. Try again.': 'environmentOpenFlow.preflightFailedDetail',
     'The environment started, but Redeven could not open the workspace. Try again.': 'environmentOpenFlow.openFailedDetail',
     'Redeven could not request access to this environment. Try again.': 'environmentOpenFlow.accessRequestFailedDetail',
     'Access is not available for this environment yet. Check the connection and try again.': 'environmentOpenFlow.accessUnavailableDetail',
@@ -1427,6 +1429,7 @@ function localizedOverlayTitle(i18n: DesktopI18n, title: string): string {
     'Initialize and open': 'environmentOpenFlow.initializeTitle',
     'Start and open': 'environmentOpenFlow.startTitle',
     'Request access': 'environmentOpenFlow.accessRequiredTitle',
+    'Open failed': 'progress.openFailed',
     'Checking access': 'environmentOpenFlow.checkingAccessTitle',
     'Preparing environment': 'environmentOpenFlow.preparingEnvironmentTitle',
     'Starting environment': 'environmentOpenFlow.startingEnvironmentTitle',
@@ -5016,6 +5019,50 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return opened;
   }
 
+  async function attemptEnvironmentOpenSilently(
+    environment: DesktopEnvironmentEntry,
+  ): Promise<Readonly<{ opened: boolean; message: string }>> {
+    let request: DesktopLauncherActionRequest | null = null;
+    if (environment.kind === 'local_environment') {
+      request = {
+        kind: 'open_local_environment',
+        environment_id: environment.id,
+        route: 'auto',
+        ...(environment.managed_runtime_target_id ? { runtime_target_id: environment.managed_runtime_target_id } : {}),
+        ...(environment.managed_runtime_placement_target_id ? { placement_target_id: environment.managed_runtime_placement_target_id } : {}),
+        ...(environment.managed_runtime_host_access ? { host_access: environment.managed_runtime_host_access } : {}),
+        ...(environment.managed_runtime_placement ? { placement: environment.managed_runtime_placement } : {}),
+      };
+    } else if (environment.kind === 'ssh_environment' && environment.ssh_details) {
+      request = {
+        kind: 'open_ssh_environment',
+        environment_id: environment.id,
+        label: environment.label,
+        ...(environment.managed_runtime_target_id ? { runtime_target_id: environment.managed_runtime_target_id } : {}),
+        ...(environment.managed_runtime_placement_target_id ? { placement_target_id: environment.managed_runtime_placement_target_id } : {}),
+        ...(environment.managed_runtime_host_access ? { host_access: environment.managed_runtime_host_access } : {}),
+        ...(environment.managed_runtime_placement ? { placement: environment.managed_runtime_placement } : {}),
+        ssh_destination: environment.ssh_details.ssh_destination,
+        ssh_port: environment.ssh_details.ssh_port,
+        auth_mode: environment.ssh_details.auth_mode,
+        runtime_root: environment.ssh_details.runtime_root,
+        bootstrap_strategy: environment.ssh_details.bootstrap_strategy,
+        release_base_url: environment.ssh_details.release_base_url,
+        connect_timeout_seconds: environment.ssh_details.connect_timeout_seconds,
+      };
+    }
+    if (!request) {
+      return { opened: false, message: i18n().t('environmentCenter.runtimeUnavailableNow') };
+    }
+    const result = await performLauncherActionSilently(request);
+    if (!result.ok) {
+      return { opened: false, message: result.message };
+    }
+    return result.outcome === 'opened_environment_window' || result.outcome === 'focused_environment_window'
+      ? { opened: true, message: '' }
+      : { opened: false, message: i18n().t('toast.unexpectedLauncherResult') };
+  }
+
   async function openEnvironment(
     environment: DesktopEnvironmentEntry,
     errorTarget: 'connect' | 'dialog' = 'connect',
@@ -5061,6 +5108,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       case 'open':
       case 'focus':
         return openEnvironment(environment, errorTarget === 'settings' ? 'connect' : errorTarget, action.route ?? 'auto');
+      case 'open_with_preflight':
       case 'initialize_and_open':
       case 'start_and_open':
       case 'request_open_access': {
@@ -5136,6 +5184,22 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       }
       return { close_panel: true, next_session: null };
     };
+
+    if (action.intent === 'open_with_preflight') {
+      const resolution = await runEnvironmentOpenPreflight({
+        environment,
+        attemptOpen: attemptEnvironmentOpenSilently,
+        loadLatestEnvironment: loadLatestEnvironmentEntry,
+      });
+      if (resolution.kind === 'opened') {
+        return { close_panel: true, next_session: null };
+      }
+      if (resolution.kind === 'guidance') {
+        publishSession(null);
+        return { close_panel: false, next_session: null };
+      }
+      return failOpenFlow(currentSession, resolution.message);
+    }
 
     if (action.intent === 'initialize_and_open') {
       const checking = advanceEnvironmentOpenFlowStage(currentSession, 'checking_access');
@@ -9248,17 +9312,19 @@ function EnvironmentPrimaryActionPanel(props: Readonly<{
   const iconTone = createMemo(() => overlayStatusIconTone(props.overlay.tone));
   const openFlowSteps = createMemo(() => {
     const intent = props.session?.pending_intent;
-    if (intent !== 'initialize_and_open' && intent !== 'start_and_open') {
+    if (intent !== 'open_with_preflight' && intent !== 'initialize_and_open' && intent !== 'start_and_open') {
       return [] as const;
     }
     const active = props.session?.open_flow_stage ?? 'checking_access';
     const steps = [
       { key: 'checking_access', label: props.i18n.t('environmentOpenFlow.checkAccess') },
+      ...(intent === 'open_with_preflight' ? [] : [
       ...(intent === 'initialize_and_open'
         ? [{ key: 'preparing_environment', label: props.i18n.t('environmentOpenFlow.prepareEnvironment') }]
         : []),
       { key: 'starting_environment', label: props.i18n.t('environmentOpenFlow.startEnvironment') },
       { key: 'opening_workspace', label: props.i18n.t('environmentOpenFlow.openWorkspace') },
+      ]),
     ];
     const activeIndex = steps.findIndex((candidate) => candidate.key === active);
     return steps.map((step, index) => ({
@@ -9511,6 +9577,8 @@ function EnvironmentSplitActionButton(props: Readonly<{
             ? props.i18n.t('environmentAction.requestAccess')
             : retryIntent === 'start_and_open'
               ? props.i18n.t('environmentAction.startAndOpen')
+              : retryIntent === 'open_with_preflight'
+                ? props.i18n.t('environmentAction.open')
               : props.i18n.t('environmentAction.retryInitialization'),
           emphasis: 'primary' as const,
           action: {
@@ -9519,6 +9587,8 @@ function EnvironmentSplitActionButton(props: Readonly<{
               ? props.i18n.t('environmentAction.requestAccess')
               : retryIntent === 'start_and_open'
                 ? props.i18n.t('environmentAction.startAndOpen')
+                : retryIntent === 'open_with_preflight'
+                  ? props.i18n.t('environmentAction.open')
                 : props.i18n.t('environmentAction.retryInitialization'),
             enabled: true,
             variant: 'default' as const,
@@ -10252,6 +10322,27 @@ function EnvironmentConnectionCard(props: Readonly<{
           }}
           confirmRuntimeOperation={props.confirmRuntimeOperation}
           onRunAction={(action) => {
+            if (action.intent === 'open_with_preflight') {
+              void (async () => {
+                const nextSession = startEnvironmentGuidanceIntent(
+                  props.guidanceSession,
+                  props.environment.id,
+                  'open_with_preflight',
+                );
+                props.onPrimaryActionGuidanceOpenChange(true);
+                props.setGuidanceSession(nextSession);
+                const resolution = await props.runEnvironmentGuidanceAction(
+                  props.environment,
+                  action,
+                  props.setGuidanceSession,
+                );
+                props.setGuidanceSession(resolution.next_session);
+                if (resolution.close_panel) {
+                  props.onPrimaryActionGuidanceOpenChange(false);
+                }
+              })();
+              return;
+            }
             if (environmentActionStartsLifecycleDisclosure(action)) {
               props.beginLifecycleDisclosure(action.intent);
             } else if (isEnvironmentGuidancePendingIntent(action.intent)) {

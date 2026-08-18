@@ -1988,6 +1988,7 @@
     "accessRequestFailedDetail": "Redeven n’a pas pu demander l’accès à cet environnement. Réessayez.",
     "accessUnavailableDetail": "L’accès à cet environnement n’est pas encore disponible. Vérifiez la connexion et réessayez.",
     "startFailedDetail": "Redeven n’a pas pu démarrer cet environnement. Réessayez.",
-    "openFailedDetail": "L’environnement a démarré, mais Redeven n’a pas pu ouvrir l’espace de travail. Réessayez."
+    "openFailedDetail": "L’environnement a démarré, mais Redeven n’a pas pu ouvrir l’espace de travail. Réessayez.",
+    "preflightFailedDetail": "Redeven n’a pas pu vérifier cet environnement. Réessayez."
   }
 }

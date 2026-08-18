@@ -1988,6 +1988,7 @@
     "accessRequestFailedDetail": "O Redeven não conseguiu solicitar acesso a este ambiente. Tente novamente.",
     "accessUnavailableDetail": "O acesso a este ambiente ainda não está disponível. Verifique a conexão e tente novamente.",
     "startFailedDetail": "O Redeven não conseguiu iniciar este ambiente. Tente novamente.",
-    "openFailedDetail": "O ambiente foi iniciado, mas o Redeven não conseguiu abrir o espaço de trabalho. Tente novamente."
+    "openFailedDetail": "O ambiente foi iniciado, mas o Redeven não conseguiu abrir o espaço de trabalho. Tente novamente.",
+    "preflightFailedDetail": "O Redeven não conseguiu verificar este ambiente. Tente novamente."
   }
 }

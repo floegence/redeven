@@ -10,6 +10,7 @@ export type EnvironmentGuidancePendingIntent = Extract<
   | 'refresh_runtime'
   | 'connect_provider_runtime'
   | 'disconnect_provider_runtime'
+  | 'open_with_preflight'
   | 'initialize_and_open'
   | 'start_and_open'
   | 'request_open_access'
@@ -33,7 +34,7 @@ export type EnvironmentGuidanceSessionState = Readonly<{
   environment_id: string;
   pending_intent: EnvironmentGuidancePendingIntent | null;
   open_flow_stage?: EnvironmentOpenFlowStage;
-  retry_intent?: Extract<EnvironmentGuidancePendingIntent, 'initialize_and_open' | 'start_and_open' | 'request_open_access'>;
+  retry_intent?: Extract<EnvironmentGuidancePendingIntent, 'open_with_preflight' | 'initialize_and_open' | 'start_and_open' | 'request_open_access'>;
   feedback: EnvironmentGuidanceFeedback | null;
 }> | null;
 
@@ -45,6 +46,7 @@ export function isEnvironmentGuidancePendingIntent(
   return intent === 'refresh_runtime'
     || intent === 'connect_provider_runtime'
     || intent === 'disconnect_provider_runtime'
+    || intent === 'open_with_preflight'
     || intent === 'initialize_and_open'
     || intent === 'start_and_open'
     || intent === 'request_open_access';
@@ -75,7 +77,7 @@ export function startEnvironmentGuidanceIntent(
   return {
     environment_id: session.environment_id,
     pending_intent: intent,
-    ...(intent === 'initialize_and_open' || intent === 'start_and_open'
+    ...(intent === 'open_with_preflight' || intent === 'initialize_and_open' || intent === 'start_and_open'
       ? { open_flow_stage: 'checking_access' as const }
       : {}),
     feedback: null,
@@ -86,7 +88,11 @@ export function advanceEnvironmentOpenFlowStage(
   state: EnvironmentGuidanceSessionState,
   stage: EnvironmentOpenFlowStage,
 ): EnvironmentGuidanceSessionState {
-  if (!state || (state.pending_intent !== 'initialize_and_open' && state.pending_intent !== 'start_and_open')) {
+  if (!state || (
+    state.pending_intent !== 'open_with_preflight'
+    && state.pending_intent !== 'initialize_and_open'
+    && state.pending_intent !== 'start_and_open'
+  )) {
     return state;
   }
   return { ...state, open_flow_stage: stage };
@@ -111,6 +117,11 @@ export function failEnvironmentGuidanceIntent(
         return {
           title: 'Provider unlink failed',
           detail: 'Desktop could not disconnect this runtime from its provider Environment.',
+        };
+      case 'open_with_preflight':
+        return {
+          title: 'Open failed',
+          detail: 'Redeven could not check this environment. Try again.',
         };
       case 'initialize_and_open':
         return {
@@ -138,7 +149,8 @@ export function failEnvironmentGuidanceIntent(
   return {
     ...state,
     pending_intent: null,
-    ...(state.pending_intent === 'initialize_and_open'
+    ...(state.pending_intent === 'open_with_preflight'
+      || state.pending_intent === 'initialize_and_open'
       || state.pending_intent === 'start_and_open'
       || state.pending_intent === 'request_open_access'
       ? { retry_intent: state.pending_intent }
@@ -244,7 +256,8 @@ export function guidanceSessionOwnsOpenFlowPanel(
   state: EnvironmentGuidanceSessionState,
 ): boolean {
   const intent = state?.pending_intent ?? state?.retry_intent;
-  return intent === 'initialize_and_open'
+  return intent === 'open_with_preflight'
+    || intent === 'initialize_and_open'
     || intent === 'start_and_open'
     || intent === 'request_open_access';
 }
@@ -262,6 +275,7 @@ export function guidanceSessionNotice(
     return null;
   }
   switch (state.pending_intent) {
+    case 'open_with_preflight':
     case 'initialize_and_open':
     case 'start_and_open': {
       const stage = state.open_flow_stage ?? 'checking_access';
