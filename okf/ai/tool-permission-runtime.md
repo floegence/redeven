@@ -19,7 +19,7 @@ Ordinary tool scheduling follows the model's response boundaries. When one model
 
 Floret owns the generic permission, approval, invocation, and effect lifecycle. Redeven decides product policy from `ai_thread_settings.permission_type` and tool metadata, then exposes that decision through Floret `PermissionSpec` and an `EffectAuthorizationGate`. `currentThreadPermissionType` has no fallback: store absence, query failure, missing settings, empty value, or unknown value returns an error. Each hosted turn installs a dynamic surface provider that rereads current product settings, rebuilds tools, signals, prompt, and host context, and validates a non-empty in-memory snapshot before each provider step and Floret dispatch. The snapshot is bound to the current run and canonical thread identity; it is not a durable permission ledger or recovery source. No stale surface, deleted audit row, or `approval_required` default can authorize execution.
 
-Immediately before an irreversible local effect, Redeven validates the complete Floret effect request against the admitted run snapshot, rereads the current product permission, and rejects a tool or permission mode that is no longer authorized. Floret has already made its canonical approval decision; Redeven never creates or waits for a second approval. The gate registers one process-local authorization entry keyed by exact thread, turn, run, tool call, argument hash, and effect-attempt identity, then enters the run's existing execution admission boundary. The concrete invocation consumes that entry exactly once and receives the exact Floret proof. Failure or cancellation before consumption calls no handler and creates no fallback authorization. Delete and shutdown effect fencing remain Floret runtime responsibilities rather than a Redeven lifecycle lease or recovery protocol.
+Immediately before an irreversible local effect, Redeven validates the complete Floret effect request against the admitted run snapshot, rereads the current product permission, and rejects a tool or permission mode that is no longer authorized. Floret has already made its canonical approval decision; Redeven never creates or waits for a second approval. The gate registers one process-local authorization entry keyed by exact thread, turn, run, tool call, and argument hash and binds it to the exact effect-attempt identity, then enters the run's existing execution admission boundary. The concrete invocation consumes that entry exactly once and receives the exact Floret proof. Failure or cancellation before consumption calls no handler and creates no fallback authorization. Delete and shutdown effect fencing remain Floret runtime responsibilities rather than a Redeven lifecycle lease or recovery protocol.
 
 Concurrent ordinary handlers do not consume a shared proof. Each effect request receives its own invocation-bound entry, and one call cannot overwrite or consume another call's authorization. A saved permission change affects the next dynamic surface and the dispatch-time reread; it cannot rewrite a provider request already sent.
 
@@ -39,17 +39,13 @@ Target provenance is part of the tool contract, not a UI hint. Flower must not i
 
 # Evidence
 
-- `redeven:internal/ai/tools/registry.go:249` - OKF tools are registered as read-only structured tool activity.
-- `redeven:internal/ai/floret_tools.go:275` - Redeven projects builtin tools into Floret definitions with effects, flags, permissions, and activity projection.
+- `redeven:internal/ai/tools/registry.go:299` - OKF tools carry read-only structured presentation policy.
+- `redeven:internal/ai/floret_tools.go:91` - Redeven projects active builtins into Floret definitions and invocation handlers.
 - `redeven:internal/ai/prompt_builder.go:322` - Prompt construction routes information sources between workspace tools, OKF, and external web discovery.
-- `redeven:internal/ai/target_tool_policy.go:49` - Target tool calls and results carry target id and execution location fields.
-- `redeven:internal/ai/subagents_floret.go:3301` - Flower child prompts forbid nested subagents and direct user input while requesting a complete final handoff.
-- `redeven:internal/ai/dynamic_permission_surface.go:74` - Hosted turns rebuild the current permission-derived tool surface from the latest thread permission.
+- `redeven:internal/ai/target_tool_policy.go` - Target tool calls and results preserve explicit target and execution-location provenance.
+- `redeven:internal/ai/subagents_floret.go` - Child runs receive the parent-derived product permission surface under Floret lifecycle ownership.
+- `redeven:internal/ai/dynamic_permission_surface.go:48` - Hosted turns fail closed while rereading current thread permission and rebuilding the run surface.
 - `redeven:internal/ai/permission_snapshot.go:27` - Run-local snapshots bind exact surface and canonical owner identity without durable lifecycle storage.
 - `redeven:internal/ai/floret_effect_authorization.go:115` - Dispatch revalidates current policy and transfers one invocation-bound proof.
-- `redeven:internal/ai/floret_runtime.go:146` - Canonical host authority is validated before provider execution.
 - `redeven:internal/ai/floret_approval_command_integration_test.go` - Published-runtime integration covers canonical approval and fail-closed correction.
-- `redeven:internal/ai/readonly_web_fetch.go:208` - `web_fetch` validates scheme, userinfo, port, host, DNS resolution, and blocked addresses before fetching.
-- `redeven:internal/config/ai.go:313` - `AIConfig` exposes the explicit model-profile value and canonical presence predicate while allowing permission-only validation.
-- `redeven:internal/ai/service.go:831` - Focused permission and model-profile mutations merge independently while holding the AI service state lock.
-- `redeven:internal/codeapp/appserver/server.go:3231` - Appserver exposes a focused default-permission route and a model-profile-only provider bundle while generic settings reject `ai`.
+- `redeven:internal/ai/readonly_web_fetch.go` - `web_fetch` enforces public-network-only SSRF and response limits.
