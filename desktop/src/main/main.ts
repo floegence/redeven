@@ -1,6 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, powerMonitor, safeStorage, session, shell, webContents as electronWebContents, WebContentsView, type MessageBoxOptions, type Session, type WebContents } from 'electron';
 import crypto from 'node:crypto';
-import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdirSync } from 'node:fs';
 import fs from 'node:fs/promises';
