@@ -66,8 +66,6 @@ The Env App recovery snapshot is a product presentation projection, not another 
 
 - `redeven:internal/envapp/ui_src/package.json:22` - Env App pins published Floe Webapp Boot, Core, and Protocol v0.41.4 packages.
 - `redeven:internal/envapp/ui_src/src/ui/App.tsx:62` - Env App configures the published shell preset catalog and per-mode defaults.
-- `redeven:internal/envapp/ui_src/src/styles/redeven.css` - Product semantic aliases derive component surfaces, status roles, and code chrome from active Floe tokens.
-- `redeven:internal/envapp/ui_src/src/ui/file-markdown/mermaidPlugin.ts` - Browser-resolved theme colors cross the Mermaid boundary only as canonical sRGB hex values.
 - `redeven:internal/envapp/ui_src/src/ui/file-markdown/FileMarkdown.browser.test.tsx` - Chromium coverage renders CSS Color 4 Mermaid themes and one accessible KaTeX presentation across theme changes.
 - `redeven:internal/envapp/ui_src/scripts/checkThemeColorSources.mjs` - The source gate rejects legacy component palettes and fixed Tailwind status colors in governed production surfaces.
 - `redeven:internal/envapp/ui_src/src/ui/services/desktopTheme.ts:103` - The storage adapter projects Desktop-owned source and versioned shell selection into Floe persistence keys.
@@ -76,10 +74,6 @@ The Env App recovery snapshot is a product presentation projection, not another 
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx:4759` - Regression coverage requires one initial connect and one replacement without a separate disconnect.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/TerminalSessionRuntime.tsx` - The per-session runtime adapts released semantic renderer, input, history, activation, and live APIs.
 - `redeven:internal/envapp/ui_src/src/ui/services/terminalPreferences.ts:1` - Persisted System/catalog selection preserves unknown values while resolving a released-theme fallback in memory.
-- `redeven:internal/envapp/ui_src/src/ui/widgets/TerminalSettingsDialog.tsx:1` - The product settings surface presents the released catalog as an accessible preview radio gallery.
-- `redeven:internal/envapp/ui_src/src/ui/widgets/TerminalSessionNavigator.tsx:96` - Desktop and mobile session navigation consume lightweight session rows independently from terminal Core creation.
-- `redeven:internal/envapp/ui_src/src/ui/services/terminalSessionChrome.ts` - One product derivation maps released context and work facts into consistent responsive chrome and local-path capability gates.
-- `redeven:internal/envapp/ui_src/src/ui/services/controlplaneApi.ts:2` - Controlplane services request entry connect artifacts through flowersec-core/controlplane.
 - `redeven:internal/envapp/ui_src/src/ui/services/controlplaneApi.ts:501` - Local and remote acquisition inject durable spend and exact current-origin target validation into Floe Webapp's public source.
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:542` - One Floe `ProxyBootstrapOwner` enforces the exact Service Worker script, scope, control, and runtime generation.
 - `redeven:AGENTS.md:173` - Published Dependency Policy forbids local sibling wiring in package manifests and build aliases.
@@ -87,16 +81,11 @@ The Env App recovery snapshot is a product presentation projection, not another 
 - `redeven:internal/envapp/ui_src/scripts/checkInitialBuildBudget.mjs:9` - Production builds enforce compressed JavaScript, CSS, and total initial-resource budgets.
 - `redeven:internal/envapp/ui_src/src/ui/codex/CodexActivitySurface.tsx:12` - The lazy Codex Activity boundary owns one provider, page, and stable sidebar Portal mount.
 - `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx:942` - Activity lifecycle regression coverage preserves Files state across Terminal, Monitor, Flower, and Codex navigation.
-- `redeven:internal/envapp/ui_src/src/ui/codex/CodexActivitySurface.test.tsx:71` - Portal host recreation moves the existing sidebar without remounting the Codex provider or page.
-- `redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:3910` - Recovery status uses a reserved footer with stable desktop and mobile sizing.
 - `redeven:internal/envapp/ui_src/src/ui/services/debugConsoleCapture.ts:503` - Terminal attach capture uses an explicit content-free request projection.
 - `redeven:internal/envapp/ui_src/src/ui/services/terminalTransport.ts` - The live adapter opens only `terminal/live_v1` and delegates resize ordering and acknowledgement to Floeterm.
 - `redeven:internal/envapp/ui_src/src/ui/services/terminalCatalogTransport.ts` - Catalog and history operations remain outside the initial live and renderer dependency graph.
-- `redeven:internal/envapp/ui_src/src/ui/services/terminalShellIntegration.ts` - Standard shell metadata parsing is delegated to Floeterm while the Redeven activity extension remains product-local.
-- `redeven:internal/envapp/ui_src/src/ui/services/terminalForegroundPresentation.ts` - One panel-level scheduler projects command metadata without per-session timers.
 - `redeven:internal/envapp/ui_src/scripts/checkPackagedRenderer.mjs:113` - The built-dist shell smoke validates production Env App assets without claiming a terminal or Electron package path.
 - `redeven:internal/envapp/ui_src/scripts/checkSemanticTerminalCarrier.mjs` - The process carrier validates real Runtime, PTY, semantic Presentation, canvas, input, clear, history, resize, refresh, and multi-view behavior without starting Desktop.
-- `redeven:scripts/check_renderer_e2e.sh` - The exact-main renderer gate runs semantic product carriers against production assets.
 - `redeven:internal/envapp/ui_src/src/ui/services/terminalTabActivity.ts:443` - Generation changes and rebases promote observed provisional unread before clearing coverage state.
 - `redeven:internal/envapp/ui_src/src/ui/reconnect/createRuntimeReconnectController.ts:429` - Structured reconnect events advance exact protocol attempt counts without product retry heuristics.
 - `redeven:internal/envapp/ui_src/src/ui/services/desktopSessionContext.ts:215` - Desktop recovery subscriptions reject stale generations and revisions.

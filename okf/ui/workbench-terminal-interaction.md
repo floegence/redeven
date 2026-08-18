@@ -4,6 +4,7 @@ title: Workbench terminal interaction
 description: Activity and Workbench consume one actor-owned semantic terminal state through view-local surfaces.
 tags: [ui, terminal, workbench, activity, semantic]
 timestamp: 2026-08-16T00:00:00Z
+quality_exception: Cross-runtime terminal interaction contract spanning actor authority, semantic rendering, multi-view control, browser input, history, accessibility, and performance.
 ---
 # Summary
 
@@ -42,22 +43,6 @@ User-visible clear is terminal-go's actor-owned semantic reset, not `clearRect`,
 Semantic history is the native VT's only history authority. One query identifies a complete canonical viewport at an atomic snapshot cut; the compact payload may use multiple bounded continuation chunks, but no partial or short frame is projected. Direct target offsets make distant scrollbar jumps constant in request count rather than distance-linear. The client binds browse and search lanes to the current connection, transport generation, attachment, content epoch, geometry generation, snapshot identity, and frontier anchor; stale or mixed responses are discarded. Each mounted view owns a bounded semantic-frame cache and serialized request lane, so Activity and Workbench scroll independently without input, resize, controller transfer, or shared cache state. Ordinary live output advances behind an immutable history viewport, and returning to the bottom shows the latest Presentation. A failed history RPC preserves the last complete safe frame and offers one explicit local retry; a structural snapshot failure returns atomically to latest. A failed search reports zero results plus a retryable inline state. Neither path changes Runtime blocking status, detaches the live stream, or prevents input, resize, refresh, reconnect, and later Presentations. Debug Console retains only the method, lane, direction, field-presence flags, transport generation, RPC code, and sanitized failure reason.
 
 Refresh forgets only the current view's live attachment and attaches again. terminal-go immediately emits a current Presentation even when geometry is unchanged, so a quiet shell redraws without synthetic PTY output. The existing semantic canvas remains mounted. Transport loss follows a finite observable retry state; permission denial, protocol failure, actor failure, or invalid semantic data remains an exact fail-closed error. Session close/delete removes catalog authority, attachments, and capabilities and cannot be resurrected by a stale list or notification.
-
-## Capability evidence map
-
-The following coordinates preserve user-facing behavior after removal of legacy implementation-coupled tests:
-
-- Selection and copy: `TerminalSessionRuntime.semantic.browser.test.tsx` selects renderer text, copies it, and keeps Ctrl+C as native input when no selection exists.
-- Paste and IME: the same browser test covers Unicode paste, composition preedit suppression, exact-once commit, and observer denial; Floeterm's published semantic tests own candidate anchoring and CJK/emoji glyph metrics.
-- Search and history scroll/crop: the semantic browser test uses complete actor-owned viewports, occurrence-level Canvas decoration with one distinct active match, separate browse/search lanes, direct target offsets, canonical 103x37 projection, local retry, live-output preservation, geometry invalidation, and view-local touch/history without advancing Presentation.
-- OSC8 and file links: `TerminalPanel.semantic.test.ts` covers safe URL protocols, exact cell hit-testing, and capability-resolved file targets; `terminalLinkProvider.test.ts` covers lexical path admission.
-- Clear: `internal/terminal/live_stream_test.go`, `terminalTransport.test.ts`, `TerminalPanel.semantic.test.ts`, and `checkSemanticTerminalCarrier.mjs` cover stale-generation denial through real multi-view repaint.
-- Refresh and reconnect: `refresh_redraw_integration_test.go`, `terminalTransport.test.ts`, and the semantic carrier prove quiet same-size redraw, explicit lifecycle, and stable canvas identity.
-- Permission and lifecycle cleanup: `internal/terminal/live_stream_test.go`, `manager_test.go`, and `terminalSessionCatalog.test.tsx` cover process denial, hidden cleanup failure, deletion, and stale catalog rejection.
-- Activity, Workbench, controller, and observer: the semantic browser test covers explicit activation-before-focus/input, ordered input settlement, rejection without PTY writes, transformed-host measurement, read-only observers, and controller diagnostics; the semantic carrier opens both surfaces, proves the hidden display mode cannot reclaim control, and requires identical sequence, epoch, and frame geometry.
-- Agent unread attention: `terminalTabActivity.test.ts` proves semantic priority and fenced output-batch fallback; `terminalSessionCatalog.test.tsx` drives RPC 2014 catalog revisions; `TerminalPanel.agentUnread.browser.test.tsx` drives stock Pi, Claude Code, and Codex through the real catalog, Panel chrome, and Navigator DOM across shared Activity/Workbench reader focus.
-- Theme, cursor, resize, CJK, and graphics: the semantic browser test covers view-local palette, typography, atomic Presentation, monotonic resize, one canvas, and fifty three-tab zero-size-to-visible commits across DPR 1/1.5/2; published terminal-web tests cover cursor shapes, IME anchor, natural grapheme width, DPR repaint, and Kitty graphics; the carrier covers real top alternate-screen resize, fifty three-session paint-safe switches, and nontransparent pixels.
-- Touch and mobile input: `mobileViewportPolicy.test.ts`, the semantic browser touch projection test, and TerminalPanel's input-mode contract preserve system and Floe keyboard paths without textarea autofocus.
 
 ## Product lifecycle and performance
 

@@ -424,7 +424,7 @@
               "runtime"
             ],
             "summary": "`redeven-gateway` is an independent process and component version. It is optional for Runtime access but is the only executor and durable authority for Redeven-managed Runtime lifecycle operations. It runs as the target OS user, owns target locks and recovery, and exposes ordinary Gateway open-session separately from lifecycle control.\n\nThe service uses one state-root lock so two Gateway supervisors cannot control the same target concurrently. Its status record is accepted only when the PID still has the recorded executable and process start time; a stale or reused PID is treated as not running.",
-            "section_count": 1
+            "section_count": 2
           }
         ]
       },
@@ -591,7 +591,7 @@
               "ui",
               "workbench"
             ],
-            "summary": "Plugin UI embeds released ReDevPlugin sandbox surfaces in Redeven chrome.\nActivity opens Shell-root windows; Workbench opens `redeven.plugin` widgets. The\nActivity Bar Launcher provides stable categories, keyboard navigation, search,\nand exact inventory routing, while Plugin Center presents trust, lifecycle,\naccess, and launch state. External installs require explicit source review and\nHost confirmation; fresh installs enable in the same Host transaction when all\nrequired permissions are approved, otherwise they remain disabled with an\nexplicit attention result. Updates require a side-effect-free, target-bound\nreview and retain Host-managed enable intent and grants without adding any.\nRedeven owns navigation, review, placement, and filters;\nReDevPlugin owns admission, sandbox and bridge lifecycle, confirmations, Events,\nand revocation. Failed exact-surface close remains retryable without wider\nauthority.",
+            "summary": "Plugin UI uses released ReDevPlugin sandbox surfaces inside Redeven-owned\nnavigation and placement. The Launcher and Plugin Center route exact inventory\nidentities through discovery, trust and lifecycle review, recovery, permissions,\ninstallation, and updates. Activity opens Shell-root windows and Workbench opens\n`redeven.plugin` widgets, always with fresh SDK slots. ReDevPlugin remains the\nauthority for package admission, lifecycle `action_state`, confirmations,\nEvents, bridge sessions, exact-surface close, and revocation; Redeven owns the\naccessible product presentation, filters, and serialized placement. Unknown\nmutation or close outcomes invalidate stale local authority and require platform\nreconciliation rather than wider teardown or blind retry.",
             "section_count": 2
           },
           {
@@ -3701,7 +3701,7 @@
         "title": "Env App upstream web dependencies",
         "type": "Frontend Contract"
       },
-      "body_length": 23399,
+      "body_length": 21488,
       "summary": "Env App is built as a Redeven-specific shell on top of published floe-webapp UI/runtime primitives, floe-webapp protocol connectivity, Floeterm terminal-web components, and Flowersec controlplane artifact helpers.\n\nEnv App composes published floe-webapp, Floeterm, and Flowersec web packages.",
       "sections": [
         {
@@ -3731,16 +3731,6 @@
           "source": "redeven:internal/envapp/ui_src/src/ui/App.tsx",
           "line": 62,
           "description": "Env App configures the published shell preset catalog and per-mode defaults."
-        },
-        {
-          "id": "redeven:internal/envapp/ui_src/src/styles/redeven.css:0:product semantic aliases derive component surfaces, status roles, and code chrome from active floe tokens.",
-          "source": "redeven:internal/envapp/ui_src/src/styles/redeven.css",
-          "description": "Product semantic aliases derive component surfaces, status roles, and code chrome from active Floe tokens."
-        },
-        {
-          "id": "redeven:internal/envapp/ui_src/src/ui/file-markdown/mermaidPlugin.ts:0:browser-resolved theme colors cross the mermaid boundary only as canonical srgb hex values.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/file-markdown/mermaidPlugin.ts",
-          "description": "Browser-resolved theme colors cross the Mermaid boundary only as canonical sRGB hex values."
         },
         {
           "id": "redeven:internal/envapp/ui_src/src/ui/file-markdown/FileMarkdown.browser.test.tsx:0:chromium coverage renders css color 4 mermaid themes and one accessible katex presentation across theme changes.",
@@ -3788,29 +3778,6 @@
           "description": "Persisted System/catalog selection preserves unknown values while resolving a released-theme fallback in memory."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/widgets/TerminalSettingsDialog.tsx:1:the product settings surface presents the released catalog as an accessible preview radio gallery.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/widgets/TerminalSettingsDialog.tsx",
-          "line": 1,
-          "description": "The product settings surface presents the released catalog as an accessible preview radio gallery."
-        },
-        {
-          "id": "redeven:internal/envapp/ui_src/src/ui/widgets/TerminalSessionNavigator.tsx:96:desktop and mobile session navigation consume lightweight session rows independently from terminal core creation.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/widgets/TerminalSessionNavigator.tsx",
-          "line": 96,
-          "description": "Desktop and mobile session navigation consume lightweight session rows independently from terminal Core creation."
-        },
-        {
-          "id": "redeven:internal/envapp/ui_src/src/ui/services/terminalSessionChrome.ts:0:one product derivation maps released context and work facts into consistent responsive chrome and local-path capability gates.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/services/terminalSessionChrome.ts",
-          "description": "One product derivation maps released context and work facts into consistent responsive chrome and local-path capability gates."
-        },
-        {
-          "id": "redeven:internal/envapp/ui_src/src/ui/services/controlplaneApi.ts:2:controlplane services request entry connect artifacts through flowersec-core/controlplane.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/services/controlplaneApi.ts",
-          "line": 2,
-          "description": "Controlplane services request entry connect artifacts through flowersec-core/controlplane."
-        },
-        {
           "id": "redeven:internal/envapp/ui_src/src/ui/services/controlplaneApi.ts:501:local and remote acquisition inject durable spend and exact current-origin target validation into floe webapp's public source.",
           "source": "redeven:internal/envapp/ui_src/src/ui/services/controlplaneApi.ts",
           "line": 501,
@@ -3853,18 +3820,6 @@
           "description": "Activity lifecycle regression coverage preserves Files state across Terminal, Monitor, Flower, and Codex navigation."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/codex/CodexActivitySurface.test.tsx:71:portal host recreation moves the existing sidebar without remounting the codex provider or page.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/codex/CodexActivitySurface.test.tsx",
-          "line": 71,
-          "description": "Portal host recreation moves the existing sidebar without remounting the Codex provider or page."
-        },
-        {
-          "id": "redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:3910:recovery status uses a reserved footer with stable desktop and mobile sizing.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx",
-          "line": 3910,
-          "description": "Recovery status uses a reserved footer with stable desktop and mobile sizing."
-        },
-        {
           "id": "redeven:internal/envapp/ui_src/src/ui/services/debugConsoleCapture.ts:503:terminal attach capture uses an explicit content-free request projection.",
           "source": "redeven:internal/envapp/ui_src/src/ui/services/debugConsoleCapture.ts",
           "line": 503,
@@ -3881,16 +3836,6 @@
           "description": "Catalog and history operations remain outside the initial live and renderer dependency graph."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/services/terminalShellIntegration.ts:0:standard shell metadata parsing is delegated to floeterm while the redeven activity extension remains product-local.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/services/terminalShellIntegration.ts",
-          "description": "Standard shell metadata parsing is delegated to Floeterm while the Redeven activity extension remains product-local."
-        },
-        {
-          "id": "redeven:internal/envapp/ui_src/src/ui/services/terminalForegroundPresentation.ts:0:one panel-level scheduler projects command metadata without per-session timers.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/services/terminalForegroundPresentation.ts",
-          "description": "One panel-level scheduler projects command metadata without per-session timers."
-        },
-        {
           "id": "redeven:internal/envapp/ui_src/scripts/checkPackagedRenderer.mjs:113:the built-dist shell smoke validates production env app assets without claiming a terminal or electron package path.",
           "source": "redeven:internal/envapp/ui_src/scripts/checkPackagedRenderer.mjs",
           "line": 113,
@@ -3900,11 +3845,6 @@
           "id": "redeven:internal/envapp/ui_src/scripts/checkSemanticTerminalCarrier.mjs:0:the process carrier validates real runtime, pty, semantic presentation, canvas, input, clear, history, resize, refresh, and multi-view behavior without starting desktop.",
           "source": "redeven:internal/envapp/ui_src/scripts/checkSemanticTerminalCarrier.mjs",
           "description": "The process carrier validates real Runtime, PTY, semantic Presentation, canvas, input, clear, history, resize, refresh, and multi-view behavior without starting Desktop."
-        },
-        {
-          "id": "redeven:scripts/check_renderer_e2e.sh:0:the exact-main renderer gate runs semantic product carriers against production assets.",
-          "source": "redeven:scripts/check_renderer_e2e.sh",
-          "description": "The exact-main renderer gate runs semantic product carriers against production assets."
         },
         {
           "id": "redeven:internal/envapp/ui_src/src/ui/services/terminalTabActivity.ts:443:generation changes and rebases promote observed provisional unread before clearing coverage state.",
@@ -4448,6 +4388,7 @@
       "timestamp": "2026-07-25T00:00:00Z",
       "frontmatter": {
         "description": "Redeven consumes ReDevPlugin as a published platform and keeps only host policy, placement, source admission, localized presentation projection, and business adapters.",
+        "quality_exception": "Cross-repository platform boundary spanning published artifacts, session teardown, package admission, surface lifecycle, runtime admission, and business adapters.",
         "tags": [
           "architecture",
           "dependencies",
@@ -5180,7 +5121,7 @@
         "title": "Browser Editor runtime",
         "type": "Runtime Contract"
       },
-      "body_length": 18677,
+      "body_length": 17693,
       "summary": "Browser Editor support is owned by the Code App app server. Codespaces are opened through Local UI `/cs/\u003cid\u003e/` routes or through remote `cs-*` sandbox hosts, while Desktop and Env App can prepare or update managed Browser Editor runtime versions through code workspace engine APIs.",
       "sections": [
         {
@@ -5212,12 +5153,6 @@
           "description": "Code App defines the strict v2 registry shape and transactional migrations for the two identified v1 layouts."
         },
         {
-          "id": "redeven:internal/codeapp/registry/registry_test.go:1:registry tests preserve every codespace field across both migrations and prove rejection and rollback leave v1 data unchanged.",
-          "source": "redeven:internal/codeapp/registry/registry_test.go",
-          "line": 1,
-          "description": "Registry tests preserve every codespace field across both migrations and prove rejection and rollback leave v1 data unchanged."
-        },
-        {
           "id": "redeven:internal/localui/localui.go:132:local ui mounts `/cs/` for codespace routes.",
           "source": "redeven:internal/localui/localui.go",
           "line": 132,
@@ -5234,12 +5169,6 @@
           "source": "redeven:internal/codeapp/codeserver/runner.go",
           "line": 274,
           "description": "code-server uses `/cs/\u003ccode_space_id\u003e` as the absolute proxy base path."
-        },
-        {
-          "id": "redeven:internal/codeapp/codeserver/artifact.go:22:runtime uses a 2 gib workspace engine archive safety cap.",
-          "source": "redeven:internal/codeapp/codeserver/artifact.go",
-          "line": 22,
-          "description": "Runtime uses a 2 GiB workspace engine archive safety cap."
         },
         {
           "id": "redeven:internal/codeapp/codeserver/shared_state.go:120:managed runtime inventory rejects unsafe version segments and binary paths before use.",
@@ -5266,12 +5195,6 @@
           "description": "Desktop shell codespace-window IPC defines loading and navigate request variants."
         },
         {
-          "id": "redeven:desktop/src/preload/desktopShell.ts:70:the trusted desktop preload exposes `opencodespacewindow` through the shell bridge.",
-          "source": "redeven:desktop/src/preload/desktopShell.ts",
-          "line": 70,
-          "description": "The trusted Desktop preload exposes `openCodespaceWindow` through the shell bridge."
-        },
-        {
           "id": "redeven:desktop/src/main/navigation.ts:212:desktop recognizes codespace urls by local `/cs/\u003cid\u003e/` paths or remote `cs-\u003cid\u003e` host labels.",
           "source": "redeven:desktop/src/main/navigation.ts",
           "line": 212,
@@ -5290,12 +5213,6 @@
           "description": "Browser Editor activity derives structured, non-retryable platform diagnoses from Runtime status."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/pages/BrowserEditorSetupActivityPanel.tsx:80:the shared setup component renders wide and compact layouts from the same activity contract.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/pages/BrowserEditorSetupActivityPanel.tsx",
-          "line": 80,
-          "description": "The shared setup component renders wide and compact layouts from the same activity contract."
-        },
-        {
           "id": "redeven:internal/envapp/ui_src/src/ui/pages/settings/CodeRuntimeSettingsCard.tsx:405:settings keeps the update action out of the header while the compact activity owns setup and retry actions, and opens the method selector for ready-state updates.",
           "source": "redeven:internal/envapp/ui_src/src/ui/pages/settings/CodeRuntimeSettingsCard.tsx",
           "line": 405,
@@ -5306,12 +5223,6 @@
           "source": "redeven:internal/codeapp/ui_src/src/runtimeBridge.ts",
           "line": 63,
           "description": "Code App requires the session-scoped bridge capability and exact WebSocket frame limit before registration."
-        },
-        {
-          "id": "redeven:internal/codeapp/ui_src/src/runtimeBridge.test.ts:84:focused tests cover exact restoration and fail-closed missing, malformed, oversized, and unavailable storage cases.",
-          "source": "redeven:internal/codeapp/ui_src/src/runtimeBridge.test.ts",
-          "line": 84,
-          "description": "Focused tests cover exact restoration and fail-closed missing, malformed, oversized, and unavailable storage cases."
         },
         {
           "id": "redeven:internal/codeapp/ui_src/src/inject.ts:222:the real injection entry converts any bridge startup failure into a network-disabled fatal document.",
@@ -5378,12 +5289,6 @@
           "source": "redeven:internal/envapp/ui_src/src/ui/pages/BrowserEditorInstallMethodSelector.tsx",
           "line": 15,
           "description": "The shared selector renders both install methods, data path, availability, locked state, and keyboard radiogroup behavior."
-        },
-        {
-          "id": "redeven:internal/envapp/ui_src/src/ui/services/browserEditorSetupError.ts:1:env app maps stable desktop and runtime failure sources without inspecting user-facing error text.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/services/browserEditorSetupError.ts",
-          "line": 1,
-          "description": "Env App maps stable Desktop and Runtime failure sources without inspecting user-facing error text."
         },
         {
           "id": "redeven:internal/envapp/ui_src/src/ui/services/browserEditorRuntimeOperation.ts:85:setup creation reconciles typed conflicts and uncertain responses without issuing a second create request.",
@@ -6204,7 +6109,7 @@
         "title": "Gateway service",
         "type": "Gateway Contract"
       },
-      "body_length": 5567,
+      "body_length": 6018,
       "summary": "`redeven-gateway` is an independent process and component version. It is optional for Runtime access but is the only executor and durable authority for Redeven-managed Runtime lifecycle operations. It runs as the target OS user, owns target locks and recovery, and exposes ordinary Gateway open-session separately from lifecycle control.\n\nThe service uses one state-root lock so two Gateway supervisors cannot control the same target concurrently. Its status record is accepted only when the PID still has the recorded executable and process start time; a stale or reused PID is treated as not running.",
       "sections": [
         {
@@ -6213,6 +6118,13 @@
           "level": 1,
           "body": "## Supervisor and compatibility\n\nGateway persists its supervisor identity, installation marker, target id/generation, binding, operation store, checkpoint, and quarantine state. Registration rejects an installation-root alias that names another target. Gateway and Runtime versions need not match; a signed compatibility manifest, stable Gateway protocol, Runtime service protocol/epoch, capabilities, and artifact digest decide compatibility. Gateway-first setup is performed by Desktop installer or an administrator and has no self-update state machine.\n\nFor a Provider binding, the Gateway process itself maintains the signed RCPP v3 supervisor poll/respond transport and dispatches accepted lifecycle frames directly to the Gateway-owned operation service. This transport remains available while Runtime and its Agent are stopped. An offline heartbeat may reuse persisted Runtime compatibility facts only when exact process inventory is empty and the managed executable digest still matches those facts; external byte replacement stops readiness projection. There is no Runtime control RPC, local management socket, or self-RPC fallback for Provider lifecycle. A transport disconnect does not cancel an already authorized durable operation; reconnect resumes polling and authorized clients attach to Gateway state.\n\n## Lifecycle\n\n`prepare` validates its action-scoped permit and client key before build, upload, staging, stop, or lock acquisition. One target mutation lock serializes prepare with enrollment; a same-target rebind advances generation from `n` to `n+1` and is rejected while an active operation or quarantine exists. One target lock protects each durable operation. Checkpoints survive Gateway restart; pre-commit deadlines expire safely, while committing/recovering/quarantined operations do not silently expire. Atomic replacement, health verification, rollback, and persistent manual recovery are one Gateway state machine. Reconcile requires a separate binding-admin permit with no artifact or build scope; Gateway persists its one-time consumption before recovery, and response-loss retry can only return the same terminal result.\n\nPublished artifacts carry distinct archive and executable digests. Gateway verifies the archive before extraction, verifies the final executable bytes in staging before activation, and compares the running Runtime identity with that executable digest after start. The complete recovery plan, previous-installation identity, verified staging root, and exact candidate process identity are durably persisted and parent-directory synced before shutdown. Recovery first terminates only the recorded candidate process, then advances idempotent phases to restore and verify the previous installation; an unverifiable result remains `manual_recovery_required` instead of unlocking or accepting mixed state.\n\nOperation identifiers are canonical bounded tokens and staging paths are derived from their digest, so request data cannot select an arbitrary filesystem path. Failed extraction, cancellation, expiry, and interrupted staging remove the durable artifact directory before the operation is released.\n\nAuthorized managers list active operations by exact environment, target, and generation. The original authorized client receives the mutation fields it needs to resume confirmation, artifact upload, or commit. Another current manager receives only a redacted observation DTO and can attach to progress without inheriting mutation authority. A binding administrator can reconcile a quarantined operation with a new exact permit; historical Desktop client identity is not required for that separate action.\n\n## Access boundary\n\nCatalog and explicit open-session continue to provide Gateway-card access. Terminal, files, web, and workspace data do not pass through the lifecycle operation store. Gateway is not a container/Provider Environment lifecycle manager, and Runtime continues to start and serve ordinary access without a Gateway process.",
           "char_count": 3998
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "Gateway owns only Redeven-managed Runtime lifecycle state for its registered target and generation. Ordinary session access, terminal, files, web, workspace traffic, Runtime service execution, and Provider or container environment lifecycle remain outside that operation store. Desktop and Provider transports may authorize or observe Gateway operations, but they cannot bypass its target lock, permits, checkpoints, or recovery state.",
+          "char_count": 435
         }
       ],
       "evidence": [
@@ -8525,7 +8437,7 @@
       "timestamp": "2026-07-29T00:00:00Z",
       "frontmatter": {
         "description": "Env App manages official and external plugins through an accessible Launcher, searchable category discovery, exact inventory identities, explicit review, SDK-owned surfaces, Activity windows, and Workbench widgets.",
-        "quality_exception": "Cross-surface UI contract spanning exact plugin identity, Launcher discovery, Center governance, Activity placement, and Workbench placement.",
+        "quality_exception": "Cross-surface plugin UX contract spanning exact inventory, discovery, package review, lifecycle governance, and Activity and Workbench placement.",
         "tags": [
           "activity",
           "plugin-center",
@@ -8537,8 +8449,8 @@
         "title": "Plugin surfaces",
         "type": "UI Contract"
       },
-      "body_length": 27993,
-      "summary": "Plugin UI embeds released ReDevPlugin sandbox surfaces in Redeven chrome.\nActivity opens Shell-root windows; Workbench opens `redeven.plugin` widgets. The\nActivity Bar Launcher provides stable categories, keyboard navigation, search,\nand exact inventory routing, while Plugin Center presents trust, lifecycle,\naccess, and launch state. External installs require explicit source review and\nHost confirmation; fresh installs enable in the same Host transaction when all\nrequired permissions are approved, otherwise they remain disabled with an\nexplicit attention result. Updates require a side-effect-free, target-bound\nreview and retain Host-managed enable intent and grants without adding any.\nRedeven owns navigation, review, placement, and filters;\nReDevPlugin owns admission, sandbox and bridge lifecycle, confirmations, Events,\nand revocation. Failed exact-surface close remains retryable without wider\nauthority.",
+      "body_length": 27837,
+      "summary": "Plugin UI uses released ReDevPlugin sandbox surfaces inside Redeven-owned\nnavigation and placement. The Launcher and Plugin Center route exact inventory\nidentities through discovery, trust and lifecycle review, recovery, permissions,\ninstallation, and updates. Activity opens Shell-root windows and Workbench opens\n`redeven.plugin` widgets, always with fresh SDK slots. ReDevPlugin remains the\nauthority for package admission, lifecycle `action_state`, confirmations,\nEvents, bridge sessions, exact-surface close, and revocation; Redeven owns the\naccessible product presentation, filters, and serialized placement. Unknown\nmutation or close outcomes invalidate stale local authority and require platform\nreconciliation rather than wider teardown or blind retry.",
       "sections": [
         {
           "id": "contract",
@@ -8659,7 +8571,7 @@
           "description": "Covers persisted `redeven.plugin` widget state."
         }
       ],
-      "snippet": "Plugin UI embeds released ReDevPlugin sandbox surfaces in Redeven chrome. Activity opens Shell-root windows; Workbench opens `redeven.plugin` widgets. The Activity Bar Launcher provides stable categories, keyboard navigation, search,",
+      "snippet": "Plugin UI uses released ReDevPlugin sandbox surfaces inside Redeven-owned navigation and placement. The Launcher and Plugin Center route exact inventory identities through discovery, trust and lifecycle review, recovery, permissions,",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -8819,15 +8731,15 @@
         "title": "Workbench input ownership",
         "type": "UI Contract"
       },
-      "body_length": 10979,
+      "body_length": 10407,
       "summary": "Workbench input ownership is declared through explicit marker contracts so canvas zoom, local scrolling, pointer actions, and text selection remain distinguishable. A selected widget boundary does not automatically own wheel input, and local-scroll regions must declare their role rather than relying on incidental DOM structure. These contracts let the canvas remain predictable while nested product surfaces preserve native interaction.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Mechanism\n\nWheel ownership uses exported local scroll viewport props that set `data-floe-canvas-wheel-interactive=\"true\"` and a local-scroll role. Layout-only regions can declare a non-interactive wheel role. Text selection surfaces use separate marker props and do not receive wheel ownership unless combined with local scroll viewport props. Action surfaces declare their own marker so clickable controls can remain interactive inside widgets without becoming text selection surfaces. Terminal keyboard shortcuts such as panel-local search and session switching are scoped to the owning TerminalPanel event tree; they do not create a window-level shortcut owner and do not widen wheel, selection, copy, or widget activation ownership. Each terminal view contains one Floeterm `RendererSurface` canvas and one `TerminalInputBridge` textarea. The input bridge derives its caret anchor from the atomic Presentation cursor and view-local cell geometry; Redeven supplies placement, focus, and controller policy without adding a Workbench-only input path. Selection, search, and semantic history projection are view-local, while terminal-go remains the only VT, scrollback, input-encoding, and geometry owner. Authenticated shell lifecycle presentation follows the same upstream ownership: while a local foreground command is running, nonce-less A/D markers emitted by Pi or another Agent CLI's semantic zones cannot reset its identity; only a matching authenticated lifecycle completion can do so.\n\nTerminal session selection uses the shared UI-first selection controller and a Floe Sidebar session list. Pointer down may preview the target, while click and keyboard selection request the same transaction: the active sidebar item reaches the screen first, and the visible Runtime mounts in the same committed selection update without a second paint wait. This path does not wait for parent Workbench state propagation, focus restoration, disposal work, or Workbench viewport navigation. The desktop sidebar and mobile drawer share `TerminalSessionNavigator`, while terminal text search stays in a surface-local overlay and per-view semantic behavior stays in `TerminalSessionRuntime`; these components consume the panel's existing state and do not establish parallel lifecycle ownership. Switching views never recreates the server-side PTY or VT. A newly mounted or refreshed view opens a generation-bound semantic attachment and receives the current Presentation; transport recovery is finite and visible, while permission, actor, protocol, or semantic validation failures remain fail closed.\n\nTerminal sidebar identity and activity come from the shared execution-context and semantic-work derivation. Local shells use a directory initial and basename; a scheduler-confirmed ordinary local foreground process updates the title and accessibility description without producing an animation; ready remote shells use the Link avatar and validated remote identity without an ongoing spinner; Agent CLIs use audited Agent identity and display name without treating their long-lived process as work. The exact executable basename `pi`, including Windows case and `.exe` normalization, is presented as Pi Agent with its pinned official mark; lookalike names such as `pi-agent` and `pi-cli` remain ordinary processes. `working` uses a three-bar wave, `waiting_user` uses attention, and `idle` is quiet. Process, output, and unread facts remain independent. Output streaming is only an unknown-semantic fallback, unread is lower visual priority, and quiet output never becomes a completion glyph. The closed mobile drawer preserves an active-session status slot and aggregates waiting or unread background attention on the session-menu control; complete truncated title and subtitle text remains available through a keyboard- and touch-operable disclosure. Search covers every visible title, subtitle, identity, and path, including combined SSH and Agent rows. Shortcut index, close, path copy, and Files use an explicit fixed two-by-two rail of 28 px cells on mobile; unavailable actions keep their cells, hidden desktop actions neither intercept the row nor remain hidden on focus, and mobile actions stay visible. Remote paths may be displayed and copied, but Files and duplicate actions stay unavailable because those paths do not identify the local Env filesystem. Local path actions require the separate immutable Redeven creation capability and exact current-path match; execution context remains display metadata. Activity opens the floating file browser and Workbench requests a new Files canvas surface through the existing file-browser handoff.\n\nTerminal session creation, first activation of an unmounted terminal session, and close interactions are UI-first inside the owning panel: sidebar selection or removal reaches the screen before semantic attachment, initial Presentation, delete RPCs, or disposal work begins. Closing a Workbench terminal widget schedules Workbench-scoped cleanup for the sessions currently bound to that widget, but widget removal remains a fire-and-forget UI transition and does not wait for PTY disposal.",
-          "char_count": 5138
+          "body": "## Mechanism\n\nWheel ownership uses exported local scroll viewport props that set `data-floe-canvas-wheel-interactive=\"true\"` and a local-scroll role. Layout-only regions can declare a non-interactive wheel role. Text selection surfaces use separate marker props and do not receive wheel ownership unless combined with local scroll viewport props. Action surfaces declare their own marker so clickable controls can remain interactive inside widgets without becoming text selection surfaces. Terminal shortcuts such as panel-local search and session switching stay inside the owning `TerminalPanel` event tree; they do not create a window-level owner or widen wheel, selection, copy, or widget activation. Terminal renderer, input, history, and controller semantics are owned by [Workbench terminal interaction](workbench-terminal-interaction.md); this concept owns only their routing through Workbench markers and panel focus.\n\nTerminal session selection uses the shared UI-first selection controller and a Floe Sidebar session list. Pointer down may preview the target, while click and keyboard selection request the same transaction: the active sidebar item reaches the screen first, and the visible Runtime mounts in the same committed selection update without a second paint wait. This path does not wait for parent Workbench state propagation, focus restoration, disposal work, or Workbench viewport navigation. The desktop sidebar and mobile drawer share `TerminalSessionNavigator`, while terminal text search stays in a surface-local overlay and per-view semantic behavior stays in `TerminalSessionRuntime`; these components consume the panel's existing state and do not establish parallel lifecycle ownership. Switching views never recreates the server-side PTY or VT. A newly mounted or refreshed view opens a generation-bound semantic attachment and receives the current Presentation; transport recovery is finite and visible, while permission, actor, protocol, or semantic validation failures remain fail closed.\n\nTerminal sidebar identity and activity come from the shared execution-context and semantic-work derivation. Local shells use a directory initial and basename; a scheduler-confirmed ordinary local foreground process updates the title and accessibility description without producing an animation; ready remote shells use the Link avatar and validated remote identity without an ongoing spinner; Agent CLIs use audited Agent identity and display name without treating their long-lived process as work. The exact executable basename `pi`, including Windows case and `.exe` normalization, is presented as Pi Agent with its pinned official mark; lookalike names such as `pi-agent` and `pi-cli` remain ordinary processes. `working` uses a three-bar wave, `waiting_user` uses attention, and `idle` is quiet. Process, output, and unread facts remain independent. Output streaming is only an unknown-semantic fallback, unread is lower visual priority, and quiet output never becomes a completion glyph. The closed mobile drawer preserves an active-session status slot and aggregates waiting or unread background attention on the session-menu control; complete truncated title and subtitle text remains available through a keyboard- and touch-operable disclosure. Search covers every visible title, subtitle, identity, and path, including combined SSH and Agent rows. Shortcut index, close, path copy, and Files use an explicit fixed two-by-two rail of 28 px cells on mobile; unavailable actions keep their cells, hidden desktop actions neither intercept the row nor remain hidden on focus, and mobile actions stay visible. Remote paths may be displayed and copied, but Files and duplicate actions stay unavailable because those paths do not identify the local Env filesystem. Local path actions require the separate immutable Redeven creation capability and exact current-path match; execution context remains display metadata. Activity opens the floating file browser and Workbench requests a new Files canvas surface through the existing file-browser handoff.\n\nTerminal session creation, first activation of an unmounted terminal session, and close interactions are UI-first inside the owning panel: sidebar selection or removal reaches the screen before semantic attachment, initial Presentation, delete RPCs, or disposal work begins. Closing a Workbench terminal widget schedules Workbench-scoped cleanup for the sessions currently bound to that widget, but widget removal remains a fire-and-forget UI transition and does not wait for PTY disposal.",
+          "char_count": 4566
         },
         {
           "id": "boundaries",
@@ -8918,6 +8830,14 @@
         }
       ],
       "snippet": "Workbench input ownership is declared through explicit marker contracts so canvas zoom, local scrolling, pointer actions, and text selection remain distinguishable. A selected widget boundary does not automatically own wheel input, and loca",
+      "links": [
+        {
+          "label": "Workbench terminal interaction",
+          "path": "ui/workbench-terminal-interaction.md",
+          "concept_id": "ui.workbench-terminal-interaction",
+          "title": "Workbench terminal interaction"
+        }
+      ],
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -9196,6 +9116,7 @@
       "timestamp": "2026-08-16T00:00:00Z",
       "frontmatter": {
         "description": "Activity and Workbench consume one actor-owned semantic terminal state through view-local surfaces.",
+        "quality_exception": "Cross-runtime terminal interaction contract spanning actor authority, semantic rendering, multi-view control, browser input, history, accessibility, and performance.",
         "tags": [
           "activity",
           "semantic",
@@ -9207,15 +9128,15 @@
         "title": "Workbench terminal interaction",
         "type": "UI Contract"
       },
-      "body_length": 17138,
+      "body_length": 13937,
       "summary": "Floeterm terminal-go v0.11.2 owns each PTY, native Ghostty VT, canonical geometry, controller epoch, semantic history, and atomic Presentation. Redeven Activity and Workbench use published terminal-web v0.16.4 to render that Presentation and complete atomic history viewports on one canvas per view and to collect view-local input. A browser view never parses PTY bytes, owns terminal history, or creates a second renderer. Authoritative live, input, resize, and renderer contract violations fail closed; auxiliary history and search failures remain local to that view and retry from a stable boundary without taking the live terminal offline.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## One terminal owner and one view renderer\n\nEvery session has one terminal-go `SessionActor`. PTY output, structured input, resize, history queries, and semantic clear enter that actor in sequence. A Presentation atomically contains state, geometry, and one complete semantic frame. Its sequence and geometry generation only advance; frame width and height must equal canonical columns and rows.\n\nEvery mounted Activity or Workbench runtime opens its own `terminal/live_v1` attachment and mounts exactly one `RendererSurface` canvas plus one `TerminalInputBridge` textarea. The canvas consumes complete Presentations and is the only visible renderer. The textarea owns keyboard, paste, and composition events but does not draw or parse output. TerminalCore, Ghostty WebAssembly, checkpoint workers, Beamterm, raw replay, browser journals, and hidden compatibility canvases are absent from source and packaged dependency graphs.\n\nThe canvas CSS box follows its host content box immediately. Its backing store follows CSS pixels times device-pixel ratio without replacing the canvas. Palette, font, DPR, and bounds changes repaint the latest immutable Presentation; they do not change the PTY, sequence, or geometry by themselves. A hidden keep-mounted canvas remains hidden while its host is zero-sized and is exposed only after an atomic render commit matches the newly visible host and DPR; the browser never stretches an old small bitmap across the active pane. The renderer fills the complete target background before cells, graphics, selection, and cursor, so resize, tab activation, and theme changes cannot expose transparent or stale edges.\n\n## Multi-view geometry and controller ownership\n\nAll attached views receive the same authoritative Presentation. A view may crop or pad locally, project semantic history, select text, search, and use its own palette without changing the PTY. Only the current controller view may send input or propose canonical geometry. The proposed grid is measured from the terminal host's untransformed layout content box, so a Workbench projection transform cannot shrink canonical columns or rows. Selecting or directly interacting with another authorized view sends one explicit activation containing that grid and the current controller epoch. terminal-go atomically transfers ownership, applies the new grid, and captures the matching Presentation before focus or input can commit; the old controller becomes an observer without a prompt, popup, duplicate write, or focus theft. The outer Activity/Workbench display mode and the selected Workbench widget jointly gate activation: a keep-mounted Activity peer remains attached for shared presentation but cannot reclaim control while Workbench is selected. Ordinary observer ResizeObserver updates never claim control. Old transport generations, stale controller epochs, and cross-principal requests have zero effect and preserve their exact fail-closed reason.\n\nResize settles only when terminal-go has applied the canonical geometry and emitted the matching new Presentation. Redeven never acknowledges resize with an old frame, broadcasts a stored frame as a resize result, or treats attachment loss as success. Rapid grow and shrink is latest-wins only before presentation; once visible, sequence and geometry cannot regress. Activity and Workbench may have different host bounds, but every view renders the same frame dimensions and sequence.\n\nAgent CLI attention has one catalog-owned state shared by Activity and Workbench. A valid fenced semantic work state is authoritative: for one unchanged context and foreground-command fence, an accepted `working` followed by a newer `idle` marks unread only when no real terminal reader owns focus, while `waiting_user` retains higher attention priority and preserves the in-progress round. Stock Agents that do not publish semantic work state use the server-owned, revisioned output activity as a narrower unread-output fallback. After the first snapshot establishes a baseline, a newer `streaming` revision on the same fence marks a background output batch unread. When the last real reader leaves during that streaming batch, the shared owner also retains it as unread because terminal-go emits no further streaming revision for the same continuous burst. `settled` removes the wave but neither asserts task completion nor recreates unread that the reader already cleared. First snapshots, replayed or regressing revisions, changed or mismatched fences, and ordinary shell sessions are inert. Focusing either real view clears the shared unread state, while hidden KeepAlive views cannot clear it. No browser output parser or quiet timer participates in this fallback.\n\n## Input, links, selection, and mobile interaction\n\n`TerminalInputBridge` sends browser-confirmed Unicode text once, sends structured key intents to terminal-go's native encoder, and gives native clipboard paste its own bounded interaction. Paste chunks are reassembled before one actor admission, then terminal-go applies the current bracketed-paste mode and newline rules; paste is never reclassified as typed text. Composition preedit, key code 229, and composing key events do not reach the PTY. Composition commit, paste, ordinary text, Enter, Tab, Backspace, arrows, modifiers, emoji, and combining text preserve exact-once behavior. Native encoding also preserves common shell controls such as Ctrl+A, Ctrl+C, Ctrl+D, Ctrl+E, Ctrl+K, Ctrl+L, Ctrl+R, Ctrl+U, Ctrl+W, control punctuation, Alt word movement, modified arrows, Home, End, Delete, Shift+Tab, and Kitty press/repeat/release. On macOS, Cmd+C uses the synchronous browser copy event for the renderer-owned selection and Cmd+V remains on the native paste-event path, while Ctrl+C remains terminal input; on other platforms Ctrl+Shift+C and Ctrl+Shift+V provide the matching clipboard shortcuts. Observer views are read-only. The editable textarea stays positioned at the semantic cursor in CSS coordinates so the operating system IME candidate window follows the visible caret; DPR affects backing pixels only.\n\nSelection belongs to `RendererSurface`. A same-cell pointer down/up is an ordinary focus click and leaves no selection paint or copy text; movement past the drag threshold may select one cell or a larger range. A completed double click selects the semantic word under the pointer, while a triple click selects the logical row through its last non-padding cell. Repeated-click selection respects transformed coordinates, Unicode word classes, grapheme cells, and wide-cell continuations. Copy reads that selection and uses the product clipboard path; Ctrl+C without a selection remains terminal input. Search uses terminal-web's isolated server search frontier and projects the complete viewport around a match without replacing the browse frontier or changing the authoritative Presentation sequence. Search counts each occurrence, maps Unicode text indices back to complete semantic cell spans, highlights every visible match, and gives the active match a distinct renderer-owned color. Search decoration is view-local and disposable: selection paints above it without changing copy semantics, the cursor remains above both, and query close or structural invalidation clears it without changing terminal content or another view. Touch gestures use the same view-local viewport controller on the normal screen and terminal input on the alternate screen. Mobile keyboard policy may choose system or Floe input, but neither path creates another VT owner.\n\nOSC8 cells retain their explicit hyperlink. Cmd/Ctrl-click accepts only `http` or `https` URLs and routes the user action through the Desktop external-URL boundary when available. Lexical file links are resolved from the displayed semantic row and require the current Redeven local-path capability before preview. Ordinary click remains terminal focus/input. Script URLs, malformed URLs, stale capabilities, and remote paths fail closed.\n\n## Clear, history, refresh, and lifecycle\n\nUser-visible clear is terminal-go's actor-owned semantic reset, not `clearRect`, Ctrl-L, session recreation, or detach. The request is bound to the current connection, transport generation, attachment, and permission. Success advances content epoch and Presentation sequence and all views converge on the cleared frame. A stale generation has zero effect.\n\nSemantic history is the native VT's only history authority. One query identifies a complete canonical viewport at an atomic snapshot cut; the compact payload may use multiple bounded continuation chunks, but no partial or short frame is projected. Direct target offsets make distant scrollbar jumps constant in request count rather than distance-linear. The client binds browse and search lanes to the current connection, transport generation, attachment, content epoch, geometry generation, snapshot identity, and frontier anchor; stale or mixed responses are discarded. Each mounted view owns a bounded semantic-frame cache and serialized request lane, so Activity and Workbench scroll independently without input, resize, controller transfer, or shared cache state. Ordinary live output advances behind an immutable history viewport, and returning to the bottom shows the latest Presentation. A failed history RPC preserves the last complete safe frame and offers one explicit local retry; a structural snapshot failure returns atomically to latest. A failed search reports zero results plus a retryable inline state. Neither path changes Runtime blocking status, detaches the live stream, or prevents input, resize, refresh, reconnect, and later Presentations. Debug Console retains only the method, lane, direction, field-presence flags, transport generation, RPC code, and sanitized failure reason.\n\nRefresh forgets only the current view's live attachment and attaches again. terminal-go immediately emits a current Presentation even when geometry is unchanged, so a quiet shell redraws without synthetic PTY output. The existing semantic canvas remains mounted. Transport loss follows a finite observable retry state; permission denial, protocol failure, actor failure, or invalid semantic data remains an exact fail-closed error. Session close/delete removes catalog authority, attachments, and capabilities and cannot be resurrected by a stale list or notification.\n\n## Capability evidence map\n\nThe following coordinates preserve user-facing behavior after removal of legacy implementation-coupled tests:\n\n- Selection and copy: `TerminalSessionRuntime.semantic.browser.test.tsx` selects renderer text, copies it, and keeps Ctrl+C as native input when no selection exists.\n- Paste and IME: the same browser test covers Unicode paste, composition preedit suppression, exact-once commit, and observer denial; Floeterm's published semantic tests own candidate anchoring and CJK/emoji glyph metrics.\n- Search and history scroll/crop: the semantic browser test uses complete actor-owned viewports, occurrence-level Canvas decoration with one distinct active match, separate browse/search lanes, direct target offsets, canonical 103x37 projection, local retry, live-output preservation, geometry invalidation, and view-local touch/history without advancing Presentation.\n- OSC8 and file links: `TerminalPanel.semantic.test.ts` covers safe URL protocols, exact cell hit-testing, and capability-resolved file targets; `terminalLinkProvider.test.ts` covers lexical path admission.\n- Clear: `internal/terminal/live_stream_test.go`, `terminalTransport.test.ts`, `TerminalPanel.semantic.test.ts`, and `checkSemanticTerminalCarrier.mjs` cover stale-generation denial through real multi-view repaint.\n- Refresh and reconnect: `refresh_redraw_integration_test.go`, `terminalTransport.test.ts`, and the semantic carrier prove quiet same-size redraw, explicit lifecycle, and stable canvas identity.\n- Permission and lifecycle cleanup: `internal/terminal/live_stream_test.go`, `manager_test.go`, and `terminalSessionCatalog.test.tsx` cover process denial, hidden cleanup failure, deletion, and stale catalog rejection.\n- Activity, Workbench, controller, and observer: the semantic browser test covers explicit activation-before-focus/input, ordered input settlement, rejection without PTY writes, transformed-host measurement, read-only observers, and controller diagnostics; the semantic carrier opens both surfaces, proves the hidden display mode cannot reclaim control, and requires identical sequence, epoch, and frame geometry.\n- Agent unread attention: `terminalTabActivity.test.ts` proves semantic priority and fenced output-batch fallback; `terminalSessionCatalog.test.tsx` drives RPC 2014 catalog revisions; `TerminalPanel.agentUnread.browser.test.tsx` drives stock Pi, Claude Code, and Codex through the real catalog, Panel chrome, and Navigator DOM across shared Activity/Workbench reader focus.\n- Theme, cursor, resize, CJK, and graphics: the semantic browser test covers view-local palette, typography, atomic Presentation, monotonic resize, one canvas, and fifty three-tab zero-size-to-visible commits across DPR 1/1.5/2; published terminal-web tests cover cursor shapes, IME anchor, natural grapheme width, DPR repaint, and Kitty graphics; the carrier covers real top alternate-screen resize, fifty three-session paint-safe switches, and nontransparent pixels.\n- Touch and mobile input: `mobileViewportPolicy.test.ts`, the semantic browser touch projection test, and TerminalPanel's input-mode contract preserve system and Floe keyboard paths without textarea autofocus.\n\n## Product lifecycle and performance\n\nThe catalog remains renderer-free and dormant sessions remain metadata-only. Terminal chrome derives from catalog snapshots for foreground command, output activity, execution context, semantic work, and local-path capability. Those facts are display metadata, not filesystem authority. Ask Flower may capture a selection or bounded visible semantic text; it receives a working directory only through the same current local-path capability.\n\nThe exact-main performance gate measures twenty semantic Presentation paints, input dispatches, and resize settlements in Chromium. The real product carrier separately measures twenty same-session multi-view activations and twenty `top` resizes, with each resize capped at 150 ms. It also verifies clear, history projection, refresh, controller transfer, one semantic canvas, canonical frame geometry, DPR backing, nontransparent paint, and zero page, console, request, or response errors.",
-          "char_count": 14526
+          "body": "## One terminal owner and one view renderer\n\nEvery session has one terminal-go `SessionActor`. PTY output, structured input, resize, history queries, and semantic clear enter that actor in sequence. A Presentation atomically contains state, geometry, and one complete semantic frame. Its sequence and geometry generation only advance; frame width and height must equal canonical columns and rows.\n\nEvery mounted Activity or Workbench runtime opens its own `terminal/live_v1` attachment and mounts exactly one `RendererSurface` canvas plus one `TerminalInputBridge` textarea. The canvas consumes complete Presentations and is the only visible renderer. The textarea owns keyboard, paste, and composition events but does not draw or parse output. TerminalCore, Ghostty WebAssembly, checkpoint workers, Beamterm, raw replay, browser journals, and hidden compatibility canvases are absent from source and packaged dependency graphs.\n\nThe canvas CSS box follows its host content box immediately. Its backing store follows CSS pixels times device-pixel ratio without replacing the canvas. Palette, font, DPR, and bounds changes repaint the latest immutable Presentation; they do not change the PTY, sequence, or geometry by themselves. A hidden keep-mounted canvas remains hidden while its host is zero-sized and is exposed only after an atomic render commit matches the newly visible host and DPR; the browser never stretches an old small bitmap across the active pane. The renderer fills the complete target background before cells, graphics, selection, and cursor, so resize, tab activation, and theme changes cannot expose transparent or stale edges.\n\n## Multi-view geometry and controller ownership\n\nAll attached views receive the same authoritative Presentation. A view may crop or pad locally, project semantic history, select text, search, and use its own palette without changing the PTY. Only the current controller view may send input or propose canonical geometry. The proposed grid is measured from the terminal host's untransformed layout content box, so a Workbench projection transform cannot shrink canonical columns or rows. Selecting or directly interacting with another authorized view sends one explicit activation containing that grid and the current controller epoch. terminal-go atomically transfers ownership, applies the new grid, and captures the matching Presentation before focus or input can commit; the old controller becomes an observer without a prompt, popup, duplicate write, or focus theft. The outer Activity/Workbench display mode and the selected Workbench widget jointly gate activation: a keep-mounted Activity peer remains attached for shared presentation but cannot reclaim control while Workbench is selected. Ordinary observer ResizeObserver updates never claim control. Old transport generations, stale controller epochs, and cross-principal requests have zero effect and preserve their exact fail-closed reason.\n\nResize settles only when terminal-go has applied the canonical geometry and emitted the matching new Presentation. Redeven never acknowledges resize with an old frame, broadcasts a stored frame as a resize result, or treats attachment loss as success. Rapid grow and shrink is latest-wins only before presentation; once visible, sequence and geometry cannot regress. Activity and Workbench may have different host bounds, but every view renders the same frame dimensions and sequence.\n\nAgent CLI attention has one catalog-owned state shared by Activity and Workbench. A valid fenced semantic work state is authoritative: for one unchanged context and foreground-command fence, an accepted `working` followed by a newer `idle` marks unread only when no real terminal reader owns focus, while `waiting_user` retains higher attention priority and preserves the in-progress round. Stock Agents that do not publish semantic work state use the server-owned, revisioned output activity as a narrower unread-output fallback. After the first snapshot establishes a baseline, a newer `streaming` revision on the same fence marks a background output batch unread. When the last real reader leaves during that streaming batch, the shared owner also retains it as unread because terminal-go emits no further streaming revision for the same continuous burst. `settled` removes the wave but neither asserts task completion nor recreates unread that the reader already cleared. First snapshots, replayed or regressing revisions, changed or mismatched fences, and ordinary shell sessions are inert. Focusing either real view clears the shared unread state, while hidden KeepAlive views cannot clear it. No browser output parser or quiet timer participates in this fallback.\n\n## Input, links, selection, and mobile interaction\n\n`TerminalInputBridge` sends browser-confirmed Unicode text once, sends structured key intents to terminal-go's native encoder, and gives native clipboard paste its own bounded interaction. Paste chunks are reassembled before one actor admission, then terminal-go applies the current bracketed-paste mode and newline rules; paste is never reclassified as typed text. Composition preedit, key code 229, and composing key events do not reach the PTY. Composition commit, paste, ordinary text, Enter, Tab, Backspace, arrows, modifiers, emoji, and combining text preserve exact-once behavior. Native encoding also preserves common shell controls such as Ctrl+A, Ctrl+C, Ctrl+D, Ctrl+E, Ctrl+K, Ctrl+L, Ctrl+R, Ctrl+U, Ctrl+W, control punctuation, Alt word movement, modified arrows, Home, End, Delete, Shift+Tab, and Kitty press/repeat/release. On macOS, Cmd+C uses the synchronous browser copy event for the renderer-owned selection and Cmd+V remains on the native paste-event path, while Ctrl+C remains terminal input; on other platforms Ctrl+Shift+C and Ctrl+Shift+V provide the matching clipboard shortcuts. Observer views are read-only. The editable textarea stays positioned at the semantic cursor in CSS coordinates so the operating system IME candidate window follows the visible caret; DPR affects backing pixels only.\n\nSelection belongs to `RendererSurface`. A same-cell pointer down/up is an ordinary focus click and leaves no selection paint or copy text; movement past the drag threshold may select one cell or a larger range. A completed double click selects the semantic word under the pointer, while a triple click selects the logical row through its last non-padding cell. Repeated-click selection respects transformed coordinates, Unicode word classes, grapheme cells, and wide-cell continuations. Copy reads that selection and uses the product clipboard path; Ctrl+C without a selection remains terminal input. Search uses terminal-web's isolated server search frontier and projects the complete viewport around a match without replacing the browse frontier or changing the authoritative Presentation sequence. Search counts each occurrence, maps Unicode text indices back to complete semantic cell spans, highlights every visible match, and gives the active match a distinct renderer-owned color. Search decoration is view-local and disposable: selection paints above it without changing copy semantics, the cursor remains above both, and query close or structural invalidation clears it without changing terminal content or another view. Touch gestures use the same view-local viewport controller on the normal screen and terminal input on the alternate screen. Mobile keyboard policy may choose system or Floe input, but neither path creates another VT owner.\n\nOSC8 cells retain their explicit hyperlink. Cmd/Ctrl-click accepts only `http` or `https` URLs and routes the user action through the Desktop external-URL boundary when available. Lexical file links are resolved from the displayed semantic row and require the current Redeven local-path capability before preview. Ordinary click remains terminal focus/input. Script URLs, malformed URLs, stale capabilities, and remote paths fail closed.\n\n## Clear, history, refresh, and lifecycle\n\nUser-visible clear is terminal-go's actor-owned semantic reset, not `clearRect`, Ctrl-L, session recreation, or detach. The request is bound to the current connection, transport generation, attachment, and permission. Success advances content epoch and Presentation sequence and all views converge on the cleared frame. A stale generation has zero effect.\n\nSemantic history is the native VT's only history authority. One query identifies a complete canonical viewport at an atomic snapshot cut; the compact payload may use multiple bounded continuation chunks, but no partial or short frame is projected. Direct target offsets make distant scrollbar jumps constant in request count rather than distance-linear. The client binds browse and search lanes to the current connection, transport generation, attachment, content epoch, geometry generation, snapshot identity, and frontier anchor; stale or mixed responses are discarded. Each mounted view owns a bounded semantic-frame cache and serialized request lane, so Activity and Workbench scroll independently without input, resize, controller transfer, or shared cache state. Ordinary live output advances behind an immutable history viewport, and returning to the bottom shows the latest Presentation. A failed history RPC preserves the last complete safe frame and offers one explicit local retry; a structural snapshot failure returns atomically to latest. A failed search reports zero results plus a retryable inline state. Neither path changes Runtime blocking status, detaches the live stream, or prevents input, resize, refresh, reconnect, and later Presentations. Debug Console retains only the method, lane, direction, field-presence flags, transport generation, RPC code, and sanitized failure reason.\n\nRefresh forgets only the current view's live attachment and attaches again. terminal-go immediately emits a current Presentation even when geometry is unchanged, so a quiet shell redraws without synthetic PTY output. The existing semantic canvas remains mounted. Transport loss follows a finite observable retry state; permission denial, protocol failure, actor failure, or invalid semantic data remains an exact fail-closed error. Session close/delete removes catalog authority, attachments, and capabilities and cannot be resurrected by a stale list or notification.\n\n## Product lifecycle and performance\n\nThe catalog remains renderer-free and dormant sessions remain metadata-only. Terminal chrome derives from catalog snapshots for foreground command, output activity, execution context, semantic work, and local-path capability. Those facts are display metadata, not filesystem authority. Ask Flower may capture a selection or bounded visible semantic text; it receives a working directory only through the same current local-path capability.\n\nThe exact-main performance gate measures twenty semantic Presentation paints, input dispatches, and resize settlements in Chromium. The real product carrier separately measures twenty same-session multi-view activations and twenty `top` resizes, with each resize capped at 150 ms. It also verifies clear, history projection, refresh, controller transfer, one semantic canvas, canonical frame geometry, DPR backing, nontransparent paint, and zero page, console, request, or response errors.",
+          "char_count": 11325
         },
         {
           "id": "boundaries",
@@ -9286,6 +9207,12 @@
           "title": "Redeven OKF Bundle"
         },
         {
+          "label": "Workbench input ownership",
+          "path": "ui/workbench-input-ownership.md",
+          "concept_id": "ui.workbench-input-ownership",
+          "title": "Workbench input ownership"
+        },
+        {
           "label": "Workbench interaction contracts",
           "path": "ui/workbench-interaction-contracts.md",
           "concept_id": "ui.workbench-interaction-contracts",
@@ -9294,5 +9221,5 @@
       ]
     }
   ],
-  "source_sha256": "1af6739788597cf351b174dd9c24874aeb43816089289a020c3338a5045faabc"
+  "source_sha256": "3ed2b54cc8d921e52887a8971a3351d52d9176db443f6ad16a9724fa53223127"
 }
