@@ -46,8 +46,7 @@ func TestProviderRuntimeManagementTransportUsesBoundSupervisorWithoutRuntimeAgen
 		StatusCode:      http.StatusOK, ContentType: "application/json", BodyB64u: "e30",
 	}
 	completed := make(chan struct{}, 1)
-	var server *httptest.Server
-	server = httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
 		switch request.URL.Path {
 		case providerTransportPathPrefix + "binding_demo/transport/poll":

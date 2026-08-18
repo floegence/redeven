@@ -382,13 +382,6 @@ func (r *Renderer) richMetricLine(label string, value string, detail string, ton
 	return richPadVisible(line, width)
 }
 
-func richBoolLabel(value bool, trueValue string, falseValue string) string {
-	if value {
-		return trueValue
-	}
-	return falseValue
-}
-
 func shortCommit(commit string) string {
 	commit = strings.TrimSpace(commit)
 	if len([]rune(commit)) <= 8 {

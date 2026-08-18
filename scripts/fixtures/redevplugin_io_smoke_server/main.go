@@ -169,7 +169,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	go http.Serve(httpListener, mux)
+	go func() {
+		if err := http.Serve(httpListener, mux); err != nil {
+			log.Fatal(err)
+		}
+	}()
 	tcpListener, err := net.Listen("tcp", net.JoinHostPort(*bind, fmt.Sprint(*tcpPort)))
 	if err != nil {
 		log.Fatal(err)
@@ -228,7 +232,11 @@ func main() {
 			log.Fatal(listenErr)
 		}
 		proxyPort = proxyListener.Addr().(*net.TCPAddr).Port
-		go http.Serve(proxyListener, proxy)
+		go func() {
+			if err := http.Serve(proxyListener, proxy); err != nil {
+				log.Fatal(err)
+			}
+		}()
 	}
 	record := map[string]any{"http": httpListener.Addr().(*net.TCPAddr).Port, "ws": httpListener.Addr().(*net.TCPAddr).Port, "tcp": tcpListener.Addr().(*net.TCPAddr).Port, "udp": udpConn.LocalAddr().(*net.UDPAddr).Port, "local_ui_proxy": proxyPort, "pid": 0}
 	// WebSocket shares the HTTP listener; the separate fields make the fixture contract explicit.

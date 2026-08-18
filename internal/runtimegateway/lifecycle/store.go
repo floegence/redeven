@@ -1199,9 +1199,8 @@ func (s *Store) failStaging(operationID string, cause error) (gatewayprotocol.Ru
 func (s *Store) failBeforeCommit(operationID string, code ErrorCode, message string, retryable bool) (gatewayprotocol.RuntimeOperation, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	operation := s.state.Operations[operationID]
 	next := cloneState(s.state)
-	operation = next.Operations[operationID]
+	operation := next.Operations[operationID]
 	operation.State = gatewayprotocol.RuntimeOperationFailed
 	operation.Failure = &gatewayprotocol.RuntimeOperationFailure{Code: string(code), Message: message, Retryable: retryable}
 	operation.UpdatedAtUnixMS = s.clock.Now().UnixMilli()
