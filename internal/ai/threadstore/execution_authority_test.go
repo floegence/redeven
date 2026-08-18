@@ -27,7 +27,7 @@ func TestExecutionAuthorityIsStableAndScopedToRequestOrTurn(t *testing.T) {
 		t.Fatalf("idempotent authority retry: %v", err)
 	}
 	for _, test := range []struct {
-		name  string
+		name   string
 		mutate func(*ExecutionAuthority)
 	}{
 		{name: "endpoint", mutate: func(value *ExecutionAuthority) { value.EndpointID = "endpoint-b" }},

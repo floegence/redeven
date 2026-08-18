@@ -72,6 +72,16 @@ run_step() {
   "$@"
 }
 
+check_go_formatting() {
+  local unformatted
+  unformatted="$(gofmt -l $(git ls-files '*.go'))"
+  if [ -n "$unformatted" ]; then
+    echo "[ERROR] gofmt is required for:" >&2
+    printf '%s\n' "$unformatted" >&2
+    return 1
+  fi
+}
+
 check_shell_syntax() {
   sh -n scripts/install.sh
   sh -n scripts/generate_release_notes.sh
@@ -120,6 +130,7 @@ check_github_workflows() {
 }
 
 run_step "checking final rebased diff" git diff --check "${base}...${tip}"
+run_step "checking Go formatting" check_go_formatting
 run_step "checking shell syntax" check_shell_syntax
 run_step "linting GitHub Actions workflows" check_github_workflows
 run_step "checking Go toolchain consistency" node scripts/check_go_version_consistency.mjs
