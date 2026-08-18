@@ -59,6 +59,68 @@ func TestControllerArtifactVersionProbeHasIndependentTimeout(t *testing.T) {
 	}
 }
 
+func TestControllerArtifactStagingPreservesRequiredRuntimeCompanions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("executable fixture is a POSIX shell script")
+	}
+	stateRoot := t.TempDir()
+	runtimeRoot := filepath.Join(t.TempDir(), "runtime-root")
+	bindings, err := OpenLocalBindingStore(stateRoot, runtimeRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	controller, err := NewController(ControllerOptions{BindingStore: bindings})
+	if err != nil {
+		t.Fatal(err)
+	}
+	managedRoot := filepath.Join(runtimeRoot, "runtime", "managed")
+	pluginBytes := []byte("published plugin runtime")
+	descriptorBytes := []byte("{\"verified\":true}\n")
+	writeExecutableFixture(t, filepath.Join(managedRoot, "bin", "redevplugin-runtime"), pluginBytes)
+	if err := os.WriteFile(filepath.Join(managedRoot, "bin", ".redevplugin-release-artifacts-verified.json"), descriptorBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(managedRoot, "managed-runtime.stamp"), []byte("obsolete\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	candidate := []byte("#!/bin/sh\nprintf 'redeven v9.9.9-e2e\\n'\n")
+	archivePath := filepath.Join(t.TempDir(), "runtime.tar.gz")
+	writeRuntimeArchiveFixture(t, archivePath, candidate)
+	candidatePath := filepath.Join(t.TempDir(), "redeven")
+	if err := os.WriteFile(candidatePath, candidate, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	candidateDigest, err := fileSHA256(candidatePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	operation := gatewayprotocol.RuntimeOperation{
+		OperationID:    "op-preserve-companions",
+		DesiredRuntime: gatewayprotocol.DesiredRuntime{Version: "v9.9.9-e2e"},
+		Artifact:       &gatewayprotocol.RuntimeArtifact{StagedPath: archivePath, ExecutableSHA256: candidateDigest},
+	}
+	stagingRoot, err := controller.extractRuntimeArtifact(context.Background(), operation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for path, expected := range map[string][]byte{
+		filepath.Join(stagingRoot, "bin", "redevplugin-runtime"):                          pluginBytes,
+		filepath.Join(stagingRoot, "bin", ".redevplugin-release-artifacts-verified.json"): descriptorBytes,
+	} {
+		actual, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read preserved Runtime companion %q: %v", path, err)
+		}
+		if !bytes.Equal(actual, expected) {
+			t.Fatalf("preserved Runtime companion %q = %q, want %q", path, actual, expected)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(stagingRoot, "managed-runtime.stamp")); !os.IsNotExist(err) {
+		t.Fatalf("obsolete managed Runtime stamp was preserved: %v", err)
+	}
+}
+
 func writeRuntimeArchiveFixture(t *testing.T, path string, executable []byte) {
 	t.Helper()
 	var archive bytes.Buffer

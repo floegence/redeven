@@ -754,6 +754,12 @@ func (c *Controller) extractRuntimeArtifact(ctx context.Context, operation gatew
 	if len(fields) < 2 || fields[0] != "redeven" || normalizeVersion(fields[1]) != normalizeVersion(operation.DesiredRuntime.Version) {
 		return "", errors.New("staged Runtime version does not match the operation target")
 	}
+	if err := preserveRequiredRuntimeCompanions(
+		filepath.Join(binding.RuntimeRoot, "runtime", "managed"),
+		stagingRoot,
+	); err != nil {
+		return "", err
+	}
 	if err := syncDirectory(filepath.Join(stagingRoot, "bin")); err != nil {
 		return "", err
 	}
@@ -762,6 +768,73 @@ func (c *Controller) extractRuntimeArtifact(ctx context.Context, operation gatew
 	}
 	completed = true
 	return stagingRoot, nil
+}
+
+func preserveRequiredRuntimeCompanions(managedRoot string, stagingRoot string) error {
+	companions := []struct {
+		name       string
+		executable bool
+	}{
+		{name: "redevplugin-runtime", executable: true},
+		{name: ".redevplugin-release-artifacts-verified.json"},
+	}
+	for _, companion := range companions {
+		sourcePath := filepath.Join(managedRoot, "bin", companion.name)
+		destinationPath := filepath.Join(stagingRoot, "bin", companion.name)
+		if err := copyRuntimeCompanion(sourcePath, destinationPath, companion.executable); err != nil {
+			return fmt.Errorf("preserve managed Runtime companion %q: %w", companion.name, err)
+		}
+	}
+	return nil
+}
+
+func copyRuntimeCompanion(sourcePath string, destinationPath string, executable bool) error {
+	pathInfo, err := os.Lstat(sourcePath)
+	if err != nil {
+		return err
+	}
+	if !pathInfo.Mode().IsRegular() {
+		return errors.New("source is not a regular file")
+	}
+	source, err := os.Open(sourcePath)
+	if err != nil {
+		return err
+	}
+	defer source.Close()
+	openedInfo, err := source.Stat()
+	if err != nil {
+		return err
+	}
+	if !openedInfo.Mode().IsRegular() || !os.SameFile(pathInfo, openedInfo) {
+		return errors.New("source identity changed while opening")
+	}
+	if executable && openedInfo.Mode().Perm()&0o111 == 0 {
+		return errors.New("source is not executable")
+	}
+
+	destination, err := os.OpenFile(destinationPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, openedInfo.Mode().Perm())
+	if err != nil {
+		return err
+	}
+	completed := false
+	defer func() {
+		if !completed {
+			_ = os.Remove(destinationPath)
+		}
+	}()
+	if _, err := io.Copy(destination, source); err != nil {
+		_ = destination.Close()
+		return err
+	}
+	if err := destination.Sync(); err != nil {
+		_ = destination.Close()
+		return err
+	}
+	if err := destination.Close(); err != nil {
+		return err
+	}
+	completed = true
+	return nil
 }
 
 func (c *Controller) cleanupRecoveryArtifacts(checkpoint operationCheckpoint) error {

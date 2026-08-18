@@ -182,9 +182,16 @@ func (manager *LifecycleManager) ReleaseLifecycleFence(token string) error {
 	if manager == nil {
 		return ErrLifecycleFenceToken
 	}
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return ErrLifecycleFenceToken
+	}
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
-	if manager.fence == nil || manager.fence.token != strings.TrimSpace(token) {
+	if manager.fence == nil {
+		return nil
+	}
+	if manager.fence.token != token {
 		return ErrLifecycleFenceToken
 	}
 	manager.fence = nil

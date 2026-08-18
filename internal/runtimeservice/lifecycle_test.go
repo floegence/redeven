@@ -34,6 +34,12 @@ func TestLifecycleFenceMakesAdmissionAndSnapshotAtomic(t *testing.T) {
 	if err := manager.ReleaseLifecycleFence(fence.Token); err != nil {
 		t.Fatal(err)
 	}
+	if err := manager.ReleaseLifecycleFence(""); !errors.Is(err, ErrLifecycleFenceToken) {
+		t.Fatalf("empty release error = %v", err)
+	}
+	if err := manager.ReleaseLifecycleFence(fence.Token); err != nil {
+		t.Fatalf("idempotent release after fence consumption: %v", err)
+	}
 	second, err := manager.Admit(ManagedWorkload{Identity: "session:2", Kind: "session"})
 	if err != nil {
 		t.Fatal(err)
