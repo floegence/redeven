@@ -35,6 +35,6 @@ The Activity companion reuses this model and selection contract; its placement, 
 - `redeven:internal/envapp/ui_src/src/ui/flower/envLocalFlowerSurfaceAdapter.ts:288` - The Env adapter exposes Desktop models only for the stable `remote_desktop` session route.
 - `redeven:scripts/check_flower_ui.sh:26` - The Flower UI quality gate includes the Desktop model-source cross-layer test explicitly.
 - `redeven:internal/flower_ui/src/settings/FlowerSettingsSurface.tsx:558` - The shared settings surface always renders the environment model and provider editor.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.navigation.activity.test.tsx:2134` - Approval interaction tests cover timeout promotion and refreshed same-action retry.
-- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.navigation.threads.test.tsx:301` - Warm thread tests verify the complete UI-first event sequence and no reload on revisit.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.navigation.test.tsx:460` - Combined navigation coverage rejects late detail loads across rapid A-to-B-to-A selection.
+- `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.navigation.structuredInput.test.tsx:412` - Summary-only refresh coverage preserves cached detail for non-selected threads.
 - `redeven:internal/envapp/ui_src/src/ui/pages/settings/sections/FlowerSection.tsx:219` - Env Settings selects the remote Desktop model-source layout from stable session routing rather than transient binding state.

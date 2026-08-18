@@ -108,8 +108,8 @@ Redeven never imports Floret internals, reads Floret storage, copies canonical l
 
 # Evidence
 
-- `floret:runtime/thread_runtime.go` - Typed service, per-thread runtime, queue, interaction, cancellation, retry, and subscription boundary.
-- `floret:internal/sessiontree/backend_repo_journal.go` - Canonical journal persistence and stable fact identity.
+- `redeven:go.mod` - Pins the released Floret v4.0.12 typed runtime without local replacement.
+- `redeven:internal/session/floret_v4_dependency_contract_test.go` - Enforces exact published-v4 adoption and rejects retired imports.
 - `redeven:internal/ai/floret_runtime.go` - Published runtime composition.
 - `redeven:internal/ai/floret_thread_context.go` - Canonical compaction mapping and timeline anchoring.
 - `redeven:internal/ai/send_user_turn.go` - Thin product send mapping into typed Floret state.
@@ -119,5 +119,7 @@ Redeven never imports Floret internals, reads Floret storage, copies canonical l
 - `redeven:internal/ai/execution_authority_continuity_test.go` - Retry and SubAgent authority continuity across accepted turns and restart.
 - `redeven:internal/ai/stop_thread.go` - Idempotent typed cancellation without handler lookup.
 - `redeven:internal/ai/retry_thread_effect.go` - Exact unknown-effect retry mapping.
+- `redeven:internal/ai/send_user_turn_flow_test.go` - Covers typed canonical send and queue behavior through the published runtime.
+- `redeven:internal/ai/floret_ask_user_integration_test.go` - Covers typed interaction settlement without waiting for provider continuation.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Latest-selection generation fence before detail cache mutation.
 - `redeven:internal/envapp/ui_src/src/ui/FlowerSurface.navigation.test.tsx` - Deterministic out-of-order A to B to A navigation coverage.

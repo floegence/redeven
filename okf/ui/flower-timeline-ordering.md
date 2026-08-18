@@ -17,10 +17,16 @@ Queued input is canonical Floret state and appears exactly once in the queue lan
 
 ThreadCache accepts detail only from detail GET and LiveCurrent. It rejects an older view version and retains cached A and B views across A-to-B-to-A selection. Summary refresh, disconnect, hidden-page recovery, and slow responses cannot clear messages. Cancel and Reject update the corresponding turn or tool row without a global failure card.
 
+# Boundaries
+
+Stable row identity and order come only from the published Floret current view. The outbox, cache, live transport, renderer keys, and summaries may present or temporarily confirm those rows but cannot assign a canonical item ID, ordinal, queue identity, terminal state, or lower `ViewVersion`.
+
 # Evidence
 
-- `floret:runtime/thread_runtime.go` - Typed current view and stable queue/item identities.
+- `redeven:go.mod` - Pins the published Floret v4.0.12 ordered current-view contract.
+- `redeven:internal/ai/floret_timeline_messages_test.go` - Proves Redeven preserves public ordered items and live markers from the typed view.
 - `redeven:internal/flower_ui/src/runtimeCurrentView.ts` - Current-view projection.
 - `redeven:internal/flower_ui/src/threadCache.ts` - Versioned bounded detail cache.
 - `redeven:internal/flower_ui/src/transportOutbox.ts` - Request-ID confirmation and deduplication.
 - `redeven:internal/flower_ui/src/flowerTimelineProjection.ts` - Stable row projection.
+- `redeven:internal/flower_ui/src/runtimeCurrentView.test.ts` - Covers explicit live state and canonical lifecycle projection.
