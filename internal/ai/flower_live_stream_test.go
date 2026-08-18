@@ -39,6 +39,69 @@ func TestFlowerWorkspaceStreamAcceptsEmptySelectionAndReceivesBackgroundThreadUp
 	}
 }
 
+func TestFlowerWorkspaceStreamReconnectsWithCompletePagedBaseline(t *testing.T) {
+	ctx := context.Background()
+	svc := newSendTurnTestService(t)
+	meta := &session.Meta{
+		ChannelID: "channel_workspace_paged", EndpointID: "env_workspace_paged",
+		UserPublicID: "user_workspace_paged", NamespacePublicID: "namespace_workspace_paged",
+		CanRead: true, CanWrite: true, CanExecute: true,
+	}
+	wantThreadIDs := make(map[string]struct{})
+	createThreads := func(start, count int) {
+		t.Helper()
+		for index := start; index < start+count; index++ {
+			thread, err := svc.CreateThreadWithOptions(ctx, meta, CreateThreadRequest{
+				ClientRequestID: fmt.Sprintf("create-workspace-paged-%03d", index),
+			})
+			if err != nil {
+				t.Fatalf("create baseline thread %d: %v", index, err)
+			}
+			wantThreadIDs[thread.ThreadID] = struct{}{}
+		}
+	}
+	assertCompleteBaseline := func(subscription *FlowerLiveStreamSubscription) {
+		t.Helper()
+		frame := nextFlowerLiveStreamFrame(t, subscription)
+		if frame.Kind != FlowerLiveStreamReady {
+			t.Fatalf("baseline frame kind=%q, want ready", frame.Kind)
+		}
+		var envelope FlowerLiveStreamEnvelope
+		if err := json.Unmarshal(frame.Data, &envelope); err != nil {
+			t.Fatal(err)
+		}
+		if len(envelope.Summaries) != len(wantThreadIDs) {
+			t.Fatalf("baseline summaries=%d, want %d", len(envelope.Summaries), len(wantThreadIDs))
+		}
+		seen := make(map[string]struct{}, len(envelope.Summaries))
+		for _, summary := range envelope.Summaries {
+			if _, expected := wantThreadIDs[summary.ThreadID]; !expected {
+				t.Fatalf("baseline contains unexpected thread %q", summary.ThreadID)
+			}
+			if _, duplicate := seen[summary.ThreadID]; duplicate {
+				t.Fatalf("baseline contains duplicate thread %q", summary.ThreadID)
+			}
+			seen[summary.ThreadID] = struct{}{}
+		}
+	}
+
+	createThreads(0, flowerLiveBaselinePageLimit+5)
+	first, err := svc.SubscribeFlowerLiveStream(ctx, meta, FlowerLiveStreamRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertCompleteBaseline(first)
+	first.Close()
+
+	createThreads(flowerLiveBaselinePageLimit+5, 3)
+	second, err := svc.SubscribeFlowerLiveStream(ctx, meta, FlowerLiveStreamRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer second.Close()
+	assertCompleteBaseline(second)
+}
+
 func TestFlowerWorkspaceStreamReceivesTypedRuntimeCurrentViewWithoutSelectingThread(t *testing.T) {
 	ctx := context.Background()
 	svc := newSendTurnTestService(t)

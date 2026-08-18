@@ -158,6 +158,9 @@ func (s *Service) importPendingInputGroup(ctx context.Context, records []threads
 		if err != nil {
 			return fmt.Errorf("materialize pending input %q: %w", record.RequestID, err)
 		}
+		if err := s.persistExecutionAuthority(ctx, &meta, threadID, request.ClientRequestID, ""); err != nil {
+			return fmt.Errorf("persist pending input %q execution authority: %w", record.RequestID, err)
+		}
 		s.floretEffects.put(identity.ThreadID(threadID), request.ClientRequestID, floretEffectRequest{meta: meta, req: request, effect: effect})
 		items = append(items, flruntime.ImportedPendingInput{RequestKey: flruntime.RequestKey(request.ClientRequestID), Input: input})
 		requestIDs = append(requestIDs, request.ClientRequestID)

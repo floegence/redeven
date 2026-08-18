@@ -5,8 +5,10 @@
   mutation now proves endpoint ownership before canonical state can change.
   Restart recovery uses the submitting turn's minimal host authorization facts,
   live-stream overflow forces baseline resynchronization instead of silently
-  dropping authority, and the transport outbox expires or settles unrecoverable
-  attachment launches. Redeven consumes published Floret v4.0.12 for atomic
+  dropping authority, reconnect baselines paginate the complete workspace,
+  retry and SubAgent turns retain the submitting user's restart authority, and
+  the transport outbox persists before send while expiring or settling
+  unrecoverable attachment launches. Redeven consumes published Floret v4.0.12 for atomic
   domain migration, canonical-first queue and interaction acceptance, one-shot
   effect retry claims, subtree deletion fencing, and monotonic typed views.
 

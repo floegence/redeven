@@ -134,7 +134,9 @@ func (s *Service) restoreFloretEffectRequest(ctx context.Context, request flrunt
 	}
 	return floretEffectRequest{meta: meta, req: SendUserTurnRequest{
 		ClientRequestID: request.RequestKey, ThreadID: request.ThreadID.String(), Model: settings.ModelID,
-		Input: runInputFromFloret(request.Input),
+		Input: runInputFromFloret(request.Input), Options: RunOptions{
+			NoUserInteraction: strings.TrimSpace(settings.ParentThreadID) != "", PermissionType: settings.PermissionType,
+		},
 	}}, nil
 }
 

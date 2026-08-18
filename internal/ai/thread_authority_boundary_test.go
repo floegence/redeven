@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/floegence/floret/v4/identity"
+	flruntime "github.com/floegence/floret/v4/runtime"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -29,6 +31,29 @@ func TestThreadViewDoesNotExposeRedevenAgentOwnershipShadow(t *testing.T) {
 		if strings.Contains(string(body), field) {
 			t.Fatalf("ThreadView exposed Redeven-owned Agent shadow field %q: %s", field, body)
 		}
+	}
+}
+
+func TestForeignEndpointCannotReadSubagentDetail(t *testing.T) {
+	svc := newSendTurnTestService(t)
+	owner := testSendTurnMeta()
+	parent, err := svc.CreateThread(t.Context(), owner, "subagent endpoint authority", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, err := svc.threadRuntime.Create(t.Context(), flruntime.CreateThreadInput{
+		ParentThreadID: identity.ThreadID(parent.ThreadID), TaskName: "private child", TaskDescription: "private child task",
+		HostProfileRef: subagentAgentTypeReviewer, ForkMode: subagentContextModeMissionOnly, RequestKey: "create-private-child",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	foreign := &session.Meta{
+		ChannelID: "foreign-channel", EndpointID: "foreign-endpoint", NamespacePublicID: "foreign-namespace",
+		UserPublicID: "foreign-user", CanRead: true, CanWrite: true, CanExecute: true,
+	}
+	if _, err := svc.GetFlowerSubagentDetail(t.Context(), foreign, parent.ThreadID, child.ThreadID.String(), 0, 50); !errorsIsNoRows(err) {
+		t.Fatalf("foreign subagent detail error=%v, want endpoint-scoped not found", err)
 	}
 }
 

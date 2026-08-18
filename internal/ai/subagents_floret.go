@@ -182,7 +182,7 @@ func (runtime *floretSubagentRuntime) spawn(ctx context.Context, toolCallID stri
 	if err != nil {
 		return nil, err
 	}
-	if err := service.ensureChildThreadSettings(ctx, parent, child.ThreadID.String(), parentID.String()); err != nil {
+	if err := service.ensureChildThreadSettings(ctx, parent, child.ThreadID.String(), parentID.String(), agentType); err != nil {
 		return nil, err
 	}
 	_, _ = threads.SetTitle(ctxOrBackground(ctx), flruntime.SetTitleInput{
@@ -190,12 +190,8 @@ func (runtime *floretSubagentRuntime) spawn(ctx context.Context, toolCallID stri
 	})
 	sendKey := requestKey + ":input"
 	request := runtime.childEffectRequest(parent, child.ThreadID.String(), sendKey, prompt, agentType)
-	service.floretEffects.put(child.ThreadID, sendKey, request)
-	result, err := threads.Send(ctxOrBackground(ctx), flruntime.SendInput{
-		ThreadID: child.ThreadID, Input: flruntime.UserInput{Text: prompt}, RequestKey: flruntime.RequestKey(sendKey),
-	})
+	result, err := service.sendFloretSubagentInput(ctx, threads, child.ThreadID, prompt, sendKey, request)
 	if err != nil {
-		service.floretEffects.drop(child.ThreadID, sendKey)
 		return nil, err
 	}
 	summary, err := runtime.snapshotForView(ctx, result)
@@ -227,7 +223,32 @@ func (runtime *floretSubagentRuntime) childEffectRequest(parent *run, childID, r
 	}}
 }
 
-func (service *Service) ensureChildThreadSettings(ctx context.Context, parent *run, childID, parentID string) error {
+func (service *Service) sendFloretSubagentInput(ctx context.Context, threads flruntime.ThreadService, threadID identity.ThreadID, text, requestKey string, request floretEffectRequest) (flruntime.ThreadView, error) {
+	if service == nil || threads == nil || service.floretEffects == nil {
+		return flruntime.ThreadView{}, errors.New("subagent input runtime is unavailable")
+	}
+	if err := service.persistExecutionAuthority(ctx, &request.meta, threadID.String(), requestKey, ""); err != nil {
+		return flruntime.ThreadView{}, err
+	}
+	service.floretEffects.put(threadID, requestKey, request)
+	result, err := threads.Send(ctxOrBackground(ctx), flruntime.SendInput{
+		ThreadID: threadID, Input: flruntime.UserInput{Text: text}, RequestKey: flruntime.RequestKey(requestKey),
+	})
+	if err != nil {
+		service.floretEffects.drop(threadID, requestKey)
+		return flruntime.ThreadView{}, err
+	}
+	if result.TurnID != "" {
+		persistCtx, cancelPersist := context.WithTimeout(context.Background(), service.persistTimeout())
+		defer cancelPersist()
+		if err := service.persistExecutionAuthority(persistCtx, &request.meta, threadID.String(), requestKey, result.TurnID.String()); err != nil {
+			return flruntime.ThreadView{}, err
+		}
+	}
+	return result, nil
+}
+
+func (service *Service) ensureChildThreadSettings(ctx context.Context, parent *run, childID, parentID, agentType string) error {
 	if service == nil || service.threadsDB == nil || parent == nil {
 		return errors.New("child thread catalog is unavailable")
 	}
@@ -245,6 +266,9 @@ func (service *Service) ensureChildThreadSettings(ctx context.Context, parent *r
 	child := *parentSettings
 	child.ThreadID = childID
 	child.ParentThreadID = parentID
+	if normalizeSubagentAgentType(agentType) != subagentAgentTypeWorker {
+		child.PermissionType = permissionTypeString(FlowerPermissionReadonly)
+	}
 	child.PinnedAtUnixMs = 0
 	child.SettingsCreatedAtUnixMs = 0
 	child.SettingsUpdatedAtUnixMs = 0
@@ -295,12 +319,8 @@ func (runtime *floretSubagentRuntime) sendInput(ctx context.Context, toolCallID 
 		}
 	}
 	request := runtime.childEffectRequest(parent, target, requestKey, message, summary.HostProfileRef)
-	service.floretEffects.put(summary.ID, requestKey, request)
-	result, err := threads.Send(ctxOrBackground(ctx), flruntime.SendInput{
-		ThreadID: summary.ID, Input: flruntime.UserInput{Text: message}, RequestKey: flruntime.RequestKey(requestKey),
-	})
+	result, err := service.sendFloretSubagentInput(ctx, threads, summary.ID, message, requestKey, request)
 	if err != nil {
-		service.floretEffects.drop(summary.ID, requestKey)
 		return nil, err
 	}
 	snapshot, err := runtime.snapshotForView(ctx, result)
@@ -668,8 +688,11 @@ func (service *Service) GetFlowerSubagentDetail(ctx context.Context, meta *sessi
 		return nil, err
 	}
 	parentThreadID, childThreadID = strings.TrimSpace(parentThreadID), strings.TrimSpace(childThreadID)
-	if parentThreadID == "" || childThreadID == "" || afterOrdinal < 0 {
+	if parentThreadID == "" || childThreadID == "" || afterOrdinal < 0 || strings.TrimSpace(meta.EndpointID) == "" {
 		return nil, errors.New("invalid request")
+	}
+	if err := service.requireEndpointThreadAuthority(ctx, meta.EndpointID, parentThreadID); err != nil {
+		return nil, err
 	}
 	parentID := identity.ThreadID(parentThreadID)
 	summaries, err := service.threadRuntime.List(ctxOrBackground(ctx), flruntime.ThreadScope{ParentID: &parentID})

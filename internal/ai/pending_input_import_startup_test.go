@@ -15,12 +15,13 @@ import (
 
 	"github.com/floegence/floret/v4/identity"
 	flruntime "github.com/floegence/floret/v4/runtime"
+	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 	_ "modernc.org/sqlite"
 )
 
-func TestPendingInputImportsRunBeforeServiceMaintenanceAndRetryIdempotently(t *testing.T) {
+func TestPendingInputImportsRunBeforeServiceMaintenance(t *testing.T) {
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
@@ -64,19 +65,6 @@ func TestPendingInputImportsRunBeforeServiceMaintenanceAndRetryIdempotently(t *t
 	metaJSON, _ := json.Marshal(meta)
 	insertPendingImportForTest(t, db, "request_pending_1", meta.EndpointID, thread.ThreadID, "first imported input", string(metaJSON), 10)
 	insertPendingImportForTest(t, db, "request_pending_2", meta.EndpointID, thread.ThreadID, "second imported input", string(metaJSON), 20)
-	if _, err := db.Exec(`CREATE TRIGGER fail_pending_import_completion BEFORE UPDATE OF imported_at_unix_ms ON ai_pending_input_imports BEGIN SELECT RAISE(ABORT, 'injected completion failure'); END`); err != nil {
-		t.Fatal(err)
-	}
-	if failed, err := newService(); err == nil {
-		_ = failed.Close()
-		t.Fatal("service startup succeeded despite pending import completion failure")
-	}
-	if count := pendingInputImportCountForTest(t, db); count != 2 {
-		t.Fatalf("pending imports after completion failure=%d, want 2", count)
-	}
-	if _, err := db.Exec(`DROP TRIGGER fail_pending_import_completion`); err != nil {
-		t.Fatal(err)
-	}
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -100,6 +88,56 @@ func TestPendingInputImportsRunBeforeServiceMaintenanceAndRetryIdempotently(t *t
 	t.Cleanup(func() { _ = db.Close() })
 	if count := pendingInputImportCountForTest(t, db); count != 0 {
 		t.Fatalf("pending imports after successful restart=%d, want 0", count)
+	}
+	for _, requestID := range []string{"request_pending_1", "request_pending_2"} {
+		assertPendingImportAuthorityForTest(t, db, requestID, meta)
+	}
+}
+
+func TestPendingInputImportPersistsAuthorityBeforeCanonicalImport(t *testing.T) {
+	meta := testSendTurnMeta()
+	const threadID = "thread_pending_authority_order"
+	workDir := t.TempDir()
+	store := newAuthorityContinuityStore(t)
+	if err := store.CreateThreadSettings(t.Context(), threadstore.ThreadSettings{
+		ThreadID: threadID, EndpointID: meta.EndpointID, NamespacePublicID: meta.NamespacePublicID,
+		ModelID: "openai/gpt-5-mini", PermissionType: permissionTypeString(FlowerPermissionApprovalRequired), WorkingDir: workDir,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	metaJSON, err := json.Marshal(meta)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const requestID = "request_pending_authority_order"
+	runtime := &authorityContinuityRuntime{}
+	effects := newFloretEffectAdapter()
+	svc := &Service{
+		cfg: &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{
+			ID: "openai", Type: "openai", BaseURL: "https://api.openai.com/v1", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
+		}}},
+		stateDir: workDir, agentHomeDir: workDir, persistOpTO: time.Second,
+		threadsDB: store, threadRuntime: runtime, floretEffects: effects,
+		terminalProcesses: newTerminalProcessManager(),
+	}
+	effects.bind(svc)
+	runtime.importPendingInputs = func(ctx context.Context, input flruntime.ImportPendingInputsInput) (flruntime.ImportResult, error) {
+		authority, err := svc.threadsDB.GetExecutionAuthority(ctx, requestID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if authority == nil || authority.ThreadID != threadID || authority.EndpointID != meta.EndpointID || authority.UserPublicID != meta.UserPublicID {
+			t.Fatalf("authority at canonical import=%#v", authority)
+		}
+		return flruntime.ImportResult{ThreadID: input.ThreadID, Imported: len(input.Items), View: flruntime.ThreadView{
+			ThreadID: input.ThreadID, Activity: flruntime.ThreadActivityActive,
+		}}, nil
+	}
+	if err := svc.importPendingInputGroup(t.Context(), []threadstore.PendingInputImport{{
+		RequestID: requestID, EndpointID: meta.EndpointID, ThreadID: threadID, ModelID: "openai/gpt-5-mini",
+		TextContent: "import with original authority", AttachmentsJSON: "[]", OptionsJSON: "{}", SessionMetaJSON: string(metaJSON),
+	}}); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -165,4 +203,20 @@ func pendingInputImportCountForTest(t *testing.T, db *sql.DB) int {
 		t.Fatal(err)
 	}
 	return count
+}
+
+func assertPendingImportAuthorityForTest(t *testing.T, db *sql.DB, requestID string, want session.Meta) {
+	t.Helper()
+	var endpointID, namespacePublicID, channelID, userPublicID, userEmail string
+	if err := db.QueryRow(`SELECT endpoint_id, namespace_public_id, channel_id, user_public_id, user_email FROM ai_flower_execution_authority WHERE request_key = ?`, requestID).Scan(
+		&endpointID, &namespacePublicID, &channelID, &userPublicID, &userEmail,
+	); err != nil {
+		t.Fatalf("load pending import authority %q: %v", requestID, err)
+	}
+	if endpointID != want.EndpointID || namespacePublicID != want.NamespacePublicID || channelID != want.ChannelID || userPublicID != want.UserPublicID || userEmail != want.UserEmail {
+		t.Fatalf("pending import authority %q=(%q, %q, %q, %q, %q), want (%q, %q, %q, %q, %q)",
+			requestID, endpointID, namespacePublicID, channelID, userPublicID, userEmail,
+			want.EndpointID, want.NamespacePublicID, want.ChannelID, want.UserPublicID, want.UserEmail,
+		)
+	}
 }

@@ -1,6 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createTransportOutbox } from './transportOutbox';
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 describe('TransportOutbox', () => {
   it('keeps only raw input until the typed current view confirms its request id', () => {
@@ -96,5 +102,92 @@ describe('TransportOutbox', () => {
 
     expect(outbox.entries.get('attachment-request')?.terminalError)
       .toBe('attachments_unavailable_after_restart');
+  });
+
+  it('keeps an unknown result recoverable and exposes IndexedDB persistence failure', async () => {
+    const storageError = new Error('IndexedDB unavailable');
+    vi.stubGlobal('indexedDB', {
+      open: vi.fn(() => {
+        const request = {
+          error: storageError,
+          onerror: null as null | (() => void),
+          onsuccess: null as null | (() => void),
+          onupgradeneeded: null as null | (() => void),
+        };
+        queueMicrotask(() => request.onerror?.());
+        return request;
+      }),
+    });
+    const report = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const outbox = createTransportOutbox().put({
+      requestId: 'transport-unknown',
+      threadId: 'thread-a',
+      input: { client_request_id: 'transport-unknown', thread_id: 'thread-a', prompt: 'keep me' },
+      attachmentLabels: [],
+      createdAtMs: Date.now(),
+    });
+
+    await expect(outbox.flushPersistence()).rejects.toThrow('IndexedDB unavailable');
+    expect(outbox.persistenceError()?.message).toBe('IndexedDB unavailable');
+    expect(outbox.entries.get('transport-unknown')?.input.prompt).toBe('keep me');
+    expect(report).toHaveBeenCalledWith('Flower transport outbox persistence failed.', storageError);
+
+    vi.stubGlobal('indexedDB', {
+      open: vi.fn(() => {
+        const request = {
+          result: undefined as unknown,
+          error: null,
+          onerror: null as null | (() => void),
+          onsuccess: null as null | (() => void),
+          onupgradeneeded: null as null | (() => void),
+        };
+        queueMicrotask(() => {
+          request.result = {
+            objectStoreNames: { contains: () => true },
+            transaction: () => {
+              const transaction = {
+                error: null,
+                oncomplete: null as null | (() => void),
+                onerror: null as null | (() => void),
+                onabort: null as null | (() => void),
+                objectStore: () => ({ clear: () => undefined, put: () => undefined }),
+              };
+              queueMicrotask(() => transaction.oncomplete?.());
+              return transaction;
+            },
+            close: () => undefined,
+          };
+          request.onsuccess?.();
+        });
+        return request;
+      }),
+    });
+    const recovered = outbox.assignThread('transport-unknown', 'thread-recovered');
+
+    await expect(recovered.flushPersistence()).resolves.toBeUndefined();
+    expect(recovered.persistenceError()).toBeNull();
+    expect(recovered.entries.get('transport-unknown')?.threadId).toBe('thread-recovered');
+    recovered.dispose();
+  });
+
+  it('expires terminal entries during a long-lived page session', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000);
+    const outbox = createTransportOutbox().put({
+      requestId: 'terminal-entry',
+      threadId: 'thread-a',
+      input: { client_request_id: 'terminal-entry', thread_id: 'thread-a', prompt: 'attached', attachment_ids: ['attachment-1'] },
+      attachmentLabels: ['notes.md'],
+      createdAtMs: Date.now(),
+      terminalError: 'attachments_unavailable_after_restart',
+    });
+    await outbox.flushPersistence();
+
+    await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1000 + 1);
+
+    expect(outbox.entries.has('terminal-entry')).toBe(false);
+    await outbox.flushPersistence();
+    outbox.dispose();
   });
 });
