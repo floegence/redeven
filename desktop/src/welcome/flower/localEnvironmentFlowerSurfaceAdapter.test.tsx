@@ -886,6 +886,7 @@ describe('Local Environment Flower surface adapter', () => {
             turn_id: 'turn-1',
             kind: 'assistant',
             text: 'working live',
+            live: true,
             created_at: '2026-08-12T00:00:42Z',
           }],
         });
@@ -907,7 +908,7 @@ describe('Local Environment Flower surface adapter', () => {
       view_version: 9, activity: 'active', turn_id: 'turn-1',
       items: [{
         id: 'assistant-live', turn_id: 'turn-1', kind: 'assistant',
-        text: 'working live', created_at: '2026-08-12T00:00:42Z',
+        text: 'working live', live: true, created_at: '2026-08-12T00:00:42Z',
       }],
     }));
   });
