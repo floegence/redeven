@@ -8,8 +8,13 @@ import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { chromium } from 'playwright';
-import { createAcceptor, SessionHandlers } from '@floegence/flowersec-core/node';
-import { parseArtifact } from '@floegence/flowersec-core';
+import {
+  authorizeRuntime,
+  createAcceptor,
+  createEndpointSet,
+  Issuer,
+  SessionHandlers,
+} from '@floegence/flowersec-core/node';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, '../../../..');
@@ -39,38 +44,45 @@ const builtPluginPresentationSHA256 = `sha256:${'1'.repeat(64)}`;
 const pluginMarketDetailPath = `/_redeven_proxy/api/plugins/market/plugins/${builtPluginReleaseRef.plugin_id}`;
 const builtPluginPackageURL = 'https://github.com/floegence/redeven-official-plugins/releases/download/v4.4.4/containers-4.4.4.redevplugin';
 
-function builtDistArtifact(webSocketURL) {
+const builtDistProxyRuntimeProjection = JSON.stringify({
+  scope: 'proxy.runtime',
+  scope_version: 2,
+  critical: true,
+  payload: {
+    version: 2,
+    mode: 'service_worker',
+    appBasePath: entryPath,
+    serviceWorker: {
+      scriptUrl: `${entryPath}_redeven_sw.js`,
+      scope: entryPath,
+    },
+  },
+});
+const builtDistTargetBinding = Object.freeze({
+  v: 1,
+  kind: 'env',
+  env_public_id: 'env_local',
+  floe_app: 'com.floegence.redeven.agent',
+  launcher_kind: 'env',
+  launcher_id: 'env_local',
+});
+
+function sha256Base64URL(value) {
+  return createHash('sha256').update(value).digest('base64url');
+}
+
+function builtDistSpendScope({ artifactJSON, origin, expiresAt }) {
   return {
-    v: 2,
-    profile: 'flowersec/2',
-    session: {
-      channel_id: 'channel-1',
-      init_expire_at_unix_s: 4_102_444_800,
-      idle_timeout_seconds: 60,
-      establish_timeout_seconds: 30,
-      rekey_prepare_timeout_seconds: 10,
-      rekey_completion_timeout_seconds: 30,
-      max_inbound_streams: 64,
-      e2ee_psk_b64u: 'AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA',
-      allowed_suites: [1, 2],
-      default_suite: 1,
-      selected_features: 0,
-      contract_hash_b64u: 'ioBJP5DPhg471caMR-huV5I9RlNKY2Pr9fs2GkP8CmA',
-    },
-    path: {
-      kind: 'direct',
-      rendezvous_group_id: 'group-1',
-      listener_audience: 'listener-1',
-      routing_token: 'routing-token',
-      candidates: [{
-        id: 'w1',
-        carrier: 'websocket',
-        url: webSocketURL,
-        wire_profile: 'flowersec-direct/2',
-      }],
-    },
-    scoped: [],
-    correlation: { v: 2, tags: [] },
+    v: 1,
+    receipt: `r1.built-dist.${sha256Base64URL(`receipt:${artifactJSON}`)}`,
+    artifact_digest_b64u: sha256Base64URL(artifactJSON),
+    projection_digest_b64u: sha256Base64URL(builtDistProxyRuntimeProjection),
+    launcher_origin: origin,
+    runtime_origin: origin,
+    app_origin: origin,
+    consumer: 'trusted',
+    target_binding: builtDistTargetBinding,
+    expires_at: expiresAt,
   };
 }
 
@@ -235,7 +247,12 @@ function builtPluginReleaseInspection() {
     presentation_sha256: builtPluginPresentationSHA256,
     security_summary: {
       summary_sha256: `sha256:${'2'.repeat(64)}`,
-      permissions: [{ permission_id: 'containers.read', methods: ['containers.list'] }],
+      permissions: [{
+        permission_id: 'containers.read',
+        methods: ['containers.list'],
+        required: true,
+        effects: ['read'],
+      }],
       methods: [],
       capability_contracts: [],
       workers: [],
@@ -331,12 +348,17 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
   let installedPlugin = null;
   let releaseInstallExecution = null;
   let directArtifact = null;
+  let directArtifactJSON = '';
+  let directAuthorizationRecord = null;
+  let directArtifactExpiresAt = '';
   let acceptor = null;
   let acceptorFailure = null;
   let accepting = true;
   let acceptController = null;
   const acceptedSessions = new Set();
   const acceptedSessionTasks = new Set();
+  const lifecycleEvents = [];
+  const artifactSpendRequests = [];
   let acceptingTask = Promise.resolve();
   const server = createServer(async (request, response) => {
     try {
@@ -371,32 +393,49 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
         return;
       }
       if (accessReady && requestURL.pathname === '/api/local/direct/connect_artifact') {
+        lifecycleEvents.push('artifact_issued');
         jsonResponse(response, {
           v: 1,
           plugin_session_credential: 'built-dist-plugin-session',
           channel_id: directArtifact.session.channel_id,
-          connect_artifact: JSON.stringify(directArtifact),
-          critical_scope_projection_json: '{"scope":"proxy.runtime"}',
-          spend_scope: {
-            v: 1,
-            receipt: 'r1.local.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
-            artifact_digest_b64u: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
-            projection_digest_b64u: 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
-            launcher_origin: baseURL,
-            runtime_origin: baseURL,
-            app_origin: baseURL,
-            consumer: 'trusted',
-            target_binding: {
-              v: 1,
-              kind: 'env',
-              env_public_id: 'env_local',
-              floe_app: 'com.floegence.redeven.agent',
-              launcher_kind: 'env',
-              launcher_id: 'env_local',
-            },
-            expires_at: '2033-05-18T03:33:20Z',
-          },
+          connect_artifact: directArtifactJSON,
+          critical_scope_projection_json: builtDistProxyRuntimeProjection,
+          spend_scope: builtDistSpendScope({
+            artifactJSON: directArtifactJSON,
+            origin: new URL(baseURL).origin,
+            expiresAt: directArtifactExpiresAt,
+          }),
         });
+        return;
+      }
+      if (accessReady && requestURL.pathname === '/api/local/direct/artifact/spend') {
+        const body = await readJSONRequest(request);
+        const spendScope = builtDistSpendScope({
+          artifactJSON: directArtifactJSON,
+          origin: new URL(baseURL).origin,
+          expiresAt: directArtifactExpiresAt,
+        });
+        const expected = {
+          attempt_id: body.attempt_id,
+          receipt: spendScope.receipt,
+          artifact_digest_b64u: spendScope.artifact_digest_b64u,
+          projection_digest_b64u: spendScope.projection_digest_b64u,
+          launcher_origin: spendScope.launcher_origin,
+          runtime_origin: spendScope.runtime_origin,
+          app_origin: spendScope.app_origin,
+          consumer: spendScope.consumer,
+          target_binding: spendScope.target_binding,
+          expires_at: spendScope.expires_at,
+        };
+        if (request.method !== 'POST'
+          || !/^[A-Za-z0-9_-]{43}$/u.test(body.attempt_id)
+          || JSON.stringify(body) !== JSON.stringify(expected)) {
+          throw new Error(`unexpected built direct artifact spend request: ${JSON.stringify(body)}`);
+        }
+        artifactSpendRequests.push(body);
+        lifecycleEvents.push('artifact_spent');
+        response.writeHead(204);
+        response.end();
         return;
       }
       if (accessReady && requestURL.pathname === '/_redeven_proxy/api/ai/threads') {
@@ -480,6 +519,7 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
         return;
       }
       if (requestURL.pathname === '/_redevplugin/api/plugins/runtime/recover-enabled') {
+        lifecycleEvents.push('recover_enabled');
         const body = await readJSONRequest(request);
         if (JSON.stringify(body) !== '{}') {
           throw new Error(`unexpected plugin recovery request: ${JSON.stringify(body)}`);
@@ -628,10 +668,14 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
         allowedOrigins: [new URL(baseURL).origin],
       }],
       maxInboundStreams: 64,
-      authorize: async () => ({
-        decision: 'allow',
-        artifact: parseArtifact(JSON.stringify(directArtifact)),
-      }),
+      authorize: async (request) => {
+        if (!directAuthorizationRecord) throw new Error('built direct artifact authorization is unavailable');
+        lifecycleEvents.push('websocket_authorized');
+        return authorizeRuntime(request, directAuthorizationRecord, 'built-dist-shell');
+      },
+      release: () => {
+        lifecycleEvents.push('lease_released');
+      },
       resolveHandlers: () => {
         const handlers = new SessionHandlers();
         handlers.handleRPC(4001, async () => ({ payload: { server_time_ms: Date.now() } }));
@@ -644,14 +688,38 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
     });
     const acceptorAddress = acceptor.addresses()[0];
     if (!acceptorAddress) throw new Error('built Env App direct server did not publish an address');
-    directArtifact = builtDistArtifact(
-      `ws://127.0.0.1:${acceptorAddress.port}/flowersec/v2/direct`,
-    );
+    const directArtifactExpiresAtUnixSeconds = Math.floor(Date.now() / 1_000) + 240;
+    directArtifactExpiresAt = new Date(directArtifactExpiresAtUnixSeconds * 1_000).toISOString();
+    const issued = new Issuer().issueDirect({
+      session: {
+        channelId: 'channel-1',
+        expiresAtUnixSeconds: directArtifactExpiresAtUnixSeconds,
+        idleTimeoutSeconds: 60,
+        maxInboundStreams: 64,
+      },
+      endpoints: createEndpointSet(`ws://127.0.0.1:${acceptorAddress.port}/flowersec/v2/direct`),
+      rendezvousGroupId: 'group-1',
+      listenerAudience: 'listener-1',
+      upstreamAddress: `127.0.0.1:${acceptorAddress.port}`,
+      metadata: {
+        scopes: [{
+          name: 'proxy.runtime',
+          version: 2,
+          critical: true,
+          payload: JSON.parse(builtDistProxyRuntimeProjection).payload,
+        }],
+      },
+    });
+    directArtifactJSON = new TextDecoder().decode(issued.artifactJSON());
+    directArtifact = JSON.parse(directArtifactJSON);
+    directAuthorizationRecord = issued.authorizationRecord();
     acceptController = new AbortController();
     acceptingTask = (async () => {
       while (accepting) {
         const accepted = await acceptor.accept({ signal: acceptController.signal });
         acceptedSessions.add(accepted);
+        lifecycleEvents.push('session_established');
+        lifecycleEvents.push('session_serving');
         const acceptedSessionTask = accepted.serve()
           .catch(() => undefined)
           .finally(() => {
@@ -659,6 +727,7 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
             acceptedSessionTasks.delete(acceptedSessionTask);
           });
         acceptedSessionTasks.add(acceptedSessionTask);
+        lifecycleEvents.push('runtime_ready');
       }
     })().catch((error) => {
       if (accepting) acceptorFailure = error;
@@ -666,6 +735,7 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
   }
   return {
     baseURL,
+    artifactSpendRequests: () => [...artifactSpendRequests],
     close: async () => {
       accepting = false;
       acceptController?.abort();
@@ -676,6 +746,7 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
       await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
       if (acceptorFailure) throw acceptorFailure;
     },
+    lifecycleEvents: () => [...lifecycleEvents],
   };
 }
 
@@ -867,6 +938,31 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
         pluginRequests,
       })}`, { cause: error });
     }
+    const lifecycleEvents = server.lifecycleEvents();
+    const expectedLifecycle = [
+      'artifact_issued',
+      'artifact_spent',
+      'websocket_authorized',
+      'session_established',
+      'session_serving',
+      'runtime_ready',
+      'recover_enabled',
+    ];
+    let lifecycleCursor = -1;
+    for (const event of expectedLifecycle) {
+      const eventCount = lifecycleEvents.filter((actual) => actual === event).length;
+      const eventIndex = lifecycleEvents.indexOf(event);
+      if (eventCount !== 1 || eventIndex <= lifecycleCursor) {
+        throw new Error(`built secure session lifecycle was incomplete or reordered: ${JSON.stringify({
+          expected: expectedLifecycle,
+          actual: lifecycleEvents,
+        })}`);
+      }
+      lifecycleCursor = eventIndex;
+    }
+    if (server.artifactSpendRequests().length !== 1) {
+      throw new Error(`built direct artifact spend count = ${server.artifactSpendRequests().length}, expected 1`);
+    }
 
     await page.getByRole('button', { name: 'Plugins', exact: true }).click();
     const pluginCenterAction = page.locator('[data-plugin-center-market-action]');
@@ -902,14 +998,25 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
     if (await pluginInstall.count() !== 1) {
       throw new Error(`built plugin Install action count = ${await pluginInstall.count()}, expected 1`);
     }
-    // This static HTTP harness cannot complete the encrypted direct WebSocket
-    // handshake, so management controls remain disabled even with admin access.
-    // Enable only the located control to exercise the production click route.
-    await pluginInstall.evaluate((button) => { button.disabled = false; });
+    if (await pluginInstall.isDisabled()) {
+      throw new Error(`built plugin Install action remained disabled after secure session recovery: ${JSON.stringify({
+        lifecycleEvents: server.lifecycleEvents(),
+        pluginRequests,
+      })}`);
+    }
     await pluginInstall.click();
 
     const installReview = page.locator('[data-plugin-install-review-dialog]');
-    await installReview.waitFor({ state: 'visible', timeout: 10_000 });
+    try {
+      await installReview.waitFor({ state: 'visible', timeout: 10_000 });
+    } catch (error) {
+      throw new Error(`built plugin Install review did not become visible: ${JSON.stringify({
+        lifecycleEvents: server.lifecycleEvents(),
+        pluginRequests,
+        pluginCenterText: (await pluginCenter.innerText()).slice(0, 2_000),
+        pageErrors,
+      })}`, { cause: error });
+    }
     await page.locator('[data-plugin-install-review-confirm]').click();
     await installReview.waitFor({ state: 'detached', timeout: 10_000 });
     await pluginCenter.locator('[data-plugin-center-list][aria-busy="false"]').waitFor({
@@ -1023,6 +1130,7 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
       package_url: builtPluginPackageURL,
       release_install_execution_called: true,
       request_count: pluginRequests.length,
+      secure_session_lifecycle: lifecycleEvents.filter((event) => expectedLifecycle.includes(event)),
     };
   } finally {
     await page.close();

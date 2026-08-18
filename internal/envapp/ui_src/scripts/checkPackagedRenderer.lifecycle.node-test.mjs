@@ -1,9 +1,16 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { access, readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { parseArtifact } from '@floegence/flowersec-core';
+import { assertProxyRuntimeScope } from '@floegence/flowersec-core/proxy';
 import { createBuiltDistServer, createBuiltDistTLS } from './checkPackagedRenderer.mjs';
 
 const packagedRendererSource = await readFile(new URL('./checkPackagedRenderer.mjs', import.meta.url), 'utf8');
+
+function sha256Base64URL(value) {
+  return createHash('sha256').update(value).digest('base64url');
+}
 
 function pendingAcceptAcceptor() {
   let resolveAccept;
@@ -135,6 +142,53 @@ test('packaged renderer TLS cleanup removes its temporary credentials', async ()
   await assert.rejects(access(tls.directory));
 });
 
+test('unlocked packaged renderer emits a current validated Floe acquisition envelope', async () => {
+  const server = await createBuiltDistServer({ accessReady: true });
+
+  try {
+    const response = await fetch(new URL('/api/local/direct/connect_artifact', server.baseURL), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    });
+    assert.equal(response.status, 200);
+    const envelope = await response.json();
+    const origin = new URL(server.baseURL).origin;
+    assert.equal(envelope.v, 1);
+    assert.equal(envelope.channel_id, 'channel-1');
+    assert.equal(envelope.spend_scope.launcher_origin, origin);
+    assert.equal(envelope.spend_scope.runtime_origin, origin);
+    assert.equal(envelope.spend_scope.app_origin, origin);
+    assert.equal(envelope.spend_scope.artifact_digest_b64u, sha256Base64URL(envelope.connect_artifact));
+    assert.equal(
+      envelope.spend_scope.projection_digest_b64u,
+      sha256Base64URL(envelope.critical_scope_projection_json),
+    );
+    assert.doesNotThrow(() => parseArtifact(envelope.connect_artifact));
+
+    const projection = JSON.parse(envelope.critical_scope_projection_json);
+    assert.deepEqual({
+      scope: projection.scope,
+      scope_version: projection.scope_version,
+      critical: projection.critical,
+    }, {
+      scope: 'proxy.runtime',
+      scope_version: 2,
+      critical: true,
+    });
+    assert.deepEqual(assertProxyRuntimeScope(projection.payload), {
+      mode: 'service_worker',
+      appBasePath: '/_redeven_proxy/env/',
+      serviceWorker: {
+        scriptUrl: '/_redeven_proxy/env/_redeven_sw.js',
+        scope: '/_redeven_proxy/env/',
+      },
+    });
+  } finally {
+    await server.close();
+  }
+});
+
 test('packaged renderer fixture inspects the exact official release before install confirmation', async () => {
   const server = await createBuiltDistServer({ pluginInstallFlow: true });
   const releaseRef = {
@@ -185,7 +239,12 @@ test('packaged renderer fixture inspects the exact official release before insta
         presentation_sha256: `sha256:${'1'.repeat(64)}`,
         security_summary: {
           summary_sha256: `sha256:${'2'.repeat(64)}`,
-          permissions: [{ permission_id: 'containers.read', methods: ['containers.list'] }],
+          permissions: [{
+            permission_id: 'containers.read',
+            methods: ['containers.list'],
+            required: true,
+            effects: ['read'],
+          }],
           methods: [],
           capability_contracts: [],
           workers: [],
@@ -228,7 +287,10 @@ test('locked packaged renderer verifies the access gate without opening privileg
 test('unlocked packaged renderer uses the Flowersec 2.5.2 WebSocket Acceptor contract', () => {
   assert.match(packagedRendererSource, /listeners: \[\{[\s\S]*?carrier: 'websocket',[\s\S]*?path: 'direct'/u);
   assert.match(packagedRendererSource, /acceptor\.addresses\(\)\[0\]/u);
+  assert.match(packagedRendererSource, /new Issuer\(\)\.issueDirect/u);
+  assert.match(packagedRendererSource, /authorizeRuntime\(request, directAuthorizationRecord/u);
   assert.doesNotMatch(packagedRendererSource, /acceptor\.address\(\)/u);
+  assert.doesNotMatch(packagedRendererSource, /contract_hash_b64u/u);
   assert.doesNotMatch(packagedRendererSource, /flowersec\/webtransport\/v2\/direct/u);
   assert.doesNotMatch(packagedRendererSource, /createBuiltDistServer\(\{[^}]*\btls\b/u);
 });
