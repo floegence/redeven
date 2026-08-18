@@ -62,7 +62,16 @@ func (s *Service) RetryThreadContinuation(ctx context.Context, meta *session.Met
 	if err := s.persistExecutionAuthorityRecord(ctx, authority, requestID, view.TurnID.String()); err != nil {
 		return RetryThreadContinuationResponse{}, err
 	}
-	if _, err := typed.Retry(ctx, flruntime.RetryInput{ThreadID: identity.ThreadID(threadID), SourceTurnID: view.TurnID, RequestKey: requestKey}); err != nil {
+	retryView, err := typed.Retry(ctx, flruntime.RetryInput{ThreadID: identity.ThreadID(threadID), SourceTurnID: view.TurnID, RequestKey: requestKey})
+	if err != nil {
+		return RetryThreadContinuationResponse{}, err
+	}
+	if retryView.TurnID == "" {
+		return RetryThreadContinuationResponse{}, errors.New("retry turn authority is unavailable")
+	}
+	persistCtx, cancelPersist := context.WithTimeout(context.Background(), s.persistTimeout())
+	defer cancelPersist()
+	if err := s.persistExecutionAuthorityRecord(persistCtx, authority, requestID, retryView.TurnID.String()); err != nil {
 		return RetryThreadContinuationResponse{}, err
 	}
 	return RetryThreadContinuationResponse{OK: true}, nil

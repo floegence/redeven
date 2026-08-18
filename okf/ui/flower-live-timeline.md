@@ -16,13 +16,16 @@ Flower uses one workspace SSE for every thread. The stream carries a baseline of
 `LiveTransport` owns the single connection and a process-local `connectionEpoch`. Every reconnect invalidates callbacks from the prior connection. Normal network failures reconnect quietly with bounded backoff; authorization failure is terminal and visible. There is no browser event log, cursor, generation graph, replay endpoint, retention-gap reducer, polling loop, or per-selection SSE.
 
 The server never silently drops an authoritative frame. An initial baseline
-contains the complete active and waiting inventory even when it exceeds the
-ordinary live-frame count. If one subscriber exceeds its byte budget, or one
-encoded frame is itself oversized, the server closes that subscriber. The
-client treats the disconnect as loss of cache authority and reconnects; the new
-baseline restores summaries and the selected current view. This fail-fast
-resynchronization contract avoids a second replay protocol while ensuring a
-lost terminal update cannot leave the UI permanently running or waiting.
+paginates the complete workspace summary inventory and includes current views
+for active and waiting threads, even when the inventory exceeds one catalog
+page or the ordinary live-frame count. A missing, repeated, or non-advancing
+page cursor fails the subscription before `ready`. If one subscriber exceeds
+its byte budget, or one encoded frame is itself oversized, the server closes
+that subscriber. The client treats the disconnect as loss of cache authority
+and reconnects; the new baseline restores summaries and the selected current
+view. This fail-fast resynchronization contract avoids a second replay protocol
+while ensuring a lost terminal update cannot leave the UI permanently running
+or waiting.
 
 Canonical terminal updates and reconnect baselines converge the current view. Background running, waiting_user, waiting_approval, and completed summaries update without pointer or focus events. A missing detail may show a local loading state, but it never clears the rail or cached transcript.
 

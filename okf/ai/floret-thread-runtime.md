@@ -76,6 +76,14 @@ source. Restart redispatch combines those Floret facts with the matching host
 authority record instead of using the thread creator, and never stores a second
 transcript or lifecycle projection.
 
+Authority is durable before pending-input import or child-thread Send can admit
+canonical input. Retry and child Send then bind the same authority to the TurnID
+returned by Floret using a bounded service-owned context, so caller cancellation
+after acceptance cannot break restart or a later retry. Child settings preserve
+autonomous execution and reviewer readonly permission across restart. SubAgent
+detail reads prove parent endpoint ownership before using the process-wide
+Floret child list or view.
+
 Flower thread navigation assigns the selection generation synchronously with
 the user's rail intent. Deferred presentation work carries that generation,
 and an older bootstrap is rejected before it can update `ThreadCache` detail.
@@ -108,6 +116,7 @@ Redeven never imports Floret internals, reads Floret storage, copies canonical l
 - `redeven:internal/ai/threads.go` - Single endpoint/thread ownership boundary before canonical mutation.
 - `redeven:internal/ai/execution_authority.go` - Current submitting-user authority capture for restart recovery.
 - `redeven:internal/ai/threadstore/execution_authority.go` - Minimal host authorization facts for restart redispatch.
+- `redeven:internal/ai/execution_authority_continuity_test.go` - Retry and SubAgent authority continuity across accepted turns and restart.
 - `redeven:internal/ai/stop_thread.go` - Idempotent typed cancellation without handler lookup.
 - `redeven:internal/ai/retry_thread_effect.go` - Exact unknown-effect retry mapping.
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Latest-selection generation fence before detail cache mutation.

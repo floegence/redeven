@@ -893,14 +893,26 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [transportOutbox, setTransportOutbox] = createSignal(createTransportOutbox());
 	const liveTransport = createLiveTransport<FlowerLiveStreamEnvelope>();
 	const outboxResendInFlight = new Set<string>();
+	let transportOutboxDisposed = false;
 	onMount(() => {
 		void restoreTransportOutbox().then((restored) => {
+			if (transportOutboxDisposed) {
+				restored.dispose();
+				return;
+			}
 			setTransportOutbox((current) => {
 				let merged = restored;
 				for (const entry of current.entries.values()) merged = merged.put(entry);
+				current.dispose();
 				return merged;
 			});
-		}).catch(() => undefined);
+		}).catch((error) => {
+			if (!transportOutboxDisposed) notifyComposerError(getErrorMessage(error));
+		});
+	});
+	onCleanup(() => {
+		transportOutboxDisposed = true;
+		transportOutbox().dispose();
 	});
 	const threads = createMemo<readonly FlowerThreadSnapshot[]>(() => [...threadCache().summaries.values()]);
 	const selectedThreadID = createMemo(() => threadCache().selectedId ?? '');
@@ -4404,13 +4416,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         // observe the new entry synchronously.
         outboxResendInFlight.add(clientRequestID);
         originalCommandFenced = true;
-        setTransportOutbox((outbox) => outbox.put({
-          requestId: clientRequestID,
-          threadId: selectedID || PENDING_NEW_THREAD_ID,
-          input: launchInput,
-          attachmentLabels: readyItems.map((attachment) => attachment.name),
-          createdAtMs: Date.now(),
-        }));
+        let durableOutbox = transportOutbox();
+        setTransportOutbox((outbox) => {
+          durableOutbox = outbox.put({
+            requestId: clientRequestID,
+            threadId: selectedID || PENDING_NEW_THREAD_ID,
+            input: launchInput,
+            attachmentLabels: readyItems.map((attachment) => attachment.name),
+            createdAtMs: Date.now(),
+          });
+          return durableOutbox;
+        });
+        await durableOutbox.flushPersistence();
         // The original command and recovery resend share one request-id fence.
         // Otherwise persisting the outbox entry can immediately trigger a
         // duplicate send before this command has returned its current view.

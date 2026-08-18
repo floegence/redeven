@@ -16,6 +16,7 @@ import (
 
 const (
 	flowerLiveMaxSubscribersPerEndpoint = 256
+	flowerLiveBaselinePageLimit         = 200
 	flowerLiveSubscriberBatchLimit      = 16
 	flowerLiveSubscriberByteLimit       = 1 << 20
 	flowerLiveGlobalQueuedByteLimit     = 32 << 20
@@ -109,12 +110,12 @@ func (s *Service) SubscribeFlowerLiveStream(ctx context.Context, meta *session.M
 
 	var summaries []ThreadView
 	if s.threadsDB != nil {
-		baseline, err := s.ListThreads(ctxOrBackground(ctx), meta, 200, "")
+		var err error
+		summaries, err = s.listFlowerLiveBaseline(ctxOrBackground(ctx), meta)
 		if err != nil {
 			closeFlowerLiveSubscription(s, subscriber)
 			return nil, err
 		}
-		summaries = baseline.Threads
 	}
 	currentBaselines := make([]*flowerLiveEncodedBatch, 0)
 	if s.threadRuntime != nil {
@@ -142,6 +143,31 @@ func (s *Service) SubscribeFlowerLiveStream(ctx context.Context, meta *session.M
 	finalizeFlowerLiveSubscriberInitializationLocked(s, subscriber, ready, currentBaselines)
 	s.mu.Unlock()
 	return &FlowerLiveStreamSubscription{service: s, subscriber: subscriber}, nil
+}
+
+func (s *Service) listFlowerLiveBaseline(ctx context.Context, meta *session.Meta) ([]ThreadView, error) {
+	var summaries []ThreadView
+	cursor := ""
+	seenCursors := make(map[string]struct{})
+	for {
+		page, err := s.ListThreads(ctx, meta, flowerLiveBaselinePageLimit, cursor)
+		if err != nil {
+			return nil, err
+		}
+		summaries = append(summaries, page.Threads...)
+		next := strings.TrimSpace(page.NextCursor)
+		if next == "" {
+			return summaries, nil
+		}
+		if next == cursor {
+			return nil, errors.New("Flower live baseline cursor did not advance")
+		}
+		if _, repeated := seenCursors[next]; repeated {
+			return nil, errors.New("Flower live baseline cursor repeated")
+		}
+		seenCursors[next] = struct{}{}
+		cursor = next
+	}
 }
 
 func finalizeFlowerLiveSubscriberInitializationLocked(service *Service, subscriber *flowerLiveSubscriber, ready *flowerLiveEncodedBatch, baselines []*flowerLiveEncodedBatch) {
