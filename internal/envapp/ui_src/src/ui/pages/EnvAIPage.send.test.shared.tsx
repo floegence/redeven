@@ -7,14 +7,10 @@ const mocks = vi.hoisted(() => {
     omitReadState: boolean;
     currentItems: unknown[] | null;
     currentInteractions: unknown[];
-    assistantDraft: string;
-    thinkingDraft: string;
   } = {
     omitReadState: false,
     currentItems: null,
     currentInteractions: [],
-    assistantDraft: '',
-    thinkingDraft: '',
   };
   const readStatus = (lastMessageAtUnixMs: number, waitingPromptID = '') => {
     const activityRevision = lastMessageAtUnixMs;
@@ -91,7 +87,9 @@ const mocks = vi.hoisted(() => {
       )) as Record<string, unknown> | undefined;
       const waitingPromptID = String(pendingInput?.id ?? '').trim();
       const items = state.currentItems ?? await currentItemsMock({ threadId: threadID });
-      const active = state.assistantDraft !== '' || state.thinkingDraft !== '';
+      const active = items.some((item) => (
+        item && typeof item === 'object' && (item as Record<string, unknown>).live === true
+      ));
       const thread = {
         thread_id: threadID,
         title: 'Loaded Env Flower thread',
@@ -113,8 +111,6 @@ const mocks = vi.hoisted(() => {
           ...(!active && !waitingPromptID ? { last_outcome: 'completed' } : {}),
           items,
           interactions: state.currentInteractions,
-          ...(state.assistantDraft ? { assistant_draft: state.assistantDraft } : {}),
-          ...(state.thinkingDraft ? { thinking_draft: state.thinkingDraft } : {}),
         },
       };
     }
@@ -476,8 +472,6 @@ export function registerEnvAIPageSendTests() {
       mocks.consumeAIThreadFocusRequestMock.mockClear();
       mocks.state.currentItems = null;
       mocks.state.currentInteractions = [];
-      mocks.state.assistantDraft = '';
-      mocks.state.thinkingDraft = '';
       mocks.state.omitReadState = false;
     });
 
@@ -515,9 +509,16 @@ export function registerEnvAIPageSendTests() {
     });
 
     it('shows live streaming output when transcript persistence has not caught up', async () => {
-      mocks.state.currentItems = [];
-      mocks.state.assistantDraft = 'Live answer recovered from the typed current view.';
-      mocks.state.thinkingDraft = 'Inspecting the workspace';
+      mocks.state.currentItems = [
+        {
+          id: 'thinking:turn-thread-1:1', turn_id: 'turn-thread-1', ordinal: 1,
+          kind: 'thinking', text: 'Inspecting the workspace', live: true,
+        },
+        {
+          id: 'assistant:turn-thread-1:1', turn_id: 'turn-thread-1', ordinal: 2,
+          kind: 'assistant', text: 'Live answer recovered from the typed current view.', live: true,
+        },
+      ];
 
       const { host, dispose } = await renderPage();
       try {
