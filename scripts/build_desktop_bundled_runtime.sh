@@ -210,8 +210,9 @@ write_bundle_manifest() {
   local goarch="$3"
   local version="$4"
   local commit="$5"
-  BUNDLE_DIR="$bundle_dir" BUNDLE_GOOS="$goos" BUNDLE_GOARCH="$goarch" \
-    BUNDLE_VERSION="$version" BUNDLE_COMMIT="$commit" node <<'NODE'
+	BUNDLE_DIR="$bundle_dir" BUNDLE_GOOS="$goos" BUNDLE_GOARCH="$goarch" \
+	    BUNDLE_VERSION="$version" BUNDLE_COMMIT="$commit" \
+	    BUNDLE_PROVENANCE="${REDEVEN_DESKTOP_BUNDLE_PROVENANCE:-packaged_bundle}" node <<'NODE'
 const { createHash } = require("node:crypto");
 const { lstatSync, readFileSync, writeFileSync } = require("node:fs");
 const { join } = require("node:path");
@@ -221,7 +222,9 @@ const platform = process.env.BUNDLE_GOOS;
 const architecture = process.env.BUNDLE_GOARCH;
 const version = String(process.env.BUNDLE_VERSION || "").trim();
 const commit = String(process.env.BUNDLE_COMMIT || "").trim();
+const provenance = String(process.env.BUNDLE_PROVENANCE || "").trim();
 if (!root || !version || !commit) fail("bundle version and commit are required");
+if (provenance !== "packaged_bundle" && provenance !== "development_bundle") fail("bundle provenance is invalid");
 
 function descriptor(name, executable) {
   const filePath = join(root, name);
@@ -249,14 +252,26 @@ const runtimeFiles = platform === "linux"
       ["redevplugin-runtime.sig", false],
     ]
   : [["redeven", true]];
-const manifest = {
+const runtimeSuite = runtimeFiles.map(([name, executable]) => descriptor(name, executable));
+const suiteIdentity = {
   schema_version: 1,
+  files: runtimeSuite.map((artifact) => ({
+    name: artifact.path,
+    sha256: `sha256:${artifact.sha256}`,
+    size_bytes: artifact.size_bytes,
+    executable: artifact.executable,
+  })).sort((left, right) => left.name.localeCompare(right.name)),
+};
+const manifest = {
+  schema_version: 2,
   version: version.startsWith("v") ? version : `v${version}`,
   commit,
   platform,
   architecture,
+  provenance,
   gateway: descriptor("redeven-gateway", true),
-  runtime_suite: runtimeFiles.map(([name, executable]) => descriptor(name, executable)),
+  runtime_suite: runtimeSuite,
+  runtime_suite_sha256: `sha256:${createHash("sha256").update(JSON.stringify(suiteIdentity)).digest("hex")}`,
 };
 writeFileSync(join(root, "desktop-bundle-manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
 
@@ -384,8 +399,17 @@ main() {
   goos="$(resolve_target_goos "$tarball_path")"
   goarch="$(resolve_target_goarch "$tarball_path")"
   binary_name="$(resolve_binary_name "$goos")"
-  bundle_parent="$ROOT_DIR/desktop/.bundle"
-  bundle_dir="$bundle_parent/${goos}-${goarch}"
+	if [ -n "${REDEVEN_DESKTOP_BUNDLE_OUTPUT_DIR:-}" ]; then
+		case "$REDEVEN_DESKTOP_BUNDLE_OUTPUT_DIR" in
+			/*) ;;
+			*) ui_pkg_die "REDEVEN_DESKTOP_BUNDLE_OUTPUT_DIR must be absolute" ;;
+		esac
+		bundle_dir="$REDEVEN_DESKTOP_BUNDLE_OUTPUT_DIR"
+		bundle_parent="$(dirname -- "$bundle_dir")"
+	else
+		bundle_parent="$ROOT_DIR/desktop/.bundle"
+		bundle_dir="$bundle_parent/${goos}-${goarch}"
+	fi
   bundle_path="$bundle_dir/$binary_name"
   gateway_bundle_path="$bundle_dir/redeven-gateway"
   bundle_version="$(resolve_bundle_version)"

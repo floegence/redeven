@@ -19,7 +19,10 @@ import (
 	gatewayprotocol "github.com/floegence/redeven/internal/runtimegateway/protocol"
 )
 
-const precompiledStartupOperationID = "desktop-precompiled-runtime-startup"
+const (
+	precompiledStartupOperationID     = "desktop-precompiled-runtime-startup"
+	precompiledConvergenceOperationID = "desktop-precompiled-runtime-convergence"
+)
 
 type precompiledArtifact struct {
 	Path       string `json:"path"`
@@ -29,13 +32,15 @@ type precompiledArtifact struct {
 }
 
 type precompiledManifest struct {
-	SchemaVersion int                   `json:"schema_version"`
-	Version       string                `json:"version"`
-	Commit        string                `json:"commit"`
-	Platform      string                `json:"platform"`
-	Architecture  string                `json:"architecture"`
-	Gateway       precompiledArtifact   `json:"gateway"`
-	RuntimeSuite  []precompiledArtifact `json:"runtime_suite"`
+	SchemaVersion      int                   `json:"schema_version"`
+	Version            string                `json:"version"`
+	Commit             string                `json:"commit"`
+	Platform           string                `json:"platform"`
+	Architecture       string                `json:"architecture"`
+	Provenance         string                `json:"provenance"`
+	Gateway            precompiledArtifact   `json:"gateway"`
+	RuntimeSuite       []precompiledArtifact `json:"runtime_suite"`
+	RuntimeSuiteSHA256 string                `json:"runtime_suite_sha256"`
 }
 
 type verifiedPrecompiledFile struct {
@@ -49,7 +54,43 @@ type verifiedPrecompiledRuntime struct {
 	Platform      string
 	Architecture  string
 	RuntimeSHA256 string
+	SuiteSHA256   string
+	Provenance    RuntimeInstallationProvenance
 	files         []verifiedPrecompiledFile
+}
+
+type managedRuntimeSuiteEntry struct {
+	Name       string `json:"name"`
+	SHA256     string `json:"sha256"`
+	SizeBytes  int    `json:"size_bytes"`
+	Executable bool   `json:"executable"`
+}
+
+type precompiledRuntimeTargetAction string
+
+const (
+	precompiledTargetExact    precompiledRuntimeTargetAction = "exact"
+	precompiledTargetPreserve precompiledRuntimeTargetAction = "preserve_verified_update"
+	precompiledTargetInstall  precompiledRuntimeTargetAction = "install"
+	precompiledTargetReplace  precompiledRuntimeTargetAction = "replace"
+)
+
+type precompiledRuntimeTarget struct {
+	Action  precompiledRuntimeTargetAction
+	Runtime verifiedPrecompiledRuntime
+}
+
+type PrecompiledRuntimeConvergenceError struct {
+	Code     string
+	Reason   string
+	Recovery string
+}
+
+func (e *PrecompiledRuntimeConvergenceError) Error() string {
+	if e == nil {
+		return ""
+	}
+	return fmt.Sprintf("%s: %s Recovery: %s", e.Code, e.Reason, e.Recovery)
 }
 
 func (c *Controller) PrecompiledRuntimeTargetID() string {
@@ -69,7 +110,7 @@ func (c *Controller) EnsurePrecompiledRuntime(ctx context.Context) error {
 	c.startupMu.Lock()
 	defer c.startupMu.Unlock()
 
-	bundle, err := c.provisionPrecompiledRuntimeUnlocked()
+	bundle, err := c.ensurePrecompiledRuntimeTarget(ctx)
 	if err != nil {
 		return err
 	}
@@ -78,7 +119,7 @@ func (c *Controller) EnsurePrecompiledRuntime(ctx context.Context) error {
 			normalizeSHA256(identity.ArtifactSHA256) != bundle.RuntimeSHA256 {
 			return errors.New("running Runtime identity does not match the precompiled Desktop bundle")
 		}
-		if err := c.validateAndRecordIdentity(identity); err != nil {
+		if err := c.validateAndRecordIdentity(identity, &bundle.Provenance); err != nil {
 			return err
 		}
 		return c.controlClient().health(ctx)
@@ -112,7 +153,7 @@ func (c *Controller) EnsurePrecompiledRuntime(ctx context.Context) error {
 		Phase:       checkpointPrepared,
 		ManagedRoot: filepath.Join(c.bindings.Binding().RuntimeRoot, "runtime", "managed"),
 	}
-	if err := c.startAndVerify(ctx, operation, &checkpoint); err != nil {
+	if err := c.startAndVerifyWithProvenance(ctx, operation, &checkpoint, &bundle.Provenance); err != nil {
 		startupErr := err
 		if _, statErr := os.Stat(checkpointPath); statErr == nil {
 			if recoverErr := c.Recover(ctx, operation); recoverErr != nil {
@@ -139,36 +180,231 @@ func (c *Controller) provisionPrecompiledRuntimeUnlocked() (verifiedPrecompiledR
 	if err != nil {
 		return verifiedPrecompiledRuntime{}, err
 	}
+	target, err := c.inspectPrecompiledRuntimeTarget(bundle)
+	if err != nil {
+		return verifiedPrecompiledRuntime{}, err
+	}
+	switch target.Action {
+	case precompiledTargetExact, precompiledTargetPreserve:
+		return target.Runtime, nil
+	case precompiledTargetReplace:
+		return verifiedPrecompiledRuntime{}, errors.New("managed Runtime requires Gateway lifecycle convergence to the precompiled Desktop target")
+	case precompiledTargetInstall:
+	default:
+		return verifiedPrecompiledRuntime{}, errors.New("precompiled Runtime target selection is invalid")
+	}
+	stagingRoot, err := c.stagePrecompiledRuntime(bundle, filepath.Join(c.bindings.Binding().RuntimeRoot, "runtime", ".precompiled-staging"))
+	if err != nil {
+		return verifiedPrecompiledRuntime{}, err
+	}
+	managedRoot := filepath.Join(c.bindings.Binding().RuntimeRoot, "runtime", "managed")
+	if err := durableRename(stagingRoot, managedRoot); err != nil {
+		_ = durableRemoveAll(stagingRoot)
+		return verifiedPrecompiledRuntime{}, err
+	}
+	return bundle, nil
+}
+
+func (c *Controller) ensurePrecompiledRuntimeTarget(ctx context.Context) (verifiedPrecompiledRuntime, error) {
+	bundle, err := loadPrecompiledRuntimeManifest(c.precompiledRuntimeManifest, c.artifactProbeTimeout)
+	if err != nil {
+		return verifiedPrecompiledRuntime{}, err
+	}
+	operation := gatewayprotocol.RuntimeOperation{
+		OperationID: precompiledConvergenceOperationID,
+		Kind:        gatewayprotocol.RuntimeOperationStart,
+		DesiredRuntime: gatewayprotocol.DesiredRuntime{
+			Version: bundle.Version, Platform: bundle.Platform, Architecture: bundle.Architecture,
+			ArtifactPolicy: gatewayprotocol.ArtifactPolicyPublishedRelease,
+		},
+		Artifact: &gatewayprotocol.RuntimeArtifact{ExecutableSHA256: bundle.RuntimeSHA256},
+	}
+	checkpointPath := c.checkpointPath(operation.OperationID)
+	if _, statErr := os.Stat(checkpointPath); statErr == nil {
+		if err := c.Recover(ctx, operation); err != nil {
+			return verifiedPrecompiledRuntime{}, fmt.Errorf("recover interrupted precompiled Runtime convergence: %w", err)
+		}
+		if err := removeFileDurably(checkpointPath); err != nil {
+			return verifiedPrecompiledRuntime{}, err
+		}
+	} else if !errors.Is(statErr, os.ErrNotExist) {
+		return verifiedPrecompiledRuntime{}, statErr
+	}
+
+	target, err := c.inspectPrecompiledRuntimeTarget(bundle)
+	if err != nil {
+		return verifiedPrecompiledRuntime{}, err
+	}
+	switch target.Action {
+	case precompiledTargetExact, precompiledTargetPreserve:
+		return target.Runtime, nil
+	case precompiledTargetInstall:
+		stagingRoot, err := c.stagePrecompiledRuntime(bundle, filepath.Join(c.bindings.Binding().RuntimeRoot, "runtime", ".precompiled-staging"))
+		if err != nil {
+			return verifiedPrecompiledRuntime{}, err
+		}
+		managedRoot := filepath.Join(c.bindings.Binding().RuntimeRoot, "runtime", "managed")
+		if err := durableRename(stagingRoot, managedRoot); err != nil {
+			_ = durableRemoveAll(stagingRoot)
+			return verifiedPrecompiledRuntime{}, err
+		}
+		return bundle, nil
+	case precompiledTargetReplace:
+		return c.convergePrecompiledRuntime(ctx, operation, target.Runtime)
+	default:
+		return verifiedPrecompiledRuntime{}, errors.New("precompiled Runtime target selection is invalid")
+	}
+}
+
+func (c *Controller) convergePrecompiledRuntime(ctx context.Context, operation gatewayprotocol.RuntimeOperation, bundle verifiedPrecompiledRuntime) (verifiedPrecompiledRuntime, error) {
+	binding := c.bindings.Binding()
+	managedRoot := filepath.Join(binding.RuntimeRoot, "runtime", "managed")
+	checkpoint := operationCheckpoint{
+		OperationID: operation.OperationID, Phase: checkpointPrepared, ManagedRoot: managedRoot,
+		PreviousManagedRoot:    managedRoot + ".previous." + safeOperationID(operation.OperationID),
+		PreviousManagedPresent: true,
+	}
+	previousDigest, err := fileSHA256(filepath.Join(managedRoot, "bin", "redeven"))
+	if err != nil {
+		return verifiedPrecompiledRuntime{}, err
+	}
+	checkpoint.PreviousExecutableSHA256 = previousDigest
+	client := c.controlClient()
+	identity, identityErr := client.identity(ctx)
+	checkpoint.RuntimeWasRunning = identityErr == nil
+	fenceToken := ""
+	if checkpoint.RuntimeWasRunning {
+		validated := binding.ValidatedRuntime
+		if validated == nil || normalizeSHA256(identity.ArtifactSHA256) != normalizeSHA256(validated.ArtifactSHA256) {
+			return verifiedPrecompiledRuntime{}, errors.New("running Runtime identity does not match the verified managed installation")
+		}
+		fence, fenceErr := client.beginFence(ctx, operation.OperationID, binding.TargetGeneration)
+		if fenceErr != nil {
+			return verifiedPrecompiledRuntime{}, fenceErr
+		}
+		if precompiledConvergenceNeedsConfirmation(fence.Snapshot) {
+			_ = client.releaseFence(ctx, fence.Token)
+			return verifiedPrecompiledRuntime{}, &PrecompiledRuntimeConvergenceError{
+				Code:     "runtime_target_active_workload_confirmation_required",
+				Reason:   "the managed Runtime differs from this development bundle and still owns active or unknown workloads",
+				Recovery: "close the environment workloads and retry, or explicitly review and confirm the Runtime update from Desktop",
+			}
+		}
+		fenceToken = fence.Token
+	} else {
+		snapshot, snapshotErr := c.offlineSnapshot(ctx)
+		if snapshotErr != nil || snapshot.Impact.Knowledge != gatewayprotocol.WorkloadKnown || len(snapshot.WorkloadIdentities) != 0 {
+			return verifiedPrecompiledRuntime{}, &PrecompiledRuntimeConvergenceError{
+				Code:     "runtime_target_identity_unproven",
+				Reason:   "the Gateway cannot prove that the previous managed Runtime is stopped and idle",
+				Recovery: "stop the exact Runtime instance through this Gateway and retry without deleting its state",
+			}
+		}
+	}
+	stagingRoot := filepath.Join(binding.RuntimeRoot, "runtime", "staging", safeOperationID(operation.OperationID))
+	checkpoint.StagingRoot, err = c.stagePrecompiledRuntime(bundle, stagingRoot)
+	if err != nil {
+		if fenceToken != "" {
+			_ = client.releaseFence(ctx, fenceToken)
+		}
+		return verifiedPrecompiledRuntime{}, err
+	}
+	if err := c.writeCheckpoint(checkpoint); err != nil {
+		if fenceToken != "" {
+			_ = client.releaseFence(ctx, fenceToken)
+		}
+		return verifiedPrecompiledRuntime{}, err
+	}
+	if checkpoint.RuntimeWasRunning {
+		if err := client.shutdown(ctx, fenceToken); err != nil {
+			return verifiedPrecompiledRuntime{}, fmt.Errorf("request Runtime shutdown for target convergence: %w", err)
+		}
+		if err := c.waitForRuntimeStopped(ctx); err != nil {
+			return verifiedPrecompiledRuntime{}, err
+		}
+		if err := c.waitForNoRuntimeProcesses(ctx); err != nil {
+			return verifiedPrecompiledRuntime{}, err
+		}
+	}
+	checkpoint.Phase = checkpointRuntimeStopped
+	if err := c.writeCheckpoint(checkpoint); err != nil {
+		return verifiedPrecompiledRuntime{}, err
+	}
+	if err := c.activateStaging(checkpoint); err != nil {
+		return verifiedPrecompiledRuntime{}, err
+	}
+	checkpoint.Phase = checkpointArtifactActive
+	if err := c.writeCheckpoint(checkpoint); err != nil {
+		return verifiedPrecompiledRuntime{}, err
+	}
+	if err := c.startAndVerifyWithProvenance(ctx, operation, &checkpoint, &bundle.Provenance); err != nil {
+		startupErr := err
+		if recoverErr := c.Recover(ctx, operation); recoverErr != nil {
+			return verifiedPrecompiledRuntime{}, fmt.Errorf("converge precompiled Runtime: %v; restore previous Runtime: %w", startupErr, recoverErr)
+		}
+		_ = removeFileDurably(c.checkpointPath(operation.OperationID))
+		return verifiedPrecompiledRuntime{}, startupErr
+	}
+	if err := durableRemoveAll(checkpoint.PreviousManagedRoot); err != nil {
+		return verifiedPrecompiledRuntime{}, err
+	}
+	if err := removeFileDurably(c.checkpointPath(operation.OperationID)); err != nil {
+		return verifiedPrecompiledRuntime{}, err
+	}
+	return bundle, nil
+}
+
+func precompiledConvergenceNeedsConfirmation(snapshot gatewayprotocol.WorkloadSnapshot) bool {
+	snapshot = gatewayprotocol.NormalizeWorkloadSnapshot(snapshot)
+	return snapshot.Impact.Knowledge != gatewayprotocol.WorkloadKnown || len(snapshot.WorkloadIdentities) != 0
+}
+
+func (c *Controller) inspectPrecompiledRuntimeTarget(bundle verifiedPrecompiledRuntime) (precompiledRuntimeTarget, error) {
 	runtimeRoot := c.bindings.Binding().RuntimeRoot
 	managedRoot := filepath.Join(runtimeRoot, "runtime", "managed")
 	if info, statErr := os.Lstat(managedRoot); statErr == nil {
 		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-			return verifiedPrecompiledRuntime{}, errors.New("managed Runtime slot is not a regular directory")
+			return precompiledRuntimeTarget{}, errors.New("managed Runtime slot is not a regular directory")
 		}
-		if err := verifyManagedPrecompiledRuntime(managedRoot, bundle); err == nil {
-			return bundle, nil
-		}
+		bundleExact := verifyManagedPrecompiledRuntime(managedRoot, bundle) == nil
 		validated := c.bindings.Binding().ValidatedRuntime
-		if !runtimeValidationCompatible(validated) || !validSHA256(validated.ManagedSuiteSHA256) {
-			return verifiedPrecompiledRuntime{}, errors.New("managed Runtime does not match the precompiled Desktop bundle or a persisted verified update")
+		persistedIdentityValid := runtimeValidationCompatible(validated) && validSHA256(validated.ManagedSuiteSHA256)
+		var managed verifiedPrecompiledRuntime
+		if persistedIdentityValid {
+			suiteDigest, executableDigest, err := managedRuntimeSuiteSHA256(managedRoot)
+			persistedIdentityValid = err == nil && suiteDigest == normalizeSHA256(validated.ManagedSuiteSHA256) &&
+				executableDigest == normalizeSHA256(validated.ArtifactSHA256) &&
+				strings.ToLower(strings.TrimSpace(validated.Platform)) == runtime.GOOS &&
+				strings.ToLower(strings.TrimSpace(validated.Architecture)) == runtime.GOARCH &&
+				validRuntimeInstallationProvenance(validated.InstallationProvenance)
+			if persistedIdentityValid {
+				managed = verifiedPrecompiledRuntime{
+					Version: validated.RuntimeBinaryVersion, Platform: validated.Platform,
+					Architecture: validated.Architecture, RuntimeSHA256: executableDigest, SuiteSHA256: suiteDigest,
+					Provenance: validated.InstallationProvenance,
+				}
+			}
 		}
-		suiteDigest, executableDigest, err := managedRuntimeSuiteSHA256(managedRoot)
-		if err != nil || suiteDigest != normalizeSHA256(validated.ManagedSuiteSHA256) || executableDigest != normalizeSHA256(validated.ArtifactSHA256) {
-			return verifiedPrecompiledRuntime{}, errors.New("managed Runtime suite does not match its persisted verified update identity")
+		if bundle.Provenance.Kind == "packaged_bundle" && persistedIdentityValid &&
+			(validated.InstallationProvenance.Kind == "verified_lifecycle_update" || validated.InstallationProvenance.Kind == "migrated_v1_validation") {
+			return precompiledRuntimeTarget{Action: precompiledTargetPreserve, Runtime: managed}, nil
 		}
-		if strings.ToLower(strings.TrimSpace(validated.Platform)) != runtime.GOOS || strings.ToLower(strings.TrimSpace(validated.Architecture)) != runtime.GOARCH {
-			return verifiedPrecompiledRuntime{}, errors.New("persisted managed Runtime target does not match this Gateway host")
+		if bundleExact {
+			return precompiledRuntimeTarget{Action: precompiledTargetExact, Runtime: bundle}, nil
 		}
-		return verifiedPrecompiledRuntime{
-			Version: validated.RuntimeBinaryVersion, Platform: validated.Platform,
-			Architecture: validated.Architecture, RuntimeSHA256: executableDigest,
-		}, nil
+		if !persistedIdentityValid {
+			return precompiledRuntimeTarget{}, errors.New("managed Runtime does not match the precompiled Desktop bundle or a persisted verified update")
+		}
+		return precompiledRuntimeTarget{Action: precompiledTargetReplace, Runtime: bundle}, nil
 	} else if !errors.Is(statErr, os.ErrNotExist) {
-		return verifiedPrecompiledRuntime{}, statErr
+		return precompiledRuntimeTarget{}, statErr
 	}
-	stagingRoot := filepath.Join(runtimeRoot, "runtime", ".precompiled-staging")
+	return precompiledRuntimeTarget{Action: precompiledTargetInstall, Runtime: bundle}, nil
+}
+
+func (c *Controller) stagePrecompiledRuntime(bundle verifiedPrecompiledRuntime, stagingRoot string) (string, error) {
 	if err := durableRemoveAll(stagingRoot); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return verifiedPrecompiledRuntime{}, err
+		return "", err
 	}
 	completed := false
 	defer func() {
@@ -178,7 +414,7 @@ func (c *Controller) provisionPrecompiledRuntimeUnlocked() (verifiedPrecompiledR
 	}()
 	binRoot := filepath.Join(stagingRoot, "bin")
 	if err := os.MkdirAll(binRoot, 0o700); err != nil {
-		return verifiedPrecompiledRuntime{}, err
+		return "", err
 	}
 	for _, file := range bundle.files {
 		mode := os.FileMode(0o600)
@@ -186,20 +422,17 @@ func (c *Controller) provisionPrecompiledRuntimeUnlocked() (verifiedPrecompiledR
 			mode = 0o700
 		}
 		if err := writeExclusiveFile(filepath.Join(binRoot, file.artifact.Path), file.bytes, mode); err != nil {
-			return verifiedPrecompiledRuntime{}, err
+			return "", err
 		}
 	}
 	if err := syncDirectory(binRoot); err != nil {
-		return verifiedPrecompiledRuntime{}, err
+		return "", err
 	}
 	if err := syncDirectory(stagingRoot); err != nil {
-		return verifiedPrecompiledRuntime{}, err
-	}
-	if err := durableRename(stagingRoot, managedRoot); err != nil {
-		return verifiedPrecompiledRuntime{}, err
+		return "", err
 	}
 	completed = true
-	return bundle, nil
+	return stagingRoot, nil
 }
 
 func loadPrecompiledRuntimeManifest(manifestPath string, probeTimeout time.Duration) (verifiedPrecompiledRuntime, error) {
@@ -224,7 +457,11 @@ func loadPrecompiledRuntimeManifest(manifestPath string, probeTimeout time.Durat
 	manifest.Commit = strings.TrimSpace(manifest.Commit)
 	manifest.Platform = strings.ToLower(strings.TrimSpace(manifest.Platform))
 	manifest.Architecture = strings.ToLower(strings.TrimSpace(manifest.Architecture))
-	if manifest.SchemaVersion != 1 || manifest.Version == "" || manifest.Commit == "" {
+	manifest.Provenance = strings.TrimSpace(manifest.Provenance)
+	manifest.RuntimeSuiteSHA256 = normalizeSHA256(manifest.RuntimeSuiteSHA256)
+	if manifest.SchemaVersion != 2 || manifest.Version == "" || manifest.Commit == "" ||
+		(manifest.Provenance != "packaged_bundle" && manifest.Provenance != "development_bundle") ||
+		!validSHA256(manifest.RuntimeSuiteSHA256) {
 		return verifiedPrecompiledRuntime{}, errors.New("precompiled Runtime manifest identity is incomplete")
 	}
 	if manifest.Platform != runtime.GOOS || manifest.Architecture != runtime.GOARCH {
@@ -270,6 +507,10 @@ func loadPrecompiledRuntimeManifest(manifestPath string, probeTimeout time.Durat
 	if strings.Join(actual, "\x00") != strings.Join(expected, "\x00") || runtimeDigest == "" {
 		return verifiedPrecompiledRuntime{}, errors.New("precompiled Runtime suite inventory is incomplete or unsupported")
 	}
+	suiteDigest, err := precompiledRuntimeSuiteSHA256(files)
+	if err != nil || suiteDigest != manifest.RuntimeSuiteSHA256 {
+		return verifiedPrecompiledRuntime{}, errors.New("precompiled Runtime suite digest does not match the manifest")
+	}
 	runtimePath := filepath.Join(root, "redeven")
 	probeContext, cancel := context.WithTimeout(context.Background(), probeTimeout)
 	defer cancel()
@@ -281,12 +522,17 @@ func loadPrecompiledRuntimeManifest(manifestPath string, probeTimeout time.Durat
 		return verifiedPrecompiledRuntime{}, fmt.Errorf("precompiled Runtime version check failed: %s", strings.TrimSpace(string(output)))
 	}
 	fields := strings.Fields(string(output))
-	if len(fields) < 2 || fields[0] != "redeven" || normalizeVersion(fields[1]) != normalizeVersion(manifest.Version) {
-		return verifiedPrecompiledRuntime{}, errors.New("precompiled Runtime version does not match its manifest")
+	reportedCommit := ""
+	if len(fields) >= 3 {
+		reportedCommit = strings.TrimSuffix(strings.TrimPrefix(fields[2], "("), ")")
+	}
+	if len(fields) < 3 || fields[0] != "redeven" || normalizeVersion(fields[1]) != normalizeVersion(manifest.Version) || reportedCommit != manifest.Commit {
+		return verifiedPrecompiledRuntime{}, errors.New("precompiled Runtime version or commit does not match its manifest")
 	}
 	return verifiedPrecompiledRuntime{
 		Version: manifest.Version, Commit: manifest.Commit, Platform: manifest.Platform,
-		Architecture: manifest.Architecture, RuntimeSHA256: runtimeDigest, files: files,
+		Architecture: manifest.Architecture, RuntimeSHA256: runtimeDigest, SuiteSHA256: suiteDigest,
+		Provenance: RuntimeInstallationProvenance{Kind: manifest.Provenance, BundleCommit: manifest.Commit}, files: files,
 	}, nil
 }
 
@@ -351,6 +597,9 @@ func readRegularPrecompiledFile(filePath string, executable bool) ([]byte, error
 }
 
 func verifyManagedPrecompiledRuntime(managedRoot string, bundle verifiedPrecompiledRuntime) error {
+	if err := verifyManagedRuntimeDirectoryModes(managedRoot); err != nil {
+		return err
+	}
 	entries, err := os.ReadDir(filepath.Join(managedRoot, "bin"))
 	if err != nil {
 		return err
@@ -372,7 +621,12 @@ func verifyManagedPrecompiledRuntime(managedRoot string, bundle verifiedPrecompi
 		return errors.New("managed Runtime suite inventory differs from the precompiled Desktop bundle")
 	}
 	for _, expected := range bundle.files {
-		actual, err := readRegularPrecompiledFile(filepath.Join(managedRoot, "bin", expected.artifact.Path), expected.artifact.Executable)
+		filePath := filepath.Join(managedRoot, "bin", expected.artifact.Path)
+		info, err := os.Lstat(filePath)
+		if err != nil || !managedRuntimeFileModeValid(expected.artifact.Path, info.Mode()) {
+			return fmt.Errorf("managed file %q has an unsupported mode", expected.artifact.Path)
+		}
+		actual, err := readRegularPrecompiledFile(filePath, expected.artifact.Executable)
 		if err != nil {
 			return err
 		}
@@ -384,6 +638,9 @@ func verifyManagedPrecompiledRuntime(managedRoot string, bundle verifiedPrecompi
 }
 
 func managedRuntimeSuiteSHA256(managedRoot string) (string, string, error) {
+	if err := verifyManagedRuntimeDirectoryModes(managedRoot); err != nil {
+		return "", "", err
+	}
 	binRoot := filepath.Join(managedRoot, "bin")
 	entries, err := os.ReadDir(binRoot)
 	if err != nil {
@@ -392,13 +649,7 @@ func managedRuntimeSuiteSHA256(managedRoot string) (string, string, error) {
 	if len(entries) == 0 || len(entries) > 32 {
 		return "", "", errors.New("managed Runtime suite inventory is invalid")
 	}
-	type suiteEntry struct {
-		Name       string `json:"name"`
-		SHA256     string `json:"sha256"`
-		SizeBytes  int    `json:"size_bytes"`
-		Executable bool   `json:"executable"`
-	}
-	manifest := make([]suiteEntry, 0, len(entries))
+	manifest := make([]managedRuntimeSuiteEntry, 0, len(entries))
 	runtimeDigest := ""
 	var totalSize int64
 	for _, entry := range entries {
@@ -411,6 +662,9 @@ func managedRuntimeSuiteSHA256(managedRoot string) (string, string, error) {
 		if statErr != nil || !fileInfo.Mode().IsRegular() || fileInfo.Mode()&os.ModeSymlink != 0 {
 			return "", "", errors.New("managed Runtime suite entry is not a regular file")
 		}
+		if !managedRuntimeFileModeValid(name, fileInfo.Mode()) {
+			return "", "", fmt.Errorf("managed Runtime suite file %q has an unsupported mode", name)
+		}
 		fileBytes, readErr := readRegularPrecompiledFile(filePath, name == "redeven" || name == "redevplugin-runtime")
 		if readErr != nil {
 			return "", "", readErr
@@ -420,7 +674,7 @@ func managedRuntimeSuiteSHA256(managedRoot string) (string, string, error) {
 		}
 		totalSize += int64(len(fileBytes))
 		digest := fmt.Sprintf("sha256:%x", sha256.Sum256(fileBytes))
-		manifest = append(manifest, suiteEntry{
+		manifest = append(manifest, managedRuntimeSuiteEntry{
 			Name: name, SHA256: digest, SizeBytes: len(fileBytes), Executable: fileInfo.Mode().Perm()&0o111 != 0,
 		})
 		if name == "redeven" {
@@ -430,15 +684,58 @@ func managedRuntimeSuiteSHA256(managedRoot string) (string, string, error) {
 	if runtimeDigest == "" {
 		return "", "", errors.New("managed Runtime suite is missing the Runtime executable")
 	}
-	sort.Slice(manifest, func(i, j int) bool { return manifest[i].Name < manifest[j].Name })
-	raw, err := json.Marshal(struct {
-		SchemaVersion int          `json:"schema_version"`
-		Files         []suiteEntry `json:"files"`
-	}{SchemaVersion: 1, Files: manifest})
+	suiteDigest, err := runtimeSuiteEntriesSHA256(manifest)
 	if err != nil {
 		return "", "", err
 	}
-	return fmt.Sprintf("sha256:%x", sha256.Sum256(raw)), runtimeDigest, nil
+	return suiteDigest, runtimeDigest, nil
+}
+
+func verifyManagedRuntimeDirectoryModes(managedRoot string) error {
+	for _, directory := range []string{managedRoot, filepath.Join(managedRoot, "bin")} {
+		info, err := os.Lstat(directory)
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm() != 0o700 {
+			return errors.New("managed Runtime suite directory must be a non-symlink directory with mode 0700")
+		}
+	}
+	return nil
+}
+
+func managedRuntimeFileModeValid(name string, mode os.FileMode) bool {
+	if !mode.IsRegular() || mode&os.ModeSymlink != 0 {
+		return false
+	}
+	expected := os.FileMode(0o600)
+	if name == "redeven" || name == "redevplugin-runtime" {
+		expected = 0o700
+	}
+	return mode.Perm() == expected
+}
+
+func precompiledRuntimeSuiteSHA256(files []verifiedPrecompiledFile) (string, error) {
+	manifest := make([]managedRuntimeSuiteEntry, 0, len(files))
+	for _, file := range files {
+		manifest = append(manifest, managedRuntimeSuiteEntry{
+			Name: file.artifact.Path, SHA256: normalizeSHA256(file.artifact.SHA256),
+			SizeBytes: len(file.bytes), Executable: file.artifact.Executable,
+		})
+	}
+	return runtimeSuiteEntriesSHA256(manifest)
+}
+
+func runtimeSuiteEntriesSHA256(manifest []managedRuntimeSuiteEntry) (string, error) {
+	sort.Slice(manifest, func(i, j int) bool { return manifest[i].Name < manifest[j].Name })
+	raw, err := json.Marshal(struct {
+		SchemaVersion int                        `json:"schema_version"`
+		Files         []managedRuntimeSuiteEntry `json:"files"`
+	}{SchemaVersion: 1, Files: manifest})
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("sha256:%x", sha256.Sum256(raw)), nil
 }
 
 func writeExclusiveFile(filePath string, value []byte, mode os.FileMode) error {

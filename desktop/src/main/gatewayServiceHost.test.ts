@@ -28,6 +28,7 @@ import {
 import { DEFAULT_DESKTOP_SSH_RUNTIME_ROOT } from '../shared/desktopSSH';
 import type { DesktopRuntimePlacement } from '../shared/desktopRuntimePlacement';
 import type { DesktopBundle } from './desktopBundle';
+import { DesktopOperationFailureError } from './desktopOperationFailure';
 
 function readGatewayServiceHostSource(): string {
   return fs.readFileSync(path.join(__dirname, 'gatewayServiceHost.ts'), 'utf8');
@@ -162,8 +163,10 @@ describe('gatewayServiceHost', () => {
       commit: 'abc123',
       platform: 'darwin',
       architecture: 'arm64',
+      provenance: 'packaged_bundle',
       gateway: { path: binaryPath, sha256: 'a'.repeat(64), size_bytes: 1, executable: true },
       runtime_suite: [{ path: path.join(path.dirname(binaryPath), 'redeven'), sha256: 'b'.repeat(64), size_bytes: 1, executable: true }],
+      runtime_suite_sha256: `sha256:${'c'.repeat(64)}`,
     };
 
     try {
@@ -178,11 +181,79 @@ describe('gatewayServiceHost', () => {
         assetCacheRoot: path.join(runtimeRoot, 'cache'),
         tempRoot: path.join(runtimeRoot, 'tmp'),
         precompiledBundle: bundle,
+        localUIBind: 'localhost:32140',
         sourceRuntimeRoot: '/source/tree/that/must/not/be-used',
       })).resolves.toBe(binaryPath);
 
       expect(fs.readFileSync(invocationPath, 'utf8')).toContain(`--precompiled-runtime-manifest ${manifestPath}`);
+      expect(fs.readFileSync(invocationPath, 'utf8')).toContain('--precompiled-runtime-local-ui-bind localhost:32140');
       expect(packageMocks.prepareDesktopRuntimeUploadAsset).not.toHaveBeenCalled();
+    } finally {
+      fs.rmSync(runtimeRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves a structured Gateway target convergence failure from the instance state', async () => {
+    const runtimeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'redeven-local-bundle-failure-'));
+    const stateRoot = path.join(runtimeRoot, 'gateways', 'local', 'state');
+    const bundleRoot = path.join(runtimeRoot, 'bundle');
+    const binaryPath = path.join(bundleRoot, 'redeven-gateway');
+    const manifestPath = path.join(bundleRoot, 'desktop-bundle-manifest.json');
+    fs.mkdirSync(stateRoot, { recursive: true });
+    fs.mkdirSync(bundleRoot, { recursive: true });
+    fs.writeFileSync(binaryPath, [
+      '#!/bin/sh',
+      'case "$1" in',
+      '  service-status) echo \'{"status":"not_running"}\'; exit 1 ;;',
+      '  service-start) echo "service-start failed" >&2; exit 1 ;;',
+      '  *) exit 2 ;;',
+      'esac',
+      '',
+    ].join('\n'), { mode: 0o755 });
+    fs.writeFileSync(manifestPath, '{}\n');
+    fs.writeFileSync(path.join(stateRoot, 'gateway-startup-failure-v1.json'), JSON.stringify({
+      schema_version: 1,
+      code: 'runtime_target_active_workload_confirmation_required',
+      reason: 'the managed Runtime still owns active workloads',
+      recovery: 'close the workloads and retry',
+    }));
+    const bundle: DesktopBundle = {
+      root: bundleRoot,
+      manifest_path: manifestPath,
+      version: 'v1.2.3',
+      commit: 'abc123',
+      platform: 'darwin',
+      architecture: 'arm64',
+      provenance: 'development_bundle',
+      gateway: { path: binaryPath, sha256: 'a'.repeat(64), size_bytes: 1, executable: true },
+      runtime_suite: [{ path: path.join(bundleRoot, 'redeven'), sha256: 'b'.repeat(64), size_bytes: 1, executable: true }],
+      runtime_suite_sha256: `sha256:${'c'.repeat(64)}`,
+    };
+
+    try {
+      const error = await ensureManagedGatewayServiceReady({
+        sshTransportManager: null as never,
+        sshCredentialScope: 'local',
+        hostAccess: { kind: 'local_host' },
+        placement: { kind: 'host_process', runtime_root: runtimeRoot },
+        stateRoot,
+        releaseTag: 'v1.2.3',
+        releaseBaseURL: '',
+        assetCacheRoot: path.join(runtimeRoot, 'cache'),
+        tempRoot: path.join(runtimeRoot, 'tmp'),
+        precompiledBundle: bundle,
+      }).catch((caught: unknown) => caught);
+      expect(error).toBeInstanceOf(DesktopOperationFailureError);
+      const failure = error as DesktopOperationFailureError;
+      expect(failure.presentation.code).toBe('confirmation_required');
+      expect(failure.presentation.detail).toBe('the managed Runtime still owns active workloads');
+      expect(failure.presentation.recovery_hint).toBe('close the workloads and retry');
+      expect(failure.presentation.diagnostics).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          channel: 'gateway_startup_failure',
+          text: expect.stringContaining('runtime_target_active_workload_confirmation_required'),
+        }),
+      ]));
     } finally {
       fs.rmSync(runtimeRoot, { recursive: true, force: true });
     }

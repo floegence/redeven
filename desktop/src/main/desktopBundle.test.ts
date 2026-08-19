@@ -13,6 +13,19 @@ function sha256(value: Buffer): string {
   return createHash('sha256').update(value).digest('hex');
 }
 
+function suiteSHA256(runtimeSuite: Array<Record<string, unknown>>): string {
+  const identity = {
+    schema_version: 1,
+    files: runtimeSuite.map((artifact) => ({
+      name: artifact.path,
+      sha256: `sha256:${artifact.sha256}`,
+      size_bytes: artifact.size_bytes,
+      executable: artifact.executable,
+    })).sort((left, right) => String(left.name).localeCompare(String(right.name))),
+  };
+  return `sha256:${createHash('sha256').update(JSON.stringify(identity)).digest('hex')}`;
+}
+
 function bundleFixture(overrides: Record<string, unknown> = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'redeven-desktop-bundle-'));
   roots.push(root);
@@ -20,24 +33,27 @@ function bundleFixture(overrides: Record<string, unknown> = {}) {
   const gateway = Buffer.from("#!/bin/sh\nprintf 'redeven-gateway v1.2.3 (abc123) 2026-08-19T00:00:00Z\\n'\n");
   fs.writeFileSync(path.join(root, 'redeven'), runtime, { mode: 0o755 });
   fs.writeFileSync(path.join(root, 'redeven-gateway'), gateway, { mode: 0o755 });
+  const runtimeSuite = [{
+    path: 'redeven',
+    sha256: sha256(runtime),
+    size_bytes: runtime.length,
+    executable: true,
+  }];
   const manifest = {
-    schema_version: 1,
+    schema_version: 2,
     version: 'v1.2.3',
     commit: 'abc123',
     platform: 'linux',
     architecture: 'amd64',
+    provenance: 'packaged_bundle',
     gateway: {
       path: 'redeven-gateway',
       sha256: sha256(gateway),
       size_bytes: gateway.length,
       executable: true,
     },
-    runtime_suite: [{
-      path: 'redeven',
-      sha256: sha256(runtime),
-      size_bytes: runtime.length,
-      executable: true,
-    }],
+    runtime_suite: runtimeSuite,
+    runtime_suite_sha256: suiteSHA256(runtimeSuite),
     ...overrides,
   };
   fs.writeFileSync(path.join(root, 'desktop-bundle-manifest.json'), `${JSON.stringify(manifest)}\n`);
@@ -57,6 +73,7 @@ function replaceBundleArtifact(root: string, name: 'redeven' | 'redeven-gateway'
   if (!descriptor) throw new Error(`Missing bundle artifact ${name}.`);
   descriptor.sha256 = sha256(value);
   descriptor.size_bytes = value.length;
+  manifest.runtime_suite_sha256 = suiteSHA256(manifest.runtime_suite);
   fs.writeFileSync(manifestPath, `${JSON.stringify(manifest)}\n`);
 }
 

@@ -19,6 +19,7 @@ const phaseBudgets = Object.freeze({
   lifecycle_start_ms: 120_000,
   lifecycle_update_ms: 180_000,
 });
+const workspaceReadinessEvidence = new WeakMap();
 
 class FatalSmokeError extends Error {}
 
@@ -245,12 +246,111 @@ async function ensureGatewayPaired(page, label) {
   return result;
 }
 
-async function waitForWorkspace(browser, excludedPages = new Set()) {
-  return waitFor(
-    () => browserPages(browser).find((page) => !excludedPages.has(page) && !page.isClosed() && isWorkspacePage(page)) ?? null,
+async function filesNamed(root, expectedName, depth = 0) {
+  if (depth > 8) return [];
+  const entries = await fs.readdir(root, { withFileTypes: true }).catch(() => []);
+  const matches = [];
+  for (const entry of entries) {
+    const entryPath = path.join(root, entry.name);
+    if (entry.isFile() && entry.name === expectedName) {
+      matches.push(entryPath);
+    } else if (entry.isDirectory()) {
+      matches.push(...await filesNamed(entryPath, expectedName, depth + 1));
+    }
+  }
+  return matches;
+}
+
+function eventCreatedAtUnixMS(event) {
+  if (Number.isFinite(Number(event?.created_at_unix_ms))) return Number(event.created_at_unix_ms);
+  if (Number.isFinite(Number(event?.created_at))) return Number(event.created_at);
+  const parsed = Date.parse(String(event?.created_at ?? ''));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+async function runtimeConnectedDiagnostic(roots, openedAfterUnixMS) {
+  const paths = (await Promise.all(roots.map((root) => filesNamed(root, 'desktop-events.jsonl')))).flat();
+  for (const diagnosticPath of paths) {
+    const raw = await fs.readFile(diagnosticPath, 'utf8').catch(() => '');
+    const events = raw.split('\n').flatMap((line) => {
+      try {
+        return line.trim() ? [JSON.parse(line)] : [];
+      } catch {
+        return [];
+      }
+    });
+    const event = events.findLast((candidate) => (
+      candidate?.kind === 'session_app_ready'
+      && candidate?.detail?.state === 'runtime_connected'
+      && eventCreatedAtUnixMS(candidate) >= openedAfterUnixMS
+    ));
+    if (event) return { path: diagnosticPath, event: redactDiagnosticValue(event) };
+  }
+  return null;
+}
+
+async function waitForWorkspace(browser, options = {}) {
+  const excludedPages = options.excludedPages ?? new Set();
+  const page = await waitFor(
+    async () => {
+      for (const candidate of browserPages(browser)) {
+        if (excludedPages.has(candidate) || candidate.isClosed() || !isWorkspacePage(candidate)) continue;
+        if (options.label) {
+          const label = await candidate.evaluate(() => (
+            window.redevenDesktopSessionContext?.getSnapshot?.()?.label ?? ''
+          )).catch(() => '');
+          if (label !== options.label) continue;
+        }
+        return candidate;
+      }
+      return null;
+    },
     120_000,
-    'Desktop workspace window',
+    `${options.label ?? 'Desktop'} workspace window`,
   );
+  const rendered = await waitFor(async () => {
+    if (page.isClosed()) return null;
+    const evidence = await page.evaluate(() => {
+      const body = document.body;
+      const bodyText = String(body?.innerText ?? '').trim();
+      const context = window.redevenDesktopSessionContext?.getSnapshot?.() ?? null;
+      return {
+        ready_state: document.readyState,
+        title: document.title,
+        body_text_length: bodyText.length,
+        body_width: Math.round(body?.getBoundingClientRect().width ?? 0),
+        body_height: Math.round(body?.getBoundingClientRect().height ?? 0),
+        root_child_count: document.querySelector('#root')?.childElementCount ?? 0,
+        session_context: context,
+      };
+    });
+    if (
+      evidence.ready_state !== 'complete'
+      || evidence.body_text_length < 20
+      || evidence.body_width < 100
+      || evidence.body_height < 100
+      || evidence.root_child_count < 1
+      || !evidence.session_context
+      || (options.label && evidence.session_context.label !== options.label)
+    ) {
+      return null;
+    }
+    return evidence;
+  }, 120_000, `${options.label ?? 'Desktop'} rendered workspace`);
+  const diagnostic = await waitFor(
+    () => runtimeConnectedDiagnostic(options.diagnosticRoots ?? [], options.openedAfterUnixMS ?? 0),
+    120_000,
+    `${options.label ?? 'Desktop'} runtime protocol connection`,
+  );
+  workspaceReadinessEvidence.set(page, { rendered, runtime_connected: diagnostic });
+  return page;
+}
+
+function workspaceEvidence(page) {
+  return {
+    workspace_url: page.url(),
+    readiness: workspaceReadinessEvidence.get(page) ?? null,
+  };
 }
 
 async function closeWorkspacePages(browser) {
@@ -264,6 +364,35 @@ function desktopBundleTarget() {
 
 function bundledRuntimeRoot() {
   return path.join(rootDir, 'desktop', '.bundle', desktopBundleTarget());
+}
+
+async function sha256File(filePath) {
+  const value = await fs.readFile(filePath);
+  return `sha256:${createHash('sha256').update(value).digest('hex')}`;
+}
+
+async function makeImmutableBundleSnapshot(sourceRoot, snapshotsRoot, name, provenance) {
+  const snapshotRoot = path.join(snapshotsRoot, name);
+  await fs.cp(sourceRoot, snapshotRoot, { recursive: true, force: false, errorOnExist: true, verbatimSymlinks: true });
+  const manifestPath = path.join(snapshotRoot, 'desktop-bundle-manifest.json');
+  const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+  if (manifest.schema_version !== 2) {
+    throw new Error(`Desktop smoke requires bundle manifest schema 2, got ${manifest.schema_version}`);
+  }
+  manifest.provenance = provenance;
+  await fs.writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
+  for (const artifact of [manifest.gateway, ...(manifest.runtime_suite ?? [])]) {
+    await fs.chmod(path.join(snapshotRoot, artifact.path), artifact.executable ? 0o500 : 0o400);
+  }
+  await fs.chmod(manifestPath, 0o400);
+  await fs.chmod(snapshotRoot, 0o500);
+  return {
+    root: snapshotRoot,
+    manifest_path: manifestPath,
+    manifest,
+    manifest_sha256: await sha256File(manifestPath),
+    runtime_sha256: await sha256File(path.join(snapshotRoot, 'redeven')),
+  };
 }
 
 function assertBudget(label, durationMs, budgetMs) {
@@ -593,6 +722,115 @@ async function runtimeSupervisorEvidence(stateRoot, snapshot) {
   };
 }
 
+function gatewayStateRootFor(snapshot, gatewayID = '') {
+  const source = (snapshot?.gateway_sources ?? []).find((candidate) => candidate.gateway_id === gatewayID)
+    ?? snapshot?.gateway_sources?.[0];
+  return source?.service_state?.service_state_root ?? '';
+}
+
+async function readRuntimeTargetBinding(snapshot, gatewayID = '') {
+  const gatewayStateRoot = gatewayStateRootFor(snapshot, gatewayID);
+  if (!gatewayStateRoot) throw new Error(`Gateway state root is unavailable for ${gatewayID || 'the selected Gateway'}`);
+  const bindingPath = path.join(gatewayStateRoot, 'runtime-target-binding-v1.json');
+  const raw = await fs.readFile(bindingPath, 'utf8');
+  return { gateway_state_root: gatewayStateRoot, binding_path: bindingPath, raw, value: JSON.parse(raw) };
+}
+
+async function seedLegacyRuntimeBinding({ stateRoot, snapshot, gatewayID }) {
+  const persisted = await readRuntimeTargetBinding(snapshot, gatewayID);
+  if (persisted.value.schema_version !== 2 || !persisted.value.binding?.validated_runtime?.managed_suite_sha256) {
+    throw new Error(`clean bootstrap did not create a schema-2 Runtime binding: ${JSON.stringify(redactDiagnosticValue(persisted.value))}`);
+  }
+  const runtimeRoot = path.join(stateRoot, 'local-environment');
+  const managedRuntime = path.join(runtimeRoot, 'runtime', 'managed', 'bin', 'redeven');
+  const previousDigest = await sha256File(managedRuntime);
+  await fs.appendFile(managedRuntime, `\nREDEVEN_LEGACY_RUNTIME_SMOKE_${Date.now()}\n`);
+  await fs.chmod(managedRuntime, 0o700);
+  const legacyDigest = await sha256File(managedRuntime);
+  if (legacyDigest === previousDigest) throw new Error('legacy Runtime fixture did not change the executable digest');
+  const versionProbe = await captureCommand(managedRuntime, ['version'], { timeoutMs: 15_000 });
+  if (versionProbe.exit_code !== 0) {
+    throw new Error(`legacy Runtime fixture is not executable after identity change: ${versionProbe.stderr || versionProbe.stdout}`);
+  }
+  const statusProbe = await captureCommand(managedRuntime, ['desktop-runtime-status', '--state-root', runtimeRoot], { timeoutMs: 15_000 });
+  if (statusProbe.exit_code !== 0) {
+    throw new Error(`legacy Runtime fixture cannot prove its stopped inventory: ${statusProbe.stderr || statusProbe.stdout}`);
+  }
+  const legacy = structuredClone(persisted.value);
+  legacy.schema_version = 1;
+  legacy.binding.validated_runtime.artifact_sha256 = legacyDigest;
+  delete legacy.binding.validated_runtime.managed_suite_sha256;
+  delete legacy.binding.validated_runtime.installation_provenance;
+  const legacyRaw = `${JSON.stringify(legacy, null, 2)}\n`;
+  const temporaryPath = `${persisted.binding_path}.smoke-tmp`;
+  await fs.writeFile(temporaryPath, legacyRaw, { mode: 0o600 });
+  await fs.rename(temporaryPath, persisted.binding_path);
+  const roundTrip = await fs.readFile(persisted.binding_path, 'utf8');
+  if (roundTrip !== legacyRaw) throw new Error('legacy Runtime binding fixture was not written exactly');
+  return {
+    binding_path: persisted.binding_path,
+    gateway_state_root: persisted.gateway_state_root,
+    schema_version: 1,
+    original_binding_sha256: `sha256:${createHash('sha256').update(persisted.raw).digest('hex')}`,
+    legacy_binding_sha256: `sha256:${createHash('sha256').update(legacyRaw).digest('hex')}`,
+    original_runtime_sha256: previousDigest,
+    legacy_runtime_sha256: legacyDigest,
+    version_probe: versionProbe.stdout.trim(),
+  };
+}
+
+async function assertDevelopmentRuntimeConvergence({ stateRoot, ready, bundle, legacyFixture, output }) {
+  const targetDigest = bundle.runtime_sha256;
+  if (legacyFixture.legacy_runtime_sha256 === targetDigest) {
+    throw new Error('legacy Runtime fixture unexpectedly matches the development target digest');
+  }
+  const managedRuntime = path.join(stateRoot, 'local-environment', 'runtime', 'managed', 'bin', 'redeven');
+  const managedDigest = await sha256File(managedRuntime);
+  if (managedDigest !== targetDigest) {
+    throw new Error(`managed Runtime did not converge to the development target: got=${managedDigest} want=${targetDigest}`);
+  }
+  const persisted = await readRuntimeTargetBinding(ready.snapshot, ready.environment.gateway_id);
+  const validation = persisted.value.binding?.validated_runtime;
+  if (
+    persisted.value.schema_version !== 2
+    || validation?.artifact_sha256 !== targetDigest
+    || validation?.managed_suite_sha256 !== bundle.manifest.runtime_suite_sha256
+    || validation?.installation_provenance?.kind !== 'development_bundle'
+    || validation?.installation_provenance?.bundle_commit !== bundle.manifest.commit
+  ) {
+    throw new Error(`development Runtime binding identity is incomplete: ${JSON.stringify(redactDiagnosticValue(persisted.value))}`);
+  }
+  const runtimeService = ready.environment.runtime_health.runtime_service;
+  if (runtimeService?.runtime_commit !== bundle.manifest.commit) {
+    throw new Error(`running Runtime commit does not match the development target: got=${runtimeService?.runtime_commit} want=${bundle.manifest.commit}`);
+  }
+  await waitFor(
+    () => output.join('').toLowerCase().includes(targetDigest.toLowerCase()) ? true : null,
+    30_000,
+    'actual Runtime digest startup log',
+  );
+  const status = await captureCommand(managedRuntime, ['desktop-runtime-status', '--state-root', path.join(stateRoot, 'local-environment')], { timeoutMs: 15_000 });
+  if (status.exit_code !== 0) {
+    throw new Error(`converged managed Runtime status failed: ${status.stderr || status.stdout}`);
+  }
+  let parsedStatus;
+  try {
+    parsedStatus = JSON.parse(status.stdout);
+  } catch {
+    parsedStatus = { raw: status.stdout.trim() };
+  }
+  return {
+    target_runtime_sha256: targetDigest,
+    managed_runtime_sha256: managedDigest,
+    running_runtime_commit: runtimeService.runtime_commit,
+    running_runtime_version: runtimeService.runtime_version,
+    binding_path: persisted.binding_path,
+    binding_schema_version: persisted.value.schema_version,
+    validated_runtime: redactDiagnosticValue(validation),
+    runtime_status: redactDiagnosticValue(parsedStatus),
+  };
+}
+
 async function stopProcessGroup(child, output) {
   if (child.exitCode !== null || child.signalCode !== null) return;
   try {
@@ -610,8 +848,8 @@ async function stopProcessGroup(child, output) {
   await new Promise((resolve) => child.once('exit', resolve));
 }
 
-async function stopSmokeGatewayServices(runtimeRoots) {
-  const bundledGateway = path.join(bundledRuntimeRoot(), 'redeven-gateway');
+async function stopSmokeGatewayServices(runtimeRoots, bundleRoot = bundledRuntimeRoot()) {
+  const bundledGateway = path.join(bundleRoot, 'redeven-gateway');
   for (const runtimeRoot of runtimeRoots) {
     const managedExecutable = path.join(runtimeRoot, 'gateway', 'managed', 'bin', 'redeven-gateway');
     const executable = await fs.stat(bundledGateway).then((stat) => stat.isFile() ? bundledGateway : managedExecutable, () => managedExecutable);
@@ -631,8 +869,8 @@ async function stopSmokeGatewayServices(runtimeRoots) {
   }
 }
 
-async function stopSmokeRuntimeProcesses(runtimeRoots) {
-  const bundledRuntime = path.join(bundledRuntimeRoot(), 'redeven');
+async function stopSmokeRuntimeProcesses(runtimeRoots, bundleRoot = bundledRuntimeRoot()) {
+  const bundledRuntime = path.join(bundleRoot, 'redeven');
   for (const runtimeRoot of runtimeRoots) {
     const managedExecutable = path.join(runtimeRoot, 'runtime', 'managed', 'bin', 'redeven');
     const executable = await fs.stat(bundledRuntime).then((stat) => stat.isFile() ? bundledRuntime : managedExecutable, () => managedExecutable);
@@ -730,16 +968,68 @@ async function runExplicitUpdate(page, label, snapshot, gatewayID) {
   };
 }
 
-async function runLocalColdStartScenario({ page, browser, launchStartedAt, output, stateRoot }) {
+async function runCleanBundleBootstrapScenario({ page, browser, launchStartedAt, output, stateRoot, bundle, diagnosticRoots }) {
   const ready = await waitForEnvironment(
     page,
     'Local Environment',
-    (environment) => environment.gateway_status === 'online' && environment.runtime_health.status === 'online',
+    (environment, snapshot) => environment.gateway_status === 'online'
+      && environment.gateway_trust_state === 'paired'
+      && environment.runtime_health.status === 'online'
+      && snapshot.issue?.scope !== 'startup',
+    phaseBudgets.desktop_cold_start_ms,
+  );
+  const durationMS = Date.now() - launchStartedAt;
+  assertBudget('clean Desktop cold startup', durationMS, phaseBudgets.desktop_cold_start_ms);
+  const pairing = await ensureGatewayPaired(page, 'Local Environment');
+  const managedRuntime = path.join(stateRoot, 'local-environment', 'runtime', 'managed', 'bin', 'redeven');
+  const managedDigest = await sha256File(managedRuntime);
+  if (managedDigest !== bundle.runtime_sha256) {
+    throw new Error(`clean managed Runtime digest mismatch: got=${managedDigest} want=${bundle.runtime_sha256}`);
+  }
+  const lifecycleBeforeOpen = await assertNormalPathHasNoArtifactWork(
+    ready.snapshot,
+    ready.environment.gateway_id,
+    output.join(''),
+  );
+  const openedAfterUnixMS = Date.now();
+  const direct = await openDirectly(page, 'Local Environment');
+  const workspace = await waitForWorkspace(browser, {
+    label: 'Local Environment', diagnosticRoots, openedAfterUnixMS,
+  });
+  await waitForEnvironment(page, 'Local Environment', (environment) => environment.is_open === true, phaseBudgets.direct_open_ms);
+  await closeWorkspacePages(browser);
+  await lifecycleActionForEnvironment(page, 'Local Environment', 'stop', 'stopped_gateway_environment_runtime');
+  await waitForEnvironment(page, 'Local Environment', (environment) => environment.runtime_health.status !== 'online', phaseBudgets.lifecycle_start_ms);
+  return {
+    environment: ready.environment,
+    snapshot: await launcherSnapshot(page),
+    evidence: {
+      duration_ms: durationMS,
+      gateway_pairing: pairing,
+      managed_runtime_sha256: managedDigest,
+      lifecycle_before_open: lifecycleBeforeOpen,
+      open: { ...direct, ...workspaceEvidence(workspace) },
+      stopped_through_gateway: true,
+    },
+  };
+}
+
+async function runLocalColdStartScenario({ page, browser, launchStartedAt, output, stateRoot, bundle, legacyFixture, diagnosticRoots }) {
+  const ready = await waitForEnvironment(
+    page,
+    'Local Environment',
+    (environment, snapshot) => environment.gateway_status === 'online'
+      && environment.gateway_trust_state === 'paired'
+      && environment.runtime_health.status === 'online'
+      && snapshot.issue?.scope !== 'startup',
     phaseBudgets.desktop_cold_start_ms,
   );
   const coldStartDurationMS = Date.now() - launchStartedAt;
   assertBudget('Desktop cold startup', coldStartDurationMS, phaseBudgets.desktop_cold_start_ms);
   const pairing = await ensureGatewayPaired(page, 'Local Environment');
+  const targetConvergence = await assertDevelopmentRuntimeConvergence({
+    stateRoot, ready, bundle, legacyFixture, output,
+  });
   const managedRuntime = path.join(stateRoot, 'local-environment', 'runtime', 'managed', 'bin', 'redeven');
   if (!await fs.stat(managedRuntime).then((stat) => stat.isFile(), () => false)) {
     throw new Error(`Desktop cold startup did not provision the bundled Runtime: ${managedRuntime}`);
@@ -756,7 +1046,9 @@ async function runLocalColdStartScenario({ page, browser, launchStartedAt, outpu
   );
   const openStartedAt = Date.now();
   const direct = await openDirectly(page, 'Local Environment');
-  const workspace = await waitForWorkspace(browser);
+  const workspace = await waitForWorkspace(browser, {
+    label: 'Local Environment', diagnosticRoots, openedAfterUnixMS: openStartedAt,
+  });
   await waitForEnvironment(page, 'Local Environment', (environment) => environment.is_open === true, phaseBudgets.direct_open_ms);
   const directOpenDurationMS = Date.now() - openStartedAt;
   assertBudget('Local Environment direct open', directOpenDurationMS, phaseBudgets.direct_open_ms);
@@ -777,14 +1069,15 @@ async function runLocalColdStartScenario({ page, browser, launchStartedAt, outpu
       gateway_pairing: pairing,
       cold_start_duration_ms: coldStartDurationMS,
       direct_open_duration_ms: directOpenDurationMS,
-      direct_open: { ...direct, workspace_url: workspace.url() },
+      direct_open: { ...direct, ...workspaceEvidence(workspace) },
       lifecycle_before_open: lifecycleBeforeOpen,
+      development_target_convergence: targetConvergence,
       pending_start_before_restart: pendingOperation,
     },
   };
 }
 
-async function continueLocalScenarioAfterRestart({ page, browser, local, reportRoot }) {
+async function continueLocalScenarioAfterRestart({ page, browser, local, reportRoot, diagnosticRoots }) {
   const confirmed = await page.evaluate(async (operationKey) => window.redevenDesktopLauncher.performAction({
     kind: 'confirm_runtime_operation',
     operation_key: operationKey,
@@ -793,15 +1086,21 @@ async function continueLocalScenarioAfterRestart({ page, browser, local, reportR
     throw new Error(`persisted start operation did not resume after Desktop restart: ${JSON.stringify(confirmed)}`);
   }
   await waitForEnvironment(page, 'Local Environment', (environment) => environment.runtime_health.status === 'online', phaseBudgets.lifecycle_start_ms);
+  const recoveredOpenedAt = Date.now();
   const recoveredOpen = await openDirectly(page, 'Local Environment');
-  const recoveredWorkspace = await waitForWorkspace(browser);
+  const recoveredWorkspace = await waitForWorkspace(browser, {
+    label: 'Local Environment', diagnosticRoots, openedAfterUnixMS: recoveredOpenedAt,
+  });
   await waitForEnvironment(page, 'Local Environment', (environment) => environment.is_open === true, phaseBudgets.direct_open_ms);
   await closeWorkspacePages(browser);
 
   await lifecycleActionForEnvironment(page, 'Local Environment', 'stop', 'stopped_gateway_environment_runtime');
   await waitForEnvironment(page, 'Local Environment', (environment) => environment.runtime_health.status !== 'online', phaseBudgets.lifecycle_start_ms);
+  const startedOpenedAt = Date.now();
   const start = await openThroughGuidance(page, 'Local Environment', /Start and open|启动并打开/u);
-  const startedWorkspace = await waitForWorkspace(browser);
+  const startedWorkspace = await waitForWorkspace(browser, {
+    label: 'Local Environment', diagnosticRoots, openedAfterUnixMS: startedOpenedAt,
+  });
   await waitForEnvironment(page, 'Local Environment', (environment) => environment.runtime_health.status === 'online' && environment.is_open === true, phaseBudgets.lifecycle_start_ms);
   await closeWorkspacePages(browser);
 
@@ -809,48 +1108,60 @@ async function continueLocalScenarioAfterRestart({ page, browser, local, reportR
   const restarted = await waitForEnvironment(page, 'Local Environment', (environment) => environment.runtime_health.status === 'online', phaseBudgets.lifecycle_start_ms);
   const coldUpdate = await runExplicitUpdate(page, 'Local Environment', restarted.snapshot, local.environment.gateway_id);
   const warmUpdate = await runExplicitUpdate(page, 'Local Environment', restarted.snapshot, local.environment.gateway_id);
+  const updatedOpenedAt = Date.now();
   const direct = await openDirectly(page, 'Local Environment');
-  const workspace = await waitForWorkspace(browser);
+  const workspace = await waitForWorkspace(browser, {
+    label: 'Local Environment', diagnosticRoots, openedAfterUnixMS: updatedOpenedAt,
+  });
   await page.screenshot({ path: path.join(reportRoot, 'desktop-lifecycle-local.png'), fullPage: true });
   return {
     ...local.scenario,
-    recovered_start: { confirmation: confirmed, ...recoveredOpen, workspace_url: recoveredWorkspace.url() },
-    start_and_open: { ...start, workspace_url: startedWorkspace.url() },
+    recovered_start: { confirmation: confirmed, ...recoveredOpen, ...workspaceEvidence(recoveredWorkspace) },
+    start_and_open: { ...start, ...workspaceEvidence(startedWorkspace) },
     restart: { outcome: 'restarted_gateway_environment_runtime' },
     source_build_cache: { cold: coldUpdate, warm: warmUpdate },
-    open_after_update: { ...direct, workspace_url: workspace.url() },
+    open_after_update: { ...direct, ...workspaceEvidence(workspace) },
   };
 }
 
-async function runSSHScenario({ page, browser, reportRoot }) {
+async function runSSHScenario({ page, browser, reportRoot, diagnosticRoots }) {
   const initial = await waitForEnvironment(page, 'SSH Remote Environment', (environment) => Boolean(environment.gateway_id), phaseBudgets.lifecycle_start_ms);
   const pairing = await ensureGatewayPaired(page, 'SSH Remote Environment');
   const initialUpdate = await runExplicitUpdate(page, 'SSH Remote Environment', initial.snapshot, initial.environment.gateway_id);
+  const directOpenedAt = Date.now();
   const direct = await openDirectly(page, 'SSH Remote Environment');
-  const workspace = await waitForWorkspace(browser);
+  const workspace = await waitForWorkspace(browser, {
+    label: 'SSH Remote Environment', diagnosticRoots, openedAfterUnixMS: directOpenedAt,
+  });
   await waitForEnvironment(page, 'SSH Remote Environment', (environment) => environment.is_open === true, phaseBudgets.direct_open_ms);
   await closeWorkspacePages(browser);
   await lifecycleActionForEnvironment(page, 'SSH Remote Environment', 'stop', 'stopped_gateway_environment_runtime');
   await waitForEnvironment(page, 'SSH Remote Environment', (environment) => environment.runtime_health.status !== 'online', phaseBudgets.lifecycle_start_ms);
+  const startedOpenedAt = Date.now();
   const start = await openThroughGuidance(page, 'SSH Remote Environment', /Start and open|启动并打开/u);
-  const startedWorkspace = await waitForWorkspace(browser);
+  const startedWorkspace = await waitForWorkspace(browser, {
+    label: 'SSH Remote Environment', diagnosticRoots, openedAfterUnixMS: startedOpenedAt,
+  });
   await waitForEnvironment(page, 'SSH Remote Environment', (environment) => environment.runtime_health.status === 'online' && environment.is_open === true, phaseBudgets.lifecycle_start_ms);
   await closeWorkspacePages(browser);
   await lifecycleActionForEnvironment(page, 'SSH Remote Environment', 'restart', 'restarted_gateway_environment_runtime');
   const restarted = await waitForEnvironment(page, 'SSH Remote Environment', (environment) => environment.runtime_health.status === 'online', phaseBudgets.lifecycle_start_ms);
   const update = await runExplicitUpdate(page, 'SSH Remote Environment', restarted.snapshot, initial.environment.gateway_id);
+  const reopenedAt = Date.now();
   const reopened = await openDirectly(page, 'SSH Remote Environment');
-  const reopenedWorkspace = await waitForWorkspace(browser);
+  const reopenedWorkspace = await waitForWorkspace(browser, {
+    label: 'SSH Remote Environment', diagnosticRoots, openedAfterUnixMS: reopenedAt,
+  });
   await page.screenshot({ path: path.join(reportRoot, 'desktop-lifecycle-ssh-remote.png'), fullPage: true });
   return {
     label: 'SSH Remote Environment',
     gateway_pairing: pairing,
     initial_explicit_update: initialUpdate,
-    open: { ...direct, workspace_url: workspace.url() },
-    start_and_open: { ...start, workspace_url: startedWorkspace.url() },
+    open: { ...direct, ...workspaceEvidence(workspace) },
+    start_and_open: { ...start, ...workspaceEvidence(startedWorkspace) },
     restart: { outcome: 'restarted_gateway_environment_runtime' },
     update,
-    open_after_update: { ...reopened, workspace_url: reopenedWorkspace.url() },
+    open_after_update: { ...reopened, ...workspaceEvidence(reopenedWorkspace) },
   };
 }
 
@@ -864,13 +1175,17 @@ async function run() {
   const cacheRoot = path.join(tempRoot, 'cache');
   const desktopTempRoot = path.join(tempRoot, 'temp');
   const reportRoot = path.join(tempRoot, 'report');
-  await Promise.all([stateRoot, userDataRoot, cacheRoot, desktopTempRoot, reportRoot].map((directory) => fs.mkdir(directory, { recursive: true })));
+  const snapshotsRoot = path.join(tempRoot, 'bundle-snapshots');
+  await Promise.all([stateRoot, userDataRoot, cacheRoot, desktopTempRoot, reportRoot, snapshotsRoot].map((directory) => fs.mkdir(directory, { recursive: true })));
 
-  const bundleRoot = bundledRuntimeRoot();
-  const bundleManifestPath = path.join(bundleRoot, 'desktop-bundle-manifest.json');
-  const bundleManifest = JSON.parse(await fs.readFile(bundleManifestPath, 'utf8').catch((error) => {
-    throw new Error(`Desktop smoke requires a prebuilt bundle at ${bundleManifestPath}: ${error}`);
-  }));
+  const sourceBundleRoot = bundledRuntimeRoot();
+  const sourceBundleManifestPath = path.join(sourceBundleRoot, 'desktop-bundle-manifest.json');
+  await fs.readFile(sourceBundleManifestPath, 'utf8').catch((error) => {
+    throw new Error(`Desktop smoke requires a prebuilt bundle at ${sourceBundleManifestPath}: ${error}`);
+  });
+  const packagedBundle = await makeImmutableBundleSnapshot(sourceBundleRoot, snapshotsRoot, 'packaged', 'packaged_bundle');
+  const developmentBundle = await makeImmutableBundleSnapshot(sourceBundleRoot, snapshotsRoot, 'development', 'development_bundle');
+  const bundleManifest = packagedBundle.manifest;
   const desktopMainPath = path.join(rootDir, 'desktop', 'dist', 'main', 'main.js');
   if (!await fs.stat(desktopMainPath).then((stat) => stat.isFile(), () => false)) {
     throw new Error(`Desktop smoke requires a prebuilt Desktop at ${desktopMainPath}`);
@@ -900,7 +1215,7 @@ async function run() {
     REDEVEN_DESKTOP_BUNDLE_COMMIT: bundleManifest.commit,
     REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT: rootDir,
   };
-  const launchDesktop = () => {
+  const launchDesktop = (bundle) => {
     const launchedAt = Date.now();
     const launched = spawn(path.join(rootDir, 'desktop', 'node_modules', '.bin', 'electron'), [
       '--remote-debugging-address=127.0.0.1',
@@ -910,14 +1225,14 @@ async function run() {
     ], {
       cwd: path.join(rootDir, 'desktop'),
       detached: true,
-      env: desktopEnvironment,
+      env: { ...desktopEnvironment, REDEVEN_DESKTOP_BUNDLED_RUNTIME_ROOT: bundle.root },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     launched.stdout.on('data', (chunk) => output.push(chunk.toString()));
     launched.stderr.on('data', (chunk) => output.push(chunk.toString()));
-    return { child: launched, launchedAt };
+    return { child: launched, launchedAt, bundle };
   };
-  let launch = launchDesktop();
+  let launch = launchDesktop(packagedBundle);
   let child = launch.child;
 
   let browser;
@@ -939,13 +1254,17 @@ async function run() {
     },
     launch_started_at_unix_ms: launch.launchedAt,
     bundle: {
-      manifest_path: bundleManifestPath,
+      source_manifest_path: sourceBundleManifestPath,
       version: bundleManifest.version,
       commit: bundleManifest.commit,
       platform: bundleManifest.platform,
       architecture: bundleManifest.architecture,
       gateway_sha256: bundleManifest.gateway.sha256,
-      runtime_sha256: bundleManifest.runtime_suite.find((artifact) => artifact.path === 'redeven')?.sha256,
+      runtime_sha256: packagedBundle.runtime_sha256,
+      snapshots: {
+        packaged: redactDiagnosticValue(packagedBundle),
+        development: redactDiagnosticValue(developmentBundle),
+      },
     },
     startups: [],
     scenarios: {},
@@ -974,15 +1293,49 @@ async function run() {
       return page;
     };
 
+    const diagnosticRoots = [stateRoot, userDataRoot];
     let page = await connectDesktop(phaseBudgets.desktop_cold_start_ms);
+    const cleanBootstrap = await runCleanBundleBootstrapScenario({
+      page,
+      browser,
+      launchStartedAt: launch.launchedAt,
+      output,
+      stateRoot,
+      bundle: packagedBundle,
+      diagnosticRoots,
+    });
+    evidence.startups.push({ kind: 'clean_packaged_bundle', duration_ms: cleanBootstrap.evidence.duration_ms });
+    evidence.scenarios.clean_local = cleanBootstrap.evidence;
+    await browser.close();
+    browser = undefined;
+    await stopProcessGroup(child, output);
+    await waitFor(async () => {
+      const response = await fetch(`http://127.0.0.1:${cdpPort}/json/version`).catch(() => null);
+      return response ? null : true;
+    }, 15_000, 'clean Desktop CDP shutdown');
+    await stopSmokeGatewayServices([path.join(stateRoot, 'local-environment')], packagedBundle.root);
+    const legacyFixture = await seedLegacyRuntimeBinding({
+      stateRoot,
+      snapshot: cleanBootstrap.snapshot,
+      gatewayID: cleanBootstrap.environment.gateway_id,
+    });
+    evidence.legacy_v1_fixture = legacyFixture;
+
+    launch = launchDesktop(developmentBundle);
+    child = launch.child;
+    evidence.electron_pid_after_legacy_fixture = child.pid;
+    page = await connectDesktop(phaseBudgets.desktop_cold_start_ms);
     const local = await runLocalColdStartScenario({
       page,
       browser,
       launchStartedAt: launch.launchedAt,
       output,
       stateRoot,
+      bundle: developmentBundle,
+      legacyFixture,
+      diagnosticRoots,
     });
-    evidence.startups.push({ kind: 'cold', duration_ms: local.scenario.cold_start_duration_ms });
+    evidence.startups.push({ kind: 'legacy_v1_development_convergence', duration_ms: local.scenario.cold_start_duration_ms });
     evidence.scenarios.local = local.scenario;
     await browser.close();
     browser = undefined;
@@ -991,7 +1344,7 @@ async function run() {
       const response = await fetch(`http://127.0.0.1:${cdpPort}/json/version`).catch(() => null);
       return response ? null : true;
     }, 15_000, 'Desktop CDP shutdown');
-    launch = launchDesktop();
+    launch = launchDesktop(developmentBundle);
     child = launch.child;
     evidence.electron_pid_after_pending_restart = child.pid;
     page = await connectDesktop(phaseBudgets.desktop_warm_start_ms);
@@ -1017,10 +1370,19 @@ async function run() {
         && operation.runtime_confirmation?.operation === 'start'
       )) ?? null;
     }, phaseBudgets.desktop_warm_start_ms, 'Desktop pending Runtime operation attachment');
-    evidence.scenarios.local = await continueLocalScenarioAfterRestart({ page, browser, local, reportRoot });
+    evidence.scenarios.local = await continueLocalScenarioAfterRestart({ page, browser, local, reportRoot, diagnosticRoots });
     evidence.scenarios.local.pending_start_after_restart = recoveredStart;
     evidence.scenarios.local.pending_start_attachment_after_restart = recoveredAttachment;
-    evidence.scenarios.ssh_remote = await runSSHScenario({ page, browser, reportRoot });
+    evidence.scenarios.ssh_remote = await runSSHScenario({ page, browser, reportRoot, diagnosticRoots });
+
+    const bindingBeforePackagedRestart = await readRuntimeTargetBinding(
+      await launcherSnapshot(page),
+      local.environment.gateway_id,
+    );
+    const provenanceBeforePackagedRestart = bindingBeforePackagedRestart.value.binding?.validated_runtime?.installation_provenance;
+    if (provenanceBeforePackagedRestart?.kind !== 'verified_lifecycle_update') {
+      throw new Error(`explicit update did not persist verified lifecycle provenance: ${JSON.stringify(redactDiagnosticValue(bindingBeforePackagedRestart.value))}`);
+    }
 
     await closeWorkspacePages(browser);
     await browser.close();
@@ -1030,7 +1392,8 @@ async function run() {
       const response = await fetch(`http://127.0.0.1:${cdpPort}/json/version`).catch(() => null);
       return response ? null : true;
     }, 15_000, 'Desktop CDP shutdown after updates');
-    launch = launchDesktop();
+    await stopSmokeGatewayServices([path.join(stateRoot, 'local-environment')], developmentBundle.root);
+    launch = launchDesktop(packagedBundle);
     child = launch.child;
     page = await connectDesktop(phaseBudgets.desktop_warm_start_ms);
     const readyAfterUpdateRestart = await waitForEnvironment(
@@ -1042,13 +1405,29 @@ async function run() {
     const updateRecoveryDurationMS = Date.now() - launch.launchedAt;
     assertBudget('Desktop verified-update recovery', updateRecoveryDurationMS, phaseBudgets.desktop_warm_start_ms);
     evidence.startups.push({ kind: 'verified_update_recovery', duration_ms: updateRecoveryDurationMS });
+    const bindingAfterPackagedRestart = await readRuntimeTargetBinding(
+      readyAfterUpdateRestart.snapshot,
+      local.environment.gateway_id,
+    );
+    const provenanceAfterPackagedRestart = bindingAfterPackagedRestart.value.binding?.validated_runtime?.installation_provenance;
+    if (JSON.stringify(provenanceAfterPackagedRestart) !== JSON.stringify(provenanceBeforePackagedRestart)) {
+      throw new Error(`packaged restart changed verified update provenance: before=${JSON.stringify(provenanceBeforePackagedRestart)} after=${JSON.stringify(provenanceAfterPackagedRestart)}`);
+    }
+    evidence.scenarios.local.packaged_restart_preserved_update = {
+      before: provenanceBeforePackagedRestart,
+      after: provenanceAfterPackagedRestart,
+      binding_path: bindingAfterPackagedRestart.binding_path,
+    };
+    const reopenedAfterRestartAt = Date.now();
     const openAfterDesktopRestart = await openDirectly(page, 'Local Environment');
-    const workspaceAfterDesktopRestart = await waitForWorkspace(browser);
+    const workspaceAfterDesktopRestart = await waitForWorkspace(browser, {
+      label: 'Local Environment', diagnosticRoots, openedAfterUnixMS: reopenedAfterRestartAt,
+    });
     evidence.scenarios.local.desktop_restart_after_update = {
       duration_ms: updateRecoveryDurationMS,
       runtime_version: readyAfterUpdateRestart.environment.runtime_health.runtime_service?.runtime_version,
       ...openAfterDesktopRestart,
-      workspace_url: workspaceAfterDesktopRestart.url(),
+      ...workspaceEvidence(workspaceAfterDesktopRestart),
     };
     evidence.completed_at_unix_ms = Date.now();
     evidence.duration_ms = evidence.completed_at_unix_ms - evidence.launch_started_at_unix_ms;
@@ -1086,19 +1465,23 @@ async function run() {
     await stopSmokeRuntimeProcesses([
       path.join(stateRoot, 'local-environment'),
       sshTarget.runtimeRoot,
-    ]).catch((error) => {
+    ], packagedBundle.root).catch((error) => {
       failure ??= error;
     });
     await stopSmokeGatewayServices([
       path.join(stateRoot, 'local-environment'),
       sshTarget.runtimeRoot,
-    ]).catch((error) => {
+    ], packagedBundle.root).catch((error) => {
       failure ??= error;
     });
     await sshTarget.stop().catch((error) => {
       failure ??= error;
     });
     if (!failure || process.env.REDEVEN_KEEP_FAILED_SMOKE_STATE !== '1') {
+      await Promise.all([
+        fs.chmod(packagedBundle.root, 0o700).catch(() => undefined),
+        fs.chmod(developmentBundle.root, 0o700).catch(() => undefined),
+      ]);
       await fs.rm(tempRoot, { recursive: true, force: true });
     }
   }

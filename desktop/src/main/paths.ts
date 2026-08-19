@@ -7,6 +7,7 @@ export type ResolveBundledRuntimePathArgs = Readonly<{
   appPath: string;
   platform?: NodeJS.Platform;
   arch?: string;
+  developmentBundleRoot?: string;
   existsSync?: (filePath: string) => boolean;
 }>;
 
@@ -47,6 +48,17 @@ export function resolveBundledRuntimePath(args: ResolveBundledRuntimePathArgs): 
   }
 
   const existsSync = args.existsSync ?? fs.existsSync;
+  const developmentBundleRoot = String(args.developmentBundleRoot ?? '').trim();
+  if (developmentBundleRoot !== '') {
+    if (!path.isAbsolute(developmentBundleRoot)) {
+      throw new Error('Development desktop bundle root must be absolute.');
+    }
+    const candidate = path.join(developmentBundleRoot, executableName);
+    if (!existsSync(candidate)) {
+      throw new Error('Development desktop bundle snapshot is missing its redeven executable.');
+    }
+    return candidate;
+  }
   const bundleDirName = bundledRuntimeBundleDirName(args.platform ?? process.platform, args.arch ?? process.arch);
   const candidateRoots = [
     args.appPath,

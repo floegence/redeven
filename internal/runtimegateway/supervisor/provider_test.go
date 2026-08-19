@@ -181,12 +181,12 @@ func TestProviderHeartbeatAllowsIndependentCompatibleComponentVersions(t *testin
 	); err != nil {
 		t.Fatal(err)
 	}
-	validation := RuntimeValidation{
+	validation := completeTestRuntimeValidation(RuntimeValidation{
 		RuntimeInstanceID: "runtime_instance_demo", RuntimeBinaryVersion: "runtime-11.0",
 		Platform: "linux", Architecture: "amd64",
 		ServiceProtocol: "redeven-runtime-v2", CompatibilityEpoch: 9,
 		Capabilities: []string{"lifecycle_fence_v1"}, ArtifactSHA256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-	}
+	})
 	if err := SendProviderHeartbeat(t.Context(), server.Client(), store, "gateway-12.0", validation); err != nil {
 		t.Fatal(err)
 	}
@@ -201,12 +201,12 @@ func TestEnrollProviderExchangesOneTimeCodeAndPersistsBinding(t *testing.T) {
 		t.Fatal(err)
 	}
 	binding := store.Binding()
-	validation := RuntimeValidation{
+	validation := completeTestRuntimeValidation(RuntimeValidation{
 		RuntimeInstanceID: "runtime_instance_demo", RuntimeBinaryVersion: "runtime-11.0",
 		Platform: "linux", Architecture: "amd64",
 		ServiceProtocol: "redeven-runtime-v2", CompatibilityEpoch: 9,
 		Capabilities: []string{"lifecycle_fence_v1"}, ArtifactSHA256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-	}
+	})
 	requests := 0
 	var server *httptest.Server
 	server = httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -289,12 +289,12 @@ func TestEnrollProviderRebindAdvancesTargetGeneration(t *testing.T) {
 		t.Fatal(err)
 	}
 	initial := store.Binding()
-	validation := RuntimeValidation{
+	validation := completeTestRuntimeValidation(RuntimeValidation{
 		RuntimeInstanceID: "runtime_instance_demo", RuntimeBinaryVersion: "runtime-11.0",
 		Platform: "linux", Architecture: "amd64",
 		ServiceProtocol: "redeven-runtime-v2", CompatibilityEpoch: 9,
 		Capabilities: []string{"lifecycle_fence_v1"}, ArtifactSHA256: strings.Repeat("a", 64),
-	}
+	})
 	var server *httptest.Server
 	server = httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		writer.Header().Set("Content-Type", "application/json")
@@ -366,12 +366,12 @@ func TestBindingReloadPreservesProviderConfigurationAcrossRuntimeValidation(t *t
 	); err != nil {
 		t.Fatal(err)
 	}
-	if err := runningStore.RecordRuntimeValidation(RuntimeValidation{
+	if err := runningStore.RecordRuntimeValidation(completeTestRuntimeValidation(RuntimeValidation{
 		RuntimeInstanceID: "runtime_demo", RuntimeBinaryVersion: "runtime-11.0", ServiceProtocol: "redeven-runtime-v2",
 		Platform: "linux", Architecture: "amd64",
 		CompatibilityEpoch: 9, Capabilities: []string{"lifecycle_fence_v1"},
 		ArtifactSHA256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-	}); err != nil {
+	})); err != nil {
 		t.Fatal(err)
 	}
 	got := runningStore.Binding()

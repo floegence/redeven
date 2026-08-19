@@ -51,6 +51,13 @@ type serviceStatus struct {
 	ErrorMessage           string `json:"error_message,omitempty"`
 }
 
+type gatewayStartupFailure struct {
+	SchemaVersion int    `json:"schema_version"`
+	Code          string `json:"code"`
+	Reason        string `json:"reason"`
+	Recovery      string `json:"recovery,omitempty"`
+}
+
 func main() {
 	os.Exit(runCLI(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
 }
@@ -132,6 +139,7 @@ func (c *cli) supervisorEnrollCmd(args []string) int {
 		return 1
 	}
 	stateRootValue := normalizeStateRoot(*stateRoot)
+	_ = os.Remove(gatewayStartupFailurePath(stateRootValue))
 	runtimeRootValue := normalizeRuntimeRoot(*runtimeRoot)
 	bindingStore, err := gatewaysupervisor.OpenLocalBindingStore(stateRootValue, runtimeRootValue)
 	if err != nil {
@@ -182,6 +190,7 @@ func (c *cli) serveCmd(args []string) int {
 	stateRoot := fs.String("state-root", "", "Gateway state root.")
 	runtimeRoot := fs.String("runtime-root", "", "Target Runtime root managed by this Gateway supervisor.")
 	precompiledRuntimeManifest := fs.String("precompiled-runtime-manifest", "", "Validated Desktop bundle manifest used for automatic Runtime startup.")
+	precompiledRuntimeLocalUIBind := fs.String("precompiled-runtime-local-ui-bind", "", "Loopback Local UI bind for the automatically started Runtime.")
 	listen := fs.String("listen", "127.0.0.1:0", "Gateway listen address.")
 	allowPrivateProfileTargets := fs.Bool("allow-private-profile-targets", false, "Allow URL profile targets on private networks.")
 	enableProfileWrite := fs.Bool("enable-profile-write", false, "Allow paired clients to create, edit, and delete Gateway environment profiles.")
@@ -209,7 +218,7 @@ func (c *cli) serveCmd(args []string) int {
 			return 1
 		}
 	}
-	return c.runGatewayService(ctx, stateRootValue, normalizeRuntimeRoot(*runtimeRoot), *precompiledRuntimeManifest, *listen, managedDesktopBridgeService(), true, *allowPrivateProfileTargets, *enableProfileWrite, *pairingCode, managedBridgeToken)
+	return c.runGatewayService(ctx, stateRootValue, normalizeRuntimeRoot(*runtimeRoot), *precompiledRuntimeManifest, *precompiledRuntimeLocalUIBind, *listen, managedDesktopBridgeService(), true, *allowPrivateProfileTargets, *enableProfileWrite, *pairingCode, managedBridgeToken)
 }
 
 func (c *cli) desktopBridgeCmd(args []string) int {
@@ -300,6 +309,7 @@ func (c *cli) serviceStartCmd(args []string) int {
 	stateRoot := fs.String("state-root", "", "Gateway state root.")
 	runtimeRoot := fs.String("runtime-root", "", "Target Runtime root managed by this Gateway supervisor.")
 	precompiledRuntimeManifest := fs.String("precompiled-runtime-manifest", "", "Validated Desktop bundle manifest used for automatic Runtime startup.")
+	precompiledRuntimeLocalUIBind := fs.String("precompiled-runtime-local-ui-bind", "", "Loopback Local UI bind for the automatically started Runtime.")
 	listen := fs.String("listen", "127.0.0.1:0", "Gateway listen address.")
 	allowPrivateProfileTargets := fs.Bool("allow-private-profile-targets", false, "Allow URL profile targets on private networks.")
 	enableProfileWrite := fs.Bool("enable-profile-write", true, "Allow paired clients to create, edit, and delete Gateway environment profiles.")
@@ -336,7 +346,7 @@ func (c *cli) serviceStartCmd(args []string) int {
 		return 1
 	}
 	defer logFile.Close()
-	cmdArgs := gatewayServiceServeArgs(stateRootValue, normalizeRuntimeRoot(*runtimeRoot), strings.TrimSpace(*precompiledRuntimeManifest), strings.TrimSpace(*listen))
+	cmdArgs := gatewayServiceServeArgs(stateRootValue, normalizeRuntimeRoot(*runtimeRoot), strings.TrimSpace(*precompiledRuntimeManifest), strings.TrimSpace(*precompiledRuntimeLocalUIBind), strings.TrimSpace(*listen))
 	if *allowPrivateProfileTargets {
 		cmdArgs = append(cmdArgs, "--allow-private-profile-targets")
 	}
@@ -363,10 +373,13 @@ func (c *cli) serviceStartCmd(args []string) int {
 	return 0
 }
 
-func gatewayServiceServeArgs(stateRoot string, runtimeRoot string, precompiledRuntimeManifest string, listen string) []string {
+func gatewayServiceServeArgs(stateRoot string, runtimeRoot string, precompiledRuntimeManifest string, precompiledRuntimeLocalUIBind string, listen string) []string {
 	args := []string{"serve", "--state-root", stateRoot, "--runtime-root", runtimeRoot, "--listen", listen}
 	if manifestPath := strings.TrimSpace(precompiledRuntimeManifest); manifestPath != "" {
 		args = append(args, "--precompiled-runtime-manifest", manifestPath)
+	}
+	if localUIBind := strings.TrimSpace(precompiledRuntimeLocalUIBind); localUIBind != "" {
+		args = append(args, "--precompiled-runtime-local-ui-bind", localUIBind)
 	}
 	return args
 }
@@ -416,7 +429,7 @@ func (c *cli) serviceStopCmd(args []string) int {
 	return 0
 }
 
-func (c *cli) runGatewayService(ctx context.Context, stateRoot string, runtimeRoot string, precompiledRuntimeManifest string, listen string, desktopBridgeTransport bool, printListen bool, allowPrivateProfileTargets bool, enableProfileWrite bool, pairingCode string, managedBridgeToken string) int {
+func (c *cli) runGatewayService(ctx context.Context, stateRoot string, runtimeRoot string, precompiledRuntimeManifest string, precompiledRuntimeLocalUIBind string, listen string, desktopBridgeTransport bool, printListen bool, allowPrivateProfileTargets bool, enableProfileWrite bool, pairingCode string, managedBridgeToken string) int {
 	stateRootValue := normalizeStateRoot(stateRoot)
 	if err := os.MkdirAll(stateRootValue, 0o700); err != nil {
 		writeError(c.stderr, fmt.Sprintf("serve failed: initialize Gateway state root: %v", err))
@@ -432,23 +445,22 @@ func (c *cli) runGatewayService(ctx context.Context, stateRoot string, runtimeRo
 		return 1
 	}
 	defer func() { _ = serviceLock.Release() }()
+	_ = os.Remove(gatewayStartupFailurePath(stateRootValue))
 	bindingStore, err := gatewaysupervisor.OpenLocalBindingStore(stateRootValue, runtimeRoot)
 	if err != nil {
-		writeError(c.stderr, fmt.Sprintf("serve failed: initialize Runtime target binding: %v", err))
-		return 1
+		return c.failGatewayStartup(stateRootValue, fmt.Errorf("initialize Runtime target binding: %w", err))
 	}
 	lifecycleController, err := gatewaysupervisor.NewController(gatewaysupervisor.ControllerOptions{
-		BindingStore:               bindingStore,
-		PrecompiledRuntimeManifest: strings.TrimSpace(precompiledRuntimeManifest),
+		BindingStore:                  bindingStore,
+		PrecompiledRuntimeManifest:    strings.TrimSpace(precompiledRuntimeManifest),
+		PrecompiledRuntimeLocalUIBind: strings.TrimSpace(precompiledRuntimeLocalUIBind),
 	})
 	if err != nil {
-		writeError(c.stderr, fmt.Sprintf("serve failed: initialize Runtime lifecycle controller: %v", err))
-		return 1
+		return c.failGatewayStartup(stateRootValue, fmt.Errorf("initialize Runtime lifecycle controller: %w", err))
 	}
 	lifecycleAuthorizer, err := gatewaysupervisor.NewAuthorizer(bindingStore)
 	if err != nil {
-		writeError(c.stderr, fmt.Sprintf("serve failed: initialize Runtime lifecycle authorizer: %v", err))
-		return 1
+		return c.failGatewayStartup(stateRootValue, fmt.Errorf("initialize Runtime lifecycle authorizer: %w", err))
 	}
 	serviceOptions := gatewayservice.Options{
 		StateRoot:                   stateRootValue,
@@ -467,13 +479,11 @@ func (c *cli) runGatewayService(ctx context.Context, stateRoot string, runtimeRo
 	}
 	svc, err := gatewayservice.New(serviceOptions)
 	if err != nil {
-		writeError(c.stderr, fmt.Sprintf("serve failed: %v", err))
-		return 1
+		return c.failGatewayStartup(stateRootValue, err)
 	}
 	srv, listeners, err := svc.Start(ctx, listen)
 	if err != nil {
-		writeError(c.stderr, fmt.Sprintf("serve failed: %v", err))
-		return 1
+		return c.failGatewayStartup(stateRootValue, err)
 	}
 	defer srv.Close()
 	go gatewaysupervisor.MaintainProviderHeartbeat(ctx, bindingStore, lifecycleController, Version)
@@ -488,6 +498,32 @@ func (c *cli) runGatewayService(ctx context.Context, stateRoot string, runtimeRo
 	<-ctx.Done()
 	_ = removePIDFile(stateRootValue)
 	return 0
+}
+
+func (c *cli) failGatewayStartup(stateRoot string, err error) int {
+	failure := gatewayStartupFailureForError(err)
+	_ = writeGatewayStartupFailure(stateRoot, failure)
+	writeError(c.stderr, fmt.Sprintf("serve failed: %v", err))
+	return 1
+}
+
+func gatewayStartupFailureForError(err error) gatewayStartupFailure {
+	failure := gatewayStartupFailure{SchemaVersion: 1, Code: "gateway_startup_failed"}
+	if err != nil {
+		failure.Reason = err.Error()
+	}
+	var convergenceErr *gatewaysupervisor.PrecompiledRuntimeConvergenceError
+	if errors.As(err, &convergenceErr) {
+		failure.Code = convergenceErr.Code
+		failure.Reason = convergenceErr.Reason
+		failure.Recovery = convergenceErr.Recovery
+		return failure
+	}
+	if strings.Contains(failure.Reason, "migrate Runtime target binding schema v1 to v2") {
+		failure.Code = "runtime_target_binding_migration_failed"
+		failure.Recovery = "restore the exact previously verified managed Runtime suite and permissions, then retry; do not delete or replace the state directory"
+	}
+	return failure
 }
 
 func normalizeRuntimeRoot(raw string) string {
@@ -521,6 +557,34 @@ func normalizeStateRoot(raw string) string {
 
 func pidFilePath(stateRoot string) string {
 	return filepath.Join(stateRoot, "gateway-service.pid.json")
+}
+
+func gatewayStartupFailurePath(stateRoot string) string {
+	return filepath.Join(stateRoot, "gateway-startup-failure-v1.json")
+}
+
+func writeGatewayStartupFailure(stateRoot string, failure gatewayStartupFailure) error {
+	raw, err := json.MarshalIndent(failure, "", "  ")
+	if err != nil {
+		return err
+	}
+	temporaryPath := gatewayStartupFailurePath(stateRoot) + ".tmp"
+	if err := os.WriteFile(temporaryPath, append(raw, '\n'), 0o600); err != nil {
+		return err
+	}
+	return os.Rename(temporaryPath, gatewayStartupFailurePath(stateRoot))
+}
+
+func readGatewayStartupFailure(stateRoot string) gatewayStartupFailure {
+	raw, err := os.ReadFile(gatewayStartupFailurePath(stateRoot))
+	if err != nil {
+		return gatewayStartupFailure{}
+	}
+	var failure gatewayStartupFailure
+	if json.Unmarshal(raw, &failure) != nil || failure.SchemaVersion != 1 {
+		return gatewayStartupFailure{}
+	}
+	return failure
 }
 
 func writePIDFile(stateRoot string, pid int, listen string) error {
@@ -660,6 +724,13 @@ func waitServiceReady(stateRoot string, expectedPID int) (serviceStatus, error) 
 			return status, nil
 		}
 		if expectedPID > 0 && !pidRunning(expectedPID) {
+			if failure := readGatewayStartupFailure(stateRoot); strings.TrimSpace(failure.Code) != "" && strings.TrimSpace(failure.Reason) != "" {
+				message := failure.Code + ": " + failure.Reason
+				if strings.TrimSpace(failure.Recovery) != "" {
+					message += " Recovery: " + failure.Recovery
+				}
+				return serviceStatus{}, errors.New(message)
+			}
 			return serviceStatus{}, errors.New("Gateway service exited before it became ready")
 		}
 		time.Sleep(100 * time.Millisecond)

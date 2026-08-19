@@ -119,12 +119,12 @@ func TestRuntimeManagementCapabilityFailsClosedAfterExternalBinaryReplacement(t 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := controller.bindings.RecordRuntimeValidation(RuntimeValidation{
+	if err := controller.bindings.RecordRuntimeValidation(completeTestRuntimeValidation(RuntimeValidation{
 		RuntimeInstanceID: "runtime-before-replacement", RuntimeBinaryVersion: "0.11.0",
 		Platform: "linux", Architecture: "amd64",
 		ServiceProtocol: gatewayprotocol.RuntimeServiceProtocolV2, CompatibilityEpoch: gatewayprotocol.RuntimeCompatibilityEpochV2,
 		Capabilities: []string{"lifecycle_fence_v1"}, ArtifactSHA256: digest,
-	}); err != nil {
+	})); err != nil {
 		t.Fatal(err)
 	}
 	writeExecutableFixture(t, binaryPath, []byte("externally replaced runtime"))
@@ -148,12 +148,16 @@ func TestRefreshRuntimeValidationReusesPersistedFactsOnlyForExactOfflineBinary(t
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := RuntimeValidation{
+	suiteDigest, _, err := managedRuntimeSuiteSHA256(filepath.Join(binding.RuntimeRoot, "runtime", "managed"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := completeTestRuntimeValidation(RuntimeValidation{
 		RuntimeInstanceID: "runtime-offline", RuntimeBinaryVersion: "0.11.0",
 		Platform: "linux", Architecture: "amd64",
 		ServiceProtocol: gatewayprotocol.RuntimeServiceProtocolV2, CompatibilityEpoch: gatewayprotocol.RuntimeCompatibilityEpochV2,
-		Capabilities: []string{"lifecycle_fence_v1"}, ArtifactSHA256: digest,
-	}
+		Capabilities: []string{"lifecycle_fence_v1"}, ArtifactSHA256: digest, ManagedSuiteSHA256: suiteDigest,
+	})
 	if err := controller.bindings.RecordRuntimeValidation(want); err != nil {
 		t.Fatal(err)
 	}
@@ -180,12 +184,12 @@ func TestRuntimeManagementCapabilityFailsClosedForIncompatiblePersistedIdentity(
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := controller.bindings.RecordRuntimeValidation(RuntimeValidation{
+	if err := controller.bindings.RecordRuntimeValidation(completeTestRuntimeValidation(RuntimeValidation{
 		RuntimeInstanceID: "runtime-old-epoch", RuntimeBinaryVersion: "0.10.0",
 		Platform: "linux", Architecture: "amd64",
 		ServiceProtocol: gatewayprotocol.RuntimeServiceProtocolV2, CompatibilityEpoch: gatewayprotocol.RuntimeCompatibilityEpochV2 - 1,
 		Capabilities: []string{"lifecycle_fence_v1"}, ArtifactSHA256: digest,
-	}); err != nil {
+	})); err != nil {
 		t.Fatal(err)
 	}
 

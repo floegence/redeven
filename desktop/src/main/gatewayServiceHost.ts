@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
 import {
   DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL,
   DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
@@ -18,6 +21,11 @@ import {
   runtimeReleaseFetchPolicy,
 } from './runtimePackageCache';
 import type { DesktopBundle } from './desktopBundle';
+import {
+  DesktopOperationFailureError,
+  desktopOperationFailurePresentation,
+  isDesktopOperationFailureError,
+} from './desktopOperationFailure';
 import { createLocalRuntimeHostExecutor, createSSHRuntimeHostExecutor, type RuntimeHostAccessExecutor } from './runtimeHostAccess';
 import type { DesktopSSHTransportManager } from './sshTransportManager';
 import {
@@ -100,6 +108,7 @@ export type GatewayServiceHostOptions = Readonly<{
   assetCacheRoot: string;
   sourceRuntimeRoot?: string;
   precompiledBundle?: DesktopBundle;
+  localUIBind?: string;
   targetCommit?: string;
   sshPassword?: string;
   tempRoot: string;
@@ -132,9 +141,62 @@ type GatewayServiceCommandStatus = Readonly<{
 
 const MANAGED_GATEWAY_STAMP_FILENAME = 'managed-gateway.stamp';
 const MANAGED_GATEWAY_STAMP_SCHEMA_VERSION = 3;
+const GATEWAY_STARTUP_FAILURE_FILENAME = 'gateway-startup-failure-v1.json';
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
+}
+
+type GatewayStartupFailure = Readonly<{
+  code: string;
+  reason: string;
+  recovery?: string;
+}>;
+
+async function readGatewayStartupFailure(stateRoot: string): Promise<GatewayStartupFailure | null> {
+  try {
+    const raw = await fs.promises.readFile(path.join(stateRoot, GATEWAY_STARTUP_FAILURE_FILENAME), 'utf8');
+    const decoded = JSON.parse(raw) as Record<string, unknown>;
+    const code = compact(decoded.code);
+    const reason = compact(decoded.reason);
+    if (decoded.schema_version !== 1 || code === '' || reason === '') {
+      return null;
+    }
+    return {
+      code,
+      reason,
+      ...(compact(decoded.recovery) ? { recovery: compact(decoded.recovery) } : {}),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function localGatewayStartupError(stateRoot: string, error: unknown): Promise<unknown> {
+  const failure = await readGatewayStartupFailure(stateRoot);
+  if (!failure) {
+    return error;
+  }
+  const activeWorkload = failure.code === 'runtime_target_active_workload_confirmation_required';
+  const priorDiagnostics = isDesktopOperationFailureError(error) ? error.presentation.diagnostics ?? [] : [];
+  return new DesktopOperationFailureError(desktopOperationFailurePresentation({
+    code: activeWorkload ? 'confirmation_required' : 'runtime_host_command_failed',
+    title: activeWorkload ? 'Runtime Confirmation Required' : 'Runtime Host Command Failed',
+    summary: activeWorkload
+      ? 'The Runtime workload must be reviewed before Desktop can replace this development target.'
+      : 'Desktop could not converge the managed Runtime to the verified target.',
+    detail: failure.reason,
+    recoveryHint: failure.recovery,
+    targetLabel: 'Local Environment',
+    diagnostics: [
+      ...priorDiagnostics,
+      {
+        channel: 'gateway_startup_failure',
+        label: 'Gateway startup failure',
+        text: JSON.stringify(failure),
+      },
+    ],
+  }), { cause: error });
 }
 
 function normalizeReleaseTag(raw: string): string {
@@ -483,7 +545,7 @@ function directGatewayServiceStatusCommand(options: GatewayServiceHostOptions): 
 
 function directGatewayServiceStartCommand(options: GatewayServiceHostOptions): readonly string[] {
   const bundle = requireLocalDesktopBundle(options);
-  return [
+  const command = [
     bundle.gateway.path,
     'service-start',
     '--state-root',
@@ -492,8 +554,12 @@ function directGatewayServiceStartCommand(options: GatewayServiceHostOptions): r
     options.placement.runtime_root,
     '--precompiled-runtime-manifest',
     bundle.manifest_path,
-    '--enable-profile-write',
   ];
+  if (compact(options.localUIBind)) {
+    command.push('--precompiled-runtime-local-ui-bind', compact(options.localUIBind));
+  }
+  command.push('--enable-profile-write');
+  return command;
 }
 
 function directGatewayServiceStopCommand(options: GatewayServiceHostOptions): readonly string[] {
@@ -1008,7 +1074,11 @@ export async function ensureManagedGatewayServiceReady(options: GatewayServiceHo
         title: 'Starting environment service',
         detail: 'Desktop is starting the precompiled service included with this application.',
       });
-      await executor.run(directGatewayServiceStartCommand(options), { signal: options.signal });
+      try {
+        await executor.run(directGatewayServiceStartCommand(options), { signal: options.signal });
+      } catch (error) {
+        throw await localGatewayStartupError(options.stateRoot, error);
+      }
       options.onProgress?.({
         phase: 'gateway_ready',
         title: 'Environment service ready',
