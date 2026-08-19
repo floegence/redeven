@@ -8,9 +8,7 @@ quality_exception: Cross-placement Runtime process contract spanning identity, r
 ---
 # Summary
 
-Desktop validates and starts its packaged environment services, but it does not own Runtime lifecycle state. Every product-managed start, stop, restart, or update is authorized and executed by the target OS user's Gateway supervisor. Desktop uses `lifecycle_target_id` plus `target_generation` and attaches to the durable Gateway operation from any authorized client. A missing, damaged, incompatible, or incorrectly targeted packaged service fails during Desktop startup, before an Environment Open action can depend on it.
-
-Gateway also owns selection of the Runtime installation used for startup. One verified target decision reconciles the immutable Desktop bundle, the managed installation, and any running Runtime identity before startup proceeds. Desktop never treats an `openable` Runtime as proof that this target decision is already satisfied, and diagnostics report the identity observed from the running Runtime rather than substituting the bundle's expected identity.
+Desktop validates the packaged Gateway and Runtime, then delegates all target-scoped start, stop, restart, and update operations to the target OS user's Gateway supervisor. Durable operations are addressed by `lifecycle_target_id` and `target_generation`; startup fails before Environment Open when the package or target identity is missing, damaged, incompatible, or stale. Gateway reconciles the immutable bundle, managed installation, and running Runtime identity as one verified decision, while diagnostics report observed Runtime identity separately from the bundle target.
 
 # Contract
 
