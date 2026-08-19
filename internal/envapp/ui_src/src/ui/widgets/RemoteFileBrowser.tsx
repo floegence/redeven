@@ -845,6 +845,10 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   let lastFilesGitDecorationRepoKey = '';
   let lastGitSubviewActivationKey = '';
   let lastGitBranchStatusActivationKey = '';
+  let gitBranchesLoadInFlight: {
+    repoRootPath: string;
+    promise: Promise<GitListBranchesResponse | undefined>;
+  } | null = null;
   let activeGitProtocolClient: object | null = null;
   let activeGitCapabilityMode: GitCapabilityMode = 'unknown';
 
@@ -1486,6 +1490,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const resetGitWorkbenchData = () => {
     gitRepoSummaryReqSeq += 1;
     gitBranchesReqSeq += 1;
+    gitBranchesLoadInFlight = null;
     gitMergeReviewReqSeq += 1;
     gitDeleteReviewReqSeq += 1;
     lastGitRepoKey = '';
@@ -1716,11 +1721,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const nextBranch = gitCurrentBranch() ?? pickDefaultGitBranch(gitBranches());
     if (!nextBranch) return;
     selectGitBranch(nextBranch);
-  };
-
-  const reconcileSelectedGitBranchAfterDetailFailure = () => {
-    if (gitBranchDetailState().kind !== 'ready') return;
-    void reconcileSelectedGitBranch({ showVerifying: false });
   };
 
   const selectGitCommit = (hash: string) => {
@@ -3198,35 +3198,46 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     }
   };
 
-  const loadGitBranches = async (options: GitBranchLoadOptions = {}) => {
+  const loadGitBranches = (options: GitBranchLoadOptions = {}): Promise<GitListBranchesResponse | undefined> => {
     const repoRootPath = resolveActiveRepoRootPath(options.repoRootPath);
-    if (!repoRootPath || !protocol.session?.()) return;
-    const seq = ++gitBranchesReqSeq;
-    const showInitialLoading = !options.silent || !gitBranches();
-    if (showInitialLoading) {
-      setGitBranchesLoading(true);
-      setGitBranchesError('');
-    }
-    try {
-      const resp = await requestGitBranchesSnapshot(repoRootPath);
-      if (seq !== gitBranchesReqSeq) return;
-      applyGitBranchesSnapshot(resp, {
-        selectionMode: options.selectionMode ?? 'preserve',
-      });
-      setSelectedGitBranchSubview((prev) => (prev === 'history' ? 'history' : 'status'));
-      return resp;
-    } catch {
-      if (seq !== gitBranchesReqSeq) return;
-      const message = presentGitRequestError();
+    if (!repoRootPath || !protocol.session?.()) return Promise.resolve(undefined);
+    const activeRequest = gitBranchesLoadInFlight;
+    if (activeRequest?.repoRootPath === repoRootPath) return activeRequest.promise;
+
+    const promise = (async (): Promise<GitListBranchesResponse | undefined> => {
+      const seq = ++gitBranchesReqSeq;
+      const showInitialLoading = !options.silent || !gitBranches();
       if (showInitialLoading) {
-        setGitBranches(null);
-        setGitBranchesError(message);
-      } else if (shouldNotifyGitLoadError(options)) {
-        notification.warning(i18n.t('git.notifications.refreshIncompleteTitle'), message);
+        setGitBranchesLoading(true);
+        setGitBranchesError('');
       }
-    } finally {
-      if (showInitialLoading && seq === gitBranchesReqSeq) setGitBranchesLoading(false);
-    }
+      try {
+        const resp = await requestGitBranchesSnapshot(repoRootPath);
+        if (seq !== gitBranchesReqSeq) return;
+        applyGitBranchesSnapshot(resp, {
+          selectionMode: options.selectionMode ?? 'preserve',
+        });
+        setSelectedGitBranchSubview((prev) => (prev === 'history' ? 'history' : 'status'));
+        return resp;
+      } catch {
+        if (seq !== gitBranchesReqSeq) return;
+        const message = presentGitRequestError();
+        if (showInitialLoading) {
+          setGitBranches(null);
+          setGitBranchesError(message);
+        } else if (shouldNotifyGitLoadError(options)) {
+          notification.warning(i18n.t('git.notifications.refreshIncompleteTitle'), message);
+        }
+      } finally {
+        if (showInitialLoading && seq === gitBranchesReqSeq) setGitBranchesLoading(false);
+      }
+    })();
+
+    gitBranchesLoadInFlight = { repoRootPath, promise };
+    void promise.finally(() => {
+      if (gitBranchesLoadInFlight?.promise === promise) gitBranchesLoadInFlight = null;
+    });
+    return promise;
   };
 
   const refreshGitWorkbench = async () => {
@@ -4720,9 +4731,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       invalidateGitWorkspaceSections(['changes', 'conflicted', 'staged']);
     }
     void loadGitRepoSummary({ silent: Boolean(gitRepoSummary()) });
-    if (gitSubview() === 'branches') {
-      void loadGitBranches({ silent: Boolean(gitBranches()), selectionMode: 'default_if_empty' });
-    }
   });
 
   createEffect(() => {
@@ -5627,7 +5635,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       onSelectBranchSubview={selectGitBranchSubview}
                       onRefreshSelectedBranch={refreshSelectedGitBranch}
                       onSelectCurrentBranch={selectCurrentGitBranch}
-                      onBranchDetailLoadFailure={reconcileSelectedGitBranchAfterDetailFailure}
                       commits={gitCommits()}
                       listLoading={gitListLoading()}
                       listRefreshing={gitListRefreshing()}

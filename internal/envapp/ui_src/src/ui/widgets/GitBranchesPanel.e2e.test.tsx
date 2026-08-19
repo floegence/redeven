@@ -248,6 +248,47 @@ async function revealTooltipForButton(
 }
 
 describe("GitBranchesPanel interactions", () => {
+  it("keeps a branch status failure local without retrying indefinitely", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    mockListWorkspacePage.mockRejectedValue(new Error("status unavailable"));
+
+    const branch: GitBranchSummary = {
+      name: "main",
+      fullName: "refs/heads/main",
+      kind: "local",
+      current: true,
+    };
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <GitBranchesPanel
+              repoRootPath="/workspace/repo"
+              selectedBranch={branch}
+              branches={{
+                repoRootPath: "/workspace/repo",
+                currentRef: "main",
+                local: [branch],
+                remote: [],
+              }}
+            />
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      await flush();
+
+      expect(mockListWorkspacePage).toHaveBeenCalledTimes(1);
+      expect(host.textContent).toContain("Request failed");
+    } finally {
+      dispose();
+    }
+  });
+
   it("loads current branch status from the active worktree root", async () => {
     let checkoutCount = 0;
     let mergeCount = 0;

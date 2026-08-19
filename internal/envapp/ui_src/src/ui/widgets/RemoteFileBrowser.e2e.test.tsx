@@ -3700,6 +3700,47 @@ describe('RemoteFileBrowser persistence', () => {
     }
   });
 
+  it('owns the initial branches request when Git branches activates', async () => {
+    widgetStateStore.values['widget-1'] = {
+      browserSidebarWidth: 312,
+      lastPathByEnv: { 'env-1': '/workspace/repo/src' },
+      pageModeByEnv: { 'env-1': 'git' },
+      gitSubviewByEnv: { 'env-1': 'branches' },
+    };
+
+    let resolveBranches: ((value: Awaited<ReturnType<typeof mockRpc.git.listBranches>>) => void) | undefined;
+    mockRpc.git.listBranches.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveBranches = resolve;
+    }));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      expect(mockRpc.git.listBranches).toHaveBeenCalledTimes(1);
+      expect(mockRpc.git.listBranches).toHaveBeenCalledWith({ repoRootPath: '/workspace/repo' });
+
+      resolveBranches?.({
+        repoRootPath: '/workspace/repo',
+        currentRef: 'main',
+        local: [{ name: 'main', fullName: 'refs/heads/main', kind: 'local', current: true }],
+        remote: [],
+      });
+      await flush();
+      expect(mockRpc.git.listBranches).toHaveBeenCalledTimes(1);
+    } finally {
+      dispose();
+    }
+  });
+
   it('refetches the same branch history when returning from status to history', async () => {
     widgetStateStore.values['widget-1'] = {
       browserSidebarWidth: 312,
