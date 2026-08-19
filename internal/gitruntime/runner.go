@@ -22,6 +22,7 @@ const (
 	processTerminateGrace  = 250 * time.Millisecond
 	processPipeDrainGrace  = 2 * time.Second
 	processCleanupDeadline = 2 * time.Second
+	gitReadTimeout         = 15 * time.Second
 )
 
 var errProcessPipeDrain = errors.New("git subprocess pipes remained open after direct process exit")
@@ -68,6 +69,12 @@ func (r *Runtime) StreamRead(ctx context.Context, repoRoot string, env []string,
 	if r == nil || consume == nil {
 		return CommandResult{}, ErrResourceLimit
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	readCtx, cancel := context.WithTimeout(ctx, gitReadTimeout)
+	defer cancel()
+	ctx = readCtx
 	releaseProcess, err := r.readProcesses.acquire(ctx)
 	if err != nil {
 		return CommandResult{}, err
@@ -281,6 +288,11 @@ func (r *Runtime) run(ctx context.Context, kind CommandKind, repoRoot string, en
 	}
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	if kind == CommandRead {
+		readCtx, cancel := context.WithTimeout(ctx, gitReadTimeout)
+		defer cancel()
+		ctx = readCtx
 	}
 	repoRoot = filepath.Clean(repoRoot)
 	if repoRoot == "." || repoRoot == "" || !filepath.IsAbs(repoRoot) {

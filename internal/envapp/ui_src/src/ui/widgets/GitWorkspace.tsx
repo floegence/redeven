@@ -17,7 +17,6 @@ import { GitHistoryModeSwitch, type GitHistoryMode } from './GitHistoryModeSwitc
 import { GitViewNav } from './GitViewNav';
 import { GitWorkbenchSidebar } from './GitWorkbenchSidebar';
 import { GitWorkbench } from './GitWorkbench';
-import { GitInlineLoadingStatus, GitSubtleNote } from './GitWorkbenchPrimitives';
 import type { GitDeleteBranchDialogConfirmOptions, GitDeleteBranchDialogState } from './GitDeleteBranchDialog';
 import type { GitMergeBranchDialogConfirmOptions, GitMergeBranchDialogState } from './GitMergeBranchDialog';
 import type { GitAskFlowerRequest, GitDirectoryShortcutRequest, GitFileShortcutTarget } from '../utils/gitBrowserShortcuts';
@@ -136,7 +135,6 @@ export interface GitWorkspaceProps {
   showMobileSidebarButton?: boolean;
   onToggleSidebar?: () => void;
   onRefresh?: () => void;
-  shellLoadingMessage?: string;
   class?: string;
 }
 
@@ -147,10 +145,6 @@ export function GitWorkspace(props: GitWorkspaceProps) {
     workspace: props.workspace,
     branchesCount: (props.branches?.local.length ?? 0) + (props.branches?.remote.length ?? 0),
   }, i18n);
-  const shellLoadingMessage = () => String(props.shellLoadingMessage ?? '').trim();
-  const shellBlocking = () => shellLoadingMessage().length > 0;
-  const shellSidebarNote = () => i18n.t('git.workspace.preparingActiveView');
-
   return (
     <BrowserWorkspaceShell
       title={i18n.t('files.title')}
@@ -174,11 +168,6 @@ export function GitWorkspace(props: GitWorkspaceProps) {
       navigation={<GitViewNav value={props.navigationSubview ?? props.subview} items={subviewItems()} onChange={props.onSubviewChange} />}
       sidebarBody={(
         <div class="flex h-full min-h-0 flex-col gap-2">
-          <Show when={shellBlocking()}>
-            <GitSubtleNote class="mx-0.5 shrink-0 py-1.5 text-[11px]">
-              {shellSidebarNote()}
-            </GitSubtleNote>
-          </Show>
           <div class="min-h-0 flex-1">
             <GitWorkbenchSidebar
               subview={props.subview}
@@ -222,12 +211,7 @@ export function GitWorkspace(props: GitWorkspaceProps) {
       )}
       content={(
         <div class="relative h-full min-h-0">
-          <Show when={shellBlocking()}>
-            <div class="pointer-events-none absolute inset-x-3 top-3 z-10 flex justify-start">
-              <GitInlineLoadingStatus class="shadow-sm">{shellLoadingMessage()}</GitInlineLoadingStatus>
-            </div>
-          </Show>
-            <GitWorkbench
+          <GitWorkbench
               class="h-full"
               currentPath={props.currentPath}
               repoInfo={props.repoInfo}
@@ -321,7 +305,7 @@ export function GitWorkspace(props: GitWorkspaceProps) {
               showMobileSidebarButton={props.showMobileSidebarButton}
               onToggleSidebar={props.onToggleSidebar}
               onRefresh={props.onRefresh}
-            />
+          />
         </div>
       )}
       class={['redeven-git-browser', props.class].filter(Boolean).join(' ')}

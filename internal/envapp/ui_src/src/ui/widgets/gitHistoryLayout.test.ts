@@ -465,9 +465,9 @@ describe('browser workspace layout wiring', () => {
     expect(primitivesSrc).toContain('<GitInlineLoadingStatus>{status()}</GitInlineLoadingStatus>');
     expect(primitivesSrc).not.toContain("import { SnakeLoader } from '@floegence/floe-webapp-core/loading';");
     expect(primitivesSrc).not.toContain('<SnakeLoader');
-    expect(workspaceSrc).toContain('shellLoadingMessage?: string;');
-    expect(workspaceSrc).toContain("i18n.t('git.workspace.preparingActiveView')");
-    expect(workspaceSrc).toContain('<GitInlineLoadingStatus class="shadow-sm">{shellLoadingMessage()}</GitInlineLoadingStatus>');
+    expect(workspaceSrc).not.toContain('shellLoadingMessage');
+    expect(workspaceSrc).not.toContain("i18n.t('git.workspace.preparingActiveView')");
+    expect(workspaceSrc).not.toContain('<GitInlineLoadingStatus');
     expect(workspaceSrc).toContain('<GitWorkbenchSidebar');
     expect(workspaceSrc).toContain('<GitWorkbench');
     expect(workspaceSrc).not.toContain('<GitStatePane loading message={shellLoadingMessage()}');

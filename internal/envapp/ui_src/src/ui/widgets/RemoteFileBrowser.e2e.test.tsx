@@ -884,7 +884,7 @@ vi.mock('./GitWorkspace', () => ({
         branchesLoading: Boolean(props.branchesLoading),
         listLoading: Boolean(props.listLoading),
         listRefreshing: Boolean(props.listRefreshing),
-        shellLoadingMessage: props.shellLoadingMessage,
+        shellLoadingMessage: props.shellLoadingMessage ?? '',
         fetchBusy: Boolean(props.fetchBusy),
         pullBusy: Boolean(props.pullBusy),
         pushBusy: Boolean(props.pushBusy),
@@ -5334,7 +5334,7 @@ describe('RemoteFileBrowser persistence', () => {
 
       expect(mockRpc.git.getRepoSummary).toHaveBeenCalled();
       expect(mockRpc.git.listWorkspacePage).toHaveBeenCalled();
-      expect(gitWorkspaceRenderStore.snapshots.some((snapshot) => snapshot.shellLoadingMessage === 'Loading workspace changes...')).toBe(true);
+      expect(gitWorkspaceRenderStore.snapshots.every((snapshot) => snapshot.shellLoadingMessage === '')).toBe(true);
       expect(notificationStore.error.some((item) => item.message === 'raw transport failure')).toBe(false);
     } finally {
       dispose();
