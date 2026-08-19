@@ -153,7 +153,7 @@ NODE
 start_linux_redeven() {
   local phase=$1 deadline
   rm -f "$LINUX_TARGET_ROOT/report/startup.json"
-  docker exec "$LINUX_CONTAINER_ID" sh -ceu 'exec /linux/redeven run --mode desktop --desktop-managed --presentation machine --state-root /state --local-ui-bind 127.0.0.1:'"$LINUX_INTERNAL_UI_PORT"' --password-file /linux/password --permission-policy execute_read_write --startup-report-file /linux/report/startup.json >> /linux/redeven.log 2>&1' &
+  docker exec "$LINUX_CONTAINER_ID" sh -ceu 'exec /linux/redeven run --mode desktop --presentation machine --state-root /state --local-ui-bind 127.0.0.1:'"$LINUX_INTERNAL_UI_PORT"' --password-file /linux/password --permission-policy execute_read_write --startup-report-file /linux/report/startup.json >> /linux/redeven.log 2>&1' &
   LINUX_REDEVEN_EXEC_PID=$!
   deadline=$((SECONDS + 180))
   until [[ -s "$LINUX_TARGET_ROOT/report/startup.json" ]] && node -e 'const f=require("node:fs");const r=JSON.parse(f.readFileSync(process.argv[1]));process.exit(r.status==="ready"?0:1)' "$LINUX_TARGET_ROOT/report/startup.json"; do
