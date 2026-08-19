@@ -67,6 +67,15 @@ export function openConnectionFailurePrimaryAction(
   ) {
     return null;
   }
+  const desktopUpdateAction = progress.next_actions?.find((action) => action.kind === 'manage_desktop_update');
+  if (progress.failure?.code === 'desktop_update_required' && desktopUpdateAction) {
+    return {
+      intent: 'update_desktop',
+      label: 'Update Redeven Desktop',
+      enabled: true,
+      variant: 'default',
+    };
+  }
   const updateAction = progress.next_actions?.find((action) => action.kind === 'update_runtime');
   if (updateAction) {
     return {

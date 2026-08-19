@@ -311,6 +311,7 @@ import {
 } from './environmentGuidanceSession';
 import {
   continueEnvironmentOpenAfterLifecycle,
+  reconcileEnvironmentOpenBeforeLifecycle,
   runConfirmedEnvironmentStart,
   runEnvironmentOpenPreflight,
 } from './environmentOpenPreflight';
@@ -4870,6 +4871,28 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return refreshed;
   }
 
+  async function refreshEnvironmentRuntimeSilently(
+    environment: DesktopEnvironmentEntry,
+  ): Promise<boolean> {
+    if (environment.kind === 'gateway_environment' || trimString(environment.gateway_id) !== '') {
+      const gatewayID = trimString(environment.gateway_id);
+      if (gatewayID === '') {
+        return false;
+      }
+      const result = await performLauncherActionSilently({
+        kind: 'refresh_gateway',
+        gateway_id: gatewayID,
+      });
+      return result.ok && result.outcome === 'refreshed_gateway';
+    }
+    const request = runtimeActionRequest(environment, 'refresh_environment_runtime');
+    if (!request) {
+      return false;
+    }
+    const result = await performLauncherActionSilently(request);
+    return result.ok && result.outcome === 'refreshed_environment_runtime';
+  }
+
   function requestProviderRuntimeLinkConfirmation(
     environment: DesktopEnvironmentEntry,
     action: ProviderRuntimeLinkConfirmationAction,
@@ -5037,7 +5060,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   async function attemptEnvironmentOpenSilently(
     environment: DesktopEnvironmentEntry,
-  ): Promise<Readonly<{ opened: boolean; message: string }>> {
+  ): Promise<Readonly<{
+    opened: boolean;
+    message: string;
+    recovery?: 'update_runtime' | 'update_desktop' | 'refresh_runtime';
+  }>> {
     let request: DesktopLauncherActionRequest | null = null;
     if (environment.kind === 'local_environment') {
       request = {
@@ -5072,7 +5099,18 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     const result = await performLauncherActionSilently(request);
     if (!result.ok) {
-      return { opened: false, message: result.message };
+      const recovery = result.failure?.code === 'runtime_update_required'
+        ? 'update_runtime' as const
+        : result.failure?.code === 'desktop_update_required'
+          ? 'update_desktop' as const
+          : result.code === 'runtime_not_ready' || result.code === 'runtime_not_started' || result.failure
+            ? 'refresh_runtime' as const
+            : undefined;
+      return {
+        opened: false,
+        message: result.message,
+        ...(recovery ? { recovery } : {}),
+      };
     }
     return result.outcome === 'opened_environment_window' || result.outcome === 'focused_environment_window'
       ? { opened: true, message: '' }
@@ -5139,6 +5177,18 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         return restartEnvironmentRuntime(environment, errorTarget);
       case 'update_runtime':
         return updateEnvironmentRuntime(environment, action, errorTarget);
+      case 'update_desktop': {
+        const result = await performLauncherAction({
+          kind: 'manage_desktop_update',
+          environment_id: environment.id,
+          label: environment.label,
+        }, errorTarget);
+        if (result?.outcome !== 'opened_desktop_update_handoff') {
+          return false;
+        }
+        showActionToast(i18n().t('environmentCenter.desktopUpdateOpenedToast', { label: environment.label }), 'info');
+        return true;
+      }
       case 'refresh_runtime':
         return refreshEnvironmentRuntime(environment, errorTarget);
       case 'review_network_exposure':
@@ -5176,17 +5226,52 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     const publishSession = (state: EnvironmentGuidanceSessionState): void => {
       updateSession?.(state);
     };
-    const failOpenFlow = (state: EnvironmentGuidanceSessionState, detail: string): EnvironmentGuidanceActionResolution => {
-      const nextSession = failEnvironmentGuidanceIntent(state, detail);
+    const failOpenFlow = (
+      state: EnvironmentGuidanceSessionState,
+      detail: string,
+      recovery?: 'update_runtime' | 'update_desktop' | 'refresh_runtime',
+    ): EnvironmentGuidanceActionResolution => {
+      const nextSession = failEnvironmentGuidanceIntent(state, detail, recovery);
       publishSession(nextSession);
       return { close_panel: false, next_session: nextSession };
     };
     const startAndOpenEnvironment = async (
       state: EnvironmentGuidanceSessionState,
     ): Promise<EnvironmentGuidanceActionResolution> => {
-      const starting = advanceEnvironmentOpenFlowStage(state, 'starting_environment');
+      const startFlowState = state?.pending_intent === 'initialize_and_open'
+        ? startEnvironmentGuidanceIntent(state, environment.id, 'start_and_open')
+        : state;
+      const checking = advanceEnvironmentOpenFlowStage(startFlowState, 'checking_access');
+      publishSession(checking);
+      const reconciled = await reconcileEnvironmentOpenBeforeLifecycle({
+        environment,
+        loadLatestEnvironment: loadLatestEnvironmentEntry,
+        refreshRuntime: refreshEnvironmentRuntimeSilently,
+      });
+      const latestBeforeStart = reconciled.environment;
+      const refreshedFlow = reconciled.flow;
+      if (refreshedFlow === 'direct') {
+        const opening = advanceEnvironmentOpenFlowStage(checking, 'opening_workspace');
+        publishSession(opening);
+        const resolution = await continueEnvironmentOpenAfterLifecycle({
+          environment: latestBeforeStart,
+          loadLatestEnvironment: loadLatestEnvironmentEntry,
+          attemptOpen: attemptEnvironmentOpenSilently,
+        });
+        if (resolution.kind === 'failed') {
+          return failOpenFlow(
+            opening,
+            resolution.message || i18n().t('environmentOpenFlow.openFailedDetail'),
+            resolution.recovery,
+          );
+        }
+        return { close_panel: true, next_session: null };
+      }
+      if (refreshedFlow === 'request_access') {
+        return failOpenFlow(checking, i18n().t('environmentOpenFlow.accessRequiredDetail'));
+      }
+      const starting = advanceEnvironmentOpenFlowStage(checking, 'starting_environment');
       publishSession(starting);
-      const latestBeforeStart = await loadLatestEnvironmentEntry(environment.id) ?? environment;
       const started = await startEnvironmentRuntimeSilently(latestBeforeStart);
       if (!started.ok) {
         return failOpenFlow(starting, started.message);
@@ -5199,7 +5284,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         attemptOpen: attemptEnvironmentOpenSilently,
       });
       if (resolution.kind === 'failed') {
-        return failOpenFlow(opening, resolution.message || i18n().t('environmentOpenFlow.openFailedDetail'));
+        return failOpenFlow(
+          opening,
+          resolution.message || i18n().t('environmentOpenFlow.openFailedDetail'),
+          resolution.recovery,
+        );
       }
       return { close_panel: true, next_session: null };
     };
@@ -5214,10 +5303,26 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         return { close_panel: true, next_session: null };
       }
       if (resolution.kind === 'guidance') {
-        publishSession(null);
-        return { close_panel: false, next_session: null };
+        const guidanceAction: EnvironmentActionModel = {
+          intent: resolution.flow === 'initialize'
+            ? 'initialize_and_open'
+            : resolution.flow === 'start'
+              ? 'start_and_open'
+              : 'request_open_access',
+          label: resolution.flow === 'initialize'
+            ? i18n().t('environmentAction.initializeAndOpen')
+            : resolution.flow === 'start'
+              ? i18n().t('environmentAction.startAndOpen')
+              : i18n().t('environmentAction.requestAccess'),
+          enabled: true,
+          variant: 'default',
+        };
+        return runEnvironmentGuidanceAction(resolution.environment, guidanceAction, updateSession);
       }
-      return failOpenFlow(currentSession, resolution.message);
+      return {
+        close_panel: false,
+        next_session: failEnvironmentGuidanceIntent(currentSession, resolution.message, resolution.recovery),
+      };
     }
 
     if (action.intent === 'initialize_and_open') {
@@ -5238,12 +5343,23 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         return startAndOpenEnvironment(checking);
       }
       if (refreshedFlow === 'direct') {
-        const opening = advanceEnvironmentOpenFlowStage(checking, 'opening_workspace');
+        const opening = advanceEnvironmentOpenFlowStage(
+          startEnvironmentGuidanceIntent(checking, environment.id, 'open_with_preflight'),
+          'opening_workspace',
+        );
         publishSession(opening);
-        const opened = await openEnvironment(initializationEnvironment, 'connect');
-        return opened
+        const resolution = await continueEnvironmentOpenAfterLifecycle({
+          environment: initializationEnvironment,
+          loadLatestEnvironment: loadLatestEnvironmentEntry,
+          attemptOpen: attemptEnvironmentOpenSilently,
+        });
+        return resolution.kind === 'opened'
           ? { close_panel: true, next_session: null }
-          : failOpenFlow(opening, i18n().t('environmentOpenFlow.openFailedDetail'));
+          : failOpenFlow(
+            opening,
+            resolution.message || i18n().t('environmentOpenFlow.openFailedDetail'),
+            resolution.recovery,
+          );
       }
       let request: DesktopLauncherActionRequest | null = null;
       if (initializationEnvironment.kind === 'provider_environment') {
@@ -5295,7 +5411,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       });
       return resolution.kind === 'opened'
         ? { close_panel: true, next_session: null }
-        : failOpenFlow(opening, resolution.message || i18n().t('environmentOpenFlow.openFailedDetail'));
+        : failOpenFlow(
+          opening,
+          resolution.message || i18n().t('environmentOpenFlow.openFailedDetail'),
+          resolution.recovery,
+        );
     }
 
     if (action.intent === 'start_and_open') {
@@ -5334,7 +5454,15 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       || action.intent === 'restart_runtime'
       || action.intent === 'update_runtime'
     ) {
-      await triggerLocalEnvironmentAction(environment, action, 'connect');
+      const completed = await triggerLocalEnvironmentAction(environment, action, 'connect');
+      if (completed && action.continue_open_after_completion) {
+        return runEnvironmentGuidanceAction(environment, {
+          intent: 'open_with_preflight',
+          label: i18n().t('environmentAction.open'),
+          enabled: true,
+          variant: 'default',
+        }, updateSession);
+      }
       return {
         close_panel: true,
         next_session: null,
@@ -8419,6 +8547,8 @@ function isEnvironmentActionBusy(
       return busyStateBlocksEnvironmentAction(busyState, environmentID, ['restart_environment_runtime', 'run_gateway_environment_lifecycle', 'run_provider_environment_lifecycle'], runtimeLifecycleProgress);
     case 'update_runtime':
       return busyStateBlocksEnvironmentAction(busyState, environmentID, ['update_environment_runtime', 'manage_desktop_update', 'run_gateway_environment_lifecycle', 'run_provider_environment_lifecycle'], runtimeLifecycleProgress);
+    case 'update_desktop':
+      return busyStateBlocksEnvironmentAction(busyState, environmentID, ['manage_desktop_update'], runtimeLifecycleProgress);
     case 'connect_provider_runtime':
       return busyStateMatchesEnvironment(busyState, environmentID, ['connect_provider_runtime']);
     case 'disconnect_provider_runtime':
@@ -9641,8 +9771,29 @@ function EnvironmentSplitActionButton(props: Readonly<{
     if (!notice) {
       return undefined;
     }
+    const recoveryAction = props.guidanceSession?.recovery_action;
     const retryIntent = props.guidanceSession?.retry_intent;
-    const retryAction = retryIntent
+    const retryAction = recoveryAction
+      ? {
+          label: recoveryAction === 'update_runtime'
+            ? props.i18n.t('environmentAction.updateRuntimeAndOpen')
+            : recoveryAction === 'update_desktop'
+              ? props.i18n.t('environmentAction.updateRedevenDesktop')
+              : props.i18n.t('environmentAction.refreshStatus'),
+          emphasis: 'primary' as const,
+          action: {
+            intent: recoveryAction,
+            label: recoveryAction === 'update_runtime'
+              ? props.i18n.t('environmentAction.updateRuntimeAndOpen')
+              : recoveryAction === 'update_desktop'
+                ? props.i18n.t('environmentAction.updateRedevenDesktop')
+                : props.i18n.t('environmentAction.refreshStatus'),
+            enabled: true,
+            variant: 'default' as const,
+            ...(recoveryAction === 'update_runtime' ? { continue_open_after_completion: true } : {}),
+          },
+        }
+      : retryIntent
       ? {
           label: retryIntent === 'request_open_access'
             ? props.i18n.t('environmentAction.requestAccess')
@@ -10420,6 +10571,10 @@ function EnvironmentConnectionCard(props: Readonly<{
           confirmRuntimeOperation={props.confirmRuntimeOperation}
           onRunAction={(action) => {
             void (async () => {
+              if (action.intent === 'update_desktop') {
+                props.setGuidanceSession(null);
+                props.onPrimaryActionGuidanceOpenChange(false);
+              }
               if (action.intent === 'open_with_preflight') {
                 await runOpenWithPreflight(action);
                 return;

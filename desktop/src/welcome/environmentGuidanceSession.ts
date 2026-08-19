@@ -36,6 +36,7 @@ export type EnvironmentGuidanceSessionState = Readonly<{
   pending_intent: EnvironmentGuidancePendingIntent | null;
   open_flow_stage?: EnvironmentOpenFlowStage;
   retry_intent?: Extract<EnvironmentGuidancePendingIntent, 'open_with_preflight' | 'initialize_and_open' | 'start_and_open' | 'request_open_access'>;
+  recovery_action?: 'update_runtime' | 'update_desktop' | 'refresh_runtime';
   feedback: EnvironmentGuidanceFeedback | null;
 }> | null;
 
@@ -102,6 +103,7 @@ export function advanceEnvironmentOpenFlowStage(
 export function failEnvironmentGuidanceIntent(
   state: EnvironmentGuidanceSessionState,
   detail: string,
+  recoveryAction?: 'update_runtime' | 'update_desktop' | 'refresh_runtime',
 ): EnvironmentGuidanceSessionState {
   if (!state) {
     return state;
@@ -152,12 +154,13 @@ export function failEnvironmentGuidanceIntent(
       || state.pending_intent === 'start_and_open'
       || state.pending_intent === 'request_open_access'
       ? state.pending_intent
-      : null;
+      : undefined;
 
   return {
     ...state,
     pending_intent: null,
-    ...(retryIntent ? { retry_intent: retryIntent } : {}),
+    recovery_action: recoveryAction,
+    retry_intent: recoveryAction ? undefined : retryIntent,
     feedback: {
       tone: 'error',
       title: fallback.title,
@@ -220,6 +223,7 @@ export function completeEnvironmentGuidanceSuccess(
   return {
     ...state,
     pending_intent: null,
+    recovery_action: undefined,
     feedback,
   };
 }
@@ -241,6 +245,7 @@ export function completeEnvironmentGuidanceRefresh(
   return {
     ...state,
     pending_intent: null,
+    recovery_action: undefined,
     feedback: {
       tone: 'warning',
       title: popover.title || 'Runtime still needs attention',

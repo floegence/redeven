@@ -99,6 +99,37 @@ describe('environmentGuidanceSession', () => {
     });
   });
 
+  it('keeps a runtime recovery action primary instead of offering Open again', () => {
+    const checking = startEnvironmentGuidanceIntent(null, 'env_demo', 'open_with_preflight');
+    const failed = failEnvironmentGuidanceIntent(checking, 'Update the Runtime before opening.', 'update_runtime');
+
+    expect(failed).toMatchObject({
+      pending_intent: null,
+      recovery_action: 'update_runtime',
+      feedback: {
+        title: 'Open failed',
+        detail: 'Update the Runtime before opening.',
+      },
+    });
+    expect(failed?.retry_intent).toBeUndefined();
+    expect(guidanceSessionOwnsOpenFlowPanel(failed)).toBe(false);
+  });
+
+  it('keeps a Desktop update handoff distinct from a Runtime update', () => {
+    const checking = startEnvironmentGuidanceIntent(null, 'env_demo', 'open_with_preflight');
+    const failed = failEnvironmentGuidanceIntent(checking, 'Update Desktop before opening.', 'update_desktop');
+
+    expect(failed).toMatchObject({
+      pending_intent: null,
+      recovery_action: 'update_desktop',
+      feedback: {
+        title: 'Open failed',
+        detail: 'Update Desktop before opening.',
+      },
+    });
+    expect(failed?.retry_intent).toBeUndefined();
+  });
+
   it('turns an early authorization failure into a request-access retry', () => {
     const checking = startEnvironmentGuidanceIntent(null, 'env_demo', 'request_open_access');
     expect(failEnvironmentGuidanceIntent(checking, 'Access is required.')).toMatchObject({

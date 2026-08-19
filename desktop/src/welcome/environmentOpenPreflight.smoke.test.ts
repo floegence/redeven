@@ -10,6 +10,7 @@ import {
 } from '../testSupport/desktopTestHelpers';
 import {
   continueEnvironmentOpenAfterLifecycle,
+  reconcileEnvironmentOpenBeforeLifecycle,
   runConfirmedEnvironmentStart,
   runEnvironmentOpenPreflight,
 } from './environmentOpenPreflight';
@@ -219,6 +220,24 @@ describe('environment Open click smoke', () => {
     });
   });
 
+  it('preserves the typed Runtime recovery after a lifecycle operation', async () => {
+    const staleOffline = environment();
+
+    await expect(continueEnvironmentOpenAfterLifecycle({
+      environment: staleOffline,
+      loadLatestEnvironment: async () => staleOffline,
+      attemptOpen: async () => ({
+        opened: false,
+        message: 'Update the Runtime before opening this environment.',
+        recovery: 'update_runtime',
+      }),
+    })).resolves.toEqual({
+      kind: 'failed',
+      message: 'Update the Runtime before opening this environment.',
+      recovery: 'update_runtime',
+    });
+  });
+
   it('continues a user-confirmed Start and open through the Gateway confirmation', async () => {
     const calls: unknown[] = [];
     const perform = vi.fn(async (request) => {
@@ -409,5 +428,67 @@ describe('environment Open click smoke', () => {
       flow: 'request_access',
       environment: checked,
     });
+  });
+
+  it('preserves Runtime update recovery when the open attempt reports an old Runtime', async () => {
+    const unchecked = environment();
+    const checked = environment({
+      runtime_health: {
+        ...unchecked.runtime_health,
+        status: 'online',
+        checked_at_unix_ms: 10,
+        freshness: 'fresh',
+      },
+    });
+
+    await expect(runEnvironmentOpenPreflight({
+      environment: unchecked,
+      attemptOpen: async () => ({
+        opened: false,
+        message: 'Update the Runtime before opening this environment.',
+        recovery: 'update_runtime',
+      }),
+      loadLatestEnvironment: async () => checked,
+    })).resolves.toEqual({
+      kind: 'failed',
+      message: 'Update the Runtime before opening this environment.',
+      recovery: 'update_runtime',
+    });
+  });
+
+  it('rechecks Runtime state before starting and skips Start when the refreshed state is online', async () => {
+    const stale = environment({
+      runtime_operations: {
+        ...environment().runtime_operations,
+        start: {
+          ...environment().runtime_operations.start,
+          availability: 'available',
+          reason_code: undefined,
+        },
+      },
+    });
+    const running = environment({
+      runtime_health: {
+        ...stale.runtime_health,
+        status: 'online',
+        freshness: 'fresh',
+        checked_at_unix_ms: 20,
+      },
+    });
+    const refreshRuntime = vi.fn(async () => undefined);
+    let reads = 0;
+
+    await expect(reconcileEnvironmentOpenBeforeLifecycle({
+      environment: stale,
+      loadLatestEnvironment: async () => {
+        reads += 1;
+        return reads === 1 ? stale : running;
+      },
+      refreshRuntime,
+    })).resolves.toMatchObject({
+      environment: running,
+      flow: 'direct',
+    });
+    expect(refreshRuntime).toHaveBeenCalledWith(stale);
   });
 });
