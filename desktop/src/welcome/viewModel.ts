@@ -663,7 +663,7 @@ function environmentOpenOperationAvailable(environment: DesktopEnvironmentEntry)
 }
 
 function environmentOpenPreflightAvailable(environment: DesktopEnvironmentEntry): boolean {
-  if (environment.window_state !== 'closed' || environment.runtime_health.freshness !== 'unknown') {
+  if (environment.window_state !== 'closed' || environment.runtime_health.freshness === 'fresh') {
     return false;
   }
   if (environment.kind === 'provider_environment') {

@@ -62,10 +62,10 @@ describe('environmentGuidanceSession', () => {
     const failed = failEnvironmentGuidanceIntent(state, 'Permission denied.');
     expect(failed).toMatchObject({
       pending_intent: null,
-      retry_intent: 'initialize_and_open',
+      retry_intent: 'open_with_preflight',
       feedback: {
         tone: 'error',
-        title: 'Initialization failed',
+        title: 'Runtime check failed',
         detail: 'Permission denied.',
       },
     });

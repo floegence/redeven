@@ -12,6 +12,7 @@ import type {
 import type { RuntimeServiceSnapshot } from './runtimeService';
 import {
   runtimeServiceAllowsOpenAttempt,
+  runtimeServiceHasActiveWork,
   runtimeServiceIsOpenable,
 } from './runtimeService';
 import {
@@ -53,6 +54,29 @@ function managementMethod(
     return hostAccess.kind === 'ssh_host' ? 'ssh_container_exec' : 'local_container_exec';
   }
   return hostAccess.kind === 'ssh_host' ? 'ssh_host' : 'local_host';
+}
+
+function packageRequiresUpdate(packageState: DesktopRuntimePackageState | undefined): boolean {
+  return packageState?.state === 'outdated' || packageState?.state === 'incompatible';
+}
+
+function updateRequiredMessage(packageState: DesktopRuntimePackageState | undefined): string {
+  if (!packageState) {
+    return 'Update this runtime before continuing.';
+  }
+  if (packageState.state === 'outdated') {
+    return `Update this runtime from ${packageState.current_version} to ${packageState.target_version} before continuing.`;
+  }
+  if (packageState.state === 'incompatible') {
+    return packageState.reason || 'Update this incompatible runtime before continuing.';
+  }
+  return 'Update this runtime before continuing.';
+}
+
+function activeWorkMessage(runtimeService: RuntimeServiceSnapshot | undefined): string {
+  return runtimeServiceHasActiveWork(runtimeService)
+    ? 'Active work may be interrupted. Confirm before changing this runtime.'
+    : '';
 }
 
 function runtimeTargetUnavailableStatus(
@@ -119,6 +143,8 @@ export function buildDesktopRuntimeOperationPlans(
 
   const method = managementMethod(input.host_access, input.placement);
   const hasManagement = method !== 'none';
+  const lifecycleMethod: DesktopRuntimeOperationMethod = hasManagement ? 'runtime_gateway' : 'none';
+  const requiresUpdate = packageRequiresUpdate(input.package_state);
   const maintenance = input.maintenance;
   const restartMaintenance = desktopRuntimeMaintenanceRequiresRestart(maintenance);
   const updateMaintenance = desktopRuntimeMaintenanceRequiresUpdate(maintenance);
@@ -134,7 +160,8 @@ export function buildDesktopRuntimeOperationPlans(
     || runtimeServiceAllowsOpenAttempt(input.runtime_service);
   const managementBlockedStatus = runtimeTargetUnavailableStatus(input.runtime_control_status, openConnectionRequired);
   const managementBlocked = !!managementBlockedStatus;
-  const lifecycleSetupMessage = 'Initialize this environment before using lifecycle actions.';
+  const updateAvailable = requiresUpdate || updateMaintenance;
+  const updateMessage = updateRequiredMessage(input.package_state);
   const blockedByRecoveryMaintenance = restartMaintenance && !optimisticOpenMaintenance;
   const openAvailability = input.running && canOpen && !blockedByRecoveryMaintenance && !managementBlocked
     ? 'available'
@@ -167,33 +194,47 @@ export function buildDesktopRuntimeOperationPlans(
     }),
     start: desktopRuntimeOperationPlan(
       'start',
-      hasManagement ? 'blocked' : 'hidden',
-      hasManagement ? 'runtime_gateway' : 'none',
+      hasManagement
+        ? input.running
+          ? 'unavailable'
+          : managementBlocked
+            ? 'blocked'
+            : 'available'
+        : 'hidden',
+      lifecycleMethod,
       {
-        reasonCode: hasManagement ? 'runtime_gateway_setup_required' : undefined,
-        message: hasManagement ? lifecycleSetupMessage : undefined,
+        reasonCode: managementBlocked ? 'runtime_target_unavailable' : input.running ? 'runtime_already_running' : undefined,
+        message: managementBlocked ? managementBlockedStatus.message : undefined,
         packageState: input.package_state,
         maintenance,
-        menuVisibility: hasManagement ? 'contextual' : 'hidden',
+        menuVisibility: hasManagement && !input.running ? 'contextual' : 'hidden',
       },
     ),
     stop: desktopRuntimeOperationPlan(
       'stop',
-      hasManagement ? 'blocked' : 'hidden',
-      hasManagement ? 'runtime_gateway' : 'none',
+      hasManagement ? input.running ? 'available' : 'unavailable' : 'hidden',
+      lifecycleMethod,
       {
-        reasonCode: hasManagement ? 'runtime_gateway_setup_required' : undefined,
-        message: hasManagement ? lifecycleSetupMessage : undefined,
+        reasonCode: input.running ? undefined : 'runtime_not_started',
+        message: input.running ? activeWorkMessage(input.runtime_service) : 'Runtime is not running.',
+        packageState: input.package_state,
+        maintenance,
         menuVisibility: hasManagement ? 'stable' : 'hidden',
       },
     ),
     restart: desktopRuntimeOperationPlan(
       'restart',
-      hasManagement ? 'blocked' : 'hidden',
-      hasManagement ? 'runtime_gateway' : 'none',
+      hasManagement
+        ? managementBlocked
+          ? 'blocked'
+          : 'available'
+        : 'hidden',
+      lifecycleMethod,
       {
-        reasonCode: hasManagement ? 'runtime_gateway_setup_required' : undefined,
-        message: hasManagement ? lifecycleSetupMessage : undefined,
+        reasonCode: managementBlocked ? 'runtime_target_unavailable' : undefined,
+        message: managementBlocked
+          ? managementBlockedStatus.message
+          : maintenance?.message ?? activeWorkMessage(input.runtime_service),
         packageState: input.package_state,
         maintenance,
         menuVisibility: hasManagement ? 'stable' : 'hidden',
@@ -201,11 +242,21 @@ export function buildDesktopRuntimeOperationPlans(
     ),
     update: desktopRuntimeOperationPlan(
       'update',
-      hasManagement ? 'blocked' : 'hidden',
-      hasManagement ? 'runtime_gateway' : 'none',
+      hasManagement
+        ? managementBlocked
+          ? 'blocked'
+          : 'available'
+        : 'hidden',
+      lifecycleMethod,
       {
-        reasonCode: hasManagement ? 'runtime_gateway_setup_required' : undefined,
-        message: hasManagement ? lifecycleSetupMessage : undefined,
+        reasonCode: managementBlocked
+          ? 'runtime_target_unavailable'
+          : updateAvailable
+            ? 'runtime_update_required'
+            : undefined,
+        message: managementBlocked
+          ? managementBlockedStatus.message
+          : maintenance?.message ?? updateMessage,
         packageState: input.package_state,
         maintenance,
         menuVisibility: hasManagement ? 'stable' : 'hidden',

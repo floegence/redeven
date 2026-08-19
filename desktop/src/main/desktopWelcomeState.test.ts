@@ -697,9 +697,8 @@ describe('desktopWelcomeState', () => {
         open_action: 'open',
         runtime_operations: expect.objectContaining({
           stop: expect.objectContaining({
-            availability: 'blocked',
+            availability: 'available',
             method: 'runtime_gateway',
-            reason_code: 'runtime_gateway_setup_required',
           }),
         }),
         runtime_health: expect.objectContaining({
@@ -1136,9 +1135,8 @@ describe('desktopWelcomeState', () => {
           method: 'ssh_host',
         }),
         update: expect.objectContaining({
-          availability: 'blocked',
+          availability: 'available',
           method: 'runtime_gateway',
-          reason_code: 'runtime_gateway_setup_required',
         }),
       }),
     });
@@ -1488,9 +1486,8 @@ describe('desktopWelcomeState', () => {
       managed_runtime_target_id: 'local:local',
       runtime_operations: expect.objectContaining({
         stop: expect.objectContaining({
-          availability: 'blocked',
+          availability: 'available',
           method: 'runtime_gateway',
-          reason_code: 'runtime_gateway_setup_required',
         }),
       }),
     });
@@ -1536,9 +1533,8 @@ describe('desktopWelcomeState', () => {
           method: 'local_host',
         }),
         update: expect.objectContaining({
-          availability: 'blocked',
+          availability: 'available',
           method: 'runtime_gateway',
-          reason_code: 'runtime_gateway_setup_required',
         }),
       }),
     });
@@ -1684,9 +1680,9 @@ describe('desktopWelcomeState', () => {
       runtime_operations: expect.objectContaining({
         open: expect.objectContaining({ availability: 'available' }),
         start: expect.objectContaining({
-          availability: 'blocked',
+          availability: 'unavailable',
           method: 'runtime_gateway',
-          reason_code: 'runtime_gateway_setup_required',
+          reason_code: 'runtime_already_running',
         }),
       }),
       provider_runtime_link_target: expect.objectContaining({
@@ -1761,12 +1757,12 @@ describe('desktopWelcomeState', () => {
         start: expect.objectContaining({
           availability: 'blocked',
           method: 'runtime_gateway',
-          reason_code: 'runtime_gateway_setup_required',
+          reason_code: 'runtime_target_unavailable',
         }),
         update: expect.objectContaining({
           availability: 'blocked',
           method: 'runtime_gateway',
-          reason_code: 'runtime_gateway_setup_required',
+          reason_code: 'runtime_target_unavailable',
         }),
       }),
       provider_runtime_link_target: expect.objectContaining({
@@ -1829,9 +1825,8 @@ describe('desktopWelcomeState', () => {
           reason_code: 'runtime_not_started',
         }),
         start: expect.objectContaining({
-          availability: 'blocked',
+          availability: 'available',
           method: 'runtime_gateway',
-          reason_code: 'runtime_gateway_setup_required',
         }),
       }),
       provider_runtime_link_target: expect.objectContaining({

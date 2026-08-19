@@ -126,8 +126,8 @@ export function failEnvironmentGuidanceIntent(
         };
       case 'initialize_and_open':
         return {
-          title: 'Initialization failed',
-          detail: 'Redeven could not prepare this environment. Try again.',
+          title: 'Runtime check failed',
+          detail: 'Redeven could not verify this environment before opening it. Try checking again.',
         };
       case 'start_and_open':
         return {
@@ -146,16 +146,18 @@ export function failEnvironmentGuidanceIntent(
         };
     }
   })();
+  const retryIntent = state.pending_intent === 'initialize_and_open'
+    ? 'open_with_preflight' as const
+    : state.pending_intent === 'open_with_preflight'
+      || state.pending_intent === 'start_and_open'
+      || state.pending_intent === 'request_open_access'
+      ? state.pending_intent
+      : null;
 
   return {
     ...state,
     pending_intent: null,
-    ...(state.pending_intent === 'open_with_preflight'
-      || state.pending_intent === 'initialize_and_open'
-      || state.pending_intent === 'start_and_open'
-      || state.pending_intent === 'request_open_access'
-      ? { retry_intent: state.pending_intent }
-      : {}),
+    ...(retryIntent ? { retry_intent: retryIntent } : {}),
     feedback: {
       tone: 'error',
       title: fallback.title,
@@ -341,6 +343,9 @@ export function reconcileEnvironmentGuidanceSession(
     return null;
   }
   if (state.pending_intent === null && state.retry_intent) {
+    if (state.retry_intent === 'open_with_preflight') {
+      return state;
+    }
     const currentRetryIntent = (() => {
       switch (environmentOpenFlow(environment)) {
         case 'preflight':

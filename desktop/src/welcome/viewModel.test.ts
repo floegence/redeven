@@ -97,10 +97,9 @@ function expectEnvironmentInitialization(
   expect(actionIDs).not.toContain('initialize_and_open');
   for (const operation of ['start_runtime', 'stop_runtime', 'restart_runtime', 'update_runtime'] as const) {
     const action = actionModel.action_presentation.menu_actions.find((item) => item.id === operation)?.action;
-    expect(action).toMatchObject({
-      enabled: false,
-      disabled_reason: 'Initialize this environment before using lifecycle actions.',
-    });
+    if (action) {
+      expect(action.disabled_reason || '').not.toContain('Initialize this environment');
+    }
   }
 }
 
@@ -1329,15 +1328,7 @@ describe('buildEnvironmentCardModel', () => {
     ]));
     const actionModel = buildProviderBackedEnvironmentActionModel(localEntry!);
     expectEnvironmentInitialization(actionModel);
-    expect(actionModel.action_presentation.primary_action_overlay).toMatchObject({
-      kind: 'popover',
-      title: 'Initialize and open',
-      actions: expect.arrayContaining([
-        expect.objectContaining({
-          label: 'Initialize and open',
-        }),
-      ]),
-    });
+    expect(actionModel.action_presentation.primary_action_overlay).toBeUndefined();
   });
 
   it('shows setup-required guidance when the local container engine CLI is unavailable', () => {
@@ -1378,10 +1369,7 @@ describe('buildEnvironmentCardModel', () => {
         primary_action: {
           enabled: true,
         },
-        primary_action_overlay: expect.objectContaining({
-          kind: 'popover',
-          title: 'Initialize and open',
-        }),
+        primary_action_overlay: undefined,
       },
     });
     expectEnvironmentInitialization(actionModel);
@@ -1419,15 +1407,11 @@ describe('buildEnvironmentCardModel', () => {
     const actionModel = buildProviderBackedEnvironmentActionModel(localEntry!);
 
     expectEnvironmentInitialization(actionModel);
-    expect(actionModel.action_presentation.primary_action_overlay).toMatchObject({
-      kind: 'popover',
-      title: 'Initialize and open',
-      actions: expect.arrayContaining([
-        expect.objectContaining({
-          label: 'Initialize and open',
-        }),
-      ]),
+    expect(actionModel.action_presentation.primary_action).toMatchObject({
+      intent: 'open_with_preflight',
+      enabled: true,
     });
+    expect(actionModel.action_presentation.primary_action_overlay).toBeUndefined();
   });
 
   it('shows ready-to-open for a container runtime prepared by Start runtime but not yet opened', () => {
@@ -1485,11 +1469,11 @@ describe('buildEnvironmentCardModel', () => {
     });
     expect(actionModel.action_presentation.menu_actions.map((item) => item.id)).not.toContain('provider_link_unavailable');
     expect(actionModel.action_presentation.menu_actions.map((item) => item.id)).toEqual(expect.arrayContaining([
-      'start_runtime',
       'stop_runtime',
       'restart_runtime',
       'update_runtime',
     ]));
+    expect(actionModel.action_presentation.menu_actions.map((item) => item.id)).not.toContain('start_runtime');
   });
 
   it('uses the runtime open operation plan as the primary Open source for saved containers', () => {
@@ -1601,12 +1585,12 @@ describe('buildEnvironmentCardModel', () => {
     expectEnvironmentInitialization(actionModel);
     expect(actionModel.action_presentation.primary_action_overlay).toMatchObject({
       kind: 'popover',
-      title: 'Initialize and open',
+      title: 'Runtime update required',
       actions: expect.arrayContaining([
         expect.objectContaining({
-          label: 'Initialize and open',
+          label: 'Update runtime',
           action: expect.objectContaining({
-            intent: 'initialize_and_open',
+            intent: 'update_runtime',
             enabled: true,
           }),
         }),
@@ -1662,12 +1646,12 @@ describe('buildEnvironmentCardModel', () => {
     expect(actionModel.status_label).toBe('RUNTIME OFFLINE');
     expect(actionModel.action_presentation.primary_action_overlay).toMatchObject({
       kind: 'popover',
-      title: 'Initialize and open',
+      title: 'Start the runtime to continue',
       actions: expect.arrayContaining([
         expect.objectContaining({
-          label: 'Initialize and open',
+          label: 'Start runtime',
           action: expect.objectContaining({
-            intent: 'initialize_and_open',
+            intent: 'start_runtime',
             enabled: true,
           }),
         }),
@@ -1720,30 +1704,11 @@ describe('buildEnvironmentCardModel', () => {
       status_tone: 'warning',
       action_presentation: {
         primary_action: {
-          intent: 'open',
+          intent: 'open_with_preflight',
           label: 'Open',
           enabled: true,
         },
-        primary_action_overlay: {
-          kind: 'popover',
-          title: 'Initialize and open',
-          actions: expect.arrayContaining([
-            expect.objectContaining({
-              label: 'Initialize and open',
-              action: expect.objectContaining({
-                intent: 'initialize_and_open',
-                enabled: true,
-              }),
-            }),
-            expect.objectContaining({
-              label: 'Refresh status',
-              action: expect.objectContaining({
-                intent: 'refresh_runtime',
-                enabled: true,
-              }),
-            }),
-          ]),
-        },
+        primary_action_overlay: undefined,
       },
     });
     expectEnvironmentInitialization(actionModel);
@@ -1839,11 +1804,11 @@ describe('buildEnvironmentCardModel', () => {
     const menuActions = actionModel.action_presentation.menu_actions;
     expect(menuActions.map((item) => item.id)).not.toContain('provider_link_unavailable');
     expect(menuActions.map((item) => item.label)).toEqual(expect.arrayContaining([
-      'Start runtime',
       'Stop runtime',
       'Restart runtime',
       'Update runtime',
     ]));
+    expect(menuActions.map((item) => item.label)).not.toContain('Start runtime');
   });
 
   it('treats a missing Env App shell as an update-required SSH runtime block', () => {
@@ -2146,12 +2111,12 @@ describe('buildEnvironmentCardModel', () => {
         },
         primary_action_overlay: {
           kind: 'popover',
-          title: 'Initialize and open',
+          title: 'Start and open',
           actions: expect.arrayContaining([
             expect.objectContaining({
-              label: 'Initialize and open',
+              label: 'Start and open',
               action: expect.objectContaining({
-                intent: 'initialize_and_open',
+                intent: 'start_and_open',
                 enabled: true,
               }),
             }),
@@ -2479,11 +2444,11 @@ describe('buildEnvironmentCardModel', () => {
     expect(managedMenuActionIDs).not.toContain('initialize_and_open');
     expect(managedMenuActionIDs).not.toContain('runtime_managed_externally');
     expect(managedMenuActionIDs).toEqual(expect.arrayContaining([
-      'start_runtime',
       'stop_runtime',
       'restart_runtime',
       'update_runtime',
     ]));
+    expect(managedMenuActionIDs).not.toContain('start_runtime');
 
     const openLocalServeSnapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
