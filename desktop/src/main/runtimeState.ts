@@ -19,8 +19,11 @@ export type RuntimeProbeOptions = Readonly<{
   signal?: AbortSignal;
 }>;
 
+export type RuntimeProbeFailureStage = 'runtime_health' | 'env_app_shell' | 'env_app_asset';
+
 export type RuntimeProbeFailure = Readonly<{
   kind: 'timeout' | 'network_error' | 'invalid_response';
+  stage?: RuntimeProbeFailureStage;
   code?: string;
   status_code?: number;
 }>;
@@ -193,25 +196,32 @@ async function probeRedevenLocalUIHealth(
   options: Required<Pick<RuntimeProbeOptions, 'timeoutMs'>> & Pick<RuntimeProbeOptions, 'signal'>,
 ): Promise<RuntimeProbeResult<RuntimeProbeStatus>> {
   if (!isAllowedAppNavigation(baseURL, baseURL)) {
-    return { ok: false, failure: { kind: 'invalid_response' } };
+    return { ok: false, failure: { kind: 'invalid_response', stage: 'runtime_health' } };
   }
   const probeURL = new URL('/api/local/runtime/health', baseURL);
   const response = await request(probeURL, options);
   if (!response.ok) {
-    return response;
+    return {
+      ...response,
+      failure: {
+        ...response.failure,
+        stage: 'runtime_health',
+      },
+    };
   }
   if (response.value.statusCode !== 200) {
     return {
       ok: false,
       failure: {
         kind: 'invalid_response',
+        stage: 'runtime_health',
         status_code: response.value.statusCode,
       },
     };
   }
   const status = parseLocalRuntimeHealthResponse(response.value.body);
   if (!status) {
-    return { ok: false, failure: { kind: 'invalid_response' } };
+    return { ok: false, failure: { kind: 'invalid_response', stage: 'runtime_health' } };
   }
   return { ok: true, value: status };
 }

@@ -902,6 +902,8 @@ describe('main routing', () => {
     expect(bridgeOpenSrc).toContain("phase: 'opening_bridge_proxy'");
     expect(bridgeOpenSrc).toContain("phase: 'checking_env_app_readiness'");
     expect(bridgeOpenSrc.match(/probeExternalLocalUIStartup\(bridgeSession\.startup\.local_ui_url/gu)).toHaveLength(1);
+    expect(bridgeOpenSrc).toContain('desktopFailureForRuntimePlacementBridgeReadiness(');
+    expect(bridgeOpenSrc).not.toContain('Runtime Placement Bridge readiness failed (');
     expect(bridgeOpenSrc).toContain('local_ui_url: bridgeSession.startup.local_ui_url');
     expect(bridgeOpenSrc).toContain('local_ui_urls: bridgeSession.startup.local_ui_urls');
     expect(bridgeOpenSrc).toContain('savedRuntimePlacementSSHPassword(');

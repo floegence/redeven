@@ -231,7 +231,7 @@ describe('runtimeState', () => {
     try {
       await expect(probeExternalLocalUIHealth(baseURL, { timeoutMs: 20 })).resolves.toEqual({
         ok: false,
-        failure: { kind: 'timeout' },
+        failure: { kind: 'timeout', stage: 'runtime_health' },
       });
     } finally {
       await closeServer(server);
@@ -452,7 +452,7 @@ describe('runtimeState', () => {
 
       await expect(probeExternalLocalUIStartup(`http://127.0.0.1:${address.port}/`)).resolves.toEqual({
         ok: false,
-        failure: { kind: 'invalid_response' },
+        failure: { kind: 'invalid_response', stage: 'runtime_health' },
       });
     } finally {
       await new Promise<void>((resolve, reject) => {
