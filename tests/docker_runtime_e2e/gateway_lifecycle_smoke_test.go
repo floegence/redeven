@@ -830,10 +830,11 @@ func (f *fixture) installPrecompiledDesktopBundle(ctx context.Context) (string, 
 	for _, name := range runtimeNames {
 		runtimeSuite = append(runtimeSuite, artifacts[name])
 	}
+	runtimeVersion, runtimeCommit := f.containerRuntimeIdentity(ctx, containerRedeven)
 	manifest := desktopBundleManifest{
 		SchemaVersion: 2,
-		Version:       f.containerRuntimeVersion(ctx, containerRedeven),
-		Commit:        "docker-e2e-precompiled",
+		Version:       runtimeVersion,
+		Commit:        runtimeCommit,
 		Platform:      "linux",
 		Architecture:  f.goarch,
 		Provenance:    "packaged_bundle",
