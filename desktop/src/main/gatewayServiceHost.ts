@@ -34,6 +34,7 @@ export type GatewayServicePackageProbeStatus =
   | 'version_command_failed'
   | 'version_output_invalid'
   | 'slot_version_mismatch'
+  | 'build_identity_mismatch'
   | 'stamp_missing'
   | 'stamp_invalid';
 
@@ -112,6 +113,9 @@ type GatewayPackageProbe = Readonly<{
   slot_release_tag: string | null;
   reported_release_tag: string | null;
   target_release_tag: string | null;
+  slot_source_commit: string | null;
+  reported_commit: string | null;
+  target_commit: string | null;
   reason: string;
 }>;
 
@@ -124,7 +128,7 @@ type GatewayServiceCommandStatus = Readonly<{
 }>;
 
 const MANAGED_GATEWAY_STAMP_FILENAME = 'managed-gateway.stamp';
-const MANAGED_GATEWAY_STAMP_SCHEMA_VERSION = 2;
+const MANAGED_GATEWAY_STAMP_SCHEMA_VERSION = 3;
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
@@ -195,9 +199,10 @@ function containerRootShell(): string {
   ].join('\n');
 }
 
-function managedGatewayPathShell(targetReleaseArg = '3'): string {
+function managedGatewayPathShell(targetReleaseArg = '3', targetCommitArg = '4'): string {
   return [
     `target_release_tag="\${${targetReleaseArg}:-}"`,
+    `target_commit="\${${targetCommitArg}:-}"`,
     'managed_root="${runtime_root%/}/gateway/managed"',
     'bin_dir="${managed_root}/bin"',
     'binary="${bin_dir}/redeven-gateway"',
@@ -210,11 +215,13 @@ function gatewayStampShell(): string {
     'write_gateway_stamp() {',
     '  install_strategy="$1"',
     '  release_tag="$2"',
+    '  source_commit="$3"',
     '  mkdir -p "$managed_root"',
     '  {',
     `    printf 'schema_version=${MANAGED_GATEWAY_STAMP_SCHEMA_VERSION}\\n'`,
     `    printf 'installed_by=redeven-desktop\\n'`,
     `    printf 'slot_release_tag=%s\\n' "$release_tag"`,
+    `    printf 'source_commit=%s\\n' "$source_commit"`,
     `    printf 'install_strategy=%s\\n' "$install_strategy"`,
     '  } > "$stamp_path"',
     '}',
@@ -226,7 +233,9 @@ function gatewayProbeShell(): string {
     'probe_status=""',
     'probe_reason=""',
     'slot_release_tag=""',
+    'slot_source_commit=""',
     'reported_release_tag=""',
+    'reported_commit=""',
     'gateway_package_is_ready() {',
     '  if [ ! -e "$binary" ]; then',
     '    probe_status="missing_binary"',
@@ -250,6 +259,9 @@ function gatewayProbeShell(): string {
     '    return 1',
     '  fi',
     '  reported_release_tag="$2"',
+    '  reported_commit="${3:-}"',
+    '  reported_commit="${reported_commit#(}"',
+    '  reported_commit="${reported_commit%)}"',
     '  case "$reported_release_tag" in v*) ;; *) reported_release_tag="v$reported_release_tag" ;; esac',
     '  if [ ! -f "$stamp_path" ]; then',
     '    probe_status="stamp_missing"',
@@ -269,6 +281,7 @@ function gatewayProbeShell(): string {
     '  while IFS= read -r stamp_line; do',
     '    case "$stamp_line" in',
     '      slot_release_tag=*) slot_release_tag="${stamp_line#slot_release_tag=}" ;;',
+    '      source_commit=*) slot_source_commit="${stamp_line#source_commit=}" ;;',
     '    esac',
     '  done < "$stamp_path"',
     '  case "$slot_release_tag" in',
@@ -289,6 +302,16 @@ function gatewayProbeShell(): string {
     '      return 1',
     '    fi',
     '  fi',
+    '  if [ -n "$slot_source_commit" ] && [ "$reported_commit" != "$slot_source_commit" ]; then',
+    '    probe_status="build_identity_mismatch"',
+    '    probe_reason="managed Gateway stamp commit does not match the installed binary"',
+    '    return 1',
+    '  fi',
+    '  if [ -n "$target_commit" ] && { [ "$reported_commit" != "$target_commit" ] || [ "$slot_source_commit" != "$target_commit" ]; }; then',
+    '    probe_status="build_identity_mismatch"',
+    '    probe_reason="managed Gateway build does not match the Desktop source build"',
+    '    return 1',
+    '  fi',
     '  probe_status="ready"',
     '  probe_reason="managed Gateway slot is ready"',
     '  return 0',
@@ -307,6 +330,9 @@ function gatewayProbeCommandScript(rootShell: string): string {
     'printf "slot_release_tag=%s\\n" "$slot_release_tag"',
     'printf "reported_release_tag=%s\\n" "$reported_release_tag"',
     'printf "target_release_tag=%s\\n" "$target_release_tag"',
+    'printf "slot_source_commit=%s\\n" "$slot_source_commit"',
+    'printf "reported_commit=%s\\n" "$reported_commit"',
+    'printf "target_commit=%s\\n" "$target_commit"',
     'printf "binary_path=%s\\n" "$binary"',
     'printf "stamp_path=%s\\n" "$stamp_path"',
     'printf "reason=%s\\n" "$probe_reason"',
@@ -357,16 +383,23 @@ function gatewayUploadedInstallScript(rootShell: string): string {
     '  exit 1',
     'fi',
     'staged_release_tag="${2:-}"',
+    'staged_commit="${3:-}"',
+    'staged_commit="${staged_commit#(}"',
+    'staged_commit="${staged_commit%)}"',
     'case "$staged_release_tag" in v*) ;; *) staged_release_tag="v$staged_release_tag" ;; esac',
     'if [ "$staged_release_tag" != "$target_release_tag" ]; then',
     '  echo "uploaded Redeven Gateway binary reported $staged_release_tag instead of $target_release_tag" >&2',
+    '  exit 1',
+    'fi',
+    'if [ -n "$target_commit" ] && [ "$staged_commit" != "$target_commit" ]; then',
+    '  echo "uploaded Redeven Gateway binary reported commit $staged_commit instead of $target_commit" >&2',
     '  exit 1',
     'fi',
     'old_managed_root="$managed_root"',
     'old_stamp_path="$stamp_path"',
     'managed_root="$staging_root"',
     `stamp_path="\${managed_root}/${MANAGED_GATEWAY_STAMP_FILENAME}"`,
-    'write_gateway_stamp "desktop_upload" "$target_release_tag"',
+    'write_gateway_stamp "desktop_upload" "$target_release_tag" "$staged_commit"',
     'managed_root="$old_managed_root"',
     'stamp_path="$old_stamp_path"',
     'previous_managed_root="${managed_root}.previous.$$"',
@@ -447,7 +480,6 @@ function gatewayDeepProbeScript(rootShell: string): string {
     'set -eu',
     rootShell,
     managedGatewayPathShell(),
-    'target_commit="${4:-}"',
     gatewayProbeShell(),
     'gateway_package_is_ready || true',
     'version_value=""',
@@ -459,6 +491,8 @@ function gatewayDeepProbeScript(rootShell: string): string {
     '    if [ "${1:-}" = "redeven-gateway" ]; then',
     '      version_value="${2:-}"',
     '      commit_value="${3:-}"',
+    '      commit_value="${commit_value#(}"',
+    '      commit_value="${commit_value%)}"',
     '      build_time_value="${4:-}"',
     '    fi',
     '  fi',
@@ -581,6 +615,7 @@ function normalizePackageProbeStatus(value: string): GatewayServicePackageProbeS
     case 'version_command_failed':
     case 'version_output_invalid':
     case 'slot_version_mismatch':
+    case 'build_identity_mismatch':
     case 'stamp_missing':
     case 'stamp_invalid':
       return compact(value) as GatewayServicePackageProbeStatus;
@@ -607,6 +642,9 @@ function parseGatewayPackageProbe(raw: string): GatewayPackageProbe {
     slot_release_tag: normalizeStatusLineTag(values.get('slot_release_tag')),
     reported_release_tag: normalizeStatusLineTag(values.get('reported_release_tag')),
     target_release_tag: normalizeStatusLineTag(values.get('target_release_tag')),
+    slot_source_commit: compact(values.get('slot_source_commit')) || null,
+    reported_commit: compact(values.get('reported_commit')) || null,
+    target_commit: compact(values.get('target_commit')) || null,
     reason: compact(values.get('reason')) || gatewayPackageProbeFallbackReason(status),
   };
 }
@@ -625,6 +663,8 @@ function gatewayPackageProbeFallbackReason(status: GatewayServicePackageProbeSta
       return 'managed Gateway returned an invalid version string';
     case 'slot_version_mismatch':
       return 'managed Gateway stamp release does not match the installed binary';
+    case 'build_identity_mismatch':
+      return 'managed Gateway build identity does not match the Desktop target';
     case 'stamp_missing':
       return 'managed Gateway stamp is missing';
     case 'stamp_invalid':
@@ -638,6 +678,9 @@ function describeGatewayPackageProbe(probe: GatewayPackageProbe): string {
   }
   if (probe.status === 'slot_version_mismatch') {
     return `Managed Gateway at ${probe.binary_path} reports ${probe.reported_release_tag ?? 'an unknown version'}, but Desktop expects ${probe.target_release_tag ?? 'the current release'}.`;
+  }
+  if (probe.status === 'build_identity_mismatch') {
+    return `Managed Gateway at ${probe.binary_path} reports commit ${probe.reported_commit ?? 'unknown'}, but Desktop expects ${probe.target_commit ?? probe.slot_source_commit ?? 'the installed build'}.`;
   }
   return `${probe.reason} (${probe.binary_path}).`;
 }
@@ -673,6 +716,7 @@ async function probeGatewayPackage(
     options.placement.runtime_root,
     options.stateRoot,
     normalizeReleaseTag(options.releaseTag),
+    compact(options.targetCommit),
   ]), { signal: options.signal });
   return parseGatewayPackageProbe(result.stdout);
 }
@@ -739,6 +783,7 @@ async function installGatewayPackage(
     options.placement.runtime_root,
     options.stateRoot,
     normalizeReleaseTag(options.releaseTag),
+    compact(options.targetCommit),
   ]), {
     stdinData: asset.archiveData,
     signal: options.signal,
@@ -850,6 +895,12 @@ export async function ensureManagedGatewayServiceReady(options: GatewayServiceHo
     const initialProbe = await probeGatewayPackage(options, executor).catch(() => null);
     if (options.forceUpdate === true || initialProbe?.status !== 'ready') {
       const platform = await probeGatewayPlatform(options, executor);
+      const rootShell = rootShellForPlacement(options.placement);
+      await executor.run(commandForPlacement(options.placement, gatewayServiceStopScript(rootShell), [
+        options.placement.runtime_root,
+        options.stateRoot,
+        releaseTag,
+      ]), { signal: options.signal });
       await installGatewayPackage(options, executor, platform);
       const installedProbe = await probeGatewayPackage(options, executor);
       if (installedProbe.status !== 'ready') {

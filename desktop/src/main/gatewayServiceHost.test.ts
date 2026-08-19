@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -8,6 +9,7 @@ import {
   gatewayReleasePackageURL,
   gatewayServiceBinaryPath,
   gatewaySupervisorEnrollmentInvocation,
+  probeManagedGatewayServiceStatus,
   resolveGatewayHostPlatform,
 } from './gatewayServiceHost';
 import { DEFAULT_DESKTOP_SSH_RUNTIME_ROOT } from '../shared/desktopSSH';
@@ -94,5 +96,50 @@ describe('gatewayServiceHost', () => {
     expect(invocation.argv).toContain('https://provider.example');
     expect(invocation.argv).toContain('env_demo');
     expect(invocation.argv.join(' ')).not.toContain('enrollment-secret');
+  });
+
+  it('requires a dev Gateway package refresh when the installed build commit is stale', async () => {
+    const runtimeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'redeven-gateway-probe-'));
+    const managedRoot = path.join(runtimeRoot, 'gateway', 'managed');
+    const binaryPath = path.join(managedRoot, 'bin', 'redeven-gateway');
+    const stateRoot = path.join(runtimeRoot, 'gateways', 'gw_test', 'state');
+    fs.mkdirSync(path.dirname(binaryPath), { recursive: true });
+    fs.writeFileSync(binaryPath, [
+      '#!/bin/sh',
+      'case "$1" in',
+      '  version) echo "redeven-gateway v0.0.0-dev (oldcommit123) 2026-08-18T00:00:00Z" ;;',
+      '  service-status) echo \'{"status":"not_running"}\'; exit 1 ;;',
+      '  *) exit 2 ;;',
+      'esac',
+      '',
+    ].join('\n'), { mode: 0o755 });
+    fs.writeFileSync(path.join(managedRoot, 'managed-gateway.stamp'), [
+      'schema_version=3',
+      'installed_by=redeven-desktop',
+      'slot_release_tag=v0.0.0-dev',
+      'source_commit=oldcommit123',
+      'install_strategy=desktop_upload',
+      '',
+    ].join('\n'));
+
+    try {
+      await expect(probeManagedGatewayServiceStatus({
+        sshTransportManager: null as never,
+        sshCredentialScope: 'gw_test',
+        hostAccess: { kind: 'local_host' },
+        placement: { kind: 'host_process', runtime_root: runtimeRoot },
+        stateRoot,
+        releaseTag: 'v0.0.0-dev',
+        releaseBaseURL: '',
+        assetCacheRoot: path.join(runtimeRoot, 'cache'),
+        targetCommit: 'newcommit456',
+        tempRoot: path.join(runtimeRoot, 'tmp'),
+      })).resolves.toMatchObject({
+        status: 'needs_update',
+        package_status: 'build_identity_mismatch',
+      });
+    } finally {
+      fs.rmSync(runtimeRoot, { recursive: true, force: true });
+    }
   });
 });

@@ -21,11 +21,12 @@ import (
 )
 
 const (
-	storeSchemaVersion       = 2
-	legacyStoreSchemaVersion = 1
-	defaultPrecommitTTL      = 30 * time.Minute
-	defaultMaximumOperation  = 2 * time.Hour
-	defaultArtifactMaxBytes  = int64(512 << 20)
+	storeSchemaVersion         = 3
+	previousStoreSchemaVersion = 2
+	legacyStoreSchemaVersion   = 1
+	defaultPrecommitTTL        = 30 * time.Minute
+	defaultMaximumOperation    = 2 * time.Hour
+	defaultArtifactMaxBytes    = int64(512 << 20)
 )
 
 type ErrorCode string
@@ -134,6 +135,8 @@ type fileState struct {
 	FenceTokens   map[string]string                                  `json:"fence_tokens"`
 	Quarantined   map[string]string                                  `json:"quarantined_targets"`
 }
+
+type fileStateV2 fileState
 
 type runtimeArtifactV1 struct {
 	SizeBytes      int64                          `json:"size_bytes"`
@@ -330,8 +333,8 @@ func (s *Store) Prepare(ctx context.Context, request gatewayprotocol.RuntimeOper
 		TargetGeneration:  operation.TargetGeneration,
 	})
 	snapshot = gatewayprotocol.NormalizeWorkloadSnapshot(snapshot)
-	if snapshotErr == nil && snapshot.SnapshotRevision > gatewayprotocol.MaxJSONSafeInteger {
-		snapshotErr = errors.New("Runtime workload snapshot revision exceeds the protocol integer range")
+	if snapshotErr == nil {
+		snapshotErr = validateWorkloadSnapshotRevision(snapshot)
 	}
 	s.mu.Lock()
 	current, ok := s.state.Operations[operation.OperationID]
@@ -720,6 +723,12 @@ func (s *Store) continueFencing(ctx context.Context, operationID string, recover
 	if fence.Token == "" {
 		return s.failBeforeCommit(operationID, ErrorUnavailable, "Runtime lifecycle fence returned an invalid token.", true)
 	}
+	if err := validateWorkloadSnapshotRevision(fence.Snapshot); err != nil {
+		if releaseErr := s.controller.ReleaseLifecycleFence(ctx, fence.Token); releaseErr != nil {
+			return s.enterManualRecovery(operationID, "Runtime lifecycle fence returned an invalid snapshot and could not be released.")
+		}
+		return s.failBeforeCommit(operationID, ErrorUnavailable, "Runtime lifecycle fence returned an invalid workload snapshot.", true)
+	}
 	s.mu.Lock()
 	current := s.state.Operations[operationID]
 	if current.State != gatewayprotocol.RuntimeOperationFencing {
@@ -1073,6 +1082,9 @@ func (s *Store) resumePreflight(ctx context.Context, operationID string) error {
 		TargetGeneration:  operation.TargetGeneration,
 	})
 	snapshot = gatewayprotocol.NormalizeWorkloadSnapshot(snapshot)
+	if snapshotErr == nil {
+		snapshotErr = validateWorkloadSnapshotRevision(snapshot)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	current, ok := s.state.Operations[operationID]
@@ -1301,17 +1313,38 @@ func (s *Store) load() error {
 		}
 		s.state = state
 		return nil
+	case previousStoreSchemaVersion:
+		legacy, err := decodeStateFileV2(raw)
+		if err != nil {
+			return err
+		}
+		state, err := migrateStateFileV2(legacy)
+		if err != nil {
+			return err
+		}
+		if err := s.validateLoadedState(state); err != nil {
+			return err
+		}
+		if err := writeStateFile(s.stateRoot, s.statePath, state); err != nil {
+			return fmt.Errorf("migrate Runtime operation store schema v2 to v3: %w", err)
+		}
+		s.state = state
+		return nil
 	case legacyStoreSchemaVersion:
 		legacy, err := decodeStateFileV1(raw)
 		if err != nil {
 			return err
 		}
-		state := migrateStateFileV1(legacy, s.clock.Now().UnixMilli())
+		v2 := migrateStateFileV1(legacy, s.clock.Now().UnixMilli())
+		state, err := migrateStateFileV2(v2)
+		if err != nil {
+			return err
+		}
 		if err := s.validateLoadedState(state); err != nil {
 			return err
 		}
 		if err := writeStateFile(s.stateRoot, s.statePath, state); err != nil {
-			return fmt.Errorf("migrate Runtime operation store schema v1 to v2: %w", err)
+			return fmt.Errorf("migrate Runtime operation store schema v1 to v3: %w", err)
 		}
 		s.state = state
 		return nil
@@ -1371,6 +1404,20 @@ func decodeStateFileV1(raw []byte) (fileStateV1, error) {
 	return state, nil
 }
 
+func decodeStateFileV2(raw []byte) (fileStateV2, error) {
+	var state fileStateV2
+	if err := decodeStrictStateJSON(raw, &state); err != nil {
+		return fileStateV2{}, fmt.Errorf("parse Runtime operation store schema v2: %w", err)
+	}
+	if state.SchemaVersion != previousStoreSchemaVersion {
+		return fileStateV2{}, fmt.Errorf("Runtime operation store schema_version=%d is not schema v2", state.SchemaVersion)
+	}
+	if err := validateStateMaps(state.Operations, state.ArtifactPaths, state.Events, state.TargetLocks, state.PermitUses, state.FenceTokens, state.Quarantined); err != nil {
+		return fileStateV2{}, err
+	}
+	return state, nil
+}
+
 func decodeStrictStateJSON(raw []byte, target any) error {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
@@ -1403,6 +1450,9 @@ func (s *Store) validateLoadedState(state fileState) error {
 		}
 		if strings.TrimSpace(operation.LifecycleTargetID) == "" || operation.TargetGeneration <= 0 || operation.State == "" {
 			return fmt.Errorf("Runtime operation %q has invalid target or state", operationID)
+		}
+		if err := validateWorkloadSnapshotRevision(operation.ExpectedSnapshot); err != nil {
+			return fmt.Errorf("Runtime operation %q has an invalid expected snapshot: %w", operationID, err)
 		}
 	}
 	for operationID, path := range state.ArtifactPaths {
@@ -1471,9 +1521,9 @@ func (s *Store) validateLoadedState(state fileState) error {
 	return nil
 }
 
-func migrateStateFileV1(legacy fileStateV1, migratedAtUnixMS int64) fileState {
-	state := fileState{
-		SchemaVersion: storeSchemaVersion,
+func migrateStateFileV1(legacy fileStateV1, migratedAtUnixMS int64) fileStateV2 {
+	state := fileStateV2{
+		SchemaVersion: previousStoreSchemaVersion,
 		Operations:    make(map[string]gatewayprotocol.RuntimeOperation, len(legacy.Operations)),
 		ArtifactPaths: cloneStringMap(legacy.ArtifactPaths),
 		Events:        cloneEventMap(legacy.Events),
@@ -1526,6 +1576,43 @@ func migrateStateFileV1(legacy fileStateV1, migratedAtUnixMS int64) fileState {
 		state.Operations[operationID] = operation
 	}
 	return state
+}
+
+func migrateStateFileV2(legacy fileStateV2) (fileState, error) {
+	state := fileState{
+		SchemaVersion: storeSchemaVersion,
+		Operations:    make(map[string]gatewayprotocol.RuntimeOperation, len(legacy.Operations)),
+		ArtifactPaths: cloneStringMap(legacy.ArtifactPaths),
+		Events:        cloneEventMap(legacy.Events),
+		TargetLocks:   cloneStringMap(legacy.TargetLocks),
+		PermitUses:    cloneStringMap(legacy.PermitUses),
+		FenceTokens:   cloneStringMap(legacy.FenceTokens),
+		Quarantined:   cloneStringMap(legacy.Quarantined),
+	}
+	for operationID, legacyOperation := range legacy.Operations {
+		operation := cloneOperation(legacyOperation)
+		snapshot := operation.ExpectedSnapshot
+		if snapshot.SnapshotRevision > gatewayprotocol.MaxJSONSafeInteger {
+			snapshot.SnapshotRevision = migratedSnapshotRevision(snapshot)
+			operation.ExpectedSnapshot = snapshot
+		}
+		state.Operations[operationID] = operation
+	}
+	return state, nil
+}
+
+func migratedSnapshotRevision(snapshot gatewayprotocol.WorkloadSnapshot) int64 {
+	if snapshot.ObservedAtUnixMS > 0 && snapshot.ObservedAtUnixMS <= gatewayprotocol.MaxJSONSafeInteger {
+		return snapshot.ObservedAtUnixMS
+	}
+	return gatewayprotocol.MaxJSONSafeInteger
+}
+
+func validateWorkloadSnapshotRevision(snapshot gatewayprotocol.WorkloadSnapshot) error {
+	if snapshot.SnapshotRevision < 0 || snapshot.SnapshotRevision > gatewayprotocol.MaxJSONSafeInteger {
+		return errors.New("Runtime workload snapshot revision exceeds the protocol integer range")
+	}
+	return nil
 }
 
 func migrateRuntimeOperationV1(legacy runtimeOperationV1) gatewayprotocol.RuntimeOperation {
