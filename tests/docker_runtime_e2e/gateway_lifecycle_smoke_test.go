@@ -19,6 +19,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -85,13 +86,42 @@ type desktopBundleArtifact struct {
 }
 
 type desktopBundleManifest struct {
-	SchemaVersion int                     `json:"schema_version"`
-	Version       string                  `json:"version"`
-	Commit        string                  `json:"commit"`
-	Platform      string                  `json:"platform"`
-	Architecture  string                  `json:"architecture"`
-	Gateway       desktopBundleArtifact   `json:"gateway"`
-	RuntimeSuite  []desktopBundleArtifact `json:"runtime_suite"`
+	SchemaVersion      int                     `json:"schema_version"`
+	Version            string                  `json:"version"`
+	Commit             string                  `json:"commit"`
+	Platform           string                  `json:"platform"`
+	Architecture       string                  `json:"architecture"`
+	Provenance         string                  `json:"provenance"`
+	Gateway            desktopBundleArtifact   `json:"gateway"`
+	RuntimeSuite       []desktopBundleArtifact `json:"runtime_suite"`
+	RuntimeSuiteSHA256 string                  `json:"runtime_suite_sha256"`
+}
+
+func precompiledRuntimeSuiteDigest(artifacts []desktopBundleArtifact) string {
+	type suiteEntry struct {
+		Name       string `json:"name"`
+		SHA256     string `json:"sha256"`
+		SizeBytes  int64  `json:"size_bytes"`
+		Executable bool   `json:"executable"`
+	}
+	entries := make([]suiteEntry, 0, len(artifacts))
+	for _, artifact := range artifacts {
+		entries = append(entries, suiteEntry{
+			Name: artifact.Path, SHA256: artifact.SHA256,
+			SizeBytes: artifact.SizeBytes, Executable: artifact.Executable,
+		})
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
+	payload := struct {
+		SchemaVersion int          `json:"schema_version"`
+		Files         []suiteEntry `json:"files"`
+	}{SchemaVersion: 1, Files: entries}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		panic(err)
+	}
+	digest := sha256.Sum256(raw)
+	return "sha256:" + hex.EncodeToString(digest[:])
 }
 
 func TestDockerUbuntuPrecompiledDesktopBundleStartup(t *testing.T) {
@@ -797,14 +827,16 @@ func (f *fixture) installPrecompiledDesktopBundle(ctx context.Context) (string, 
 		runtimeSuite = append(runtimeSuite, artifacts[name])
 	}
 	manifest := desktopBundleManifest{
-		SchemaVersion: 1,
+		SchemaVersion: 2,
 		Version:       f.containerRuntimeVersion(ctx, containerRedeven),
 		Commit:        "docker-e2e-precompiled",
 		Platform:      "linux",
 		Architecture:  f.goarch,
+		Provenance:    "packaged_bundle",
 		Gateway:       artifacts["redeven-gateway"],
 		RuntimeSuite:  runtimeSuite,
 	}
+	manifest.RuntimeSuiteSHA256 = precompiledRuntimeSuiteDigest(runtimeSuite)
 	manifestBytes, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
 		f.t.Fatalf("encode Linux precompiled Desktop bundle manifest: %v", err)
