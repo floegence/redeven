@@ -217,6 +217,7 @@ import {
   probeExternalLocalUIHealth,
   probeExternalLocalUIStartup,
 } from './runtimeState';
+import { desktopFailureForRuntimePlacementBridgeReadiness } from './runtimePlacementBridgeReadiness';
 import {
   RuntimeControlError,
   connectProviderLink,
@@ -12934,11 +12935,27 @@ function launcherActionFailureForRuntimeNotOpenable(
   const summary = runtimeServiceOpenReadinessLabel(startup.runtime_service);
   const needsUpdate = runtimeServiceNeedsRuntimeUpdate(startup.runtime_service);
   const needsDesktopUpdate = runtimeServiceNeedsDesktopUpdate(startup.runtime_service);
+  const failureCode = needsDesktopUpdate
+    ? 'desktop_update_required' as const
+    : needsUpdate
+      ? 'runtime_update_required' as const
+      : 'environment_open_failed' as const;
   const failure = desktopOperationFailurePresentation({
-    code: needsDesktopUpdate ? 'desktop_update_required' : needsUpdate ? 'runtime_update_required' : 'environment_open_failed',
+    code: failureCode,
     title: 'Open Failed',
     summary,
     targetLabel: options.targetLabel,
+    ...(needsDesktopUpdate
+      ? {
+          summaryKey: 'runtimeMessage.updateDesktopBeforeOpeningEnvironment' as const,
+          recoveryHintKey: 'runtimeMessage.updateDesktopBeforeOpeningEnvironment' as const,
+        }
+      : needsUpdate
+        ? {
+            summaryKey: 'runtimeMessage.updateRuntimeBeforeOpeningEnvironment' as const,
+            recoveryHintKey: 'runtimeMessage.updateRuntimeFirst' as const,
+          }
+        : {}),
     detail: needsDesktopUpdate
       ? [
           `Installed runtime: ${startup.runtime_service?.runtime_version ?? 'unknown'}`,
@@ -14521,7 +14538,13 @@ async function openRuntimePlacementBridgeFromLauncher(
           signal,
         });
         if (!readiness.ok) {
-          throw new Error(`Runtime Placement Bridge readiness failed (${readiness.failure.kind}).`);
+          throw new DesktopOperationFailureError(
+            desktopFailureForRuntimePlacementBridgeReadiness(
+              readiness.failure,
+              bridgeSession.startup,
+              label,
+            ),
+          );
         }
         const nextRecord = {
           ...bridgeRecordFromSession({
