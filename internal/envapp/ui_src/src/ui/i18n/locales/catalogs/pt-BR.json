@@ -4458,6 +4458,7 @@
           "stateConflict": "O estado do plugin instalado está em conflito com esta versão.",
           "denied": "Você não tem permissão para instalar plugins neste ambiente.",
           "trust": "A versão do plugin não passou pela verificação do editor e de confiança.",
+          "manifestInvalid": "Este pacote de plugin usa um formato de manifesto que a plataforma não pode instalar.",
           "internal": "A instalação não pôde ser concluída devido a uma falha interna da plataforma de plugins."
         }
       },

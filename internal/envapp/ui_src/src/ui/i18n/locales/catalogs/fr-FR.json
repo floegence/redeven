@@ -4458,6 +4458,7 @@
           "stateConflict": "L’état du plugin installé est incompatible avec cette publication.",
           "denied": "Vous n’êtes pas autorisé à installer des plugins dans cet environnement.",
           "trust": "La publication du plugin n’a pas réussi la vérification de l’éditeur et de la confiance.",
+          "manifestInvalid": "Ce paquet de plugin utilise un format de manifeste que cette plateforme ne peut pas installer.",
           "internal": "Une erreur interne de la plateforme de plugins a empêché l’installation."
         }
       },

@@ -194,6 +194,7 @@ function installFailureLabel(code: string, i18n: I18nHelpers): string {
     case 'PLUGIN_INSTALL_STATE_CONFLICT': return i18n.t('uiCopy.plugin.installOperation.failure.stateConflict');
     case 'PLUGIN_ACTION_DENIED':
     case 'PLUGIN_PERMISSION_DENIED': return i18n.t('uiCopy.plugin.installOperation.failure.denied');
+    case 'PLUGIN_MANIFEST_INVALID': return i18n.t('uiCopy.plugin.installOperation.failure.manifestInvalid');
     case 'PLUGIN_RELEASE_REF_VERIFICATION_FAILED':
     case 'PLUGIN_RELEASE_REF_POLICY_DENIED':
     case 'PLUGIN_TRUST_STATE_DENIED':

@@ -4458,6 +4458,7 @@
           "stateConflict": "El estado del plugin instalado entra en conflicto con esta versión.",
           "denied": "No tienes permiso para instalar plugins en este entorno.",
           "trust": "La versión del plugin no superó la verificación del editor y de confianza.",
+          "manifestInvalid": "Este paquete de plugin usa un formato de manifiesto que la plataforma no puede instalar.",
           "internal": "No se pudo completar la instalación por un fallo interno de la plataforma de plugins."
         }
       },

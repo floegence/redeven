@@ -332,6 +332,7 @@ export const enUS = defineDictionary({
           stateConflict: 'The installed plugin state conflicts with this release.',
           denied: 'You do not have permission to install plugins in this environment.',
           trust: 'The plugin release could not pass publisher and trust verification.',
+          manifestInvalid: 'This plugin package uses a manifest format that this platform cannot install.',
           internal: 'The installation could not be completed because of an internal plugin platform failure.',
         },
       },
