@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  toWireGitGetDiffContentRequest,
   toWireGitListCommitsRequest,
   toWireGitListWorkspacePageRequest,
   toWireGitListWorkspacePathStatusesRequest,
@@ -58,6 +59,28 @@ describe('Git request wire encoding', () => {
       repo_root_path: '/workspace/repo',
       offset: 0,
       limit: 50,
+    });
+  });
+
+  it('omits absent commit diff fields from the JSON payload', () => {
+    expect(toWireGitGetDiffContentRequest({
+      repoRootPath: '/workspace/repo',
+      sourceKind: 'commit',
+      commit: '3a47b67b1234567890',
+      mode: 'preview',
+      file: {
+        changeType: 'modified',
+        path: 'src/app.ts',
+      },
+    })).toStrictEqual({
+      repo_root_path: '/workspace/repo',
+      source_kind: 'commit',
+      commit: '3a47b67b1234567890',
+      mode: 'preview',
+      file: {
+        change_type: 'modified',
+        path: 'src/app.ts',
+      },
     });
   });
 });
