@@ -252,7 +252,7 @@ export async function ensureEnabledWorkerRuntime({ request, plugins }) {
   let startResponse = null;
   if (health?.ready !== true) {
     startResponse = await request('/_redevplugin/api/plugins/runtime/start', {
-      target: runtimeTargetFromDescriptor(health?.descriptor),
+      target: runtimeTargetFromDescriptor(health),
     });
     health = successfulPluginResponse(startResponse, 'plugin runtime start');
   }
