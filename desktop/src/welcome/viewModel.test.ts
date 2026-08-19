@@ -95,10 +95,13 @@ function expectEnvironmentInitialization(
   ]));
   const actionIDs = actionModel.action_presentation.menu_actions.map((item) => item.id);
   expect(actionIDs).not.toContain('initialize_and_open');
-  expect(actionIDs).not.toContain('start_runtime');
-  expect(actionIDs).not.toContain('stop_runtime');
-  expect(actionIDs).not.toContain('restart_runtime');
-  expect(actionIDs).not.toContain('update_runtime');
+  for (const operation of ['start_runtime', 'stop_runtime', 'restart_runtime', 'update_runtime'] as const) {
+    const action = actionModel.action_presentation.menu_actions.find((item) => item.id === operation)?.action;
+    expect(action).toMatchObject({
+      enabled: false,
+      disabled_reason: 'Initialize this environment before using lifecycle actions.',
+    });
+  }
 }
 
 describe('environment open flow decisions', () => {
@@ -1480,14 +1483,12 @@ describe('buildEnvironmentCardModel', () => {
         primary_action_overlay: undefined,
       },
     });
-    expect(actionModel.action_presentation.menu_actions).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'provider_link_unavailable',
-        action: expect.objectContaining({
-          intent: 'unavailable',
-          enabled: false,
-        }),
-      }),
+    expect(actionModel.action_presentation.menu_actions.map((item) => item.id)).not.toContain('provider_link_unavailable');
+    expect(actionModel.action_presentation.menu_actions.map((item) => item.id)).toEqual(expect.arrayContaining([
+      'start_runtime',
+      'stop_runtime',
+      'restart_runtime',
+      'update_runtime',
     ]));
   });
 
@@ -1748,7 +1749,7 @@ describe('buildEnvironmentCardModel', () => {
     expectEnvironmentInitialization(actionModel);
   });
 
-  it('keeps an online SSH runtime openable while offering Update runtime separately when it needs an update', () => {
+  it('keeps an online SSH runtime openable while exposing lifecycle actions separately from Provider linking', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         saved_ssh_environments: [{
@@ -1835,6 +1836,14 @@ describe('buildEnvironmentCardModel', () => {
       },
     });
     expectEnvironmentInitialization(actionModel);
+    const menuActions = actionModel.action_presentation.menu_actions;
+    expect(menuActions.map((item) => item.id)).not.toContain('provider_link_unavailable');
+    expect(menuActions.map((item) => item.label)).toEqual(expect.arrayContaining([
+      'Start runtime',
+      'Stop runtime',
+      'Restart runtime',
+      'Update runtime',
+    ]));
   });
 
   it('treats a missing Env App shell as an update-required SSH runtime block', () => {
@@ -2468,9 +2477,13 @@ describe('buildEnvironmentCardModel', () => {
     const managedMenuActionIDs = buildProviderBackedEnvironmentActionModel(managedLocalEntry!)
       .action_presentation.menu_actions.map((item) => item.id);
     expect(managedMenuActionIDs).not.toContain('initialize_and_open');
-    expect(managedMenuActionIDs).not.toContain('stop_runtime');
     expect(managedMenuActionIDs).not.toContain('runtime_managed_externally');
-    expect(managedMenuActionIDs).not.toContain('start_runtime');
+    expect(managedMenuActionIDs).toEqual(expect.arrayContaining([
+      'start_runtime',
+      'stop_runtime',
+      'restart_runtime',
+      'update_runtime',
+    ]));
 
     const openLocalServeSnapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
