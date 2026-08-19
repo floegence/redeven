@@ -1413,20 +1413,9 @@ function runtimeProviderLinkMenuAction(
         },
       };
     case 'unsupported':
-      if (target.runtime_running) {
-        return {
-          id: 'provider_link_unavailable',
-          label: 'Provider link unavailable',
-          action: {
-            intent: 'unavailable',
-            label: 'Provider link unavailable',
-            enabled: false,
-            variant: 'outline',
-            disabled_reason: 'Provider link is unavailable for this runtime.',
-          },
-        };
-      }
-      break;
+      // Provider linking is optional. An unsupported link must not replace
+      // the runtime lifecycle actions on a Local or SSH environment card.
+      return null;
     case 'unlinked':
       break;
   }
@@ -1482,9 +1471,6 @@ function runtimeOperationIntent(operation: DesktopRuntimeOperation): Environment
 
 function runtimeOperationMenuItem(plan: DesktopRuntimeOperationPlan | undefined): EnvironmentActionMenuItemModel | null {
   if (!plan || !desktopRuntimeOperationIsVisible(plan) || plan.menu_visibility === 'hidden') {
-    return null;
-  }
-  if (plan.reason_code === 'runtime_gateway_setup_required') {
     return null;
   }
   if (plan.menu_visibility === 'contextual' && plan.availability === 'unavailable') {
@@ -1567,12 +1553,8 @@ function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly Envi
     return items;
   }
   const remoteRouteAction = providerRemoteRouteMenuAction(environment);
-  const runtimeProviderLinkAction = runtimeProviderLinkMenuAction(environment);
   if (remoteRouteAction) {
     items.push(remoteRouteAction);
-  }
-  if (runtimeProviderLinkAction) {
-    items.push(runtimeProviderLinkAction);
   }
   if (desktopEntryKindCanInitiateRuntimeManagement(environment.kind)) {
     for (const operation of runtimeOperationMenuOrder) {
@@ -1581,6 +1563,10 @@ function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly Envi
         items.push(item);
       }
     }
+  }
+  const runtimeProviderLinkAction = runtimeProviderLinkMenuAction(environment);
+  if (runtimeProviderLinkAction) {
+    items.push(runtimeProviderLinkAction);
   }
   const refreshPlan = environment.runtime_operations.refresh;
   const refreshLabel = environment.kind === 'provider_environment' ? 'Refresh provider status' : 'Refresh runtime status';

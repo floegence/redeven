@@ -381,7 +381,11 @@ describe('environmentAggregator', () => {
     expect(withGatewayLifecycle?.runtime_operations.start).toMatchObject({
       availability: 'available',
       method: 'runtime_gateway',
+      label: 'Start runtime',
     });
+    expect(withGatewayLifecycle?.runtime_operations.stop.label).toBe('Stop runtime');
+    expect(withGatewayLifecycle?.runtime_operations.restart.label).toBe('Restart runtime');
+    expect(withGatewayLifecycle?.runtime_operations.update.label).toBe('Update runtime');
   });
 
   it('projects the matching local supervisor onto the direct card without changing Open routing', () => {

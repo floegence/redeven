@@ -513,22 +513,20 @@ function providerRuntimeOperations(
   const plan = (
     operation: 'start' | 'stop' | 'restart' | 'update_runtime',
     runtimeOperation: 'start' | 'stop' | 'restart' | 'update',
-    label: string,
   ) => desktopRuntimeOperationPlan(
     runtimeOperation,
     management.operations?.includes(operation) ? 'available' : 'hidden',
     'runtime_gateway',
     {
-      label,
       menuVisibility: management.operations?.includes(operation) ? 'contextual' : 'hidden',
     },
   );
   return {
     ...base,
-    start: plan('start', 'start', 'Start through Gateway...'),
-    stop: plan('stop', 'stop', 'Stop through Gateway...'),
-    restart: plan('restart', 'restart', 'Restart through Gateway...'),
-    update: plan('update_runtime', 'update', 'Update through Gateway...'),
+    start: plan('start', 'start'),
+    stop: plan('stop', 'stop'),
+    restart: plan('restart', 'restart'),
+    update: plan('update_runtime', 'update'),
   };
 }
 

@@ -260,7 +260,6 @@ function gatewayRuntimeOperations(input: Readonly<{
       input.canStart ? 'available' : 'hidden',
       'runtime_gateway',
       {
-        label: 'Start through Gateway',
         menuVisibility: input.canStart ? 'contextual' : 'hidden',
       },
     ),
@@ -269,7 +268,6 @@ function gatewayRuntimeOperations(input: Readonly<{
       input.canStop ? 'available' : 'hidden',
       'runtime_gateway',
       {
-        label: 'Stop through Gateway',
         menuVisibility: input.canStop ? 'stable' : 'hidden',
       },
     ),
@@ -278,7 +276,6 @@ function gatewayRuntimeOperations(input: Readonly<{
       input.canRestart ? 'available' : 'hidden',
       'runtime_gateway',
       {
-        label: 'Restart through Gateway',
         menuVisibility: input.canRestart ? 'stable' : 'hidden',
       },
     ),
@@ -287,7 +284,6 @@ function gatewayRuntimeOperations(input: Readonly<{
       input.canUpdate ? 'available' : 'hidden',
       'runtime_gateway',
       {
-        label: 'Update through Gateway',
         menuVisibility: input.canUpdate ? 'stable' : 'hidden',
       },
     ),
