@@ -9999,7 +9999,10 @@ async function createSessionRecord(
   const rootWindow = createSessionRootWindow(target.session_key, entryURL, diagnostics, {
     stealAppFocus: options.stealAppFocus,
     sessionPartition,
-    presentOnReadyToShow: false,
+    // A password-protected external target must expose its unlock gate before
+    // the renderer can report app readiness; keeping it hidden would deadlock
+    // the open action while the user is waiting for the password form.
+    presentOnReadyToShow: startup.password_required === true,
     deferInitialLoad: true,
     onDidFinishLoad: () => {
       sessionRecord.document_loaded_at_unix_ms = Date.now();
