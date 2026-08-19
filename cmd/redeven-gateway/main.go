@@ -413,20 +413,59 @@ func (c *cli) serviceStopCmd(args []string) int {
 	if err == nil {
 		_ = process.Signal(syscall.SIGTERM)
 	}
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		if !serviceProcessMatches(status) {
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
+	stopped, stopErr := waitGatewayServiceStopped(stateRootValue, status, 5*time.Second)
+	if stopErr != nil {
+		writeError(c.stderr, fmt.Sprintf("service-stop failed: %v", stopErr))
+		return 1
 	}
-	if process != nil && serviceProcessMatches(status) {
+	if !stopped && process != nil && serviceProcessMatches(status) {
 		_ = process.Kill()
+	}
+	if !stopped {
+		stopped, stopErr = waitGatewayServiceStopped(stateRootValue, status, 2*time.Second)
+	}
+	if stopErr != nil || !stopped {
+		if stopErr == nil {
+			stopErr = errors.New("Gateway service did not release its state-root lock before the shutdown timeout")
+		}
+		writeError(c.stderr, fmt.Sprintf("service-stop failed: %v", stopErr))
+		return 1
 	}
 	_ = removePIDFile(stateRootValue)
 	_ = removeManagedBridgeToken(stateRootValue)
 	_ = json.NewEncoder(c.stdout).Encode(serviceStatus{Status: "not_running", StateRoot: stateRootValue})
 	return 0
+}
+
+func waitGatewayServiceStopped(stateRoot string, status serviceStatus, timeout time.Duration) (bool, error) {
+	deadline := time.Now().Add(timeout)
+	for {
+		stopped, err := gatewayServiceStopped(stateRoot, status)
+		if err != nil || stopped {
+			return stopped, err
+		}
+		if !time.Now().Before(deadline) {
+			return false, nil
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+func gatewayServiceStopped(stateRoot string, status serviceStatus) (bool, error) {
+	if serviceProcessMatches(status) {
+		return false, nil
+	}
+	serviceLock, err := lockfile.Acquire(filepath.Join(stateRoot, "gateway-service.lock"))
+	if errors.Is(err, lockfile.ErrAlreadyLocked) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if err := serviceLock.Release(); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (c *cli) runGatewayService(ctx context.Context, stateRoot string, runtimeRoot string, precompiledRuntimeManifest string, precompiledRuntimeLocalUIBind string, listen string, desktopBridgeTransport bool, printListen bool, allowPrivateProfileTargets bool, enableProfileWrite bool, pairingCode string, managedBridgeToken string) int {
@@ -665,7 +704,7 @@ func readServiceStatus(stateRoot string) serviceStatus {
 		return serviceStatus{Status: "error", StateRoot: stateRoot, ErrorMessage: "Gateway status file is invalid."}
 	}
 	status.StateRoot = stateRoot
-	if status.PID <= 0 || !serviceProcessMatches(status) {
+	if status.PID <= 0 || !serviceProcessMatchesEventually(status, 3, 10*time.Millisecond, serviceProcessMatches) {
 		return serviceStatus{Status: "not_running", StateRoot: stateRoot}
 	}
 	if strings.TrimSpace(status.Listen) == "" || strings.TrimSpace(status.Listen) == "127.0.0.1:0" {
@@ -673,6 +712,21 @@ func readServiceStatus(stateRoot string) serviceStatus {
 	}
 	status.Status = "running"
 	return status
+}
+
+func serviceProcessMatchesEventually(status serviceStatus, attempts int, delay time.Duration, probe func(serviceStatus) bool) bool {
+	if attempts <= 0 || probe == nil {
+		return false
+	}
+	for attempt := 0; attempt < attempts; attempt++ {
+		if probe(status) {
+			return true
+		}
+		if attempt+1 < attempts && delay > 0 {
+			time.Sleep(delay)
+		}
+	}
+	return false
 }
 
 func processStartedAtUnixMS(pid int) int64 {

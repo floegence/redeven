@@ -7,7 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/floegence/redeven/internal/lockfile"
 	gatewaysupervisor "github.com/floegence/redeven/internal/runtimegateway/supervisor"
 )
 
@@ -58,6 +60,52 @@ func TestServiceProcessMatchesRejectsReusedPIDMetadata(t *testing.T) {
 	status.ProcessStartedAtUnixMS++
 	if serviceProcessMatches(status) {
 		t.Fatal("service status accepted a reused PID with a different start time")
+	}
+}
+
+func TestServiceProcessMatchesEventuallyRecoversTransientProbeFailure(t *testing.T) {
+	attempts := 0
+	matched := serviceProcessMatchesEventually(serviceStatus{PID: os.Getpid()}, 3, 0, func(serviceStatus) bool {
+		attempts++
+		return attempts == 3
+	})
+	if !matched || attempts != 3 {
+		t.Fatalf("bounded process probe = %v after %d attempts, want success on attempt 3", matched, attempts)
+	}
+
+	attempts = 0
+	matched = serviceProcessMatchesEventually(serviceStatus{PID: os.Getpid()}, 3, time.Nanosecond, func(serviceStatus) bool {
+		attempts++
+		return false
+	})
+	if matched || attempts != 3 {
+		t.Fatalf("bounded process probe = %v after %d attempts, want failure after 3 attempts", matched, attempts)
+	}
+}
+
+func TestGatewayServiceStoppedRequiresReleasedServiceLock(t *testing.T) {
+	stateRoot := t.TempDir()
+	serviceLock, err := lockfile.Acquire(filepath.Join(stateRoot, "gateway-service.lock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	status := serviceStatus{PID: 99999999, StateRoot: stateRoot}
+	stopped, err := gatewayServiceStopped(stateRoot, status)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stopped {
+		t.Fatal("Gateway service reported stopped while its service lock was held")
+	}
+	if err := serviceLock.Release(); err != nil {
+		t.Fatal(err)
+	}
+	stopped, err = gatewayServiceStopped(stateRoot, status)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !stopped {
+		t.Fatal("Gateway service did not report stopped after its process and lock were released")
 	}
 }
 
