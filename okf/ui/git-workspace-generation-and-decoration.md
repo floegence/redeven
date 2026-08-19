@@ -19,6 +19,10 @@ Every owner starts with a fresh response that establishes its `workspace_revisio
 
 Changes, staged, and conflicted directory scopes remain explicit. Directory rows are aggregates, not representative descendants, and menu routing uses a deterministic priority: pending changes first, then conflicted, then staged. Moving from a Files-owned revision to the main Workspace opens a fresh Workspace generation before applying the requested section and directory scope; it cannot splice Files revision data into an older Workspace owner.
 
+## Loading and recovery
+
+The Git shell and both navigation controls remain mounted and interactive while a Git read is pending. Changes, Branches, and History own their initial loading and error presentation inside the active panel; the shell must not add a second blocking curtain or overlay. A silent request is background refresh only when the panel already has a committed snapshot. Without one, it enters the same loading state as an explicit first request, and every failure settles loading to a retryable error state. Read-only Git subprocesses have a bounded runtime deadline and process-group cleanup so an inaccessible worktree or slow filesystem cannot leave the UI request pending indefinitely.
+
 ## Invalidation
 
 The stable protocol provider owns `GitWorkspaceInvalidationBus`. Each client identity has a monotonically increasing global watermark and per-repository watermarks. A repository event advances that repository; an event without a reliable repository advances the client-global watermark. Other protocol clients are isolated.
@@ -51,3 +55,5 @@ Files without the new capability remains fully usable as a filesystem browser, b
 - `redeven:internal/envapp/ui_src/src/ui/services/workspaceEffects.ts` - Publishes invalidation after every dispatched workspace effect outcome.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.tsx` - Projects background Git status over loaded Files paths and routes directory actions.
 - `redeven:internal/envapp/ui_src/src/ui/widgets/GitBranchesPanel.tsx` - Owns revision-bound Branch status sections, pagination, and directory scopes.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/GitWorkspace.tsx` - Keeps the Git shell and navigation independent from panel loading presentation.
+- `redeven:internal/gitruntime/runner.go` - Applies bounded read execution and process-group cleanup.

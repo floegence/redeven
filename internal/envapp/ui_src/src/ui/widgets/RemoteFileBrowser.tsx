@@ -1232,23 +1232,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (infoError) return infoError;
     return repoUnavailableReason();
   });
-  const gitShellLoadingMessage = createMemo(() => {
-    if (pageMode() !== 'git') return '';
-    if (repoInfoLoading()) return i18n.t('git.notifications.checkingRepository');
-    if (!repoHistoryAvailable()) return '';
-    if (gitSubview() === 'changes') {
-      return !gitWorkspace() && !gitWorkspaceError() ? i18n.t('git.changes.loadingWorkspaceChanges') : '';
-    }
-    if (gitSubview() === 'branches') {
-      if (!gitBranches() && !gitBranchesError()) return i18n.t('git.notifications.loadingBranches');
-      return '';
-    }
-    if (gitSubview() === 'history') {
-      return !gitListResolved() && !gitListError() ? i18n.t('git.notifications.loadingCommits') : '';
-    }
-    return '';
-  });
-
   const resolveActiveRepoRootPath = (overridePath?: string): string => {
 	return exactGitPath(overridePath ?? repoInfo()?.repoRootPath);
   };
@@ -2965,7 +2948,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (!repoRootPath || !client) return;
     const seq = ++gitRepoSummaryReqSeq;
     const watermark = getGitWorkspaceWatermark(client, repoRootPath);
-    if (!options.silent) {
+    const showInitialLoading = !options.silent || !gitRepoSummary();
+    if (showInitialLoading) {
       setGitRepoSummaryLoading(true);
       setGitRepoSummaryError('');
     }
@@ -2988,14 +2972,14 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     } catch {
       if (seq !== gitRepoSummaryReqSeq) return;
       const message = presentGitRequestError();
-      if (!options.silent) {
+      if (showInitialLoading) {
         setGitRepoSummary(null);
         setGitRepoSummaryError(message);
       } else if (shouldNotifyGitLoadError(options)) {
         notification.warning(i18n.t('git.notifications.refreshIncompleteTitle'), message);
       }
     } finally {
-      if (!options.silent && seq === gitRepoSummaryReqSeq) setGitRepoSummaryLoading(false);
+      if (showInitialLoading && seq === gitRepoSummaryReqSeq) setGitRepoSummaryLoading(false);
     }
   };
 
@@ -3218,7 +3202,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const repoRootPath = resolveActiveRepoRootPath(options.repoRootPath);
     if (!repoRootPath || !protocol.session?.()) return;
     const seq = ++gitBranchesReqSeq;
-    if (!options.silent) {
+    const showInitialLoading = !options.silent || !gitBranches();
+    if (showInitialLoading) {
       setGitBranchesLoading(true);
       setGitBranchesError('');
     }
@@ -3233,14 +3218,14 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     } catch {
       if (seq !== gitBranchesReqSeq) return;
       const message = presentGitRequestError();
-      if (!options.silent) {
+      if (showInitialLoading) {
         setGitBranches(null);
         setGitBranchesError(message);
       } else if (shouldNotifyGitLoadError(options)) {
         notification.warning(i18n.t('git.notifications.refreshIncompleteTitle'), message);
       }
     } finally {
-      if (!options.silent && seq === gitBranchesReqSeq) setGitBranchesLoading(false);
+      if (showInitialLoading && seq === gitBranchesReqSeq) setGitBranchesLoading(false);
     }
   };
 
@@ -3306,20 +3291,21 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     });
     const contextKey = String(context?.key ?? '').trim();
     const backgroundRefresh = reset && options.mode === 'background';
-    if (!options.silent) {
+    const hasExistingCommits = gitListResolved()
+      || Boolean(contextKey && readGitCommitCacheEntry(contextKey)?.resolved);
+    const showInitialLoading = reset && !backgroundRefresh && (!options.silent || !hasExistingCommits);
+    if (showInitialLoading) {
       setGitListError('');
-      if (reset) {
-        setGitCommitListRef(nextRef);
-        if (backgroundRefresh) {
-          setGitListRefreshing(true);
-        } else {
-          setGitListLoading(true);
-          setGitListResolved(false);
-        }
-      } else {
-        setGitListLoadingMore(true);
-      }
-    } else if (backgroundRefresh) {
+      setGitCommitListRef(nextRef);
+      setGitListLoading(true);
+      setGitListResolved(false);
+    } else if (!options.silent && reset) {
+      setGitListError('');
+      setGitCommitListRef(nextRef);
+    } else if (!options.silent) {
+      setGitListLoadingMore(true);
+    }
+    if (backgroundRefresh) {
       setGitListRefreshing(true);
     }
     try {
@@ -3385,14 +3371,14 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
           showVerifying: false,
         });
       }
-      if (!options.silent && !backgroundRefresh) {
+      if (showInitialLoading) {
         setGitListError(message);
       } else if (!backgroundRefresh && shouldNotifyGitLoadError(options)) {
         notification.warning(i18n.t('git.notifications.refreshIncompleteTitle'), message);
       }
     } finally {
       if (seq === gitListReqSeq) {
-        if (!options.silent && !backgroundRefresh) {
+        if (showInitialLoading) {
           setGitListLoading(false);
         }
         setGitListLoadingMore(false);
@@ -5692,7 +5678,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       showMobileSidebarButton={layout.isMobile() && hasEmbeddedWidget()}
                       onToggleSidebar={togglePageSidebar}
                       onRefresh={() => { void refreshGitWorkbench(); }}
-                      shellLoadingMessage={gitShellLoadingMessage()}
                     />
               )}
             />

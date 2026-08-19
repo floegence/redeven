@@ -362,7 +362,6 @@ describe('GitWorkspace interactions', () => {
                 open
                 currentPath="/workspace/repo/src"
                 repoInfo={{ available: true, repoRootPath: '/workspace/repo', headRef: 'main', headCommit: 'abc1234' }}
-                shellLoadingMessage="Loading branches..."
               />
             </div>
           </ProtocolProvider>
@@ -378,9 +377,9 @@ describe('GitWorkspace interactions', () => {
       expect(Array.from(host.querySelectorAll('button')).some((node) => node.textContent?.trim().startsWith('Changes'))).toBe(true);
       expect(Array.from(host.querySelectorAll('button')).some((node) => node.textContent?.trim().startsWith('Branches'))).toBe(true);
       expect(Array.from(host.querySelectorAll('button')).some((node) => node.textContent?.trim().startsWith('Commit Graph'))).toBe(true);
-      expect(host.textContent).toContain('Preparing the active Git view...');
-      expect(host.textContent).toContain('Loading branches...');
-      expect(host.querySelector('.git-loading-indicator')).toBeTruthy();
+      expect(host.textContent).not.toContain('Preparing the active Git view...');
+      expect(host.textContent).not.toContain('Loading branches...');
+      expect(host.querySelector('.git-loading-indicator')).toBeNull();
       expect(host.querySelector('.floe-grid-cell')).toBeNull();
       expect(host.querySelector('[data-testid="git-sidebar-scroll-region"]')).toBeTruthy();
       expect(host.textContent).not.toContain('Current path is not inside a Git repository.');
