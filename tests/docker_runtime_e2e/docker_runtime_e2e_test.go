@@ -662,11 +662,21 @@ func (f *fixture) removeManagedRuntime(ctx context.Context) {
 
 func (f *fixture) containerRuntimeVersion(ctx context.Context, executable string) string {
 	f.t.Helper()
+	version, _ := f.containerRuntimeIdentity(ctx, executable)
+	return version
+}
+
+func (f *fixture) containerRuntimeIdentity(ctx context.Context, executable string) (string, string) {
+	f.t.Helper()
 	fields := strings.Fields(strings.TrimSpace(f.dockerExec(ctx, nil, executable, "version").Stdout))
-	if len(fields) < 2 || fields[0] != "redeven" || fields[1] == "" {
+	if len(fields) < 3 || fields[0] != "redeven" || fields[1] == "" {
 		f.t.Fatalf("invalid Runtime version output for %s: %q", executable, strings.Join(fields, " "))
 	}
-	return fields[1]
+	commit := strings.TrimSuffix(strings.TrimPrefix(fields[2], "("), ")")
+	if commit == "" {
+		f.t.Fatalf("missing Runtime commit in version output for %s: %q", executable, strings.Join(fields, " "))
+	}
+	return fields[1], commit
 }
 
 func (f *fixture) assertInventoryScopesVerifiedRuntime(ctx context.Context) {
