@@ -215,7 +215,8 @@ function successfulPluginResponse(response, operation) {
 }
 
 function runtimeTargetFromDescriptor(descriptor) {
-  const match = /^(linux)\/(amd64|arm64)$/u.exec(String(descriptor?.target ?? ''));
+  const artifact = descriptor?.artifact_identity ?? descriptor;
+  const match = /^(linux)\/(amd64|arm64)$/u.exec(String(artifact?.target ?? ''));
   if (!match) throw new Error('plugin runtime descriptor does not expose a supported Linux target');
   return { os: match[1], arch: match[2] };
 }
