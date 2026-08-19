@@ -1,4 +1,3 @@
-import { Show } from 'solid-js';
 import type {
   GitBranchSummary,
   GitCommitSummary,
