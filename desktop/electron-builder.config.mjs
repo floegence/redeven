@@ -71,6 +71,7 @@ function loadReleaseArtifactHelpers() {
 
 const bundledRuntimeBinary = resolveBundledRuntimeBinary();
 const bundledGatewayBinary = resolveBundledGatewayBinary();
+const bundledDesktopManifest = bundledBinaryCandidate('desktop-bundle-manifest.json');
 const bundledReDevPluginResources = resolveTargetGoos() === 'linux'
   ? [
       'redevplugin-runtime',
@@ -129,6 +130,10 @@ export default {
     {
       from: bundledGatewayBinary,
       to: 'bin/redeven-gateway',
+    },
+    {
+      from: bundledDesktopManifest,
+      to: 'bin/desktop-bundle-manifest.json',
     },
     ...bundledReDevPluginResources,
     {

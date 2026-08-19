@@ -21,6 +21,26 @@ func TestRuntimeOperationStoreUsesSchemaV3ForFreshState(t *testing.T) {
 	}
 }
 
+func TestRuntimeOperationStoreBlocksAutomaticStartupForLockedTarget(t *testing.T) {
+	controller := &fakeController{snapshot: knownSnapshot(1)}
+	store := newTestStore(t, controller, &fakeClock{now: time.Unix(51, 0)})
+	request := prepareRequest("op-startup-lock", "idem-startup-lock")
+	if _, err := store.Prepare(context.Background(), request, prepareAuthorization("permit-startup-lock")); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AssertTargetUnlocked(request.LifecycleTargetID); err == nil {
+		t.Fatal("AssertTargetUnlocked() accepted a target reserved by a pending operation")
+	} else {
+		var lifecycleErr *Error
+		if !errors.As(err, &lifecycleErr) || lifecycleErr.Code != ErrorOperationInProgress {
+			t.Fatalf("AssertTargetUnlocked() error = %v", err)
+		}
+	}
+	if err := store.AssertTargetUnlocked("another-target"); err != nil {
+		t.Fatalf("AssertTargetUnlocked() rejected an unrelated target: %v", err)
+	}
+}
+
 func TestRuntimeOperationStoreMigratesV1TerminalOperation(t *testing.T) {
 	clock := &fakeClock{now: time.Unix(60, 0)}
 	controller := &fakeController{snapshot: knownSnapshot(1), fenced: knownSnapshot(1), token: "fence-a"}

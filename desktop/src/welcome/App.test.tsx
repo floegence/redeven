@@ -403,6 +403,14 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain(".redeven-environment-progress__step-label[data-state='active']");
   });
 
+  it('keeps start confirmation user-facing while retaining workload review for maintenance actions', () => {
+    const appSrc = readWelcomeSource();
+    expect(appSrc).toContain("confirmation().operation === 'start'");
+    expect(appSrc).toContain("props.i18n.t('environmentOpenFlow.checkingAccessTitle')");
+    expect(appSrc).toContain("props.i18n.t('environmentOpenFlow.checkingAccessDetail')");
+    expect(appSrc).toContain("props.i18n.t('progress.runtimeImpactTitle')");
+  });
+
 	  it('filters Gateway source rows with the Gateways tab source filter and query', () => {
     const appSrc = readWelcomeSource();
     const styles = readWelcomeStyles();

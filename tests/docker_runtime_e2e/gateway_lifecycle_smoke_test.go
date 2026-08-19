@@ -77,6 +77,97 @@ type gatewayLifecycleClient struct {
 	nonceCounter  uint64
 }
 
+type desktopBundleArtifact struct {
+	Path       string `json:"path"`
+	SHA256     string `json:"sha256"`
+	SizeBytes  int64  `json:"size_bytes"`
+	Executable bool   `json:"executable"`
+}
+
+type desktopBundleManifest struct {
+	SchemaVersion int                     `json:"schema_version"`
+	Version       string                  `json:"version"`
+	Commit        string                  `json:"commit"`
+	Platform      string                  `json:"platform"`
+	Architecture  string                  `json:"architecture"`
+	Gateway       desktopBundleArtifact   `json:"gateway"`
+	RuntimeSuite  []desktopBundleArtifact `json:"runtime_suite"`
+}
+
+func TestDockerUbuntuPrecompiledDesktopBundleStartup(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
+	defer cancel()
+
+	f := newFixture(t)
+	f.requireDocker(ctx)
+	f.startContainer(ctx)
+	defer f.cleanup(context.Background())
+	f.detectContainerArch(ctx)
+	f.buildBinaries(ctx)
+	manifestPath, bundledRuntimeSHA256 := f.installPrecompiledDesktopBundle(ctx)
+	f.removeManagedRuntime(ctx)
+
+	service := f.startGatewayServiceWithPrecompiledManifest(ctx, manifestPath)
+	initial := f.waitReady(ctx)
+	initialIdentity := f.runtimeLifecycleIdentity(ctx, initial)
+	if initialIdentity.ArtifactSHA256 != bundledRuntimeSHA256 {
+		t.Fatalf("Linux precompiled startup Runtime digest = %q, want %q", initialIdentity.ArtifactSHA256, bundledRuntimeSHA256)
+	}
+	if result := f.dockerExec(ctx, nil, "test", "-x", managedRedeven); strings.TrimSpace(result.Stdout) != "" {
+		t.Fatalf("Linux precompiled startup did not provision the managed Runtime: %s", result.Stdout)
+	}
+	f.openBridgeAndAssertRequests(ctx, initial)
+
+	bridge := f.startGatewayBridge(ctx)
+	client := pairGatewayLifecycleClient(t, bridge, service.Listen)
+	capability := readRuntimeCapability(t, client)
+	if capability.Target == nil || capability.Compatibility == nil ||
+		capability.Compatibility.RuntimeArtifactSHA256 != bundledRuntimeSHA256 {
+		t.Fatalf("Linux precompiled startup capability lost Runtime identity: %#v", capability)
+	}
+	runDockerLifecycleOperation(t, client, *capability.Target, *capability.Compatibility, "linux-precompiled-stop", gatewayprotocol.RuntimeOperationStop)
+	f.stopRuntime(ctx)
+	bridge.close()
+	f.stopGatewayService(ctx)
+
+	restartedService := f.startGatewayServiceWithPrecompiledManifest(ctx, manifestPath)
+	if restartedService.PID == service.PID || restartedService.ProcessStartedAtUnixMS <= service.ProcessStartedAtUnixMS {
+		t.Fatalf("Linux precompiled Gateway restart reused its process identity: before=%#v after=%#v", service, restartedService)
+	}
+	restarted := f.waitReady(ctx)
+	restartedIdentity := f.runtimeLifecycleIdentity(ctx, restarted)
+	if restarted.PID == initial.PID || restartedIdentity.RuntimeInstanceID == initialIdentity.RuntimeInstanceID ||
+		restartedIdentity.ArtifactSHA256 != bundledRuntimeSHA256 {
+		t.Fatalf("Linux precompiled restart did not restore a new verified Runtime: before=%#v/%#v after=%#v/%#v", initial, initialIdentity, restarted, restartedIdentity)
+	}
+	f.openBridgeAndAssertRequests(ctx, restarted)
+
+	var persisted struct {
+		Operations map[string]struct {
+			Kind gatewayprotocol.RuntimeOperationKind `json:"kind"`
+		} `json:"operations"`
+		Events map[string][]struct {
+			State gatewayprotocol.RuntimeOperationState `json:"state"`
+		} `json:"events"`
+	}
+	storeBytes := f.readContainerFile(ctx, gatewayStateRoot+"/runtime-lifecycle/runtime-operations-v1.json")
+	if err := json.Unmarshal([]byte(storeBytes), &persisted); err != nil {
+		t.Fatalf("decode Linux precompiled startup operation store: %v; store=%s", err, storeBytes)
+	}
+	for operationID, operation := range persisted.Operations {
+		if operation.Kind == gatewayprotocol.RuntimeOperationUpdate {
+			t.Fatalf("normal Linux precompiled startup created update operation %q", operationID)
+		}
+	}
+	for operationID, events := range persisted.Events {
+		for _, event := range events {
+			if event.State == gatewayprotocol.RuntimeOperationAwaitingArtifact || event.State == gatewayprotocol.RuntimeOperationStaging {
+				t.Fatalf("normal Linux precompiled startup entered artifact state %q for %q", event.State, operationID)
+			}
+		}
+	}
+}
+
 func TestDockerUbuntuLocalGatewayRuntimeLifecycle(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 7*time.Minute)
 	defer cancel()
@@ -647,17 +738,108 @@ func containsArtifactPolicy(values []gatewayprotocol.ArtifactPolicy, expected ga
 	return false
 }
 
+func (f *fixture) installPrecompiledDesktopBundle(ctx context.Context) (string, string) {
+	f.t.Helper()
+	bundleRoot := filepath.Join(f.tempRoot, "desktop-linux-bundle")
+	if err := os.MkdirAll(bundleRoot, 0o700); err != nil {
+		f.t.Fatalf("create Linux precompiled Desktop bundle: %v", err)
+	}
+	pluginRoot := filepath.Dir(f.pluginRuntime)
+	sources := []struct {
+		name       string
+		path       string
+		executable bool
+	}{
+		{name: "redeven", path: filepath.Join(f.tempRoot, "redeven-linux"), executable: true},
+		{name: "redeven-gateway", path: filepath.Join(f.tempRoot, "redeven-gateway-linux"), executable: true},
+		{name: "redevplugin-runtime", path: f.pluginRuntime, executable: true},
+		{name: ".redevplugin-release-artifacts-verified.json", path: f.pluginDescriptor},
+		{name: "REDEVPLUGIN_RUNTIME.spdx.json", path: filepath.Join(pluginRoot, "REDEVPLUGIN_RUNTIME.spdx.json")},
+		{name: "REDEVPLUGIN_THIRD_PARTY_NOTICES.md", path: filepath.Join(pluginRoot, "REDEVPLUGIN_THIRD_PARTY_NOTICES.md")},
+		{name: "redevplugin-runtime.pem", path: filepath.Join(pluginRoot, "redevplugin-runtime.pem")},
+		{name: "redevplugin-runtime.provenance.json", path: filepath.Join(pluginRoot, "redevplugin-runtime.provenance.json")},
+		{name: "redevplugin-runtime.sig", path: filepath.Join(pluginRoot, "redevplugin-runtime.sig")},
+	}
+	artifacts := make(map[string]desktopBundleArtifact, len(sources))
+	for _, source := range sources {
+		info, err := os.Lstat(source.path)
+		if err != nil || !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+			f.t.Fatalf("inspect Linux precompiled bundle source %s: %v", source.path, err)
+		}
+		content, err := os.ReadFile(source.path)
+		if err != nil {
+			f.t.Fatalf("read Linux precompiled bundle source %s: %v", source.path, err)
+		}
+		mode := os.FileMode(0o600)
+		if source.executable {
+			mode = 0o700
+		}
+		if err := os.WriteFile(filepath.Join(bundleRoot, source.name), content, mode); err != nil {
+			f.t.Fatalf("write Linux precompiled bundle entry %s: %v", source.name, err)
+		}
+		digest := sha256.Sum256(content)
+		artifacts[source.name] = desktopBundleArtifact{
+			Path: source.name, SHA256: hex.EncodeToString(digest[:]), SizeBytes: int64(len(content)), Executable: source.executable,
+		}
+	}
+	runtimeNames := []string{
+		"redeven",
+		".redevplugin-release-artifacts-verified.json",
+		"REDEVPLUGIN_RUNTIME.spdx.json",
+		"REDEVPLUGIN_THIRD_PARTY_NOTICES.md",
+		"redevplugin-runtime",
+		"redevplugin-runtime.pem",
+		"redevplugin-runtime.provenance.json",
+		"redevplugin-runtime.sig",
+	}
+	runtimeSuite := make([]desktopBundleArtifact, 0, len(runtimeNames))
+	for _, name := range runtimeNames {
+		runtimeSuite = append(runtimeSuite, artifacts[name])
+	}
+	manifest := desktopBundleManifest{
+		SchemaVersion: 1,
+		Version:       f.containerRuntimeVersion(ctx, containerRedeven),
+		Commit:        "docker-e2e-precompiled",
+		Platform:      "linux",
+		Architecture:  f.goarch,
+		Gateway:       artifacts["redeven-gateway"],
+		RuntimeSuite:  runtimeSuite,
+	}
+	manifestBytes, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		f.t.Fatalf("encode Linux precompiled Desktop bundle manifest: %v", err)
+	}
+	manifestBytes = append(manifestBytes, '\n')
+	if err := os.WriteFile(filepath.Join(bundleRoot, "desktop-bundle-manifest.json"), manifestBytes, 0o600); err != nil {
+		f.t.Fatalf("write Linux precompiled Desktop bundle manifest: %v", err)
+	}
+	f.dockerExec(ctx, nil, "mkdir", "-p", containerDesktopBundleRoot)
+	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", bundleRoot+"/.", f.containerName+":"+containerDesktopBundleRoot); err != nil {
+		f.t.Fatalf("copy Linux precompiled Desktop bundle: %v", err)
+	}
+	f.dockerExec(ctx, nil, "chown", "-R", "0:0", containerDesktopBundleRoot)
+	return containerDesktopBundleRoot + "/desktop-bundle-manifest.json", "sha256:" + artifacts["redeven"].SHA256
+}
+
 func (f *fixture) startGatewayService(ctx context.Context) gatewayServiceStatus {
+	return f.startGatewayServiceWithPrecompiledManifest(ctx, "")
+}
+
+func (f *fixture) startGatewayServiceWithPrecompiledManifest(ctx context.Context, manifestPath string) gatewayServiceStatus {
 	f.t.Helper()
 	const statusPath = "/tmp/redeven-gateway-service-start.json"
 	const stderrPath = "/tmp/redeven-gateway-service-start.stderr"
 	const exitPath = "/tmp/redeven-gateway-service-start.exit"
 	f.dockerExec(ctx, nil, "rm", "-f", statusPath, stderrPath, exitPath, gatewayServiceWrapperPIDPath)
+	manifestArg := ""
+	if strings.TrimSpace(manifestPath) != "" {
+		manifestArg = fmt.Sprintf(" --precompiled-runtime-manifest %q", manifestPath)
+	}
 	// Docker exec tears down released descendants with its session, so keep the
 	// detached service-start session alive until stopGatewayService releases it.
 	command := fmt.Sprintf(
-		"echo $$ > %s; %s service-start --state-root %s --runtime-root %s --listen 127.0.0.1:0 --enable-profile-write >%s 2>%s; echo $? >%s; exec sleep infinity",
-		gatewayServiceWrapperPIDPath, containerGateway, gatewayStateRoot, containerStateRoot, statusPath, stderrPath, exitPath,
+		"echo $$ > %s; %s service-start --state-root %s --runtime-root %s%s --listen 127.0.0.1:0 --enable-profile-write >%s 2>%s; echo $? >%s; exec sleep infinity",
+		gatewayServiceWrapperPIDPath, containerGateway, gatewayStateRoot, containerStateRoot, manifestArg, statusPath, stderrPath, exitPath,
 	)
 	_, err := f.runHost(ctx, f.repoRoot, nil, "docker", "exec", "-d", f.containerName, "sh", "-c", command)
 	if err != nil {

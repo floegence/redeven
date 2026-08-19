@@ -9147,24 +9147,38 @@ function EnvironmentProgressPanel(props: Readonly<{
       <Show when={props.progress.runtime_confirmation}>
         {(confirmation) => (
           <div class="redeven-action-popover__failure-notice" data-tone="warning">
-            <div class="redeven-action-popover__failure-title">{props.i18n.t('progress.runtimeImpactTitle')}</div>
-            <div class="redeven-action-popover__failure-summary">
-              {confirmation().workload_knowledge === 'known'
-                ? props.i18n.t('progress.runtimeImpactKnown')
-                : props.i18n.t('progress.runtimeImpactUnknown')}
-            </div>
-            <div class="redeven-environment-progress__meta">
-              <Show when={confirmation().affected_process_count !== undefined}>
-                <span>{props.i18n.t('progress.affectedProcesses', { count: confirmation().affected_process_count ?? 0 })}</span>
-              </Show>
-              <Show when={confirmation().active_session_count !== undefined}>
-                <span>{props.i18n.t('progress.activeSessions', { count: confirmation().active_session_count ?? 0 })}</span>
-              </Show>
-              <Show when={confirmation().protected_workload_present}>
-                <span>{props.i18n.t('progress.protectedWorkloadPresent')}</span>
-              </Show>
-              <span>{props.i18n.t('progress.snapshotRevision', { revision: confirmation().snapshot_revision })}</span>
-            </div>
+            <Show
+              when={confirmation().operation === 'start'}
+              fallback={(
+                <>
+                  <div class="redeven-action-popover__failure-title">{props.i18n.t('progress.runtimeImpactTitle')}</div>
+                  <div class="redeven-action-popover__failure-summary">
+                    {confirmation().workload_knowledge === 'known'
+                      ? props.i18n.t('progress.runtimeImpactKnown')
+                      : props.i18n.t('progress.runtimeImpactUnknown')}
+                  </div>
+                  <div class="redeven-environment-progress__meta">
+                    <Show when={confirmation().affected_process_count !== undefined}>
+                      <span>{props.i18n.t('progress.affectedProcesses', { count: confirmation().affected_process_count ?? 0 })}</span>
+                    </Show>
+                    <Show when={confirmation().active_session_count !== undefined}>
+                      <span>{props.i18n.t('progress.activeSessions', { count: confirmation().active_session_count ?? 0 })}</span>
+                    </Show>
+                    <Show when={confirmation().protected_workload_present}>
+                      <span>{props.i18n.t('progress.protectedWorkloadPresent')}</span>
+                    </Show>
+                    <span>{props.i18n.t('progress.snapshotRevision', { revision: confirmation().snapshot_revision })}</span>
+                  </div>
+                </>
+              )}
+            >
+              <div class="redeven-action-popover__failure-title">
+                {props.i18n.t('environmentOpenFlow.checkingAccessTitle')}
+              </div>
+              <div class="redeven-action-popover__failure-summary">
+                {props.i18n.t('environmentOpenFlow.checkingAccessDetail')}
+              </div>
+            </Show>
           </div>
         )}
       </Show>

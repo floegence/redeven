@@ -18,7 +18,7 @@ const STARTUP_SECRETS_MAX_BYTES = 64 * 1024;
 export function desktopAutoStartRuntimeEnabled(
   rawValue: string | undefined = process.env[DESKTOP_AUTO_START_RUNTIME_ENV_NAME],
 ): boolean {
-  return ['1', 'true', 'yes', 'on'].includes(String(rawValue ?? '').trim().toLowerCase());
+  return !['0', 'false', 'no', 'off'].includes(String(rawValue ?? '').trim().toLowerCase());
 }
 
 export type DesktopRuntimeBootstrap = Readonly<

@@ -52,17 +52,25 @@ describe('main routing', () => {
     expect(mainSrc).not.toContain("'window:settings'");
   });
 
-  it('reattaches without starting Runtime during Desktop launch', () => {
+  it('starts the validated local Gateway and Runtime during Desktop launch without initialization or artifact upload', () => {
     const mainSrc = readMainSource();
     const start = mainSrc.indexOf('async function autoStartLocalRuntimeOnDesktopLaunch()');
     const end = mainSrc.indexOf('function controlPlaneIssueForError(', start);
     expect(start).toBeGreaterThanOrEqual(0);
     expect(end).toBeGreaterThan(start);
     const startupSrc = mainSrc.slice(start, end);
-    expect(startupSrc.match(/await refreshWelcomeRuntimeHealthForEnvironment\(environment\.id, \{ force: true \}\);/gu)).toHaveLength(1);
+    expect(startupSrc).toContain('const bundle = requireDesktopBundle();');
+    expect(startupSrc).toContain('await upsertDirectRuntimeGateway(environment.id, environment.label, hostAccess, placement);');
+    expect(startupSrc).toContain('await gatewayLifecycleManager().restartGateway(record');
+    expect(startupSrc).toContain('await gatewayLifecycleManager().startGateway(record');
+    expect(startupSrc).toContain('await syncGatewayRecord(record');
+    expect(startupSrc).toContain('const attached = await attachLocalEnvironmentRuntime(environment);');
+    expect(startupSrc).toContain('await refreshWelcomeRuntimeHealthForEnvironment(environment.id, { force: true });');
     expect(startupSrc).toContain('resetLauncherIssueState();');
     expect(startupSrc).toContain('broadcastDesktopWelcomeSnapshots();');
-    expect(startupSrc).not.toContain('startLocalHostRuntimeWithLifecycleProgress({');
+    expect(startupSrc).not.toContain('initializeGatewayRuntime({');
+    expect(startupSrc).not.toContain('prepareDesktopRuntimeUploadAsset');
+    expect(startupSrc).not.toContain('prepareCustomRuntimeLifecycleArtifact');
   });
 
   it('tracks environment windows by session key and scopes child windows per session', () => {
@@ -380,7 +388,7 @@ describe('main routing', () => {
     expect(gatewayTypeSrc).toContain('package_status?:');
     expect(gatewayTypeSrc).toContain('target_version?: string;');
     expect(gatewayTypeSrc).toContain('target_commit?: string;');
-    expect(mainSrc).toContain('target_commit: process.env.REDEVEN_DESKTOP_BUNDLE_COMMIT');
+    expect(mainSrc).toContain('target_commit: bundle.commit');
     expect(mainSrc).toContain('function gatewayManagedProbeNeedsUpdate(');
     expect(diagnosisSrc).toContain('if (gatewayClientErrorIsPairingRejected(error)) {');
     expect(diagnosisSrc).toContain('if (gatewayManagedProbeNeedsUpdate(managedProbe)) {');
@@ -508,12 +516,18 @@ describe('main routing', () => {
 
   it('lets dev SSH bootstrap use an explicit runtime release tag without changing the bundled runtime version', () => {
     const mainSrc = readMainSource();
+    const bundleVersionStart = mainSrc.indexOf('function resolveDesktopBundleVersion()');
+    const bundleVersionEnd = mainSrc.indexOf('function desktopBundleTarget()', bundleVersionStart);
+    const bundleVersionSrc = mainSrc.slice(bundleVersionStart, bundleVersionEnd);
+    const sshVersionStart = mainSrc.indexOf('function resolveSSHRuntimeReleaseTag()');
+    const sshVersionEnd = mainSrc.indexOf('function desktopRuntimePackageCacheRoot()', sshVersionStart);
+    const sshVersionSrc = mainSrc.slice(sshVersionStart, sshVersionEnd);
 
-    expect(mainSrc).toContain('process.env.REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG');
-    expect(mainSrc.indexOf('process.env.REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG')).toBeLessThan(
-      mainSrc.indexOf('process.env.REDEVEN_DESKTOP_BUNDLE_VERSION'),
-    );
-    expect(mainSrc).toContain('Set REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG for dev SSH bootstrap');
+    expect(bundleVersionSrc).toContain('process.env.REDEVEN_DESKTOP_BUNDLE_VERSION');
+    expect(bundleVersionSrc).not.toContain('REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG');
+    expect(sshVersionSrc).toContain('process.env.REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG');
+    expect(sshVersionSrc).toContain('process.env.REDEVEN_DESKTOP_BUNDLE_VERSION');
+    expect(sshVersionSrc).toContain('Set REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG for dev SSH bootstrap');
   });
 
   it('routes runtime lifecycle and Open connection progress through cancellable launcher operations', () => {
@@ -1622,6 +1636,54 @@ describe('main routing', () => {
     expect(completionSrc).toContain('return driveRuntimeOperation(operation.operation_id, () => advanceGatewayRuntimeOperation(operation, {');
     expect(attachmentSrc).toContain('if (locallyDrivenRuntimeOperationIDs.has(operation.operation_id)) {');
     expect(initializationSrc).toContain('await driveRuntimeOperation(operationID, () => initializeGatewayRuntime({');
+  });
+
+  it('keeps attached start confirmation and completion on the user-facing environment stages', () => {
+    const mainSrc = readMainSource();
+    const finishStart = mainSrc.indexOf('function finishAttachedRuntimeOperation(');
+    const finishEnd = mainSrc.indexOf('function upsertRuntimeOperationAttachment(', finishStart);
+    const confirmationStart = mainSrc.indexOf('function awaitRuntimeOperationConfirmation(');
+    const confirmationEnd = mainSrc.indexOf('async function confirmRuntimeOperationFromLauncher(', confirmationStart);
+    const confirmStart = confirmationEnd;
+    const confirmEnd = mainSrc.indexOf('async function reconcileRuntimeOperationFromLauncher(', confirmStart);
+
+    expect(finishStart).toBeGreaterThanOrEqual(0);
+    expect(finishEnd).toBeGreaterThan(finishStart);
+    expect(confirmationStart).toBeGreaterThanOrEqual(0);
+    expect(confirmationEnd).toBeGreaterThan(confirmationStart);
+    expect(confirmStart).toBeGreaterThanOrEqual(0);
+    expect(confirmEnd).toBeGreaterThan(confirmStart);
+
+    const finishSrc = mainSrc.slice(finishStart, finishEnd);
+    const confirmationSrc = mainSrc.slice(confirmationStart, confirmationEnd);
+    const confirmSrc = mainSrc.slice(confirmStart, confirmEnd);
+    expect(finishSrc).toContain('const presentation = projectAttachedRuntimeOperation(response);');
+    expect(confirmationSrc).toContain('const presentation = projectAttachedRuntimeOperation(pending.operation);');
+    expect(confirmSrc).toContain("state: 'fencing',");
+    expect(confirmSrc).toContain('const completedPresentation = projectAttachedRuntimeOperation(response);');
+  });
+
+  it('keeps foreground start operations on user-facing environment stages', () => {
+    const mainSrc = readMainSource();
+    const directStart = mainSrc.indexOf('async function runGatewayEnvironmentLifecycleFromLauncher(');
+    const directEnd = mainSrc.indexOf('async function resolveProviderRuntimeLifecycleScope(', directStart);
+    const providerStart = mainSrc.indexOf('async function runProviderEnvironmentLifecycleFromLauncher(');
+    const providerEnd = mainSrc.indexOf('function gatewayStartRequiredFailure(', providerStart);
+
+    expect(directStart).toBeGreaterThanOrEqual(0);
+    expect(directEnd).toBeGreaterThan(directStart);
+    expect(providerStart).toBeGreaterThanOrEqual(0);
+    expect(providerEnd).toBeGreaterThan(providerStart);
+
+    for (const lifecycleSrc of [
+      mainSrc.slice(directStart, directEnd),
+      mainSrc.slice(providerStart, providerEnd),
+    ]) {
+      expect(lifecycleSrc).toContain("request.operation === 'start'");
+      expect(lifecycleSrc).toContain("title_key: 'environmentOpenFlow.checkingAccessTitle'");
+      expect(lifecycleSrc).toContain("detail_key: 'environmentOpenFlow.checkingAccessDetail'");
+      expect(lifecycleSrc).toContain('const completedPresentation = projectAttachedRuntimeOperation(response);');
+    }
   });
 
   it('routes legacy Gateway refresh requests through the unified Refresh workflow', () => {

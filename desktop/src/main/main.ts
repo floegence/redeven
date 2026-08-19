@@ -86,6 +86,7 @@ import {
 } from './desktopTarget';
 import { desktopSessionContextSnapshotFromTarget } from './desktopSessionContext';
 import { desktopAutoStartRuntimeEnabled } from './desktopLaunch';
+import { loadDesktopBundle, type DesktopBundle } from './desktopBundle';
 import {
   DesktopWelcomeRuntimeHealthStore,
   type DesktopWelcomeRuntimeHealthProbeEvent,
@@ -856,6 +857,7 @@ let desktopPreferencesCache: DesktopPreferences | null = null;
 let desktopStateStoreCache: DesktopStateStore | null = null;
 let gatewayStoreCache: GatewayStore | null = null;
 let gatewayLifecycleManagerCache: GatewayLifecycleManager | null = null;
+let desktopBundleCache: DesktopBundle | null = null;
 let providerRuntimeLifecycleClientCache: ProviderRuntimeLifecycleClient | null = null;
 let desktopThemeStateCache: DesktopThemeState | null = null;
 let desktopLanguageStateCache: DesktopLanguageState | null = null;
@@ -1069,6 +1071,53 @@ function bundledRuntimeExecutablePath(): string {
     resourcesPath: process.resourcesPath,
     appPath: app.getAppPath(),
   });
+}
+
+function resolveDesktopBundleVersion(): string {
+  const clean = [
+    process.env.REDEVEN_DESKTOP_BUNDLE_VERSION,
+    process.env.REDEVEN_DESKTOP_VERSION,
+    app.getVersion(),
+  ].map((value) => compact(value)).find(Boolean) ?? '';
+  if (clean === '') {
+    throw new Error('Desktop bundle version is unavailable.');
+  }
+  return clean.startsWith('v') ? clean : `v${clean}`;
+}
+
+function desktopBundleTarget(): Readonly<{ platform: 'darwin' | 'linux'; architecture: 'amd64' | 'arm64' }> {
+  if (process.platform !== 'darwin' && process.platform !== 'linux') {
+    throw new Error(`Desktop bundle platform ${process.platform} is unsupported.`);
+  }
+  if (process.arch !== 'x64' && process.arch !== 'arm64') {
+    throw new Error(`Desktop bundle architecture ${process.arch} is unsupported.`);
+  }
+  return {
+    platform: process.platform,
+    architecture: process.arch === 'x64' ? 'amd64' : 'arm64',
+  };
+}
+
+async function loadDesktopBundleForStartup(): Promise<DesktopBundle> {
+  if (desktopBundleCache) {
+    return desktopBundleCache;
+  }
+  const target = desktopBundleTarget();
+  desktopBundleCache = await loadDesktopBundle({
+    root: path.dirname(bundledRuntimeExecutablePath()),
+    expectedPlatform: target.platform,
+    expectedArchitecture: target.architecture,
+    expectedVersion: resolveDesktopBundleVersion(),
+    expectedCommit: compact(process.env.REDEVEN_DESKTOP_BUNDLE_COMMIT) || undefined,
+  });
+  return desktopBundleCache;
+}
+
+function requireDesktopBundle(): DesktopBundle {
+  if (!desktopBundleCache) {
+    throw new Error('Desktop bundled environment services have not been validated.');
+  }
+  return desktopBundleCache;
 }
 
 async function startDesktopModelSourceForStartup(args: Readonly<{
@@ -2648,6 +2697,7 @@ function gatewaySecretStore(): GatewaySecretStore {
 
 function gatewayLifecycleManager(): GatewayLifecycleManager {
   if (!gatewayLifecycleManagerCache) {
+    const bundle = requireDesktopBundle();
     gatewayLifecycleManagerCache = new GatewayLifecycleManager({
       secret_store: gatewaySecretStore(),
       runtime_release_tag: resolveSSHRuntimeReleaseTag(),
@@ -2655,7 +2705,8 @@ function gatewayLifecycleManager(): GatewayLifecycleManager {
       asset_cache_root: desktopRuntimePackageCacheRoot(),
       temp_root: app.getPath('temp'),
       source_runtime_root: process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT,
-      target_commit: process.env.REDEVEN_DESKTOP_BUNDLE_COMMIT,
+      precompiled_bundle: bundle,
+      target_commit: bundle.commit,
       lifecycle_coordinator: runtimeLifecycleCoordinator,
       ssh_transport_manager: desktopSSHTransportManager,
     });
@@ -4927,12 +4978,13 @@ function finishAttachedRuntimeOperation(
     try {
       const response = await adapter.complete(operation);
       if (response.state === 'succeeded') {
-		launcherOperations.finish(operationKey, 'succeeded', {
-			phase: 'gateway_runtime_operation_succeeded',
-			title: `${gatewayEnvLifecycleTitle(operation.kind as 'start' | 'stop' | 'restart' | 'update_runtime')} complete`,
-			title_key: 'progress.runtimeOperationCompleteTitle',
-			detail: 'The Runtime supervisor completed this lifecycle operation.',
-			detail_key: 'progress.runtimeOperationCompleteDetail',
+        const presentation = projectAttachedRuntimeOperation(response);
+        launcherOperations.finish(operationKey, 'succeeded', {
+          phase: presentation.phase,
+          title: presentation.title,
+          title_key: presentation.title_key,
+          detail: presentation.detail,
+          detail_key: presentation.detail_key,
           runtime_confirmation: undefined,
           next_actions: undefined,
         });
@@ -5257,26 +5309,15 @@ function awaitRuntimeOperationConfirmation(
   operationKey: string,
   pending: PendingRuntimeOperationConfirmation,
 ): DesktopLauncherActionFailure {
-  const snapshot = pending.operation.expected_snapshot;
+  const presentation = projectAttachedRuntimeOperation(pending.operation);
   pendingRuntimeOperationConfirmations.set(operationKey, pending);
-	launcherOperations.finish(operationKey, 'needs_confirmation', {
-		phase: 'runtime_operation_confirmation_required',
-		title: 'Review Runtime impact',
-		title_key: 'progress.runtimeImpactTitle',
-		detail: 'Review the current workload impact before allowing the Runtime supervisor to continue.',
-		detail_key: 'progress.runtimeConfirmationRequiredRecoveryHint',
-    runtime_confirmation: {
-      operation: pending.operation.kind as 'start' | 'stop' | 'restart' | 'update_runtime',
-      snapshot_revision: snapshot.snapshot_revision,
-      workload_knowledge: snapshot.workload.knowledge,
-      ...(snapshot.workload.affected_process_count !== undefined
-        ? { affected_process_count: snapshot.workload.affected_process_count }
-        : {}),
-      ...(snapshot.workload.active_session_count !== undefined
-        ? { active_session_count: snapshot.workload.active_session_count }
-        : {}),
-      protected_workload_present: snapshot.workload.protected_workload_present,
-    },
+  launcherOperations.finish(operationKey, 'needs_confirmation', {
+    phase: presentation.phase,
+    title: presentation.title,
+    title_key: presentation.title_key,
+    detail: presentation.detail,
+    detail_key: presentation.detail_key,
+    runtime_confirmation: presentation.confirmation,
     next_actions: [
       {
         kind: 'confirm_runtime_operation',
@@ -5313,13 +5354,17 @@ async function confirmRuntimeOperationFromLauncher(
     );
   }
   pendingRuntimeOperationConfirmations.delete(request.operation_key);
-	launcherOperations.update(request.operation_key, {
+  const continuingPresentation = projectAttachedRuntimeOperation({
+    ...pending.operation,
+    state: 'fencing',
+  });
+  launcherOperations.update(request.operation_key, {
     status: 'running',
     phase: 'confirming_runtime_operation',
-		title: gatewayEnvLifecycleTitle(pending.operation.kind as 'start' | 'stop' | 'restart' | 'update_runtime'),
-		title_key: gatewayEnvLifecycleTitleKey(pending.operation.kind as 'start' | 'stop' | 'restart' | 'update_runtime'),
-		detail: 'The Runtime supervisor is rechecking the confirmed snapshot and continuing the operation.',
-		detail_key: 'progress.runtimeFencingDetail',
+    title: continuingPresentation.title,
+    title_key: continuingPresentation.title_key,
+    detail: continuingPresentation.detail,
+    detail_key: continuingPresentation.detail_key,
     runtime_confirmation: undefined,
     next_actions: undefined,
     cancelable: false,
@@ -5333,12 +5378,13 @@ async function confirmRuntimeOperationFromLauncher(
         response.failure?.message || `Runtime operation stopped in ${response.state}.`,
       );
     }
-		launcherOperations.finish(request.operation_key, 'succeeded', {
-      phase: 'runtime_operation_succeeded',
-			title: `${gatewayEnvLifecycleTitle(pending.operation.kind as 'start' | 'stop' | 'restart' | 'update_runtime')} complete`,
-			title_key: 'progress.runtimeOperationCompleteTitle',
-			detail: 'The Runtime supervisor completed this lifecycle operation.',
-			detail_key: 'progress.runtimeOperationCompleteDetail',
+    const completedPresentation = projectAttachedRuntimeOperation(response);
+    launcherOperations.finish(request.operation_key, 'succeeded', {
+      phase: completedPresentation.phase,
+      title: completedPresentation.title,
+      title_key: completedPresentation.title_key,
+      detail: completedPresentation.detail,
+      detail_key: completedPresentation.detail_key,
       runtime_confirmation: undefined,
       next_actions: undefined,
     });
@@ -5874,10 +5920,19 @@ async function runGatewayEnvironmentLifecycleFromLauncher(
     environment_label: label,
     gateway_environment_id: request.gateway_env_id,
     phase: 'checking_runtime_record',
-		title: gatewayEnvLifecycleTitle(request.operation),
-		title_key: gatewayEnvLifecycleTitleKey(request.operation),
-		detail: `Desktop is asking ${record.display_name} to ${request.operation} ${label}.`,
-		detail_key: 'progress.runtimeSupervisorPreflightDetail',
+    ...(request.operation === 'start'
+      ? {
+          title: 'Checking access',
+          title_key: 'environmentOpenFlow.checkingAccessTitle' as const,
+          detail: 'Redeven is checking access before changing this environment.',
+          detail_key: 'environmentOpenFlow.checkingAccessDetail' as const,
+        }
+      : {
+          title: gatewayEnvLifecycleTitle(request.operation),
+          title_key: gatewayEnvLifecycleTitleKey(request.operation),
+          detail: `Desktop is asking ${record.display_name} to ${request.operation} ${label}.`,
+          detail_key: 'progress.runtimeSupervisorPreflightDetail' as const,
+        }),
     cancelable: true,
     interrupt_label: 'Stop operation',
 		interrupt_detail: 'Desktop is canceling this Gateway environment lifecycle request.',
@@ -5931,7 +5986,7 @@ async function runGatewayEnvironmentLifecycleFromLauncher(
       signal,
       startPolicy: actionStartPolicy,
     });
-    let runtimeOperation = prepared.operation;
+    const runtimeOperation = prepared.operation;
     if (prepared.confirmation_required) {
       return awaitRuntimeOperationConfirmation(operationKey, {
         operation: runtimeOperation,
@@ -6006,12 +6061,13 @@ async function runGatewayEnvironmentLifecycleFromLauncher(
         response.failure?.message || `Gateway Runtime operation stopped in ${response.state}.`,
       );
     }
-		launcherOperations.finish(operationKey, 'succeeded', {
-      phase: 'gateway_environment_lifecycle_succeeded',
-			title: `${gatewayEnvLifecycleTitle(request.operation)} complete`,
-			title_key: 'progress.runtimeOperationCompleteTitle',
-			detail: 'Gateway completed this Runtime lifecycle operation.',
-			detail_key: 'progress.runtimeOperationCompleteDetail',
+    const completedPresentation = projectAttachedRuntimeOperation(response);
+    launcherOperations.finish(operationKey, 'succeeded', {
+      phase: completedPresentation.phase,
+      title: completedPresentation.title,
+      title_key: completedPresentation.title_key,
+      detail: completedPresentation.detail,
+      detail_key: completedPresentation.detail_key,
     });
     scheduleLauncherOperationRemoval(operationKey);
     await syncGatewayRecord(record, {
@@ -6488,10 +6544,19 @@ async function runProviderEnvironmentLifecycleFromLauncher(
     provider_origin: environment.provider_origin,
     provider_id: environment.provider_id,
     phase: 'checking_runtime_record',
-		title: gatewayEnvLifecycleTitle(request.operation),
-		title_key: gatewayEnvLifecycleTitleKey(request.operation),
-		detail: `Desktop is asking the Provider Runtime supervisor to ${request.operation} ${label}.`,
-		detail_key: 'progress.runtimeSupervisorPreflightDetail',
+    ...(request.operation === 'start'
+      ? {
+          title: 'Checking access',
+          title_key: 'environmentOpenFlow.checkingAccessTitle' as const,
+          detail: 'Redeven is checking access before changing this environment.',
+          detail_key: 'environmentOpenFlow.checkingAccessDetail' as const,
+        }
+      : {
+          title: gatewayEnvLifecycleTitle(request.operation),
+          title_key: gatewayEnvLifecycleTitleKey(request.operation),
+          detail: `Desktop is asking the Provider Runtime supervisor to ${request.operation} ${label}.`,
+          detail_key: 'progress.runtimeSupervisorPreflightDetail' as const,
+        }),
     cancelable: true,
     interrupt_label: 'Stop operation',
 		interrupt_detail: 'Desktop is canceling this Provider Runtime lifecycle request.',
@@ -6561,7 +6626,7 @@ async function runProviderEnvironmentLifecycleFromLauncher(
       idempotency_key: `provider-runtime-operation:${operationID}`,
       authorization_permit: authorization.permit,
     });
-    let runtimeOperation = prepared.operation;
+    const runtimeOperation = prepared.operation;
     if (prepared.confirmation_required) {
       return awaitRuntimeOperationConfirmation(operationKey, {
         operation: runtimeOperation,
@@ -6612,12 +6677,13 @@ async function runProviderEnvironmentLifecycleFromLauncher(
         response.failure?.message || `Provider Runtime operation stopped in ${response.state}.`,
       );
     }
-		launcherOperations.finish(operationKey, 'succeeded', {
-      phase: 'provider_environment_lifecycle_succeeded',
-			title: `${gatewayEnvLifecycleTitle(request.operation)} complete`,
-			title_key: 'progress.runtimeOperationCompleteTitle',
-			detail: 'The Provider Runtime supervisor completed this lifecycle operation.',
-			detail_key: 'progress.runtimeOperationCompleteDetail',
+    const completedPresentation = projectAttachedRuntimeOperation(response);
+    launcherOperations.finish(operationKey, 'succeeded', {
+      phase: completedPresentation.phase,
+      title: completedPresentation.title,
+      title_key: completedPresentation.title_key,
+      detail: completedPresentation.detail,
+      detail_key: completedPresentation.detail_key,
     });
     scheduleLauncherOperationRemoval(operationKey);
     return launcherActionSuccess(gatewayEnvLifecycleOutcome(request.operation));
@@ -10133,22 +10199,93 @@ async function autoStartLocalRuntimeOnDesktopLaunch(): Promise<void> {
   if (!desktopAutoStartRuntimeEnabled()) {
     return;
   }
+  const startedAtMS = Date.now();
+  const phaseStartedAtMS = new Map<string, number>();
+  const beginPhase = (phase: string): void => {
+    phaseStartedAtMS.set(phase, Date.now());
+  };
+  const finishPhase = (phase: string): void => {
+    const phaseStarted = phaseStartedAtMS.get(phase) ?? startedAtMS;
+    console.info(`[redeven:desktop-startup] ${phase} completed in ${Date.now() - phaseStarted}ms`);
+  };
   try {
+    const bundle = requireDesktopBundle();
+    beginPhase('checking_access');
     const preferences = await loadDesktopPreferencesCached();
     const environment = preferences.local_environment;
-    const attached = await attachLocalEnvironmentRuntime(environment);
-    if (attached && runtimeServiceIsOpenable(attached.startup.runtime_service)) {
-      await refreshWelcomeRuntimeHealthForEnvironment(environment.id, { force: true });
-      resetLauncherIssueState();
-      broadcastDesktopWelcomeSnapshots();
-      return;
+    const hostAccess: DesktopRuntimeHostAccess = { kind: 'local_host' };
+    const placement = localHostRuntimeLifecyclePlacement(environment);
+    const attachedBeforeStartup = await attachLocalEnvironmentRuntime(environment);
+    const record = await upsertDirectRuntimeGateway(environment.id, environment.label, hostAccess, placement);
+    const serviceState = await gatewayLifecycleManager().inspectService(record);
+    finishPhase('checking_access');
+
+    beginPhase('preparing_environment');
+    if (!attachedBeforeStartup || !runtimeServiceIsOpenable(attachedBeforeStartup.startup.runtime_service)) {
+      beginPhase('starting_environment');
+      if (serviceState.status === 'ready' || serviceState.status === 'service_needs_update') {
+        await gatewayLifecycleManager().restartGateway(record, {
+          operationKey: `desktop-startup:${environment.id}`,
+        });
+      } else {
+        await gatewayLifecycleManager().startGateway(record, {
+          operationKey: `desktop-startup:${environment.id}`,
+        });
+      }
+      finishPhase('starting_environment');
     }
-    // Runtime can run independently, but product-managed lifecycle requires a
-    // configured Gateway supervisor. Desktop launch only reattaches here.
-    console.info('[redeven:desktop-startup] Local runtime is not running; managed startup requires Gateway setup.');
+    await syncGatewayRecord(record, {
+      force: true,
+      mode: 'sync',
+      priority: 'foreground',
+      startPolicy: 'start_if_needed',
+    });
+    finishPhase('preparing_environment');
+
+    beginPhase('checking_workspace_readiness');
+    const attached = await attachLocalEnvironmentRuntime(environment);
+    if (!attached || !runtimeServiceIsOpenable(attached.startup.runtime_service)) {
+      const resumedOperation = launcherOperations.operations().some((operation) => (
+        operation.environment_id === environment.id
+        && (operation.status === 'running' || operation.status === 'needs_confirmation' || operation.status === 'cleanup_running')
+      ));
+      if (resumedOperation) {
+        finishPhase('checking_workspace_readiness');
+        broadcastDesktopWelcomeSnapshots();
+        return;
+      }
+      throw new Error('The Local Environment did not become ready during Desktop startup.');
+    }
+    await refreshWelcomeRuntimeHealthForEnvironment(environment.id, { force: true });
+    finishPhase('checking_workspace_readiness');
+    resetLauncherIssueState();
+    console.info('[redeven:desktop-startup] Local Environment ready', {
+      duration_ms: Date.now() - startedAtMS,
+      runtime_pid: attached.startup.pid,
+      runtime_version: attached.startup.runtime_service?.runtime_version,
+      runtime_digest: bundle.runtime_suite.find((artifact) => path.basename(artifact.path) === 'redeven')?.sha256,
+      workspace_ready: true,
+    });
+    broadcastDesktopWelcomeSnapshots();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.warn(`[redeven:desktop-startup] Local runtime auto-start failed: ${message}`);
+    const preferences = await loadDesktopPreferencesCached().catch(() => null);
+    setLauncherViewState({
+      surface: 'connect_environment',
+      entryReason: 'app_launch',
+      issue: {
+        scope: 'startup',
+        code: 'local_environment_startup_failed',
+        title: 'Local Environment startup failed',
+        title_key: 'issue.startupFailedTitle',
+        message: 'Redeven could not start this environment. Try again.',
+        message_key: 'environmentOpenFlow.startFailedDetail',
+        diagnostics_copy: `status: blocked\ncode: local_environment_startup_failed\nmessage: ${message}`,
+        target_url: '',
+        environment_id: preferences?.local_environment.id,
+      },
+    });
     broadcastDesktopWelcomeSnapshots();
   }
 }
@@ -16952,6 +17089,28 @@ if (!app.requestSingleInstanceLock()) {
     installOrRefreshAppMenu();
 
     try {
+      try {
+        await loadDesktopBundleForStartup();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`[redeven:desktop-startup] Desktop bundle validation failed: ${message}`);
+        setLauncherViewState({
+          surface: 'connect_environment',
+          entryReason: 'app_launch',
+          issue: {
+            scope: 'startup',
+            code: 'desktop_bundle_invalid',
+            title: 'Local Environment startup failed',
+            title_key: 'issue.startupFailedTitle',
+            message: 'Redeven could not prepare this environment. Repair or reinstall the application, then restart Desktop.',
+            message_key: 'environmentOpenFlow.initializationFailedDetail',
+            diagnostics_copy: `status: blocked\ncode: desktop_bundle_invalid\nmessage: ${message}`,
+            target_url: '',
+          },
+        });
+        await openDesktopWelcomeWindow({ entryReason: 'app_launch' });
+        return;
+      }
       if (pendingDesktopDeepLinks.length > 0) {
         while (pendingDesktopDeepLinks.length > 0) {
           const nextDeepLink = pendingDesktopDeepLinks.shift();
@@ -16963,11 +17122,11 @@ if (!app.requestSingleInstanceLock()) {
         if (openSessionSummaries().length <= 0 && !liveUtilityWindow('launcher')) {
           await openDesktopWelcomeWindow({ entryReason: 'app_launch' });
         }
-        void autoStartLocalRuntimeOnDesktopLaunch();
+        await autoStartLocalRuntimeOnDesktopLaunch();
         return;
       }
       await openDesktopWelcomeWindow({ entryReason: 'app_launch' });
-      void autoStartLocalRuntimeOnDesktopLaunch();
+      await autoStartLocalRuntimeOnDesktopLaunch();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       dialog.showErrorBox('Redeven Desktop failed to start', message || 'Unknown startup error.');

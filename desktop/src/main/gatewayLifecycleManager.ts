@@ -56,6 +56,7 @@ import {
   type RuntimeLifecycleIntent,
 } from './runtimeLifecycleCoordinator';
 import type { DesktopSSHTransportManager } from './sshTransportManager';
+import type { DesktopBundle } from './desktopBundle';
 
 export type GatewayLifecycleSession = Readonly<{
   target_id: string;
@@ -129,6 +130,7 @@ export type GatewayLifecycleManagerOptions = Readonly<{
   temp_root: string;
   lifecycle_coordinator: RuntimeLifecycleCoordinator;
   source_runtime_root?: string;
+  precompiled_bundle?: DesktopBundle;
   target_commit?: string;
   session_cache?: Map<string, GatewayLifecycleSession>;
   signal?: AbortSignal;
@@ -345,10 +347,11 @@ export class GatewayLifecycleManager {
         placement: gatewayPlacement(record),
         stateRoot: gatewayServiceStateRoot(record),
         gatewayID: record.gateway_id,
-        releaseTag: this.options.runtime_release_tag,
+        releaseTag: this.gatewayReleaseTag(record),
         releaseBaseURL: this.options.release_base_url,
         assetCacheRoot: this.options.asset_cache_root,
         sourceRuntimeRoot: this.options.source_runtime_root,
+        precompiledBundle: this.options.precompiled_bundle,
         targetCommit: this.options.target_commit,
         sshPassword,
         tempRoot: this.options.temp_root,
@@ -402,10 +405,11 @@ export class GatewayLifecycleManager {
       placement: gatewayPlacement(record),
       stateRoot: gatewayServiceStateRoot(record),
       gatewayID: record.gateway_id,
-      releaseTag: this.options.runtime_release_tag,
+      releaseTag: this.gatewayReleaseTag(record),
       releaseBaseURL: this.options.release_base_url,
       assetCacheRoot: this.options.asset_cache_root,
       sourceRuntimeRoot: this.options.source_runtime_root,
+      precompiledBundle: this.options.precompiled_bundle,
       targetCommit: this.options.target_commit,
       sshPassword,
       tempRoot: this.options.temp_root,
@@ -435,7 +439,7 @@ export class GatewayLifecycleManager {
     }
     const serviceState = await this.inspectService(record, options.signal);
     if (serviceState.status === 'ready') {
-      return this.openBridgeSession(record, gatewayServiceBinaryPath(gatewayPlacement(record)), {
+      return this.openBridgeSession(record, this.gatewayExecutablePath(record), {
         signal: options.signal,
         onProgress: options.onProgress,
       });
@@ -530,10 +534,11 @@ export class GatewayLifecycleManager {
       hostAccess: gatewayHostAccess(record),
       placement: gatewayPlacement(record),
       stateRoot: gatewayServiceStateRoot(record),
-      releaseTag: this.options.runtime_release_tag,
+      releaseTag: this.gatewayReleaseTag(record),
       releaseBaseURL: this.options.release_base_url,
       assetCacheRoot: this.options.asset_cache_root,
       sourceRuntimeRoot: this.options.source_runtime_root,
+      precompiledBundle: this.options.precompiled_bundle,
       targetCommit: this.options.target_commit,
       sshPassword,
       tempRoot: this.options.temp_root,
@@ -553,10 +558,11 @@ export class GatewayLifecycleManager {
       hostAccess: gatewayHostAccess(record),
       placement,
       stateRoot: gatewayServiceStateRoot(record),
-      releaseTag: this.options.runtime_release_tag,
+      releaseTag: this.gatewayReleaseTag(record),
       releaseBaseURL: this.options.release_base_url,
       assetCacheRoot: this.options.asset_cache_root,
       sourceRuntimeRoot: this.options.source_runtime_root,
+      precompiledBundle: this.options.precompiled_bundle,
       targetCommit: this.options.target_commit,
       sshPassword,
       tempRoot: this.options.temp_root,
@@ -595,10 +601,11 @@ export class GatewayLifecycleManager {
       hostAccess: gatewayHostAccess(record),
       placement,
       stateRoot: gatewayServiceStateRoot(record),
-      releaseTag: this.options.runtime_release_tag,
+      releaseTag: this.gatewayReleaseTag(record),
       releaseBaseURL: this.options.release_base_url,
       assetCacheRoot: this.options.asset_cache_root,
       sourceRuntimeRoot: this.options.source_runtime_root,
+      precompiledBundle: this.options.precompiled_bundle,
       targetCommit: this.options.target_commit,
       sshPassword,
       tempRoot: this.options.temp_root,
@@ -613,10 +620,11 @@ export class GatewayLifecycleManager {
         hostAccess: gatewayHostAccess(record),
         placement,
         stateRoot: gatewayServiceStateRoot(record),
-        releaseTag: this.options.runtime_release_tag,
+        releaseTag: this.gatewayReleaseTag(record),
         releaseBaseURL: this.options.release_base_url,
         assetCacheRoot: this.options.asset_cache_root,
         sourceRuntimeRoot: this.options.source_runtime_root,
+        precompiledBundle: this.options.precompiled_bundle,
         targetCommit: this.options.target_commit,
         sshPassword,
         tempRoot: this.options.temp_root,
@@ -762,10 +770,11 @@ export class GatewayLifecycleManager {
         placement,
         stateRoot: gatewayServiceStateRoot(record),
         gatewayID: record.gateway_id,
-        releaseTag: this.options.runtime_release_tag,
+        releaseTag: this.gatewayReleaseTag(record),
         releaseBaseURL: this.options.release_base_url,
         assetCacheRoot: this.options.asset_cache_root,
-        sourceRuntimeRoot: this.options.source_runtime_root,
+        sourceRuntimeRoot: options.forceUpdate === true ? this.options.source_runtime_root : undefined,
+        precompiledBundle: this.options.precompiled_bundle,
         targetCommit: this.options.target_commit,
         sshPassword,
         tempRoot: this.options.temp_root,
@@ -789,6 +798,26 @@ export class GatewayLifecycleManager {
       return '';
     }
     return this.options.secret_store.readSecret(ref);
+  }
+
+  private gatewayExecutablePath(record: GatewayRecord): string {
+    if (record.connection.kind === 'local_host') {
+      const path = this.options.precompiled_bundle?.gateway.path;
+      if (!path) {
+        throw new GatewayServiceUnavailableError(
+          'gateway_service_start_failed',
+          'Desktop could not validate its bundled environment services. Repair or reinstall the application, then try again.',
+        );
+      }
+      return path;
+    }
+    return gatewayServiceBinaryPath(gatewayPlacement(record));
+  }
+
+  private gatewayReleaseTag(record: GatewayRecord): string {
+    return record.connection.kind === 'local_host'
+      ? this.options.precompiled_bundle?.version ?? this.options.runtime_release_tag
+      : this.options.runtime_release_tag;
   }
 
   private emit(

@@ -181,6 +181,7 @@ func (c *cli) serveCmd(args []string) int {
 	fs := newFlagSet("serve")
 	stateRoot := fs.String("state-root", "", "Gateway state root.")
 	runtimeRoot := fs.String("runtime-root", "", "Target Runtime root managed by this Gateway supervisor.")
+	precompiledRuntimeManifest := fs.String("precompiled-runtime-manifest", "", "Validated Desktop bundle manifest used for automatic Runtime startup.")
 	listen := fs.String("listen", "127.0.0.1:0", "Gateway listen address.")
 	allowPrivateProfileTargets := fs.Bool("allow-private-profile-targets", false, "Allow URL profile targets on private networks.")
 	enableProfileWrite := fs.Bool("enable-profile-write", false, "Allow paired clients to create, edit, and delete Gateway environment profiles.")
@@ -208,7 +209,7 @@ func (c *cli) serveCmd(args []string) int {
 			return 1
 		}
 	}
-	return c.runGatewayService(ctx, stateRootValue, normalizeRuntimeRoot(*runtimeRoot), *listen, managedDesktopBridgeService(), true, *allowPrivateProfileTargets, *enableProfileWrite, *pairingCode, managedBridgeToken)
+	return c.runGatewayService(ctx, stateRootValue, normalizeRuntimeRoot(*runtimeRoot), *precompiledRuntimeManifest, *listen, managedDesktopBridgeService(), true, *allowPrivateProfileTargets, *enableProfileWrite, *pairingCode, managedBridgeToken)
 }
 
 func (c *cli) desktopBridgeCmd(args []string) int {
@@ -298,6 +299,7 @@ func (c *cli) serviceStartCmd(args []string) int {
 	fs := newFlagSet("service-start")
 	stateRoot := fs.String("state-root", "", "Gateway state root.")
 	runtimeRoot := fs.String("runtime-root", "", "Target Runtime root managed by this Gateway supervisor.")
+	precompiledRuntimeManifest := fs.String("precompiled-runtime-manifest", "", "Validated Desktop bundle manifest used for automatic Runtime startup.")
 	listen := fs.String("listen", "127.0.0.1:0", "Gateway listen address.")
 	allowPrivateProfileTargets := fs.Bool("allow-private-profile-targets", false, "Allow URL profile targets on private networks.")
 	enableProfileWrite := fs.Bool("enable-profile-write", true, "Allow paired clients to create, edit, and delete Gateway environment profiles.")
@@ -334,7 +336,7 @@ func (c *cli) serviceStartCmd(args []string) int {
 		return 1
 	}
 	defer logFile.Close()
-	cmdArgs := []string{"serve", "--state-root", stateRootValue, "--runtime-root", normalizeRuntimeRoot(*runtimeRoot), "--listen", strings.TrimSpace(*listen)}
+	cmdArgs := gatewayServiceServeArgs(stateRootValue, normalizeRuntimeRoot(*runtimeRoot), strings.TrimSpace(*precompiledRuntimeManifest), strings.TrimSpace(*listen))
 	if *allowPrivateProfileTargets {
 		cmdArgs = append(cmdArgs, "--allow-private-profile-targets")
 	}
@@ -359,6 +361,14 @@ func (c *cli) serviceStartCmd(args []string) int {
 	}
 	_ = json.NewEncoder(c.stdout).Encode(status)
 	return 0
+}
+
+func gatewayServiceServeArgs(stateRoot string, runtimeRoot string, precompiledRuntimeManifest string, listen string) []string {
+	args := []string{"serve", "--state-root", stateRoot, "--runtime-root", runtimeRoot, "--listen", listen}
+	if manifestPath := strings.TrimSpace(precompiledRuntimeManifest); manifestPath != "" {
+		args = append(args, "--precompiled-runtime-manifest", manifestPath)
+	}
+	return args
 }
 
 func (c *cli) serviceStopCmd(args []string) int {
@@ -406,7 +416,7 @@ func (c *cli) serviceStopCmd(args []string) int {
 	return 0
 }
 
-func (c *cli) runGatewayService(ctx context.Context, stateRoot string, runtimeRoot string, listen string, desktopBridgeTransport bool, printListen bool, allowPrivateProfileTargets bool, enableProfileWrite bool, pairingCode string, managedBridgeToken string) int {
+func (c *cli) runGatewayService(ctx context.Context, stateRoot string, runtimeRoot string, precompiledRuntimeManifest string, listen string, desktopBridgeTransport bool, printListen bool, allowPrivateProfileTargets bool, enableProfileWrite bool, pairingCode string, managedBridgeToken string) int {
 	stateRootValue := normalizeStateRoot(stateRoot)
 	if err := os.MkdirAll(stateRootValue, 0o700); err != nil {
 		writeError(c.stderr, fmt.Sprintf("serve failed: initialize Gateway state root: %v", err))
@@ -427,7 +437,10 @@ func (c *cli) runGatewayService(ctx context.Context, stateRoot string, runtimeRo
 		writeError(c.stderr, fmt.Sprintf("serve failed: initialize Runtime target binding: %v", err))
 		return 1
 	}
-	lifecycleController, err := gatewaysupervisor.NewController(gatewaysupervisor.ControllerOptions{BindingStore: bindingStore})
+	lifecycleController, err := gatewaysupervisor.NewController(gatewaysupervisor.ControllerOptions{
+		BindingStore:               bindingStore,
+		PrecompiledRuntimeManifest: strings.TrimSpace(precompiledRuntimeManifest),
+	})
 	if err != nil {
 		writeError(c.stderr, fmt.Sprintf("serve failed: initialize Runtime lifecycle controller: %v", err))
 		return 1
@@ -437,7 +450,7 @@ func (c *cli) runGatewayService(ctx context.Context, stateRoot string, runtimeRo
 		writeError(c.stderr, fmt.Sprintf("serve failed: initialize Runtime lifecycle authorizer: %v", err))
 		return 1
 	}
-	svc, err := gatewayservice.New(gatewayservice.Options{
+	serviceOptions := gatewayservice.Options{
 		StateRoot:                   stateRootValue,
 		DesktopBridgeTransport:      desktopBridgeTransport,
 		AllowPrivateProfileTargets:  allowPrivateProfileTargets,
@@ -448,7 +461,11 @@ func (c *cli) runGatewayService(ctx context.Context, stateRoot string, runtimeRo
 		LifecycleArtifactVerifier:   gatewaysupervisor.ArtifactVerifier{BindingStore: bindingStore},
 		LifecycleAuthorizer:         lifecycleAuthorizer,
 		LifecycleCapabilityProvider: lifecycleController,
-	})
+	}
+	if strings.TrimSpace(precompiledRuntimeManifest) != "" {
+		serviceOptions.PrecompiledRuntimeStartup = lifecycleController
+	}
+	svc, err := gatewayservice.New(serviceOptions)
 	if err != nil {
 		writeError(c.stderr, fmt.Sprintf("serve failed: %v", err))
 		return 1
@@ -754,6 +771,8 @@ Run the Gateway HTTP service.
 Flags:
   --state-root <path>   Gateway state root.
   --runtime-root <path> Target Runtime root managed by this Gateway.
+  --precompiled-runtime-manifest <path>
+                        Validated Desktop bundle manifest used for automatic Runtime startup.
   --listen <addr>       Listen address (default 127.0.0.1:0).
   --allow-private-profile-targets
                         Allow URL profiles to target private networks.
@@ -775,7 +794,7 @@ Flags:
 
 func serviceStatusHelpText() string { return "redeven-gateway service-status --state-root <path>\n" }
 func serviceStartHelpText() string {
-	return "redeven-gateway service-start --state-root <path> --runtime-root <path> [--listen <addr>] [--allow-private-profile-targets] [--enable-profile-write]\n"
+	return "redeven-gateway service-start --state-root <path> --runtime-root <path> [--precompiled-runtime-manifest <path>] [--listen <addr>] [--allow-private-profile-targets] [--enable-profile-write]\n"
 }
 func serviceStopHelpText() string { return "redeven-gateway service-stop --state-root <path>\n" }
 

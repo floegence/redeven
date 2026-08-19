@@ -40,6 +40,7 @@ type RuntimeValidation struct {
 	CompatibilityEpoch   int      `json:"compatibility_epoch"`
 	Capabilities         []string `json:"capabilities"`
 	ArtifactSHA256       string   `json:"artifact_sha256"`
+	ManagedSuiteSHA256   string   `json:"managed_suite_sha256,omitempty"`
 }
 
 type TargetBinding struct {
@@ -456,6 +457,7 @@ func normalizeRuntimeValidation(validation RuntimeValidation) RuntimeValidation 
 	validation.Architecture = strings.ToLower(strings.TrimSpace(validation.Architecture))
 	validation.ServiceProtocol = strings.TrimSpace(validation.ServiceProtocol)
 	validation.ArtifactSHA256 = strings.ToLower(strings.TrimSpace(validation.ArtifactSHA256))
+	validation.ManagedSuiteSHA256 = strings.ToLower(strings.TrimSpace(validation.ManagedSuiteSHA256))
 	validation.Capabilities = compactSorted(validation.Capabilities)
 	return validation
 }

@@ -86,14 +86,10 @@ export async function initializeGatewayRuntime(
   if (!input.capability.operations.includes('update_runtime')) {
     throw new Error('This environment does not expose Runtime installation.');
   }
-  const artifactPlan = selectGatewayRuntimeArtifactPlan({
-    artifactPolicies: input.capability.artifact_policies,
-    sourceBuildAvailable: input.sourceBuildAvailable,
-    sourceCommit: input.sourceCommit,
-    desiredVersion: input.desiredVersion,
-    platform: input.capability.compatibility.runtime_platform,
-    architecture: input.capability.compatibility.runtime_architecture,
-  });
+  if (!input.capability.artifact_policies.includes('published_release')) {
+    throw new Error('This environment does not expose an authorized precompiled Runtime artifact.');
+  }
+  const artifactPlan: GatewayRuntimeArtifactPlan = { artifact_policy: 'published_release' };
   const prepared = await input.prepare({
     operation_id: input.operationID,
     authorized_client_key_id: input.authorizedClientKeyID,

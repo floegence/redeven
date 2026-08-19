@@ -85,7 +85,7 @@ describe('Gateway Runtime initialization', () => {
     })).toThrow('does not expose an authorized Runtime artifact policy');
   });
 
-  it('installs an absent Runtime through update prepare, confirm, artifact upload, and commit', async () => {
+  it('never lets a source checkout change absent Runtime initialization into a custom build', async () => {
     const calls: string[] = [];
     const artifact = Buffer.from('custom Runtime archive');
     const metadata: GatewayRuntimeArtifactMetadata = {
@@ -97,16 +97,10 @@ describe('Gateway Runtime initialization', () => {
     };
     const prepare = vi.fn(async (request: GatewayRuntimeOperationPrepareRequest) => {
       calls.push(`prepare:${request.operation}:${request.desired_runtime.artifact_policy}`);
-      expect(request.build_inputs).toEqual({
-        architecture: 'arm64',
-        commit: 'abc123',
-        platform: 'darwin',
-        source: 'desktop_source_build',
-        version: 'v0.0.0-dev',
-      });
+      expect(request.build_inputs).toBeUndefined();
       return {
         protocol_version: 'redeven-gateway-v2',
-        operation: operation('awaiting_confirmation'),
+        operation: operation('awaiting_confirmation', 'published_release'),
         confirmation_required: true,
         artifact_max_bytes: 512 << 20,
       };
@@ -132,7 +126,7 @@ describe('Gateway Runtime initialization', () => {
       prepare,
       confirm: vi.fn(async () => {
         calls.push('confirm');
-        return operation('awaiting_artifact');
+        return operation('awaiting_artifact', 'published_release');
       }),
       prepareArtifact: vi.fn(async (current) => {
         calls.push(`artifact:${current.desired_runtime.artifact_policy}`);
@@ -150,9 +144,9 @@ describe('Gateway Runtime initialization', () => {
     })).resolves.toMatchObject({ state: 'succeeded' });
 
     expect(calls).toEqual([
-      'prepare:update_runtime:custom_build',
+      'prepare:update_runtime:published_release',
       'confirm',
-      'artifact:custom_build',
+      'artifact:published_release',
       'upload',
       'commit',
     ]);
