@@ -4458,6 +4458,7 @@
           "stateConflict": "Der installierte Plugin-Status steht im Konflikt mit dieser Veröffentlichung.",
           "denied": "Sie dürfen in dieser Umgebung keine Plugins installieren.",
           "trust": "Die Plugin-Veröffentlichung hat die Herausgeber- und Vertrauensprüfung nicht bestanden.",
+          "manifestInvalid": "Dieses Plugin-Paket verwendet ein Manifestformat, das diese Plattform nicht installieren kann.",
           "internal": "Die Installation konnte wegen eines internen Fehlers der Plugin-Plattform nicht abgeschlossen werden."
         }
       },

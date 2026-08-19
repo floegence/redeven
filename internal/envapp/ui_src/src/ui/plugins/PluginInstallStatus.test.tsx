@@ -68,4 +68,20 @@ describe('PluginInstallStatus', () => {
     dispose();
     host.remove();
   });
+
+  it('explains an incompatible plugin manifest instead of reporting an internal failure', () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const dispose = render(() => <PluginInstallStatus
+      projection={projection({
+        execution: execution({ status: 'failed', failure_code: 'PLUGIN_MANIFEST_INVALID' }),
+        events: [],
+      })}
+    />, host);
+
+    expect(host.textContent).toContain('manifest format');
+    expect(host.textContent).not.toContain('internal plugin platform failure');
+    dispose();
+    host.remove();
+  });
 });
