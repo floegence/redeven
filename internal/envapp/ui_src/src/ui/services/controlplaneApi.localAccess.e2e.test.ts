@@ -48,7 +48,7 @@ describe('controlplaneApi local access flow', () => {
       }
       if (String(input) === '/api/local/runtime') {
         expect(init?.credentials).toBe('same-origin');
-        return jsonResponse({ message: 'locked' }, 423);
+        return errorResponse('access password required', 423, { code: 'ACCESS_PASSWORD_REQUIRED' });
       }
       throw new Error(`unexpected request: ${String(input)}`);
     });
