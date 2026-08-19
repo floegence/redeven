@@ -535,7 +535,7 @@ The intended dependency shape is library consumption, not source sharing:
 - Redeven contributes product policy and concrete adapters around those
   imports; it does not become a source tree for ReDevPlugin implementation.
 
-For the current `v3.0.2` baseline, Redeven accepts only ReDevPlugin
+For the current `v3.0.3` baseline, Redeven accepts only ReDevPlugin
 manifest v9, release metadata current, `current plugin UI contract`, and `current bridge contract`. Older
 manifest or release metadata state is not migrated, rewritten, or given a
 synthetic presentation; reads fail closed while the original bytes remain
@@ -566,7 +566,7 @@ version, package hash, manifest hash, and entries hash exactly match the
 current signed market release, Redeven may reuse that release's bounded icon
 URL; any mismatch falls back to the generic placeholder, so a later market
 generation cannot replace an older installed package's icon. ReDevPlugin
-`v3.0.2` exposes the owner/session-protected installed-icon metadata needed by
+`v3.0.3` exposes the owner/session-protected installed-icon metadata needed by
 the host, so Redeven must not parse package bytes or invent a second icon
 transport.
 
