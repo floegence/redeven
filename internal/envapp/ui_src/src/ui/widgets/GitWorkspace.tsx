@@ -84,7 +84,6 @@ export interface GitWorkspaceProps {
   onSelectBranchSubview?: (view: GitBranchSubview) => void;
   onRefreshSelectedBranch?: () => void;
   onSelectCurrentBranch?: () => void;
-  onBranchDetailLoadFailure?: () => void;
   commits?: GitCommitSummary[];
   listLoading?: boolean;
   listRefreshing?: boolean;
@@ -242,7 +241,6 @@ export function GitWorkspace(props: GitWorkspaceProps) {
               onSelectBranchSubview={props.onSelectBranchSubview}
               onRefreshSelectedBranch={props.onRefreshSelectedBranch}
               onSelectCurrentBranch={props.onSelectCurrentBranch}
-              onBranchDetailLoadFailure={props.onBranchDetailLoadFailure}
               selectedCommitHash={props.selectedCommitHash}
               commits={props.commits}
               listLoading={props.listLoading}

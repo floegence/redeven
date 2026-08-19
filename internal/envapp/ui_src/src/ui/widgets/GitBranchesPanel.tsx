@@ -191,7 +191,6 @@ export interface GitBranchesPanelProps {
   onSelectBranchSubview?: (view: GitBranchSubview) => void;
   onRefreshSelectedBranch?: () => void;
   onSelectCurrentBranch?: () => void;
-  onBranchDetailLoadFailure?: () => void;
   branches?: GitListBranchesResponse | null;
   branchesLoading?: boolean;
   branchesError?: string;
@@ -3605,7 +3604,6 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
           setStatusWorkspace(null);
         }
         setStatusError(message);
-        props.onBranchDetailLoadFailure?.();
       } else if (background) {
         notification.warning(i18n.t('git.notifications.refreshIncompleteTitle'), message);
       }
@@ -3707,7 +3705,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     const section = selectedStatusSection();
     if (!branch || subview !== "status" || !repoRootPath) return;
     const pageState = statusPageState(section);
-    if (!pageState.initialized && !pageState.loading) {
+    if (!pageState.initialized && !pageState.loading && !pageState.error) {
       void loadStatusSection(section);
     }
   });
@@ -3726,10 +3724,10 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     if (refreshKey === lastStatusRefreshContextKey) return;
     const section = selectedStatusSection();
     const pageState = statusPageState(section);
-    if (!pageState.initialized || pageState.loading) return;
+    if (pageState.loading || (!pageState.initialized && !pageState.error)) return;
     void loadStatusSection(section, {
       force: true,
-      background: true,
+      background: pageState.initialized,
     });
   });
 

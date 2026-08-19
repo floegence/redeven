@@ -80,7 +80,6 @@ export interface GitWorkbenchProps {
   onSelectBranchSubview?: (view: GitBranchSubview) => void;
   onRefreshSelectedBranch?: () => void;
   onSelectCurrentBranch?: () => void;
-  onBranchDetailLoadFailure?: () => void;
   commits?: GitCommitSummary[];
   listLoading?: boolean;
   listRefreshing?: boolean;
@@ -513,7 +512,6 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               onSelectBranchSubview={props.onSelectBranchSubview}
               onRefreshSelectedBranch={props.onRefreshSelectedBranch}
               onSelectCurrentBranch={props.onSelectCurrentBranch}
-              onBranchDetailLoadFailure={props.onBranchDetailLoadFailure}
               branches={props.branches}
               branchesLoading={props.branchesLoading}
               branchesError={props.branchesError}

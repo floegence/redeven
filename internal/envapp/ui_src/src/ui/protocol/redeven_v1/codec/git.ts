@@ -427,11 +427,13 @@ export function fromWireGitListWorkspaceChangesResponse(resp: wire_git_list_work
 export function toWireGitListWorkspacePageRequest(req: GitListWorkspacePageRequest): wire_git_list_workspace_page_req {
   return {
     repo_root_path: req.repoRootPath,
-    section: typeof req.section === 'string' ? req.section : undefined,
-    directory_path: typeof req.directoryPath === 'string' ? req.directoryPath : undefined,
-    offset: typeof req.offset === 'number' ? req.offset : undefined,
-    limit: typeof req.limit === 'number' ? req.limit : undefined,
-    expected_workspace_revision: typeof req.expectedWorkspaceRevision === 'string' ? req.expectedWorkspaceRevision : undefined,
+    ...(typeof req.section === 'string' ? { section: req.section } : {}),
+    ...(typeof req.directoryPath === 'string' ? { directory_path: req.directoryPath } : {}),
+    ...(typeof req.offset === 'number' ? { offset: req.offset } : {}),
+    ...(typeof req.limit === 'number' ? { limit: req.limit } : {}),
+    ...(typeof req.expectedWorkspaceRevision === 'string'
+      ? { expected_workspace_revision: req.expectedWorkspaceRevision }
+      : {}),
   };
 }
 
@@ -463,9 +465,9 @@ export function toWireGitListWorkspacePathStatusesRequest(
   return {
     repo_root_path: req.repoRootPath,
     paths: req.paths,
-    expected_workspace_revision: typeof req.expectedWorkspaceRevision === 'string'
-      ? req.expectedWorkspaceRevision
-      : undefined,
+    ...(typeof req.expectedWorkspaceRevision === 'string'
+      ? { expected_workspace_revision: req.expectedWorkspaceRevision }
+      : {}),
   };
 }
 
@@ -664,9 +666,9 @@ export function fromWireGitListBranchesResponse(resp: wire_git_list_branches_res
 export function toWireGitListCommitsRequest(req: GitListCommitsRequest): wire_git_list_commits_req {
   return {
     repo_root_path: req.repoRootPath,
-    ref: typeof req.ref === 'string' ? req.ref : undefined,
-    offset: typeof req.offset === 'number' ? req.offset : undefined,
-    limit: typeof req.limit === 'number' ? req.limit : undefined,
+    ...(typeof req.ref === 'string' ? { ref: req.ref } : {}),
+    ...(typeof req.offset === 'number' ? { offset: req.offset } : {}),
+    ...(typeof req.limit === 'number' ? { limit: req.limit } : {}),
   };
 }
 
@@ -724,7 +726,7 @@ export function toWireGitGetBranchCompareRequest(req: GitGetBranchCompareRequest
     repo_root_path: req.repoRootPath,
     base_ref: req.baseRef,
     target_ref: req.targetRef,
-    limit: typeof req.limit === 'number' ? req.limit : undefined,
+    ...(typeof req.limit === 'number' ? { limit: req.limit } : {}),
   };
 }
 
