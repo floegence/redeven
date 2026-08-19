@@ -474,9 +474,8 @@ describe('environmentAggregator', () => {
       reason_code: 'runtime_gateway_setup_required',
     });
     expect(entry?.runtime_operations.update).toMatchObject({
-      availability: 'blocked',
+      availability: 'available',
       method: 'runtime_gateway',
-      reason_code: 'runtime_gateway_setup_required',
     });
   });
 

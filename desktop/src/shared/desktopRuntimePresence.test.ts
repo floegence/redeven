@@ -17,16 +17,15 @@ const localContainerPlacement = {
   bridge_strategy: 'exec_stream' as const,
 };
 
-function expectGatewaySetupRequired(
+function expectLifecyclePlansProjected(
   plans: ReturnType<typeof buildDesktopRuntimeOperationPlans>,
   operations: readonly ('start' | 'stop' | 'restart' | 'update')[] = ['start', 'stop', 'restart', 'update'],
 ): void {
   for (const operation of operations) {
     expect(plans[operation]).toMatchObject({
-      availability: 'blocked',
       method: 'runtime_gateway',
-      reason_code: 'runtime_gateway_setup_required',
     });
+    expect(plans[operation].reason_code).not.toBe('runtime_gateway_setup_required');
   }
 }
 
@@ -45,7 +44,7 @@ describe('desktopRuntimePresence', () => {
       availability: 'available',
       method: 'local_host',
     });
-    expectGatewaySetupRequired(plans);
+    expectLifecyclePlansProjected(plans);
     expect(plans.refresh.availability).toBe('available');
   });
 
@@ -71,7 +70,7 @@ describe('desktopRuntimePresence', () => {
       availability: 'available',
       method: 'ssh_host',
     });
-    expectGatewaySetupRequired(plans);
+    expectLifecyclePlansProjected(plans);
     expect(plans.connect_provider).toMatchObject({
       availability: 'blocked',
       reason_code: 'runtime_control_missing',
@@ -95,7 +94,7 @@ describe('desktopRuntimePresence', () => {
       ),
     });
 
-    expectGatewaySetupRequired(plans);
+    expectLifecyclePlansProjected(plans);
   });
 
   it('blocks container lifecycle actions when the local container engine CLI is unavailable', () => {
@@ -120,7 +119,7 @@ describe('desktopRuntimePresence', () => {
       reason_code: 'runtime_target_unavailable',
       message: 'Docker CLI was not found. Install Docker Desktop or make docker available to Redeven Desktop, then refresh and try again.',
     });
-    expectGatewaySetupRequired(plans);
+    expectLifecyclePlansProjected(plans);
     expect(plans.refresh.availability).toBe('available');
   });
 
@@ -143,7 +142,7 @@ describe('desktopRuntimePresence', () => {
       reason_code: 'runtime_not_started',
       message: 'Start this runtime before opening it.',
     });
-    expectGatewaySetupRequired(plans);
+    expectLifecyclePlansProjected(plans);
   });
 
   it('preserves outdated package facts while lifecycle waits for Gateway setup', () => {
@@ -176,7 +175,7 @@ describe('desktopRuntimePresence', () => {
         target_version: 'v0.6.7',
       },
     });
-    expectGatewaySetupRequired(plans);
+    expectLifecyclePlansProjected(plans);
   });
 
   it('keeps Open available for compatibility update blocks while preserving Update as a separate operation', () => {
@@ -215,9 +214,8 @@ describe('desktopRuntimePresence', () => {
         method: 'local_host',
       });
       expect(plans.update).toMatchObject({
-        availability: 'blocked',
+        availability: 'available',
         method: 'runtime_gateway',
-        reason_code: 'runtime_gateway_setup_required',
         menu_visibility: 'stable',
       });
     }
@@ -333,7 +331,7 @@ describe('desktopRuntimePresence', () => {
       message: maintenance.message,
       maintenance,
     });
-    expectGatewaySetupRequired(plans);
+    expectLifecyclePlansProjected(plans);
   });
 
   it('does not turn stale lock recovery into a direct lifecycle executor', () => {
@@ -367,7 +365,7 @@ describe('desktopRuntimePresence', () => {
       method: 'local_container_exec',
       message: 'Start this runtime before opening it.',
     });
-    expectGatewaySetupRequired(plans);
+    expectLifecyclePlansProjected(plans);
   });
 
   it('keeps provider cards out of runtime lifecycle management', () => {
@@ -429,10 +427,9 @@ describe('desktopRuntimePresence', () => {
     });
 
     expect(plans.update).toMatchObject({
-      availability: 'blocked',
+      availability: 'available',
       label: 'Update runtime',
       method: 'runtime_gateway',
-      reason_code: 'runtime_gateway_setup_required',
       menu_visibility: 'stable',
     });
   });
@@ -456,9 +453,9 @@ describe('desktopRuntimePresence', () => {
       method: 'local_container_exec',
     });
     expect(plans.start).toMatchObject({
-      availability: 'blocked',
+      availability: 'unavailable',
       method: 'runtime_gateway',
-      reason_code: 'runtime_gateway_setup_required',
+      reason_code: 'runtime_already_running',
     });
     expect(plans.connect_provider).toMatchObject({
       availability: 'blocked',

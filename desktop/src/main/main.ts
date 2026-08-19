@@ -14709,17 +14709,73 @@ async function openRuntimePlacementBridgeFromLauncher(
 }
 
 async function runEnvironmentRuntimeLifecycleFromLauncher(
-  request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'start_environment_runtime' | 'restart_environment_runtime' | 'update_environment_runtime' }>>,
+  request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'start_environment_runtime' | 'restart_environment_runtime' | 'update_environment_runtime' | 'stop_environment_runtime' }>>,
 ): Promise<DesktopLauncherActionResult> {
-  return launcherActionFailure(
-    'runtime_not_ready',
-    'environment',
-    'Initialize this environment before using lifecycle actions.',
-    {
-      environmentID: runtimeTargetEnvironmentIDFromRequest(request),
-      shouldRefreshSnapshot: true,
-    },
-  );
+  const environmentID = runtimeTargetEnvironmentIDFromRequest(request);
+  if ('external_local_ui_url' in request && compact(request.external_local_ui_url) !== '') {
+    return launcherActionFailure(
+      'action_invalid',
+      'environment',
+      'URL connections open directly and do not support lifecycle actions.',
+      { environmentID },
+    );
+  }
+
+  const hostAccess = runtimeHostAccessFromRequest(request);
+  const placement = runtimePlacementFromRequest(request);
+  const operation = request.kind === 'start_environment_runtime'
+    ? 'start'
+    : request.kind === 'stop_environment_runtime'
+      ? 'stop'
+      : request.kind === 'restart_environment_runtime'
+        ? 'restart'
+        : 'update_runtime';
+  const label = runtimeTargetLabelFromRequest(request);
+
+  try {
+    // Direct Local/SSH cards own the target coordinates, while Gateway owns
+    // the lifecycle mutation. Ensure the route exists before dispatching the
+    // operation so a missing route is recoverable inside the user's action.
+    const record = await upsertDirectRuntimeGateway(environmentID, label, hostAccess, placement);
+    const source = await syncGatewayRecord(record, {
+      force: true,
+      mode: 'sync',
+      priority: 'foreground',
+      startPolicy: 'start_if_needed',
+    });
+    const gatewayEnvironment = source.environments.find((candidate) => candidate.gateway_env_id === 'env_local');
+    if (!gatewayEnvironment) {
+      throw new GatewayClientError(
+        'RUNTIME_INITIALIZATION_UNAVAILABLE',
+        'Desktop could not discover the runtime lifecycle target. Refresh the environment and try again.',
+      );
+    }
+    return await runGatewayEnvironmentLifecycleFromLauncher({
+      kind: 'run_gateway_environment_lifecycle',
+      environment_id: environmentID,
+      gateway_id: record.gateway_id,
+      gateway_env_id: gatewayEnvironment.gateway_env_id,
+      operation,
+      label,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return launcherActionFailure(
+      gatewayServiceFailureCode(error),
+      'environment',
+      message,
+      {
+        environmentID,
+        shouldRefreshSnapshot: true,
+        failure: desktopFailureFromError(error, {
+          code: 'operation_failed',
+          title: 'Environment Runtime Action Failed',
+          summary: message,
+          targetLabel: label,
+        }),
+      },
+    );
+  }
 }
 
 async function startEnvironmentRuntimeFromLauncher(
@@ -14731,17 +14787,6 @@ async function startEnvironmentRuntimeFromLauncher(
 async function updateEnvironmentRuntimeFromLauncher(
   request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'update_environment_runtime' }>>,
 ): Promise<DesktopLauncherActionResult> {
-  const requestedPlacement = runtimePlacementFromRequest(request);
-  if (requestedPlacement.kind !== 'container_process' && !sshDetailsFromRuntimeTargetRequest(request)) {
-    return launcherActionFailure(
-      'action_invalid',
-      'environment',
-      'Local Host runtime updates are managed through the Redeven Desktop update handoff.',
-      {
-        environmentID: runtimeTargetEnvironmentIDFromRequest(request),
-      },
-    );
-  }
   return runEnvironmentRuntimeLifecycleFromLauncher({
     ...request,
     kind: 'update_environment_runtime',
@@ -15085,17 +15130,7 @@ async function dismissLauncherOperationFromLauncher(
 async function stopEnvironmentRuntimeFromLauncher(
   request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'stop_environment_runtime' }>>,
 ): Promise<DesktopLauncherActionResult> {
-  return launcherActionFailure(
-    request.external_local_ui_url ? 'action_invalid' : 'runtime_not_ready',
-    'environment',
-    request.external_local_ui_url
-      ? 'URL connections open directly and do not support lifecycle actions.'
-      : 'Initialize this environment before using lifecycle actions.',
-    {
-      environmentID: runtimeTargetEnvironmentIDFromRequest(request),
-      shouldRefreshSnapshot: true,
-    },
-  );
+  return runEnvironmentRuntimeLifecycleFromLauncher(request);
 }
 
 async function refreshEnvironmentRuntimeFromLauncher(

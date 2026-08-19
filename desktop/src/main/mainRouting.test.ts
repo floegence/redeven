@@ -777,8 +777,10 @@ describe('main routing', () => {
     const directLifecycleStart = mainSrc.indexOf('async function runEnvironmentRuntimeLifecycleFromLauncher(');
     const directLifecycleEnd = mainSrc.indexOf('async function startEnvironmentRuntimeFromLauncher(', directLifecycleStart);
     const directLifecycleSrc = mainSrc.slice(directLifecycleStart, directLifecycleEnd);
-    expect(directLifecycleSrc).toContain("'runtime_not_ready'");
-    expect(directLifecycleSrc).toContain('Initialize this environment before using lifecycle actions.');
+    expect(directLifecycleSrc).toContain('upsertDirectRuntimeGateway(');
+    expect(directLifecycleSrc).toContain('syncGatewayRecord(record');
+    expect(directLifecycleSrc).toContain('runGatewayEnvironmentLifecycleFromLauncher({');
+    expect(directLifecycleSrc).toContain("startPolicy: 'start_if_needed'");
     expect(directLifecycleSrc).not.toContain('ensureRuntimePlacementReadyRecordFromLauncher(');
     expect(directLifecycleSrc).not.toContain('ensureSSHRuntimeReadyRecord(');
     expect(directLifecycleSrc).not.toContain('startLocalHostRuntimeWithLifecycleProgress(');
@@ -944,8 +946,8 @@ describe('main routing', () => {
     const startRuntimeStart = mainSrc.indexOf('async function runEnvironmentRuntimeLifecycleFromLauncher(');
     const startRuntimeEnd = mainSrc.indexOf('async function connectProviderRuntimeFromLauncher(', startRuntimeStart);
     const startRuntimeSrc = mainSrc.slice(startRuntimeStart, startRuntimeEnd);
-    expect(startRuntimeSrc).toContain("'runtime_not_ready'");
-    expect(startRuntimeSrc).toContain('Initialize this environment before using lifecycle actions.');
+    expect(startRuntimeSrc).toContain('upsertDirectRuntimeGateway(');
+    expect(startRuntimeSrc).toContain('runGatewayEnvironmentLifecycleFromLauncher({');
     expect(startRuntimeSrc).not.toContain('ensureRuntimePlacementReadyRecordFromLauncher(request)');
     expect(startRuntimeSrc).not.toContain('startRuntimePlacementBridgeSession({');
     expect(startRuntimeSrc).not.toContain('const normalizedSSHTarget = sshDetailsFromRuntimeTargetRequest(request);');
@@ -953,8 +955,7 @@ describe('main routing', () => {
     const stopRuntimeStart = mainSrc.indexOf('async function stopEnvironmentRuntimeFromLauncher(');
     const stopRuntimeEnd = mainSrc.indexOf('async function refreshEnvironmentRuntimeFromLauncher(', stopRuntimeStart);
     const stopRuntimeSrc = mainSrc.slice(stopRuntimeStart, stopRuntimeEnd);
-    expect(stopRuntimeSrc).toContain("request.external_local_ui_url ? 'action_invalid' : 'runtime_not_ready'");
-    expect(stopRuntimeSrc).toContain('URL connections open directly and do not support lifecycle actions.');
+    expect(stopRuntimeSrc).toContain('return runEnvironmentRuntimeLifecycleFromLauncher(request);');
     expect(stopRuntimeSrc).not.toContain('stopEnvironmentRuntimeFromLauncherUncoordinated(request');
 
     const refreshRuntimeStart = mainSrc.indexOf('async function refreshEnvironmentRuntimeFromLauncher(');
@@ -1266,7 +1267,8 @@ describe('main routing', () => {
     expect(startRuntimeEnd).toBeGreaterThan(startRuntimeStart);
     const startRuntimeSrc = mainSrc.slice(startRuntimeStart, startRuntimeEnd);
     expect(startRuntimeSrc).not.toContain('syncLinkedProviderRuntimeHealthFromService(');
-    expect(startRuntimeSrc).toContain('Initialize this environment before using lifecycle actions.');
+    expect(startRuntimeSrc).toContain('upsertDirectRuntimeGateway(');
+    expect(startRuntimeSrc).toContain('runGatewayEnvironmentLifecycleFromLauncher({');
 
     const connectStart = mainSrc.indexOf('async function connectProviderRuntimeFromLauncher(');
     const connectEnd = mainSrc.indexOf('async function disconnectProviderRuntimeFromLauncher(', connectStart);
