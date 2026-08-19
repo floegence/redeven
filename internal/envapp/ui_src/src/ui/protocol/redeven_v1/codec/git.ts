@@ -303,10 +303,10 @@ function fromWireGitCommitFileSummary(resp: wire_git_commit_file_summary): GitCo
 
 function toWireGitDiffFileRef(req: GitDiffFileRef): wire_git_diff_file_ref {
   return {
-    change_type: typeof req.changeType === 'string' ? req.changeType : undefined,
-    path: typeof req.path === 'string' ? req.path : undefined,
-    old_path: typeof req.oldPath === 'string' ? req.oldPath : undefined,
-    new_path: typeof req.newPath === 'string' ? req.newPath : undefined,
+    ...(typeof req.changeType === 'string' ? { change_type: req.changeType } : {}),
+    ...(typeof req.path === 'string' ? { path: req.path } : {}),
+    ...(typeof req.oldPath === 'string' ? { old_path: req.oldPath } : {}),
+    ...(typeof req.newPath === 'string' ? { new_path: req.newPath } : {}),
   };
 }
 
@@ -701,13 +701,13 @@ export function toWireGitGetDiffContentRequest(req: GitGetDiffContentRequest): w
   return {
     repo_root_path: req.repoRootPath,
     source_kind: req.sourceKind,
-    workspace_section: typeof req.workspaceSection === 'string' ? req.workspaceSection : undefined,
-    commit: typeof req.commit === 'string' ? req.commit : undefined,
-    base_ref: typeof req.baseRef === 'string' ? req.baseRef : undefined,
-    target_ref: typeof req.targetRef === 'string' ? req.targetRef : undefined,
-    stash_id: typeof req.stashId === 'string' ? req.stashId : undefined,
-    stash_section: typeof req.stashSection === 'string' ? req.stashSection : undefined,
-    mode: typeof req.mode === 'string' ? req.mode : undefined,
+    ...(typeof req.workspaceSection === 'string' ? { workspace_section: req.workspaceSection } : {}),
+    ...(typeof req.commit === 'string' ? { commit: req.commit } : {}),
+    ...(typeof req.baseRef === 'string' ? { base_ref: req.baseRef } : {}),
+    ...(typeof req.targetRef === 'string' ? { target_ref: req.targetRef } : {}),
+    ...(typeof req.stashId === 'string' ? { stash_id: req.stashId } : {}),
+    ...(typeof req.stashSection === 'string' ? { stash_section: req.stashSection } : {}),
+    ...(typeof req.mode === 'string' ? { mode: req.mode } : {}),
     file: toWireGitDiffFileRef(req.file),
   };
 }
