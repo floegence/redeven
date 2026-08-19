@@ -562,6 +562,32 @@ describe('selectEnvironmentPanelProgress', () => {
     expect(selectEnvironmentPanelProgress(staleOpenFailure, runtimeRunning)).toBe(runtimeRunning);
   });
 
+  it('uses a newer Gateway Runtime confirmation instead of the Open failure that requested it', () => {
+    const openFailure = openConnectionProgress('failed', { startedAt: 100, updatedAt: 110 });
+    const runtimeConfirmation: DesktopLauncherActionProgress = {
+      action: 'run_gateway_environment_lifecycle',
+      environment_id: 'local-environment',
+      environment_label: 'Local Environment',
+      operation_key: 'local-environment:update_runtime',
+      subject_kind: 'gateway',
+      subject_id: 'gateway-local',
+      started_at_unix_ms: 200,
+      updated_at_unix_ms: 210,
+      status: 'needs_confirmation',
+      phase: 'runtime_operation_confirmation_required',
+      title: 'Review Runtime impact',
+      detail: 'Confirm the Runtime update.',
+      runtime_confirmation: {
+        operation: 'update_runtime',
+        snapshot_revision: 1,
+        workload_knowledge: 'unknown',
+        protected_workload_present: false,
+      },
+    };
+
+    expect(selectEnvironmentPanelProgress(openFailure, runtimeConfirmation)).toBe(runtimeConfirmation);
+  });
+
   it('uses an active Open operation instead of a stale runtime failure', () => {
     const openRunning = openConnectionProgress('running', { startedAt: 300, updatedAt: 310 });
     const staleRuntimeFailure = lifecycleActionProgress({

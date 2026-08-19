@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   containerInspectCommand,
+  containerStartCommand,
   containerListCommand,
   containerRuntimePlatformProbeCommand,
   containerRuntimeProbeCommand,
@@ -13,7 +14,9 @@ import {
   parseContainerListOutput,
   parseContainerInspectJSON,
   parseContainerPlatformProbeOutput,
+  prepareRuntimeContainerLifecycleTarget,
   resolveRuntimeContainerPlacement,
+  type DesktopRuntimeContainerLifecycleResolver,
   type DesktopRuntimeContainerResolver,
 } from './containerRuntime';
 import { DesktopHostCommandNotFoundError } from './desktopHostCommand';
@@ -93,6 +96,11 @@ describe('containerRuntime', () => {
     expect(containerInspectCommand('docker', 'dev-container')).toEqual([
       'docker',
       'inspect',
+      'dev-container',
+    ]);
+    expect(containerStartCommand('podman', 'dev-container')).toEqual([
+      'podman',
+      'start',
       'dev-container',
     ]);
     expect(containerListCommand('docker')).toEqual([
@@ -320,6 +328,7 @@ describe('containerRuntime', () => {
 
   it('rejects malformed command inputs instead of falling back', () => {
     expect(() => containerInspectCommand('docker', '')).toThrow('Container reference');
+    expect(() => containerStartCommand('docker', '')).toThrow('Container reference');
     expect(() => containerRuntimeExecCommand({
       engine: 'docker',
       container_id: '',
@@ -366,6 +375,142 @@ describe('containerRuntime', () => {
         container_label: 'redeven-nginx-dev',
       },
     });
+  });
+
+  it('starts the exact saved container and verifies it is running', async () => {
+    let running = false;
+    const calls: string[] = [];
+    const resolver: DesktopRuntimeContainerLifecycleResolver = {
+      inspect: async (_engine, reference) => {
+        calls.push(`inspect:${reference}`);
+        return {
+          engine: 'docker',
+          container_id: 'container-stable-id',
+          container_ref: 'dev-container',
+          container_label: 'dev-container',
+          status: running ? 'running' : 'stopped',
+        };
+      },
+      start: async (_engine, reference) => {
+        calls.push(`start:${reference}`);
+        running = true;
+      },
+    };
+
+    await expect(prepareRuntimeContainerLifecycleTarget(resolver, {
+      kind: 'container_process',
+      container_engine: 'docker',
+      container_id: 'container-stable-id',
+      container_ref: 'dev-container',
+      container_label: 'dev-container',
+      runtime_root: '/root/.redeven',
+      bridge_strategy: 'exec_stream',
+    }, { startIfNeeded: true })).resolves.toMatchObject({
+      running: true,
+      placement: { container_id: 'container-stable-id' },
+    });
+    expect(calls).toEqual([
+      'inspect:container-stable-id',
+      'start:container-stable-id',
+      'inspect:container-stable-id',
+    ]);
+  });
+
+  it('keeps Stop idempotent when the saved container is already stopped', async () => {
+    let startCalled = false;
+    const resolver: DesktopRuntimeContainerLifecycleResolver = {
+      inspect: async () => ({
+        engine: 'podman',
+        container_id: 'container-stable-id',
+        container_ref: 'dev-container',
+        container_label: 'dev-container',
+        status: 'stopped',
+      }),
+      start: async () => {
+        startCalled = true;
+      },
+    };
+
+    await expect(prepareRuntimeContainerLifecycleTarget(resolver, {
+      kind: 'container_process',
+      container_engine: 'podman',
+      container_id: 'container-stable-id',
+      container_ref: 'dev-container',
+      container_label: 'dev-container',
+      runtime_root: '/root/.redeven',
+      bridge_strategy: 'exec_stream',
+    }, { startIfNeeded: false })).resolves.toMatchObject({ running: false });
+    expect(startCalled).toBe(false);
+  });
+
+  it('recovers a rebuilt stopped container through its stable reference', async () => {
+    let running = false;
+    const calls: string[] = [];
+    const resolver: DesktopRuntimeContainerLifecycleResolver = {
+      inspect: async (_engine, reference) => {
+        calls.push(`inspect:${reference}`);
+        if (reference === 'old-container-id') {
+          throw new Error('No such container: old-container-id');
+        }
+        return {
+          engine: 'docker',
+          container_id: 'new-container-id',
+          container_ref: 'dev-container',
+          container_label: 'dev-container',
+          status: running ? 'running' : 'stopped',
+        };
+      },
+      start: async (_engine, reference) => {
+        calls.push(`start:${reference}`);
+        running = true;
+      },
+    };
+
+    await expect(prepareRuntimeContainerLifecycleTarget(resolver, {
+      kind: 'container_process',
+      container_engine: 'docker',
+      container_id: 'old-container-id',
+      container_ref: 'dev-container',
+      container_label: 'dev-container',
+      runtime_root: '/root/.redeven',
+      bridge_strategy: 'exec_stream',
+    }, { startIfNeeded: true })).resolves.toMatchObject({
+      running: true,
+      placement: { container_id: 'new-container-id' },
+    });
+    expect(calls).toEqual([
+      'inspect:old-container-id',
+      'inspect:dev-container',
+      'start:new-container-id',
+      'inspect:new-container-id',
+    ]);
+  });
+
+  it('reports a failed container start as the real host-management boundary', async () => {
+    const resolver: DesktopRuntimeContainerLifecycleResolver = {
+      inspect: async () => ({
+        engine: 'docker',
+        container_id: 'container-stable-id',
+        container_ref: 'dev-container',
+        container_label: 'dev-container',
+        status: 'stopped',
+      }),
+      start: async () => {
+        throw new Error('permission denied while starting container');
+      },
+    };
+
+    await expect(prepareRuntimeContainerLifecycleTarget(resolver, {
+      kind: 'container_process',
+      container_engine: 'docker',
+      container_id: 'container-stable-id',
+      container_ref: 'dev-container',
+      container_label: 'dev-container',
+      runtime_root: '/root/.redeven',
+      bridge_strategy: 'exec_stream',
+    }, { startIfNeeded: true })).rejects.toThrow(
+      'Desktop does not have permission to manage dev-container. Check docker access, then try again.',
+    );
   });
 
   it('uses structured host command diagnostics when recovering stale container ids', async () => {

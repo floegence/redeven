@@ -47,7 +47,7 @@ describe('desktopRuntimeOperationPlanner', () => {
     });
 
     expect(plans.start).toMatchObject({ availability: 'available', method: 'runtime_gateway' });
-    expect(plans.stop).toMatchObject({ availability: 'unavailable', reason_code: 'runtime_not_started' });
+    expect(plans.stop).toMatchObject({ availability: 'available', method: 'runtime_gateway' });
     expect(plans.restart).toMatchObject({ availability: 'available', method: 'runtime_gateway' });
     expect(plans.update).toMatchObject({ availability: 'available', method: 'runtime_gateway' });
   });

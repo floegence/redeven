@@ -2,9 +2,40 @@ import { describe, expect, it } from 'vitest';
 
 import type { DesktopOperationFailurePresentation } from '../shared/desktopOperationFailure';
 import { createDesktopI18n } from '../shared/i18n';
-import { buildWelcomeOperationFailureDisplay } from './operationFailureDisplay';
+import type { DesktopLauncherActionProgress, DesktopLauncherActionResult } from '../shared/desktopLauncherIPC';
+import {
+  buildWelcomeOperationFailureDisplay,
+  confirmationProgressForLauncherFailure,
+} from './operationFailureDisplay';
 
 describe('operationFailureDisplay', () => {
+  it('treats confirmation_required as a progress transition instead of a displayed failure', () => {
+    const failure: Extract<DesktopLauncherActionResult, Readonly<{ ok: false }>> = {
+      ok: false,
+      code: 'confirmation_required',
+      scope: 'environment',
+      message: 'Review the Runtime impact.',
+      environment_id: 'ssh-orange',
+      operation_key: 'ssh-orange:update_runtime',
+    };
+    const progress = {
+      operation_key: 'ssh-orange:update_runtime',
+      action: 'update_environment_runtime',
+      subject_kind: 'gateway',
+      subject_id: 'gw-orange',
+      environment_id: 'ssh-orange',
+      status: 'needs_confirmation',
+      phase: 'runtime_operation_confirmation_required',
+      title: 'Update Runtime',
+      detail: 'Confirm and continue.',
+      started_at_unix_ms: 1,
+      updated_at_unix_ms: 2,
+      cancelable: true,
+    } satisfies DesktopLauncherActionProgress;
+
+    expect(confirmationProgressForLauncherFailure(failure, [progress])).toBe(progress);
+    expect(confirmationProgressForLauncherFailure({ ...failure, code: 'runtime_start_failed' }, [progress])).toBeNull();
+  });
   it('keeps a localized failure summary compact and moves the raw error into technical details', () => {
     const rawError = 'failed to init runtime: codeapp registry column mismatch';
     const failure: DesktopOperationFailurePresentation = {

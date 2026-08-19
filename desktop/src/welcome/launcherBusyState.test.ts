@@ -979,6 +979,40 @@ describe('launcherBusyState', () => {
     )).toBe(localContainerProgress);
   });
 
+  it('recognizes Gateway runtime confirmation as environment lifecycle progress without a step timeline', () => {
+    const environment: RuntimeProgressEnvironmentMatch = {
+      id: 'ssh:orange:default:key_agent:remote_default',
+      managed_runtime_target_id: undefined,
+      managed_runtime_placement_target_id: undefined,
+      provider_runtime_link_target: undefined,
+    };
+    const confirmation: DesktopLauncherActionProgress = {
+      action: 'run_gateway_environment_lifecycle',
+      operation_key: `${environment.id}:update_runtime`,
+      subject_kind: 'gateway',
+      subject_id: 'gateway-orange',
+      environment_id: environment.id,
+      environment_label: 'orange',
+      started_at_unix_ms: 200,
+      status: 'needs_confirmation',
+      phase: 'runtime_operation_confirmation_required',
+      title: 'Review Runtime impact',
+      detail: 'Confirm the Runtime update.',
+      runtime_confirmation: {
+        operation: 'update_runtime',
+        snapshot_revision: 1,
+        workload_knowledge: 'unknown',
+        protected_workload_present: false,
+      },
+    };
+
+    expect(environmentMatchesRuntimeLifecycleProgress(environment, confirmation)).toBe(true);
+    expect(selectedSnapshotRuntimeLifecycleProgressForEnvironment(
+      environment as never,
+      [confirmation],
+    )).toBe(confirmation);
+  });
+
   it('prefers terminal runtime lifecycle progress over stale running busy progress for the same operation', () => {
     const environment: RuntimeProgressEnvironmentMatch = {
       id: 'local',

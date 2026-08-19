@@ -68,7 +68,10 @@ func TestRuntimeManagementCapabilityAllowsInstallWhenInventoryProvesRuntimeAbsen
 	if capability.Target == nil || capability.Target.LifecycleTargetID != binding.LifecycleTargetID || capability.Target.TargetGeneration != binding.TargetGeneration {
 		t.Fatalf("capability target = %#v, want %#v", capability.Target, binding)
 	}
-	assertRuntimeOperationKinds(t, capability.Operations, gatewayprotocol.RuntimeOperationUpdate)
+	assertRuntimeOperationKinds(t, capability.Operations,
+		gatewayprotocol.RuntimeOperationStop,
+		gatewayprotocol.RuntimeOperationUpdate,
+	)
 	if len(capability.ArtifactPolicies) != 2 ||
 		capability.ArtifactPolicies[0] != gatewayprotocol.ArtifactPolicyCustomBuild ||
 		capability.ArtifactPolicies[1] != gatewayprotocol.ArtifactPolicyPublishedRelease {
@@ -98,7 +101,10 @@ func TestRuntimeManagementCapabilityAdvertisesReconcileOnlyToBindingAdministrato
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertRuntimeOperationKinds(t, manager.Operations, gatewayprotocol.RuntimeOperationUpdate)
+	assertRuntimeOperationKinds(t, manager.Operations,
+		gatewayprotocol.RuntimeOperationStop,
+		gatewayprotocol.RuntimeOperationUpdate,
+	)
 
 	bindingAdmin, err := controller.RuntimeManagementCapability(context.Background(), gatewayprotocol.ReservedLocalEnvironmentID, gatewaylifecycle.Access{
 		ClientKeyID: "binding-admin-client",
@@ -112,6 +118,7 @@ func TestRuntimeManagementCapabilityAdvertisesReconcileOnlyToBindingAdministrato
 	}
 	assertRuntimeOperationKinds(t, bindingAdmin.Operations,
 		gatewayprotocol.RuntimeOperationReconcile,
+		gatewayprotocol.RuntimeOperationStop,
 		gatewayprotocol.RuntimeOperationUpdate,
 	)
 }
@@ -140,9 +147,13 @@ func TestRuntimeManagementCapabilityFailsClosedAfterExternalBinaryReplacement(t 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if capability.Readiness != gatewayprotocol.ManagementTemporarilyUnavailable || capability.ReasonCode != "runtime_identity_validation_required" || len(capability.Operations) != 0 {
+	if capability.Readiness != gatewayprotocol.ManagementReady || capability.ReasonCode != "runtime_identity_validation_required" {
 		t.Fatalf("capability after external replacement = %#v", capability)
 	}
+	assertRuntimeOperationKinds(t, capability.Operations,
+		gatewayprotocol.RuntimeOperationStop,
+		gatewayprotocol.RuntimeOperationUpdate,
+	)
 }
 
 func TestRefreshRuntimeValidationReusesPersistedFactsOnlyForExactOfflineBinary(t *testing.T) {
@@ -204,9 +215,13 @@ func TestRuntimeManagementCapabilityFailsClosedForIncompatiblePersistedIdentity(
 	if err != nil {
 		t.Fatal(err)
 	}
-	if capability.Readiness != gatewayprotocol.ManagementTemporarilyUnavailable || capability.ReasonCode != "runtime_identity_incompatible" || len(capability.Operations) != 0 {
+	if capability.Readiness != gatewayprotocol.ManagementReady || capability.ReasonCode != "runtime_identity_incompatible" {
 		t.Fatalf("capability for incompatible persisted identity = %#v", capability)
 	}
+	assertRuntimeOperationKinds(t, capability.Operations,
+		gatewayprotocol.RuntimeOperationStop,
+		gatewayprotocol.RuntimeOperationUpdate,
+	)
 	if capability.Compatibility == nil || capability.Compatibility.CompatibilityEpoch != gatewayprotocol.RuntimeCompatibilityEpochV2-1 {
 		t.Fatalf("capability hid the validated source epoch from the authorized client: %#v", capability.Compatibility)
 	}
@@ -288,7 +303,11 @@ func TestRuntimeManagementCapabilityOffersUpdateForVerifiedLegacyRuntime(t *test
 
 	capability, err := controller.RuntimeManagementCapability(context.Background(), gatewayprotocol.ReservedLocalEnvironmentID, gatewaylifecycle.Access{
 		ClientKeyID: "admin-client",
-		Grants:      []gatewayprotocol.RuntimeGrant{gatewayprotocol.RuntimeGrantManage, gatewayprotocol.RuntimeGrantCustomBuild},
+		Grants: []gatewayprotocol.RuntimeGrant{
+			gatewayprotocol.RuntimeGrantManage,
+			gatewayprotocol.RuntimeGrantCustomBuild,
+			gatewayprotocol.RuntimeGrantManageBinding,
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -296,7 +315,12 @@ func TestRuntimeManagementCapabilityOffersUpdateForVerifiedLegacyRuntime(t *test
 	if capability.Readiness != gatewayprotocol.ManagementReady || capability.ReasonCode != "runtime_update_required" {
 		t.Fatalf("legacy Runtime capability = %#v", capability)
 	}
-	assertRuntimeOperationKinds(t, capability.Operations, gatewayprotocol.RuntimeOperationUpdate)
+	assertRuntimeOperationKinds(t, capability.Operations,
+		gatewayprotocol.RuntimeOperationReconcile,
+		gatewayprotocol.RuntimeOperationRestart,
+		gatewayprotocol.RuntimeOperationStop,
+		gatewayprotocol.RuntimeOperationUpdate,
+	)
 	if capability.Compatibility == nil || capability.Compatibility.CompatibilityEpoch != 5 || capability.Compatibility.RuntimeBinaryVersion != "v0.7.0" {
 		t.Fatalf("legacy Runtime compatibility = %#v", capability.Compatibility)
 	}

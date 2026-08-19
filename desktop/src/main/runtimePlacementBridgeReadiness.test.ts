@@ -58,4 +58,19 @@ describe('runtimePlacementBridgeReadiness', () => {
     });
     expect(failure.diagnostics?.[0]?.text).toContain('kind=network_error');
   });
+
+  it('offers Runtime update recovery when the bridge receives an invalid health payload', () => {
+    const failure = desktopFailureForRuntimePlacementBridgeReadiness(
+      { kind: 'invalid_response', stage: 'runtime_health', status_code: 200 },
+      startup(runtimeService({ compatibility: 'unknown' })),
+      'orange',
+    );
+
+    expect(failure).toMatchObject({
+      code: 'runtime_update_required',
+      summary_key: 'runtimeMessage.updateRuntimeBeforeOpeningEnvironment',
+      recovery_hint_key: 'runtimeMessage.updateRuntimeFirst',
+      target_label: 'orange',
+    });
+  });
 });

@@ -1,5 +1,6 @@
 import type { DesktopLauncherActionProgress, DesktopLauncherActionRequest } from '../shared/desktopLauncherIPC';
 import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
+import type { DesktopRuntimeLifecycleOperation } from '../shared/desktopRuntimeLifecycleProgress';
 
 export type RuntimeProgressEnvironmentMatch = Pick<
   DesktopEnvironmentEntry,
@@ -243,11 +244,49 @@ function environmentRuntimeProgressIDs(environment: RuntimeProgressEnvironmentMa
     .filter((value, index, values) => value !== '' && values.indexOf(value) === index);
 }
 
+export function runtimeLifecycleOperationForActionProgress(
+  progress: DesktopLauncherActionProgress | null | undefined,
+): DesktopRuntimeLifecycleOperation | null {
+  if (!progress) {
+    return null;
+  }
+  if (progress.lifecycle_progress) {
+    return progress.lifecycle_progress.operation;
+  }
+  switch (progress.action) {
+    case 'start_environment_runtime':
+      return 'start';
+    case 'stop_environment_runtime':
+      return 'stop';
+    case 'restart_environment_runtime':
+      return 'restart';
+    case 'update_environment_runtime':
+      return 'update';
+    case 'run_gateway_environment_lifecycle':
+    case 'run_provider_environment_lifecycle':
+      break;
+    default:
+      return null;
+  }
+  const operation = progress.runtime_confirmation?.operation
+    ?? String(progress.operation_key ?? '').split(':').at(-1);
+  switch (operation) {
+    case 'start':
+    case 'stop':
+    case 'restart':
+      return operation;
+    case 'update_runtime':
+      return 'update';
+    default:
+      return null;
+  }
+}
+
 export function environmentMatchesRuntimeLifecycleProgress(
   environment: RuntimeProgressEnvironmentMatch,
   progress: DesktopLauncherActionProgress | null | undefined,
 ): boolean {
-  if (!progress?.lifecycle_progress) {
+  if (!progress || runtimeLifecycleOperationForActionProgress(progress) === null) {
     return false;
   }
   const progressIDs = [

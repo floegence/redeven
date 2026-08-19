@@ -141,8 +141,9 @@ func TestAuthorizerVerifiesProviderReconcilePermit(t *testing.T) {
 	permit := signTestPermit(t, privateKey, binding.PermitVerificationKey.KeyID, claims)
 	authorizer, _ := NewAuthorizer(bindings)
 	if _, err := authorizer.AuthorizeReconcile(context.Background(), nil, gatewayauth.VerifiedRequest{
-		ClientKeyID:   "gck_recovery_admin",
-		RuntimeGrants: []gatewayprotocol.RuntimeGrant{gatewayprotocol.RuntimeGrantManageBinding},
+		ClientKeyID:    "gck_recovery_admin",
+		RuntimeGrants:  []gatewayprotocol.RuntimeGrant{gatewayprotocol.RuntimeGrantManageBinding},
+		ProviderTunnel: true,
 	}, operation, ""); err == nil {
 		t.Fatal("AuthorizeReconcile accepted binding permission without an exact recovery permit")
 	}
@@ -156,6 +157,33 @@ func TestAuthorizerVerifiesProviderReconcilePermit(t *testing.T) {
 	claims.Action = "prepare"
 	if _, err := authorizer.AuthorizeReconcile(context.Background(), nil, gatewayauth.VerifiedRequest{ClientKeyID: "gck_recovery_admin"}, operation, signTestPermit(t, privateKey, binding.PermitVerificationKey.KeyID, claims)); err == nil {
 		t.Fatal("AuthorizeReconcile accepted a prepare permit")
+	}
+}
+
+func TestAuthorizerAllowsDirectBindingAdminReconcileWithoutProviderPermit(t *testing.T) {
+	bindings, err := OpenLocalBindingStore(t.TempDir(), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding := bindings.Binding()
+	operation := gatewayprotocol.RuntimeOperation{
+		OperationID: "rop_direct_reconcile", LifecycleTargetID: binding.LifecycleTargetID,
+		TargetGeneration: binding.TargetGeneration, GatewayEnvID: binding.GatewayEnvID,
+		AuthorizedClientKeyID: "gck_direct_admin", RouteBindingID: binding.BindingID,
+	}
+	authorizer, err := NewAuthorizer(bindings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	access, err := authorizer.AuthorizeReconcile(context.Background(), nil, gatewayauth.VerifiedRequest{
+		ClientKeyID:   operation.AuthorizedClientKeyID,
+		RuntimeGrants: []gatewayprotocol.RuntimeGrant{gatewayprotocol.RuntimeGrantManageBinding},
+	}, operation, "")
+	if err != nil {
+		t.Fatalf("AuthorizeReconcile() error = %v", err)
+	}
+	if access.ClientKeyID != operation.AuthorizedClientKeyID || access.PermitJTI == "" || len(access.Grants) != 1 {
+		t.Fatalf("direct reconcile access = %#v", access)
 	}
 }
 

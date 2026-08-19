@@ -368,6 +368,17 @@ type fakeController struct {
 	commitContextErr   chan error
 }
 
+type commitBoundaryError struct {
+	cause            error
+	recoveryRequired bool
+}
+
+func (e commitBoundaryError) Error() string { return e.cause.Error() }
+func (e commitBoundaryError) Unwrap() error { return e.cause }
+func (e commitBoundaryError) RuntimeRecoveryRequired() bool {
+	return e.recoveryRequired
+}
+
 func (c *fakeController) ValidateTarget(_ context.Context, _ string, _ gatewayprotocol.LifecycleTarget) error {
 	c.validations++
 	return c.validateErr
@@ -481,6 +492,35 @@ func TestStopCommitConsumesFenceWithTheStoppedRuntime(t *testing.T) {
 	}
 	if controller.released != 0 {
 		t.Fatalf("Stop Commit() released a fence through the Runtime after that Runtime exited: %d", controller.released)
+	}
+}
+
+func TestCommitFailureBeforeRuntimeMutationReleasesFenceWithoutRecovery(t *testing.T) {
+	clock := &fakeClock{now: time.Unix(227, 0)}
+	controller := &fakeController{
+		snapshot: knownSnapshot(4), fenced: knownSnapshot(4), token: "fence-precommit",
+		commitErr: commitBoundaryError{
+			cause:            errors.New("fresh Linux Runtime artifact is missing required ReDevPlugin companions"),
+			recoveryRequired: false,
+		},
+	}
+	store := newTestStore(t, controller, clock)
+	prepareCommitReadyOperation(t, store, "op-precommit-failure")
+
+	operation, err := store.Commit(context.Background(), "op-precommit-failure", "client-a")
+	assertCode(t, err, ErrorUnavailable)
+	if operation.State != gatewayprotocol.RuntimeOperationFailed || operation.Failure == nil ||
+		operation.Failure.Message != controller.commitErr.Error() {
+		t.Fatalf("Commit() operation = %#v", operation)
+	}
+	if controller.recoveries != 0 {
+		t.Fatalf("pre-mutation failure invoked recovery %d times", controller.recoveries)
+	}
+	if controller.released != 1 {
+		t.Fatalf("pre-mutation failure released fence %d times, want 1", controller.released)
+	}
+	if _, quarantined := store.state.Quarantined[operation.LifecycleTargetID]; quarantined {
+		t.Fatalf("pre-mutation failure quarantined an unchanged target: %#v", store.state.Quarantined)
 	}
 }
 

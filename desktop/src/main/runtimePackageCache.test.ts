@@ -49,8 +49,21 @@ function archiveFetchCount(fetchMock: ReturnType<typeof vi.fn>, packageName: str
     .reduce((total, [, count]) => total + count, 0);
 }
 
-function singleFileTarGzipEntryName(archive: Buffer): string {
-  return gunzipSync(archive).subarray(0, 100).toString('utf8').replace(/\0.*$/u, '');
+function tarGzipEntryNames(archive: Buffer): readonly string[] {
+  const data = gunzipSync(archive);
+  const names: string[] = [];
+  for (let offset = 0; offset + 512 <= data.length;) {
+    const header = data.subarray(offset, offset + 512);
+    const name = header.subarray(0, 100).toString('utf8').replace(/\0.*$/u, '');
+    if (name === '') {
+      break;
+    }
+    names.push(name);
+    const sizeText = header.subarray(124, 136).toString('ascii').replace(/\0.*$/u, '').trim();
+    const size = Number.parseInt(sizeText || '0', 8);
+    offset += 512 + Math.ceil(size / 512) * 512;
+  }
+  return names;
 }
 
 async function mkCacheRoot(): Promise<string> {
@@ -181,6 +194,25 @@ async function createSourceRuntimeFixture(): Promise<Readonly<{
     'done',
     '[ "$check_only" -eq 0 ] || exit 0',
     'GOWORK=off GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 go build -o "$output" "$command_path"',
+  ].join('\n'), { mode: 0o755 });
+  await fs.writeFile(path.join(root, 'scripts', 'stage_redevplugin_release_artifacts.sh'), [
+    '#!/usr/bin/env sh',
+    'set -eu',
+    'dest_dir=',
+    'runtime_out=',
+    'while [ "$#" -gt 0 ]; do',
+    '  case "$1" in',
+    '    --dest-dir) dest_dir="$2" ;;',
+    '    --runtime-out) runtime_out="$2" ;;',
+    '  esac',
+    '  shift 2',
+    'done',
+    'mkdir -p "$dest_dir" "$(dirname "$runtime_out")"',
+    'printf plugin-runtime > "$runtime_out"',
+    'chmod 755 "$runtime_out"',
+    'for name in .redevplugin-release-artifacts-verified.json REDEVPLUGIN_THIRD_PARTY_NOTICES.md REDEVPLUGIN_RUNTIME.spdx.json redevplugin-runtime.provenance.json redevplugin-runtime.sig redevplugin-runtime.pem; do',
+    '  printf evidence > "$(dirname "$runtime_out")/$name"',
+    'done',
   ].join('\n'), { mode: 0o755 });
 
   return {
@@ -421,8 +453,17 @@ describe('runtimePackageCache', () => {
       expect(runtimeAsset.source).toBe('source_build');
       expect(gatewayAsset.source).toBe('source_build');
       expect(runtimeAsset.archiveData).not.toEqual(gatewayAsset.archiveData);
-      expect(singleFileTarGzipEntryName(runtimeAsset.archiveData)).toBe('redeven');
-      expect(singleFileTarGzipEntryName(gatewayAsset.archiveData)).toBe('redeven-gateway');
+      expect(tarGzipEntryNames(runtimeAsset.archiveData)).toEqual([
+        'redeven',
+        'redevplugin-runtime',
+        '.redevplugin-release-artifacts-verified.json',
+        'REDEVPLUGIN_THIRD_PARTY_NOTICES.md',
+        'REDEVPLUGIN_RUNTIME.spdx.json',
+        'redevplugin-runtime.provenance.json',
+        'redevplugin-runtime.sig',
+        'redevplugin-runtime.pem',
+      ]);
+      expect(tarGzipEntryNames(gatewayAsset.archiveData)).toEqual(['redeven-gateway']);
       const buildLog = await fs.readFile(fixture.buildLogPath, 'utf8');
       expect(buildLog.trim().split('\n')).toHaveLength(2);
 

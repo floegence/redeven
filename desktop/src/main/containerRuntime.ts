@@ -89,6 +89,16 @@ export type DesktopRuntimeContainerResolver = Readonly<{
   listRunning: (engine: DesktopContainerEngine) => Promise<readonly DesktopRuntimeContainerListItem[]>;
 }>;
 
+export type DesktopRuntimeContainerLifecycleResolver = Readonly<{
+  inspect: DesktopRuntimeContainerResolver['inspect'];
+  start: (engine: DesktopContainerEngine, containerRef: string) => Promise<void>;
+}>;
+
+export type DesktopRuntimeContainerLifecyclePreparation = Readonly<{
+  placement: ContainerProcessPlacement;
+  running: boolean;
+}>;
+
 function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
@@ -225,6 +235,18 @@ export function containerInspectCommand(
   return [normalizedEngine, 'inspect', ref];
 }
 
+export function containerStartCommand(
+  engine: DesktopContainerEngine,
+  containerRef: string,
+): readonly string[] {
+  const normalizedEngine = normalizeContainerEngine(engine);
+  const ref = compact(containerRef);
+  if (ref === '') {
+    throw new Error('Container reference is required.');
+  }
+  return [normalizedEngine, 'start', ref];
+}
+
 export function containerListCommand(
   engine: DesktopContainerEngine,
 ): readonly string[] {
@@ -270,12 +292,12 @@ export function containerRuntimeUnavailableMessage(
     return `Container ${label} was not found. Choose a running container, then try again.`;
   }
   if (status === 'no_permission') {
-    return `Desktop does not have permission to inspect ${label}. Check ${placement.container_engine} access, then try again.`;
+    return `Desktop does not have permission to manage ${label}. Check ${placement.container_engine} access, then try again.`;
   }
   if (status === 'ambiguous') {
     return `Container reference ${label} matches more than one running container. Choose the exact container, then try again.`;
   }
-  return `Container ${label} is not running. Start it outside Redeven, then refresh and try again.`;
+  return `Container ${label} is not running.`;
 }
 
 export function containerRuntimeCommandFailureStatus(
@@ -415,6 +437,71 @@ export async function resolveRuntimeContainerPlacement(
     inspected,
     placement: nextPlacement,
     changed: true,
+  };
+}
+
+export async function prepareRuntimeContainerLifecycleTarget(
+  resolver: DesktopRuntimeContainerLifecycleResolver,
+  placement: ContainerProcessPlacement,
+  options: Readonly<{ startIfNeeded: boolean }>,
+): Promise<DesktopRuntimeContainerLifecyclePreparation> {
+  const unavailable = (status: DesktopRuntimeContainerUnavailableStatus): Error => (
+    new Error(containerRuntimeUnavailableMessage(placement, status))
+  );
+  const inspect = async (reference: string): Promise<DesktopContainerInspectResult> => {
+    try {
+      return await resolver.inspect(placement.container_engine, reference);
+    } catch (error) {
+      throw unavailable(containerRuntimeCommandFailureStatus(error));
+    }
+  };
+
+  let inspected: DesktopContainerInspectResult;
+  try {
+    inspected = await resolver.inspect(placement.container_engine, placement.container_id);
+  } catch (error) {
+    const status = containerRuntimeCommandFailureStatus(error);
+    if (status !== 'missing' || placement.container_ref === placement.container_id) {
+      throw unavailable(status);
+    }
+    inspected = await inspect(placement.container_ref);
+  }
+  if (!inspectedContainerMatchesReference(inspected, placement)) {
+    if (placement.container_ref === placement.container_id) {
+      throw unavailable('missing');
+    }
+    inspected = await inspect(placement.container_ref);
+    if (!inspectedContainerMatchesReference(inspected, placement)) {
+      throw unavailable('missing');
+    }
+  }
+
+  const nextPlacement = resolvedContainerPlacement(placement, inspected);
+  if (inspected.status === 'running') {
+    return { placement: nextPlacement, running: true };
+  }
+  if (inspected.status !== 'stopped') {
+    throw unavailable(inspected.status);
+  }
+  if (!options.startIfNeeded) {
+    return { placement: nextPlacement, running: false };
+  }
+
+  try {
+    await resolver.start(placement.container_engine, inspected.container_id);
+  } catch (error) {
+    throw unavailable(containerRuntimeCommandFailureStatus(error));
+  }
+  const started = await inspect(inspected.container_id);
+  if (started.status !== 'running') {
+    throw new Error(`Desktop started container ${placement.container_label || placement.container_ref}, but it did not report running.`);
+  }
+  if (started.container_id !== inspected.container_id) {
+    throw new Error(`Container ${placement.container_label || placement.container_ref} changed identity while Desktop was starting it.`);
+  }
+  return {
+    placement: resolvedContainerPlacement(nextPlacement, started),
+    running: true,
   };
 }
 

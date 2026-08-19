@@ -364,6 +364,54 @@ func TestControllerRecoveryRemovesFailedFirstInstallIdempotently(t *testing.T) {
 	}
 }
 
+func TestControllerReconcileClearsRestoredUpdateWithoutStartingBrokenPreviousRuntime(t *testing.T) {
+	stateRoot := t.TempDir()
+	runtimeRoot := filepath.Join(t.TempDir(), "runtime-root")
+	bindings, err := OpenLocalBindingStore(stateRoot, runtimeRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	controller, err := NewController(ControllerOptions{BindingStore: bindings})
+	if err != nil {
+		t.Fatal(err)
+	}
+	operation := gatewayprotocol.RuntimeOperation{
+		OperationID: "op-reconcile-restored",
+		Kind:        gatewayprotocol.RuntimeOperationUpdate,
+	}
+	managedRoot := filepath.Join(bindings.Binding().RuntimeRoot, "runtime", "managed")
+	previousBytes := []byte("restored legacy runtime")
+	writeExecutableFixture(t, filepath.Join(managedRoot, "bin", "redeven"), previousBytes)
+	previousDigest, err := fileSHA256(filepath.Join(managedRoot, "bin", "redeven"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkpoint := operationCheckpoint{
+		OperationID:              operation.OperationID,
+		Phase:                    checkpointRecovering,
+		ManagedRoot:              managedRoot,
+		PreviousManagedPresent:   true,
+		PreviousExecutableSHA256: previousDigest,
+	}
+	if err := controller.writeCheckpoint(checkpoint); err != nil {
+		t.Fatal(err)
+	}
+	if err := controller.Reconcile(context.Background(), operation); err != nil {
+		t.Fatalf("Reconcile() error = %v", err)
+	}
+	restored, err := os.ReadFile(filepath.Join(managedRoot, "bin", "redeven"))
+	if err != nil || string(restored) != string(previousBytes) {
+		t.Fatalf("restored Runtime = %q, %v", restored, err)
+	}
+	cleared, err := controller.readCheckpoint(operation.OperationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleared.Phase != checkpointRecovered {
+		t.Fatalf("checkpoint phase = %q, want %q", cleared.Phase, checkpointRecovered)
+	}
+}
+
 func TestControllerRecoveryTerminatesCandidateFromDurableLaunchIntent(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Runtime process recovery is Unix-only")

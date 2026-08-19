@@ -77,7 +77,7 @@ describe('desktopRuntimePresence', () => {
     });
   });
 
-  it('blocks container start when the management target itself is unavailable', () => {
+  it('keeps lifecycle recovery available when the saved container is stopped', () => {
     const plans = buildDesktopRuntimeOperationPlans({
       surface: 'managed_runtime_card',
       host_access: { kind: 'local_host' },
@@ -95,9 +95,13 @@ describe('desktopRuntimePresence', () => {
     });
 
     expectLifecyclePlansProjected(plans);
+    expect(plans.start.availability).toBe('available');
+    expect(plans.stop.availability).toBe('available');
+    expect(plans.restart.availability).toBe('available');
+    expect(plans.update.availability).toBe('available');
   });
 
-  it('blocks container lifecycle actions when the local container engine CLI is unavailable', () => {
+  it('keeps container lifecycle recovery reachable when the last engine probe failed', () => {
     const plans = buildDesktopRuntimeOperationPlans({
       surface: 'managed_runtime_card',
       host_access: { kind: 'local_host' },
@@ -120,6 +124,10 @@ describe('desktopRuntimePresence', () => {
       message: 'Docker CLI was not found. Install Docker Desktop or make docker available to Redeven Desktop, then refresh and try again.',
     });
     expectLifecyclePlansProjected(plans);
+    expect(plans.start.availability).toBe('available');
+    expect(plans.stop.availability).toBe('available');
+    expect(plans.restart.availability).toBe('available');
+    expect(plans.update.availability).toBe('available');
     expect(plans.refresh.availability).toBe('available');
   });
 

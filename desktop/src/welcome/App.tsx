@@ -227,7 +227,10 @@ import {
 import {
   launcherActionFailurePresentation,
 } from './launcherActionFeedback';
-import { buildWelcomeOperationFailureDisplay } from './operationFailureDisplay';
+import {
+  buildWelcomeOperationFailureDisplay,
+  confirmationProgressForLauncherFailure,
+} from './operationFailureDisplay';
 import {
   syncSSHConnectionDialogAdvancedState,
   type SSHConnectionDialogAdvancedState,
@@ -2906,6 +2909,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [lifecycleProgressFocusRequest, setLifecycleProgressFocusRequest] = createSignal<LifecycleProgressFocusRequest | null>(null);
   const actionToastTimers = new Map<number, number>();
   const liveActionProgressTimers = new Map<string, number>();
+  const runtimeOpenContinuationByOperationKey = new Map<string, string>();
   let nextActionToastID = 0;
   let lifecycleProgressFocusRequestSequence = 0;
   let settingsErrorRef: HTMLElement | undefined;
@@ -3664,6 +3668,28 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       }
     }
     const activeOperationKey = trimString(failure.operation_key);
+    const confirmationProgress = confirmationProgressForLauncherFailure(failure, activeActionProgress());
+    if (confirmationProgress) {
+      const environmentID = trimString(
+        requestEnvID
+        || failure.environment_id
+        || confirmationProgress.environment_id,
+      );
+      if (environmentID !== '') {
+        setActiveCenterTab('environments');
+        setLibrarySourceFilter('');
+        setLibraryQuery('');
+        lifecycleProgressFocusRequestSequence += 1;
+        setLifecycleProgressFocusRequest({
+          request_id: lifecycleProgressFocusRequestSequence,
+          operation_key: activeOperationKey,
+          started_at_unix_ms: confirmationProgress.started_at_unix_ms ?? 0,
+          subject_kind: 'environment',
+          subject_id: environmentID,
+        });
+      }
+      return;
+    }
     if (failure.code === 'runtime_lifecycle_in_progress' && activeOperationKey !== '') {
       const activeProgress = activeActionProgress().find((progress) => (
         trimString(progress.operation_key) === activeOperationKey
@@ -4387,6 +4413,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (operationKey === '') {
       return;
     }
+    runtimeOpenContinuationByOperationKey.delete(operationKey);
     const result = await performLauncherAction({
       kind: 'cancel_launcher_operation',
       operation_key: operationKey,
@@ -4401,6 +4428,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (operationKey === '') {
       return;
     }
+    runtimeOpenContinuationByOperationKey.delete(operationKey);
     if (operationKey.startsWith('ui:gateway:')) {
       setRetainedGatewayFailures((current) => current.filter((item) => trimString(item.operation_key) !== operationKey));
       return;
@@ -4728,8 +4756,22 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     action: EnvironmentActionModel | undefined,
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
   ): Promise<boolean> {
+    const operationKey = `${environment.id}:update_runtime`;
+    const continueOpen = action?.continue_open_after_completion === true;
+    if (continueOpen) {
+      runtimeOpenContinuationByOperationKey.set(operationKey, environment.id);
+    }
+    const finish = (updated: boolean): boolean => {
+      const pendingConfirmation = activeActionProgress().some((progress) => (
+        progress.operation_key === operationKey && progress.status === 'needs_confirmation'
+      ));
+      if (updated || !pendingConfirmation) {
+        runtimeOpenContinuationByOperationKey.delete(operationKey);
+      }
+      return updated;
+    };
     if (environment.kind === 'provider_environment') {
-      return runProviderEnvironmentLifecycle(environment, 'update_runtime', 'updated_gateway_environment_runtime', errorTarget);
+      return finish(await runProviderEnvironmentLifecycle(environment, 'update_runtime', 'updated_gateway_environment_runtime', errorTarget));
     }
     if (
       environment.kind === 'gateway_environment'
@@ -4743,7 +4785,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       if (updated) {
         showActionToast(i18n().t('environmentCenter.runtimeUpdatedToast', { label: environment.label }));
       }
-      return updated;
+      return finish(updated);
     }
     const request = runtimeActionRequest(environment, 'update_environment_runtime', {
       forceRuntimeUpdate: true,
@@ -4757,7 +4799,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (updated) {
       showActionToast(i18n().t('environmentCenter.runtimeUpdatedToast', { label: environment.label }));
     }
-    return updated;
+    return finish(updated);
   }
 
   async function restartEnvironmentRuntime(
@@ -5123,10 +5165,21 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       environment.window_state === 'closed'
       && environment.runtime_health.status !== 'online'
       && !canCheckBeforeOpen
+      && environment.kind !== 'provider_environment'
+      && environment.kind !== 'external_local_ui'
     ) {
-      const message = runtimeUnavailableMessage(environment);
-      setErrorMessage(errorTarget, message);
-      return false;
+      // A fresh offline/unknown snapshot is not an instruction to stop. The
+      // authoritative open attempt must re-check the target, then route to
+      // Start and open, Initialize and open, or Update and open based on the
+      // result. Returning a generic "runtime unavailable" here strands old
+      // and partially running SSH/container targets without a recovery path.
+      const resolution = await runEnvironmentGuidanceAction(environment, {
+        intent: 'open_with_preflight',
+        label: i18n().t('environmentAction.open'),
+        enabled: true,
+        variant: 'default',
+      });
+      return resolution.close_panel;
     }
     if (environment.kind === 'local_environment') {
       return openLocalEnvironment(environment, errorTarget, route);
@@ -6675,10 +6728,32 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                 }
               }}
               confirmRuntimeOperation={(operationKey) => {
-                void performLauncherAction({
-                  kind: 'confirm_runtime_operation',
-                  operation_key: operationKey,
-                });
+                void (async () => {
+                  const result = await performLauncherAction({
+                    kind: 'confirm_runtime_operation',
+                    operation_key: operationKey,
+                  });
+                  const environmentID = runtimeOpenContinuationByOperationKey.get(operationKey);
+                  runtimeOpenContinuationByOperationKey.delete(operationKey);
+                  if (
+                    !environmentID
+                    || (
+                      result?.outcome !== 'updated_environment_runtime'
+                      && result?.outcome !== 'updated_gateway_environment_runtime'
+                    )
+                  ) {
+                    return;
+                  }
+                  const environment = await loadLatestEnvironmentEntry(environmentID);
+                  if (environment) {
+                    await runEnvironmentGuidanceAction(environment, {
+                      intent: 'open_with_preflight',
+                      label: i18n().t('environmentAction.open'),
+                      enabled: true,
+                      variant: 'default',
+                    });
+                  }
+                })();
               }}
               toggleEnvironmentPinned={toggleEnvironmentPinned}
               copyEnvironmentValue={copyEnvironmentValue}

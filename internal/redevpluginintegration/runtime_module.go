@@ -41,11 +41,22 @@ type runtimeModuleDependencies struct {
 	ExecutionRoot string
 }
 
+type runtimeExecutableOpener func(context.Context, host.VerifiedExecutableOptions) (*host.VerifiedExecutable, error)
+
 // newOfficialRuntimeModule admits Redeven's product-built ReDevPlugin runtime
 // through the released Host capability. ReDevPlugin exposes
 // runtime admission only on Linux; other platforms keep the plugin management
 // surface available without claiming worker execution support.
 func newOfficialRuntimeModule(ctx context.Context, deps runtimeModuleDependencies) (*host.RuntimeModule, error) {
+	return newOfficialRuntimeModuleForPlatform(ctx, deps, runtime.GOOS+"/"+runtime.GOARCH, host.OpenVerifiedExecutable)
+}
+
+func newOfficialRuntimeModuleForPlatform(
+	ctx context.Context,
+	deps runtimeModuleDependencies,
+	platform string,
+	openExecutable runtimeExecutableOpener,
+) (*host.RuntimeModule, error) {
 	runtimePath := strings.TrimSpace(deps.Path)
 	if runtimePath == "" || !filepath.IsAbs(runtimePath) || filepath.Clean(runtimePath) != runtimePath || filepath.Base(runtimePath) != "redevplugin-runtime" {
 		return nil, errors.New("official runtime path must be an absolute canonical path named redevplugin-runtime")
@@ -54,8 +65,11 @@ func newOfficialRuntimeModule(ctx context.Context, deps runtimeModuleDependencie
 	if executionRootPath == "" || !filepath.IsAbs(executionRootPath) || filepath.Clean(executionRootPath) != executionRootPath {
 		return nil, errors.New("official runtime execution root must be an absolute canonical path")
 	}
-	if runtime.GOOS != "linux" {
+	if !strings.HasPrefix(platform, "linux/") {
 		return nil, nil
+	}
+	if openExecutable == nil {
+		return nil, errors.New("runtime executable opener is required")
 	}
 	if err := os.MkdirAll(executionRootPath, 0o700); err != nil {
 		return nil, err
@@ -64,7 +78,10 @@ func newOfficialRuntimeModule(ctx context.Context, deps runtimeModuleDependencie
 		return nil, err
 	}
 
-	descriptor, err := BundledRuntimeDescriptor(filepath.Join(filepath.Dir(runtimePath), bundledRuntimeDescriptorName))
+	descriptor, err := bundledRuntimeDescriptor(
+		filepath.Join(filepath.Dir(runtimePath), bundledRuntimeDescriptorName),
+		platform,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -85,13 +102,20 @@ func newOfficialRuntimeModule(ctx context.Context, deps runtimeModuleDependencie
 		return nil, err
 	}
 	defer executionRoot.Close()
-	executable, err := host.OpenVerifiedExecutable(ctx, host.VerifiedExecutableOptions{
+	executable, err := openExecutable(ctx, host.VerifiedExecutableOptions{
 		RootDir:                  runtimeRoot,
 		ExecutionRoot:            executionRoot,
 		RelativeName:             binaryName,
 		ExpectedArtifactIdentity: descriptor,
 	})
 	if err != nil {
+		// Worker execution is an optional Host module. Older Linux kernels can
+		// reject the released sealed-memfd admission primitive; keep plugin
+		// management and the rest of Env App available without weakening or
+		// replacing ReDevPlugin's executable verification.
+		if errors.Is(err, host.ErrRuntimeAdmissionUnsupported) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	module, err := host.NewRuntimeModule(executable, host.RuntimeModuleOptions{})

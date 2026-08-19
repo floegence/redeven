@@ -1751,18 +1751,24 @@ describe('desktopWelcomeState', () => {
       runtime_operations: expect.objectContaining({
         open: expect.objectContaining({
           availability: 'blocked',
-          reason_code: 'runtime_target_unavailable',
-          message: 'Container redeven-nginx-dev is not running.',
+          reason_code: 'runtime_not_started',
+          message: 'Start this runtime before opening it.',
         }),
         start: expect.objectContaining({
-          availability: 'blocked',
+          availability: 'available',
           method: 'runtime_gateway',
-          reason_code: 'runtime_target_unavailable',
+        }),
+        stop: expect.objectContaining({
+          availability: 'available',
+          method: 'runtime_gateway',
+        }),
+        restart: expect.objectContaining({
+          availability: 'available',
+          method: 'runtime_gateway',
         }),
         update: expect.objectContaining({
-          availability: 'blocked',
+          availability: 'available',
           method: 'runtime_gateway',
-          reason_code: 'runtime_target_unavailable',
         }),
       }),
       provider_runtime_link_target: expect.objectContaining({

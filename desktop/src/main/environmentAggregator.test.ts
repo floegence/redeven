@@ -388,6 +388,41 @@ describe('environmentAggregator', () => {
     expect(withGatewayLifecycle?.runtime_operations.update.label).toBe('Update runtime');
   });
 
+  it('keeps legacy runtime update available when the runtime state is unknown', () => {
+    const entry = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences(),
+      gatewaySources: [gatewaySource({
+        capabilities: [],
+        environments: [{
+          gateway_env_id: 'orange',
+          display_name: 'orange',
+          env_kind: 'managed_local_env',
+          state: 'unknown',
+          capabilities: ['open', 'update_runtime'],
+          control_capabilities: ['update_runtime'],
+          runtime_management: {
+            support: 'supported',
+            authorization: { state: 'allowed', grants: ['manage_runtime'] },
+            readiness: 'ready',
+            presentation_state: 'allowed',
+            reason_code: 'runtime_update_required',
+            target: { lifecycle_target_id: 'rlt_orange', target_generation: 1 },
+            operations: ['update_runtime'],
+            artifact_policies: ['published_release'],
+            checked_at_unix_ms: 1,
+          },
+          origin: { kind: 'gateway_host', label: 'orange' },
+        }],
+      })],
+    }).environments.find((candidate) => candidate.gateway_env_id === 'orange');
+
+    expect(entry?.runtime_operations.update).toMatchObject({
+      availability: 'available',
+      method: 'runtime_gateway',
+      label: 'Update runtime',
+    });
+  });
+
   it('projects the matching local supervisor onto the direct card without changing Open routing', () => {
     const entry = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences(),
@@ -459,6 +494,60 @@ describe('environmentAggregator', () => {
     expect(allEntries.filter((candidate) => candidate.kind === 'gateway_environment')).toHaveLength(0);
   });
 
+  it('keeps direct recovery actions aligned with Runtime state when Gateway catalog is stale', () => {
+    const running = localPresence();
+    const stopped: DesktopRuntimePresence = {
+      ...running,
+      running: false,
+      local_ui_url: '',
+      openable: false,
+      runtime_control_status: {
+        state: 'missing',
+        reason_code: 'not_started',
+        message: 'Runtime is not running.',
+      },
+      operations: buildDesktopRuntimeOperationPlans({
+        surface: 'managed_runtime_card',
+        host_access: running.host_access,
+        placement: running.placement,
+        running: false,
+        openable: false,
+        runtime_control_status: {
+          state: 'missing',
+          reason_code: 'not_started',
+          message: 'Runtime is not running.',
+        },
+      }),
+    };
+    const entry = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences(),
+      managedRuntimePresenceByTargetID: { 'local:local': stopped },
+      gatewaySources: [gatewaySource({
+        gateway_id: 'local-supervisor',
+        connection_kind: 'local_host',
+        management_capability: 'managed_local_host',
+        runtime_root: '/tmp/redeven',
+        capabilities: ['env_lifecycle'],
+        environments: [{
+          gateway_env_id: 'env_local',
+          display_name: 'Local Environment',
+          env_kind: 'managed_local_env',
+          state: 'available',
+          capabilities: ['open', 'stop', 'restart', 'update_runtime'],
+          control_capabilities: ['stop', 'restart', 'update_runtime'],
+          origin: { kind: 'gateway_host', label: 'This device' },
+        }],
+      })],
+    }).environments.find((candidate) => candidate.kind === 'local_environment');
+
+    expect(entry?.runtime_operations).toMatchObject({
+      start: { availability: 'available', method: 'runtime_gateway' },
+      stop: { availability: 'available', method: 'runtime_gateway' },
+      restart: { availability: 'available', method: 'runtime_gateway' },
+      update: { availability: 'available', method: 'runtime_gateway' },
+    });
+  });
+
   it('projects supported setup-required management before a direct target has a Gateway', () => {
     const entry = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences(),
@@ -479,7 +568,7 @@ describe('environmentAggregator', () => {
     });
   });
 
-  it('keeps an existing direct binding temporarily unavailable when its supervisor is offline', () => {
+  it('keeps direct lifecycle recovery available when its supervisor is offline', () => {
     const entry = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences(),
       managedRuntimePresenceByTargetID: { 'local:local': localPresence() },
@@ -499,10 +588,31 @@ describe('environmentAggregator', () => {
       readiness: 'temporarily_unavailable',
       presentation_state: 'temporarily_unavailable',
     });
-    expect(entry?.runtime_operations.restart).toMatchObject({
-      availability: 'blocked',
+    expect(entry?.runtime_operations).toMatchObject({
+      start: { availability: 'unavailable' },
+      stop: { availability: 'available', method: 'runtime_gateway' },
+      restart: { availability: 'available', method: 'runtime_gateway' },
+      update: { availability: 'available', method: 'runtime_gateway' },
+    });
+  });
+
+  it('keeps direct lifecycle recovery available before the Gateway discovers env_local', () => {
+    const entry = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences(),
+      managedRuntimePresenceByTargetID: { 'local:local': localPresence() },
+      gatewaySources: [gatewaySource({
+        gateway_id: 'local-supervisor',
+        connection_kind: 'local_host',
+        management_capability: 'managed_local_host',
+        runtime_root: '/tmp/redeven',
+        status: 'online',
+        environments: [],
+      })],
+    }).environments.find((candidate) => candidate.kind === 'local_environment');
+
+    expect(entry?.runtime_operations.update).toMatchObject({
+      availability: 'available',
       method: 'runtime_gateway',
-      reason_code: 'runtime_gateway_temporarily_unavailable',
     });
   });
 
