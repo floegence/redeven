@@ -402,7 +402,7 @@
               "process",
               "runtime"
             ],
-            "summary": "Desktop validates and starts its packaged environment services, but it does not own Runtime lifecycle state. Every product-managed start, stop, restart, or update is authorized and executed by the target OS user's Gateway supervisor. Desktop uses `lifecycle_target_id` plus `target_generation` and attaches to the durable Gateway operation from any authorized client. A missing, damaged, incompatible, or incorrectly targeted packaged service fails during Desktop startup, before an Environment Open action can depend on it.\n\nGateway also owns selection of the Runtime installation used for startup. One verified target decision reconciles the immutable Desktop bundle, the managed installation, and any running Runtime identity before startup proceeds. Desktop never treats an `openable` Runtime as proof that this target decision is already satisfied, and diagnostics report the identity observed from the running Runtime rather than substituting the bundle's expected identity.",
+            "summary": "Desktop validates the packaged Gateway and Runtime, then delegates all target-scoped start, stop, restart, and update operations to the target OS user's Gateway supervisor. Durable operations are addressed by `lifecycle_target_id` and `target_generation`; startup fails before Environment Open when the package or target identity is missing, damaged, incompatible, or stale. Gateway reconciles the immutable bundle, managed installation, and running Runtime identity as one verified decision, while diagnostics report observed Runtime identity separately from the bundle target.",
             "section_count": 2
           }
         ]
@@ -5477,8 +5477,8 @@
         "title": "Desktop runtime process lifecycle",
         "type": "Desktop Contract"
       },
-      "body_length": 13153,
-      "summary": "Desktop validates and starts its packaged environment services, but it does not own Runtime lifecycle state. Every product-managed start, stop, restart, or update is authorized and executed by the target OS user's Gateway supervisor. Desktop uses `lifecycle_target_id` plus `target_generation` and attaches to the durable Gateway operation from any authorized client. A missing, damaged, incompatible, or incorrectly targeted packaged service fails during Desktop startup, before an Environment Open action can depend on it.\n\nGateway also owns selection of the Runtime installation used for startup. One verified target decision reconciles the immutable Desktop bundle, the managed installation, and any running Runtime identity before startup proceeds. Desktop never treats an `openable` Runtime as proof that this target decision is already satisfied, and diagnostics report the identity observed from the running Runtime rather than substituting the bundle's expected identity.",
+      "body_length": 12751,
+      "summary": "Desktop validates the packaged Gateway and Runtime, then delegates all target-scoped start, stop, restart, and update operations to the target OS user's Gateway supervisor. Durable operations are addressed by `lifecycle_target_id` and `target_generation`; startup fails before Environment Open when the package or target identity is missing, damaged, incompatible, or stale. Gateway reconciles the immutable bundle, managed installation, and running Runtime identity as one verified decision, while diagnostics report observed Runtime identity separately from the bundle target.",
       "sections": [
         {
           "id": "contract",
@@ -5593,7 +5593,7 @@
           "description": "Real service, Desktop bridge, signed lifecycle, persistence, and negative smoke."
         }
       ],
-      "snippet": "Desktop validates and starts its packaged environment services, but it does not own Runtime lifecycle state. Every product-managed start, stop, restart, or update is authorized and executed by the target OS user's Gateway supervisor. Deskto",
+      "snippet": "Desktop validates the packaged Gateway and Runtime, then delegates all target-scoped start, stop, restart, and update operations to the target OS user's Gateway supervisor. Durable operations are addressed by `lifecycle_target_id` and `targ",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -9368,5 +9368,5 @@
       ]
     }
   ],
-  "source_sha256": "58b5763e566b103e8ee6ff05e01b780a53c8d6c05965262fcb9b47083322b2ae"
+  "source_sha256": "46f3863eefb2a2c560180de674938b3d20562e25a1df59a3c6ed4523e3f6d130"
 }
