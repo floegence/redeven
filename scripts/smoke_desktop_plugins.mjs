@@ -499,6 +499,33 @@ async function ensureInitialEnabledPlugin(page, sessionHeaders, config, pluginRe
     if (!String(installed.plugin_instance_id ?? '').trim()) {
       throw new Error('smoke package installation omitted plugin identity');
     }
+    let installedCatalog = await waitFor(async () => {
+      const response = await queryCatalog();
+      if (response.status !== 200) return null;
+      const catalog = response.body?.data ?? response.body;
+      return installedPlugins(catalog).find((plugin) => plugin.plugin_instance_id === installed.plugin_instance_id) ?? null;
+    }, 120_000, 'v9 plugin installation projection');
+    const requiredPermissions = installedCatalog.security_summary?.permissions ?? [];
+    for (const requirement of requiredPermissions) {
+      const permissionID = String(requirement.permission_id ?? '').trim();
+      if (!permissionID) continue;
+      const grant = await requestPluginJSON(page, '/_redevplugin/api/plugins/permissions/grant', {
+        plugin_instance_id: installedCatalog.plugin_instance_id,
+        permission_id: permissionID,
+        expected_policy_revision: installedCatalog.policy_revision,
+        expected_management_revision: installedCatalog.management_revision,
+        expected_revoke_epoch: installedCatalog.revoke_epoch,
+      }, sessionHeaders);
+      pluginResponses.push({ method: 'POST', pathname: '/_redevplugin/api/plugins/permissions/grant', ...grant });
+      if (grant.status !== 200) throw new Error(`v9 permission grant failed: ${JSON.stringify(grant)}`);
+      const revisions = grant.body?.data?.revisions ?? grant.body?.revisions;
+      installedCatalog = {
+        ...installedCatalog,
+        policy_revision: Number(revisions?.policy_revision ?? installedCatalog.policy_revision + 1),
+        management_revision: Number(revisions?.management_revision ?? installedCatalog.management_revision),
+        revoke_epoch: Number(revisions?.revoke_epoch ?? installedCatalog.revoke_epoch),
+      };
+    }
     const enabled = await waitFor(async () => {
       const response = await queryCatalog();
       if (response.status !== 200) return null;
