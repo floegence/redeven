@@ -2,24 +2,42 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const packageMocks = vi.hoisted(() => ({
+  prepareDesktopRuntimeUploadAsset: vi.fn(),
+}));
+
+vi.mock('./runtimePackageCache', async () => {
+  const actual = await vi.importActual<typeof import('./runtimePackageCache')>('./runtimePackageCache');
+  return {
+    ...actual,
+    prepareDesktopRuntimeUploadAsset: packageMocks.prepareDesktopRuntimeUploadAsset,
+  };
+});
 
 import {
   gatewayReleasePackageName,
   gatewayReleasePackageURL,
   gatewayServiceBinaryPath,
   gatewaySupervisorEnrollmentInvocation,
+  ensureManagedGatewayServiceReady,
   probeManagedGatewayServiceStatus,
   resolveGatewayHostPlatform,
 } from './gatewayServiceHost';
 import { DEFAULT_DESKTOP_SSH_RUNTIME_ROOT } from '../shared/desktopSSH';
 import type { DesktopRuntimePlacement } from '../shared/desktopRuntimePlacement';
+import type { DesktopBundle } from './desktopBundle';
 
 function readGatewayServiceHostSource(): string {
   return fs.readFileSync(path.join(__dirname, 'gatewayServiceHost.ts'), 'utf8');
 }
 
 describe('gatewayServiceHost', () => {
+  beforeEach(() => {
+    packageMocks.prepareDesktopRuntimeUploadAsset.mockReset();
+  });
+
   it('resolves Gateway service binaries into the independent Gateway managed slot', () => {
     expect(gatewayServiceBinaryPath({
       kind: 'host_process',
@@ -98,29 +116,9 @@ describe('gatewayServiceHost', () => {
     expect(invocation.argv.join(' ')).not.toContain('enrollment-secret');
   });
 
-  it('requires a dev Gateway package refresh when the installed build commit is stale', async () => {
+  it('fails closed before local startup when Desktop has no validated bundle', async () => {
     const runtimeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'redeven-gateway-probe-'));
-    const managedRoot = path.join(runtimeRoot, 'gateway', 'managed');
-    const binaryPath = path.join(managedRoot, 'bin', 'redeven-gateway');
     const stateRoot = path.join(runtimeRoot, 'gateways', 'gw_test', 'state');
-    fs.mkdirSync(path.dirname(binaryPath), { recursive: true });
-    fs.writeFileSync(binaryPath, [
-      '#!/bin/sh',
-      'case "$1" in',
-      '  version) echo "redeven-gateway v0.0.0-dev (oldcommit123) 2026-08-18T00:00:00Z" ;;',
-      '  service-status) echo \'{"status":"not_running"}\'; exit 1 ;;',
-      '  *) exit 2 ;;',
-      'esac',
-      '',
-    ].join('\n'), { mode: 0o755 });
-    fs.writeFileSync(path.join(managedRoot, 'managed-gateway.stamp'), [
-      'schema_version=3',
-      'installed_by=redeven-desktop',
-      'slot_release_tag=v0.0.0-dev',
-      'source_commit=oldcommit123',
-      'install_strategy=desktop_upload',
-      '',
-    ].join('\n'));
 
     try {
       await expect(probeManagedGatewayServiceStatus({
@@ -132,12 +130,59 @@ describe('gatewayServiceHost', () => {
         releaseTag: 'v0.0.0-dev',
         releaseBaseURL: '',
         assetCacheRoot: path.join(runtimeRoot, 'cache'),
-        targetCommit: 'newcommit456',
         tempRoot: path.join(runtimeRoot, 'tmp'),
-      })).resolves.toMatchObject({
-        status: 'needs_update',
-        package_status: 'build_identity_mismatch',
-      });
+      })).rejects.toThrow('Repair or reinstall');
+    } finally {
+      fs.rmSync(runtimeRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('starts the local Gateway and Runtime from the validated Desktop bundle without preparing an upload asset', async () => {
+    const runtimeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'redeven-local-bundle-start-'));
+    const stateRoot = path.join(runtimeRoot, 'gateways', 'local', 'state');
+    const binaryPath = path.join(runtimeRoot, 'bundle', 'redeven-gateway');
+    const manifestPath = path.join(runtimeRoot, 'bundle', 'desktop-bundle-manifest.json');
+    const invocationPath = path.join(runtimeRoot, 'service-start.args');
+    fs.mkdirSync(path.dirname(binaryPath), { recursive: true });
+    fs.writeFileSync(binaryPath, [
+      '#!/bin/sh',
+      'case "$1" in',
+      '  service-status) echo \'{"status":"not_running"}\'; exit 1 ;;',
+      `  service-start) printf '%s\\n' "$*" > ${JSON.stringify(invocationPath)}; echo '{"status":"running"}'; exit 0 ;;`,
+      '  service-stop) echo \'{"status":"not_running"}\'; exit 0 ;;',
+      '  *) exit 2 ;;',
+      'esac',
+      '',
+    ].join('\n'), { mode: 0o755 });
+    fs.writeFileSync(manifestPath, '{}\n');
+    const bundle: DesktopBundle = {
+      root: path.dirname(binaryPath),
+      manifest_path: manifestPath,
+      version: 'v1.2.3',
+      commit: 'abc123',
+      platform: 'darwin',
+      architecture: 'arm64',
+      gateway: { path: binaryPath, sha256: 'a'.repeat(64), size_bytes: 1, executable: true },
+      runtime_suite: [{ path: path.join(path.dirname(binaryPath), 'redeven'), sha256: 'b'.repeat(64), size_bytes: 1, executable: true }],
+    };
+
+    try {
+      await expect(ensureManagedGatewayServiceReady({
+        sshTransportManager: null as never,
+        sshCredentialScope: 'local',
+        hostAccess: { kind: 'local_host' },
+        placement: { kind: 'host_process', runtime_root: runtimeRoot },
+        stateRoot,
+        releaseTag: 'v1.2.3',
+        releaseBaseURL: '',
+        assetCacheRoot: path.join(runtimeRoot, 'cache'),
+        tempRoot: path.join(runtimeRoot, 'tmp'),
+        precompiledBundle: bundle,
+        sourceRuntimeRoot: '/source/tree/that/must/not/be-used',
+      })).resolves.toBe(binaryPath);
+
+      expect(fs.readFileSync(invocationPath, 'utf8')).toContain(`--precompiled-runtime-manifest ${manifestPath}`);
+      expect(packageMocks.prepareDesktopRuntimeUploadAsset).not.toHaveBeenCalled();
     } finally {
       fs.rmSync(runtimeRoot, { recursive: true, force: true });
     }

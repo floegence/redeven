@@ -12,7 +12,13 @@ const require = createRequire(import.meta.url);
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(scriptDir, '..');
 const sharedPorts = new Set([9222, 9230, 23998]);
-const coldLifecycleTimeoutMs = 600_000;
+const phaseBudgets = Object.freeze({
+  desktop_cold_start_ms: 120_000,
+  desktop_warm_start_ms: 90_000,
+  direct_open_ms: 30_000,
+  lifecycle_start_ms: 120_000,
+  lifecycle_update_ms: 180_000,
+});
 
 class FatalSmokeError extends Error {}
 
@@ -83,12 +89,12 @@ async function waitForEnvironment(page, label, predicate, timeoutMs = 120_000) {
   }, timeoutMs, `${label} ${predicate.name || 'environment'} state`);
 }
 
-async function lifecycleActionForEnvironment(page, label, operation, expectedOutcome) {
+async function prepareLifecycleAction(page, label, operation) {
   const { environment } = await waitForEnvironment(
     page,
     label,
     (candidate) => candidate.gateway_id && candidate.gateway_env_id,
-    120_000,
+    phaseBudgets.lifecycle_start_ms,
   );
   const prepared = await page.evaluate(async ({ target, operation: requestedOperation }) => (
     window.redevenDesktopLauncher.performAction({
@@ -103,12 +109,21 @@ async function lifecycleActionForEnvironment(page, label, operation, expectedOut
   if (prepared?.ok !== false || prepared.code !== 'confirmation_required') {
     throw new Error(`${operation} did not stop for explicit confirmation: ${JSON.stringify(prepared)}`);
   }
+  return {
+    environment,
+    operationKey: `${environment.id}:${operation}`,
+    prepared,
+  };
+}
+
+async function lifecycleActionForEnvironment(page, label, operation, expectedOutcome) {
+  const { operationKey, prepared } = await prepareLifecycleAction(page, label, operation);
   const confirmed = await page.evaluate(async ({ operationKey }) => (
     window.redevenDesktopLauncher.performAction({
       kind: 'confirm_runtime_operation',
       operation_key: operationKey,
     })
-  ), { operationKey: `${environment.id}:${operation}` });
+  ), { operationKey });
   if (confirmed?.ok !== true || confirmed.outcome !== expectedOutcome) {
     throw new Error(`${operation} failed after confirmation: ${JSON.stringify(confirmed)}`);
   }
@@ -238,20 +253,23 @@ async function waitForWorkspace(browser, excludedPages = new Set()) {
   );
 }
 
-async function waitForWorkspaceOrInitializationFailure(browser, launcherPage) {
-  return waitFor(async () => {
-    const workspace = browserPages(browser).find((page) => !page.isClosed() && isWorkspacePage(page)) ?? null;
-    if (workspace) return { kind: 'workspace', workspace };
-    const retry = launcherPage.locator('.redeven-action-popover__actions button').filter({
-      hasText: /Retry initialization|重试初始化/u,
-    }).first();
-    if (await retry.count() > 0 && await retry.isVisible()) return { kind: 'failed' };
-    return null;
-  }, coldLifecycleTimeoutMs, 'Desktop workspace or initialization failure');
-}
-
 async function closeWorkspacePages(browser) {
   await Promise.all(browserPages(browser).filter(isWorkspacePage).map((page) => page.close().catch(() => undefined)));
+}
+
+function desktopBundleTarget() {
+  const architecture = process.arch === 'x64' ? 'amd64' : process.arch;
+  return `${process.platform}-${architecture}`;
+}
+
+function bundledRuntimeRoot() {
+  return path.join(rootDir, 'desktop', '.bundle', desktopBundleTarget());
+}
+
+function assertBudget(label, durationMs, budgetMs) {
+  if (durationMs > budgetMs) {
+    throw new Error(`${label} exceeded its ${budgetMs}ms budget: ${durationMs}ms`);
+  }
 }
 
 async function gatewayLifecycleState(snapshot, gatewayID = '') {
@@ -541,7 +559,7 @@ async function runtimeSupervisorEvidence(stateRoot, snapshot) {
     candidateProcesses.push({ pid, alive, process_table: processTable });
   }
 
-  const bundledRuntime = path.join(rootDir, 'desktop', '.bundle', `${process.platform}-${process.arch}`, 'redeven');
+  const bundledRuntime = path.join(bundledRuntimeRoot(), 'redeven');
   const managedRuntime = path.join(runtimeRoot, 'runtime', 'managed', 'bin', 'redeven');
   const statusProbes = [];
   for (const [kind, executable] of [['bundled', bundledRuntime], ['managed', managedRuntime]]) {
@@ -593,8 +611,10 @@ async function stopProcessGroup(child, output) {
 }
 
 async function stopSmokeGatewayServices(runtimeRoots) {
+  const bundledGateway = path.join(bundledRuntimeRoot(), 'redeven-gateway');
   for (const runtimeRoot of runtimeRoots) {
-    const executable = path.join(runtimeRoot, 'gateway', 'managed', 'bin', 'redeven-gateway');
+    const managedExecutable = path.join(runtimeRoot, 'gateway', 'managed', 'bin', 'redeven-gateway');
+    const executable = await fs.stat(bundledGateway).then((stat) => stat.isFile() ? bundledGateway : managedExecutable, () => managedExecutable);
     if (!await fs.stat(executable).then((stat) => stat.isFile(), () => false)) continue;
     const gatewaysRoot = path.join(runtimeRoot, 'gateways');
     const entries = await fs.readdir(gatewaysRoot, { withFileTypes: true }).catch(() => []);
@@ -612,8 +632,10 @@ async function stopSmokeGatewayServices(runtimeRoots) {
 }
 
 async function stopSmokeRuntimeProcesses(runtimeRoots) {
+  const bundledRuntime = path.join(bundledRuntimeRoot(), 'redeven');
   for (const runtimeRoot of runtimeRoots) {
-    const executable = path.join(runtimeRoot, 'runtime', 'managed', 'bin', 'redeven');
+    const managedExecutable = path.join(runtimeRoot, 'runtime', 'managed', 'bin', 'redeven');
+    const executable = await fs.stat(bundledRuntime).then((stat) => stat.isFile() ? bundledRuntime : managedExecutable, () => managedExecutable);
     if (!await fs.stat(executable).then((stat) => stat.isFile(), () => false)) continue;
     const stopped = await captureCommand(executable, [
       'desktop-runtime-stop',
@@ -626,153 +648,209 @@ async function stopSmokeRuntimeProcesses(runtimeRoots) {
   }
 }
 
-async function runEnvironmentScenario({ page, browser, label, reportRoot, scenarioName, managedRuntimePath }) {
-  const scenario = { label, operations: [] };
-  scenario.gateway_pairing = await ensureGatewayPaired(page, label);
-  await waitForEnvironment(page, label, () => true, 120_000);
-  if (managedRuntimePath && await fs.stat(managedRuntimePath).then(() => true, () => false)) {
-    throw new Error(`${label} managed Runtime exists before initialization: ${managedRuntimePath}`);
-  }
-
-  const initialize = await openThroughGuidance(page, label, /Initialize and open|初始化并打开/u);
-  scenario.operations.push({ kind: 'initialize_guidance_confirmed', ...initialize });
-  const initializationResult = await waitForWorkspaceOrInitializationFailure(browser, page);
-  if (initializationResult.kind === 'failed') {
-    const current = await waitForEnvironment(page, label, () => true, 30_000);
-    scenario.initialization_failure_panel_text = await page.locator('.redeven-action-popover').first().innerText().catch(() => '');
-    scenario.gateway_lifecycle_state_at_initial_failure = await gatewayLifecycleState(current.snapshot);
-    throw new Error(`${label} Runtime initialization failed on first click: ${scenario.initialization_failure_panel_text}`);
-  }
-  const initialWorkspace = initializationResult.workspace;
-  await waitForEnvironment(page, label, (environment) => environment.runtime_health.status === 'online' && environment.is_open === true, 120_000);
-  scenario.operations.push({ kind: 'initialize_and_open', ...initialize, workspace_url: initialWorkspace.url() });
-
-  await closeWorkspacePages(browser);
-  await lifecycleActionForEnvironment(page, label, 'stop', 'stopped_gateway_environment_runtime');
-  await waitForEnvironment(page, label, (environment) => environment.runtime_health.status !== 'online', 120_000);
-  scenario.operations.push({ kind: 'stop', outcome: 'stopped_gateway_environment_runtime' });
-
-  const start = await openThroughGuidance(page, label, /Start and open|启动并打开/u);
-  const startedWorkspace = await waitForWorkspace(browser);
-  await waitForEnvironment(page, label, (environment) => environment.runtime_health.status === 'online' && environment.is_open === true, 180_000);
-  scenario.operations.push({ kind: 'start_and_open', ...start, workspace_url: startedWorkspace.url() });
-
-  await closeWorkspacePages(browser);
-  await lifecycleActionForEnvironment(page, label, 'restart', 'restarted_gateway_environment_runtime');
-  await waitForEnvironment(page, label, (environment) => environment.runtime_health.status === 'online', 180_000);
-  scenario.operations.push({ kind: 'restart', outcome: 'restarted_gateway_environment_runtime' });
-
-  await lifecycleActionForEnvironment(page, label, 'update_runtime', 'updated_gateway_environment_runtime');
-  const afterUpdate = await waitForEnvironment(page, label, (environment) => environment.runtime_health.status === 'online', 300_000);
-  scenario.operations.push({
-    kind: 'update',
-    outcome: 'updated_gateway_environment_runtime',
-    runtime_version: afterUpdate.environment.runtime_health.runtime_service?.runtime_version,
-  });
-
-  const direct = await openDirectly(page, label);
-  const directWorkspace = await waitForWorkspace(browser);
-  await waitForEnvironment(page, label, (environment) => environment.is_open === true, 120_000);
-  scenario.operations.push({ kind: 'open', ...direct, workspace_url: directWorkspace.url() });
-
-  await page.screenshot({ path: path.join(reportRoot, `desktop-lifecycle-${scenarioName}.png`), fullPage: true });
-  await closeWorkspacePages(browser);
-  await lifecycleActionForEnvironment(page, label, 'stop', 'stopped_gateway_environment_runtime');
-  const final = await waitForEnvironment(page, label, (environment) => environment.runtime_health.status !== 'online', 120_000);
-  if (final.environment.gateway_id) {
-    scenario.gateway_stop = await page.evaluate(async (gateway_id) => window.redevenDesktopLauncher.performAction({
-      kind: 'stop_gateway',
-      gateway_id,
-      impact_acknowledged: true,
-    }), final.environment.gateway_id);
-  }
-  return scenario;
-}
-
-async function buildSmokeGatewayBinary(tempRoot) {
-  const outputPath = path.join(tempRoot, 'redeven-gateway-stale');
-  const result = await captureCommand('go', [
-    'build',
-    '-trimpath',
-    '-ldflags', '-s -w -X main.Version=v0.0.0-dev -X main.Commit=stale-smoke-commit -X main.BuildTime=2026-08-19T00:00:00Z',
-    '-o', outputPath,
-    './cmd/redeven-gateway',
-  ], { timeoutMs: 180_000 });
-  if (result.exit_code !== 0) {
-    throw new Error(`stale Gateway build failed: ${result.stderr || result.stdout}`);
-  }
-  return outputPath;
-}
-
-async function prepareLegacyGatewayRestart(tempRoot, stateRoot, snapshot, environment) {
-  const source = (snapshot.gateway_sources ?? []).find((candidate) => candidate.gateway_id === environment.gateway_id)
-    ?? (snapshot.gateway_sources ?? []).find((candidate) => candidate.connection_kind === 'local_host');
-  const gatewayStateRoot = source?.service_state?.service_state_root ?? '';
-  if (!gatewayStateRoot) {
-    throw new Error('Local Gateway smoke source did not expose its service state root.');
-  }
-  const runtimeRoot = path.join(stateRoot, 'local-environment');
-  const storePath = path.join(gatewayStateRoot, 'runtime-lifecycle', 'runtime-operations-v1.json');
-  const currentRaw = await fs.readFile(storePath, 'utf8');
-  const currentStore = JSON.parse(currentRaw);
-  const operationID = Object.keys(currentStore.operations ?? {}).find((candidate) => (
-    currentStore.operations[candidate]?.kind === 'start'
-  ));
-  if (!operationID) {
-    throw new Error('Local Gateway smoke store did not contain a start operation to reconnect.');
-  }
-
-  const staleBinary = await buildSmokeGatewayBinary(tempRoot);
-  const managedRoot = path.join(runtimeRoot, 'gateway', 'managed');
-  const managedBinary = path.join(managedRoot, 'bin', 'redeven-gateway');
-  await fs.mkdir(path.dirname(managedBinary), { recursive: true });
-  await fs.copyFile(staleBinary, managedBinary);
-  await fs.chmod(managedBinary, 0o755);
-  await fs.writeFile(path.join(managedRoot, 'managed-gateway.stamp'), [
-    'schema_version=3',
-    'installed_by=redeven-desktop',
-    'slot_release_tag=v0.0.0-dev',
-    'source_commit=stale-smoke-commit',
-    'install_strategy=smoke_stale_binary',
-    '',
-  ].join('\n'), { mode: 0o600 });
-  const started = await captureCommand(managedBinary, [
-    'service-start',
-    '--state-root', gatewayStateRoot,
-    '--runtime-root', runtimeRoot,
-    '--enable-profile-write',
-  ], { timeoutMs: 30_000 });
-  if (started.exit_code !== 0) {
-    throw new Error(`stale Gateway service failed to start: ${started.stderr || started.stdout}`);
-  }
-  let serviceStatus;
-  try {
-    serviceStatus = JSON.parse(started.stdout.trim().split(/\r?\n/u).at(-1) ?? '{}');
-  } catch (error) {
-    throw new Error(`stale Gateway service returned invalid status: ${error}`);
-  }
-  if (serviceStatus.status !== 'running' || !Number.isInteger(serviceStatus.pid)) {
-    throw new Error(`stale Gateway service was not running: ${started.stdout}`);
-  }
-
-  const operation = currentStore.operations[operationID];
-  operation.state = 'awaiting_confirmation';
-  operation.failure = undefined;
-  operation.expires_at_unix_ms = Date.now() + 600_000;
-  operation.maximum_expires_at_unix_ms = Date.now() + 7_200_000;
-  operation.updated_at_unix_ms = Date.now();
-  operation.expected_snapshot.snapshot_revision = 1787104792250444000;
-  operation.expected_snapshot.observed_at_unix_ms = 1787104792250;
-  currentStore.schema_version = 2;
-  currentStore.target_locks = { ...(currentStore.target_locks ?? {}), [operation.lifecycle_target_id]: operationID };
-  delete currentStore.quarantined_targets?.[operation.lifecycle_target_id];
-  await fs.writeFile(storePath, `${JSON.stringify(currentStore, null, 2)}\n`, { mode: 0o600 });
+function operationEvidence(lifecycleState, operationID) {
+  const operation = lifecycleState?.store?.operations?.[operationID];
+  if (!operation) return null;
+  const events = [...(lifecycleState.store.events?.[operationID] ?? [])].sort((left, right) => left.sequence - right.sequence);
   return {
-    gateway_state_root: gatewayStateRoot,
-    store_path: storePath,
     operation_id: operationID,
-    stale_pid: serviceStatus.pid,
-    stale_binary: managedBinary,
+    kind: operation.kind,
+    state: operation.state,
+    target: {
+      lifecycle_target_id: operation.lifecycle_target_id,
+      target_generation: operation.target_generation,
+    },
+    desired_runtime: operation.desired_runtime,
+    artifact: operation.artifact,
+    events: events.map((event, index) => ({
+      sequence: event.sequence,
+      state: event.state,
+      timestamp_unix_ms: event.timestamp_unix_ms,
+      elapsed_from_previous_ms: index === 0 ? 0 : event.timestamp_unix_ms - events[index - 1].timestamp_unix_ms,
+    })),
+  };
+}
+
+function latestOperationEvidence(lifecycleState, kind) {
+  const matches = Object.entries(lifecycleState?.store?.operations ?? {})
+    .filter(([, operation]) => operation.kind === kind)
+    .sort(([, left], [, right]) => right.created_at_unix_ms - left.created_at_unix_ms);
+  return matches.length > 0 ? operationEvidence(lifecycleState, matches[0][0]) : null;
+}
+
+function assertOperationStates(evidence, expectedStates) {
+  if (!evidence) throw new Error(`missing ${expectedStates.join(' -> ')} operation evidence`);
+  const actual = evidence.events.map((event) => event.state);
+  if (JSON.stringify(actual) !== JSON.stringify(expectedStates)) {
+    throw new Error(`${evidence.kind} event sequence mismatch: got=${JSON.stringify(actual)} want=${JSON.stringify(expectedStates)}`);
+  }
+}
+
+async function assertNormalPathHasNoArtifactWork(snapshot, gatewayID, outputSinceDesktopStart) {
+  const lifecycleState = await gatewayLifecycleState(snapshot, gatewayID);
+  const operations = Object.values(lifecycleState?.store?.operations ?? {});
+  const artifactEvents = Object.values(lifecycleState?.store?.events ?? {}).flat().filter((event) => (
+    event.state === 'awaiting_artifact' || event.state === 'staging'
+  ));
+  if (operations.some((operation) => operation.kind === 'update_runtime') || artifactEvents.length > 0 || (lifecycleState?.staging_files?.length ?? 0) > 0) {
+    throw new Error(`normal Desktop startup/open performed Runtime artifact work: ${JSON.stringify(lifecycleState)}`);
+  }
+  const forbiddenOutput = ['build_assets.sh', 'build_runtime_binary.sh', 'Preparing source Runtime upload asset', 'runtime.artifact.partial'];
+  const matched = forbiddenOutput.find((value) => outputSinceDesktopStart.includes(value));
+  if (matched) {
+    throw new Error(`normal Desktop startup/open invoked forbidden source preparation: ${matched}`);
+  }
+  return lifecycleState;
+}
+
+async function runExplicitUpdate(page, label, snapshot, gatewayID) {
+  const startedAt = Date.now();
+  await lifecycleActionForEnvironment(page, label, 'update_runtime', 'updated_gateway_environment_runtime');
+  const ready = await waitForEnvironment(
+    page,
+    label,
+    (environment) => environment.runtime_health.status === 'online',
+    phaseBudgets.lifecycle_update_ms,
+  );
+  const durationMs = Date.now() - startedAt;
+  assertBudget(`${label} explicit Runtime update`, durationMs, phaseBudgets.lifecycle_update_ms);
+  const lifecycleState = await gatewayLifecycleState(ready.snapshot ?? snapshot, gatewayID);
+  const update = latestOperationEvidence(lifecycleState, 'update_runtime');
+  assertOperationStates(update, [
+    'preflighting', 'awaiting_confirmation', 'awaiting_artifact', 'staging',
+    'commit_ready', 'fencing', 'committing', 'succeeded',
+  ]);
+  if (update.desired_runtime?.artifact_policy !== 'custom_build' || !update.artifact?.archive_sha256 || !update.artifact?.executable_sha256) {
+    throw new Error(`${label} explicit update did not preserve custom-build artifact identity: ${JSON.stringify(update)}`);
+  }
+  return {
+    duration_ms: durationMs,
+    runtime_version: ready.environment.runtime_health.runtime_service?.runtime_version,
+    operation: update,
+  };
+}
+
+async function runLocalColdStartScenario({ page, browser, launchStartedAt, output, stateRoot }) {
+  const ready = await waitForEnvironment(
+    page,
+    'Local Environment',
+    (environment) => environment.gateway_status === 'online' && environment.runtime_health.status === 'online',
+    phaseBudgets.desktop_cold_start_ms,
+  );
+  const coldStartDurationMS = Date.now() - launchStartedAt;
+  assertBudget('Desktop cold startup', coldStartDurationMS, phaseBudgets.desktop_cold_start_ms);
+  const pairing = await ensureGatewayPaired(page, 'Local Environment');
+  const managedRuntime = path.join(stateRoot, 'local-environment', 'runtime', 'managed', 'bin', 'redeven');
+  if (!await fs.stat(managedRuntime).then((stat) => stat.isFile(), () => false)) {
+    throw new Error(`Desktop cold startup did not provision the bundled Runtime: ${managedRuntime}`);
+  }
+  const card = await environmentCard(page, 'Local Environment');
+  const primaryLabel = (await card.locator('.redeven-split-action-primary button').first().innerText()).trim();
+  if (ready.environment.open_action !== 'open' || !/^(Open|打开)$/u.test(primaryLabel)) {
+    throw new Error(`ready Local Environment primary action was not Open: action=${ready.environment.open_action} label=${primaryLabel}`);
+  }
+  const lifecycleBeforeOpen = await assertNormalPathHasNoArtifactWork(
+    ready.snapshot,
+    ready.environment.gateway_id,
+    output.join(''),
+  );
+  const openStartedAt = Date.now();
+  const direct = await openDirectly(page, 'Local Environment');
+  const workspace = await waitForWorkspace(browser);
+  await waitForEnvironment(page, 'Local Environment', (environment) => environment.is_open === true, phaseBudgets.direct_open_ms);
+  const directOpenDurationMS = Date.now() - openStartedAt;
+  assertBudget('Local Environment direct open', directOpenDurationMS, phaseBudgets.direct_open_ms);
+  await closeWorkspacePages(browser);
+  await lifecycleActionForEnvironment(page, 'Local Environment', 'stop', 'stopped_gateway_environment_runtime');
+  await waitForEnvironment(page, 'Local Environment', (environment) => environment.runtime_health.status !== 'online', phaseBudgets.lifecycle_start_ms);
+  const pendingStart = await prepareLifecycleAction(page, 'Local Environment', 'start');
+  const pendingState = await gatewayLifecycleState((await launcherSnapshot(page)), ready.environment.gateway_id);
+  const pendingOperation = latestOperationEvidence(pendingState, 'start');
+  if (!pendingOperation || pendingOperation.state !== 'awaiting_confirmation') {
+    throw new Error(`start operation was not durable before Desktop restart: ${JSON.stringify(pendingOperation)}`);
+  }
+  return {
+    environment: ready.environment,
+    pendingStart,
+    scenario: {
+      label: 'Local Environment',
+      gateway_pairing: pairing,
+      cold_start_duration_ms: coldStartDurationMS,
+      direct_open_duration_ms: directOpenDurationMS,
+      direct_open: { ...direct, workspace_url: workspace.url() },
+      lifecycle_before_open: lifecycleBeforeOpen,
+      pending_start_before_restart: pendingOperation,
+    },
+  };
+}
+
+async function continueLocalScenarioAfterRestart({ page, browser, local, reportRoot }) {
+  const confirmed = await page.evaluate(async (operationKey) => window.redevenDesktopLauncher.performAction({
+    kind: 'confirm_runtime_operation',
+    operation_key: operationKey,
+  }), local.pendingStart.operationKey);
+  if (confirmed?.ok !== true || confirmed.outcome !== 'started_gateway_environment_runtime') {
+    throw new Error(`persisted start operation did not resume after Desktop restart: ${JSON.stringify(confirmed)}`);
+  }
+  await waitForEnvironment(page, 'Local Environment', (environment) => environment.runtime_health.status === 'online', phaseBudgets.lifecycle_start_ms);
+  const recoveredOpen = await openDirectly(page, 'Local Environment');
+  const recoveredWorkspace = await waitForWorkspace(browser);
+  await waitForEnvironment(page, 'Local Environment', (environment) => environment.is_open === true, phaseBudgets.direct_open_ms);
+  await closeWorkspacePages(browser);
+
+  await lifecycleActionForEnvironment(page, 'Local Environment', 'stop', 'stopped_gateway_environment_runtime');
+  await waitForEnvironment(page, 'Local Environment', (environment) => environment.runtime_health.status !== 'online', phaseBudgets.lifecycle_start_ms);
+  const start = await openThroughGuidance(page, 'Local Environment', /Start and open|启动并打开/u);
+  const startedWorkspace = await waitForWorkspace(browser);
+  await waitForEnvironment(page, 'Local Environment', (environment) => environment.runtime_health.status === 'online' && environment.is_open === true, phaseBudgets.lifecycle_start_ms);
+  await closeWorkspacePages(browser);
+
+  await lifecycleActionForEnvironment(page, 'Local Environment', 'restart', 'restarted_gateway_environment_runtime');
+  const restarted = await waitForEnvironment(page, 'Local Environment', (environment) => environment.runtime_health.status === 'online', phaseBudgets.lifecycle_start_ms);
+  const coldUpdate = await runExplicitUpdate(page, 'Local Environment', restarted.snapshot, local.environment.gateway_id);
+  const warmUpdate = await runExplicitUpdate(page, 'Local Environment', restarted.snapshot, local.environment.gateway_id);
+  const direct = await openDirectly(page, 'Local Environment');
+  const workspace = await waitForWorkspace(browser);
+  await page.screenshot({ path: path.join(reportRoot, 'desktop-lifecycle-local.png'), fullPage: true });
+  return {
+    ...local.scenario,
+    recovered_start: { confirmation: confirmed, ...recoveredOpen, workspace_url: recoveredWorkspace.url() },
+    start_and_open: { ...start, workspace_url: startedWorkspace.url() },
+    restart: { outcome: 'restarted_gateway_environment_runtime' },
+    source_build_cache: { cold: coldUpdate, warm: warmUpdate },
+    open_after_update: { ...direct, workspace_url: workspace.url() },
+  };
+}
+
+async function runSSHScenario({ page, browser, reportRoot }) {
+  const initial = await waitForEnvironment(page, 'SSH Remote Environment', (environment) => Boolean(environment.gateway_id), phaseBudgets.lifecycle_start_ms);
+  const pairing = await ensureGatewayPaired(page, 'SSH Remote Environment');
+  const initialUpdate = await runExplicitUpdate(page, 'SSH Remote Environment', initial.snapshot, initial.environment.gateway_id);
+  const direct = await openDirectly(page, 'SSH Remote Environment');
+  const workspace = await waitForWorkspace(browser);
+  await waitForEnvironment(page, 'SSH Remote Environment', (environment) => environment.is_open === true, phaseBudgets.direct_open_ms);
+  await closeWorkspacePages(browser);
+  await lifecycleActionForEnvironment(page, 'SSH Remote Environment', 'stop', 'stopped_gateway_environment_runtime');
+  await waitForEnvironment(page, 'SSH Remote Environment', (environment) => environment.runtime_health.status !== 'online', phaseBudgets.lifecycle_start_ms);
+  const start = await openThroughGuidance(page, 'SSH Remote Environment', /Start and open|启动并打开/u);
+  const startedWorkspace = await waitForWorkspace(browser);
+  await waitForEnvironment(page, 'SSH Remote Environment', (environment) => environment.runtime_health.status === 'online' && environment.is_open === true, phaseBudgets.lifecycle_start_ms);
+  await closeWorkspacePages(browser);
+  await lifecycleActionForEnvironment(page, 'SSH Remote Environment', 'restart', 'restarted_gateway_environment_runtime');
+  const restarted = await waitForEnvironment(page, 'SSH Remote Environment', (environment) => environment.runtime_health.status === 'online', phaseBudgets.lifecycle_start_ms);
+  const update = await runExplicitUpdate(page, 'SSH Remote Environment', restarted.snapshot, initial.environment.gateway_id);
+  const reopened = await openDirectly(page, 'SSH Remote Environment');
+  const reopenedWorkspace = await waitForWorkspace(browser);
+  await page.screenshot({ path: path.join(reportRoot, 'desktop-lifecycle-ssh-remote.png'), fullPage: true });
+  return {
+    label: 'SSH Remote Environment',
+    gateway_pairing: pairing,
+    initial_explicit_update: initialUpdate,
+    open: { ...direct, workspace_url: workspace.url() },
+    start_and_open: { ...start, workspace_url: startedWorkspace.url() },
+    restart: { outcome: 'restarted_gateway_environment_runtime' },
+    update,
+    open_after_update: { ...reopened, workspace_url: reopenedWorkspace.url() },
   };
 }
 
@@ -788,15 +866,23 @@ async function run() {
   const reportRoot = path.join(tempRoot, 'report');
   await Promise.all([stateRoot, userDataRoot, cacheRoot, desktopTempRoot, reportRoot].map((directory) => fs.mkdir(directory, { recursive: true })));
 
+  const bundleRoot = bundledRuntimeRoot();
+  const bundleManifestPath = path.join(bundleRoot, 'desktop-bundle-manifest.json');
+  const bundleManifest = JSON.parse(await fs.readFile(bundleManifestPath, 'utf8').catch((error) => {
+    throw new Error(`Desktop smoke requires a prebuilt bundle at ${bundleManifestPath}: ${error}`);
+  }));
+  const desktopMainPath = path.join(rootDir, 'desktop', 'dist', 'main', 'main.js');
+  if (!await fs.stat(desktopMainPath).then((stat) => stat.isFile(), () => false)) {
+    throw new Error(`Desktop smoke requires a prebuilt Desktop at ${desktopMainPath}`);
+  }
+
   const ports = new Set();
-  const localUIPort = await reservePort(ports); ports.add(localUIPort);
   const cdpPort = await reservePort(ports); ports.add(cdpPort);
   const inspectorPort = await reservePort(ports); ports.add(inspectorPort);
   const sshTarget = await startSSHSmokeTarget(tempRoot, ports);
   await writeSSHSmokeCatalog(stateRoot, sshTarget);
   await writeSSHSmokeGatewayCatalog(stateRoot, sshTarget);
   const output = [];
-  const launchStartedAt = Date.now();
   const desktopEnvironment = {
     ...process.env,
     ...sshTarget.agentEnv,
@@ -806,30 +892,33 @@ async function run() {
     REDEVEN_DESKTOP_USER_DATA_ROOT: userDataRoot,
     REDEVEN_DESKTOP_CACHE_ROOT: cacheRoot,
     REDEVEN_DESKTOP_TEMP_ROOT: desktopTempRoot,
-    REDEVEN_DESKTOP_LOCAL_UI_BIND: `127.0.0.1:${localUIPort}`,
-    REDEVEN_DESKTOP_AUTO_START_RUNTIME: '0',
+    REDEVEN_DESKTOP_LOCAL_UI_BIND: '127.0.0.1:0',
+    REDEVEN_DESKTOP_AUTO_START_RUNTIME: '1',
     REDEVEN_DESKTOP_OPEN_DEVTOOLS: '0',
-    REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG: 'v0.0.0-dev',
-    REDEVEN_DESKTOP_BUNDLE_VERSION: 'v0.0.0-dev',
+    REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG: bundleManifest.version,
+    REDEVEN_DESKTOP_BUNDLE_VERSION: bundleManifest.version,
+    REDEVEN_DESKTOP_BUNDLE_COMMIT: bundleManifest.commit,
     REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT: rootDir,
   };
   const launchDesktop = () => {
-    const launched = spawn(path.join(rootDir, 'scripts/dev_desktop.sh'), [
-      '--no-stop',
-      '--no-devtools',
-      '--remote-debugging-port', String(cdpPort),
-      '--inspect-port', String(inspectorPort),
+    const launchedAt = Date.now();
+    const launched = spawn(path.join(rootDir, 'desktop', 'node_modules', '.bin', 'electron'), [
+      '--remote-debugging-address=127.0.0.1',
+      `--remote-debugging-port=${cdpPort}`,
+      `--inspect=127.0.0.1:${inspectorPort}`,
+      '.',
     ], {
-      cwd: rootDir,
+      cwd: path.join(rootDir, 'desktop'),
       detached: true,
       env: desktopEnvironment,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     launched.stdout.on('data', (chunk) => output.push(chunk.toString()));
     launched.stderr.on('data', (chunk) => output.push(chunk.toString()));
-    return launched;
+    return { child: launched, launchedAt };
   };
-  let child = launchDesktop();
+  let launch = launchDesktop();
+  let child = launch.child;
 
   let browser;
   let launcherPage;
@@ -840,7 +929,6 @@ async function run() {
     root: tempRoot,
     state_root: stateRoot,
     electron_pid: child.pid,
-    local_ui_port: localUIPort,
     cdp_port: cdpPort,
     inspector_port: inspectorPort,
     ssh_remote: {
@@ -849,19 +937,28 @@ async function run() {
       runtime_root: sshTarget.runtimeRoot,
       platform: process.platform,
     },
-    launch_started_at_unix_ms: launchStartedAt,
-    operations: [],
+    launch_started_at_unix_ms: launch.launchedAt,
+    bundle: {
+      manifest_path: bundleManifestPath,
+      version: bundleManifest.version,
+      commit: bundleManifest.commit,
+      platform: bundleManifest.platform,
+      architecture: bundleManifest.architecture,
+      gateway_sha256: bundleManifest.gateway.sha256,
+      runtime_sha256: bundleManifest.runtime_suite.find((artifact) => artifact.path === 'redeven')?.sha256,
+    },
+    startups: [],
     scenarios: {},
   };
   try {
-    const connectDesktop = async () => {
+    const connectDesktop = async (budgetMs) => {
       await waitFor(async () => {
-      if (child.exitCode !== null || child.signalCode !== null) {
-        throw new FatalSmokeError(`Desktop exited before CDP readiness: code=${child.exitCode} signal=${child.signalCode}`);
-      }
-      const response = await fetch(`http://127.0.0.1:${cdpPort}/json/version`).catch(() => null);
-      return response?.ok ? true : null;
-      }, 240_000, 'Desktop CDP endpoint');
+        if (child.exitCode !== null || child.signalCode !== null) {
+          throw new FatalSmokeError(`Desktop exited before CDP readiness: code=${child.exitCode} signal=${child.signalCode}`);
+        }
+        const response = await fetch(`http://127.0.0.1:${cdpPort}/json/version`).catch(() => null);
+        return response?.ok ? true : null;
+      }, budgetMs, 'Desktop CDP endpoint');
 
       const { chromium } = require(path.join(rootDir, 'internal/envapp/ui_src/node_modules/playwright'));
       browser = await chromium.connectOverCDP(`http://127.0.0.1:${cdpPort}`);
@@ -877,91 +974,84 @@ async function run() {
       return page;
     };
 
-    let page = await connectDesktop();
-    const localScenario = await runEnvironmentScenario({
+    let page = await connectDesktop(phaseBudgets.desktop_cold_start_ms);
+    const local = await runLocalColdStartScenario({
       page,
       browser,
-      label: 'Local Environment',
-      reportRoot,
-      scenarioName: 'local',
-      managedRuntimePath: path.join(stateRoot, 'local-environment', 'runtime', 'managed', 'bin', 'redeven'),
+      launchStartedAt: launch.launchedAt,
+      output,
+      stateRoot,
     });
-    evidence.scenarios.local = localScenario;
-    evidence.operations = localScenario.operations;
-
-    const legacySnapshot = await launcherSnapshot(page);
-    const legacyEnvironment = environmentByLabel(legacySnapshot, 'Local Environment');
-    if (!legacyEnvironment) {
-      throw new Error('Local Environment disappeared before legacy Gateway restart smoke.');
-    }
-    const legacyRestart = await prepareLegacyGatewayRestart(tempRoot, stateRoot, legacySnapshot, legacyEnvironment);
-    evidence.scenarios.legacy_restart_recovery = legacyRestart;
+    evidence.startups.push({ kind: 'cold', duration_ms: local.scenario.cold_start_duration_ms });
+    evidence.scenarios.local = local.scenario;
     await browser.close();
     browser = undefined;
     await stopProcessGroup(child, output);
-    child = launchDesktop();
-    page = await connectDesktop();
-    const recoveredGatewayStart = await page.evaluate(async (gatewayID) => (
-      window.redevenDesktopLauncher.performAction({
-        kind: 'start_gateway',
-        gateway_id: gatewayID,
-      })
-    ), legacyEnvironment.gateway_id);
-    if (recoveredGatewayStart?.ok !== true) {
-      throw new Error(`legacy Runtime recovery Gateway start failed: ${JSON.stringify(recoveredGatewayStart)}`);
-    }
-    await waitForEnvironment(page, 'Local Environment', (environment) => environment.gateway_status === 'online', 120_000);
-    const recoveredConfirmation = await page.evaluate(async (operationKey) => (
-      window.redevenDesktopLauncher.performAction({
-        kind: 'confirm_runtime_operation',
-        operation_key: operationKey,
-      })
-    ), `${legacyEnvironment.id}:start`);
-    if (recoveredConfirmation?.ok !== true) {
-      throw new Error(`legacy Runtime operation confirmation failed: ${JSON.stringify(recoveredConfirmation)}`);
-    }
-    await waitForEnvironment(page, 'Local Environment', (environment) => environment.runtime_health.status === 'online', 180_000);
-    const recoveredOpen = await openDirectly(page, 'Local Environment');
-    const recoveredWorkspace = await waitForWorkspace(browser);
-    const recoveredState = await waitForEnvironment(page, 'Local Environment', (environment) => environment.is_open === true, 30_000);
-    const migratedState = await gatewayLifecycleState(recoveredState.snapshot, legacyEnvironment.gateway_id);
-    if (migratedState.store?.schema_version !== 3) {
-      throw new Error(`legacy Runtime operation store was not migrated to v3: ${JSON.stringify(migratedState.store)}`);
-    }
-    const migratedOperation = migratedState.store.operations?.[legacyRestart.operation_id];
-    if (!migratedOperation || migratedOperation.expected_snapshot.snapshot_revision > 9007199254740991) {
-      throw new Error(`legacy Runtime operation revision was not made JavaScript-safe: ${JSON.stringify(migratedOperation)}`);
-    }
-    const currentGatewayStatus = await captureCommand(path.join(stateRoot, 'local-environment', 'gateway', 'managed', 'bin', 'redeven-gateway'), [
-      'service-status', '--state-root', legacyRestart.gateway_state_root,
-    ], { timeoutMs: 10_000 });
-    const currentGatewayStatusJSON = JSON.parse(currentGatewayStatus.stdout.trim().split(/\r?\n/u).at(-1) ?? '{}');
-    if (currentGatewayStatusJSON.status !== 'running' || currentGatewayStatusJSON.pid === legacyRestart.stale_pid) {
-      throw new Error(`Desktop did not replace the stale Gateway service process: ${currentGatewayStatus.stdout}`);
-    }
-    evidence.scenarios.legacy_restart_recovery = {
-      ...legacyRestart,
-      gateway_start: recoveredGatewayStart,
-      confirmation: recoveredConfirmation,
-      ...recoveredOpen,
-      workspace_url: recoveredWorkspace.url(),
-      migrated_schema_version: migratedState.store.schema_version,
-      migrated_snapshot_revision: migratedOperation.expected_snapshot.snapshot_revision,
-      restarted_pid: currentGatewayStatusJSON.pid,
-    };
-    await closeWorkspacePages(browser);
-
-    const remoteScenario = await runEnvironmentScenario({
+    await waitFor(async () => {
+      const response = await fetch(`http://127.0.0.1:${cdpPort}/json/version`).catch(() => null);
+      return response ? null : true;
+    }, 15_000, 'Desktop CDP shutdown');
+    launch = launchDesktop();
+    child = launch.child;
+    evidence.electron_pid_after_pending_restart = child.pid;
+    page = await connectDesktop(phaseBudgets.desktop_warm_start_ms);
+    const gatewayRecovered = await waitForEnvironment(
       page,
-      browser,
-      label: 'SSH Remote Environment',
-      reportRoot,
-      scenarioName: 'ssh-remote',
-      managedRuntimePath: path.join(sshTarget.runtimeRoot, 'runtime', 'managed', 'bin', 'redeven'),
-    });
-    evidence.scenarios.ssh_remote = remoteScenario;
+      'Local Environment',
+      (environment) => environment.gateway_status === 'online',
+      phaseBudgets.desktop_warm_start_ms,
+    );
+    const warmStartDurationMS = Date.now() - launch.launchedAt;
+    assertBudget('Desktop pending-operation recovery', warmStartDurationMS, phaseBudgets.desktop_warm_start_ms);
+    evidence.startups.push({ kind: 'pending_operation_recovery', duration_ms: warmStartDurationMS });
+    const recoveredLifecycle = await gatewayLifecycleState(gatewayRecovered.snapshot, local.environment.gateway_id);
+    const recoveredStart = latestOperationEvidence(recoveredLifecycle, 'start');
+    if (!recoveredStart || recoveredStart.operation_id !== local.scenario.pending_start_before_restart.operation_id || recoveredStart.state !== 'awaiting_confirmation') {
+      throw new Error(`Desktop/Gateway did not recover the exact pending start operation: ${JSON.stringify(recoveredStart)}`);
+    }
+    const recoveredAttachment = await waitFor(async () => {
+      const snapshot = await launcherSnapshot(page);
+      return snapshot.operations.find((operation) => (
+        operation.operation_key === local.pendingStart.operationKey
+        && operation.status === 'needs_confirmation'
+        && operation.runtime_confirmation?.operation === 'start'
+      )) ?? null;
+    }, phaseBudgets.desktop_warm_start_ms, 'Desktop pending Runtime operation attachment');
+    evidence.scenarios.local = await continueLocalScenarioAfterRestart({ page, browser, local, reportRoot });
+    evidence.scenarios.local.pending_start_after_restart = recoveredStart;
+    evidence.scenarios.local.pending_start_attachment_after_restart = recoveredAttachment;
+    evidence.scenarios.ssh_remote = await runSSHScenario({ page, browser, reportRoot });
+
+    await closeWorkspacePages(browser);
+    await browser.close();
+    browser = undefined;
+    await stopProcessGroup(child, output);
+    await waitFor(async () => {
+      const response = await fetch(`http://127.0.0.1:${cdpPort}/json/version`).catch(() => null);
+      return response ? null : true;
+    }, 15_000, 'Desktop CDP shutdown after updates');
+    launch = launchDesktop();
+    child = launch.child;
+    page = await connectDesktop(phaseBudgets.desktop_warm_start_ms);
+    const readyAfterUpdateRestart = await waitForEnvironment(
+      page,
+      'Local Environment',
+      (environment) => environment.gateway_status === 'online' && environment.runtime_health.status === 'online',
+      phaseBudgets.desktop_warm_start_ms,
+    );
+    const updateRecoveryDurationMS = Date.now() - launch.launchedAt;
+    assertBudget('Desktop verified-update recovery', updateRecoveryDurationMS, phaseBudgets.desktop_warm_start_ms);
+    evidence.startups.push({ kind: 'verified_update_recovery', duration_ms: updateRecoveryDurationMS });
+    const openAfterDesktopRestart = await openDirectly(page, 'Local Environment');
+    const workspaceAfterDesktopRestart = await waitForWorkspace(browser);
+    evidence.scenarios.local.desktop_restart_after_update = {
+      duration_ms: updateRecoveryDurationMS,
+      runtime_version: readyAfterUpdateRestart.environment.runtime_health.runtime_service?.runtime_version,
+      ...openAfterDesktopRestart,
+      workspace_url: workspaceAfterDesktopRestart.url(),
+    };
     evidence.completed_at_unix_ms = Date.now();
-    evidence.duration_ms = evidence.completed_at_unix_ms - launchStartedAt;
+    evidence.duration_ms = evidence.completed_at_unix_ms - evidence.launch_started_at_unix_ms;
     await fs.writeFile(path.join(reportRoot, 'desktop-lifecycle.json'), `${JSON.stringify(evidence, null, 2)}\n`);
     process.stdout.write(`${JSON.stringify(evidence, null, 2)}\n`);
   } catch (error) {

@@ -41,6 +41,28 @@ import { DEFAULT_DESKTOP_SSH_RUNTIME_ROOT } from '../shared/desktopSSH';
 import { desktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 import { RuntimeLifecycleCoordinator, RuntimeLifecycleInProgressError } from './runtimeLifecycleCoordinator';
 import type { DesktopSSHTransportManager } from './sshTransportManager';
+import type { DesktopBundle } from './desktopBundle';
+
+const PRECOMPILED_BUNDLE: DesktopBundle = {
+  root: '/Applications/Redeven.app/Contents/Resources/bin',
+  manifest_path: '/Applications/Redeven.app/Contents/Resources/bin/desktop-bundle-manifest.json',
+  version: 'v1.2.3',
+  commit: 'bundle123',
+  platform: 'darwin',
+  architecture: 'arm64',
+  gateway: {
+    path: '/Applications/Redeven.app/Contents/Resources/bin/redeven-gateway',
+    sha256: 'a'.repeat(64),
+    size_bytes: 1,
+    executable: true,
+  },
+  runtime_suite: [{
+    path: '/Applications/Redeven.app/Contents/Resources/bin/redeven',
+    sha256: 'b'.repeat(64),
+    size_bytes: 1,
+    executable: true,
+  }],
+};
 
 function fakeSSHTransportManager(): DesktopSSHTransportManager {
   return {
@@ -106,6 +128,7 @@ function manager(progress: string[] = [], secretStore = memorySecretStore()): Ga
     asset_cache_root: '/tmp/redeven-assets',
     temp_root: '/tmp/redeven-temp',
     source_runtime_root: '/Applications/Redeven.app/Contents/Resources',
+    precompiled_bundle: PRECOMPILED_BUNDLE,
     lifecycle_coordinator: new RuntimeLifecycleCoordinator(),
     on_progress: (event) => {
       progress.push(event.phase);
@@ -151,6 +174,22 @@ function containerGateway(): GatewayRecord {
       container_ref: 'dev-container',
       container_label: 'dev-container',
       runtime_root: '/root/.redeven',
+    },
+    created_at_ms: 1,
+    updated_at_ms: 1,
+  };
+}
+
+function localGateway(): GatewayRecord {
+  return {
+    schema_version: 2,
+    gateway_id: 'gw_local',
+    display_name: 'Local Environment service',
+    runtime_environment_id: 'local',
+    local_enabled: true,
+    connection: {
+      kind: 'local_host',
+      runtime_root: '/Users/test/.redeven',
     },
     created_at_ms: 1,
     updated_at_ms: 1,
@@ -213,7 +252,7 @@ describe('GatewayLifecycleManager', () => {
       releaseTag: 'v1.2.3',
       tempRoot: '/tmp/redeven-temp',
       assetCacheRoot: '/tmp/redeven-assets',
-      sourceRuntimeRoot: '/Applications/Redeven.app/Contents/Resources',
+      sourceRuntimeRoot: undefined,
       sshPassword: '',
     }));
     expect(lifecycleMocks.startRuntimePlacementBridgeSession).toHaveBeenCalledWith(expect.objectContaining({
@@ -231,6 +270,24 @@ describe('GatewayLifecycleManager', () => {
       fallback_local_id: 'gw_bastion',
     }));
     expect(progress).toEqual(['opening_bridge', 'gateway_ready']);
+  });
+
+  it('starts the local service from the validated Desktop bundle without passing the development source root', async () => {
+    lifecycleMocks.ensureManagedGatewayServiceReady.mockResolvedValue(PRECOMPILED_BUNDLE.gateway.path);
+
+    await manager().bridgeClient(localGateway(), { startPolicy: 'start_if_needed' });
+
+    expect(lifecycleMocks.ensureManagedGatewayServiceReady).toHaveBeenCalledWith(expect.objectContaining({
+      hostAccess: { kind: 'local_host' },
+      releaseTag: PRECOMPILED_BUNDLE.version,
+      sourceRuntimeRoot: undefined,
+      precompiledBundle: PRECOMPILED_BUNDLE,
+    }));
+    expect(lifecycleMocks.startRuntimePlacementBridgeSession).toHaveBeenCalledWith(expect.objectContaining({
+      host_access: { kind: 'local_host' },
+      runtime_binary_path: PRECOMPILED_BUNDLE.gateway.path,
+      bridge_command_kind: 'gateway',
+    }));
   });
 
   it('uses the Gateway profile state root for SSH host Gateway bridges', async () => {
@@ -647,6 +704,7 @@ describe('GatewayLifecycleManager', () => {
     expect(lifecycleMocks.ensureManagedGatewayServiceReady).toHaveBeenCalledWith(expect.objectContaining({
       stateRoot: '/opt/redeven/gateways/gw_bastion/state',
       forceUpdate: true,
+      sourceRuntimeRoot: '/Applications/Redeven.app/Contents/Resources',
     }));
     expect(lifecycleMocks.startRuntimePlacementBridgeSession).toHaveBeenCalledWith(expect.objectContaining({
       runtime_binary_path: '/opt/redeven/gateway/managed/bin/redeven-gateway',

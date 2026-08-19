@@ -491,6 +491,26 @@ func (s *Store) OperationForAuthorization(operationID string) (gatewayprotocol.R
 	return cloneOperation(operation), nil
 }
 
+func (s *Store) AssertTargetUnlocked(lifecycleTargetID string) error {
+	if s == nil {
+		return lifecycleError(ErrorUnavailable, "Runtime lifecycle supervisor is unavailable.", true)
+	}
+	lifecycleTargetID = strings.TrimSpace(lifecycleTargetID)
+	if lifecycleTargetID == "" {
+		return lifecycleError(ErrorInvalidRequest, "Runtime lifecycle target is required.", false)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if operationID := strings.TrimSpace(s.state.TargetLocks[lifecycleTargetID]); operationID != "" {
+		return lifecycleError(
+			ErrorOperationInProgress,
+			fmt.Sprintf("Runtime target is reserved by operation %s.", operationID),
+			true,
+		)
+	}
+	return nil
+}
+
 func (s *Store) Events(_ context.Context, operationID string, access Access) (gatewayprotocol.RuntimeOperationEventsResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

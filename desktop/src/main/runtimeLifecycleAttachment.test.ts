@@ -42,6 +42,21 @@ function operation(
 }
 
 describe('projectAttachedRuntimeOperation', () => {
+  it.each([
+    ['preflighting', 'environmentOpenFlow.checkingAccessTitle'],
+    ['awaiting_confirmation', 'environmentOpenFlow.checkingAccessTitle'],
+    ['awaiting_artifact', 'environmentOpenFlow.preparingEnvironmentTitle'],
+    ['staging', 'environmentOpenFlow.preparingEnvironmentTitle'],
+    ['commit_ready', 'environmentOpenFlow.startingEnvironmentTitle'],
+    ['fencing', 'environmentOpenFlow.startingEnvironmentTitle'],
+    ['committing', 'environmentOpenFlow.startingEnvironmentTitle'],
+  ] as const)('maps start state %s to a user-facing environment stage', (state, titleKey) => {
+    const projection = projectAttachedRuntimeOperation({ ...operation(state), kind: 'start' });
+    expect(projection.title_key).toBe(titleKey);
+    expect(projection.title).not.toContain('Runtime');
+    expect(projection.detail).not.toContain('supervisor');
+  });
+
   it('restores explicit confirmation only for the authorized operation client', () => {
     expect(projectAttachedRuntimeOperation(operation('awaiting_confirmation'))).toMatchObject({
       owned: true,

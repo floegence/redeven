@@ -48,6 +48,62 @@ function statePresentation(
   operation: GatewayRuntimeOperation,
   owned: boolean,
 ): Pick<RuntimeLifecycleAttachmentProjection, 'phase' | 'title' | 'title_key' | 'detail' | 'detail_key'> {
+  if (operation.kind === 'start') {
+    switch (operation.state) {
+      case 'preflighting':
+      case 'awaiting_confirmation':
+      case 'confirmation_required':
+        return {
+          phase: operation.state === 'preflighting'
+            ? 'gateway_runtime_operation_preflighting'
+            : 'runtime_operation_confirmation_required',
+          title: 'Checking access',
+          title_key: 'environmentOpenFlow.checkingAccessTitle',
+          detail: 'Redeven is checking access before changing this environment.',
+          detail_key: 'environmentOpenFlow.checkingAccessDetail',
+        };
+      case 'awaiting_artifact':
+      case 'staging':
+        return {
+          phase: `gateway_runtime_operation_${operation.state}`,
+          title: 'Preparing environment',
+          title_key: 'environmentOpenFlow.preparingEnvironmentTitle',
+          detail: 'Redeven is preparing the environment so it can start safely.',
+          detail_key: 'environmentOpenFlow.preparingEnvironmentDetail',
+        };
+      case 'commit_ready':
+      case 'fencing':
+      case 'committing':
+        return {
+          phase: `gateway_runtime_operation_${operation.state}`,
+          title: 'Starting environment',
+          title_key: 'environmentOpenFlow.startingEnvironmentTitle',
+          detail: 'Redeven is starting the environment.',
+          detail_key: 'environmentOpenFlow.startingEnvironmentDetail',
+        };
+      case 'succeeded':
+        return {
+          phase: 'gateway_runtime_operation_succeeded',
+          title: 'Starting environment',
+          title_key: 'environmentOpenFlow.startingEnvironmentTitle',
+          detail: 'Redeven is starting the environment.',
+          detail_key: 'environmentOpenFlow.startingEnvironmentDetail',
+        };
+      case 'failed':
+      case 'cancelled':
+      case 'expired':
+        return {
+          phase: `gateway_runtime_operation_${operation.state}`,
+          title: 'Start failed',
+          title_key: 'environmentOpenFlow.startFailedTitle',
+          detail: 'Redeven could not start this environment. Try again.',
+          detail_key: 'environmentOpenFlow.startFailedDetail',
+        };
+      case 'recovering':
+      case 'manual_recovery_required':
+        break;
+    }
+  }
   const presentation = operationTitle(operation.kind);
   switch (operation.state) {
     case 'preflighting':

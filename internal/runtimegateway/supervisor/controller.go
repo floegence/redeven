@@ -28,21 +28,24 @@ import (
 )
 
 type ControllerOptions struct {
-	BindingStore         *BindingStore
-	StartupWait          time.Duration
-	ShutdownWait         time.Duration
-	ControlTimeout       time.Duration
-	ArtifactProbeTimeout time.Duration
+	BindingStore               *BindingStore
+	PrecompiledRuntimeManifest string
+	StartupWait                time.Duration
+	ShutdownWait               time.Duration
+	ControlTimeout             time.Duration
+	ArtifactProbeTimeout       time.Duration
 }
 
 type Controller struct {
-	mu                   sync.Mutex
-	offlineFences        map[string]gatewayprotocol.LifecycleTarget
-	bindings             *BindingStore
-	startupWait          time.Duration
-	shutdownWait         time.Duration
-	controlTimeout       time.Duration
-	artifactProbeTimeout time.Duration
+	mu                         sync.Mutex
+	startupMu                  sync.Mutex
+	offlineFences              map[string]gatewayprotocol.LifecycleTarget
+	bindings                   *BindingStore
+	precompiledRuntimeManifest string
+	startupWait                time.Duration
+	shutdownWait               time.Duration
+	controlTimeout             time.Duration
+	artifactProbeTimeout       time.Duration
 }
 
 type operationCheckpoint struct {
@@ -102,7 +105,8 @@ func NewController(options ControllerOptions) (*Controller, error) {
 	}
 	return &Controller{
 		bindings: options.BindingStore, offlineFences: make(map[string]gatewayprotocol.LifecycleTarget),
-		startupWait: startupWait, shutdownWait: shutdownWait, controlTimeout: controlTimeout, artifactProbeTimeout: artifactProbeTimeout,
+		precompiledRuntimeManifest: strings.TrimSpace(options.PrecompiledRuntimeManifest),
+		startupWait:                startupWait, shutdownWait: shutdownWait, controlTimeout: controlTimeout, artifactProbeTimeout: artifactProbeTimeout,
 	}, nil
 }
 
@@ -142,6 +146,12 @@ func (c *Controller) persistedOfflineRuntimeValidation(ctx context.Context) (Run
 	digest, err := fileSHA256(managedBinary)
 	if err != nil || digest != normalizeSHA256(validated.ArtifactSHA256) {
 		return RuntimeValidation{}, errors.New("managed Runtime executable no longer matches persisted validation")
+	}
+	if strings.TrimSpace(validated.ManagedSuiteSHA256) != "" {
+		suiteDigest, _, suiteErr := managedRuntimeSuiteSHA256(filepath.Join(binding.RuntimeRoot, "runtime", "managed"))
+		if suiteErr != nil || suiteDigest != normalizeSHA256(validated.ManagedSuiteSHA256) {
+			return RuntimeValidation{}, errors.New("managed Runtime suite no longer matches persisted validation")
+		}
 	}
 	return *validated, nil
 }
@@ -558,11 +568,20 @@ func (c *Controller) controlClient() runtimeControlClient {
 }
 
 func (c *Controller) validateAndRecordIdentity(identity runtimeservice.RuntimeIdentity) error {
+	managedRoot := filepath.Join(c.bindings.Binding().RuntimeRoot, "runtime", "managed")
+	suiteDigest, executableDigest, err := managedRuntimeSuiteSHA256(managedRoot)
+	if err != nil {
+		return fmt.Errorf("verify managed Runtime suite: %w", err)
+	}
+	if executableDigest != normalizeSHA256(identity.ArtifactSHA256) {
+		return errors.New("managed Runtime executable does not match the running Runtime identity")
+	}
 	validation := RuntimeValidation{
 		RuntimeInstanceID: identity.RuntimeInstanceID, RuntimeBinaryVersion: identity.RuntimeBinaryVersion,
 		Platform: strings.ToLower(strings.TrimSpace(identity.Platform)), Architecture: strings.ToLower(strings.TrimSpace(identity.Architecture)),
 		ServiceProtocol: identity.ServiceProtocol, CompatibilityEpoch: identity.CompatibilityEpoch,
 		Capabilities: identity.Capabilities, ArtifactSHA256: normalizeSHA256(identity.ArtifactSHA256),
+		ManagedSuiteSHA256: suiteDigest,
 	}
 	if !runtimeValidationCompatible(&validation) {
 		return errors.New("Runtime identity, protocol, epoch, capabilities, or digest is incompatible with managed lifecycle")

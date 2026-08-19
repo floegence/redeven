@@ -48,6 +48,7 @@ type Options struct {
 	LifecycleArtifactVerifier   gatewaylifecycle.ArtifactVerifier
 	LifecycleAuthorizer         LifecycleAuthorizer
 	LifecycleCapabilityProvider LifecycleCapabilityProvider
+	PrecompiledRuntimeStartup   PrecompiledRuntimeStartup
 }
 
 type LifecycleAuthorizer interface {
@@ -59,6 +60,11 @@ type LifecycleAuthorizer interface {
 
 type LifecycleCapabilityProvider interface {
 	RuntimeManagementCapability(context.Context, string, gatewaylifecycle.Access) (gatewayprotocol.RuntimeManagementCapability, error)
+}
+
+type PrecompiledRuntimeStartup interface {
+	PrecompiledRuntimeTargetID() string
+	EnsurePrecompiledRuntime(context.Context) error
 }
 
 type Server struct {
@@ -74,6 +80,7 @@ type Server struct {
 	lifecycle                   *gatewaylifecycle.Store
 	lifecycleAuthorizer         LifecycleAuthorizer
 	lifecycleCapabilityProvider LifecycleCapabilityProvider
+	precompiledRuntimeStartup   PrecompiledRuntimeStartup
 	lifecycleAvailable          bool
 
 	profileSessionsMu sync.Mutex
@@ -138,6 +145,7 @@ func New(options Options) (*Server, error) {
 		lifecycle:                   lifecycleStore,
 		lifecycleAuthorizer:         options.LifecycleAuthorizer,
 		lifecycleCapabilityProvider: options.LifecycleCapabilityProvider,
+		precompiledRuntimeStartup:   options.PrecompiledRuntimeStartup,
 		lifecycleAvailable:          options.LifecycleController != nil && options.LifecycleArtifactVerifier != nil && options.LifecycleAuthorizer != nil,
 		profileSessions:             make(map[string]*profileSession),
 		providerNonces:              make(map[string]int64),
@@ -239,6 +247,20 @@ func (s *Server) Start(ctx context.Context, listen string) (*http.Server, []net.
 	if s.lifecycle != nil {
 		if err := s.lifecycle.RecoverPending(ctx); err != nil {
 			return nil, nil, fmt.Errorf("recover Runtime lifecycle operations: %w", err)
+		}
+	}
+	if s.precompiledRuntimeStartup != nil {
+		if s.lifecycle == nil {
+			return nil, nil, errors.New("precompiled Runtime startup requires the lifecycle store")
+		}
+		targetID := s.precompiledRuntimeStartup.PrecompiledRuntimeTargetID()
+		if err := s.lifecycle.AssertTargetUnlocked(targetID); err != nil {
+			var lifecycleErr *gatewaylifecycle.Error
+			if !errors.As(err, &lifecycleErr) || lifecycleErr.Code != gatewaylifecycle.ErrorOperationInProgress {
+				return nil, nil, fmt.Errorf("check precompiled Runtime startup target: %w", err)
+			}
+		} else if err := s.precompiledRuntimeStartup.EnsurePrecompiledRuntime(ctx); err != nil {
+			return nil, nil, fmt.Errorf("start precompiled Runtime: %w", err)
 		}
 	}
 	addr := strings.TrimSpace(listen)

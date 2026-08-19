@@ -66,6 +66,101 @@ type gatewayLifecycleTestController struct {
 	snapshot protocol.WorkloadSnapshot
 }
 
+type gatewayPrecompiledRuntimeStartup struct {
+	targetID string
+	err      error
+	called   int
+}
+
+func (s *gatewayPrecompiledRuntimeStartup) PrecompiledRuntimeTargetID() string { return s.targetID }
+
+func (s *gatewayPrecompiledRuntimeStartup) EnsurePrecompiledRuntime(context.Context) error {
+	s.called++
+	return s.err
+}
+
+func TestGatewayStartsPrecompiledRuntimeBeforeListening(t *testing.T) {
+	startup := &gatewayPrecompiledRuntimeStartup{targetID: "target-startup"}
+	server, err := New(Options{
+		StateRoot:                 t.TempDir(),
+		LifecycleController:       &gatewayLifecycleTestController{},
+		LifecycleArtifactVerifier: gatewayLifecycleTestArtifactVerifier{},
+		PrecompiledRuntimeStartup: startup,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	httpServer, _, err := server.Start(ctx, "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer httpServer.Close()
+	if startup.called != 1 {
+		t.Fatalf("precompiled Runtime startup calls = %d, want 1", startup.called)
+	}
+}
+
+func TestGatewayDoesNotListenWhenPrecompiledRuntimeStartupFails(t *testing.T) {
+	startup := &gatewayPrecompiledRuntimeStartup{targetID: "target-startup", err: errors.New("bundle digest mismatch")}
+	server, err := New(Options{
+		StateRoot:                 t.TempDir(),
+		LifecycleController:       &gatewayLifecycleTestController{},
+		LifecycleArtifactVerifier: gatewayLifecycleTestArtifactVerifier{},
+		PrecompiledRuntimeStartup: startup,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := server.Start(context.Background(), "127.0.0.1:0"); err == nil || !strings.Contains(err.Error(), "bundle digest mismatch") {
+		t.Fatalf("Start() error = %v", err)
+	}
+}
+
+func TestGatewayPreservesPendingRuntimeOperationWithoutDuplicateStartup(t *testing.T) {
+	count := 0
+	snapshot := protocol.NormalizeWorkloadSnapshot(protocol.WorkloadSnapshot{
+		SnapshotRevision: 1, ProcessInventoryDigest: "sha256:inventory", WorkloadIdentityDigest: "sha256:workload",
+		Impact: protocol.WorkloadImpact{Knowledge: protocol.WorkloadKnown, AffectedProcessCount: &count}, ObservedAtUnixMS: time.Now().UnixMilli(),
+	})
+	startup := &gatewayPrecompiledRuntimeStartup{targetID: "target-startup"}
+	server, err := New(Options{
+		StateRoot:                 t.TempDir(),
+		LifecycleController:       &gatewayLifecycleTestController{snapshot: snapshot},
+		LifecycleArtifactVerifier: gatewayLifecycleTestArtifactVerifier{},
+		PrecompiledRuntimeStartup: startup,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = server.lifecycle.Prepare(context.Background(), protocol.RuntimeOperationPrepareRequest{
+		ProtocolVersion: protocol.Version, OperationID: "op-pending-restart", AuthorizedClientKeyID: "client-pending",
+		GatewayEnvID: "env-local", LifecycleTargetID: "target-startup", TargetGeneration: 1,
+		Operation: protocol.RuntimeOperationRestart,
+		DesiredRuntime: protocol.DesiredRuntime{
+			Version: "v1.2.3", Platform: "darwin", Architecture: "arm64", ArtifactPolicy: protocol.ArtifactPolicyPublishedRelease,
+		},
+		IdempotencyKey: "idem-pending-restart",
+	}, gatewaylifecycle.Authorization{
+		Actor:  protocol.RuntimeOperationActor{Kind: "direct_user", SubjectID: "client-pending"},
+		Grants: []protocol.RuntimeGrant{protocol.RuntimeGrantManage},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	httpServer, _, err := server.Start(ctx, "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer httpServer.Close()
+	if startup.called != 0 {
+		t.Fatalf("precompiled Runtime startup calls = %d, want 0 while operation owns the target", startup.called)
+	}
+}
+
 func (c *gatewayLifecycleTestController) ValidateTarget(context.Context, string, protocol.LifecycleTarget) error {
 	return nil
 }

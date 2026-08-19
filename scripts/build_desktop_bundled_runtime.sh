@@ -67,6 +67,20 @@ resolve_binary_name() {
   printf 'redeven\n'
 }
 
+resolve_bundle_version() {
+  if [ -n "${REDEVEN_DESKTOP_BUNDLE_VERSION:-}" ]; then
+    printf '%s\n' "$REDEVEN_DESKTOP_BUNDLE_VERSION"
+    return 0
+  fi
+  if [ -n "${REDEVEN_DESKTOP_VERSION:-}" ]; then
+    printf '%s\n' "$REDEVEN_DESKTOP_VERSION"
+    return 0
+  fi
+  node -e 'const version = String(require(process.argv[1]).version || "").trim(); if (!version) process.exit(1); process.stdout.write(`${version}\n`);' \
+    "$ROOT_DIR/desktop/package.json" \
+    || ui_pkg_die "desktop package version is unavailable"
+}
+
 validate_target() {
   local goos="$1"
   local goarch="$2"
@@ -160,6 +174,7 @@ assert_bundle_inventory() {
 const { lstatSync, readdirSync } = require("node:fs");
 const { join } = require("node:path");
 const expected = [
+  "desktop-bundle-manifest.json",
   "redeven",
   "redeven-gateway",
 ];
@@ -182,6 +197,69 @@ for (const name of actual) {
   const stat = lstatSync(join(process.env.BUNDLE_DIR, name));
   if (stat.isSymbolicLink() || !stat.isFile()) fail(`bundle entry must be a regular file: ${name}`);
 }
+function fail(message) {
+  console.error(`[desktop-bundle] ${message}`);
+  process.exit(1);
+}
+NODE
+}
+
+write_bundle_manifest() {
+  local bundle_dir="$1"
+  local goos="$2"
+  local goarch="$3"
+  local version="$4"
+  local commit="$5"
+  BUNDLE_DIR="$bundle_dir" BUNDLE_GOOS="$goos" BUNDLE_GOARCH="$goarch" \
+    BUNDLE_VERSION="$version" BUNDLE_COMMIT="$commit" node <<'NODE'
+const { createHash } = require("node:crypto");
+const { lstatSync, readFileSync, writeFileSync } = require("node:fs");
+const { join } = require("node:path");
+
+const root = process.env.BUNDLE_DIR;
+const platform = process.env.BUNDLE_GOOS;
+const architecture = process.env.BUNDLE_GOARCH;
+const version = String(process.env.BUNDLE_VERSION || "").trim();
+const commit = String(process.env.BUNDLE_COMMIT || "").trim();
+if (!root || !version || !commit) fail("bundle version and commit are required");
+
+function descriptor(name, executable) {
+  const filePath = join(root, name);
+  const stat = lstatSync(filePath);
+  if (stat.isSymbolicLink() || !stat.isFile()) fail(`bundle entry must be a regular file: ${name}`);
+  if (executable && (stat.mode & 0o111) === 0) fail(`bundle entry must be executable: ${name}`);
+  const bytes = readFileSync(filePath);
+  return {
+    path: name,
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+    size_bytes: bytes.length,
+    executable,
+  };
+}
+
+const runtimeFiles = platform === "linux"
+  ? [
+      ["redeven", true],
+      ["redevplugin-runtime", true],
+      [".redevplugin-release-artifacts-verified.json", false],
+      ["REDEVPLUGIN_RUNTIME.spdx.json", false],
+      ["REDEVPLUGIN_THIRD_PARTY_NOTICES.md", false],
+      ["redevplugin-runtime.pem", false],
+      ["redevplugin-runtime.provenance.json", false],
+      ["redevplugin-runtime.sig", false],
+    ]
+  : [["redeven", true]];
+const manifest = {
+  schema_version: 1,
+  version: version.startsWith("v") ? version : `v${version}`,
+  commit,
+  platform,
+  architecture,
+  gateway: descriptor("redeven-gateway", true),
+  runtime_suite: runtimeFiles.map(([name, executable]) => descriptor(name, executable)),
+};
+writeFileSync(join(root, "desktop-bundle-manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
+
 function fail(message) {
   console.error(`[desktop-bundle] ${message}`);
   process.exit(1);
@@ -273,13 +351,13 @@ bundle_from_source() {
   local goarch="$2"
   local output_path="$3"
   local runtime_gateway_output_path="$4"
+  local version="$5"
+  local commit="$6"
 
   if ! command -v go >/dev/null 2>&1; then
     ui_pkg_die "go not found (required to build the desktop bundled runtime)"
   fi
 
-  local version="${REDEVEN_DESKTOP_BUNDLE_VERSION:-${REDEVEN_DESKTOP_VERSION:-0.0.0-dev}}"
-  local commit="${REDEVEN_DESKTOP_BUNDLE_COMMIT:-$(git -C "$ROOT_DIR" rev-parse --short=12 HEAD)}"
   local build_time="${REDEVEN_DESKTOP_BUNDLE_BUILD_TIME:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
 
   ui_pkg_log "Building desktop bundled runtime from the current repository..."
@@ -300,7 +378,7 @@ bundle_from_source() {
 main() {
   local goos goarch binary_name bundle_parent bundle_dir bundle_path gateway_bundle_path
   local staging_parent working_bundle working_bundle_path working_gateway_path
-  local tarball_path gateway_tarball_path from_archive
+  local tarball_path gateway_tarball_path from_archive bundle_version bundle_commit
   tarball_path="${REDEVEN_DESKTOP_RUNTIME_TARBALL:-${REDEVEN_DESKTOP_AGENT_TARBALL:-}}"
   gateway_tarball_path="${REDEVEN_DESKTOP_GATEWAY_TARBALL:-}"
   goos="$(resolve_target_goos "$tarball_path")"
@@ -310,6 +388,8 @@ main() {
   bundle_dir="$bundle_parent/${goos}-${goarch}"
   bundle_path="$bundle_dir/$binary_name"
   gateway_bundle_path="$bundle_dir/redeven-gateway"
+  bundle_version="$(resolve_bundle_version)"
+  bundle_commit="${REDEVEN_DESKTOP_BUNDLE_COMMIT:-$(git -C "$ROOT_DIR" rev-parse --short=12 HEAD)}"
 
   ui_pkg_log "Preparing desktop bundled runtime..."
   ui_pkg_log "ROOT_DIR: $ROOT_DIR"
@@ -330,7 +410,7 @@ main() {
   else
     from_archive=0
     mkdir -p "$working_bundle"
-    bundle_from_source "$goos" "$goarch" "$working_bundle_path" "$working_gateway_path"
+    bundle_from_source "$goos" "$goarch" "$working_bundle_path" "$working_gateway_path" "$bundle_version" "$bundle_commit"
     if [[ "$goos" == "linux" ]]; then
       stage_redevplugin_runtime "$working_bundle" "$goos" "$goarch"
     fi
@@ -343,12 +423,13 @@ main() {
     ui_pkg_die "desktop bundled Gateway not found after preparation: $working_gateway_path"
   fi
 
-  assert_bundle_inventory "$working_bundle" "$from_archive" "$goos"
   assert_go_binary_target "$working_bundle_path" "$goos" "$goarch" "Redeven runtime"
   assert_go_binary_target "$working_gateway_path" "$goos" "$goarch" "Redeven Gateway"
   "$SCRIPT_DIR/check_redevplugin_consumption_gate.sh" \
     --scan-root "$working_bundle" \
     --runtime-target "${goos}/${goarch}"
+  write_bundle_manifest "$working_bundle" "$goos" "$goarch" "$bundle_version" "$bundle_commit"
+  assert_bundle_inventory "$working_bundle" "$from_archive" "$goos"
 
   chmod +x "$working_bundle_path"
   chmod +x "$working_gateway_path"

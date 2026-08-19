@@ -16,11 +16,12 @@ import {
 } from '../testSupport/desktopTestHelpers';
 
 describe('desktopLaunch', () => {
-  it('requires an explicit opt-in before Desktop auto-starts the local runtime', () => {
-    expect(desktopAutoStartRuntimeEnabled()).toBe(false);
+  it('auto-starts the local runtime unless an isolated test explicitly disables startup', () => {
+    expect(desktopAutoStartRuntimeEnabled()).toBe(true);
     expect(desktopAutoStartRuntimeEnabled('1')).toBe(true);
     expect(desktopAutoStartRuntimeEnabled('TRUE')).toBe(true);
     expect(desktopAutoStartRuntimeEnabled('off')).toBe(false);
+    expect(desktopAutoStartRuntimeEnabled('0')).toBe(false);
     expect(DESKTOP_AUTO_START_RUNTIME_ENV_NAME).toBe('REDEVEN_DESKTOP_AUTO_START_RUNTIME');
   });
 
