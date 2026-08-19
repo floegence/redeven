@@ -384,7 +384,7 @@ async function loadLocalRuntimeInfo(): Promise<LocalRuntimeInfo | null> {
     const out = await fetchLocalJSON<LocalRuntimeInfo>('/api/local/runtime', { method: 'GET' });
     return { ...normalizeLocalRuntimeInfo(out), access_status: access };
   } catch (error) {
-    if (error instanceof APIError && error.status === 423) {
+    if ((error instanceof APIError && error.status === 423) || error instanceof AccessUnlockError) {
       return {
         mode: 'local',
         env_public_id: 'env_local',
