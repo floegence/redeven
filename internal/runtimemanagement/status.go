@@ -41,6 +41,8 @@ type RuntimeInstanceIdentity struct {
 	RuntimeVersion  string `json:"runtime_version,omitempty"`
 	RuntimeCommit   string `json:"runtime_commit,omitempty"`
 	BinaryPath      string `json:"binary_path,omitempty"`
+	DesktopManaged  bool   `json:"desktop_managed,omitempty"`
+	DesktopOwnerID  string `json:"desktop_owner_id,omitempty"`
 }
 
 type RuntimeControlEndpoint struct {

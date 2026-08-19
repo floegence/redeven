@@ -43,6 +43,7 @@ type Controller struct {
 	mu                            sync.Mutex
 	startupMu                     sync.Mutex
 	offlineFences                 map[string]gatewayprotocol.LifecycleTarget
+	legacyFences                  map[string]gatewayprotocol.LifecycleTarget
 	bindings                      *BindingStore
 	precompiledRuntimeManifest    string
 	precompiledRuntimeLocalUIBind string
@@ -61,7 +62,15 @@ type operationCheckpoint struct {
 	PreviousExecutableSHA256 string                    `json:"previous_executable_sha256,omitempty"`
 	StagingRoot              string                    `json:"staging_root,omitempty"`
 	RuntimeWasRunning        bool                      `json:"runtime_was_running"`
+	PreviousRuntimeLegacy    bool                      `json:"previous_runtime_legacy,omitempty"`
+	PreviousDesktopOwnerID   string                    `json:"previous_desktop_owner_id,omitempty"`
 	Candidate                *candidateProcessIdentity `json:"candidate,omitempty"`
+}
+
+type legacyRuntimeUpgradeCandidate struct {
+	status           runtimemanagement.RuntimeAttachStatus
+	inventory        runtimemanagement.RuntimeProcessInventory
+	executableSHA256 string
 }
 
 type operationCheckpointPhase string
@@ -113,6 +122,7 @@ func NewController(options ControllerOptions) (*Controller, error) {
 	}
 	return &Controller{
 		bindings: options.BindingStore, offlineFences: make(map[string]gatewayprotocol.LifecycleTarget),
+		legacyFences:                  make(map[string]gatewayprotocol.LifecycleTarget),
 		precompiledRuntimeManifest:    strings.TrimSpace(options.PrecompiledRuntimeManifest),
 		precompiledRuntimeLocalUIBind: localUIBind,
 		startupWait:                   startupWait, shutdownWait: shutdownWait, controlTimeout: controlTimeout, artifactProbeTimeout: artifactProbeTimeout,
@@ -246,6 +256,18 @@ func (c *Controller) RuntimeManagementCapability(ctx context.Context, gatewayEnv
 		capability.ReasonCode = "runtime_management_ready"
 		return gatewayprotocol.NormalizeRuntimeManagementCapability(capability), nil
 	}
+	if legacy, legacyErr := c.legacyRuntimeUpgradeCandidate(ctx); legacyErr == nil {
+		capability.Compatibility.RuntimeBinaryVersion = strings.TrimSpace(legacy.status.RuntimeService.RuntimeVersion)
+		capability.Compatibility.RuntimePlatform = runtime.GOOS
+		capability.Compatibility.RuntimeArchitecture = runtime.GOARCH
+		capability.Compatibility.RuntimeServiceProtocol = strings.TrimSpace(legacy.status.RuntimeService.ProtocolVersion)
+		capability.Compatibility.CompatibilityEpoch = legacy.status.RuntimeService.CompatibilityEpoch
+		capability.Compatibility.RuntimeArtifactSHA256 = legacy.executableSHA256
+		capability.Readiness = gatewayprotocol.ManagementReady
+		capability.Operations = []gatewayprotocol.RuntimeOperationKind{gatewayprotocol.RuntimeOperationUpdate}
+		capability.ReasonCode = "runtime_update_required"
+		return gatewayprotocol.NormalizeRuntimeManagementCapability(capability), nil
+	}
 
 	snapshot, snapshotErr := c.offlineSnapshot(ctx)
 	if snapshotErr != nil || snapshot.Impact.Knowledge != gatewayprotocol.WorkloadKnown || len(snapshot.WorkloadIdentities) != 0 {
@@ -321,6 +343,9 @@ func (c *Controller) Snapshot(ctx context.Context, target gatewayprotocol.Lifecy
 	client := c.controlClient()
 	identity, err := client.identity(ctx)
 	if err != nil {
+		if legacy, legacyErr := c.legacyRuntimeUpgradeCandidate(ctx); legacyErr == nil {
+			return legacyRuntimeWorkloadSnapshot(legacy), nil
+		}
 		return c.offlineSnapshot(ctx)
 	}
 	if err := c.validateAndRecordIdentity(identity, nil); err != nil {
@@ -335,6 +360,17 @@ func (c *Controller) BeginLifecycleFence(ctx context.Context, operationID string
 	}
 	identity, err := c.controlClient().identity(ctx)
 	if err != nil {
+		if legacy, legacyErr := c.legacyRuntimeUpgradeCandidate(ctx); legacyErr == nil {
+			tokenBytes := make([]byte, 24)
+			if _, err := rand.Read(tokenBytes); err != nil {
+				return gatewaylifecycle.LifecycleFence{}, err
+			}
+			token := "gwlf_" + base64.RawURLEncoding.EncodeToString(tokenBytes)
+			c.mu.Lock()
+			c.legacyFences[token] = target
+			c.mu.Unlock()
+			return gatewaylifecycle.LifecycleFence{Token: token, Snapshot: legacyRuntimeWorkloadSnapshot(legacy)}, nil
+		}
 		snapshot, snapshotErr := c.offlineSnapshot(ctx)
 		if snapshotErr != nil || snapshot.Impact.Knowledge != gatewayprotocol.WorkloadKnown || len(snapshot.WorkloadIdentities) != 0 {
 			return gatewaylifecycle.LifecycleFence{}, errors.New("Runtime is not reachable and the supervisor cannot prove that the target has no active Runtime workload")
@@ -356,6 +392,15 @@ func (c *Controller) BeginLifecycleFence(ctx context.Context, operationID string
 }
 
 func (c *Controller) ReleaseLifecycleFence(ctx context.Context, token string) error {
+	if strings.HasPrefix(strings.TrimSpace(token), "gwlf_") {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		if _, ok := c.legacyFences[strings.TrimSpace(token)]; !ok {
+			return errors.New("legacy Runtime lifecycle fence is stale")
+		}
+		delete(c.legacyFences, strings.TrimSpace(token))
+		return nil
+	}
 	if strings.HasPrefix(strings.TrimSpace(token), "gwof_") {
 		c.mu.Lock()
 		defer c.mu.Unlock()
@@ -375,11 +420,30 @@ func (c *Controller) Commit(ctx context.Context, operation gatewayprotocol.Runti
 		return err
 	}
 	binding := c.bindings.Binding()
+	legacyFence := strings.HasPrefix(strings.TrimSpace(fenceToken), "gwlf_")
+	if legacyFence {
+		if operation.Kind != gatewayprotocol.RuntimeOperationUpdate {
+			return errors.New("legacy Runtime lifecycle fences support update only")
+		}
+		c.mu.Lock()
+		fencedTarget, ok := c.legacyFences[strings.TrimSpace(fenceToken)]
+		c.mu.Unlock()
+		if !ok || fencedTarget.LifecycleTargetID != operation.LifecycleTargetID || fencedTarget.TargetGeneration != operation.TargetGeneration {
+			return errors.New("legacy Runtime lifecycle fence is stale")
+		}
+	}
 	checkpoint := operationCheckpoint{
 		OperationID:       operation.OperationID,
 		Phase:             checkpointPrepared,
 		ManagedRoot:       filepath.Join(binding.RuntimeRoot, "runtime", "managed"),
-		RuntimeWasRunning: c.runtimeStatusPresent(),
+		RuntimeWasRunning: c.runtimeStatusPresent(), PreviousRuntimeLegacy: legacyFence,
+	}
+	if legacyFence {
+		legacy, err := c.legacyRuntimeUpgradeCandidate(ctx)
+		if err != nil {
+			return err
+		}
+		checkpoint.PreviousDesktopOwnerID = strings.TrimSpace(legacy.status.Identity.DesktopOwnerID)
 	}
 	if strings.HasPrefix(strings.TrimSpace(fenceToken), "gwof_") {
 		c.mu.Lock()
@@ -417,14 +481,20 @@ func (c *Controller) Commit(ctx context.Context, operation gatewayprotocol.Runti
 		return err
 	}
 	if checkpoint.RuntimeWasRunning {
-		if err := c.controlClient().shutdown(ctx, fenceToken); err != nil {
-			return fmt.Errorf("request Runtime shutdown: %w", err)
-		}
-		if err := c.waitForRuntimeStopped(ctx); err != nil {
-			return err
-		}
-		if err := c.waitForNoRuntimeProcesses(ctx); err != nil {
-			return err
+		if legacyFence {
+			if err := c.stopLegacyRuntimeForUpdate(ctx, operation.ExpectedSnapshot); err != nil {
+				return err
+			}
+		} else {
+			if err := c.controlClient().shutdown(ctx, fenceToken); err != nil {
+				return fmt.Errorf("request Runtime shutdown: %w", err)
+			}
+			if err := c.waitForRuntimeStopped(ctx); err != nil {
+				return err
+			}
+			if err := c.waitForNoRuntimeProcesses(ctx); err != nil {
+				return err
+			}
 		}
 	}
 	checkpoint.Phase = checkpointRuntimeStopped
@@ -517,8 +587,14 @@ func (c *Controller) Recover(ctx context.Context, operation gatewayprotocol.Runt
 		}
 	}
 	if checkpoint.RuntimeWasRunning {
-		if err := c.startAndVerify(ctx, gatewayprotocol.RuntimeOperation{}, &checkpoint); err != nil {
-			return err
+		var startErr error
+		if checkpoint.PreviousRuntimeLegacy {
+			startErr = c.startLegacyAndVerify(ctx, &checkpoint)
+		} else {
+			startErr = c.startAndVerify(ctx, gatewayprotocol.RuntimeOperation{}, &checkpoint)
+		}
+		if startErr != nil {
+			return startErr
 		}
 	}
 	if err := c.cleanupRecoveryArtifacts(checkpoint); err != nil {
@@ -538,6 +614,12 @@ func (c *Controller) recoverPrepared(ctx context.Context, checkpoint *operationC
 	}
 	if checkpoint.RuntimeWasRunning {
 		if c.runtimeStatusPresent() {
+			if checkpoint.PreviousRuntimeLegacy {
+				if _, err := c.legacyRuntimeUpgradeCandidate(ctx); err != nil {
+					return err
+				}
+				return c.finishPreparedRecovery(checkpoint)
+			}
 			identity, err := c.controlClient().identity(ctx)
 			if err != nil {
 				return err
@@ -552,17 +634,18 @@ func (c *Controller) recoverPrepared(ctx context.Context, checkpoint *operationC
 			if err := c.waitForNoRuntimeProcesses(ctx); err != nil {
 				return err
 			}
-			if err := c.startAndVerify(ctx, gatewayprotocol.RuntimeOperation{}, checkpoint); err != nil {
-				return err
+			var startErr error
+			if checkpoint.PreviousRuntimeLegacy {
+				startErr = c.startLegacyAndVerify(ctx, checkpoint)
+			} else {
+				startErr = c.startAndVerify(ctx, gatewayprotocol.RuntimeOperation{}, checkpoint)
+			}
+			if startErr != nil {
+				return startErr
 			}
 		}
 	}
-	if err := c.cleanupRecoveryArtifacts(*checkpoint); err != nil {
-		return err
-	}
-	checkpoint.Candidate = nil
-	checkpoint.Phase = checkpointRecovered
-	return c.writeCheckpoint(*checkpoint)
+	return c.finishPreparedRecovery(checkpoint)
 }
 
 func (c *Controller) Reconcile(ctx context.Context, operation gatewayprotocol.RuntimeOperation) error {
@@ -671,6 +754,175 @@ func (c *Controller) runtimeStatusPresent() bool {
 	defer cancel()
 	status, err := runtimemanagement.LoadStatus(ctx, c.bindings.Binding().RuntimeControlSocketPath, 300*time.Millisecond)
 	return err == nil && status.State == runtimemanagement.AttachStateReady
+}
+
+func (c *Controller) runtimeProcessInventoryOptions() runtimemanagement.RuntimeProcessInventoryOptions {
+	binding := c.bindings.Binding()
+	return runtimemanagement.RuntimeProcessInventoryOptions{
+		RuntimeRoot:        binding.RuntimeRoot,
+		StateRoot:          binding.RuntimeRoot,
+		CurrentExecutables: []string{filepath.Join(binding.RuntimeRoot, "runtime", "managed", "bin", "redeven")},
+	}
+}
+
+func (c *Controller) legacyRuntimeUpgradeCandidate(ctx context.Context) (legacyRuntimeUpgradeCandidate, error) {
+	binding := c.bindings.Binding()
+	status, err := runtimemanagement.LoadStatus(ctx, binding.RuntimeControlSocketPath, c.controlTimeout)
+	if err != nil {
+		return legacyRuntimeUpgradeCandidate{}, err
+	}
+	service := status.RuntimeService
+	managedBinary := filepath.Join(binding.RuntimeRoot, "runtime", "managed", "bin", "redeven")
+	if status.State != runtimemanagement.AttachStateReady || !status.Identity.DesktopManaged || strings.TrimSpace(status.Identity.DesktopOwnerID) == "" ||
+		!isLegacyRuntimeService(service) ||
+		status.Identity.PID <= 0 || filepath.Clean(status.Identity.StateRoot) != filepath.Clean(binding.RuntimeRoot) ||
+		filepath.Clean(status.Identity.BinaryPath) != filepath.Clean(managedBinary) {
+		return legacyRuntimeUpgradeCandidate{}, errors.New("running Runtime is not an eligible managed legacy update target")
+	}
+	inventory, err := runtimemanagement.InspectRuntimeProcesses(ctx, c.runtimeProcessInventoryOptions())
+	if err != nil {
+		return legacyRuntimeUpgradeCandidate{}, err
+	}
+	if len(inventory.Instances) != 1 || inventory.Summary.Automatic != 1 || inventory.Summary.Blocked != 0 {
+		return legacyRuntimeUpgradeCandidate{}, errors.New("legacy Runtime process inventory is not a single verified managed process")
+	}
+	instance := inventory.Instances[0]
+	if instance.PID != status.Identity.PID || instance.IdentityStatus != runtimemanagement.RuntimeProcessIdentityVerified ||
+		instance.StopAuthority != runtimemanagement.RuntimeProcessStopAutomatic ||
+		filepath.Clean(instance.ExecutablePath) != filepath.Clean(managedBinary) ||
+		filepath.Clean(instance.StateRoot) != filepath.Clean(binding.RuntimeRoot) {
+		return legacyRuntimeUpgradeCandidate{}, errors.New("legacy Runtime process identity does not match its management status")
+	}
+	executableSHA256, err := fileSHA256(managedBinary)
+	if err != nil {
+		return legacyRuntimeUpgradeCandidate{}, err
+	}
+	return legacyRuntimeUpgradeCandidate{status: status, inventory: inventory, executableSHA256: executableSHA256}, nil
+}
+
+func isLegacyRuntimeService(service runtimeservice.Snapshot) bool {
+	return strings.TrimSpace(service.ProtocolVersion) != "" &&
+		service.CompatibilityEpoch > 0 &&
+		service.CompatibilityEpoch < gatewayprotocol.RuntimeCompatibilityEpochV2
+}
+
+func legacyRuntimeWorkloadSnapshot(candidate legacyRuntimeUpgradeCandidate) gatewayprotocol.WorkloadSnapshot {
+	workload := candidate.status.RuntimeService.ActiveWorkload
+	workloadDigest := digestStrings([]string{fmt.Sprintf(
+		"legacy-runtime:%s:%d:%d:%d:%d:%d",
+		strings.TrimSpace(candidate.status.Identity.InstanceID),
+		candidate.status.Identity.PID,
+		workload.TerminalCount,
+		workload.SessionCount,
+		workload.TaskCount,
+		workload.PortForwardCount,
+	)})
+	now := time.Now().UnixMilli()
+	return gatewayprotocol.NormalizeWorkloadSnapshot(gatewayprotocol.WorkloadSnapshot{
+		RuntimeBinaryVersion:   strings.TrimSpace(candidate.status.RuntimeService.RuntimeVersion),
+		SnapshotRevision:       now,
+		ProcessInventoryDigest: "sha256:" + candidate.inventory.InventoryDigest,
+		WorkloadIdentityDigest: workloadDigest,
+		Impact:                 gatewayprotocol.WorkloadImpact{Knowledge: gatewayprotocol.WorkloadUnknown},
+		ObservedAtUnixMS:       now,
+	})
+}
+
+func legacyRuntimeSnapshotMatches(expected gatewayprotocol.WorkloadSnapshot, observed gatewayprotocol.WorkloadSnapshot) bool {
+	expected = gatewayprotocol.NormalizeWorkloadSnapshot(expected)
+	observed = gatewayprotocol.NormalizeWorkloadSnapshot(observed)
+	return expected.Impact.Knowledge == gatewayprotocol.WorkloadUnknown &&
+		observed.Impact.Knowledge == gatewayprotocol.WorkloadUnknown &&
+		expected.ProcessInventoryDigest == observed.ProcessInventoryDigest &&
+		expected.WorkloadIdentityDigest == observed.WorkloadIdentityDigest
+}
+
+func (c *Controller) stopLegacyRuntimeForUpdate(ctx context.Context, expected gatewayprotocol.WorkloadSnapshot) error {
+	candidate, err := c.legacyRuntimeUpgradeCandidate(ctx)
+	if err != nil {
+		return fmt.Errorf("recheck legacy Runtime before update: %w", err)
+	}
+	if !legacyRuntimeSnapshotMatches(expected, legacyRuntimeWorkloadSnapshot(candidate)) {
+		return errors.New("legacy Runtime workload changed after confirmation")
+	}
+	result, err := runtimemanagement.StopRuntimeProcesses(
+		ctx,
+		c.runtimeProcessInventoryOptions(),
+		candidate.inventory.InventoryDigest,
+		c.shutdownWait,
+	)
+	if err != nil {
+		return fmt.Errorf("stop verified legacy Runtime process: %w", err)
+	}
+	if len(result.After.Instances) != 0 {
+		return errors.New("legacy Runtime process remained after the update fence")
+	}
+	return nil
+}
+
+func (c *Controller) startLegacyAndVerify(ctx context.Context, checkpoint *operationCheckpoint) error {
+	if checkpoint == nil || !checkpoint.PreviousRuntimeLegacy {
+		return errors.New("legacy Runtime recovery checkpoint is unavailable")
+	}
+	binding := c.bindings.Binding()
+	binaryPath := filepath.Join(binding.RuntimeRoot, "runtime", "managed", "bin", "redeven")
+	digest, err := fileSHA256(binaryPath)
+	if err != nil || digest != normalizeSHA256(checkpoint.PreviousExecutableSHA256) {
+		return errors.New("legacy Runtime recovery executable does not match the checkpoint")
+	}
+	logRoot := filepath.Join(binding.RuntimeRoot, "runtime", "logs")
+	if err := os.MkdirAll(logRoot, 0o700); err != nil {
+		return err
+	}
+	logPath := filepath.Join(logRoot, "gateway-legacy-recovery-"+safeOperationID(checkpoint.OperationID)+".log")
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	command := exec.Command(
+		binaryPath,
+		"run",
+		"--state-root", binding.RuntimeRoot,
+		"--mode", "desktop",
+		"--desktop-managed",
+		"--presentation", "machine",
+		"--local-ui-bind", c.precompiledRuntimeLocalUIBind,
+	)
+	command.Env = append(os.Environ(), "REDEVEN_DESKTOP_OWNER_ID="+strings.TrimSpace(checkpoint.PreviousDesktopOwnerID))
+	command.Stdin = nil
+	command.Stdout = logFile
+	command.Stderr = logFile
+	if err := command.Start(); err != nil {
+		_ = logFile.Close()
+		return err
+	}
+	_ = command.Process.Release()
+	_ = logFile.Close()
+	deadline := time.Now().Add(c.startupWait)
+	for time.Now().Before(deadline) {
+		candidate, candidateErr := c.legacyRuntimeUpgradeCandidate(ctx)
+		if candidateErr == nil && candidate.executableSHA256 == normalizeSHA256(checkpoint.PreviousExecutableSHA256) {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(150 * time.Millisecond):
+		}
+	}
+	return errors.New("restored legacy Runtime did not become ready before the recovery deadline")
+}
+
+func (c *Controller) finishPreparedRecovery(checkpoint *operationCheckpoint) error {
+	if checkpoint == nil {
+		return errors.New("Runtime recovery checkpoint is unavailable")
+	}
+	if err := c.cleanupRecoveryArtifacts(*checkpoint); err != nil {
+		return err
+	}
+	checkpoint.Candidate = nil
+	checkpoint.Phase = checkpointRecovered
+	return c.writeCheckpoint(*checkpoint)
 }
 
 func (c *Controller) offlineSnapshot(ctx context.Context) (gatewayprotocol.WorkloadSnapshot, error) {
@@ -1016,7 +1268,8 @@ func (c *Controller) startAndVerifyWithProvenance(ctx context.Context, operation
 	if err != nil {
 		return err
 	}
-	cmd := exec.Command(binaryPath, "run", "--state-root", binding.RuntimeRoot, "--mode", "desktop", "--presentation", "machine", "--local-ui-bind", c.precompiledRuntimeLocalUIBind)
+	args := []string{"run", "--state-root", binding.RuntimeRoot, "--mode", "desktop", "--presentation", "machine", "--local-ui-bind", c.precompiledRuntimeLocalUIBind}
+	cmd := exec.Command(binaryPath, args...)
 	cmd.Stdin = nil
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile

@@ -2,11 +2,16 @@ package supervisor
 
 import (
 	"context"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	gatewaylifecycle "github.com/floegence/redeven/internal/runtimegateway/lifecycle"
 	gatewayprotocol "github.com/floegence/redeven/internal/runtimegateway/protocol"
+	"github.com/floegence/redeven/internal/runtimemanagement"
+	"github.com/floegence/redeven/internal/runtimeservice"
 )
 
 func TestRuntimeManagementCapabilityDoesNotDiscloseTargetWithoutGrant(t *testing.T) {
@@ -204,6 +209,145 @@ func TestRuntimeManagementCapabilityFailsClosedForIncompatiblePersistedIdentity(
 	}
 	if capability.Compatibility == nil || capability.Compatibility.CompatibilityEpoch != gatewayprotocol.RuntimeCompatibilityEpochV2-1 {
 		t.Fatalf("capability hid the validated source epoch from the authorized client: %#v", capability.Compatibility)
+	}
+}
+
+func TestRuntimeManagementCapabilityOffersUpdateForVerifiedLegacyRuntime(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a Runtime process fixture")
+	}
+	controller, binding := newCapabilityTestController(t)
+	managedBinary := filepath.Join(binding.RuntimeRoot, "runtime", "managed", "bin", "redeven")
+	if err := os.MkdirAll(filepath.Dir(managedBinary), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	source := filepath.Join(t.TempDir(), "legacy-runtime-process.go")
+	if err := os.WriteFile(source, []byte(recoveryRuntimeProcessHelperSource), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	build := exec.Command("go", "build", "-o", managedBinary, source)
+	build.Env = append(os.Environ(), "GOWORK=off")
+	if output, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build legacy Runtime fixture: %v\n%s", err, output)
+	}
+	readyFile := filepath.Join(t.TempDir(), "legacy-runtime.ready")
+	process := exec.Command(managedBinary, "run", "--mode", "desktop", "--state-root", binding.RuntimeRoot)
+	process.Env = append(os.Environ(), "REDEVEN_TEST_READY_FILE="+readyFile)
+	if err := process.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if process.Process != nil {
+			_ = process.Process.Kill()
+			_, _ = process.Process.Wait()
+		}
+	})
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		if _, err := os.Stat(readyFile); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("legacy Runtime fixture did not become ready")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	statusContext, stopStatus := context.WithCancel(context.Background())
+	statusServer, err := runtimemanagement.NewServer(binding.RuntimeControlSocketPath, func(context.Context) (runtimemanagement.RuntimeAttachStatus, error) {
+		return runtimemanagement.RuntimeAttachStatus{
+			State: runtimemanagement.AttachStateReady,
+			Identity: runtimemanagement.RuntimeInstanceIdentity{
+				InstanceID: "runtime-legacy", StateRoot: binding.RuntimeRoot,
+				PID: process.Process.Pid, RuntimeVersion: "v0.7.0", BinaryPath: managedBinary,
+				DesktopManaged: true, DesktopOwnerID: "desktop-owner-legacy",
+			},
+			Endpoint: &runtimemanagement.RuntimeAttachEndpoint{
+				RuntimeControl: &runtimemanagement.RuntimeControlEndpoint{
+					ProtocolVersion: "redeven-runtime-control-v1",
+					BaseURL:         "http://127.0.0.1:1",
+					Token:           "legacy-token",
+				},
+			},
+			RuntimeService: runtimeservice.Snapshot{
+				RuntimeVersion: "v0.7.0", ProtocolVersion: "redeven-runtime-v1", CompatibilityEpoch: 5,
+				ActiveWorkload: runtimeservice.Workload{TerminalCount: 3},
+			},
+		}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := statusServer.Start(statusContext); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		stopStatus()
+		_ = statusServer.Close()
+	})
+
+	capability, err := controller.RuntimeManagementCapability(context.Background(), gatewayprotocol.ReservedLocalEnvironmentID, gatewaylifecycle.Access{
+		ClientKeyID: "admin-client",
+		Grants:      []gatewayprotocol.RuntimeGrant{gatewayprotocol.RuntimeGrantManage, gatewayprotocol.RuntimeGrantCustomBuild},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if capability.Readiness != gatewayprotocol.ManagementReady || capability.ReasonCode != "runtime_update_required" {
+		t.Fatalf("legacy Runtime capability = %#v", capability)
+	}
+	assertRuntimeOperationKinds(t, capability.Operations, gatewayprotocol.RuntimeOperationUpdate)
+	if capability.Compatibility == nil || capability.Compatibility.CompatibilityEpoch != 5 || capability.Compatibility.RuntimeBinaryVersion != "v0.7.0" {
+		t.Fatalf("legacy Runtime compatibility = %#v", capability.Compatibility)
+	}
+
+	snapshot, err := controller.Snapshot(context.Background(), *capability.Target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Impact.Knowledge != gatewayprotocol.WorkloadUnknown || snapshot.ProcessInventoryDigest == "" || snapshot.WorkloadIdentityDigest == "" {
+		t.Fatalf("legacy Runtime workload snapshot = %#v", snapshot)
+	}
+	fence, err := controller.BeginLifecycleFence(context.Background(), "op-legacy-update", *capability.Target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fence.Token == "" || fence.Snapshot.ProcessInventoryDigest != snapshot.ProcessInventoryDigest || fence.Snapshot.WorkloadIdentityDigest != snapshot.WorkloadIdentityDigest {
+		t.Fatalf("legacy Runtime lifecycle fence = %#v", fence)
+	}
+	if err := controller.stopLegacyRuntimeForUpdate(context.Background(), snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if err := process.Wait(); err != nil && process.ProcessState == nil {
+		t.Fatalf("wait for legacy Runtime stop: %v", err)
+	}
+	process.Process = nil
+	if err := controller.ReleaseLifecycleFence(context.Background(), fence.Token); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestIsLegacyRuntimeServiceRejectsCurrentAndFutureEpochs(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		protocol  string
+		epoch     int
+		wantMatch bool
+	}{
+		{name: "legacy v1", protocol: "redeven-runtime-v1", epoch: 5, wantMatch: true},
+		{name: "legacy protocol at current epoch", protocol: "redeven-runtime-v1", epoch: gatewayprotocol.RuntimeCompatibilityEpochV2, wantMatch: false},
+		{name: "current", protocol: gatewayprotocol.RuntimeServiceProtocolV2, epoch: gatewayprotocol.RuntimeCompatibilityEpochV2, wantMatch: false},
+		{name: "future", protocol: "redeven-runtime-v3", epoch: gatewayprotocol.RuntimeCompatibilityEpochV2 + 1, wantMatch: false},
+		{name: "unknown epoch", protocol: "redeven-runtime-v1", epoch: 0, wantMatch: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got := isLegacyRuntimeService(runtimeservice.Snapshot{
+				ProtocolVersion: test.protocol, CompatibilityEpoch: test.epoch,
+			})
+			if got != test.wantMatch {
+				t.Fatalf("isLegacyRuntimeService() = %t, want %t", got, test.wantMatch)
+			}
+		})
 	}
 }
 

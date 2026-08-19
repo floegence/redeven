@@ -4651,7 +4651,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     if (
       environment.kind === 'gateway_environment'
-      || (environment.runtime_operations.start.method === 'runtime_gateway' && trimString(environment.gateway_id) !== '')
     ) {
       const started = await runGatewayEnvironmentLifecycle(
         environment,
@@ -4692,7 +4691,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       expectedOutcome = 'started_gateway_environment_runtime';
     } else if (
       environment.kind === 'gateway_environment'
-      || (environment.runtime_operations.start.method === 'runtime_gateway' && trimString(environment.gateway_id) !== '')
     ) {
       const gatewayID = trimString(environment.gateway_id);
       const gatewayEnvID = trimString(environment.gateway_env_id);
@@ -4735,7 +4733,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     if (
       environment.kind === 'gateway_environment'
-      || (environment.runtime_operations.update.method === 'runtime_gateway' && trimString(environment.gateway_id) !== '')
     ) {
       const updated = await runGatewayEnvironmentLifecycle(
         environment,
@@ -4772,7 +4769,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     if (
       environment.kind === 'gateway_environment'
-      || (environment.runtime_operations.restart.method === 'runtime_gateway' && trimString(environment.gateway_id) !== '')
     ) {
       const restarted = await runGatewayEnvironmentLifecycle(
         environment,
@@ -4807,7 +4803,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     if (
       environment.kind === 'gateway_environment'
-      || (environment.runtime_operations.stop.method === 'runtime_gateway' && trimString(environment.gateway_id) !== '')
     ) {
       const stopped = await runGatewayEnvironmentLifecycle(
         environment,
@@ -4842,7 +4837,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
     options: Readonly<{ announceSuccess?: boolean }> = {},
   ): Promise<boolean> {
-    if (environment.kind === 'gateway_environment' || trimString(environment.gateway_id) !== '') {
+    if (environment.kind === 'gateway_environment') {
       const gatewayID = trimString(environment.gateway_id);
       if (gatewayID === '') {
         setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', i18n().t('environmentCenter.resolveGatewayError'));
@@ -4874,7 +4869,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   async function refreshEnvironmentRuntimeSilently(
     environment: DesktopEnvironmentEntry,
   ): Promise<boolean> {
-    if (environment.kind === 'gateway_environment' || trimString(environment.gateway_id) !== '') {
+    if (environment.kind === 'gateway_environment') {
       const gatewayID = trimString(environment.gateway_id);
       if (gatewayID === '') {
         return false;
