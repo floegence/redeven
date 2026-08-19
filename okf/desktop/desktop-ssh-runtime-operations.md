@@ -19,7 +19,7 @@ SSH discovery follows bounded `Include` rules, excludes wildcard/negated hosts f
 
 ## Lifecycle delegation
 
-Before build or upload, Desktop requests the Gateway capability and scoped authorization for the exact target/generation and artifact policy. Once prepared, Gateway owns target lock, Runtime fence, workload confirmation, staging, commit, health, and recovery. Desktop reports typed phases and can attach after disconnect; it does not maintain a second SSH lifecycle state machine.
+Before build or upload, Desktop requests the Gateway capability and scoped authorization for the exact target/generation and artifact policy. Once prepared, Gateway owns target lock, Runtime fence, workload confirmation, staging, commit, health, and recovery. If an older Desktop-managed Runtime is still running, capability discovery may expose only `update_runtime`; the update confirmation and exact-process recheck are still Gateway-owned. Desktop reports typed phases and can attach after disconnect; it does not maintain a second SSH lifecycle state machine.
 
 # Boundaries
 

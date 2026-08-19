@@ -780,7 +780,11 @@ export class GatewayLifecycleManager {
         releaseTag: this.gatewayReleaseTag(record),
         releaseBaseURL: this.options.release_base_url,
         assetCacheRoot: this.options.asset_cache_root,
-        sourceRuntimeRoot: options.forceUpdate === true ? this.options.source_runtime_root : undefined,
+        // A development Desktop may not have a published Gateway artifact for the
+        // remote platform. Keep the source tree available so a missing or stale
+        // managed Gateway can be built locally; the service host only uses it when
+        // the package probe requires installation or forceUpdate is requested.
+        sourceRuntimeRoot: this.options.source_runtime_root,
         precompiledBundle: this.options.precompiled_bundle,
         localUIBind: this.options.local_ui_bind,
         targetCommit: this.options.target_commit,

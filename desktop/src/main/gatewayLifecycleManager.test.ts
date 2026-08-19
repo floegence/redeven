@@ -254,7 +254,7 @@ describe('GatewayLifecycleManager', () => {
       releaseTag: 'v1.2.3',
       tempRoot: '/tmp/redeven-temp',
       assetCacheRoot: '/tmp/redeven-assets',
-      sourceRuntimeRoot: undefined,
+      sourceRuntimeRoot: '/Applications/Redeven.app/Contents/Resources',
       sshPassword: '',
     }));
     expect(lifecycleMocks.startRuntimePlacementBridgeSession).toHaveBeenCalledWith(expect.objectContaining({
@@ -274,7 +274,7 @@ describe('GatewayLifecycleManager', () => {
     expect(progress).toEqual(['opening_bridge', 'gateway_ready']);
   });
 
-  it('starts the local service from the validated Desktop bundle without passing the development source root', async () => {
+  it('passes the controlled development source root so a local Gateway can be rebuilt when needed', async () => {
     lifecycleMocks.ensureManagedGatewayServiceReady.mockResolvedValue(PRECOMPILED_BUNDLE.gateway.path);
 
     await manager().bridgeClient(localGateway(), { startPolicy: 'start_if_needed' });
@@ -282,7 +282,7 @@ describe('GatewayLifecycleManager', () => {
     expect(lifecycleMocks.ensureManagedGatewayServiceReady).toHaveBeenCalledWith(expect.objectContaining({
       hostAccess: { kind: 'local_host' },
       releaseTag: PRECOMPILED_BUNDLE.version,
-      sourceRuntimeRoot: undefined,
+      sourceRuntimeRoot: '/Applications/Redeven.app/Contents/Resources',
       precompiledBundle: PRECOMPILED_BUNDLE,
     }));
     expect(lifecycleMocks.startRuntimePlacementBridgeSession).toHaveBeenCalledWith(expect.objectContaining({
