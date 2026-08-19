@@ -218,6 +218,41 @@ describe('environmentLifecycleDisclosure', () => {
     })).toBe(failedRestart);
   });
 
+  it('binds a Gateway update confirmation that has no lifecycle step timeline', () => {
+    const environment = localEnvironmentEntry();
+    const state = beginEnvironmentLifecycleDisclosure(null, environment.id, 'update_runtime');
+    const confirmation: DesktopLauncherActionProgress = {
+      action: 'run_gateway_environment_lifecycle',
+      environment_id: environment.id,
+      environment_label: environment.label,
+      operation_key: `${environment.id}:update_runtime`,
+      subject_kind: 'gateway',
+      subject_id: 'gateway-local',
+      started_at_unix_ms: progressStartedAfter(state!),
+      status: 'needs_confirmation',
+      phase: 'runtime_operation_confirmation_required',
+      title: 'Review Runtime impact',
+      detail: 'Confirm the Runtime update.',
+      runtime_confirmation: {
+        operation: 'update_runtime',
+        snapshot_revision: 1,
+        workload_knowledge: 'unknown',
+        protected_workload_present: false,
+      },
+    };
+    const bound = reconcileEnvironmentLifecycleDisclosure(state, [environment], [confirmation]);
+
+    expect(bound).toEqual(expect.objectContaining({
+      environment_id: environment.id,
+      last_progress: confirmation,
+    }));
+    expect(visibleEnvironmentLifecycleProgress({
+      environment,
+      selectedProgress: confirmation,
+      disclosure: bound,
+    })).toBe(confirmation);
+  });
+
   it('uses the terminal disclosure receipt instead of a stale selected running progress for the same attempt', () => {
     const environment = localEnvironmentEntry();
     const state = beginEnvironmentLifecycleDisclosure(null, environment.id, 'restart_runtime');

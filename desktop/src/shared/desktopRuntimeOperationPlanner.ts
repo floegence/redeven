@@ -22,8 +22,6 @@ import {
   type DesktopRuntimeOperationPlans,
 } from './desktopRuntimeOperations';
 
-type MissingRuntimeControlStatus = Extract<DesktopRuntimeControlStatus, Readonly<{ state: 'missing' }>>;
-
 export type DesktopRuntimeOperationPlanningSurface =
   | 'managed_runtime_card'
   | 'provider_card'
@@ -77,22 +75,6 @@ function activeWorkMessage(runtimeService: RuntimeServiceSnapshot | undefined): 
   return runtimeServiceHasActiveWork(runtimeService)
     ? 'Active work may be interrupted. Confirm before changing this runtime.'
     : '';
-}
-
-function runtimeTargetUnavailableStatus(
-  runtimeControlStatus: DesktopRuntimeControlStatus | undefined,
-  openConnectionRequired: boolean,
-): MissingRuntimeControlStatus | null {
-  if (runtimeControlStatus?.state !== 'missing') {
-    return null;
-  }
-  if (runtimeControlStatus.reason_code === 'container_not_running'
-    || runtimeControlStatus.reason_code === 'container_engine_unavailable') {
-    return runtimeControlStatus;
-  }
-  return runtimeControlStatus.reason_code === 'forward_unavailable' && !openConnectionRequired
-    ? runtimeControlStatus
-    : null;
 }
 
 export function buildDesktopRuntimeOperationPlans(
@@ -158,16 +140,17 @@ export function buildDesktopRuntimeOperationPlans(
     || openConnectionRequired
     || updateMaintenance
     || runtimeServiceAllowsOpenAttempt(input.runtime_service);
-  const managementBlockedStatus = runtimeTargetUnavailableStatus(input.runtime_control_status, openConnectionRequired);
-  const managementBlocked = !!managementBlockedStatus;
+  const openTargetUnavailable = input.runtime_control_status?.state === 'missing'
+    && (input.runtime_control_status.reason_code === 'container_engine_unavailable'
+      || (input.runtime_control_status.reason_code === 'forward_unavailable' && !openConnectionRequired));
   const updateAvailable = requiresUpdate || updateMaintenance;
   const updateMessage = updateRequiredMessage(input.package_state);
   const blockedByRecoveryMaintenance = restartMaintenance && !optimisticOpenMaintenance;
-  const openAvailability = input.running && canOpen && !blockedByRecoveryMaintenance && !managementBlocked
+  const openAvailability = input.running && canOpen && !blockedByRecoveryMaintenance && !openTargetUnavailable
     ? 'available'
     : 'blocked';
-  const openMessage = managementBlocked
-    ? managementBlockedStatus.message
+  const openMessage = openTargetUnavailable
+    ? input.runtime_control_status?.message
     : blockedByRecoveryMaintenance
       ? maintenance?.message
     : !input.running
@@ -180,7 +163,7 @@ export function buildDesktopRuntimeOperationPlans(
     open: desktopRuntimeOperationPlan('open', openAvailability, method, {
       reasonCode: openAvailability === 'available'
         ? undefined
-        : managementBlocked
+        : openTargetUnavailable
           ? 'runtime_target_unavailable'
           : !input.running
             ? 'runtime_not_started'
@@ -197,14 +180,11 @@ export function buildDesktopRuntimeOperationPlans(
       hasManagement
         ? input.running
           ? 'unavailable'
-          : managementBlocked
-            ? 'blocked'
-            : 'available'
+          : 'available'
         : 'hidden',
       lifecycleMethod,
       {
-        reasonCode: managementBlocked ? 'runtime_target_unavailable' : input.running ? 'runtime_already_running' : undefined,
-        message: managementBlocked ? managementBlockedStatus.message : undefined,
+        reasonCode: input.running ? 'runtime_already_running' : undefined,
         packageState: input.package_state,
         maintenance,
         menuVisibility: hasManagement && !input.running ? 'contextual' : 'hidden',
@@ -212,10 +192,10 @@ export function buildDesktopRuntimeOperationPlans(
     ),
     stop: desktopRuntimeOperationPlan(
       'stop',
-      hasManagement ? input.running ? 'available' : 'unavailable' : 'hidden',
+      hasManagement ? 'available' : 'hidden',
       lifecycleMethod,
       {
-        reasonCode: input.running ? undefined : 'runtime_not_started',
+        reasonCode: undefined,
         message: input.running ? activeWorkMessage(input.runtime_service) : 'Runtime is not running.',
         packageState: input.package_state,
         maintenance,
@@ -224,17 +204,11 @@ export function buildDesktopRuntimeOperationPlans(
     ),
     restart: desktopRuntimeOperationPlan(
       'restart',
-      hasManagement
-        ? managementBlocked
-          ? 'blocked'
-          : 'available'
-        : 'hidden',
+      hasManagement ? 'available' : 'hidden',
       lifecycleMethod,
       {
-        reasonCode: managementBlocked ? 'runtime_target_unavailable' : undefined,
-        message: managementBlocked
-          ? managementBlockedStatus.message
-          : maintenance?.message ?? activeWorkMessage(input.runtime_service),
+        reasonCode: undefined,
+        message: maintenance?.message ?? activeWorkMessage(input.runtime_service),
         packageState: input.package_state,
         maintenance,
         menuVisibility: hasManagement ? 'stable' : 'hidden',
@@ -242,21 +216,13 @@ export function buildDesktopRuntimeOperationPlans(
     ),
     update: desktopRuntimeOperationPlan(
       'update',
-      hasManagement
-        ? managementBlocked
-          ? 'blocked'
-          : 'available'
-        : 'hidden',
+      hasManagement ? 'available' : 'hidden',
       lifecycleMethod,
       {
-        reasonCode: managementBlocked
-          ? 'runtime_target_unavailable'
-          : updateAvailable
+        reasonCode: updateAvailable
             ? 'runtime_update_required'
             : undefined,
-        message: managementBlocked
-          ? managementBlockedStatus.message
-          : maintenance?.message ?? updateMessage,
+        message: maintenance?.message ?? updateMessage,
         packageState: input.package_state,
         maintenance,
         menuVisibility: hasManagement ? 'stable' : 'hidden',

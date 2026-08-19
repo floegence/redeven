@@ -195,6 +195,14 @@ worker execution. No target searches `PATH` or alternate runtime names.
 The expected runtime digest comes from the product release marker; startup must
 not hash the field binary and accept that value as its own trust anchor.
 
+ReDevPlugin worker execution is an optional Host module, not a prerequisite for
+Env App startup. When the released Host explicitly reports that its verified
+executable admission primitive is unsupported by the Linux kernel, Redeven
+opens the Host without that module so plugin management UI and the rest of the
+environment remain available. It does not execute a worker through another
+path. Missing evidence, digest or target mismatch, invalid metadata, and all
+other admission failures still fail closed.
+
 Official Containers `4.4.4` is a signed manifest-v9 release-ref package over the
 `redeven.capability.container_resources@3.0.0` adapter. The latest-only market
 selects its immutable GitHub Release and complete transport, while ReDevPlugin
@@ -227,6 +235,7 @@ tampered, and future roots remain fail-closed without mutation.
 - `redeven:internal/agent/plugin_session_registry.go:1` - Owns process-local authenticated generation admission and exact access-session retirement.
 - `redeven:internal/localui/localui.go:1` - Binds Local UI access sessions, pending artifacts, credentials, and direct transports without persisting raw credentials.
 - `redeven:internal/redevpluginintegration/trust_adapter.go:1` - Delegates package signature and freshness assessment to the released verifier.
+- `redeven:internal/redevpluginintegration/runtime_module.go:1` - Admits the released worker runtime or disables only that optional module when the platform primitive is explicitly unsupported.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginPlatform.ts:1` - Owns the released client, transport, shared scope, and slot placement adapter.
 - `redeven:internal/envapp/ui_src/src/ui/workbench/redevenWorkbenchWidgets.tsx:300` - Registers the standard projected plugin widget.
 - `redeven:internal/workbenchlayout/types.go:21` - Declares the persisted `redeven.plugin` widget type.

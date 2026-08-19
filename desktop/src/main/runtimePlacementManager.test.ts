@@ -665,4 +665,61 @@ describe('runtimePlacementManager', () => {
       await sshTransportManager.dispose();
     }
   }, 15_000);
+
+  it('updates an old SSH container runtime after stopping its verified residual process', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-placement-manager-'));
+    const {
+      markerPath,
+      daemonPath,
+      daemonPidSequencePath,
+      eventsPath,
+    } = await installFakeDocker(tempDir);
+    await installFakeSSH(tempDir);
+    await fs.writeFile(markerPath, 'v0.6.10');
+    await fs.writeFile(daemonPath, '1111');
+    await fs.writeFile(daemonPidSequencePath, '2222');
+    const sshTransportManager = new DefaultDesktopSSHTransportManager({
+      readyPollMs: 1,
+      dependencies: { tempRoot: tempDir },
+    });
+
+    try {
+      const ready = await ensureRuntimePlacementReady({
+        host_access: {
+          kind: 'ssh_host',
+          ssh: {
+            ssh_destination: 'devbox',
+            ssh_port: 2222,
+            auth_mode: 'key_agent',
+            connect_timeout_seconds: 1,
+          },
+        },
+        placement: {
+          kind: 'container_process',
+          container_engine: 'docker',
+          container_id: 'dev',
+          container_ref: 'dev',
+          container_label: 'dev',
+          runtime_root: '/root/.redeven',
+          bridge_strategy: 'exec_stream',
+        },
+        ssh_transport_manager: sshTransportManager,
+        ssh_credential_scope: tempDir,
+        runtime_release_tag: 'v1.2.3',
+        release_base_url: 'https://example.invalid/releases',
+        asset_cache_root: tempDir,
+        runtime_process_intent: 'update',
+        force_runtime_update: true,
+        previous_runtime_pid: 1111,
+        require_new_daemon: true,
+      });
+
+      expect(ready.startup?.pid).toBe(2222);
+      expect(ready.probe.reported_release_tag).toBe('v1.2.3');
+      expect(await fs.readFile(markerPath, 'utf8')).toBe('v1.2.3');
+      expect(await fs.readFile(eventsPath, 'utf8')).toBe('stop\ninstall\nrun\n');
+    } finally {
+      await sshTransportManager.dispose();
+    }
+  }, 15_000);
 });

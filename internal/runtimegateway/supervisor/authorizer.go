@@ -3,7 +3,9 @@ package supervisor
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -125,7 +127,26 @@ func (a *Authorizer) AuthorizeReconcile(_ context.Context, _ *http.Request, veri
 		return access, &gatewaylifecycle.Error{Code: gatewaylifecycle.ErrorTargetChanged, Message: "Runtime lifecycle target changed before reconcile authorization."}
 	}
 	if strings.TrimSpace(permit) == "" {
-		return gatewaylifecycle.Access{}, &gatewaylifecycle.Error{Code: gatewaylifecycle.ErrorUnauthorized, Message: "An exact Runtime recovery authorization permit is required."}
+		if verified.ProviderTunnel {
+			return gatewaylifecycle.Access{}, &gatewaylifecycle.Error{Code: gatewaylifecycle.ErrorUnauthorized, Message: "An exact Runtime recovery authorization permit is required."}
+		}
+		if access.ClientKeyID != strings.TrimSpace(operation.AuthorizedClientKeyID) {
+			return gatewaylifecycle.Access{}, &gatewaylifecycle.Error{Code: gatewaylifecycle.ErrorUnauthorized, Message: "Only the authorized Runtime management client can reconcile this operation."}
+		}
+		grants := normalizePermitGrants(verified.RuntimeGrants)
+		if !hasPermitGrant(grants, gatewayprotocol.RuntimeGrantManageBinding) {
+			return gatewaylifecycle.Access{}, &gatewaylifecycle.Error{Code: gatewaylifecycle.ErrorUnauthorized, Message: "Runtime binding management permission is required."}
+		}
+		// Direct Gateway clients are already authenticated against the local
+		// binding. Each recovery attempt gets a fresh JTI so a failed reconcile
+		// can be retried, while Store.Reconcile still rejects replayed permits.
+		access.Grants = grants
+		permitNonce := make([]byte, 16)
+		if _, err := rand.Read(permitNonce); err != nil {
+			return gatewaylifecycle.Access{}, &gatewaylifecycle.Error{Code: gatewaylifecycle.ErrorUnauthorized, Message: "Runtime reconcile authorization could not be issued."}
+		}
+		access.PermitJTI = "gateway-reconcile:" + operation.OperationID + ":" + access.ClientKeyID + ":" + hex.EncodeToString(permitNonce)
+		return access, nil
 	}
 	claims, err := parseRuntimeOperationPermit(permit, a.bindings.Binding(), a.currentTime())
 	if err != nil || claims.Action != "reconcile" || claims.Operation != gatewayprotocol.RuntimeOperationReconcile ||

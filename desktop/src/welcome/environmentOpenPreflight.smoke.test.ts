@@ -313,10 +313,11 @@ describe('environment Open click smoke', () => {
         },
         runtime_operations: {
           start: {
-            availability: 'blocked',
+            availability: 'available',
             method: 'runtime_gateway',
-            reason_code: 'runtime_gateway_temporarily_unavailable',
           },
+          restart: { availability: 'available', method: 'runtime_gateway' },
+          update: { availability: 'available', method: 'runtime_gateway' },
         },
       });
       expect(stopped.gateway_id).toBe(`gw-${testCase.kind === 'local_environment'

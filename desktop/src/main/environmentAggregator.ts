@@ -145,18 +145,18 @@ function buildGatewayEnvironmentEntry(
     && environment.profile_access_route.kind === environment.profile?.access_route_kind;
   const canEditGatewayProfile = canWriteGatewayProfile && hasEditableGatewayProfile;
   const hasGatewayLifecycleControl = gateway.status === 'online'
-    && gateway.capabilities.includes('env_lifecycle');
+    && (gateway.capabilities.includes('env_lifecycle')
+      || environment.runtime_management?.presentation_state === 'allowed');
+  const canRecoverByUpdating = desktopGatewayEnvironmentHasControlCapability(environment, 'update_runtime');
   const canStart = hasGatewayLifecycleControl
-    && environment.state === 'stopped'
-    && desktopGatewayEnvironmentHasControlCapability(environment, 'start');
+    && environment.state !== 'available'
+    && (desktopGatewayEnvironmentHasControlCapability(environment, 'start') || canRecoverByUpdating);
   const canStop = hasGatewayLifecycleControl
-    && environment.state === 'available'
+    && environment.state !== 'stopped'
     && desktopGatewayEnvironmentHasControlCapability(environment, 'stop');
   const canRestart = hasGatewayLifecycleControl
-    && (environment.state === 'available' || environment.state === 'stopped')
-    && desktopGatewayEnvironmentHasControlCapability(environment, 'restart');
+    && (desktopGatewayEnvironmentHasControlCapability(environment, 'restart') || canRecoverByUpdating);
   const canUpdate = hasGatewayLifecycleControl
-    && (environment.state === 'available' || environment.state === 'stopped')
     && desktopGatewayEnvironmentHasControlCapability(environment, 'update_runtime');
   const runtimeOperations = gatewayRuntimeOperations({
     openable: isOpenable,
@@ -435,58 +435,12 @@ function gatewayMatchesDirectRuntimeTarget(
 
 function directRuntimeGatewayOperations(
   entry: DesktopEnvironmentEntry,
-  gateway: DesktopGatewaySource,
-  environment: DesktopGatewayEnvironment | undefined,
 ): DesktopRuntimeOperationPlans {
-  if (!environment || gateway.status !== 'online') {
-    const message = gateway.status === 'pairing_required'
-      ? 'Initialize this environment before using lifecycle actions.'
-      : 'Lifecycle actions are temporarily unavailable. Try again shortly.';
-    const reasonCode = gateway.status === 'pairing_required'
-      ? 'runtime_gateway_setup_required'
-      : 'runtime_gateway_temporarily_unavailable';
-    const blocked = (operation: 'start' | 'stop' | 'restart' | 'update') => desktopRuntimeOperationPlan(
-      operation,
-      'blocked',
-      'runtime_gateway',
-      {
-        reasonCode,
-        message,
-        menuVisibility: operation === 'start' ? 'contextual' : 'stable',
-      },
-    );
-    return {
-      ...entry.runtime_operations,
-      start: blocked('start'),
-      stop: blocked('stop'),
-      restart: blocked('restart'),
-      update: blocked('update'),
-    };
-  }
-  const hasLifecycle = gateway.capabilities.includes('env_lifecycle');
-  const gatewayOperations = gatewayRuntimeOperations({
-    openable: false,
-    canStart: hasLifecycle
-      && environment.state === 'stopped'
-      && desktopGatewayEnvironmentHasControlCapability(environment, 'start'),
-    canStop: hasLifecycle
-      && environment.state === 'available'
-      && desktopGatewayEnvironmentHasControlCapability(environment, 'stop'),
-    canRestart: hasLifecycle
-      && (environment.state === 'available' || environment.state === 'stopped')
-      && desktopGatewayEnvironmentHasControlCapability(environment, 'restart'),
-    canUpdate: hasLifecycle
-      && (environment.state === 'available' || environment.state === 'stopped')
-      && desktopGatewayEnvironmentHasControlCapability(environment, 'update_runtime'),
-    needsResolve: false,
-  });
-  return {
-    ...entry.runtime_operations,
-    start: gatewayOperations.start,
-    stop: gatewayOperations.stop,
-    restart: gatewayOperations.restart,
-    update: gatewayOperations.update,
-  };
+  // Direct cards own target coordinates and operation availability. Gateway
+  // catalog state is a cached protocol observation and must never replace the
+  // direct card's current Runtime plan; execution re-establishes and probes
+  // the Gateway authoritatively after the click.
+  return entry.runtime_operations;
 }
 
 function projectDirectRuntimeManagement(
@@ -554,6 +508,6 @@ function projectDirectRuntimeManagement(
     gateway_environment_control_capabilities: environment?.control_capabilities,
     gateway_environment_origin: environment?.origin,
     runtime_management: environment?.runtime_management ?? fallbackManagement,
-    runtime_operations: directRuntimeGatewayOperations(entry, gateway, environment),
+    runtime_operations: directRuntimeGatewayOperations(entry),
   };
 }

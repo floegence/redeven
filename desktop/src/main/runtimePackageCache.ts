@@ -231,7 +231,26 @@ function writeTarOctal(header: Buffer, value: number, offset: number, length: nu
   header[offset + length - 1] = 0;
 }
 
-function createSingleFileTarGzip(fileName: string, data: Buffer, mode: number): Buffer {
+type RuntimeArchiveEntry = Readonly<{
+  name: string;
+  data: Buffer;
+  mode: number;
+}>;
+
+const LINUX_RUNTIME_COMPANION_FILES = [
+  'redevplugin-runtime',
+  '.redevplugin-release-artifacts-verified.json',
+  'REDEVPLUGIN_THIRD_PARTY_NOTICES.md',
+  'REDEVPLUGIN_RUNTIME.spdx.json',
+  'redevplugin-runtime.provenance.json',
+  'redevplugin-runtime.sig',
+  'redevplugin-runtime.pem',
+] as const;
+
+function createTarGzip(entries: readonly RuntimeArchiveEntry[]): Buffer {
+  const chunks: Buffer[] = [];
+  for (const entry of entries) {
+    const { name: fileName, data, mode } = entry;
   const header = Buffer.alloc(512, 0);
   header.write(fileName, 0, Math.min(Buffer.byteLength(fileName), 100), 'ascii');
   writeTarOctal(header, mode, 100, 8);
@@ -254,13 +273,15 @@ function createSingleFileTarGzip(fileName: string, data: Buffer, mode: number): 
   header[154] = 0;
   header[155] = 0x20;
 
-  const paddingLength = (512 - (data.length % 512)) % 512;
-  return gzipSync(Buffer.concat([
-    header,
-    data,
-    Buffer.alloc(paddingLength, 0),
-    Buffer.alloc(1024, 0),
-  ]));
+    const paddingLength = (512 - (data.length % 512)) % 512;
+    chunks.push(header, data, Buffer.alloc(paddingLength, 0));
+  }
+  chunks.push(Buffer.alloc(1024, 0));
+  return gzipSync(Buffer.concat(chunks));
+}
+
+function createSingleFileTarGzip(fileName: string, data: Buffer, mode: number): Buffer {
+  return createTarGzip([{ name: fileName, data, mode }]);
 }
 
 async function readSourceRuntimeCommit(sourceRoot: string, signal?: AbortSignal): Promise<string> {
@@ -327,6 +348,25 @@ async function buildSourceRuntimeBinary(args: Readonly<{
     '--version', args.version,
     '--commit', args.commit,
     '--build-time', args.buildTime,
+  ], { cwd: args.sourceRoot, signal: args.signal });
+}
+
+async function stageSourceRuntimeCompanions(args: Readonly<{
+  sourceRoot: string;
+  outputRoot: string;
+  platform: DesktopSSHRemotePlatform;
+  signal?: AbortSignal;
+}>): Promise<void> {
+  const scriptPath = path.join(args.sourceRoot, 'scripts', 'stage_redevplugin_release_artifacts.sh');
+  const scriptStat = await fs.stat(scriptPath).catch(() => null);
+  if (!scriptStat?.isFile()) {
+    throw new Error(`ReDevPlugin Runtime staging script is missing: ${scriptPath}`);
+  }
+  await runLocalCommand(scriptPath, [
+    '--dest-dir', path.join(args.outputRoot, 'published-redevplugin'),
+    '--redeven-goos', args.platform.goos,
+    '--redeven-goarch', args.platform.goarch,
+    '--runtime-out', path.join(args.outputRoot, 'redevplugin-runtime'),
   ], { cwd: args.sourceRoot, signal: args.signal });
 }
 
@@ -411,6 +451,33 @@ async function prepareSourceRuntimeUploadAsset(args: Readonly<{
       signal: args.signal,
     });
     throwIfCanceled(args.signal);
+    if (args.packageKind === 'runtime' && args.platform.goos === 'linux') {
+      const suiteRoot = path.join(buildRoot, 'runtime-suite');
+      await fs.mkdir(suiteRoot, { recursive: true });
+      await stageSourceRuntimeCompanions({
+        sourceRoot,
+        outputRoot: suiteRoot,
+        platform: args.platform,
+        signal: args.signal,
+      });
+      const entries: RuntimeArchiveEntry[] = [{
+        name: commandName,
+        data: await fs.readFile(binaryPath),
+        mode: 0o755,
+      }];
+      for (const name of LINUX_RUNTIME_COMPANION_FILES) {
+        entries.push({
+          name,
+          data: await fs.readFile(path.join(suiteRoot, name)),
+          mode: name === 'redevplugin-runtime' ? 0o755 : 0o644,
+        });
+      }
+      return {
+        archiveData: createTarGzip(entries),
+        cacheEntry: null,
+        source: 'source_build',
+      };
+    }
     return {
       archiveData: createSingleFileTarGzip(commandName, await fs.readFile(binaryPath), 0o755),
       cacheEntry: null,

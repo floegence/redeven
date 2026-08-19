@@ -66,13 +66,23 @@ fi
 [[ -n "$dest_dir" && -n "$runtime_out" && -n "$goos" && -n "$goarch" ]] || { usage >&2; exit 2; }
 [[ "$profile" == "development" || "$profile" == "release" ]] || die "unsupported build profile: $profile"
 target="$goos/$goarch"
+rust_libc="gnu"
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  # macOS has no Linux libc. Use the musl Rust standard library and Rust LLD
+  # so the resulting Runtime remains a dependency-free static PIE.
+  rust_libc="musl"
+fi
 case "$target" in
-  linux/amd64) rust_target="x86_64-unknown-linux-gnu" ;;
-  linux/arm64) rust_target="aarch64-unknown-linux-gnu" ;;
+  linux/amd64)
+    rust_target="x86_64-unknown-linux-$rust_libc"
+    ;;
+  linux/arm64)
+    rust_target="aarch64-unknown-linux-$rust_libc"
+    ;;
   *) die "unsupported ReDevPlugin runtime target: $target" ;;
 esac
 
-for command in cargo gh go jq node readelf rustc rustup; do require_command "$command"; done
+for command in cargo gh go jq node rustc rustup; do require_command "$command"; done
 if [[ "$profile" == "release" ]]; then
   require_command cosign
   [[ "${GITHUB_REPOSITORY:-}" == "floegence/redeven" ]] || die "release build requires the floegence/redeven workflow identity"
@@ -122,7 +132,8 @@ rustc_version=$(rustup run "$RUST_TOOLCHAIN" rustc --version)
 export CARGO_HOME="$tmpdir/cargo-home"
 install_root="$tmpdir/runtime-install"
 rustflags_key="CARGO_TARGET_$(printf '%s' "$rust_target" | tr '[:lower:]-' '[:upper:]_')_RUSTFLAGS"
-env "$rustflags_key=-C target-feature=+crt-static -C relocation-model=pic -C linker=$SCRIPT_DIR/link_redevplugin_runtime_static_pie.sh" \
+env \
+  "$rustflags_key=-C target-feature=+crt-static -C relocation-model=pic -C linker=$SCRIPT_DIR/link_redevplugin_runtime_static_pie.sh" \
   rustup run "$RUST_TOOLCHAIN" cargo install \
   --locked \
   --root "$install_root" \
@@ -130,7 +141,10 @@ env "$rustflags_key=-C target-feature=+crt-static -C relocation-model=pic -C lin
   --version "=$version" \
   redevplugin-runtime
 
-mapfile -t runtime_sources < <(find "$CARGO_HOME/registry/src" \
+runtime_sources=()
+while IFS= read -r runtime_source; do
+  runtime_sources+=("$runtime_source")
+done < <(find "$CARGO_HOME/registry/src" \
   -mindepth 2 -maxdepth 2 -type d -name "redevplugin-runtime-$version" -print)
 [[ "${#runtime_sources[@]}" -eq 1 ]] || die "Cargo cache does not contain one exact published runtime source"
 runtime_source="${runtime_sources[0]}"
@@ -147,12 +161,6 @@ node "$SCRIPT_DIR/redevplugin_release_contract.mjs" project-runtime-cargo-metada
 runtime="$tmpdir/redevplugin-runtime"
 install -m 0755 "$install_root/bin/redevplugin-runtime" "$runtime"
 node "$SCRIPT_DIR/redevplugin_release_contract.mjs" verify-elf "$runtime" "$target"
-if readelf -lW "$runtime" | grep -q '[[:space:]]INTERP[[:space:]]'; then
-  die "ReDevPlugin runtime ELF interpreter is forbidden"
-fi
-if readelf -dW "$runtime" | grep -q '[[:space:]]NEEDED[[:space:]]'; then
-  die "ReDevPlugin runtime dynamic dependencies are forbidden"
-fi
 
 provenance="$tmpdir/$RUNTIME_PROVENANCE"
 sbom="$tmpdir/$RUNTIME_SBOM"

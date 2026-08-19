@@ -21,6 +21,7 @@ import type {
 } from './viewModel';
 import {
   environmentMatchesRuntimeLifecycleProgress,
+  runtimeLifecycleOperationForActionProgress,
   type DesktopLauncherBusyState,
 } from './launcherBusyState';
 
@@ -89,6 +90,23 @@ function lifecycleActionKindForIntent(intent: EnvironmentLifecycleDisclosureInte
       return 'update_environment_runtime';
     default:
       return 'start_environment_runtime';
+  }
+}
+
+function lifecycleDisclosureIntentForProgress(
+  progress: DesktopLauncherActionProgress | null | undefined,
+): EnvironmentLifecycleDisclosureIntent | null {
+  switch (runtimeLifecycleOperationForActionProgress(progress)) {
+    case 'start':
+      return 'start_runtime';
+    case 'stop':
+      return 'stop_runtime';
+    case 'restart':
+      return 'restart_runtime';
+    case 'update':
+      return 'update_runtime';
+    default:
+      return null;
   }
 }
 
@@ -248,8 +266,8 @@ function progressBelongsToDisclosure(
   state: Exclude<EnvironmentLifecycleDisclosureState, null>,
 ): progress is DesktopLauncherActionProgress {
   if (
-    !progress?.lifecycle_progress
-    || lifecycleDisclosureIntentForActionKind(progress.action) !== state.intent
+    !progress
+    || lifecycleDisclosureIntentForProgress(progress) !== state.intent
   ) {
     return false;
   }
@@ -299,7 +317,11 @@ export function environmentLifecycleDisclosureHasPendingRequest(
 ): boolean {
   return state !== null
     && state.environment_id === busyState.environment_id
-    && busyState.action === lifecycleActionKindForIntent(state.intent);
+    && (
+      busyState.action === lifecycleActionKindForIntent(state.intent)
+      || busyState.action === 'run_gateway_environment_lifecycle'
+      || busyState.action === 'run_provider_environment_lifecycle'
+    );
 }
 
 export function pendingEnvironmentLifecycleProgress(
@@ -342,7 +364,7 @@ export function visibleEnvironmentLifecycleProgress(input: Readonly<{
   busyState?: Pick<DesktopLauncherBusyState, 'action' | 'environment_id'>;
 }>): DesktopLauncherActionProgress | null {
   if (!input.disclosure) {
-    return input.selectedProgress?.lifecycle_progress ? input.selectedProgress : null;
+    return input.selectedProgress ?? null;
   }
   if (input.disclosure.last_progress) {
     return input.disclosure.last_progress;

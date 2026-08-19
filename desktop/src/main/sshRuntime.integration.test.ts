@@ -919,6 +919,26 @@ done
 [ -n "$output" ]
 go build -o "$output" ./cmd/redeven
 `, { mode: 0o755 });
+  await fs.writeFile(path.join(sourceRoot, 'scripts', 'stage_redevplugin_release_artifacts.sh'), `#!/bin/sh
+set -eu
+dest_dir=
+runtime_out=
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --dest-dir) dest_dir="$2" ;;
+    --runtime-out) runtime_out="$2" ;;
+  esac
+  shift 2
+done
+[ -n "$dest_dir" ]
+[ -n "$runtime_out" ]
+mkdir -p "$dest_dir" "$(dirname "$runtime_out")"
+printf 'plugin-runtime\n' > "$runtime_out"
+chmod 755 "$runtime_out"
+for name in .redevplugin-release-artifacts-verified.json REDEVPLUGIN_THIRD_PARTY_NOTICES.md REDEVPLUGIN_RUNTIME.spdx.json redevplugin-runtime.provenance.json redevplugin-runtime.sig redevplugin-runtime.pem; do
+  printf 'evidence\n' > "$(dirname "$runtime_out")/$name"
+done
+`, { mode: 0o755 });
   const fakeGo = path.join(binDir, 'go');
   await fs.writeFile(fakeGo, `#!/usr/bin/env node
 const fs = require('node:fs');

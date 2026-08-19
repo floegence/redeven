@@ -73,6 +73,17 @@ type legacyRuntimeUpgradeCandidate struct {
 	executableSHA256 string
 }
 
+type runtimeCommitError struct {
+	cause            error
+	recoveryRequired bool
+}
+
+func (e *runtimeCommitError) Error() string { return e.cause.Error() }
+func (e *runtimeCommitError) Unwrap() error { return e.cause }
+func (e *runtimeCommitError) RuntimeRecoveryRequired() bool {
+	return e.recoveryRequired
+}
+
 type operationCheckpointPhase string
 
 const (
@@ -264,24 +275,41 @@ func (c *Controller) RuntimeManagementCapability(ctx context.Context, gatewayEnv
 		capability.Compatibility.CompatibilityEpoch = legacy.status.RuntimeService.CompatibilityEpoch
 		capability.Compatibility.RuntimeArtifactSHA256 = legacy.executableSHA256
 		capability.Readiness = gatewayprotocol.ManagementReady
-		capability.Operations = []gatewayprotocol.RuntimeOperationKind{gatewayprotocol.RuntimeOperationUpdate}
+		capability.Operations = []gatewayprotocol.RuntimeOperationKind{
+			gatewayprotocol.RuntimeOperationStop,
+			gatewayprotocol.RuntimeOperationRestart,
+			gatewayprotocol.RuntimeOperationUpdate,
+		}
+		if hasControllerGrant(grants, gatewayprotocol.RuntimeGrantManageBinding) {
+			// Reconciliation is a Gateway-supervisor action. It remains available
+			// for an authorized binding administrator even when the attached Runtime
+			// is legacy and can only be upgraded.
+			capability.Operations = append(capability.Operations, gatewayprotocol.RuntimeOperationReconcile)
+		}
 		capability.ReasonCode = "runtime_update_required"
 		return gatewayprotocol.NormalizeRuntimeManagementCapability(capability), nil
 	}
 
-	snapshot, snapshotErr := c.offlineSnapshot(ctx)
-	if snapshotErr != nil || snapshot.Impact.Knowledge != gatewayprotocol.WorkloadKnown || len(snapshot.WorkloadIdentities) != 0 {
+	inventory, inventoryErr := c.runtimeProcessInventory(ctx)
+	if inventoryErr != nil || inventory.Summary.Blocked != 0 {
 		capability.Readiness = gatewayprotocol.ManagementTemporarilyUnavailable
 		capability.ReasonCode = "runtime_supervisor_temporarily_unavailable"
 		return gatewayprotocol.NormalizeRuntimeManagementCapability(capability), nil
+	}
+	capability.Readiness = gatewayprotocol.ManagementReady
+	capability.Operations = []gatewayprotocol.RuntimeOperationKind{
+		gatewayprotocol.RuntimeOperationStop,
+		gatewayprotocol.RuntimeOperationUpdate,
 	}
 	managedBinary := filepath.Join(binding.RuntimeRoot, "runtime", "managed", "bin", "redeven")
 	if c.runtimeInstalled() {
 		digest, digestErr := fileSHA256(managedBinary)
 		validated := binding.ValidatedRuntime
 		if digestErr != nil || validated == nil || normalizeSHA256(validated.ArtifactSHA256) != digest {
-			capability.Readiness = gatewayprotocol.ManagementTemporarilyUnavailable
 			capability.ReasonCode = "runtime_identity_validation_required"
+			if hasControllerGrant(grants, gatewayprotocol.RuntimeGrantManageBinding) {
+				capability.Operations = append(capability.Operations, gatewayprotocol.RuntimeOperationReconcile)
+			}
 			return gatewayprotocol.NormalizeRuntimeManagementCapability(capability), nil
 		}
 		capability.Compatibility.RuntimeBinaryVersion = validated.RuntimeBinaryVersion
@@ -291,20 +319,26 @@ func (c *Controller) RuntimeManagementCapability(ctx context.Context, gatewayEnv
 		capability.Compatibility.CompatibilityEpoch = validated.CompatibilityEpoch
 		capability.Compatibility.RuntimeArtifactSHA256 = normalizeSHA256(validated.ArtifactSHA256)
 		if !runtimeValidationCompatible(validated) {
-			capability.Readiness = gatewayprotocol.ManagementTemporarilyUnavailable
 			capability.ReasonCode = "runtime_identity_incompatible"
+			if hasControllerGrant(grants, gatewayprotocol.RuntimeGrantManageBinding) {
+				capability.Operations = append(capability.Operations, gatewayprotocol.RuntimeOperationReconcile)
+			}
 			return gatewayprotocol.NormalizeRuntimeManagementCapability(capability), nil
 		}
-	}
-	capability.Readiness = gatewayprotocol.ManagementReady
-	capability.Operations = []gatewayprotocol.RuntimeOperationKind{gatewayprotocol.RuntimeOperationUpdate}
-	if c.runtimeInstalled() {
-		capability.Operations = append([]gatewayprotocol.RuntimeOperationKind{gatewayprotocol.RuntimeOperationStart}, capability.Operations...)
+		if len(inventory.Instances) == 0 {
+			capability.Operations = append(capability.Operations, gatewayprotocol.RuntimeOperationStart)
+		} else {
+			capability.Operations = append(capability.Operations, gatewayprotocol.RuntimeOperationRestart)
+		}
 	}
 	if hasControllerGrant(grants, gatewayprotocol.RuntimeGrantManageBinding) {
 		capability.Operations = append(capability.Operations, gatewayprotocol.RuntimeOperationReconcile)
 	}
-	capability.ReasonCode = "runtime_management_ready"
+	if len(inventory.Instances) > 0 {
+		capability.ReasonCode = "runtime_process_recovery_required"
+	} else {
+		capability.ReasonCode = "runtime_management_ready"
+	}
 	return gatewayprotocol.NormalizeRuntimeManagementCapability(capability), nil
 }
 
@@ -371,10 +405,11 @@ func (c *Controller) BeginLifecycleFence(ctx context.Context, operationID string
 			c.mu.Unlock()
 			return gatewaylifecycle.LifecycleFence{Token: token, Snapshot: legacyRuntimeWorkloadSnapshot(legacy)}, nil
 		}
-		snapshot, snapshotErr := c.offlineSnapshot(ctx)
-		if snapshotErr != nil || snapshot.Impact.Knowledge != gatewayprotocol.WorkloadKnown || len(snapshot.WorkloadIdentities) != 0 {
+		inventory, inventoryErr := c.runtimeProcessInventory(ctx)
+		if inventoryErr != nil || inventory.Summary.Blocked != 0 {
 			return gatewaylifecycle.LifecycleFence{}, errors.New("Runtime is not reachable and the supervisor cannot prove that the target has no active Runtime workload")
 		}
+		snapshot := offlineSnapshotFromInventory(inventory)
 		tokenBytes := make([]byte, 24)
 		if _, err := rand.Read(tokenBytes); err != nil {
 			return gatewaylifecycle.LifecycleFence{}, err
@@ -396,7 +431,9 @@ func (c *Controller) ReleaseLifecycleFence(ctx context.Context, token string) er
 		c.mu.Lock()
 		defer c.mu.Unlock()
 		if _, ok := c.legacyFences[strings.TrimSpace(token)]; !ok {
-			return errors.New("legacy Runtime lifecycle fence is stale")
+			// Legacy fences are Gateway-local coordination records. After a Gateway
+			// restart, absence means there is no live Runtime fence left to release.
+			return nil
 		}
 		delete(c.legacyFences, strings.TrimSpace(token))
 		return nil
@@ -413,7 +450,20 @@ func (c *Controller) ReleaseLifecycleFence(ctx context.Context, token string) er
 	return c.controlClient().releaseFence(ctx, token)
 }
 
-func (c *Controller) Commit(ctx context.Context, operation gatewayprotocol.RuntimeOperation, fenceToken string) error {
+func (c *Controller) Commit(ctx context.Context, operation gatewayprotocol.RuntimeOperation, fenceToken string) (commitErr error) {
+	recoveryRequired := false
+	stagingRoot := ""
+	defer func() {
+		if commitErr == nil {
+			return
+		}
+		if !recoveryRequired && stagingRoot != "" {
+			if cleanupErr := durableRemoveAll(stagingRoot); cleanupErr != nil {
+				commitErr = errors.Join(commitErr, fmt.Errorf("clean rejected Runtime staging: %w", cleanupErr))
+			}
+		}
+		commitErr = &runtimeCommitError{cause: commitErr, recoveryRequired: recoveryRequired}
+	}()
 	if err := c.bindings.Validate(operation.GatewayEnvID, gatewayprotocol.LifecycleTarget{
 		LifecycleTargetID: operation.LifecycleTargetID, TargetGeneration: operation.TargetGeneration,
 	}); err != nil {
@@ -422,8 +472,10 @@ func (c *Controller) Commit(ctx context.Context, operation gatewayprotocol.Runti
 	binding := c.bindings.Binding()
 	legacyFence := strings.HasPrefix(strings.TrimSpace(fenceToken), "gwlf_")
 	if legacyFence {
-		if operation.Kind != gatewayprotocol.RuntimeOperationUpdate {
-			return errors.New("legacy Runtime lifecycle fences support update only")
+		if operation.Kind != gatewayprotocol.RuntimeOperationStop &&
+			operation.Kind != gatewayprotocol.RuntimeOperationRestart &&
+			operation.Kind != gatewayprotocol.RuntimeOperationUpdate {
+			return errors.New("legacy Runtime lifecycle fences support stop, restart, and update only")
 		}
 		c.mu.Lock()
 		fencedTarget, ok := c.legacyFences[strings.TrimSpace(fenceToken)]
@@ -444,6 +496,8 @@ func (c *Controller) Commit(ctx context.Context, operation gatewayprotocol.Runti
 			return err
 		}
 		checkpoint.PreviousDesktopOwnerID = strings.TrimSpace(legacy.status.Identity.DesktopOwnerID)
+		checkpoint.PreviousExecutableSHA256 = legacy.executableSHA256
+		checkpoint.PreviousManagedPresent = true
 	}
 	if strings.HasPrefix(strings.TrimSpace(fenceToken), "gwof_") {
 		c.mu.Lock()
@@ -452,16 +506,26 @@ func (c *Controller) Commit(ctx context.Context, operation gatewayprotocol.Runti
 		if !ok || fencedTarget.LifecycleTargetID != operation.LifecycleTargetID || fencedTarget.TargetGeneration != operation.TargetGeneration {
 			return errors.New("offline Runtime lifecycle fence is stale")
 		}
-		snapshot, err := c.offlineSnapshot(ctx)
-		if err != nil || snapshot.Impact.Knowledge != gatewayprotocol.WorkloadKnown || len(snapshot.WorkloadIdentities) != 0 {
+		inventory, err := c.runtimeProcessInventory(ctx)
+		if err != nil || inventory.Summary.Blocked != 0 ||
+			!offlineRuntimeSnapshotMatches(operation.ExpectedSnapshot, offlineSnapshotFromInventory(inventory)) {
 			return errors.New("Runtime workload changed after the offline lifecycle fence was established")
+		}
+		if len(inventory.Instances) > 0 {
+			if operation.Kind == gatewayprotocol.RuntimeOperationStart {
+				return errors.New("Runtime start cannot replace residual managed processes without an update or restart")
+			}
+			if err := c.stopOfflineRuntimeProcesses(ctx, inventory); err != nil {
+				return err
+			}
 		}
 	}
 	if operation.Kind == gatewayprotocol.RuntimeOperationUpdate {
 		if operation.Artifact == nil || strings.TrimSpace(operation.Artifact.StagedPath) == "" {
 			return errors.New("staged Runtime artifact is unavailable")
 		}
-		stagingRoot, err := c.extractRuntimeArtifact(ctx, operation)
+		var err error
+		stagingRoot, err = c.extractRuntimeArtifact(ctx, operation)
 		if err != nil {
 			return err
 		}
@@ -480,6 +544,7 @@ func (c *Controller) Commit(ctx context.Context, operation gatewayprotocol.Runti
 	if err := c.writeCheckpoint(checkpoint); err != nil {
 		return err
 	}
+	recoveryRequired = true
 	if checkpoint.RuntimeWasRunning {
 		if legacyFence {
 			if err := c.stopLegacyRuntimeForUpdate(ctx, operation.ExpectedSnapshot); err != nil {
@@ -506,6 +571,9 @@ func (c *Controller) Commit(ctx context.Context, operation gatewayprotocol.Runti
 	case gatewayprotocol.RuntimeOperationStop:
 		return nil
 	case gatewayprotocol.RuntimeOperationStart, gatewayprotocol.RuntimeOperationRestart:
+		if legacyFence {
+			return c.startLegacyAndVerify(ctx, &checkpoint)
+		}
 		return c.startAndVerify(ctx, operation, &checkpoint)
 	case gatewayprotocol.RuntimeOperationUpdate:
 		if err := c.activateStaging(checkpoint); err != nil {
@@ -649,6 +717,23 @@ func (c *Controller) recoverPrepared(ctx context.Context, checkpoint *operationC
 }
 
 func (c *Controller) Reconcile(ctx context.Context, operation gatewayprotocol.RuntimeOperation) error {
+	if operation.Kind == gatewayprotocol.RuntimeOperationUpdate {
+		reconciled, err := c.reconcileRestoredUpdate(ctx, operation)
+		if err != nil {
+			return err
+		}
+		if reconciled {
+			return nil
+		}
+		// A failed legacy update may retain a checkpoint even when installation
+		// never changed the running process. Verify that exact pre-update
+		// workload before clearing the stale recovery state so the next update can
+		// start from a clean lifecycle operation.
+		legacy, legacyErr := c.legacyRuntimeUpgradeCandidate(ctx)
+		if legacyErr == nil && legacyRuntimeSnapshotMatches(operation.ExpectedSnapshot, legacyRuntimeWorkloadSnapshot(legacy)) {
+			return nil
+		}
+	}
 	if operation.Kind == gatewayprotocol.RuntimeOperationStop {
 		if c.runtimeStatusPresent() {
 			return errors.New("Runtime is still running after the stop operation")
@@ -673,6 +758,43 @@ func (c *Controller) Reconcile(ctx context.Context, operation gatewayprotocol.Ru
 		return err
 	}
 	return c.controlClient().health(ctx)
+}
+
+func (c *Controller) reconcileRestoredUpdate(
+	ctx context.Context,
+	operation gatewayprotocol.RuntimeOperation,
+) (bool, error) {
+	checkpoint, err := c.readCheckpoint(operation.OperationID)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if checkpoint.Phase != checkpointRecovering || !checkpoint.PreviousManagedPresent ||
+		filepath.Clean(checkpoint.ManagedRoot) != filepath.Clean(filepath.Join(c.bindings.Binding().RuntimeRoot, "runtime", "managed")) {
+		return false, nil
+	}
+	inventory, err := c.runtimeProcessInventory(ctx)
+	if err != nil {
+		return false, err
+	}
+	if inventory.Summary.Blocked > 0 || len(inventory.Instances) > 0 {
+		return false, errors.New("Runtime recovery cannot be reconciled while a residual process remains")
+	}
+	digest, err := fileSHA256(filepath.Join(checkpoint.ManagedRoot, "bin", "redeven"))
+	if err != nil || normalizeSHA256(digest) != normalizeSHA256(checkpoint.PreviousExecutableSHA256) {
+		return false, nil
+	}
+	if err := c.cleanupRecoveryArtifacts(checkpoint); err != nil {
+		return false, err
+	}
+	checkpoint.Candidate = nil
+	checkpoint.Phase = checkpointRecovered
+	if err := c.writeCheckpoint(checkpoint); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func (c *Controller) controlClient() runtimeControlClient {
@@ -763,6 +885,10 @@ func (c *Controller) runtimeProcessInventoryOptions() runtimemanagement.RuntimeP
 		StateRoot:          binding.RuntimeRoot,
 		CurrentExecutables: []string{filepath.Join(binding.RuntimeRoot, "runtime", "managed", "bin", "redeven")},
 	}
+}
+
+func (c *Controller) runtimeProcessInventory(ctx context.Context) (runtimemanagement.RuntimeProcessInventory, error) {
+	return runtimemanagement.InspectRuntimeProcesses(ctx, c.runtimeProcessInventoryOptions())
 }
 
 func (c *Controller) legacyRuntimeUpgradeCandidate(ctx context.Context) (legacyRuntimeUpgradeCandidate, error) {
@@ -860,6 +986,31 @@ func (c *Controller) stopLegacyRuntimeForUpdate(ctx context.Context, expected ga
 	return nil
 }
 
+func (c *Controller) stopOfflineRuntimeProcesses(
+	ctx context.Context,
+	inventory runtimemanagement.RuntimeProcessInventory,
+) error {
+	if len(inventory.Instances) == 0 {
+		return nil
+	}
+	if inventory.Summary.Blocked != 0 || inventory.Summary.Automatic != len(inventory.Instances) {
+		return errors.New("Runtime process inventory contains a process that the supervisor cannot stop safely")
+	}
+	result, err := runtimemanagement.StopRuntimeProcesses(
+		ctx,
+		c.runtimeProcessInventoryOptions(),
+		inventory.InventoryDigest,
+		c.shutdownWait,
+	)
+	if err != nil {
+		return fmt.Errorf("stop verified residual Runtime processes: %w", err)
+	}
+	if len(result.After.Instances) != 0 {
+		return errors.New("verified residual Runtime processes remained after the lifecycle fence")
+	}
+	return nil
+}
+
 func (c *Controller) startLegacyAndVerify(ctx context.Context, checkpoint *operationCheckpoint) error {
 	if checkpoint == nil || !checkpoint.PreviousRuntimeLegacy {
 		return errors.New("legacy Runtime recovery checkpoint is unavailable")
@@ -926,16 +1077,14 @@ func (c *Controller) finishPreparedRecovery(checkpoint *operationCheckpoint) err
 }
 
 func (c *Controller) offlineSnapshot(ctx context.Context) (gatewayprotocol.WorkloadSnapshot, error) {
-	binding := c.bindings.Binding()
-	managedBinary := filepath.Join(binding.RuntimeRoot, "runtime", "managed", "bin", "redeven")
-	inventory, err := runtimemanagement.InspectRuntimeProcesses(ctx, runtimemanagement.RuntimeProcessInventoryOptions{
-		RuntimeRoot:        binding.RuntimeRoot,
-		StateRoot:          binding.RuntimeRoot,
-		CurrentExecutables: []string{managedBinary},
-	})
+	inventory, err := c.runtimeProcessInventory(ctx)
 	if err != nil {
 		return gatewayprotocol.WorkloadSnapshot{}, err
 	}
+	return offlineSnapshotFromInventory(inventory), nil
+}
+
+func offlineSnapshotFromInventory(inventory runtimemanagement.RuntimeProcessInventory) gatewayprotocol.WorkloadSnapshot {
 	identities := make([]string, 0, len(inventory.Instances))
 	for _, instance := range inventory.Instances {
 		identities = append(identities, fmt.Sprintf("process:%d:%d:%s", instance.PID, instance.ProcessStartedAtUnixMS, instance.ExecutablePath))
@@ -946,7 +1095,7 @@ func (c *Controller) offlineSnapshot(ctx context.Context) (gatewayprotocol.Workl
 			SnapshotRevision: observedAt, ProcessInventoryDigest: "sha256:" + inventory.InventoryDigest,
 			WorkloadIdentityDigest: digestStrings(identities), WorkloadIdentities: identities,
 			Impact: gatewayprotocol.WorkloadImpact{Knowledge: gatewayprotocol.WorkloadUnknown}, ObservedAtUnixMS: observedAt,
-		}), nil
+		})
 	}
 	zero := 0
 	return gatewayprotocol.NormalizeWorkloadSnapshot(gatewayprotocol.WorkloadSnapshot{
@@ -954,7 +1103,15 @@ func (c *Controller) offlineSnapshot(ctx context.Context) (gatewayprotocol.Workl
 		WorkloadIdentityDigest: digestStrings(nil), WorkloadIdentities: []string{},
 		Impact:           gatewayprotocol.WorkloadImpact{Knowledge: gatewayprotocol.WorkloadKnown, AffectedProcessCount: &zero, ActiveSessionCount: &zero},
 		ObservedAtUnixMS: observedAt,
-	}), nil
+	})
+}
+
+func offlineRuntimeSnapshotMatches(expected gatewayprotocol.WorkloadSnapshot, observed gatewayprotocol.WorkloadSnapshot) bool {
+	expected = gatewayprotocol.NormalizeWorkloadSnapshot(expected)
+	observed = gatewayprotocol.NormalizeWorkloadSnapshot(observed)
+	return expected.Impact.Knowledge == observed.Impact.Knowledge &&
+		expected.ProcessInventoryDigest == observed.ProcessInventoryDigest &&
+		expected.WorkloadIdentityDigest == observed.WorkloadIdentityDigest
 }
 
 func digestStrings(values []string) string {

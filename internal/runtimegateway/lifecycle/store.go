@@ -811,6 +811,21 @@ func (s *Store) continueFencing(ctx context.Context, operationID string, recover
 
 	current = s.operationWithPrivateState(current)
 	if err := s.controller.Commit(ctx, current, fence.Token); err != nil {
+		var boundary interface{ RuntimeRecoveryRequired() bool }
+		if errors.As(err, &boundary) && !boundary.RuntimeRecoveryRequired() {
+			if releaseErr := s.releaseStoredFence(ctx, operationID); releaseErr != nil {
+				return s.enterManualRecovery(operationID, fmt.Sprintf(
+					"Runtime update was rejected before installation changed, but its lifecycle fence could not be released. Commit error: %v. Fence error: %v",
+					err,
+					releaseErr,
+				))
+			}
+			failed, failErr := s.failBeforeCommit(operationID, ErrorUnavailable, err.Error(), false)
+			if cleanupErr := s.removeArtifactDirectory(operationID); cleanupErr != nil && failErr == nil {
+				return failed, lifecycleError(ErrorUnavailable, fmt.Sprintf("%s; clean rejected Runtime artifact: %v", err, cleanupErr), true)
+			}
+			return failed, failErr
+		}
 		return s.recover(ctx, current, err)
 	}
 	return s.markSucceeded(operationID)
@@ -923,6 +938,14 @@ func (s *Store) Reconcile(ctx context.Context, operationID string, access Access
 	if !hasGrant(normalizeGrants(access.Grants), gatewayprotocol.RuntimeGrantManageBinding) {
 		s.mu.Unlock()
 		return gatewayprotocol.RuntimeOperation{}, lifecycleError(ErrorUnauthorized, "Runtime binding management permission is required.", false)
+	}
+	// A response may be lost after recovery completes. Return the terminal
+	// operation before checking the one-use permit so a safe replay remains
+	// idempotent. Non-terminal operations still require a fresh permit, which
+	// lets a failed recovery attempt be retried without reusing authorization.
+	if operation.State.Terminal() {
+		s.mu.Unlock()
+		return cloneOperation(operation), nil
 	}
 	permitHash := digestOptional(access.PermitJTI)
 	if permitHash == "" {
@@ -1206,6 +1229,7 @@ func (s *Store) resumeRecovery(ctx context.Context, operationID string) error {
 	next.Operations[operationID] = operation
 	delete(next.TargetLocks, operation.LifecycleTargetID)
 	delete(next.FenceTokens, operationID)
+	delete(next.ArtifactPaths, operationID)
 	return s.saveLocked(next)
 }
 
@@ -1268,7 +1292,11 @@ func (s *Store) recover(ctx context.Context, operation gatewayprotocol.RuntimeOp
 	}
 	s.mu.Unlock()
 	if err := s.controller.Recover(ctx, operation); err != nil {
-		return s.enterManualRecovery(operation.OperationID, "Runtime recovery could not verify a complete installation.")
+		return s.enterManualRecovery(operation.OperationID, fmt.Sprintf(
+			"Runtime update failed and recovery could not verify a complete installation. Commit error: %v. Recovery error: %v",
+			commitErr,
+			err,
+		))
 	}
 	if err := s.releaseStoredFence(ctx, operation.OperationID); err != nil {
 		return s.enterManualRecovery(operation.OperationID, "Runtime lifecycle fence could not be released after recovery.")

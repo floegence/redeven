@@ -81,6 +81,27 @@ export function desktopFailureForRuntimePlacementBridgeReadiness(
     });
   }
 
+  // A bridge can be established against an old, partially upgraded, or
+  // damaged Runtime that still answers HTTP but cannot produce a valid health
+  // response. SSH/container targets still have an authoritative Gateway
+  // update path, so keep Open actionable instead of trapping the user on a
+  // refresh-only failure panel.
+  if (failure.kind === 'invalid_response') {
+    return desktopOperationFailurePresentation({
+      code: 'runtime_update_required',
+      title: 'Runtime Update Required',
+      titleKey: 'runtimeMessage.runtimeUpdateRequired',
+      summary: 'Desktop could not read a valid Runtime health response. Update the Runtime before opening this environment.',
+      summaryKey: 'runtimeMessage.updateRuntimeBeforeOpeningEnvironment',
+      detail: runtimeCompatibilityDetail(startup)
+        ?? 'The Runtime responded with an invalid health payload. Updating it repairs the managed Runtime files and restores the open check.',
+      recoveryHint: 'Update the Runtime first, then try opening this environment again.',
+      recoveryHintKey: 'runtimeMessage.updateRuntimeFirst',
+      targetLabel,
+      diagnostics,
+    });
+  }
+
   return desktopOperationFailurePresentation({
     code: 'environment_open_failed',
     severity: 'warning',

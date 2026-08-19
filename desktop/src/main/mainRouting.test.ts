@@ -935,9 +935,8 @@ describe('main routing', () => {
     );
     expect(mainSrc).toContain('resolveRuntimeContainerPlacement');
     expect(mainSrc).toContain('DESKTOP_LAUNCHER_LIST_RUNTIME_CONTAINERS_CHANNEL');
-    expect(mainSrc).not.toContain('containerStartCommand');
+    expect(mainSrc).toContain('containerStartCommand');
     expect(mainSrc).not.toContain('containerStopCommand');
-    expect(mainSrc).not.toContain("container_engine, 'start'");
     expect(mainSrc).not.toContain("container_engine, 'stop'");
 
     expect(mainSrc).not.toContain('async function ensureRuntimePlacementReadyRecordFromLauncher(');
@@ -948,6 +947,9 @@ describe('main routing', () => {
     const startRuntimeStart = mainSrc.indexOf('async function runEnvironmentRuntimeLifecycleFromLauncher(');
     const startRuntimeEnd = mainSrc.indexOf('async function connectProviderRuntimeFromLauncher(', startRuntimeStart);
     const startRuntimeSrc = mainSrc.slice(startRuntimeStart, startRuntimeEnd);
+    expect(startRuntimeSrc).toContain('prepareRuntimeContainerForLifecycle(');
+    expect(startRuntimeSrc).toContain("startIfNeeded: operation !== 'stop'");
+    expect(startRuntimeSrc).toContain("operation === 'stop' && !prepared.running");
     expect(startRuntimeSrc).toContain('upsertDirectRuntimeGateway(');
     expect(startRuntimeSrc).toContain('runGatewayEnvironmentLifecycleFromLauncher({');
     expect(startRuntimeSrc).not.toContain('ensureRuntimePlacementReadyRecordFromLauncher(request)');
@@ -1612,9 +1614,23 @@ describe('main routing', () => {
     const lifecycleStart = mainSrc.indexOf('async function runGatewayEnvironmentLifecycleFromLauncher(');
     const lifecycleEnd = mainSrc.indexOf('async function resolveProviderRuntimeLifecycleScope(', lifecycleStart);
     const lifecycleSrc = mainSrc.slice(lifecycleStart, lifecycleEnd);
+    const directStart = mainSrc.indexOf('async function runEnvironmentRuntimeLifecycleFromLauncher(');
+    const directEnd = mainSrc.indexOf('async function connectProviderRuntimeFromLauncher(', directStart);
+    const directSrc = mainSrc.slice(directStart, directEnd);
 
     expect(lifecycleSrc.match(/await awaitEnvironmentRuntimeLifecycleReadiness\(request\.environment_id, request\.operation\);/g)).toHaveLength(2);
     expect(lifecycleSrc).toContain('after_success: async () => {');
+    expect(lifecycleSrc).toContain('await options.afterSuccess?.();');
+    expect(lifecycleSrc.indexOf('await options.afterSuccess?.();')).toBeLessThan(
+      lifecycleSrc.indexOf('await syncGatewayRecord(record', lifecycleSrc.indexOf('await options.afterSuccess?.();')),
+    );
+    expect(lifecycleSrc.indexOf('await options.afterSuccess?.();')).toBeLessThan(
+      lifecycleSrc.indexOf('await awaitEnvironmentRuntimeLifecycleReadiness('),
+    );
+    expect(directSrc).toContain("const lifecycleSessionKey = hostAccess.kind === 'local_host' && placement.kind === 'host_process'");
+    expect(directSrc).toContain('await closeEnvironmentSessionsForRuntimeLifecycle({');
+    expect(directSrc).toContain("operation: operation === 'update_runtime' ? 'update' : operation");
+    expect(directSrc).toContain('await runtimePlacementBridgeRegistry.retire(targetID).catch(() => undefined);');
   });
 
   it('keeps foreground Runtime operations authoritative over persistence attachment recovery', () => {
@@ -1641,7 +1657,8 @@ describe('main routing', () => {
     expect(mainSrc).toContain('const locallyDrivenRuntimeOperationIDs = new Set<string>();');
     expect(mainSrc).toContain('async function driveRuntimeOperation<T>(');
     expect(completionSrc).toContain('return driveRuntimeOperation(operation.operation_id, () => advanceGatewayRuntimeOperation(operation, {');
-    expect(attachmentSrc).toContain('if (locallyDrivenRuntimeOperationIDs.has(operation.operation_id)) {');
+    expect(attachmentSrc).toContain('locallyDrivenRuntimeOperationIDs.has(operation.operation_id)');
+    expect(attachmentSrc).toContain('foregroundRuntimeOperationIDs.has(operation.operation_id)');
     expect(initializationSrc).toContain('await driveRuntimeOperation(operationID, () => initializeGatewayRuntime({');
   });
 
@@ -1668,6 +1685,7 @@ describe('main routing', () => {
     expect(confirmationSrc).toContain('const presentation = projectAttachedRuntimeOperation(pending.operation);');
     expect(confirmSrc).toContain("state: 'fencing',");
     expect(confirmSrc).toContain('const completedPresentation = projectAttachedRuntimeOperation(response);');
+    expect(confirmSrc).toContain('await pending.cancel().catch(() => undefined);');
   });
 
   it('keeps foreground start operations on user-facing environment stages', () => {

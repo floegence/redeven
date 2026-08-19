@@ -4,6 +4,10 @@ import type {
   DesktopOperationFailurePresentation,
 } from '../shared/desktopOperationFailure';
 import type { DesktopI18n } from '../shared/i18n';
+import type {
+  DesktopLauncherActionProgress,
+  DesktopLauncherActionResult,
+} from '../shared/desktopLauncherIPC';
 import {
   localizedOperationFailureDetail,
   localizedOperationFailureCompactSummary,
@@ -38,6 +42,20 @@ function distinctText(values: readonly unknown[], excluded: readonly unknown[]):
     result.push(text);
   }
   return result;
+}
+
+export function confirmationProgressForLauncherFailure(
+  failure: Extract<DesktopLauncherActionResult, Readonly<{ ok: false }>>,
+  progressItems: readonly DesktopLauncherActionProgress[],
+): DesktopLauncherActionProgress | null {
+  const operationKey = compact(failure.operation_key);
+  if (failure.code !== 'confirmation_required' || operationKey === '') {
+    return null;
+  }
+  return progressItems.find((progress) => (
+    compact(progress.operation_key) === operationKey
+    && progress.status === 'needs_confirmation'
+  )) ?? null;
 }
 
 export function buildWelcomeOperationFailureDisplay(input: Readonly<{
