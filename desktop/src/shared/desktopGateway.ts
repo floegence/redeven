@@ -188,6 +188,7 @@ export type DesktopGatewayManagedProbe = Readonly<{
     | 'version_command_failed'
     | 'version_output_invalid'
     | 'slot_version_mismatch'
+    | 'build_identity_mismatch'
     | 'stamp_missing'
     | 'stamp_invalid';
   version?: string;

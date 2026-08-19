@@ -9352,9 +9352,9 @@ function EnvironmentPrimaryActionPanel(props: Readonly<{
     return steps.map((step, index) => ({
       ...step,
       state: index < activeIndex
-        ? 'complete'
+        ? 'done'
         : step.key === active
-          ? 'running'
+          ? 'active'
           : 'pending',
     }));
   });
@@ -9383,14 +9383,25 @@ function EnvironmentPrimaryActionPanel(props: Readonly<{
       </Show>
       <Show when={openFlowSteps().length > 0}>
         <div class="redeven-environment-progress__steps mt-3" aria-label={props.i18n.t('environmentOpenFlow.progressLabel')}>
-          <For each={openFlowSteps()}>
-            {(step) => (
-              <div class="redeven-environment-progress__step" data-state={step.state}>
-                <span class="redeven-environment-progress__step-dot" data-state={step.state} aria-hidden="true" />
-                <span class="redeven-environment-progress__step-label" data-state={step.state}>{step.label}</span>
-              </div>
-            )}
-          </For>
+          <Index each={openFlowSteps()}>
+            {(step, index) => {
+              const state = () => step().state;
+              const isLast = () => index === openFlowSteps().length - 1;
+              return (
+                <div class="redeven-environment-progress__step" data-state={state()}>
+                  <div class="redeven-environment-progress__step-connector">
+                    <span class="redeven-environment-progress__step-dot" data-state={state()} aria-hidden="true" />
+                    <Show when={!isLast()}>
+                      <span class="redeven-environment-progress__step-line" data-state={state()} aria-hidden="true" />
+                    </Show>
+                  </div>
+                  <span class="min-w-0">
+                    <span class="redeven-environment-progress__step-label" data-state={state()}>{step().label}</span>
+                  </span>
+                </div>
+              );
+            }}
+          </Index>
         </div>
       </Show>
       <Show when={props.overlay.actions.length > 0}>

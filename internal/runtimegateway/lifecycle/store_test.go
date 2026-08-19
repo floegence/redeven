@@ -7,16 +7,17 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
 	gatewayprotocol "github.com/floegence/redeven/internal/runtimegateway/protocol"
 )
 
-func TestRuntimeOperationStoreUsesSchemaV2ForFreshState(t *testing.T) {
+func TestRuntimeOperationStoreUsesSchemaV3ForFreshState(t *testing.T) {
 	store := newTestStore(t, &fakeController{}, &fakeClock{now: time.Unix(50, 0)})
-	if store.state.SchemaVersion != 2 {
-		t.Fatalf("schema version = %d, want 2", store.state.SchemaVersion)
+	if store.state.SchemaVersion != 3 {
+		t.Fatalf("schema version = %d, want 3", store.state.SchemaVersion)
 	}
 }
 
@@ -38,15 +39,112 @@ func TestRuntimeOperationStoreMigratesV1TerminalOperation(t *testing.T) {
 		t.Fatal(err)
 	}
 	operation := reopened.state.Operations[request.OperationID]
-	if reopened.state.SchemaVersion != 2 || operation.State != gatewayprotocol.RuntimeOperationSucceeded {
+	if reopened.state.SchemaVersion != 3 || operation.State != gatewayprotocol.RuntimeOperationSucceeded {
 		t.Fatalf("migrated state = version %d operation %#v", reopened.state.SchemaVersion, operation)
 	}
 	migrated, err := os.ReadFile(reopened.statePath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bytes.Equal(migrated, original) || !bytes.Contains(migrated, []byte(`"schema_version": 2`)) {
-		t.Fatalf("v1 state was not atomically rewritten as v2: %s", migrated)
+	if bytes.Equal(migrated, original) || !bytes.Contains(migrated, []byte(`"schema_version": 3`)) {
+		t.Fatalf("v1 state was not atomically rewritten as v3: %s", migrated)
+	}
+}
+
+func TestRuntimeOperationStoreMigratesV2UnsafeSnapshotRevision(t *testing.T) {
+	clock := &fakeClock{now: time.Unix(65, 0)}
+	controller := &fakeController{snapshot: knownSnapshot(1), fenced: knownSnapshot(1), token: "fence-a"}
+	store := newTestStore(t, controller, clock)
+	request := prepareRequest("op-unsafe-revision", "idem-unsafe-revision")
+	request.Operation = gatewayprotocol.RuntimeOperationStart
+	request.DesiredRuntime = gatewayprotocol.DesiredRuntime{}
+	if _, err := store.Prepare(context.Background(), request, prepareAuthorization("permit-unsafe-revision")); err != nil {
+		t.Fatal(err)
+	}
+
+	const unsafeRevision = int64(1787104792250444000)
+	const observedAtUnixMS = int64(1787104792250)
+	operation := store.state.Operations[request.OperationID]
+	operation.ExpectedSnapshot.SnapshotRevision = unsafeRevision
+	operation.ExpectedSnapshot.ObservedAtUnixMS = observedAtUnixMS
+	store.state.Operations[request.OperationID] = operation
+	originalAuthorization := operation.Authorization
+	originalLock := store.state.TargetLocks[operation.LifecycleTargetID]
+	writeHistoricalV2State(t, store.stateRoot, store.state)
+
+	reopened, err := NewStore(Options{StateRoot: store.stateRoot, Clock: clock, Controller: controller, ArtifactVerifier: allowArtifacts{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	migrated := reopened.state.Operations[request.OperationID]
+	if reopened.state.SchemaVersion != 3 {
+		t.Fatalf("schema version = %d, want 3", reopened.state.SchemaVersion)
+	}
+	if migrated.ExpectedSnapshot.SnapshotRevision != observedAtUnixMS {
+		t.Fatalf("snapshot revision = %d, want observed timestamp %d", migrated.ExpectedSnapshot.SnapshotRevision, observedAtUnixMS)
+	}
+	if migrated.OperationID != operation.OperationID || migrated.State != operation.State || !reflect.DeepEqual(migrated.Authorization, originalAuthorization) {
+		t.Fatalf("migration changed operation authority or state: %#v", migrated)
+	}
+	if reopened.state.TargetLocks[migrated.LifecycleTargetID] != originalLock {
+		t.Fatalf("migration changed target lock: %#v", reopened.state.TargetLocks)
+	}
+}
+
+func TestRuntimeOperationStoreV2MigrationWriteFailureLeavesStateUnchanged(t *testing.T) {
+	clock := &fakeClock{now: time.Unix(66, 0)}
+	controller := &fakeController{snapshot: knownSnapshot(1), fenced: knownSnapshot(1), token: "fence-a"}
+	store := newTestStore(t, controller, clock)
+	request := prepareRequest("op-v2-write-failure", "idem-v2-write-failure")
+	request.Operation = gatewayprotocol.RuntimeOperationStart
+	request.DesiredRuntime = gatewayprotocol.DesiredRuntime{}
+	if _, err := store.Prepare(context.Background(), request, prepareAuthorization("permit-v2-write-failure")); err != nil {
+		t.Fatal(err)
+	}
+	operation := store.state.Operations[request.OperationID]
+	operation.ExpectedSnapshot.SnapshotRevision = 1787104792250444000
+	operation.ExpectedSnapshot.ObservedAtUnixMS = 1787104792250
+	store.state.Operations[request.OperationID] = operation
+	original := writeHistoricalV2State(t, store.stateRoot, store.state)
+	if err := os.Mkdir(store.statePath+".tmp", 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewStore(Options{StateRoot: store.stateRoot, Clock: clock, Controller: controller, ArtifactVerifier: allowArtifacts{}}); err == nil {
+		t.Fatal("NewStore() succeeded when the v2 migration could not be committed")
+	}
+	after, err := os.ReadFile(store.statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(after, original) {
+		t.Fatal("failed v2 migration modified the original state file")
+	}
+}
+
+func TestRuntimeOperationStoreRejectsUnsafeSnapshotInSchemaV3WithoutMutation(t *testing.T) {
+	clock := &fakeClock{now: time.Unix(67, 0)}
+	controller := &fakeController{snapshot: knownSnapshot(1), fenced: knownSnapshot(1), token: "fence-a"}
+	store := newTestStore(t, controller, clock)
+	request := prepareRequest("op-v3-unsafe", "idem-v3-unsafe")
+	request.Operation = gatewayprotocol.RuntimeOperationStart
+	request.DesiredRuntime = gatewayprotocol.DesiredRuntime{}
+	if _, err := store.Prepare(context.Background(), request, prepareAuthorization("permit-v3-unsafe")); err != nil {
+		t.Fatal(err)
+	}
+	operation := store.state.Operations[request.OperationID]
+	operation.ExpectedSnapshot.SnapshotRevision = 1787104792250444000
+	store.state.Operations[request.OperationID] = operation
+	original := writeStateSchemaVersion(t, store.stateRoot, store.state, 3)
+
+	if _, err := NewStore(Options{StateRoot: store.stateRoot, Clock: clock, Controller: controller, ArtifactVerifier: allowArtifacts{}}); err == nil {
+		t.Fatal("NewStore() accepted an unsafe revision in schema v3")
+	}
+	after, err := os.ReadFile(store.statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(after, original) {
+		t.Fatal("rejected schema v3 state was modified")
 	}
 }
 
@@ -69,7 +167,7 @@ func TestRuntimeOperationStoreMigrationFailsCommitReadyUpdateAndReleasesTarget(t
 		t.Fatalf("pre-destructive v1 update remained locked: %#v", reopened.state)
 	}
 	if _, exists := reopened.state.ArtifactPaths[operation.OperationID]; exists {
-		t.Fatalf("obsolete v1 staging path remained in v2 state: %#v", reopened.state.ArtifactPaths)
+		t.Fatalf("obsolete v1 staging path remained in v3 state: %#v", reopened.state.ArtifactPaths)
 	}
 	if operation.Artifact == nil || operation.Artifact.ArchiveSHA256 == "" || operation.Artifact.ExecutableSHA256 != "" {
 		t.Fatalf("v1 artifact digest provenance was not preserved honestly: %#v", operation.Artifact)
@@ -114,7 +212,7 @@ func TestRuntimeOperationStoreMigrationRejectsDriftAndFutureVersionsWithoutMutat
 		mutate func(map[string]any)
 	}{
 		{name: "v1 drift", mutate: func(document map[string]any) { document["unexpected"] = true }},
-		{name: "future", mutate: func(document map[string]any) { document["schema_version"] = float64(3) }},
+		{name: "future", mutate: func(document map[string]any) { document["schema_version"] = float64(4) }},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			clock := &fakeClock{now: time.Unix(90, 0)}
@@ -194,6 +292,26 @@ func writeHistoricalV1State(t *testing.T, stateRoot string, state fileState, mut
 		mutate(document)
 	}
 	raw, err = json.MarshalIndent(document, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw = append(raw, '\n')
+	statePath := filepath.Join(stateRoot, "runtime-operations-v1.json")
+	if err := os.WriteFile(statePath, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return raw
+}
+
+func writeHistoricalV2State(t *testing.T, stateRoot string, state fileState) []byte {
+	t.Helper()
+	return writeStateSchemaVersion(t, stateRoot, state, 2)
+}
+
+func writeStateSchemaVersion(t *testing.T, stateRoot string, state fileState, schemaVersion int) []byte {
+	t.Helper()
+	state.SchemaVersion = schemaVersion
+	raw, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -942,6 +1060,72 @@ func TestRecoverPendingReacquiresAndReleasesExpiredFence(t *testing.T) {
 	}
 	if operation.State != gatewayprotocol.RuntimeOperationExpired || controller.begins != 1 || controller.released != 1 || controller.commits != 0 {
 		t.Fatalf("operation=%#v begins=%d released=%d commits=%d", operation, controller.begins, controller.released, controller.commits)
+	}
+}
+
+func TestRecoverPendingRejectsUnsafeSnapshotRevision(t *testing.T) {
+	clock := &fakeClock{now: time.Unix(560, 0)}
+	unsafeSnapshot := knownSnapshot(1787104792250444000)
+	unsafeSnapshot.ObservedAtUnixMS = 1787104792250
+	controller := &fakeController{snapshot: unsafeSnapshot, fenced: knownSnapshot(1), token: "fence-a"}
+	store := newTestStore(t, controller, clock)
+	request := prepareRequest("op-unsafe-recovery", "idem-unsafe-recovery")
+	request.Operation = gatewayprotocol.RuntimeOperationStart
+	request.DesiredRuntime = gatewayprotocol.DesiredRuntime{}
+	controller.snapshot = knownSnapshot(1)
+	if _, err := store.Prepare(context.Background(), request, prepareAuthorization("permit-unsafe-recovery")); err != nil {
+		t.Fatal(err)
+	}
+	persistOperationState(t, store, request.OperationID, gatewayprotocol.RuntimeOperationPreflighting)
+	controller.snapshot = unsafeSnapshot
+
+	restarted, err := NewStore(Options{StateRoot: store.stateRoot, Clock: clock, Controller: controller, ArtifactVerifier: allowArtifacts{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := restarted.RecoverPending(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	operation := restarted.state.Operations[request.OperationID]
+	if operation.State != gatewayprotocol.RuntimeOperationFailed || operation.Failure == nil || operation.Failure.Code != string(ErrorUnavailable) {
+		t.Fatalf("unsafe recovery snapshot operation = %#v", operation)
+	}
+	if restarted.state.TargetLocks[operation.LifecycleTargetID] != "" {
+		t.Fatalf("unsafe recovery snapshot retained target lock: %#v", restarted.state.TargetLocks)
+	}
+}
+
+func TestCommitRejectsUnsafeFenceSnapshotAndReleasesFence(t *testing.T) {
+	clock := &fakeClock{now: time.Unix(570, 0)}
+	controller := &fakeController{snapshot: knownSnapshot(1, "session:a"), fenced: knownSnapshot(1, "session:a"), token: "fence-unsafe"}
+	store := newTestStore(t, controller, clock)
+	request := prepareRequest("op-unsafe-fence", "idem-unsafe-fence")
+	request.Operation = gatewayprotocol.RuntimeOperationRestart
+	request.DesiredRuntime = gatewayprotocol.DesiredRuntime{}
+	prepared, err := store.Prepare(context.Background(), request, prepareAuthorization("permit-unsafe-fence"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := prepared.Operation.ExpectedSnapshot
+	if _, err := store.Confirm(context.Background(), request.OperationID, "client-a", gatewayprotocol.RuntimeOperationConfirmationRequest{
+		ProtocolVersion:        gatewayprotocol.Version,
+		SnapshotRevision:       snapshot.SnapshotRevision,
+		ProcessInventoryDigest: snapshot.ProcessInventoryDigest,
+		WorkloadIdentityDigest: snapshot.WorkloadIdentityDigest,
+		RiskSummaryDigest:      "sha256:risk",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	controller.fenced = knownSnapshot(1787104792250444000, "session:a")
+	controller.fenced.ObservedAtUnixMS = 1787104792250
+
+	operation, err := store.Commit(context.Background(), request.OperationID, "client-a")
+	if err == nil {
+		t.Fatal("Commit() accepted an unsafe fence snapshot")
+	}
+	assertCode(t, err, ErrorUnavailable)
+	if operation.State != gatewayprotocol.RuntimeOperationFailed || controller.released != 1 || controller.commits != 0 {
+		t.Fatalf("operation=%#v released=%d commits=%d", operation, controller.released, controller.commits)
 	}
 }
 

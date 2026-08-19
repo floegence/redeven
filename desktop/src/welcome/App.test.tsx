@@ -390,6 +390,19 @@ describe('DesktopWelcomeShell', () => {
 	    expect(appSrc).not.toContain("mode: state.auth_mode === 'password' ? state.ssh_password_mode : 'clear'");
 	  });
 
+  it('keeps open-flow steps on the shared timeline and progress styles', () => {
+    const appSrc = readWelcomeSource();
+    const styles = readWelcomeStyles();
+
+    expect(appSrc).toContain("state: index < activeIndex\n        ? 'done'\n        : step.key === active\n          ? 'active'");
+    expect(appSrc).toContain('class="redeven-environment-progress__step-connector"');
+    expect(appSrc).toContain('class="redeven-environment-progress__step-line" data-state={state()}');
+    expect(styles).toContain(".redeven-environment-progress__step-dot[data-state='done']");
+    expect(styles).toContain(".redeven-environment-progress__step-dot[data-state='active']");
+    expect(styles).toContain(".redeven-environment-progress__step-label[data-state='done']");
+    expect(styles).toContain(".redeven-environment-progress__step-label[data-state='active']");
+  });
+
 	  it('filters Gateway source rows with the Gateways tab source filter and query', () => {
     const appSrc = readWelcomeSource();
     const styles = readWelcomeStyles();
