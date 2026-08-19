@@ -64,6 +64,9 @@ describe('main routing', () => {
     expect(startupSrc).toContain('await gatewayLifecycleManager().restartGateway(record');
     expect(startupSrc).toContain('await gatewayLifecycleManager().startGateway(record');
     expect(startupSrc).toContain('await syncGatewayRecord(record');
+    expect(startupSrc).toContain('const authorizedRecord = await gatewayStore().get(record.gateway_id);');
+    expect(startupSrc).toContain('await gatewayLifecycleManager().runtimeManagementCapability(authorizedRecord');
+    expect(startupSrc).not.toContain('await gatewayLifecycleManager().runtimeManagementCapability(record');
     expect(startupSrc).toContain('const attached = await attachLocalEnvironmentRuntime(environment);');
     expect(startupSrc).toContain('await refreshWelcomeRuntimeHealthForEnvironment(environment.id, { force: true });');
     expect(startupSrc).toContain('resetLauncherIssueState();');

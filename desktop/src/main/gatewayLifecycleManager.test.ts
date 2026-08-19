@@ -50,6 +50,7 @@ const PRECOMPILED_BUNDLE: DesktopBundle = {
   commit: 'bundle123',
   platform: 'darwin',
   architecture: 'arm64',
+  provenance: 'packaged_bundle',
   gateway: {
     path: '/Applications/Redeven.app/Contents/Resources/bin/redeven-gateway',
     sha256: 'a'.repeat(64),
@@ -62,6 +63,7 @@ const PRECOMPILED_BUNDLE: DesktopBundle = {
     size_bytes: 1,
     executable: true,
   }],
+  runtime_suite_sha256: `sha256:${'c'.repeat(64)}`,
 };
 
 function fakeSSHTransportManager(): DesktopSSHTransportManager {

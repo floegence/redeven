@@ -12,11 +12,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -28,24 +30,26 @@ import (
 )
 
 type ControllerOptions struct {
-	BindingStore               *BindingStore
-	PrecompiledRuntimeManifest string
-	StartupWait                time.Duration
-	ShutdownWait               time.Duration
-	ControlTimeout             time.Duration
-	ArtifactProbeTimeout       time.Duration
+	BindingStore                  *BindingStore
+	PrecompiledRuntimeManifest    string
+	PrecompiledRuntimeLocalUIBind string
+	StartupWait                   time.Duration
+	ShutdownWait                  time.Duration
+	ControlTimeout                time.Duration
+	ArtifactProbeTimeout          time.Duration
 }
 
 type Controller struct {
-	mu                         sync.Mutex
-	startupMu                  sync.Mutex
-	offlineFences              map[string]gatewayprotocol.LifecycleTarget
-	bindings                   *BindingStore
-	precompiledRuntimeManifest string
-	startupWait                time.Duration
-	shutdownWait               time.Duration
-	controlTimeout             time.Duration
-	artifactProbeTimeout       time.Duration
+	mu                            sync.Mutex
+	startupMu                     sync.Mutex
+	offlineFences                 map[string]gatewayprotocol.LifecycleTarget
+	bindings                      *BindingStore
+	precompiledRuntimeManifest    string
+	precompiledRuntimeLocalUIBind string
+	startupWait                   time.Duration
+	shutdownWait                  time.Duration
+	controlTimeout                time.Duration
+	artifactProbeTimeout          time.Duration
 }
 
 type operationCheckpoint struct {
@@ -103,11 +107,36 @@ func NewController(options ControllerOptions) (*Controller, error) {
 	if artifactProbeTimeout <= 0 {
 		artifactProbeTimeout = 5 * time.Second
 	}
+	localUIBind, err := normalizePrecompiledRuntimeLocalUIBind(options.PrecompiledRuntimeLocalUIBind)
+	if err != nil {
+		return nil, err
+	}
 	return &Controller{
 		bindings: options.BindingStore, offlineFences: make(map[string]gatewayprotocol.LifecycleTarget),
-		precompiledRuntimeManifest: strings.TrimSpace(options.PrecompiledRuntimeManifest),
-		startupWait:                startupWait, shutdownWait: shutdownWait, controlTimeout: controlTimeout, artifactProbeTimeout: artifactProbeTimeout,
+		precompiledRuntimeManifest:    strings.TrimSpace(options.PrecompiledRuntimeManifest),
+		precompiledRuntimeLocalUIBind: localUIBind,
+		startupWait:                   startupWait, shutdownWait: shutdownWait, controlTimeout: controlTimeout, artifactProbeTimeout: artifactProbeTimeout,
 	}, nil
+}
+
+func normalizePrecompiledRuntimeLocalUIBind(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "127.0.0.1:0", nil
+	}
+	host, portText, err := net.SplitHostPort(value)
+	if err != nil {
+		return "", errors.New("precompiled Runtime Local UI bind is invalid")
+	}
+	port, err := strconv.Atoi(portText)
+	if err != nil || port < 0 || port > 65535 {
+		return "", errors.New("precompiled Runtime Local UI port is invalid")
+	}
+	ip := net.ParseIP(host)
+	if host != "localhost" && (ip == nil || !ip.IsLoopback()) {
+		return "", errors.New("precompiled Runtime Local UI bind must use an exact loopback host")
+	}
+	return value, nil
 }
 
 func (c *Controller) ValidateTarget(_ context.Context, gatewayEnvID string, target gatewayprotocol.LifecycleTarget) error {
@@ -122,7 +151,7 @@ func (c *Controller) RefreshRuntimeValidation(ctx context.Context) (RuntimeValid
 	if err != nil {
 		return c.persistedOfflineRuntimeValidation(ctx)
 	}
-	if err := c.validateAndRecordIdentity(identity); err != nil {
+	if err := c.validateAndRecordIdentity(identity, nil); err != nil {
 		return RuntimeValidation{}, err
 	}
 	validation := c.bindings.Binding().ValidatedRuntime
@@ -198,7 +227,7 @@ func (c *Controller) RuntimeManagementCapability(ctx context.Context, gatewayEnv
 
 	identity, err := c.controlClient().identity(ctx)
 	if err == nil {
-		if err := c.validateAndRecordIdentity(identity); err != nil {
+		if err := c.validateAndRecordIdentity(identity, nil); err != nil {
 			capability.Readiness = gatewayprotocol.ManagementTemporarilyUnavailable
 			capability.ReasonCode = "runtime_identity_incompatible"
 			return gatewayprotocol.NormalizeRuntimeManagementCapability(capability), nil
@@ -294,7 +323,7 @@ func (c *Controller) Snapshot(ctx context.Context, target gatewayprotocol.Lifecy
 	if err != nil {
 		return c.offlineSnapshot(ctx)
 	}
-	if err := c.validateAndRecordIdentity(identity); err != nil {
+	if err := c.validateAndRecordIdentity(identity, nil); err != nil {
 		return gatewayprotocol.WorkloadSnapshot{}, err
 	}
 	return client.snapshot(ctx)
@@ -320,7 +349,7 @@ func (c *Controller) BeginLifecycleFence(ctx context.Context, operationID string
 		c.mu.Unlock()
 		return gatewaylifecycle.LifecycleFence{Token: token, Snapshot: snapshot}, nil
 	}
-	if err := c.validateAndRecordIdentity(identity); err != nil {
+	if err := c.validateAndRecordIdentity(identity, nil); err != nil {
 		return gatewaylifecycle.LifecycleFence{}, err
 	}
 	return c.controlClient().beginFence(ctx, operationID, target.TargetGeneration)
@@ -513,7 +542,7 @@ func (c *Controller) recoverPrepared(ctx context.Context, checkpoint *operationC
 			if err != nil {
 				return err
 			}
-			if err := c.validateAndRecordIdentity(identity); err != nil {
+			if err := c.validateAndRecordIdentity(identity, nil); err != nil {
 				return err
 			}
 			if err := c.controlClient().health(ctx); err != nil {
@@ -557,7 +586,7 @@ func (c *Controller) Reconcile(ctx context.Context, operation gatewayprotocol.Ru
 	if operation.Artifact != nil && normalizeSHA256(identity.ArtifactSHA256) != normalizeSHA256(operation.Artifact.ExecutableSHA256) {
 		return errors.New("Runtime artifact digest does not match the operation target")
 	}
-	if err := c.validateAndRecordIdentity(identity); err != nil {
+	if err := c.validateAndRecordIdentity(identity, nil); err != nil {
 		return err
 	}
 	return c.controlClient().health(ctx)
@@ -567,7 +596,7 @@ func (c *Controller) controlClient() runtimeControlClient {
 	return runtimeControlClient{socketPath: c.bindings.Binding().RuntimeControlSocketPath, timeout: c.controlTimeout}
 }
 
-func (c *Controller) validateAndRecordIdentity(identity runtimeservice.RuntimeIdentity) error {
+func (c *Controller) validateAndRecordIdentity(identity runtimeservice.RuntimeIdentity, provenance *RuntimeInstallationProvenance) error {
 	managedRoot := filepath.Join(c.bindings.Binding().RuntimeRoot, "runtime", "managed")
 	suiteDigest, executableDigest, err := managedRuntimeSuiteSHA256(managedRoot)
 	if err != nil {
@@ -576,17 +605,37 @@ func (c *Controller) validateAndRecordIdentity(identity runtimeservice.RuntimeId
 	if executableDigest != normalizeSHA256(identity.ArtifactSHA256) {
 		return errors.New("managed Runtime executable does not match the running Runtime identity")
 	}
+	if provenance == nil {
+		existing := c.bindings.Binding().ValidatedRuntime
+		if existing == nil || normalizeSHA256(existing.ArtifactSHA256) != executableDigest ||
+			normalizeSHA256(existing.ManagedSuiteSHA256) != suiteDigest || !validRuntimeInstallationProvenance(existing.InstallationProvenance) {
+			return errors.New("managed Runtime installation provenance is unavailable for the running identity")
+		}
+		preserved := existing.InstallationProvenance
+		provenance = &preserved
+	}
 	validation := RuntimeValidation{
 		RuntimeInstanceID: identity.RuntimeInstanceID, RuntimeBinaryVersion: identity.RuntimeBinaryVersion,
 		Platform: strings.ToLower(strings.TrimSpace(identity.Platform)), Architecture: strings.ToLower(strings.TrimSpace(identity.Architecture)),
 		ServiceProtocol: identity.ServiceProtocol, CompatibilityEpoch: identity.CompatibilityEpoch,
 		Capabilities: identity.Capabilities, ArtifactSHA256: normalizeSHA256(identity.ArtifactSHA256),
-		ManagedSuiteSHA256: suiteDigest,
+		ManagedSuiteSHA256: suiteDigest, InstallationProvenance: *provenance,
 	}
 	if !runtimeValidationCompatible(&validation) {
 		return errors.New("Runtime identity, protocol, epoch, capabilities, or digest is incompatible with managed lifecycle")
 	}
 	return c.bindings.RecordRuntimeValidation(validation)
+}
+
+func runtimeOperationInstallationProvenance(operation gatewayprotocol.RuntimeOperation) *RuntimeInstallationProvenance {
+	if operation.Kind != gatewayprotocol.RuntimeOperationUpdate || strings.TrimSpace(operation.OperationID) == "" {
+		return nil
+	}
+	provenance := RuntimeInstallationProvenance{
+		Kind: "verified_lifecycle_update", OperationID: strings.TrimSpace(operation.OperationID),
+		OperationKind: string(operation.Kind), ArtifactPolicy: string(operation.DesiredRuntime.ArtifactPolicy),
+	}
+	return &provenance
 }
 
 func runtimeValidationCompatible(validation *RuntimeValidation) bool {
@@ -950,6 +999,10 @@ func (c *Controller) activateStaging(checkpoint operationCheckpoint) error {
 }
 
 func (c *Controller) startAndVerify(ctx context.Context, operation gatewayprotocol.RuntimeOperation, checkpoint *operationCheckpoint) error {
+	return c.startAndVerifyWithProvenance(ctx, operation, checkpoint, runtimeOperationInstallationProvenance(operation))
+}
+
+func (c *Controller) startAndVerifyWithProvenance(ctx context.Context, operation gatewayprotocol.RuntimeOperation, checkpoint *operationCheckpoint, provenance *RuntimeInstallationProvenance) error {
 	binding := c.bindings.Binding()
 	binaryPath := filepath.Join(binding.RuntimeRoot, "runtime", "managed", "bin", "redeven")
 	if info, err := os.Stat(binaryPath); err != nil || !info.Mode().IsRegular() || info.Mode()&0o111 == 0 {
@@ -963,7 +1016,7 @@ func (c *Controller) startAndVerify(ctx context.Context, operation gatewayprotoc
 	if err != nil {
 		return err
 	}
-	cmd := exec.Command(binaryPath, "run", "--state-root", binding.RuntimeRoot, "--mode", "desktop", "--presentation", "machine", "--local-ui-bind", "127.0.0.1:0")
+	cmd := exec.Command(binaryPath, "run", "--state-root", binding.RuntimeRoot, "--mode", "desktop", "--presentation", "machine", "--local-ui-bind", c.precompiledRuntimeLocalUIBind)
 	cmd.Stdin = nil
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
@@ -1006,7 +1059,7 @@ func (c *Controller) startAndVerify(ctx context.Context, operation gatewayprotoc
 			if operation.Artifact != nil && normalizeSHA256(identity.ArtifactSHA256) != normalizeSHA256(operation.Artifact.ExecutableSHA256) {
 				return errors.New("started Runtime artifact digest does not match the operation target")
 			}
-			if err := c.validateAndRecordIdentity(identity); err != nil {
+			if err := c.validateAndRecordIdentity(identity, provenance); err != nil {
 				return err
 			}
 			if err := c.controlClient().health(ctx); err != nil {

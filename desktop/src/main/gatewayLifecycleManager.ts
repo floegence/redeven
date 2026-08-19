@@ -131,6 +131,7 @@ export type GatewayLifecycleManagerOptions = Readonly<{
   lifecycle_coordinator: RuntimeLifecycleCoordinator;
   source_runtime_root?: string;
   precompiled_bundle?: DesktopBundle;
+  local_ui_bind?: string;
   target_commit?: string;
   session_cache?: Map<string, GatewayLifecycleSession>;
   signal?: AbortSignal;
@@ -352,6 +353,7 @@ export class GatewayLifecycleManager {
         assetCacheRoot: this.options.asset_cache_root,
         sourceRuntimeRoot: this.options.source_runtime_root,
         precompiledBundle: this.options.precompiled_bundle,
+        localUIBind: this.options.local_ui_bind,
         targetCommit: this.options.target_commit,
         sshPassword,
         tempRoot: this.options.temp_root,
@@ -410,6 +412,7 @@ export class GatewayLifecycleManager {
       assetCacheRoot: this.options.asset_cache_root,
       sourceRuntimeRoot: this.options.source_runtime_root,
       precompiledBundle: this.options.precompiled_bundle,
+      localUIBind: this.options.local_ui_bind,
       targetCommit: this.options.target_commit,
       sshPassword,
       tempRoot: this.options.temp_root,
@@ -539,6 +542,7 @@ export class GatewayLifecycleManager {
       assetCacheRoot: this.options.asset_cache_root,
       sourceRuntimeRoot: this.options.source_runtime_root,
       precompiledBundle: this.options.precompiled_bundle,
+      localUIBind: this.options.local_ui_bind,
       targetCommit: this.options.target_commit,
       sshPassword,
       tempRoot: this.options.temp_root,
@@ -563,6 +567,7 @@ export class GatewayLifecycleManager {
       assetCacheRoot: this.options.asset_cache_root,
       sourceRuntimeRoot: this.options.source_runtime_root,
       precompiledBundle: this.options.precompiled_bundle,
+      localUIBind: this.options.local_ui_bind,
       targetCommit: this.options.target_commit,
       sshPassword,
       tempRoot: this.options.temp_root,
@@ -606,6 +611,7 @@ export class GatewayLifecycleManager {
       assetCacheRoot: this.options.asset_cache_root,
       sourceRuntimeRoot: this.options.source_runtime_root,
       precompiledBundle: this.options.precompiled_bundle,
+      localUIBind: this.options.local_ui_bind,
       targetCommit: this.options.target_commit,
       sshPassword,
       tempRoot: this.options.temp_root,
@@ -625,6 +631,7 @@ export class GatewayLifecycleManager {
         assetCacheRoot: this.options.asset_cache_root,
         sourceRuntimeRoot: this.options.source_runtime_root,
         precompiledBundle: this.options.precompiled_bundle,
+        localUIBind: this.options.local_ui_bind,
         targetCommit: this.options.target_commit,
         sshPassword,
         tempRoot: this.options.temp_root,
@@ -775,6 +782,7 @@ export class GatewayLifecycleManager {
         assetCacheRoot: this.options.asset_cache_root,
         sourceRuntimeRoot: options.forceUpdate === true ? this.options.source_runtime_root : undefined,
         precompiledBundle: this.options.precompiled_bundle,
+        localUIBind: this.options.local_ui_bind,
         targetCommit: this.options.target_commit,
         sshPassword,
         tempRoot: this.options.temp_root,

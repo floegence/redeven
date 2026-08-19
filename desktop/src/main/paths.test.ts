@@ -29,6 +29,18 @@ describe('paths', () => {
     })).toBe('/repo/desktop/.bundle/linux-amd64/redeven');
   });
 
+  it('uses the immutable development instance bundle snapshot when provided', () => {
+    expect(resolveBundledRuntimePath({
+      isPackaged: false,
+      resourcesPath: '/tmp/resources',
+      appPath: '/repo/desktop',
+      developmentBundleRoot: '/state/desktop/bundles/abc123',
+      existsSync: (candidate) => candidate === '/state/desktop/bundles/abc123/redeven',
+      platform: 'darwin',
+      arch: 'arm64',
+    })).toBe('/state/desktop/bundles/abc123/redeven');
+  });
+
   it('falls back to the parent desktop workspace bundle when appPath points to a nested build directory', () => {
     expect(resolveBundledRuntimePath({
       isPackaged: false,

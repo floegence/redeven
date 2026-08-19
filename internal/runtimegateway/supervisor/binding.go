@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 
@@ -21,7 +22,10 @@ import (
 	"github.com/floegence/redeven/internal/runtimegateway/security"
 )
 
-const bindingSchemaVersion = 1
+const (
+	bindingSchemaVersion       = 2
+	legacyBindingSchemaVersion = 1
+)
 
 const targetMarkerFileName = ".redeven-runtime-lifecycle-target-v1.json"
 
@@ -32,15 +36,24 @@ type PermitVerificationKey struct {
 }
 
 type RuntimeValidation struct {
-	RuntimeInstanceID    string   `json:"runtime_instance_id"`
-	RuntimeBinaryVersion string   `json:"runtime_binary_version"`
-	Platform             string   `json:"platform"`
-	Architecture         string   `json:"architecture"`
-	ServiceProtocol      string   `json:"service_protocol"`
-	CompatibilityEpoch   int      `json:"compatibility_epoch"`
-	Capabilities         []string `json:"capabilities"`
-	ArtifactSHA256       string   `json:"artifact_sha256"`
-	ManagedSuiteSHA256   string   `json:"managed_suite_sha256,omitempty"`
+	RuntimeInstanceID      string                        `json:"runtime_instance_id"`
+	RuntimeBinaryVersion   string                        `json:"runtime_binary_version"`
+	Platform               string                        `json:"platform"`
+	Architecture           string                        `json:"architecture"`
+	ServiceProtocol        string                        `json:"service_protocol"`
+	CompatibilityEpoch     int                           `json:"compatibility_epoch"`
+	Capabilities           []string                      `json:"capabilities"`
+	ArtifactSHA256         string                        `json:"artifact_sha256"`
+	ManagedSuiteSHA256     string                        `json:"managed_suite_sha256"`
+	InstallationProvenance RuntimeInstallationProvenance `json:"installation_provenance"`
+}
+
+type RuntimeInstallationProvenance struct {
+	Kind           string `json:"kind"`
+	BundleCommit   string `json:"bundle_commit,omitempty"`
+	OperationID    string `json:"operation_id,omitempty"`
+	OperationKind  string `json:"operation_kind,omitempty"`
+	ArtifactPolicy string `json:"artifact_policy,omitempty"`
 }
 
 type TargetBinding struct {
@@ -199,8 +212,7 @@ func (s *BindingStore) RecordRuntimeValidation(validation RuntimeValidation) err
 		return errors.New("Runtime target binding is unavailable")
 	}
 	validation = normalizeRuntimeValidation(validation)
-	if validation.RuntimeInstanceID == "" || validation.Platform == "" || validation.Architecture == "" || validation.ServiceProtocol == "" || validation.CompatibilityEpoch <= 0 ||
-		validation.ArtifactSHA256 == "" || len(validation.Capabilities) == 0 {
+	if !runtimeValidationPersistenceValid(validation) || !validRuntimeInstallationProvenance(validation.InstallationProvenance) {
 		return errors.New("Runtime validation facts are incomplete")
 	}
 	s.mu.Lock()
@@ -285,10 +297,20 @@ func (s *BindingStore) loadLocked() error {
 	if err := decoder.Decode(&struct{}{}); err != io.EOF {
 		return errors.New("Runtime target binding contains trailing data")
 	}
-	if state.SchemaVersion != bindingSchemaVersion {
+	if state.SchemaVersion != bindingSchemaVersion && state.SchemaVersion != legacyBindingSchemaVersion {
 		return fmt.Errorf("Runtime target binding schema_version=%d is unsupported", state.SchemaVersion)
 	}
 	state.Binding = normalizeBinding(state.Binding)
+	if state.SchemaVersion == legacyBindingSchemaVersion {
+		migrated, err := migrateLegacyBinding(state.Binding)
+		if err != nil {
+			return fmt.Errorf("migrate Runtime target binding schema v1 to v2: %w", err)
+		}
+		if err := s.saveLocked(migrated); err != nil {
+			return fmt.Errorf("persist Runtime target binding schema v2: %w", err)
+		}
+		return nil
+	}
 	if err := validateBinding(state.Binding); err != nil {
 		return err
 	}
@@ -306,11 +328,7 @@ func (s *BindingStore) saveLocked(next TargetBinding) error {
 		return err
 	}
 	raw = append(raw, '\n')
-	temporaryPath := s.filePath + ".tmp"
-	if err := os.WriteFile(temporaryPath, raw, 0o600); err != nil {
-		return err
-	}
-	if err := os.Rename(temporaryPath, s.filePath); err != nil {
+	if err := writeFileDurably(s.filePath, raw, 0o600); err != nil {
 		return err
 	}
 	s.binding = next
@@ -343,6 +361,27 @@ func normalizeBinding(binding TargetBinding) TargetBinding {
 }
 
 func validateBinding(binding TargetBinding) error {
+	if err := validateBindingCore(binding); err != nil {
+		return err
+	}
+	if binding.ValidatedRuntime != nil {
+		validation := normalizeRuntimeValidation(*binding.ValidatedRuntime)
+		if !runtimeValidationPersistenceValid(validation) ||
+			!validRuntimeInstallationProvenance(validation.InstallationProvenance) {
+			return errors.New("persisted Runtime validation identity or installation provenance is incomplete")
+		}
+	}
+	return nil
+}
+
+func runtimeValidationPersistenceValid(validation RuntimeValidation) bool {
+	return validation.RuntimeInstanceID != "" && validation.RuntimeBinaryVersion != "" &&
+		validation.Platform != "" && validation.Architecture != "" && validation.ServiceProtocol != "" &&
+		validation.CompatibilityEpoch > 0 && len(validation.Capabilities) > 0 &&
+		validSHA256(validation.ArtifactSHA256) && validSHA256(validation.ManagedSuiteSHA256)
+}
+
+func validateBindingCore(binding TargetBinding) error {
 	if binding.BindingID == "" || binding.GatewayEnvID == "" || binding.LifecycleTargetID == "" || binding.TargetGeneration <= 0 ||
 		binding.OSPrincipal == "" || !filepath.IsAbs(binding.RuntimeRoot) || !filepath.IsAbs(binding.RuntimeControlSocketPath) ||
 		len(binding.InstallationRootDigest) != sha256.Size*2 || binding.SupervisorInstanceID == "" ||
@@ -361,6 +400,21 @@ func validateBinding(binding TargetBinding) error {
 		return errors.New("Provider Runtime binding shape is incomplete")
 	}
 	return nil
+}
+
+func validRuntimeInstallationProvenance(provenance RuntimeInstallationProvenance) bool {
+	switch provenance.Kind {
+	case "packaged_bundle":
+		return provenance.BundleCommit != "" && provenance.OperationID == "" && provenance.OperationKind == "" && provenance.ArtifactPolicy == ""
+	case "development_bundle":
+		return provenance.BundleCommit != "" && provenance.OperationID == "" && provenance.OperationKind == "" && provenance.ArtifactPolicy == ""
+	case "verified_lifecycle_update":
+		return provenance.OperationID != "" && provenance.OperationKind == string(gatewayprotocol.RuntimeOperationUpdate) && provenance.ArtifactPolicy != ""
+	case "migrated_v1_validation":
+		return provenance.BundleCommit == "" && provenance.OperationID == "" && provenance.OperationKind == "" && provenance.ArtifactPolicy == ""
+	default:
+		return false
+	}
 }
 
 func installationRootDigest(runtimeRoot string) string {
@@ -458,8 +512,83 @@ func normalizeRuntimeValidation(validation RuntimeValidation) RuntimeValidation 
 	validation.ServiceProtocol = strings.TrimSpace(validation.ServiceProtocol)
 	validation.ArtifactSHA256 = strings.ToLower(strings.TrimSpace(validation.ArtifactSHA256))
 	validation.ManagedSuiteSHA256 = strings.ToLower(strings.TrimSpace(validation.ManagedSuiteSHA256))
+	validation.InstallationProvenance.Kind = strings.TrimSpace(validation.InstallationProvenance.Kind)
+	validation.InstallationProvenance.BundleCommit = strings.TrimSpace(validation.InstallationProvenance.BundleCommit)
+	validation.InstallationProvenance.OperationID = strings.TrimSpace(validation.InstallationProvenance.OperationID)
+	validation.InstallationProvenance.OperationKind = strings.TrimSpace(validation.InstallationProvenance.OperationKind)
+	validation.InstallationProvenance.ArtifactPolicy = strings.TrimSpace(validation.InstallationProvenance.ArtifactPolicy)
 	validation.Capabilities = compactSorted(validation.Capabilities)
 	return validation
+}
+
+func migrateLegacyBinding(binding TargetBinding) (TargetBinding, error) {
+	binding = normalizeBinding(binding)
+	if err := validateBindingCore(binding); err != nil {
+		return TargetBinding{}, err
+	}
+	if binding.ValidatedRuntime == nil {
+		return binding, nil
+	}
+	validation := *binding.ValidatedRuntime
+	managedRoot := filepath.Join(binding.RuntimeRoot, "runtime", "managed")
+	if err := verifyLegacyManagedRuntimeInventory(managedRoot, validation.Platform); err != nil {
+		return TargetBinding{}, err
+	}
+	suiteDigest, executableDigest, err := managedRuntimeSuiteSHA256(managedRoot)
+	if err != nil {
+		return TargetBinding{}, fmt.Errorf("verify legacy managed Runtime suite: %w", err)
+	}
+	if executableDigest != normalizeSHA256(validation.ArtifactSHA256) {
+		return TargetBinding{}, errors.New("legacy managed Runtime executable does not match its persisted artifact digest")
+	}
+	if validation.ManagedSuiteSHA256 != "" && suiteDigest != normalizeSHA256(validation.ManagedSuiteSHA256) {
+		return TargetBinding{}, errors.New("legacy managed Runtime suite does not match its persisted suite digest")
+	}
+	validation.ManagedSuiteSHA256 = suiteDigest
+	validation.InstallationProvenance = RuntimeInstallationProvenance{Kind: "migrated_v1_validation"}
+	binding.ValidatedRuntime = &validation
+	if err := validateBinding(binding); err != nil {
+		return TargetBinding{}, err
+	}
+	return binding, nil
+}
+
+func verifyLegacyManagedRuntimeInventory(managedRoot string, platform string) error {
+	if err := verifyManagedRuntimeDirectoryModes(managedRoot); err != nil {
+		return fmt.Errorf("legacy managed Runtime directory permissions are invalid: %w", err)
+	}
+	binRoot := filepath.Join(managedRoot, "bin")
+	entries, err := os.ReadDir(binRoot)
+	if err != nil {
+		return errors.New("legacy managed Runtime suite is unavailable for validation")
+	}
+	actual := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		name := entry.Name()
+		info, statErr := os.Lstat(filepath.Join(binRoot, name))
+		if statErr != nil || entry.Type()&os.ModeSymlink != 0 || !entry.Type().IsRegular() ||
+			!info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+			return errors.New("legacy managed Runtime suite contains a non-regular or symlink entry")
+		}
+		if !managedRuntimeFileModeValid(name, info.Mode()) {
+			return fmt.Errorf("legacy managed Runtime file %q has an unsupported executable mode", name)
+		}
+		actual = append(actual, name)
+	}
+	sort.Strings(actual)
+	allowed := [][]string{{"redeven"}, {"LICENSE", "THIRD_PARTY_NOTICES.md", "redeven"}}
+	if strings.EqualFold(strings.TrimSpace(platform), "linux") {
+		base := expectedPrecompiledRuntimeFiles("linux")
+		withNotices := append(append([]string(nil), base...), "LICENSE", "THIRD_PARTY_NOTICES.md")
+		sort.Strings(withNotices)
+		allowed = [][]string{base, withNotices}
+	}
+	for _, expected := range allowed {
+		if strings.Join(actual, "\x00") == strings.Join(expected, "\x00") {
+			return nil
+		}
+	}
+	return fmt.Errorf("legacy managed Runtime suite inventory is unsupported: %s", strings.Join(actual, ","))
 }
 
 func cloneBinding(binding TargetBinding) TargetBinding {

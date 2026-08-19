@@ -22,8 +22,10 @@ export type DesktopBundle = Readonly<{
   commit: string;
   platform: 'darwin' | 'linux';
   architecture: 'amd64' | 'arm64';
+  provenance: 'packaged_bundle' | 'development_bundle';
   gateway: DesktopBundleArtifact;
   runtime_suite: readonly DesktopBundleArtifact[];
+  runtime_suite_sha256: string;
 }>;
 
 type LoadDesktopBundleOptions = Readonly<{
@@ -174,16 +176,18 @@ export async function loadDesktopBundle(options: LoadDesktopBundleOptions): Prom
   const manifest = requireObject(decoded, 'manifest');
   requireExactKeys(
     manifest,
-    ['architecture', 'commit', 'gateway', 'platform', 'runtime_suite', 'schema_version', 'version'],
+    ['architecture', 'commit', 'gateway', 'platform', 'provenance', 'runtime_suite', 'runtime_suite_sha256', 'schema_version', 'version'],
     'manifest',
   );
-  if (manifest.schema_version !== 1) {
+  if (manifest.schema_version !== 2) {
     throw new Error('Desktop bundle manifest schema is unsupported.');
   }
   const version = compact(manifest.version);
   const commit = compact(manifest.commit);
   const platform = compact(manifest.platform);
   const architecture = compact(manifest.architecture);
+  const provenance = compact(manifest.provenance);
+  const runtimeSuiteSHA256 = compact(manifest.runtime_suite_sha256).toLowerCase();
   if (version === '' || commit === '') {
     throw new Error('Desktop bundle version and commit are required.');
   }
@@ -202,6 +206,9 @@ export async function loadDesktopBundle(options: LoadDesktopBundleOptions): Prom
   if ((platform !== 'darwin' && platform !== 'linux') || (architecture !== 'amd64' && architecture !== 'arm64')) {
     throw new Error('Desktop bundle target is unsupported.');
   }
+  if ((provenance !== 'packaged_bundle' && provenance !== 'development_bundle') || !/^sha256:[0-9a-f]{64}$/u.test(runtimeSuiteSHA256)) {
+    throw new Error('Desktop bundle Runtime suite provenance or digest is invalid.');
+  }
   const gateway = parseArtifact(manifest.gateway, 'Gateway');
   if (gateway.path !== 'redeven-gateway' || !gateway.executable) {
     throw new Error('Desktop bundle Gateway entry is invalid.');
@@ -217,6 +224,19 @@ export async function loadDesktopBundle(options: LoadDesktopBundleOptions): Prom
   const runtime = runtimeSuite.find((artifact) => artifact.path === 'redeven');
   if (!runtime?.executable) {
     throw new Error('Desktop bundle Runtime executable entry is invalid.');
+  }
+  const suiteIdentity = {
+    schema_version: 1,
+    files: runtimeSuite.map((artifact) => ({
+      name: artifact.path,
+      sha256: `sha256:${artifact.sha256}`,
+      size_bytes: artifact.size_bytes,
+      executable: artifact.executable,
+    })).sort((left, right) => left.name.localeCompare(right.name)),
+  };
+  const actualSuiteSHA256 = `sha256:${createHash('sha256').update(JSON.stringify(suiteIdentity)).digest('hex')}`;
+  if (actualSuiteSHA256 !== runtimeSuiteSHA256) {
+    throw new Error('Desktop bundle Runtime suite digest does not match its manifest.');
   }
   const [validatedGateway, ...validatedRuntimeSuite] = await Promise.all([
     validateArtifact(root, gateway, 'Gateway'),
@@ -237,7 +257,9 @@ export async function loadDesktopBundle(options: LoadDesktopBundleOptions): Prom
     commit,
     platform,
     architecture,
+    provenance,
     gateway: validatedGateway,
     runtime_suite: validatedRuntimeSuite,
+    runtime_suite_sha256: runtimeSuiteSHA256,
   };
 }

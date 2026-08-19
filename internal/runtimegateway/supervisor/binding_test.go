@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -119,6 +120,141 @@ func TestOpenLocalBindingStoreMigratesLegacyLongRuntimeControlSocket(t *testing.
 	if migrated.LifecycleTargetID != initial.LifecycleTargetID || migrated.TargetGeneration != initial.TargetGeneration {
 		t.Fatalf("socket migration changed target identity: before=%#v after=%#v", initial, migrated)
 	}
+}
+
+func TestOpenLocalBindingStoreMigratesLegacyRuntimeValidationFromExactManagedSuite(t *testing.T) {
+	stateRoot := filepath.Join(t.TempDir(), "gateway-state")
+	runtimeRoot := filepath.Join(t.TempDir(), "runtime-root")
+	store, err := OpenLocalBindingStore(stateRoot, runtimeRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	managedBinary := filepath.Join(runtimeRoot, "runtime", "managed", "bin", "redeven")
+	writeExecutableFixture(t, managedBinary, []byte("legacy verified Runtime"))
+	executableDigest, err := fileSHA256(managedBinary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyRaw := writeLegacyBindingWithoutSuiteDigest(t, stateRoot, store.Binding(), executableDigest)
+
+	migrated, err := OpenLocalBindingStore(stateRoot, runtimeRoot)
+	if err != nil {
+		t.Fatalf("OpenLocalBindingStore(legacy validation) error = %v", err)
+	}
+	validation := migrated.Binding().ValidatedRuntime
+	if validation == nil || !validSHA256(validation.ManagedSuiteSHA256) {
+		t.Fatalf("migrated validation = %#v", validation)
+	}
+	raw, err := os.ReadFile(filepath.Join(stateRoot, "runtime-target-binding-v1.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) == string(legacyRaw) {
+		t.Fatal("legacy binding was not migrated")
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded["schema_version"] != float64(2) {
+		t.Fatalf("migrated schema_version = %#v, want 2", decoded["schema_version"])
+	}
+	binding := decoded["binding"].(map[string]any)
+	persistedValidation := binding["validated_runtime"].(map[string]any)
+	provenance, _ := persistedValidation["installation_provenance"].(map[string]any)
+	if provenance["kind"] != "migrated_v1_validation" {
+		t.Fatalf("migrated provenance = %#v", provenance)
+	}
+}
+
+func TestOpenLocalBindingStoreLeavesLegacyBindingUnchangedWhenSuiteCannotBeProven(t *testing.T) {
+	stateRoot := filepath.Join(t.TempDir(), "gateway-state")
+	runtimeRoot := filepath.Join(t.TempDir(), "runtime-root")
+	store, err := OpenLocalBindingStore(stateRoot, runtimeRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	managedBinRoot := filepath.Join(runtimeRoot, "runtime", "managed", "bin")
+	managedBinary := filepath.Join(managedBinRoot, "redeven")
+	writeExecutableFixture(t, managedBinary, []byte("legacy verified Runtime"))
+	if err := os.WriteFile(filepath.Join(managedBinRoot, "unexpected"), []byte("unreviewed companion"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	executableDigest, err := fileSHA256(managedBinary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyRaw := writeLegacyBindingWithoutSuiteDigest(t, stateRoot, store.Binding(), executableDigest)
+
+	if _, err := OpenLocalBindingStore(stateRoot, runtimeRoot); err == nil {
+		t.Fatal("OpenLocalBindingStore migrated a legacy validation with an unsupported managed inventory")
+	}
+	after, err := os.ReadFile(filepath.Join(stateRoot, "runtime-target-binding-v1.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(legacyRaw) {
+		t.Fatal("failed legacy migration changed the original binding bytes")
+	}
+}
+
+func TestOpenLocalBindingStoreLeavesLegacyBindingUnchangedWhenManagedModeChanged(t *testing.T) {
+	stateRoot := filepath.Join(t.TempDir(), "gateway-state")
+	runtimeRoot := filepath.Join(t.TempDir(), "runtime-root")
+	store, err := OpenLocalBindingStore(stateRoot, runtimeRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	managedBinary := filepath.Join(runtimeRoot, "runtime", "managed", "bin", "redeven")
+	writeExecutableFixture(t, managedBinary, []byte("legacy verified Runtime"))
+	executableDigest, err := fileSHA256(managedBinary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyRaw := writeLegacyBindingWithoutSuiteDigest(t, stateRoot, store.Binding(), executableDigest)
+	if err := os.Chmod(managedBinary, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := OpenLocalBindingStore(stateRoot, runtimeRoot); err == nil {
+		t.Fatal("OpenLocalBindingStore migrated a legacy validation after its managed executable mode changed")
+	}
+	after, err := os.ReadFile(filepath.Join(stateRoot, "runtime-target-binding-v1.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(legacyRaw) {
+		t.Fatal("failed legacy mode migration changed the original binding bytes")
+	}
+}
+
+func writeLegacyBindingWithoutSuiteDigest(t *testing.T, stateRoot string, binding TargetBinding, executableDigest string) []byte {
+	t.Helper()
+	binding.ValidatedRuntime = &RuntimeValidation{
+		RuntimeInstanceID: "legacy-runtime", RuntimeBinaryVersion: "v1.1.0",
+		Platform: runtime.GOOS, Architecture: runtime.GOARCH,
+		ServiceProtocol: "redeven-runtime-v2", CompatibilityEpoch: 9,
+		Capabilities: []string{"lifecycle_fence_v1"}, ArtifactSHA256: executableDigest,
+	}
+	raw, err := json.MarshalIndent(bindingFile{SchemaVersion: 1, Binding: binding}, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw = append(raw, '\n')
+	if err := os.WriteFile(filepath.Join(stateRoot, "runtime-target-binding-v1.json"), raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return raw
+}
+
+func completeTestRuntimeValidation(validation RuntimeValidation) RuntimeValidation {
+	if validation.ManagedSuiteSHA256 == "" {
+		validation.ManagedSuiteSHA256 = "sha256:" + strings.Repeat("b", 64)
+	}
+	if validation.InstallationProvenance.Kind == "" {
+		validation.InstallationProvenance = RuntimeInstallationProvenance{Kind: "migrated_v1_validation"}
+	}
+	return validation
 }
 
 func TestOpenLocalBindingStoreRejectsSecondTargetForSameInstallationRoot(t *testing.T) {

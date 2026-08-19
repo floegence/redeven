@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	gatewayprotocol "github.com/floegence/redeven/internal/runtimegateway/protocol"
 )
 
 func TestProvisionPrecompiledRuntimeInstallsExactSuiteIdempotently(t *testing.T) {
@@ -94,8 +96,44 @@ func TestProvisionPrecompiledRuntimeFailsClosedForExtraManagedFile(t *testing.T)
 	}
 }
 
-func TestProvisionPrecompiledRuntimeAcceptsPersistedVerifiedManagedUpdate(t *testing.T) {
+func TestProvisionPrecompiledRuntimeFailsClosedForChangedManagedFileMode(t *testing.T) {
 	controller, runtimeRoot, _, _ := newPrecompiledTestController(t)
+	if _, err := controller.provisionPrecompiledRuntime(); err != nil {
+		t.Fatal(err)
+	}
+	managedPath := filepath.Join(runtimeRoot, "runtime", "managed", "bin", "redeven")
+	if err := os.Chmod(managedPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := controller.provisionPrecompiledRuntime(); err == nil {
+		t.Fatal("provisionPrecompiledRuntime() accepted a managed Runtime whose file mode changed")
+	}
+}
+
+func TestProvisionPrecompiledRuntimeFailsClosedForSymlinkedManagedFile(t *testing.T) {
+	controller, runtimeRoot, _, _ := newPrecompiledTestController(t)
+	if _, err := controller.provisionPrecompiledRuntime(); err != nil {
+		t.Fatal(err)
+	}
+	managedPath := filepath.Join(runtimeRoot, "runtime", "managed", "bin", "redeven")
+	externalPath := filepath.Join(t.TempDir(), "redeven")
+	writeExecutableFixture(t, externalPath, []byte("external Runtime"))
+	if err := os.Remove(managedPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(externalPath, managedPath); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	if _, err := controller.provisionPrecompiledRuntime(); err == nil {
+		t.Fatal("provisionPrecompiledRuntime() accepted a symlinked managed Runtime")
+	}
+}
+
+func TestProvisionPrecompiledRuntimeAcceptsPersistedVerifiedManagedUpdate(t *testing.T) {
+	controller, runtimeRoot, manifestPath, _ := newPrecompiledTestController(t)
+	setPrecompiledManifestProvenance(t, manifestPath, "packaged_bundle")
 	managedRoot := filepath.Join(runtimeRoot, "runtime", "managed")
 	managedPath := filepath.Join(managedRoot, "bin", "redeven")
 	updatedBytes := []byte("#!/bin/sh\nprintf 'redeven v1.3.0\\n'\n")
@@ -113,6 +151,10 @@ func TestProvisionPrecompiledRuntimeAcceptsPersistedVerifiedManagedUpdate(t *tes
 		ServiceProtocol: "redeven-runtime-v2", CompatibilityEpoch: 9,
 		Capabilities: []string{"lifecycle_fence_v1"}, ArtifactSHA256: executableDigest,
 		ManagedSuiteSHA256: suiteDigest,
+		InstallationProvenance: RuntimeInstallationProvenance{
+			Kind: "verified_lifecycle_update", OperationID: "update-reviewed",
+			OperationKind: "update_runtime", ArtifactPolicy: "published_release",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -126,8 +168,43 @@ func TestProvisionPrecompiledRuntimeAcceptsPersistedVerifiedManagedUpdate(t *tes
 	}
 }
 
+func TestProvisionPrecompiledRuntimePreservesVerifiedUpdateProvenanceWhenBytesMatchPackagedBundle(t *testing.T) {
+	controller, runtimeRoot, manifestPath, _ := newPrecompiledTestController(t)
+	setPrecompiledManifestProvenance(t, manifestPath, "packaged_bundle")
+	if _, err := controller.provisionPrecompiledRuntime(); err != nil {
+		t.Fatal(err)
+	}
+	managedRoot := filepath.Join(runtimeRoot, "runtime", "managed")
+	suiteDigest, executableDigest, err := managedRuntimeSuiteSHA256(managedRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := controller.bindings.RecordRuntimeValidation(RuntimeValidation{
+		RuntimeInstanceID: "runtime-updated", RuntimeBinaryVersion: "v1.2.3",
+		Platform: runtime.GOOS, Architecture: runtime.GOARCH,
+		ServiceProtocol: "redeven-runtime-v2", CompatibilityEpoch: 9,
+		Capabilities: []string{"lifecycle_fence_v1"}, ArtifactSHA256: executableDigest,
+		ManagedSuiteSHA256: suiteDigest,
+		InstallationProvenance: RuntimeInstallationProvenance{
+			Kind: "verified_lifecycle_update", OperationID: "update-same-bytes",
+			OperationKind: "update_runtime", ArtifactPolicy: "published_release",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	target, err := controller.provisionPrecompiledRuntime()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if target.Provenance.Kind != "verified_lifecycle_update" || target.Provenance.OperationID != "update-same-bytes" {
+		t.Fatalf("preserved target provenance = %#v", target.Provenance)
+	}
+}
+
 func TestProvisionPrecompiledRuntimeRejectsTamperedVerifiedManagedUpdateSuite(t *testing.T) {
-	controller, runtimeRoot, _, _ := newPrecompiledTestController(t)
+	controller, runtimeRoot, manifestPath, _ := newPrecompiledTestController(t)
+	setPrecompiledManifestProvenance(t, manifestPath, "packaged_bundle")
 	managedRoot := filepath.Join(runtimeRoot, "runtime", "managed")
 	managedPath := filepath.Join(managedRoot, "bin", "redeven")
 	writeExecutableFixture(t, managedPath, []byte("#!/bin/sh\nprintf 'redeven v1.3.0\\n'\n"))
@@ -145,6 +222,10 @@ func TestProvisionPrecompiledRuntimeRejectsTamperedVerifiedManagedUpdateSuite(t 
 		ServiceProtocol: "redeven-runtime-v2", CompatibilityEpoch: 9,
 		Capabilities: []string{"lifecycle_fence_v1"}, ArtifactSHA256: executableDigest,
 		ManagedSuiteSHA256: suiteDigest,
+		InstallationProvenance: RuntimeInstallationProvenance{
+			Kind: "verified_lifecycle_update", OperationID: "update-reviewed",
+			OperationKind: "update_runtime", ArtifactPolicy: "published_release",
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -157,6 +238,103 @@ func TestProvisionPrecompiledRuntimeRejectsTamperedVerifiedManagedUpdateSuite(t 
 	}
 }
 
+func TestDevelopmentBundleSelectsExactReplacementForVerifiedOlderManagedRuntime(t *testing.T) {
+	controller, runtimeRoot, manifestPath, _ := newPrecompiledTestController(t)
+	managedRoot := filepath.Join(runtimeRoot, "runtime", "managed")
+	managedPath := filepath.Join(managedRoot, "bin", "redeven")
+	writeExecutableFixture(t, managedPath, []byte("#!/bin/sh\nprintf 'redeven v1.1.0\\n'\n"))
+	suiteDigest, executableDigest, err := managedRuntimeSuiteSHA256(managedRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := controller.bindings.RecordRuntimeValidation(RuntimeValidation{
+		RuntimeInstanceID: "runtime-older", RuntimeBinaryVersion: "v1.1.0",
+		Platform: runtime.GOOS, Architecture: runtime.GOARCH,
+		ServiceProtocol: "redeven-runtime-v2", CompatibilityEpoch: 9,
+		Capabilities: []string{"lifecycle_fence_v1"}, ArtifactSHA256: executableDigest,
+		ManagedSuiteSHA256:     suiteDigest,
+		InstallationProvenance: RuntimeInstallationProvenance{Kind: "migrated_v1_validation"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	bundle, err := loadPrecompiledRuntimeManifest(manifestPath, controller.artifactProbeTimeout)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, err := controller.inspectPrecompiledRuntimeTarget(bundle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if target.Action != precompiledTargetReplace || target.Runtime.RuntimeSHA256 != bundle.RuntimeSHA256 {
+		t.Fatalf("development target = %#v, want exact bundle replacement", target)
+	}
+}
+
+func TestPrecompiledConvergenceRequiresConfirmationForActiveOrUnknownWorkloads(t *testing.T) {
+	zero := 0
+	one := 1
+	tests := []struct {
+		name     string
+		snapshot gatewayprotocol.WorkloadSnapshot
+		want     bool
+	}{
+		{
+			name: "known idle",
+			snapshot: gatewayprotocol.WorkloadSnapshot{
+				ProcessInventoryDigest: "sha256:inventory", WorkloadIdentityDigest: "sha256:idle",
+				Impact: gatewayprotocol.WorkloadImpact{
+					Knowledge: gatewayprotocol.WorkloadKnown, AffectedProcessCount: &zero, ActiveSessionCount: &zero,
+				},
+			},
+		},
+		{
+			name: "known active",
+			snapshot: gatewayprotocol.WorkloadSnapshot{
+				ProcessInventoryDigest: "sha256:inventory", WorkloadIdentityDigest: "sha256:active",
+				WorkloadIdentities: []string{"session:active"},
+				Impact: gatewayprotocol.WorkloadImpact{
+					Knowledge: gatewayprotocol.WorkloadKnown, AffectedProcessCount: &one, ActiveSessionCount: &one,
+				},
+			},
+			want: true,
+		},
+		{
+			name: "unknown",
+			snapshot: gatewayprotocol.WorkloadSnapshot{
+				Impact: gatewayprotocol.WorkloadImpact{Knowledge: gatewayprotocol.WorkloadUnknown},
+			},
+			want: true,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := precompiledConvergenceNeedsConfirmation(test.snapshot); got != test.want {
+				t.Fatalf("precompiledConvergenceNeedsConfirmation() = %v, want %v", got, test.want)
+			}
+		})
+	}
+}
+
+func setPrecompiledManifestProvenance(t *testing.T, manifestPath string, provenance string) {
+	t.Helper()
+	raw, err := os.ReadFile(manifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest map[string]any
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	manifest["provenance"] = provenance
+	raw, err = json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(manifestPath, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func newPrecompiledTestController(t *testing.T) (*Controller, string, string, []byte) {
 	t.Helper()
 	root := t.TempDir()
@@ -165,8 +343,8 @@ func newPrecompiledTestController(t *testing.T) (*Controller, string, string, []
 	if err := os.MkdirAll(bundleRoot, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	runtimeBytes := []byte("#!/bin/sh\nprintf 'redeven v1.2.3\\n'\n")
-	gatewayBytes := []byte("#!/bin/sh\nprintf 'redeven-gateway v1.2.3\\n'\n")
+	runtimeBytes := []byte("#!/bin/sh\nprintf 'redeven v1.2.3 (abc123)\\n'\n")
+	gatewayBytes := []byte("#!/bin/sh\nprintf 'redeven-gateway v1.2.3 (abc123)\\n'\n")
 	writeExecutableFixture(t, filepath.Join(bundleRoot, "redeven"), runtimeBytes)
 	writeExecutableFixture(t, filepath.Join(bundleRoot, "redeven-gateway"), gatewayBytes)
 	runtimeSuite := []map[string]any{precompiledArtifactFixture("redeven", runtimeBytes, true)}
@@ -195,14 +373,27 @@ func newPrecompiledTestController(t *testing.T) (*Controller, string, string, []
 			runtimeSuite = append(runtimeSuite, precompiledArtifactFixture(companion.name, value, companion.executable))
 		}
 	}
+	suiteEntries := make([]managedRuntimeSuiteEntry, 0, len(runtimeSuite))
+	for _, artifact := range runtimeSuite {
+		suiteEntries = append(suiteEntries, managedRuntimeSuiteEntry{
+			Name: artifact["path"].(string), SHA256: "sha256:" + artifact["sha256"].(string),
+			SizeBytes: artifact["size_bytes"].(int), Executable: artifact["executable"].(bool),
+		})
+	}
+	suiteDigest, err := runtimeSuiteEntriesSHA256(suiteEntries)
+	if err != nil {
+		t.Fatal(err)
+	}
 	manifest := map[string]any{
-		"schema_version": 1,
-		"version":        "v1.2.3",
-		"commit":         "abc123",
-		"platform":       runtime.GOOS,
-		"architecture":   runtime.GOARCH,
-		"gateway":        precompiledArtifactFixture("redeven-gateway", gatewayBytes, true),
-		"runtime_suite":  runtimeSuite,
+		"schema_version":       2,
+		"version":              "v1.2.3",
+		"commit":               "abc123",
+		"platform":             runtime.GOOS,
+		"architecture":         runtime.GOARCH,
+		"provenance":           "development_bundle",
+		"gateway":              precompiledArtifactFixture("redeven-gateway", gatewayBytes, true),
+		"runtime_suite":        runtimeSuite,
+		"runtime_suite_sha256": suiteDigest,
 	}
 	raw, err := json.Marshal(manifest)
 	if err != nil {

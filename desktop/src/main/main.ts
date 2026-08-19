@@ -169,6 +169,7 @@ import { DesktopWelcomeSnapshotOrder } from './desktopWelcomeSnapshotOrder';
 import {
   DesktopOperationFailureError,
   desktopOperationFailurePresentation,
+  isDesktopOperationFailureError,
   operationFailureFromUnknown,
 } from './desktopOperationFailure';
 import {
@@ -1070,6 +1071,7 @@ function bundledRuntimeExecutablePath(): string {
     isPackaged: app.isPackaged,
     resourcesPath: process.resourcesPath,
     appPath: app.getAppPath(),
+    developmentBundleRoot: process.env.REDEVEN_DESKTOP_BUNDLED_RUNTIME_ROOT,
   });
 }
 
@@ -2706,6 +2708,7 @@ function gatewayLifecycleManager(): GatewayLifecycleManager {
       temp_root: app.getPath('temp'),
       source_runtime_root: process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT,
       precompiled_bundle: bundle,
+      local_ui_bind: compact(process.env.REDEVEN_DESKTOP_LOCAL_UI_BIND),
       target_commit: bundle.commit,
       lifecycle_coordinator: runtimeLifecycleCoordinator,
       ssh_transport_manager: desktopSSHTransportManager,
@@ -10221,7 +10224,8 @@ async function autoStartLocalRuntimeOnDesktopLaunch(): Promise<void> {
     finishPhase('checking_access');
 
     beginPhase('preparing_environment');
-    if (!attachedBeforeStartup || !runtimeServiceIsOpenable(attachedBeforeStartup.startup.runtime_service)) {
+    const runtimeWasOpenable = !!attachedBeforeStartup && runtimeServiceIsOpenable(attachedBeforeStartup.startup.runtime_service);
+    if (bundle.provenance === 'development_bundle' || !runtimeWasOpenable) {
       beginPhase('starting_environment');
       if (serviceState.status === 'ready' || serviceState.status === 'service_needs_update') {
         await gatewayLifecycleManager().restartGateway(record, {
@@ -10240,6 +10244,13 @@ async function autoStartLocalRuntimeOnDesktopLaunch(): Promise<void> {
       priority: 'foreground',
       startPolicy: 'start_if_needed',
     });
+    const authorizedRecord = await gatewayStore().get(record.gateway_id);
+    if (!authorizedRecord?.trust_profile) {
+      throw new GatewayClientError(
+        'GATEWAY_PAIRING_REQUIRED',
+        'Desktop could not authorize the Local Environment Gateway during startup.',
+      );
+    }
     finishPhase('preparing_environment');
 
     beginPhase('checking_workspace_readiness');
@@ -10256,6 +10267,19 @@ async function autoStartLocalRuntimeOnDesktopLaunch(): Promise<void> {
       }
       throw new Error('The Local Environment did not become ready during Desktop startup.');
     }
+    const management = await gatewayLifecycleManager().runtimeManagementCapability(authorizedRecord, {
+      gateway_env_id: 'env_local',
+    }, {
+      startPolicy: 'require_ready',
+    });
+    const actualRuntimeDigest = compact(management.compatibility?.runtime_artifact_sha256).toLowerCase();
+    const expectedRuntimeDigest = compact(bundle.runtime_suite.find((artifact) => path.basename(artifact.path) === 'redeven')?.sha256).toLowerCase();
+    if (actualRuntimeDigest === '' || (
+      bundle.provenance === 'development_bundle'
+      && actualRuntimeDigest.replace(/^sha256:/u, '') !== expectedRuntimeDigest.replace(/^sha256:/u, '')
+    )) {
+      throw new Error('The Local Environment Runtime did not converge to the verified development bundle identity.');
+    }
     await refreshWelcomeRuntimeHealthForEnvironment(environment.id, { force: true });
     finishPhase('checking_workspace_readiness');
     resetLauncherIssueState();
@@ -10263,12 +10287,21 @@ async function autoStartLocalRuntimeOnDesktopLaunch(): Promise<void> {
       duration_ms: Date.now() - startedAtMS,
       runtime_pid: attached.startup.pid,
       runtime_version: attached.startup.runtime_service?.runtime_version,
-      runtime_digest: bundle.runtime_suite.find((artifact) => path.basename(artifact.path) === 'redeven')?.sha256,
+      runtime_commit: attached.startup.runtime_service?.runtime_commit,
+      runtime_digest: actualRuntimeDigest,
+      target_runtime_digest: expectedRuntimeDigest,
+      target_provenance: bundle.provenance,
       workspace_ready: true,
     });
     broadcastDesktopWelcomeSnapshots();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const structuredFailure = isDesktopOperationFailureError(error) ? error.presentation : undefined;
+    const diagnosticLines = (structuredFailure?.diagnostics ?? []).flatMap((diagnostic) => [
+      `${diagnostic.channel}:`,
+      diagnostic.text,
+    ]);
+    const workloadReviewRequired = structuredFailure?.code === 'confirmation_required';
     console.warn(`[redeven:desktop-startup] Local runtime auto-start failed: ${message}`);
     const preferences = await loadDesktopPreferencesCached().catch(() => null);
     setLauncherViewState({
@@ -10276,12 +10309,21 @@ async function autoStartLocalRuntimeOnDesktopLaunch(): Promise<void> {
       entryReason: 'app_launch',
       issue: {
         scope: 'startup',
-        code: 'local_environment_startup_failed',
-        title: 'Local Environment startup failed',
-        title_key: 'issue.startupFailedTitle',
-        message: 'Redeven could not start this environment. Try again.',
-        message_key: 'environmentOpenFlow.startFailedDetail',
-        diagnostics_copy: `status: blocked\ncode: local_environment_startup_failed\nmessage: ${message}`,
+        code: structuredFailure?.code ?? 'local_environment_startup_failed',
+        title: workloadReviewRequired ? 'Runtime Confirmation Required' : 'Local Environment startup failed',
+        title_key: workloadReviewRequired ? 'progress.runtimeConfirmationRequiredTitle' : 'issue.startupFailedTitle',
+        message: workloadReviewRequired
+          ? 'The Runtime workload changed before this operation could continue.'
+          : 'Redeven could not start this environment. Try again.',
+        message_key: workloadReviewRequired
+          ? 'progress.runtimeConfirmationRequiredSummary'
+          : 'environmentOpenFlow.startFailedDetail',
+        diagnostics_copy: [
+          'status: blocked',
+          `code: ${structuredFailure?.code ?? 'local_environment_startup_failed'}`,
+          `message: ${message}`,
+          ...diagnosticLines,
+        ].join('\n'),
         target_url: '',
         environment_id: preferences?.local_environment.id,
       },

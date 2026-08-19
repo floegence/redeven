@@ -10,14 +10,17 @@ FAKE_DESKTOP="$FAKE_CHECKOUT/desktop"
 FAKE_SCRIPTS="$FAKE_CHECKOUT/scripts"
 OWN_PID=""
 OTHER_PID=""
+OTHER_PORT_PID=""
 BUSY_PORT_PID=""
 
 cleanup() {
   [ -z "$OWN_PID" ] || kill "$OWN_PID" >/dev/null 2>&1 || true
   [ -z "$OTHER_PID" ] || kill "$OTHER_PID" >/dev/null 2>&1 || true
+  [ -z "$OTHER_PORT_PID" ] || kill "$OTHER_PORT_PID" >/dev/null 2>&1 || true
   [ -z "$BUSY_PORT_PID" ] || kill "$BUSY_PORT_PID" >/dev/null 2>&1 || true
   [ -z "$OWN_PID" ] || wait "$OWN_PID" >/dev/null 2>&1 || true
   [ -z "$OTHER_PID" ] || wait "$OTHER_PID" >/dev/null 2>&1 || true
+  [ -z "$OTHER_PORT_PID" ] || wait "$OTHER_PORT_PID" >/dev/null 2>&1 || true
   [ -z "$BUSY_PORT_PID" ] || wait "$BUSY_PORT_PID" >/dev/null 2>&1 || true
   rm -rf "$TEST_ROOT"
 }
@@ -28,35 +31,46 @@ printf '%s\n' '{"name":"@floegence/redeven-desktop"}' > "$FAKE_DESKTOP/package.j
 cp "$ROOT_DIR/scripts/dev_desktop.sh" "$ROOT_DIR/scripts/ui_package_common.sh" "$FAKE_SCRIPTS/"
 cp "$ROOT_DIR/.node-version" "$FAKE_CHECKOUT/.node-version"
 
-(
-  cd "$ROOT_DIR/desktop"
-  exec -a electron sleep 30
-) &
-OWN_PID=$!
-
-(
-  cd "$FAKE_DESKTOP"
-  exec -a electron sleep 30
-) &
-OTHER_PID=$!
-
-for _ in 1 2 3 4 5; do
-  if kill -0 "$OWN_PID" >/dev/null 2>&1 && kill -0 "$OTHER_PID" >/dev/null 2>&1; then
-    break
-  fi
-  sleep 0.1
-done
-
 TEST_HOME="$TEST_ROOT/home"
 mkdir -p "$TEST_HOME"
 output=$(HOME="$TEST_HOME" "$ROOT_DIR/scripts/dev_desktop.sh" --dry-run --stop-only)
-if ! printf '%s\n' "$output" | rg -q "Stopping Redeven Desktop processes:.*[[:space:]]$OWN_PID([[:space:]]|$)"; then
-  printf '%s\n' "$output" >&2
-  printf 'expected current-checkout desktop PID %s in dry-run inventory\n' "$OWN_PID" >&2
-  exit 1
+state_root=$(printf '%s\n' "$output" | sed -n 's/^Development state root: //p' | head -n 1)
+instance_id=$(printf '%s\n' "$output" | sed -n 's/^Development instance identity: //p' | head -n 1)
+(
+  cd "$ROOT_DIR/desktop"
+  exec node -e 'process.on("SIGTERM", () => process.exit(0)); setInterval(() => {}, 1000)' -- "--redeven-dev-instance=$instance_id"
+) &
+OWN_PID=$!
+(
+  cd "$FAKE_DESKTOP"
+  exec node -e 'setInterval(() => {}, 1000)' -- '--redeven-dev-instance=other-instance'
+) &
+OTHER_PID=$!
+other_output=$(HOME="$TEST_HOME" "$FAKE_SCRIPTS/dev_desktop.sh" --dry-run --stop-only)
+other_state_root=$(printf '%s\n' "$other_output" | sed -n 's/^Development state root: //p' | head -n 1)
+other_local_ui_port=$(printf '%s\n' "$other_output" | sed -n 's/^Development Local UI: .*://p' | head -n 1)
+other_cdp_port=$(printf '%s\n' "$other_output" | sed -n 's/^Development CDP port: //p' | head -n 1)
+other_inspect_port=$(printf '%s\n' "$other_output" | sed -n 's/^Development inspect port: //p' | head -n 1)
+mkdir -p "$other_state_root"
+printf '%s\n' 'other-instance-marker' > "$other_state_root/instance-marker"
+other_marker_sha256=$(shasum -a 256 "$other_state_root/instance-marker" | awk '{print $1}')
+node -e '
+  const net = require("node:net");
+  const server = net.createServer();
+  server.listen(Number(process.argv[1]), "127.0.0.1");
+' "$other_local_ui_port" &
+OTHER_PORT_PID=$!
+mkdir -p "$state_root/desktop"
+printf '%s\n' "$OWN_PID" > "$state_root/desktop/dev-electron-v1.pid"
+sleep 0.2
+stop_output=$(HOME="$TEST_HOME" "$ROOT_DIR/scripts/dev_desktop.sh" --dry-run --stop-only)
+if ! printf '%s\n' "$stop_output" | rg -q "Stopping Redeven Desktop processes:.*[[:space:]]$OWN_PID([[:space:]]|$)"; then
+	printf '%s\n' "$stop_output" >&2
+	printf 'expected current-checkout desktop PID %s in dry-run inventory\n' "$OWN_PID" >&2
+	exit 1
 fi
-if printf '%s\n' "$output" | rg -q "Stopping Redeven Desktop processes:.*[[:space:]]$OTHER_PID([[:space:]]|$)"; then
-  printf '%s\n' "$output" >&2
+if printf '%s\n' "$stop_output" | rg -q "Stopping Redeven Desktop processes:.*[[:space:]]$OTHER_PID([[:space:]]|$)"; then
+	printf '%s\n' "$stop_output" >&2
   printf 'must not inventory another checkout desktop PID %s\n' "$OTHER_PID" >&2
   exit 1
 fi
@@ -66,7 +80,44 @@ if printf '%s\n' "$output" | rg -q 'ask macOS to quit Redeven Desktop'; then
   exit 1
 fi
 
-state_root=$(printf '%s\n' "$output" | sed -n 's/^Development state root: //p' | head -n 1)
+HOME="$TEST_HOME" "$ROOT_DIR/scripts/dev_desktop.sh" --stop-only >/dev/null
+wait "$OWN_PID" >/dev/null 2>&1 || true
+if kill -0 "$OWN_PID" >/dev/null 2>&1; then
+  printf 'actual instance-scoped stop did not stop current Desktop PID %s\n' "$OWN_PID" >&2
+  exit 1
+fi
+if ! kill -0 "$OTHER_PID" >/dev/null 2>&1 || ! kill -0 "$OTHER_PORT_PID" >/dev/null 2>&1; then
+  printf 'actual instance-scoped stop changed another instance process or listener\n' >&2
+  exit 1
+fi
+if [ "$(shasum -a 256 "$other_state_root/instance-marker" | awk '{print $1}')" != "$other_marker_sha256" ]; then
+  printf 'actual instance-scoped stop changed another instance state marker\n' >&2
+  exit 1
+fi
+OWN_PID=""
+(
+  cd "$ROOT_DIR/desktop"
+  exec node -e 'process.on("SIGTERM", () => process.exit(0)); setInterval(() => {}, 1000)' -- "--redeven-dev-instance=$instance_id"
+) &
+OWN_PID=$!
+printf '%s\n' "$OWN_PID" > "$state_root/desktop/dev-electron-v1.pid"
+sleep 0.2
+HOME="$TEST_HOME" "$ROOT_DIR/scripts/dev_desktop.sh" --stop-only >/dev/null
+wait "$OWN_PID" >/dev/null 2>&1 || true
+if kill -0 "$OWN_PID" >/dev/null 2>&1; then
+  printf 'actual instance-scoped stop did not stop restarted Desktop PID %s\n' "$OWN_PID" >&2
+  exit 1
+fi
+if ! kill -0 "$OTHER_PID" >/dev/null 2>&1 || ! kill -0 "$OTHER_PORT_PID" >/dev/null 2>&1; then
+  printf 'stopping the restarted instance changed another instance process or listener\n' >&2
+  exit 1
+fi
+if [ "$(shasum -a 256 "$other_state_root/instance-marker" | awk '{print $1}')" != "$other_marker_sha256" ]; then
+  printf 'stopping the restarted instance changed another instance state marker\n' >&2
+  exit 1
+fi
+OWN_PID=""
+
 if [ -z "$state_root" ] || [ "$state_root" = "$TEST_HOME/.redeven" ]; then
   printf '%s\n' "$output" >&2
   printf 'expected an isolated default development state root\n' >&2
@@ -108,10 +159,28 @@ if [ "$local_ui_port" = "$cdp_port" ] || [ "$local_ui_port" = "$inspect_port" ] 
   exit 1
 fi
 
-other_output=$(HOME="$TEST_HOME" "$FAKE_SCRIPTS/dev_desktop.sh" --dry-run --stop-only)
-other_local_ui_port=$(printf '%s\n' "$other_output" | sed -n 's/^Development Local UI: .*://p' | head -n 1)
-other_cdp_port=$(printf '%s\n' "$other_output" | sed -n 's/^Development CDP port: //p' | head -n 1)
-other_inspect_port=$(printf '%s\n' "$other_output" | sed -n 's/^Development inspect port: //p' | head -n 1)
+node -e '
+  const net = require("node:net");
+  const server = net.createServer();
+  server.listen(Number(process.argv[1]), "127.0.0.1");
+' "$local_ui_port" &
+BUSY_PORT_PID=$!
+sleep 0.2
+collision_output=$(HOME="$TEST_HOME" "$ROOT_DIR/scripts/dev_desktop.sh" --dry-run --stop-only)
+collision_local_ui_port=$(printf '%s\n' "$collision_output" | sed -n 's/^Development Local UI: .*://p' | head -n 1)
+if [ "$collision_local_ui_port" = "$local_ui_port" ]; then
+	printf '%s\n' "$collision_output" >&2
+	printf 'an occupied preferred port must allocate a different window\n' >&2
+	exit 1
+fi
+if ! kill -0 "$BUSY_PORT_PID" >/dev/null 2>&1; then
+	printf 'port collision handling must not stop the existing listener\n' >&2
+	exit 1
+fi
+kill "$BUSY_PORT_PID" >/dev/null 2>&1 || true
+wait "$BUSY_PORT_PID" >/dev/null 2>&1 || true
+BUSY_PORT_PID=""
+
 for own_port in "$local_ui_port" "$cdp_port" "$inspect_port"; do
   for other_port in "$other_local_ui_port" "$other_cdp_port" "$other_inspect_port"; do
     if [ "$own_port" = "$other_port" ]; then
@@ -138,10 +207,26 @@ case "$explicit_port_output" in
 esac
 
 help_output=$("$ROOT_DIR/scripts/dev_desktop.sh" --help)
-if ! printf '%s\n' "$help_output" | rg -q 'checkout-derived'; then
+if ! printf '%s\n' "$help_output" | rg -q 'instance-derived'; then
   printf '%s\n' "$help_output" >&2
   printf 'expected help to document checkout-derived default ports\n' >&2
   exit 1
+fi
+if rg -q '\$BASHPID' "$ROOT_DIR/scripts/dev_desktop.sh"; then
+	printf 'development PID metadata must not depend on Bash 4 BASHPID\n' >&2
+	exit 1
+fi
+if ! rg -q 'exec env REDEVEN_DESKTOP_PID_FILE=.* sh -c' "$ROOT_DIR/scripts/dev_desktop.sh"; then
+	printf 'development PID metadata must be written by the shell that execs Electron\n' >&2
+	exit 1
+fi
+if rg -q 'cmd=\("\./node_modules/\.bin/electron"\)' "$ROOT_DIR/scripts/dev_desktop.sh"; then
+	printf 'development launch must record the actual Electron executable PID, not its Node CLI wrapper\n' >&2
+	exit 1
+fi
+if ! rg -q 'process\.stdout\.write\(require\("electron"\)\)' "$ROOT_DIR/scripts/dev_desktop.sh"; then
+	printf 'development launch must resolve the actual Electron executable\n' >&2
+	exit 1
 fi
 
 override_root=$(node -e 'process.stdout.write(require("node:path").resolve(process.argv[1]))' "$TEST_ROOT/explicit-state")
@@ -154,6 +239,46 @@ case "$override_output" in
     exit 1
     ;;
 esac
+
+second_override_root=$(node -e 'process.stdout.write(require("node:path").resolve(process.argv[1]))' "$TEST_ROOT/explicit-state-2")
+second_override_output=$(HOME="$TEST_HOME" REDEVEN_STATE_ROOT="$second_override_root" "$ROOT_DIR/scripts/dev_desktop.sh" --dry-run --stop-only)
+override_instance_id=$(printf '%s\n' "$override_output" | sed -n 's/^Development instance identity: //p' | head -n 1)
+second_override_instance_id=$(printf '%s\n' "$second_override_output" | sed -n 's/^Development instance identity: //p' | head -n 1)
+if [ -z "$override_instance_id" ] || [ "$override_instance_id" = "$second_override_instance_id" ]; then
+	printf 'two explicit instances from one checkout must have independent identities: %s / %s\n' \
+		"$override_instance_id" "$second_override_instance_id" >&2
+	exit 1
+fi
+override_ports=$(printf '%s\n' "$override_output" | sed -n -e 's/^Development Local UI: .*://p' -e 's/^Development CDP port: //p' -e 's/^Development inspect port: //p' | tr '\n' ' ')
+second_override_ports=$(printf '%s\n' "$second_override_output" | sed -n -e 's/^Development Local UI: .*://p' -e 's/^Development CDP port: //p' -e 's/^Development inspect port: //p' | tr '\n' ' ')
+if [ "$override_ports" = "$second_override_ports" ]; then
+	printf 'two explicit instances from one checkout must have independent ports: %s\n' "$override_ports" >&2
+	exit 1
+fi
+for expected in \
+	"Development user data root: $override_root/desktop/user-data" \
+	"Development cache root: $override_root/desktop/cache" \
+	"Development temp root: $override_root/desktop/temp" \
+	"Development immutable bundle root: $override_root/desktop/bundles"
+do
+	if ! printf '%s\n' "$override_output" | rg -Fq "$expected"; then
+		printf '%s\n' "$override_output" >&2
+		printf 'missing isolated instance path: %s\n' "$expected" >&2
+		exit 1
+	fi
+done
+
+managed_runtime="$override_root/local-environment/runtime/managed/bin/redeven"
+mkdir -p "$(dirname -- "$managed_runtime")"
+printf '#!/bin/sh\nexit 0\n' > "$managed_runtime"
+chmod 700 "$managed_runtime"
+stop_runtime_output=$(HOME="$TEST_HOME" REDEVEN_STATE_ROOT="$override_root" \
+	"$ROOT_DIR/scripts/dev_desktop.sh" --dry-run --stop-only --stop-runtimes)
+if ! printf '%s\n' "$stop_runtime_output" | rg -Fq "$managed_runtime desktop-runtime-stop --state-root $override_root/local-environment"; then
+	printf '%s\n' "$stop_runtime_output" >&2
+	printf 'expected --stop-runtimes to use this instance managed Runtime inventory\n' >&2
+	exit 1
+fi
 
 if HOME="$TEST_HOME" REDEVEN_STATE_ROOT="$TEST_HOME/.redeven" \
   "$ROOT_DIR/scripts/dev_desktop.sh" --dry-run --stop-only >"$TEST_ROOT/user-state.out" 2>&1; then
