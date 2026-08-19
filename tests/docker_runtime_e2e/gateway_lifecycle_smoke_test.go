@@ -106,8 +106,12 @@ func precompiledRuntimeSuiteDigest(artifacts []desktopBundleArtifact) string {
 	}
 	entries := make([]suiteEntry, 0, len(artifacts))
 	for _, artifact := range artifacts {
+		artifactDigest := artifact.SHA256
+		if !strings.HasPrefix(artifactDigest, "sha256:") {
+			artifactDigest = "sha256:" + artifactDigest
+		}
 		entries = append(entries, suiteEntry{
-			Name: artifact.Path, SHA256: artifact.SHA256,
+			Name: artifact.Path, SHA256: artifactDigest,
 			SizeBytes: artifact.SizeBytes, Executable: artifact.Executable,
 		})
 	}
