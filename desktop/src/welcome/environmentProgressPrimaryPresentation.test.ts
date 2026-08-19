@@ -64,6 +64,7 @@ function openConnectionProgress(
     startedAt?: number;
     updatedAt?: number;
     nextActions?: DesktopLauncherActionProgress['next_actions'];
+    failure?: DesktopLauncherActionProgress['failure'];
   }> = {},
 ): DesktopLauncherActionProgress {
   const phase = openConnectionPhaseForStatus(status);
@@ -81,6 +82,7 @@ function openConnectionProgress(
     title: status === 'failed' ? 'Open failed' : 'Opening environment',
     detail: 'Desktop is opening the environment.',
     ...(input.nextActions ? { next_actions: input.nextActions } : {}),
+    ...(input.failure ? { failure: input.failure } : {}),
     open_progress: buildOpenConnectionProgress({
       location: 'local_host',
       phase,
@@ -181,6 +183,28 @@ describe('openConnectionFailurePrimaryAction', () => {
     expect(openConnectionFailurePrimaryAction(openConnectionProgress('failed', { nextActions }), openAction)).toEqual({
       intent: 'refresh_runtime',
       label: 'Refresh status',
+      enabled: true,
+      variant: 'default',
+    });
+  });
+
+  it('promotes the Desktop update handoff when the Runtime requires a newer Desktop', () => {
+    const nextActions: DesktopLauncherActionProgress['next_actions'] = [
+      { kind: 'refresh_status', environment_id: 'local-environment', label: 'Refresh status' },
+      { kind: 'manage_desktop_update', environment_id: 'local-environment', label: 'Update Redeven Desktop' },
+    ];
+
+    expect(openConnectionFailurePrimaryAction(openConnectionProgress('failed', {
+      nextActions,
+      failure: {
+        code: 'desktop_update_required',
+        severity: 'error',
+        title: 'Desktop update required',
+        summary: 'Update Redeven Desktop before opening this environment.',
+      },
+    }), openAction)).toEqual({
+      intent: 'update_desktop',
+      label: 'Update Redeven Desktop',
       enabled: true,
       variant: 'default',
     });

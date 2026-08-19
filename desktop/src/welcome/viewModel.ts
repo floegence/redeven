@@ -191,6 +191,7 @@ export type EnvironmentActionIntent =
   | 'stop_runtime'
   | 'restart_runtime'
   | 'update_runtime'
+  | 'update_desktop'
   | 'refresh_runtime'
   | 'review_network_exposure'
   | 'unavailable';
