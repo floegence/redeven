@@ -3,9 +3,9 @@
   "publisher": { "publisher_id": "dev.redeven.smoke", "display_name": "Redeven Smoke" },
   "plugin": { "plugin_id": "dev.redeven.smoke.io", "display_name": "I/O smoke", "version": "9.0.0" },
   "api": {
-    "surface": 1,
-    "worker": 1,
-    "required_features": ["io.stream.v1", "fs.workspace.v1", "fs.home.v1", "fs.environment.v1", "fs.watch.v1", "net.http.v1", "net.websocket.v1", "net.tcp.v1", "net.udp.v1"]
+    "major": 1,
+    "required_features": ["io.stream.v1", "fs.workspace.v1", "fs.home.v1", "fs.environment.v1", "fs.watch.v1", "net.http.v1", "net.websocket.v1", "net.tcp.v1", "net.udp.v1"],
+    "optional_features": []
   },
   "permissions": ["fs.environment.read", "fs.environment.write", "network.client"],
   "presentation": {
@@ -17,9 +17,9 @@
   "methods": [
     {
       "method": "smoke.run",
-      "worker_id": "io_worker",
       "effect": "execute",
       "execution": "sync",
+      "route": { "kind": "worker", "worker_id": "io_worker" },
       "request_schema": {
         "type": "object",
         "additionalProperties": false,
@@ -90,9 +90,9 @@
     },
     {
       "method": "smoke.hold",
-      "worker_id": "io_worker",
       "effect": "execute",
       "execution": "sync",
+      "route": { "kind": "worker", "worker_id": "io_worker" },
       "request_schema": {
         "type": "object",
         "additionalProperties": false,
