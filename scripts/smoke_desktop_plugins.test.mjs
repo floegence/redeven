@@ -113,7 +113,7 @@ test('Desktop smoke starts and retries workers installed after an empty startup 
           ok: true,
           data: {
             ready: false,
-            descriptor: { target: 'linux/arm64' },
+            artifact_identity: { target: 'linux/arm64' },
             shards: [],
           },
         },
@@ -124,8 +124,8 @@ test('Desktop smoke starts and retries workers installed after an empty startup 
           ok: true,
           data: {
             ready: true,
-            descriptor: { target: 'linux/arm64' },
-            shards: [{ ready: true, runtime_instance_id: 'runtime_431', descriptor: { target: 'linux/arm64' } }],
+            artifact_identity: { target: 'linux/arm64' },
+            shards: [{ ready: true, runtime_instance_id: 'runtime_431', artifact_identity: { target: 'linux/arm64' } }],
           },
         },
       },
@@ -136,8 +136,8 @@ test('Desktop smoke starts and retries workers installed after an empty startup 
         ok: true,
         data: {
           ready: true,
-          descriptor: { target: 'linux/arm64' },
-          shards: [{ ready: true, runtime_instance_id: 'runtime_431', descriptor: { target: 'linux/arm64' } }],
+          artifact_identity: { target: 'linux/arm64' },
+          shards: [{ ready: true, runtime_instance_id: 'runtime_431', artifact_identity: { target: 'linux/arm64' } }],
         },
       },
     }],
