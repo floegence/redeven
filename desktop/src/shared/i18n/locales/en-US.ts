@@ -756,6 +756,7 @@ export const enUS = {
     stopRuntime: 'Stop Runtime',
     restartRuntime: 'Restart Runtime',
     updateRuntime: 'Update Runtime',
+    updateRuntimeAndOpen: 'Update Runtime and open',
     updateAndRestart: 'Update and restart...',
     restartRuntimeEllipsis: 'Restart Runtime...',
     connectToProvider: 'Connect to Provider',

@@ -23,6 +23,8 @@ Local UI password and network exposure acknowledgement are startup configuration
 
 An accepted destructive lifecycle operation closes the attached Env App session through the shared operation coordinator. A disconnected Desktop leaves the Gateway operation running; a later open attaches to the durable progress. Lifecycle incompatibility disables only the management area; Connect, Workspace, and Runtime UI remain available.
 
+An Open failure keeps the original intent and promotes the typed recovery action to the panel's primary action. A `update_runtime` next action is presented as `Update Runtime and open`; after the update completes Desktop reruns the authoritative open preflight and opens only after fresh readiness succeeds. When readiness is unknown, the primary action is `Refresh status`; a failed Open panel must never offer the same Open request again. Recovery actions are derived from the operation contract, not from a second renderer-only status machine.
+
 Gateway restart recovery also migrates the durable operation store before attach refresh. Historical nanosecond snapshot revisions are converted to bounded, stable values during the atomic v2-to-v3 migration; invalid revisions from preflight or lifecycle fencing are rejected before persistence, so Desktop receives a retryable operation failure instead of an attach-refresh parsing error.
 
 ## Unified open flow
@@ -48,5 +50,7 @@ Environment open guidance does not display Gateway, Desktop ownership, target bi
 - `redeven:desktop/src/welcome/environmentOpenPreflight.ts:1` - Unknown-state Open preflight and refreshed lifecycle routing.
 - `redeven:desktop/src/welcome/environmentOpenPreflight.smoke.test.ts:1` - Open, initialize, start, and authorization smoke outcomes.
 - `redeven:desktop/src/welcome/environmentGuidanceSession.ts:1` - Panel ownership, ordered stages, failure retention, and retry state.
+- `redeven:desktop/src/welcome/environmentProgressPrimaryPresentation.ts:59` - Maps typed Open failures to update-and-open or refresh-status primary recovery actions.
 - `redeven:desktop/src/welcome/App.tsx:5104` - One localized initialize/start/open orchestrator.
+- `redeven:desktop/src/welcome/App.tsx:10290` - Runs update-and-open continuation through the shared open preflight.
 - `redeven:scripts/smoke_desktop_runtime_lifecycle.mjs:1` - Real Local and SSH Remote Open and lifecycle outcomes.

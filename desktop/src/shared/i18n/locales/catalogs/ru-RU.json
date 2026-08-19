@@ -1527,6 +1527,7 @@
     "stopRuntime": "Остановить среду выполнения",
     "restartRuntime": "Перезапустить среду выполнения",
     "updateRuntime": "Обновить среду выполнения",
+    "updateRuntimeAndOpen": "Обновить среду выполнения и открыть",
     "updateAndRestart": "Обновить и перезапустить...",
     "restartRuntimeEllipsis": "Перезапустить среду выполнения...",
     "connectToProvider": "Подключение к Provider",

@@ -1501,6 +1501,7 @@
     "stopRuntime": "ランタイムの停止",
     "restartRuntime": "ランタイムの再起動",
     "updateRuntime": "ランタイムを更新",
+    "updateRuntimeAndOpen": "ランタイムを更新して開く",
     "updateAndRestart": "更新して再起動...",
     "restartRuntimeEllipsis": "ランタイムを再起動...",
     "connectToProvider": "Providerに接続します",

@@ -200,6 +200,7 @@ export type EnvironmentActionModel = Readonly<{
   label: string;
   enabled: boolean;
   variant: 'default' | 'outline';
+  continue_open_after_completion?: boolean;
   route?: DesktopLocalEnvironmentStateRoute;
   provider_origin?: string;
   provider_id?: string;

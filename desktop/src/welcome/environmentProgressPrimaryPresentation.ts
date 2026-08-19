@@ -21,7 +21,7 @@ export type EnvironmentProgressPrimaryPresentation = Readonly<
 export type EnvironmentProgressPanelPrimaryActionPresentation = Readonly<{
   action: EnvironmentActionModel;
   label: string;
-  icon: 'external_link';
+  icon: 'external_link' | 'refresh';
   loading: boolean;
   disabled: boolean;
 }>;
@@ -63,12 +63,30 @@ export function openConnectionFailurePrimaryAction(
   if (
     !progress.open_progress
     || (progress.status !== 'failed' && progress.status !== 'cleanup_failed')
-    || !primaryAction?.enabled
-    || (primaryAction.intent !== 'open' && primaryAction.intent !== 'focus')
+    || !primaryAction
   ) {
     return null;
   }
-  return primaryAction;
+  const updateAction = progress.next_actions?.find((action) => action.kind === 'update_runtime');
+  if (updateAction) {
+    return {
+      intent: 'update_runtime',
+      label: 'Update runtime and open',
+      enabled: true,
+      variant: 'default',
+      continue_open_after_completion: true,
+    };
+  }
+  const refreshAction = progress.next_actions?.find((action) => action.kind === 'refresh_status');
+  if (refreshAction) {
+    return {
+      intent: 'refresh_runtime',
+      label: 'Refresh status',
+      enabled: true,
+      variant: 'default',
+    };
+  }
+  return null;
 }
 
 export function environmentProgressPanelPrimaryAction(
@@ -85,7 +103,9 @@ export function environmentProgressPanelPrimaryAction(
   return {
     action,
     label: action.intent === 'focus' ? 'Focus' : action.label,
-    icon: 'external_link',
+    icon: action.intent === 'update_runtime' || action.intent === 'refresh_runtime'
+      ? 'refresh'
+      : 'external_link',
     loading: busy,
     disabled: busy,
   };

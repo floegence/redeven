@@ -1505,6 +1505,7 @@
     "stopRuntime": "Detener tiempo de ejecución",
     "restartRuntime": "Reiniciar tiempo de ejecución",
     "updateRuntime": "Actualizar tiempo de ejecución",
+    "updateRuntimeAndOpen": "Actualizar tiempo de ejecución y abrir",
     "updateAndRestart": "Actualizar y reiniciar...",
     "restartRuntimeEllipsis": "Reiniciar tiempo de ejecución...",
     "connectToProvider": "Conectarse al Provider",
