@@ -1505,6 +1505,7 @@
     "stopRuntime": "Arrêter l’exécution",
     "restartRuntime": "Redémarrer l’exécution",
     "updateRuntime": "Mettre à jour le moteur d'exécution",
+    "updateRuntimeAndOpen": "Mettre à jour le moteur d'exécution et ouvrir",
     "updateAndRestart": "Mettre à jour et redémarrer...",
     "restartRuntimeEllipsis": "Redémarrer le moteur d'exécution...",
     "connectToProvider": "Se connecter au Provider",

@@ -63,6 +63,7 @@ function openConnectionProgress(
   input: Readonly<{
     startedAt?: number;
     updatedAt?: number;
+    nextActions?: DesktopLauncherActionProgress['next_actions'];
   }> = {},
 ): DesktopLauncherActionProgress {
   const phase = openConnectionPhaseForStatus(status);
@@ -79,6 +80,7 @@ function openConnectionProgress(
     phase,
     title: status === 'failed' ? 'Open failed' : 'Opening environment',
     detail: 'Desktop is opening the environment.',
+    ...(input.nextActions ? { next_actions: input.nextActions } : {}),
     open_progress: buildOpenConnectionProgress({
       location: 'local_host',
       phase,
@@ -146,17 +148,47 @@ describe('runtimeLifecycleReadyPrimaryAction', () => {
 });
 
 describe('openConnectionFailurePrimaryAction', () => {
-  it('returns the enabled Open or Focus action only for failed Open progress', () => {
+  it('promotes runtime update to the primary recovery action', () => {
     const focusAction: EnvironmentActionModel = {
       intent: 'focus',
       label: 'Focus',
       enabled: true,
       variant: 'default',
     };
+    const nextActions: DesktopLauncherActionProgress['next_actions'] = [
+      { kind: 'refresh_status', environment_id: 'local-environment', label: 'Refresh status' },
+      { kind: 'update_runtime', environment_id: 'local-environment', label: 'Update runtime' },
+    ];
 
-    expect(openConnectionFailurePrimaryAction(openConnectionProgress('failed'), openAction)).toBe(openAction);
-    expect(openConnectionFailurePrimaryAction(openConnectionProgress('cleanup_failed'), openAction)).toBe(openAction);
-    expect(openConnectionFailurePrimaryAction(openConnectionProgress('failed'), focusAction)).toBe(focusAction);
+    expect(openConnectionFailurePrimaryAction(openConnectionProgress('failed', { nextActions }), openAction)).toEqual({
+      intent: 'update_runtime',
+      label: 'Update runtime and open',
+      enabled: true,
+      variant: 'default',
+      continue_open_after_completion: true,
+    });
+    expect(openConnectionFailurePrimaryAction(openConnectionProgress('cleanup_failed', { nextActions }), focusAction)).toMatchObject({
+      intent: 'update_runtime',
+      continue_open_after_completion: true,
+    });
+  });
+
+  it('uses refresh status when the failure cannot identify a recovery operation', () => {
+    const nextActions: DesktopLauncherActionProgress['next_actions'] = [
+      { kind: 'refresh_status', environment_id: 'local-environment', label: 'Refresh status' },
+    ];
+
+    expect(openConnectionFailurePrimaryAction(openConnectionProgress('failed', { nextActions }), openAction)).toEqual({
+      intent: 'refresh_runtime',
+      label: 'Refresh status',
+      enabled: true,
+      variant: 'default',
+    });
+  });
+
+  it('does not offer Open again after a failed Open operation', () => {
+    expect(openConnectionFailurePrimaryAction(openConnectionProgress('failed'), openAction)).toBeNull();
+    expect(openConnectionFailurePrimaryAction(openConnectionProgress('cleanup_failed'), openAction)).toBeNull();
     expect(openConnectionFailurePrimaryAction(
       openConnectionProgress('failed'),
       { ...openAction, enabled: false },
@@ -171,8 +203,13 @@ describe('openConnectionFailurePrimaryAction', () => {
 });
 
 describe('environmentProgressPanelPrimaryAction', () => {
-  it('offers Open or Focus inside the popup without changing failed card presentation', () => {
-    const failedOpen = openConnectionProgress('failed');
+  it('promotes runtime update inside the popup without changing failed card presentation', () => {
+    const failedOpen = openConnectionProgress('failed', {
+      nextActions: [
+        { kind: 'refresh_status', environment_id: 'local-environment', label: 'Refresh status' },
+        { kind: 'update_runtime', environment_id: 'local-environment', label: 'Update runtime' },
+      ],
+    });
     const focusAction: EnvironmentActionModel = {
       intent: 'focus',
       label: 'Focus',
@@ -185,32 +222,42 @@ describe('environmentProgressPanelPrimaryAction', () => {
       label: 'Open failed',
     });
     expect(environmentProgressPanelPrimaryAction(failedOpen, openAction)).toEqual({
-      action: openAction,
-      label: 'Open',
-      icon: 'external_link',
+      action: expect.objectContaining({
+        intent: 'update_runtime',
+        continue_open_after_completion: true,
+      }),
+      label: 'Update runtime and open',
+      icon: 'refresh',
       loading: false,
       disabled: false,
     });
     expect(environmentProgressPanelPrimaryAction(failedOpen, focusAction, { busy: true })).toEqual({
-      action: focusAction,
-      label: 'Focus',
-      icon: 'external_link',
+      action: expect.objectContaining({
+        intent: 'update_runtime',
+        continue_open_after_completion: true,
+      }),
+      label: 'Update runtime and open',
+      icon: 'refresh',
       loading: true,
       disabled: true,
     });
   });
 
-  it('offers Open or Focus for cleanup-failed Open receipts inside the popup', () => {
-    const cleanupFailedOpen = openConnectionProgress('cleanup_failed');
+  it('offers status refresh for cleanup-failed Open receipts inside the popup', () => {
+    const cleanupFailedOpen = openConnectionProgress('cleanup_failed', {
+      nextActions: [
+        { kind: 'refresh_status', environment_id: 'local-environment', label: 'Refresh status' },
+      ],
+    });
 
     expect(environmentProgressPrimaryPresentation(cleanupFailedOpen)).toMatchObject({
       kind: 'attention_trigger',
       label: 'Cleanup failed',
     });
     expect(environmentProgressPanelPrimaryAction(cleanupFailedOpen, openAction)).toEqual({
-      action: openAction,
-      label: 'Open',
-      icon: 'external_link',
+      action: expect.objectContaining({ intent: 'refresh_runtime' }),
+      label: 'Refresh status',
+      icon: 'refresh',
       loading: false,
       disabled: false,
     });

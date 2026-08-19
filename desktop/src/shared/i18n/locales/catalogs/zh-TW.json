@@ -1501,6 +1501,7 @@
     "stopRuntime": "停止運轉時",
     "restartRuntime": "重新啟動運行時",
     "updateRuntime": "更新運行時",
+    "updateRuntimeAndOpen": "更新運行時並開啟",
     "updateAndRestart": "更新並重新啟動...",
     "restartRuntimeEllipsis": "重新啟動運行時...",
     "connectToProvider": "連接到 Provider",

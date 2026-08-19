@@ -918,6 +918,8 @@ function localizedEnvironmentActionLabel(i18n: DesktopI18n, label: string): stri
     'Restart Runtime': 'environmentAction.restartRuntime',
     'Update runtime': 'environmentAction.updateRuntime',
     'Update Runtime': 'environmentAction.updateRuntime',
+    'Update runtime and open': 'environmentAction.updateRuntimeAndOpen',
+    'Update Runtime and open': 'environmentAction.updateRuntimeAndOpen',
     'Stop operation': 'progress.cancelRuntimeOperation',
     'Update and restart...': 'environmentAction.updateAndRestart',
     'Update and restart…': 'environmentAction.updateAndRestart',
@@ -8947,7 +8949,18 @@ function EnvironmentProgressPanel(props: Readonly<{
     { busy: props.primaryActionBusy },
   ));
   const nextActionsByKind = createMemo(() => operationNextActionsByKind(props.progress));
-  const nextActionGroups = createMemo(() => groupedVisibleOperationNextActions(props.progress));
+  const nextActionGroups = createMemo(() => {
+    const primaryIntent = panelPrimaryAction()?.action.intent;
+    return groupedVisibleOperationNextActions(props.progress)
+      .map((group) => ({
+        ...group,
+        actions: group.actions.filter((action) => (
+          !(primaryIntent === 'update_runtime' && action.kind === 'update_runtime')
+          && !(primaryIntent === 'refresh_runtime' && action.kind === 'refresh_status')
+        )),
+      }))
+      .filter((group) => group.actions.length > 0);
+  });
   const showFallbackCopyAction = createMemo(() => (
     props.progress.failure !== undefined && !nextActionsByKind().has('copy_diagnostics')
   ));
@@ -9285,7 +9298,12 @@ function EnvironmentProgressPanel(props: Readonly<{
               disabled={action().disabled}
               onClick={() => props.runPrimaryAction?.(action().action)}
             >
-              <ExternalLink class="h-3.5 w-3.5" />
+              <Show
+                when={action().icon === 'refresh'}
+                fallback={<ExternalLink class="h-3.5 w-3.5" />}
+              >
+                <Refresh class="h-3.5 w-3.5" />
+              </Show>
               {action().label}
             </Button>
           </div>
@@ -9873,9 +9891,17 @@ function EnvironmentSplitActionButton(props: Readonly<{
                                 props.refreshEnvironmentRuntime();
                                 break;
                               case 'update_runtime': {
-                                const updateAction = props.presentation.menu_actions.find((item) => item.action.intent === 'update_runtime')?.action;
+                                const updateAction = props.presentation.menu_actions.find((item) => item.action.intent === 'update_runtime')?.action ?? {
+                                  intent: 'update_runtime' as const,
+                                  label: 'Update runtime',
+                                  enabled: true,
+                                  variant: 'default' as const,
+                                };
                                 if (updateAction) {
-                                  props.onRunAction(updateAction);
+                                  props.onRunAction({
+                                    ...updateAction,
+                                    ...(p().open_progress ? { continue_open_after_completion: true } : {}),
+                                  });
                                 }
                                 break;
                               }
@@ -10261,6 +10287,24 @@ function EnvironmentConnectionCard(props: Readonly<{
       ? props.i18n.t('environmentCenter.deleteRuntimeTarget')
       : props.i18n.t('environmentCenter.deleteConnection')
   ));
+  const runOpenWithPreflight = async (action: EnvironmentActionModel): Promise<void> => {
+    const nextSession = startEnvironmentGuidanceIntent(
+      props.guidanceSession,
+      props.environment.id,
+      'open_with_preflight',
+    );
+    props.onPrimaryActionGuidanceOpenChange(true);
+    props.setGuidanceSession(nextSession);
+    const resolution = await props.runEnvironmentGuidanceAction(
+      props.environment,
+      action,
+      props.setGuidanceSession,
+    );
+    props.setGuidanceSession(resolution.next_session);
+    if (resolution.close_panel) {
+      props.onPrimaryActionGuidanceOpenChange(false);
+    }
+  };
 
   return (
     <Card class={cn(
@@ -10375,42 +10419,36 @@ function EnvironmentConnectionCard(props: Readonly<{
           }}
           confirmRuntimeOperation={props.confirmRuntimeOperation}
           onRunAction={(action) => {
-            if (action.intent === 'open_with_preflight') {
-              void (async () => {
-                const nextSession = startEnvironmentGuidanceIntent(
+            void (async () => {
+              if (action.intent === 'open_with_preflight') {
+                await runOpenWithPreflight(action);
+                return;
+              }
+              if (environmentActionStartsLifecycleDisclosure(action)) {
+                props.beginLifecycleDisclosure(action.intent);
+              } else if (isEnvironmentGuidancePendingIntent(action.intent)) {
+                props.setGuidanceSession(startEnvironmentGuidanceIntent(
                   props.guidanceSession,
                   props.environment.id,
-                  'open_with_preflight',
-                );
+                  action.intent,
+                ));
                 props.onPrimaryActionGuidanceOpenChange(true);
-                props.setGuidanceSession(nextSession);
-                const resolution = await props.runEnvironmentGuidanceAction(
-                  props.environment,
-                  action,
-                  props.setGuidanceSession,
-                );
-                props.setGuidanceSession(resolution.next_session);
-                if (resolution.close_panel) {
-                  props.onPrimaryActionGuidanceOpenChange(false);
-                }
-              })();
-              return;
-            }
-            if (environmentActionStartsLifecycleDisclosure(action)) {
-              props.beginLifecycleDisclosure(action.intent);
-            } else if (isEnvironmentGuidancePendingIntent(action.intent)) {
-              props.setGuidanceSession(startEnvironmentGuidanceIntent(
-                props.guidanceSession,
-                props.environment.id,
-                action.intent,
-              ));
-              props.onPrimaryActionGuidanceOpenChange(true);
-            }
-            void props.runLocalEnvironmentAction(
-              props.environment,
-              action,
-              'connect',
-            );
+              }
+              const completed = await props.runLocalEnvironmentAction(
+                props.environment,
+                action,
+                'connect',
+              );
+              if (!completed || !action.continue_open_after_completion) {
+                return;
+              }
+              await runOpenWithPreflight({
+                intent: 'open_with_preflight',
+                label: 'Open',
+                enabled: true,
+                variant: 'default',
+              });
+            })();
           }}
           onRunGuidanceAction={(action) => {
             void (async () => {

@@ -1750,7 +1750,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('redeven-action-popover__failure-details-viewport');
     expect(appSrc).toContain('<For each={failure().technical_details}>');
     expect(appSrc).toContain("action.kind === 'update_runtime'");
-    expect(appSrc).toContain('const nextActionGroups = createMemo(() => groupedVisibleOperationNextActions(props.progress));');
+    expect(appSrc).toContain('const nextActionGroups = createMemo(() => {');
+    expect(appSrc).toContain("primaryIntent === 'update_runtime' && action.kind === 'update_runtime'");
     expect(appSrc).toContain('<For each={nextActionGroups()}>');
     expect(appSrc).toContain('data-layout={group.kind}');
     expect(appSrc).toContain('<For each={group.actions}>');
@@ -1835,13 +1836,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("case 'open_with_preflight':");
     expect(appSrc).toContain('props.onPrimaryActionGuidanceOpenChange(true);');
     expect(appSrc).not.toContain("case 'open_with_preflight':\n        return openEnvironment(");
-    const clickHandler = appSrc.slice(
-      appSrc.indexOf("if (action.intent === 'open_with_preflight') {", appSrc.indexOf('function EnvironmentConnectionCard')),
-      appSrc.indexOf('if (environmentActionStartsLifecycleDisclosure(action))', appSrc.indexOf('function EnvironmentConnectionCard')),
-    );
-    expect(clickHandler.indexOf('props.onPrimaryActionGuidanceOpenChange(true);')).toBeLessThan(
-      clickHandler.indexOf('props.setGuidanceSession(nextSession);'),
-    );
+    expect(appSrc).toContain('const runOpenWithPreflight = async (action: EnvironmentActionModel): Promise<void> => {');
+    expect(appSrc).toContain('await runOpenWithPreflight(action);');
   });
 
   it('shows structured operation failures in a compact card with scrollable technical details', () => {

@@ -1501,6 +1501,7 @@
     "stopRuntime": "런타임 중지",
     "restartRuntime": "런타임 다시 시작",
     "updateRuntime": "런타임 업데이트",
+    "updateRuntimeAndOpen": "런타임 업데이트 후 열기",
     "updateAndRestart": "업데이트 후 재시작...",
     "restartRuntimeEllipsis": "런타임 다시 시작...",
     "connectToProvider": "Provider에 연결",
