@@ -182,7 +182,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     if (item.pluginInstanceID) return authoritative;
     if (!authoritative) return undefined;
     if (installOperationActive(authoritative)) return authoritative;
-    if (authoritative.observation === 'refresh_failed') return authoritative;
+    if (authoritative.observation === 'refresh_failed' || authoritative.observation === 'activation_failed') return authoritative;
     if (authoritative.execution?.status === 'failed') return authoritative;
     return undefined;
   };
@@ -190,6 +190,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     projection.observation === 'starting'
     || projection.observation === 'reconnecting'
     || projection.observation === 'refreshing'
+    || projection.observation === 'authorizing'
     || (
       projection.observation === 'watching'
       && projection.execution?.status !== 'completed'

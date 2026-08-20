@@ -36,6 +36,7 @@ export type PluginInstallCoordinator = Readonly<{
 export function createPluginInstallCoordinator(options: Readonly<{
   lifecycle: InstallLifecycle;
   refreshInventory: () => Promise<unknown>;
+  completeApprovedInstall: (pluginInstanceID: string, signal?: AbortSignal) => Promise<unknown>;
   createRequestID: () => string;
   resolvePluginID: (pluginInstanceID: string) => string | undefined;
 }>): PluginInstallCoordinator {
@@ -88,9 +89,16 @@ export function createPluginInstallCoordinator(options: Readonly<{
         signal,
         'Plugin inventory refresh timed out',
       );
-      remove(projection.pluginInstanceID);
     } catch {
       put({ ...projection, observation: 'refresh_failed' });
+      return;
+    }
+    put({ ...projection, observation: 'authorizing' });
+    try {
+      await options.completeApprovedInstall(projection.pluginInstanceID, signal);
+      remove(projection.pluginInstanceID);
+    } catch {
+      put({ ...projection, observation: 'activation_failed' });
     }
   };
 
@@ -240,7 +248,11 @@ export function createPluginInstallCoordinator(options: Readonly<{
   const retry = async (pluginInstanceID: string): Promise<void> => {
     const projection = projectionFor(pluginInstanceID);
     if (!projection) return;
-    if (projection.observation === 'refresh_failed') {
+    if (projection.observation === 'refresh_failed' || projection.observation === 'activation_failed') {
+      if (projection.observation === 'activation_failed' && projection.execution) {
+        await runExclusive(pluginInstanceID, () => finish(projection));
+        return;
+      }
       put({ ...projection, observation: 'refreshing' });
       try {
         await withTimeout(options.refreshInventory(), INVENTORY_REFRESH_TIMEOUT_MS, undefined, 'Plugin inventory refresh timed out');
