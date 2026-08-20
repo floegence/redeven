@@ -2763,6 +2763,51 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
+  it('keeps an enable mutation openable when management_revision is unchanged', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection
+      .mockResolvedValueOnce(officialContainersProjection('disabled'))
+      .mockResolvedValue(officialContainersProjection('enabled'));
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushUntil(() => Boolean(host.querySelector('[data-activity-id="plugins"]')), 40);
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement).click();
+      await flushUntil(() => Boolean(pluginPanelState.lastProps), 40);
+      await pluginPanelState.lastProps.onOpenCenter();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onCommand));
+
+      await expect(pluginCenterViewState.lastProps.onCommand({
+        type: 'enable',
+        pluginInstanceID: officialContainersCatalog.pluginInstanceID,
+        expectedManagementRevision: 11,
+      }, new AbortController().signal)).resolves.toBeUndefined();
+
+      await expect(pluginCenterViewState.lastProps.onCommand({
+        type: 'open_surface',
+        pluginID: officialContainersCatalog.pluginID,
+        pluginInstanceID: officialContainersCatalog.pluginInstanceID,
+        surfaceID: officialContainersCatalog.defaultSurfaceID,
+        expectedManagementRevision: 11,
+        placement: 'workbench',
+      }, new AbortController().signal)).resolves.toBeUndefined();
+      expect(workbenchPluginSurfaceState.open).toHaveBeenCalledWith(expect.objectContaining({
+        pluginInstanceID: officialContainersCatalog.pluginInstanceID,
+        expectedManagementRevision: 11,
+        preferredPlacement: 'workbench',
+      }));
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
   it('removes a plugin window when a lifecycle mutation reports a committed error', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
