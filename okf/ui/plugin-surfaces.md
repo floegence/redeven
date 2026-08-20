@@ -110,7 +110,8 @@ replacement aborts the old request and clears its projection boundary before a
 new owner can publish results. This process-local projection is not durable
 plugin state; Host catalog and `action_state` remain authoritative.
 
-Official catalog presentation comes from the frozen latest-only market snapshot
+Official catalog presentation comes from the current latest-only market snapshot,
+which the Host refreshes and atomically swaps without restarting the Desktop
 and ultimately from the signed manifest. It requires exact publisher, plugin,
 version, package, manifest, and entries identity. Historical content additionally
 requires the fixed catalog instance and Host-verified official signature.
