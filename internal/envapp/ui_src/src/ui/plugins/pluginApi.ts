@@ -36,6 +36,9 @@ export function createPluginLifecycleAPI(
   loadInstalledIcon: (url: string, signal?: AbortSignal) => Promise<string> = loadInstalledPluginIcon,
 ) {
   let catalog: readonly OfficialPluginCatalogItem[] = catalogSeed ?? [];
+  let marketUnavailable = false;
+  let marketGeneration: number | undefined;
+  let marketRefreshPromise: Promise<boolean> | undefined;
   const installedIconLoads = new Map<string, Promise<void>>();
   const installedIconURLBySource = new Map<string, string>();
   const loadedInstalledIconURLs = new Set<string>();
@@ -46,23 +49,40 @@ export function createPluginLifecycleAPI(
     return result.plugins;
   };
 
+  const refreshMarketCatalog = async (options: PluginRequestOptions = {}): Promise<boolean> => {
+    if (catalogSeed !== undefined) {
+      catalog = catalogSeed;
+      marketUnavailable = false;
+      return false;
+    }
+    if (marketRefreshPromise) return marketRefreshPromise;
+    const refresh = withAbortTimeout(
+      (signal) => loadMarket(signal),
+      options.signal,
+      INVENTORY_MARKET_TIMEOUT_MS,
+      'Loading the plugin market',
+    ).then((snapshot) => {
+      const nextCatalog = officialPluginCatalog(snapshot);
+      const changed = marketGeneration !== snapshot.generation
+        || catalog.length !== nextCatalog.length;
+      catalog = nextCatalog;
+      marketGeneration = snapshot.generation;
+      marketUnavailable = false;
+      return changed;
+    }).catch((error) => {
+      marketUnavailable = true;
+      throw error;
+    }).finally(() => {
+      marketRefreshPromise = undefined;
+    });
+    marketRefreshPromise = refresh;
+    return refresh;
+  };
+
   const loadInventoryProjection = async (options: PluginRequestOptions = {}): Promise<PluginInventoryProjection> => {
     const installedPluginsPromise = listInstalledPlugins(options);
     const installedPlugins = await installedPluginsPromise;
-    let marketUnavailable = false;
-    if (catalogSeed === undefined && installedPlugins.length === 0) {
-      try {
-        catalog = officialPluginCatalog(await withAbortTimeout(
-          (signal) => loadMarket(signal),
-          options.signal,
-          INVENTORY_MARKET_TIMEOUT_MS,
-          'Loading the plugin market',
-        ));
-      } catch {
-        catalog = [];
-        marketUnavailable = true;
-      }
-    } else if (catalogSeed !== undefined) {
+    if (catalogSeed !== undefined) {
       catalog = catalogSeed;
     }
     const [permissionsResult, securityPoliciesResult, permissionRequirementResults] = installedPlugins.length > 0
@@ -307,6 +327,7 @@ export function createPluginLifecycleAPI(
 
   return Object.freeze({
     listInstalledPlugins,
+    refreshMarketCatalog,
     loadInventoryProjection,
     loadMarketDetail: loadPluginMarketDetail,
     inspectOfficialRelease,

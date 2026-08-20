@@ -319,6 +319,11 @@ describe('v3.0.2 plugin lifecycle client integration', () => {
 
     await expect(lifecycle.loadInventoryProjection()).resolves.toMatchObject({
       marketUnavailable: false,
+      items: [],
+    });
+    await expect(lifecycle.refreshMarketCatalog()).resolves.toBe(true);
+    await expect(lifecycle.loadInventoryProjection()).resolves.toMatchObject({
+      marketUnavailable: false,
       items: [expect.objectContaining({
         pluginID: 'com.redeven.official.containers',
         lifecycleState: 'not_installed',
@@ -326,6 +331,39 @@ describe('v3.0.2 plugin lifecycle client integration', () => {
       })],
     });
     expect(loadMarket).toHaveBeenCalledOnce();
+  });
+
+  it('refreshes the market asynchronously without blocking the installed inventory', async () => {
+    const { mocks } = createClientHarness();
+    let resolveMarket!: (snapshot: typeof OFFICIAL_PLUGIN_MARKET_SNAPSHOT) => void;
+    const loadMarket = vi.fn(() => new Promise<typeof OFFICIAL_PLUGIN_MARKET_SNAPSHOT>((resolve) => {
+      resolveMarket = resolve;
+    }));
+    const lifecycle = createPluginLifecycleAPI(
+      mocks as unknown as PluginPlatformClient,
+      undefined,
+      loadMarket,
+    );
+
+    await expect(lifecycle.loadInventoryProjection()).resolves.toMatchObject({
+      items: [],
+      marketUnavailable: false,
+    });
+    const refresh = lifecycle.refreshMarketCatalog();
+    expect(loadMarket).toHaveBeenCalledOnce();
+    await expect(lifecycle.loadInventoryProjection()).resolves.toMatchObject({
+      items: [],
+      marketUnavailable: false,
+    });
+
+    resolveMarket(OFFICIAL_PLUGIN_MARKET_SNAPSHOT);
+    await expect(refresh).resolves.toBe(true);
+    await expect(lifecycle.loadInventoryProjection()).resolves.toMatchObject({
+      items: [expect.objectContaining({
+        pluginID: 'com.redeven.official.containers',
+        officialCatalog: expect.objectContaining({ latestVersion: '4.4.4' }),
+      })],
+    });
   });
 
   it('projects installed plugins without waiting for the market snapshot', async () => {
