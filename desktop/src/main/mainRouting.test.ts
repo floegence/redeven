@@ -1698,6 +1698,14 @@ describe('main routing', () => {
     expect(confirmSrc).toContain("state: 'fencing',");
     expect(confirmSrc).toContain('const completedPresentation = projectAttachedRuntimeOperation(response);');
     expect(confirmSrc).toContain('await pending.cancel().catch(() => undefined);');
+    expect(mainSrc).toContain('function publishGatewayRuntimeOperationProgress(');
+    expect(mainSrc).toContain('function runtimeLifecycleFailureProgress(');
+    expect(mainSrc).toContain('onProgress: publishRuntimeProgress');
+    expect(mainSrc).toContain('lifecycle_progress: completedLifecycleProgress');
+    expect(mainSrc).toContain("projection.should_resume || operation.state === 'succeeded'");
+    expect(mainSrc).toContain('RuntimeLifecycleWorkflow.fromProgress(existingProgress)');
+    expect(mainSrc).toContain('clearRuntimeLifecycleWorkflow(cleanOperationKey);');
+    expect(mainSrc).not.toContain('const stepStates: readonly DesktopRuntimeLifecycleStepState[] = plan.steps.map');
   });
 
   it('keeps foreground start operations on user-facing environment stages', () => {

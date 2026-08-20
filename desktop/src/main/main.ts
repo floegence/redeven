@@ -179,6 +179,7 @@ import {
   runtimeLifecycleStepIDFromError,
 } from './runtimeLifecycleWorkflow';
 import {
+  initialRuntimeLifecyclePlan,
   runtimeLifecyclePlanIncludingStep,
 } from './runtimeLifecycleExecutionPlan';
 import {
@@ -890,6 +891,13 @@ type PendingRuntimeOperationConfirmation = Readonly<{
   environment_id?: string;
   retry_action?: DesktopLauncherActionRequest;
   success_outcome?: DesktopLauncherActionSuccess['outcome'];
+  lifecycle?: Readonly<{
+    host_access: DesktopRuntimeHostAccess;
+    placement: DesktopRuntimePlacement;
+    operation: DesktopRuntimeLifecycleOperation;
+    target_id: string;
+    target_label: string;
+  }>;
 }>;
 const pendingRuntimeOperationConfirmations = new Map<string, PendingRuntimeOperationConfirmation>();
 type PendingRuntimeOperationReconciliation = Readonly<{
@@ -4921,6 +4929,7 @@ async function completeRuntimeOperation(
     commit: () => Promise<GatewayRuntimeOperation>;
     observe: () => Promise<GatewayRuntimeOperation>;
     signal?: AbortSignal;
+    onProgress?: (operation: GatewayRuntimeOperation) => void;
   }>,
 ): Promise<GatewayRuntimeOperation> {
   return driveRuntimeOperation(operation.operation_id, () => advanceGatewayRuntimeOperation(operation, {
@@ -4946,6 +4955,7 @@ async function completeRuntimeOperation(
     upload: input.upload,
     commit: input.commit,
     observe: input.observe,
+    onProgress: input.onProgress,
   }));
 }
 
@@ -4968,6 +4978,9 @@ type AttachedRuntimeOperationSurface = Readonly<{
   gateway_environment_id?: string;
   provider_origin?: string;
   provider_id?: string;
+  runtime_target_id?: string;
+  host_access?: DesktopRuntimeHostAccess;
+  placement?: DesktopRuntimePlacement;
 }>;
 
 function attachedRuntimeOperationKey(environmentID: string, operation: GatewayRuntimeOperation): string {
@@ -4976,6 +4989,160 @@ function attachedRuntimeOperationKey(environmentID: string, operation: GatewayRu
 
 function attachedRuntimeOperationPhase(phase: string): boolean {
   return phase.startsWith('gateway_runtime_operation_') || phase === 'runtime_operation_confirmation_required';
+}
+
+function attachedRuntimeOperationLifecycleProgress(
+  operationKey: string,
+  operation: GatewayRuntimeOperation,
+  surface: AttachedRuntimeOperationSurface,
+  projection: ReturnType<typeof projectAttachedRuntimeOperation>,
+): DesktopRuntimeLifecycleProgress | undefined {
+  if (!surface.host_access || !surface.placement) {
+    return undefined;
+  }
+  const lifecycleOperation = runtimeLifecycleOperationFromGatewayKind(operation.kind);
+  if (!lifecycleOperation) {
+    return undefined;
+  }
+  const location = desktopRuntimeLifecycleLocation(surface.host_access, surface.placement);
+  const phase = runtimeLifecyclePhaseForGatewayOperation(operation, lifecycleOperation, location);
+  const existingProgress = launcherOperations.get(operationKey)?.lifecycle_progress;
+  const effectivePhase = operation.state === 'failed'
+    || operation.state === 'cancelled'
+    || operation.state === 'expired'
+    ? existingProgress?.operation === lifecycleOperation
+      ? existingProgress.active_step_id
+      : phase
+    : phase;
+  const initialPlan = initialRuntimeLifecyclePlan({
+    location,
+    operation: lifecycleOperation,
+  });
+  const plan = runtimeLifecyclePlanIncludingStep({
+    location,
+    operation: lifecycleOperation,
+    currentSteps: existingProgress?.operation === lifecycleOperation
+      ? existingProgress.steps.map((step) => step.id)
+      : initialPlan.steps.map((step) => step.id),
+    step: effectivePhase,
+  });
+  const workflow = existingProgress?.operation === lifecycleOperation
+    ? RuntimeLifecycleWorkflow.fromProgress(existingProgress)
+    : runtimeLifecycleWorkflowFromInput(operationKey, {
+        hostAccess: surface.host_access,
+        placement: surface.placement,
+        operation: lifecycleOperation,
+        targetID: surface.runtime_target_id,
+        targetLabel: surface.environment_label,
+      });
+  workflow.commitPlan({
+    state: 'executing',
+    steps: plan.steps.map((step) => step.id),
+    omitted_steps: plan.omitted_steps,
+  });
+  if (operation.state === 'succeeded') {
+    workflow.completeThrough(effectivePhase);
+    return workflow.progress();
+  }
+  if (operation.state === 'failed' || operation.state === 'cancelled' || operation.state === 'expired') {
+    const failure = attachedRuntimeOperationFailure(operation, surface) ?? desktopOperationFailurePresentation({
+      code: 'operation_failed',
+      title: 'Runtime Action Failed',
+      summary: projection.detail,
+      targetLabel: surface.environment_label,
+    });
+    workflow.failStep(new GatewayClientError(
+      operation.failure?.code || 'GATEWAY_RUNTIME_OPERATION_INCOMPLETE',
+      operation.failure?.message || projection.detail,
+    ), failure, effectivePhase);
+    return workflow.progress();
+  }
+  const currentPhase = workflow.progress().active_step_id;
+  const currentIndex = workflow.currentStepIDs().indexOf(currentPhase);
+  const nextIndex = workflow.currentStepIDs().indexOf(effectivePhase);
+  const nextStatus = workflow.stepStates().find((step) => step.id === effectivePhase)?.status;
+  if (currentPhase === effectivePhase && nextStatus === 'running') {
+    workflow.observeStep(effectivePhase, projection.detail);
+  } else if (nextStatus === 'pending' && nextIndex > currentIndex) {
+    workflow.advanceToStep(effectivePhase, projection.detail);
+  } else if (nextStatus === 'pending') {
+    workflow.beginStep(effectivePhase, projection.detail);
+  }
+  return workflow.progress();
+}
+
+function attachedRuntimeOperationRetryAction(
+  operation: GatewayRuntimeOperation,
+  surface: AttachedRuntimeOperationSurface,
+): DesktopLauncherActionRequest | undefined {
+  if (
+    surface.action !== 'run_gateway_environment_lifecycle'
+    || !surface.gateway_id
+    || !surface.gateway_environment_id
+    || operation.kind === 'reconcile'
+  ) {
+    return undefined;
+  }
+  return {
+    kind: 'run_gateway_environment_lifecycle',
+    environment_id: surface.environment_id,
+    gateway_id: surface.gateway_id,
+    gateway_env_id: surface.gateway_environment_id,
+    operation: operation.kind,
+    label: surface.environment_label,
+  };
+}
+
+function attachedRuntimeOperationFailure(
+  operation: GatewayRuntimeOperation,
+  surface: AttachedRuntimeOperationSurface,
+): DesktopOperationFailurePresentation | undefined {
+  if (operation.state !== 'failed' && operation.state !== 'cancelled' && operation.state !== 'expired') {
+    return undefined;
+  }
+  return desktopFailureFromError(
+    new GatewayClientError(
+      operation.failure?.code || 'GATEWAY_RUNTIME_OPERATION_INCOMPLETE',
+      operation.failure?.message || `Runtime operation stopped in ${operation.state}.`,
+    ),
+    {
+      code: 'operation_failed',
+      title: 'Runtime Action Failed',
+      summary: operation.failure?.message || `Runtime operation stopped in ${operation.state}.`,
+      targetLabel: surface.environment_label,
+    },
+  );
+}
+
+function attachedRuntimeOperationNextActions(
+  operationKey: string,
+  operation: GatewayRuntimeOperation,
+  surface: AttachedRuntimeOperationSurface,
+): readonly DesktopLauncherOperationNextAction[] {
+  const retryAction = attachedRuntimeOperationRetryAction(operation, surface);
+  return [
+    ...(retryAction ? [{
+      kind: 'retry' as const,
+      operation_key: operationKey,
+      label: 'Try again',
+      retry_action: retryAction,
+    }] : []),
+    {
+      kind: 'refresh_status' as const,
+      environment_id: surface.environment_id,
+      label: 'Refresh status',
+    },
+    {
+      kind: 'copy_diagnostics' as const,
+      operation_key: operationKey,
+      label: 'Copy log',
+    },
+    {
+      kind: 'dismiss' as const,
+      operation_key: operationKey,
+      label: 'Dismiss',
+    },
+  ];
 }
 
 function removeMissingRuntimeOperationAttachments(
@@ -4994,7 +5161,7 @@ function removeMissingRuntimeOperationAttachments(
     }
     pendingRuntimeOperationConfirmations.delete(operationKey);
     pendingRuntimeOperationReconciliations.delete(operationKey);
-    launcherOperations.remove(operationKey);
+    removeLauncherOperation(operationKey);
   }
 }
 
@@ -5019,6 +5186,7 @@ function finishAttachedRuntimeOperation(
           title_key: presentation.title_key,
           detail: presentation.detail,
           detail_key: presentation.detail_key,
+          lifecycle_progress: attachedRuntimeOperationLifecycleProgress(operationKey, response, surface, presentation),
           runtime_confirmation: undefined,
           next_actions: undefined,
         });
@@ -5045,12 +5213,24 @@ function finishAttachedRuntimeOperation(
         summary: error instanceof Error ? error.message : String(error),
         targetLabel: surface.environment_label,
       });
+      const failedOperation: GatewayRuntimeOperation = {
+        ...operation,
+        state: 'failed',
+        failure: {
+          code: failure.code,
+          message: failure.summary,
+        },
+      };
+      const failedProjection = projectAttachedRuntimeOperation(failedOperation);
       launcherOperations.finish(operationKey, 'failed', {
-        phase: 'gateway_runtime_operation_failed',
-        title: 'Runtime action failed',
-        detail: failure.summary,
+        phase: failedProjection.phase,
+        title: failedProjection.title,
+        title_key: failedProjection.title_key,
+        detail: failedProjection.detail,
+        detail_key: failedProjection.detail_key,
+        lifecycle_progress: attachedRuntimeOperationLifecycleProgress(operationKey, failedOperation, surface, failedProjection),
         runtime_confirmation: undefined,
-        next_actions: undefined,
+        next_actions: attachedRuntimeOperationNextActions(operationKey, operation, surface),
         failure,
       });
     }
@@ -5077,17 +5257,25 @@ function upsertRuntimeOperationAttachment(
   }
   const operationKey = attachedRuntimeOperationKey(surface.environment_id, operation);
   const projection = projectAttachedRuntimeOperation(operation);
+  const lifecycleProgress = attachedRuntimeOperationLifecycleProgress(operationKey, operation, surface, projection);
+  const failure = attachedRuntimeOperationFailure(operation, surface);
+  const terminalFailure = failure !== undefined;
   const patch = {
-    status: projection.needs_confirmation ? 'needs_confirmation' as const : 'running' as const,
+    status: projection.needs_confirmation
+      ? 'needs_confirmation' as const
+      : terminalFailure
+        ? operation.state === 'cancelled' ? 'canceled' as const : 'failed' as const
+        : 'running' as const,
     phase: projection.phase,
     title: projection.title,
     title_key: projection.title_key,
     detail: projection.detail,
     detail_key: projection.detail_key,
+    lifecycle_progress: lifecycleProgress,
     runtime_confirmation: projection.confirmation,
     cancelable: false,
-    next_actions: undefined,
-    failure: undefined,
+    next_actions: terminalFailure ? attachedRuntimeOperationNextActions(operationKey, operation, surface) : undefined,
+    failure,
   };
   if (launcherOperations.get(operationKey)) {
     launcherOperations.update(operationKey, patch);
@@ -5143,7 +5331,7 @@ function upsertRuntimeOperationAttachment(
   } else {
     pendingRuntimeOperationReconciliations.delete(operationKey);
   }
-  if (projection.should_resume) {
+  if (projection.should_resume || operation.state === 'succeeded') {
     finishAttachedRuntimeOperation(operationKey, operation, surface, adapter);
   }
 }
@@ -5179,6 +5367,7 @@ async function refreshDirectGatewayRuntimeOperationAttachments(
     });
     const environmentID = compact(record.runtime_environment_id)
       || desktopGatewayEnvironmentEntryID(record.gateway_id, environment.gateway_env_id);
+    const targetDescriptor = gatewayServiceTargetDescriptor(record);
     const surface: AttachedRuntimeOperationSurface = {
       action: 'run_gateway_environment_lifecycle',
       subject_kind: 'gateway',
@@ -5187,6 +5376,9 @@ async function refreshDirectGatewayRuntimeOperationAttachments(
       environment_label: environment.display_name,
       gateway_id: record.gateway_id,
       gateway_environment_id: environment.gateway_env_id,
+      runtime_target_id: management.target.lifecycle_target_id,
+      host_access: targetDescriptor.host_access,
+      placement: targetDescriptor.placement,
     };
     for (const operation of response.operations) {
       upsertRuntimeOperationAttachment(operation, surface, {
@@ -5422,6 +5614,28 @@ async function confirmRuntimeOperationFromLauncher(
       );
     }
     const completedPresentation = projectAttachedRuntimeOperation(response);
+    const completedLifecycleProgress = pending.lifecycle
+      ? (() => {
+          const current = launcherOperations.get(request.operation_key);
+          const owner = runtimeLifecycleAttemptIdentity(current);
+          if (!owner) {
+            return undefined;
+          }
+          return completeRuntimeLifecycleWorkflowProgress(request.operation_key, owner, {
+            hostAccess: pending.lifecycle.host_access,
+            placement: pending.lifecycle.placement,
+            operation: pending.lifecycle.operation,
+            phase: runtimeLifecyclePhaseForGatewayOperation(
+              response,
+              pending.lifecycle.operation,
+              desktopRuntimeLifecycleLocation(pending.lifecycle.host_access, pending.lifecycle.placement),
+            ),
+            targetID: pending.lifecycle.target_id,
+            targetLabel: pending.lifecycle.target_label,
+            detail: completedPresentation.detail,
+          });
+        })()
+      : undefined;
     runtimeOperationSucceeded = true;
     await pending.after_success?.();
     if (pending.continuation) {
@@ -5433,6 +5647,7 @@ async function confirmRuntimeOperationFromLauncher(
       title_key: completedPresentation.title_key,
       detail: completedPresentation.detail,
       detail_key: completedPresentation.detail_key,
+      ...(completedLifecycleProgress ? { lifecycle_progress: completedLifecycleProgress } : {}),
       runtime_confirmation: undefined,
       next_actions: undefined,
     });
@@ -5455,10 +5670,29 @@ async function confirmRuntimeOperationFromLauncher(
       summary: error instanceof Error ? error.message : String(error),
       targetLabel: pending.label,
     });
+    const failureLifecycleProgress = pending.lifecycle
+      ? (() => {
+          const current = launcherOperations.get(request.operation_key);
+          const owner = runtimeLifecycleAttemptIdentity(current);
+          if (!owner) {
+            return undefined;
+          }
+          return runtimeLifecycleWorkflowFailure(request.operation_key, owner, {
+            hostAccess: pending.lifecycle.host_access,
+            placement: pending.lifecycle.placement,
+            operation: pending.lifecycle.operation,
+            targetID: pending.lifecycle.target_id,
+            targetLabel: pending.lifecycle.target_label,
+            error,
+            fallback: failure,
+          }).lifecycle_progress;
+        })()
+      : undefined;
     launcherOperations.finish(request.operation_key, 'failed', {
       phase: 'failed',
       title: 'Runtime action failed',
       detail: failure.summary,
+      ...(failureLifecycleProgress ? { lifecycle_progress: failureLifecycleProgress } : {}),
       runtime_confirmation: undefined,
       next_actions: [
         ...(pending.retry_action ? [{
@@ -5934,10 +6168,10 @@ async function deleteGatewayEnvironmentProfileFromLauncher(
 
 async function runGatewayEnvironmentLifecycleFromLauncher(
   request: Extract<DesktopLauncherActionRequest, { kind: 'run_gateway_environment_lifecycle' }>,
-	  options: Readonly<{
-	    successOutcome?: DesktopLauncherActionSuccess['outcome'];
-	    beforeMutation?: () => Promise<void>;
-	    afterSuccess?: () => Promise<void>;
+  options: Readonly<{
+    successOutcome?: DesktopLauncherActionSuccess['outcome'];
+    beforeMutation?: () => Promise<void>;
+    afterSuccess?: () => Promise<void>;
     operationKey?: string;
     attachToExistingOperation?: boolean;
     keepOperationRunningAfterSuccess?: boolean;
@@ -6005,6 +6239,14 @@ async function runGatewayEnvironmentLifecycleFromLauncher(
     });
   }
   const label = compact(request.label) || request.gateway_env_id;
+  const targetDescriptor = gatewayServiceTargetDescriptor(record);
+  const lifecycleOperation = runtimeLifecycleOperationFromGatewayKind(request.operation);
+  if (!lifecycleOperation) {
+    return gatewayCapabilityFailure(record, 'This Runtime operation cannot be shown as a lifecycle workflow.', {
+      environmentID: request.environment_id,
+      gatewayEnvironmentID: request.gateway_env_id,
+    });
+  }
   const operationKey = compact(options.operationKey) || `${request.environment_id}:${request.operation}`;
   const operationPresentation = request.operation === 'start'
     ? {
@@ -6049,11 +6291,28 @@ async function runGatewayEnvironmentLifecycleFromLauncher(
         ...operationPresentation,
         cancelable: true,
         interrupt_label: 'Stop operation',
-		  interrupt_detail: 'Desktop is canceling this Gateway environment lifecycle request.',
-		  interrupt_detail_key: 'progress.stopBackgroundTask',
+        interrupt_detail: 'Desktop is canceling this Gateway environment lifecycle request.',
+        interrupt_detail_key: 'progress.stopBackgroundTask',
         interrupt_kind: 'generic',
       });
   const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;
+  const lifecycleOwner = initializeRuntimeLifecycleOperation(operationKey, operation, {
+    hostAccess: targetDescriptor.host_access,
+    placement: targetDescriptor.placement,
+    lifecycleOperation,
+    targetID: targetDescriptor.target_id,
+    targetLabel: label,
+    detail: operation.detail,
+  });
+  const publishRuntimeProgress = (runtimeOperation: GatewayRuntimeOperation): void => {
+    publishGatewayRuntimeOperationProgress(operationKey, lifecycleOwner, {
+      hostAccess: targetDescriptor.host_access,
+      placement: targetDescriptor.placement,
+      lifecycleOperation,
+      targetID: targetDescriptor.target_id,
+      targetLabel: label,
+    }, runtimeOperation);
+  };
   let foregroundOperationID = '';
   try {
     const finishLifecycleMutation = async (): Promise<void> => {
@@ -6112,21 +6371,22 @@ async function runGatewayEnvironmentLifecycleFromLauncher(
       startPolicy: actionStartPolicy,
     });
     const runtimeOperation = prepared.operation;
+    publishRuntimeProgress(runtimeOperation);
     foregroundRuntimeOperationIDs.add(operationID);
     if (prepared.confirmation_required) {
       return awaitRuntimeOperationConfirmation(operationKey, {
         operation: runtimeOperation,
         label,
         operation_id: operationID,
-	        confirm: async (confirmation) => {
-	          const confirmed = await gatewayLifecycleManager().confirmRuntimeOperation(
+        confirm: async (confirmation) => {
+          const confirmed = await gatewayLifecycleManager().confirmRuntimeOperation(
             record,
             operationID,
             confirmation,
-	            { startPolicy: actionStartPolicy },
-	          );
-	          await options.beforeMutation?.();
-	          return completeRuntimeOperation(confirmed, {
+            { startPolicy: actionStartPolicy },
+          );
+          await options.beforeMutation?.();
+          return completeRuntimeOperation(confirmed, {
             current_runtime_epoch: management.compatibility?.compatibility_epoch ?? 0,
             artifact_preflight: artifactPreflight,
             upload: (metadata, artifact) => gatewayLifecycleManager().uploadRuntimeOperationArtifact(
@@ -6146,6 +6406,7 @@ async function runGatewayEnvironmentLifecycleFromLauncher(
               operationID,
               { startPolicy: actionStartPolicy },
             ),
+            onProgress: publishRuntimeProgress,
           });
         },
         cancel: async () => {
@@ -6160,10 +6421,17 @@ async function runGatewayEnvironmentLifecycleFromLauncher(
         environment_id: request.environment_id,
         retry_action: options.retryAction,
         success_outcome: options.successOutcome,
+        lifecycle: {
+          host_access: targetDescriptor.host_access,
+          placement: targetDescriptor.placement,
+          operation: lifecycleOperation,
+          target_id: targetDescriptor.target_id,
+          target_label: label,
+        },
       });
     }
-	    await options.beforeMutation?.();
-	    const response = await completeRuntimeOperation(runtimeOperation, {
+    await options.beforeMutation?.();
+    const response = await completeRuntimeOperation(runtimeOperation, {
       current_runtime_epoch: management.compatibility?.compatibility_epoch ?? 0,
       artifact_preflight: artifactPreflight,
       upload: (metadata, artifact) => gatewayLifecycleManager().uploadRuntimeOperationArtifact(
@@ -6184,6 +6452,7 @@ async function runGatewayEnvironmentLifecycleFromLauncher(
         { signal, startPolicy: actionStartPolicy },
       ),
       signal,
+      onProgress: publishRuntimeProgress,
     });
     if (response.state !== 'succeeded') {
       throw new GatewayClientError(
@@ -6191,8 +6460,34 @@ async function runGatewayEnvironmentLifecycleFromLauncher(
         response.failure?.message || `Gateway Runtime operation stopped in ${response.state}.`,
       );
     }
+    publishRuntimeProgress(response);
+    const completedLifecycleProgress = completeRuntimeLifecycleWorkflowProgress(
+      operationKey,
+      lifecycleOwner,
+      {
+        hostAccess: targetDescriptor.host_access,
+        placement: targetDescriptor.placement,
+        operation: lifecycleOperation,
+        phase: runtimeLifecyclePhaseForGatewayOperation(
+          response,
+          lifecycleOperation,
+          desktopRuntimeLifecycleLocation(targetDescriptor.host_access, targetDescriptor.placement),
+        ),
+        targetID: targetDescriptor.target_id,
+        targetLabel: label,
+        detail: projectAttachedRuntimeOperation(response).detail,
+      },
+    );
     if (options.keepOperationRunningAfterSuccess) {
       await finishLifecycleMutation();
+      launcherOperations.updateCurrentAttempt(operationKey, lifecycleOwner, {
+        phase: completedLifecycleProgress.active_step_id,
+        title: projectAttachedRuntimeOperation(response).title,
+        title_key: projectAttachedRuntimeOperation(response).title_key,
+        detail: projectAttachedRuntimeOperation(response).detail,
+        detail_key: projectAttachedRuntimeOperation(response).detail_key,
+        lifecycle_progress: completedLifecycleProgress,
+      });
       foregroundRuntimeOperationIDs.delete(operationID);
       return launcherActionSuccess(options.successOutcome ?? gatewayEnvLifecycleOutcome(request.operation));
     }
@@ -6203,6 +6498,7 @@ async function runGatewayEnvironmentLifecycleFromLauncher(
       title_key: completedPresentation.title_key,
       detail: completedPresentation.detail,
       detail_key: completedPresentation.detail_key,
+      lifecycle_progress: completedLifecycleProgress,
     });
     scheduleLauncherOperationRemoval(operationKey);
     await finishLifecycleMutation();
@@ -6218,20 +6514,38 @@ async function runGatewayEnvironmentLifecycleFromLauncher(
       summary: error instanceof Error ? error.message : String(error),
       targetLabel: label,
     });
-		launcherOperations.finish(operationKey, signal?.aborted ? 'canceled' : 'failed', {
+    const failureProgress = signal?.aborted
+      ? currentRuntimeLifecycleWorkflowProgress(operationKey, lifecycleOwner, {
+          hostAccess: targetDescriptor.host_access,
+          placement: targetDescriptor.placement,
+          operation: lifecycleOperation,
+          targetID: targetDescriptor.target_id,
+          targetLabel: label,
+        })
+      : runtimeLifecycleWorkflowFailure(operationKey, lifecycleOwner, {
+          hostAccess: targetDescriptor.host_access,
+          placement: targetDescriptor.placement,
+          operation: lifecycleOperation,
+          targetID: targetDescriptor.target_id,
+          targetLabel: label,
+          error,
+          fallback: failure,
+        }).lifecycle_progress;
+    launcherOperations.finish(operationKey, signal?.aborted ? 'canceled' : 'failed', {
       phase: signal?.aborted ? 'canceled' : 'failed',
-			title: signal?.aborted
+      title: signal?.aborted
         ? 'Operation canceled'
         : options.presentationKind === 'managed_runtime'
           ? 'Runtime action failed'
           : 'Gateway environment action failed',
-			title_key: signal?.aborted ? 'progress.canceled' : 'progress.runtimeOperationStoppedTitle',
-			detail: signal?.aborted
+      title_key: signal?.aborted ? 'progress.canceled' : 'progress.runtimeOperationStoppedTitle',
+      detail: signal?.aborted
         ? options.presentationKind === 'managed_runtime'
           ? 'Desktop canceled this Runtime operation.'
           : 'Desktop canceled this Gateway environment lifecycle request.'
         : failure.summary,
-			...(signal?.aborted ? { detail_key: 'progress.runtimeOperationStoppedDetail' as const } : {}),
+      ...(signal?.aborted ? { detail_key: 'progress.runtimeOperationStoppedDetail' as const } : {}),
+      lifecycle_progress: failureProgress,
       ...(signal?.aborted ? {} : {
         next_actions: [
           ...(options.retryAction ? [{
@@ -8737,7 +9051,7 @@ function scheduleLauncherOperationRemoval(operationKey: string, delayMs = 4_000)
     if (startedAtUnixMs !== undefined && current?.started_at_unix_ms !== startedAtUnixMs) {
       return;
     }
-    launcherOperations.remove(cleanOperationKey);
+    removeLauncherOperation(cleanOperationKey);
     void emitDesktopWelcomeSnapshot('launcher');
   }, delayMs);
   launcherOperationRemovalTimers.set(cleanOperationKey, timer);
@@ -8753,6 +9067,7 @@ function removeLauncherOperation(operationKey: string): void {
     clearTimeout(existingTimer);
     launcherOperationRemovalTimers.delete(cleanOperationKey);
   }
+  clearRuntimeLifecycleWorkflow(cleanOperationKey);
   launcherOperations.remove(cleanOperationKey);
 }
 
@@ -8812,7 +9127,7 @@ function scheduleCurrentLauncherOperationRemoval(
     ) {
       return;
     }
-    launcherOperations.remove(cleanOperationKey);
+    removeLauncherOperation(cleanOperationKey);
     void emitDesktopWelcomeSnapshot('launcher');
   }, delayMs);
   launcherOperationRemovalTimers.set(cleanOperationKey, timer);
@@ -11470,6 +11785,183 @@ function beginRuntimeLifecycleWorkflowAttempt(
   return workflow;
 }
 
+function runtimeLifecycleOperationFromGatewayKind(
+  operation: GatewayRuntimeOperation['kind'],
+): DesktopRuntimeLifecycleOperation | null {
+  switch (operation) {
+    case 'start':
+    case 'stop':
+    case 'restart':
+      return operation;
+    case 'update_runtime':
+      return 'update';
+    case 'reconcile':
+      return null;
+  }
+}
+
+function runtimeLifecycleInitialPhase(
+  location: ReturnType<typeof desktopRuntimeLifecycleLocation>,
+): DesktopRuntimeLifecycleStepID {
+  switch (location) {
+    case 'local_host':
+      return 'checking_existing_runtime';
+    case 'local_container':
+      return 'checking_container';
+    case 'ssh_host':
+    case 'ssh_container':
+      return 'checking_host';
+  }
+}
+
+function runtimeLifecyclePhaseForGatewayOperation(
+  operation: GatewayRuntimeOperation,
+  lifecycleOperation: DesktopRuntimeLifecycleOperation,
+  location: ReturnType<typeof desktopRuntimeLifecycleLocation>,
+): DesktopRuntimeLifecycleStepID {
+  switch (operation.state) {
+    case 'preflighting':
+    case 'awaiting_confirmation':
+    case 'confirmation_required':
+      return runtimeLifecycleInitialPhase(location);
+    case 'awaiting_artifact':
+      return 'preparing_runtime_package';
+    case 'staging':
+      return 'installing_runtime_package';
+    case 'commit_ready':
+    case 'fencing':
+      return lifecycleOperation === 'stop' || lifecycleOperation === 'restart' || lifecycleOperation === 'update'
+        ? 'stopping_runtime_process'
+        : 'starting_runtime_process';
+    case 'committing':
+      return lifecycleOperation === 'stop'
+        ? 'verifying_runtime_inventory'
+        : 'starting_runtime_process';
+    case 'recovering':
+    case 'manual_recovery_required':
+      return 'verifying_runtime_inventory';
+    case 'succeeded':
+      return lifecycleOperation === 'stop'
+        ? 'runtime_stopped'
+        : lifecycleOperation === 'update'
+          ? 'runtime_up_to_date'
+          : 'runtime_ready';
+    case 'failed':
+    case 'cancelled':
+    case 'expired':
+      return runtimeLifecycleInitialPhase(location);
+  }
+}
+
+function runtimeLifecycleFailureProgress(
+  input: Readonly<{
+    hostAccess: DesktopRuntimeHostAccess;
+    placement: DesktopRuntimePlacement;
+    operation: DesktopRuntimeLifecycleOperation;
+    targetID: string;
+    targetLabel: string;
+    error: unknown;
+    fallback: DesktopOperationFailurePresentation;
+  }>,
+): DesktopRuntimeLifecycleProgress {
+  const location = desktopRuntimeLifecycleLocation(input.hostAccess, input.placement);
+  const workflow = new RuntimeLifecycleWorkflow({
+    location,
+    operation: input.operation,
+    target_id: input.targetID,
+    target_label: input.targetLabel,
+    target_detail: runtimeTargetDetail(input.hostAccess, input.placement),
+  });
+  const initialPlan = initialRuntimeLifecyclePlan({
+    location,
+    operation: input.operation,
+  });
+  const failedStep = runtimeLifecycleStepIDFromError(input.error)
+    ?? initialPlan.steps[0]?.id
+    ?? runtimeLifecycleInitialPhase(location);
+  const failurePlan = runtimeLifecyclePlanIncludingStep({
+    location,
+    operation: input.operation,
+    currentSteps: workflow.currentStepIDs(),
+    step: failedStep,
+  });
+  workflow.ensureStepPlanned(failedStep, {
+    state: failurePlan.state,
+    steps: failurePlan.steps.map((step) => step.id),
+    omitted_steps: failurePlan.omitted_steps,
+  });
+  workflow.failStep(input.error, input.fallback, failedStep);
+  return workflow.progress();
+}
+
+function initializeRuntimeLifecycleOperation(
+  operationKey: string,
+  operation: DesktopLauncherOperationSnapshot,
+  input: Readonly<{
+    hostAccess: DesktopRuntimeHostAccess;
+    placement: DesktopRuntimePlacement;
+    lifecycleOperation: DesktopRuntimeLifecycleOperation;
+    targetID: string;
+    targetLabel: string;
+    detail: string;
+  }>,
+): LauncherOperationAttemptIdentity {
+  const owner = {
+    action: operation.action,
+    started_at_unix_ms: operation.started_at_unix_ms,
+  } satisfies LauncherOperationAttemptIdentity;
+  const workflow = beginRuntimeLifecycleWorkflowAttempt(operationKey, {
+    hostAccess: input.hostAccess,
+    placement: input.placement,
+    operation: input.lifecycleOperation,
+    targetID: input.targetID,
+    targetLabel: input.targetLabel,
+  });
+  workflow.commitPlan({
+    state: 'executing',
+    steps: workflow.currentStepIDs(),
+  });
+  const initialPhase = runtimeLifecycleInitialPhase(
+    desktopRuntimeLifecycleLocation(input.hostAccess, input.placement),
+  );
+  workflow.beginStep(initialPhase, input.detail);
+  const progress = workflow.progress();
+  launcherOperations.updateCurrentAttempt(operationKey, owner, {
+    phase: progress.active_step_id,
+    detail: input.detail,
+    lifecycle_progress: progress,
+  });
+  return owner;
+}
+
+function publishGatewayRuntimeOperationProgress(
+  operationKey: string,
+  owner: LauncherOperationAttemptIdentity,
+  input: Readonly<{
+    hostAccess: DesktopRuntimeHostAccess;
+    placement: DesktopRuntimePlacement;
+    lifecycleOperation: DesktopRuntimeLifecycleOperation;
+    targetID: string;
+    targetLabel: string;
+  }>,
+  operation: GatewayRuntimeOperation,
+): void {
+  const projection = projectAttachedRuntimeOperation(operation);
+  const location = desktopRuntimeLifecycleLocation(input.hostAccess, input.placement);
+  updateRuntimeLifecycleOperation(operationKey, owner, {
+    hostAccess: input.hostAccess,
+    placement: input.placement,
+    operation: input.lifecycleOperation,
+    phase: runtimeLifecyclePhaseForGatewayOperation(operation, input.lifecycleOperation, location),
+    targetID: input.targetID,
+    targetLabel: input.targetLabel,
+    title: projection.title,
+    titleKey: projection.title_key,
+    detail: projection.detail,
+    detailKey: projection.detail_key,
+  });
+}
+
 function runtimeLifecycleWorkflowForOperation(
   operationKey: string,
   owner: LauncherOperationAttemptIdentity,
@@ -11653,7 +12145,9 @@ function updateRuntimeLifecycleOperation(
     targetID?: string;
     targetLabel: string;
     title: string;
+    titleKey?: DesktopLauncherOperationSnapshot['title_key'];
     detail: string;
+    detailKey?: DesktopLauncherOperationSnapshot['detail_key'];
     status?: DesktopLauncherOperationSnapshot['status'];
     failedPhase?: DesktopRuntimeLifecyclePhase;
     failure?: DesktopOperationFailurePresentation;
@@ -11723,7 +12217,9 @@ function updateRuntimeLifecycleOperation(
     ...(input.status ? { status: input.status } : {}),
     phase: lifecycleProgress.active_step_id,
     title: input.title,
+    title_key: input.titleKey,
     detail: input.detail,
+    detail_key: input.detailKey,
     lifecycle_progress: lifecycleProgress,
     ...(input.failure ? { failure: input.failure } : {}),
     ...(input.cancelable !== undefined ? { cancelable: input.cancelable } : {}),
@@ -13310,15 +13806,6 @@ function finishLocalHostOpenFailure(
     phase: signal?.aborted ? 'canceled' : 'failed',
     title: signal?.aborted ? 'Open canceled' : 'Open failed',
     detail: signal?.aborted ? 'Desktop canceled this open request.' : result.message,
-    open_progress: buildOpenConnectionProgress({
-      hostAccess: target.hostAccess,
-      placement: target.placement,
-      phase: signal?.aborted ? 'canceled' : 'failed',
-      environmentID: target.environmentID,
-      environmentLabel: target.environmentLabel,
-      targetID: target.targetID,
-      targetLabel: target.targetLabel,
-    }),
     ...(signal?.aborted ? {} : { next_actions: openConnectionFailureNextActions(operationKey, target.environmentID, {
       ...runtimeOpenFailureRecoveryActions({
         failure: result.failure,
@@ -13656,17 +14143,6 @@ function finishGatewayOpenCapabilityFailure(
     phase: 'failed',
     title: 'Open failed',
     detail: failure.summary,
-    open_progress: buildOpenConnectionProgress({
-      hostAccess: { kind: 'local_host' },
-      placement: { kind: 'host_process', runtime_root: '' },
-      phase: 'failed',
-      environmentID: request.environment_id,
-      environmentLabel: request.label,
-      targetID,
-      targetLabel: request.label,
-      targetDetail: record.display_name,
-      location: 'runtime_gateway',
-    }),
     failure,
     next_actions: gatewayOperationFailureNextActions(operationKey, {
       gatewayID: record.gateway_id,
@@ -13846,17 +14322,6 @@ async function openGatewayEnvironmentFromLauncher(
         phase: 'checking_runtime_record',
         title: 'Open failed',
         detail: failure.summary,
-        open_progress: buildOpenConnectionProgress({
-          hostAccess: { kind: 'local_host' },
-          placement: { kind: 'host_process', runtime_root: '' },
-          phase: 'failed',
-          environmentID: request.environment_id,
-          environmentLabel: request.label,
-          targetID: operationTargetID,
-          targetLabel: request.label,
-          targetDetail: record.display_name,
-          location: 'runtime_gateway',
-        }),
         failure,
         next_actions: gatewayOperationFailureNextActions(operationKey, {
           gatewayID: record.gateway_id,
@@ -13917,17 +14382,6 @@ async function openGatewayEnvironmentFromLauncher(
       phase: signal?.aborted ? 'canceled' : 'failed',
       title: signal?.aborted ? 'Open canceled' : 'Open failed',
       detail: signal?.aborted ? 'Desktop canceled this Gateway open request.' : failure.summary,
-      open_progress: buildOpenConnectionProgress({
-        hostAccess: { kind: 'local_host' },
-        placement: { kind: 'host_process', runtime_root: '' },
-        phase: signal?.aborted ? 'canceled' : 'failed',
-        environmentID: request.environment_id,
-        environmentLabel: request.label,
-        targetID: operationTargetID,
-        targetLabel: request.label,
-        targetDetail: record.display_name,
-        location: 'runtime_gateway',
-      }),
       ...(signal?.aborted ? {} : {
         failure,
         next_actions: gatewayOperationFailureNextActions(operationKey, {
@@ -14051,17 +14505,6 @@ async function openProviderRemoteEnvironmentRecord(
       phase: signal?.aborted ? 'canceled' : 'failed',
       title: signal?.aborted ? 'Open canceled' : 'Open failed',
       detail: signal?.aborted ? 'Desktop canceled this open request.' : failure.summary,
-      open_progress: buildOpenConnectionProgress({
-        hostAccess: { kind: 'local_host' },
-        placement: { kind: 'host_process', runtime_root: '' },
-        phase: signal?.aborted ? 'canceled' : 'failed',
-        environmentID: environment.id,
-        environmentLabel: environment.label,
-        targetID: target.session_key,
-        targetLabel: environment.label,
-        targetDetail: 'Provider route',
-        location: 'provider_remote',
-      }),
       ...(signal?.aborted ? {} : { next_actions: openConnectionFailureNextActions(operationKey, environment.id, {
         ...runtimeOpenFailureRecoveryActions({ failure }),
         desktopUpdateAvailable: desktopUpdateHandoffAvailable(preferences, environment.id),
@@ -14266,17 +14709,6 @@ async function openRemoteEnvironmentFromLauncher(
       phase: canceled ? 'canceled' : 'failed',
       title: canceled ? 'Open canceled' : 'Open failed',
       detail: canceled ? 'Desktop canceled this open request.' : result.message,
-      open_progress: buildOpenConnectionProgress({
-        hostAccess: { kind: 'local_host' },
-        placement: { kind: 'host_process', runtime_root: '' },
-        phase: canceled ? 'canceled' : 'failed',
-        environmentID: failureEnvironmentID,
-        environmentLabel: request.label ?? normalizedTargetURL,
-        targetID: optimisticSessionKey,
-        targetLabel: request.label ?? normalizedTargetURL,
-        targetDetail: normalizedTargetURL,
-        location: 'external_local_ui',
-      }),
       ...(canceled ? {} : { next_actions: openConnectionFailureNextActions(operationKey, failureEnvironmentID, {
         ...runtimeOpenFailureRecoveryActions({
           failure: result.failure,
@@ -14814,15 +15246,6 @@ async function openRuntimePlacementBridgeFromLauncher(
                 phase: 'failed',
                 title: 'Runtime recovery incomplete',
                 detail: failure.summary,
-                open_progress: buildOpenConnectionProgress({
-                  hostAccess,
-                  placement,
-                  phase: 'failed',
-                  environmentID,
-                  environmentLabel: label,
-                  targetID,
-                  targetLabel: label,
-                }),
                 next_actions: openConnectionFailureNextActions(operationKey, environmentID, {
                   includeUpdateRuntime: true,
                   desktopUpdateAvailable: desktopUpdateHandoffAvailable(preferences, environmentID),
@@ -14884,15 +15307,6 @@ async function openRuntimePlacementBridgeFromLauncher(
                 phase: signal?.aborted ? 'canceled' : 'failed',
                 title: signal?.aborted ? 'Open canceled' : 'Runtime recovery failed',
                 detail: signal?.aborted ? 'Desktop canceled this Open request.' : failure.summary,
-                open_progress: buildOpenConnectionProgress({
-                  hostAccess,
-                  placement,
-                  phase: signal?.aborted ? 'canceled' : 'failed',
-                  environmentID,
-                  environmentLabel: label,
-                  targetID,
-                  targetLabel: label,
-                }),
                 ...(signal?.aborted ? {} : {
                   next_actions: openConnectionFailureNextActions(operationKey, environmentID, {
                     includeUpdateRuntime: true,
@@ -15334,15 +15748,6 @@ async function openRuntimePlacementBridgeFromLauncher(
         phase: signal?.aborted ? 'canceled' : 'failed',
         title: signal?.aborted ? 'Open canceled' : 'Open failed',
         detail: signal?.aborted ? 'Desktop canceled this open request.' : failure.summary,
-        open_progress: buildOpenConnectionProgress({
-          hostAccess,
-          placement,
-          phase: signal?.aborted ? 'canceled' : 'failed',
-          environmentID,
-          environmentLabel: label,
-          targetID,
-          targetLabel: label,
-        }),
         ...(signal?.aborted ? {} : { next_actions: openConnectionFailureNextActions(operationKey, environmentID, {
           ...runtimeOpenFailureRecoveryActions({ error, failure }),
           desktopUpdateAvailable: desktopUpdateHandoffAvailable(preferences, environmentID),
@@ -15450,6 +15855,15 @@ async function runEnvironmentRuntimeLifecycleFromLauncher(
         recoveryHint: 'Try the operation again. If the target changed outside Desktop, refresh its status first.',
         targetLabel: label,
       });
+      const lifecycleProgress = runtimeLifecycleFailureProgress({
+        hostAccess,
+        placement,
+        operation: requestedOperation === 'update_runtime' ? 'update' : requestedOperation,
+        targetID,
+        targetLabel: label,
+        error: result.failure ?? new Error(result.message),
+        fallback: failure,
+      });
       launcherOperations.create({
         operation_key: failureOperationKey,
         action: request.kind,
@@ -15461,6 +15875,7 @@ async function runEnvironmentRuntimeLifecycleFromLauncher(
         phase: 'failed',
         title: 'Runtime action failed',
         detail: failure.summary,
+        lifecycle_progress: lifecycleProgress,
         cancelable: false,
         next_actions: [
           {
@@ -15598,11 +16013,11 @@ async function runEnvironmentRuntimeLifecycleFromLauncher(
         : 'stopped_environment_runtime');
     }
     const effectiveOperation = decision.operation;
-	    const beforeLifecycleMutation = async () => {
-	      // Confirmation transfers lifecycle ownership to Desktop. Close its
-	      // exact Environment session and placement bridge before mutating the
-	      // Runtime so an attached window cannot keep shutdown from converging.
-	      await closeEnvironmentSessionsForRuntimeLifecycle({
+    const beforeLifecycleMutation = async () => {
+      // Confirmation transfers lifecycle ownership to Desktop. Close its
+      // exact Environment session and placement bridge before mutating the
+      // Runtime so an attached window cannot keep shutdown from converging.
+      await closeEnvironmentSessionsForRuntimeLifecycle({
         operation: effectiveOperation === 'update_runtime' ? 'update' : effectiveOperation,
         scope: {
           kind: 'session_key',
@@ -15625,9 +16040,9 @@ async function runEnvironmentRuntimeLifecycleFromLauncher(
       gateway_env_id: gatewayEnvironment.gateway_env_id,
       operation: effectiveOperation,
       label,
-	    }, {
-	      successOutcome,
-	      beforeMutation: beforeLifecycleMutation,
+    }, {
+      successOutcome,
+      beforeMutation: beforeLifecycleMutation,
       presentationKind: 'managed_runtime',
       ...(options.openRecovery ? {
         operationKey: options.openRecovery.operationKey,
@@ -16005,7 +16420,7 @@ async function dismissLauncherOperationFromLauncher(
     pendingRuntimeOperationConfirmations.delete(request.operation_key);
     await pendingConfirmation.cancel().catch(() => undefined);
   }
-  launcherOperations.remove(request.operation_key);
+  removeLauncherOperation(request.operation_key);
   broadcastDesktopWelcomeSnapshots();
   return launcherActionSuccess('dismissed_launcher_operation');
 }

@@ -16,6 +16,7 @@ async function waitForOperationProgress(
   input: Readonly<{
     observe?: () => Promise<GatewayRuntimeOperation>;
     wait?: () => Promise<void>;
+    onProgress?: (operation: GatewayRuntimeOperation) => void;
   }>,
 ): Promise<GatewayRuntimeOperation> {
   if (!input.observe) throw originalError;
@@ -28,6 +29,7 @@ async function waitForOperationProgress(
       await wait();
       continue;
     }
+    input.onProgress?.(observed);
     if (observed.state === previousState) throw originalError;
     if (
       observed.state === 'staging'
@@ -51,9 +53,11 @@ export async function advanceGatewayRuntimeOperation(
     commit: () => Promise<GatewayRuntimeOperation>;
     observe?: () => Promise<GatewayRuntimeOperation>;
     wait?: () => Promise<void>;
+    onProgress?: (operation: GatewayRuntimeOperation) => void;
   }>,
 ): Promise<GatewayRuntimeOperation> {
   let current = operation;
+  input.onProgress?.(current);
   if (current.state === 'awaiting_artifact') {
     if (current.kind !== 'update_runtime') {
       throw new Error('Gateway requested a Runtime artifact for an operation that does not install one.');
@@ -61,13 +65,16 @@ export async function advanceGatewayRuntimeOperation(
     const prepared = await input.prepareArtifact(current);
     try {
       current = await input.upload(prepared.metadata, prepared.artifact);
+      input.onProgress?.(current);
     } catch (error) {
       current = await waitForOperationProgress('awaiting_artifact', error, input);
     }
   }
   if (current.state !== 'commit_ready') return current;
   try {
-    return await input.commit();
+    current = await input.commit();
+    input.onProgress?.(current);
+    return current;
   } catch (error) {
     return waitForOperationProgress('commit_ready', error, input);
   }

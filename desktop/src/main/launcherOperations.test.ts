@@ -84,6 +84,37 @@ describe('LauncherOperationRegistry', () => {
     expect(registry.progressItems()[0]?.runtime_confirmation).toEqual(confirmation);
   });
 
+  it('does not clear an unrelated explicit presentation key', () => {
+    const registry = new LauncherOperationRegistry();
+    const operation = registry.create({
+      operation_key: 'gateway:refresh',
+      action: 'refresh_gateway',
+      subject_kind: 'gateway',
+      subject_id: 'gateway',
+      phase: 'checking_gateway',
+      title: 'Checking Gateway',
+      title_key: 'progress.checkingGateway',
+      detail: 'Checking Gateway status.',
+      detail_key: 'progress.checkingGatewayService',
+    });
+
+    const detailChanged = registry.update(operation.operation_key, {
+      detail: 'Checking Gateway trust.',
+    });
+    expect(detailChanged).toEqual(expect.objectContaining({
+      title_key: 'progress.checkingGateway',
+      detail_key: undefined,
+    }));
+
+    const titleChanged = registry.update(operation.operation_key, {
+      title: 'Gateway checked',
+    });
+    expect(titleChanged).toEqual(expect.objectContaining({
+      title_key: undefined,
+      detail_key: undefined,
+    }));
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -650,14 +681,6 @@ describe('LauncherOperationRegistry', () => {
       phase: 'failed',
       title: 'Open failed',
       detail: 'Desktop could not open the local environment.',
-      open_progress: openConnectionProgress({
-        location: 'local_host',
-        phase: 'failed',
-        environmentID: 'local',
-        environmentLabel: 'Local Environment',
-        targetID: 'local:local',
-        targetLabel: 'Local Environment',
-      }),
       next_actions: [
         {
           kind: 'refresh_status',
@@ -687,13 +710,78 @@ describe('LauncherOperationRegistry', () => {
     }));
     expect(registry.progressItems()[0]).toEqual(expect.objectContaining({
       status: 'failed',
-      open_progress: expect.objectContaining({ phase: 'failed' }),
+      title_key: 'progress.openFailed',
+      detail_key: undefined,
+      open_progress: expect.objectContaining({ phase: 'checking_runtime_record' }),
       next_actions: [
         expect.objectContaining({ kind: 'refresh_status', environment_id: 'local' }),
         expect.objectContaining({ kind: 'copy_diagnostics', operation_key: operation.operation_key }),
         expect.objectContaining({ kind: 'dismiss', operation_key: operation.operation_key }),
       ],
     }));
+  });
+
+  it('retains the real Open step when an operation fails', () => {
+    const registry = new LauncherOperationRegistry();
+    const operation = registry.create({
+      operation_key: 'ssh:container:missing:open',
+      action: 'open_ssh_environment',
+      subject_kind: 'ssh_environment',
+      subject_id: 'ssh:container:missing',
+      environment_id: 'ssh:container:missing',
+      environment_label: 'Missing container',
+      phase: 'starting_container_bridge',
+      title: 'Opening container bridge',
+      detail: 'Desktop is opening the container bridge.',
+      open_progress: openConnectionProgress({
+        location: 'ssh_container',
+        phase: 'starting_container_bridge',
+        environmentID: 'ssh:container:missing',
+        environmentLabel: 'Missing container',
+      }),
+      cancelable: true,
+    });
+
+    const failed = registry.finish(operation.operation_key, 'failed', {
+      phase: 'failed',
+      title: 'Open failed',
+      detail: 'The container was not found.',
+    });
+
+    expect(failed).toEqual(expect.objectContaining({
+      status: 'failed',
+      title_key: 'progress.openFailed',
+      detail_key: undefined,
+      open_progress: expect.objectContaining({
+        phase: 'starting_container_bridge',
+        stage_index: 4,
+        stage_count: 10,
+      }),
+    }));
+  });
+
+  it('does not relabel a failed Runtime operation as its last lifecycle step', () => {
+    const registry = new LauncherOperationRegistry();
+    const operation = registry.create({
+      operation_key: 'ssh:runtime:failed',
+      action: 'update_environment_runtime',
+      subject_kind: 'ssh_environment',
+      subject_id: 'ssh:runtime:failed',
+      status: 'failed',
+      phase: 'failed',
+      title: 'Runtime action failed',
+      detail: 'The Runtime package could not be installed.',
+      lifecycle_progress: runtimeLifecycleProgress({
+        location: 'ssh_host',
+        operation: 'update',
+        phase: 'installing_runtime_package',
+        failedPhase: 'installing_runtime_package',
+        targetLabel: 'SSH Runtime',
+      }),
+    });
+
+    expect(operation.title_key).toBeUndefined();
+    expect(registry.progressItems()[0]?.title_key).toBeUndefined();
   });
 
   it('projects provider remote Open operations into action progress', () => {
