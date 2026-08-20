@@ -1543,6 +1543,29 @@ export function EnvAppShell() {
       )));
     }
     const refreshedProjection = await refetchPluginInventory();
+    if (
+      command.type !== 'grant_permission'
+      && command.type !== 'revoke_permission'
+      && 'pluginInstanceID' in command
+      && command.pluginInstanceID
+    ) {
+      const refreshedItem = refreshedProjection?.items.find((item) => (
+        item.pluginInstanceID === command.pluginInstanceID
+      ));
+      const retiredRevision = retiredPluginManagementRevisionByInstanceID.get(command.pluginInstanceID);
+      // Some lifecycle mutations (notably enable) are committed without
+      // advancing management_revision. Keep the authoritative current
+      // revision openable instead of treating it as the stale revision that
+      // was retired before the mutation completed.
+      if (
+        refreshedItem
+        && refreshedItem.managementRevision !== undefined
+        && retiredRevision !== undefined
+        && refreshedItem.managementRevision <= retiredRevision
+      ) {
+        retiredPluginManagementRevisionByInstanceID.delete(command.pluginInstanceID);
+      }
+    }
     if (permissionMutationPluginInstanceID && preservedPermissionTargets.length > 0) {
       const refreshedItem = refreshedProjection?.items.find((item) => item.pluginInstanceID === permissionMutationPluginInstanceID);
       if (refreshedItem?.defaultLaunchTarget) {
