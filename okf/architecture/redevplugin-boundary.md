@@ -9,7 +9,7 @@ quality_exception: Cross-repository platform boundary spanning published artifac
 # Summary
 
 ReDevPlugin is an independently released plugin platform. Redeven consumes its
-coordinated `v3.0.2` Go, npm, Rust source-crate, and machine-contract artifacts;
+coordinated `v3.0.5` Go, npm, Rust source-crate, and machine-contract artifacts;
 it does not fork platform mechanics. Redeven owns authenticated session mapping,
 product source policy and review UX, UI placement, product runtime builds, and
 concrete business adapters. Missing or unverifiable upstream identity, lifecycle,
@@ -43,12 +43,12 @@ external-package inspection or receipt store.
 
 ## Published dependency set
 
-The current integration consumes the coordinated ReDevPlugin `v3.0.2` set:
+The current integration consumes the coordinated ReDevPlugin `v3.0.5` set:
 
-- `github.com/floegence/redevplugin/v3 v3.0.2`;
-- `@floegence/redevplugin-contracts@3.0.2` and
-  `@floegence/redevplugin-ui@3.0.2`;
-- `redevplugin-runtime@3.0.2` and `redevplugin-worker-sdk@3.0.2` as the exact
+- `github.com/floegence/redevplugin/v3 v3.0.5`;
+- `@floegence/redevplugin-contracts@3.0.5` and
+  `@floegence/redevplugin-ui@3.0.5`;
+- `redevplugin-runtime@3.0.5` and `redevplugin-worker-sdk@3.0.5` as the exact
   public Rust source-crate boundary;
 - the released contract registry, release-manifest contract, contract hashes, and
   attested `platform-release-manifest.json` registry readback, whose
@@ -79,7 +79,7 @@ platform state. Redeven may reconnect and refresh inventory, but must not create
 a local execution store, copy the state machine, invent progress, or cancel work
 when a panel closes.
 
-The `v3.0.2` release-package inspection is also the presentation authority for
+The `v3.0.5` release-package inspection is also the presentation authority for
 pre-install access review. Each permission carries its exact permission id,
 verified method set, explicit required status, and the stable
 `read|write|delete|execute|admin` effects derived from Host-verified capability
@@ -87,7 +87,7 @@ contracts. Redeven may localize and arrange those facts, but it must not recover
 permission meaning from the market catalog, infer required status, or replace
 different permissions with one generic fallback.
 
-Enabled-plugin startup recovery remains ReDevPlugin work. The `v3.0.2` Host
+Enabled-plugin startup recovery remains ReDevPlugin work. The `v3.0.5` Host
 revalidates the installed package identity, SHA-256 hashes, Ed25519 status,
 revocation, grants, policy fences, runtime admission, and session scope before it
 publishes a runnable result. Invalid or revoked evidence, schema drift, tampering,
@@ -203,7 +203,7 @@ environment remain available. It does not execute a worker through another
 path. Missing evidence, digest or target mismatch, invalid metadata, and all
 other admission failures still fail closed.
 
-Official Containers `4.4.4` is a signed manifest-v9 release-ref package over the
+Official Containers `4.4.7` is a signed manifest-v9 release-ref package over the
 `redeven.capability.container_resources@3.0.0` adapter. The latest-only market
 selects its immutable GitHub Release and complete transport, while ReDevPlugin
 verifies release and capability artifacts as one closed source. The market is
