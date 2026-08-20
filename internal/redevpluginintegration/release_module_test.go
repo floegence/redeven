@@ -85,6 +85,41 @@ func TestOfficialReleaseProviderUsesMarketVersion(t *testing.T) {
 	}
 }
 
+func TestOfficialReleaseProviderAdvancesToRefreshedMarketRelease(t *testing.T) {
+	first := officialMarketReleaseFixture(t)
+	provider, err := newOfficialReleaseProvider(first, rejectingReleaseAssetFetcher{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second := first
+	second.Version = "4.4.7"
+	second.Source.Tag = "v4.4.7"
+	second.Asset.Name = "containers-4.4.7.redevplugin"
+	second.Asset.URL = "https://github.com/floegence/redeven-official-plugins/releases/download/v4.4.7/containers-4.4.7.redevplugin"
+	second.ReleaseRefAsset.Name = "containers-4.4.7.release-ref.json"
+	second.ReleaseRefAsset.URL = "https://github.com/floegence/redeven-official-plugins/releases/download/v4.4.7/containers-4.4.7.release-ref.json"
+	second.TrustRoot.URL = "https://github.com/floegence/redeven-official-plugins/releases/download/v4.4.7/root.public.json"
+	second.PublisherReleaseRef.ReleaseRef.Version = second.Version
+	second.PublisherReleaseRef.ReleaseRef.ReleaseMetadataRef = "plugins/com.redeven.official/com.redeven.official.containers/4.4.7/release.json"
+	second.PublisherReleaseRef.Files[0].Locator = second.PublisherReleaseRef.ReleaseRef.ReleaseMetadataRef
+	second.TransportAssets[0].Locator = second.PublisherReleaseRef.ReleaseRef.ReleaseMetadataRef
+	if err := provider.setRelease(second); err != nil {
+		t.Fatal(err)
+	}
+	firstRef, _, err := first.RemoteProjection()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := provider.currentReleaseRef().Version; got != "4.4.7" {
+		t.Fatalf("provider version = %q, want 4.4.7", got)
+	}
+	if _, err := provider.ResolveReleaseArtifact(context.Background(), host.ReleaseArtifactResolveRequest{
+		Action: host.PackageTrustActionInstall, ReleaseRef: firstRef,
+	}); errors.Is(err, host.ErrReleaseRefVerificationFailed) {
+		t.Fatalf("stale release ref error = %v", err)
+	}
+}
+
 func officialMarketReleaseFixture(t *testing.T) pluginmarket.LatestRelease {
 	t.Helper()
 	anchors, err := redevpluginartifacts.OfficialReleaseTrustAnchorSet()

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/floegence/redeven/internal/auditlog"
@@ -47,7 +48,9 @@ type Integration struct {
 	runtimeAuthority *RuntimeProcessAuthority
 	marketSnapshot   *pluginmarket.Snapshot
 	marketService    *pluginmarket.Service
+	releaseProvider  *officialReleaseProvider
 	marketErr        error
+	marketMu         sync.RWMutex
 	closers          []func() error
 }
 
@@ -114,23 +117,29 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 	var releaseModule *host.ReleaseModule
 	var closeReleaseTrust func() error
 	var marketSnapshot *pluginmarket.Snapshot
+	var releaseProvider *officialReleaseProvider
 	var marketErr error
 	if opts.newReleaseModule != nil {
 		releaseModule, _, closeReleaseTrust, err = opts.newReleaseModule(filepath.Join(root, "trust"))
 	} else if opts.PluginMarket != nil {
+		releaseModule, releaseProvider, err = newOfficialReleaseModulePending(releaseFetcher)
+		if err != nil {
+			marketErr = err
+		}
 		var snapshot pluginmarket.Snapshot
-		snapshot, marketErr = opts.PluginMarket.Snapshot(ctx)
+		if marketErr == nil {
+			snapshot, marketErr = opts.PluginMarket.Snapshot(ctx)
+		}
 		if marketErr == nil {
 			var release pluginmarket.LatestRelease
 			release, marketErr = snapshot.LatestRelease(officialContainersPluginID, officialReleaseChannel)
 			if marketErr == nil {
-				now := time.Now
-				if opts.releaseTrustNow != nil {
-					now = opts.releaseTrustNow
+				if releaseProvider != nil {
+					marketErr = releaseProvider.setRelease(release)
 				}
-				releaseModule, _, closeReleaseTrust, marketErr = newOfficialReleaseModuleWithClock(
-					ctx, filepath.Join(root, "trust"), release, releaseFetcher, now,
-				)
+				if marketErr == nil {
+					releaseProvider, _ = releaseModule.ReleaseArtifactResolver.(*officialReleaseProvider)
+				}
 			}
 			if marketErr == nil {
 				frozen := snapshot.Clone()
@@ -246,6 +255,7 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		runtimeAuthority: opts.RuntimeAuthority,
 		marketSnapshot:   marketSnapshot,
 		marketService:    opts.PluginMarket,
+		releaseProvider:  releaseProvider,
 		marketErr:        marketErr,
 		closers:          closers,
 	}
@@ -253,7 +263,19 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 }
 
 func (i *Integration) MarketSnapshot() (pluginmarket.Snapshot, bool) {
-	if i == nil || i.marketSnapshot == nil {
+	if i == nil {
+		return pluginmarket.Snapshot{}, false
+	}
+	if i.marketService != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if snapshot, err := i.refreshMarket(ctx); err == nil {
+			return snapshot, true
+		}
+	}
+	i.marketMu.RLock()
+	defer i.marketMu.RUnlock()
+	if i.marketSnapshot == nil {
 		return pluginmarket.Snapshot{}, false
 	}
 	return i.marketSnapshot.Clone(), true
@@ -267,10 +289,20 @@ func (i *Integration) MarketDetail(ctx context.Context, pluginID string) (plugin
 }
 
 func (i *Integration) MarketIcon(ctx context.Context, pluginID, digest string) (pluginmarket.IconAsset, error) {
-	if i == nil || i.marketService == nil || i.marketSnapshot == nil {
+	if i == nil || i.marketService == nil {
 		return pluginmarket.IconAsset{}, pluginmarket.ErrUnavailable
 	}
-	for _, plugin := range i.marketSnapshot.Plugins {
+	snapshot, err := i.refreshMarket(ctx)
+	if err != nil {
+		i.marketMu.RLock()
+		if i.marketSnapshot == nil {
+			i.marketMu.RUnlock()
+			return pluginmarket.IconAsset{}, err
+		}
+		snapshot = i.marketSnapshot.Clone()
+		i.marketMu.RUnlock()
+	}
+	for _, plugin := range snapshot.Plugins {
 		icon := plugin.Presentation.Icon
 		if plugin.PluginID == pluginID && icon != nil && icon.SHA256 == digest {
 			return i.marketService.Icon(ctx, pluginID, *icon)
@@ -283,7 +315,43 @@ func (i *Integration) MarketError() error {
 	if i == nil {
 		return pluginmarket.ErrUnavailable
 	}
+	i.marketMu.RLock()
+	defer i.marketMu.RUnlock()
 	return i.marketErr
+}
+
+func (i *Integration) refreshMarket(ctx context.Context) (pluginmarket.Snapshot, error) {
+	if i == nil || i.marketService == nil {
+		return pluginmarket.Snapshot{}, pluginmarket.ErrUnavailable
+	}
+	snapshot, err := i.marketService.Snapshot(ctx)
+	if err != nil {
+		i.marketMu.Lock()
+		i.marketErr = err
+		i.marketMu.Unlock()
+		return pluginmarket.Snapshot{}, err
+	}
+	if i.releaseProvider != nil {
+		release, releaseErr := snapshot.LatestRelease(officialContainersPluginID, officialReleaseChannel)
+		if releaseErr != nil {
+			i.marketMu.Lock()
+			i.marketErr = releaseErr
+			i.marketMu.Unlock()
+			return pluginmarket.Snapshot{}, releaseErr
+		}
+		if releaseErr = i.releaseProvider.setRelease(release); releaseErr != nil {
+			i.marketMu.Lock()
+			i.marketErr = releaseErr
+			i.marketMu.Unlock()
+			return pluginmarket.Snapshot{}, releaseErr
+		}
+	}
+	frozen := snapshot.Clone()
+	i.marketMu.Lock()
+	i.marketSnapshot = &frozen
+	i.marketErr = nil
+	i.marketMu.Unlock()
+	return frozen, nil
 }
 
 func (i *Integration) Handler() http.Handler {
