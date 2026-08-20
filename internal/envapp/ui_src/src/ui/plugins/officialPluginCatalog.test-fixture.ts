@@ -96,17 +96,17 @@ export const OFFICIAL_PLUGIN_MARKET_SNAPSHOT: PluginMarketSnapshot = {
     },
     categories: ['containers', 'development'],
     channels: ['stable'],
-    latest: { channel: 'stable', version: '4.4.4', availability_status: 'visible' },
+    latest: { channel: 'stable', version: '4.4.7', availability_status: 'visible' },
     release: {
       plugin_id: 'com.redeven.official.containers',
       channel: 'stable',
-      version: '4.4.4',
+      version: '4.4.7',
       asset: {
-        url: 'https://github.com/floegence/redeven-official-plugins/releases/download/v4.4.4/containers-4.4.4.redevplugin',
+        url: 'https://github.com/floegence/redeven-official-plugins/releases/download/v4.4.7/containers-4.4.7.redevplugin',
       },
       publisher_release_ref: { release_ref: OFFICIAL_CONTAINERS_RELEASE_REF },
-      signer_key_id: 'redeven_official_signing_2026',
-      compatibility: { min_redeven_version: '1.0.0', min_redevplugin_version: '1.1.2' },
+      signer_key_id: 'redeven_official_signing_2026_08',
+      compatibility: { min_redeven_version: '1.0.0', min_redevplugin_version: '3.0.5' },
     },
   }],
 };

@@ -54,7 +54,7 @@ const containersPlugin = {
     iconFallback: 'generic',
     category: 'infrastructure',
     searchKeywords: ['docker', 'podman'],
-    trustedSigningKeyIDs: ['redeven_official_signing_2026'],
+    trustedSigningKeyIDs: ['redeven_official_signing_2026_08'],
     distribution: {
       releaseRef: OFFICIAL_CONTAINERS_RELEASE_REF,
       installSource: {

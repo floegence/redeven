@@ -1,8 +1,8 @@
 {
   "schema_version": "redevplugin.ed25519_signing_key.v1",
   "algorithm": "ed25519",
-  "key_id": "redeven_official_signing_2026",
+  "key_id": "redeven_official_signing_2026_08",
   "publisher_id": "com.redeven.official",
-  "public_key": "CjQqXNS/mR2MgLwWPhTLee6G5ay1XQ4J/bIgw2djtQY=",
+  "public_key": "61UT2XQhVjySn8RPTU8TJHvgPvMVTnhywCipDWT2SB8=",
   "created_at": "2026-08-01T05:30:00Z"
 }
