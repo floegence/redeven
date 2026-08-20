@@ -366,6 +366,22 @@ describe('v3.0.2 plugin lifecycle client integration', () => {
     });
   });
 
+  it('keeps the current catalog but marks stale market data unavailable', async () => {
+    const { mocks } = createClientHarness();
+    const staleSnapshot = { ...OFFICIAL_PLUGIN_MARKET_SNAPSHOT, stale: true, source: 'cache' as const };
+    const lifecycle = createPluginLifecycleAPI(
+      mocks as unknown as PluginPlatformClient,
+      undefined,
+      async () => staleSnapshot,
+    );
+
+    await expect(lifecycle.refreshMarketCatalog()).rejects.toThrow('stale cached data');
+    await expect(lifecycle.loadInventoryProjection()).resolves.toMatchObject({
+      marketUnavailable: true,
+      items: [],
+    });
+  });
+
   it('projects installed plugins without waiting for the market snapshot', async () => {
     const { mocks } = createClientHarness();
     mocks.catalog.mockResolvedValue({ plugins: [generatedContainersRecord] });

@@ -62,6 +62,9 @@ export function createPluginLifecycleAPI(
       INVENTORY_MARKET_TIMEOUT_MS,
       'Loading the plugin market',
     ).then((snapshot) => {
+      if (snapshot.stale || snapshot.source === 'cache') {
+        throw new Error('The plugin market is using stale cached data');
+      }
       const nextCatalog = officialPluginCatalog(snapshot);
       const changed = marketGeneration !== snapshot.generation
         || catalog.length !== nextCatalog.length;

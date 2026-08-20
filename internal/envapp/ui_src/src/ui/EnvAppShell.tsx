@@ -1339,6 +1339,13 @@ export function EnvAppShell() {
     void refreshPluginMarket();
   };
 
+  // Restored Activity state bypasses openPluginCenter; refresh the market in
+  // the background so the center never stays on an old catalog silently.
+  createEffect(() => {
+    if (viewMode() !== 'activity' || layout.sidebarActiveTab() !== PLUGIN_CENTER_ACTIVITY_ID || !pluginInventorySource()) return;
+    void refreshPluginMarket();
+  });
+
   const closePluginCenter = () => {
     setPluginCenterSelectedInventoryKey(undefined);
     activateActivitySurface(lastActivitySurface(), { persist: false });
