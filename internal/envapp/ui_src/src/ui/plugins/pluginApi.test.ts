@@ -327,7 +327,7 @@ describe('v3.0.2 plugin lifecycle client integration', () => {
       items: [expect.objectContaining({
         pluginID: 'com.redeven.official.containers',
         lifecycleState: 'not_installed',
-        officialCatalog: expect.objectContaining({ latestVersion: '4.4.4' }),
+        officialCatalog: expect.objectContaining({ latestVersion: '4.4.7' }),
       })],
     });
     expect(loadMarket).toHaveBeenCalledOnce();
@@ -361,7 +361,7 @@ describe('v3.0.2 plugin lifecycle client integration', () => {
     await expect(lifecycle.loadInventoryProjection()).resolves.toMatchObject({
       items: [expect.objectContaining({
         pluginID: 'com.redeven.official.containers',
-        officialCatalog: expect.objectContaining({ latestVersion: '4.4.4' }),
+        officialCatalog: expect.objectContaining({ latestVersion: '4.4.7' }),
       })],
     });
   });

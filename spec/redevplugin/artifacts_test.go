@@ -48,7 +48,7 @@ func TestOfficialSigningPublicKeyReturnsIndependentBytes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first.KeyID != "redeven_official_signing_2026" || first.PublisherID != "com.redeven.official" {
+	if first.KeyID != "redeven_official_signing_2026_08" || first.PublisherID != "com.redeven.official" {
 		t.Fatalf("official signing key = %#v", first)
 	}
 	first.PublicKey[0] ^= 0xff

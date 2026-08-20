@@ -42,7 +42,7 @@ function installedRecord(overrides: Partial<ReDevPluginRecord> = {}): ReDevPlugi
       },
       verified_signature: {
         algorithm: 'ed25519',
-        key_id: 'redeven_official_signing_2026',
+        key_id: 'redeven_official_signing_2026_08',
       },
     },
     enable_state: 'enabled',
@@ -322,7 +322,7 @@ describe('v3.0.2 plugin inventory projection', () => {
           },
           verified_signature: {
             algorithm: 'ed25519',
-            key_id: 'redeven_official_signing_2026',
+            key_id: 'redeven_official_signing_2026_08',
           },
         },
       },

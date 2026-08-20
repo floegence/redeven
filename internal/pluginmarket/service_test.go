@@ -139,7 +139,7 @@ const validLatestResponse = `{
         "sha256": "8aef41598f631df76b79b1428376cd983347c31ffd7f30daa087c3588b3b32ae"
       }
     ],
-    "signer_key_id": "redeven_official_signing_2026",
+    "signer_key_id": "redeven_official_signing_2026_08",
     "compatibility": {"min_redeven_version": "1.0.0", "min_redevplugin_version": "0.6.22"},
     "release_identity_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
   },

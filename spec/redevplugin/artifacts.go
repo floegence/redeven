@@ -74,7 +74,7 @@ func OfficialReleaseTrustAnchorSet() (OfficialReleaseTrustAnchors, error) {
 func OfficialSigningPublicKey() (ReleaseTrustPublicKey, error) {
 	key, err := readSigningPublicKey(
 		"official-package-signing-key.public.json",
-		"redeven_official_signing_2026",
+		"redeven_official_signing_2026_08",
 	)
 	if err != nil {
 		return ReleaseTrustPublicKey{}, err
