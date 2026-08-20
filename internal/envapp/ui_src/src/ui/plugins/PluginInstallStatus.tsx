@@ -213,6 +213,9 @@ function installFailureLabel(code: string, i18n: I18nHelpers): string {
     case 'PLUGIN_TRUST_STATE_DENIED':
     case 'PLUGIN_TRUST_VERIFICATION_REQUIRED':
     case 'PLUGIN_TRUST_VERIFICATION_INVALID': return i18n.t('uiCopy.plugin.installOperation.failure.trust');
+    case 'PLUGIN_PACKAGE_INVALID': return i18n.t('uiCopy.plugin.installOperation.failure.packageInvalid');
+    case 'PLUGIN_PACKAGE_TOO_LARGE': return i18n.t('uiCopy.plugin.installOperation.failure.packageTooLarge');
+    case 'PLUGIN_PACKAGE_PATH_FORBIDDEN': return i18n.t('uiCopy.plugin.installOperation.failure.packagePathForbidden');
     default: return i18n.t('uiCopy.plugin.installOperation.failure.internal');
   }
 }

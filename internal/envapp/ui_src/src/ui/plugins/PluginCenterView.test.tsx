@@ -1338,7 +1338,7 @@ describe('PluginCenterView', () => {
     expect(document.activeElement).toBe(summary);
   });
 
-  it('acknowledges a direct card install immediately and opens only a complete authoritative review', async () => {
+  it('opens an immediate loading dialog and then shows the complete authoritative review', async () => {
     const onCommand = vi.fn();
     const inspection = deferred<OfficialPluginReleaseInspection>();
     const onInspectOfficial = vi.fn(() => inspection.promise);
@@ -1367,7 +1367,12 @@ describe('PluginCenterView', () => {
     expect(install.disabled).toBe(true);
     expect(install.getAttribute('aria-busy')).toBe('true');
     expect(install.textContent).toContain('Checking package');
-    expect(document.querySelector('[data-plugin-install-review-dialog]')).toBeNull();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const loadingReview = document.querySelector<HTMLElement>('[data-plugin-install-review-dialog]')!;
+    expect(loadingReview).not.toBeNull();
+    expect(loadingReview.getAttribute('data-plugin-install-loading')).toBe('true');
+    expect(loadingReview.textContent).toContain('Getting plugin information');
+    expect(document.querySelector('[data-plugin-install-review-confirm]')).toBeNull();
     install.click();
     expect(onInspectOfficial).toHaveBeenCalledTimes(1);
 
@@ -1380,6 +1385,7 @@ describe('PluginCenterView', () => {
     expect(onInspectOfficial).toHaveBeenCalledWith(containersPlugin, expect.any(AbortSignal));
     const review = document.querySelector<HTMLElement>('[data-plugin-install-review-dialog]')!;
     expect(review).not.toBeNull();
+    expect(review.getAttribute('data-plugin-install-loading')).toBeNull();
     expect(review.textContent).not.toContain('Inspecting');
     const readPermission = review.querySelector<HTMLElement>('[data-plugin-install-permission="containers.read"]')!;
     const deletePermission = review.querySelector<HTMLElement>('[data-plugin-install-permission="containers.delete"]')!;
@@ -1435,7 +1441,8 @@ describe('PluginCenterView', () => {
     install.click();
     expect(install.disabled).toBe(true);
     expect(install.textContent).toContain('Checking package');
-    expect(document.querySelector('[data-plugin-install-review-dialog]')).toBeNull();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(document.querySelector<HTMLElement>('[data-plugin-install-review-dialog]')?.getAttribute('data-plugin-install-loading')).toBe('true');
     expect(onInspectOfficial).toHaveBeenCalledTimes(1);
 
     inspection.resolve(officialInspection(containersPlugin, [
@@ -1571,7 +1578,7 @@ describe('PluginCenterView', () => {
     mount.querySelector<HTMLButtonElement>('[data-plugin-center-install="catalog:database-tools"]')!.click();
     first.resolve(officialInspection(containersPlugin));
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(document.querySelector('[data-plugin-install-review-dialog]')).toBeNull();
+    expect(document.querySelector<HTMLElement>('[data-plugin-install-review-dialog]')?.getAttribute('data-plugin-install-loading')).toBe('true');
 
     second.resolve(officialInspection(databaseOfficial));
     await new Promise((resolve) => setTimeout(resolve, 0));
