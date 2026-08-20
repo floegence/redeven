@@ -351,7 +351,7 @@ func (s *Store) Prepare(ctx context.Context, request gatewayprotocol.RuntimeOper
 		delete(next.TargetLocks, current.LifecycleTargetID)
 	} else {
 		current.ExpectedSnapshot = snapshot
-		if requiresInitialConfirmation(current.Kind) {
+		if requiresInitialConfirmation(current.Kind) && requiresWorkloadConfirmation(snapshot) {
 			current.State = gatewayprotocol.RuntimeOperationAwaitingConfirmation
 		} else if current.Kind == gatewayprotocol.RuntimeOperationUpdate {
 			current.State = gatewayprotocol.RuntimeOperationAwaitingArtifact
@@ -1824,6 +1824,20 @@ func requiresInitialConfirmation(kind gatewayprotocol.RuntimeOperationKind) bool
 	default:
 		return false
 	}
+}
+
+func requiresWorkloadConfirmation(snapshot gatewayprotocol.WorkloadSnapshot) bool {
+	snapshot = gatewayprotocol.NormalizeWorkloadSnapshot(snapshot)
+	if snapshot.Impact.Knowledge != gatewayprotocol.WorkloadKnown {
+		return true
+	}
+	if snapshot.Impact.AffectedProcessCount == nil || *snapshot.Impact.AffectedProcessCount != 0 {
+		return true
+	}
+	if snapshot.Impact.ActiveSessionCount == nil || *snapshot.Impact.ActiveSessionCount != 0 {
+		return true
+	}
+	return snapshot.Impact.ProtectedWorkloadPresent || len(snapshot.WorkloadIdentities) != 0
 }
 
 func snapshotWithinConfirmation(expected gatewayprotocol.WorkloadSnapshot, observed gatewayprotocol.WorkloadSnapshot) bool {
