@@ -3,7 +3,7 @@ type: Desktop Contract
 title: Desktop runtime readiness
 description: Independent access readiness, lifecycle capability projection, and window-open gates.
 tags: [desktop, runtime, startup, readiness]
-timestamp: 2026-08-19T00:00:00Z
+timestamp: 2026-08-20T00:00:00Z
 ---
 # Summary
 
@@ -35,6 +35,10 @@ Every Environment row uses `Open` as its primary action. After successful packag
 
 The initialization panel owns its interaction until completion. It reports `Check access`, `Prepare environment`, `Start environment`, and `Open workspace` in execution order while the internal Gateway progress remains hidden. The start-only path omits the preparation stage. A lifecycle success is not enough to complete the action: Desktop waits for a fresh Runtime health sample with open readiness before opening, and waits for a fresh offline sample after stop. The final Open request remains authoritative when the first renderer snapshot is stale. Success opens the workspace and closes the panel. Failure preserves the exact user-facing reason in that panel and exposes the next reason-specific action: Retry check, Prepare environment, Upgrade runtime, or Request access. Snapshot refresh and lower-level operation progress cannot prematurely replace or complete this session.
 
+The renderer guidance state is presentation only. One main-process decision contract owns every Local, SSH host, Local container, and SSH container Open or lifecycle request: `probe -> decide -> lifecycle -> re-probe -> open`. The decision uses the latest observed health and advertised operations; it treats a running Runtime as idempotently started, treats an unknown result as a probe/recovery decision rather than an instruction to initialize, and chooses Update when that is the only safe convergence operation. After any recovery attempt, Desktop probes the exact same target again before creating a session. This prevents a stale card snapshot and a renderer retry flow from becoming a second lifecycle state machine.
+
+Every failed Open or Runtime action retains a structured summary and executable next actions in the operation snapshot: `Retry`, `Refresh status`, `Copy log`, and `Dismiss`. Container failures name the actual boundary (missing container, unavailable engine, SSH failure, or invalid Runtime response) and retain the exact host, container id, reference, and placement in the retry request. A failure cannot collapse to a toast or a disabled Open button without a recovery path.
+
 # Boundaries
 
 Environment open guidance does not display Gateway, Desktop ownership, target binding, takeover, or lifecycle-controller terminology. Provider setup never borrows another card's credentials or a public URL control path; authorization and target selection remain enforced behind the product action.
@@ -55,4 +59,6 @@ Environment open guidance does not display Gateway, Desktop ownership, target bi
 - `redeven:desktop/src/welcome/environmentProgressPrimaryPresentation.ts:59` - Maps typed Open failures to Runtime update-and-open, Desktop update handoff, or refresh-status primary recovery actions.
 - `redeven:desktop/src/welcome/App.tsx:5104` - One localized initialize/start/open orchestrator.
 - `redeven:desktop/src/welcome/App.tsx:10290` - Runs update-and-open continuation through the shared open preflight.
-- `redeven:scripts/smoke_desktop_runtime_lifecycle.mjs:1` - Real Local and SSH Remote Open and lifecycle outcomes.
+- `redeven:desktop/src/main/environmentOpenCoordinator.ts:1` - Single target-scoped Open and lifecycle decision contract.
+- `redeven:desktop/src/main/environmentOpenCoordinator.test.ts:1` - Unknown, stale, stopped, old, and idempotent Runtime decisions.
+- `redeven:scripts/smoke_desktop_runtime_lifecycle.mjs:1` - Real Local and SSH Remote outcomes plus Local/SSH container failure guidance.

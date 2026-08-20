@@ -131,6 +131,193 @@ async function lifecycleActionForEnvironment(page, label, operation, expectedOut
   return { prepared, confirmed };
 }
 
+async function assertFailedOperationHasGuidance(page, result, label, expectedTarget = {}) {
+  if (result?.ok !== false) {
+    throw new Error(`${label} unexpectedly succeeded: ${JSON.stringify(result)}`);
+  }
+  const operationKey = String(result.operation_key ?? '').trim();
+  if (!operationKey) {
+    throw new Error(`${label} did not return a retained operation key: ${JSON.stringify(result)}`);
+  }
+  const retained = await waitFor(async () => {
+    const snapshot = await launcherSnapshot(page);
+    const operation = snapshot.operations.find((candidate) => candidate.operation_key === operationKey);
+    return operation?.status === 'failed' ? { operation, snapshot } : null;
+  }, 10_000, `${label} failed operation`);
+  const operation = retained.operation;
+  const summary = String(result.failure?.summary ?? operation.failure?.summary ?? result.message ?? '').trim();
+  if (!summary) {
+    throw new Error(`${label} failed without a user-facing summary: ${JSON.stringify({ result, operation })}`);
+  }
+  const nextActions = operation.next_actions ?? [];
+  const actionKinds = new Set(nextActions.map((action) => action.kind));
+  for (const requiredKind of ['retry', 'refresh_status', 'copy_diagnostics', 'dismiss']) {
+    if (!actionKinds.has(requiredKind)) {
+      throw new Error(`${label} failure guidance omitted ${requiredKind}: ${JSON.stringify(operation)}`);
+    }
+  }
+  const retryAction = nextActions.find((action) => action.kind === 'retry')?.retry_action;
+  if (!retryAction) {
+    throw new Error(`${label} failure guidance did not retain a retry request: ${JSON.stringify(operation)}`);
+  }
+  for (const [key, expected] of Object.entries(expectedTarget)) {
+    if (JSON.stringify(retryAction[key]) !== JSON.stringify(expected)) {
+      throw new Error(`${label} retry request changed ${key}: got=${JSON.stringify(retryAction[key])} want=${JSON.stringify(expected)}`);
+    }
+  }
+  const visibleText = [operation.title, operation.detail, summary].filter(Boolean).join(' ');
+  if (/\b(?:Gateway|Provider)\b/iu.test(visibleText)) {
+    throw new Error(`${label} exposed an internal Gateway/Provider label in user-facing failure text: ${visibleText}`);
+  }
+  return {
+    operation_key: operationKey,
+    code: result.code,
+    summary,
+    next_actions: nextActions.map((action) => action.kind),
+    retry_action: retryAction,
+  };
+}
+
+async function confirmPendingRuntimeOperation(page, environmentLabel, timeoutMs = 10_000) {
+  const deadline = Date.now() + timeoutMs;
+  let confirmationCount = 0;
+  while (Date.now() < deadline) {
+    const snapshot = await launcherSnapshot(page);
+    const pending = snapshot.operations.find((operation) => (
+      operation.environment_label === environmentLabel
+      && operation.status === 'needs_confirmation'
+      && operation.runtime_confirmation?.operation
+    ));
+    if (pending) {
+      const result = await page.evaluate(async (operationKey) => (
+        window.redevenDesktopLauncher.performAction({
+          kind: 'confirm_runtime_operation',
+          operation_key: operationKey,
+        })
+      ), pending.operation_key);
+      confirmationCount += 1;
+      if (result?.ok === true && result?.code !== 'confirmation_required') {
+        return { ...result, confirmation_count: confirmationCount };
+      }
+      continue;
+    }
+    const failed = snapshot.operations.find((operation) => (
+      operation.environment_label === environmentLabel
+      && operation.status === 'failed'
+      && operation.failure
+    ));
+    if (failed) {
+      throw new Error(`${environmentLabel} open operation failed before confirmation: ${JSON.stringify(failed)}`);
+    }
+    await delay(100);
+  }
+  return confirmationCount > 0 ? { ok: true, confirmation_count: confirmationCount } : null;
+}
+
+async function runContainerFailureScenarios(page, sshTarget) {
+  const sshHost = {
+    kind: 'ssh_host',
+    ssh: {
+      ssh_destination: sshTarget.destination,
+      ssh_port: sshTarget.port,
+      auth_mode: 'key_agent',
+      connect_timeout_seconds: 10,
+    },
+  };
+  const missingSSHContainer = {
+    kind: 'container_process',
+    container_engine: 'docker',
+    container_id: 'redeven-smoke-missing-id',
+    container_ref: 'redeven-smoke-missing',
+    container_label: 'redeven-smoke-missing',
+    runtime_root: sshTarget.runtimeRoot,
+    runtime_state_root: sshTarget.runtimeRoot,
+    bridge_strategy: 'exec_stream',
+  };
+  const sshTargetFields = {
+    host_access: sshHost,
+    placement: missingSSHContainer,
+    runtime_target_id: 'ssh:container:smoke-missing',
+    placement_target_id: 'ssh:container:smoke-missing',
+    ssh_destination: sshTarget.destination,
+    ssh_port: sshTarget.port,
+    auth_mode: 'key_agent',
+    runtime_root: sshTarget.runtimeRoot,
+    bootstrap_strategy: 'desktop_upload',
+    release_base_url: '',
+    connect_timeout_seconds: 10,
+  };
+  const sshOpenResult = await page.evaluate(async (request) => (
+    window.redevenDesktopLauncher.performAction(request)
+  ), {
+    kind: 'open_ssh_environment',
+    environment_id: 'ssh-container-smoke-missing',
+    label: 'SSH Container Missing',
+    ...sshTargetFields,
+  });
+  const sshOpen = await assertFailedOperationHasGuidance(
+    page,
+    sshOpenResult,
+    'SSH container Open with missing container',
+    {
+      placement: missingSSHContainer,
+      host_access: sshHost,
+    },
+  );
+
+  const sshUpdateResult = await page.evaluate(async (request) => (
+    window.redevenDesktopLauncher.performAction(request)
+  ), {
+    kind: 'update_environment_runtime',
+    environment_id: 'ssh-container-smoke-update-missing',
+    label: 'SSH Container Update Missing',
+    ...sshTargetFields,
+  });
+  const sshUpdate = await assertFailedOperationHasGuidance(
+    page,
+    sshUpdateResult,
+    'SSH container Update with missing container',
+    {
+      placement: missingSSHContainer,
+      host_access: sshHost,
+    },
+  );
+
+  const localHost = { kind: 'local_host' };
+  const missingLocalContainer = {
+    kind: 'container_process',
+    container_engine: 'docker',
+    container_id: 'redeven-smoke-local-missing-id',
+    container_ref: 'redeven-smoke-local-missing',
+    container_label: 'redeven-smoke-local-missing',
+    runtime_root: path.join(os.tmpdir(), 'redeven-smoke-local-container'),
+    runtime_state_root: path.join(os.tmpdir(), 'redeven-smoke-local-container'),
+    bridge_strategy: 'exec_stream',
+  };
+  const localRestartRequest = {
+    kind: 'restart_environment_runtime',
+    environment_id: 'local-container-smoke-missing',
+    label: 'Local Container Missing',
+    runtime_target_id: 'local:container:smoke-missing',
+    placement_target_id: 'local:container:smoke-missing',
+    host_access: localHost,
+    placement: missingLocalContainer,
+  };
+  const localRestartResult = await page.evaluate(async (request) => (
+    window.redevenDesktopLauncher.performAction(request)
+  ), localRestartRequest);
+  const localRestart = await assertFailedOperationHasGuidance(
+    page,
+    localRestartResult,
+    'Local container Restart with missing container',
+    {
+      placement: missingLocalContainer,
+      host_access: localHost,
+    },
+  );
+  return { ssh_open: sshOpen, ssh_update: sshUpdate, local_restart: localRestart };
+}
+
 async function environmentCard(page, label) {
   const card = page.locator('.redeven-environment-card').filter({ hasText: label }).first();
   await card.waitFor({ state: 'visible', timeout: 30_000 });
@@ -169,6 +356,7 @@ async function openThroughGuidance(page, label, expectedGuidance) {
   const dotStatesAfterConfirm = await timeline.locator('.redeven-environment-progress__step-dot').evaluateAll((dots) => (
     dots.map((dot) => dot.getAttribute('data-state'))
   )).catch(() => []);
+  const confirmation = await confirmPendingRuntimeOperation(page, label);
   return {
     primaryLabel,
     actionLabel,
@@ -179,6 +367,7 @@ async function openThroughGuidance(page, label, expectedGuidance) {
       dot_states_before_confirm: dotStatesBeforeConfirm,
       dot_states_after_confirm: dotStatesAfterConfirm,
     },
+    confirmation,
   };
 }
 
@@ -192,7 +381,8 @@ async function openDirectly(page, label) {
   if (await page.locator('.redeven-action-popover').filter({ hasText: /Initialize and open|Start and open|初始化并打开|启动并打开/u }).count() > 0) {
     throw new Error(`online ${label} opened lifecycle guidance instead of opening directly`);
   }
-  return { label: labelBeforeClick };
+  const confirmation = await confirmPendingRuntimeOperation(page, label);
+  return { label: labelBeforeClick, confirmation };
 }
 
 async function ensureGatewayPaired(page, label) {
@@ -1374,6 +1564,7 @@ async function run() {
     evidence.scenarios.local.pending_start_after_restart = recoveredStart;
     evidence.scenarios.local.pending_start_attachment_after_restart = recoveredAttachment;
     evidence.scenarios.ssh_remote = await runSSHScenario({ page, browser, reportRoot, diagnosticRoots });
+    evidence.scenarios.container_failures = await runContainerFailureScenarios(page, sshTarget);
 
     const bindingBeforePackagedRestart = await readRuntimeTargetBinding(
       await launcherSnapshot(page),

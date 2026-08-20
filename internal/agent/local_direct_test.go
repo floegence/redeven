@@ -81,6 +81,32 @@ func (sess *acceptedNotificationSession) WaitTermination(ctx context.Context) (f
 }
 func (*acceptedNotificationSession) Close() error { return nil }
 
+type blockingPluginSessionLifecycle struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (*blockingPluginSessionLifecycle) BindPluginSessionGeneration(context.Context, *session.Meta, string, string) error {
+	return nil
+}
+
+func (lifecycle *blockingPluginSessionLifecycle) RecordPluginSessionTerminalIntent(ctx context.Context, _ *session.Meta, _, _ string) error {
+	select {
+	case lifecycle.started <- struct{}{}:
+	default:
+	}
+	select {
+	case <-lifecycle.release:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (*blockingPluginSessionLifecycle) MaintainTerminalPluginSession(context.Context, *session.Meta, string, string) error {
+	return nil
+}
+
 func TestRegisterLocalDirectChannelStartsUnlockedWhenAccessAlreadyAuthorized(t *testing.T) {
 	gate := accessgate.New(accessgate.Options{Password: "secret"})
 	a := &Agent{accessGate: gate}
@@ -184,6 +210,55 @@ func TestServeLocalDirectAcceptorSessionAttachesAndDetachesTerminalNotificationS
 	case typeID := <-peer.notifications:
 		t.Fatalf("detached RPC peer received notification type ID %d", typeID)
 	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+func TestServeLocalDirectSessionDrainDoesNotWaitForPluginPersistence(t *testing.T) {
+	sess := &acceptedNotificationSession{
+		peer:    &recordingNotificationPeer{notifications: make(chan uint32, 1)},
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	lifecycle := &blockingPluginSessionLifecycle{
+		started: make(chan struct{}, 1),
+		release: make(chan struct{}),
+	}
+	a := &Agent{
+		log:                    slog.New(slog.NewTextHandler(io.Discard, nil)),
+		sessions:               make(map[string]*activeSession),
+		pluginSessions:         newAuthenticatedPluginSessionRegistry(),
+		pluginSessionLifecycle: lifecycle,
+	}
+	done := make(chan error, 1)
+	go func() {
+		done <- a.ServeLocalDirectSession(context.Background(), sess, &session.Meta{
+			ChannelID:   "ch-shutdown-drain",
+			FloeApp:     FloeAppRedevenAgent,
+			SessionKind: "envapp_rpc",
+		}, LocalDirectSessionOptions{})
+	}()
+	select {
+	case <-sess.started:
+	case <-time.After(time.Second):
+		t.Fatal("local direct session did not start")
+	}
+	close(sess.release)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("ServeLocalDirectSession() error = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("session drain waited for plugin persistence")
+	}
+	select {
+	case <-lifecycle.started:
+	case <-time.After(time.Second):
+		t.Fatal("plugin persistence did not continue asynchronously")
+	}
+	close(lifecycle.release)
+	if !a.waitForPluginSessionCloses(time.Second) {
+		t.Fatal("plugin persistence did not finish after release")
 	}
 }
 

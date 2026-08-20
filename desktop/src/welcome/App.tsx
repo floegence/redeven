@@ -1848,6 +1848,7 @@ type SilentLauncherActionFailure = Readonly<{
   message: string;
   operation_key?: string;
   failure?: DesktopOperationFailurePresentation;
+  raw_failure?: Extract<DesktopLauncherActionResult, Readonly<{ ok: false }>>;
 }>;
 
 function launcherFailureSummary(failure: SilentLauncherActionFailure): string {
@@ -3794,6 +3795,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           message: presentation.message || i18n().t('toast.actionFailedFallback'),
           ...(result.operation_key ? { operation_key: result.operation_key } : {}),
           ...(result.failure ? { failure: result.failure } : {}),
+          raw_failure: result,
         };
       }
       if (isDesktopLauncherActionSuccess(result)) {
@@ -5096,6 +5098,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     opened: boolean;
     message: string;
     recovery?: 'update_runtime' | 'update_desktop' | 'refresh_runtime';
+    operation_key?: string;
   }>> {
     let request: DesktopLauncherActionRequest | null = null;
     if (environment.kind === 'local_environment') {
@@ -5131,6 +5134,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     const result = await performLauncherActionSilently(request);
     if (!result.ok) {
+      if (result.raw_failure) {
+        await handleLauncherActionFailure(
+          result.raw_failure,
+          'connect',
+          environment.id,
+          request,
+        );
+      }
       const recovery = result.failure?.code === 'runtime_update_required'
         ? 'update_runtime' as const
         : result.failure?.code === 'desktop_update_required'
@@ -5142,6 +5153,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         opened: false,
         message: result.message,
         ...(recovery ? { recovery } : {}),
+        ...(result.operation_key ? { operation_key: result.operation_key } : {}),
       };
     }
     return result.outcome === 'opened_environment_window' || result.outcome === 'focused_environment_window'
@@ -5278,6 +5290,30 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       publishSession(nextSession);
       return { close_panel: false, next_session: nextSession };
     };
+    if (
+      (environment.kind === 'local_environment' || environment.kind === 'ssh_environment')
+      && (
+        action.intent === 'open_with_preflight'
+        || action.intent === 'initialize_and_open'
+        || action.intent === 'start_and_open'
+      )
+    ) {
+      const checking = advanceEnvironmentOpenFlowStage(currentSession, 'checking_access');
+      publishSession(checking);
+      const attempted = await attemptEnvironmentOpenSilently(environment);
+      if (attempted.opened) {
+        return { close_panel: true, next_session: null };
+      }
+      if (attempted.operation_key) {
+        publishSession(null);
+        return { close_panel: true, next_session: null };
+      }
+      return failOpenFlow(
+        checking,
+        attempted.message || i18n().t('environmentOpenFlow.openFailedDetail'),
+        attempted.recovery,
+      );
+    }
     const startAndOpenEnvironment = async (
       state: EnvironmentGuidanceSessionState,
     ): Promise<EnvironmentGuidanceActionResolution> => {
@@ -9081,6 +9117,42 @@ function localizedNextActionLabel(i18n: DesktopI18n, action: DesktopLauncherOper
   }
 }
 
+function environmentActionForLauncherRetry(
+  request: DesktopLauncherActionRequest | undefined,
+): EnvironmentActionModel | null {
+  if (!request) {
+    return null;
+  }
+  switch (request.kind) {
+    case 'open_local_environment':
+    case 'open_ssh_environment':
+      return { intent: 'open_with_preflight', label: 'Open', enabled: true, variant: 'default' };
+    case 'start_environment_runtime':
+      return { intent: 'start_runtime', label: 'Start', enabled: true, variant: 'default' };
+    case 'stop_environment_runtime':
+      return { intent: 'stop_runtime', label: 'Stop', enabled: true, variant: 'default' };
+    case 'restart_environment_runtime':
+      return { intent: 'restart_runtime', label: 'Restart', enabled: true, variant: 'default' };
+    case 'update_environment_runtime':
+      return { intent: 'update_runtime', label: 'Update runtime', enabled: true, variant: 'default' };
+    case 'run_gateway_environment_lifecycle':
+      return {
+        intent: request.operation === 'start'
+          ? 'start_runtime'
+          : request.operation === 'stop'
+            ? 'stop_runtime'
+            : request.operation === 'restart'
+              ? 'restart_runtime'
+              : 'update_runtime',
+        label: request.operation,
+        enabled: true,
+        variant: 'default',
+      };
+    default:
+      return null;
+  }
+}
+
 function localizedProgressPanelPrimaryAction(
   i18n: DesktopI18n,
   progress: DesktopLauncherActionProgress,
@@ -10130,6 +10202,13 @@ function EnvironmentSplitActionButton(props: Readonly<{
                               }
                               case 'manage_desktop_update': {
                                 void props.runDesktopUpdateHandoff(props.environmentID, props.environmentLabel);
+                                break;
+                              }
+                              case 'retry': {
+                                const retryAction = environmentActionForLauncherRetry(action.retry_action);
+                                if (retryAction) {
+                                  props.onRunAction(retryAction);
+                                }
                                 break;
                               }
                               case 'copy_diagnostics':
@@ -13082,6 +13161,10 @@ function GatewaySourceCard(props: Readonly<{
                         case 'update_runtime':
                           break;
                         case 'retry':
+                          if (action.retry_action) {
+                            runForegroundRequestFromProgress(action.retry_action, currentProgress);
+                          }
+                          break;
                         case 'refresh_gateway':
                         case 'check_gateway':
                         case 'refresh_gateway_status':
