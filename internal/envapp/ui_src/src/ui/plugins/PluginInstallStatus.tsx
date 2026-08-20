@@ -28,8 +28,13 @@ export function PluginInstallStatus(props: {
     || execution()?.status === 'orphaned';
   const active = () => !failed()
     && props.projection.observation !== 'refresh_failed'
-    && execution()?.status !== 'completed';
+    && props.projection.observation !== 'activation_failed'
+    && (
+      props.projection.observation === 'authorizing'
+      || execution()?.status !== 'completed'
+    );
   const retryable = () => props.projection.observation === 'refresh_failed'
+    || props.projection.observation === 'activation_failed'
     || props.projection.startFailure?.retryable === true
     || retryableFailureCode(execution()?.failure_code);
   const progress = () => latestProgress(props.projection);
@@ -52,8 +57,10 @@ export function PluginInstallStatus(props: {
     });
   };
   const statusIcon = () => (
-    failed() || props.projection.observation === 'refresh_failed'
+    failed() || props.projection.observation === 'refresh_failed' || props.projection.observation === 'activation_failed'
       ? AlertTriangle
+      : props.projection.observation === 'authorizing'
+        ? RefreshIcon
       : execution()?.status === 'completed'
         ? CheckCircle
         : progress()?.kind === 'bytes'
@@ -64,12 +71,12 @@ export function PluginInstallStatus(props: {
   return (
     <section
       data-plugin-install-execution={props.projection.pluginInstanceID}
-      role={failed() || props.projection.observation === 'refresh_failed' ? 'alert' : 'status'}
-      aria-live={failed() || props.projection.observation === 'refresh_failed' ? 'assertive' : 'polite'}
+      role={failed() || props.projection.observation === 'refresh_failed' || props.projection.observation === 'activation_failed' ? 'alert' : 'status'}
+      aria-live={failed() || props.projection.observation === 'refresh_failed' || props.projection.observation === 'activation_failed' ? 'assertive' : 'polite'}
       aria-busy={active()}
       class={cn(
         'min-w-0 rounded-md border px-3 py-2.5',
-        failed() || props.projection.observation === 'refresh_failed'
+        failed() || props.projection.observation === 'refresh_failed' || props.projection.observation === 'activation_failed'
           ? 'border-destructive/40 bg-destructive/5 text-destructive'
           : 'border-primary/25 bg-primary/5 text-foreground',
         PLUGIN_ENTER_MOTION_CLASS,
@@ -78,7 +85,9 @@ export function PluginInstallStatus(props: {
       <div class="flex min-w-0 items-start gap-2">
         <Dynamic component={statusIcon()} class={cn(
           'mt-0.5 h-4 w-4 shrink-0',
-          active() && progress()?.kind !== 'bytes' && 'animate-spin motion-reduce:animate-none',
+          active()
+            && (props.projection.observation === 'authorizing' || progress()?.kind !== 'bytes')
+            && 'animate-spin motion-reduce:animate-none',
         )} />
         <div class="min-w-0 flex-1">
           <p class={cn('text-xs font-semibold leading-5', props.compact && 'line-clamp-2')}>{label()}</p>
@@ -126,6 +135,8 @@ export function PluginInstallStatus(props: {
             >
               {props.projection.observation === 'refresh_failed'
                 ? i18n.t('uiCopy.plugin.installOperation.retryRefresh')
+                : props.projection.observation === 'activation_failed'
+                  ? i18n.t('uiCopy.plugin.installOperation.retryActivation')
                 : i18n.t('common.actions.retry')}
             </button>
           </Show>
@@ -160,6 +171,8 @@ function installStatusLabel(
   if (projection.observation === 'starting') return i18n.t('uiCopy.plugin.installOperation.starting');
   if (projection.observation === 'reconnecting') return i18n.t('uiCopy.plugin.installOperation.reconnecting');
   if (projection.observation === 'refreshing') return i18n.t('uiCopy.plugin.installOperation.refreshing');
+  if (projection.observation === 'authorizing') return i18n.t('uiCopy.plugin.installOperation.authorizing');
+  if (projection.observation === 'activation_failed') return i18n.t('uiCopy.plugin.installOperation.activationFailed');
   if (projection.observation === 'refresh_failed') return i18n.t('uiCopy.plugin.installOperation.refreshFailed');
   const execution = projection.execution;
   if (!execution) {

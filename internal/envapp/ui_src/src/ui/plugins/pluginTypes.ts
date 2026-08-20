@@ -253,6 +253,8 @@ export type PluginInstallObservation =
   | 'reconnecting'
   | 'failed'
   | 'refreshing'
+  | 'authorizing'
+  | 'activation_failed'
   | 'refresh_failed';
 
 export type PluginInstallExecutionProjection = Readonly<{

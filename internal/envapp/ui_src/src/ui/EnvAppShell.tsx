@@ -83,6 +83,7 @@ import {
   createPluginInstallCoordinator,
   type PluginInstallCoordinator,
 } from './plugins/pluginInstallCoordinator';
+import { completeApprovedOfficialInstall } from './plugins/pluginApprovedInstallSetup';
 import {
   PluginConfirmationDialog,
   createPluginConfirmationQueue,
@@ -1193,9 +1194,13 @@ export function EnvAppShell() {
   };
   pluginInstallCoordinator = createPluginInstallCoordinator({
     lifecycle: pluginLifecycle,
-    refreshInventory: async () => {
-      await refetchPluginInventory();
-    },
+    refreshInventory: refetchPluginInventory,
+    completeApprovedInstall: (pluginInstanceID, signal) => completeApprovedOfficialInstall({
+      pluginInstanceID,
+      lifecycle: pluginLifecycle,
+      refreshInventory: refetchPluginInventory,
+      signal,
+    }),
     createRequestID: () => createClientId('plugin-install'),
     resolvePluginID: (pluginInstanceID) => (
       pluginInventoryProjection()?.items.find((item) => (
