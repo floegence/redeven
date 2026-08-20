@@ -18,12 +18,6 @@ func officialReleaseFixtureTime() time.Time {
 	return time.Date(2026, time.August, 14, 15, 20, 0, 0, time.UTC)
 }
 
-func TestOfficialContainersVersionMatchesPublishedRelease(t *testing.T) {
-	if officialContainersVersion != "4.4.4" {
-		t.Fatalf("official Containers version = %q, want 4.4.4", officialContainersVersion)
-	}
-}
-
 type rejectingReleaseAssetFetcher struct{}
 
 func (rejectingReleaseAssetFetcher) FetchArtifact(context.Context, externalsource.ArtifactFetchRequest) (externalsource.ArtifactFetchResult, error) {
@@ -68,6 +62,29 @@ func TestOfficialReleaseProviderRejectsTrustAnchorDrift(t *testing.T) {
 	}
 }
 
+func TestOfficialReleaseProviderUsesMarketVersion(t *testing.T) {
+	release := officialMarketReleaseFixture(t)
+	release.Version = "4.4.5"
+	release.Source.Tag = "v4.4.5"
+	release.Asset.Name = "containers-4.4.5.redevplugin"
+	release.Asset.URL = "https://github.com/floegence/redeven-official-plugins/releases/download/v4.4.5/containers-4.4.5.redevplugin"
+	release.ReleaseRefAsset.Name = "containers-4.4.5.release-ref.json"
+	release.ReleaseRefAsset.URL = "https://github.com/floegence/redeven-official-plugins/releases/download/v4.4.5/containers-4.4.5.release-ref.json"
+	release.TrustRoot.URL = "https://github.com/floegence/redeven-official-plugins/releases/download/v4.4.5/root.public.json"
+	release.PublisherReleaseRef.ReleaseRef.Version = release.Version
+	release.PublisherReleaseRef.ReleaseRef.ReleaseMetadataRef = "plugins/com.redeven.official/com.redeven.official.containers/4.4.5/release.json"
+	release.PublisherReleaseRef.Files[0].Locator = release.PublisherReleaseRef.ReleaseRef.ReleaseMetadataRef
+	release.TransportAssets[0].Locator = release.PublisherReleaseRef.ReleaseRef.ReleaseMetadataRef
+
+	provider, err := newOfficialReleaseProvider(release, rejectingReleaseAssetFetcher{})
+	if err != nil {
+		t.Fatalf("newOfficialReleaseProvider() rejected market version: %v", err)
+	}
+	if provider.releaseRef.Version != "4.4.5" {
+		t.Fatalf("release ref version = %q, want 4.4.5", provider.releaseRef.Version)
+	}
+}
+
 func officialMarketReleaseFixture(t *testing.T) pluginmarket.LatestRelease {
 	t.Helper()
 	anchors, err := redevpluginartifacts.OfficialReleaseTrustAnchorSet()
@@ -92,7 +109,7 @@ func officialMarketReleaseFixture(t *testing.T) pluginmarket.LatestRelease {
 		Size: 1794, SHA256: metadataSHA256,
 	}
 	release := pluginmarket.LatestRelease{
-		PluginID: officialContainersPluginID, Channel: officialReleaseChannel, Version: officialContainersVersion,
+		PluginID: officialContainersPluginID, Channel: officialReleaseChannel, Version: "4.4.4",
 		Source: pluginmarket.ReleaseSource{
 			Provider: "github", RepositoryID: 1289352675, RepositoryOwner: "floegence",
 			RepositoryName: "redeven-official-plugins", ReleaseID: 370650709, Tag: "v4.4.4",
@@ -117,7 +134,7 @@ func officialMarketReleaseFixture(t *testing.T) pluginmarket.LatestRelease {
 	release.PublisherReleaseRef.ReleaseRef = host.PluginReleaseRef{
 		SourceID: officialReleaseSourceID, Channel: officialReleaseChannel,
 		ReleaseMetadataRef: locator, ReleaseMetadataSHA256: metadataSHA256,
-		PublisherID: officialPublisherID, PluginID: officialContainersPluginID, Version: officialContainersVersion,
+		PublisherID: officialPublisherID, PluginID: officialContainersPluginID, Version: "4.4.4",
 		ExpectedHashes: host.PackageHashSet{
 			PackageSHA256: packageIdentitySHA256, ManifestSHA256: manifestSHA256, EntriesSHA256: entriesSHA256,
 		},

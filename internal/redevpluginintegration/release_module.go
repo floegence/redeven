@@ -15,10 +15,9 @@ import (
 )
 
 const (
-	officialReleaseSourceID   = "redeven_official"
-	officialReleaseChannel    = "stable"
-	officialContainersVersion = "4.4.4"
-	officialMinHostVersion    = "1.0.0"
+	officialReleaseSourceID = "redeven_official"
+	officialReleaseChannel  = "stable"
+	officialMinHostVersion  = "1.0.0"
 )
 
 type officialReleaseProvider struct {
@@ -53,9 +52,9 @@ func newOfficialReleaseProvider(release pluginmarket.LatestRelease, fetcher remo
 		return nil, fmt.Errorf("project official Containers release: %w", err)
 	}
 	if release.PluginID != officialContainersPluginID || release.Channel != officialReleaseChannel ||
-		release.Version != officialContainersVersion || ref.SourceID != officialReleaseSourceID ||
+		ref.SourceID != officialReleaseSourceID ||
 		ref.PublisherID != officialPublisherID || ref.PluginID != officialContainersPluginID ||
-		ref.Channel != officialReleaseChannel || ref.Version != officialContainersVersion {
+		ref.Channel != officialReleaseChannel || ref.Version != release.Version {
 		return nil, errors.New("official Containers market release identity is invalid")
 	}
 	anchors, err := redevpluginartifacts.OfficialReleaseTrustAnchorSet()
