@@ -730,9 +730,25 @@ test('Desktop smoke verifies owned PID cleanup and includes it in the final summ
     'utf8',
   ));
   assert.match(source, /kill -0 "\$pid"/u);
+  assert.match(source, /electron_pid=\$\(listener_pid "\$CDP_PORT"\)/u);
+  assert.match(source, /runtime_pid=\$\(listener_pid "\$LOCAL_UI_PORT"\)/u);
+  assert.match(source, /wait_for_owned_exit 30/u);
+  assert.match(source, /owned_pid_active "\$pid" && kill -KILL/u);
   assert.match(source, /PIDS_RELEASED=false/u);
   assert.match(source, /cleanup:JSON\.parse\(f\.readFileSync\(p\.join\(root,"cleanup\.json"\)\)\)/u);
   assert.doesNotMatch(source, /"pids_released":true/u);
+});
+
+test('Desktop smoke uninstalls the I/O plugin after cold restart acceptance', async () => {
+  const source = await import('node:fs/promises').then((fs) => fs.readFile(
+    new URL('./smoke_desktop_plugins.mjs', import.meta.url),
+    'utf8',
+  ));
+  assert.match(source, /async function verifyUninstall/u);
+  assert.match(source, /\/_redevplugin\/api\/plugins\/uninstall/u);
+  assert.match(source, /delete_data: true/u);
+  assert.match(source, /removed_from_catalog: true/u);
+  assert.match(source, /uninstall: uninstallEvidence/u);
 });
 
 test('Desktop smoke records the task owner in each phase summary', async () => {
