@@ -8769,10 +8769,6 @@ function localizedOpenConnectionPhaseLabel(i18n: DesktopI18n, phase: DesktopOpen
       return i18n.t('progress.openingWindow');
     case 'open_ready':
       return i18n.t('progress.openReady');
-    case 'failed':
-      return i18n.t('progress.failed');
-    case 'canceled':
-      return i18n.t('progress.canceled');
   }
 }
 
@@ -8906,6 +8902,12 @@ function localizedProgressTitle(i18n: DesktopI18n, progress: DesktopLauncherActi
   }
   const open = progress.open_progress;
   if (open) {
+    if (progress.status === 'failed') {
+      return i18n.t('progress.openFailed');
+    }
+    if (progress.status === 'canceled') {
+      return i18n.t('progress.canceled');
+    }
     switch (open.phase) {
       case 'checking_runtime_record':
         return i18n.t('progress.titleCheckingRuntimeStatus');
@@ -8922,10 +8924,6 @@ function localizedProgressTitle(i18n: DesktopI18n, progress: DesktopLauncherActi
         return i18n.t('progress.titleOpeningEnvironment');
       case 'open_ready':
         return i18n.t('progress.titleEnvironmentOpen');
-      case 'failed':
-        return i18n.t('progress.openFailed');
-      case 'canceled':
-        return i18n.t('progress.canceled');
       case 'ensuring_runtime_ready':
       case 'connecting_runtime_control':
         return localizedOpenConnectionPhaseLabel(i18n, open.phase);
@@ -8956,7 +8954,7 @@ function localizedProgressDetail(i18n: DesktopI18n, progress: DesktopLauncherAct
     return i18n.t(progress.detail_key);
   }
   const open = progress.open_progress;
-  if (open) {
+  if (open && progress.status !== 'failed' && progress.status !== 'canceled') {
     switch (open.phase) {
       case 'checking_runtime_record':
         return i18n.t('progress.detailCheckingRuntimeStatus');
@@ -8975,8 +8973,6 @@ function localizedProgressDetail(i18n: DesktopI18n, progress: DesktopLauncherAct
         return i18n.t('progress.detailEnvironmentOpen');
       case 'ensuring_runtime_ready':
       case 'connecting_runtime_control':
-      case 'failed':
-      case 'canceled':
         break;
     }
   }
@@ -9180,11 +9176,10 @@ function EnvironmentProgressPanel(props: Readonly<{
   runNextAction?: (action: DesktopLauncherOperationNextAction, progress: DesktopLauncherActionProgress) => void;
   runPrimaryAction?: (action: EnvironmentActionModel) => void;
 }>) {
-  const startup = createMemo(() => props.progress.lifecycle_progress);
+  const runtimeLifecycle = createMemo(() => props.progress.lifecycle_progress);
   const openConnection = createMemo(() => props.progress.open_progress);
   const stepProgress = createMemo(() => props.progress.step_progress);
-  const currentRuntimeLifecycle = createMemo(() => props.progress.lifecycle_progress);
-  const runtimeTargetDetail = createMemo(() => localizedRuntimeTargetDetail(props.i18n, startup()));
+  const runtimeTargetDetail = createMemo(() => localizedRuntimeTargetDetail(props.i18n, runtimeLifecycle()));
   const openTargetDetail = createMemo(() => localizedRuntimeTargetDetail(props.i18n, openConnection()));
   const iconTone = createMemo(() => environmentProgressStatusIconTone(props.progress));
   const phaseStatus = createMemo(() => {
@@ -9197,10 +9192,10 @@ function EnvironmentProgressPanel(props: Readonly<{
     }
     return 'running';
   });
-  const runtimeSteps = createMemo(() => startup()?.steps ?? []);
+  const runtimeSteps = createMemo(() => runtimeLifecycle()?.steps ?? []);
   const stepEntering = createRuntimeLifecycleStepAnimation(
     runtimeSteps,
-    () => startup()?.plan_revision ?? 0,
+    () => runtimeLifecycle()?.plan_revision ?? 0,
   );
   const stagePercent = createMemo(() => {
     return environmentProgressMeterPercent(props.progress);
@@ -9255,7 +9250,7 @@ function EnvironmentProgressPanel(props: Readonly<{
         detail: step.detail_key ? props.i18n.t(step.detail_key) : localizedGatewayCheckStepDetail(props.i18n, step.detail),
       }));
     }
-    const current = startup();
+    const current = runtimeLifecycle();
     const open = openConnection();
     if (open) {
       return openConnectionPhaseSequence(open.location)
@@ -9285,7 +9280,7 @@ function EnvironmentProgressPanel(props: Readonly<{
   const progressLeadDetail = createMemo(() => (
     failureDisplay() ? '' : localizedProgressDetail(props.i18n, props.progress)
   ));
-  const hasStepTimeline = createMemo(() => Boolean(stepProgress() || startup() || openConnection()));
+  const hasStepTimeline = createMemo(() => Boolean(stepProgress() || runtimeLifecycle() || openConnection()));
   const renderFailureNotice = () => (
     <Show when={failureDisplay()}>
       {(failure) => (
@@ -9439,36 +9434,44 @@ function EnvironmentProgressPanel(props: Readonly<{
       </Show>
       <Show when={props.progress.runtime_confirmation}>
         {(confirmation) => (
-          <div class="redeven-action-popover__failure-notice" data-tone="warning">
+          <div class="redeven-runtime-impact" data-tone="warning">
             <Show
               when={confirmation().operation === 'start'}
               fallback={(
                 <>
-                  <div class="redeven-action-popover__failure-title">{props.i18n.t('progress.runtimeImpactTitle')}</div>
-                  <div class="redeven-action-popover__failure-summary">
+                  <div class="redeven-runtime-impact__summary">
                     {confirmation().workload_knowledge === 'known'
                       ? props.i18n.t('progress.runtimeImpactKnown')
                       : props.i18n.t('progress.runtimeImpactUnknown')}
                   </div>
-                  <div class="redeven-environment-progress__meta">
+                  <div class="redeven-runtime-impact__metrics">
                     <Show when={confirmation().affected_process_count !== undefined}>
-                      <span>{props.i18n.t('progress.affectedProcesses', { count: confirmation().affected_process_count ?? 0 })}</span>
+                      <div class="redeven-runtime-impact__metric">
+                        {props.i18n.t('progress.affectedProcesses', { count: confirmation().affected_process_count ?? 0 })}
+                      </div>
                     </Show>
                     <Show when={confirmation().active_session_count !== undefined}>
-                      <span>{props.i18n.t('progress.activeSessions', { count: confirmation().active_session_count ?? 0 })}</span>
+                      <div class="redeven-runtime-impact__metric">
+                        {props.i18n.t('progress.activeSessions', { count: confirmation().active_session_count ?? 0 })}
+                      </div>
                     </Show>
                     <Show when={confirmation().protected_workload_present}>
-                      <span>{props.i18n.t('progress.protectedWorkloadPresent')}</span>
+                      <div class="redeven-runtime-impact__metric" data-emphasis="warning">
+                        {props.i18n.t('progress.protectedWorkloadPresent')}
+                      </div>
                     </Show>
-                    <span>{props.i18n.t('progress.snapshotRevision', { revision: confirmation().snapshot_revision })}</span>
                   </div>
+                  <details class="redeven-runtime-impact__technical">
+                    <summary>{props.i18n.t('progress.snapshotRevision', { revision: confirmation().snapshot_revision })}</summary>
+                    <div>{props.i18n.t('progress.runtimeConfirmationRequiredDetail')}</div>
+                  </details>
                 </>
               )}
             >
-              <div class="redeven-action-popover__failure-title">
+              <div class="redeven-runtime-impact__summary">
                 {props.i18n.t('environmentOpenFlow.checkingAccessTitle')}
               </div>
-              <div class="redeven-action-popover__failure-summary">
+              <div class="redeven-runtime-impact__detail">
                 {props.i18n.t('environmentOpenFlow.checkingAccessDetail')}
               </div>
             </Show>
@@ -9486,7 +9489,7 @@ function EnvironmentProgressPanel(props: Readonly<{
                 {(step, index) => {
                   const state = () => stepState(
                     index,
-                    stepProgress()?.active_step_id ?? startup()?.phase ?? openConnection()?.phase,
+                    stepProgress()?.active_step_id ?? runtimeLifecycle()?.phase ?? openConnection()?.phase,
                     phaseStatus(),
                   );
                   const isLast = () => index === phaseSequence().length - 1;
@@ -9494,8 +9497,8 @@ function EnvironmentProgressPanel(props: Readonly<{
                     <div
                       class="redeven-environment-progress__step"
                       data-step-key={step().key}
-                      data-plan-revision={startup()?.plan_revision ?? 0}
-                      data-entering={startup() ? stepEntering(step().key) : false}
+                      data-plan-revision={runtimeLifecycle()?.plan_revision ?? 0}
+                      data-entering={runtimeLifecycle() ? stepEntering(step().key) : false}
                     >
                       <div class="redeven-environment-progress__step-connector">
                         <span class="redeven-environment-progress__step-dot" data-state={state()} />
@@ -9519,21 +9522,23 @@ function EnvironmentProgressPanel(props: Readonly<{
             </div>
             <div
               class="redeven-environment-progress__meter"
-              data-plan-state={startup()?.plan_state ?? 'executing'}
+              data-plan-state={runtimeLifecycle()?.plan_state ?? 'executing'}
               aria-hidden="true"
             >
               <span style={{ width: `${stagePercent()}%` }} />
             </div>
             <div class="redeven-environment-progress__meta">
-              <Show when={stepProgress()}>
+              <Show when={stepProgress() || runtimeLifecycle()}>
                 <span>
                   {props.i18n.t('progress.stepOf', {
-                    current: Math.max(1, phaseSequence().findIndex((step) => step.phase === stepProgress()?.active_step_id) + 1),
+                    current: Math.max(1, phaseSequence().findIndex((step) => step.phase === (
+                      stepProgress()?.active_step_id ?? runtimeLifecycle()?.active_step_id
+                    )) + 1),
                     total: phaseSequence().length,
                   })}
                 </span>
               </Show>
-              <Show when={!stepProgress() && currentRuntimeLifecycle()?.plan_state !== 'planning'}>
+              <Show when={!stepProgress() && runtimeLifecycle()?.plan_state !== 'planning'}>
                 <span>{localizedProgressPlanningLabel(props.i18n, props.progress.action)}</span>
               </Show>
               <Show when={!stepProgress() && runtimeTargetDetail()}>

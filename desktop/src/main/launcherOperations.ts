@@ -6,7 +6,7 @@ import type {
   DesktopLauncherOperationSubjectKind,
 } from '../shared/desktopLauncherIPC';
 import type { DesktopTranslationKey } from '../shared/i18n/desktopI18n';
-import { advanceOpenConnectionTiming, openConnectionProgress } from '../shared/desktopOpenConnectionProgress';
+import { advanceOpenConnectionTiming } from '../shared/desktopOpenConnectionProgress';
 import type { DesktopOpenConnectionProgress, DesktopOpenConnectionTiming } from '../shared/desktopOpenConnectionProgress';
 import type { DesktopRuntimeLifecycleProgress } from '../shared/desktopRuntimeLifecycleProgress';
 import type { DesktopOperationFailurePresentation } from '../shared/desktopOperationFailure';
@@ -122,7 +122,16 @@ function operationProgress(snapshot: DesktopLauncherOperationSnapshot): DesktopL
   };
 }
 
-function openProgressTitleKey(open: DesktopOpenConnectionProgress | undefined): DesktopTranslationKey | undefined {
+function openProgressTitleKey(
+  open: DesktopOpenConnectionProgress | undefined,
+  status?: DesktopLauncherOperationStatus,
+): DesktopTranslationKey | undefined {
+  if (open && status === 'failed') {
+    return 'progress.openFailed';
+  }
+  if (open && status === 'canceled') {
+    return 'progress.canceled';
+  }
   switch (open?.phase) {
     case 'checking_runtime_record':
       return 'progress.titleCheckingRuntimeStatus';
@@ -139,16 +148,18 @@ function openProgressTitleKey(open: DesktopOpenConnectionProgress | undefined): 
       return 'progress.titleOpeningEnvironment';
     case 'open_ready':
       return 'progress.titleEnvironmentOpen';
-    case 'failed':
-      return 'progress.openFailed';
-    case 'canceled':
-      return 'progress.canceled';
     default:
       return undefined;
   }
 }
 
-function openProgressDetailKey(open: DesktopOpenConnectionProgress | undefined): DesktopTranslationKey | undefined {
+function openProgressDetailKey(
+  open: DesktopOpenConnectionProgress | undefined,
+  status?: DesktopLauncherOperationStatus,
+): DesktopTranslationKey | undefined {
+  if (status === 'failed' || status === 'canceled') {
+    return undefined;
+  }
   switch (open?.phase) {
     case 'checking_runtime_record':
       return 'progress.detailCheckingRuntimeStatus';
@@ -170,7 +181,13 @@ function openProgressDetailKey(open: DesktopOpenConnectionProgress | undefined):
   }
 }
 
-function lifecycleProgressTitleKey(lifecycle: DesktopRuntimeLifecycleProgress | undefined): DesktopTranslationKey | undefined {
+function lifecycleProgressTitleKey(
+  lifecycle: DesktopRuntimeLifecycleProgress | undefined,
+  status?: DesktopLauncherOperationStatus,
+): DesktopTranslationKey | undefined {
+  if (status === 'failed' || status === 'cleanup_failed' || status === 'canceled') {
+    return undefined;
+  }
   switch (lifecycle?.phase) {
     case 'checking_existing_runtime':
       return 'progress.checkingExistingRuntime';
@@ -205,18 +222,6 @@ function lifecycleProgressTitleKey(lifecycle: DesktopRuntimeLifecycleProgress | 
     default:
       return undefined;
   }
-}
-
-function launcherOperationTitleKey(
-  input: Pick<DesktopLauncherOperationSnapshot, 'open_progress' | 'lifecycle_progress' | 'title_key'>,
-): DesktopTranslationKey | undefined {
-  return input.title_key ?? openProgressTitleKey(input.open_progress) ?? lifecycleProgressTitleKey(input.lifecycle_progress);
-}
-
-function launcherOperationDetailKey(
-  input: Pick<DesktopLauncherOperationSnapshot, 'open_progress' | 'detail_key'>,
-): DesktopTranslationKey | undefined {
-  return input.detail_key ?? openProgressDetailKey(input.open_progress);
 }
 
 function operationAttemptMatches(
@@ -324,9 +329,11 @@ export class LauncherOperationRegistry {
       status: input.status ?? 'running',
       phase: compact(input.phase),
       title: compact(input.title),
-      title_key: input.title_key ?? openProgressTitleKey(input.open_progress) ?? lifecycleProgressTitleKey(input.lifecycle_progress),
+      title_key: input.title_key
+        ?? openProgressTitleKey(input.open_progress, input.status)
+        ?? lifecycleProgressTitleKey(input.lifecycle_progress, input.status),
       detail: compact(input.detail),
-      detail_key: input.detail_key ?? openProgressDetailKey(input.open_progress),
+      detail_key: input.detail_key ?? openProgressDetailKey(input.open_progress, input.status),
       ...(input.lifecycle_progress ? { lifecycle_progress: input.lifecycle_progress } : {}),
       ...(input.open_progress ? { open_progress: input.open_progress } : {}),
       ...(input.open_timing ? { open_timing: input.open_timing } : {}),
@@ -392,10 +399,30 @@ export class LauncherOperationRegistry {
       ...(nextOpenTiming ? { open_timing: nextOpenTiming } : {}),
       updated_at_unix_ms: now,
     };
+    const titlePresentationChanged = patch.status !== undefined
+      || patch.phase !== undefined
+      || patch.title !== undefined
+      || patch.open_progress !== undefined
+      || patch.lifecycle_progress !== undefined;
+    const detailPresentationChanged = patch.status !== undefined
+      || patch.phase !== undefined
+      || patch.detail !== undefined
+      || patch.open_progress !== undefined
+      || patch.lifecycle_progress !== undefined;
+    const titleKey = Object.hasOwn(patch, 'title_key')
+      ? patch.title_key
+      : titlePresentationChanged
+        ? openProgressTitleKey(next.open_progress, next.status) ?? lifecycleProgressTitleKey(next.lifecycle_progress, next.status)
+        : current.title_key;
+    const detailKey = Object.hasOwn(patch, 'detail_key')
+      ? patch.detail_key
+      : detailPresentationChanged
+        ? openProgressDetailKey(next.open_progress, next.status)
+        : current.detail_key;
     const patchedNext: DesktopLauncherOperationSnapshot = {
       ...next,
-      title_key: launcherOperationTitleKey(next),
-      detail_key: launcherOperationDetailKey(next),
+      title_key: titleKey,
+      detail_key: detailKey,
     };
     this.operationsByKey.set(key, patchedNext);
     this.onChange(patchedNext);
@@ -468,22 +495,11 @@ export class LauncherOperationRegistry {
         continue;
       }
       const runtimeLifecycle = snapshot.lifecycle_progress;
-      const openConnection = snapshot.open_progress
-        ? openConnectionProgress({
-            location: snapshot.open_progress.location,
-            phase: 'canceled',
-            environmentID: snapshot.open_progress.environment_id,
-            environmentLabel: snapshot.open_progress.environment_label,
-            targetID: snapshot.open_progress.target_id,
-            targetLabel: snapshot.open_progress.target_label,
-            targetDetail: snapshot.open_progress.target_detail,
-          })
-        : undefined;
       const next = this.update(snapshot.operation_key, {
         ...patch,
         deleted_subject: true,
         ...(runtimeLifecycle && !patch.lifecycle_progress ? { lifecycle_progress: runtimeLifecycle } : {}),
-        ...(openConnection && !patch.open_progress ? { open_progress: openConnection } : {}),
+        ...(snapshot.open_progress && !patch.open_progress ? { open_progress: snapshot.open_progress } : {}),
       });
       if (next) {
         touched.push(next);
@@ -513,17 +529,6 @@ export class LauncherOperationRegistry {
     }
     const cancelPhase = cancelPhaseForSnapshot(snapshot);
     const runtimeLifecycle = snapshot.lifecycle_progress;
-    const openConnection = snapshot.open_progress
-      ? openConnectionProgress({
-          location: snapshot.open_progress.location,
-          phase: 'canceled',
-          environmentID: snapshot.open_progress.environment_id,
-          environmentLabel: snapshot.open_progress.environment_label,
-          targetID: snapshot.open_progress.target_id,
-          targetLabel: snapshot.open_progress.target_label,
-          targetDetail: snapshot.open_progress.target_detail,
-        })
-      : undefined;
     return this.update(key, {
       status: 'canceling',
       phase: cancelPhase.phase,
@@ -532,7 +537,7 @@ export class LauncherOperationRegistry {
       detail: compact(reason) || cancelPhase.detail,
       detail_key: compact(reason) ? undefined : cancelPhase.detailKey,
       ...(runtimeLifecycle ? { lifecycle_progress: runtimeLifecycle } : {}),
-      ...(openConnection ? { open_progress: openConnection } : {}),
+      ...(snapshot.open_progress ? { open_progress: snapshot.open_progress } : {}),
       cancelable: false,
       interrupt_label: undefined,
       interrupt_detail: undefined,

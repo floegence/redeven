@@ -437,7 +437,7 @@ describe('launcherBusyState', () => {
     });
     const failedOpenProgress = localOpenActionProgress({
       status: 'failed',
-      phase: 'failed',
+      phase: 'opening_window',
       title: 'Open failed',
       operationKey: 'local:host:local:open:123',
       startedAt: 100,
@@ -477,7 +477,7 @@ describe('launcherBusyState', () => {
     const operationKey = 'local:host:local:open';
     const failedSnapshotProgress = localOpenActionProgress({
       status: 'failed',
-      phase: 'failed',
+      phase: 'opening_window',
       title: 'Open failed',
       operationKey,
       startedAt: 100,
@@ -507,7 +507,7 @@ describe('launcherBusyState', () => {
     });
     const failedSnapshotProgress = localOpenActionProgress({
       status: 'failed',
-      phase: 'failed',
+      phase: 'opening_window',
       title: 'Open failed',
       operationKey: 'local:host:local:open:failed',
       startedAt: 300,
@@ -553,7 +553,7 @@ describe('launcherBusyState', () => {
     });
     const failedSnapshotProgress = localOpenActionProgress({
       status: 'failed',
-      phase: 'failed',
+      phase: 'opening_window',
       title: 'Open failed',
       operationKey: 'local:host:local:open:failed',
       startedAt: 300,
@@ -593,7 +593,7 @@ describe('launcherBusyState', () => {
     };
     const failedSnapshotProgress = localOpenActionProgress({
       status: 'failed',
-      phase: 'failed',
+      phase: 'opening_window',
       title: 'Open failed',
       operationKey: 'local:host:local:open:failed',
       startedAt: 100,
@@ -647,7 +647,7 @@ describe('launcherBusyState', () => {
     });
     const newerFailedProgress = localOpenActionProgress({
       status: 'failed',
-      phase: 'failed',
+      phase: 'opening_window',
       title: 'Open failed',
       operationKey: 'local:host:local:open:newer-failed',
       startedAt: 200,
@@ -676,7 +676,7 @@ describe('launcherBusyState', () => {
     });
     const failedSnapshotProgress = localOpenActionProgress({
       status: 'failed',
-      phase: 'failed',
+      phase: 'opening_window',
       title: 'Open failed',
       operationKey: 'local:host:local:open:failed',
       startedAt: 300,
@@ -709,7 +709,7 @@ describe('launcherBusyState', () => {
   it('keeps fresh retry busy progress when an older failed snapshot is still the card authority', () => {
     const failedSnapshotProgress = localOpenActionProgress({
       status: 'failed',
-      phase: 'failed',
+      phase: 'opening_window',
       title: 'Open failed',
       operationKey: 'local:host:local:open:failed',
       startedAt: 100,
@@ -740,7 +740,7 @@ describe('launcherBusyState', () => {
   it('releases request busy when a matching current snapshot lands before an action progress receipt', () => {
     const failedSnapshotProgress = localOpenActionProgress({
       status: 'failed',
-      phase: 'failed',
+      phase: 'opening_window',
       title: 'Open failed',
       operationKey: 'local:host:local:open:failed',
       startedAt: 100,
@@ -763,7 +763,7 @@ describe('launcherBusyState', () => {
   it('keeps request busy when only an older failed snapshot exists for a fresh retry', () => {
     const failedSnapshotProgress = localOpenActionProgress({
       status: 'failed',
-      phase: 'failed',
+      phase: 'opening_window',
       title: 'Open failed',
       operationKey: 'local:host:local:open:failed',
       startedAt: 100,
@@ -793,7 +793,7 @@ describe('launcherBusyState', () => {
     const operationKey = 'local:host:local:open';
     const failedPreviousAttempt = localOpenActionProgress({
       status: 'failed',
-      phase: 'failed',
+      phase: 'opening_window',
       title: 'Open failed',
       operationKey,
       startedAt: 100,
@@ -851,7 +851,7 @@ describe('launcherBusyState', () => {
     });
     const canceledOpenProgress = localOpenActionProgress({
       status: 'canceled',
-      phase: 'canceled',
+      phase: 'opening_window',
       title: 'Open canceled',
       operationKey,
       startedAt: 100,

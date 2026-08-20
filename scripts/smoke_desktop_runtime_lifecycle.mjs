@@ -128,7 +128,18 @@ async function lifecycleActionForEnvironment(page, label, operation, expectedOut
   if (confirmed?.ok !== true || confirmed.outcome !== expectedOutcome) {
     throw new Error(`${operation} failed after confirmation: ${JSON.stringify(confirmed)}`);
   }
-  return { prepared, confirmed };
+  const completed = await waitFor(async () => {
+    const snapshot = await launcherSnapshot(page);
+    const operationSnapshot = snapshot.operations.find((candidate) => candidate.operation_key === operationKey);
+    const progress = operationSnapshot?.lifecycle_progress;
+    return operationSnapshot?.status === 'succeeded'
+      && progress?.plan_state === 'terminal'
+      && progress.steps.length > 0
+      && progress.steps.every((step) => step.status === 'succeeded')
+      ? operationSnapshot
+      : null;
+  }, 5_000, `${label} ${operation} lifecycle completion`);
+  return { prepared, confirmed, completed };
 }
 
 async function assertFailedOperationHasGuidance(page, result, label, expectedTarget = {}) {
@@ -148,6 +159,32 @@ async function assertFailedOperationHasGuidance(page, result, label, expectedTar
   const summary = String(result.failure?.summary ?? operation.failure?.summary ?? result.message ?? '').trim();
   if (!summary) {
     throw new Error(`${label} failed without a user-facing summary: ${JSON.stringify({ result, operation })}`);
+  }
+  const lifecycleProgress = operation.lifecycle_progress;
+  const failedSteps = lifecycleProgress?.steps.filter((step) => step.status === 'failed') ?? [];
+  if (lifecycleProgress) {
+    if (
+      lifecycleProgress.plan_state !== 'terminal'
+      || !lifecycleProgress.failed_step_id
+      || failedSteps.length !== 1
+      || failedSteps[0]?.id !== lifecycleProgress.failed_step_id
+    ) {
+      throw new Error(`${label} did not retain one terminal failed lifecycle step: ${JSON.stringify(operation)}`);
+    }
+  } else if (operation.open_progress) {
+    const open = operation.open_progress;
+    if (
+      open.phase === 'failed'
+      || open.phase === 'canceled'
+      || !Number.isInteger(open.stage_index)
+      || !Number.isInteger(open.stage_count)
+      || open.stage_index < 1
+      || open.stage_index > open.stage_count
+    ) {
+      throw new Error(`${label} did not retain the real failed Open step: ${JSON.stringify(operation)}`);
+    }
+  } else {
+    throw new Error(`${label} failed without lifecycle or Open step progress: ${JSON.stringify(operation)}`);
   }
   const nextActions = operation.next_actions ?? [];
   const actionKinds = new Set(nextActions.map((action) => action.kind));
@@ -1287,7 +1324,7 @@ async function continueLocalScenarioAfterRestart({ page, browser, local, reportR
   await lifecycleActionForEnvironment(page, 'Local Environment', 'stop', 'stopped_gateway_environment_runtime');
   await waitForEnvironment(page, 'Local Environment', (environment) => environment.runtime_health.status !== 'online', phaseBudgets.lifecycle_start_ms);
   const startedOpenedAt = Date.now();
-  const start = await openThroughGuidance(page, 'Local Environment', /Start and open|启动并打开/u);
+  const start = await openThroughGuidance(page, 'Local Environment', /Start and open|Initialize and open|启动并打开|初始化并打开/u);
   const startedWorkspace = await waitForWorkspace(browser, {
     label: 'Local Environment', diagnosticRoots, openedAfterUnixMS: startedOpenedAt,
   });
@@ -1328,7 +1365,7 @@ async function runSSHScenario({ page, browser, reportRoot, diagnosticRoots }) {
   await lifecycleActionForEnvironment(page, 'SSH Remote Environment', 'stop', 'stopped_gateway_environment_runtime');
   await waitForEnvironment(page, 'SSH Remote Environment', (environment) => environment.runtime_health.status !== 'online', phaseBudgets.lifecycle_start_ms);
   const startedOpenedAt = Date.now();
-  const start = await openThroughGuidance(page, 'SSH Remote Environment', /Start and open|启动并打开/u);
+  const start = await openThroughGuidance(page, 'SSH Remote Environment', /Start and open|Initialize and open|启动并打开|初始化并打开/u);
   const startedWorkspace = await waitForWorkspace(browser, {
     label: 'SSH Remote Environment', diagnosticRoots, openedAfterUnixMS: startedOpenedAt,
   });

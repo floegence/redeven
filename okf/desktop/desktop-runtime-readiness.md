@@ -39,6 +39,8 @@ The renderer guidance state is presentation only. One main-process decision cont
 
 Every failed Open or Runtime action retains a structured summary and executable next actions in the operation snapshot: `Retry`, `Refresh status`, `Copy log`, and `Dismiss`. Container failures name the actual boundary (missing container, unavailable engine, SSH failure, or invalid Runtime response) and retain the exact host, container id, reference, and placement in the retry request. A failure cannot collapse to a toast or a disabled Open button without a recovery path.
 
+Progress snapshots keep the last real execution step until the operation is dismissed. Open progress describes only its ordered connection stages; operation `status` carries success, failure, or cancellation, so a failed Open marks the step that actually failed instead of replacing it with a generic `failed` stage. Runtime lifecycle progress uses the same rule with its terminal failed step. The operation registry recomputes localized title and detail keys whenever status or stage changes, preventing stale step copy from hiding a terminal failure.
+
 # Boundaries
 
 Environment open guidance does not display Gateway, Desktop ownership, target binding, takeover, or lifecycle-controller terminology. Provider setup never borrows another card's credentials or a public URL control path; authorization and target selection remain enforced behind the product action.
@@ -56,6 +58,7 @@ Environment open guidance does not display Gateway, Desktop ownership, target bi
 - `redeven:desktop/src/welcome/environmentOpenPreflight.ts:1` - Unknown-state Open preflight, Runtime reconciliation, and refreshed lifecycle routing.
 - `redeven:desktop/src/welcome/environmentOpenPreflight.smoke.test.ts:1` - Open, initialize, start, and authorization smoke outcomes.
 - `redeven:desktop/src/welcome/environmentGuidanceSession.ts:1` - Panel ownership, ordered stages, typed recovery actions, failure retention, and retry state.
+- `redeven:desktop/src/main/launcherOperations.ts:1` - Durable operation snapshots retain real Open stages and derive status-aware presentation keys.
 - `redeven:desktop/src/welcome/environmentProgressPrimaryPresentation.ts:59` - Maps typed Open failures to Runtime update-and-open, Desktop update handoff, or refresh-status primary recovery actions.
 - `redeven:desktop/src/welcome/App.tsx:5104` - One localized initialize/start/open orchestrator.
 - `redeven:desktop/src/welcome/App.tsx:10290` - Runs update-and-open continuation through the shared open preflight.

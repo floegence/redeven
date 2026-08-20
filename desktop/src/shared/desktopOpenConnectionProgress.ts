@@ -22,9 +22,7 @@ export type DesktopOpenConnectionPhase =
   | 'connecting_desktop_model_source'
   | 'checking_env_app_readiness'
   | 'opening_window'
-  | 'open_ready'
-  | 'failed'
-  | 'canceled';
+  | 'open_ready';
 
 export type DesktopOpenConnectionProgress = Readonly<{
   kind: 'open_connection';
@@ -135,8 +133,6 @@ export const OPEN_CONNECTION_PHASE_LABELS: Record<DesktopOpenConnectionPhase, st
   checking_env_app_readiness: 'Checking app readiness',
   opening_window: 'Opening window',
   open_ready: 'Open ready',
-  failed: 'Failed',
-  canceled: 'Canceled',
 };
 
 function compact(value: unknown): string {
@@ -151,9 +147,6 @@ function stageIndexForPhase(
   const index = phases.indexOf(phase);
   if (index >= 0) {
     return index + 1;
-  }
-  if (phase === 'failed' || phase === 'canceled') {
-    return Math.max(1, phases.length);
   }
   return 1;
 }

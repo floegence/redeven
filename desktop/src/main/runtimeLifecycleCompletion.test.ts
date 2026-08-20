@@ -51,6 +51,7 @@ describe('Runtime lifecycle completion', () => {
 
   it('prepares, uploads, and commits an authorized update in order', async () => {
     const calls: string[] = [];
+    const progress: GatewayRuntimeOperation['state'][] = [];
     const commitReady = operation('commit_ready');
     const succeeded = operation('succeeded');
     const artifact = Buffer.from('runtime archive');
@@ -74,9 +75,11 @@ describe('Runtime lifecycle completion', () => {
         calls.push('commit');
         return succeeded;
       }),
+      onProgress: (current) => progress.push(current.state),
     });
 
     expect(calls).toEqual(['prepare', 'upload', 'commit']);
+    expect(progress).toEqual(['awaiting_artifact', 'commit_ready', 'succeeded']);
     expect(result).toBe(succeeded);
   });
 
@@ -100,6 +103,7 @@ describe('Runtime lifecycle completion', () => {
       commit,
       observe: vi.fn(async () => observed.shift() ?? operation('commit_ready')),
       wait: vi.fn(async () => undefined),
+      onProgress: vi.fn(),
     })).resolves.toMatchObject({ state: 'succeeded' });
 
     expect(commit).toHaveBeenCalledOnce();

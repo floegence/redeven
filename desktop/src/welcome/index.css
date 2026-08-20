@@ -2428,6 +2428,81 @@ html:not(.dark) .redeven-header-separator {
   background: color-mix(in srgb, var(--success) 6%, var(--popover));
 }
 
+.redeven-runtime-impact {
+  box-sizing: border-box;
+  display: grid;
+  min-width: 0;
+  gap: 0.65rem;
+  margin-top: 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--warning) 28%, var(--border));
+  border-radius: 0.45rem;
+  padding: 0.7rem;
+  background: color-mix(in srgb, var(--warning) 7%, var(--popover));
+}
+
+.redeven-runtime-impact__summary {
+  min-width: 0;
+  color: var(--popover-foreground);
+  font-size: 0.76rem;
+  font-weight: 600;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.redeven-runtime-impact__detail {
+  min-width: 0;
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.redeven-runtime-impact__metrics {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.45rem;
+}
+
+.redeven-runtime-impact__metric {
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
+  border-radius: 0.35rem;
+  padding: 0.42rem 0.5rem;
+  background: color-mix(in srgb, var(--background) 48%, transparent);
+  color: var(--popover-foreground);
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.redeven-runtime-impact__metric[data-emphasis='warning'] {
+  border-color: color-mix(in srgb, var(--warning) 38%, var(--border));
+  color: color-mix(in srgb, var(--warning) 72%, var(--foreground) 28%);
+}
+
+.redeven-runtime-impact__technical {
+  min-width: 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 52%, transparent);
+  padding-top: 0.5rem;
+  color: var(--muted-foreground);
+  font-size: 0.66rem;
+  line-height: 1.4;
+}
+
+.redeven-runtime-impact__technical summary {
+  cursor: pointer;
+  color: var(--muted-foreground);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.redeven-runtime-impact__technical > div {
+  margin-top: 0.35rem;
+  overflow-wrap: anywhere;
+}
+
 .redeven-action-popover__notice-title {
   min-width: 0;
   font-size: 0.72rem;

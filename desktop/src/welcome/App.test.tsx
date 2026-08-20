@@ -408,7 +408,12 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("confirmation().operation === 'start'");
     expect(appSrc).toContain("props.i18n.t('environmentOpenFlow.checkingAccessTitle')");
     expect(appSrc).toContain("props.i18n.t('environmentOpenFlow.checkingAccessDetail')");
-    expect(appSrc).toContain("props.i18n.t('progress.runtimeImpactTitle')");
+    expect(appSrc).toContain('class="redeven-runtime-impact"');
+    expect(appSrc).toContain('class="redeven-runtime-impact__metrics"');
+    expect(appSrc).toContain('class="redeven-runtime-impact__technical"');
+    expect(appSrc).not.toContain('redeven-action-popover__failure-notice');
+    expect(appSrc).not.toContain('redeven-action-popover__failure-title');
+    expect(appSrc).not.toContain('redeven-action-popover__failure-summary');
   });
 
 	  it('filters Gateway source rows with the Gateways tab source filter and query', () => {
@@ -531,7 +536,7 @@ describe('DesktopWelcomeShell', () => {
       detail: 'Desktop could not open the local environment.',
       open_progress: openConnectionProgress({
         location: 'local_host',
-        phase: 'failed',
+        phase: 'checking_runtime_record',
         environmentID: local.id,
         environmentLabel: local.label,
         targetID: 'local:local',
@@ -1736,10 +1741,10 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('createRuntimeLifecycleStepAnimation');
     expect(appSrc).toContain('<Index each={phaseSequence()}>');
     expect(appSrc).toContain('data-step-key={step().key}');
-    expect(appSrc).toContain('data-plan-revision={startup()?.plan_revision ?? 0}');
-    expect(appSrc).toContain('data-entering={startup() ? stepEntering(step().key) : false}');
-    expect(appSrc).toContain("data-plan-state={startup()?.plan_state ?? 'executing'}");
-    expect(appSrc).toContain("currentRuntimeLifecycle()?.plan_state !== 'planning'");
+    expect(appSrc).toContain('data-plan-revision={runtimeLifecycle()?.plan_revision ?? 0}');
+    expect(appSrc).toContain('data-entering={runtimeLifecycle() ? stepEntering(step().key) : false}');
+    expect(appSrc).toContain("data-plan-state={runtimeLifecycle()?.plan_state ?? 'executing'}");
+    expect(appSrc).toContain("runtimeLifecycle()?.plan_state !== 'planning'");
     expect(appSrc).not.toContain("current.plan_state === 'planning'");
     expect(appSrc).toContain('localizedProgressPlanningLabel(props.i18n, props.progress.action)');
     expect(appSrc).toContain("props.progress.status === 'failed' || props.progress.status === 'cleanup_failed'");
@@ -1801,7 +1806,7 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('.redeven-environment-progress');
     expect(styles).toContain('grid-template-columns: 1rem minmax(0, 1fr);');
     expect(styles).toContain(".redeven-environment-progress__step[data-entering='true']");
-    expect(appSrc).toContain('const hasStepTimeline = createMemo(() => Boolean(stepProgress() || startup() || openConnection()));');
+    expect(appSrc).toContain('const hasStepTimeline = createMemo(() => Boolean(stepProgress() || runtimeLifecycle() || openConnection()));');
     expect(appSrc).toContain('<div class="redeven-action-popover__notice-title">{failure().title}</div>');
     const steppedProgressStart = appSrc.indexOf('<Show when={hasStepTimeline()}>');
     const steppedProgressEnd = appSrc.indexOf('<Show when={canCancel()}>', steppedProgressStart);
@@ -1819,6 +1824,9 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('@media (prefers-reduced-motion: reduce)');
     expect(styles).toContain('.redeven-environment-progress__meter');
     expect(styles).toContain('.redeven-environment-progress__meta');
+    expect(styles).toContain('.redeven-runtime-impact');
+    expect(styles).toContain('.redeven-runtime-impact__metrics');
+    expect(styles).toContain('.redeven-runtime-impact__technical');
     expect(styles).toContain('.redeven-split-action-trigger--progress');
     expect(styles).toContain('.redeven-split-action-trigger--attention');
     expect(styles).not.toContain('.redeven-ssh-runtime-activity');

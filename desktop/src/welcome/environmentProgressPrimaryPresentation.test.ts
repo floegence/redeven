@@ -641,10 +641,6 @@ describe('selectEnvironmentPanelProgress', () => {
 
 function openConnectionPhaseForStatus(status: DesktopLauncherActionProgress['status']): DesktopOpenConnectionPhase {
   switch (status) {
-    case 'failed':
-      return 'failed';
-    case 'canceled':
-      return 'canceled';
     case 'succeeded':
       return 'open_ready';
     default:
