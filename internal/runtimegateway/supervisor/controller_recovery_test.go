@@ -9,10 +9,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"syscall"
 	"testing"
 	"time"
 
 	gatewayprotocol "github.com/floegence/redeven/internal/runtimegateway/protocol"
+	"github.com/floegence/redeven/internal/runtimemanagement"
 )
 
 func TestControllerArtifactVersionProbeHasIndependentTimeout(t *testing.T) {
@@ -287,6 +289,118 @@ func main() {
 	<-stop
 }
 `
+
+const stubbornRuntimeProcessHelperSource = `package main
+
+import (
+	"os"
+	"os/signal"
+	"syscall"
+)
+
+func main() {
+	if ready := os.Getenv("REDEVEN_TEST_READY_FILE"); ready != "" {
+		_ = os.WriteFile(ready, []byte("ready"), 0o600)
+	}
+	ignored := make(chan os.Signal, 1)
+	signal.Notify(ignored, os.Interrupt, syscall.SIGTERM)
+	for range ignored {
+	}
+}
+`
+
+func buildAndStartStubbornRuntimeProcess(
+	t *testing.T,
+	controller *Controller,
+	binding TargetBinding,
+	readyName string,
+) (*exec.Cmd, runtimemanagement.RuntimeProcessInventory) {
+	t.Helper()
+	managedBinary := filepath.Join(binding.RuntimeRoot, "runtime", "managed", "bin", "redeven")
+	if _, err := os.Stat(managedBinary); os.IsNotExist(err) {
+		source := filepath.Join(t.TempDir(), "stubborn-runtime-process.go")
+		if err := os.WriteFile(source, []byte(stubbornRuntimeProcessHelperSource), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(filepath.Dir(managedBinary), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		build := exec.Command("go", "build", "-o", managedBinary, source)
+		build.Env = append(os.Environ(), "GOWORK=off")
+		if output, err := build.CombinedOutput(); err != nil {
+			t.Fatalf("build stubborn Runtime fixture: %v\n%s", err, output)
+		}
+	}
+	readyFile := filepath.Join(t.TempDir(), readyName)
+	command := exec.Command(managedBinary, "run", "--mode", "desktop", "--state-root", binding.RuntimeRoot)
+	command.Env = append(os.Environ(), "REDEVEN_TEST_READY_FILE="+readyFile)
+	if err := command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if command.Process != nil {
+			_ = command.Process.Kill()
+			_, _ = command.Process.Wait()
+		}
+	})
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		if _, err := os.Stat(readyFile); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("stubborn Runtime fixture did not become ready")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	inventory, err := controller.runtimeProcessInventory(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(inventory.Instances) != 1 || inventory.Summary.Automatic != 1 || inventory.Summary.Blocked != 0 {
+		t.Fatalf("Runtime fixture inventory = %#v", inventory)
+	}
+	return command, inventory
+}
+
+func TestControllerStopsExactVerifiedRuntimeAfterGracefulShutdownTimeout(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Runtime process recovery is Unix-only")
+	}
+	controller, binding := newCapabilityTestController(t)
+	controller.shutdownWait = 100 * time.Millisecond
+	command, inventory := buildAndStartStubbornRuntimeProcess(t, controller, binding, "stubborn.ready")
+
+	if err := controller.stopVerifiedRuntimeProcesses(context.Background(), inventory); err != nil {
+		t.Fatalf("stopVerifiedRuntimeProcesses() error = %v", err)
+	}
+	if err := command.Wait(); err == nil {
+		t.Fatal("stubborn Runtime exited without the expected forced termination")
+	}
+	command.Process = nil
+}
+
+func TestControllerRefusesGracefulShutdownRecoveryAfterRuntimeIdentityChanges(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Runtime process recovery is Unix-only")
+	}
+	controller, binding := newCapabilityTestController(t)
+	controller.shutdownWait = 100 * time.Millisecond
+	first, firstInventory := buildAndStartStubbornRuntimeProcess(t, controller, binding, "first.ready")
+	if err := first.Process.Kill(); err != nil {
+		t.Fatal(err)
+	}
+	_, _ = first.Process.Wait()
+	first.Process = nil
+	second, _ := buildAndStartStubbornRuntimeProcess(t, controller, binding, "second.ready")
+
+	if err := controller.stopVerifiedRuntimeProcesses(context.Background(), firstInventory); err == nil {
+		t.Fatal("graceful shutdown recovery accepted a replacement Runtime process")
+	}
+	if err := second.Process.Signal(syscall.Signal(0)); err != nil {
+		t.Fatalf("replacement Runtime was stopped despite identity mismatch: %v", err)
+	}
+}
 
 func TestControllerRecoveryRestoresPreviousExecutableIdempotently(t *testing.T) {
 	stateRoot := t.TempDir()

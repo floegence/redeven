@@ -66,9 +66,10 @@ describe('operationNextActions', () => {
     ]);
 
     expect(visibleOperationNextActions(progress)).toEqual([
-      expect.objectContaining({ kind: 'refresh_status', label: 'Refresh status' }),
       expect.objectContaining({ kind: 'update_runtime', label: 'Update runtime' }),
       expect.objectContaining({ kind: 'manage_desktop_update', label: 'Update Redeven Desktop' }),
+      expect.objectContaining({ kind: 'retry', label: 'Retry' }),
+      expect.objectContaining({ kind: 'refresh_status', label: 'Refresh status' }),
       expect.objectContaining({ kind: 'copy_diagnostics', label: 'Copy log' }),
       expect.objectContaining({ kind: 'dismiss', label: 'Dismiss' }),
     ]);
@@ -138,8 +139,8 @@ describe('operationNextActions', () => {
       {
         kind: 'primary',
         actions: [
-          expect.objectContaining({ kind: 'refresh_status', label: 'Refresh status' }),
           expect.objectContaining({ kind: 'manage_desktop_update', label: 'Update Redeven Desktop' }),
+          expect.objectContaining({ kind: 'refresh_status', label: 'Refresh status' }),
         ],
       },
       {

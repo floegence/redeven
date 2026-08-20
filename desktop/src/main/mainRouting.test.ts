@@ -898,8 +898,21 @@ describe('main routing', () => {
     expect(bridgeOpenSrc).toContain('launcherActionFailureFromRuntimeLifecycleError(error');
     expect(bridgeOpenSrc).toContain("title: 'Checking runtime status'");
     expect(bridgeOpenSrc).toContain("if (placement.kind !== 'container_process' && hostAccess.kind !== 'ssh_host')");
-    expect(bridgeOpenSrc).toContain('const sshReadyRecord = hostAccess.kind === \'ssh_host\'');
+    expect(mainSrc).toContain('function savedRuntimePlacementReadyRecord(');
+    expect(mainSrc).toContain("startup report's state_dir points at the nested local-environment state");
+    expect(mainSrc).toContain('directory, which is not a valid bridge --state-root.');
+    expect(mainSrc).not.toContain('const runtimeStateRoot = compact(sshReady.startup.state_dir);');
+    expect(bridgeOpenSrc).toContain('let readyRecord = savedRuntimePlacementReadyRecord(');
     expect(bridgeOpenSrc).toContain("phase: 'opening_bridge_proxy'");
+    expect(bridgeOpenSrc).toContain('runtimeBridgeStartCanRecover(error)');
+    expect(bridgeOpenSrc).toContain('MANAGED_ENVIRONMENT_OPEN_BRIDGE_START_RETRY_DELAYS_MS');
+    expect(bridgeOpenSrc).toContain('The Runtime is still starting. Desktop will retry the connection before restarting it.');
+    expect(bridgeOpenSrc).toContain('managedEnvironmentOpenBridgeRecoveryAttemptsByTargetID');
+    expect(bridgeOpenSrc).toContain('MAX_MANAGED_ENVIRONMENT_OPEN_BRIDGE_RECOVERY_ATTEMPTS');
+    expect(bridgeOpenSrc).toContain('The SSH Runtime was restarted, but Desktop still could not connect to it.');
+    expect(bridgeOpenSrc).toContain('Refresh status and retry Open. If it continues, update the Runtime from this environment card.');
+    expect(bridgeOpenSrc).toContain("kind: 'restart_environment_runtime' as const");
+    expect(bridgeOpenSrc).toContain('The SSH Runtime stopped while Desktop was connecting.');
     expect(bridgeOpenSrc).toContain("phase: 'checking_env_app_readiness'");
     expect(bridgeOpenSrc.match(/probeExternalLocalUIStartup\(bridgeSession\.startup\.local_ui_url/gu)).toHaveLength(1);
     expect(bridgeOpenSrc).toContain('desktopFailureForRuntimePlacementBridgeReadiness(');
@@ -948,8 +961,8 @@ describe('main routing', () => {
     const startRuntimeEnd = mainSrc.indexOf('async function connectProviderRuntimeFromLauncher(', startRuntimeStart);
     const startRuntimeSrc = mainSrc.slice(startRuntimeStart, startRuntimeEnd);
     expect(startRuntimeSrc).toContain('prepareRuntimeContainerForLifecycle(');
-    expect(startRuntimeSrc).toContain("startIfNeeded: operation !== 'stop'");
-    expect(startRuntimeSrc).toContain("operation === 'stop' && !prepared.running");
+    expect(startRuntimeSrc).toContain("startIfNeeded: requestedOperation !== 'stop'");
+    expect(startRuntimeSrc).toContain("requestedOperation === 'stop' && !prepared.running");
     expect(startRuntimeSrc).toContain('upsertDirectRuntimeGateway(');
     expect(startRuntimeSrc).toContain('runGatewayEnvironmentLifecycleFromLauncher({');
     expect(startRuntimeSrc).not.toContain('ensureRuntimePlacementReadyRecordFromLauncher(request)');
@@ -1616,8 +1629,9 @@ describe('main routing', () => {
     const directEnd = mainSrc.indexOf('async function connectProviderRuntimeFromLauncher(', directStart);
     const directSrc = mainSrc.slice(directStart, directEnd);
 
-    expect(lifecycleSrc.match(/await awaitEnvironmentRuntimeLifecycleReadiness\(request\.environment_id, request\.operation\);/g)).toHaveLength(2);
-    expect(lifecycleSrc).toContain('after_success: async () => {');
+    expect(lifecycleSrc.match(/await awaitEnvironmentRuntimeLifecycleReadiness\(request\.environment_id, request\.operation\);/g)).toHaveLength(1);
+    expect(lifecycleSrc).toContain('const finishLifecycleMutation = async (): Promise<void> => {');
+    expect(lifecycleSrc).toContain('after_success: finishLifecycleMutation');
     expect(lifecycleSrc).toContain('await options.afterSuccess?.();');
     expect(lifecycleSrc.indexOf('await options.afterSuccess?.();')).toBeLessThan(
       lifecycleSrc.indexOf('await syncGatewayRecord(record', lifecycleSrc.indexOf('await options.afterSuccess?.();')),
@@ -1627,7 +1641,7 @@ describe('main routing', () => {
     );
     expect(directSrc).toContain("const lifecycleSessionKey = hostAccess.kind === 'local_host' && placement.kind === 'host_process'");
     expect(directSrc).toContain('await closeEnvironmentSessionsForRuntimeLifecycle({');
-    expect(directSrc).toContain("operation: operation === 'update_runtime' ? 'update' : operation");
+    expect(directSrc).toContain("operation: effectiveOperation === 'update_runtime' ? 'update' : effectiveOperation");
     expect(directSrc).toContain('await runtimePlacementBridgeRegistry.retire(targetID).catch(() => undefined);');
   });
 

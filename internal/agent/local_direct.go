@@ -129,7 +129,7 @@ func (a *Agent) ServeLocalDirectSession(ctx context.Context, sess flowersec.Sess
 	defer func() {
 		cleanupAccessGate()
 		closedGeneration := a.removeActiveSession(channelID)
-		a.closePluginSessionGeneration(channelID, closedGeneration)
+		a.startPluginSessionClose(channelID, closedGeneration)
 
 		reason := "eof"
 		if errors.Is(err, context.Canceled) {

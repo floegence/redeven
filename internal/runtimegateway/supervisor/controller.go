@@ -551,11 +551,20 @@ func (c *Controller) Commit(ctx context.Context, operation gatewayprotocol.Runti
 				return err
 			}
 		} else {
+			inventory, inventoryErr := c.runtimeProcessInventory(ctx)
 			if err := c.controlClient().shutdown(ctx, fenceToken); err != nil {
 				return fmt.Errorf("request Runtime shutdown: %w", err)
 			}
 			if err := c.waitForRuntimeStopped(ctx); err != nil {
-				return err
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				if inventoryErr != nil {
+					return errors.Join(err, fmt.Errorf("capture Runtime process identity before shutdown: %w", inventoryErr))
+				}
+				if stopErr := c.stopVerifiedRuntimeProcesses(ctx, inventory); stopErr != nil {
+					return errors.Join(err, stopErr)
+				}
 			}
 			if err := c.waitForNoRuntimeProcesses(ctx); err != nil {
 				return err
@@ -1007,6 +1016,28 @@ func (c *Controller) stopOfflineRuntimeProcesses(
 	}
 	if len(result.After.Instances) != 0 {
 		return errors.New("verified residual Runtime processes remained after the lifecycle fence")
+	}
+	return nil
+}
+
+func (c *Controller) stopVerifiedRuntimeProcesses(
+	ctx context.Context,
+	expected runtimemanagement.RuntimeProcessInventory,
+) error {
+	if expected.Summary.Blocked != 0 || expected.Summary.Automatic != len(expected.Instances) || len(expected.Instances) == 0 {
+		return errors.New("Runtime graceful shutdown failed and the supervisor cannot safely stop the remaining process inventory")
+	}
+	result, err := runtimemanagement.StopRuntimeProcesses(
+		ctx,
+		c.runtimeProcessInventoryOptions(),
+		expected.InventoryDigest,
+		c.shutdownWait,
+	)
+	if err != nil {
+		return fmt.Errorf("stop verified Runtime processes after graceful shutdown failed: %w", err)
+	}
+	if len(result.After.Instances) != 0 {
+		return errors.New("verified Runtime processes remained after graceful shutdown recovery")
 	}
 	return nil
 }

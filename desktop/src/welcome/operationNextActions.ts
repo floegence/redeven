@@ -55,9 +55,10 @@ export function visibleOperationNextActions(
     }
   };
   if (progress.subject_kind !== 'gateway') {
-    push('refresh_status');
     push('update_runtime');
     push('manage_desktop_update');
+    push('retry');
+    push('refresh_status');
   } else {
     push('start_gateway');
     push('restart_gateway');
@@ -77,6 +78,7 @@ export type OperationNextActionLayoutGroup = Readonly<{
 
 function operationNextActionIsPrimary(action: DesktopLauncherOperationNextAction): boolean {
   return action.kind === 'refresh_status'
+    || action.kind === 'retry'
     || action.kind === 'confirm_runtime_operation'
     || action.kind === 'update_runtime'
     || action.kind === 'manage_desktop_update'
