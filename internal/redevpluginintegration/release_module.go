@@ -178,21 +178,12 @@ func (p *officialReleaseProvider) FetchReleaseDocument(ctx context.Context, req 
 		return releasetrust.ReleaseDocumentResult{}, remoterelease.ErrAssetMissing
 	}
 	p.mu.RLock()
-	transports := make([]*remoterelease.AssetSet, 0, len(p.transports))
-	for _, transport := range p.transports {
-		transports = append(transports, transport)
-	}
+	transport := p.transport
 	p.mu.RUnlock()
-	for _, transport := range transports {
-		result, err := transport.FetchReleaseDocument(ctx, req)
-		if err == nil {
-			return result, nil
-		}
-	}
-	if len(transports) == 0 {
+	if transport == nil {
 		return releasetrust.ReleaseDocumentResult{}, remoterelease.ErrAssetMissing
 	}
-	return releasetrust.ReleaseDocumentResult{}, remoterelease.ErrAssetMissing
+	return transport.FetchReleaseDocument(ctx, req)
 }
 
 func releaseRefKey(ref host.PluginReleaseRef) string {
