@@ -1182,6 +1182,15 @@ export function EnvAppShell() {
     const state = await refetchPluginInventorySession();
     return state?.owner === pluginInventorySource() ? state.projection : undefined;
   };
+  const refreshPluginMarket = async () => {
+    try {
+      await pluginLifecycle.refreshMarketCatalog();
+    } catch {
+      // Keep the current inventory usable and let the projection expose a
+      // retryable market-unavailable state.
+    }
+    await refetchPluginInventory();
+  };
   pluginInstallCoordinator = createPluginInstallCoordinator({
     lifecycle: pluginLifecycle,
     refreshInventory: async () => {
@@ -1320,6 +1329,9 @@ export function EnvAppShell() {
     setPluginCenterFocusRequest((request) => request + 1);
     setViewMode('activity', { surfaceId: activeSurface() });
     activateActivitySurface(PLUGIN_CENTER_ACTIVITY_ID);
+    // The center opens immediately with the current inventory. Market data is
+    // refreshed independently and projected into the view when it arrives.
+    void refreshPluginMarket();
   };
 
   const closePluginCenter = () => {
@@ -3430,7 +3442,7 @@ export function EnvAppShell() {
           installOperations={pluginInstallCoordinator?.projections() ?? []}
           onRetryInstall={(pluginInstanceID) => pluginInstallCoordinator?.retry(pluginInstanceID)}
           onRefresh={async () => {
-            await refetchPluginInventory();
+            await refreshPluginMarket();
             await pluginInstallCoordinator?.resume();
           }}
           onCommand={handlePluginCenterCommand}
