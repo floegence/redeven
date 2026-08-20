@@ -5,6 +5,7 @@ import type { DesktopRuntimePresence } from '../shared/desktopRuntimePresence';
 import {
   DesktopWelcomeRuntimeHealthStore,
   desktopWelcomeRuntimeHealthIsFresh,
+  desktopWelcomeRuntimeHealthForEnvironment,
   type DesktopWelcomeRuntimeHealthTarget,
 } from './desktopWelcomeRuntimeHealth';
 
@@ -74,6 +75,34 @@ function presence(
 }
 
 describe('DesktopWelcomeRuntimeHealthStore', () => {
+  it('resolves saved SSH health for an Open preflight by Environment id', () => {
+    const sshHealth = health({
+      offline_reason_code: 'not_started',
+      offline_reason: 'Runtime daemon is not running.',
+      freshness: 'fresh',
+    });
+
+    expect(desktopWelcomeRuntimeHealthForEnvironment({
+      localRuntimeHealth: {},
+      savedExternalRuntimeHealth: {},
+      savedSSHRuntimeHealth: { env_ssh: sshHealth },
+      savedRuntimeTargetHealth: {},
+      managedRuntimePresenceByTargetID: {},
+    }, 'env_ssh', 'ssh:host:demo:1234')).toBe(sshHealth);
+  });
+
+  it('does not borrow another Environment health record from the target fallback', () => {
+    const otherHealth = health({ status: 'online', freshness: 'fresh' });
+
+    expect(desktopWelcomeRuntimeHealthForEnvironment({
+      localRuntimeHealth: {},
+      savedExternalRuntimeHealth: {},
+      savedSSHRuntimeHealth: { env_other: otherHealth },
+      savedRuntimeTargetHealth: {},
+      managedRuntimePresenceByTargetID: {},
+    }, 'env_ssh', 'env_other')).toBeUndefined();
+  });
+
   it('treats only fresh health inside the TTL as reusable', () => {
     const checkedAtUnixMS = 10_000;
     const freshHealth = health({ freshness: 'fresh', checked_at_unix_ms: checkedAtUnixMS });

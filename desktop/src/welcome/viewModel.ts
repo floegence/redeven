@@ -1680,6 +1680,9 @@ function blockedRuntimePrimaryActionGuidanceActions(
           action: {
             ...primarySource.action,
             label: primaryLabel,
+            ...(primarySource.action.intent === 'update_runtime' || primarySource.action.intent === 'restart_runtime' || primarySource.action.intent === 'start_runtime'
+              ? { continue_open_after_completion: true }
+              : {}),
           },
         }
       : null,
