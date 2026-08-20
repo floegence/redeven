@@ -231,7 +231,17 @@ export function createPluginInstallCoordinator(options: Readonly<{
     }
     const now = Date.now();
     await Promise.all([...latestByPlugin.values()].flatMap((execution) => {
-      if (execution.status === 'completed') return [];
+      if (execution.status === 'completed') {
+        const projection: PluginInstallExecutionProjection = {
+          pluginID: options.resolvePluginID(execution.plugin_instance_id) ?? '',
+          pluginInstanceID: execution.plugin_instance_id,
+          observation: 'refreshing',
+          execution,
+          events: [],
+        };
+        put(projection);
+        return [runExclusive(execution.plugin_instance_id, () => finish(projection))];
+      }
       if (isExecutionTerminal(execution) && !terminalFailureIsRecent(execution, now)) return [];
       const projection: PluginInstallExecutionProjection = {
         pluginID: options.resolvePluginID(execution.plugin_instance_id) ?? '',
@@ -249,7 +259,7 @@ export function createPluginInstallCoordinator(options: Readonly<{
     const projection = projectionFor(pluginInstanceID);
     if (!projection) return;
     if (projection.observation === 'refresh_failed' || projection.observation === 'activation_failed') {
-      if (projection.observation === 'activation_failed' && projection.execution) {
+      if (projection.execution?.status === 'completed') {
         await runExclusive(pluginInstanceID, () => finish(projection));
         return;
       }

@@ -140,4 +140,29 @@ describe('plugin install execution coordinator', () => {
     expect(completeApprovedInstall).toHaveBeenCalledTimes(2);
     expect(coordinator.projections()).toEqual([]);
   });
+
+  it('retries the complete approved setup after an inventory refresh failure', async () => {
+    const { coordinator, refreshInventory, completeApprovedInstall } = harness();
+    refreshInventory.mockRejectedValueOnce(new Error('offline')).mockResolvedValue(undefined);
+
+    await coordinator.start('com.redeven.official.containers', pluginInstanceID);
+    await coordinator.retry(pluginInstanceID);
+
+    expect(refreshInventory).toHaveBeenCalledTimes(2);
+    expect(completeApprovedInstall).toHaveBeenCalledOnce();
+    expect(coordinator.projections()).toEqual([]);
+  });
+
+  it('finishes a completed install after the UI restarts', async () => {
+    const completed = execution();
+    const { coordinator, refreshInventory, completeApprovedInstall } = harness({
+      listReleaseInstallExecutions: vi.fn(async () => [completed]),
+    });
+
+    await coordinator.resume();
+
+    expect(refreshInventory).toHaveBeenCalledOnce();
+    expect(completeApprovedInstall).toHaveBeenCalledWith(pluginInstanceID, undefined);
+    expect(coordinator.projections()).toEqual([]);
+  });
 });
