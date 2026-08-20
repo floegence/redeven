@@ -469,6 +469,33 @@ async function verifyIOSmokeRevoke(page, frame, sessionHeaders, catalog, config,
   };
 }
 
+async function verifyUninstall(page, sessionHeaders, catalog, pluginResponses) {
+  const plugin = installedPlugins(catalog).find((candidate) => candidate.plugin_id === 'dev.redeven.smoke.io');
+  if (!plugin) throw new Error('v9 uninstall smoke requires the installed I/O plugin');
+  const response = await requestPluginJSON(page, '/_redevplugin/api/plugins/uninstall', {
+    plugin_instance_id: plugin.plugin_instance_id,
+    expected_management_revision: plugin.management_revision,
+    delete_data: true,
+  }, sessionHeaders);
+  pluginResponses.push({ method: 'POST', pathname: '/_redevplugin/api/plugins/uninstall', ...response });
+  if (response.status !== 200 || response.body?.ok !== true) {
+    throw new Error(`v9 I/O uninstall failed: ${JSON.stringify(response)}`);
+  }
+  await waitFor(async () => {
+    const next = await requestPluginJSON(page, '/_redevplugin/api/plugins/catalog/query', {}, sessionHeaders);
+    if (next.status !== 200) return null;
+    const nextCatalog = next.body?.data ?? next.body;
+    return installedPlugins(nextCatalog).some((candidate) => candidate.plugin_instance_id === plugin.plugin_instance_id)
+      ? null
+      : true;
+  }, 30_000, 'v9 plugin removal after uninstall');
+  return {
+    plugin_instance_id: plugin.plugin_instance_id,
+    delete_data: true,
+    removed_from_catalog: true,
+  };
+}
+
 async function ensureInitialEnabledPlugin(page, sessionHeaders, config, pluginResponses) {
   const queryCatalog = async () => {
     const response = await requestPluginJSON(
@@ -1226,6 +1253,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     disabledUpdateIntent = await verifyDisabledUpdateIntent(page, sessionHeaders, catalog, pluginResponses);
   }
   let ioEvidence = null;
+  let uninstallEvidence = null;
   if (config.ioPackagePath) {
     const workerResult = workerResultFromRPCResponse(rpc.result);
     const initialEvidence = config.phase === 'cold_restart' && config.initialOutput
@@ -1262,6 +1290,9 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
       requireRevoke: config.phase === 'initial',
       requireColdRestart: config.phase === 'cold_restart',
     });
+    if (config.phase === 'cold_restart') {
+      uninstallEvidence = await verifyUninstall(page, sessionHeaders, catalog, pluginResponses);
+    }
   }
   const summary = {
     schema_version: 1,
@@ -1305,6 +1336,7 @@ async function runConnectedBrowserSmoke(config, browser, startedAt, reconnectBro
     surface,
     rpc,
     disabled_update_intent: disabledUpdateIntent,
+    uninstall: uninstallEvidence,
     io_evidence: ioEvidence,
     console_errors: consoleErrors,
     page_errors: pageErrors,
