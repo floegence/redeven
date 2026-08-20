@@ -7,12 +7,12 @@ timestamp: 2026-08-01T00:00:00Z
 ---
 # Summary
 
-Redeven reads a public, latest-only catalog from `https://plugins.redeven.com`, freezes
-one validated snapshot during startup, and serves that snapshot only to the
-trusted Env App origin. The market identifies a candidate GitHub Release; it
+Redeven reads a public, latest-only catalog from `https://plugins.redeven.com`,
+refreshes and atomically publishes a validated snapshot without restarting the
+Desktop, and serves that snapshot only to the trusted Env App origin. The market identifies a candidate GitHub Release; it
 does not host plugin packages, preserve version history, grant trust, or install
 anything. Redeven downloads the exact GitHub assets declared by the snapshot and
-passes the complete signed release transport to released ReDevPlugin `v3.0.2`.
+passes the complete signed release transport to released ReDevPlugin `v3.0.5`.
 An invalid current response fails closed. A valid last-known-good snapshot may
 keep discovery available as stale data, but it cannot authorize an automatic
 update.
@@ -140,7 +140,7 @@ does not grant permissions or enable runtime access.
 
 # Evidence
 
-- `redeven:internal/pluginmarket/service.go` - Fetches, validates, freezes, and atomically caches one latest-only market snapshot.
+- `redeven:internal/pluginmarket/service.go` - Fetches and validates latest-only market snapshots; the integration atomically swaps the current snapshot and release transport.
 - `redeven:internal/pluginmarket/contracts.go` - Validates generation, GitHub release identity, hashes, anchors, and complete release transport.
 - `redeven:internal/codeapp/codeapp.go` - Refreshes once at startup and keeps market failure non-fatal.
 - `redeven:internal/codeapp/appserver/server.go` - Serves only the frozen snapshot through the read-gated Env App route.

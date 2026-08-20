@@ -10,7 +10,7 @@ timestamp: 2026-07-29T00:00:00Z
 Redeven owns Docker and Podman semantics, CLI execution, redacted DTOs, and risk
 projection; ReDevPlugin owns plugin identity, grants, confirmations, Executions,
 Events, quotas, revocation, and audit. Production consumes signed
-Containers `4.4.4`, `redeven.container_resources.v4@4.0.0`, and
+Containers `4.4.7`, `redeven.container_resources.v4@4.0.0`, and
 `redeven.capability.container_resources@3.0.0` through the latest-only market
 and immutable GitHub Release transport. The Host registers the v4 contract as a
 Redeven-versioned known contract generated from one canonical source; there is
@@ -26,7 +26,7 @@ The production artifact set under `spec/redevplugin/` contains only the generate
 v4 known-contract projection and public package-verification keys needed by the
 product. Plugin package, release metadata, root delegation, revocation, and
 source policy remain immutable GitHub Release assets. Startup
-freezes a validated market snapshot; ReDevPlugin verifies and downloads its
+refreshes and atomically publishes a validated market snapshot; ReDevPlugin verifies and downloads its
 complete release transport before registration. Redeven does not embed the
 plugin package or implement an alternate package, token, confirmation, or
 Execution/Event protocol. The matching plugin still requires authorized package
@@ -121,7 +121,7 @@ lifecycle authority, audit store, or token issuer.
 
 The v4 bridge and generated client are exercised against the source contract.
 Production registers the generated known v4 contract and separately admits the
-verified Containers `4.4.4` package selected by the production market snapshot.
+verified Containers `4.4.7` package selected by the production market snapshot.
 Development follows the same published market and release path; Redeven does
 not build, embed, or trust an ephemeral Containers package. Missing or altered
 delivery evidence fails startup rather than falling back to another contract.
