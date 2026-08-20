@@ -472,10 +472,11 @@ func (c *Controller) Commit(ctx context.Context, operation gatewayprotocol.Runti
 	binding := c.bindings.Binding()
 	legacyFence := strings.HasPrefix(strings.TrimSpace(fenceToken), "gwlf_")
 	if legacyFence {
-		if operation.Kind != gatewayprotocol.RuntimeOperationStop &&
+		if operation.Kind != gatewayprotocol.RuntimeOperationStart &&
+			operation.Kind != gatewayprotocol.RuntimeOperationStop &&
 			operation.Kind != gatewayprotocol.RuntimeOperationRestart &&
 			operation.Kind != gatewayprotocol.RuntimeOperationUpdate {
-			return errors.New("legacy Runtime lifecycle fences support stop, restart, and update only")
+			return errors.New("legacy Runtime lifecycle fences support start, stop, restart, and update only")
 		}
 		c.mu.Lock()
 		fencedTarget, ok := c.legacyFences[strings.TrimSpace(fenceToken)]
@@ -498,6 +499,7 @@ func (c *Controller) Commit(ctx context.Context, operation gatewayprotocol.Runti
 		checkpoint.PreviousDesktopOwnerID = strings.TrimSpace(legacy.status.Identity.DesktopOwnerID)
 		checkpoint.PreviousExecutableSHA256 = legacy.executableSHA256
 		checkpoint.PreviousManagedPresent = true
+		checkpoint.RuntimeWasRunning = true
 	}
 	if strings.HasPrefix(strings.TrimSpace(fenceToken), "gwof_") {
 		c.mu.Lock()
@@ -508,14 +510,24 @@ func (c *Controller) Commit(ctx context.Context, operation gatewayprotocol.Runti
 		}
 		inventory, err := c.runtimeProcessInventory(ctx)
 		if err != nil || inventory.Summary.Blocked != 0 ||
-			!offlineRuntimeSnapshotMatches(operation.ExpectedSnapshot, offlineSnapshotFromInventory(inventory)) {
+			(operation.Kind != gatewayprotocol.RuntimeOperationStart &&
+				!offlineRuntimeSnapshotMatches(operation.ExpectedSnapshot, offlineSnapshotFromInventory(inventory))) {
 			return errors.New("Runtime workload changed after the offline lifecycle fence was established")
 		}
 		if len(inventory.Instances) > 0 {
 			if operation.Kind == gatewayprotocol.RuntimeOperationStart {
-				return errors.New("Runtime start cannot replace residual managed processes without an update or restart")
-			}
-			if err := c.stopOfflineRuntimeProcesses(ctx, inventory); err != nil {
+				// Start is idempotent. A process that appeared while its service
+				// status was unavailable is already the target we need to open; wait
+				// briefly for the status publication instead of replacing it or
+				// launching a duplicate Runtime.
+				if !c.waitForRuntimeReady(ctx, 5*time.Second) {
+					return errors.New("Runtime is already running, but its Runtime Service status is unavailable; retry after it becomes ready or restart the Runtime")
+				}
+				checkpoint.RuntimeWasRunning = true
+				if err := c.writeCheckpoint(checkpoint); err != nil {
+					return err
+				}
+			} else if err := c.stopOfflineRuntimeProcesses(ctx, inventory); err != nil {
 				return err
 			}
 		}
@@ -545,6 +557,20 @@ func (c *Controller) Commit(ctx context.Context, operation gatewayprotocol.Runti
 		return err
 	}
 	recoveryRequired = true
+	if checkpoint.RuntimeWasRunning && operation.Kind == gatewayprotocol.RuntimeOperationStart {
+		if legacyFence {
+			if _, err := c.legacyRuntimeUpgradeCandidate(ctx); err != nil {
+				return fmt.Errorf("verify already-running legacy Runtime before start: %w", err)
+			}
+			checkpoint.Phase = checkpointVerified
+			return c.writeCheckpoint(checkpoint)
+		}
+		if err := c.controlClient().health(ctx); err != nil {
+			return fmt.Errorf("verify already-running Runtime before start: %w", err)
+		}
+		checkpoint.Phase = checkpointVerified
+		return c.writeCheckpoint(checkpoint)
+	}
 	if checkpoint.RuntimeWasRunning {
 		if legacyFence {
 			if err := c.stopLegacyRuntimeForUpdate(ctx, operation.ExpectedSnapshot); err != nil {
@@ -1164,6 +1190,24 @@ func (c *Controller) waitForRuntimeStopped(ctx context.Context) error {
 		}
 	}
 	return errors.New("Runtime did not stop before the supervisor deadline")
+}
+
+func (c *Controller) waitForRuntimeReady(ctx context.Context, wait time.Duration) bool {
+	if wait <= 0 {
+		wait = 5 * time.Second
+	}
+	deadline := time.Now().Add(wait)
+	for time.Now().Before(deadline) {
+		if c.runtimeStatusPresent() {
+			return true
+		}
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(150 * time.Millisecond):
+		}
+	}
+	return c.runtimeStatusPresent()
 }
 
 func (c *Controller) waitForNoRuntimeProcesses(ctx context.Context) error {

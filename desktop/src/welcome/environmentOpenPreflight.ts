@@ -1,7 +1,4 @@
-import type {
-  DesktopEnvironmentEntry,
-  DesktopLauncherActionRequest,
-} from '../shared/desktopLauncherIPC';
+import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
 import {
   environmentOpenFlowAfterPreflight,
   type EnvironmentOpenFlow,
@@ -86,28 +83,6 @@ export async function continueEnvironmentOpenAfterLifecycle(input: Readonly<{
         message: opened.message,
         ...(opened.recovery ? { recovery: opened.recovery } : {}),
       };
-}
-
-export async function runConfirmedEnvironmentStart<Result extends Readonly<{
-  ok: boolean;
-  code?: string;
-  operation_key?: string;
-}>>(input: Readonly<{
-  request: DesktopLauncherActionRequest;
-  perform: (request: DesktopLauncherActionRequest) => Promise<Result>;
-}>): Promise<Result> {
-  const result = await input.perform(input.request);
-  if (result.ok || result.code !== 'confirmation_required') {
-    return result;
-  }
-  const operationKey = result.operation_key?.trim();
-  if (!operationKey) {
-    return result;
-  }
-  return input.perform({
-    kind: 'confirm_runtime_operation',
-    operation_key: operationKey,
-  });
 }
 
 export async function runEnvironmentOpenPreflight(input: Readonly<{

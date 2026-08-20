@@ -800,6 +800,8 @@ describe('main routing', () => {
     expect(gatewayLifecycleSrc).toContain('gatewayLifecycleManager().prepareRuntimeOperation(record');
     expect(gatewayLifecycleSrc).toContain('gatewayLifecycleManager().confirmRuntimeOperation(');
     expect(gatewayLifecycleSrc).toContain('gatewayLifecycleManager().commitRuntimeOperation(');
+    expect(gatewayLifecycleSrc).toContain("if (request.operation === 'start') {");
+    expect(gatewayLifecycleSrc).toContain('absorb that legacy response and continue without a user prompt');
     expect(gatewayLifecycleSrc).not.toContain('await closeEnvironmentSessionsForRuntimeLifecycle({');
     expect(gatewayLifecycleSrc.indexOf('requireGatewayEnvironmentLifecycleCapability(record, request')).toBeLessThan(
       gatewayLifecycleSrc.indexOf('gatewayLifecycleManager().prepareRuntimeOperation(record'),
@@ -1674,7 +1676,7 @@ describe('main routing', () => {
     expect(initializationSrc).not.toContain('initializeGatewayRuntime(');
   });
 
-  it('keeps attached start confirmation and completion on the user-facing environment stages', () => {
+  it('keeps attached start recovery and completion on user-facing stages without a confirmation barrier', () => {
     const mainSrc = readMainSource();
     const finishStart = mainSrc.indexOf('function finishAttachedRuntimeOperation(');
     const finishEnd = mainSrc.indexOf('function upsertRuntimeOperationAttachment(', finishStart);
@@ -1698,6 +1700,9 @@ describe('main routing', () => {
     expect(confirmSrc).toContain("state: 'fencing',");
     expect(confirmSrc).toContain('const completedPresentation = projectAttachedRuntimeOperation(response);');
     expect(confirmSrc).toContain('await pending.cancel().catch(() => undefined);');
+    expect(mainSrc).toContain("const autoConfirmStart = operation.kind === 'start' && projection.needs_confirmation;");
+    expect(mainSrc).toContain('runtime_confirmation: autoConfirmStart ? undefined : projection.confirmation');
+    expect(mainSrc).toContain('complete: async (current) => adapter.complete(await adapter.confirm(');
     expect(mainSrc).toContain('function publishGatewayRuntimeOperationProgress(');
     expect(mainSrc).toContain('function runtimeLifecycleFailureProgress(');
     expect(mainSrc).toContain('onProgress: publishRuntimeProgress');
@@ -1725,6 +1730,7 @@ describe('main routing', () => {
       mainSrc.slice(providerStart, providerEnd),
     ]) {
       expect(lifecycleSrc).toContain("request.operation === 'start'");
+      expect(lifecycleSrc).toContain('runtimeOperationConfirmationRequest(runtimeOperation)');
       expect(lifecycleSrc).toContain("title_key: 'environmentOpenFlow.checkingAccessTitle'");
       expect(lifecycleSrc).toContain("detail_key: 'environmentOpenFlow.checkingAccessDetail'");
       expect(lifecycleSrc).toContain('const completedPresentation = projectAttachedRuntimeOperation(response);');

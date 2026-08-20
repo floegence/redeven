@@ -315,7 +315,6 @@ import {
 import {
   continueEnvironmentOpenAfterLifecycle,
   reconcileEnvironmentOpenBeforeLifecycle,
-  runConfirmedEnvironmentStart,
   runEnvironmentOpenPreflight,
 } from './environmentOpenPreflight';
 import {
@@ -4738,10 +4737,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (!request) {
       return { ok: false, message: i18n().t('environmentCenter.resolveRuntimeTargetError') };
     }
-    const result = await runConfirmedEnvironmentStart({
-      request,
-      perform: performLauncherActionSilently,
-    });
+    const result = await performLauncherActionSilently(request);
     if (!result.ok || result.outcome === expectedOutcome) {
       return result;
     }

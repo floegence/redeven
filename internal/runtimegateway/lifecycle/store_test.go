@@ -423,7 +423,7 @@ func TestCommitContinuesAfterClientTransportDisconnect(t *testing.T) {
 	}
 	store := newTestStore(t, controller, clock)
 	request := prepareRequest("op-detached", "idem-detached")
-	request.Operation = gatewayprotocol.RuntimeOperationStart
+	request.Operation = gatewayprotocol.RuntimeOperationRestart
 	request.DesiredRuntime = gatewayprotocol.DesiredRuntime{}
 	prepared, err := store.Prepare(context.Background(), request, prepareAuthorization("permit-detached"))
 	if err != nil || prepared.Operation.State != gatewayprotocol.RuntimeOperationAwaitingConfirmation {
@@ -619,7 +619,7 @@ func TestPrepareKeepsConfirmationWhenWorkloadImpactIsNotFullyKnown(t *testing.T)
 	})}
 	store := newTestStore(t, controller, &fakeClock{now: time.Unix(121, 0)})
 	request := prepareRequest("op-unknown-idle", "idem-unknown-idle")
-	request.Operation = gatewayprotocol.RuntimeOperationStart
+	request.Operation = gatewayprotocol.RuntimeOperationRestart
 	request.DesiredRuntime = gatewayprotocol.DesiredRuntime{}
 
 	prepared, err := store.Prepare(context.Background(), request, prepareAuthorization("permit-unknown-idle"))
@@ -628,6 +628,64 @@ func TestPrepareKeepsConfirmationWhenWorkloadImpactIsNotFullyKnown(t *testing.T)
 	}
 	if !prepared.ConfirmationRequired || prepared.Operation.State != gatewayprotocol.RuntimeOperationAwaitingConfirmation {
 		t.Fatalf("Prepare() did not require confirmation for an incomplete workload snapshot: %#v", prepared.Operation)
+	}
+}
+
+func TestPrepareNeverRequiresConfirmationForStart(t *testing.T) {
+	zero := 0
+	controller := &fakeController{snapshot: gatewayprotocol.NormalizeWorkloadSnapshot(gatewayprotocol.WorkloadSnapshot{
+		SnapshotRevision:       3,
+		ProcessInventoryDigest: "sha256:inventory",
+		WorkloadIdentityDigest: "sha256:workload",
+		Impact: gatewayprotocol.WorkloadImpact{
+			Knowledge:            gatewayprotocol.WorkloadUnknown,
+			AffectedProcessCount: &zero,
+		},
+		ObservedAtUnixMS: 1,
+	})}
+	store := newTestStore(t, controller, &fakeClock{now: time.Unix(122, 0)})
+	request := prepareRequest("op-start-no-confirm", "idem-start-no-confirm")
+	request.Operation = gatewayprotocol.RuntimeOperationStart
+	request.DesiredRuntime = gatewayprotocol.DesiredRuntime{}
+
+	prepared, err := store.Prepare(context.Background(), request, prepareAuthorization("permit-start-no-confirm"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prepared.ConfirmationRequired || prepared.Operation.State != gatewayprotocol.RuntimeOperationCommitReady {
+		t.Fatalf("Prepare() required confirmation for idempotent start: %#v", prepared.Operation)
+	}
+}
+
+func TestStartDoesNotReconfirmWhenWorkloadChangesAtFence(t *testing.T) {
+	clock := &fakeClock{now: time.Unix(123, 0)}
+	controller := &fakeController{
+		snapshot: knownSnapshot(3),
+		fenced:  knownSnapshot(4, "session:appeared-during-start"),
+		token:   "fence-start-race",
+	}
+	store := newTestStore(t, controller, clock)
+	request := prepareRequest("op-start-race", "idem-start-race")
+	request.Operation = gatewayprotocol.RuntimeOperationStart
+	request.DesiredRuntime = gatewayprotocol.DesiredRuntime{}
+
+	prepared, err := store.Prepare(context.Background(), request, prepareAuthorization("permit-start-race"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prepared.Operation.State != gatewayprotocol.RuntimeOperationCommitReady || prepared.ConfirmationRequired {
+		t.Fatalf("Prepare() did not keep idempotent start commit-ready: %#v", prepared.Operation)
+	}
+
+	committed, err := store.Commit(context.Background(), request.OperationID, request.AuthorizedClientKeyID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if committed.State != gatewayprotocol.RuntimeOperationSucceeded {
+		t.Fatalf("Commit() state = %q, want succeeded", committed.State)
+	}
+	if controller.released != 1 || controller.commits != 1 {
+		t.Fatalf("start fence handling released=%d commits=%d, want 1/1", controller.released, controller.commits)
 	}
 }
 

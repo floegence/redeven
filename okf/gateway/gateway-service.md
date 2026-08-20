@@ -21,6 +21,8 @@ For a Provider binding, the Gateway process itself maintains the signed RCPP v3 
 
 When a Desktop-managed Runtime is running but exposes an older service protocol or compatibility epoch, the Gateway exposes stop, restart, and update recovery. Start or restart clients may converge through update when the old Runtime cannot execute the original operation. Gateway first verifies the status identity, state root, managed executable, PID, and automatically stoppable process. The confirmation shows the observed process and workload summary; Gateway rechecks that snapshot before stopping the exact verified process. After a successful update, the new Runtime is health-checked before Open continues. A current or future epoch is never treated as legacy and remains unavailable until its contract can be validated.
 
+Start is an idempotent observation or launch operation and does not require workload confirmation. When a managed process appears while Service status is delayed, Gateway waits briefly for the status to become available and verifies that exact Runtime instead of launching a duplicate or replacing it. Workload confirmation remains limited to stop, restart, and update operations that can interrupt or replace active work.
+
 When Runtime control is unreachable, Gateway derives capability and the lifecycle fence from one process inventory. Missing, unknown, externally replaced, or incompatible installations still expose idempotent stop and update repair; a positively identified residual process is stopped before restart or update. If the process cannot be tied to the bound user, namespace, state root, and executable, automatic signaling remains unavailable because SSH reachability is not process ownership evidence.
 
 ## Lifecycle
