@@ -555,6 +555,82 @@ func knownSnapshot(revision int64, identities ...string) gatewayprotocol.Workloa
 	})
 }
 
+func idleSnapshot(revision int64) gatewayprotocol.WorkloadSnapshot {
+	zero := 0
+	return gatewayprotocol.NormalizeWorkloadSnapshot(gatewayprotocol.WorkloadSnapshot{
+		RuntimeBinaryVersion:   "v0.10.1",
+		SnapshotRevision:       revision,
+		ProcessInventoryDigest: "sha256:inventory",
+		WorkloadIdentityDigest: "sha256:idle",
+		Impact: gatewayprotocol.WorkloadImpact{
+			Knowledge:            gatewayprotocol.WorkloadKnown,
+			AffectedProcessCount: &zero,
+			ActiveSessionCount:   &zero,
+		},
+		ObservedAtUnixMS: 1,
+	})
+}
+
+func TestPrepareSkipsConfirmationForKnownIdleWorkload(t *testing.T) {
+	for _, operationKind := range []gatewayprotocol.RuntimeOperationKind{
+		gatewayprotocol.RuntimeOperationStart,
+		gatewayprotocol.RuntimeOperationStop,
+		gatewayprotocol.RuntimeOperationRestart,
+		gatewayprotocol.RuntimeOperationUpdate,
+	} {
+		t.Run(string(operationKind), func(t *testing.T) {
+			controller := &fakeController{snapshot: idleSnapshot(3)}
+			store := newTestStore(t, controller, &fakeClock{now: time.Unix(120, 0)})
+			request := prepareRequest("op-idle-"+string(operationKind), "idem-idle-"+string(operationKind))
+			request.Operation = operationKind
+			if operationKind != gatewayprotocol.RuntimeOperationUpdate {
+				request.DesiredRuntime = gatewayprotocol.DesiredRuntime{}
+			}
+
+			prepared, err := store.Prepare(context.Background(), request, prepareAuthorization("permit-idle-"+string(operationKind)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if prepared.ConfirmationRequired {
+				t.Fatalf("Prepare() unexpectedly required confirmation: %#v", prepared.Operation)
+			}
+			wantState := gatewayprotocol.RuntimeOperationCommitReady
+			if operationKind == gatewayprotocol.RuntimeOperationUpdate {
+				wantState = gatewayprotocol.RuntimeOperationAwaitingArtifact
+			}
+			if prepared.Operation.State != wantState {
+				t.Fatalf("state = %q, want %q", prepared.Operation.State, wantState)
+			}
+		})
+	}
+}
+
+func TestPrepareKeepsConfirmationWhenWorkloadImpactIsNotFullyKnown(t *testing.T) {
+	zero := 0
+	controller := &fakeController{snapshot: gatewayprotocol.NormalizeWorkloadSnapshot(gatewayprotocol.WorkloadSnapshot{
+		SnapshotRevision:       3,
+		ProcessInventoryDigest: "sha256:inventory",
+		WorkloadIdentityDigest: "sha256:workload",
+		Impact: gatewayprotocol.WorkloadImpact{
+			Knowledge:            gatewayprotocol.WorkloadKnown,
+			AffectedProcessCount: &zero,
+		},
+		ObservedAtUnixMS: 1,
+	})}
+	store := newTestStore(t, controller, &fakeClock{now: time.Unix(121, 0)})
+	request := prepareRequest("op-unknown-idle", "idem-unknown-idle")
+	request.Operation = gatewayprotocol.RuntimeOperationStart
+	request.DesiredRuntime = gatewayprotocol.DesiredRuntime{}
+
+	prepared, err := store.Prepare(context.Background(), request, prepareAuthorization("permit-unknown-idle"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !prepared.ConfirmationRequired || prepared.Operation.State != gatewayprotocol.RuntimeOperationAwaitingConfirmation {
+		t.Fatalf("Prepare() did not require confirmation for an incomplete workload snapshot: %#v", prepared.Operation)
+	}
+}
+
 func prepareRequest(operationID string, idempotencyKey string) gatewayprotocol.RuntimeOperationPrepareRequest {
 	return gatewayprotocol.RuntimeOperationPrepareRequest{
 		ProtocolVersion:       gatewayprotocol.Version,

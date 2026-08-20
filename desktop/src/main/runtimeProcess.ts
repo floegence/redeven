@@ -32,6 +32,8 @@ const STARTUP_REPORT_POLL_MS = 100;
 const DEFAULT_STARTUP_TIMEOUT_MS = 30_000;
 const DEFAULT_STOP_TIMEOUT_MS = 5_000;
 const DEFAULT_RUNTIME_ATTACH_TIMEOUT_MS = 1_500;
+const DEFAULT_RUNTIME_ATTACH_RETRY_WINDOW_MS = 2_000;
+const RUNTIME_ATTACH_RETRY_POLL_MS = 100;
 const DEFAULT_RUNTIME_INVENTORY_TIMEOUT_MS = 10_000;
 const DEFAULT_RUNTIME_STABILITY_WINDOW_MS = 1_200;
 const DEFAULT_RUNTIME_STABILITY_POLL_MS = 250;
@@ -1215,6 +1217,7 @@ export async function attachManagedRuntimeFromStatus(args: Readonly<{
   stateRoot?: string;
   env?: NodeJS.ProcessEnv;
   runtimeAttachTimeoutMs?: number;
+  runtimeAttachRetryWindowMs?: number;
   runtimeInventoryTimeoutMs?: number;
   stopTimeoutMs?: number;
 }>): Promise<ManagedRuntime | null> {
@@ -1246,12 +1249,30 @@ export async function attachManagedRuntimeFromStatus(args: Readonly<{
   if (inventory) {
     requireDesktopRuntimeProcessIdentity(inventory);
   }
-  const startup = await loadManagedRuntimeStartupFromStatus({
+  let startup = await loadManagedRuntimeStartupFromStatus({
     executablePath: args.executablePath,
     stateRoot: args.stateRoot,
     env,
     timeoutMs: args.runtimeAttachTimeoutMs ?? DEFAULT_RUNTIME_ATTACH_TIMEOUT_MS,
   });
+  if (!startup && inventory && inventory.instances.length > 0) {
+    // A managed process publishes its status after the process inventory. Keep
+    // this attach attempt alive briefly so that startup is not mistaken for a
+    // dead or incompatible Runtime during that normal handoff window.
+    const deadline = Date.now() + Math.max(
+      0,
+      Math.floor(args.runtimeAttachRetryWindowMs ?? DEFAULT_RUNTIME_ATTACH_RETRY_WINDOW_MS),
+    );
+    while (!startup && Date.now() < deadline) {
+      await delay(Math.min(RUNTIME_ATTACH_RETRY_POLL_MS, deadline - Date.now()));
+      startup = await loadManagedRuntimeStartupFromStatus({
+        executablePath: args.executablePath,
+        stateRoot: args.stateRoot,
+        env,
+        timeoutMs: args.runtimeAttachTimeoutMs ?? DEFAULT_RUNTIME_ATTACH_TIMEOUT_MS,
+      });
+    }
+  }
   if (!startup) {
     if (inventory && inventory.instances.length > 0) {
       throw new Error('Desktop found a live local runtime process, but its Runtime Service status is unavailable.');

@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -148,6 +149,7 @@ function readJSON(file) {
 
 const statusFile = process.env.REDEVEN_TEST_STATUS_FILE;
 const counterFile = process.env.REDEVEN_TEST_STATUS_COUNTER_FILE;
+const statusPayloadFile = process.env.REDEVEN_TEST_STATUS_PAYLOAD_FILE;
 const inventoryFile = process.env.REDEVEN_TEST_PROCESS_INVENTORY_FILE;
 const commandCounterFile = process.env.REDEVEN_TEST_PROCESS_COMMAND_COUNTER_FILE;
 
@@ -227,6 +229,15 @@ if (process.argv[2] === 'desktop-runtime-status') {
     if (counterFile) {
       const count = fs.existsSync(counterFile) ? Number(fs.readFileSync(counterFile, 'utf8')) || 0 : 0;
       fs.writeFileSync(counterFile, String(count + 1));
+      if (process.env.REDEVEN_TEST_RUNTIME_MODE === 'status_after_inventory'
+        && count === 0
+        && statusPayloadFile
+        && statusFile
+        && fs.existsSync(statusPayloadFile)) {
+        writeJSON(statusFile, readJSON(statusPayloadFile));
+        process.stdout.write(JSON.stringify({ status: 'blocked', code: 'not_running', message: 'Runtime daemon is not running.' }) + '\\n');
+        process.exit(0);
+      }
       const payload = readJSON(statusFile);
       if (process.env.REDEVEN_TEST_RUNTIME_MODE === 'attach_existing_update_required' && count === 0) {
         process.stdout.write(JSON.stringify({ status: 'blocked', code: 'not_running', message: 'Runtime daemon is not running.' }) + '\\n');
@@ -298,7 +309,11 @@ server.listen(0, '127.0.0.1', () => {
   );
   payload.pid = process.pid;
   if (statusFile) {
-    writeJSON(statusFile, payload);
+    if (mode === 'status_after_inventory') {
+      setTimeout(() => writeJSON(statusFile, payload), 1_500);
+    } else {
+      writeJSON(statusFile, payload);
+    }
   }
   if (inventoryFile) {
     writeJSON(inventoryFile, {
@@ -594,6 +609,60 @@ describe('runtimeProcess', () => {
       expect(launch.spawned).toBe(false);
       expect(launch.managedRuntime.attached).toBe(true);
     } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('retries a live runtime whose status is published just after its process inventory', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-process-'));
+    const stateRoot = path.join(dir, 'state');
+    const statusFile = path.join(dir, 'status.json');
+    const statusCounterFile = path.join(dir, 'status-count.txt');
+    const statusPayloadFile = path.join(dir, 'status-payload.json');
+    const inventoryFile = path.join(dir, 'inventory.json');
+    const reportFile = path.join(dir, 'startup-report.json');
+    const executablePath = await writeFakeRuntimeExecutable(dir);
+    await writeJSON(statusPayloadFile, runtimeStatusPayload('http://127.0.0.1:43123/'));
+    const child = spawn(executablePath, ['--state-root', stateRoot, '--startup-report-file', reportFile], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        REDEVEN_TEST_RUNTIME_MODE: 'status_after_inventory',
+        REDEVEN_TEST_STATUS_FILE: statusFile,
+        REDEVEN_TEST_STATUS_COUNTER_FILE: statusCounterFile,
+        REDEVEN_TEST_STATUS_PAYLOAD_FILE: statusPayloadFile,
+        REDEVEN_TEST_PROCESS_INVENTORY_FILE: inventoryFile,
+      },
+    });
+    try {
+      await waitForFile(inventoryFile);
+      const attached = await attachManagedRuntimeFromStatus({
+        executablePath,
+        stateRoot,
+        runtimeAttachTimeoutMs: 100,
+        runtimeAttachRetryWindowMs: 3_000,
+        env: {
+          REDEVEN_TEST_RUNTIME_MODE: 'status_after_inventory',
+          REDEVEN_TEST_STATUS_FILE: statusFile,
+          REDEVEN_TEST_STATUS_COUNTER_FILE: statusCounterFile,
+          REDEVEN_TEST_STATUS_PAYLOAD_FILE: statusPayloadFile,
+          REDEVEN_TEST_PROCESS_INVENTORY_FILE: inventoryFile,
+        },
+      });
+      expect(attached?.attached).toBe(true);
+      expect(attached?.startup.runtime_service?.open_readiness?.state).toBe('openable');
+      expect(Number(await fs.readFile(statusCounterFile, 'utf8'))).toBeGreaterThan(1);
+    } finally {
+      if (child.exitCode === null && child.signalCode === null) {
+        child.kill('SIGTERM');
+      }
+      await new Promise<void>((resolve) => {
+        if (child.exitCode !== null || child.signalCode !== null) {
+          resolve();
+          return;
+        }
+        child.once('close', () => resolve());
+      });
       await fs.rm(dir, { recursive: true, force: true });
     }
   });
