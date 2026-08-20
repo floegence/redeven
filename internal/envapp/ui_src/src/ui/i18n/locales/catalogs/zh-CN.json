@@ -4459,6 +4459,9 @@
           "denied": "你没有在此环境中安装插件的权限。",
           "trust": "插件发布未通过发布者和信任验证。",
           "manifestInvalid": "此插件包使用了当前平台无法安装的清单格式。",
+          "packageInvalid": "插件包无效，无法安装。",
+          "packageTooLarge": "插件包超过平台允许的大小限制。",
+          "packagePathForbidden": "插件包包含不允许的文件路径。",
           "internal": "插件平台内部故障，无法完成安装。"
         }
       },
@@ -4744,6 +4747,8 @@
         "confirmReinstallTitle": "确认重新安装此确切插件包",
         "confirmReplaceTitle": "确认替换已安装的插件包",
         "confirmInstallCheckedTitle": "确认安装已检查的插件包",
+        "loadingInstallTitle": "正在获取插件信息",
+        "loadingInstallDescription": "正在获取并验证插件包信息。完成后你可以查看访问权限，再决定是否安装。",
         "confirmInstallGuidance": "安装即确认此确切软件包及其声明的访问范围。Host 会授予策略允许的必需权限并启用插件；策略阻止的访问将安全失败。",
         "confirmUpdateGuidance": "你正在确认此次确切检查及其声明的访问范围。Host 会保留当前启用状态和已有权限授权，且不会自动新增授权。",
         "currentStateRetained": "保留当前状态",

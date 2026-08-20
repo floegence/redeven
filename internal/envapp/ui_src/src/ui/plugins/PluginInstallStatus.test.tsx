@@ -84,4 +84,20 @@ describe('PluginInstallStatus', () => {
     dispose();
     host.remove();
   });
+
+  it('explains package validation failures with actionable copy', () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const dispose = render(() => <PluginInstallStatus
+      projection={projection({
+        execution: execution({ status: 'failed', failure_code: 'PLUGIN_PACKAGE_PATH_FORBIDDEN' }),
+        events: [],
+      })}
+    />, host);
+
+    expect(host.textContent).toContain('forbidden file path');
+    expect(host.textContent).not.toContain('internal plugin platform failure');
+    dispose();
+    host.remove();
+  });
 });

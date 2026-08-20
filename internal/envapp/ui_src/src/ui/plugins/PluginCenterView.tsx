@@ -100,6 +100,10 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     const flow = officialInstallFlow();
     return flow.status === 'review_ready' ? flow : undefined;
   });
+  const officialInstallDialog = createMemo(() => {
+    const flow = officialInstallFlow();
+    return flow.status === 'inspecting' || flow.status === 'review_ready' ? flow : undefined;
+  });
   const [externalUpdateItem, setExternalUpdateItem] = createSignal<PluginInventoryItem | undefined>();
   const [externalSourcePreset, setExternalSourcePreset] = createSignal<ExternalPluginSourcePreset | undefined>();
   const [updateReviewItem, setUpdateReviewItem] = createSignal<PluginInventoryItem>();
@@ -856,10 +860,13 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
         </Show>
       </div>
       <OfficialPluginInstallDialog
-        item={officialInstallReview()?.item}
+        item={officialInstallDialog()?.item}
         inspection={officialInstallReview()?.inspection}
+        loading={officialInstallDialog()?.status === 'inspecting'}
         onOpenChange={(open) => {
-          if (!open && officialInstallFlow().status === 'review_ready') setOfficialInstallFlow({ status: 'idle' });
+          if (!open && (officialInstallFlow().status === 'inspecting' || officialInstallFlow().status === 'review_ready')) {
+            setOfficialInstallFlow({ status: 'idle' });
+          }
         }}
         onConfirm={confirmOfficialInstall}
       />
@@ -941,6 +948,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
 function OfficialPluginInstallDialog(props: {
   item?: PluginInventoryItem;
   inspection?: OfficialPluginReleaseInspection;
+  loading: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
 }): JSX.Element {
@@ -950,8 +958,12 @@ function OfficialPluginInstallDialog(props: {
     <Dialog
       open={Boolean(props.item)}
       onOpenChange={props.onOpenChange}
-      title={i18n.t('uiCopy.plugin.external.confirmInstallTitle')}
-      description={i18n.t('uiCopy.plugin.external.confirmInstallGuidance')}
+      title={props.loading
+        ? i18n.t('uiCopy.plugin.external.loadingInstallTitle')
+        : i18n.t('uiCopy.plugin.external.confirmInstallTitle')}
+      description={props.loading
+        ? i18n.t('uiCopy.plugin.external.loadingInstallDescription')
+        : i18n.t('uiCopy.plugin.external.confirmInstallGuidance')}
       class="w-[min(34rem,calc(100%-1rem))] max-w-[34rem] bg-background text-foreground sm:w-[min(34rem,calc(100%-2rem))]"
       footer={(
         <div class="flex w-full flex-wrap justify-end gap-2">
@@ -962,23 +974,26 @@ function OfficialPluginInstallDialog(props: {
           >
             {i18n.t('common.actions.cancel')}
           </button>
-          <button
-            type="button"
-            data-plugin-install-review-confirm
-            class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90')}
-            onClick={props.onConfirm}
-            disabled={!props.inspection}
-          >
-            {i18n.t('uiCopy.plugin.external.confirmInstall')}
-          </button>
+          <Show when={!props.loading}>
+            <button
+              type="button"
+              data-plugin-install-review-confirm
+              class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90')}
+              onClick={props.onConfirm}
+              disabled={!props.inspection}
+            >
+              {i18n.t('uiCopy.plugin.external.confirmInstall')}
+            </button>
+          </Show>
         </div>
       )}
     >
       <Show when={props.item}>
         {(item) => (
-          <div data-plugin-install-review-dialog class="space-y-4">
+          <div data-plugin-install-review-dialog data-plugin-install-loading={props.loading || undefined} class="space-y-4">
             <PluginIdentityHeader item={item()} description />
-            <section class="rounded-md border bg-muted/10 px-4 py-3">
+            <Show when={props.loading} fallback={(
+              <section class="rounded-md border bg-muted/10 px-4 py-3">
               <h3 class="text-sm font-semibold">
                 {i18n.t('uiCopy.plugin.permissionsTitle', { plugin: item().displayName })}
               </h3>
@@ -1015,7 +1030,16 @@ function OfficialPluginInstallDialog(props: {
                   </For>
                 </div>
               </Show>
-            </section>
+              </section>
+            )}>
+              <section role="status" aria-live="polite" aria-busy="true" class="flex items-center gap-3 rounded-md border bg-muted/10 px-4 py-5">
+                <RefreshIcon class="h-5 w-5 shrink-0 animate-spin motion-reduce:animate-none" />
+                <div class="min-w-0">
+                  <p class="text-sm font-semibold">{i18n.t('uiCopy.plugin.external.loadingInstallTitle')}</p>
+                  <p class="mt-1 text-xs text-muted-foreground">{i18n.t('uiCopy.plugin.external.loadingInstallDescription')}</p>
+                </div>
+              </section>
+            </Show>
           </div>
         )}
       </Show>
