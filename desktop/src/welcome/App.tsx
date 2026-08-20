@@ -1846,6 +1846,7 @@ type SilentLauncherActionFailure = Readonly<{
   ok: false;
   code?: DesktopLauncherActionFailureCode;
   message: string;
+  operation_key?: string;
   failure?: DesktopOperationFailurePresentation;
 }>;
 
@@ -3791,6 +3792,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           ok: false,
           code: result.code,
           message: presentation.message || i18n().t('toast.actionFailedFallback'),
+          ...(result.operation_key ? { operation_key: result.operation_key } : {}),
           ...(result.failure ? { failure: result.failure } : {}),
         };
       }
@@ -4535,12 +4537,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return result?.outcome === 'opened_environment_window' || result?.outcome === 'focused_environment_window';
   }
 
-  function runtimeUnavailableMessage(environment: DesktopEnvironmentEntry): string {
-    return environment.runtime_operations.start.availability === 'available'
-      ? i18n().t('environmentCenter.startRuntimeFirst')
-      : i18n().t('environmentCenter.runtimeUnavailableNow');
-  }
-
   function runtimeActionRequest(
     environment: DesktopEnvironmentEntry,
     kind: RuntimeLauncherActionKind,
@@ -4741,7 +4737,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return { ok: false, message: i18n().t('environmentCenter.resolveRuntimeTargetError') };
     }
     const result = await runConfirmedEnvironmentStart({
-      environmentID: environment.id,
       request,
       perform: performLauncherActionSilently,
     });
@@ -5448,12 +5443,19 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         }
         return failOpenFlow(preparing, initialized.message);
       }
+      const postInitializationEnvironment = await loadLatestEnvironmentEntry(environment.id)
+        .catch(() => null)
+        ?? initializationEnvironment;
       const starting = advanceEnvironmentOpenFlowStage(preparing, 'starting_environment');
       publishSession(starting);
+      const started = await startEnvironmentRuntimeSilently(postInitializationEnvironment);
+      if (!started.ok) {
+        return failOpenFlow(starting, started.message);
+      }
       const opening = advanceEnvironmentOpenFlowStage(starting, 'opening_workspace');
       publishSession(opening);
       const resolution = await continueEnvironmentOpenAfterLifecycle({
-        environment: initializationEnvironment,
+        environment: postInitializationEnvironment,
         loadLatestEnvironment: loadLatestEnvironmentEntry,
         attemptOpen: attemptEnvironmentOpenSilently,
       });

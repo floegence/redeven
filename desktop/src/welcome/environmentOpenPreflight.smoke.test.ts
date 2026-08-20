@@ -250,11 +250,11 @@ describe('environment Open click smoke', () => {
         code: 'confirmation_required' as const,
         scope: 'environment' as const,
         message: 'Review the Runtime impact and confirm before this operation can continue.',
+        operation_key: 'env_local:update_runtime',
       };
     });
 
     await expect(runConfirmedEnvironmentStart({
-      environmentID: 'env_local',
       request: {
         kind: 'run_gateway_environment_lifecycle',
         environment_id: 'env_local',
@@ -266,8 +266,30 @@ describe('environment Open click smoke', () => {
     })).resolves.toEqual({ ok: true, outcome: 'started_gateway_environment_runtime' });
     expect(calls).toEqual([
       expect.objectContaining({ kind: 'run_gateway_environment_lifecycle', operation: 'start' }),
-      { kind: 'confirm_runtime_operation', operation_key: 'env_local:start' },
+      { kind: 'confirm_runtime_operation', operation_key: 'env_local:update_runtime' },
     ]);
+  });
+
+  it('does not guess a confirmation key when the lifecycle owner omits it', async () => {
+    const confirmationRequired = {
+      ok: false as const,
+      code: 'confirmation_required' as const,
+      scope: 'environment' as const,
+      message: 'Review the Runtime impact and confirm before this operation can continue.',
+    };
+    const perform = vi.fn(async () => confirmationRequired);
+
+    await expect(runConfirmedEnvironmentStart({
+      request: {
+        kind: 'run_gateway_environment_lifecycle',
+        environment_id: 'env_local',
+        gateway_id: 'gw_local',
+        gateway_env_id: 'env_local',
+        operation: 'start',
+      },
+      perform,
+    })).resolves.toBe(confirmationRequired);
+    expect(perform).toHaveBeenCalledOnce();
   });
 
   it('does not turn an ordinary start failure into a confirmation', async () => {
@@ -286,7 +308,6 @@ describe('environment Open click smoke', () => {
     };
 
     await expect(runConfirmedEnvironmentStart({
-      environmentID: 'env_local',
       request,
       perform,
     })).resolves.toMatchObject({ ok: false, code: 'runtime_start_failed' });

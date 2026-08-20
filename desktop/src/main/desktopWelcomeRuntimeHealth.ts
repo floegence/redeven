@@ -43,6 +43,31 @@ export type DesktopWelcomeRuntimeHealthSnapshot = Readonly<{
   managedRuntimePresenceByTargetID: Readonly<Record<string, DesktopRuntimePresence>>;
 }>;
 
+/**
+ * Resolve the health record owned by one Environment without borrowing a
+ * record from another runtime target. SSH and local environments are stored
+ * by environment id; managed runtime targets may additionally be keyed by
+ * their placement target id.
+ */
+export function desktopWelcomeRuntimeHealthForEnvironment(
+  snapshot: DesktopWelcomeRuntimeHealthSnapshot,
+  environmentID: string,
+  targetID?: string,
+): DesktopRuntimeHealth | undefined {
+  const cleanEnvironmentID = String(environmentID ?? '').trim();
+  const cleanTargetID = String(targetID ?? '').trim();
+  if (cleanEnvironmentID === '') {
+    return undefined;
+  }
+  return snapshot.localRuntimeHealth[cleanEnvironmentID]
+    ?? snapshot.savedSSHRuntimeHealth[cleanEnvironmentID]
+    ?? snapshot.savedRuntimeTargetHealth[cleanEnvironmentID]
+    ?? snapshot.savedExternalRuntimeHealth[cleanEnvironmentID]
+    ?? (cleanTargetID !== ''
+      ? snapshot.savedRuntimeTargetHealth[cleanTargetID]
+      : undefined);
+}
+
 type CacheEntry = {
   generation: number;
   target: DesktopWelcomeRuntimeHealthTarget;

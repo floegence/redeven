@@ -89,6 +89,7 @@ import { desktopAutoStartRuntimeEnabled } from './desktopLaunch';
 import { loadDesktopBundle, type DesktopBundle } from './desktopBundle';
 import {
   DesktopWelcomeRuntimeHealthStore,
+  desktopWelcomeRuntimeHealthForEnvironment,
   type DesktopWelcomeRuntimeHealthProbeEvent,
   type DesktopWelcomeRuntimeHealthProbeResult,
   type DesktopWelcomeRuntimeHealthTarget,
@@ -281,7 +282,6 @@ import {
   type DesktopRuntimeLifecycleReadinessOperation,
 } from './runtimeLifecycleReadiness';
 import {
-  initializeGatewayRuntime,
   selectGatewayRuntimeArtifactPlan,
 } from './gatewayRuntimeInitialization';
 import { projectAttachedRuntimeOperation } from './runtimeLifecycleAttachment';
@@ -3747,11 +3747,10 @@ async function refreshWelcomeRuntimeHealthForEnvironment(
 }
 
 function welcomeRuntimeHealthForEnvironment(environmentID: string): DesktopRuntimeHealth | undefined {
-  const health = welcomeRuntimeHealthStore.snapshot();
-  return health.localRuntimeHealth[environmentID]
-    ?? health.savedSSHRuntimeHealth[environmentID]
-    ?? health.savedRuntimeTargetHealth[environmentID]
-    ?? health.savedExternalRuntimeHealth[environmentID];
+  return desktopWelcomeRuntimeHealthForEnvironment(
+    welcomeRuntimeHealthStore.snapshot(),
+    environmentID,
+  );
 }
 
 async function awaitEnvironmentRuntimeLifecycleReadiness(
@@ -3777,9 +3776,11 @@ function savedRuntimeTargetHealthForOpenPreflight(
   environmentID: string,
   targetID: DesktopRuntimeTargetID,
 ): DesktopRuntimeHealth | undefined {
-  const snapshot = welcomeRuntimeHealthStore.snapshot();
-  return snapshot.savedRuntimeTargetHealth[environmentID]
-    ?? snapshot.savedRuntimeTargetHealth[targetID];
+  return desktopWelcomeRuntimeHealthForEnvironment(
+    welcomeRuntimeHealthStore.snapshot(),
+    environmentID,
+    targetID,
+  );
 }
 
 function launcherActionEnvironmentID(request: DesktopLauncherActionRequest): string {
@@ -6396,82 +6397,9 @@ async function setupDirectRuntimeManagementFromLauncher(
         : 'This environment is not ready for initialization yet.';
       throw new GatewayClientError('RUNTIME_INITIALIZATION_UNAVAILABLE', message);
     }
-    const target = management.target;
-    const compatibility = management.compatibility;
-    const operations = management.operations ?? [];
-    const runtimeMissing = operations.includes('update_runtime')
-      && !operations.includes('start')
-      && !operations.includes('stop')
-      && !operations.includes('restart');
-    if (runtimeMissing) {
-      const operationID = `rop_${crypto.randomUUID()}`;
-      const sourceRuntimeRoot = compact(process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT);
-      await driveRuntimeOperation(operationID, () => initializeGatewayRuntime({
-        operationID,
-        authorizedClientKeyID: compact(trustProfile.paired_client_key_id),
-        gatewayEnvironmentID: gatewayEnvironment.gateway_env_id,
-        desiredVersion: resolveSSHRuntimeReleaseTag(),
-        sourceCommit: compact(process.env.REDEVEN_DESKTOP_BUNDLE_COMMIT) || 'unknown',
-        sourceBuildAvailable: sourceRuntimeRoot !== '',
-        capability: {
-          target,
-          compatibility,
-          operations,
-          artifact_policies: management.artifact_policies ?? [],
-        },
-        prepare: (prepareRequest) => gatewayLifecycleManager().prepareRuntimeOperation(
-          authorizedRecord,
-          prepareRequest,
-          { startPolicy: 'start_if_needed' },
-        ),
-        confirm: (runtimeOperation) => gatewayLifecycleManager().confirmRuntimeOperation(
-          authorizedRecord,
-          operationID,
-          runtimeOperationConfirmationRequest(runtimeOperation),
-          { startPolicy: 'start_if_needed' },
-        ),
-        prepareArtifact: (runtimeOperation) => runtimeOperation.desired_runtime.artifact_policy === 'custom_build'
-          ? prepareCustomRuntimeLifecycleArtifact({
-              operation: runtimeOperation,
-              runtimeReleaseTag: runtimeOperation.desired_runtime.version,
-              releaseBaseURL: PUBLIC_REDEVEN_RELEASE_BASE_URL,
-              assetCacheRoot: desktopRuntimePackageCacheRoot(),
-              sourceRuntimeRoot,
-            })
-          : preparePublishedRuntimeLifecycleArtifact({
-              runtimeReleaseTag: runtimeOperation.desired_runtime.version,
-              releaseBaseURL: PUBLIC_REDEVEN_RELEASE_BASE_URL,
-              assetCacheRoot: desktopRuntimePackageCacheRoot(),
-              platform: runtimeOperation.desired_runtime.platform,
-              architecture: runtimeOperation.desired_runtime.architecture,
-              currentRuntimeEpoch: compatibility.compatibility_epoch,
-            }),
-        upload: (metadata, artifact) => gatewayLifecycleManager().uploadRuntimeOperationArtifact(
-          authorizedRecord,
-          operationID,
-          metadata,
-          artifact,
-          { startPolicy: 'start_if_needed' },
-        ),
-        commit: () => gatewayLifecycleManager().commitRuntimeOperation(
-          authorizedRecord,
-          operationID,
-          { startPolicy: 'start_if_needed' },
-        ),
-        observe: () => gatewayLifecycleManager().getRuntimeOperation(
-          authorizedRecord,
-          operationID,
-          { startPolicy: 'start_if_needed' },
-        ),
-      }));
-      await syncGatewayRecord(authorizedRecord, {
-        force: true,
-        mode: 'refresh_catalog',
-        priority: 'foreground',
-        startPolicy: 'start_if_needed',
-      });
-    }
-    await awaitEnvironmentRuntimeLifecycleReadiness(request.environment_id, 'initialize');
+    // Initialization only establishes the direct Gateway management route.
+    // Runtime start/update is owned by the normal lifecycle action so every
+    // target uses the same confirmation, artifact, commit, and readiness path.
     broadcastDesktopWelcomeSnapshots();
     return launcherActionSuccess('initialized_environment');
   } catch (error) {
@@ -13091,31 +13019,57 @@ function launcherActionFailureForRuntimeHealthPreflight(
   }>,
 ): DesktopLauncherActionFailure {
   const maintenance = options.maintenance ?? health?.runtime_maintenance;
+  const requiresUpdate = maintenance?.recovery_action === 'update_runtime'
+    || maintenance?.kind === 'runtime_update_required';
+  const requiresRestart = maintenance?.recovery_action === 'restart_runtime';
+  const requiresStart = maintenance?.recovery_action === 'start_runtime'
+    || health?.offline_reason_code === 'not_started'
+    || health?.offline_reason_code === 'container_not_running';
   const message = compact(maintenance?.message) || compact(health?.offline_reason)
     || 'Desktop could not verify this runtime before opening it.';
-  const failure = desktopOperationFailurePresentation({
-    code: 'environment_open_failed',
-    title: 'Open Failed',
-    summary: message,
-    targetLabel: options.targetLabel,
-    ...(maintenance?.message ? { detail: maintenance.message } : {}),
-    ...(maintenance?.recovery_action === 'start_runtime' ? { recoveryHint: 'Start the runtime, then try again.' } : {}),
-  });
-  const code: DesktopLauncherActionFailureCode = (
-    maintenance
+  const failure = requiresUpdate
+    ? desktopOperationFailurePresentation({
+        code: 'runtime_update_required',
+        title: 'Runtime Update Required',
+        summary: message,
+        summaryKey: 'runtimeMessage.updateRuntimeBeforeOpeningEnvironment',
+        recoveryHint: 'Update the Runtime, verify it is ready, then open again.',
+        recoveryHintKey: 'runtimeMessage.updateRuntimeFirst',
+        targetLabel: options.targetLabel,
+        ...(maintenance?.message ? { detail: maintenance.message } : {}),
+      })
+    : requiresRestart
+      ? desktopOperationFailurePresentation({
+          code: 'environment_open_failed',
+          title: 'Runtime Restart Required',
+          summary: message,
+          recoveryHint: 'Restart the Runtime, verify it is ready, then open again.',
+          targetLabel: options.targetLabel,
+        })
+      : requiresStart
+        ? undefined
+        : desktopOperationFailurePresentation({
+            code: 'environment_open_failed',
+            title: 'Open Failed',
+            summary: message,
+            targetLabel: options.targetLabel,
+            ...(maintenance?.message ? { detail: maintenance.message } : {}),
+          });
+  const code: DesktopLauncherActionFailureCode = requiresUpdate || requiresRestart || maintenance
     || health?.offline_reason_code === 'unverified'
     || health?.offline_reason_code === 'probe_failed'
-  )
     ? 'runtime_not_ready'
-    : 'runtime_not_started';
+    : requiresStart
+      ? 'runtime_not_started'
+      : 'runtime_not_ready';
   return launcherActionFailure(
     code,
     'environment',
-    failure.summary,
+    message,
     {
       environmentID: options.environmentID,
       shouldRefreshSnapshot: true,
-      failure,
+      ...(failure ? { failure } : {}),
     },
   );
 }

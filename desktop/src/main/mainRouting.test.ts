@@ -1585,7 +1585,7 @@ describe('main routing', () => {
     expect(syncSrc).toContain('throw new GatewaySyncCanceledError(\'Gateway sync was canceled because this Gateway is disabled on this Desktop.\');');
   });
 
-  it('uses the post-pairing Gateway record for first-click Runtime initialization', () => {
+  it('keeps first-click Runtime initialization as route setup only', () => {
     const mainSrc = readMainSource();
     const initializeStart = mainSrc.indexOf('async function setupDirectRuntimeManagementFromLauncher(');
     const initializeEnd = mainSrc.indexOf(
@@ -1596,16 +1596,14 @@ describe('main routing', () => {
     expect(initializeEnd).toBeGreaterThan(initializeStart);
     const initializeSrc = mainSrc.slice(initializeStart, initializeEnd);
 
-    expect(initializeSrc.match(/syncGatewayRecord\(/g)).toHaveLength(2);
+    expect(initializeSrc.match(/syncGatewayRecord\(/g)).toHaveLength(1);
     expect(initializeSrc).toContain('const authorizedRecord = await gatewayStore().get(record.gateway_id);');
     expect(initializeSrc).toContain('const trustProfile = authorizedRecord?.trust_profile;');
     expect(initializeSrc).toContain('if (!authorizedRecord || !trustProfile) {');
-    expect(initializeSrc).toContain('gatewayLifecycleManager().prepareRuntimeOperation(\n          authorizedRecord,');
-    expect(initializeSrc).toContain('gatewayLifecycleManager().confirmRuntimeOperation(\n          authorizedRecord,');
-    expect(initializeSrc).toContain('gatewayLifecycleManager().uploadRuntimeOperationArtifact(\n          authorizedRecord,');
-    expect(initializeSrc).toContain('gatewayLifecycleManager().commitRuntimeOperation(\n          authorizedRecord,');
-    expect(initializeSrc).toContain('gatewayLifecycleManager().getRuntimeOperation(\n          authorizedRecord,');
-    expect(initializeSrc).toContain("await awaitEnvironmentRuntimeLifecycleReadiness(request.environment_id, 'initialize');");
+    expect(initializeSrc).toContain('Initialization only establishes the direct Gateway management route.');
+    expect(initializeSrc).not.toContain('prepareRuntimeOperation(');
+    expect(initializeSrc).not.toContain('initializeGatewayRuntime(');
+    expect(initializeSrc).not.toContain('awaitEnvironmentRuntimeLifecycleReadiness(');
     expect(initializeSrc).not.toContain('refreshGatewaySourceForAuthorizedAction(record, {');
   });
 
@@ -1659,7 +1657,7 @@ describe('main routing', () => {
     expect(completionSrc).toContain('return driveRuntimeOperation(operation.operation_id, () => advanceGatewayRuntimeOperation(operation, {');
     expect(attachmentSrc).toContain('locallyDrivenRuntimeOperationIDs.has(operation.operation_id)');
     expect(attachmentSrc).toContain('foregroundRuntimeOperationIDs.has(operation.operation_id)');
-    expect(initializationSrc).toContain('await driveRuntimeOperation(operationID, () => initializeGatewayRuntime({');
+    expect(initializationSrc).not.toContain('initializeGatewayRuntime(');
   });
 
   it('keeps attached start confirmation and completion on the user-facing environment stages', () => {

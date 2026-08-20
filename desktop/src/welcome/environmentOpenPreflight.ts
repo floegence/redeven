@@ -91,8 +91,8 @@ export async function continueEnvironmentOpenAfterLifecycle(input: Readonly<{
 export async function runConfirmedEnvironmentStart<Result extends Readonly<{
   ok: boolean;
   code?: string;
+  operation_key?: string;
 }>>(input: Readonly<{
-  environmentID: string;
   request: DesktopLauncherActionRequest;
   perform: (request: DesktopLauncherActionRequest) => Promise<Result>;
 }>): Promise<Result> {
@@ -100,9 +100,13 @@ export async function runConfirmedEnvironmentStart<Result extends Readonly<{
   if (result.ok || result.code !== 'confirmation_required') {
     return result;
   }
+  const operationKey = result.operation_key?.trim();
+  if (!operationKey) {
+    return result;
+  }
   return input.perform({
     kind: 'confirm_runtime_operation',
-    operation_key: `${input.environmentID}:start`,
+    operation_key: operationKey,
   });
 }
 

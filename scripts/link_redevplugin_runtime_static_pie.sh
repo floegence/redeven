@@ -8,6 +8,14 @@ darwin_link=false
 link_args=()
 for argument in "$@"; do
   case "$argument" in
+    -m64)
+      # Rust LLD's GNU frontend does not implement the GCC emulation switch;
+      # the target triple already selects x86_64 for the cross-link.
+      if [[ "$(uname -s)" == "Darwin" && -z "${REDEVENPLUGIN_STATIC_PIE_CC:-}" ]]; then
+        continue
+      fi
+      link_args+=("$argument")
+      ;;
     -static|-no-pie)
       ;;
     -nostartfiles|-nodefaultlibs)
