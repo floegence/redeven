@@ -351,7 +351,7 @@ func (s *Store) Prepare(ctx context.Context, request gatewayprotocol.RuntimeOper
 		delete(next.TargetLocks, current.LifecycleTargetID)
 	} else {
 		current.ExpectedSnapshot = snapshot
-		if requiresInitialConfirmation(current.Kind) && requiresWorkloadConfirmation(snapshot) {
+		if requiresWorkloadMutationConfirmation(current.Kind) && requiresWorkloadConfirmation(snapshot) {
 			current.State = gatewayprotocol.RuntimeOperationAwaitingConfirmation
 		} else if current.Kind == gatewayprotocol.RuntimeOperationUpdate {
 			current.State = gatewayprotocol.RuntimeOperationAwaitingArtifact
@@ -765,7 +765,7 @@ func (s *Store) continueFencing(ctx context.Context, operationID string, recover
 	}
 	s.mu.Unlock()
 
-	if !snapshotWithinConfirmation(current.ExpectedSnapshot, fence.Snapshot) {
+	if requiresWorkloadMutationConfirmation(current.Kind) && !snapshotWithinConfirmation(current.ExpectedSnapshot, fence.Snapshot) {
 		if err := s.controller.ReleaseLifecycleFence(ctx, fence.Token); err != nil {
 			return s.enterManualRecovery(operationID, "Runtime lifecycle fence could not be released after workload changed.")
 		}
@@ -1143,7 +1143,7 @@ func (s *Store) resumePreflight(ctx context.Context, operationID string) error {
 		delete(next.TargetLocks, current.LifecycleTargetID)
 	} else {
 		current.ExpectedSnapshot = snapshot
-		if requiresInitialConfirmation(current.Kind) {
+		if requiresWorkloadMutationConfirmation(current.Kind) {
 			current.State = gatewayprotocol.RuntimeOperationAwaitingConfirmation
 		} else if current.Kind == gatewayprotocol.RuntimeOperationUpdate {
 			current.State = gatewayprotocol.RuntimeOperationAwaitingArtifact
@@ -1817,9 +1817,12 @@ func (s *Store) removeArtifactDirectory(operationID string) error {
 	}
 }
 
-func requiresInitialConfirmation(kind gatewayprotocol.RuntimeOperationKind) bool {
+// Only operations that may interrupt or replace an existing Runtime workload
+// require an explicit workload confirmation. Starting is idempotent: it either
+// starts a stopped Runtime or observes the already-running one.
+func requiresWorkloadMutationConfirmation(kind gatewayprotocol.RuntimeOperationKind) bool {
 	switch kind {
-	case gatewayprotocol.RuntimeOperationStart, gatewayprotocol.RuntimeOperationStop, gatewayprotocol.RuntimeOperationRestart, gatewayprotocol.RuntimeOperationUpdate:
+	case gatewayprotocol.RuntimeOperationStop, gatewayprotocol.RuntimeOperationRestart, gatewayprotocol.RuntimeOperationUpdate:
 		return true
 	default:
 		return false

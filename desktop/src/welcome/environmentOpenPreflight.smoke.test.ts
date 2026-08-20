@@ -11,7 +11,6 @@ import {
 import {
   continueEnvironmentOpenAfterLifecycle,
   reconcileEnvironmentOpenBeforeLifecycle,
-  runConfirmedEnvironmentStart,
   runEnvironmentOpenPreflight,
 } from './environmentOpenPreflight';
 import {
@@ -236,82 +235,6 @@ describe('environment Open click smoke', () => {
       message: 'Update the Runtime before opening this environment.',
       recovery: 'update_runtime',
     });
-  });
-
-  it('continues a user-confirmed Start and open through the Gateway confirmation', async () => {
-    const calls: unknown[] = [];
-    const perform = vi.fn(async (request) => {
-      calls.push(request);
-      if (request.kind === 'confirm_runtime_operation') {
-        return { ok: true as const, outcome: 'started_gateway_environment_runtime' as const };
-      }
-      return {
-        ok: false as const,
-        code: 'confirmation_required' as const,
-        scope: 'environment' as const,
-        message: 'Review the Runtime impact and confirm before this operation can continue.',
-        operation_key: 'env_local:update_runtime',
-      };
-    });
-
-    await expect(runConfirmedEnvironmentStart({
-      request: {
-        kind: 'run_gateway_environment_lifecycle',
-        environment_id: 'env_local',
-        gateway_id: 'gw_local',
-        gateway_env_id: 'env_local',
-        operation: 'start',
-      },
-      perform,
-    })).resolves.toEqual({ ok: true, outcome: 'started_gateway_environment_runtime' });
-    expect(calls).toEqual([
-      expect.objectContaining({ kind: 'run_gateway_environment_lifecycle', operation: 'start' }),
-      { kind: 'confirm_runtime_operation', operation_key: 'env_local:update_runtime' },
-    ]);
-  });
-
-  it('does not guess a confirmation key when the lifecycle owner omits it', async () => {
-    const confirmationRequired = {
-      ok: false as const,
-      code: 'confirmation_required' as const,
-      scope: 'environment' as const,
-      message: 'Review the Runtime impact and confirm before this operation can continue.',
-    };
-    const perform = vi.fn(async () => confirmationRequired);
-
-    await expect(runConfirmedEnvironmentStart({
-      request: {
-        kind: 'run_gateway_environment_lifecycle',
-        environment_id: 'env_local',
-        gateway_id: 'gw_local',
-        gateway_env_id: 'env_local',
-        operation: 'start',
-      },
-      perform,
-    })).resolves.toBe(confirmationRequired);
-    expect(perform).toHaveBeenCalledOnce();
-  });
-
-  it('does not turn an ordinary start failure into a confirmation', async () => {
-    const perform = vi.fn(async () => ({
-      ok: false as const,
-      code: 'runtime_start_failed' as const,
-      scope: 'environment' as const,
-      message: 'Runtime failed to start.',
-    }));
-    const request = {
-      kind: 'run_gateway_environment_lifecycle' as const,
-      environment_id: 'env_local',
-      gateway_id: 'gw_local',
-      gateway_env_id: 'env_local',
-      operation: 'start' as const,
-    };
-
-    await expect(runConfirmedEnvironmentStart({
-      request,
-      perform,
-    })).resolves.toMatchObject({ ok: false, code: 'runtime_start_failed' });
-    expect(perform).toHaveBeenCalledTimes(1);
   });
 
   it.each(directRuntimeSmokeCases)(

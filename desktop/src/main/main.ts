@@ -5257,11 +5257,12 @@ function upsertRuntimeOperationAttachment(
   }
   const operationKey = attachedRuntimeOperationKey(surface.environment_id, operation);
   const projection = projectAttachedRuntimeOperation(operation);
+  const autoConfirmStart = operation.kind === 'start' && projection.needs_confirmation;
   const lifecycleProgress = attachedRuntimeOperationLifecycleProgress(operationKey, operation, surface, projection);
   const failure = attachedRuntimeOperationFailure(operation, surface);
   const terminalFailure = failure !== undefined;
   const patch = {
-    status: projection.needs_confirmation
+    status: projection.needs_confirmation && !autoConfirmStart
       ? 'needs_confirmation' as const
       : terminalFailure
         ? operation.state === 'cancelled' ? 'canceled' as const : 'failed' as const
@@ -5272,7 +5273,7 @@ function upsertRuntimeOperationAttachment(
     detail: projection.detail,
     detail_key: projection.detail_key,
     lifecycle_progress: lifecycleProgress,
-    runtime_confirmation: projection.confirmation,
+    runtime_confirmation: autoConfirmStart ? undefined : projection.confirmation,
     cancelable: false,
     next_actions: terminalFailure ? attachedRuntimeOperationNextActions(operationKey, operation, surface) : undefined,
     failure,
@@ -5293,6 +5294,17 @@ function upsertRuntimeOperationAttachment(
       provider_id: surface.provider_id,
       ...patch,
     });
+  }
+  if (autoConfirmStart) {
+    pendingRuntimeOperationConfirmations.delete(operationKey);
+    pendingRuntimeOperationReconciliations.delete(operationKey);
+    finishAttachedRuntimeOperation(operationKey, operation, surface, {
+      ...adapter,
+      complete: async (current) => adapter.complete(await adapter.confirm(
+        runtimeOperationConfirmationRequest(current),
+      )),
+    });
+    return;
   }
   if (projection.needs_confirmation) {
     pendingRuntimeOperationReconciliations.delete(operationKey);
@@ -6370,65 +6382,78 @@ async function runGatewayEnvironmentLifecycleFromLauncher(
       signal,
       startPolicy: actionStartPolicy,
     });
-    const runtimeOperation = prepared.operation;
+    let runtimeOperation = prepared.operation;
     publishRuntimeProgress(runtimeOperation);
     foregroundRuntimeOperationIDs.add(operationID);
     if (prepared.confirmation_required) {
-      return awaitRuntimeOperationConfirmation(operationKey, {
-        operation: runtimeOperation,
-        label,
-        operation_id: operationID,
-        confirm: async (confirmation) => {
-          const confirmed = await gatewayLifecycleManager().confirmRuntimeOperation(
-            record,
-            operationID,
-            confirmation,
-            { startPolicy: actionStartPolicy },
-          );
-          await options.beforeMutation?.();
-          return completeRuntimeOperation(confirmed, {
-            current_runtime_epoch: management.compatibility?.compatibility_epoch ?? 0,
-            artifact_preflight: artifactPreflight,
-            upload: (metadata, artifact) => gatewayLifecycleManager().uploadRuntimeOperationArtifact(
+      if (request.operation === 'start') {
+        // Start is idempotent and never replaces a Runtime workload. Older
+        // Gateway bundles may still report a conservative confirmation state;
+        // absorb that legacy response and continue without a user prompt.
+        runtimeOperation = await gatewayLifecycleManager().confirmRuntimeOperation(
+          record,
+          operationID,
+          runtimeOperationConfirmationRequest(runtimeOperation),
+          { startPolicy: actionStartPolicy },
+        );
+        publishRuntimeProgress(runtimeOperation);
+      } else {
+        return awaitRuntimeOperationConfirmation(operationKey, {
+          operation: runtimeOperation,
+          label,
+          operation_id: operationID,
+          confirm: async (confirmation) => {
+            const confirmed = await gatewayLifecycleManager().confirmRuntimeOperation(
               record,
               operationID,
-              metadata,
-              artifact,
+              confirmation,
               { startPolicy: actionStartPolicy },
-            ),
-            commit: () => gatewayLifecycleManager().commitRuntimeOperation(
-              record,
-              operationID,
-              { startPolicy: actionStartPolicy },
-            ),
-            observe: () => gatewayLifecycleManager().getRuntimeOperation(
-              record,
-              operationID,
-              { startPolicy: actionStartPolicy },
-            ),
-            onProgress: publishRuntimeProgress,
-          });
-        },
-        cancel: async () => {
-          try {
-            await gatewayLifecycleManager().cancelRuntimeOperation(record, operationID, { startPolicy: actionStartPolicy });
-          } finally {
-            foregroundRuntimeOperationIDs.delete(operationID);
-          }
-        },
-        after_success: finishLifecycleMutation,
-        continuation: options.confirmationContinuation,
-        environment_id: request.environment_id,
-        retry_action: options.retryAction,
-        success_outcome: options.successOutcome,
-        lifecycle: {
-          host_access: targetDescriptor.host_access,
-          placement: targetDescriptor.placement,
-          operation: lifecycleOperation,
-          target_id: targetDescriptor.target_id,
-          target_label: label,
-        },
-      });
+            );
+            await options.beforeMutation?.();
+            return completeRuntimeOperation(confirmed, {
+              current_runtime_epoch: management.compatibility?.compatibility_epoch ?? 0,
+              artifact_preflight: artifactPreflight,
+              upload: (metadata, artifact) => gatewayLifecycleManager().uploadRuntimeOperationArtifact(
+                record,
+                operationID,
+                metadata,
+                artifact,
+                { startPolicy: actionStartPolicy },
+              ),
+              commit: () => gatewayLifecycleManager().commitRuntimeOperation(
+                record,
+                operationID,
+                { startPolicy: actionStartPolicy },
+              ),
+              observe: () => gatewayLifecycleManager().getRuntimeOperation(
+                record,
+                operationID,
+                { startPolicy: actionStartPolicy },
+              ),
+              onProgress: publishRuntimeProgress,
+            });
+          },
+          cancel: async () => {
+            try {
+              await gatewayLifecycleManager().cancelRuntimeOperation(record, operationID, { startPolicy: actionStartPolicy });
+            } finally {
+              foregroundRuntimeOperationIDs.delete(operationID);
+            }
+          },
+          after_success: finishLifecycleMutation,
+          continuation: options.confirmationContinuation,
+          environment_id: request.environment_id,
+          retry_action: options.retryAction,
+          success_outcome: options.successOutcome,
+          lifecycle: {
+            host_access: targetDescriptor.host_access,
+            placement: targetDescriptor.placement,
+            operation: lifecycleOperation,
+            target_id: targetDescriptor.target_id,
+            target_label: label,
+          },
+        });
+      }
     }
     await options.beforeMutation?.();
     const response = await completeRuntimeOperation(runtimeOperation, {
@@ -7077,37 +7102,45 @@ async function runProviderEnvironmentLifecycleFromLauncher(
       idempotency_key: `provider-runtime-operation:${operationID}`,
       authorization_permit: authorization.permit,
     });
-    const runtimeOperation = prepared.operation;
+    let runtimeOperation = prepared.operation;
     if (prepared.confirmation_required) {
-      return awaitRuntimeOperationConfirmation(operationKey, {
-        operation: runtimeOperation,
-        label,
-        confirm: async (confirmation) => {
-          const confirmed = await client.confirmRuntimeOperation(resolved.scope, operationID, confirmation);
-          return completeRuntimeOperation(confirmed, {
-            current_runtime_epoch: compatibility.compatibility_epoch,
-            artifact_preflight: artifactPreflight,
-            upload: (metadata, artifact) => client.uploadRuntimeOperationArtifact(
-              resolved.scope,
-              operationID,
-              metadata,
-              artifact,
-            ),
-            commit: () => client.commitRuntimeOperation(resolved.scope, operationID),
-            observe: () => client.getRuntimeOperation(resolved.scope, operationID),
-          });
-        },
-        cancel: async () => {
-          await client.cancelRuntimeOperation(resolved.scope, operationID);
-        },
-        after_success: async () => {
-          await refreshProviderEnvironmentRuntimeHealth(
-            environment.provider_origin,
-            environment.provider_id,
-            [environment.env_public_id],
-          ).catch(() => undefined);
-        },
-      });
+      if (request.operation === 'start') {
+        runtimeOperation = await client.confirmRuntimeOperation(
+          resolved.scope,
+          operationID,
+          runtimeOperationConfirmationRequest(runtimeOperation),
+        );
+      } else {
+        return awaitRuntimeOperationConfirmation(operationKey, {
+          operation: runtimeOperation,
+          label,
+          confirm: async (confirmation) => {
+            const confirmed = await client.confirmRuntimeOperation(resolved.scope, operationID, confirmation);
+            return completeRuntimeOperation(confirmed, {
+              current_runtime_epoch: compatibility.compatibility_epoch,
+              artifact_preflight: artifactPreflight,
+              upload: (metadata, artifact) => client.uploadRuntimeOperationArtifact(
+                resolved.scope,
+                operationID,
+                metadata,
+                artifact,
+              ),
+              commit: () => client.commitRuntimeOperation(resolved.scope, operationID),
+              observe: () => client.getRuntimeOperation(resolved.scope, operationID),
+            });
+          },
+          cancel: async () => {
+            await client.cancelRuntimeOperation(resolved.scope, operationID);
+          },
+          after_success: async () => {
+            await refreshProviderEnvironmentRuntimeHealth(
+              environment.provider_origin,
+              environment.provider_id,
+              [environment.env_public_id],
+            ).catch(() => undefined);
+          },
+        });
+      }
     }
     const response = await completeRuntimeOperation(runtimeOperation, {
       current_runtime_epoch: compatibility.compatibility_epoch,
@@ -15936,7 +15969,7 @@ async function runEnvironmentRuntimeLifecycleFromLauncher(
       }
     }
     await refreshWelcomeRuntimeHealthForEnvironment(environmentID).catch(() => undefined);
-    const observedHealth = savedRuntimeTargetHealthForOpenPreflight(environmentID, targetID);
+    let observedHealth = savedRuntimeTargetHealthForOpenPreflight(environmentID, targetID);
     if (!options.openRecovery) {
       const alreadyComplete = decideManagedRuntimeLifecycle({
         requestedOperation,
@@ -15968,7 +16001,14 @@ async function runEnvironmentRuntimeLifecycleFromLauncher(
       );
     }
     const advertisedOperations = gatewayEnvironment.runtime_management?.operations ?? [];
-    const decision = options.openRecovery?.requiredOperation
+    // Gateway startup may also converge a stopped Runtime. Re-read health at
+    // this boundary so Start and open never acts on the stale offline snapshot
+    // that caused Gateway initialization in the first place.
+    await refreshWelcomeRuntimeHealthForEnvironment(environmentID).catch(() => undefined);
+    observedHealth = savedRuntimeTargetHealthForOpenPreflight(environmentID, targetID);
+    const decision = requestedOperation === 'start' && observedHealth?.status === 'online'
+      ? { kind: 'complete' as const }
+      : options.openRecovery?.requiredOperation
       ? decideManagedRuntimeLifecycle({
           requestedOperation: options.openRecovery.requiredOperation,
           health: observedHealth,
@@ -16014,9 +16054,12 @@ async function runEnvironmentRuntimeLifecycleFromLauncher(
     }
     const effectiveOperation = decision.operation;
     const beforeLifecycleMutation = async () => {
-      // Confirmation transfers lifecycle ownership to Desktop. Close its
-      // exact Environment session and placement bridge before mutating the
-      // Runtime so an attached window cannot keep shutdown from converging.
+      // Start is idempotent and must not tear down an existing session while
+      // Desktop reconciles a stale Runtime status. Stop, restart, and update
+      // transfer lifecycle ownership to Desktop before mutating the Runtime.
+      if (effectiveOperation === 'start') {
+        return;
+      }
       await closeEnvironmentSessionsForRuntimeLifecycle({
         operation: effectiveOperation === 'update_runtime' ? 'update' : effectiveOperation,
         scope: {
