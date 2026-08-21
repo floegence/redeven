@@ -1,14 +1,14 @@
 ---
 type: Architecture Contract
 title: Plugin platform integration
-description: Redeven mounts ReDevPlugin v3.0.5 and adds authenticated host modules, market-backed official releases, external-source policy, localized plugin presentation, product placement, and business adapters.
+description: Redeven mounts ReDevPlugin v3.0.8 and adds authenticated host modules, market-backed official releases, external-source policy, localized plugin presentation, product placement, and business adapters.
 tags: [architecture, plugins, local-ui, redevplugin]
 timestamp: 2026-07-25T00:00:00Z
 quality_exception: Cross-domain host integration contract spanning identity, security, runtime, storage, routes, surfaces, and business adapters.
 ---
 # Summary
 
-Redeven integrates ReDevPlugin `v3.0.5` through one Go Host, one canonical HTTP
+Redeven integrates ReDevPlugin `v3.0.8` through one Go Host, one canonical HTTP
 namespace, one Env App `PluginPlatformClient`, one shared surface scope, and the
 released ProcessManager over a verified Redeven-built Linux runtime. Redeven
 adds authenticated session mapping, public-source admission policy, product
@@ -74,15 +74,25 @@ handlers, and then invokes the released idempotent Host teardown path.
 
 ## Package sources and lifecycle
 
-Production obtains the official Containers `4.4.7` release from the frozen
-latest-only market snapshot. The snapshot identifies the immutable GitHub
+Production obtains the official Containers `4.4.7` release from the current
+validated latest-only market snapshot. The snapshot identifies the immutable GitHub
 Release and complete signed transport; it does not carry package bytes or grant
-trust. Redeven starts one released install Execution and observes ordered Events
+trust. Redeven first requests the released package inspection and immediately
+shows its verified presentation, exact source, package/manifest/entries hashes,
+and permissions. The inspection fetches and
+verifies the exact package, but performs no runtime, lifecycle, conflict, enable,
+or inventory work. After explicit confirmation Redeven starts one released
+install Execution with the short-lived inspection id and observes ordered Events
 through the generated start/list/get/Event client. Publisher, plugin, version,
 SHA-256 hashes, Ed25519 root and package signatures, revocation evidence, source
 policy, host requirement, and the Host-registered known capability contract must
 all match before ReDevPlugin changes the registry. Invalid, revoked, or
 incomplete evidence fails closed without falling back to external admission.
+Submission response loss is reconciled with the same request id and the same
+inspection evidence; a new inspection is acquired only for a new operation or
+after explicit expiry/staleness. Confirmed retained-data deletion treats an
+already-absent binding as success and reconciles an unknown mutation outcome
+against the exact generation and binding revision before reinstalling.
 
 Host restart and explicit retry use the Host-owned recovery snapshot and
 `recoverEnabled` path. Redeven observes and localizes the authoritative result;
@@ -121,7 +131,7 @@ user pin.
 ## Runtime and Containers
 
 The runtime module binds the canonical sibling executable, target, ReDevPlugin
-`1.1.4`, runtime-internal IPC and WASM ABI contracts, exact product-build descriptor, lease
+`v3.0.8`, runtime-internal IPC and WASM ABI contracts, exact product-build descriptor, lease
 replay storage, and released limits. Linux runtime bytes are built with Rust
 1.88.0 from the attested release manifest and travel with SBOM, provenance, notices,
 and signature evidence. The expected binary digest comes from the product release
@@ -234,7 +244,7 @@ disposal alone is not revocation evidence.
 # Boundaries
 
 Canonical ownership is defined by [ReDevPlugin host integration boundary](redevplugin-boundary.md).
-This concept owns only Redeven's concrete `v3.0.5` assembly.
+This concept owns only Redeven's concrete `v3.0.8` assembly.
 
 Manifest surfaces remain `view|command|background` with semantic roles. Activity,
 Workbench, window, widget, inventory key, navigation, settings, and product layout

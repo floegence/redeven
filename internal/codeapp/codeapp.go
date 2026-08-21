@@ -33,6 +33,7 @@ import (
 	"github.com/floegence/redeven/internal/terminal"
 	"github.com/floegence/redeven/internal/threadreadstate"
 	"github.com/floegence/redeven/internal/workbenchlayout"
+	redevpluginversion "github.com/floegence/redevplugin/v3/pkg/version"
 )
 
 const (
@@ -49,6 +50,7 @@ type Options struct {
 	PermissionPolicy       *config.PermissionPolicy
 	ControlplaneBaseURL    string
 	ReDevPluginRuntimePath string
+	RedevenVersion         string
 
 	// CodeServerPortMin/Max configures the dynamic port range used for code-server processes.
 	// If unset/invalid, a safe default range is used.
@@ -299,8 +301,10 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	}
 	terminalLayoutCleanup := registerWorkbenchTerminalSessionCleanup(logger, workbenchLayoutSvc, opts.Terminal)
 	pluginMarket, err := pluginmarket.NewService(pluginmarket.ServiceOptions{
-		Origin:    strings.TrimSpace(os.Getenv("REDEVEN_PLUGIN_MARKET_ORIGIN")),
-		CachePath: filepath.Join(stateAbs, "apps", "plugins", "market-lkg.json"),
+		Origin:             strings.TrimSpace(os.Getenv("REDEVEN_PLUGIN_MARKET_ORIGIN")),
+		CachePath:          filepath.Join(stateAbs, "apps", "plugins", "market-lkg.json"),
+		RedevenVersion:     opts.RedevenVersion,
+		ReDevPluginVersion: redevpluginversion.CurrentPlatformVersion(),
 	})
 	if err != nil {
 		terminalLayoutCleanup()
@@ -345,7 +349,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		return nil, err
 	}
 	if marketErr := pluginIntegration.MarketError(); marketErr != nil {
-		logger.Warn("plugin market unavailable; catalog installs remain disabled until restart", "error", marketErr)
+		logger.Warn("plugin market unavailable; catalog installs remain disabled while background refresh retries", "error", marketErr)
 	}
 
 	appSrv, err := appserver.New(appserver.Options{

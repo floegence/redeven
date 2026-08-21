@@ -41,16 +41,22 @@ type Options struct {
 }
 
 type Integration struct {
-	handler          http.Handler
-	host             *host.Host
-	capabilities     *containersCapabilityAdapter
-	runtimeAuthority *RuntimeProcessAuthority
-	marketSnapshot   *pluginmarket.Snapshot
-	marketService    *pluginmarket.Service
-	releaseProvider  *officialReleaseProvider
-	marketErr        error
-	marketMu         sync.RWMutex
-	closers          []func() error
+	handler              http.Handler
+	host                 *host.Host
+	capabilities         *containersCapabilityAdapter
+	runtimeAuthority     *RuntimeProcessAuthority
+	marketSnapshot       *pluginmarket.Snapshot
+	marketService        *pluginmarket.Service
+	releaseProvider      *officialReleaseProvider
+	marketErr            error
+	marketMu             sync.RWMutex
+	marketRefreshMu      sync.Mutex
+	marketRefreshCancel  context.CancelFunc
+	marketRefreshDone    chan struct{}
+	marketRefreshRunning bool
+	marketRefreshReady   bool
+	marketRefreshClosed  bool
+	closers              []func() error
 }
 
 func New(ctx context.Context, opts Options) (*Integration, error) {
@@ -122,27 +128,23 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		releaseModule, _, closeReleaseTrust, err = opts.newReleaseModule(filepath.Join(root, "trust"))
 	} else if opts.PluginMarket != nil {
 		releaseModule, releaseProvider, err = newOfficialReleaseModulePending(releaseFetcher)
-		if err != nil {
-			marketErr = err
-		}
-		var snapshot pluginmarket.Snapshot
-		if marketErr == nil {
-			snapshot, marketErr = opts.PluginMarket.Snapshot(ctx)
-		}
-		if marketErr == nil {
-			var release pluginmarket.LatestRelease
-			release, marketErr = snapshot.LatestRelease(officialContainersPluginID, officialReleaseChannel)
-			if marketErr == nil {
-				if releaseProvider != nil {
-					marketErr = releaseProvider.setRelease(release)
+		if err == nil {
+			snapshot, ok := opts.PluginMarket.CachedSnapshot()
+			if ok {
+				var release pluginmarket.LatestRelease
+				release, marketErr = snapshot.LatestRelease(officialContainersPluginID, officialReleaseChannel)
+				if marketErr == nil {
+					if releaseProvider != nil {
+						marketErr = releaseProvider.setRelease(release)
+					}
+					if marketErr == nil {
+						releaseProvider, _ = releaseModule.ReleaseArtifactResolver.(*officialReleaseProvider)
+					}
 				}
 				if marketErr == nil {
-					releaseProvider, _ = releaseModule.ReleaseArtifactResolver.(*officialReleaseProvider)
+					frozen := snapshot.Clone()
+					marketSnapshot = &frozen
 				}
-			}
-			if marketErr == nil {
-				frozen := snapshot.Clone()
-				marketSnapshot = &frozen
 			}
 		}
 	}
@@ -258,6 +260,9 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		marketErr:        marketErr,
 		closers:          closers,
 	}
+	if integration.marketService != nil {
+		integration.startMarketRefresh()
+	}
 	return integration, nil
 }
 
@@ -265,19 +270,63 @@ func (i *Integration) MarketSnapshot() (pluginmarket.Snapshot, bool) {
 	if i == nil {
 		return pluginmarket.Snapshot{}, false
 	}
-	if i.marketService != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if snapshot, err := i.refreshMarket(ctx); err == nil {
-			return snapshot, true
-		}
+	i.marketRefreshMu.Lock()
+	ready := i.marketRefreshReady
+	if ready {
+		i.marketRefreshReady = false
+	}
+	running := i.marketRefreshRunning
+	i.marketRefreshMu.Unlock()
+	if !ready && !running {
+		i.startMarketRefresh()
+		running = true
 	}
 	i.marketMu.RLock()
-	defer i.marketMu.RUnlock()
-	if i.marketSnapshot == nil {
+	var snapshot *pluginmarket.Snapshot
+	if i.marketSnapshot != nil {
+		cloned := i.marketSnapshot.Clone()
+		snapshot = &cloned
+	}
+	i.marketMu.RUnlock()
+	if snapshot == nil {
 		return pluginmarket.Snapshot{}, false
 	}
-	return i.marketSnapshot.Clone(), true
+	if running && !ready {
+		snapshot.Stale = true
+		snapshot.Source = pluginmarket.SnapshotSourceCache
+	}
+	return *snapshot, true
+}
+
+func (i *Integration) startMarketRefresh() {
+	if i == nil || i.marketService == nil {
+		return
+	}
+	i.marketRefreshMu.Lock()
+	if i.marketRefreshClosed || i.marketRefreshRunning {
+		i.marketRefreshMu.Unlock()
+		return
+	}
+	refreshContext, cancelRefresh := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	i.marketRefreshCancel = cancelRefresh
+	i.marketRefreshDone = done
+	i.marketRefreshRunning = true
+	i.marketRefreshReady = false
+	i.marketRefreshMu.Unlock()
+	go func() {
+		ctx, cancel := context.WithTimeout(refreshContext, 15*time.Second)
+		defer cancel()
+		_, err := i.refreshMarket(ctx)
+		i.marketRefreshMu.Lock()
+		if i.marketRefreshDone == done {
+			i.marketRefreshRunning = false
+			i.marketRefreshReady = err == nil
+			i.marketRefreshCancel = nil
+			close(done)
+		}
+		i.marketRefreshMu.Unlock()
+	}()
 }
 
 func (i *Integration) MarketDetail(ctx context.Context, pluginID string) (pluginmarket.PluginDetail, int64, error) {
@@ -291,15 +340,16 @@ func (i *Integration) MarketIcon(ctx context.Context, pluginID, digest string) (
 	if i == nil || i.marketService == nil {
 		return pluginmarket.IconAsset{}, pluginmarket.ErrUnavailable
 	}
-	snapshot, err := i.refreshMarket(ctx)
-	if err != nil {
-		i.marketMu.RLock()
-		if i.marketSnapshot == nil {
-			i.marketMu.RUnlock()
-			return pluginmarket.IconAsset{}, err
-		}
-		snapshot = i.marketSnapshot.Clone()
-		i.marketMu.RUnlock()
+	i.marketMu.RLock()
+	var snapshot *pluginmarket.Snapshot
+	if i.marketSnapshot != nil {
+		cloned := i.marketSnapshot.Clone()
+		snapshot = &cloned
+	}
+	i.marketMu.RUnlock()
+	if snapshot == nil {
+		i.startMarketRefresh()
+		return pluginmarket.IconAsset{}, pluginmarket.ErrReleaseMissing
 	}
 	for _, plugin := range snapshot.Plugins {
 		icon := plugin.Presentation.Icon
@@ -307,6 +357,7 @@ func (i *Integration) MarketIcon(ctx context.Context, pluginID, digest string) (
 			return i.marketService.Icon(ctx, pluginID, *icon)
 		}
 	}
+	i.startMarketRefresh()
 	return pluginmarket.IconAsset{}, pluginmarket.ErrReleaseMissing
 }
 
@@ -437,6 +488,17 @@ func (i *Integration) Close() error {
 		return nil
 	}
 	var out error
+	i.marketRefreshMu.Lock()
+	i.marketRefreshClosed = true
+	cancelMarketRefresh := i.marketRefreshCancel
+	marketRefreshDone := i.marketRefreshDone
+	i.marketRefreshMu.Unlock()
+	if cancelMarketRefresh != nil {
+		cancelMarketRefresh()
+	}
+	if marketRefreshDone != nil {
+		<-marketRefreshDone
+	}
 	if i.capabilities != nil {
 		out = errors.Join(out, i.capabilities.Close())
 	}

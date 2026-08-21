@@ -120,4 +120,53 @@ describe('PluginInstallStatus', () => {
     dispose();
     host.remove();
   });
+
+  it.each([
+    ['PLUGIN_RELEASE_INSPECTION_EXPIRED', 'information expired'],
+    ['PLUGIN_RELEASE_INSPECTION_STALE', 'release changed'],
+    ['PLUGIN_RUNTIME_UNAVAILABLE', 'temporarily unavailable'],
+    ['PLUGIN_RUNTIME_VERSION_MISMATCH', 'not compatible'],
+    ['PLUGIN_FEATURE_NOT_CONFIGURED', 'platform feature is unavailable'],
+    ['PLUGIN_CONTRACT_MISMATCH', 'capability contract'],
+    ['PLUGIN_SIGNATURE_INVALID', 'trust verification'],
+  ])('keeps %s actionable instead of collapsing it to an internal failure', (failureCode, expected) => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const dispose = render(() => <PluginInstallStatus
+      projection={projection({
+        execution: execution({ status: 'failed', failure_code: failureCode }),
+        events: [],
+      })}
+      onRetry={vi.fn()}
+    />, host);
+
+    expect(host.textContent).toContain(expected);
+    expect(host.textContent).not.toContain('internal plugin platform failure');
+    dispose();
+    host.remove();
+  });
+
+  it.each([
+    ['validate_inspection', 'Validating the approved plugin information'],
+    ['refresh_trust', 'Rechecking publisher trust'],
+    ['validate_install', 'Checking the current plugin state'],
+    ['runtime_preflight', 'Checking the plugin runtime'],
+  ])('labels the %s install phase', (phase, expected) => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const dispose = render(() => <PluginInstallStatus
+      projection={projection({
+        events: [{
+          execution_id: 'release_install_1',
+          sequence: 1,
+          kind: 'progress',
+          payload: { phase, progress: { kind: 'indeterminate' } },
+        }],
+      })}
+    />, host);
+
+    expect(host.textContent).toContain(expected);
+    dispose();
+    host.remove();
+  });
 });

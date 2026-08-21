@@ -2,6 +2,7 @@ import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, 
 import { cn, createUIFirstSelection } from '@floegence/floe-webapp-core';
 import { AlertTriangle, ArrowLeft, CheckCircle, ChevronDown, Download, MoreHorizontal, Play, RefreshIcon, Search, Shield, X } from '@floegence/floe-webapp-core/icons';
 import { Button, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
+import { PluginPlatformRequestError, PluginTransportError } from '@floegence/redevplugin-ui';
 
 import { buildPluginCenterModel } from './pluginInventoryProjection';
 import { useI18n, type I18nHelpers } from '../i18n';
@@ -31,7 +32,7 @@ import { PluginCenterItem } from './PluginCenterItems';
 import { PluginIdentityHeader } from './PluginPresentationPrimitives';
 import { resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
 import { PluginUpdateReviewDialog } from './PluginUpdateReviewDialog';
-import { PluginInstallStatus } from './PluginInstallStatus';
+import { PluginInstallStatus, pluginInstallFailureLabel } from './PluginInstallStatus';
 
 export type PluginCenterViewProps = {
   projection: PluginInventoryProjection;
@@ -46,7 +47,11 @@ export type PluginCenterViewProps = {
   onRetryRuntimeRecovery?: (pluginInstanceID?: string) => Promise<unknown> | unknown;
   onClose?: () => void;
   onRefresh: () => Promise<unknown> | unknown;
-  onCommand: (command: PluginLifecycleCommand, signal: AbortSignal) => Promise<unknown> | unknown;
+  onCommand: (
+    command: PluginLifecycleCommand,
+    signal: AbortSignal,
+    inspection?: OfficialPluginReleaseInspection,
+  ) => Promise<unknown> | unknown;
   installOperations?: readonly PluginInstallExecutionProjection[];
   onRetryInstall?: (pluginInstanceID: string) => Promise<unknown> | unknown;
   onDiscardRetainedDataAndRetry?: (pluginInstanceID: string) => Promise<unknown> | unknown;
@@ -72,6 +77,9 @@ type OfficialInspectionCacheEntry = {
   promise: Promise<OfficialPluginReleaseInspection>;
   inspection?: OfficialPluginReleaseInspection;
 };
+
+const OFFICIAL_INSPECTION_MIN_VALIDITY_MS = 5_000;
+const OFFICIAL_INSPECTION_PREFETCH_CONCURRENCY = 3;
 
 export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const i18n = useI18n();
@@ -137,6 +145,10 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   let marketDetailController: AbortController | undefined;
   const marketDetailCache = new Map<string, PluginMarketDetail>();
   const officialInspectionCache = new Map<string, OfficialInspectionCacheEntry>();
+  const officialInspectionPrefetchQueue: Array<Readonly<{ key: string; item: PluginInventoryItem }>> = [];
+  const officialInspectionPrefetchQueued = new Set<string>();
+  let officialInspectionPrefetchActive = 0;
+  let disposed = false;
 
   const cancelDeferredPermissionsFocus = () => {
     if (deferredPermissionsFocusFrame !== undefined) {
@@ -150,10 +162,13 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   };
 
   onCleanup(() => {
+    disposed = true;
     commandController?.abort('Plugin Center disposed');
     marketDetailController?.abort('Plugin Center disposed');
     for (const entry of officialInspectionCache.values()) entry.controller.abort('Plugin Center disposed');
     officialInspectionCache.clear();
+    officialInspectionPrefetchQueue.length = 0;
+    officialInspectionPrefetchQueued.clear();
     cancelDeferredPermissionsFocus();
   });
 
@@ -207,11 +222,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       && projection.execution?.status !== 'orphaned'
     )
   );
-  const installPending = createMemo(() => (
-    officialInstallFlow().status === 'installing'
-    || (props.installOperations ?? []).some(installOperationActive)
-  ));
-  const managementPending = createMemo(() => Boolean(pendingCommand()) || installPending());
+  const managementPending = createMemo(() => Boolean(pendingCommand()));
   const pendingCommandTypeForItem = (item: PluginInventoryItem): PluginPendingCommandType | undefined => {
     const command = pendingCommand();
     const target = command?.target;
@@ -397,7 +408,12 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       return Promise.reject(new Error(i18n.t('uiCopy.plugin.external.inspectFailed')));
     }
     const key = officialInspectionKey(item);
-    const cached = officialInspectionCache.get(key);
+    let cached = officialInspectionCache.get(key);
+    if (cached?.inspection && !officialInspectionIsFresh(cached.inspection)) {
+      cached.controller.abort('Official plugin inspection expired');
+      officialInspectionCache.delete(key);
+      cached = undefined;
+    }
     if (cached?.inspection) return Promise.resolve(cached.inspection);
     if (cached) return cached.promise;
 
@@ -427,6 +443,24 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     return entry.promise;
   };
 
+  const pumpOfficialInspectionPrefetch = () => {
+    if (disposed) return;
+    while (officialInspectionPrefetchActive < OFFICIAL_INSPECTION_PREFETCH_CONCURRENCY) {
+      const next = officialInspectionPrefetchQueue.shift();
+      if (!next) return;
+      officialInspectionPrefetchQueued.delete(next.key);
+      if (officialInspectionCache.has(next.key)
+        || !allItems().some((item) => officialInspectionKey(item) === next.key)) continue;
+      officialInspectionPrefetchActive += 1;
+      void ensureOfficialInspection(next.item).catch(() => {
+        // Prefetch failures stay silent until the user explicitly requests install.
+      }).finally(() => {
+        officialInspectionPrefetchActive -= 1;
+        pumpOfficialInspectionPrefetch();
+      });
+    }
+  };
+
   createEffect(() => {
     const validKeys = new Set(allItems().flatMap((item) => (
       item.officialCatalog && !item.pluginInstanceID ? [officialInspectionKey(item)] : []
@@ -435,6 +469,13 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       if (validKeys.has(key)) continue;
       entry.controller.abort('Official plugin release identity changed');
       officialInspectionCache.delete(key);
+    }
+    for (let index = officialInspectionPrefetchQueue.length - 1; index >= 0; index -= 1) {
+      const queued = officialInspectionPrefetchQueue[index];
+      if (queued && !validKeys.has(queued.key)) {
+        officialInspectionPrefetchQueue.splice(index, 1);
+        officialInspectionPrefetchQueued.delete(queued.key);
+      }
     }
     const flow = officialInstallFlow();
     if (flow.status === 'idle' || flow.status === 'installed' || flow.status === 'installing') return;
@@ -450,11 +491,11 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     for (const item of allItems()) {
       if (!item.officialCatalog || item.pluginInstanceID) continue;
       const key = officialInspectionKey(item);
-      if (officialInspectionCache.has(key)) continue;
-      void ensureOfficialInspection(item).catch(() => {
-        // Prefetch failures stay silent until the user explicitly requests install.
-      });
+      if (officialInspectionCache.has(key) || officialInspectionPrefetchQueued.has(key)) continue;
+      officialInspectionPrefetchQueued.add(key);
+      officialInspectionPrefetchQueue.push({ key, item });
     }
+    pumpOfficialInspectionPrefetch();
   });
 
   createEffect(() => {
@@ -531,7 +572,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       const flow = officialInstallFlow();
       if ((flow.status === 'inspecting' || flow.status === 'installing') && flow.key === key) return;
       const cached = officialInspectionCache.get(key);
-      if (cached?.inspection) {
+      if (cached?.inspection && officialInspectionIsFresh(cached.inspection)) {
         setOfficialInstallFlow({ status: 'review_ready', key, item, inspection: cached.inspection });
         return;
       }
@@ -549,7 +590,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
             status: 'error',
             key,
             item,
-            message: messageFromUnknown(error) ?? i18n.t('uiCopy.plugin.external.inspectFailed'),
+            message: officialInstallErrorMessage(error, i18n),
           });
         }
       });
@@ -560,12 +601,36 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const confirmOfficialInstall = () => {
     const flow = officialInstallFlow();
     if (flow.status !== 'review_ready' || !flow.item.officialCatalog) return;
+    if (!officialInspectionIsFresh(flow.inspection)) {
+      const cached = officialInspectionCache.get(flow.key);
+      cached?.controller.abort('Official plugin inspection expired before confirmation');
+      officialInspectionCache.delete(flow.key);
+      setOfficialInstallFlow({ status: 'inspecting', key: flow.key, item: flow.item });
+      void ensureOfficialInspection(flow.item).then((inspection) => {
+        const current = officialInstallFlow();
+        if (current.status === 'inspecting' && current.key === flow.key) {
+          setOfficialInstallFlow({ status: 'review_ready', key: flow.key, item: flow.item, inspection });
+        }
+      }).catch((error: unknown) => {
+        const current = officialInstallFlow();
+        if (current.status === 'inspecting' && current.key === flow.key) {
+          setOfficialInstallFlow({
+            status: 'error',
+            key: flow.key,
+            item: flow.item,
+            message: officialInstallErrorMessage(error, i18n),
+          });
+        }
+      });
+      return;
+    }
+    officialInspectionCache.delete(flow.key);
     setOfficialInstallFlow({ status: 'installing', key: flow.key, item: flow.item });
     void runCommand({
       type: 'install',
       pluginID: flow.item.pluginID,
       source: 'official_catalog',
-    });
+    }, flow.inspection);
   };
   const currentUpdateReviewItem = createMemo(() => {
     const reviewed = updateReviewItem();
@@ -573,11 +638,22 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     return allItems().find((item) => item.inventoryKey === reviewed.inventoryKey) ?? reviewed;
   });
 
-  const runCommand = async (command: PluginLifecycleCommand) => {
+  const runCommand = async (
+    command: PluginLifecycleCommand,
+    inspection?: OfficialPluginReleaseInspection,
+  ) => {
     if (command.type === 'install') {
       const item = allItems().find((candidate) => candidate.pluginID === command.pluginID && candidate.officialCatalog);
-      if (!item?.officialCatalog) {
-        setCommandError(i18n.t('uiCopy.plugin.installOperation.failure.internal'));
+      if (!item?.officialCatalog || !inspection) {
+        if (item?.officialCatalog) {
+          const key = officialInspectionKey(item);
+          setOfficialInstallFlow({
+            status: 'error',
+            key,
+            item,
+            message: i18n.t('uiCopy.plugin.external.inspectFailed'),
+          });
+        }
         return;
       }
       const key = officialInspectionKey(item);
@@ -586,11 +662,10 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
         : { status: 'installing', key, item });
       setCommandError(null);
       try {
-        await props.onCommand(command, new AbortController().signal);
+        await props.onCommand(command, new AbortController().signal, inspection);
       } catch (error) {
-        const message = messageFromUnknown(error) ?? i18n.t('uiCopy.plugin.installOperation.failure.internal');
+        const message = officialInstallErrorMessage(error, i18n);
         setOfficialInstallFlow({ status: 'error', key, item, message });
-        setCommandError(message);
       }
       return;
     }
@@ -783,8 +858,10 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
                   managementDisabled={loading() || itemManagementPending(item)}
                   commandPendingType={pendingCommandTypeForItem(item)}
                   officialInstallPhase={officialInstallPhaseForItem(item)}
-                  officialInstallError={officialInstallErrorForItem(item)}
-                  installOperation={selectedInventoryKey() === item.inventoryKey && mobileDetailOpen()
+                  officialInstallError={selectedInventoryKey() === item.inventoryKey
+                    ? undefined
+                    : officialInstallErrorForItem(item)}
+                  installOperation={selectedInventoryKey() === item.inventoryKey
                     ? undefined
                     : installOperationForItem(item)}
                   entranceDelayMs={Math.min(index() * 18, 126)}
@@ -1058,44 +1135,80 @@ function OfficialPluginInstallDialog(props: {
           <div data-plugin-install-review-dialog data-plugin-install-loading={props.loading || undefined} class="space-y-4">
             <PluginIdentityHeader item={item()} description />
             <Show when={props.loading} fallback={(
-              <section class="rounded-md border bg-muted/10 px-4 py-3">
-              <h3 class="text-sm font-semibold">
-                {i18n.t('uiCopy.plugin.permissionsTitle', { plugin: item().displayName })}
-              </h3>
-              <Show
-                when={permissions().length > 0}
-                fallback={<p class="mt-2 text-sm leading-6 text-muted-foreground">{i18n.t('uiCopy.plugin.noRequiredPermissions')}</p>}
-              >
-                <div class="mt-2 divide-y">
-                  <For each={permissions()}>
-                    {(permission) => (
-                      <div class="flex items-start gap-3 py-2.5" data-plugin-install-permission={permission.permission_id}>
-                        <Shield class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                        <div class="min-w-0 flex-1">
-                          <div class="flex flex-wrap items-center gap-2">
-                            <span class="text-sm font-medium">{humanizePermissionID(permission.permission_id)}</span>
-                            <span class="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                              {permission.required
-                                ? i18n.t('uiCopy.plugin.requiredToOpen')
-                                : i18n.t('uiCopy.plugin.optionalPermission')}
-                            </span>
-                          </div>
-                          <code class="mt-1 block break-all text-[11px] text-muted-foreground">{permission.permission_id}</code>
-                          <p class="mt-1 text-xs leading-5 text-muted-foreground">
-                            {i18n.t('uiCopy.plugin.officialPermissionEffects', {
-                              effects: permission.effects.map((effect) => officialPermissionEffectLabel(effect, i18n)).join(', '),
-                            })}
-                          </p>
-                          <p class="mt-0.5 break-words text-xs leading-5 text-muted-foreground">
-                            {i18n.t('uiCopy.plugin.officialPermissionMethods', { methods: permission.methods.join(', ') })}
-                          </p>
-                        </div>
+              <div class="space-y-3">
+                <Show when={props.inspection}>
+                  {(inspection) => (
+                    <section data-plugin-install-verification class="rounded-md border border-emerald-500/25 bg-emerald-500/5 px-4 py-3">
+                      <div class="flex items-center gap-2 text-sm font-semibold">
+                        <CheckCircle class="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                        <span>{i18n.t('uiCopy.plugin.external.signatureVerified')}</span>
                       </div>
-                    )}
-                  </For>
-                </div>
-              </Show>
-              </section>
+                      <p class="mt-1 text-xs text-muted-foreground">{i18n.t('uiCopy.plugin.external.reviewReady')}</p>
+                      <dl class="mt-3 space-y-2 text-xs">
+                        <div>
+                          <dt class="font-medium text-muted-foreground">{i18n.t('uiCopy.plugin.external.source')}</dt>
+                          <dd class="mt-0.5 break-all font-mono" data-plugin-install-source>
+                            {inspection().release_ref.source_id} · {inspection().release_ref.channel}
+                            <span class="mt-0.5 block text-muted-foreground">{inspection().release_ref.release_metadata_ref}</span>
+                          </dd>
+                        </div>
+                        <div>
+                          <dt class="font-medium text-muted-foreground">{i18n.t('uiCopy.plugin.external.packageHash')}</dt>
+                          <dd class="mt-0.5 break-all font-mono" data-plugin-install-package-hash>{inspection().inspected_hashes.package_sha256}</dd>
+                        </div>
+                        <div class="grid gap-2 sm:grid-cols-2">
+                          <div>
+                            <dt class="font-medium text-muted-foreground">{i18n.t('uiCopy.plugin.external.manifestHash')}</dt>
+                            <dd class="mt-0.5 break-all font-mono">{inspection().inspected_hashes.manifest_sha256}</dd>
+                          </div>
+                          <div>
+                            <dt class="font-medium text-muted-foreground">{i18n.t('uiCopy.plugin.external.entriesHash')}</dt>
+                            <dd class="mt-0.5 break-all font-mono">{inspection().inspected_hashes.entries_sha256}</dd>
+                          </div>
+                        </div>
+                      </dl>
+                    </section>
+                  )}
+                </Show>
+                <section class="rounded-md border bg-muted/10 px-4 py-3">
+                  <h3 class="text-sm font-semibold">
+                    {i18n.t('uiCopy.plugin.permissionsTitle', { plugin: item().displayName })}
+                  </h3>
+                  <Show
+                    when={permissions().length > 0}
+                    fallback={<p class="mt-2 text-sm leading-6 text-muted-foreground">{i18n.t('uiCopy.plugin.noRequiredPermissions')}</p>}
+                  >
+                    <div class="mt-2 divide-y">
+                      <For each={permissions()}>
+                        {(permission) => (
+                          <div class="flex items-start gap-3 py-2.5" data-plugin-install-permission={permission.permission_id}>
+                            <Shield class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                            <div class="min-w-0 flex-1">
+                              <div class="flex flex-wrap items-center gap-2">
+                                <span class="text-sm font-medium">{humanizePermissionID(permission.permission_id)}</span>
+                                <span class="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                                  {permission.required
+                                    ? i18n.t('uiCopy.plugin.requiredToOpen')
+                                    : i18n.t('uiCopy.plugin.optionalPermission')}
+                                </span>
+                              </div>
+                              <code class="mt-1 block break-all text-[11px] text-muted-foreground">{permission.permission_id}</code>
+                              <p class="mt-1 text-xs leading-5 text-muted-foreground">
+                                {i18n.t('uiCopy.plugin.officialPermissionEffects', {
+                                  effects: permission.effects.map((effect) => officialPermissionEffectLabel(effect, i18n)).join(', '),
+                                })}
+                              </p>
+                              <p class="mt-0.5 break-words text-xs leading-5 text-muted-foreground">
+                                {i18n.t('uiCopy.plugin.officialPermissionMethods', { methods: permission.methods.join(', ') })}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </For>
+                    </div>
+                  </Show>
+                </section>
+              </div>
             )}>
               <section role="status" aria-live="polite" aria-busy="true" class="flex items-center gap-3 rounded-md border bg-muted/10 px-4 py-5">
                 <RefreshIcon class="h-5 w-5 shrink-0 animate-spin motion-reduce:animate-none" />
@@ -2435,6 +2548,24 @@ function officialInspectionMatchesItem(
     && inspection.inspected_hashes.package_sha256 === expected.expected_hashes.package_sha256
     && inspection.inspected_hashes.manifest_sha256 === expected.expected_hashes.manifest_sha256
     && inspection.inspected_hashes.entries_sha256 === expected.expected_hashes.entries_sha256;
+}
+
+function officialInspectionIsFresh(
+  inspection: OfficialPluginReleaseInspection,
+  now = Date.now(),
+): boolean {
+  const expiresAt = Date.parse(inspection.expires_at);
+  return Number.isFinite(expiresAt) && expiresAt > now + OFFICIAL_INSPECTION_MIN_VALIDITY_MS;
+}
+
+function officialInstallErrorMessage(error: unknown, i18n: I18nHelpers): string {
+  if (error instanceof PluginPlatformRequestError) {
+    return pluginInstallFailureLabel(error.errorCode, i18n);
+  }
+  if (error instanceof PluginTransportError) {
+    return pluginInstallFailureLabel('PLUGIN_RELEASE_NETWORK', i18n);
+  }
+  return messageFromUnknown(error) ?? i18n.t('uiCopy.plugin.installOperation.failure.internal');
 }
 
 function officialPermissionPresentation(

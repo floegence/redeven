@@ -130,7 +130,7 @@ invented fetch provenance are denied. Redeven persists no trusted-time,
 transparency ledger, publisher-continuity, or activation-evidence database.
 
 Plugin Center installs an official market result only through this release-ref
-boundary. The frozen market snapshot identifies immutable GitHub assets and
+boundary. The validated market snapshot identifies immutable GitHub assets and
 their complete transport, but cannot assert trust or replace Redeven's pinned
 official root key. ReDevPlugin downloads and verifies the
 exact signed transport before changing registry state. Invalid, incomplete,
