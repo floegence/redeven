@@ -4467,6 +4467,9 @@
           "denied": "No tienes permiso para instalar plugins en este entorno.",
           "trust": "La versión del plugin no superó la verificación del editor y de confianza.",
           "manifestInvalid": "Este paquete de plugin usa un formato de manifiesto que la plataforma no puede instalar.",
+          "packageInvalid": "El paquete del plugin no es válido y no se puede instalar.",
+          "packageTooLarge": "El paquete del plugin supera los límites de tamaño de la plataforma.",
+          "packagePathForbidden": "El paquete del plugin contiene una ruta de archivo no permitida.",
           "internal": "No se pudo completar la instalación por un fallo interno de la plataforma de plugins."
         }
       },
@@ -4756,6 +4759,8 @@
         "confirmReinstallTitle": "Confirmar la reinstalación de este paquete concreto",
         "confirmReplaceTitle": "Confirmar el reemplazo del paquete instalado",
         "confirmInstallCheckedTitle": "Confirmar la instalación del paquete inspeccionado",
+        "loadingInstallTitle": "Obteniendo información del plugin",
+        "loadingInstallDescription": "Estamos obteniendo y verificando los detalles del paquete. Podrás revisar su acceso antes de instalarlo.",
         "confirmInstallGuidance": "Instalar confirma este paquete exacto y su acceso declarado. El Host concede los permisos necesarios permitidos y habilita el plugin; el acceso bloqueado por la política se rechaza de forma segura.",
         "confirmUpdateGuidance": "Estás confirmando esta inspección concreta y el acceso declarado. El host conserva el estado de activación actual y los permisos existentes, y no concede ninguno nuevo automáticamente.",
         "currentStateRetained": "Se conserva el estado actual",

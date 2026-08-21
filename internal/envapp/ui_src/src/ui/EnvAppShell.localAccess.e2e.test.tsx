@@ -2115,9 +2115,8 @@ describe('EnvAppShell environment entry affordances', () => {
   it('refreshes the session inventory exactly once after a lifecycle mutation', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
-    pluginLifecycleMocks.loadInventoryProjection
-      .mockResolvedValueOnce(officialContainersProjection('enabled'))
-      .mockResolvedValueOnce(officialContainersProjection('disabled'));
+    let currentProjection = officialContainersProjection('enabled');
+    pluginLifecycleMocks.loadInventoryProjection.mockImplementation(async () => currentProjection);
     window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -2128,6 +2127,9 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 1, 40);
       await pluginPanelState.lastProps.onOpenCenter();
       await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onCommand), 40);
+      await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length >= 2, 40);
+      const requestsBeforeMutation = pluginLifecycleMocks.loadInventoryProjection.mock.calls.length;
+      currentProjection = officialContainersProjection('disabled');
       await pluginCenterViewState.lastProps.onCommand({
         type: 'disable',
         pluginInstanceID: officialContainersCatalog.pluginInstanceID,
@@ -2135,7 +2137,7 @@ describe('EnvAppShell environment entry affordances', () => {
       }, new AbortController().signal);
 
       expect(pluginLifecycleMocks.execute).toHaveBeenCalledTimes(1);
-      expect(pluginLifecycleMocks.loadInventoryProjection).toHaveBeenCalledTimes(2);
+      expect(pluginLifecycleMocks.loadInventoryProjection).toHaveBeenCalledTimes(requestsBeforeMutation + 1);
     } finally {
       dispose();
     }
@@ -2580,7 +2582,8 @@ describe('EnvAppShell environment entry affordances', () => {
   it('keeps official installation observation alive when Plugin Center closes', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
-    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection());
+    let currentProjection = officialContainersProjection();
+    pluginLifecycleMocks.loadInventoryProjection.mockImplementation(async () => currentProjection);
     window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
     let finishInstall!: (execution: any) => void;
     let observationSignal: AbortSignal | undefined;
@@ -2650,6 +2653,7 @@ describe('EnvAppShell environment entry affordances', () => {
       viewController.abort('Plugin Center disposed');
       expect(observationSignal?.aborted).toBe(false);
 
+      currentProjection = officialContainersProjection('enabled');
       finishInstall({
         ...pluginCenterViewState.lastProps.installOperations[0].execution,
         status: 'completed',

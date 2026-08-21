@@ -4467,6 +4467,9 @@
           "denied": "이 환경에 플러그인을 설치할 권한이 없습니다.",
           "trust": "플러그인 릴리스가 게시자 및 신뢰 검증을 통과하지 못했습니다.",
           "manifestInvalid": "이 플러그인 패키지는 플랫폼에서 설치할 수 없는 매니페스트 형식을 사용합니다.",
+          "packageInvalid": "플러그인 패키지가 올바르지 않아 설치할 수 없습니다.",
+          "packageTooLarge": "플러그인 패키지가 플랫폼의 크기 제한을 초과합니다.",
+          "packagePathForbidden": "플러그인 패키지에 허용되지 않은 파일 경로가 포함되어 있습니다.",
           "internal": "플러그인 플랫폼 내부 오류로 설치를 완료할 수 없습니다."
         }
       },
@@ -4752,6 +4755,8 @@
         "confirmReinstallTitle": "바로 이 패키지 재설치 확인",
         "confirmReplaceTitle": "설치된 패키지 교체 확인",
         "confirmInstallCheckedTitle": "검사된 패키지 설치 확인",
+        "loadingInstallTitle": "플러그인 정보 가져오는 중",
+        "loadingInstallDescription": "패키지 세부 정보를 가져와 확인하고 있습니다. 완료되면 설치 전에 접근 범위를 검토할 수 있습니다.",
         "confirmInstallGuidance": "설치하면 이 정확한 패키지와 선언된 접근 범위를 승인합니다. Host는 허용된 필수 권한을 부여하고 플러그인을 활성화하며, 정책으로 차단된 접근은 안전하게 거부합니다.",
         "confirmUpdateGuidance": "바로 이 검사 결과와 선언된 접근 범위를 확인합니다. Host는 현재 활성화 상태와 기존 권한 부여를 유지하며 새 권한을 자동으로 부여하지 않습니다.",
         "currentStateRetained": "현재 상태 유지",

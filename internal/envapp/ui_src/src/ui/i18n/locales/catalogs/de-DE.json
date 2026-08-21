@@ -4467,6 +4467,9 @@
           "denied": "Sie dürfen in dieser Umgebung keine Plugins installieren.",
           "trust": "Die Plugin-Veröffentlichung hat die Herausgeber- und Vertrauensprüfung nicht bestanden.",
           "manifestInvalid": "Dieses Plugin-Paket verwendet ein Manifestformat, das diese Plattform nicht installieren kann.",
+          "packageInvalid": "Das Plugin-Paket ist ungültig und kann nicht installiert werden.",
+          "packageTooLarge": "Das Plugin-Paket überschreitet die Größenbeschränkungen der Plattform.",
+          "packagePathForbidden": "Das Plugin-Paket enthält einen unzulässigen Dateipfad.",
           "internal": "Die Installation konnte wegen eines internen Fehlers der Plugin-Plattform nicht abgeschlossen werden."
         }
       },
@@ -4756,6 +4759,8 @@
         "confirmReinstallTitle": "Neuinstallation genau dieses Pakets bestätigen",
         "confirmReplaceTitle": "Ersetzen des installierten Pakets bestätigen",
         "confirmInstallCheckedTitle": "Installation des geprüften Pakets bestätigen",
+        "loadingInstallTitle": "Plugin-Informationen werden abgerufen",
+        "loadingInstallDescription": "Die Paketdetails werden abgerufen und überprüft. Vor der Installation können Sie den Zugriff prüfen.",
         "confirmInstallGuidance": "Mit der Installation bestätigen Sie dieses exakte Paket und seinen deklarierten Zugriff. Der Host erteilt zulässige erforderliche Berechtigungen und aktiviert das Plugin; blockierter Zugriff wird sicher abgelehnt.",
         "confirmUpdateGuidance": "Sie bestätigen genau diese Prüfung und den deklarierten Zugriff. Der Host behält den aktuellen Aktivierungsstatus und die bestehenden Berechtigungsfreigaben bei und fügt nicht automatisch neue hinzu.",
         "currentStateRetained": "Aktueller Status bleibt erhalten",
