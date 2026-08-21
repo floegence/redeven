@@ -432,7 +432,11 @@ export function buildFlowerTimelineEntries(thread: FlowerThreadSnapshot | null |
     ? [...thread.messages].reverse().find((message) => message.role === 'assistant' && message.active_cursor === true)?.id ?? ''
     : '';
   const decorations = decorationsByTimelineAnchor(thread.timeline_decorations ?? []);
+  const seenMessageIDs = new Set<string>();
   const entries: FlowerTimelineEntry[] = thread.messages.flatMap((message): readonly FlowerTimelineEntry[] => {
+    const messageID = trimString(message.id);
+    if (!messageID || seenMessageIDs.has(messageID)) return [];
+    seenMessageIDs.add(messageID);
     const activeCursor = message.id === activeCursorMessageID;
     const projectedMessage = activeCursor === message.active_cursor
       ? message
