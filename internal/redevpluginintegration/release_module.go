@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -26,7 +27,7 @@ type officialReleaseProvider struct {
 	releaseRef host.PluginReleaseRef
 	transport  *remoterelease.AssetSet
 	fetcher    remoterelease.AssetFetcher
-	transports map[string]*remoterelease.AssetSet
+	projection string
 }
 
 func newOfficialReleaseModuleWithClock(
@@ -54,7 +55,7 @@ func newOfficialReleaseModuleWithClock(
 // while the market is temporarily unavailable. The provider is populated by
 // the first successful market refresh before an install is attempted.
 func newOfficialReleaseModulePending(fetcher remoterelease.AssetFetcher) (*host.ReleaseModule, *officialReleaseProvider, error) {
-	provider := &officialReleaseProvider{fetcher: fetcher, transports: make(map[string]*remoterelease.AssetSet)}
+	provider := &officialReleaseProvider{fetcher: fetcher}
 	trust, err := newOfficialReleaseTrust(provider)
 	if err != nil {
 		return nil, nil, err
@@ -93,6 +94,12 @@ func (p *officialReleaseProvider) setRelease(release pluginmarket.LatestRelease)
 	if p == nil || p.fetcher == nil {
 		return errors.New("official Containers release fetcher is unavailable")
 	}
+	projection := releaseAssetProjectionKey(assets)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.transport != nil && p.releaseRef == ref && p.projection == projection {
+		return nil
+	}
 	transport, err := remoterelease.NewAssetSet(remoterelease.AssetSetOptions{
 		SourceID: ref.SourceID, Channel: ref.Channel,
 		QuotaKey: "redeven.official.containers", AllowedHosts: []string{
@@ -103,14 +110,9 @@ func (p *officialReleaseProvider) setRelease(release pluginmarket.LatestRelease)
 	if err != nil {
 		return fmt.Errorf("create official Containers remote transport: %w", err)
 	}
-	p.mu.Lock()
 	p.releaseRef = ref
 	p.transport = transport
-	if p.transports == nil {
-		p.transports = make(map[string]*remoterelease.AssetSet)
-	}
-	p.transports[releaseRefKey(ref)] = transport
-	p.mu.Unlock()
+	p.projection = projection
 	return nil
 }
 
@@ -164,9 +166,10 @@ func (p *officialReleaseProvider) ResolveReleaseArtifact(ctx context.Context, re
 		return host.ResolvedPackageArtifact{}, officialReleaseVerificationError("release artifact is not declared by the verified source policy")
 	}
 	p.mu.RLock()
-	transport := p.transports[releaseRefKey(req.ReleaseRef)]
+	transport := p.transport
+	current := p.releaseRef
 	p.mu.RUnlock()
-	if transport == nil ||
+	if transport == nil || current != req.ReleaseRef ||
 		(req.Action != host.PackageTrustActionInstall && req.Action != host.PackageTrustActionUpdate) {
 		return host.ResolvedPackageArtifact{}, officialReleaseVerificationError("release artifact is not declared by the verified source policy")
 	}
@@ -186,8 +189,12 @@ func (p *officialReleaseProvider) FetchReleaseDocument(ctx context.Context, req 
 	return transport.FetchReleaseDocument(ctx, req)
 }
 
-func releaseRefKey(ref host.PluginReleaseRef) string {
-	return ref.ReleaseMetadataSHA256 + "\x00" + ref.Version
+func releaseAssetProjectionKey(assets []remoterelease.Asset) string {
+	parts := make([]string, 0, len(assets)*4)
+	for _, asset := range assets {
+		parts = append(parts, asset.Locator, asset.URL, asset.SHA256, fmt.Sprintf("%d", asset.Size))
+	}
+	return strings.Join(parts, "\x00")
 }
 
 func officialReleaseVerificationError(reason string) error {

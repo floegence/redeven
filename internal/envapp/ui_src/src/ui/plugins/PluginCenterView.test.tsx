@@ -2871,6 +2871,52 @@ describe('PluginCenterView', () => {
     }, expect.any(AbortSignal));
   });
 
+  it('keeps the fresh reinstall prefetch alive after uninstall inventory refresh', async () => {
+    const [currentProjection, setCurrentProjection] = createSignal<PluginInventoryProjection>({
+      items: [{
+        ...containersPlugin,
+        pluginInstanceID: 'plugini_redeven_official_containers',
+        version: '2.0.0',
+        managementRevision: 23,
+        lifecycleState: 'disabled',
+      }],
+    });
+    let reinstallSignal: AbortSignal | undefined;
+    const inspection = deferred<OfficialPluginReleaseInspection>();
+    const onInspectOfficial = vi.fn((_item: PluginInventoryProjection['items'][number], signal: AbortSignal) => {
+      reinstallSignal = signal;
+      return inspection.promise;
+    });
+    const onCommand = vi.fn(async () => {
+      setCurrentProjection({ items: [containersPlugin] });
+      await Promise.resolve();
+    });
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={currentProjection()}
+        loading={false}
+        onCommand={onCommand}
+        onInspectOfficial={onInspectOfficial}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    openInventoryDetails(mount);
+    (mount.querySelector('[data-plugin-action="more"]') as HTMLButtonElement).click();
+    await Promise.resolve();
+    findDocumentButton('Uninstall').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    (document.querySelector('[data-plugin-uninstall-confirm]') as HTMLButtonElement).click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(onInspectOfficial).toHaveBeenCalledTimes(1);
+    expect(reinstallSignal?.aborted).toBe(false);
+  });
+
   it('restores keep data as the safe default after cancelling an uninstall', async () => {
     const onCommand = vi.fn();
     const installedProjection: PluginInventoryProjection = {
