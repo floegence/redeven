@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import {
+  DEFAULT_DESKTOP_SSH_GATEWAY_PROFILE_DIR,
   DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL,
   DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
   type DesktopSSHEnvironmentDetails,
@@ -51,6 +52,7 @@ export type GatewayServiceStatus =
   | 'running'
   | 'not_running'
   | 'needs_update'
+  | 'needs_reinstall'
   | 'failed';
 
 export type GatewayServiceProbe = Readonly<{
@@ -117,6 +119,12 @@ export type GatewayServiceHostOptions = Readonly<{
   onProgress?: (progress: GatewayServiceProgress) => void;
 }>;
 
+export type GatewayTargetQuarantine = Readonly<{
+  operation_id: string;
+  target_root: string;
+  quarantine_root: string;
+}>;
+
 type GatewayPackageProbe = Readonly<{
   status: GatewayServicePackageProbeStatus;
   binary_path: string;
@@ -178,13 +186,18 @@ async function localGatewayStartupError(stateRoot: string, error: unknown): Prom
     return error;
   }
   const activeWorkload = failure.code === 'runtime_target_active_workload_confirmation_required';
+  const reinstallRequired = failure.code === 'runtime_target_binding_migration_failed';
   const priorDiagnostics = isDesktopOperationFailureError(error) ? error.presentation.diagnostics ?? [] : [];
   return new DesktopOperationFailureError(desktopOperationFailurePresentation({
-    code: activeWorkload ? 'confirmation_required' : 'runtime_host_command_failed',
-    title: activeWorkload ? 'Runtime Confirmation Required' : 'Runtime Host Command Failed',
+    code: activeWorkload ? 'confirmation_required' : reinstallRequired ? 'reinstall_required' : 'runtime_host_command_failed',
+    title: activeWorkload ? 'Runtime Confirmation Required' : reinstallRequired ? 'Local Environment Reinstall Required' : 'Runtime Host Command Failed',
+    titleKey: reinstallRequired ? 'confirm.reinstallTargetTitle' : undefined,
     summary: activeWorkload
       ? 'The Runtime workload must be reviewed before Desktop can replace this development target.'
-      : 'Desktop could not converge the managed Runtime to the verified target.',
+      : reinstallRequired
+        ? 'The Local Environment state is incompatible with this Desktop and must be reinstalled.'
+        : 'Desktop could not converge the managed Runtime to the verified target.',
+    summaryKey: reinstallRequired ? 'confirm.reinstallRequiredDescription' : undefined,
     detail: failure.reason,
     recoveryHint: failure.recovery,
     targetLabel: 'Local Environment',
@@ -914,6 +927,122 @@ export function gatewayServiceBinaryPath(placement: DesktopRuntimePlacement): st
   return `${root.replace(/\/+$/u, '')}/gateway/managed/bin/redeven-gateway`;
 }
 
+function gatewayTargetProfileRoot(options: GatewayServiceHostOptions): string {
+  const runtimeRoot = compact(options.placement.runtime_root).replace(/\/+$/u, '');
+  const gatewayID = compact(options.gatewayID);
+  if (runtimeRoot === '' || runtimeRoot === '/' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(gatewayID)) {
+    throw new Error('Gateway reinstall requires an exact runtime root and Gateway identity.');
+  }
+  const expectedStateRoot = `${runtimeRoot}/${DEFAULT_DESKTOP_SSH_GATEWAY_PROFILE_DIR}/${gatewayID}/state`;
+  if (compact(options.stateRoot).replace(/\/+$/u, '') !== expectedStateRoot) {
+    throw new Error('Gateway reinstall target does not match the registered Gateway profile root.');
+  }
+  return `${runtimeRoot}/${DEFAULT_DESKTOP_SSH_GATEWAY_PROFILE_DIR}/${gatewayID}`;
+}
+
+function gatewayQuarantineCommand(
+  options: GatewayServiceHostOptions,
+  targetRoot: string,
+  quarantineRoot: string,
+): readonly string[] {
+  const script = [
+    'set -eu',
+    'target="$1"',
+    'quarantine="$2"',
+    '[ -d "$target" ] || { echo "target missing" >&2; exit 40; }',
+    '[ ! -L "$target" ] || { echo "target is symlink" >&2; exit 41; }',
+    'for existing in "$target".redeven-quarantine-*; do',
+    '  [ -e "$existing" ] || [ -L "$existing" ] || continue',
+    '  echo "previous quarantine exists" >&2',
+    '  exit 42',
+    'done',
+    '[ ! -e "$quarantine" ] || { echo "quarantine exists" >&2; exit 42; }',
+    'mv -- "$target" "$quarantine"',
+    'mkdir -p -- "$target/state"',
+  ].join('\n');
+  return commandForPlacement(options.placement, script, [targetRoot, quarantineRoot]);
+}
+
+function gatewayQuarantineCleanupCommand(
+  options: GatewayServiceHostOptions,
+  quarantineRoot: string,
+): readonly string[] {
+  const script = [
+    'set -eu',
+    'quarantine="$1"',
+    'case "$quarantine" in *.redeven-quarantine-*) ;; *) echo "invalid quarantine" >&2; exit 43;; esac',
+    '[ -d "$quarantine" ] || { echo "quarantine missing" >&2; exit 44; }',
+    'rm -rf -- "$quarantine"',
+  ].join('\n');
+  return commandForPlacement(options.placement, script, [quarantineRoot]);
+}
+
+function gatewayQuarantinePreflightCommand(
+  options: GatewayServiceHostOptions,
+  targetRoot: string,
+  quarantineRoot: string,
+): readonly string[] {
+  const script = [
+    'set -eu',
+    'target="$1"',
+    'quarantine="$2"',
+    '[ -d "$target" ] || { echo "target missing" >&2; exit 40; }',
+    '[ ! -L "$target" ] || { echo "target is symlink" >&2; exit 41; }',
+    'for existing in "$target".redeven-quarantine-*; do',
+    '  [ -e "$existing" ] || [ -L "$existing" ] || continue',
+    '  echo "previous quarantine exists" >&2',
+    '  exit 42',
+    'done',
+    '[ ! -e "$quarantine" ] || { echo "quarantine exists" >&2; exit 42; }',
+  ].join('\n');
+  return commandForPlacement(options.placement, script, [targetRoot, quarantineRoot]);
+}
+
+export async function preflightManagedGatewayTarget(
+  options: GatewayServiceHostOptions,
+  operationID: string,
+): Promise<GatewayTargetQuarantine> {
+  const cleanOperationID = compact(operationID);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(cleanOperationID)) {
+    throw new Error('Gateway reinstall operation ID is invalid.');
+  }
+  const targetRoot = gatewayTargetProfileRoot(options);
+  const quarantineRoot = `${targetRoot}.redeven-quarantine-${cleanOperationID}`;
+  await withGatewayExecutor(options, async (executor) => {
+    await executor.run(gatewayQuarantinePreflightCommand(options, targetRoot, quarantineRoot), { signal: options.signal });
+  });
+  return { operation_id: cleanOperationID, target_root: targetRoot, quarantine_root: quarantineRoot };
+}
+
+export async function quarantineManagedGatewayTarget(
+  options: GatewayServiceHostOptions,
+  operationID: string,
+): Promise<GatewayTargetQuarantine> {
+  const cleanOperationID = compact(operationID);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(cleanOperationID)) {
+    throw new Error('Gateway reinstall operation ID is invalid.');
+  }
+  const targetRoot = gatewayTargetProfileRoot(options);
+  const quarantineRoot = `${targetRoot}.redeven-quarantine-${cleanOperationID}`;
+  await withGatewayExecutor(options, async (executor) => {
+    await executor.run(gatewayQuarantineCommand(options, targetRoot, quarantineRoot), { signal: options.signal });
+  });
+  return { operation_id: cleanOperationID, target_root: targetRoot, quarantine_root: quarantineRoot };
+}
+
+export async function cleanupManagedGatewayQuarantine(
+  options: GatewayServiceHostOptions,
+  quarantine: GatewayTargetQuarantine,
+): Promise<void> {
+  const targetRoot = gatewayTargetProfileRoot(options);
+  if (quarantine.target_root !== targetRoot || quarantine.quarantine_root !== `${targetRoot}.redeven-quarantine-${quarantine.operation_id}`) {
+    throw new Error('Gateway quarantine does not match the registered target.');
+  }
+  await withGatewayExecutor(options, async (executor) => {
+    await executor.run(gatewayQuarantineCleanupCommand(options, quarantine.quarantine_root), { signal: options.signal });
+  });
+}
+
 async function probeManagedGatewayServiceStatusWithExecutor(
   options: GatewayServiceHostOptions,
   executor: RuntimeHostAccessExecutor,
@@ -943,7 +1072,7 @@ async function probeManagedGatewayServiceStatusWithExecutor(
     if (status.status === 'running') {
       return {
         status: 'needs_update',
-        message: 'The running environment service does not match this Desktop version.',
+        message: 'The running environment service package does not match this Desktop bundle.',
         binary_path: bundle.gateway.path,
         state_root: status.state_root ?? options.stateRoot,
         package_status: 'build_identity_mismatch',
@@ -1063,6 +1192,9 @@ export async function ensureManagedGatewayServiceReady(options: GatewayServiceHo
     if (isDirectLocalHost(options)) {
       const bundle = requireLocalDesktopBundle(options);
       const current = await probeManagedGatewayServiceStatusWithExecutor(options, executor);
+      if (current.status === 'needs_reinstall') {
+        throw new Error(current.message || 'Gateway state is incompatible and must be reinstalled.');
+      }
       if (current.status === 'running' && options.forceUpdate !== true) {
         return bundle.gateway.path;
       }

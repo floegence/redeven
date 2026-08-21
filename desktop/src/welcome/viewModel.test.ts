@@ -525,6 +525,52 @@ function gatewaySource(overrides: Partial<DesktopGatewaySource> = {}): DesktopGa
 }
 
 describe('buildEnvironmentDisplayStateModel', () => {
+  it('shows only Reinstall for an incompatible Local Environment', () => {
+    const local = testLocalEnvironment();
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({ local_environment: local }),
+    });
+    const entry = snapshot.environments.find((candidate) => candidate.id === local.id);
+    expect(entry).toBeTruthy();
+
+    const model = buildProviderBackedEnvironmentActionModel({
+      ...entry!,
+      reinstall_required: true,
+      reinstall_gateway_id: 'gw-local',
+    });
+
+    expect(model.action_presentation.primary_action).toMatchObject({
+      intent: 'reinstall_target',
+      label: 'Reinstall',
+      enabled: true,
+    });
+    expect(model.action_presentation.menu_actions).toEqual([]);
+    expect(model.action_presentation.primary_action_overlay).toBeUndefined();
+  });
+
+  it('requires Gateway pairing before reopening a freshly reinstalled Local Environment', () => {
+    const local = testLocalEnvironment();
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({ local_environment: local }),
+    });
+    const entry = snapshot.environments.find((candidate) => candidate.id === local.id);
+    expect(entry).toBeTruthy();
+
+    const model = buildProviderBackedEnvironmentActionModel({
+      ...entry!,
+      reinstall_pairing_required: true,
+      reinstall_gateway_id: 'gw-local',
+    });
+
+    expect(model.action_presentation.primary_action).toMatchObject({
+      intent: 'pair_gateway',
+      label: 'Pair Gateway',
+      gateway_id: 'gw-local',
+    });
+    expect(model.action_presentation.menu_actions).toEqual([]);
+    expect(model.action_presentation.primary_action_overlay).toBeUndefined();
+  });
+
   it('classifies openable online runtimes as ready without calling them open windows', () => {
     const local = testLocalEnvironment({
       currentRuntime: {
@@ -3609,6 +3655,57 @@ describe('Gateway view models', () => {
       'restart_gateway',
       'update_gateway',
     ]);
+
+    const reinstallRequiredSSHRow = buildGatewaySourceRowModel(gatewaySource({
+      connection_kind: 'ssh_host',
+      management_capability: 'managed_ssh_host',
+      service_state: {
+        status: 'needs_reinstall',
+        can_start: false,
+        can_stop: true,
+        can_restart: false,
+        can_update: false,
+        can_pair_after_start: false,
+      },
+    }));
+    expect(reinstallRequiredSSHRow).toMatchObject({
+      status_label: 'Reinstall required',
+      primary_action: {
+        intent: 'reinstall_gateway',
+        label: 'Reinstall',
+      },
+      guidance: {
+        title: 'Gateway reinstall required',
+        tone: 'warning',
+      },
+    });
+    expect(reinstallRequiredSSHRow.secondary_actions).toEqual([]);
+
+    const reinstallPairingSSHRow = buildGatewaySourceRowModel(gatewaySource({
+      connection_kind: 'ssh_host',
+      management_capability: 'managed_ssh_host',
+      reinstall_pairing_required: true,
+      trust_state: 'unpaired',
+      service_state: {
+        status: 'ready',
+        can_start: false,
+        can_stop: true,
+        can_restart: true,
+        can_update: true,
+        can_pair_after_start: true,
+      },
+    }));
+    expect(reinstallPairingSSHRow).toMatchObject({
+      primary_action: {
+        intent: 'refresh_gateway',
+        label: 'Pair Gateway',
+      },
+      guidance: {
+        title: 'Gateway pairing required',
+        tone: 'warning',
+      },
+    });
+    expect(reinstallPairingSSHRow.secondary_actions).toEqual([]);
 
     const readySSHRow = buildGatewaySourceRowModel(gatewaySource({
       connection_kind: 'ssh_host',

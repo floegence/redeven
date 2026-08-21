@@ -40,6 +40,8 @@ export type BusyAction =
   | 'stop_gateway'
   | 'restart_gateway'
   | 'update_gateway'
+  | 'reinstall_gateway'
+  | 'reset_local_environment'
   | 'refresh_gateway_status'
   | 'refresh_gateway_catalog'
   | 'delete_gateway'

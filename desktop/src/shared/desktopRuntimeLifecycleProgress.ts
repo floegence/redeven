@@ -36,7 +36,12 @@ export type DesktopRuntimeLifecyclePhase =
   | 'gateway_service_up_to_date'
   | 'stopping_gateway_service'
   | 'verifying_gateway_stopped'
-  | 'gateway_service_stopped';
+  | 'gateway_service_stopped'
+  | 'quarantining_target'
+  | 'initializing_fresh_state'
+  | 'verifying_fresh_state'
+  | 'pairing_required'
+  | 'cleaning_quarantine';
 
 export type DesktopRuntimeLifecycleStepID = DesktopRuntimeLifecyclePhase;
 
@@ -95,7 +100,7 @@ export type DesktopRuntimeLifecycleProgress = Readonly<{
   };
 }>;
 
-export type DesktopRuntimeLifecycleOperation = 'start' | 'restart' | 'update' | 'stop';
+export type DesktopRuntimeLifecycleOperation = 'start' | 'restart' | 'update' | 'stop' | 'reinstall';
 
 export type DesktopRuntimeLifecycleStepState = Readonly<{
   id: DesktopRuntimeLifecycleStepID;
@@ -137,6 +142,11 @@ export const RUNTIME_LIFECYCLE_PHASE_LABELS: Record<DesktopRuntimeLifecyclePhase
   stopping_gateway_service: 'Stopping Gateway service',
   verifying_gateway_stopped: 'Verifying Gateway stopped',
   gateway_service_stopped: 'Gateway service stopped',
+  quarantining_target: 'Isolating old environment',
+  initializing_fresh_state: 'Initializing fresh environment',
+  verifying_fresh_state: 'Verifying fresh environment',
+  pairing_required: 'Pairing required',
+  cleaning_quarantine: 'Removing old environment',
 };
 
 function compact(value: unknown): string {

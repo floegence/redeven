@@ -59,5 +59,11 @@ export function runGatewaySourceAction(
         gateway_id: gateway.gateway_id,
         impact_acknowledged: true,
       });
+    case 'reinstall_gateway':
+      return runGatewayLauncherAction({
+        kind: 'reinstall_gateway',
+        gateway_id: gateway.gateway_id,
+        impact_acknowledged: true,
+      });
   }
 }

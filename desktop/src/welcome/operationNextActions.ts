@@ -17,6 +17,7 @@ function operationNextActionKey(action: DesktopLauncherOperationNextAction): str
     case 'stop_gateway':
     case 'restart_gateway':
     case 'update_gateway':
+    case 'reinstall_gateway':
       return `${action.kind}:gateway:${action.gateway_id}`;
     case 'resolve_gateway':
       return `${action.kind}:gateway:${action.gateway_id}:${action.resolve_focus ?? ''}`;

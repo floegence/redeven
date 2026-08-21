@@ -915,6 +915,7 @@ describe('desktopLauncherIPC', () => {
       'stop_gateway',
       'restart_gateway',
       'update_gateway',
+      'reinstall_gateway',
     ] as const) {
       expect(normalizeDesktopLauncherActionRequest({
         kind,
@@ -925,6 +926,24 @@ describe('desktopLauncherIPC', () => {
         gateway_id: 'gw-demo',
       });
     }
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'reinstall_gateway',
+      gateway_id: ' gw-demo ',
+      impact_acknowledged: true,
+    })).toEqual({
+      kind: 'reinstall_gateway',
+      gateway_id: 'gw-demo',
+      impact_acknowledged: true,
+    });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'reset_local_environment',
+      environment_id: ' local ',
+      impact_acknowledged: true,
+    })).toEqual({
+      kind: 'reset_local_environment',
+      environment_id: 'local',
+      impact_acknowledged: true,
+    });
     expect(normalizeDesktopLauncherActionRequest({ kind: 'refresh_gateway_runtime', gateway_id: 'gw-demo' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'check_gateway', gateway_id: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'start_gateway', gateway_id: '   ' })).toBeNull();
