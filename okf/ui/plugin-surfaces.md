@@ -301,9 +301,10 @@ of collapsing into an unsigned-package warning.
 The exact-package confirmation control stays in the fixed action footer and
 remains visible while the review body scrolls. Its concise decision copy does
 not repeat the confirmation digest; the complete report retains that exact
-evidence. First install confirmation states the disabled, zero-grant result.
-Update or reinstall confirmation states that the Host retains enabled state and
-existing grants and adds no grants automatically.
+evidence. First install confirmation states that the Host will persist the
+plugin as enabled without silently granting permissions. Update or reinstall
+confirmation states that the Host retains enabled state and existing grants and
+adds no grants automatically.
 
 Invalid, revoked, or policy-blocked assessment disables install. Absent,
 unknown-signer, and temporarily unavailable signatures show a prominent risk
@@ -312,15 +313,16 @@ and the dialog cannot close while the Host mutation is in flight. An update clos
 its visible slots before install; failure to close blocks the mutation. Unknown
 outcome retires the stale management revision until authoritative inventory is
 reloaded, so queued stale opens cannot pass.
-After a fresh install, the plugin is visibly disabled with zero grants. After
-an update or reinstall, completion reads the authoritative inventory record,
-retains existing grants, and claims only that no new grants were added.
+After a fresh install, the plugin is visibly enabled; missing required grants
+are shown as permission attention and block only the affected open or capability
+call. After an update or reinstall, completion reads the authoritative inventory
+record, retains existing grants, and claims only that no new grants were added.
 Manual updates remain the default unless verified evidence allows automatic
 updates. Equal SemVer never proves latest: equal package hashes offer exact-package
 reinstall, different hashes warn that content differs, and missing prior hash
 states that equality cannot be determined. Every case remains bound to the
 exact update intent and inspection digest. The completion action enters
-the exact installed detail for permission review and manual enablement. A refresh
+the exact installed detail for permission review. A refresh
 failure after a terminal install exposes only an inventory refresh recovery and
 never a second install action.
 

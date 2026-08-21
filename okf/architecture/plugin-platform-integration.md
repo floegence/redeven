@@ -1,14 +1,14 @@
 ---
 type: Architecture Contract
 title: Plugin platform integration
-description: Redeven mounts ReDevPlugin v3.0.8 and adds authenticated host modules, market-backed official releases, external-source policy, localized plugin presentation, product placement, and business adapters.
+description: Redeven mounts ReDevPlugin v3.0.9 and adds authenticated host modules, market-backed official releases, external-source policy, localized plugin presentation, product placement, and business adapters.
 tags: [architecture, plugins, local-ui, redevplugin]
 timestamp: 2026-07-25T00:00:00Z
 quality_exception: Cross-domain host integration contract spanning identity, security, runtime, storage, routes, surfaces, and business adapters.
 ---
 # Summary
 
-Redeven integrates ReDevPlugin `v3.0.8` through one Go Host, one canonical HTTP
+Redeven integrates ReDevPlugin `v3.0.9` through one Go Host, one canonical HTTP
 namespace, one Env App `PluginPlatformClient`, one shared surface scope, and the
 released ProcessManager over a verified Redeven-built Linux runtime. Redeven
 adds authenticated session mapping, public-source admission policy, product
@@ -93,6 +93,10 @@ inspection evidence; a new inspection is acquired only for a new operation or
 after explicit expiry/staleness. Confirmed retained-data deletion treats an
 already-absent binding as success and reconciles an unknown mutation outcome
 against the exact generation and binding revision before reinstalling.
+ReDevPlugin `v3.0.9` also preserves the deleted instance's durable revoke-epoch
+floor across both retained-data and delete-data reinstalls. Previously issued
+credentials therefore remain revoked, while the newly installed instance can
+open surfaces with credentials minted at the current floor.
 
 Host restart and explicit retry use the Host-owned recovery snapshot and
 `recoverEnabled` path. Redeven observes and localizes the authoritative result;
@@ -115,11 +119,12 @@ Redeven neither persists inspection/receipt/query state nor parses packages or
 manufactures provenance or trust state.
 
 Unsigned, unknown-signer, and temporarily unverifiable packages may be installed
-after explicit confirmation and remain manual-update-only. A fresh install
-enables in the same Host transaction when that confirmation approves every
-required permission allowed by policy; otherwise it finishes disabled with an
-explicit permission or policy attention result. Invalid or revoked signatures
-are blocked. A later update remains bound to the installed instance and current
+after explicit confirmation and remain manual-update-only. Every successful
+fresh install is persisted as enabled in the same Host transaction. Confirmation
+does not silently grant permissions: missing or policy-blocked requirements are
+projected as product attention, and the affected open or capability call returns
+`permission_required` until the user grants access. Invalid or revoked
+signatures are blocked. A later update remains bound to the installed instance and current
 management revision. GitHub updates may reuse the stored public repository
 identity; package-URL updates require the administrator to enter the URL again,
 and upload updates require a new file selection. Redeven never reconstructs a
@@ -131,7 +136,7 @@ user pin.
 ## Runtime and Containers
 
 The runtime module binds the canonical sibling executable, target, ReDevPlugin
-`v3.0.8`, runtime-internal IPC and WASM ABI contracts, exact product-build descriptor, lease
+`v3.0.9`, runtime-internal IPC and WASM ABI contracts, exact product-build descriptor, lease
 replay storage, and released limits. Linux runtime bytes are built with Rust
 1.88.0 from the attested release manifest and travel with SBOM, provenance, notices,
 and signature evidence. The expected binary digest comes from the product release
@@ -167,7 +172,8 @@ Ed25519 verification, commit, enable, and reconciliation. Byte progress is shown
 only when the Host reports bytes; retry attempt
 and verified cache-hit details remain explanatory diagnostics rather than
 invented percentages. A succeeded operation refreshes inventory and projects
-the authoritative enabled or `needs_attention` record; a refresh failure is
+the authoritative enabled Host record as product-ready or `needs_attention`
+without rewriting its lifecycle state; a refresh failure is
 shown as a separate recoverable state and never relabeled as an install failure.
 Only a confirmed terminal, retryable failure may create a new request. On Env
 App startup, only the newest Execution for each plugin is eligible for
@@ -244,7 +250,7 @@ disposal alone is not revocation evidence.
 # Boundaries
 
 Canonical ownership is defined by [ReDevPlugin host integration boundary](redevplugin-boundary.md).
-This concept owns only Redeven's concrete `v3.0.8` assembly.
+This concept owns only Redeven's concrete `v3.0.9` assembly.
 
 Manifest surfaces remain `view|command|background` with semantic roles. Activity,
 Workbench, window, widget, inventory key, navigation, settings, and product layout
@@ -253,7 +259,7 @@ never become manifest fields.
 # Evidence
 
 - `redeven:internal/redevpluginintegration/integration.go:1` - Opens Host modules and the canonical handler.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/ExternalPluginInstallDialog.test.tsx:1` - Exercises inspect, explicit confirmation, Host install, and disabled zero-grant presentation.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/ExternalPluginInstallDialog.test.tsx:1` - Exercises inspect, explicit confirmation, enabled Host install, and permission-attention presentation.
 - `redeven:spec/redevplugin/artifacts.go:1` - Pins official package keys and loads the generated known v4 capability contract.
 - `redeven:internal/redevpluginintegration/session_adapter.go:340` - Maps read and admin external-package actions to explicit product permissions.
 - `redeven:internal/redevpluginintegration/runtime_module.go:1` - Configures the released runtime manager and fixed version.
