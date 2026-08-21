@@ -1408,7 +1408,7 @@ describe('PluginCenterView', () => {
     expect(document.querySelector('[data-external-plugin-dialog]')).toBeNull();
   });
 
-  it('prefetches only the selected official detail and reuses its exact inspection for review', async () => {
+  it('prefetches official releases before selection and reuses the exact inspection for review', async () => {
     const inspection = deferred<OfficialPluginReleaseInspection>();
     let prefetchSignal: AbortSignal | undefined;
     const onInspectOfficial = vi.fn((_item: PluginInventoryProjection['items'][number], signal: AbortSignal) => {
@@ -1429,10 +1429,8 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    openInventoryDetails(mount);
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(onInspectOfficial).toHaveBeenCalledTimes(1);
-    mount.querySelector<HTMLButtonElement>('[data-plugin-center-drawer-close]')!.click();
     expect(prefetchSignal?.aborted).toBe(false);
     openInventoryDetails(mount);
     expect(onInspectOfficial).toHaveBeenCalledTimes(1);

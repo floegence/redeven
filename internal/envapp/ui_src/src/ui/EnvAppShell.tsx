@@ -634,6 +634,7 @@ export function EnvAppShell() {
     if (cleanupError !== undefined) throw cleanupError;
   };
   let pluginInventoryAbort: AbortController | undefined;
+  let pluginMarketRefreshPromise: Promise<void> | undefined;
   const disposePluginPlatform = async () => {
     let coordinatorError: unknown;
     try {
@@ -1183,14 +1184,26 @@ export function EnvAppShell() {
     const state = await refetchPluginInventorySession();
     return state?.owner === pluginInventorySource() ? state.projection : undefined;
   };
-  const refreshPluginMarket = async () => {
-    try {
-      await pluginLifecycle.refreshMarketCatalog();
-    } catch {
-      // Keep the current inventory usable and let the projection expose a
-      // retryable market-unavailable state.
-    }
-    await refetchPluginInventory();
+  const refreshPluginMarket = (): Promise<void> => {
+    // Opening the center and restoring its activity surface can both request a
+    // refresh in the same render turn. Share the complete market+inventory
+    // refresh so the UI does not start duplicate network work.
+    if (pluginMarketRefreshPromise) return pluginMarketRefreshPromise;
+    const refresh = (async () => {
+      try {
+        await pluginLifecycle.refreshMarketCatalog();
+      } catch {
+        // Keep the current inventory usable and let the projection expose a
+        // retryable market-unavailable state.
+      }
+      await refetchPluginInventory();
+    })();
+    let tracked: Promise<void>;
+    tracked = refresh.finally(() => {
+      if (pluginMarketRefreshPromise === tracked) pluginMarketRefreshPromise = undefined;
+    });
+    pluginMarketRefreshPromise = tracked;
+    return tracked;
   };
   pluginInstallCoordinator = createPluginInstallCoordinator({
     lifecycle: pluginLifecycle,
@@ -1334,15 +1347,21 @@ export function EnvAppShell() {
     setPluginCenterFocusRequest((request) => request + 1);
     setViewMode('activity', { surfaceId: activeSurface() });
     activateActivitySurface(PLUGIN_CENTER_ACTIVITY_ID);
-    // The center opens immediately with the current inventory. Market data is
-    // refreshed independently and projected into the view when it arrives.
-    void refreshPluginMarket();
+    // The activation effect below refreshes market data independently while
+    // the center opens immediately with the current inventory.
   };
 
   // Restored Activity state bypasses openPluginCenter; refresh the market in
   // the background so the center never stays on an old catalog silently.
+  let lastPluginCenterRefreshOwner: object | undefined;
   createEffect(() => {
-    if (viewMode() !== 'activity' || layout.sidebarActiveTab() !== PLUGIN_CENTER_ACTIVITY_ID || !pluginInventorySource()) return;
+    const owner = pluginInventorySource();
+    if (viewMode() !== 'activity' || layout.sidebarActiveTab() !== PLUGIN_CENTER_ACTIVITY_ID || !owner) {
+      lastPluginCenterRefreshOwner = undefined;
+      return;
+    }
+    if (lastPluginCenterRefreshOwner === owner) return;
+    lastPluginCenterRefreshOwner = owner;
     void refreshPluginMarket();
   });
 
