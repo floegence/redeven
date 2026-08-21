@@ -15434,6 +15434,25 @@ function localEnvironmentReinstallRequiredLauncherFailure(
   });
 }
 
+function localEnvironmentPairingRequiredLauncherFailure(
+  environment: DesktopLocalEnvironmentState,
+): DesktopLauncherActionFailure {
+  const failure = desktopOperationFailurePresentation({
+    code: 'operation_failed',
+    severity: 'warning',
+    title: 'Gateway pairing required',
+    titleKey: 'environmentStatus.pairingRequired',
+    summary: 'Pair the new Gateway before using this Environment.',
+    summaryKey: 'confirm.reinstallPairingRequired',
+    targetLabel: environment.label,
+  });
+  return launcherActionFailure('gateway_pairing_required', 'environment', failure.summary, {
+    environmentID: environment.id,
+    failure,
+    shouldRefreshSnapshot: true,
+  });
+}
+
 async function openLocalEnvironmentFromLauncher(
   request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'open_local_environment' }>>,
 ): Promise<DesktopLauncherActionResult> {
@@ -15454,20 +15473,7 @@ async function openLocalEnvironmentFromLauncher(
     return localEnvironmentReinstallRequiredLauncherFailure(environment);
   }
   if (await localEnvironmentReinstallPairingRequired(environment)) {
-    const failure = desktopOperationFailurePresentation({
-      code: 'operation_failed',
-      severity: 'warning',
-      title: 'Gateway pairing required',
-      titleKey: 'environmentStatus.pairingRequired',
-      summary: 'Pair the new Gateway before using this Environment.',
-      summaryKey: 'confirm.reinstallPairingRequired',
-      targetLabel: environment.label,
-    });
-    return launcherActionFailure('gateway_pairing_required', 'environment', failure.summary, {
-      environmentID: environment.id,
-      failure,
-      shouldRefreshSnapshot: true,
-    });
+    return localEnvironmentPairingRequiredLauncherFailure(environment);
   }
   const bridgeOpenResult = await openRuntimePlacementBridgeFromLauncher(request);
   if (bridgeOpenResult) {
@@ -16732,6 +16738,9 @@ async function runEnvironmentRuntimeLifecycleFromLauncher(
   if (localEnvironment && await localEnvironmentReinstallRequired(localEnvironment)) {
     return localEnvironmentReinstallRequiredLauncherFailure(localEnvironment);
   }
+  if (localEnvironment && await localEnvironmentReinstallPairingRequired(localEnvironment)) {
+    return localEnvironmentPairingRequiredLauncherFailure(localEnvironment);
+  }
 
   const hostAccess = runtimeHostAccessFromRequest(request);
   let placement = runtimePlacementFromRequest(request);
@@ -17392,6 +17401,9 @@ async function refreshEnvironmentRuntimeFromLauncher(
   const localEnvironment = findLocalEnvironmentByID(preferences, environmentID);
   if (localEnvironment && await localEnvironmentReinstallRequired(localEnvironment)) {
     return localEnvironmentReinstallRequiredLauncherFailure(localEnvironment);
+  }
+  if (localEnvironment && await localEnvironmentReinstallPairingRequired(localEnvironment)) {
+    return localEnvironmentPairingRequiredLauncherFailure(localEnvironment);
   }
 
   await refreshWelcomeRuntimeHealthForEnvironment(environmentID);
