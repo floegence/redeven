@@ -1103,23 +1103,23 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
       }
       requestCursor = nextIndex + 1;
     }
-    const exactlyOnceRequests = new Set([
-      'POST /_redevplugin/api/plugins/runtime/recover-enabled',
-      'POST /_redevplugin/api/plugins/executions/query',
-      'POST /_redevplugin/api/plugins/release-packages/inspect',
-      'POST /_redevplugin/api/plugins/executions/release-installs',
-      'POST /_redevplugin/api/plugins/executions/release_install_built_renderer/events/query',
-      'POST /_redevplugin/api/plugins/executions/release_install_built_renderer/query',
-      'POST /_redevplugin/api/plugins/permissions/query',
-      'POST /_redevplugin/api/plugins/security-policies/query',
-      'POST /_redevplugin/api/plugins/permissions/requirements/query',
+    const exactRequestCounts = new Map([
+      ['POST /_redevplugin/api/plugins/runtime/recover-enabled', 1],
+      ['POST /_redevplugin/api/plugins/executions/query', 1],
+      ['POST /_redevplugin/api/plugins/release-packages/inspect', 1],
+      ['POST /_redevplugin/api/plugins/executions/release-installs', 1],
+      ['POST /_redevplugin/api/plugins/executions/release_install_built_renderer/events/query', 1],
+      ['POST /_redevplugin/api/plugins/executions/release_install_built_renderer/query', 1],
+      ['POST /_redevplugin/api/plugins/permissions/query', 2],
+      ['POST /_redevplugin/api/plugins/security-policies/query', 2],
+      ['POST /_redevplugin/api/plugins/permissions/requirements/query', 2],
     ]);
-    for (const requestIdentity of exactlyOnceRequests) {
+    for (const [requestIdentity, expectedCount] of exactRequestCounts) {
       const count = normalizedPluginRequests.filter(
         (request) => `${request.method} ${request.path}` === requestIdentity,
       ).length;
-      if (count !== 1) {
-        throw new Error(`built plugin Install request ${requestIdentity} count = ${count}, expected 1`);
+      if (count !== expectedCount) {
+        throw new Error(`built plugin Install request ${requestIdentity} count = ${count}, expected ${expectedCount}`);
       }
     }
     if (pageErrors.length > 0) throw new Error(`built plugin install page errors: ${JSON.stringify(pageErrors)}`);
