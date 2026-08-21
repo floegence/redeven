@@ -2,9 +2,13 @@ package supervisor
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -151,9 +155,96 @@ func TestRuntimeManagementCapabilityFailsClosedAfterExternalBinaryReplacement(t 
 		t.Fatalf("capability after external replacement = %#v", capability)
 	}
 	assertRuntimeOperationKinds(t, capability.Operations,
-		gatewayprotocol.RuntimeOperationStop,
 		gatewayprotocol.RuntimeOperationUpdate,
 	)
+}
+
+func TestRuntimeManagementCapabilityOffersRepairUpdateForRunningIdentityMismatch(t *testing.T) {
+	controller, binding := newCapabilityTestController(t)
+	binaryPath := filepath.Join(binding.RuntimeRoot, "runtime", "managed", "bin", "redeven")
+	writeExecutableFixture(t, binaryPath, []byte("validated runtime"))
+	validatedDigest, err := fileSHA256(binaryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := controller.bindings.RecordRuntimeValidation(completeTestRuntimeValidation(RuntimeValidation{
+		RuntimeInstanceID: "runtime-before-replacement", RuntimeBinaryVersion: "v0.11.0",
+		Platform: "linux", Architecture: "amd64",
+		ServiceProtocol: gatewayprotocol.RuntimeServiceProtocolV2, CompatibilityEpoch: gatewayprotocol.RuntimeCompatibilityEpochV2,
+		Capabilities: []string{"lifecycle_fence_v1"}, ArtifactSHA256: validatedDigest,
+	})); err != nil {
+		t.Fatal(err)
+	}
+	writeExecutableFixture(t, binaryPath, []byte("externally replaced runtime"))
+	replacedDigest, err := fileSHA256(binaryPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	controlServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Path != "/v2/runtime/identity" {
+			http.NotFound(writer, request)
+			return
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(writer).Encode(map[string]any{
+			"ok": true,
+			"data": runtimeservice.RuntimeIdentity{
+				RuntimeInstanceID: "runtime-replaced", RuntimeBinaryVersion: "v0.0.0-debug",
+				Platform: "linux", Architecture: "amd64",
+				ServiceProtocol: gatewayprotocol.RuntimeServiceProtocolV2, CompatibilityEpoch: gatewayprotocol.RuntimeCompatibilityEpochV2,
+				Capabilities: []string{"lifecycle_fence_v1"}, ArtifactSHA256: replacedDigest,
+			},
+		})
+	}))
+	t.Cleanup(controlServer.Close)
+	statusContext, stopStatus := context.WithCancel(context.Background())
+	statusServer, err := runtimemanagement.NewServer(binding.RuntimeControlSocketPath, func(context.Context) (runtimemanagement.RuntimeAttachStatus, error) {
+		return runtimemanagement.RuntimeAttachStatus{
+			State: runtimemanagement.AttachStateReady,
+			Endpoint: &runtimemanagement.RuntimeAttachEndpoint{RuntimeControl: &runtimemanagement.RuntimeControlEndpoint{
+				ProtocolVersion: "redeven-runtime-control-v2", BaseURL: controlServer.URL, Token: "test-token",
+			}},
+		}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := statusServer.Start(statusContext); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		stopStatus()
+		_ = statusServer.Close()
+	})
+
+	capability, err := controller.RuntimeManagementCapability(context.Background(), gatewayprotocol.ReservedLocalEnvironmentID, gatewaylifecycle.Access{
+		ClientKeyID: "admin-client", Grants: []gatewayprotocol.RuntimeGrant{gatewayprotocol.RuntimeGrantManage},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if capability.PresentationState != gatewayprotocol.ManagementPresentationAllowed || capability.ReasonCode != "runtime_identity_incompatible" {
+		t.Fatalf("capability = %#v", capability)
+	}
+	assertRuntimeOperationKinds(t, capability.Operations, gatewayprotocol.RuntimeOperationUpdate)
+	if capability.Compatibility == nil || capability.Compatibility.RuntimeBinaryVersion != "v0.0.0-debug" || capability.Compatibility.RuntimeArtifactSHA256 != replacedDigest {
+		t.Fatalf("repair compatibility = %#v", capability.Compatibility)
+	}
+	snapshot, err := controller.Snapshot(context.Background(), *capability.Target, gatewayprotocol.RuntimeOperationUpdate)
+	if err != nil {
+		t.Fatalf("repair update snapshot = %v", err)
+	}
+	fence, err := controller.BeginLifecycleFence(context.Background(), "repair-update", gatewayprotocol.RuntimeOperationUpdate, *capability.Target)
+	if err != nil {
+		t.Fatalf("repair update fence = %v", err)
+	}
+	if !strings.HasPrefix(fence.Token, "gwof_") || fence.Snapshot.ProcessInventoryDigest != snapshot.ProcessInventoryDigest {
+		t.Fatalf("repair update fence = %#v, snapshot = %#v", fence, snapshot)
+	}
+	if err := controller.ReleaseLifecycleFence(context.Background(), fence.Token); err != nil {
+		t.Fatalf("release repair update fence: %v", err)
+	}
 }
 
 func TestRefreshRuntimeValidationReusesPersistedFactsOnlyForExactOfflineBinary(t *testing.T) {
@@ -325,14 +416,14 @@ func TestRuntimeManagementCapabilityOffersUpdateForVerifiedLegacyRuntime(t *test
 		t.Fatalf("legacy Runtime compatibility = %#v", capability.Compatibility)
 	}
 
-	snapshot, err := controller.Snapshot(context.Background(), *capability.Target)
+	snapshot, err := controller.Snapshot(context.Background(), *capability.Target, gatewayprotocol.RuntimeOperationUpdate)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if snapshot.Impact.Knowledge != gatewayprotocol.WorkloadUnknown || snapshot.ProcessInventoryDigest == "" || snapshot.WorkloadIdentityDigest == "" {
 		t.Fatalf("legacy Runtime workload snapshot = %#v", snapshot)
 	}
-	fence, err := controller.BeginLifecycleFence(context.Background(), "op-legacy-update", *capability.Target)
+	fence, err := controller.BeginLifecycleFence(context.Background(), "op-legacy-update", gatewayprotocol.RuntimeOperationUpdate, *capability.Target)
 	if err != nil {
 		t.Fatal(err)
 	}

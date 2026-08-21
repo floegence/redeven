@@ -14,7 +14,7 @@ Desktop validates the packaged Gateway and Runtime, then delegates all target-sc
 
 ## Identity and inventory
 
-The Runtime inventory records PID/create time, user, namespace, state root, executable identity, Runtime version, workload identities, snapshot revision, and an inventory digest. Missing, malformed, stale, or incompatible inventory is `unknown`; it is never coerced to zero. Target identity is stable across Desktop clients and transport changes. A changed OS principal, container instance, or installation root creates a new target id; a supervisor key rotation advances generation under the same target lock.
+The Runtime inventory records PID/create time, user, namespace, state root, executable identity, Runtime version, workload identities, snapshot revision, and an inventory digest. Missing, malformed, stale, or incompatible inventory is `unknown`; it is never coerced to zero. Target identity is stable across Desktop clients and transport changes. A changed OS principal, container instance, or installation root creates a new target id; a supervisor key rotation advances generation under the same target lock. When the managed executable changes outside Desktop, Gateway exposes only an authorized `update_runtime` operation and uses a host process-inventory snapshot for that repair; stop and restart remain unavailable until the replacement passes full identity, protocol, capability, provenance, and digest validation.
 
 ## Packaged Desktop startup
 
@@ -36,7 +36,7 @@ Development Desktop instances derive a stable identity from the canonical checko
 
 For an explicit update, Desktop performs support, authorization, readiness, target, generation, compatibility, and artifact-policy checks before invoking a builder or uploader. The Gateway `prepare` response creates or attaches to one durable operation. User confirmation precedes artifact staging. Commit acquires the Runtime lifecycle fence, compares the exact confirmed workload identity set, atomically replaces the artifact, checks health, and records recovery. Identity replacement, added risk, or `known -> unknown` requires `confirmation_required`. A conflicting operation returns `operation_in_progress`; it is never queued or forcefully taken over.
 
-Start is idempotent and never asks the user to confirm workload impact: it starts a stopped Runtime or verifies the already-running target without stopping or replacing it. Only stop, restart, and update may interrupt or replace a Runtime workload and therefore use the explicit workload confirmation boundary. Desktop silently completes the same safe start contract when an older Gateway still returns a conservative confirmation state.
+Start is idempotent and never asks the user to confirm workload impact: it starts a stopped Runtime or verifies the already-running target without stopping or replacing it. Only stop, restart, and update may interrupt or replace a Runtime workload and therefore use the explicit workload confirmation boundary. An identity-repair update may use an offline host-process fence when the running Runtime identity cannot be trusted; it still compares the exact workload snapshot before stopping the process and verifies the new installation before returning success. Desktop silently completes the same safe start contract when an older Gateway still returns a conservative confirmation state.
 
 The Gateway Runtime operation store uses contiguous schema migrations. Schema v2 records with nanosecond-era `snapshot_revision` values that cannot round-trip through Desktop JavaScript are migrated atomically to schema v3 using the same snapshot's bounded observation timestamp, preserving operation authority, target locks, artifacts, and events. Current and newly observed snapshots outside the JSON-safe integer range fail closed before they can be persisted or committed; a failed migration leaves the original file unchanged.
 
@@ -54,7 +54,7 @@ The macOS smoke exercises Local and a real temporary sshd/SSH Remote Environment
 
 # Boundaries
 
-External shell, systemd, launchd, or container-entrypoint maintenance is outside Redeven lifecycle authority and produces no operation, permit, target lock, fence, rollback, or recovery guarantee. When Gateway is later enabled, it revalidates Runtime identity, service protocol, epoch, capabilities, and digest before allowing lifecycle management. Desktop owner ids, takeover confirmation, and ownership mismatch are not Runtime concepts.
+External shell, systemd, launchd, or container-entrypoint maintenance is outside Redeven lifecycle authority and produces no operation, permit, target lock, fence, rollback, or recovery guarantee. Gateway revalidates Runtime identity, service protocol, epoch, capabilities, provenance, and digest before allowing normal lifecycle management; an externally changed installation is a repair-only state until a verified update completes. Desktop owner ids, takeover confirmation, and ownership mismatch are not Runtime concepts.
 
 # Evidence
 
@@ -66,6 +66,8 @@ External shell, systemd, launchd, or container-entrypoint maintenance is outside
 - `redeven:desktop/src/main/runtimeLifecycleAttachment.ts:1` - Cross-client confirmation, redacted observation, resume, and recovery projection.
 - `redeven:desktop/src/main/desktopBundle.ts:1` - Strict packaged Gateway and Runtime manifest validation before Desktop startup.
 - `redeven:internal/runtimegateway/supervisor/precompiled.go:1` - Gateway-owned precompiled provisioning, startup, suite validation, and recovery.
+- `redeven:internal/runtimegateway/supervisor/controller.go:385` - Operation-aware repair snapshots and offline fencing for externally changed Runtime installations.
+- `redeven:internal/gatewayservice/server.go:262` - Allows Gateway lifecycle service startup to expose the repair operation when the managed Runtime is untrusted.
 - `redeven:internal/runtimegateway/supervisor/binding.go:1` - Runtime target binding schema migration, complete managed identity, and installation provenance.
 - `redeven:desktop/src/main/providerRuntimeLifecycleClient.ts:1` - Provider-scoped signed lifecycle tunnel without Gateway-card credential borrowing.
 - `redeven:desktop/src/main/environmentOpenCoordinator.ts:1` - Shared Open/lifecycle decision and idempotent recovery rules.

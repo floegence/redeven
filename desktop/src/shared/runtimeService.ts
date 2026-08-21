@@ -14,6 +14,14 @@ export type RuntimeServiceOpenReadiness = Readonly<{
   message?: string;
 }>;
 
+export type RuntimeServiceAIReadinessState = 'starting' | 'ready' | 'degraded' | 'blocked' | 'recovering' | 'migrating';
+
+export type RuntimeServiceAIReadiness = Readonly<{
+  state: RuntimeServiceAIReadinessState;
+  reason_code?: string;
+  issue_count?: number;
+}>;
+
 export type RuntimeServiceWorkload = Readonly<{
   terminal_count: number;
   session_count: number;
@@ -97,6 +105,7 @@ export type RuntimeServiceSnapshot = Readonly<{
   minimum_runtime_version?: string;
   compatibility_review_id?: string;
   open_readiness?: RuntimeServiceOpenReadiness;
+  ai_readiness?: RuntimeServiceAIReadiness;
   active_workload: RuntimeServiceWorkload;
   capabilities?: RuntimeServiceCapabilities;
   bindings?: RuntimeServiceBindings;
@@ -220,6 +229,20 @@ function normalizeOpenReadiness(
   return missingOpenReadinessFromCompatibility(compatibility, compatibilityMessage);
 }
 
+function normalizeAIReadiness(value: unknown): RuntimeServiceAIReadiness | undefined {
+  const record = value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  const state = compact(record.state) as RuntimeServiceAIReadinessState;
+  if (state !== 'starting' && state !== 'ready' && state !== 'degraded' && state !== 'blocked' && state !== 'recovering' && state !== 'migrating') {
+    return undefined;
+  }
+  const issueCount = normalizeCount(record.issue_count);
+  return {
+    state,
+    reason_code: compact(record.reason_code) || undefined,
+    ...(issueCount > 0 ? { issue_count: issueCount } : {}),
+  };
+}
+
 function normalizeCapability(value: unknown): RuntimeServiceCapability {
   const record = value && typeof value === 'object' ? value as Record<string, unknown> : {};
   const supported = record.supported === true;
@@ -321,6 +344,7 @@ export function normalizeRuntimeServiceSnapshot(
   const compatibilityMessage = compatibilityMessageForEpoch(declaredCompatibilityMessage, observedCompatibilityEpoch);
   const compatibilityEpochMismatch = observedCompatibilityEpoch === undefined
     || compatibility !== declaredCompatibility;
+  const aiReadiness = normalizeAIReadiness(record.ai_readiness);
   return {
     runtime_version: compact(record.runtime_version) || undefined,
     runtime_commit: compact(record.runtime_commit) || undefined,
@@ -343,6 +367,7 @@ export function normalizeRuntimeServiceSnapshot(
     open_readiness: compatibilityEpochMismatch
       ? openReadinessFromCompatibility(compatibility, compatibilityMessage)
       : normalizeOpenReadiness(record.open_readiness, compatibility, compatibilityMessage),
+    ...(aiReadiness ? { ai_readiness: aiReadiness } : {}),
     active_workload: {
       terminal_count: normalizeCount(workload.terminal_count),
       session_count: normalizeCount(workload.session_count),

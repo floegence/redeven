@@ -76,8 +76,8 @@ type LifecycleFence struct {
 
 type Controller interface {
 	ValidateTarget(context.Context, string, gatewayprotocol.LifecycleTarget) error
-	Snapshot(context.Context, gatewayprotocol.LifecycleTarget) (gatewayprotocol.WorkloadSnapshot, error)
-	BeginLifecycleFence(context.Context, string, gatewayprotocol.LifecycleTarget) (LifecycleFence, error)
+	Snapshot(context.Context, gatewayprotocol.LifecycleTarget, gatewayprotocol.RuntimeOperationKind) (gatewayprotocol.WorkloadSnapshot, error)
+	BeginLifecycleFence(context.Context, string, gatewayprotocol.RuntimeOperationKind, gatewayprotocol.LifecycleTarget) (LifecycleFence, error)
 	ReleaseLifecycleFence(context.Context, string) error
 	Commit(context.Context, gatewayprotocol.RuntimeOperation, string) error
 	Recover(context.Context, gatewayprotocol.RuntimeOperation) error
@@ -331,7 +331,7 @@ func (s *Store) Prepare(ctx context.Context, request gatewayprotocol.RuntimeOper
 	snapshot, snapshotErr := s.controller.Snapshot(ctx, gatewayprotocol.LifecycleTarget{
 		LifecycleTargetID: operation.LifecycleTargetID,
 		TargetGeneration:  operation.TargetGeneration,
-	})
+	}, operation.Kind)
 	snapshot = gatewayprotocol.NormalizeWorkloadSnapshot(snapshot)
 	if snapshotErr == nil {
 		snapshotErr = validateWorkloadSnapshotRevision(snapshot)
@@ -731,7 +731,7 @@ func (s *Store) continueFencing(ctx context.Context, operationID string, recover
 	}
 	s.mu.Unlock()
 
-	fence, err := s.controller.BeginLifecycleFence(ctx, operationID, gatewayprotocol.LifecycleTarget{LifecycleTargetID: operation.LifecycleTargetID, TargetGeneration: operation.TargetGeneration})
+	fence, err := s.controller.BeginLifecycleFence(ctx, operationID, operation.Kind, gatewayprotocol.LifecycleTarget{LifecycleTargetID: operation.LifecycleTargetID, TargetGeneration: operation.TargetGeneration})
 	if err != nil {
 		if recovering {
 			return s.enterManualRecovery(operationID, "Runtime lifecycle fence could not be recovered after Gateway restart.")
@@ -1010,7 +1010,7 @@ func (s *Store) Expire(ctx context.Context) error {
 			token := s.state.FenceTokens[operation.OperationID]
 			s.mu.Unlock()
 			if token == "" {
-				fence, err := s.controller.BeginLifecycleFence(ctx, operation.OperationID, gatewayprotocol.LifecycleTarget{
+				fence, err := s.controller.BeginLifecycleFence(ctx, operation.OperationID, operation.Kind, gatewayprotocol.LifecycleTarget{
 					LifecycleTargetID: operation.LifecycleTargetID,
 					TargetGeneration:  operation.TargetGeneration,
 				})
@@ -1123,7 +1123,7 @@ func (s *Store) resumePreflight(ctx context.Context, operationID string) error {
 	snapshot, snapshotErr := s.controller.Snapshot(ctx, gatewayprotocol.LifecycleTarget{
 		LifecycleTargetID: operation.LifecycleTargetID,
 		TargetGeneration:  operation.TargetGeneration,
-	})
+	}, operation.Kind)
 	snapshot = gatewayprotocol.NormalizeWorkloadSnapshot(snapshot)
 	if snapshotErr == nil {
 		snapshotErr = validateWorkloadSnapshotRevision(snapshot)

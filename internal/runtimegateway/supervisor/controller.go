@@ -248,8 +248,20 @@ func (c *Controller) RuntimeManagementCapability(ctx context.Context, gatewayEnv
 
 	identity, err := c.controlClient().identity(ctx)
 	if err == nil {
-		if err := c.validateAndRecordIdentity(identity, nil); err != nil {
-			capability.Readiness = gatewayprotocol.ManagementTemporarilyUnavailable
+		if validationErr := c.validateAndRecordIdentity(identity, nil); validationErr != nil {
+			// The running Runtime is not trusted for normal lifecycle control, but
+			// an authorized update must remain available to replace and re-verify
+			// an externally changed managed binary. Do not expose stop/restart
+			// until a fresh artifact has passed the normal validation path.
+			capability.Compatibility.RuntimeBinaryVersion = identity.RuntimeBinaryVersion
+			capability.Compatibility.RuntimeArtifactSHA256 = normalizeSHA256(identity.ArtifactSHA256)
+			capability.Readiness = gatewayprotocol.ManagementReady
+			capability.Operations = []gatewayprotocol.RuntimeOperationKind{
+				gatewayprotocol.RuntimeOperationUpdate,
+			}
+			if hasControllerGrant(grants, gatewayprotocol.RuntimeGrantManageBinding) {
+				capability.Operations = append(capability.Operations, gatewayprotocol.RuntimeOperationReconcile)
+			}
 			capability.ReasonCode = "runtime_identity_incompatible"
 			return gatewayprotocol.NormalizeRuntimeManagementCapability(capability), nil
 		}
@@ -306,6 +318,7 @@ func (c *Controller) RuntimeManagementCapability(ctx context.Context, gatewayEnv
 		digest, digestErr := fileSHA256(managedBinary)
 		validated := binding.ValidatedRuntime
 		if digestErr != nil || validated == nil || normalizeSHA256(validated.ArtifactSHA256) != digest {
+			capability.Operations = []gatewayprotocol.RuntimeOperationKind{gatewayprotocol.RuntimeOperationUpdate}
 			capability.ReasonCode = "runtime_identity_validation_required"
 			if hasControllerGrant(grants, gatewayprotocol.RuntimeGrantManageBinding) {
 				capability.Operations = append(capability.Operations, gatewayprotocol.RuntimeOperationReconcile)
@@ -370,7 +383,7 @@ func hasControllerGrant(values []gatewayprotocol.RuntimeGrant, expected gatewayp
 	return false
 }
 
-func (c *Controller) Snapshot(ctx context.Context, target gatewayprotocol.LifecycleTarget) (gatewayprotocol.WorkloadSnapshot, error) {
+func (c *Controller) Snapshot(ctx context.Context, target gatewayprotocol.LifecycleTarget, operationKind gatewayprotocol.RuntimeOperationKind) (gatewayprotocol.WorkloadSnapshot, error) {
 	if err := c.bindings.Validate(gatewayprotocol.ReservedLocalEnvironmentID, target); err != nil {
 		return gatewayprotocol.WorkloadSnapshot{}, err
 	}
@@ -383,12 +396,26 @@ func (c *Controller) Snapshot(ctx context.Context, target gatewayprotocol.Lifecy
 		return c.offlineSnapshot(ctx)
 	}
 	if err := c.validateAndRecordIdentity(identity, nil); err != nil {
+		if operationKind == gatewayprotocol.RuntimeOperationUpdate {
+			// A controlled update is the repair path for an externally changed
+			// managed binary. The Runtime identity is not trusted for lifecycle
+			// control, so use the host process inventory until the new artifact
+			// has been installed and verified.
+			inventory, inventoryErr := c.runtimeProcessInventory(ctx)
+			if inventoryErr != nil || inventory.Summary.Blocked != 0 {
+				if inventoryErr != nil {
+					return gatewayprotocol.WorkloadSnapshot{}, inventoryErr
+				}
+				return gatewayprotocol.WorkloadSnapshot{}, errors.New("Runtime process inventory contains an unmanaged process")
+			}
+			return offlineSnapshotFromInventory(inventory), nil
+		}
 		return gatewayprotocol.WorkloadSnapshot{}, err
 	}
 	return client.snapshot(ctx)
 }
 
-func (c *Controller) BeginLifecycleFence(ctx context.Context, operationID string, target gatewayprotocol.LifecycleTarget) (gatewaylifecycle.LifecycleFence, error) {
+func (c *Controller) BeginLifecycleFence(ctx context.Context, operationID string, operationKind gatewayprotocol.RuntimeOperationKind, target gatewayprotocol.LifecycleTarget) (gatewaylifecycle.LifecycleFence, error) {
 	if err := c.bindings.Validate(gatewayprotocol.ReservedLocalEnvironmentID, target); err != nil {
 		return gatewaylifecycle.LifecycleFence{}, err
 	}
@@ -421,7 +448,25 @@ func (c *Controller) BeginLifecycleFence(ctx context.Context, operationID string
 		return gatewaylifecycle.LifecycleFence{Token: token, Snapshot: snapshot}, nil
 	}
 	if err := c.validateAndRecordIdentity(identity, nil); err != nil {
-		return gatewaylifecycle.LifecycleFence{}, err
+		if operationKind != gatewayprotocol.RuntimeOperationUpdate {
+			return gatewaylifecycle.LifecycleFence{}, err
+		}
+		inventory, inventoryErr := c.runtimeProcessInventory(ctx)
+		if inventoryErr != nil {
+			return gatewaylifecycle.LifecycleFence{}, inventoryErr
+		}
+		if inventory.Summary.Blocked != 0 {
+			return gatewaylifecycle.LifecycleFence{}, errors.New("Runtime process inventory contains an unmanaged process")
+		}
+		tokenBytes := make([]byte, 24)
+		if _, err := rand.Read(tokenBytes); err != nil {
+			return gatewaylifecycle.LifecycleFence{}, err
+		}
+		token := "gwof_" + base64.RawURLEncoding.EncodeToString(tokenBytes)
+		c.mu.Lock()
+		c.offlineFences[token] = target
+		c.mu.Unlock()
+		return gatewaylifecycle.LifecycleFence{Token: token, Snapshot: offlineSnapshotFromInventory(inventory)}, nil
 	}
 	return c.controlClient().beginFence(ctx, operationID, target.TargetGeneration)
 }
@@ -471,6 +516,7 @@ func (c *Controller) Commit(ctx context.Context, operation gatewayprotocol.Runti
 	}
 	binding := c.bindings.Binding()
 	legacyFence := strings.HasPrefix(strings.TrimSpace(fenceToken), "gwlf_")
+	offlineFence := strings.HasPrefix(strings.TrimSpace(fenceToken), "gwof_")
 	if legacyFence {
 		if operation.Kind != gatewayprotocol.RuntimeOperationStart &&
 			operation.Kind != gatewayprotocol.RuntimeOperationStop &&
@@ -501,7 +547,7 @@ func (c *Controller) Commit(ctx context.Context, operation gatewayprotocol.Runti
 		checkpoint.PreviousManagedPresent = true
 		checkpoint.RuntimeWasRunning = true
 	}
-	if strings.HasPrefix(strings.TrimSpace(fenceToken), "gwof_") {
+	if offlineFence {
 		c.mu.Lock()
 		fencedTarget, ok := c.offlineFences[strings.TrimSpace(fenceToken)]
 		c.mu.Unlock()
@@ -530,6 +576,11 @@ func (c *Controller) Commit(ctx context.Context, operation gatewayprotocol.Runti
 			} else if err := c.stopOfflineRuntimeProcesses(ctx, inventory); err != nil {
 				return err
 			}
+		}
+		if operation.Kind != gatewayprotocol.RuntimeOperationStart {
+			// The offline fence has already stopped the old process. Do not call
+			// its untrusted control endpoint again during update or recovery.
+			checkpoint.RuntimeWasRunning = false
 		}
 	}
 	if operation.Kind == gatewayprotocol.RuntimeOperationUpdate {
@@ -576,7 +627,7 @@ func (c *Controller) Commit(ctx context.Context, operation gatewayprotocol.Runti
 			if err := c.stopLegacyRuntimeForUpdate(ctx, operation.ExpectedSnapshot); err != nil {
 				return err
 			}
-		} else {
+		} else if !offlineFence {
 			inventory, inventoryErr := c.runtimeProcessInventory(ctx)
 			if err := c.controlClient().shutdown(ctx, fenceToken); err != nil {
 				return fmt.Errorf("request Runtime shutdown: %w", err)

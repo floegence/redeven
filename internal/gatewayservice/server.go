@@ -260,7 +260,10 @@ func (s *Server) Start(ctx context.Context, listen string) (*http.Server, []net.
 				return nil, nil, fmt.Errorf("check precompiled Runtime startup target: %w", err)
 			}
 		} else if err := s.precompiledRuntimeStartup.EnsurePrecompiledRuntime(ctx); err != nil {
-			return nil, nil, fmt.Errorf("start precompiled Runtime: %w", err)
+			var identityMismatch interface{ PrecompiledRuntimeIdentityMismatch() bool }
+			if !errors.As(err, &identityMismatch) || !identityMismatch.PrecompiledRuntimeIdentityMismatch() {
+				return nil, nil, fmt.Errorf("start precompiled Runtime: %w", err)
+			}
 		}
 	}
 	addr := strings.TrimSpace(listen)

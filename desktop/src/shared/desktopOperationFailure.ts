@@ -19,6 +19,7 @@ export type DesktopFailureCode =
   | 'gateway_package_prepare_failed'
   | 'runtime_host_command_failed'
   | 'runtime_update_required'
+  | 'runtime_identity_mismatch'
   | 'desktop_update_required'
   | 'environment_open_failed'
   | 'provider_link_failed'
@@ -71,6 +72,7 @@ function normalizeFailureCode(value: unknown): DesktopFailureCode {
     case 'gateway_package_prepare_failed':
     case 'runtime_host_command_failed':
     case 'runtime_update_required':
+    case 'runtime_identity_mismatch':
     case 'desktop_update_required':
     case 'environment_open_failed':
     case 'provider_link_failed':

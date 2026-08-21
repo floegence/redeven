@@ -79,8 +79,44 @@ func (s *gatewayPrecompiledRuntimeStartup) EnsurePrecompiledRuntime(context.Cont
 	return s.err
 }
 
+type gatewayPrecompiledRuntimeIdentityMismatch struct{}
+
+func (gatewayPrecompiledRuntimeIdentityMismatch) Error() string {
+	return "managed Runtime identity does not match the packaged bundle"
+}
+
+func (gatewayPrecompiledRuntimeIdentityMismatch) PrecompiledRuntimeIdentityMismatch() bool {
+	return true
+}
+
 func TestGatewayStartsPrecompiledRuntimeBeforeListening(t *testing.T) {
 	startup := &gatewayPrecompiledRuntimeStartup{targetID: "target-startup"}
+	server, err := New(Options{
+		StateRoot:                 t.TempDir(),
+		LifecycleController:       &gatewayLifecycleTestController{},
+		LifecycleArtifactVerifier: gatewayLifecycleTestArtifactVerifier{},
+		PrecompiledRuntimeStartup: startup,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	httpServer, _, err := server.Start(ctx, "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer httpServer.Close()
+	if startup.called != 1 {
+		t.Fatalf("precompiled Runtime startup calls = %d, want 1", startup.called)
+	}
+}
+
+func TestGatewayStaysAvailableForRuntimeIdentityRepair(t *testing.T) {
+	startup := &gatewayPrecompiledRuntimeStartup{
+		targetID: "target-repair",
+		err:      gatewayPrecompiledRuntimeIdentityMismatch{},
+	}
 	server, err := New(Options{
 		StateRoot:                 t.TempDir(),
 		LifecycleController:       &gatewayLifecycleTestController{},
@@ -165,11 +201,11 @@ func (c *gatewayLifecycleTestController) ValidateTarget(context.Context, string,
 	return nil
 }
 
-func (controller *gatewayLifecycleTestController) Snapshot(context.Context, protocol.LifecycleTarget) (protocol.WorkloadSnapshot, error) {
+func (controller *gatewayLifecycleTestController) Snapshot(context.Context, protocol.LifecycleTarget, protocol.RuntimeOperationKind) (protocol.WorkloadSnapshot, error) {
 	return controller.snapshot, nil
 }
 
-func (controller *gatewayLifecycleTestController) BeginLifecycleFence(context.Context, string, protocol.LifecycleTarget) (gatewaylifecycle.LifecycleFence, error) {
+func (controller *gatewayLifecycleTestController) BeginLifecycleFence(context.Context, string, protocol.RuntimeOperationKind, protocol.LifecycleTarget) (gatewaylifecycle.LifecycleFence, error) {
 	return gatewaylifecycle.LifecycleFence{Token: "fence-http", Snapshot: controller.snapshot}, nil
 }
 
