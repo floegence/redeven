@@ -1611,6 +1611,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('forceRuntimeUpdate: true');
     expect(appSrc).toContain("'Reinstall Redeven': 'environmentAction.reinstallRedeven'");
     expect(appSrc).toContain("confirmText={i18n().t('confirm.reinstallTargetConfirm')}");
+    expect(appSrc).toContain("<Show when={reinstallLocalTarget()?.reinstall_required === true}>");
     expect(appSrc).toContain("if (environment.kind !== 'local_environment') {");
     expect(appSrc).not.toContain("environment.reinstall_required !== true");
     expect(appSrc).not.toContain('allow_active_work_replacement');
