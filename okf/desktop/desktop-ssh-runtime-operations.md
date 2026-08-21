@@ -7,7 +7,7 @@ timestamp: 2026-08-20T00:00:00Z
 ---
 # Summary
 
-Desktop shares one lazy, credential-scoped SSH transport manager for access and setup, while the target Gateway performs host Runtime lifecycle work. Local, SSH-host, and SSH-container actions remain recoverable when the Runtime is stopped, old, unreachable, partially installed, or represented only by verified residual processes. A cached probe is an observation, never a reason to remove a direct lifecycle entry point; the click performs the authoritative probe. Transport generations fence retries; SSH hostnames, container labels, and Desktop card ids never substitute for a lifecycle target identity.
+Desktop shares one lazy, credential-scoped SSH transport manager for access and setup, while the target Gateway performs host Runtime lifecycle work. Local, SSH-host, and SSH-container actions remain recoverable when the Runtime is stopped, old, unreachable, partially installed, or represented only by verified residual processes. A cached probe is an observation, never a reason to remove a direct lifecycle entry point; the click performs the authoritative probe. SSH connection establishment uses only the Environment `connect_timeout_seconds` setting (10 seconds by default); remote commands and probes are cancellation-bound rather than terminated by a second fixed timeout. Transport generations fence retries; SSH hostnames, container labels, and Desktop card ids never substitute for a lifecycle target identity.
 
 # Contract
 
@@ -25,7 +25,7 @@ SSH-container execution follows the same order inside the selected exact contain
 
 Local containers follow the same exact-identity rules through the local engine executor. Local host, SSH host, Local container, and SSH container all share the same main-process Open/lifecycle decision order: probe, choose one recovery operation, execute it, re-probe the same target, then open. Unknown health is not treated as initialization, and a running Runtime makes Start a no-op. If only update is advertised, Update is the convergence operation for Start, Restart, and Open recovery.
 
-Desktop reports typed phases and can attach after disconnect; it does not maintain a second SSH lifecycle state machine. Artifact preparation or upload failure cancels a still-precommit operation so its Gateway target lock is released and the next user attempt starts cleanly.
+Desktop reports typed phases, per-step elapsed time, and actionable terminal failures, and can attach after disconnect; it does not maintain a second SSH lifecycle state machine. A slow phase remains visible with its current step and elapsed time, and cancellation, SSH interruption, or process exit closes the operation with retry/diagnostic guidance. An old or incompatible Runtime is classified as an update requirement and exposes Update Runtime before Open. Artifact preparation or upload failure cancels a still-precommit operation so its Gateway target lock is released and the next user attempt starts cleanly.
 
 # Boundaries
 

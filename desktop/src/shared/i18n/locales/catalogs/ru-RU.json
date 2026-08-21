@@ -1721,6 +1721,7 @@
     "protectedWorkloadPresent": "Защищённая рабочая нагрузка активна",
     "snapshotRevision": "Ревизия снимка {revision}",
     "stepOf": "Шаг {current} из {total}",
+    "stageElapsed": "Выполняется · {seconds} с",
     "planningStartupPath": "Планирование пути запуска",
     "planningRestartPath": "Планирование пути перезапуска",
     "planningUpdatePath": "Планирование пути обновления",

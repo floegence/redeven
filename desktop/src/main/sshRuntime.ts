@@ -64,7 +64,7 @@ import {
 const PUBLIC_INSTALL_SCRIPT_URL = 'https://redeven.com/install.sh';
 const DEFAULT_SSH_STARTUP_TIMEOUT_MS = 45_000;
 const DEFAULT_SSH_STOP_TIMEOUT_MS = 5_000;
-const DEFAULT_SSH_CONNECT_TIMEOUT_SECONDS = 15;
+const DEFAULT_SSH_CONNECT_TIMEOUT_SECONDS = 10;
 const DEFAULT_SSH_POLL_INTERVAL_MS = 200;
 const MAX_RECENT_LOG_CHARS = 8_000;
 export const MANAGED_SSH_RUNTIME_STAMP_FILENAME = 'managed-runtime.stamp';
@@ -1992,7 +1992,10 @@ async function startManagedSSHRuntimeInternal(
       credentialScope: args.sshCredentialScope,
       sshPassword: args.sshPassword,
       sshBinary: args.sshBinary,
-      readyTimeoutMs: startupTimeoutMs,
+      // SSH connection establishment is governed exclusively by the
+      // environment's Connect Timeout setting. Runtime startup may continue
+      // afterwards without reusing that setting as a remote-command timeout.
+      readyTimeoutMs: Math.max(1_000, connectTimeoutSeconds * 1_000),
       signal: args.signal,
     });
   } catch (error) {

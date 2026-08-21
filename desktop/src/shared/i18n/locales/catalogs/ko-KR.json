@@ -1695,6 +1695,7 @@
     "protectedWorkloadPresent": "보호된 워크로드가 활성 상태입니다",
     "snapshotRevision": "스냅샷 리비전 {revision}",
     "stepOf": "{total}단계 중 {current}단계",
+    "stageElapsed": "계속 처리 중 · {seconds}초",
     "planningStartupPath": "시작 경로 계획 중",
     "planningRestartPath": "재시작 경로 계획 중",
     "planningUpdatePath": "업데이트 경로 계획 중",

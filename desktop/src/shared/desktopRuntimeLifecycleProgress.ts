@@ -58,6 +58,9 @@ export type DesktopRuntimeLifecycleStepSnapshot = Readonly<{
   status: DesktopRuntimeLifecycleStepStatus;
   detail?: string;
   attempt_count?: number;
+  started_at_unix_ms?: number;
+  completed_at_unix_ms?: number;
+  duration_ms?: number;
 }>;
 
 export type DesktopRuntimeLifecycleOmittedStepReason =
@@ -101,6 +104,9 @@ export type DesktopRuntimeLifecycleStepState = Readonly<{
   status: DesktopRuntimeLifecycleStepStatus;
   detail?: string;
   attempt_count?: number;
+  started_at_unix_ms?: number;
+  completed_at_unix_ms?: number;
+  duration_ms?: number;
 }>;
 
 export const RUNTIME_LIFECYCLE_PHASE_LABELS: Record<DesktopRuntimeLifecyclePhase, string> = {
@@ -166,6 +172,15 @@ export function runtimeLifecycleStepsFromStates(input: Readonly<{
     const attemptCount = step.attempt_count !== undefined
       ? Math.max(0, Math.floor(step.attempt_count))
       : undefined;
+    const startedAt = step.started_at_unix_ms !== undefined
+      ? Math.max(0, Math.floor(step.started_at_unix_ms))
+      : undefined;
+    const completedAt = step.completed_at_unix_ms !== undefined
+      ? Math.max(0, Math.floor(step.completed_at_unix_ms))
+      : undefined;
+    const duration = step.duration_ms !== undefined
+      ? Math.max(0, Math.floor(step.duration_ms))
+      : undefined;
     return {
       id: step.id,
       key: lifecycleStepKey(step, index, planRevision),
@@ -173,6 +188,9 @@ export function runtimeLifecycleStepsFromStates(input: Readonly<{
       status: step.status,
       ...(detail ? { detail } : {}),
       ...(attemptCount !== undefined ? { attempt_count: attemptCount } : {}),
+      ...(startedAt !== undefined ? { started_at_unix_ms: startedAt } : {}),
+      ...(completedAt !== undefined ? { completed_at_unix_ms: completedAt } : {}),
+      ...(duration !== undefined ? { duration_ms: duration } : {}),
     };
   });
 }

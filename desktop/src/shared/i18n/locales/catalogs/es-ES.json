@@ -1699,6 +1699,7 @@
     "protectedWorkloadPresent": "Hay una carga de trabajo protegida activa",
     "snapshotRevision": "Revisión del snapshot {revision}",
     "stepOf": "Paso {current} de {total}",
+    "stageElapsed": "Sigue en curso · {seconds}s",
     "planningStartupPath": "Planificando ruta de inicio",
     "planningRestartPath": "Planificando ruta de reinicio",
     "planningUpdatePath": "Planificando ruta de actualización",

@@ -1699,6 +1699,7 @@
     "protectedWorkloadPresent": "Ein geschützter Workload ist aktiv",
     "snapshotRevision": "Snapshot-Revision {revision}",
     "stepOf": "Schritt {current} von {total}",
+    "stageElapsed": "Wird noch ausgeführt · {seconds}s",
     "planningStartupPath": "Startpfad wird geplant",
     "planningRestartPath": "Neustartpfad wird geplant",
     "planningUpdatePath": "Updatepfad wird geplant",

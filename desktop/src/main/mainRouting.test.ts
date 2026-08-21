@@ -778,9 +778,9 @@ describe('main routing', () => {
     const directLifecycleEnd = mainSrc.indexOf('async function startEnvironmentRuntimeFromLauncher(', directLifecycleStart);
     const directLifecycleSrc = mainSrc.slice(directLifecycleStart, directLifecycleEnd);
     expect(directLifecycleSrc).toContain('upsertDirectRuntimeGateway(');
-    expect(directLifecycleSrc).toContain('syncGatewayRecord(record');
+    expect(directLifecycleSrc).not.toContain('syncGatewayRecord(record');
     expect(directLifecycleSrc).toContain('runGatewayEnvironmentLifecycleFromLauncher({');
-    expect(directLifecycleSrc).toContain("startPolicy: 'start_if_needed'");
+    expect(directLifecycleSrc).toContain("gateway_env_id: 'env_local'");
     expect(directLifecycleSrc).not.toContain('ensureRuntimePlacementReadyRecordFromLauncher(');
     expect(directLifecycleSrc).not.toContain('ensureSSHRuntimeReadyRecord(');
     expect(directLifecycleSrc).not.toContain('startLocalHostRuntimeWithLifecycleProgress(');
@@ -795,15 +795,18 @@ describe('main routing', () => {
     const gatewayLifecycleStart = mainSrc.indexOf('async function runGatewayEnvironmentLifecycleFromLauncher(');
     const gatewayLifecycleEnd = mainSrc.indexOf('async function resolveProviderRuntimeLifecycleScope(', gatewayLifecycleStart);
     const gatewayLifecycleSrc = mainSrc.slice(gatewayLifecycleStart, gatewayLifecycleEnd);
-    expect(gatewayLifecycleSrc).toContain('requireGatewayEnvironmentLifecycleCapability(record, request');
+    expect(gatewayLifecycleSrc).not.toContain('requireGatewayEnvironmentLifecycleCapability(record, request');
+    expect(gatewayLifecycleSrc.match(/refreshGatewaySourceForAuthorizedAction\(record/g)).toHaveLength(1);
+    expect(gatewayLifecycleSrc).toContain('onGatewayServiceProgress');
     expect(gatewayLifecycleSrc).toContain("management.presentation_state !== 'allowed'");
     expect(gatewayLifecycleSrc).toContain('gatewayLifecycleManager().prepareRuntimeOperation(record');
     expect(gatewayLifecycleSrc).toContain('gatewayLifecycleManager().confirmRuntimeOperation(');
     expect(gatewayLifecycleSrc).toContain('gatewayLifecycleManager().commitRuntimeOperation(');
-    expect(gatewayLifecycleSrc).toContain("if (request.operation === 'start') {");
-    expect(gatewayLifecycleSrc).toContain('absorb that legacy response and continue without a user prompt');
+    expect(gatewayLifecycleSrc).toContain("if (runtimeOperationKind === 'start' || !runtimeOperationRequiresConfirmation(runtimeOperation)) {");
+    expect(gatewayLifecycleSrc).toContain("runtimeOperationKind === 'restart' && management.operations?.includes('update_runtime')");
+    expect(gatewayLifecycleSrc).toContain('Older Gateway bundles may report a conservative confirmation state');
     expect(gatewayLifecycleSrc).not.toContain('await closeEnvironmentSessionsForRuntimeLifecycle({');
-    expect(gatewayLifecycleSrc.indexOf('requireGatewayEnvironmentLifecycleCapability(record, request')).toBeLessThan(
+    expect(gatewayLifecycleSrc.indexOf('refreshGatewaySourceForAuthorizedAction(record')).toBeLessThan(
       gatewayLifecycleSrc.indexOf('gatewayLifecycleManager().prepareRuntimeOperation(record'),
     );
     expect(gatewayLifecycleSrc.indexOf('preflightPublishedRuntimeLifecycleArtifact({')).toBeLessThan(
@@ -1631,20 +1634,21 @@ describe('main routing', () => {
     const directEnd = mainSrc.indexOf('async function connectProviderRuntimeFromLauncher(', directStart);
     const directSrc = mainSrc.slice(directStart, directEnd);
 
-    expect(lifecycleSrc.match(/await awaitEnvironmentRuntimeLifecycleReadiness\(request\.environment_id, request\.operation\);/g)).toHaveLength(1);
+    expect(lifecycleSrc.match(/await awaitEnvironmentRuntimeLifecycleReadiness\(request\.environment_id, runtimeOperationKind\);/g)).toHaveLength(1);
     expect(lifecycleSrc).toContain('const finishLifecycleMutation = async (): Promise<void> => {');
     expect(lifecycleSrc).toContain('after_success: finishLifecycleMutation');
     expect(lifecycleSrc).toContain('await options.afterSuccess?.();');
-    expect(lifecycleSrc.indexOf('await options.afterSuccess?.();')).toBeLessThan(
-      lifecycleSrc.indexOf('await syncGatewayRecord(record', lifecycleSrc.indexOf('await options.afterSuccess?.();')),
-    );
+    expect(lifecycleSrc).not.toContain('await syncGatewayRecord(record');
     expect(lifecycleSrc.indexOf('await options.afterSuccess?.();')).toBeLessThan(
       lifecycleSrc.indexOf('await awaitEnvironmentRuntimeLifecycleReadiness('),
     );
     expect(directSrc).toContain("const lifecycleSessionKey = hostAccess.kind === 'local_host' && placement.kind === 'host_process'");
     expect(directSrc).toContain('await closeEnvironmentSessionsForRuntimeLifecycle({');
     expect(directSrc).toContain("operation: effectiveOperation === 'update_runtime' ? 'update' : effectiveOperation");
-    expect(directSrc).toContain('await runtimePlacementBridgeRegistry.retire(targetID).catch(() => undefined);');
+    expect(directSrc).toContain("if (hostAccess.kind === 'ssh_host' && placement.kind === 'host_process')");
+    expect(directSrc).toContain('clearSSHRuntimeReadyState(sshDesktopSessionKey(sshDetailsFromRuntimePlacement(hostAccess, placement)))');
+    expect(directSrc).toContain('await clearRuntimePlacementTargetRecords(targetID).catch(() => undefined);');
+    expect(directSrc).not.toContain('await runtimePlacementBridgeRegistry.retire(targetID).catch(() => undefined);');
   });
 
   it('keeps foreground Runtime operations authoritative over persistence attachment recovery', () => {
@@ -1700,8 +1704,8 @@ describe('main routing', () => {
     expect(confirmSrc).toContain("state: 'fencing',");
     expect(confirmSrc).toContain('const completedPresentation = projectAttachedRuntimeOperation(response);');
     expect(confirmSrc).toContain('await pending.cancel().catch(() => undefined);');
-    expect(mainSrc).toContain("const autoConfirmStart = operation.kind === 'start' && projection.needs_confirmation;");
-    expect(mainSrc).toContain('runtime_confirmation: autoConfirmStart ? undefined : projection.confirmation');
+    expect(mainSrc).toContain('const autoConfirmOperation = projection.owned');
+    expect(mainSrc).toContain('runtime_confirmation: autoConfirmOperation ? undefined : projection.confirmation');
     expect(mainSrc).toContain('complete: async (current) => adapter.complete(await adapter.confirm(');
     expect(mainSrc).toContain('function publishGatewayRuntimeOperationProgress(');
     expect(mainSrc).toContain('function runtimeLifecycleFailureProgress(');

@@ -174,6 +174,41 @@ describe('RuntimeLifecycleWorkflow', () => {
     ]);
   });
 
+  it('clears elapsed-time state when a later step is reset to pending', () => {
+    const subject = workflow();
+    subject.commitPlan({
+      state: 'executing',
+      steps: [
+        'checking_host',
+        'checking_runtime_package',
+        'preparing_runtime_package',
+        'installing_runtime_package',
+        'starting_runtime_process',
+        'checking_runtime_service',
+        'runtime_ready',
+      ],
+    });
+    subject.advanceToStep('installing_runtime_package', 'Installing runtime package');
+
+    expect(subject.progress().steps.find((step) => step.id === 'installing_runtime_package'))
+      .toMatchObject({ status: 'running', started_at_unix_ms: expect.any(Number) });
+
+    const failure = desktopOperationFailurePresentation({
+      code: 'operation_failed',
+      title: 'Package failed',
+      summary: 'Desktop could not prepare the runtime package.',
+      targetLabel: 'Devbox',
+    });
+    subject.failStep(new Error(failure.summary), failure, 'preparing_runtime_package');
+
+    expect(subject.progress().steps.find((step) => step.id === 'installing_runtime_package')).toEqual({
+      id: 'installing_runtime_package',
+      key: expect.any(String),
+      label: 'Installing runtime package',
+      status: 'pending',
+    });
+  });
+
   it('allows the container placement helper sequence without treating platform detection as an interrupt', () => {
     const subject = containerWorkflow();
 

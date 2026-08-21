@@ -1695,6 +1695,7 @@
     "protectedWorkloadPresent": "存在受保護的使用中工作負載",
     "snapshotRevision": "快照修訂版 {revision}",
     "stepOf": "第 {current} / {total} 步",
+    "stageElapsed": "仍在處理 · {seconds} 秒",
     "planningStartupPath": "正在規劃啟動路徑",
     "planningRestartPath": "正在規劃重新啟動路徑",
     "planningUpdatePath": "正在規劃更新路徑",

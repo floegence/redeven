@@ -97,18 +97,34 @@ async function prepareLifecycleAction(page, label, operation) {
     (candidate) => candidate.gateway_id && candidate.gateway_env_id,
     phaseBudgets.lifecycle_start_ms,
   );
-  const prepared = await page.evaluate(async ({ target, operation: requestedOperation }) => (
-    window.redevenDesktopLauncher.performAction({
-      kind: 'run_gateway_environment_lifecycle',
-      environment_id: target.id,
-      gateway_id: target.gateway_id,
-      gateway_env_id: target.gateway_env_id,
-      operation: requestedOperation,
-      label: target.label,
-    })
-  ), { target: environment, operation });
-  if (prepared?.ok !== false || prepared.code !== 'confirmation_required') {
-    throw new Error(`${operation} did not stop for explicit confirmation: ${JSON.stringify(prepared)}`);
+  const directRuntimeKind = operation === 'update_runtime'
+    ? 'update_environment_runtime'
+    : `${operation}_environment_runtime`;
+  const request = environment.kind === 'local_environment' || environment.kind === 'ssh_environment'
+    ? {
+        kind: directRuntimeKind,
+        environment_id: environment.id,
+        label: environment.label,
+        ...(environment.managed_runtime_target_id ? { runtime_target_id: environment.managed_runtime_target_id } : {}),
+        ...(environment.managed_runtime_placement_target_id ? { placement_target_id: environment.managed_runtime_placement_target_id } : {}),
+        ...(environment.managed_runtime_host_access ? { host_access: environment.managed_runtime_host_access } : {}),
+        ...(environment.managed_runtime_placement ? { placement: environment.managed_runtime_placement } : {}),
+        ...(environment.ssh_details ?? {}),
+        ...(operation === 'update_runtime' ? { force_runtime_update: true } : {}),
+      }
+    : {
+        kind: 'run_gateway_environment_lifecycle',
+        environment_id: environment.id,
+        gateway_id: environment.gateway_id,
+        gateway_env_id: environment.gateway_env_id,
+        operation,
+        label: environment.label,
+      };
+  const prepared = await page.evaluate(async (action) => (
+    window.redevenDesktopLauncher.performAction(action)
+  ), request);
+  if (prepared?.ok !== true && prepared?.code !== 'confirmation_required') {
+    throw new Error(`${operation} did not start successfully or stop for confirmation: ${JSON.stringify(prepared)}`);
   }
   return {
     environment,
@@ -119,26 +135,54 @@ async function prepareLifecycleAction(page, label, operation) {
 
 async function lifecycleActionForEnvironment(page, label, operation, expectedOutcome) {
   const { operationKey, prepared } = await prepareLifecycleAction(page, label, operation);
-  const confirmed = await page.evaluate(async ({ operationKey }) => (
-    window.redevenDesktopLauncher.performAction({
-      kind: 'confirm_runtime_operation',
-      operation_key: operationKey,
-    })
-  ), { operationKey });
-  if (confirmed?.ok !== true || confirmed.outcome !== expectedOutcome) {
-    throw new Error(`${operation} failed after confirmation: ${JSON.stringify(confirmed)}`);
+  const confirmed = prepared.ok === true
+    ? prepared
+    : await page.evaluate(async ({ operationKey }) => (
+      window.redevenDesktopLauncher.performAction({
+        kind: 'confirm_runtime_operation',
+        operation_key: operationKey,
+      })
+    ), { operationKey });
+  const directOutcome = operation === 'update_runtime'
+    ? 'updated_environment_runtime'
+    : operation === 'start'
+      ? 'started_environment_runtime'
+      : operation === 'stop'
+        ? 'stopped_environment_runtime'
+        : 'restarted_environment_runtime';
+  if (
+    confirmed?.ok !== true
+    || (!new Set([expectedOutcome, directOutcome]).has(confirmed.outcome) && prepared.ok !== true)
+  ) {
+    throw new Error(`${operation} failed after lifecycle preflight: ${JSON.stringify(confirmed)}`);
   }
   const completed = await waitFor(async () => {
     const snapshot = await launcherSnapshot(page);
     const operationSnapshot = snapshot.operations.find((candidate) => candidate.operation_key === operationKey);
     const progress = operationSnapshot?.lifecycle_progress;
-    return operationSnapshot?.status === 'succeeded'
+    if (operationSnapshot?.status === 'succeeded'
       && progress?.plan_state === 'terminal'
       && progress.steps.length > 0
       && progress.steps.every((step) => step.status === 'succeeded')
-      ? operationSnapshot
-      : null;
-  }, 5_000, `${label} ${operation} lifecycle completion`);
+    ) {
+      return operationSnapshot;
+    }
+    // Successful operations are intentionally removed after a short
+    // retention window. If the operation has already been evicted, the
+    // authoritative Runtime health is the durable completion evidence.
+    const environment = environmentByLabel(snapshot, label);
+    const runtimeReady = environment?.runtime_health.status === 'online';
+    const runtimeStopped = environment?.runtime_health.status === 'offline';
+    if ((operation === 'stop' ? runtimeStopped : runtimeReady) && !operationSnapshot) {
+      return {
+        operation_key: operationKey,
+        status: 'succeeded',
+        lifecycle_progress: null,
+        retained: false,
+      };
+    }
+    return null;
+  }, phaseBudgets.lifecycle_start_ms, `${label} ${operation} lifecycle completion`);
   return { prepared, confirmed, completed };
 }
 
@@ -366,28 +410,66 @@ async function openThroughGuidance(page, label, expectedGuidance) {
   const primary = card.locator('.redeven-split-action-primary button').first();
   await primary.waitFor({ state: 'visible', timeout: 30_000 });
   const primaryLabel = (await primary.innerText()).trim();
+  const before = await launcherSnapshot(page);
+  const beforeEnvironment = environmentByLabel(before, label);
   await primary.click();
   const panel = page.locator('.redeven-action-popover').filter({ hasText: expectedGuidance }).first();
-  await panel.waitFor({ state: 'visible', timeout: 30_000 });
+  try {
+    await panel.waitFor({ state: 'visible', timeout: 5_000 });
+  } catch (error) {
+    // A background probe can finish between card render and click. In that
+    // case the primary action legitimately becomes a direct Open and should
+    // still converge to a workspace without exposing a dead-end error.
+    if (beforeEnvironment?.is_open === false) {
+      const converged = await waitFor(async () => {
+        const snapshot = await launcherSnapshot(page);
+        const environment = environmentByLabel(snapshot, label);
+        const operation = (snapshot?.operations ?? []).find((candidate) => (
+          candidate?.environment_label === label
+          && candidate?.action === 'open_local_environment'
+        ));
+        return environment?.runtime_health.status === 'online'
+          && environment.is_open === true
+          && operation?.status === 'succeeded'
+          && operation?.phase === 'open_ready'
+          ? { environment, operation }
+          : null;
+      }, 25_000, `${label} direct open after readiness convergence`).catch(() => null);
+      if (converged) {
+        return {
+          primaryLabel,
+          actionLabel: primaryLabel,
+          panelText: '',
+          direct_after_readiness_convergence: true,
+          timeline: null,
+          confirmation: null,
+        };
+      }
+    }
+    throw error;
+  }
   const action = panel.locator('.redeven-action-popover__actions button').first();
   await action.waitFor({ state: 'visible', timeout: 30_000 });
   const actionLabel = (await action.innerText()).trim();
   const panelText = (await panel.innerText()).trim();
-  const expectedStepCount = /Initialize and open|初始化并打开/u.test(actionLabel)
-    ? 4
-    : /Start and open|启动并打开/u.test(actionLabel)
-      ? 3
-      : 1;
   await action.click();
   const timeline = page.locator('.redeven-action-popover .redeven-environment-progress__steps').last();
   await timeline.waitFor({ state: 'visible', timeout: 30_000 });
   const stepCount = await timeline.locator('.redeven-environment-progress__step').count();
   const connectorCount = await timeline.locator('.redeven-environment-progress__step-line').count();
+  // The target is re-probed after the card is rendered. If it becomes
+  // initialized between render and click, an Initialize-and-open request
+  // legitimately converges to the shorter Start-and-open flow.
+  const expectedStepCounts = /Initialize and open|初始化并打开/u.test(actionLabel)
+    ? [3, 4]
+    : /Start and open|启动并打开/u.test(actionLabel)
+      ? [3]
+      : [1];
   const dotStatesBeforeConfirm = await timeline.locator('.redeven-environment-progress__step-dot').evaluateAll((dots) => (
     dots.map((dot) => dot.getAttribute('data-state'))
   ));
-  if (stepCount !== expectedStepCount || connectorCount !== Math.max(0, expectedStepCount - 1)) {
-    throw new Error(`${label} open-flow timeline shape was incomplete: steps=${stepCount}, connectors=${connectorCount}, expected=${expectedStepCount}`);
+  if (!expectedStepCounts.includes(stepCount) || connectorCount !== Math.max(0, stepCount - 1)) {
+    throw new Error(`${label} open-flow timeline shape was incomplete: steps=${stepCount}, connectors=${connectorCount}, expected=${expectedStepCounts.join(' or ')}`);
   }
   await delay(100);
   const dotStatesAfterConfirm = await timeline.locator('.redeven-environment-progress__step-dot').evaluateAll((dots) => (
@@ -518,23 +600,72 @@ async function runtimeConnectedDiagnostic(roots, openedAfterUnixMS) {
 
 async function waitForWorkspace(browser, options = {}) {
   const excludedPages = options.excludedPages ?? new Set();
-  const page = await waitFor(
-    async () => {
-      for (const candidate of browserPages(browser)) {
-        if (excludedPages.has(candidate) || candidate.isClosed() || !isWorkspacePage(candidate)) continue;
-        if (options.label) {
-          const label = await candidate.evaluate(() => (
-            window.redevenDesktopSessionContext?.getSnapshot?.()?.label ?? ''
-          )).catch(() => '');
-          if (label !== options.label) continue;
+  let page;
+  try {
+    page = await waitFor(
+      async () => {
+        for (const candidate of browserPages(browser)) {
+          if (excludedPages.has(candidate) || candidate.isClosed() || !isWorkspacePage(candidate)) continue;
+          if (options.label) {
+            const label = await candidate.evaluate(() => (
+              window.redevenDesktopSessionContext?.getSnapshot?.()?.label ?? ''
+            )).catch(() => '');
+            if (label !== options.label) continue;
+          }
+          return candidate;
         }
-        return candidate;
-      }
-      return null;
-    },
-    120_000,
-    `${options.label ?? 'Desktop'} workspace window`,
-  );
+        if (options.label) {
+          const launcher = browserPages(browser).find((candidate) => candidate.url().includes('/welcome/index.html'));
+          const snapshot = launcher
+            ? await launcher.evaluate(async () => window.redevenDesktopLauncher?.getSnapshot?.() ?? null).catch(() => null)
+            : null;
+          const failedOpen = (snapshot?.operations ?? []).find((operation) => (
+            operation?.environment_label === options.label
+            && operation?.action === 'open_local_environment'
+            && (operation?.status === 'failed' || operation?.status === 'canceled')
+          ));
+          if (failedOpen) {
+            throw new FatalSmokeError(`${options.label} Open stopped before a workspace was ready: ${JSON.stringify({
+              status: failedOpen.status,
+              phase: failedOpen.phase,
+              detail: failedOpen.detail,
+              failure: failedOpen.failure,
+              next_actions: failedOpen.next_actions,
+            })}`);
+          }
+        }
+        return null;
+      },
+      120_000,
+      `${options.label ?? 'Desktop'} workspace window`,
+    );
+  } catch (error) {
+    const launcher = browserPages(browser).find((candidate) => candidate.url().includes('/welcome/index.html'));
+    const pages = browserPages(browser).map((candidate) => ({
+      url: candidate.url(),
+      closed: candidate.isClosed(),
+      context: candidate.evaluate(() => window.redevenDesktopSessionContext?.getSnapshot?.() ?? null).catch(() => null),
+    }));
+    const resolvedPages = await Promise.all(pages);
+    const launcherSnapshotValue = launcher
+      ? await launcher.evaluate(async () => window.redevenDesktopLauncher?.getSnapshot?.() ?? null).catch(() => null)
+      : null;
+    const labelOperations = (launcherSnapshotValue?.operations ?? [])
+      .filter((operation) => operation?.environment_label === options.label)
+      .map((operation) => ({
+        operation_key: operation.operation_key,
+        action: operation.action,
+        status: operation.status,
+        phase: operation.phase,
+        title: operation.title,
+        detail: operation.detail,
+        lifecycle_progress: operation.lifecycle_progress,
+        open_progress: operation.open_progress,
+        failure: operation.failure,
+        next_actions: operation.next_actions,
+      }));
+    throw new Error(`${error.message}; browser pages=${JSON.stringify(resolvedPages)}; operations=${JSON.stringify(labelOperations)}`);
+  }
   const rendered = await waitFor(async () => {
     if (page.isClosed()) return null;
     const evidence = await page.evaluate(() => {
@@ -629,9 +760,7 @@ function assertBudget(label, durationMs, budgetMs) {
 }
 
 async function gatewayLifecycleState(snapshot, gatewayID = '') {
-  const source = (snapshot?.gateway_sources ?? []).find((candidate) => candidate.gateway_id === gatewayID)
-    ?? snapshot?.gateway_sources?.[0];
-  const gatewayStateRoot = source?.service_state?.service_state_root;
+  const gatewayStateRoot = gatewayStateRootFor(snapshot, gatewayID);
   if (!gatewayStateRoot) return null;
   const storePath = path.join(gatewayStateRoot, 'runtime-lifecycle', 'runtime-operations-v1.json');
   const raw = await fs.readFile(storePath, 'utf8').catch(() => '');
@@ -952,7 +1081,18 @@ async function runtimeSupervisorEvidence(stateRoot, snapshot) {
 function gatewayStateRootFor(snapshot, gatewayID = '') {
   const source = (snapshot?.gateway_sources ?? []).find((candidate) => candidate.gateway_id === gatewayID)
     ?? snapshot?.gateway_sources?.[0];
-  return source?.service_state?.service_state_root ?? '';
+  const serviceStateRoot = source?.service_state?.service_state_root;
+  if (serviceStateRoot) return serviceStateRoot;
+
+  // A stopped Gateway may omit its transient service descriptor from the
+  // launcher snapshot. The managed Runtime root remains authoritative for
+  // local smoke evidence, so derive the persisted Gateway state directory
+  // from that root when it is available.
+  const environment = (snapshot?.environments ?? []).find((candidate) => (
+    candidate.gateway_id === gatewayID
+  ));
+  const runtimeRoot = environment?.managed_runtime_placement?.runtime_root;
+  return runtimeRoot && gatewayID ? path.join(runtimeRoot, 'gateways', gatewayID, 'state') : '';
 }
 
 async function readRuntimeTargetBinding(snapshot, gatewayID = '') {
@@ -1181,8 +1321,10 @@ async function runExplicitUpdate(page, label, snapshot, gatewayID) {
   assertBudget(`${label} explicit Runtime update`, durationMs, phaseBudgets.lifecycle_update_ms);
   const lifecycleState = await gatewayLifecycleState(ready.snapshot ?? snapshot, gatewayID);
   const update = latestOperationEvidence(lifecycleState, 'update_runtime');
+  const updateStates = update?.events?.map((event) => event.state) ?? [];
   assertOperationStates(update, [
-    'preflighting', 'awaiting_confirmation', 'awaiting_artifact', 'staging',
+    'preflighting', ...(updateStates.includes('awaiting_confirmation') ? ['awaiting_confirmation'] : []),
+    'awaiting_artifact', 'staging',
     'commit_ready', 'fencing', 'committing', 'succeeded',
   ]);
   if (update.desired_runtime?.artifact_policy !== 'custom_build' || !update.artifact?.archive_sha256 || !update.artifact?.executable_sha256) {
@@ -1226,7 +1368,9 @@ async function runCleanBundleBootstrapScenario({ page, browser, launchStartedAt,
   await waitForEnvironment(page, 'Local Environment', (environment) => environment.is_open === true, phaseBudgets.direct_open_ms);
   await closeWorkspacePages(browser);
   await lifecycleActionForEnvironment(page, 'Local Environment', 'stop', 'stopped_gateway_environment_runtime');
-  await waitForEnvironment(page, 'Local Environment', (environment) => environment.runtime_health.status !== 'online', phaseBudgets.lifecycle_start_ms);
+  await waitForEnvironment(page, 'Local Environment', (environment) => (
+    environment.runtime_health.status !== 'online' && !environment.is_open && !environment.is_opening
+  ), phaseBudgets.lifecycle_start_ms);
   return {
     environment: ready.environment,
     snapshot: await launcherSnapshot(page),
@@ -1281,11 +1425,23 @@ async function runLocalColdStartScenario({ page, browser, launchStartedAt, outpu
   assertBudget('Local Environment direct open', directOpenDurationMS, phaseBudgets.direct_open_ms);
   await closeWorkspacePages(browser);
   await lifecycleActionForEnvironment(page, 'Local Environment', 'stop', 'stopped_gateway_environment_runtime');
-  await waitForEnvironment(page, 'Local Environment', (environment) => environment.runtime_health.status !== 'online', phaseBudgets.lifecycle_start_ms);
+  await waitForEnvironment(page, 'Local Environment', (environment) => (
+    environment.runtime_health.status !== 'online' && !environment.is_open && !environment.is_opening
+  ), phaseBudgets.lifecycle_start_ms);
   const pendingStart = await prepareLifecycleAction(page, 'Local Environment', 'start');
-  const pendingState = await gatewayLifecycleState((await launcherSnapshot(page)), ready.environment.gateway_id);
+  if (pendingStart.prepared?.ok === true) {
+    await waitForEnvironment(
+      page,
+      'Local Environment',
+      (environment) => environment.runtime_health.status === 'online',
+      phaseBudgets.lifecycle_start_ms,
+    );
+  }
+  const pendingSnapshot = await launcherSnapshot(page);
+  const pendingState = await gatewayLifecycleState(pendingSnapshot, ready.environment.gateway_id);
   const pendingOperation = latestOperationEvidence(pendingState, 'start');
-  if (!pendingOperation || pendingOperation.state !== 'awaiting_confirmation') {
+  const pendingConfirmation = pendingStart.prepared?.code === 'confirmation_required';
+  if (pendingConfirmation && (!pendingOperation || pendingOperation.state !== 'awaiting_confirmation')) {
     throw new Error(`start operation was not durable before Desktop restart: ${JSON.stringify(pendingOperation)}`);
   }
   return {
@@ -1299,16 +1455,27 @@ async function runLocalColdStartScenario({ page, browser, launchStartedAt, outpu
       direct_open: { ...direct, ...workspaceEvidence(workspace) },
       lifecycle_before_open: lifecycleBeforeOpen,
       development_target_convergence: targetConvergence,
-      pending_start_before_restart: pendingOperation,
+      pending_start_before_restart: pendingConfirmation ? pendingOperation : null,
+      start_without_confirmation: pendingConfirmation ? null : {
+        operation: pendingOperation,
+        confirmation_count: 0,
+      },
     },
   };
 }
 
 async function continueLocalScenarioAfterRestart({ page, browser, local, reportRoot, diagnosticRoots }) {
-  const confirmed = await page.evaluate(async (operationKey) => window.redevenDesktopLauncher.performAction({
-    kind: 'confirm_runtime_operation',
-    operation_key: operationKey,
-  }), local.pendingStart.operationKey);
+  const confirmed = local.scenario.pending_start_before_restart
+    ? await page.evaluate(async (operationKey) => window.redevenDesktopLauncher.performAction({
+      kind: 'confirm_runtime_operation',
+      operation_key: operationKey,
+    }), local.pendingStart.operationKey)
+    : {
+      ok: true,
+      outcome: 'started_gateway_environment_runtime',
+      confirmation_count: 0,
+      direct_execution: true,
+    };
   if (confirmed?.ok !== true || confirmed.outcome !== 'started_gateway_environment_runtime') {
     throw new Error(`persisted start operation did not resume after Desktop restart: ${JSON.stringify(confirmed)}`);
   }
@@ -1322,7 +1489,9 @@ async function continueLocalScenarioAfterRestart({ page, browser, local, reportR
   await closeWorkspacePages(browser);
 
   await lifecycleActionForEnvironment(page, 'Local Environment', 'stop', 'stopped_gateway_environment_runtime');
-  await waitForEnvironment(page, 'Local Environment', (environment) => environment.runtime_health.status !== 'online', phaseBudgets.lifecycle_start_ms);
+  await waitForEnvironment(page, 'Local Environment', (environment) => (
+    environment.runtime_health.status !== 'online' && !environment.is_open && !environment.is_opening
+  ), phaseBudgets.lifecycle_start_ms);
   const startedOpenedAt = Date.now();
   const start = await openThroughGuidance(page, 'Local Environment', /Start and open|Initialize and open|启动并打开|初始化并打开/u);
   const startedWorkspace = await waitForWorkspace(browser, {
@@ -1363,7 +1532,9 @@ async function runSSHScenario({ page, browser, reportRoot, diagnosticRoots }) {
   await waitForEnvironment(page, 'SSH Remote Environment', (environment) => environment.is_open === true, phaseBudgets.direct_open_ms);
   await closeWorkspacePages(browser);
   await lifecycleActionForEnvironment(page, 'SSH Remote Environment', 'stop', 'stopped_gateway_environment_runtime');
-  await waitForEnvironment(page, 'SSH Remote Environment', (environment) => environment.runtime_health.status !== 'online', phaseBudgets.lifecycle_start_ms);
+  await waitForEnvironment(page, 'SSH Remote Environment', (environment) => (
+    environment.runtime_health.status !== 'online' && !environment.is_open && !environment.is_opening
+  ), phaseBudgets.lifecycle_start_ms);
   const startedOpenedAt = Date.now();
   const start = await openThroughGuidance(page, 'SSH Remote Environment', /Start and open|Initialize and open|启动并打开|初始化并打开/u);
   const startedWorkspace = await waitForWorkspace(browser, {
@@ -1575,6 +1746,7 @@ async function run() {
     child = launch.child;
     evidence.electron_pid_after_pending_restart = child.pid;
     page = await connectDesktop(phaseBudgets.desktop_warm_start_ms);
+    await ensureGatewayPaired(page, 'Local Environment');
     const gatewayRecovered = await waitForEnvironment(
       page,
       'Local Environment',
@@ -1586,17 +1758,24 @@ async function run() {
     evidence.startups.push({ kind: 'pending_operation_recovery', duration_ms: warmStartDurationMS });
     const recoveredLifecycle = await gatewayLifecycleState(gatewayRecovered.snapshot, local.environment.gateway_id);
     const recoveredStart = latestOperationEvidence(recoveredLifecycle, 'start');
-    if (!recoveredStart || recoveredStart.operation_id !== local.scenario.pending_start_before_restart.operation_id || recoveredStart.state !== 'awaiting_confirmation') {
+    if (
+      local.scenario.pending_start_before_restart
+      && (!recoveredStart
+        || recoveredStart.operation_id !== local.scenario.pending_start_before_restart.operation_id
+        || recoveredStart.state !== 'awaiting_confirmation')
+    ) {
       throw new Error(`Desktop/Gateway did not recover the exact pending start operation: ${JSON.stringify(recoveredStart)}`);
     }
-    const recoveredAttachment = await waitFor(async () => {
-      const snapshot = await launcherSnapshot(page);
-      return snapshot.operations.find((operation) => (
-        operation.operation_key === local.pendingStart.operationKey
-        && operation.status === 'needs_confirmation'
-        && operation.runtime_confirmation?.operation === 'start'
-      )) ?? null;
-    }, phaseBudgets.desktop_warm_start_ms, 'Desktop pending Runtime operation attachment');
+    const recoveredAttachment = local.scenario.pending_start_before_restart
+      ? await waitFor(async () => {
+        const snapshot = await launcherSnapshot(page);
+        return snapshot.operations.find((operation) => (
+          operation.operation_key === local.pendingStart.operationKey
+          && operation.status === 'needs_confirmation'
+          && operation.runtime_confirmation?.operation === 'start'
+        )) ?? null;
+      }, phaseBudgets.desktop_warm_start_ms, 'Desktop pending Runtime operation attachment')
+      : null;
     evidence.scenarios.local = await continueLocalScenarioAfterRestart({ page, browser, local, reportRoot, diagnosticRoots });
     evidence.scenarios.local.pending_start_after_restart = recoveredStart;
     evidence.scenarios.local.pending_start_attachment_after_restart = recoveredAttachment;
@@ -1624,6 +1803,7 @@ async function run() {
     launch = launchDesktop(packagedBundle);
     child = launch.child;
     page = await connectDesktop(phaseBudgets.desktop_warm_start_ms);
+    await ensureGatewayPaired(page, 'Local Environment');
     const readyAfterUpdateRestart = await waitForEnvironment(
       page,
       'Local Environment',

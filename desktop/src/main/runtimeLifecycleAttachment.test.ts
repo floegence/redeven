@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import type { GatewayRuntimeOperation, GatewayRuntimeOperationState } from './gatewayClient';
-import { projectAttachedRuntimeOperation } from './runtimeLifecycleAttachment';
+import {
+  projectAttachedRuntimeOperation,
+  runtimeOperationRequiresConfirmation,
+} from './runtimeLifecycleAttachment';
 
 function operation(
   state: GatewayRuntimeOperationState,
@@ -42,6 +45,45 @@ function operation(
 }
 
 describe('projectAttachedRuntimeOperation', () => {
+  it('does not require confirmation when the authoritative workload is empty', () => {
+    const source = operation('confirmation_required');
+    const empty: GatewayRuntimeOperation = {
+      ...source,
+      expected_snapshot: {
+        ...source.expected_snapshot,
+        workload: {
+          ...source.expected_snapshot.workload,
+          affected_process_count: 0,
+          active_session_count: 0,
+        },
+      },
+    };
+    expect(runtimeOperationRequiresConfirmation(empty)).toBe(false);
+    const projection = projectAttachedRuntimeOperation(empty);
+    expect(projection).toMatchObject({
+      owned: true,
+      needs_confirmation: false,
+    });
+    expect(projection).not.toHaveProperty('confirmation');
+  });
+
+  it('keeps confirmation conservative when workload counts are unknown', () => {
+    const source = operation('confirmation_required');
+    const unknown: GatewayRuntimeOperation = {
+      ...source,
+      expected_snapshot: {
+        ...source.expected_snapshot,
+        workload: {
+          ...source.expected_snapshot.workload,
+          affected_process_count: undefined,
+          active_session_count: undefined,
+        },
+      },
+    };
+    expect(runtimeOperationRequiresConfirmation(unknown)).toBe(true);
+    expect(projectAttachedRuntimeOperation(unknown).needs_confirmation).toBe(true);
+  });
+
   it.each([
     ['preflighting', 'environmentOpenFlow.checkingAccessTitle'],
     ['awaiting_confirmation', 'environmentOpenFlow.checkingAccessTitle'],
