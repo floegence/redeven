@@ -535,7 +535,7 @@ The intended dependency shape is library consumption, not source sharing:
 - Redeven contributes product policy and concrete adapters around those
   imports; it does not become a source tree for ReDevPlugin implementation.
 
-For the current `v3.0.5` baseline, Redeven accepts only ReDevPlugin
+For the current `v3.0.8` baseline, Redeven accepts only ReDevPlugin
 manifest v9, release metadata current, `current plugin UI contract`, and `current bridge contract`. Older
 manifest or release metadata state is not migrated, rewritten, or given a
 synthetic presentation; reads fail closed while the original bytes remain
@@ -545,17 +545,26 @@ presentation catalog. Redeven resolves BCP 47 locales through the released
 ReDevPlugin resolver and must not add an English fallback, duplicate parser,
 Containers-specific author copy, or plugin-id presentation branch.
 
-Official signed-release installation uses ReDevPlugin's durable owner-scoped
-Execution with ordered Events, one cancellation identity, and one cursor.
-ReDevPlugin owns request idempotency, remote-asset retries, byte and
-indeterminate progress, stable failure codes, response-loss recovery, and
-restart reconciliation in its control database. Redeven uses only the released
-start/list/get/Event client helpers. It owns target-scoped presentation,
+Official signed-release installation begins with ReDevPlugin's process-local
+release-package inspection. Inspection fetches and verifies the exact package,
+projects presentation and permissions, and returns short-lived owner/session-
+bound evidence without runtime or lifecycle preflight. After confirmation,
+Redeven starts ReDevPlugin's durable owner-scoped Execution with that inspection
+id; the Execution consumes the cached verified package without another download
+or parse. ReDevPlugin owns request idempotency, stable failure codes,
+response-loss recovery, and restart reconciliation in its control database.
+Redeven uses only the released inspect/start/list/get/Event client helpers. It owns target-scoped presentation,
 localized copy, reconnect observation, and inventory refresh after a committed
 installation. Closing Plugin Center or losing its observer must not cancel the
 Host Execution, create a new request id, replay installation, or turn
 transport/internal failures into permission denials. Redeven must not add an
 execution store, lifecycle state machine, or Containers-specific install path.
+When start response delivery is unknown, Redeven must retry with the same
+request id and inspection evidence so Host idempotency recovers the existing
+operation before evidence claim. It must obtain fresh evidence for a new
+operation after expiry or staleness. Confirmed retained-data deletion must
+reconcile the exact binding postcondition after response loss; an already absent
+binding is success, while a changed generation or revision is a conflict.
 
 Plugin Center cards, detail actions, and the application launcher must consume
 one product action projection. Disabled or blocked records must not expose a
@@ -566,7 +575,7 @@ version, package hash, manifest hash, and entries hash exactly match the
 current signed market release, Redeven may reuse that release's bounded icon
 URL; any mismatch falls back to the generic placeholder, so a later market
 generation cannot replace an older installed package's icon. ReDevPlugin
-`v3.0.5` exposes the owner/session-protected installed-icon metadata needed by
+`v3.0.8` exposes the owner/session-protected installed-icon metadata needed by
 the host, so Redeven must not parse package bytes or invent a second icon
 transport.
 

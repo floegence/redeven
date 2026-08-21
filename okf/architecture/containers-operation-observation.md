@@ -139,6 +139,6 @@ package and integration ownership remains in [Plugin platform integration](plugi
 
 # Evidence
 
-- `redeven:internal/pluginmarket/service.go` - Freezes the latest-only production release selection and validated transport.
+- `redeven:internal/pluginmarket/service.go` - Atomically publishes the latest-only production release selection and validated transport.
 - `redeven:internal/redevpluginintegration/release_module.go` - Installs the complete signed GitHub Release transport through ReDevPlugin.
 - `redeven:scripts/check_plugin_integration.sh` - Routes final ReDevPlugin integration validation through the published release-manifest and capability gates.

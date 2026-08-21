@@ -191,18 +191,23 @@ function installStatusLabel(
   const execution = projection.execution;
   if (!execution) {
     return projection.startFailure
-      ? installFailureLabel(projection.startFailure.code, i18n)
+      ? pluginInstallFailureLabel(projection.startFailure.code, i18n)
       : i18n.t('uiCopy.plugin.installOperation.starting');
   }
   if (execution.status === 'failed' || execution.status === 'canceled' || execution.status === 'orphaned') {
-    return installFailureLabel(execution.failure_code ?? 'PLUGIN_INTERNAL_FAILURE', i18n);
+    return pluginInstallFailureLabel(execution.failure_code ?? 'PLUGIN_INTERNAL_FAILURE', i18n);
   }
   if (execution.status === 'completed') return i18n.t('uiCopy.plugin.installOperation.complete');
   switch (phase) {
+    case 'validate_inspection': return i18n.t('uiCopy.plugin.installOperation.validatingInspection');
+    case 'refresh_trust': return i18n.t('uiCopy.plugin.installOperation.refreshingTrust');
+    case 'validate_install': return i18n.t('uiCopy.plugin.installOperation.validatingInstall');
+    case 'runtime_preflight': return i18n.t('uiCopy.plugin.installOperation.checkingRuntime');
     case 'fetch_trust_evidence': return i18n.t('uiCopy.plugin.installOperation.fetchingTrustEvidence');
     case 'fetch_release_evidence': return i18n.t('uiCopy.plugin.installOperation.fetchingReleaseEvidence');
     case 'download_package': return i18n.t('uiCopy.plugin.installOperation.downloadingPackage');
     case 'verify_hashes': return i18n.t('uiCopy.plugin.installOperation.verifyingHashes');
+    case 'verify_signatures':
     case 'verify_signatures_ledger': return i18n.t('uiCopy.plugin.installOperation.verifyingSignaturesLedger');
     case 'fetch_capability_evidence': return i18n.t('uiCopy.plugin.installOperation.fetchingCapabilityEvidence');
     case 'commit': return i18n.t('uiCopy.plugin.installOperation.installing');
@@ -211,12 +216,14 @@ function installStatusLabel(
   }
 }
 
-function installFailureLabel(code: string, i18n: I18nHelpers): string {
+export function pluginInstallFailureLabel(code: string, i18n: I18nHelpers): string {
   switch (code) {
     case 'PLUGIN_RELEASE_NETWORK': return i18n.t('uiCopy.plugin.installOperation.failure.network');
     case 'PLUGIN_RELEASE_TIMEOUT': return i18n.t('uiCopy.plugin.installOperation.failure.timeout');
     case 'PLUGIN_RELEASE_ASSET_MISSING': return i18n.t('uiCopy.plugin.installOperation.failure.assetMissing');
     case 'PLUGIN_RELEASE_ASSET_INTEGRITY': return i18n.t('uiCopy.plugin.installOperation.failure.assetIntegrity');
+    case 'PLUGIN_RELEASE_INSPECTION_EXPIRED': return i18n.t('uiCopy.plugin.installOperation.failure.inspectionExpired');
+    case 'PLUGIN_RELEASE_INSPECTION_STALE': return i18n.t('uiCopy.plugin.installOperation.failure.inspectionStale');
     case 'PLUGIN_INSTALL_INTERRUPTED': return i18n.t('uiCopy.plugin.installOperation.failure.interrupted');
     case 'PLUGIN_INSTALL_STATE_CONFLICT': return i18n.t('uiCopy.plugin.installOperation.failure.stateConflict');
     case 'PLUGIN_RETAINED_DATA_INCOMPATIBLE': return i18n.t('uiCopy.plugin.installOperation.failure.retainedDataIncompatible');
@@ -227,10 +234,17 @@ function installFailureLabel(code: string, i18n: I18nHelpers): string {
     case 'PLUGIN_RELEASE_REF_POLICY_DENIED':
     case 'PLUGIN_TRUST_STATE_DENIED':
     case 'PLUGIN_TRUST_VERIFICATION_REQUIRED':
-    case 'PLUGIN_TRUST_VERIFICATION_INVALID': return i18n.t('uiCopy.plugin.installOperation.failure.trust');
+    case 'PLUGIN_TRUST_VERIFICATION_INVALID':
+    case 'PLUGIN_SIGNATURE_INVALID': return i18n.t('uiCopy.plugin.installOperation.failure.trust');
     case 'PLUGIN_PACKAGE_INVALID': return i18n.t('uiCopy.plugin.installOperation.failure.packageInvalid');
     case 'PLUGIN_PACKAGE_TOO_LARGE': return i18n.t('uiCopy.plugin.installOperation.failure.packageTooLarge');
     case 'PLUGIN_PACKAGE_PATH_FORBIDDEN': return i18n.t('uiCopy.plugin.installOperation.failure.packagePathForbidden');
+    case 'PLUGIN_RUNTIME_UNAVAILABLE': return i18n.t('uiCopy.plugin.installOperation.failure.runtimeUnavailable');
+    case 'PLUGIN_RUNTIME_VERSION_MISMATCH':
+    case 'PLUGIN_RUNTIME_CONTRACT_MISMATCH': return i18n.t('uiCopy.plugin.installOperation.failure.runtimeVersionMismatch');
+    case 'PLUGIN_FEATURE_NOT_CONFIGURED':
+    case 'PLUGIN_ADAPTER_FAILURE': return i18n.t('uiCopy.plugin.installOperation.failure.platformUnavailable');
+    case 'PLUGIN_CONTRACT_MISMATCH': return i18n.t('uiCopy.plugin.installOperation.failure.contractMismatch');
     default: return i18n.t('uiCopy.plugin.installOperation.failure.internal');
   }
 }
@@ -238,7 +252,10 @@ function installFailureLabel(code: string, i18n: I18nHelpers): string {
 function retryableFailureCode(code?: string): boolean {
   return code === 'PLUGIN_RELEASE_NETWORK'
     || code === 'PLUGIN_RELEASE_TIMEOUT'
-    || code === 'PLUGIN_INSTALL_INTERRUPTED';
+    || code === 'PLUGIN_INSTALL_INTERRUPTED'
+    || code === 'PLUGIN_RELEASE_INSPECTION_EXPIRED'
+    || code === 'PLUGIN_RELEASE_INSPECTION_STALE'
+    || code === 'PLUGIN_RUNTIME_UNAVAILABLE';
 }
 
 function formatBytes(value: number, locale: string): string {

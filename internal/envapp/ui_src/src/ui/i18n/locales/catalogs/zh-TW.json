@@ -4426,6 +4426,10 @@
       "install": "安裝",
       "installOperation": {
         "starting": "正在準備安裝...",
+        "validatingInspection": "正在核對已確認的外掛程式資訊...",
+        "refreshingTrust": "正在重新檢查發佈者信任狀態...",
+        "validatingInstall": "正在檢查目前的外掛程式狀態...",
+        "checkingRuntime": "正在檢查外掛程式執行階段...",
         "queued": "正在等待安裝...",
         "fetchingTrustEvidence": "正在檢查發佈者信任資訊...",
         "fetchingReleaseEvidence": "正在取得已簽署的發佈證據...",
@@ -4461,6 +4465,8 @@
           "timeout": "外掛程式發佈來源未及時回應。請重試安裝。",
           "assetMissing": "外掛程式發佈內容缺少必要檔案。",
           "assetIntegrity": "外掛程式發佈檔案與其簽署身分不符。",
+          "inspectionExpired": "已確認的外掛程式資訊已過期，請重新取得後再試。",
+          "inspectionStale": "確認後外掛程式發佈資訊已變更，請重新整理外掛程式中心並再次確認。",
           "interrupted": "安裝在提交前遭到中斷。",
           "stateConflict": "已安裝的外掛程式狀態與此發佈版本衝突。",
           "retainedDataIncompatible": "外掛程式歷史資料與此版本不相容，請先確認如何處理。",
@@ -4470,6 +4476,10 @@
           "packageInvalid": "外掛程式套件無效，無法安裝。",
           "packageTooLarge": "外掛程式套件超過平台允許的大小限制。",
           "packagePathForbidden": "外掛程式套件包含不允許的檔案路徑。",
+          "runtimeUnavailable": "外掛程式執行階段暫時無法使用，請稍後再試。",
+          "runtimeVersionMismatch": "此外掛程式與目前的外掛程式執行階段不相容。",
+          "platformUnavailable": "此環境缺少外掛程式所需的平台功能。",
+          "contractMismatch": "此外掛程式需要目前平台未提供的能力契約。",
           "internal": "外掛程式平台發生內部錯誤，無法完成安裝。"
         }
       },

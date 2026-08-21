@@ -1,17 +1,19 @@
 import { createSignal, type Accessor } from 'solid-js';
 import {
   PluginPlatformRequestError,
+  PluginTransportError,
   type PluginEvent,
   type PluginExecution,
   type PluginPlatformErrorCode,
 } from '@floegence/redevplugin-ui';
 
 import type { PluginLifecycleAPI } from './pluginApi';
-import type { PluginInstallExecutionProjection } from './pluginTypes';
+import type { OfficialPluginReleaseInspection, PluginInstallExecutionProjection } from './pluginTypes';
 
 type InstallLifecycle = Pick<
   PluginLifecycleAPI,
   | 'installOfficialRelease'
+  | 'inspectOfficialRelease'
   | 'listReleaseInstallExecutions'
   | 'getReleaseInstallExecution'
   | 'listReleaseInstallExecutionEvents'
@@ -28,6 +30,7 @@ export type PluginInstallCoordinator = Readonly<{
   start: (
     pluginID: string,
     pluginInstanceID: string,
+    inspection: OfficialPluginReleaseInspection,
   ) => Promise<void>;
   resume: () => Promise<void>;
   retry: (pluginInstanceID: string) => Promise<void>;
@@ -38,6 +41,7 @@ export type PluginInstallCoordinator = Readonly<{
 export function createPluginInstallCoordinator(options: Readonly<{
   lifecycle: InstallLifecycle;
   refreshInventory: () => Promise<unknown>;
+  refreshMarket: () => Promise<unknown>;
   completeApprovedInstall: (pluginInstanceID: string, signal?: AbortSignal) => Promise<unknown>;
   createRequestID: () => string;
   resolvePluginID: (pluginInstanceID: string) => string | undefined;
@@ -156,9 +160,11 @@ export function createPluginInstallCoordinator(options: Readonly<{
     }
   };
 
-  const start = (
+  const startWithInspection = (
     pluginID: string,
     pluginInstanceID: string,
+    resolveInspection: (signal: AbortSignal) => Promise<OfficialPluginReleaseInspection>,
+    existingSubmission?: NonNullable<PluginInstallExecutionProjection['submission']>,
   ): Promise<void> => runExclusive(pluginInstanceID, async () => {
     const controller = new AbortController();
     controllers.get(pluginInstanceID)?.abort('Plugin installation submission superseded');
@@ -171,13 +177,22 @@ export function createPluginInstallCoordinator(options: Readonly<{
     };
     put(current);
     try {
+      const inspection = existingSubmission?.inspection ?? await resolveInspection(controller.signal);
+      const submission = existingSubmission ?? {
+        requestID: options.createRequestID(),
+        inspection,
+        retrySameRequest: false,
+      };
+      current = { ...current, submission };
+      put(current);
       const execution = await options.lifecycle.installOfficialRelease(
         {
           type: 'install',
           pluginID,
           source: 'official_catalog',
         },
-        options.createRequestID(),
+        inspection,
+        submission.requestID,
         { signal: controller.signal },
         (update, events) => {
           current = {
@@ -194,13 +209,33 @@ export function createPluginInstallCoordinator(options: Readonly<{
     } catch (error) {
       if (disposed || controller.signal.aborted) return;
       if (error instanceof PluginPlatformRequestError) {
+        const retryable = startFailureRetryable(error.errorCode);
         put({
           ...current,
           observation: 'failed',
+          ...(current.submission
+            ? {
+                submission: {
+                  ...current.submission,
+                  retrySameRequest: retryable && error.mutationOutcome === 'unknown',
+                },
+              }
+            : {}),
           startFailure: {
             code: error.errorCode,
-            retryable: startFailureRetryable(error.errorCode),
+            retryable,
           },
+        });
+        return;
+      }
+      if (error instanceof PluginTransportError) {
+        put({
+          ...current,
+          observation: 'failed',
+          ...(current.submission
+            ? { submission: { ...current.submission, retrySameRequest: true } }
+            : {}),
+          startFailure: { code: 'PLUGIN_RELEASE_NETWORK', retryable: true },
         });
         return;
       }
@@ -209,10 +244,29 @@ export function createPluginInstallCoordinator(options: Readonly<{
         await observe(current);
         return;
       }
-      put({ ...current, observation: 'failed' });
+      put({
+        ...current,
+        observation: 'failed',
+        startFailure: { code: 'PLUGIN_INTERNAL_FAILURE', retryable: false },
+      });
     } finally {
       if (controllers.get(pluginInstanceID) === controller) controllers.delete(pluginInstanceID);
     }
+  });
+
+  const start = (
+    pluginID: string,
+    pluginInstanceID: string,
+    inspection: OfficialPluginReleaseInspection,
+  ): Promise<void> => startWithInspection(pluginID, pluginInstanceID, async () => inspection);
+
+  const startWithFreshInspection = (
+    pluginID: string,
+    pluginInstanceID: string,
+    refreshMarket: boolean,
+  ): Promise<void> => startWithInspection(pluginID, pluginInstanceID, async (signal) => {
+    if (refreshMarket) await options.refreshMarket();
+    return options.lifecycle.inspectOfficialRelease(pluginID, { signal });
   });
 
   const resume = async (): Promise<void> => {
@@ -278,12 +332,23 @@ export function createPluginInstallCoordinator(options: Readonly<{
       await runExclusive(pluginInstanceID, () => observe(projection));
       return;
     }
+    if (projection.startFailure?.retryable && projection.submission?.retrySameRequest) {
+      remove(pluginInstanceID);
+      await startWithInspection(
+        projection.pluginID,
+        pluginInstanceID,
+        async () => projection.submission!.inspection,
+        projection.submission,
+      );
+      return;
+    }
     const retryable = projection.startFailure?.retryable
       || (projection.execution?.status === 'failed' && startFailureRetryable(projection.execution.failure_code ?? ''));
     const pluginID = projection.pluginID || options.resolvePluginID(pluginInstanceID);
     if (!retryable || !pluginID) return;
+    const refreshMarket = failureCode(projection) === 'PLUGIN_RELEASE_INSPECTION_STALE';
     remove(pluginInstanceID);
-    await start(pluginID, pluginInstanceID);
+    await startWithFreshInspection(pluginID, pluginInstanceID, refreshMarket);
   };
 
   const discardRetainedDataAndRetry = async (pluginInstanceID: string): Promise<void> => {
@@ -292,7 +357,7 @@ export function createPluginInstallCoordinator(options: Readonly<{
     if (!projection || !pluginID || projection.execution?.failure_code !== 'PLUGIN_RETAINED_DATA_INCOMPATIBLE') return;
     await runExclusive(pluginInstanceID, () => options.lifecycle.deleteIncompatibleRetainedData(pluginInstanceID));
     remove(pluginInstanceID);
-    await start(pluginID, pluginInstanceID);
+    await startWithFreshInspection(pluginID, pluginInstanceID, false);
   };
 
   const dispose = () => {
@@ -369,5 +434,12 @@ function terminalFailureIsRecent(execution: PluginExecution, now: number): boole
 function startFailureRetryable(code: PluginPlatformErrorCode | string): boolean {
   return code === 'PLUGIN_RELEASE_NETWORK'
     || code === 'PLUGIN_RELEASE_TIMEOUT'
-    || code === 'PLUGIN_INSTALL_INTERRUPTED';
+    || code === 'PLUGIN_INSTALL_INTERRUPTED'
+    || code === 'PLUGIN_RELEASE_INSPECTION_EXPIRED'
+    || code === 'PLUGIN_RELEASE_INSPECTION_STALE'
+    || code === 'PLUGIN_RUNTIME_UNAVAILABLE';
+}
+
+function failureCode(projection: PluginInstallExecutionProjection): string | undefined {
+  return projection.startFailure?.code ?? projection.execution?.failure_code;
 }

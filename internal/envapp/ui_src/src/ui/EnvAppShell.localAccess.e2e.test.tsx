@@ -68,6 +68,10 @@ const activitySurfaceLifecycleState = vi.hoisted(() => ({
 const pluginLifecycleMocks = vi.hoisted(() => {
   const listInstalledPlugins = vi.fn(async () => []);
   const loadInventoryProjection = vi.fn();
+  const refreshMarketCatalog = vi.fn(async () => false);
+  const marketCatalogNeedsRefresh = vi.fn(() => false);
+  const loadMarketDetail = vi.fn(async () => ({}));
+  const inspectOfficialRelease = vi.fn(async () => ({}));
   const recoverEnabled = vi.fn(async (): Promise<PluginRecoverySnapshot> => ({ revision: 1, complete: true, results: [] }));
   const retryRecovery = vi.fn(async (pluginInstanceID: string) => ({ plugin_instance_id: pluginInstanceID, status: 'ready' as const }));
   const execute = vi.fn(async (_command: any) => ({}));
@@ -86,6 +90,10 @@ const pluginLifecycleMocks = vi.hoisted(() => {
   return {
     listInstalledPlugins,
     loadInventoryProjection,
+    refreshMarketCatalog,
+    marketCatalogNeedsRefresh,
+    loadMarketDetail,
+    inspectOfficialRelease,
     recoverEnabled,
     retryRecovery,
     execute,
@@ -98,6 +106,10 @@ const pluginLifecycleMocks = vi.hoisted(() => {
     createPluginLifecycleAPI: vi.fn(() => ({
       listInstalledPlugins,
       loadInventoryProjection,
+      refreshMarketCatalog,
+      marketCatalogNeedsRefresh,
+      loadMarketDetail,
+      inspectOfficialRelease,
       recoverEnabled,
       retryRecovery,
       execute,
@@ -1398,6 +1410,12 @@ beforeEach(async () => {
   pluginLifecycleMocks.createPluginLifecycleAPI.mockClear();
   pluginLifecycleMocks.listInstalledPlugins.mockClear();
   pluginLifecycleMocks.loadInventoryProjection.mockReset();
+  pluginLifecycleMocks.refreshMarketCatalog.mockReset();
+  pluginLifecycleMocks.refreshMarketCatalog.mockResolvedValue(false);
+  pluginLifecycleMocks.marketCatalogNeedsRefresh.mockReset();
+  pluginLifecycleMocks.marketCatalogNeedsRefresh.mockReturnValue(false);
+  pluginLifecycleMocks.loadMarketDetail.mockReset();
+  pluginLifecycleMocks.inspectOfficialRelease.mockReset();
   pluginLifecycleMocks.recoverEnabled.mockReset();
   pluginLifecycleMocks.recoverEnabled.mockResolvedValue({ revision: 1, complete: true, results: [] });
   pluginLifecycleMocks.execute.mockReset();
@@ -2198,6 +2216,70 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(pluginCenterViewState.lastProps.projection.items).toContainEqual(
         expect.objectContaining({ pluginID: officialContainersCatalog.pluginID }),
       );
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('waits for a slow background market refresh without rebuilding unchanged inventory', async () => {
+    vi.useFakeTimers();
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection());
+    let stale = true;
+    const startedAt = performance.now();
+    pluginLifecycleMocks.refreshMarketCatalog.mockImplementation(async () => {
+      if (performance.now() - startedAt < 10_000) return false;
+      stale = false;
+      return true;
+    });
+    pluginLifecycleMocks.marketCatalogNeedsRefresh.mockImplementation(() => stale);
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 1, 40);
+      await pluginPanelState.lastProps.onOpenCenter();
+      await flushUntil(() => pluginLifecycleMocks.refreshMarketCatalog.mock.calls.length === 1, 40);
+
+      await vi.advanceTimersByTimeAsync(12_000);
+      await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 2, 40);
+
+      expect(stale).toBe(false);
+      expect(pluginLifecycleMocks.refreshMarketCatalog.mock.calls.length).toBeLessThanOrEqual(10);
+      expect(pluginLifecycleMocks.loadInventoryProjection).toHaveBeenCalledTimes(2);
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('projects a persistent market failure once while background retries stay lightweight', async () => {
+    vi.useFakeTimers();
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue({ items: [], marketUnavailable: true });
+    pluginLifecycleMocks.refreshMarketCatalog
+      .mockResolvedValueOnce(true)
+      .mockResolvedValue(false);
+    pluginLifecycleMocks.marketCatalogNeedsRefresh.mockReturnValue(true);
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 1, 40);
+      await pluginPanelState.lastProps.onOpenCenter();
+      await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 2, 40);
+
+      await vi.advanceTimersByTimeAsync(17_000);
+
+      expect(pluginLifecycleMocks.refreshMarketCatalog.mock.calls.length).toBeLessThanOrEqual(12);
+      expect(pluginLifecycleMocks.loadInventoryProjection).toHaveBeenCalledTimes(2);
     } finally {
       dispose();
     }

@@ -1,4 +1,5 @@
 import {
+  PluginTransportError,
   type PluginExecution,
   type PluginPlatformClient,
 } from '@floegence/redevplugin-ui';
@@ -23,7 +24,6 @@ function createClientHarness() {
     catalog: vi.fn(async (): Promise<{ plugins: ReDevPluginRecord[] }> => ({ plugins: [] })),
     listPermissions: vi.fn(async (): ReturnType<PluginPlatformClient['listPermissions']> => ({ permissions: [] })),
     listSecurityPolicies: vi.fn(async (): ReturnType<PluginPlatformClient['listSecurityPolicies']> => ({ security_policies: [] })),
-    installReleaseRef: vi.fn(async () => ({})),
     startReleaseInstallExecution: vi.fn(async () => releaseInstallExecution()),
     listExecutions: vi.fn(async () => ({ executions: [] as PluginExecution[] })),
     getExecution: vi.fn(async () => releaseInstallExecution()),
@@ -43,6 +43,8 @@ function createClientHarness() {
       contracts: [],
     })),
     inspectReleasePackage: vi.fn(async () => ({
+      inspection_id: 'release_inspection_official_1',
+      expires_at: '2099-08-21T00:05:00Z',
       plugin_instance_id: officialContainers.pluginInstanceID,
       release_ref: OFFICIAL_CONTAINERS_RELEASE_REF,
       inspected_hashes: OFFICIAL_CONTAINERS_RELEASE_REF.expected_hashes,
@@ -139,7 +141,7 @@ const generatedContainersRecord: ReDevPluginRecord = {
   updated_at: '2026-07-04T10:01:00Z',
 };
 
-describe('v3.0.2 plugin lifecycle client integration', () => {
+describe('plugin lifecycle client integration', () => {
   it('loads an installed package icon without blocking the first inventory projection', async () => {
     const { mocks } = createClientHarness();
     const iconDigest = 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -374,7 +376,7 @@ describe('v3.0.2 plugin lifecycle client integration', () => {
     });
   });
 
-  it('keeps the current catalog but marks stale market data unavailable', async () => {
+  it('keeps a validated cached catalog visible while marking the market unavailable', async () => {
     const { mocks } = createClientHarness();
     const staleSnapshot = { ...OFFICIAL_PLUGIN_MARKET_SNAPSHOT, stale: true, source: 'cache' as const };
     const lifecycle = createPluginLifecycleAPI(
@@ -383,11 +385,46 @@ describe('v3.0.2 plugin lifecycle client integration', () => {
       async () => staleSnapshot,
     );
 
-    await expect(lifecycle.refreshMarketCatalog()).rejects.toThrow('stale cached data');
+    await expect(lifecycle.refreshMarketCatalog()).resolves.toBe(true);
     await expect(lifecycle.loadInventoryProjection()).resolves.toMatchObject({
       marketUnavailable: true,
-      items: [],
+      items: [expect.objectContaining({
+        pluginID: 'com.redeven.official.containers',
+        officialCatalog: expect.objectContaining({ latestVersion: '4.4.7' }),
+      })],
     });
+  });
+
+  it('reports a same-generation cache-to-remote transition as a catalog change', async () => {
+    const { mocks } = createClientHarness();
+    const staleSnapshot = { ...OFFICIAL_PLUGIN_MARKET_SNAPSHOT, stale: true, source: 'cache' as const };
+    const loadMarket = vi.fn()
+      .mockResolvedValueOnce(staleSnapshot)
+      .mockResolvedValueOnce(OFFICIAL_PLUGIN_MARKET_SNAPSHOT);
+    const lifecycle = createPluginLifecycleAPI(
+      mocks as unknown as PluginPlatformClient,
+      undefined,
+      loadMarket,
+    );
+
+    await expect(lifecycle.refreshMarketCatalog()).resolves.toBe(true);
+    expect(lifecycle.marketCatalogNeedsRefresh()).toBe(true);
+    await expect(lifecycle.refreshMarketCatalog()).resolves.toBe(true);
+    expect(lifecycle.marketCatalogNeedsRefresh()).toBe(false);
+  });
+
+  it('reports only the first repeated market failure as an availability change', async () => {
+    const { mocks } = createClientHarness();
+    const lifecycle = createPluginLifecycleAPI(
+      mocks as unknown as PluginPlatformClient,
+      undefined,
+      async () => { throw new Error('market unavailable'); },
+    );
+
+    await expect(lifecycle.refreshMarketCatalog()).resolves.toBe(true);
+    expect(lifecycle.marketCatalogNeedsRefresh()).toBe(true);
+    await expect(lifecycle.refreshMarketCatalog()).resolves.toBe(false);
+    expect(lifecycle.marketCatalogNeedsRefresh()).toBe(true);
   });
 
   it('projects installed plugins without waiting for the market snapshot', async () => {
@@ -491,21 +528,22 @@ describe('v3.0.2 plugin lifecycle client integration', () => {
   it('starts the generated signed release installation with one stable request id', async () => {
     const { lifecycle, mocks } = createClientHarness();
     const updates: PluginExecution[] = [];
+    const inspection = await lifecycle.inspectOfficialRelease(officialContainers.pluginID);
 
     await expect(lifecycle.installOfficialRelease({
       type: 'install',
       pluginID: officialContainers.pluginID,
       source: 'official_catalog',
-    }, releaseInstallRequestID, {}, (execution) => updates.push(execution))).resolves.toMatchObject({
+    }, inspection, releaseInstallRequestID, {}, (execution) => updates.push(execution))).resolves.toMatchObject({
       status: 'completed',
     });
 
     expect(mocks.startReleaseInstallExecution).toHaveBeenCalledWith({
       request_id: releaseInstallRequestID,
       plugin_instance_id: officialContainers.pluginInstanceID,
+      inspection_id: inspection.inspection_id,
       release_ref: OFFICIAL_CONTAINERS_RELEASE_REF,
     }, {});
-    expect(mocks.installReleaseRef).not.toHaveBeenCalled();
     expect(updates).toEqual([expect.objectContaining({ status: 'completed' })]);
     expect(OFFICIAL_CONTAINERS_RELEASE_REF).toMatchObject({
       publisher_id: officialContainers.publisherID,
@@ -532,6 +570,7 @@ describe('v3.0.2 plugin lifecycle client integration', () => {
 
   it('returns an already terminal release installation execution', async () => {
     const { lifecycle, mocks } = createClientHarness();
+    const inspection = await lifecycle.inspectOfficialRelease(officialContainers.pluginID);
     mocks.startReleaseInstallExecution.mockResolvedValueOnce(releaseInstallExecution({
       status: 'failed',
       failure_code: 'PLUGIN_RELEASE_NETWORK',
@@ -541,7 +580,7 @@ describe('v3.0.2 plugin lifecycle client integration', () => {
       type: 'install',
       pluginID: officialContainers.pluginID,
       source: 'official_catalog',
-    }, releaseInstallRequestID)).resolves.toMatchObject({
+    }, inspection, releaseInstallRequestID)).resolves.toMatchObject({
       status: 'failed',
       failure_code: 'PLUGIN_RELEASE_NETWORK',
     });
@@ -575,6 +614,34 @@ describe('v3.0.2 plugin lifecycle client integration', () => {
       plugin_instance_id: officialContainers.pluginInstanceID,
       expected_binding_revision: 4,
     }, {});
+  });
+
+  it('treats retained-data deletion response loss as complete when the postcondition is already reached', async () => {
+    const { lifecycle, mocks } = createClientHarness();
+    mocks.deleteRetainedData.mockRejectedValueOnce(new PluginTransportError(
+      'delete response was lost',
+      new Error('connection reset'),
+      'unknown',
+    ));
+    mocks.listRetainedData
+      .mockResolvedValueOnce({ retained_data: [{
+        plugin_instance_id: officialContainers.pluginInstanceID,
+        generation_id: 'gen-retained',
+        state: 'retained' as const,
+        revision: 4,
+        shape_hash: 'a'.repeat(64),
+      }] })
+      .mockResolvedValue({ retained_data: [] });
+
+    await expect(lifecycle.deleteIncompatibleRetainedData(
+      officialContainers.pluginInstanceID,
+    )).resolves.toBeUndefined();
+    await expect(lifecycle.deleteIncompatibleRetainedData(
+      officialContainers.pluginInstanceID,
+    )).resolves.toBeUndefined();
+
+    expect(mocks.deleteRetainedData).toHaveBeenCalledOnce();
+    expect(mocks.listRetainedData).toHaveBeenCalledTimes(3);
   });
 
   it('updates the exact installed instance with its management revision and generated release ref', async () => {

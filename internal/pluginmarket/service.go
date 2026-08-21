@@ -19,10 +19,11 @@ import (
 )
 
 const (
-	defaultMarketOrigin  = "https://plugins.redeven.com"
-	maxMarketResponse    = 8 << 20
-	maxMarketIcon        = 512 << 10
-	marketRequestTimeout = 5 * time.Second
+	defaultMarketOrigin    = "https://plugins.redeven.com"
+	maxMarketResponse      = 8 << 20
+	maxMarketIcon          = 512 << 10
+	marketRequestTimeout   = 5 * time.Second
+	latestFetchConcurrency = 4
 )
 
 type IconAsset struct {
@@ -32,20 +33,25 @@ type IconAsset struct {
 }
 
 type ServiceOptions struct {
-	Origin     string
-	CachePath  string
-	HTTPClient *http.Client
-	Now        func() time.Time
+	Origin             string
+	CachePath          string
+	HTTPClient         *http.Client
+	Now                func() time.Time
+	RedevenVersion     string
+	ReDevPluginVersion string
 }
 
 type Service struct {
-	origin     *url.URL
-	cachePath  string
-	httpClient *http.Client
-	now        func() time.Time
+	origin             *url.URL
+	cachePath          string
+	httpClient         *http.Client
+	now                func() time.Time
+	redevenVersion     string
+	redevpluginVersion string
 
-	mu   sync.Mutex
-	last *Snapshot
+	refreshMu sync.Mutex
+	mu        sync.RWMutex
+	last      *Snapshot
 }
 
 func NewService(options ServiceOptions) (*Service, error) {
@@ -69,7 +75,19 @@ func NewService(options ServiceOptions) (*Service, error) {
 	if now == nil {
 		now = time.Now
 	}
-	return &Service{origin: origin, cachePath: cachePath, httpClient: client, now: now}, nil
+	return &Service{
+		origin: origin, cachePath: cachePath, httpClient: client, now: now,
+		redevenVersion:     compatibilityVersion(options.RedevenVersion, "1.0.0"),
+		redevpluginVersion: compatibilityVersion(options.ReDevPluginVersion, "0.0.0"),
+	}, nil
+}
+
+func compatibilityVersion(value, fallback string) string {
+	value = strings.TrimPrefix(strings.TrimSpace(value), "v")
+	if semverPattern.MatchString(value) {
+		return value
+	}
+	return fallback
 }
 
 func validMarketOrigin(origin *url.URL) bool {
@@ -92,32 +110,71 @@ func (service *Service) Snapshot(ctx context.Context) (Snapshot, error) {
 	if service == nil {
 		return Snapshot{}, ErrUnavailable
 	}
-	service.mu.Lock()
-	defer service.mu.Unlock()
+	service.refreshMu.Lock()
+	defer service.refreshMu.Unlock()
 
 	snapshot, err := service.refresh(ctx)
 	if err == nil {
+		service.mu.Lock()
 		service.last = &snapshot
+		service.mu.Unlock()
 		return cloneSnapshot(snapshot), nil
 	}
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return Snapshot{}, ctxErr
 	}
-	if service.last != nil {
-		cached := cloneSnapshot(*service.last)
+	service.mu.RLock()
+	last := service.last
+	if last != nil {
+		cached := cloneSnapshot(*last)
+		service.mu.RUnlock()
 		cached.Stale = true
 		cached.Source = SnapshotSourceCache
 		return cached, nil
 	}
+	service.mu.RUnlock()
 	cached, cacheErr := service.readCache()
 	if cacheErr == nil {
+		service.mu.Lock()
 		service.last = &cached
+		service.mu.Unlock()
 		return cloneSnapshot(cached), nil
 	}
 	if errors.Is(err, ErrInvalidResponse) {
 		return Snapshot{}, err
 	}
 	return Snapshot{}, fmt.Errorf("%w: remote: %v; cache: %v", ErrUnavailable, err, cacheErr)
+}
+
+// CachedSnapshot returns only already-verified local evidence and never starts
+// a network request. It lets the host render its last known catalog and bind a
+// pending release provider before the background market refresh completes.
+func (service *Service) CachedSnapshot() (Snapshot, bool) {
+	if service == nil {
+		return Snapshot{}, false
+	}
+	service.mu.RLock()
+	last := service.last
+	if last != nil {
+		snapshot := cloneSnapshot(*last)
+		service.mu.RUnlock()
+		snapshot.Stale = true
+		snapshot.Source = SnapshotSourceCache
+		return snapshot, true
+	}
+	service.mu.RUnlock()
+	snapshot, err := service.readCache()
+	if err != nil {
+		return Snapshot{}, false
+	}
+	service.mu.Lock()
+	if service.last == nil {
+		frozen := cloneSnapshot(snapshot)
+		service.last = &frozen
+	}
+	last = service.last
+	service.mu.Unlock()
+	return cloneSnapshot(*last), true
 }
 
 func (service *Service) LatestRelease(ctx context.Context, pluginID, channel string) (LatestRelease, error) {
@@ -190,6 +247,7 @@ func (service *Service) Icon(ctx context.Context, pluginID string, expected Pres
 
 func (service *Service) refresh(ctx context.Context) (Snapshot, error) {
 	plugins := make([]CatalogPlugin, 0)
+	latestRequests := make([]latestFetchRequest, 0)
 	cursor := ""
 	generation := int64(-1)
 	etag := ""
@@ -199,6 +257,8 @@ func (service *Service) refresh(ctx context.Context) (Snapshot, error) {
 		query := endpoint.Query()
 		query.Set("channel", "stable")
 		query.Set("limit", "100")
+		query.Set("redeven_version", service.redevenVersion)
+		query.Set("redevplugin_version", service.redevpluginVersion)
 		if cursor != "" {
 			query.Set("cursor", cursor)
 		}
@@ -230,14 +290,10 @@ func (service *Service) refresh(ctx context.Context) (Snapshot, error) {
 				Categories: slices.Clone(summary.Categories), Channels: slices.Clone(summary.Channels), Latest: summary.Latest,
 			}
 			if summary.Latest.AvailabilityStatus == "visible" {
-				release, releaseGeneration, releaseErr := service.fetchLatest(ctx, summary.PluginID, summary.Latest.Channel)
-				if releaseErr != nil {
-					return Snapshot{}, releaseErr
-				}
-				if releaseGeneration != generation || release.PluginID != summary.PluginID || release.Channel != summary.Latest.Channel || release.Version != summary.Latest.Version {
-					return Snapshot{}, invalid("latest release does not match the catalog generation")
-				}
-				plugin.Release = &release
+				latestRequests = append(latestRequests, latestFetchRequest{
+					index: len(plugins), pluginID: summary.PluginID,
+					channel: summary.Latest.Channel, version: summary.Latest.Version,
+				})
 			}
 			plugins = append(plugins, plugin)
 		}
@@ -251,6 +307,9 @@ func (service *Service) refresh(ctx context.Context) (Snapshot, error) {
 	}
 	if generation < 0 {
 		return Snapshot{}, invalid("catalog response is empty")
+	}
+	if err := service.fetchLatestReleases(ctx, plugins, latestRequests, generation); err != nil {
+		return Snapshot{}, err
 	}
 	slices.SortFunc(plugins, func(left, right CatalogPlugin) int { return strings.Compare(left.PluginID, right.PluginID) })
 	snapshot := Snapshot{
@@ -268,6 +327,54 @@ func (service *Service) refresh(ctx context.Context) (Snapshot, error) {
 		return Snapshot{}, fmt.Errorf("persist plugin market cache: %w", err)
 	}
 	return snapshot, nil
+}
+
+type latestFetchRequest struct {
+	index    int
+	pluginID string
+	channel  string
+	version  string
+}
+
+func (service *Service) fetchLatestReleases(
+	ctx context.Context,
+	plugins []CatalogPlugin,
+	requests []latestFetchRequest,
+	generation int64,
+) error {
+	if len(requests) == 0 {
+		return nil
+	}
+	workerCount := min(latestFetchConcurrency, len(requests))
+	jobs := make(chan latestFetchRequest, len(requests))
+	for _, request := range requests {
+		jobs <- request
+	}
+	close(jobs)
+	fetchCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var workers sync.WaitGroup
+	var firstErr error
+	var firstErrOnce sync.Once
+	for range workerCount {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			for request := range jobs {
+				release, releaseGeneration, err := service.fetchLatest(fetchCtx, request.pluginID, request.channel)
+				if err == nil && (releaseGeneration != generation || release.PluginID != request.pluginID || release.Channel != request.channel || release.Version != request.version) {
+					err = invalid("latest release does not match the catalog generation")
+				}
+				if err != nil {
+					firstErrOnce.Do(func() { firstErr = err; cancel() })
+					continue
+				}
+				plugins[request.index].Release = &release
+			}
+		}()
+	}
+	workers.Wait()
+	return firstErr
 }
 
 func (service *Service) fetchLatest(ctx context.Context, pluginID, channel string) (LatestRelease, int64, error) {

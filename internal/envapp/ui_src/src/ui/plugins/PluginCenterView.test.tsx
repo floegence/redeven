@@ -3,6 +3,7 @@
 import { render } from 'solid-js/web';
 import { createSignal } from 'solid-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { PluginPlatformRequestError } from '@floegence/redevplugin-ui';
 
 import { PluginCenterView } from './PluginCenterView';
 import { OFFICIAL_CONTAINERS_RELEASE_REF } from './officialContainersRelease.generated';
@@ -243,6 +244,8 @@ function officialInspection(
   }>[] = [],
 ): OfficialPluginReleaseInspection {
   return {
+    inspection_id: `release_inspection_${item.pluginID}`,
+    expires_at: '2099-08-21T00:05:00Z',
     plugin_instance_id: item.officialCatalog!.pluginInstanceID,
     release_ref: item.officialCatalog!.distribution.releaseRef,
     inspected_hashes: item.officialCatalog!.distribution.releaseRef.expected_hashes,
@@ -276,6 +279,8 @@ describe('PluginCenterView', () => {
         projection={{ items: [containersPlugin] }}
         loading={false}
         onInspectOfficial={vi.fn(async () => ({
+          inspection_id: 'release_inspection_containers',
+          expires_at: '2099-08-21T00:05:00Z',
           plugin_instance_id: containersPlugin.officialCatalog.pluginInstanceID,
           release_ref: OFFICIAL_CONTAINERS_RELEASE_REF,
           inspected_hashes: OFFICIAL_CONTAINERS_RELEASE_REF.expected_hashes,
@@ -312,7 +317,9 @@ describe('PluginCenterView', () => {
     await Promise.resolve();
     expect(onCommand).toHaveBeenCalledWith({
       type: 'install', pluginID: 'com.redeven.official.containers', source: 'official_catalog',
-    }, expect.any(AbortSignal));
+    }, expect.any(AbortSignal), expect.objectContaining({
+      inspection_id: 'release_inspection_containers',
+    }));
     expect(document.querySelector('[data-external-plugin-dialog]')).toBeNull();
   });
 
@@ -1398,13 +1405,20 @@ describe('PluginCenterView', () => {
     expect(deletePermission.textContent).toContain('Delete');
     expect(deletePermission.textContent).toContain('Optional');
     expect(onCommand).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-plugin-install-verification]')).not.toBeNull();
+    expect(document.querySelector('[data-plugin-install-source]')?.textContent).toContain('redeven_official');
+    expect(document.querySelector('[data-plugin-install-source]')?.textContent).toContain('release.json');
+    expect(document.querySelector('[data-plugin-install-package-hash]')?.textContent)
+      .toBe(OFFICIAL_CONTAINERS_RELEASE_REF.expected_hashes.package_sha256);
     (document.querySelector('[data-plugin-install-review-confirm]') as HTMLButtonElement).click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(onCommand).toHaveBeenCalledWith({
       type: 'install',
       pluginID: 'com.redeven.official.containers',
       source: 'official_catalog',
-    }, expect.any(AbortSignal));
+    }, expect.any(AbortSignal), expect.objectContaining({
+      inspection_id: 'release_inspection_com.redeven.official.containers',
+    }));
     expect(document.querySelector('[data-external-plugin-dialog]')).toBeNull();
   });
 
@@ -1448,6 +1462,101 @@ describe('PluginCenterView', () => {
     ]));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(document.querySelector('[data-plugin-install-review-dialog]')).not.toBeNull();
+  });
+
+  it('limits background official inspection prefetch to three concurrent requests', async () => {
+    const items = Array.from({ length: 6 }, (_, index) => ({
+      ...containersPlugin,
+      inventoryKey: `catalog:plugin-${index}`,
+      pluginID: `com.redeven.official.plugin-${index}`,
+      displayName: `Plugin ${index}`,
+      officialCatalog: {
+        ...containersPlugin.officialCatalog,
+        pluginID: `com.redeven.official.plugin-${index}`,
+        pluginInstanceID: `plugini_redeven_official_plugin_${index}`,
+        displayName: `Plugin ${index}`,
+        distribution: {
+          ...containersPlugin.officialCatalog.distribution,
+          releaseRef: {
+            ...containersPlugin.officialCatalog.distribution.releaseRef,
+            plugin_id: `com.redeven.official.plugin-${index}`,
+          },
+        },
+      },
+    })) satisfies PluginInventoryProjection['items'];
+    const pending = new Map<string, ReturnType<typeof deferred<OfficialPluginReleaseInspection>>>();
+    let active = 0;
+    let maximumActive = 0;
+    const onInspectOfficial = vi.fn((item: PluginInventoryProjection['items'][number]) => {
+      const request = deferred<OfficialPluginReleaseInspection>();
+      pending.set(item.pluginID, request);
+      active += 1;
+      maximumActive = Math.max(maximumActive, active);
+      return request.promise.finally(() => { active -= 1; });
+    });
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={{ items }}
+        loading={false}
+        onCommand={vi.fn()}
+        onInspectOfficial={onInspectOfficial}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    await Promise.resolve();
+    expect(onInspectOfficial).toHaveBeenCalledTimes(3);
+    expect(maximumActive).toBe(3);
+    const first = items[0]!;
+    pending.get(first.pluginID)!.resolve(officialInspection(first));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onInspectOfficial).toHaveBeenCalledTimes(4);
+    expect(maximumActive).toBe(3);
+  });
+
+  it('does not reuse an official inspection that is too close to expiry', async () => {
+    const expired = {
+      ...officialInspection(),
+      inspection_id: 'release_inspection_expiring',
+      expires_at: new Date(Date.now() + 1_000).toISOString(),
+    };
+    const fresh = {
+      ...officialInspection(),
+      inspection_id: 'release_inspection_fresh',
+    };
+    const onInspectOfficial = vi.fn()
+      .mockResolvedValueOnce(expired)
+      .mockResolvedValueOnce(fresh);
+    const onCommand = vi.fn();
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={{ items: [containersPlugin] }}
+        loading={false}
+        onCommand={onCommand}
+        onInspectOfficial={onInspectOfficial}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    mount.querySelector<HTMLButtonElement>('[data-plugin-center-install="catalog:containers"]')!.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onInspectOfficial).toHaveBeenCalledTimes(2);
+    document.querySelector<HTMLButtonElement>('[data-plugin-install-review-confirm]')!.click();
+    await Promise.resolve();
+    expect(onCommand).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'install' }),
+      expect.any(AbortSignal),
+      expect.objectContaining({ inspection_id: 'release_inspection_fresh' }),
+    );
   });
 
   it('invalidates an in-flight prefetch when the exact official release identity changes', async () => {
@@ -1596,6 +1705,7 @@ describe('PluginCenterView', () => {
       <PluginCenterView
         projection={{ items: [containersPlugin] }}
         loading={false}
+        selectedInventoryKey={containersPlugin.inventoryKey}
         onCommand={vi.fn()}
         onInspectOfficial={onInspectOfficial}
         onRefresh={vi.fn()}
@@ -1606,11 +1716,17 @@ describe('PluginCenterView', () => {
 
     const install = mount.querySelector<HTMLButtonElement>('[data-plugin-center-install="catalog:containers"]')!;
     install.click();
-    failed.reject(new Error('Package verification service is unavailable'));
+    failed.reject(new PluginPlatformRequestError(
+      'PLUGIN_RELEASE_TIMEOUT',
+      'low-level release request timeout',
+    ));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(install.disabled).toBe(false);
     const error = mount.querySelector<HTMLElement>('[data-plugin-install-inspection-error="catalog:containers"]')!;
-    expect(error.textContent).toContain('Package verification service is unavailable');
+    expect(mount.querySelectorAll('[data-plugin-install-inspection-error="catalog:containers"]')).toHaveLength(1);
+    expect(mount.querySelector('[data-plugin-center-error]')).toBeNull();
+    expect(error.textContent).toContain('did not respond in time');
+    expect(error.textContent).not.toContain('low-level release request timeout');
     expect(error.textContent).toContain('Retry');
 
     error.querySelector<HTMLButtonElement>('button')!.click();

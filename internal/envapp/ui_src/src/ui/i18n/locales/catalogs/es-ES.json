@@ -4426,6 +4426,10 @@
       "install": "Instalar",
       "installOperation": {
         "starting": "Preparando la instalación...",
+        "validatingInspection": "Validando la información confirmada del plugin...",
+        "refreshingTrust": "Volviendo a comprobar la confianza del editor...",
+        "validatingInstall": "Comprobando el estado actual del plugin...",
+        "checkingRuntime": "Comprobando el entorno de ejecución del plugin...",
         "queued": "Instalación en espera...",
         "fetchingTrustEvidence": "Comprobando la confianza del editor...",
         "fetchingReleaseEvidence": "Obteniendo las pruebas de publicación firmadas...",
@@ -4461,6 +4465,8 @@
           "timeout": "La versión del plugin no respondió a tiempo. Vuelve a intentar la instalación.",
           "assetMissing": "Falta un archivo necesario de la versión del plugin.",
           "assetIntegrity": "Un archivo de la versión no coincide con su identidad firmada.",
+          "inspectionExpired": "La información confirmada del plugin ha caducado. Vuelve a obtenerla e inténtalo de nuevo.",
+          "inspectionStale": "La versión del plugin cambió después de revisarla. Actualiza el Centro de plugins y revísala de nuevo.",
           "interrupted": "La instalación se interrumpió antes de confirmarse.",
           "stateConflict": "El estado del plugin instalado entra en conflicto con esta versión.",
           "retainedDataIncompatible": "Los datos históricos del plugin son incompatibles con esta versión. Revísalos antes de continuar.",
@@ -4470,6 +4476,10 @@
           "packageInvalid": "El paquete del plugin no es válido y no se puede instalar.",
           "packageTooLarge": "El paquete del plugin supera los límites de tamaño de la plataforma.",
           "packagePathForbidden": "El paquete del plugin contiene una ruta de archivo no permitida.",
+          "runtimeUnavailable": "El entorno de ejecución del plugin no está disponible temporalmente. Inténtalo de nuevo en breve.",
+          "runtimeVersionMismatch": "Este plugin no es compatible con el entorno de ejecución actual.",
+          "platformUnavailable": "Una función necesaria de la plataforma de plugins no está disponible en este entorno.",
+          "contractMismatch": "Este plugin requiere un contrato de capacidad que la plataforma actual no ofrece.",
           "internal": "No se pudo completar la instalación por un fallo interno de la plataforma de plugins."
         }
       },

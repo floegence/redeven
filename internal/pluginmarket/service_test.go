@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -190,6 +191,9 @@ func TestServiceRefreshesAndFallsBackToValidatedCache(t *testing.T) {
 	transport := roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		switch request.URL.Path {
 		case "/v1/catalog":
+			if request.URL.Query().Get("redeven_version") != "1.2.3" || request.URL.Query().Get("redevplugin_version") != "3.0.8" {
+				t.Fatalf("catalog compatibility query = %q", request.URL.RawQuery)
+			}
 			return response(http.StatusOK, validCatalogResponse, http.Header{"Etag": {`"catalog-g7"`}}), nil
 		case "/v1/plugins/com.redeven.official.containers/latest":
 			return response(http.StatusOK, validLatestResponse, nil), nil
@@ -198,10 +202,12 @@ func TestServiceRefreshesAndFallsBackToValidatedCache(t *testing.T) {
 		}
 	})
 	service, err := NewService(ServiceOptions{
-		Origin:     "https://plugins.redeven.com",
-		CachePath:  cachePath,
-		HTTPClient: &http.Client{Transport: transport},
-		Now:        func() time.Time { return now },
+		Origin:             "https://plugins.redeven.com",
+		CachePath:          cachePath,
+		HTTPClient:         &http.Client{Transport: transport},
+		Now:                func() time.Time { return now },
+		RedevenVersion:     "v1.2.3",
+		ReDevPluginVersion: "3.0.8",
 	})
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -232,12 +238,72 @@ func TestServiceRefreshesAndFallsBackToValidatedCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewService(offline) error = %v", err)
 	}
+	if local, ok := offline.CachedSnapshot(); !ok || !local.Stale || local.Source != SnapshotSourceCache {
+		t.Fatalf("CachedSnapshot() = %#v, %v", local, ok)
+	}
 	cached, err := offline.Snapshot(context.Background())
 	if err != nil {
 		t.Fatalf("offline Snapshot() error = %v", err)
 	}
 	if !cached.Stale || cached.Source != SnapshotSourceCache || cached.CachedAt != now {
 		t.Fatalf("unexpected cached snapshot: %#v", cached)
+	}
+}
+
+func TestServiceFetchesLatestReleasesWithBoundedConcurrency(t *testing.T) {
+	t.Parallel()
+	started := make(chan struct{}, 2)
+	releaseRequests := make(chan struct{})
+	var activeMu sync.Mutex
+	active := 0
+	maximumActive := 0
+	transport := roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		pluginID := strings.TrimSuffix(strings.TrimPrefix(request.URL.Path, "/v1/plugins/"), "/latest")
+		activeMu.Lock()
+		active++
+		if active > maximumActive {
+			maximumActive = active
+		}
+		activeMu.Unlock()
+		started <- struct{}{}
+		select {
+		case <-releaseRequests:
+		case <-request.Context().Done():
+			return nil, request.Context().Err()
+		}
+		activeMu.Lock()
+		active--
+		activeMu.Unlock()
+		body := strings.ReplaceAll(validLatestResponse, "com.redeven.official.containers", pluginID)
+		return response(http.StatusOK, body, nil), nil
+	})
+	service, err := NewService(ServiceOptions{
+		Origin: "https://plugins.redeven.com", CachePath: filepath.Join(t.TempDir(), "market.json"),
+		HTTPClient: &http.Client{Transport: transport},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	plugins := []CatalogPlugin{{PluginID: "com.redeven.official.containers"}, {PluginID: "com.redeven.official.toolbox"}}
+	requests := []latestFetchRequest{
+		{index: 0, pluginID: plugins[0].PluginID, channel: "stable", version: "4.0.0"},
+		{index: 1, pluginID: plugins[1].PluginID, channel: "stable", version: "4.0.0"},
+	}
+	done := make(chan error, 1)
+	go func() { done <- service.fetchLatestReleases(context.Background(), plugins, requests, 7) }()
+	for range 2 {
+		select {
+		case <-started:
+		case <-time.After(time.Second):
+			t.Fatal("latest release requests did not overlap")
+		}
+	}
+	close(releaseRequests)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if maximumActive != 2 || plugins[0].Release == nil || plugins[1].Release == nil {
+		t.Fatalf("maximum active = %d, plugins = %#v", maximumActive, plugins)
 	}
 }
 

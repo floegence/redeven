@@ -4426,6 +4426,10 @@
       "install": "Installieren",
       "installOperation": {
         "starting": "Installation wird vorbereitet...",
+        "validatingInspection": "Bestätigte Plugin-Informationen werden geprüft...",
+        "refreshingTrust": "Vertrauen des Herausgebers wird erneut geprüft...",
+        "validatingInstall": "Aktueller Plugin-Status wird geprüft...",
+        "checkingRuntime": "Plugin-Laufzeit wird geprüft...",
         "queued": "Installation wartet...",
         "fetchingTrustEvidence": "Vertrauen des Herausgebers wird geprüft...",
         "fetchingReleaseEvidence": "Signierte Veröffentlichungsnachweise werden abgerufen...",
@@ -4461,6 +4465,8 @@
           "timeout": "Die Plugin-Veröffentlichung hat nicht rechtzeitig geantwortet. Versuchen Sie die Installation erneut.",
           "assetMissing": "Eine erforderliche Datei der Plugin-Veröffentlichung fehlt.",
           "assetIntegrity": "Eine Datei der Plugin-Veröffentlichung stimmt nicht mit ihrer signierten Identität überein.",
+          "inspectionExpired": "Die bestätigten Plugin-Informationen sind abgelaufen. Rufen Sie sie erneut ab und versuchen Sie es noch einmal.",
+          "inspectionStale": "Die Plugin-Veröffentlichung wurde nach der Prüfung geändert. Aktualisieren Sie das Plugin-Center und prüfen Sie sie erneut.",
           "interrupted": "Die Installation wurde vor dem Commit unterbrochen.",
           "stateConflict": "Der installierte Plugin-Status steht im Konflikt mit dieser Veröffentlichung.",
           "retainedDataIncompatible": "Historische Plugin-Daten sind mit dieser Version inkompatibel. Prüfen Sie sie, bevor Sie fortfahren.",
@@ -4470,6 +4476,10 @@
           "packageInvalid": "Das Plugin-Paket ist ungültig und kann nicht installiert werden.",
           "packageTooLarge": "Das Plugin-Paket überschreitet die Größenbeschränkungen der Plattform.",
           "packagePathForbidden": "Das Plugin-Paket enthält einen unzulässigen Dateipfad.",
+          "runtimeUnavailable": "Die Plugin-Laufzeit ist vorübergehend nicht verfügbar. Versuchen Sie es gleich erneut.",
+          "runtimeVersionMismatch": "Dieses Plugin ist mit der aktuellen Plugin-Laufzeit nicht kompatibel.",
+          "platformUnavailable": "Eine erforderliche Plugin-Plattformfunktion ist in dieser Umgebung nicht verfügbar.",
+          "contractMismatch": "Dieses Plugin benötigt einen Funktionsvertrag, den die aktuelle Plattform nicht bereitstellt.",
           "internal": "Die Installation konnte wegen eines internen Fehlers der Plugin-Plattform nicht abgeschlossen werden."
         }
       },

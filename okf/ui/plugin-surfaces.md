@@ -230,7 +230,7 @@ inspection API; it never downloads remote bytes in the browser, parses the
 package, chooses trust state, or invents provenance.
 
 An official Discover action uses the exact signed release reference from the
-frozen market snapshot. Redeven passes the matching immutable GitHub Release
+validated market snapshot. Redeven passes the matching immutable GitHub Release
 transport to ReDevPlugin and never downloads package bytes in the browser. If
 the market is unavailable, installed plugins remain visible and usable while
 discovery and release installation show one retryable unavailable state. An

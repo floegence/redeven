@@ -2,18 +2,23 @@ package redevpluginintegration
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/floegence/redeven/internal/auditlog"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/diagnostics"
+	"github.com/floegence/redeven/internal/pluginmarket"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/sessionhop"
 	"github.com/floegence/redevplugin/v3/pkg/host"
@@ -567,6 +572,150 @@ func TestNewRejectsNonCanonicalRuntimePath(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "absolute canonical path") {
 		t.Fatalf("New() runtime path error = %v", err)
+	}
+}
+
+type blockingMarketTransport func(*http.Request) (*http.Response, error)
+
+func (transport blockingMarketTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	return transport(request)
+}
+
+func TestNewDoesNotWaitForRemotePluginMarket(t *testing.T) {
+	requestStarted := make(chan struct{}, 1)
+	market, err := pluginmarket.NewService(pluginmarket.ServiceOptions{
+		Origin:    "https://plugins.redeven.com",
+		CachePath: filepath.Join(t.TempDir(), "market-lkg.json"),
+		HTTPClient: &http.Client{Transport: blockingMarketTransport(func(request *http.Request) (*http.Response, error) {
+			select {
+			case requestStarted <- struct{}{}:
+			default:
+			}
+			<-request.Context().Done()
+			return nil, request.Context().Err()
+		})},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	options := ownerScopeTestOptions(t, t.TempDir())
+	options.PluginMarket = market
+	type result struct {
+		integration *Integration
+		err         error
+	}
+	completed := make(chan result, 1)
+	go func() {
+		integration, newErr := New(context.Background(), options)
+		completed <- result{integration: integration, err: newErr}
+	}()
+	var created result
+	select {
+	case created = <-completed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("New() blocked on the remote plugin market")
+	}
+	if created.err != nil {
+		t.Fatal(created.err)
+	}
+	select {
+	case <-requestStarted:
+	case <-time.After(time.Second):
+		t.Fatal("background plugin market refresh did not start")
+	}
+	if err := created.integration.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMarketSnapshotReturnsCachedProjectionWhileRemoteRefreshIsBlocked(t *testing.T) {
+	requestStarted := make(chan struct{}, 1)
+	market, err := pluginmarket.NewService(pluginmarket.ServiceOptions{
+		Origin:    "https://plugins.redeven.com",
+		CachePath: filepath.Join(t.TempDir(), "market-lkg.json"),
+		HTTPClient: &http.Client{Transport: blockingMarketTransport(func(request *http.Request) (*http.Response, error) {
+			select {
+			case requestStarted <- struct{}{}:
+			default:
+			}
+			<-request.Context().Done()
+			return nil, request.Context().Err()
+		})},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cached := pluginmarket.Snapshot{
+		SchemaVersion: pluginmarket.SnapshotSchemaVersion,
+		Generation:    7,
+		CachedAt:      time.Now().UTC(),
+		Stale:         true,
+		Source:        pluginmarket.SnapshotSourceCache,
+	}
+	integration := &Integration{marketSnapshot: &cached, marketService: market}
+	integration.startMarketRefresh()
+	select {
+	case <-requestStarted:
+	case <-time.After(time.Second):
+		t.Fatal("background plugin market refresh did not start")
+	}
+
+	startedAt := time.Now()
+	snapshot, ok := integration.MarketSnapshot()
+	if elapsed := time.Since(startedAt); elapsed > 100*time.Millisecond {
+		t.Fatalf("MarketSnapshot() blocked for %s", elapsed)
+	}
+	if !ok || snapshot.Generation != 7 || !snapshot.Stale || snapshot.Source != pluginmarket.SnapshotSourceCache {
+		t.Fatalf("MarketSnapshot() = %#v, %v", snapshot, ok)
+	}
+	if err := integration.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMarketIconUsesVerifiedSnapshotWithoutRefreshingCatalog(t *testing.T) {
+	data := []byte("verified market icon")
+	digest := fmt.Sprintf("%x", sha256.Sum256(data))
+	var requestedPaths []string
+	market, err := pluginmarket.NewService(pluginmarket.ServiceOptions{
+		Origin:    "https://plugins.redeven.com",
+		CachePath: filepath.Join(t.TempDir(), "market-lkg.json"),
+		HTTPClient: &http.Client{Transport: blockingMarketTransport(func(request *http.Request) (*http.Response, error) {
+			requestedPaths = append(requestedPaths, request.URL.Path)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(string(data))),
+				Header:     http.Header{"Content-Type": {"image/png"}},
+			}, nil
+		})},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	icon := &pluginmarket.PresentationIcon{
+		URL:       "/v1/plugins/com.redeven.official.containers/icon?sha256=" + digest,
+		MediaType: "image/png",
+		Width:     512,
+		Height:    512,
+		SHA256:    digest,
+	}
+	snapshot := pluginmarket.Snapshot{Plugins: []pluginmarket.CatalogPlugin{{
+		PluginID: "com.redeven.official.containers",
+		Presentation: pluginmarket.PresentationCompact{
+			Icon: icon,
+		},
+	}}}
+	integration := &Integration{marketSnapshot: &snapshot, marketService: market}
+
+	asset, err := integration.MarketIcon(context.Background(), "com.redeven.official.containers", digest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(asset.Data) != string(data) || asset.SHA256 != digest || asset.MediaType != "image/png" {
+		t.Fatalf("MarketIcon() = %#v", asset)
+	}
+	if len(requestedPaths) != 1 || requestedPaths[0] != "/v1/plugins/com.redeven.official.containers/icon" {
+		t.Fatalf("MarketIcon() requests = %v, want icon only", requestedPaths)
 	}
 }
 

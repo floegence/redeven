@@ -12,7 +12,7 @@ refreshes and atomically publishes a validated snapshot without restarting the
 Desktop, and serves that snapshot only to the trusted Env App origin. The market identifies a candidate GitHub Release; it
 does not host plugin packages, preserve version history, grant trust, or install
 anything. Redeven downloads the exact GitHub assets declared by the snapshot and
-passes the complete signed release transport to released ReDevPlugin `v3.0.5`.
+passes the complete signed release transport to released ReDevPlugin `v3.0.8`.
 An invalid current response fails closed. A valid last-known-good snapshot may
 keep discovery available as stale data, but it cannot authorize an automatic
 update.
@@ -21,12 +21,16 @@ update.
 
 ## Snapshot lifecycle
 
-Startup requests the stable catalog and each visible plugin's exact latest
-release from the configured HTTPS market origin. Responses use strict JSON
+Startup reads only an already validated local last-known-good snapshot and does
+not wait for the public market. It then starts one background refresh of the
+stable catalog. Redeven sends its exact product and ReDevPlugin SemVer values so
+the market excludes incompatible releases before discovery. Catalog pages are
+fetched in order, while each visible plugin's exact latest release is fetched
+with at most four concurrent requests. Responses use strict JSON
 decoding, bounded bodies, stable generation checks, duplicate rejection, and
 schema validation. Every page and latest response must name the same non-stale
 generation. The resulting snapshot is sorted, timestamped, written atomically
-to the product cache, and then frozen for the process lifetime.
+to the product cache, and atomically replaces the current in-process snapshot.
 
 If refresh fails because the market is offline, Redeven may load only a
 previously persisted snapshot that still passes the current schema and release
@@ -35,13 +39,16 @@ preserves its original `cached_at`. Unknown fields, malformed identities,
 incomplete transport, or a response that changes generation during pagination
 are invalid input, not offline fallback. If neither remote nor cache is valid,
 Redeven still starts; Plugin Center keeps installed plugins usable and reports
-that discovery and release installation are unavailable until restart.
+that discovery and release installation are unavailable until a background
+refresh succeeds.
 
-AppServer exposes the frozen snapshot at
+AppServer exposes the current snapshot at
 `/_redeven_proxy/api/plugins/market/catalog`. The route requires read
 permission and an Env App route. Codespace, port-forward, plugin, missing, and
-untrusted origins receive no market data. The endpoint does not perform a new
-network request or let the browser choose an origin, generation, or release.
+untrusted origins receive no market data. A background catalog request may join
+the service's single in-flight refresh, but the Plugin Center is already
+interactive and keeps its current or validated cached inventory while that work
+finishes. The browser cannot choose an origin, generation, or release.
 
 Catalog and detail responses use the in-place `/v1` presentation contract.
 Catalog carries every compact locale record; selecting a plugin may load the
@@ -55,15 +62,22 @@ Plugin Center accepts and caches a detail only when that generation matches the
 catalog snapshot generation. Missing, stale, or negative detail generations
 fail closed rather than allowing cross-generation presentation mixing.
 
-Selecting one uninstalled official plugin may prefetch its Host release-package
-inspection; Redeven never prefetches the full market. The process-local browser
+Plugin Center renders the current inventory immediately, refreshes the market in
+the background, and prefetches exact Host release-package inspections for
+uninstalled official plugins with at most three concurrent background requests.
+The process-local browser
 cache is keyed by plugin instance, market generation, every release-reference
 field, release-metadata digest, and expected package, manifest, and entries
-hash. Concurrent detail and install consumers share one request. Selection
-changes do not invalidate still-exact results, while release or generation
+hash and the short evidence expiry. Concurrent detail and install consumers
+share one request. Selection changes do not invalidate still-exact results that
+remain safely inside their expiry window, while release or generation
 changes, successful installation, uninstall, and Plugin Center disposal evict
 or abort the affected entry. Canceling a completed review returns the visible
-flow to idle without discarding its still-exact inspection.
+flow to idle without discarding its still-exact inspection. Confirmation removes
+the single-use evidence from the browser cache. A start response with unknown
+delivery is reconciled with the same request id and inspection evidence; only a
+new operation or expired/stale evidence requests a fresh inspection, and stale-
+release retries refresh the market first.
 
 The market may expose one compact icon descriptor for the current verified
 release. Its URL, media type, dimensions, and digest are evidence-bound to the
@@ -87,7 +101,7 @@ signer identity, signed publisher release reference, Ed25519 root pin, and the
 complete locator-to-asset transport projection. Redeven does not
 persist or expose a market version-history model.
 
-Plugin Center projects current entries from the frozen snapshot; names,
+Plugin Center projects current entries from the current validated snapshot; names,
 summaries, keywords, and long descriptions are not compiled into the production
 catalog. An unavailable market
 does not hide installed instances. Availability `disabled` or `revoked` is a
@@ -106,17 +120,19 @@ publisher, plugin, version, channel, and host capability requirement, and only
 then changes registry state.
 
 Official installation is a durable ReDevPlugin Execution. Redeven submits the
-snapshot-derived release reference once with an idempotent request identity and
-observes ordered Events; it does not treat the market response, browser
+snapshot-derived release reference and inspection evidence with an idempotent
+request identity and observes ordered Events; it does not treat the market response, browser
 connection, or an Env App pending flag as installation authority. A failed or
 disconnected observer may reattach to the same Execution without selecting new
-assets or replaying the mutation.
+assets or replaying the mutation. If submission response delivery is unknown,
+Redeven preserves and replays the same request id and inspection evidence so the
+Host recovers the existing operation before attempting any evidence claim.
 
-Before that mutation, release inspection is read-only and may download and
-verify the same exact package. Its result is presentation evidence only, not a
-durable receipt or authorization shortcut; install still revalidates the
-release, hashes, signature, runtime admission, and approved required permission
-ids.
+Before that mutation, release inspection downloads, parses, and verifies the
+exact package and returns bounded process-local evidence. Install consumes the
+cached verified package without downloading or parsing it again, refreshes
+current trust and revocation state, and then performs runtime admission,
+lifecycle conflict checks, and approved required-permission handling.
 
 Market `latest`, signer labels, compatibility text, and listing status are not
 installation authorization. Redeven pins the official Ed25519 root public key in
@@ -142,9 +158,9 @@ does not grant permissions or enable runtime access.
 
 - `redeven:internal/pluginmarket/service.go` - Fetches and validates latest-only market snapshots; the integration atomically swaps the current snapshot and release transport.
 - `redeven:internal/pluginmarket/contracts.go` - Validates generation, GitHub release identity, hashes, anchors, and complete release transport.
-- `redeven:internal/codeapp/codeapp.go` - Refreshes once at startup and keeps market failure non-fatal.
-- `redeven:internal/codeapp/appserver/server.go` - Serves only the frozen snapshot through the read-gated Env App route.
+- `redeven:internal/codeapp/codeapp.go` - Starts background refresh and keeps market failure non-fatal.
+- `redeven:internal/codeapp/appserver/server.go` - Serves the current validated snapshot through the read-gated Env App route.
 - `redeven:internal/codeapp/appserver/server.go` - Preserves validated detail generation in the read-gated local proxy envelope.
 - `redeven:internal/redevpluginintegration/release_module.go` - Converts validated market data into released remote release transport.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginCatalog.ts` - Projects current official discovery from the frozen snapshot.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginCatalog.ts` - Projects current official discovery from the validated snapshot.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts` - Preserves installed inventory and reports market unavailability.

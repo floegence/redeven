@@ -371,6 +371,7 @@ func New(opts Options) (*Agent, error) {
 		ConfigPath:             cfgPathAbs,
 		PermissionPolicy:       opts.Config.PermissionPolicy,
 		ReDevPluginRuntimePath: redevpluginRuntimePath,
+		RedevenVersion:         opts.Version,
 		ControlplaneBaseURL:    strings.TrimSpace(opts.Config.ControlplaneBaseURL),
 		CodeServerPortMin:      opts.Config.CodeServerPortMin,
 		CodeServerPortMax:      opts.Config.CodeServerPortMax,

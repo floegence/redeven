@@ -169,6 +169,6 @@ actions are disabled when inventory is stale, partial, or unavailable.
 - `redeven:internal/capabilities/containers/resources_v4_test.go` - Proves opaque endpoint binding, Compose volume retention, Pod confirmation, and rootless projection.
 - `redeven:internal/redevpluginintegration/containers_capability_v4.go` - Dispatches v4 requests through ReDevPlugin-owned invocation and Execution/Event contexts.
 - `redeven:scripts/check_plugin_integration.sh` - Verifies the published ReDevPlugin package set and official capability release boundary.
-- `redeven:internal/pluginmarket/service.go` - Freezes the validated latest-only market snapshot with a last-known-good fallback.
+- `redeven:internal/pluginmarket/service.go` - Atomically publishes the validated latest-only market snapshot with a last-known-good fallback.
 - `redeven:internal/redevpluginintegration/release_module.go` - Projects the market release into the exact signed remote transport and selects the Host-known capability requirement.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginCatalog.ts` - Projects current Containers discovery without embedding package bytes or a fixed release version.

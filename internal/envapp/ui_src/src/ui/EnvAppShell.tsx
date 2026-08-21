@@ -95,6 +95,7 @@ import {
 import type {
   ExternalPluginCommitResult,
   ExternalPluginInspection,
+  OfficialPluginReleaseInspection,
   PluginInventoryProjection,
   PluginPanelModel,
   PluginLifecycleCommand,
@@ -635,6 +636,7 @@ export function EnvAppShell() {
   };
   let pluginInventoryAbort: AbortController | undefined;
   let pluginMarketRefreshPromise: Promise<void> | undefined;
+  let pluginMarketRefreshAbort: AbortController | undefined;
   const disposePluginPlatform = async () => {
     let coordinatorError: unknown;
     try {
@@ -656,6 +658,7 @@ export function EnvAppShell() {
     setPluginSessionReady(false);
     clearPluginSessionCredential();
     pluginInventoryAbort?.abort('Env App shell disposed');
+    pluginMarketRefreshAbort?.abort('Env App shell disposed');
     pluginInstallCoordinator?.dispose();
     pluginLifecycle.dispose();
     pluginConfirmationQueue.cancelAll();
@@ -1189,18 +1192,36 @@ export function EnvAppShell() {
     // refresh in the same render turn. Share the complete market+inventory
     // refresh so the UI does not start duplicate network work.
     if (pluginMarketRefreshPromise) return pluginMarketRefreshPromise;
+    const controller = new AbortController();
+    pluginMarketRefreshAbort?.abort('Plugin market refresh superseded');
+    pluginMarketRefreshAbort = controller;
     const refresh = (async () => {
-      try {
-        await pluginLifecycle.refreshMarketCatalog();
-      } catch {
-        // Keep the current inventory usable and let the projection expose a
-        // retryable market-unavailable state.
+      const deadline = performance.now() + 16_000;
+      let delayMS = 250;
+      while (!controller.signal.aborted) {
+        let changed = false;
+        try {
+          changed = await pluginLifecycle.refreshMarketCatalog({ signal: controller.signal });
+        } catch {
+          // Keep the current inventory usable while the Host-owned background
+          // refresh is still resolving or the market is unavailable.
+        }
+        if (changed) await refetchPluginInventory();
+        if (!pluginLifecycle.marketCatalogNeedsRefresh()) return;
+        const remainingMS = deadline - performance.now();
+        if (remainingMS <= 0) return;
+        try {
+          await abortableDelay(Math.min(delayMS, remainingMS), controller.signal);
+        } catch {
+          return;
+        }
+        delayMS = Math.min(delayMS * 2, 2_000);
       }
-      await refetchPluginInventory();
     })();
     let tracked: Promise<void>;
     tracked = refresh.finally(() => {
       if (pluginMarketRefreshPromise === tracked) pluginMarketRefreshPromise = undefined;
+      if (pluginMarketRefreshAbort === controller) pluginMarketRefreshAbort = undefined;
     });
     pluginMarketRefreshPromise = tracked;
     return tracked;
@@ -1208,6 +1229,7 @@ export function EnvAppShell() {
   pluginInstallCoordinator = createPluginInstallCoordinator({
     lifecycle: pluginLifecycle,
     refreshInventory: refetchPluginInventory,
+    refreshMarket: refreshPluginMarket,
     completeApprovedInstall: (pluginInstanceID, signal) => completeApprovedOfficialInstall({
       pluginInstanceID,
       lifecycle: pluginLifecycle,
@@ -1641,6 +1663,7 @@ export function EnvAppShell() {
   const handlePluginCenterCommand = (
     command: PluginLifecycleCommand,
     signal: AbortSignal,
+    inspection?: OfficialPluginReleaseInspection,
   ): Promise<void> => {
     if (command.type === 'open_surface') {
       return openPluginSurface({
@@ -1656,12 +1679,13 @@ export function EnvAppShell() {
       const item = pluginInventoryProjection()?.items.find((candidate) => (
         candidate.pluginID === command.pluginID && candidate.officialCatalog
       ));
-      if (!item?.officialCatalog) {
+      if (!item?.officialCatalog || !inspection) {
         return Promise.reject(new Error(i18n.t('uiCopy.plugin.installOperation.failure.internal')));
       }
       return pluginInstallCoordinator!.start(
         command.pluginID,
         item.officialCatalog.pluginInstanceID,
+        inspection,
       );
     }
     return serializePluginPlacementOperation(() => performPluginCenterManagementCommand(command, signal));
@@ -5009,4 +5033,19 @@ export function EnvAppShell() {
       </TerminalSessionCatalogProvider>
     </EnvContext.Provider>
   );
+}
+
+function abortableDelay(delayMS: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.reject(signal.reason);
+  return new Promise((resolve, reject) => {
+    const timer = globalThis.setTimeout(() => {
+      signal.removeEventListener('abort', abort);
+      resolve();
+    }, delayMS);
+    const abort = () => {
+      globalThis.clearTimeout(timer);
+      reject(signal.reason);
+    };
+    signal.addEventListener('abort', abort, { once: true });
+  });
 }

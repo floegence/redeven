@@ -1,4 +1,5 @@
 import {
+  pluginMutationOutcome,
   type PluginExecution,
   type PluginEvent,
   type PluginPlatformClient,
@@ -62,19 +63,19 @@ export function createPluginLifecycleAPI(
       INVENTORY_MARKET_TIMEOUT_MS,
       'Loading the plugin market',
     ).then((snapshot) => {
-      if (snapshot.stale || snapshot.source === 'cache') {
-        throw new Error('The plugin market is using stale cached data');
-      }
       const nextCatalog = officialPluginCatalog(snapshot);
+      const nextUnavailable = snapshot.stale || snapshot.source === 'cache';
       const changed = marketGeneration !== snapshot.generation
-        || catalog.length !== nextCatalog.length;
+        || catalog.length !== nextCatalog.length
+        || marketUnavailable !== nextUnavailable;
       catalog = nextCatalog;
       marketGeneration = snapshot.generation;
-      marketUnavailable = false;
+      marketUnavailable = nextUnavailable;
       return changed;
-    }).catch((error) => {
+    }).catch(() => {
+      const changed = !marketUnavailable;
       marketUnavailable = true;
-      throw error;
+      return changed;
     }).finally(() => {
       marketRefreshPromise = undefined;
     });
@@ -218,6 +219,7 @@ export function createPluginLifecycleAPI(
 
   const installOfficialRelease = async (
     command: Extract<PluginManagementCommand, { type: 'install' }>,
+    inspection: OfficialPluginReleaseInspection,
     requestID: string,
     options: PluginRequestOptions = {},
     onUpdate?: (execution: PluginExecution, events: readonly PluginEvent[]) => void,
@@ -226,6 +228,7 @@ export function createPluginLifecycleAPI(
     let execution = await client.startReleaseInstallExecution({
       request_id: requestID,
       plugin_instance_id: official.pluginInstanceID,
+      inspection_id: inspection.inspection_id,
       release_ref: official.distribution.releaseRef,
     }, options);
     onUpdate?.(execution, []);
@@ -264,14 +267,30 @@ export function createPluginLifecycleAPI(
     options: PluginRequestOptions = {},
   ): Promise<void> => {
     const result = await client.listRetainedData({ plugin_instance_id: pluginInstanceID }, options);
-    if (result.retained_data.length !== 1) {
-      throw new Error('The incompatible retained plugin data is no longer available');
-    }
+    if (result.retained_data.length === 0) return;
+    if (result.retained_data.length !== 1) throw new Error('The incompatible retained plugin data is ambiguous');
     const binding = result.retained_data[0]!;
-    await client.deleteRetainedData({
-      plugin_instance_id: pluginInstanceID,
-      expected_binding_revision: binding.revision,
-    }, options);
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        await client.deleteRetainedData({
+          plugin_instance_id: pluginInstanceID,
+          expected_binding_revision: binding.revision,
+        }, options);
+        return;
+      } catch (error) {
+        if (pluginMutationOutcome(error) !== 'unknown') throw error;
+        const reconciled = await client.listRetainedData({ plugin_instance_id: pluginInstanceID }, options);
+        if (reconciled.retained_data.length === 0) return;
+        const current = reconciled.retained_data[0];
+        if (reconciled.retained_data.length !== 1
+          || !current
+          || current.generation_id !== binding.generation_id
+          || current.revision !== binding.revision) {
+          throw new Error('The incompatible retained plugin data changed while deletion was being confirmed');
+        }
+        if (attempt === 1) throw error;
+      }
+    }
   };
 
   const recoverEnabled = (options: PluginRequestOptions = {}) => client.recoverEnabled(options);
@@ -346,6 +365,7 @@ export function createPluginLifecycleAPI(
   return Object.freeze({
     listInstalledPlugins,
     refreshMarketCatalog,
+    marketCatalogNeedsRefresh: () => marketUnavailable,
     loadInventoryProjection,
     loadMarketDetail: loadPluginMarketDetail,
     inspectOfficialRelease,

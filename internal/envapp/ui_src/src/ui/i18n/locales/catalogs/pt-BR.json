@@ -4426,6 +4426,10 @@
       "install": "Instalar",
       "installOperation": {
         "starting": "Preparando a instalação...",
+        "validatingInspection": "Validando as informações confirmadas do plugin...",
+        "refreshingTrust": "Verificando novamente a confiança do editor...",
+        "validatingInstall": "Verificando o estado atual do plugin...",
+        "checkingRuntime": "Verificando o ambiente de execução do plugin...",
         "queued": "Instalação aguardando...",
         "fetchingTrustEvidence": "Verificando a confiança do editor...",
         "fetchingReleaseEvidence": "Buscando evidências da versão assinada...",
@@ -4461,6 +4465,8 @@
           "timeout": "A versão do plugin não respondeu a tempo. Tente instalar novamente.",
           "assetMissing": "Falta um arquivo obrigatório da versão do plugin.",
           "assetIntegrity": "Um arquivo da versão não corresponde à identidade assinada.",
+          "inspectionExpired": "As informações confirmadas do plugin expiraram. Obtenha-as novamente e tente outra vez.",
+          "inspectionStale": "A versão do plugin mudou após a revisão. Atualize a Central de plugins e revise-a novamente.",
           "interrupted": "A instalação foi interrompida antes da confirmação.",
           "stateConflict": "O estado do plugin instalado está em conflito com esta versão.",
           "retainedDataIncompatible": "Os dados históricos do plugin são incompatíveis com esta versão. Revise-os antes de continuar.",
@@ -4470,6 +4476,10 @@
           "packageInvalid": "O pacote do plugin é inválido e não pode ser instalado.",
           "packageTooLarge": "O pacote do plugin excede os limites de tamanho da plataforma.",
           "packagePathForbidden": "O pacote do plugin contém um caminho de arquivo não permitido.",
+          "runtimeUnavailable": "O ambiente de execução do plugin está temporariamente indisponível. Tente novamente em instantes.",
+          "runtimeVersionMismatch": "Este plugin não é compatível com o ambiente de execução atual.",
+          "platformUnavailable": "Um recurso necessário da plataforma de plugins não está disponível neste ambiente.",
+          "contractMismatch": "Este plugin exige um contrato de capacidade que a plataforma atual não oferece.",
           "internal": "A instalação não pôde ser concluída devido a uma falha interna da plataforma de plugins."
         }
       },

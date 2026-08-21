@@ -4426,6 +4426,10 @@
       "install": "설치",
       "installOperation": {
         "starting": "설치를 준비하는 중...",
+        "validatingInspection": "확인한 플러그인 정보를 검증하는 중...",
+        "refreshingTrust": "게시자 신뢰 상태를 다시 확인하는 중...",
+        "validatingInstall": "현재 플러그인 상태를 확인하는 중...",
+        "checkingRuntime": "플러그인 런타임을 확인하는 중...",
         "queued": "설치를 기다리는 중...",
         "fetchingTrustEvidence": "게시자 신뢰 정보를 확인하는 중...",
         "fetchingReleaseEvidence": "서명된 릴리스 증거를 가져오는 중...",
@@ -4461,6 +4465,8 @@
           "timeout": "플러그인 릴리스가 제시간에 응답하지 않았습니다. 설치를 다시 시도하세요.",
           "assetMissing": "플러그인 릴리스에 필요한 파일이 없습니다.",
           "assetIntegrity": "플러그인 릴리스 파일이 서명된 ID와 일치하지 않습니다.",
+          "inspectionExpired": "확인한 플러그인 정보가 만료되었습니다. 다시 가져온 후 재시도하세요.",
+          "inspectionStale": "확인 후 플러그인 릴리스가 변경되었습니다. 플러그인 센터를 새로 고치고 다시 확인하세요.",
           "interrupted": "커밋되기 전에 설치가 중단되었습니다.",
           "stateConflict": "설치된 플러그인 상태가 이 릴리스와 충돌합니다.",
           "retainedDataIncompatible": "플러그인 이전 데이터가 이 버전과 호환되지 않습니다. 계속하기 전에 검토하세요.",
@@ -4470,6 +4476,10 @@
           "packageInvalid": "플러그인 패키지가 올바르지 않아 설치할 수 없습니다.",
           "packageTooLarge": "플러그인 패키지가 플랫폼의 크기 제한을 초과합니다.",
           "packagePathForbidden": "플러그인 패키지에 허용되지 않은 파일 경로가 포함되어 있습니다.",
+          "runtimeUnavailable": "플러그인 런타임을 일시적으로 사용할 수 없습니다. 잠시 후 재시도하세요.",
+          "runtimeVersionMismatch": "이 플러그인은 현재 플러그인 런타임과 호환되지 않습니다.",
+          "platformUnavailable": "이 환경에서 필요한 플러그인 플랫폼 기능을 사용할 수 없습니다.",
+          "contractMismatch": "이 플러그인에 필요한 기능 계약을 현재 플랫폼에서 제공하지 않습니다.",
           "internal": "플러그인 플랫폼 내부 오류로 설치를 완료할 수 없습니다."
         }
       },
