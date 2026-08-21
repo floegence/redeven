@@ -4467,6 +4467,9 @@
           "denied": "你沒有在此環境中安裝外掛程式的權限。",
           "trust": "外掛程式發佈內容未通過發佈者與信任驗證。",
           "manifestInvalid": "此外掛程式套件使用了目前平台無法安裝的資訊清單格式。",
+          "packageInvalid": "外掛程式套件無效，無法安裝。",
+          "packageTooLarge": "外掛程式套件超過平台允許的大小限制。",
+          "packagePathForbidden": "外掛程式套件包含不允許的檔案路徑。",
           "internal": "外掛程式平台發生內部錯誤，無法完成安裝。"
         }
       },
@@ -4752,6 +4755,8 @@
         "confirmReinstallTitle": "確認重新安裝這個確切套件",
         "confirmReplaceTitle": "確認取代已安裝的套件",
         "confirmInstallCheckedTitle": "確認安裝已檢查的套件",
+        "loadingInstallTitle": "正在取得外掛程式資訊",
+        "loadingInstallDescription": "正在取得並驗證套件資訊。完成後，你可以先檢視存取權限，再決定是否安裝。",
         "confirmInstallGuidance": "安裝即確認此確切套件及其宣告的存取範圍。Host 會授予原則允許的必要權限並啟用外掛程式；原則阻擋的存取將安全失敗。",
         "confirmUpdateGuidance": "您正在確認這次確切的檢查結果及其宣告的存取範圍。主機會保留目前的啟用狀態與既有權限，且不會自動授予新權限。",
         "currentStateRetained": "保留目前狀態",
