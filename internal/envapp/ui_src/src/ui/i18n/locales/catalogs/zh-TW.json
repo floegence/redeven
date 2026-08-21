@@ -4446,6 +4446,13 @@
         "refreshFailed": "外掛程式已安裝，但外掛程式中心無法重新整理最新清單。",
         "retryRefresh": "重新整理清單",
         "retryActivation": "重試設定",
+        "resolveRetainedData": "處理歷史資料",
+        "retainedDataDialog": {
+          "title": "外掛程式歷史資料不相容",
+          "description": "此外掛程式無法使用先前安裝所保留的資料。是否清除歷史資料並安裝目前版本？",
+          "confirm": "清除資料並安裝",
+          "installing": "正在清除資料並安裝..."
+        },
         "complete": "安裝完成。",
         "byteProgress": "已下載 {completed}，共 {total}",
         "phaseCompleted": "{duration}",
@@ -4456,6 +4463,7 @@
           "assetIntegrity": "外掛程式發佈檔案與其簽署身分不符。",
           "interrupted": "安裝在提交前遭到中斷。",
           "stateConflict": "已安裝的外掛程式狀態與此發佈版本衝突。",
+          "retainedDataIncompatible": "外掛程式歷史資料與此版本不相容，請先確認如何處理。",
           "denied": "你沒有在此環境中安裝外掛程式的權限。",
           "trust": "外掛程式發佈內容未通過發佈者與信任驗證。",
           "manifestInvalid": "此外掛程式套件使用了目前平台無法安裝的資訊清單格式。",

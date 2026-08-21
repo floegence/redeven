@@ -18,6 +18,7 @@ export function PluginInstallStatus(props: {
   projection: PluginInstallExecutionProjection;
   pluginName?: string;
   onRetry?: () => void;
+  onResolveRetainedData?: () => void;
   compact?: boolean;
 }): JSX.Element {
   const i18n = useI18n();
@@ -140,6 +141,19 @@ export function PluginInstallStatus(props: {
                 : i18n.t('common.actions.retry')}
             </button>
           </Show>
+          <Show when={execution()?.failure_code === 'PLUGIN_RETAINED_DATA_INCOMPATIBLE' && props.onResolveRetainedData}>
+            <button
+              type="button"
+              data-plugin-install-resolve-retained-data
+              class={cn(
+                'mt-2 min-h-9 cursor-pointer rounded-md border border-current px-3 text-xs font-semibold hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                PLUGIN_PRESS_MOTION_CLASS,
+              )}
+              onClick={() => props.onResolveRetainedData?.()}
+            >
+              {i18n.t('uiCopy.plugin.installOperation.resolveRetainedData')}
+            </button>
+          </Show>
         </div>
       </div>
     </section>
@@ -205,6 +219,7 @@ function installFailureLabel(code: string, i18n: I18nHelpers): string {
     case 'PLUGIN_RELEASE_ASSET_INTEGRITY': return i18n.t('uiCopy.plugin.installOperation.failure.assetIntegrity');
     case 'PLUGIN_INSTALL_INTERRUPTED': return i18n.t('uiCopy.plugin.installOperation.failure.interrupted');
     case 'PLUGIN_INSTALL_STATE_CONFLICT': return i18n.t('uiCopy.plugin.installOperation.failure.stateConflict');
+    case 'PLUGIN_RETAINED_DATA_INCOMPATIBLE': return i18n.t('uiCopy.plugin.installOperation.failure.retainedDataIncompatible');
     case 'PLUGIN_ACTION_DENIED':
     case 'PLUGIN_PERMISSION_DENIED': return i18n.t('uiCopy.plugin.installOperation.failure.denied');
     case 'PLUGIN_MANIFEST_INVALID': return i18n.t('uiCopy.plugin.installOperation.failure.manifestInvalid');

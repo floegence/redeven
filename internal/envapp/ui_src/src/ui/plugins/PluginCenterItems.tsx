@@ -34,6 +34,7 @@ export function PluginCenterItem(props: {
   onOpenActivity: () => void;
   onOpenWorkbench: () => void;
   onRetryInstall?: () => void;
+  onResolveRetainedData?: () => void;
 }): JSX.Element {
   return <PluginDirectoryCard {...props} />;
 }
@@ -196,6 +197,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
               pluginName={props.item.displayName}
               compact
               onRetry={props.onRetryInstall}
+              onResolveRetainedData={props.onResolveRetainedData}
             />
           </div>
         )}

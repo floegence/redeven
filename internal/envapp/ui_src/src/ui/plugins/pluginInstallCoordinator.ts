@@ -15,6 +15,7 @@ type InstallLifecycle = Pick<
   | 'listReleaseInstallExecutions'
   | 'getReleaseInstallExecution'
   | 'listReleaseInstallExecutionEvents'
+  | 'deleteIncompatibleRetainedData'
 >;
 
 const RECENT_TERMINAL_FAILURE_MS = 24 * 60 * 60 * 1_000;
@@ -30,6 +31,7 @@ export type PluginInstallCoordinator = Readonly<{
   ) => Promise<void>;
   resume: () => Promise<void>;
   retry: (pluginInstanceID: string) => Promise<void>;
+  discardRetainedDataAndRetry: (pluginInstanceID: string) => Promise<void>;
   dispose: () => void;
 }>;
 
@@ -284,13 +286,22 @@ export function createPluginInstallCoordinator(options: Readonly<{
     await start(pluginID, pluginInstanceID);
   };
 
+  const discardRetainedDataAndRetry = async (pluginInstanceID: string): Promise<void> => {
+    const projection = projectionFor(pluginInstanceID);
+    const pluginID = projection?.pluginID || options.resolvePluginID(pluginInstanceID);
+    if (!projection || !pluginID || projection.execution?.failure_code !== 'PLUGIN_RETAINED_DATA_INCOMPATIBLE') return;
+    await runExclusive(pluginInstanceID, () => options.lifecycle.deleteIncompatibleRetainedData(pluginInstanceID));
+    remove(pluginInstanceID);
+    await start(pluginID, pluginInstanceID);
+  };
+
   const dispose = () => {
     disposed = true;
     for (const controller of controllers.values()) controller.abort('Env App shell disposed');
     controllers.clear();
   };
 
-  return Object.freeze({ projections, start, resume, retry, dispose });
+  return Object.freeze({ projections, start, resume, retry, discardRetainedDataAndRetry, dispose });
 }
 
 function isExecutionTerminal(execution: PluginExecution): boolean {

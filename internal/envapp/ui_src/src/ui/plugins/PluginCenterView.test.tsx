@@ -1739,6 +1739,54 @@ describe('PluginCenterView', () => {
     expect(onRetryInstall).toHaveBeenCalledWith(containersPlugin.officialCatalog.pluginInstanceID);
   });
 
+  it('shows an incompatible-data recovery once and requires confirmation before deleting it', async () => {
+    const onDiscardRetainedDataAndRetry = vi.fn(async () => undefined);
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={projection}
+        loading={false}
+        selectedInventoryKey={containersPlugin.inventoryKey}
+        installOperations={[{
+          pluginID: containersPlugin.pluginID,
+          pluginInstanceID: containersPlugin.officialCatalog.pluginInstanceID,
+          observation: 'watching',
+          execution: {
+            execution_id: 'release_install_containers',
+            plugin_instance_id: containersPlugin.officialCatalog.pluginInstanceID,
+            kind: 'operation',
+            status: 'failed',
+            cursor: 1,
+            failure_code: 'PLUGIN_RETAINED_DATA_INCOMPATIBLE',
+            cancelable: false,
+            created_at: '2026-08-05T08:00:00Z',
+            updated_at: '2026-08-05T08:00:03Z',
+            terminal_at: '2026-08-05T08:00:03Z',
+          },
+          events: [],
+        }]}
+        onDiscardRetainedDataAndRetry={onDiscardRetainedDataAndRetry}
+        onCommand={vi.fn()}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    const statuses = document.querySelectorAll('[data-plugin-install-execution]');
+    expect(statuses).toHaveLength(1);
+    expect(statuses[0]?.textContent).toContain('historical data is incompatible');
+    (statuses[0]?.querySelector('[data-plugin-install-resolve-retained-data]') as HTMLButtonElement).click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(document.body.textContent).toContain('Erase the plugin historical data and install the current version?');
+    expect(onDiscardRetainedDataAndRetry).not.toHaveBeenCalled();
+
+    (document.querySelector('[data-plugin-retained-data-confirm]') as HTMLButtonElement).click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onDiscardRetainedDataAndRetry).toHaveBeenCalledWith(containersPlugin.officialCatalog.pluginInstanceID);
+  });
+
   it('keeps a release trust timeout retryable and distinct from permission denial', () => {
     const onRetryInstall = vi.fn();
     const mount = document.createElement('div');

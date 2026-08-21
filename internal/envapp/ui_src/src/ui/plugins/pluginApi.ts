@@ -259,6 +259,21 @@ export function createPluginLifecycleAPI(
     options: PluginRequestOptions = {},
   ) => client.listExecutionEvents(executionID, { after_cursor: cursor }, options);
 
+  const deleteIncompatibleRetainedData = async (
+    pluginInstanceID: string,
+    options: PluginRequestOptions = {},
+  ): Promise<void> => {
+    const result = await client.listRetainedData({ plugin_instance_id: pluginInstanceID }, options);
+    if (result.retained_data.length !== 1) {
+      throw new Error('The incompatible retained plugin data is no longer available');
+    }
+    const binding = result.retained_data[0]!;
+    await client.deleteRetainedData({
+      plugin_instance_id: pluginInstanceID,
+      expected_binding_revision: binding.revision,
+    }, options);
+  };
+
   const recoverEnabled = (options: PluginRequestOptions = {}) => client.recoverEnabled(options);
   const retryRecovery = (pluginInstanceID: string, options: PluginRequestOptions = {}) => (
     client.retryRecovery(pluginInstanceID, options)
@@ -340,6 +355,7 @@ export function createPluginLifecycleAPI(
     listReleaseInstallExecutions,
     getReleaseInstallExecution,
     listReleaseInstallExecutionEvents,
+    deleteIncompatibleRetainedData,
     recoverEnabled,
     retryRecovery,
     execute,

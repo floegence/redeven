@@ -4446,6 +4446,13 @@
         "refreshFailed": "Das Plugin wurde installiert, aber das Plugin-Center konnte den aktuellen Bestand nicht laden.",
         "retryRefresh": "Bestand aktualisieren",
         "retryActivation": "Einrichtung wiederholen",
+        "resolveRetainedData": "Historische Daten prüfen",
+        "retainedDataDialog": {
+          "title": "Historische Plugin-Daten sind inkompatibel",
+          "description": "Dieses Plugin kann die Daten einer früheren Installation nicht verwenden. Historische Daten löschen und die aktuelle Version installieren?",
+          "confirm": "Daten löschen und installieren",
+          "installing": "Daten werden gelöscht und das Plugin installiert..."
+        },
         "complete": "Installation abgeschlossen.",
         "byteProgress": "{completed} von {total}",
         "phaseCompleted": "{duration}",
@@ -4456,6 +4463,7 @@
           "assetIntegrity": "Eine Datei der Plugin-Veröffentlichung stimmt nicht mit ihrer signierten Identität überein.",
           "interrupted": "Die Installation wurde vor dem Commit unterbrochen.",
           "stateConflict": "Der installierte Plugin-Status steht im Konflikt mit dieser Veröffentlichung.",
+          "retainedDataIncompatible": "Historische Plugin-Daten sind mit dieser Version inkompatibel. Prüfen Sie sie, bevor Sie fortfahren.",
           "denied": "Sie dürfen in dieser Umgebung keine Plugins installieren.",
           "trust": "Die Plugin-Veröffentlichung hat die Herausgeber- und Vertrauensprüfung nicht bestanden.",
           "manifestInvalid": "Dieses Plugin-Paket verwendet ein Manifestformat, das diese Plattform nicht installieren kann.",
