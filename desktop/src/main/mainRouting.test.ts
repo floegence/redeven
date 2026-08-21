@@ -96,11 +96,13 @@ describe('main routing', () => {
     expect(mainSrc).toContain('reason: `explicit_reinstall:${operationID}`');
     expect(mainSrc).toContain('await localEnvironmentReinstallPairingRequired(preferences.local_environment)');
     expect(mainSrc).toContain('reinstall_pairing_required: true');
+    expect(mainSrc).toContain('const gatewaySources = localReinstallRequired ? [] : await loadGatewaySourcesForWelcome();');
+    expect(mainSrc).toContain('if (await localEnvironmentReinstallBlocksGateway(record)) {');
     const openStart = mainSrc.indexOf('async function openLocalEnvironmentFromLauncher(');
     const openEnd = mainSrc.indexOf('async function openRemoteEnvironmentFromLauncher(', openStart);
     const openSrc = mainSrc.slice(openStart, openEnd);
     expect(openSrc).toContain('if (await localEnvironmentReinstallRequired(environment)) {');
-    expect(openSrc).toContain("launcherActionFailure('local_environment_reinstall_required'");
+    expect(openSrc).toContain('return localEnvironmentReinstallRequiredLauncherFailure(environment);');
     expect(openSrc).toContain('if (await localEnvironmentReinstallPairingRequired(environment)) {');
     expect(openSrc).toContain("launcherActionFailure('gateway_pairing_required'");
 
@@ -118,6 +120,28 @@ describe('main routing', () => {
     const autoSyncEnd = mainSrc.indexOf('async function syncVisibleGatewaysIfNeeded(', autoSyncStart);
     const autoSyncSrc = mainSrc.slice(autoSyncStart, autoSyncEnd);
     expect(autoSyncSrc).toContain('if (await gatewayReinstallPairingRequired(record.gateway_id)) {');
+    const visibleSyncStart = mainSrc.indexOf('async function syncVisibleGatewaysIfNeeded(');
+    const visibleSyncEnd = mainSrc.indexOf('async function upsertGatewayFromLauncher(', visibleSyncStart);
+    const visibleSyncSrc = mainSrc.slice(visibleSyncStart, visibleSyncEnd);
+    expect(visibleSyncSrc.indexOf('await localEnvironmentReinstallRequired(preferences.local_environment)')).toBeLessThan(
+      visibleSyncSrc.indexOf('await gatewayStore().list()'),
+    );
+
+    const lifecycleStart = mainSrc.indexOf('async function runEnvironmentRuntimeLifecycleFromLauncher(');
+    const lifecycleEnd = mainSrc.indexOf('async function startEnvironmentRuntimeFromLauncher(', lifecycleStart);
+    const lifecycleSrc = mainSrc.slice(lifecycleStart, lifecycleEnd);
+    expect(lifecycleSrc).toContain('return localEnvironmentReinstallRequiredLauncherFailure(localEnvironment);');
+    expect(lifecycleSrc.indexOf('await localEnvironmentReinstallRequired(localEnvironment)')).toBeLessThan(
+      lifecycleSrc.indexOf('await upsertDirectRuntimeGateway(environmentID, label, hostAccess, placement)'),
+    );
+
+    const refreshStart = mainSrc.indexOf('async function refreshEnvironmentRuntimeFromLauncher(');
+    const refreshEnd = mainSrc.indexOf('async function refreshAllEnvironmentRuntimesFromLauncher(', refreshStart);
+    const refreshSrc = mainSrc.slice(refreshStart, refreshEnd);
+    expect(refreshSrc).toContain('return localEnvironmentReinstallRequiredLauncherFailure(localEnvironment);');
+    expect(refreshSrc.indexOf('await localEnvironmentReinstallRequired(localEnvironment)')).toBeLessThan(
+      refreshSrc.indexOf('await refreshWelcomeRuntimeHealthForEnvironment(environmentID)'),
+    );
     expect(mainSrc).toContain('await clearGatewayReinstallPairingRequired(syncedRecord.gateway_id);');
   });
 

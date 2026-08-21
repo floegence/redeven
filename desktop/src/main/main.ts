@@ -1229,6 +1229,13 @@ function localEnvironmentStateRoot(environment: DesktopLocalEnvironmentState): s
   return compact(environment.local_hosting.state_dir);
 }
 
+function localEnvironmentGatewayID(environment: DesktopLocalEnvironmentState): string {
+  return stableGatewayID(gatewayBindingAudience(directRuntimeGatewayConnection(
+    { kind: 'local_host' },
+    localHostRuntimeLifecyclePlacement(environment),
+  )));
+}
+
 function localEnvironmentReinstallRequiredMarkerPath(environment: DesktopLocalEnvironmentState): string {
   const targetRoot = path.resolve(localEnvironmentStateRoot(environment));
   const parentRoot = path.dirname(targetRoot);
@@ -1242,6 +1249,12 @@ async function localEnvironmentReinstallRequired(environment: DesktopLocalEnviro
   return fs.lstat(localEnvironmentReinstallRequiredMarkerPath(environment))
     .then(() => true)
     .catch((error: NodeJS.ErrnoException) => error.code === 'ENOENT' ? false : Promise.reject(error));
+}
+
+async function localEnvironmentReinstallBlocksGateway(record: GatewayRecord): Promise<boolean> {
+  const environment = (await loadDesktopPreferencesCached()).local_environment;
+  return record.gateway_id === localEnvironmentGatewayID(environment)
+    && await localEnvironmentReinstallRequired(environment);
 }
 
 async function markLocalEnvironmentReinstallRequired(
@@ -3823,8 +3836,10 @@ async function refreshWelcomeRuntimeHealth(options: Readonly<{
   const targetEnvironmentIDs = new Set((options.targetEnvironmentIDs ?? [])
     .map((value) => compact(value))
     .filter((value) => value !== ''));
+  const localReinstallRequired = await localEnvironmentReinstallRequired(preferences.local_environment);
   const targets = buildWelcomeRuntimeHealthTargets(preferences, openSessions)
     .filter((target) => targetEnvironmentIDs.size === 0 || targetEnvironmentIDs.has(target.environment_id))
+    .filter((target) => !localReinstallRequired || target.environment_id !== preferences.local_environment.id)
     .filter((target) => mode === 'manual' || target.auto_refresh_enabled);
   await welcomeRuntimeHealthStore.refresh(targets, {
     force: options.force === true,
@@ -4036,7 +4051,11 @@ async function buildCurrentDesktopWelcomeSnapshot(
       : {}),
   };
   const state = currentUtilityWindowState(kind);
-  const gatewaySources = await loadGatewaySourcesForWelcome();
+  const localReinstallRequired = await localEnvironmentReinstallRequired(preferences.local_environment);
+  // IMPORTANT: A reinstall marker makes the complete Local Environment root
+  // opaque. Reading the old Gateway registry, trust, or Catalog would revive
+  // state that the destructive replacement flow intentionally abandoned.
+  const gatewaySources = localReinstallRequired ? [] : await loadGatewaySourcesForWelcome();
   const snapshot = buildDesktopWelcomeSnapshot({
     preferences,
     controlPlanes: currentControlPlaneSummaries(preferences),
@@ -4055,12 +4074,9 @@ async function buildCurrentDesktopWelcomeSnapshot(
     selectedEnvironmentID: state.selectedEnvironmentID,
     flowerSettingsFocusRevision: state.flowerSettingsFocusRevision,
   });
-  const localGatewayID = stableGatewayID(gatewayBindingAudience(directRuntimeGatewayConnection(
-    { kind: 'local_host' },
-    localHostRuntimeLifecyclePlacement(preferences.local_environment),
-  )));
+  const localGatewayID = localEnvironmentGatewayID(preferences.local_environment);
   const localGateway = gatewaySources.find((source) => source.gateway_id === localGatewayID);
-  const localNeedsReinstall = await localEnvironmentReinstallRequired(preferences.local_environment)
+  const localNeedsReinstall = localReinstallRequired
     || localGateway?.service_state?.status === 'needs_reinstall';
   const localPairingRequired = !localNeedsReinstall
     && await localEnvironmentReinstallPairingRequired(preferences.local_environment);
@@ -4603,6 +4619,17 @@ async function syncGatewayRecord(
     progress?: GatewaySyncProgressObserver;
   }> = {},
 ): Promise<DesktopGatewaySource> {
+  if (await localEnvironmentReinstallBlocksGateway(record)) {
+    throw new GatewayReinstallRequiredError(gatewayServiceStateForReinstall({
+      status: 'not_started',
+      can_start: false,
+      can_stop: false,
+      can_restart: false,
+      can_update: false,
+      can_pair_after_start: false,
+      checked_at_unix_ms: Date.now(),
+    }, 'This Local Environment has incompatible state. Reinstall is the only safe recovery.'));
+  }
   if (await gatewayReinstallPairingRequired(record.gateway_id) && options.allowReinstallPairing !== true) {
     throw new GatewayClientError(
       'GATEWAY_PAIRING_REQUIRED',
@@ -4805,6 +4832,10 @@ async function syncVisibleGatewaysIfNeeded(options: Readonly<{ force?: boolean }
   const launcher = liveUtilityWindow('launcher');
   if (!launcher || launcher.isDestroyed()) {
     updateGatewaySyncPoller();
+    return;
+  }
+  const preferences = await loadDesktopPreferencesCached();
+  if (await localEnvironmentReinstallRequired(preferences.local_environment)) {
     return;
   }
   const records = await gatewayStore().list();
@@ -11509,9 +11540,7 @@ async function autoStartLocalRuntimeOnDesktopLaunch(): Promise<void> {
     console.warn(`[redeven:desktop-startup] Local runtime auto-start failed: ${message}`);
     const preferences = await loadDesktopPreferencesCached().catch(() => null);
     if (reinstallRequired && preferences) {
-      const hostAccess: DesktopRuntimeHostAccess = { kind: 'local_host' };
-      const placement = localHostRuntimeLifecyclePlacement(preferences.local_environment);
-      const gatewayID = stableGatewayID(gatewayBindingAudience(directRuntimeGatewayConnection(hostAccess, placement)));
+      const gatewayID = localEnvironmentGatewayID(preferences.local_environment);
       await markLocalEnvironmentReinstallRequired(preferences.local_environment, {
         gatewayID,
         reason: message,
@@ -15386,6 +15415,25 @@ async function openProviderEnvironmentWithOpenSession(args: Readonly<{
   });
 }
 
+function localEnvironmentReinstallRequiredLauncherFailure(
+  environment: DesktopLocalEnvironmentState,
+): DesktopLauncherActionFailure {
+  const failure = desktopOperationFailurePresentation({
+    code: 'reinstall_required',
+    severity: 'warning',
+    title: 'Local Environment reinstall required',
+    titleKey: 'confirm.reinstallTargetTitle',
+    summary: 'This Local Environment has incompatible state. Reinstall is the only safe recovery.',
+    summaryKey: 'confirm.reinstallRequiredDescription',
+    targetLabel: environment.label,
+  });
+  return launcherActionFailure('local_environment_reinstall_required', 'environment', failure.summary, {
+    environmentID: environment.id,
+    failure,
+    shouldRefreshSnapshot: true,
+  });
+}
+
 async function openLocalEnvironmentFromLauncher(
   request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'open_local_environment' }>>,
 ): Promise<DesktopLauncherActionResult> {
@@ -15403,20 +15451,7 @@ async function openLocalEnvironmentFromLauncher(
     );
   }
   if (await localEnvironmentReinstallRequired(environment)) {
-    const failure = desktopOperationFailurePresentation({
-      code: 'reinstall_required',
-      severity: 'warning',
-      title: 'Local Environment reinstall required',
-      titleKey: 'confirm.reinstallTargetTitle',
-      summary: 'This Local Environment has incompatible state. Reinstall is the only safe recovery.',
-      summaryKey: 'confirm.reinstallRequiredDescription',
-      targetLabel: environment.label,
-    });
-    return launcherActionFailure('local_environment_reinstall_required', 'environment', failure.summary, {
-      environmentID: environment.id,
-      failure,
-      shouldRefreshSnapshot: true,
-    });
+    return localEnvironmentReinstallRequiredLauncherFailure(environment);
   }
   if (await localEnvironmentReinstallPairingRequired(environment)) {
     const failure = desktopOperationFailurePresentation({
@@ -16690,6 +16725,14 @@ async function runEnvironmentRuntimeLifecycleFromLauncher(
     );
   }
 
+  const localEnvironment = findLocalEnvironmentByID(
+    await loadDesktopPreferencesCached(),
+    environmentID,
+  );
+  if (localEnvironment && await localEnvironmentReinstallRequired(localEnvironment)) {
+    return localEnvironmentReinstallRequiredLauncherFailure(localEnvironment);
+  }
+
   const hostAccess = runtimeHostAccessFromRequest(request);
   let placement = runtimePlacementFromRequest(request);
   const requestedOperation: ManagedRuntimeLifecycleOperation = request.kind === 'start_environment_runtime'
@@ -17346,6 +17389,11 @@ async function refreshEnvironmentRuntimeFromLauncher(
     return launcherActionSuccess('refreshed_environment_runtime');
   }
 
+  const localEnvironment = findLocalEnvironmentByID(preferences, environmentID);
+  if (localEnvironment && await localEnvironmentReinstallRequired(localEnvironment)) {
+    return localEnvironmentReinstallRequiredLauncherFailure(localEnvironment);
+  }
+
   await refreshWelcomeRuntimeHealthForEnvironment(environmentID);
 
   const placement = runtimePlacementFromRequest(request);
@@ -17379,7 +17427,6 @@ async function refreshEnvironmentRuntimeFromLauncher(
     return launcherActionSuccess('refreshed_environment_runtime');
   }
 
-  const localEnvironment = findLocalEnvironmentByID(preferences, environmentID);
   if (localEnvironment?.local_hosting) {
     const runtimeRecord = await verifyCurrentLocalEnvironmentRuntimeRecord(localEnvironment)
       ?? await attachLocalEnvironmentRuntime(localEnvironment);
