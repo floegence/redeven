@@ -100,4 +100,24 @@ describe('PluginInstallStatus', () => {
     dispose();
     host.remove();
   });
+
+  it('offers the retained-data recovery action only for incompatible historical data', () => {
+    const onResolveRetainedData = vi.fn();
+    const host = document.createElement('div');
+    document.body.append(host);
+    const dispose = render(() => <PluginInstallStatus
+      projection={projection({
+        execution: execution({ status: 'failed', failure_code: 'PLUGIN_RETAINED_DATA_INCOMPATIBLE' }),
+        events: [],
+      })}
+      onResolveRetainedData={onResolveRetainedData}
+    />, host);
+
+    (host.querySelector('[data-plugin-install-resolve-retained-data]') as HTMLButtonElement).click();
+    expect(onResolveRetainedData).toHaveBeenCalledOnce();
+    expect(host.textContent).toContain('historical data');
+    expect(host.textContent).not.toContain('internal plugin platform failure');
+    dispose();
+    host.remove();
+  });
 });

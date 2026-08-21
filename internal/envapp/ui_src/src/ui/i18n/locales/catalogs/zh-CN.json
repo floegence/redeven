@@ -4446,6 +4446,13 @@
         "refreshFailed": "插件已安装，但插件中心无法刷新最新清单。",
         "retryRefresh": "刷新清单",
         "retryActivation": "重试设置",
+        "resolveRetainedData": "处理历史数据",
+        "retainedDataDialog": {
+          "title": "插件历史数据不兼容",
+          "description": "此插件无法使用之前安装所保留的数据。是否抹除插件历史数据并安装当前版本？",
+          "confirm": "抹除数据并安装",
+          "installing": "正在抹除数据并安装..."
+        },
         "complete": "安装完成。",
         "byteProgress": "已下载 {completed}，共 {total}",
         "phaseCompleted": "{duration}",
@@ -4456,6 +4463,7 @@
           "assetIntegrity": "插件发布文件与其签名身份不匹配。",
           "interrupted": "安装在提交前被中断。",
           "stateConflict": "已安装的插件状态与此发布版本冲突。",
+          "retainedDataIncompatible": "插件历史数据与此版本不兼容，请先确认如何处理。",
           "denied": "你没有在此环境中安装插件的权限。",
           "trust": "插件发布未通过发布者和信任验证。",
           "manifestInvalid": "此插件包使用了当前平台无法安装的清单格式。",

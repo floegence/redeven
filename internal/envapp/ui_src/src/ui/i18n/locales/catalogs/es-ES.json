@@ -4446,6 +4446,13 @@
         "refreshFailed": "El plugin se instaló, pero el centro de plugins no pudo actualizar el inventario.",
         "retryRefresh": "Actualizar inventario",
         "retryActivation": "Reintentar configuración",
+        "resolveRetainedData": "Revisar datos históricos",
+        "retainedDataDialog": {
+          "title": "Los datos históricos del plugin son incompatibles",
+          "description": "Este plugin no puede usar los datos de una instalación anterior. ¿Borrarlos e instalar la versión actual?",
+          "confirm": "Borrar datos e instalar",
+          "installing": "Borrando datos e instalando..."
+        },
         "complete": "Instalación completada.",
         "byteProgress": "{completed} de {total}",
         "phaseCompleted": "{duration}",
@@ -4456,6 +4463,7 @@
           "assetIntegrity": "Un archivo de la versión no coincide con su identidad firmada.",
           "interrupted": "La instalación se interrumpió antes de confirmarse.",
           "stateConflict": "El estado del plugin instalado entra en conflicto con esta versión.",
+          "retainedDataIncompatible": "Los datos históricos del plugin son incompatibles con esta versión. Revísalos antes de continuar.",
           "denied": "No tienes permiso para instalar plugins en este entorno.",
           "trust": "La versión del plugin no superó la verificación del editor y de confianza.",
           "manifestInvalid": "Este paquete de plugin usa un formato de manifiesto que la plataforma no puede instalar.",

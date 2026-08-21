@@ -45,6 +45,7 @@ function harness(overrides: Record<string, unknown> = {}) {
     listReleaseInstallExecutionEvents: vi.fn(async () => ({
       execution_id: 'release_install_1', events: [event()], cursor: 1,
     })),
+    deleteIncompatibleRetainedData: vi.fn(async () => undefined),
     ...lifecycleOverrides,
   };
   const refreshInventory = vi.fn(async () => undefined);
@@ -92,6 +93,24 @@ describe('plugin install execution coordinator', () => {
         events: [],
       }),
     ]);
+  });
+
+  it('deletes confirmed incompatible retained data before starting a new install execution', async () => {
+    const failed = execution({ status: 'failed', failure_code: 'PLUGIN_RETAINED_DATA_INCOMPATIBLE' });
+    const installOfficialRelease = vi.fn()
+      .mockImplementationOnce(async (_command, _requestID, _options, onUpdate) => {
+        onUpdate?.(failed, []);
+        return failed;
+      })
+      .mockResolvedValueOnce(execution());
+    const { coordinator, lifecycle } = harness({ installOfficialRelease });
+
+    await coordinator.start('com.redeven.official.containers', pluginInstanceID);
+    await coordinator.discardRetainedDataAndRetry(pluginInstanceID);
+
+    expect(lifecycle.deleteIncompatibleRetainedData).toHaveBeenCalledWith(pluginInstanceID);
+    expect(installOfficialRelease).toHaveBeenCalledTimes(2);
+    expect(coordinator.projections()).toEqual([]);
   });
 
   it('retains public Execution events when inventory refresh needs retry', async () => {

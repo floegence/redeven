@@ -49,6 +49,7 @@ export type PluginCenterViewProps = {
   onCommand: (command: PluginLifecycleCommand, signal: AbortSignal) => Promise<unknown> | unknown;
   installOperations?: readonly PluginInstallExecutionProjection[];
   onRetryInstall?: (pluginInstanceID: string) => Promise<unknown> | unknown;
+  onDiscardRetainedDataAndRetry?: (pluginInstanceID: string) => Promise<unknown> | unknown;
   onInspectOfficial?: (item: PluginInventoryItem, signal: AbortSignal) => Promise<OfficialPluginReleaseInspection>;
   onInspectExternal?: (request: ExternalPluginInspectionRequest, signal: AbortSignal) => Promise<ExternalPluginInspection>;
   onCommitExternal?: (inspection: ExternalPluginInspection, signal: AbortSignal) => Promise<ExternalPluginCommitResult>;
@@ -96,6 +97,9 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const [mobileDetailOpen, setMobileDetailOpen] = createSignal(Boolean(props.selectedInventoryKey));
   const [externalDialogOpen, setExternalDialogOpen] = createSignal(false);
   const [officialInstallFlow, setOfficialInstallFlow] = createSignal<OfficialInstallFlow>({ status: 'idle' });
+  const [retainedDataRecoveryItem, setRetainedDataRecoveryItem] = createSignal<PluginInventoryItem>();
+  const [retainedDataRecoveryPending, setRetainedDataRecoveryPending] = createSignal(false);
+  const [retainedDataRecoveryError, setRetainedDataRecoveryError] = createSignal<string>();
   const officialInstallReview = createMemo(() => {
     const flow = officialInstallFlow();
     return flow.status === 'review_ready' ? flow : undefined;
@@ -251,14 +255,29 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     }
     const operation = installOperationByInstanceID().get(flow.item.officialCatalog?.pluginInstanceID ?? '');
     if (operation?.observation === 'failed' || operation?.execution?.status === 'failed') {
-      setOfficialInstallFlow({
-        status: 'error',
-        key: flow.key,
-        item: flow.item,
-        message: i18n.t('uiCopy.plugin.installOperation.failure.internal'),
-      });
+      setOfficialInstallFlow({ status: 'idle' });
     }
   });
+
+  const requestRetainedDataRecovery = (item: PluginInventoryItem) => {
+    setRetainedDataRecoveryError(undefined);
+    setRetainedDataRecoveryItem(item);
+  };
+  const confirmRetainedDataRecovery = async () => {
+    const item = retainedDataRecoveryItem();
+    const pluginInstanceID = item?.pluginInstanceID ?? item?.officialCatalog?.pluginInstanceID;
+    if (!pluginInstanceID || retainedDataRecoveryPending()) return;
+    setRetainedDataRecoveryPending(true);
+    setRetainedDataRecoveryError(undefined);
+    try {
+      await props.onDiscardRetainedDataAndRetry?.(pluginInstanceID);
+      setRetainedDataRecoveryItem(undefined);
+    } catch (error) {
+      setRetainedDataRecoveryError(messageFromUnknown(error) ?? i18n.t('uiCopy.plugin.installOperation.failure.internal'));
+    } finally {
+      setRetainedDataRecoveryPending(false);
+    }
+  };
   const tabItems = createMemo(() => {
     switch (activeTab()) {
       case 'discover':
@@ -759,7 +778,9 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
                   commandPendingType={pendingCommandTypeForItem(item)}
                   officialInstallPhase={officialInstallPhaseForItem(item)}
                   officialInstallError={officialInstallErrorForItem(item)}
-                  installOperation={installOperationForItem(item)}
+                  installOperation={selectedInventoryKey() === item.inventoryKey && mobileDetailOpen()
+                    ? undefined
+                    : installOperationForItem(item)}
                   entranceDelayMs={Math.min(index() * 18, 126)}
                   onOpenDetails={(target) => openDetails(item.inventoryKey, target)}
                   onInstall={() => installItem(item)}
@@ -793,6 +814,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
                     const pluginInstanceID = item.pluginInstanceID ?? item.officialCatalog?.pluginInstanceID;
                     if (pluginInstanceID) void props.onRetryInstall?.(pluginInstanceID);
                   }}
+                  onResolveRetainedData={() => requestRetainedDataRecovery(item)}
                 />
               )}
             </For>
@@ -851,6 +873,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
                 const pluginInstanceID = item.pluginInstanceID ?? item.officialCatalog?.pluginInstanceID;
                 if (pluginInstanceID) void props.onRetryInstall?.(pluginInstanceID);
               }}
+              onResolveRetainedData={() => requestRetainedDataRecovery(item)}
               marketDetail={marketDetailState()?.pluginID === item.pluginID ? marketDetailState()?.detail : undefined}
               marketDetailLoading={marketDetailState()?.pluginID === item.pluginID && marketDetailState()?.loading === true}
               marketDetailError={marketDetailState()?.pluginID === item.pluginID ? marketDetailState()?.error : undefined}
@@ -870,6 +893,42 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
         }}
         onConfirm={confirmOfficialInstall}
       />
+      <Dialog
+        open={Boolean(retainedDataRecoveryItem())}
+        onOpenChange={(open) => {
+          if (!open && !retainedDataRecoveryPending()) setRetainedDataRecoveryItem(undefined);
+        }}
+        title={i18n.t('uiCopy.plugin.installOperation.retainedDataDialog.title')}
+        description={i18n.t('uiCopy.plugin.installOperation.retainedDataDialog.description')}
+        class="w-[min(30rem,calc(100%-1rem))] max-w-[30rem] bg-background text-foreground sm:w-[min(30rem,calc(100%-2rem))]"
+        footer={(
+          <div class="flex w-full flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted disabled:opacity-50')}
+              disabled={retainedDataRecoveryPending()}
+              onClick={() => setRetainedDataRecoveryItem(undefined)}
+            >
+              {i18n.t('common.actions.cancel')}
+            </button>
+            <button
+              type="button"
+              data-plugin-retained-data-confirm
+              class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md bg-destructive px-4 text-sm font-semibold text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50')}
+              disabled={retainedDataRecoveryPending()}
+              onClick={() => void confirmRetainedDataRecovery()}
+            >
+              {retainedDataRecoveryPending()
+                ? i18n.t('uiCopy.plugin.installOperation.retainedDataDialog.installing')
+                : i18n.t('uiCopy.plugin.installOperation.retainedDataDialog.confirm')}
+            </button>
+          </div>
+        )}
+      >
+        <Show when={retainedDataRecoveryError()}>
+          {(message) => <p role="alert" class="text-sm text-destructive">{message()}</p>}
+        </Show>
+      </Dialog>
       <ExternalPluginInstallDialog
         open={externalDialogOpen()}
         updateItem={externalUpdateItem()}
@@ -1331,6 +1390,7 @@ export function PluginCenterDetails(props: {
   onRetryOfficialInstall: () => void;
   onExternalUpdate: (item: PluginInventoryItem) => void;
   onRetryInstall?: () => void;
+  onResolveRetainedData?: () => void;
 }): JSX.Element {
   const i18n = useI18n();
   return (
@@ -1403,7 +1463,8 @@ export function PluginCenterDetails(props: {
                 onExternalInstall={props.onExternalInstall}
                 onRetryOfficialInstall={props.onRetryOfficialInstall}
                 onExternalUpdate={props.onExternalUpdate}
-                onRetryInstall={props.onRetryInstall}
+              onRetryInstall={props.onRetryInstall}
+              onResolveRetainedData={props.onResolveRetainedData}
               />
             </div>
 
@@ -1950,6 +2011,7 @@ function PluginActions(props: {
   onRetryOfficialInstall: () => void;
   onExternalUpdate: (item: PluginInventoryItem) => void;
   onRetryInstall?: () => void;
+  onResolveRetainedData?: () => void;
 }) {
   const i18n = useI18n();
   const presentation = () => presentPlugin(props.item);
@@ -2054,6 +2116,7 @@ function PluginActions(props: {
               projection={operation()}
               pluginName={item().displayName}
               onRetry={props.onRetryInstall}
+              onResolveRetainedData={props.onResolveRetainedData}
             />
           </div>
         )}

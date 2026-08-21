@@ -59,6 +59,14 @@ function createClientHarness() {
     installInspectedPackage: vi.fn(async () => ({})),
     recoverEnabled: vi.fn(async () => ({ revision: 1, complete: true, results: [] })),
     retryRecovery: vi.fn(async () => ({ plugin_instance_id: officialContainers.pluginInstanceID, status: 'ready' as const })),
+    listRetainedData: vi.fn(async () => ({ retained_data: [{
+      plugin_instance_id: officialContainers.pluginInstanceID,
+      generation_id: 'gen-retained',
+      state: 'retained' as const,
+      revision: 4,
+      shape_hash: 'a'.repeat(64),
+    }] })),
+    deleteRetainedData: vi.fn(async () => ({})),
   };
   return {
     mocks,
@@ -553,6 +561,20 @@ describe('v3.0.2 plugin lifecycle client integration', () => {
     expect(mocks.listExecutions).toHaveBeenCalledWith({ limit: 100 }, {});
     expect(mocks.getExecution).toHaveBeenCalledWith(execution.execution_id, {});
     expect(mocks.listExecutionEvents).toHaveBeenCalledWith(execution.execution_id, { after_cursor: 0 }, {});
+  });
+
+  it('deletes the exact retained data revision before an incompatible-data reinstall', async () => {
+    const { lifecycle, mocks } = createClientHarness();
+
+    await lifecycle.deleteIncompatibleRetainedData(officialContainers.pluginInstanceID);
+
+    expect(mocks.listRetainedData).toHaveBeenCalledWith({
+      plugin_instance_id: officialContainers.pluginInstanceID,
+    }, {});
+    expect(mocks.deleteRetainedData).toHaveBeenCalledWith({
+      plugin_instance_id: officialContainers.pluginInstanceID,
+      expected_binding_revision: 4,
+    }, {});
   });
 
   it('updates the exact installed instance with its management revision and generated release ref', async () => {
