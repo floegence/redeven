@@ -81,6 +81,23 @@ describe('runtimeService', () => {
     expect(snapshot.open_readiness).toEqual({ state: 'openable' });
   });
 
+  it('keeps blocked AI readiness separate from Runtime open readiness', () => {
+    const snapshot = normalizeRuntimeServiceSnapshot({
+      runtime_version: 'v0.11.0',
+      compatibility: 'compatible',
+      open_readiness: { state: 'openable' },
+      ai_readiness: { state: 'blocked', reason_code: 'unsupported_store' },
+      active_workload: {},
+    });
+
+    expect(snapshot).toMatchObject({
+      open_readiness: { state: 'openable' },
+      ai_readiness: { state: 'blocked', reason_code: 'unsupported_store' },
+    });
+    expect(runtimeServiceIsOpenable(snapshot)).toBe(true);
+    expect(runtimeServiceAllowsOpenAttempt(snapshot)).toBe(true);
+  });
+
   it('fails closed for missing or malformed epochs, including development runtimes', () => {
     for (const compatibilityEpoch of [undefined, null, 0, -1, 6.9, '6']) {
       const snapshot = normalizeRuntimeServiceSnapshot({

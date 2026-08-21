@@ -86,6 +86,27 @@ type PrecompiledRuntimeConvergenceError struct {
 	Recovery string
 }
 
+// PrecompiledRuntimeIdentityMismatchError is non-fatal for Gateway startup:
+// the lifecycle API must remain available so an authorized update can repair
+// the managed Runtime installation.
+type PrecompiledRuntimeIdentityMismatchError struct {
+	Reason string
+}
+
+func (e *PrecompiledRuntimeIdentityMismatchError) Error() string {
+	if e == nil {
+		return ""
+	}
+	if strings.TrimSpace(e.Reason) == "" {
+		return "managed Runtime identity does not match the precompiled Desktop bundle"
+	}
+	return e.Reason
+}
+
+func (*PrecompiledRuntimeIdentityMismatchError) PrecompiledRuntimeIdentityMismatch() bool {
+	return true
+}
+
 func (e *PrecompiledRuntimeConvergenceError) Error() string {
 	if e == nil {
 		return ""
@@ -393,7 +414,9 @@ func (c *Controller) inspectPrecompiledRuntimeTarget(bundle verifiedPrecompiledR
 			return precompiledRuntimeTarget{Action: precompiledTargetExact, Runtime: bundle}, nil
 		}
 		if !persistedIdentityValid {
-			return precompiledRuntimeTarget{}, errors.New("managed Runtime does not match the precompiled Desktop bundle or a persisted verified update")
+			return precompiledRuntimeTarget{}, &PrecompiledRuntimeIdentityMismatchError{
+				Reason: "managed Runtime does not match the precompiled Desktop bundle or a persisted verified update",
+			}
 		}
 		return precompiledRuntimeTarget{Action: precompiledTargetReplace, Runtime: bundle}, nil
 	} else if !errors.Is(statErr, os.ErrNotExist) {

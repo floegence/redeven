@@ -283,6 +283,7 @@ import {
   type PublishedRuntimeLifecyclePreflight,
 } from './runtimeLifecycleArtifact';
 import { advanceGatewayRuntimeOperation } from './runtimeLifecycleCompletion';
+import { startRuntimeOperationLease, type RuntimeOperationLease } from './runtimeOperationLease';
 import {
   waitForDesktopRuntimeLifecycleReadiness,
   type DesktopRuntimeLifecycleReadinessOperation,
@@ -885,6 +886,7 @@ type PendingRuntimeOperationConfirmation = Readonly<{
   label: string;
   operation_id?: string;
   confirm: (request: GatewayRuntimeOperationConfirmationRequest) => Promise<GatewayRuntimeOperation>;
+  renew?: (expiresAtUnixMS: number) => Promise<GatewayRuntimeOperation>;
   cancel: () => Promise<void>;
   after_success?: () => Promise<void>;
   continuation?: () => Promise<DesktopLauncherActionResult>;
@@ -900,6 +902,7 @@ type PendingRuntimeOperationConfirmation = Readonly<{
   }>;
 }>;
 const pendingRuntimeOperationConfirmations = new Map<string, PendingRuntimeOperationConfirmation>();
+const pendingRuntimeOperationLeases = new Map<string, RuntimeOperationLease>();
 type PendingRuntimeOperationReconciliation = Readonly<{
   operation: GatewayRuntimeOperation;
   label: string;
@@ -4909,6 +4912,7 @@ async function completeRuntimeOperation(
   input: Readonly<{
     current_runtime_epoch: number;
     artifact_preflight?: PublishedRuntimeLifecyclePreflight;
+    renew?: (expiresAtUnixMS: number) => Promise<GatewayRuntimeOperation>;
     upload: (metadata: import('./gatewayClient').GatewayRuntimeArtifactMetadata, artifact: Buffer) => Promise<GatewayRuntimeOperation>;
     commit: () => Promise<GatewayRuntimeOperation>;
     observe: () => Promise<GatewayRuntimeOperation>;
@@ -4916,7 +4920,9 @@ async function completeRuntimeOperation(
     onProgress?: (operation: GatewayRuntimeOperation) => void;
   }>,
 ): Promise<GatewayRuntimeOperation> {
-  return driveRuntimeOperation(operation.operation_id, () => advanceGatewayRuntimeOperation(operation, {
+  const lease = startRuntimeOperationLease(operation, input.renew, input.onProgress);
+  try {
+    return driveRuntimeOperation(operation.operation_id, () => advanceGatewayRuntimeOperation(operation, {
     prepareArtifact: (current) => current.desired_runtime.artifact_policy === 'custom_build'
       ? prepareCustomRuntimeLifecycleArtifact({
           operation: current,
@@ -4940,12 +4946,16 @@ async function completeRuntimeOperation(
     commit: input.commit,
     observe: input.observe,
     onProgress: input.onProgress,
-  }));
+    }));
+  } finally {
+    lease.stop();
+  }
 }
 
 type AttachedRuntimeOperationAdapter = Readonly<{
   resume_key: string;
   confirm: (confirmation: GatewayRuntimeOperationConfirmationRequest) => Promise<GatewayRuntimeOperation>;
+  renew?: (expiresAtUnixMS: number) => Promise<GatewayRuntimeOperation>;
   complete: (operation: GatewayRuntimeOperation) => Promise<GatewayRuntimeOperation>;
   cancel: () => Promise<void>;
   reconcile?: () => Promise<GatewayRuntimeOperation>;
@@ -5143,6 +5153,8 @@ function removeMissingRuntimeOperationAttachments(
     if (!snapshot || !attachedRuntimeOperationPhase(snapshot.phase)) {
       continue;
     }
+    pendingRuntimeOperationLeases.get(operationKey)?.stop();
+    pendingRuntimeOperationLeases.delete(operationKey);
     pendingRuntimeOperationConfirmations.delete(operationKey);
     pendingRuntimeOperationReconciliations.delete(operationKey);
     removeLauncherOperation(operationKey);
@@ -5388,8 +5400,20 @@ async function refreshDirectGatewayRuntimeOperationAttachments(
           confirmation,
           { startPolicy: 'require_ready' },
         ),
+        renew: (expiresAtUnixMS) => gatewayLifecycleManager().renewRuntimeOperation(
+          record,
+          operation.operation_id,
+          expiresAtUnixMS,
+          { startPolicy: 'require_ready' },
+        ),
         complete: (current) => completeRuntimeOperation(current, {
           current_runtime_epoch: management.compatibility?.compatibility_epoch ?? 0,
+          renew: (expiresAtUnixMS) => gatewayLifecycleManager().renewRuntimeOperation(
+            record,
+            operation.operation_id,
+            expiresAtUnixMS,
+            { startPolicy: 'require_ready' },
+          ),
           upload: (metadata, artifact) => gatewayLifecycleManager().uploadRuntimeOperationArtifact(
             record,
             operation.operation_id,
@@ -5484,8 +5508,10 @@ async function refreshProviderRuntimeOperationAttachments(
     upsertRuntimeOperationAttachment(operation, surface, {
       resume_key: `provider:${environment.provider_origin}:${environment.env_public_id}`,
       confirm: (confirmation) => client.confirmRuntimeOperation(scope, operation.operation_id, confirmation),
+      renew: (expiresAtUnixMS) => client.renewRuntimeOperation(scope, operation.operation_id, expiresAtUnixMS),
       complete: (current) => completeRuntimeOperation(current, {
         current_runtime_epoch: management.compatibility!.compatibility_epoch,
+        renew: (expiresAtUnixMS) => client.renewRuntimeOperation(scope, operation.operation_id, expiresAtUnixMS),
         upload: (metadata, artifact) => client.uploadRuntimeOperationArtifact(
           scope,
           operation.operation_id,
@@ -5542,8 +5568,29 @@ function awaitRuntimeOperationConfirmation(
   operationKey: string,
   pending: PendingRuntimeOperationConfirmation,
 ): DesktopLauncherActionFailure {
-  const presentation = projectAttachedRuntimeOperation(pending.operation);
+  const existingLease = pendingRuntimeOperationLeases.get(operationKey);
+  existingLease?.stop();
   pendingRuntimeOperationConfirmations.set(operationKey, pending);
+  const lease = startRuntimeOperationLease(pending.operation, pending.renew, (renewed) => {
+    const current = pendingRuntimeOperationConfirmations.get(operationKey);
+    if (!current || current.operation.operation_id !== renewed.operation_id) {
+      return;
+    }
+    const next = { ...current, operation: renewed };
+    pendingRuntimeOperationConfirmations.set(operationKey, next);
+    const presentation = projectAttachedRuntimeOperation(renewed);
+    launcherOperations.update(operationKey, {
+      phase: presentation.phase,
+      title: presentation.title,
+      title_key: presentation.title_key,
+      detail: presentation.detail,
+      detail_key: presentation.detail_key,
+      runtime_confirmation: presentation.confirmation,
+    });
+    broadcastDesktopWelcomeSnapshots();
+  });
+  pendingRuntimeOperationLeases.set(operationKey, lease);
+  const presentation = projectAttachedRuntimeOperation(pending.operation);
   launcherOperations.finish(operationKey, 'needs_confirmation', {
     phase: presentation.phase,
     title: presentation.title,
@@ -5586,6 +5633,8 @@ async function confirmRuntimeOperationFromLauncher(
       { shouldRefreshSnapshot: true },
     );
   }
+  pendingRuntimeOperationLeases.get(request.operation_key)?.stop();
+  pendingRuntimeOperationLeases.delete(request.operation_key);
   pendingRuntimeOperationConfirmations.delete(request.operation_key);
   const continuingPresentation = projectAttachedRuntimeOperation({
     ...pending.operation,
@@ -6285,6 +6334,14 @@ async function runGatewayEnvironmentLifecycleFromLauncher(
             : 'Initialize this environment before starting a lifecycle operation.';
       throw new GatewayClientError('RUNTIME_NOT_READY', reason);
     }
+    const runtimeIdentityMismatch = management.reason_code === 'runtime_identity_incompatible'
+      || management.reason_code === 'runtime_identity_validation_required';
+    if (runtimeIdentityMismatch && request.operation !== 'update_runtime') {
+      throw new GatewayClientError(
+        'RUNTIME_IDENTITY_MISMATCH',
+        'The managed Runtime files changed outside Desktop. Update the Runtime to restore a verified installation before using this operation.',
+      );
+    }
     let runtimeOperationKind = request.operation;
     if (!management.operations?.includes(runtimeOperationKind)) {
       // Older Runtime supervisors may expose start/stop/update but not the
@@ -6387,6 +6444,12 @@ async function runGatewayEnvironmentLifecycleFromLauncher(
           operation: runtimeOperation,
           label,
           operation_id: operationID,
+          renew: (expiresAtUnixMS) => gatewayLifecycleManager().renewRuntimeOperation(
+            record,
+            operationID,
+            expiresAtUnixMS,
+            { signal, startPolicy: actionStartPolicy },
+          ),
           confirm: async (confirmation) => {
             const confirmed = await gatewayLifecycleManager().confirmRuntimeOperation(
               record,
@@ -6398,6 +6461,12 @@ async function runGatewayEnvironmentLifecycleFromLauncher(
             return completeRuntimeOperation(confirmed, {
               current_runtime_epoch: management.compatibility?.compatibility_epoch ?? 0,
               artifact_preflight: artifactPreflight,
+              renew: (expiresAtUnixMS) => gatewayLifecycleManager().renewRuntimeOperation(
+                record,
+                operationID,
+                expiresAtUnixMS,
+                { signal, startPolicy: actionStartPolicy },
+              ),
               upload: (metadata, artifact) => gatewayLifecycleManager().uploadRuntimeOperationArtifact(
                 record,
                 operationID,
@@ -6444,6 +6513,12 @@ async function runGatewayEnvironmentLifecycleFromLauncher(
     const response = await completeRuntimeOperation(runtimeOperation, {
       current_runtime_epoch: management.compatibility?.compatibility_epoch ?? 0,
       artifact_preflight: artifactPreflight,
+      renew: (expiresAtUnixMS) => gatewayLifecycleManager().renewRuntimeOperation(
+        record,
+        operationID,
+        expiresAtUnixMS,
+        { signal, startPolicy: actionStartPolicy },
+      ),
       upload: (metadata, artifact) => gatewayLifecycleManager().uploadRuntimeOperationArtifact(
         record,
         operationID,
@@ -7104,11 +7179,13 @@ async function runProviderEnvironmentLifecycleFromLauncher(
         return awaitRuntimeOperationConfirmation(operationKey, {
           operation: runtimeOperation,
           label,
+          renew: (expiresAtUnixMS) => client.renewRuntimeOperation(resolved.scope, operationID, expiresAtUnixMS),
           confirm: async (confirmation) => {
             const confirmed = await client.confirmRuntimeOperation(resolved.scope, operationID, confirmation);
             return completeRuntimeOperation(confirmed, {
               current_runtime_epoch: compatibility.compatibility_epoch,
               artifact_preflight: artifactPreflight,
+              renew: (expiresAtUnixMS) => client.renewRuntimeOperation(resolved.scope, operationID, expiresAtUnixMS),
               upload: (metadata, artifact) => client.uploadRuntimeOperationArtifact(
                 resolved.scope,
                 operationID,
@@ -7135,6 +7212,7 @@ async function runProviderEnvironmentLifecycleFromLauncher(
     const response = await completeRuntimeOperation(runtimeOperation, {
       current_runtime_epoch: compatibility.compatibility_epoch,
       artifact_preflight: artifactPreflight,
+      renew: (expiresAtUnixMS) => client.renewRuntimeOperation(resolved.scope, operationID, expiresAtUnixMS),
       upload: (metadata, artifact) => client.uploadRuntimeOperationArtifact(
         resolved.scope,
         operationID,
@@ -7312,6 +7390,19 @@ function gatewayRuntimeLifecycleFailure(
     return null;
   }
   switch (error.code) {
+    case 'RUNTIME_IDENTITY_MISMATCH':
+      return desktopOperationFailurePresentation({
+        code: 'runtime_identity_mismatch',
+        title: 'Runtime verification required',
+        titleKey: 'runtimeMessage.runtimeIdentityMismatchTitle',
+        summary: 'The managed Runtime files changed outside Desktop.',
+        summaryKey: 'runtimeMessage.runtimeIdentityMismatch',
+        detail: 'Desktop found a different Runtime file than the one Gateway previously verified.',
+        detailKey: 'runtimeMessage.runtimeIdentityMismatchDetail',
+        recoveryHint: 'Update the Runtime to restore and verify the managed files.',
+        recoveryHintKey: 'runtimeMessage.runtimeIdentityMismatchRecovery',
+        targetLabel,
+      });
     case 'GATEWAY_INVALID_RESPONSE':
     case 'GATEWAY_PROTOCOL_VERSION_UNSUPPORTED':
     case 'RUNTIME_COMPATIBILITY_UNAVAILABLE':
@@ -16556,6 +16647,8 @@ async function dismissLauncherOperationFromLauncher(
     launcherOperationRemovalTimers.delete(request.operation_key);
   }
   const pendingConfirmation = pendingRuntimeOperationConfirmations.get(request.operation_key);
+  pendingRuntimeOperationLeases.get(request.operation_key)?.stop();
+  pendingRuntimeOperationLeases.delete(request.operation_key);
   if (pendingConfirmation) {
     pendingRuntimeOperationConfirmations.delete(request.operation_key);
     await pendingConfirmation.cancel().catch(() => undefined);

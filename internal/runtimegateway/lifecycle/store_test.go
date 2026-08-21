@@ -384,11 +384,11 @@ func (c *fakeController) ValidateTarget(_ context.Context, _ string, _ gatewaypr
 	return c.validateErr
 }
 
-func (c *fakeController) Snapshot(context.Context, gatewayprotocol.LifecycleTarget) (gatewayprotocol.WorkloadSnapshot, error) {
+func (c *fakeController) Snapshot(context.Context, gatewayprotocol.LifecycleTarget, gatewayprotocol.RuntimeOperationKind) (gatewayprotocol.WorkloadSnapshot, error) {
 	return c.snapshot, nil
 }
 
-func (c *fakeController) BeginLifecycleFence(context.Context, string, gatewayprotocol.LifecycleTarget) (LifecycleFence, error) {
+func (c *fakeController) BeginLifecycleFence(context.Context, string, gatewayprotocol.RuntimeOperationKind, gatewayprotocol.LifecycleTarget) (LifecycleFence, error) {
 	c.begins++
 	return LifecycleFence{Token: c.token, Snapshot: c.fenced}, c.beginErr
 }
@@ -661,8 +661,8 @@ func TestStartDoesNotReconfirmWhenWorkloadChangesAtFence(t *testing.T) {
 	clock := &fakeClock{now: time.Unix(123, 0)}
 	controller := &fakeController{
 		snapshot: knownSnapshot(3),
-		fenced:  knownSnapshot(4, "session:appeared-during-start"),
-		token:   "fence-start-race",
+		fenced:   knownSnapshot(4, "session:appeared-during-start"),
+		token:    "fence-start-race",
 	}
 	store := newTestStore(t, controller, clock)
 	request := prepareRequest("op-start-race", "idem-start-race")
