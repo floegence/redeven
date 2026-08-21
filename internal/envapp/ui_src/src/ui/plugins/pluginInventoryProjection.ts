@@ -436,11 +436,13 @@ function projectAuthorizationFromPermissions(
   const activeByPermission = new Map(grants.map((grant) => [grant.permission_id, grant]));
   const policyCapsPermissions = Boolean(policy && policy.allowed_permissions.length > 0);
   const deniedMethods = new Set(policy?.denied_methods ?? []);
+  const now = Date.now();
   return {
     grants,
     policy,
     permissions: metadata.map((permission) => {
       const grant = activeByPermission.get(permission.permissionID);
+      const decisionIsCurrent = permissionDecisionIsCurrent(grant, now);
       const blockedByPermissionAllowlist = Boolean(
         policy && policyCapsPermissions && !policy.allowed_permissions.includes(permission.permissionID),
       );
@@ -449,8 +451,8 @@ function projectAuthorizationFromPermissions(
         .filter((method) => deniedMethods.has(method));
       return {
         ...permission,
-        granted: grant?.effect === 'grant',
-        deniedByGrant: grant?.effect === 'deny',
+        granted: decisionIsCurrent && grant?.effect === 'grant',
+        deniedByGrant: decisionIsCurrent && grant?.effect === 'deny',
         blockedByPolicy: blockedByPermissionAllowlist || blockedMethods.length > 0,
         grantBlockedByPolicy: blockedByPermissionAllowlist,
         blockedToOpen: blockedByPermissionAllowlist || blockedOpeningMethods.length > 0,
@@ -462,6 +464,16 @@ function projectAuthorizationFromPermissions(
       revokeEpoch: policy?.revoke_epoch ?? installed.revoke_epoch,
     },
   };
+}
+
+function permissionDecisionIsCurrent(
+  decision: PluginPermissionGrant | undefined,
+  now: number,
+): boolean {
+  if (!decision || decision.revoked_at) return false;
+  if (!decision.expires_at) return true;
+  const expiresAt = Date.parse(decision.expires_at);
+  return Number.isFinite(expiresAt) && expiresAt > now;
 }
 
 function groupByPluginInstance(

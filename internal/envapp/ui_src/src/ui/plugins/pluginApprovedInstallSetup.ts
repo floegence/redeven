@@ -3,12 +3,14 @@ import type { PluginInventoryItem, PluginInventoryProjection } from './pluginTyp
 
 type ApprovedInstallLifecycle = Pick<PluginLifecycleAPI, 'execute'>;
 
+export type ApprovedOfficialInstallSetupResult = 'ready' | 'superseded';
+
 export async function completeApprovedOfficialInstall(options: Readonly<{
   pluginInstanceID: string;
   lifecycle: ApprovedInstallLifecycle;
   refreshInventory: () => Promise<PluginInventoryProjection | undefined>;
   signal?: AbortSignal;
-}>): Promise<void> {
+}>): Promise<ApprovedOfficialInstallSetupResult> {
   const attemptedPermissions = new Set<string>();
   let item = await requireInstalledItem(options);
 
@@ -19,6 +21,13 @@ export async function completeApprovedOfficialInstall(options: Readonly<{
       && !attemptedPermissions.has(candidate.permissionID)
     ));
     if (!permission) break;
+    const previousDecision = item.authorization?.grants.find((grant) => (
+      grant.permission_id === permission.permissionID
+    ));
+    // A denied, revoked, or expired decision is newer user/security intent.
+    // Installation recovery may complete untouched reviewed grants, but it
+    // must never overwrite a decision that already has durable history.
+    if (previousDecision) return 'superseded';
     if (permission.grantBlockedByPolicy) {
       throw new Error(`Required plugin permission is blocked by policy: ${permission.permissionID}`);
     }
@@ -43,21 +52,14 @@ export async function completeApprovedOfficialInstall(options: Readonly<{
     throw new Error(`Required plugin permission was not granted: ${unresolved.permissionID}`);
   }
 
-  if (item.lifecycleState === 'disabled') {
-    if (item.managementRevision === undefined) {
-      throw new Error('Installed plugin management revision is unavailable');
-    }
-    await options.lifecycle.execute({
-      type: 'enable',
-      pluginInstanceID: options.pluginInstanceID,
-      expectedManagementRevision: item.managementRevision,
-    }, { signal: options.signal });
-    item = await requireInstalledItem(options);
-  }
+  // Fresh official installs commit enabled. A disabled record therefore
+  // represents newer user intent and is not installation recovery work.
+  if (item.lifecycleState === 'disabled') return 'superseded';
 
   if (item.lifecycleState !== 'enabled' && item.lifecycleState !== 'update_available') {
     throw new Error(`Installed plugin is not ready to open: ${item.lifecycleState}`);
   }
+  return 'ready';
 }
 
 async function requireInstalledItem(options: Readonly<{

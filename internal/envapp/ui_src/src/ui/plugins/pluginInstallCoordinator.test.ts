@@ -62,28 +62,69 @@ function harness(overrides: Record<string, unknown> = {}) {
   let requestSequence = 0;
   const createRequestID = vi.fn(() => `request-${++requestSequence}`);
   const completeApprovedInstall = typeof completeApprovedInstallOverride === 'function'
-    ? completeApprovedInstallOverride as (pluginInstanceID: string, signal?: AbortSignal) => Promise<unknown>
-    : vi.fn(async () => undefined);
+    ? completeApprovedInstallOverride as (pluginInstanceID: string, signal?: AbortSignal) => Promise<'ready' | 'superseded'>
+    : vi.fn(async () => 'ready' as const);
+  const installFence = { managementRevision: 11, generation: 1 };
+  const captureInstallRetirementFence = vi.fn(() => installFence);
+  const onInstallReady = vi.fn();
   const coordinator = createPluginInstallCoordinator({
     lifecycle: lifecycle as never,
     refreshInventory,
     refreshMarket,
     completeApprovedInstall,
+    captureInstallRetirementFence,
+    onInstallReady,
     createRequestID,
     resolvePluginID: (candidate) => candidate === pluginInstanceID ? 'com.redeven.official.containers' : undefined,
   });
-  return { coordinator, lifecycle, refreshInventory, refreshMarket, completeApprovedInstall, createRequestID };
+  return {
+    coordinator,
+    lifecycle,
+    refreshInventory,
+    refreshMarket,
+    completeApprovedInstall,
+    captureInstallRetirementFence,
+    installFence,
+    onInstallReady,
+    createRequestID,
+  };
 }
 
 describe('plugin install execution coordinator', () => {
   it('submits one Host execution and removes presentation after authoritative inventory refresh', async () => {
-    const { coordinator, lifecycle, refreshInventory, completeApprovedInstall } = harness();
+    const { coordinator, lifecycle, refreshInventory, completeApprovedInstall, installFence, onInstallReady } = harness();
 
     await coordinator.start('com.redeven.official.containers', pluginInstanceID, inspection());
 
     expect(lifecycle.installOfficialRelease).toHaveBeenCalledOnce();
     expect(refreshInventory).toHaveBeenCalledOnce();
     expect(completeApprovedInstall).toHaveBeenCalledWith(pluginInstanceID, expect.any(AbortSignal));
+    expect(onInstallReady).toHaveBeenCalledWith(pluginInstanceID, installFence);
+    expect(coordinator.projections()).toEqual([]);
+  });
+
+  it('does not replay successful post-install setup when the completed execution is listed again', async () => {
+    const completed = execution();
+    const { coordinator, completeApprovedInstall, onInstallReady } = harness({
+      listReleaseInstallExecutions: vi.fn(async () => [completed]),
+    });
+
+    await coordinator.start('com.redeven.official.containers', pluginInstanceID, inspection());
+    await coordinator.resume();
+
+    expect(completeApprovedInstall).toHaveBeenCalledOnce();
+    expect(onInstallReady).toHaveBeenCalledOnce();
+    expect(coordinator.projections()).toEqual([]);
+  });
+
+  it('does not clear an install fence when later lifecycle intent supersedes setup', async () => {
+    const completeApprovedInstall = vi.fn(async () => 'superseded' as const);
+    const { coordinator, onInstallReady } = harness({ completeApprovedInstall });
+
+    await coordinator.start('com.redeven.official.containers', pluginInstanceID, inspection());
+
+    expect(completeApprovedInstall).toHaveBeenCalledOnce();
+    expect(onInstallReady).not.toHaveBeenCalled();
     expect(coordinator.projections()).toEqual([]);
   });
 
@@ -279,7 +320,9 @@ describe('plugin install execution coordinator', () => {
       lifecycle: lifecycle as never,
       refreshInventory,
       refreshMarket: vi.fn(async () => undefined),
-      completeApprovedInstall: vi.fn(async () => undefined),
+      completeApprovedInstall: vi.fn(async () => 'ready' as const),
+      captureInstallRetirementFence: vi.fn(() => undefined),
+      onInstallReady: vi.fn(),
       createRequestID: () => 'request-1',
       resolvePluginID: () => 'com.redeven.official.containers',
     });
@@ -296,8 +339,8 @@ describe('plugin install execution coordinator', () => {
   it('keeps a committed install retryable when approved permission setup fails', async () => {
     const completeApprovedInstall = vi.fn()
       .mockRejectedValueOnce(new Error('grant failed'))
-      .mockResolvedValueOnce(undefined);
-    const { coordinator } = harness({ completeApprovedInstall });
+      .mockResolvedValueOnce('ready' as const);
+    const { coordinator, onInstallReady } = harness({ completeApprovedInstall });
 
     await coordinator.start('com.redeven.official.containers', pluginInstanceID, inspection());
 
@@ -306,8 +349,10 @@ describe('plugin install execution coordinator', () => {
       observation: 'activation_failed',
       execution: { status: 'completed' },
     });
+    expect(onInstallReady).not.toHaveBeenCalled();
     await coordinator.retry(pluginInstanceID);
     expect(completeApprovedInstall).toHaveBeenCalledTimes(2);
+    expect(onInstallReady).toHaveBeenCalledOnce();
     expect(coordinator.projections()).toEqual([]);
   });
 
@@ -325,7 +370,7 @@ describe('plugin install execution coordinator', () => {
 
   it('finishes a completed install after the UI restarts', async () => {
     const completed = execution();
-    const { coordinator, refreshInventory, completeApprovedInstall } = harness({
+    const { coordinator, refreshInventory, completeApprovedInstall, onInstallReady } = harness({
       listReleaseInstallExecutions: vi.fn(async () => [completed]),
     });
 
@@ -333,6 +378,7 @@ describe('plugin install execution coordinator', () => {
 
     expect(refreshInventory).toHaveBeenCalledOnce();
     expect(completeApprovedInstall).toHaveBeenCalledWith(pluginInstanceID, undefined);
+    expect(onInstallReady).not.toHaveBeenCalled();
     expect(coordinator.projections()).toEqual([]);
   });
 });

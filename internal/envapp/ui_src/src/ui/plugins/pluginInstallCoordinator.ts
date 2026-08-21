@@ -8,6 +8,7 @@ import {
 } from '@floegence/redevplugin-ui';
 
 import type { PluginLifecycleAPI } from './pluginApi';
+import type { ApprovedOfficialInstallSetupResult } from './pluginApprovedInstallSetup';
 import type { OfficialPluginReleaseInspection, PluginInstallExecutionProjection } from './pluginTypes';
 
 type InstallLifecycle = Pick<
@@ -24,6 +25,11 @@ const RECENT_TERMINAL_FAILURE_MS = 24 * 60 * 60 * 1_000;
 const REATTACH_BASE_DELAY_MS = 250;
 const REATTACH_MAX_DELAY_MS = 5_000;
 const INVENTORY_REFRESH_TIMEOUT_MS = 8_000;
+
+export type PluginInstallRetirementFence = Readonly<{
+  managementRevision: number;
+  generation: number;
+}>;
 
 export type PluginInstallCoordinator = Readonly<{
   projections: Accessor<readonly PluginInstallExecutionProjection[]>;
@@ -42,13 +48,20 @@ export function createPluginInstallCoordinator(options: Readonly<{
   lifecycle: InstallLifecycle;
   refreshInventory: () => Promise<unknown>;
   refreshMarket: () => Promise<unknown>;
-  completeApprovedInstall: (pluginInstanceID: string, signal?: AbortSignal) => Promise<unknown>;
+  completeApprovedInstall: (
+    pluginInstanceID: string,
+    signal?: AbortSignal,
+  ) => Promise<ApprovedOfficialInstallSetupResult>;
+  captureInstallRetirementFence: (pluginInstanceID: string) => PluginInstallRetirementFence | undefined;
+  onInstallReady: (pluginInstanceID: string, fence: PluginInstallRetirementFence) => void;
   createRequestID: () => string;
   resolvePluginID: (pluginInstanceID: string) => string | undefined;
 }>): PluginInstallCoordinator {
   const [projections, setProjections] = createSignal<readonly PluginInstallExecutionProjection[]>([]);
   const tasks = new Map<string, Promise<void>>();
   const controllers = new Map<string, AbortController>();
+  const completedPostInstallExecutionByInstanceID = new Map<string, string>();
+  const installRetirementFenceByInstanceID = new Map<string, PluginInstallRetirementFence>();
   let disposed = false;
 
   const projectionFor = (pluginInstanceID: string) => (
@@ -87,6 +100,10 @@ export function createPluginInstallCoordinator(options: Readonly<{
       put({ ...projection, observation: 'failed' });
       return;
     }
+    if (completedPostInstallExecutionByInstanceID.get(projection.pluginInstanceID) === execution.execution_id) {
+      remove(projection.pluginInstanceID);
+      return;
+    }
     put({ ...projection, observation: 'refreshing' });
     try {
       await withTimeout(
@@ -101,7 +118,16 @@ export function createPluginInstallCoordinator(options: Readonly<{
     }
     put({ ...projection, observation: 'authorizing' });
     try {
-      await options.completeApprovedInstall(projection.pluginInstanceID, signal);
+      const setup = await options.completeApprovedInstall(projection.pluginInstanceID, signal);
+      if (setup === 'ready') {
+        const fence = installRetirementFenceByInstanceID.get(projection.pluginInstanceID);
+        if (fence) options.onInstallReady(projection.pluginInstanceID, fence);
+      }
+      completedPostInstallExecutionByInstanceID.set(
+        projection.pluginInstanceID,
+        execution.execution_id,
+      );
+      installRetirementFenceByInstanceID.delete(projection.pluginInstanceID);
       remove(projection.pluginInstanceID);
     } catch {
       put({ ...projection, observation: 'activation_failed' });
@@ -165,7 +191,13 @@ export function createPluginInstallCoordinator(options: Readonly<{
     pluginInstanceID: string,
     resolveInspection: (signal: AbortSignal) => Promise<OfficialPluginReleaseInspection>,
     existingSubmission?: NonNullable<PluginInstallExecutionProjection['submission']>,
+    captureRetirementFence = false,
   ): Promise<void> => runExclusive(pluginInstanceID, async () => {
+    if (captureRetirementFence) {
+      const fence = options.captureInstallRetirementFence(pluginInstanceID);
+      if (fence) installRetirementFenceByInstanceID.set(pluginInstanceID, fence);
+      else installRetirementFenceByInstanceID.delete(pluginInstanceID);
+    }
     const controller = new AbortController();
     controllers.get(pluginInstanceID)?.abort('Plugin installation submission superseded');
     controllers.set(pluginInstanceID, controller);
@@ -258,7 +290,13 @@ export function createPluginInstallCoordinator(options: Readonly<{
     pluginID: string,
     pluginInstanceID: string,
     inspection: OfficialPluginReleaseInspection,
-  ): Promise<void> => startWithInspection(pluginID, pluginInstanceID, async () => inspection);
+  ): Promise<void> => startWithInspection(
+    pluginID,
+    pluginInstanceID,
+    async () => inspection,
+    undefined,
+    true,
+  );
 
   const startWithFreshInspection = (
     pluginID: string,
@@ -288,6 +326,10 @@ export function createPluginInstallCoordinator(options: Readonly<{
     const now = Date.now();
     await Promise.all([...latestByPlugin.values()].flatMap((execution) => {
       if (execution.status === 'completed') {
+        if (completedPostInstallExecutionByInstanceID.get(execution.plugin_instance_id) === execution.execution_id) {
+          remove(execution.plugin_instance_id);
+          return [];
+        }
         const projection: PluginInstallExecutionProjection = {
           pluginID: options.resolvePluginID(execution.plugin_instance_id) ?? '',
           pluginInstanceID: execution.plugin_instance_id,
@@ -364,6 +406,8 @@ export function createPluginInstallCoordinator(options: Readonly<{
     disposed = true;
     for (const controller of controllers.values()) controller.abort('Env App shell disposed');
     controllers.clear();
+    completedPostInstallExecutionByInstanceID.clear();
+    installRetirementFenceByInstanceID.clear();
   };
 
   return Object.freeze({ projections, start, resume, retry, discardRetainedDataAndRetry, dispose });

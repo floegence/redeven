@@ -92,7 +92,10 @@ export function createPluginLifecycleAPI(
     const [permissionsResult, securityPoliciesResult, permissionRequirementResults] = installedPlugins.length > 0
       ? await Promise.all([
       withAbortTimeout(
-        (signal) => client.listPermissions({ active_only: true }, { ...options, signal }),
+        // Installation recovery must see deny, revoked, and expired decisions
+        // so it cannot mistake historical user intent for a never-reviewed
+        // permission. The projection below computes current grant activity.
+        (signal) => client.listPermissions({ active_only: false }, { ...options, signal }),
         options.signal,
         INVENTORY_MARKET_TIMEOUT_MS,
         'Loading plugin permissions',

@@ -79,24 +79,38 @@ describe('approved official install setup', () => {
     expect(lifecycle.execute).toHaveBeenCalledTimes(2);
   });
 
-  it('uses the released enable API only when the committed inventory is actually disabled', async () => {
+  it('does not overwrite a later user disable while recovering a completed install', async () => {
     const lifecycle = { execute: vi.fn(async () => ({})) };
-    const inventories = [
-      projection(item(['containers.read', 'containers.execute'], 'disabled')),
-      projection(item(['containers.read', 'containers.execute'], 'enabled')),
-    ];
+    const disabled = item(['containers.read', 'containers.execute'], 'disabled');
 
-    await completeApprovedOfficialInstall({
+    await expect(completeApprovedOfficialInstall({
       pluginInstanceID,
       lifecycle: lifecycle as never,
-      refreshInventory: vi.fn(async () => inventories.shift()),
-    });
+      refreshInventory: vi.fn(async () => projection(disabled)),
+    })).resolves.toBe('superseded');
 
-    expect(lifecycle.execute).toHaveBeenCalledWith({
-      type: 'enable',
+    expect(lifecycle.execute).not.toHaveBeenCalled();
+  });
+
+  it('does not restore a required permission that the user revoked after installation', async () => {
+    const lifecycle = { execute: vi.fn(async () => ({})) };
+    const revoked = item(['containers.execute']);
+    revoked.authorization!.grants = [{
+      plugin_instance_id: pluginInstanceID,
+      permission_id: 'containers.read',
+      effect: 'grant',
+      granted_at: '2026-08-21T01:00:00Z',
+      revoked_at: '2026-08-21T02:00:00Z',
+      revoked_reason: 'user',
+    }];
+
+    await expect(completeApprovedOfficialInstall({
       pluginInstanceID,
-      expectedManagementRevision: 7,
-    }, { signal: undefined });
+      lifecycle: lifecycle as never,
+      refreshInventory: vi.fn(async () => projection(revoked)),
+    })).resolves.toBe('superseded');
+
+    expect(lifecycle.execute).not.toHaveBeenCalled();
   });
 
   it('fails without issuing a grant when local policy blocks required access', async () => {

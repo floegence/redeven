@@ -499,7 +499,7 @@ describe('plugin lifecycle client integration', () => {
     releaseCatalog();
     await expect(loading).resolves.toMatchObject({ items: expect.any(Array) });
     expect(mocks.listPermissions).toHaveBeenCalledWith(
-      { active_only: true },
+      { active_only: false },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     expect(mocks.listSecurityPolicies).toHaveBeenCalledWith(
@@ -509,6 +509,74 @@ describe('plugin lifecycle client integration', () => {
       { plugin_instance_id: generatedContainersInstanceID },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
+  });
+
+  it.each([
+    {
+      name: 'denied',
+      decision: {
+        plugin_instance_id: generatedContainersInstanceID,
+        permission_id: 'containers.read',
+        effect: 'deny' as const,
+        granted_at: '2026-08-12T16:13:36Z',
+      },
+      deniedByGrant: true,
+    },
+    {
+      name: 'revoked',
+      decision: {
+        plugin_instance_id: generatedContainersInstanceID,
+        permission_id: 'containers.read',
+        effect: 'grant' as const,
+        granted_at: '2026-08-12T16:13:36Z',
+        revoked_at: '2026-08-13T16:13:36Z',
+      },
+      deniedByGrant: false,
+    },
+    {
+      name: 'expired',
+      decision: {
+        plugin_instance_id: generatedContainersInstanceID,
+        permission_id: 'containers.read',
+        effect: 'grant' as const,
+        granted_at: '2000-01-01T00:00:00Z',
+        expires_at: '2000-01-02T00:00:00Z',
+      },
+      deniedByGrant: false,
+    },
+  ])('retains a full $name permission decision without projecting it as an active grant', async ({
+    decision,
+    deniedByGrant,
+  }) => {
+    const { lifecycle, mocks } = createClientHarness();
+    mocks.catalog.mockResolvedValue({ plugins: [generatedContainersRecord] });
+    mocks.listPermissions.mockResolvedValue({ permissions: [decision] });
+    mocks.getPermissionRequirements.mockResolvedValue({
+      plugin_instance_id: generatedContainersInstanceID,
+      plugin_version: OFFICIAL_CONTAINERS_RELEASE_REF.version,
+      active_fingerprint: OFFICIAL_CONTAINERS_RELEASE_REF.expected_hashes.package_sha256,
+      management_revision: 23,
+      required_permissions: ['containers.read'],
+      contracts: [],
+    });
+
+    const projection = await lifecycle.loadInventoryProjection();
+    const installed = projection.items.find((item) => (
+      item.pluginInstanceID === generatedContainersInstanceID
+    ));
+
+    expect(mocks.listPermissions).toHaveBeenCalledWith(
+      { active_only: false },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(installed?.authorization).toMatchObject({
+      grants: [decision],
+      permissions: expect.arrayContaining([expect.objectContaining({
+        permissionID: 'containers.read',
+        granted: false,
+        deniedByGrant,
+      })]),
+    });
   });
 
   it('keeps the installed record when permission requirements are unavailable', async () => {
