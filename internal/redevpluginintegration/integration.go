@@ -37,7 +37,6 @@ type Options struct {
 	Containers           *containers.Adapter
 	RuntimeAuthority     *RuntimeProcessAuthority
 	PluginMarket         *pluginmarket.Service
-	releaseTrustNow      func() time.Time
 	newReleaseModule     func(string) (*host.ReleaseModule, host.PluginReleaseRef, func() error, error)
 }
 
