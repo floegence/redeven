@@ -60,6 +60,23 @@ test("development entrypoints explicitly enforce Node major 26", () => {
   assert.doesNotMatch(pluginSmoke, /\/node\/v24\./);
 });
 
+test("dev Desktop installs dependencies before resolving Electron", () => {
+  const desktop = source("scripts/dev_desktop.sh");
+  const mainStart = desktop.indexOf("main() {");
+  const dependencyInstall = desktop.indexOf("\n  ensure_desktop_dependencies\n", mainStart);
+  const desktopStart = desktop.indexOf("\n  start_desktop\n", mainStart);
+  const dependencyFunction = desktop.indexOf("ensure_desktop_dependencies() {");
+  const dependencyFunctionEnd = desktop.indexOf("\n}\n", dependencyFunction);
+
+  assert.ok(mainStart >= 0, "dev Desktop must have a main entrypoint");
+  assert.ok(dependencyInstall >= 0, "dev Desktop must preflight dependencies");
+  assert.ok(desktopStart >= 0, "dev Desktop must start after dependency preflight");
+  assert.ok(dependencyInstall < desktopStart, "dependency installation must precede Desktop start");
+  assert.ok(dependencyFunctionEnd > dependencyFunction, "dependency preflight must be a complete function");
+  assert.match(desktop.slice(dependencyFunction, dependencyFunctionEnd), /npm ci/);
+  assert.match(desktop.slice(dependencyFunction, dependencyFunctionEnd), /require\.resolve\("electron"\)/);
+});
+
 test("canonical and localized READMEs publish the exact Node 26 badge and prerequisite", () => {
   const localeManifest = JSON.parse(source("assets/readme/locales.json"));
   for (const { file } of localeManifest.locales) {
