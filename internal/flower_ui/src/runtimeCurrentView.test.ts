@@ -47,17 +47,17 @@ describe('applyFlowerRuntimeCurrentView', () => {
     expect(result.messages[0]).toMatchObject({ id: 'assistant:turn-a:1', content: 'same reply' });
   });
 
-  it('keeps the later assistant segment when it contains an earlier repeated reply', () => {
+  it('keeps assistant messages with different stable identities even when text repeats', () => {
     const repeated = 'Current weather in Changsha: temperature 28-29C, humidity 85%, forecast is clear and dry.';
     const result = applyFlowerRuntimeCurrentView(summary(), {
       thread_id: 'thread-a', view_version: 10, activity: 'idle', turn_id: 'turn-a', last_outcome: 'completed',
       items: [
         { id: 'assistant:turn-a:1', turn_id: 'turn-a', ordinal: 1, kind: 'assistant', text: repeated },
-        { id: 'assistant:turn-a:2', turn_id: 'turn-a', ordinal: 2, kind: 'assistant', text: `I verified the sources. ${repeated}` },
+        { id: 'assistant:turn-a:2', turn_id: 'turn-a', ordinal: 2, kind: 'assistant', text: repeated },
       ],
     });
 
-    expect(result.messages.map((message) => message.id)).toEqual(['assistant:turn-a:2']);
+    expect(result.messages.map((message) => message.id)).toEqual(['assistant:turn-a:1', 'assistant:turn-a:2']);
   });
 
   it('projects an interrupted runtime outcome as a visible failed turn', () => {

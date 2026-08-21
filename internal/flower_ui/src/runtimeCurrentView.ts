@@ -196,16 +196,7 @@ function runtimeMessages(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentV
       ...(references ? { references } : {}),
     });
   }
-  return messages.filter((message, index) => {
-    if (message.role !== 'assistant' || !trim(message.content) || !trim(message.turn_id)) return true;
-    const content = trim(message.content).replace(/\s+/g, ' ');
-    if (content.length < 80) return true;
-    return !messages.slice(index + 1).some((candidate) => (
-      candidate.role === 'assistant'
-      && trim(candidate.turn_id) === trim(message.turn_id)
-      && trim(candidate.content).replace(/\s+/g, ' ').includes(content)
-    ));
-  });
+  return messages;
 }
 
 function runtimeApprovalActions(
