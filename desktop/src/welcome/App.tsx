@@ -7043,7 +7043,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         onConfirm={() => void confirmLocalEnvironmentReinstall()}
       >
         <div class="space-y-2">
-          <p class="text-sm font-medium">{i18n().t('confirm.reinstallRequiredDescription')}</p>
+          <Show when={reinstallLocalTarget()?.reinstall_required === true}>
+            <p class="text-sm font-medium">{i18n().t('confirm.reinstallRequiredDescription')}</p>
+          </Show>
           <p class="text-sm">{i18n().t('confirm.reinstallTargetDescription')}</p>
           <p class="text-xs font-medium text-destructive">{i18n().t('confirm.reinstallIrreversible')}</p>
         </div>
