@@ -1319,7 +1319,7 @@
   },
   "confirm": {
     "reinstallTargetTitle": "重装此环境？",
-    "reinstallTargetConfirm": "重装",
+    "reinstallTargetConfirm": "重装 Redeven",
     "reinstallTargetDescription": "这会永久删除已登记的整个 Redeven 环境，包括 Gateway、运行时、工作区、项目、应用数据、Floret 和 ReDevPlugin 数据、信任信息、身份、Catalog 与环境配置。操作不可撤销，完成后必须重新配对。",
     "reinstallRequiredDescription": "此环境包含不兼容状态，重装是唯一安全的恢复方式。",
     "reinstallIrreversible": "此操作不可撤销。",
@@ -1525,6 +1525,7 @@
     "continue": "继续",
     "manageInDesktop": "在 Desktop 中管理",
     "updateRedevenDesktop": "更新 Redeven Desktop",
+    "reinstallRedeven": "重装 Redeven",
     "unavailableTrigger": "{label} 不可用。显示恢复选项。",
     "initializeAndOpen": "初始化并打开",
     "startAndOpen": "启动并打开",

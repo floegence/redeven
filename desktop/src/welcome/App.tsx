@@ -901,6 +901,7 @@ function localizedEnvironmentActionLabel(i18n: DesktopI18n, label: string): stri
     'Update': 'environmentAction.updateRuntime',
     'Update Gateway': 'environmentCenter.gatewayActionUpdate',
     Reinstall: 'common.reinstall',
+    'Reinstall Redeven': 'environmentAction.reinstallRedeven',
     'Pair Gateway': 'environmentCenter.gatewayPanelPairThisGatewayAria',
     // Keep legacy route-qualified plans user-facing neutral if an older
     // snapshot still contains those labels.
@@ -5262,7 +5263,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       case 'refresh_runtime':
         return refreshEnvironmentRuntime(environment, errorTarget);
       case 'reinstall_target':
-        if (environment.kind !== 'local_environment' || environment.reinstall_required !== true) {
+        if (environment.kind !== 'local_environment') {
           return false;
         }
         setReinstallLocalTarget(environment);
@@ -7035,7 +7036,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           if (!open) setReinstallLocalTarget(null);
         }}
         title={i18n().t('confirm.reinstallTargetTitle')}
-        confirmText={i18n().t('common.reinstall')}
+        confirmText={i18n().t('confirm.reinstallTargetConfirm')}
         cancelText={i18n().t('common.cancel')}
         variant="destructive"
         loading={busyStateMatchesAction(busyState(), 'reset_local_environment')}

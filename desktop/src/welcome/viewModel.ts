@@ -1575,6 +1575,18 @@ function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly Envi
       }
     }
   }
+  if (environment.kind === 'local_environment') {
+    items.push({
+      id: 'reinstall_target',
+      label: 'Reinstall Redeven',
+      action: {
+        intent: 'reinstall_target',
+        label: 'Reinstall Redeven',
+        enabled: true,
+        variant: 'outline',
+      },
+    });
+  }
   const runtimeProviderLinkAction = runtimeProviderLinkMenuAction(environment);
   if (runtimeProviderLinkAction) {
     items.push(runtimeProviderLinkAction);
@@ -2021,7 +2033,7 @@ export function buildProviderBackedEnvironmentActionModel(
   const primaryAction = environment.kind === 'local_environment' && environment.reinstall_required === true
     ? {
         intent: 'reinstall_target' as const,
-        label: 'Reinstall',
+        label: 'Reinstall Redeven',
         enabled: true,
         variant: 'default' as const,
       }

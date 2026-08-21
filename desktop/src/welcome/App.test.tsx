@@ -1609,6 +1609,10 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('confirmRuntimeMaintenance');
     expect(appSrc).toContain('force_runtime_update');
     expect(appSrc).toContain('forceRuntimeUpdate: true');
+    expect(appSrc).toContain("'Reinstall Redeven': 'environmentAction.reinstallRedeven'");
+    expect(appSrc).toContain("confirmText={i18n().t('confirm.reinstallTargetConfirm')}");
+    expect(appSrc).toContain("if (environment.kind !== 'local_environment') {");
+    expect(appSrc).not.toContain("environment.reinstall_required !== true");
     expect(appSrc).not.toContain('allow_active_work_replacement');
     expect(appSrc).not.toContain('allowActiveWorkReplacement: true');
     expect(appSrc).not.toContain('continueLauncherOperation');

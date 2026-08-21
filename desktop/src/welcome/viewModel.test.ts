@@ -541,11 +541,33 @@ describe('buildEnvironmentDisplayStateModel', () => {
 
     expect(model.action_presentation.primary_action).toMatchObject({
       intent: 'reinstall_target',
-      label: 'Reinstall',
+      label: 'Reinstall Redeven',
       enabled: true,
     });
     expect(model.action_presentation.menu_actions).toEqual([]);
     expect(model.action_presentation.primary_action_overlay).toBeUndefined();
+  });
+
+  it('keeps Reinstall Redeven in the normal Local Environment runtime menu', () => {
+    const local = testLocalEnvironment();
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({ local_environment: local }),
+    });
+    const entry = snapshot.environments.find((candidate) => candidate.id === local.id);
+    expect(entry).toBeTruthy();
+
+    const model = buildProviderBackedEnvironmentActionModel(entry!);
+
+    expect(model.action_presentation.menu_actions).toEqual(expect.arrayContaining([{
+      id: 'reinstall_target',
+      label: 'Reinstall Redeven',
+      action: {
+        intent: 'reinstall_target',
+        label: 'Reinstall Redeven',
+        enabled: true,
+        variant: 'outline',
+      },
+    }]));
   });
 
   it('requires Gateway pairing before reopening a freshly reinstalled Local Environment', () => {

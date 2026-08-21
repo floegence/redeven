@@ -1319,7 +1319,7 @@
   },
   "confirm": {
     "reinstallTargetTitle": "この環境を再インストールしますか？",
-    "reinstallTargetConfirm": "再インストール",
+    "reinstallTargetConfirm": "Redeven を再インストール",
     "reinstallTargetDescription": "登録済みの Redeven 環境全体（Gateway、ランタイム、ワークスペース、プロジェクト、アプリデータ、Floret と ReDevPlugin のデータ、信頼情報、ID、Catalog、環境設定）を完全に削除します。この操作は元に戻せません。完了後に再ペアリングが必要です。",
     "reinstallRequiredDescription": "この環境には互換性のない状態があります。安全に復旧する唯一の方法は再インストールです。",
     "reinstallIrreversible": "この操作は元に戻せません。",
@@ -1525,6 +1525,7 @@
     "continue": "続行",
     "manageInDesktop": "Desktop で管理",
     "updateRedevenDesktop": "Redeven Desktop を更新",
+    "reinstallRedeven": "Redeven を再インストール",
     "unavailableTrigger": "{label} は利用できません。復旧オプションを表示します。",
     "initializeAndOpen": "初期化して開く",
     "startAndOpen": "起動して開く",

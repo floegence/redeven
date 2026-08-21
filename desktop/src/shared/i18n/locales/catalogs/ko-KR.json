@@ -1319,7 +1319,7 @@
   },
   "confirm": {
     "reinstallTargetTitle": "이 환경을 재설치할까요?",
-    "reinstallTargetConfirm": "재설치",
+    "reinstallTargetConfirm": "Redeven 재설치",
     "reinstallTargetDescription": "등록된 Redeven 환경 전체를 영구적으로 삭제합니다. Gateway, 런타임, 작업 공간, 프로젝트, 앱 데이터, Floret 및 ReDevPlugin 데이터, 신뢰 정보, ID, Catalog, 환경 설정이 모두 포함됩니다. 이 작업은 되돌릴 수 없으며 완료 후 다시 페어링해야 합니다.",
     "reinstallRequiredDescription": "이 환경에는 호환되지 않는 상태가 있습니다. 안전하게 복구하는 유일한 방법은 재설치입니다.",
     "reinstallIrreversible": "이 작업은 되돌릴 수 없습니다.",
@@ -1525,6 +1525,7 @@
     "continue": "계속",
     "manageInDesktop": "Desktop에서 관리",
     "updateRedevenDesktop": "Redeven Desktop 업데이트",
+    "reinstallRedeven": "Redeven 재설치",
     "unavailableTrigger": "{label}을(를) 사용할 수 없습니다. 복구 옵션을 표시합니다.",
     "initializeAndOpen": "초기화하고 열기",
     "startAndOpen": "시작하고 열기",
