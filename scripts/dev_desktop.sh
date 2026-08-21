@@ -605,6 +605,20 @@ ensure_desktop_workspace() {
   fi
 }
 
+ensure_desktop_dependencies() {
+  if [ "$DRY_RUN" -eq 1 ]; then
+    return 0
+  fi
+
+  (
+    cd "$DESKTOP_DIR"
+    if ui_pkg_need_install "$DESKTOP_DIR" || ! node -e 'require.resolve("electron")' >/dev/null 2>&1; then
+      ui_pkg_log "Installing Desktop dependencies before resolving Electron..."
+      npm ci
+    fi
+  )
+}
+
 prepare_instance_bundle_snapshot() {
 	local snapshots_root build_root working_bundle manifest_digest snapshot_root
 	snapshots_root="$DEVELOPMENT_STATE_ROOT/desktop/bundles"
@@ -693,9 +707,6 @@ start_desktop() {
 
   (
     cd "$DESKTOP_DIR"
-    if ui_pkg_need_install "$DESKTOP_DIR"; then
-      npm ci
-    fi
     export REDEVEN_DESKTOP_OPEN_DEVTOOLS="$OPEN_DEVTOOLS"
     export REDEVEN_DESKTOP_AUTO_START_RUNTIME="${REDEVEN_DESKTOP_AUTO_START_RUNTIME:-1}"
     export REDEVEN_STATE_ROOT="$DEVELOPMENT_STATE_ROOT"
@@ -800,6 +811,7 @@ main() {
   fi
   verify_development_ports
   ensure_desktop_workspace
+  ensure_desktop_dependencies
   start_desktop
 }
 
