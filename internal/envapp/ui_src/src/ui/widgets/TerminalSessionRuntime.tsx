@@ -67,6 +67,13 @@ const MAX_TERMINAL_COLS = 500;
 const MAX_TERMINAL_ROWS = 200;
 const RECONNECT_DELAYS_MS = [100, 300, 900] as const;
 
+function emitTerminalDebugTrace(event: Readonly<Record<string, unknown>>): void {
+  const target = globalThis as typeof globalThis & {
+    __floetermSemanticTrace?: (event: Readonly<Record<string, unknown>>) => void;
+  };
+  target.__floetermSemanticTrace?.(event);
+}
+
 export function shouldPublishTerminalOutputCoverage(
   previousAttachGeneration: number,
   previousCoveredThroughSequence: number,
@@ -222,6 +229,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   const [controllerRevision, setControllerRevision] = createSignal(0);
 
   let host: HTMLDivElement | null = null;
+  let runtimeRoot: HTMLDivElement | null = null;
   let canvas: HTMLCanvasElement | null = null;
   let inputElement: HTMLTextAreaElement | null = null;
   let renderer: RendererSurface | null = null;
@@ -255,6 +263,9 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   let searchCallback: ((result: SemanticTerminalSearchResult) => void) | null = null;
   let retryHistoryRequest: (() => void) | null = null;
   let lastBell = 0;
+  let wheelSequence = 0;
+  let measuredWheelSequence = 0;
+  let lastWheelAt = 0;
   let geometryLifecycleEpoch = 0;
   let geometryRendererEpoch = 1;
   let geometryRequestEpoch = 0;
@@ -744,6 +755,16 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     request: SemanticHistoryRequest,
   ): Promise<SemanticHistoryViewport> => {
     const traceEpoch = historyRequestEpoch;
+    const requestStartedAt = performance.now();
+    emitTerminalDebugTrace({
+      kind: 'history-request-start',
+      at: requestStartedAt,
+      direction: request.direction,
+      offset: request.offset ?? 0,
+      targetOffset: request.targetOffset ?? null,
+      viewportRows: request.viewportRows,
+      windowRows: request.windowRows ?? null,
+    });
     setHistoryRequestTrace((previous) => ({
       ...previous,
       count: previous.count + 1,
@@ -754,6 +775,14 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     }));
     try {
       const viewport = await props.transport.semanticHistory(sessionId, request);
+      emitTerminalDebugTrace({
+        kind: 'history-request-end',
+        at: performance.now(),
+        durationMs: performance.now() - requestStartedAt,
+        offset: viewport.offset,
+        rows: viewport.frame.height,
+        window: viewport.window === true,
+      });
       if (traceEpoch === historyRequestEpoch) {
         setHistoryRequestTrace((previous) => ({
           ...previous,
@@ -764,6 +793,18 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       }
       return viewport;
     } catch (error) {
+      const typedError = error as Error & { kind?: unknown; code?: unknown; cause?: unknown };
+      const cause = typedError.cause as Error & { code?: unknown } | undefined;
+      emitTerminalDebugTrace({
+        kind: 'history-request-error',
+        at: performance.now(),
+        durationMs: performance.now() - requestStartedAt,
+        errorName: typedError.name || 'Error',
+        errorKind: typeof typedError.kind === 'string' ? typedError.kind : null,
+        errorCode: Number.isFinite(Number(typedError.code)) ? Number(typedError.code) : null,
+        causeName: cause?.name ?? null,
+        causeCode: cause && Number.isFinite(Number(cause.code)) ? Number(cause.code) : null,
+      });
       if (traceEpoch === historyRequestEpoch) {
         setHistoryRequestTrace((previous) => ({ ...previous, state: 'error' }));
       }
@@ -1045,7 +1086,19 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       return;
     }
 
-    renderer = new RendererSurface(canvas, (error) => failClosed(error, 'semantic_renderer_failed'));
+    renderer = new RendererSurface(
+      canvas,
+      (error) => failClosed(error, 'semantic_renderer_failed'),
+      (metrics) => {
+        if (!runtimeRoot) return;
+        runtimeRoot.dataset.terminalLastRenderDurationMs = metrics.durationMs.toFixed(3);
+        if (!metrics.projectionChanged || measuredWheelSequence >= wheelSequence) return;
+        measuredWheelSequence = wheelSequence;
+        runtimeRoot.dataset.terminalLastWheelToRenderMs = Math.max(0, metrics.completedAt - lastWheelAt).toFixed(3);
+        runtimeRoot.dataset.terminalLastWheelSequence = String(wheelSequence);
+        runtimeRoot.dataset.terminalLastProjectionRendered = metrics.projected ? 'true' : 'false';
+      },
+    );
     renderer.setVisible(props.active() && props.viewActive());
     renderer.setPalette(resolvedPalette());
     applyTypography(props.fontSize(), props.fontFamily());
@@ -1303,6 +1356,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
 
   return (
     <div
+      ref={(node) => { runtimeRoot = node; }}
       aria-busy={!ready() || loading() !== 'idle'}
       class="h-full min-h-0 relative overflow-hidden"
       data-terminal-runtime-session={sessionId}
@@ -1359,6 +1413,14 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
           resetSearch();
           const delta = event.deltaY;
           const deltaMode = event.deltaMode;
+          lastWheelAt = performance.now();
+          wheelSequence += 1;
+          emitTerminalDebugTrace({
+            kind: 'wheel',
+            at: lastWheelAt,
+            delta,
+            deltaMode,
+          });
           runHistoryIntent(() => historyController?.handleWheel(delta, deltaMode));
         }}
         style={{
