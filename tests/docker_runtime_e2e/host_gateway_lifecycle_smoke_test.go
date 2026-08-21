@@ -165,12 +165,8 @@ func runNativeLifecycleOperation(
 ) {
 	t.Helper()
 	prepared := prepareRuntimeOperation(t, client, target, compatibility, operationID, kind, gatewayprotocol.ArtifactPolicyPublishedRelease, nil)
-	if prepared.Operation.State != gatewayprotocol.RuntimeOperationAwaitingConfirmation {
-		t.Fatalf("native %s prepare state = %q, want awaiting_confirmation", kind, prepared.Operation.State)
-	}
-	confirmed := confirmRuntimeOperation(t, client, prepared.Operation)
-	if confirmed.State != gatewayprotocol.RuntimeOperationCommitReady {
-		t.Fatalf("native %s confirmation state = %q, want commit_ready", kind, confirmed.State)
+	if prepared.ConfirmationRequired || prepared.Operation.State != gatewayprotocol.RuntimeOperationCommitReady {
+		t.Fatalf("native %s idle prepare = %#v, want commit_ready without confirmation", kind, prepared)
 	}
 	committed := decodeOperationResponse(t, client.call(t, http.MethodPost, "/gateway/v2/runtime-operations/"+operationID+"/commit", []byte(`{}`), nil, nil))
 	if committed.State != gatewayprotocol.RuntimeOperationSucceeded {
@@ -178,7 +174,6 @@ func runNativeLifecycleOperation(
 	}
 	assertLifecycleEvents(t, client, operationID, []gatewayprotocol.RuntimeOperationState{
 		gatewayprotocol.RuntimeOperationPreflighting,
-		gatewayprotocol.RuntimeOperationAwaitingConfirmation,
 		gatewayprotocol.RuntimeOperationCommitReady,
 		gatewayprotocol.RuntimeOperationFencing,
 		gatewayprotocol.RuntimeOperationCommitting,
@@ -189,7 +184,6 @@ func runNativeLifecycleOperation(
 func nativeCustomUpdateEvents() []gatewayprotocol.RuntimeOperationState {
 	return []gatewayprotocol.RuntimeOperationState{
 		gatewayprotocol.RuntimeOperationPreflighting,
-		gatewayprotocol.RuntimeOperationAwaitingConfirmation,
 		gatewayprotocol.RuntimeOperationAwaitingArtifact,
 		gatewayprotocol.RuntimeOperationStaging,
 		gatewayprotocol.RuntimeOperationCommitReady,
@@ -214,11 +208,8 @@ func runNativeCustomUpdate(
 		t, client, target, compatibility, operationID, gatewayprotocol.RuntimeOperationUpdate,
 		gatewayprotocol.ArtifactPolicyCustomBuild, buildInputs, desiredVersion,
 	)
-	if prepared.Operation.State != gatewayprotocol.RuntimeOperationAwaitingConfirmation {
-		t.Fatalf("native custom update prepare state = %q, want awaiting_confirmation", prepared.Operation.State)
-	}
-	if confirmed := confirmRuntimeOperation(t, client, prepared.Operation); confirmed.State != gatewayprotocol.RuntimeOperationAwaitingArtifact {
-		t.Fatalf("native custom update confirmation state = %q, want awaiting_artifact", confirmed.State)
+	if prepared.ConfirmationRequired || prepared.Operation.State != gatewayprotocol.RuntimeOperationAwaitingArtifact {
+		t.Fatalf("native idle custom update prepare = %#v, want awaiting_artifact without confirmation", prepared)
 	}
 	artifact, metadata := makeNativeCustomRuntimeArtifact(t, binaryPath, operationID, target, compatibility, buildInputs)
 	metadataJSON := mustJSON(t, metadata)
