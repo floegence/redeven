@@ -1132,9 +1132,9 @@ attestation, readback, and publication work required for official artifacts.
 
 ## Repository Rule File
 
+- `AGENTS.md` is the canonical repository rule file for this repository.
+- Do not add or keep a committed repository-level `.develop.md` here.
+
 ## Communication Clarity
 
 - Problem-analysis conclusions and solution designs must use concise, plain, and clear language.
-
-- `AGENTS.md` is the canonical repository rule file for this repository.
-- Do not add or keep a committed repository-level `.develop.md` here.
