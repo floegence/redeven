@@ -40,6 +40,7 @@ const builtPluginReleaseRef = Object.freeze({
   expected_hashes: builtPluginPackageHashes,
 });
 const builtPluginInstanceID = `catalog_${builtPluginReleaseRef.publisher_id}_${builtPluginReleaseRef.plugin_id}`;
+const builtPluginReleaseInspectionID = 'release_inspection_built_renderer';
 const builtPluginPresentationSHA256 = `sha256:${'1'.repeat(64)}`;
 const pluginMarketDetailPath = `/_redeven_proxy/api/plugins/market/plugins/${builtPluginReleaseRef.plugin_id}`;
 const builtPluginPackageURL = 'https://github.com/floegence/redeven-official-plugins/releases/download/v4.4.7/containers-4.4.7.redevplugin';
@@ -240,6 +241,8 @@ function builtPluginPresentationCatalog() {
 
 function builtPluginReleaseInspection() {
   return {
+    inspection_id: builtPluginReleaseInspectionID,
+    expires_at: '2099-08-21T00:05:00Z',
     plugin_instance_id: builtPluginInstanceID,
     release_ref: builtPluginReleaseRef,
     inspected_hashes: builtPluginPackageHashes,
@@ -553,6 +556,7 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
         const expected = {
           request_id: body.request_id,
           plugin_instance_id: builtPluginInstanceID,
+          inspection_id: builtPluginReleaseInspectionID,
           release_ref: builtPluginReleaseRef,
         };
         if (!/^[0-9a-f-]{36}$/u.test(body.request_id)
@@ -1073,6 +1077,7 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
         payload: {
           request_id: ':requestID',
           plugin_instance_id: builtPluginInstanceID,
+          inspection_id: builtPluginReleaseInspectionID,
           release_ref: builtPluginReleaseRef,
         },
       },
