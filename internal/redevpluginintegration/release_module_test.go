@@ -115,8 +115,42 @@ func TestOfficialReleaseProviderAdvancesToRefreshedMarketRelease(t *testing.T) {
 	}
 	if _, err := provider.ResolveReleaseArtifact(context.Background(), host.ReleaseArtifactResolveRequest{
 		Action: host.PackageTrustActionInstall, ReleaseRef: firstRef,
-	}); errors.Is(err, host.ErrReleaseRefVerificationFailed) {
-		t.Fatalf("stale release ref error = %v", err)
+	}); !errors.Is(err, host.ErrReleaseRefVerificationFailed) {
+		t.Fatalf("stale release ref remained resolvable: %v", err)
+	}
+}
+
+func TestOfficialReleaseProviderReusesExactReleaseTransport(t *testing.T) {
+	release := officialMarketReleaseFixture(t)
+	provider, err := newOfficialReleaseProvider(release, rejectingReleaseAssetFetcher{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := provider.transport
+	if first == nil {
+		t.Fatal("initial release transport is nil")
+	}
+	if err := provider.setRelease(release); err != nil {
+		t.Fatal(err)
+	}
+	if provider.transport != first {
+		t.Fatal("exact market refresh replaced the release transport and discarded its verified asset cache")
+	}
+}
+
+func TestOfficialReleaseProviderReplacesTransportWhenAssetProjectionChanges(t *testing.T) {
+	release := officialMarketReleaseFixture(t)
+	provider, err := newOfficialReleaseProvider(release, rejectingReleaseAssetFetcher{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := provider.transport
+	release.TransportAssets[0].URL = strings.Replace(release.TransportAssets[0].URL, "/v4.4.4/", "/mirror/", 1)
+	if err := provider.setRelease(release); err != nil {
+		t.Fatal(err)
+	}
+	if provider.transport == first {
+		t.Fatal("changed release asset projection reused stale transport bytes")
 	}
 }
 

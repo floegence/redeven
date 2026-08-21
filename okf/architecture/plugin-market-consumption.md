@@ -71,9 +71,12 @@ field, release-metadata digest, and expected package, manifest, and entries
 hash and the short evidence expiry. Concurrent detail and install consumers
 share one request. Selection changes do not invalidate still-exact results that
 remain safely inside their expiry window, while release or generation
-changes, successful installation, uninstall, and Plugin Center disposal evict
-or abort the affected entry. Canceling a completed review returns the visible
-flow to idle without discarding its still-exact inspection. Confirmation removes
+changes, successful installation, uninstall start, and Plugin Center disposal
+evict or abort the affected entry. Uninstall invalidates only evidence that predates
+the operation; once authoritative inventory projects the plugin as available
+again, its fresh reinstall prefetch remains active. Canceling a completed review
+returns the visible flow to idle without discarding its still-exact inspection.
+Confirmation removes
 the single-use evidence from the browser cache. A start response with unknown
 delivery is reconciled with the same request id and inspection evidence; only a
 new operation or expired/stale evidence requests a fresh inspection, and stale-
@@ -156,11 +159,11 @@ does not grant permissions or enable runtime access.
 
 # Evidence
 
-- `redeven:internal/pluginmarket/service.go` - Fetches and validates latest-only market snapshots; the integration atomically swaps the current snapshot and release transport.
+- `redeven:internal/pluginmarket/service.go` - Fetches and validates latest-only market snapshots; the integration atomically publishes the current snapshot.
 - `redeven:internal/pluginmarket/contracts.go` - Validates generation, GitHub release identity, hashes, anchors, and complete release transport.
 - `redeven:internal/codeapp/codeapp.go` - Starts background refresh and keeps market failure non-fatal.
 - `redeven:internal/codeapp/appserver/server.go` - Serves the current validated snapshot through the read-gated Env App route.
 - `redeven:internal/codeapp/appserver/server.go` - Preserves validated detail generation in the read-gated local proxy envelope.
-- `redeven:internal/redevpluginintegration/release_module.go` - Converts validated market data into released remote release transport.
+- `redeven:internal/redevpluginintegration/release_module.go` - Converts validated market data into one current remote release transport, preserves its verified asset cache only for an identical release and complete asset projection, and replaces it when either identity changes.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginCatalog.ts` - Projects current official discovery from the validated snapshot.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts` - Preserves installed inventory and reports market unavailability.

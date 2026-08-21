@@ -675,15 +675,19 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     const pendingTarget = command.pluginInstanceID;
     setPendingCommand({ type: command.type, target: pendingTarget });
     setCommandError(null);
+    if (command.type === 'uninstall') {
+      // Invalidate evidence that predates the uninstall before inventory can
+      // project the plugin as available and start a fresh reinstall prefetch.
+      for (const [key, entry] of officialInspectionCache) {
+        if (!key.startsWith(`${command.pluginInstanceID}|`)) continue;
+        entry.controller.abort('Official plugin uninstall started');
+        officialInspectionCache.delete(key);
+      }
+    }
     try {
       await props.onCommand(command, controller.signal);
       setUninstallChoiceFor(null);
       if (command.type === 'uninstall') {
-        for (const [key, entry] of officialInspectionCache) {
-          if (!key.startsWith(`${command.pluginInstanceID}|`)) continue;
-          entry.controller.abort('Official plugin uninstalled');
-          officialInspectionCache.delete(key);
-        }
         const flow = officialInstallFlow();
         if (flow.status !== 'idle' && flow.item.officialCatalog?.pluginInstanceID === command.pluginInstanceID) {
           setOfficialInstallFlow({ status: 'idle' });
