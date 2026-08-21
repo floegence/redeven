@@ -370,7 +370,7 @@
               "runtime",
               "ssh"
             ],
-            "summary": "Desktop shares one lazy, credential-scoped SSH transport manager for access and setup, while the target Gateway performs host Runtime lifecycle work. Local, SSH-host, and SSH-container actions remain recoverable when the Runtime is stopped, old, unreachable, partially installed, or represented only by verified residual processes. A cached probe is an observation, never a reason to remove a direct lifecycle entry point; the click performs the authoritative probe. SSH connection establishment uses only the Environment `connect_timeout_seconds` setting (10 seconds by default); remote commands and probes are cancellation-bound rather than terminated by a second fixed timeout. Transport generations fence retries; SSH hostnames, container labels, and Desktop card ids never substitute for a lifecycle target identity.",
+            "summary": "Desktop shares one lazy, credential-scoped SSH transport manager, while the target Gateway owns Runtime lifecycle work. Local, SSH-host, and SSH-container actions remain recoverable when the Runtime is stopped, stale, unreachable, partially installed, or represented by verified residual processes. Cached probes are observations only; each click authoritatively probes the exact lifecycle target. SSH establishment uses the Environment `connect_timeout_seconds` setting (10 seconds by default); remote commands and probes are cancellation-bound, with no second fixed timeout. Transport generations fence retries, and hostnames, container labels, or Desktop card ids never substitute for target identity.",
             "section_count": 2
           },
           {
@@ -6105,8 +6105,8 @@
         "title": "Desktop SSH runtime operations",
         "type": "Desktop Contract"
       },
-      "body_length": 5328,
-      "summary": "Desktop shares one lazy, credential-scoped SSH transport manager for access and setup, while the target Gateway performs host Runtime lifecycle work. Local, SSH-host, and SSH-container actions remain recoverable when the Runtime is stopped, old, unreachable, partially installed, or represented only by verified residual processes. A cached probe is an observation, never a reason to remove a direct lifecycle entry point; the click performs the authoritative probe. SSH connection establishment uses only the Environment `connect_timeout_seconds` setting (10 seconds by default); remote commands and probes are cancellation-bound rather than terminated by a second fixed timeout. Transport generations fence retries; SSH hostnames, container labels, and Desktop card ids never substitute for a lifecycle target identity.",
+      "body_length": 5211,
+      "summary": "Desktop shares one lazy, credential-scoped SSH transport manager, while the target Gateway owns Runtime lifecycle work. Local, SSH-host, and SSH-container actions remain recoverable when the Runtime is stopped, stale, unreachable, partially installed, or represented by verified residual processes. Cached probes are observations only; each click authoritatively probes the exact lifecycle target. SSH establishment uses the Environment `connect_timeout_seconds` setting (10 seconds by default); remote commands and probes are cancellation-bound, with no second fixed timeout. Transport generations fence retries, and hostnames, container labels, or Desktop card ids never substitute for target identity.",
       "sections": [
         {
           "id": "contract",
@@ -6160,7 +6160,7 @@
           "description": "SSH-container and Local-container failure guidance smoke."
         }
       ],
-      "snippet": "Desktop shares one lazy, credential-scoped SSH transport manager for access and setup, while the target Gateway performs host Runtime lifecycle work. Local, SSH-host, and SSH-container actions remain recoverable when the Runtime is stopped,",
+      "snippet": "Desktop shares one lazy, credential-scoped SSH transport manager, while the target Gateway owns Runtime lifecycle work. Local, SSH-host, and SSH-container actions remain recoverable when the Runtime is stopped, stale, unreachable, partially",
       "backlinks": [
         {
           "label": "Desktop runtime bridge",
@@ -9464,5 +9464,5 @@
       ]
     }
   ],
-  "source_sha256": "13d298d6fadb1dfd10ef11b54a162f883cf36a8ee60cafd0c2f701c940c4cd8e"
+  "source_sha256": "907a841552740b1213b36a840a584c87af0a367eaaaa39cb695a295e9e15331f"
 }
