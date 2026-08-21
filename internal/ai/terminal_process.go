@@ -674,9 +674,9 @@ func (p *terminalProcess) waitLoop() {
 	p.reaped = true
 	p.cond.Broadcast()
 	p.mu.Unlock()
-	close(p.reapedDone)
 	p.managerProcessEnded()
 	p.releaseWorkload()
+	close(p.reapedDone)
 }
 
 func (p *terminalProcess) releaseWorkload() {
