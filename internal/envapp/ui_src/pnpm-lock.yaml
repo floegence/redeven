@@ -42,8 +42,8 @@ importers:
         specifier: 0.41.4
         version: 0.41.4(solid-js@1.9.13)
       '@floegence/floeterm-terminal-web':
-        specifier: 0.16.5
-        version: 0.16.5
+        specifier: 0.16.6
+        version: 0.16.6
       '@floegence/flowersec-core':
         specifier: 2.5.2
         version: 2.5.2
@@ -385,8 +385,8 @@ packages:
     peerDependencies:
       solid-js: ^1.8.0
 
-  '@floegence/floeterm-terminal-web@0.16.5':
-    resolution: {integrity: sha512-6ydrHM2L60XiU1/F6PZsAnIMUy2NzqUwC3itBZ9FnquyQc1E87XGTn3xSiEj7tXjrT3Zp+Gkh7bfoSNkhbzzpw==}
+  '@floegence/floeterm-terminal-web@0.16.6':
+    resolution: {integrity: sha512-Kl/ejKUeFRQ48Qe8ikw1qov6FtZKbFE7YkqjbZH1F7FXkhhC52Q4qSLF3BDs4hZVQNTrfMhX25cQwOwgS0YOEQ==}
 
   '@floegence/flowersec-core@2.5.2':
     resolution: {integrity: sha512-TjyoHmsLvBZeT8bdx44Yd57I/OMJT10xOGp0jmmfzmUO0jawKyzj6/361Sb3k7kT21VIlz78YqpHGHPrxag+HA==}
@@ -2910,7 +2910,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@floegence/floeterm-terminal-web@0.16.5': {}
+  '@floegence/floeterm-terminal-web@0.16.6': {}
 
   '@floegence/flowersec-core@2.5.2':
     dependencies:
