@@ -1319,7 +1319,7 @@
   },
   "confirm": {
     "reinstallTargetTitle": "Diese Umgebung neu installieren?",
-    "reinstallTargetConfirm": "Neu installieren",
+    "reinstallTargetConfirm": "Redeven neu installieren",
     "reinstallTargetDescription": "Dadurch wird die vollständig registrierte Redeven-Umgebung dauerhaft gelöscht, einschließlich Gateway, Laufzeit, Arbeitsbereichen, Projekten, App-Daten, Floret- und ReDevPlugin-Daten, Vertrauen, Identität, Katalog und Umgebungseinstellungen. Dies kann nicht rückgängig gemacht werden. Anschließend ist eine erneute Kopplung erforderlich.",
     "reinstallRequiredDescription": "Diese Umgebung enthält einen inkompatiblen Zustand. Eine Neuinstallation ist die einzige sichere Wiederherstellung.",
     "reinstallIrreversible": "Dieser Vorgang kann nicht rückgängig gemacht werden.",
@@ -1529,6 +1529,7 @@
     "continue": "Fortfahren",
     "manageInDesktop": "In Desktop verwalten",
     "updateRedevenDesktop": "Redeven Desktop aktualisieren",
+    "reinstallRedeven": "Redeven neu installieren",
     "unavailableTrigger": "{label} ist nicht verfügbar. Wiederherstellungsoptionen anzeigen.",
     "initializeAndOpen": "Initialisieren und öffnen",
     "startAndOpen": "Starten und öffnen",

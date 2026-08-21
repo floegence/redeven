@@ -1319,7 +1319,7 @@
   },
   "confirm": {
     "reinstallTargetTitle": "Reinstalar este ambiente?",
-    "reinstallTargetConfirm": "Reinstalar",
+    "reinstallTargetConfirm": "Reinstalar o Redeven",
     "reinstallTargetDescription": "Isso exclui permanentemente todo o ambiente Redeven registrado, incluindo Gateway, ambiente de execução, áreas de trabalho, projetos, dados de aplicativos, dados do Floret e do ReDevPlugin, confiança, identidade, catálogo e configurações do ambiente. Não é possível desfazer. Será necessário emparelhar novamente.",
     "reinstallRequiredDescription": "Este ambiente contém um estado incompatível. A reinstalação é a única recuperação segura.",
     "reinstallIrreversible": "Esta operação não pode ser desfeita.",
@@ -1529,6 +1529,7 @@
     "continue": "Continuar",
     "manageInDesktop": "Gerenciar no Desktop",
     "updateRedevenDesktop": "Atualizar Redeven Desktop",
+    "reinstallRedeven": "Reinstalar o Redeven",
     "unavailableTrigger": "{label} está indisponível. Mostrar opções de recuperação.",
     "initializeAndOpen": "Inicializar e abrir",
     "startAndOpen": "Iniciar e abrir",

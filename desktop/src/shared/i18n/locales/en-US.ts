@@ -772,6 +772,7 @@ export const enUS = {
     continue: 'Continue',
     manageInDesktop: 'Manage in Desktop',
     updateRedevenDesktop: 'Update Redeven Desktop',
+    reinstallRedeven: 'Reinstall Redeven',
     unavailableTrigger: '{label} is unavailable. Show recovery options.',
   },
   environmentFacts: {
@@ -1345,7 +1346,7 @@ export const enUS = {
   },
   confirm: {
     reinstallTargetTitle: 'Reinstall this environment?',
-    reinstallTargetConfirm: 'Reinstall',
+    reinstallTargetConfirm: 'Reinstall Redeven',
     reinstallTargetDescription: 'This permanently deletes the complete registered Redeven environment, including Gateway, Runtime, workspaces, projects, app data, Floret and ReDevPlugin data, trust, identity, Catalog, and Environment settings. This cannot be undone. Pairing is required again.',
     reinstallRequiredDescription: 'This environment has incompatible state. Reinstall is the only safe recovery.',
     reinstallIrreversible: 'This operation cannot be undone.',

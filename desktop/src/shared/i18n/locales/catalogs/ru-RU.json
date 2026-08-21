@@ -1321,7 +1321,7 @@
   },
   "confirm": {
     "reinstallTargetTitle": "Переустановить эту среду?",
-    "reinstallTargetConfirm": "Переустановить",
+    "reinstallTargetConfirm": "Переустановить Redeven",
     "reinstallTargetDescription": "Будет безвозвратно удалена вся зарегистрированная среда Redeven, включая Gateway, среду выполнения, рабочие пространства, проекты, данные приложений, данные Floret и ReDevPlugin, сведения о доверии, идентификатор, каталог и настройки среды. Отменить действие нельзя. После завершения потребуется повторное сопряжение.",
     "reinstallRequiredDescription": "Эта среда содержит несовместимое состояние. Переустановка — единственный безопасный способ восстановления.",
     "reinstallIrreversible": "Эту операцию нельзя отменить.",
@@ -1551,6 +1551,7 @@
     "continue": "Продолжить",
     "manageInDesktop": "Управлять в Desktop",
     "updateRedevenDesktop": "Обновить Redeven Desktop",
+    "reinstallRedeven": "Переустановить Redeven",
     "unavailableTrigger": "{label} недоступно. Показать варианты восстановления.",
     "initializeAndOpen": "Инициализировать и открыть",
     "startAndOpen": "Запустить и открыть",
