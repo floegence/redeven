@@ -159,10 +159,12 @@ blind mutation replay.
 
 An absent, unknown-signer, or temporarily unavailable signature is not an
 integrity failure, but it is also not trust. An administrator may explicitly
-confirm installation; the result is disabled, has zero grants, and is eligible
-only for manual update. Invalid and revoked signatures block install and
-execution. Verified, current signing evidence may raise trust and automatic
-update eligibility, but signature status never grants permissions. Redeven does
+confirm installation; the result is enabled, receives no implicit grants, and
+is eligible only for manual update. Missing or policy-blocked grants project
+product attention and make the affected open or capability call return
+`permission_required` until the user authorizes access. Invalid and revoked
+signatures block install and execution. Verified, current signing evidence may
+raise trust and automatic update eligibility, but signature status never grants permissions. Redeven does
 not add a new authorization workflow; the
 existing official release-ref verification remains unchanged.
 
@@ -222,7 +224,7 @@ tokens, weaken route policy, edit opaque state, or replace released brokers.
 - `redeven:internal/redevpluginintegration/adapters_test.go:1` - Covers origin, CSRF, session, and action denial.
 - `redeven:internal/redevpluginintegration/release_module.go:1` - Enforces official source, signature, revocation, and Host-known capability requirements.
 - `redeven:internal/redevpluginintegration/integration.go:260` - Registers the process-local external-package inspection and assessment module.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/ExternalPluginInstallDialog.test.tsx:1` - Proves unsigned inspection requires explicit confirmation and installs disabled with zero grants.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/ExternalPluginInstallDialog.test.tsx:1` - Proves unsigned inspection requires explicit confirmation and installs enabled without implicit grants, with permission attention when access is missing.
 - `redeven:internal/redevpluginintegration/release_module_test.go:1` - Proves expired official release evidence fails without a catalog record.
 - `redeven:internal/redevpluginintegration/runtime_module.go:1` - Binds runtime target, hash, IPC, ABI, leases, and Host services.
 - `redeven:internal/redevpluginintegration/containers_capability.go:1` - Adapts authorized capability invocations to domain behavior.

@@ -191,7 +191,7 @@ func TestServiceRefreshesAndFallsBackToValidatedCache(t *testing.T) {
 	transport := roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		switch request.URL.Path {
 		case "/v1/catalog":
-			if request.URL.Query().Get("redeven_version") != "1.2.3" || request.URL.Query().Get("redevplugin_version") != "3.0.8" {
+			if request.URL.Query().Get("redeven_version") != "1.2.3" || request.URL.Query().Get("redevplugin_version") != "3.0.9" {
 				t.Fatalf("catalog compatibility query = %q", request.URL.RawQuery)
 			}
 			return response(http.StatusOK, validCatalogResponse, http.Header{"Etag": {`"catalog-g7"`}}), nil
@@ -207,7 +207,7 @@ func TestServiceRefreshesAndFallsBackToValidatedCache(t *testing.T) {
 		HTTPClient:         &http.Client{Transport: transport},
 		Now:                func() time.Time { return now },
 		RedevenVersion:     "v1.2.3",
-		ReDevPluginVersion: "3.0.8",
+		ReDevPluginVersion: "3.0.9",
 	})
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)

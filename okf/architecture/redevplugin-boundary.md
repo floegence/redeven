@@ -9,7 +9,7 @@ quality_exception: Cross-repository platform boundary spanning published artifac
 # Summary
 
 ReDevPlugin is an independently released plugin platform. Redeven consumes its
-coordinated `v3.0.8` Go, npm, Rust source-crate, and machine-contract artifacts;
+coordinated `v3.0.9` Go, npm, Rust source-crate, and machine-contract artifacts;
 it does not fork platform mechanics. Redeven owns authenticated session mapping,
 product source policy and review UX, UI placement, product runtime builds, and
 concrete business adapters. Missing or unverifiable upstream identity, lifecycle,
@@ -43,12 +43,12 @@ external-package inspection or receipt store.
 
 ## Published dependency set
 
-The current integration consumes the coordinated ReDevPlugin `v3.0.8` set:
+The current integration consumes the coordinated ReDevPlugin `v3.0.9` set:
 
-- `github.com/floegence/redevplugin/v3 v3.0.8`;
-- `@floegence/redevplugin-contracts@3.0.8` and
-  `@floegence/redevplugin-ui@3.0.8`;
-- `redevplugin-runtime@3.0.8` and `redevplugin-worker-sdk@3.0.8` as the exact
+- `github.com/floegence/redevplugin/v3 v3.0.9`;
+- `@floegence/redevplugin-contracts@3.0.9` and
+  `@floegence/redevplugin-ui@3.0.9`;
+- `redevplugin-runtime@3.0.9` and `redevplugin-worker-sdk@3.0.9` as the exact
   public Rust source-crate boundary;
 - the released contract registry, release-manifest contract, contract hashes, and
   attested `platform-release-manifest.json` registry readback, whose
@@ -73,17 +73,19 @@ one cancellation identity, and one cursor. Before confirmation, release-package
 inspection fetches and verifies the exact signed package once, derives the
 presentation and permission review, and issues short-lived owner/session-bound
 evidence. The install Execution consumes that evidence and its cached verified
-package without downloading or parsing the package again. The platform
-activates a verified official release when its permissions are already
-approved, or returns an installed `needs_attention` record without silently
-granting missing permissions. The Execution survives browser, Shell, transport,
+package without downloading or parsing the package again. The platform always
+persists a successfully verified fresh install as enabled. Missing grants are
+not a disabled lifecycle state: Redeven projects the installed record as
+`needs_attention`, while only the affected open or capability call returns
+`permission_required`. No install silently grants missing permissions. The
+Execution survives browser, Shell, transport,
 and Host observation loss; its fetch, download, hash, signature, commit,
 enable, retry, cache, failure, mutation, and byte-progress evidence remains
 platform state. Redeven may reconnect and refresh inventory, but must not create
 a local execution store, copy the state machine, invent progress, or cancel work
 when a panel closes.
 
-The `v3.0.8` release-package inspection is also the presentation authority for
+The `v3.0.9` release-package inspection is also the presentation authority for
 pre-install access review. Each permission carries its exact permission id,
 verified method set, explicit required status, and the stable
 `read|write|delete|execute|admin` effects derived from Host-verified capability
@@ -91,7 +93,7 @@ contracts. Redeven may localize and arrange those facts, but it must not recover
 permission meaning from the market catalog, infer required status, or replace
 different permissions with one generic fallback.
 
-Enabled-plugin startup recovery remains ReDevPlugin work. The `v3.0.8` Host
+Enabled-plugin startup recovery remains ReDevPlugin work. The `v3.0.9` Host
 revalidates the installed package identity, SHA-256 hashes, Ed25519 status,
 revocation, grants, policy fences, runtime admission, and session scope before it
 publishes a runnable result. Invalid or revoked evidence, schema drift, tampering,
@@ -155,10 +157,12 @@ presentation.
 
 Absent and unknown-signer signatures may cross installation
 only after explicit user confirmation. They never imply trust, permission, or
-automatic-update authority: the committed plugin is disabled, has zero grants,
-and is manual-update-only. Invalid or revoked signatures block install and
-execution. Signature evidence determines trust and automatic-update eligibility,
-not basic installation eligibility. The existing official signed-release module
+automatic-update authority: the committed plugin is enabled, remains
+manual-update-only, and receives no implicit grants. Missing or policy-blocked
+grants project product attention and make the affected open or capability call
+return `permission_required` until the user authorizes access. Invalid or
+revoked signatures block install and execution. Signature evidence determines
+trust and automatic-update eligibility, not basic installation eligibility. The existing official signed-release module
 remains a stricter release-ref path; this feature does not add or weaken an
 official signing or authorization process.
 
