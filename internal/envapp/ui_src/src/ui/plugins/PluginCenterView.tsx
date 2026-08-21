@@ -442,13 +442,19 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   });
 
   createEffect(() => {
-    const item = selectedItem();
-    if (!item?.officialCatalog || item.pluginInstanceID || !props.onInspectOfficial) return;
-    const key = officialInspectionKey(item);
-    if (officialInspectionCache.has(key)) return;
-    void ensureOfficialInspection(item).catch(() => {
-      // Prefetch failures stay silent until the user explicitly requests install.
-    });
+    // Start Host-verified inspection as soon as the market projection arrives.
+    // The result is cached by the exact release identity, so clicking Install
+    // while this work is in flight reuses the same request and never starts a
+    // second trust/package validation pass.
+    if (loading() || !props.onInspectOfficial) return;
+    for (const item of allItems()) {
+      if (!item.officialCatalog || item.pluginInstanceID) continue;
+      const key = officialInspectionKey(item);
+      if (officialInspectionCache.has(key)) continue;
+      void ensureOfficialInspection(item).catch(() => {
+        // Prefetch failures stay silent until the user explicitly requests install.
+      });
+    }
   });
 
   createEffect(() => {
