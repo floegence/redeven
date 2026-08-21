@@ -82,6 +82,7 @@ import { createPluginLifecycleAPI } from './plugins/pluginApi';
 import {
   createPluginInstallCoordinator,
   type PluginInstallCoordinator,
+  type PluginInstallRetirementFence,
 } from './plugins/pluginInstallCoordinator';
 import { completeApprovedOfficialInstall } from './plugins/pluginApprovedInstallSetup';
 import {
@@ -554,9 +555,27 @@ export function EnvAppShell() {
   const [pluginRuntimeRecoveryComplete, setPluginRuntimeRecoveryComplete] = createSignal(false);
   const [pluginRuntimeRecoveryByInstanceID, setPluginRuntimeRecoveryByInstanceID] = createSignal<Record<string, import('./plugins/pluginTypes').PluginRuntimeRecoveryPresentation>>({});
   const retiredPluginManagementRevisionByInstanceID = new Map<string, number>();
+  const pluginManagementRetirementGenerationByInstanceID = new Map<string, number>();
+  let nextPluginManagementRetirementGeneration = 0;
+  const advancePluginManagementIntentGeneration = (pluginInstanceID: string) => {
+    pluginManagementRetirementGenerationByInstanceID.set(
+      pluginInstanceID,
+      ++nextPluginManagementRetirementGeneration,
+    );
+  };
   const retirePluginManagementRevision = (pluginInstanceID: string, revision: number) => {
     const previous = retiredPluginManagementRevisionByInstanceID.get(pluginInstanceID) ?? 0;
     if (revision > previous) retiredPluginManagementRevisionByInstanceID.set(pluginInstanceID, revision);
+    advancePluginManagementIntentGeneration(pluginInstanceID);
+  };
+  const capturePluginInstallRetirementFence = (
+    pluginInstanceID: string,
+  ): PluginInstallRetirementFence | undefined => {
+    const managementRevision = retiredPluginManagementRevisionByInstanceID.get(pluginInstanceID);
+    const generation = pluginManagementRetirementGenerationByInstanceID.get(pluginInstanceID);
+    return managementRevision !== undefined && generation !== undefined
+      ? { managementRevision, generation }
+      : undefined;
   };
   const reportPluginSurfaceRetirementError = (error: unknown) => {
     notify.error(i18n.t('uiCopy.plugin.needsAttention'), getErrorMessage(error));
@@ -1241,6 +1260,19 @@ export function EnvAppShell() {
       refreshInventory: refetchPluginInventory,
       signal,
     }),
+    captureInstallRetirementFence: capturePluginInstallRetirementFence,
+    // Clear only the exact pre-install retirement fence. A newer disable,
+    // revoke, uninstall, or unknown mutation outcome remains authoritative.
+    onInstallReady: (pluginInstanceID, installedFence) => {
+      const currentFence = capturePluginInstallRetirementFence(pluginInstanceID);
+      if (
+        currentFence?.managementRevision === installedFence.managementRevision
+        && currentFence.generation === installedFence.generation
+      ) {
+        retiredPluginManagementRevisionByInstanceID.delete(pluginInstanceID);
+        pluginManagementRetirementGenerationByInstanceID.delete(pluginInstanceID);
+      }
+    },
     createRequestID: () => createClientId('plugin-install'),
     resolvePluginID: (pluginInstanceID) => (
       pluginInventoryProjection()?.items.find((item) => (
@@ -1561,6 +1593,12 @@ export function EnvAppShell() {
       mutationError = error;
     }
     if (
+      permissionMutationPluginInstanceID
+      && (mutationError === undefined || pluginMutationOutcome(mutationError) === 'committed')
+    ) {
+      advancePluginManagementIntentGeneration(permissionMutationPluginInstanceID);
+    }
+    if (
       invalidatesManagementRevision
       && 'pluginInstanceID' in command
       && 'expectedManagementRevision' in command
@@ -1628,12 +1666,14 @@ export function EnvAppShell() {
       // revision openable instead of treating it as the stale revision that
       // was retired before the mutation completed.
       if (
-        refreshedItem
+        command.type === 'enable'
+        && refreshedItem
         && refreshedItem.managementRevision !== undefined
         && retiredRevision !== undefined
         && refreshedItem.managementRevision <= retiredRevision
       ) {
         retiredPluginManagementRevisionByInstanceID.delete(command.pluginInstanceID);
+        pluginManagementRetirementGenerationByInstanceID.delete(command.pluginInstanceID);
       }
     }
     if (permissionMutationPluginInstanceID && preservedPermissionTargets.length > 0) {

@@ -168,6 +168,21 @@ post-uninstall inventory remains active for immediate reinstall. Confirmation
 approves only the deduplicated required permission ids from that exact
 inspection and keeps the existing default-enable Host path.
 
+Uninstall retires the prior local management revision before the Host mutation.
+When a later official reinstall reaches terminal success, inventory refresh,
+required permission setup, and activation must all complete before the Shell
+clears the exact retirement fence captured by that install attempt. A newer
+disable, permission decision, uninstall, or unknown mutation outcome supersedes
+the install and keeps its newer fence authoritative. Each completed Execution's
+post-install setup commits at most once in the current Shell; recovery may
+finish only required permissions that have no durable prior decision and never
+re-enables a user-disabled plugin or restores a denied, revoked, or expired
+grant. Inventory retains every current durable Host permission decision,
+including denied, revoked, and expired records, while deriving current grant
+state from effect, revocation, and expiry. The current authoritative launch
+target is openable immediately only after that bounded setup succeeds; failed,
+superseded, or incomplete reinstalls cannot revive a stale surface.
+
 Official installation uses the released durable Execution instead of a
 page-bound pending flag. Only the target plugin card and inspector show its
 queued, trust verification, release inspection, download, package verification,

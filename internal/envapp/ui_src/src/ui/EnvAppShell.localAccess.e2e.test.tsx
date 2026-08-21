@@ -3,7 +3,7 @@
 import { For, Show, Suspense, createContext, createEffect, createSignal, onCleanup, onMount, useContext, type JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PluginPlatformRequestError, type PluginRecoverySnapshot } from '@floegence/redevplugin-ui';
+import { PluginPlatformRequestError, type PluginExecution, type PluginRecoverySnapshot } from '@floegence/redevplugin-ui';
 import { OFFICIAL_CONTAINERS_RELEASE_REF } from './plugins/officialContainersRelease.generated';
 import type { PluginInventoryProjection } from './plugins/pluginTypes';
 import { NETWORK_EXPOSURE_WARNING_PREFERENCE_STORAGE_KEY } from './security/networkExposureWarningPreference';
@@ -164,14 +164,14 @@ const pluginPlatformMocks = vi.hoisted(() => {
     dispose: vi.fn(async () => undefined),
   };
   const state = {
-    onMutationOutcomeUnknown: undefined as undefined | (() => void),
+    onMutationOutcomeUnknown: undefined as undefined | ((pluginInstanceID?: string) => void),
   };
   return {
     client,
     close,
     coordinator,
     state,
-    createRedevenPluginPlatform: vi.fn((options?: { onMutationOutcomeUnknown?: () => void }) => {
+    createRedevenPluginPlatform: vi.fn((options?: { onMutationOutcomeUnknown?: (pluginInstanceID?: string) => void }) => {
       state.onMutationOutcomeUnknown = options?.onMutationOutcomeUnknown;
       return { client, close };
     }),
@@ -2748,6 +2748,151 @@ describe('EnvAppShell environment entry affordances', () => {
       await expect(install).resolves.toBeUndefined();
       await flushAsync();
       expect(pluginCenterViewState.lastProps.installOperations).toEqual([]);
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('opens an official plugin after uninstall with deleted data and reinstall', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    let currentProjection = officialContainersProjection('enabled');
+    pluginLifecycleMocks.loadInventoryProjection.mockImplementation(async () => currentProjection);
+    pluginLifecycleMocks.execute.mockImplementation(async (command: { type?: string }) => {
+      if (command.type === 'uninstall') currentProjection = officialContainersProjection('not_installed');
+      return {};
+    });
+    pluginLifecycleMocks.installOfficialRelease.mockImplementationOnce(async () => {
+      currentProjection = officialContainersProjection('enabled');
+      return {
+        execution_id: 'release_install_after_delete',
+        plugin_instance_id: officialContainersCatalog.pluginInstanceID,
+        kind: 'operation',
+        status: 'completed',
+        cursor: 1,
+        cancelable: false,
+        created_at: '2026-08-21T00:00:00Z',
+        updated_at: '2026-08-21T00:00:01Z',
+        terminal_at: '2026-08-21T00:00:01Z',
+      };
+    });
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushUntil(() => Boolean(host.querySelector('[data-activity-id="plugins"]')), 40);
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement).click();
+      await flushUntil(() => Boolean(pluginPanelState.lastProps), 40);
+      await pluginPanelState.lastProps.onOpenCenter();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onCommand), 40);
+
+      await expect(pluginCenterViewState.lastProps.onCommand({
+        type: 'uninstall',
+        pluginInstanceID: officialContainersCatalog.pluginInstanceID,
+        expectedManagementRevision: 11,
+        dataRetention: 'delete_data',
+      }, new AbortController().signal)).resolves.toBeUndefined();
+
+      await expect(pluginCenterViewState.lastProps.onCommand({
+        type: 'install',
+        pluginID: officialContainersCatalog.pluginID,
+        source: 'official_catalog',
+      }, new AbortController().signal, {
+        inspection_id: 'release_inspection_after_delete',
+      })).resolves.toBeUndefined();
+
+      await expect(pluginCenterViewState.lastProps.onCommand({
+        type: 'open_surface',
+        ...officialContainersProjection('enabled').items[0].defaultLaunchTarget,
+        placement: 'workbench',
+      }, new AbortController().signal)).resolves.toBeUndefined();
+      expect(workbenchPluginSurfaceState.open).toHaveBeenCalledWith(expect.objectContaining({
+        pluginInstanceID: officialContainersCatalog.pluginInstanceID,
+        expectedManagementRevision: 11,
+        preferredPlacement: 'workbench',
+      }));
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('does not clear a newer retirement fence when an install completes', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    let currentProjection = officialContainersProjection('enabled');
+    pluginLifecycleMocks.loadInventoryProjection.mockImplementation(async () => currentProjection);
+    pluginLifecycleMocks.execute.mockImplementation(async (command: { type?: string }) => {
+      if (command.type === 'uninstall') currentProjection = officialContainersProjection('not_installed');
+      return {};
+    });
+    let finishInstall!: (execution: PluginExecution) => void;
+    pluginLifecycleMocks.installOfficialRelease.mockImplementationOnce(() => new Promise((resolve) => {
+      finishInstall = resolve;
+    }));
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushUntil(() => Boolean(host.querySelector('[data-activity-id="plugins"]')), 40);
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement).click();
+      await flushUntil(() => Boolean(pluginPanelState.lastProps), 40);
+      await pluginPanelState.lastProps.onOpenCenter();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onCommand), 40);
+
+      await pluginCenterViewState.lastProps.onCommand({
+        type: 'uninstall',
+        pluginInstanceID: officialContainersCatalog.pluginInstanceID,
+        expectedManagementRevision: 11,
+        dataRetention: 'delete_data',
+      }, new AbortController().signal);
+      const install = pluginCenterViewState.lastProps.onCommand({
+        type: 'install',
+        pluginID: officialContainersCatalog.pluginID,
+        source: 'official_catalog',
+      }, new AbortController().signal, {
+        inspection_id: 'release_inspection_fence_binding',
+      });
+      await flushUntil(() => pluginLifecycleMocks.installOfficialRelease.mock.calls.length === 1);
+
+      currentProjection = officialContainersProjection('enabled');
+      await pluginCenterViewState.lastProps.onRefresh();
+      await pluginCenterViewState.lastProps.onCommand({
+        type: 'revoke_permission',
+        pluginInstanceID: officialContainersCatalog.pluginInstanceID,
+        permissionID: 'containers.read',
+        expectedPolicyRevision: 7,
+        expectedManagementRevision: 11,
+        expectedRevokeEpoch: 3,
+      }, new AbortController().signal);
+      finishInstall({
+        execution_id: 'release_install_fence_binding',
+        plugin_instance_id: officialContainersCatalog.pluginInstanceID,
+        kind: 'operation',
+        status: 'completed',
+        cursor: 1,
+        cancelable: false,
+        created_at: '2026-08-21T00:00:00Z',
+        updated_at: '2026-08-21T00:00:01Z',
+        terminal_at: '2026-08-21T00:00:01Z',
+      });
+      await expect(install).resolves.toBeUndefined();
+
+      await expect(pluginCenterViewState.lastProps.onCommand({
+        type: 'open_surface',
+        ...officialContainersProjection('enabled').items[0].defaultLaunchTarget,
+        placement: 'workbench',
+      }, new AbortController().signal)).rejects.toThrow();
+      expect(workbenchPluginSurfaceState.open).not.toHaveBeenCalled();
     } finally {
       dispose();
     }
