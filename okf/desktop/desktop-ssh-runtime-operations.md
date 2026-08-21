@@ -7,7 +7,7 @@ timestamp: 2026-08-20T00:00:00Z
 ---
 # Summary
 
-Desktop shares one lazy, credential-scoped SSH transport manager for access and setup, while the target Gateway performs host Runtime lifecycle work. Local, SSH-host, and SSH-container actions remain recoverable when the Runtime is stopped, old, unreachable, partially installed, or represented only by verified residual processes. A cached probe is an observation, never a reason to remove a direct lifecycle entry point; the click performs the authoritative probe. SSH connection establishment uses only the Environment `connect_timeout_seconds` setting (10 seconds by default); remote commands and probes are cancellation-bound rather than terminated by a second fixed timeout. Transport generations fence retries; SSH hostnames, container labels, and Desktop card ids never substitute for a lifecycle target identity.
+Desktop shares one lazy, credential-scoped SSH transport manager, while the target Gateway owns Runtime lifecycle work. Local, SSH-host, and SSH-container actions remain recoverable when the Runtime is stopped, stale, unreachable, partially installed, or represented by verified residual processes. Cached probes are observations only; each click authoritatively probes the exact lifecycle target. SSH establishment uses the Environment `connect_timeout_seconds` setting (10 seconds by default); remote commands and probes are cancellation-bound, with no second fixed timeout. Transport generations fence retries, and hostnames, container labels, or Desktop card ids never substitute for target identity.
 
 # Contract
 
