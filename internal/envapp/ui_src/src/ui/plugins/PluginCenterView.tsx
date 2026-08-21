@@ -1138,9 +1138,9 @@ function OfficialPluginInstallDialog(props: {
               <div class="space-y-3">
                 <Show when={props.inspection}>
                   {(inspection) => (
-                    <section data-plugin-install-verification class="rounded-md border border-emerald-500/25 bg-emerald-500/5 px-4 py-3">
+                    <section data-plugin-install-verification class="rounded-md border border-[var(--redeven-status-success-foreground)] bg-[var(--redeven-status-success-soft)] px-4 py-3">
                       <div class="flex items-center gap-2 text-sm font-semibold">
-                        <CheckCircle class="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                        <CheckCircle class="h-4 w-4 shrink-0 text-[var(--redeven-status-success-foreground)]" />
                         <span>{i18n.t('uiCopy.plugin.external.signatureVerified')}</span>
                       </div>
                       <p class="mt-1 text-xs text-muted-foreground">{i18n.t('uiCopy.plugin.external.reviewReady')}</p>
