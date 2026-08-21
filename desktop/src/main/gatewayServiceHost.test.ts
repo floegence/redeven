@@ -23,6 +23,9 @@ import {
   gatewaySupervisorEnrollmentInvocation,
   ensureManagedGatewayServiceReady,
   probeManagedGatewayServiceStatus,
+  preflightManagedGatewayTarget,
+  quarantineManagedGatewayTarget,
+  cleanupManagedGatewayQuarantine,
   resolveGatewayHostPlatform,
 } from './gatewayServiceHost';
 import { DEFAULT_DESKTOP_SSH_RUNTIME_ROOT } from '../shared/desktopSSH';
@@ -254,6 +257,164 @@ describe('gatewayServiceHost', () => {
           text: expect.stringContaining('runtime_target_active_workload_confirmation_required'),
         }),
       ]));
+    } finally {
+      fs.rmSync(runtimeRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('classifies a running local Gateway from another bundle as a normal package update', async () => {
+    const runtimeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'redeven-local-identity-'));
+    const stateRoot = path.join(runtimeRoot, 'gateways', 'local', 'state');
+    const binaryPath = path.join(runtimeRoot, 'bundle', 'redeven-gateway');
+    const manifestPath = path.join(runtimeRoot, 'bundle', 'desktop-bundle-manifest.json');
+    fs.mkdirSync(path.dirname(binaryPath), { recursive: true });
+    fs.writeFileSync(binaryPath, [
+      '#!/bin/sh',
+      'case "$1" in',
+      '  service-status) echo \'{"status":"running","pid":1234,"executable":"/old/redeven-gateway"}\'; exit 0 ;;',
+      '  *) exit 2 ;;',
+      'esac',
+      '',
+    ].join('\n'), { mode: 0o755 });
+    fs.writeFileSync(manifestPath, '{}\n');
+    const bundle: DesktopBundle = {
+      root: path.dirname(binaryPath),
+      manifest_path: manifestPath,
+      version: 'v1.2.3',
+      commit: 'abc123',
+      platform: 'darwin',
+      architecture: 'arm64',
+      provenance: 'development_bundle',
+      gateway: { path: binaryPath, sha256: 'a'.repeat(64), size_bytes: 1, executable: true },
+      runtime_suite: [{ path: path.join(path.dirname(binaryPath), 'redeven'), sha256: 'b'.repeat(64), size_bytes: 1, executable: true }],
+      runtime_suite_sha256: `sha256:${'c'.repeat(64)}`,
+    };
+    const options = {
+      sshTransportManager: null as never,
+      sshCredentialScope: 'local',
+      gatewayID: 'local',
+      hostAccess: { kind: 'local_host' as const },
+      placement: { kind: 'host_process' as const, runtime_root: runtimeRoot },
+      stateRoot,
+      releaseTag: 'v1.2.3',
+      releaseBaseURL: '',
+      assetCacheRoot: path.join(runtimeRoot, 'cache'),
+      tempRoot: path.join(runtimeRoot, 'tmp'),
+      precompiledBundle: bundle,
+    };
+
+    try {
+      await expect(probeManagedGatewayServiceStatus(options)).resolves.toMatchObject({
+        status: 'needs_update',
+        package_status: 'build_identity_mismatch',
+      });
+    } finally {
+      fs.rmSync(runtimeRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('classifies an incompatible local Runtime binding startup as reinstall required', async () => {
+    const runtimeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'redeven-local-binding-'));
+    const stateRoot = path.join(runtimeRoot, 'gateways', 'local', 'state');
+    const binaryPath = path.join(runtimeRoot, 'bundle', 'redeven-gateway');
+    const manifestPath = path.join(runtimeRoot, 'bundle', 'desktop-bundle-manifest.json');
+    fs.mkdirSync(stateRoot, { recursive: true });
+    fs.mkdirSync(path.dirname(binaryPath), { recursive: true });
+    fs.writeFileSync(binaryPath, [
+      '#!/bin/sh',
+      'case "$1" in',
+      '  service-status) echo \'{"status":"not_running"}\'; exit 0 ;;',
+      '  service-start) exit 1 ;;',
+      '  *) exit 2 ;;',
+      'esac',
+      '',
+    ].join('\n'), { mode: 0o755 });
+    fs.writeFileSync(manifestPath, '{}\n');
+    fs.writeFileSync(path.join(stateRoot, 'gateway-startup-failure-v1.json'), JSON.stringify({
+      schema_version: 1,
+      code: 'runtime_target_binding_migration_failed',
+      reason: 'stored binding schema is incompatible',
+    }));
+    const bundle: DesktopBundle = {
+      root: path.dirname(binaryPath),
+      manifest_path: manifestPath,
+      version: 'v1.2.3',
+      commit: 'abc123',
+      platform: 'darwin',
+      architecture: 'arm64',
+      provenance: 'development_bundle',
+      gateway: { path: binaryPath, sha256: 'a'.repeat(64), size_bytes: 1, executable: true },
+      runtime_suite: [{ path: path.join(path.dirname(binaryPath), 'redeven'), sha256: 'b'.repeat(64), size_bytes: 1, executable: true }],
+      runtime_suite_sha256: `sha256:${'c'.repeat(64)}`,
+    };
+
+    try {
+      await expect(ensureManagedGatewayServiceReady({
+        sshTransportManager: null as never,
+        sshCredentialScope: 'local',
+        gatewayID: 'local',
+        hostAccess: { kind: 'local_host' },
+        placement: { kind: 'host_process', runtime_root: runtimeRoot },
+        stateRoot,
+        releaseTag: 'v1.2.3',
+        releaseBaseURL: '',
+        assetCacheRoot: path.join(runtimeRoot, 'cache'),
+        tempRoot: path.join(runtimeRoot, 'tmp'),
+        precompiledBundle: bundle,
+      })).rejects.toMatchObject({ presentation: { code: 'reinstall_required' } });
+    } finally {
+      fs.rmSync(runtimeRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('quarantines and cleans only the exact registered Gateway profile root', async () => {
+    const runtimeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'redeven-gateway-quarantine-'));
+    const targetRoot = path.join(runtimeRoot, 'gateways', 'gw_exact');
+    const stateRoot = path.join(targetRoot, 'state');
+    const siblingRoot = path.join(runtimeRoot, 'keep-me');
+    fs.mkdirSync(stateRoot, { recursive: true });
+    fs.mkdirSync(siblingRoot);
+    fs.writeFileSync(path.join(targetRoot, 'old-state'), 'old');
+    fs.writeFileSync(path.join(siblingRoot, 'data'), 'keep');
+    const options = {
+      sshTransportManager: null as never,
+      sshCredentialScope: 'gw_exact',
+      gatewayID: 'gw_exact',
+      hostAccess: { kind: 'local_host' as const },
+      placement: { kind: 'host_process' as const, runtime_root: runtimeRoot },
+      stateRoot,
+      releaseTag: 'v1.2.3',
+      releaseBaseURL: '',
+      assetCacheRoot: path.join(runtimeRoot, 'cache'),
+      tempRoot: path.join(runtimeRoot, 'tmp'),
+    };
+
+    try {
+      await expect(preflightManagedGatewayTarget(options, 'operation-1')).resolves.toEqual({
+        operation_id: 'operation-1',
+        target_root: targetRoot,
+        quarantine_root: `${targetRoot}.redeven-quarantine-operation-1`,
+      });
+      const quarantine = await quarantineManagedGatewayTarget(options, 'operation-1');
+      expect(quarantine).toEqual({
+        operation_id: 'operation-1',
+        target_root: targetRoot,
+        quarantine_root: `${targetRoot}.redeven-quarantine-operation-1`,
+      });
+      expect(fs.readFileSync(path.join(quarantine.quarantine_root, 'old-state'), 'utf8')).toBe('old');
+      expect(fs.readFileSync(path.join(siblingRoot, 'data'), 'utf8')).toBe('keep');
+      await cleanupManagedGatewayQuarantine(options, quarantine);
+      expect(fs.existsSync(quarantine.quarantine_root)).toBe(false);
+      expect(fs.readFileSync(path.join(siblingRoot, 'data'), 'utf8')).toBe('keep');
+
+      fs.mkdirSync(`${targetRoot}.redeven-quarantine-previous`);
+      await expect(preflightManagedGatewayTarget(options, 'operation-2')).rejects.toThrow('Desktop could not run the runtime host command');
+      expect(fs.existsSync(`${targetRoot}.redeven-quarantine-previous`)).toBe(true);
+
+      await expect(quarantineManagedGatewayTarget({
+        ...options,
+        stateRoot: path.join(runtimeRoot, 'wrong', 'state'),
+      }, 'operation-3')).rejects.toThrow('does not match');
     } finally {
       fs.rmSync(runtimeRoot, { recursive: true, force: true });
     }

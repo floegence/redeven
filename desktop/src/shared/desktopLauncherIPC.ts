@@ -142,6 +142,8 @@ export type DesktopLauncherActionOutcome =
   | 'stopped_gateway'
   | 'restarted_gateway'
   | 'updated_gateway'
+  | 'reinstalled_gateway'
+  | 'reset_local_environment'
   | 'refreshed_gateway_catalog'
   | 'refreshed_gateway_status'
   | 'deleted_gateway'
@@ -188,6 +190,11 @@ export type DesktopLauncherActionFailureCode =
   | 'gateway_service_stop_failed'
   | 'gateway_service_restart_failed'
   | 'gateway_service_update_failed'
+  | 'gateway_reinstall_required'
+  | 'gateway_pairing_required'
+  | 'local_environment_reinstall_required'
+  | 'gateway_service_reinstall_failed'
+  | 'local_environment_reinstall_failed'
   | 'gateway_catalog_failed'
   | 'confirmation_required'
   | 'operation_missing'
@@ -231,6 +238,8 @@ export type DesktopLauncherActionKind =
   | 'stop_gateway'
   | 'restart_gateway'
   | 'update_gateway'
+  | 'reinstall_gateway'
+  | 'reset_local_environment'
   | 'refresh_gateway_catalog'
   | 'refresh_gateway_status'
   | 'delete_gateway'
@@ -349,6 +358,9 @@ export type DesktopEnvironmentEntry = Readonly<{
   local_environment_close_behavior?: DesktopLocalCloseBehavior;
   local_environment_has_local_hosting?: boolean;
   local_environment_has_remote_desktop?: boolean;
+  reinstall_required?: boolean;
+  reinstall_gateway_id?: string;
+  reinstall_pairing_required?: boolean;
   local_environment_preferred_open_route?: 'auto' | DesktopLocalEnvironmentStateRoute;
   default_open_route?: DesktopLocalEnvironmentStateRoute;
   open_local_session_key?: string;
@@ -648,6 +660,12 @@ export type DesktopLauncherOperationNextAction = Readonly<
       label_key?: DesktopTranslationKey;
     }
   | {
+      kind: 'reinstall_gateway';
+      gateway_id: string;
+      label: string;
+      label_key?: DesktopTranslationKey;
+    }
+  | {
       kind: 'resolve_gateway';
       gateway_id: string;
       resolve_focus?: DesktopGatewayResolveFocus;
@@ -877,6 +895,16 @@ export type DesktopLauncherActionRequest = Readonly<
   | {
       kind: 'update_gateway';
       gateway_id: string;
+      impact_acknowledged?: boolean;
+    }
+  | {
+      kind: 'reinstall_gateway';
+      gateway_id: string;
+      impact_acknowledged?: boolean;
+    }
+  | {
+      kind: 'reset_local_environment';
+      environment_id: string;
       impact_acknowledged?: boolean;
     }
   | {
@@ -1624,6 +1652,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
     case 'stop_gateway':
     case 'restart_gateway':
     case 'update_gateway':
+    case 'reinstall_gateway':
     case 'refresh_gateway_status':
     case 'refresh_gateway_catalog':
     case 'delete_gateway': {
@@ -1671,7 +1700,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
           ...(startPolicy ? { start_policy: startPolicy as Extract<DesktopGatewayStartPolicy, 'start_if_needed'> } : {}),
         };
       }
-      if (kind === 'stop_gateway' || kind === 'restart_gateway' || kind === 'update_gateway') {
+      if (kind === 'stop_gateway' || kind === 'restart_gateway' || kind === 'update_gateway' || kind === 'reinstall_gateway') {
         return {
           kind,
           gateway_id: gatewayID,
@@ -1689,6 +1718,19 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       return {
         kind,
         gateway_id: gatewayID,
+      };
+    }
+    case 'reset_local_environment': {
+      const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
+      if (environmentID === '') {
+        return null;
+      }
+      return {
+        kind,
+        environment_id: environmentID,
+        ...((candidate as { impact_acknowledged?: unknown }).impact_acknowledged === true
+          ? { impact_acknowledged: true }
+          : {}),
       };
     }
     case 'upsert_gateway_environment_profile': {

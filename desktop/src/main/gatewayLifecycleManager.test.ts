@@ -6,6 +6,9 @@ const lifecycleMocks = vi.hoisted(() => ({
   probeManagedGatewayServiceDeep: vi.fn(),
   probeManagedGatewayServiceStatus: vi.fn(),
   stopManagedGatewayService: vi.fn(),
+  preflightManagedGatewayTarget: vi.fn(),
+  quarantineManagedGatewayTarget: vi.fn(),
+  cleanupManagedGatewayQuarantine: vi.fn(),
   startRuntimePlacementBridgeSession: vi.fn(),
 }));
 
@@ -18,6 +21,9 @@ vi.mock('./gatewayServiceHost', async () => {
     probeManagedGatewayServiceDeep: lifecycleMocks.probeManagedGatewayServiceDeep,
     probeManagedGatewayServiceStatus: lifecycleMocks.probeManagedGatewayServiceStatus,
     stopManagedGatewayService: lifecycleMocks.stopManagedGatewayService,
+    preflightManagedGatewayTarget: lifecycleMocks.preflightManagedGatewayTarget,
+    quarantineManagedGatewayTarget: lifecycleMocks.quarantineManagedGatewayTarget,
+    cleanupManagedGatewayQuarantine: lifecycleMocks.cleanupManagedGatewayQuarantine,
   };
 });
 
@@ -32,6 +38,7 @@ vi.mock('./runtimePlacementBridgeSession', async () => {
 import {
   GatewayLifecycleManager,
   GatewayNotManageableError,
+  GatewayReinstallRequiredError,
   GatewayServiceStartRequiredError,
   GatewayServiceUnavailableError,
 } from './gatewayLifecycleManager';
@@ -205,6 +212,9 @@ describe('GatewayLifecycleManager', () => {
     lifecycleMocks.probeManagedGatewayServiceDeep.mockReset();
     lifecycleMocks.probeManagedGatewayServiceStatus.mockReset();
     lifecycleMocks.stopManagedGatewayService.mockReset();
+    lifecycleMocks.preflightManagedGatewayTarget.mockReset();
+    lifecycleMocks.quarantineManagedGatewayTarget.mockReset();
+    lifecycleMocks.cleanupManagedGatewayQuarantine.mockReset();
     lifecycleMocks.startRuntimePlacementBridgeSession.mockReset();
     lifecycleMocks.ensureManagedGatewayServiceReady.mockResolvedValue('/opt/redeven/gateway/managed/bin/redeven-gateway');
     lifecycleMocks.enrollManagedGatewaySupervisor.mockResolvedValue(undefined);
@@ -224,6 +234,17 @@ describe('GatewayLifecycleManager', () => {
       state_root: '/opt/redeven/gateways/gw_bastion/state',
     });
     lifecycleMocks.stopManagedGatewayService.mockResolvedValue(undefined);
+    lifecycleMocks.preflightManagedGatewayTarget.mockResolvedValue({
+      target_root: '/opt/redeven/gateways/gw_bastion',
+      quarantine_root: '/opt/redeven/gateways/gw_bastion.redeven-quarantine-operation-1',
+      operation_id: 'operation-1',
+    });
+    lifecycleMocks.quarantineManagedGatewayTarget.mockResolvedValue({
+      target_root: '/opt/redeven/gateways/gw_bastion',
+      quarantine_root: '/opt/redeven/gateways/gw_bastion.redeven-quarantine-operation-1',
+      operation_id: 'operation-1',
+    });
+    lifecycleMocks.cleanupManagedGatewayQuarantine.mockResolvedValue(undefined);
     lifecycleMocks.startRuntimePlacementBridgeSession.mockResolvedValue(fakeBridgeSession());
   });
 
@@ -718,6 +739,58 @@ describe('GatewayLifecycleManager', () => {
     expect(lifecycleMocks.ensureManagedGatewayServiceReady.mock.invocationCallOrder[0]).toBeLessThan(
       lifecycleMocks.startRuntimePlacementBridgeSession.mock.invocationCallOrder[0] ?? 0,
     );
+  });
+
+  it('blocks ordinary start, restart, and update when the target requires reinstall', async () => {
+    lifecycleMocks.probeManagedGatewayServiceStatus.mockResolvedValue({
+      status: 'needs_reinstall',
+      message: 'Gateway identity is incompatible with this Desktop.',
+      binary_path: '/opt/redeven/gateway/managed/bin/redeven-gateway',
+      state_root: '/opt/redeven/gateways/gw_bastion/state',
+    });
+    const lifecycle = manager();
+    const record = sshGateway();
+
+    await expect(lifecycle.startGateway(record)).rejects.toBeInstanceOf(GatewayReinstallRequiredError);
+    await expect(lifecycle.restartGateway(record)).rejects.toBeInstanceOf(GatewayReinstallRequiredError);
+    await expect(lifecycle.updateGateway(record)).rejects.toBeInstanceOf(GatewayReinstallRequiredError);
+    expect(lifecycleMocks.ensureManagedGatewayServiceReady).not.toHaveBeenCalled();
+    expect(lifecycleMocks.startRuntimePlacementBridgeSession).not.toHaveBeenCalled();
+  });
+
+  it('uses the explicit reinstall path and clears quarantine only after fresh verification hooks succeed', async () => {
+    const beforeCleanup = vi.fn(async () => undefined);
+    const lifecycle = manager();
+
+    await lifecycle.reinstallTarget(sshGateway(), {
+      operationID: 'operation-1',
+      beforeCleanup,
+    });
+
+    expect(lifecycleMocks.stopManagedGatewayService).toHaveBeenCalledTimes(1);
+    expect(lifecycleMocks.preflightManagedGatewayTarget).toHaveBeenCalledTimes(1);
+    expect(lifecycleMocks.quarantineManagedGatewayTarget).toHaveBeenCalledTimes(1);
+    expect(lifecycleMocks.ensureManagedGatewayServiceReady).toHaveBeenCalledTimes(1);
+    expect(lifecycleMocks.startRuntimePlacementBridgeSession).toHaveBeenCalledTimes(1);
+    expect(beforeCleanup).toHaveBeenCalledTimes(1);
+    expect(lifecycleMocks.cleanupManagedGatewayQuarantine).toHaveBeenCalledTimes(1);
+    expect(lifecycleMocks.preflightManagedGatewayTarget.mock.invocationCallOrder[0]).toBeLessThan(
+      lifecycleMocks.stopManagedGatewayService.mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(beforeCleanup.mock.invocationCallOrder[0]).toBeLessThan(
+      lifecycleMocks.cleanupManagedGatewayQuarantine.mock.invocationCallOrder[0] ?? 0,
+    );
+  });
+
+  it('preserves Gateway quarantine when the fresh bridge cannot be verified', async () => {
+    lifecycleMocks.startRuntimePlacementBridgeSession.mockRejectedValueOnce(new Error('fresh bridge failed'));
+
+    await expect(manager().reinstallTarget(sshGateway(), {
+      operationID: 'operation-1',
+    })).rejects.toThrow('fresh bridge failed');
+
+    expect(lifecycleMocks.quarantineManagedGatewayTarget).toHaveBeenCalledTimes(1);
+    expect(lifecycleMocks.cleanupManagedGatewayQuarantine).not.toHaveBeenCalled();
   });
 
   it('stops the selected Gateway, enrolls through stdin, then restarts the supervisor', async () => {

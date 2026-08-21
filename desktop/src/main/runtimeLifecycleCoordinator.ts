@@ -7,7 +7,7 @@ import {
 } from '../shared/desktopRuntimePlacement';
 import { desktopSSHAuthority } from '../shared/desktopSSH';
 
-export type RuntimeLifecycleIntent = 'start' | 'stop' | 'restart' | 'update';
+export type RuntimeLifecycleIntent = 'start' | 'stop' | 'restart' | 'update' | 'reinstall';
 
 export type RuntimeLifecycleOperationSnapshot = Readonly<{
   target_key: string;

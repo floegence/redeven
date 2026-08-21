@@ -193,6 +193,8 @@ export type EnvironmentActionIntent =
   | 'update_runtime'
   | 'update_desktop'
   | 'refresh_runtime'
+  | 'reinstall_target'
+  | 'pair_gateway'
   | 'review_network_exposure'
   | 'unavailable';
 
@@ -205,6 +207,7 @@ export type EnvironmentActionModel = Readonly<{
   route?: DesktopLocalEnvironmentStateRoute;
   provider_origin?: string;
   provider_id?: string;
+  gateway_id?: string;
   runtime_operation?: DesktopRuntimeOperation;
   runtime_operation_method?: DesktopRuntimeOperationMethod;
   disabled_reason?: string;
@@ -1533,6 +1536,12 @@ function runtimeManagementStartRecoveryAvailable(environment: DesktopEnvironment
 }
 
 function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly EnvironmentActionMenuItemModel[] {
+  if (environment.kind === 'local_environment' && (
+    environment.reinstall_required === true
+    || environment.reinstall_pairing_required === true
+  )) {
+    return [];
+  }
   const items: EnvironmentActionMenuItemModel[] = [];
   if (environment.kind === 'gateway_environment') {
     for (const operation of runtimeOperationMenuOrder) {
@@ -2009,7 +2018,22 @@ export function buildProviderBackedEnvironmentActionModel(
 ): ProviderBackedEnvironmentActionModel {
   const displayState = buildEnvironmentDisplayStateModel(environment);
   const syncState = _controlPlaneSyncState;
-  const primaryAction = primaryWindowAction(environment);
+  const primaryAction = environment.kind === 'local_environment' && environment.reinstall_required === true
+    ? {
+        intent: 'reinstall_target' as const,
+        label: 'Reinstall',
+        enabled: true,
+        variant: 'default' as const,
+      }
+    : environment.kind === 'local_environment' && environment.reinstall_pairing_required === true
+      ? {
+          intent: 'pair_gateway' as const,
+          label: 'Pair Gateway',
+          enabled: true,
+          variant: 'default' as const,
+          gateway_id: environment.reinstall_gateway_id,
+        }
+      : primaryWindowAction(environment);
   const menuActions = syncState === 'auth_required' && environment.kind === 'provider_environment'
     ? [{
         id: 'request_open_access',
@@ -2030,7 +2054,12 @@ export function buildProviderBackedEnvironmentActionModel(
     action_presentation: {
       kind: 'split_button',
       primary_action: primaryAction,
-      primary_action_overlay: primaryActionOverlay(environment, menuActions),
+      primary_action_overlay: environment.kind === 'local_environment' && (
+        environment.reinstall_required === true
+        || environment.reinstall_pairing_required === true
+      )
+        ? undefined
+        : primaryActionOverlay(environment, menuActions),
       menu_button_label: 'Runtime actions',
       menu_actions: menuActions,
     },
@@ -2443,6 +2472,7 @@ export type GatewaySourceActionIntent =
   | 'stop_gateway'
   | 'restart_gateway'
   | 'update_gateway'
+  | 'reinstall_gateway'
   | 'view_gateway_environments'
   | 'cancel_gateway_action';
 
@@ -2514,6 +2544,12 @@ function gatewaySourcePrimaryAction(gateway: DesktopGatewaySource): GatewaySourc
   if (gateway.local_enabled === false) {
     return gatewaySourceAction('enable_gateway', 'Enable Gateway', 'default');
   }
+  if (desktopGatewayCanManageService(gateway) && gateway.service_state?.status === 'needs_reinstall') {
+    return gatewaySourceAction('reinstall_gateway', 'Reinstall', 'default');
+  }
+  if (gateway.reinstall_pairing_required === true) {
+    return gatewaySourceAction('refresh_gateway', 'Pair Gateway', 'default');
+  }
   return gatewaySourceAction('refresh_gateway', 'Refresh', 'default');
 }
 
@@ -2532,6 +2568,13 @@ function gatewaySourceSecondaryActions(gateway: DesktopGatewaySource): readonly 
   };
 
   if (gateway.local_enabled === false) {
+    return actions;
+  }
+
+  if (manageable && serviceStatus === 'needs_reinstall') {
+    return actions;
+  }
+  if (gateway.reinstall_pairing_required === true) {
     return actions;
   }
 
@@ -2570,6 +2613,14 @@ function gatewaySourceGuidance(gateway: DesktopGatewaySource): GatewaySourceGuid
       title: 'Gateway disabled on this Desktop',
       detail: 'This Desktop is not syncing this Gateway or showing its environments.',
       tone: 'neutral',
+    };
+  }
+
+  if (gateway.reinstall_pairing_required === true) {
+    return {
+      title: 'Gateway pairing required',
+      detail: 'Reinstall completed. Pair the new Gateway before using this Environment.',
+      tone: 'warning',
     };
   }
 
@@ -2640,6 +2691,14 @@ function gatewaySourceGuidance(gateway: DesktopGatewaySource): GatewaySourceGuid
     return {
       title: 'Update before continuing',
       detail: 'Install the Gateway service update, then Desktop can pair and refresh the environments this Gateway exposes.',
+      tone: 'warning',
+    };
+  }
+
+  if (runtimeStatus === 'needs_reinstall') {
+    return {
+      title: 'Gateway reinstall required',
+      detail: 'This Gateway has incompatible state. Reinstall replaces its complete Redeven environment and requires pairing again.',
       tone: 'warning',
     };
   }
@@ -2736,6 +2795,8 @@ export function buildGatewaySourceRowModel(
       ? 'Not started'
       : runtimeStatus === 'service_needs_update'
         ? 'Update available'
+        : runtimeStatus === 'needs_reinstall'
+          ? 'Reinstall required'
         : runtimeStatus === 'ready' && gateway.status !== 'online'
           ? 'Service ready'
         : gateway.background_sync_running === true
@@ -2747,7 +2808,7 @@ export function buildGatewaySourceRowModel(
       ? 'success'
       : gateway.status === 'installing' || gateway.status === 'starting' || gateway.status === 'updating'
         ? 'primary'
-        : runtimeStatus === 'not_started' || runtimeStatus === 'service_needs_update'
+        : runtimeStatus === 'not_started' || runtimeStatus === 'service_needs_update' || runtimeStatus === 'needs_reinstall'
           ? 'warning'
         : needsResolution
           ? 'warning'

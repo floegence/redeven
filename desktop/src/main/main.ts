@@ -12,7 +12,9 @@ import { safeLogText } from './logSafety';
 import {
   attachManagedRuntimeFromStatus,
   inspectLocalManagedRuntimeProcesses,
+  stopLocalManagedRuntimeProcesses,
 } from './runtimeProcess';
+import { preflightReinstallTarget, reinstallTarget } from './targetReinstall';
 import {
 	beginRuntimeFlowerAttachmentWrite,
 	endRuntimeFlowerAttachmentWrite,
@@ -106,6 +108,7 @@ import {
   buildRemoteConnectionIssue,
   type BuildDesktopWelcomeSnapshotArgs,
 } from './desktopWelcomeState';
+import { createDesktopLocalEnvironmentState } from '../shared/desktopLocalEnvironmentState';
 import { hydrateWelcomeLocalEnvironmentRuntimeState } from './desktopWelcomeRuntimeState';
 import { defaultDesktopStateStorePath, DesktopStateStore } from './desktopStateStore';
 import {
@@ -148,6 +151,7 @@ import {
 import {
   GatewayLifecycleManager,
   GatewayNotManageableError,
+  GatewayReinstallRequiredError,
   GatewayServiceStartRequiredError,
   GatewayServiceUnavailableError,
   gatewayServiceTargetDescriptor,
@@ -1223,6 +1227,80 @@ async function refreshStartupReportFromLocalUI(
 
 function localEnvironmentStateRoot(environment: DesktopLocalEnvironmentState): string {
   return compact(environment.local_hosting.state_dir);
+}
+
+function localEnvironmentReinstallRequiredMarkerPath(environment: DesktopLocalEnvironmentState): string {
+  const targetRoot = path.resolve(localEnvironmentStateRoot(environment));
+  const parentRoot = path.dirname(targetRoot);
+  if (targetRoot === path.parse(targetRoot).root || parentRoot === targetRoot) {
+    throw new Error('Local Environment reinstall marker requires a dedicated target root.');
+  }
+  return path.join(parentRoot, 'maintenance', 'local-environment-reinstall-required.json');
+}
+
+async function localEnvironmentReinstallRequired(environment: DesktopLocalEnvironmentState): Promise<boolean> {
+  return fs.lstat(localEnvironmentReinstallRequiredMarkerPath(environment))
+    .then(() => true)
+    .catch((error: NodeJS.ErrnoException) => error.code === 'ENOENT' ? false : Promise.reject(error));
+}
+
+async function markLocalEnvironmentReinstallRequired(
+  environment: DesktopLocalEnvironmentState,
+  input: Readonly<{ gatewayID: string; reason: string }>,
+): Promise<void> {
+  const markerPath = localEnvironmentReinstallRequiredMarkerPath(environment);
+  const markerDirectory = path.dirname(markerPath);
+  const temporaryPath = `${markerPath}.${crypto.randomUUID()}.tmp`;
+  await fs.mkdir(markerDirectory, { recursive: true });
+  await fs.writeFile(temporaryPath, JSON.stringify({
+    schema_version: 1,
+    environment_id: environment.id,
+    gateway_id: input.gatewayID,
+    reason: compact(input.reason) || 'incompatible_state',
+    marked_at_unix_ms: Date.now(),
+  }, null, 2), { encoding: 'utf8', mode: 0o600 });
+  await fs.rename(temporaryPath, markerPath);
+}
+
+async function clearLocalEnvironmentReinstallRequired(environment: DesktopLocalEnvironmentState): Promise<void> {
+  await fs.rm(localEnvironmentReinstallRequiredMarkerPath(environment), { force: true });
+}
+
+async function localEnvironmentReinstallPairingRequired(environment: DesktopLocalEnvironmentState): Promise<boolean> {
+  return fs.lstat(path.join(localEnvironmentStateRoot(environment), '.reinstall-marker.json'))
+    .then(() => true)
+    .catch((error: NodeJS.ErrnoException) => error.code === 'ENOENT' ? false : Promise.reject(error));
+}
+
+function gatewayReinstallPairingMarkerPath(gatewayID: string): string {
+  const cleanGatewayID = compact(gatewayID);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(cleanGatewayID)) {
+    throw new Error('Gateway pairing marker requires an exact Gateway identity.');
+  }
+  return path.join(preferencesPaths().stateRoot, 'maintenance', 'gateway-pairing-required', `${cleanGatewayID}.json`);
+}
+
+async function gatewayReinstallPairingRequired(gatewayID: string): Promise<boolean> {
+  return fs.lstat(gatewayReinstallPairingMarkerPath(gatewayID))
+    .then(() => true)
+    .catch((error: NodeJS.ErrnoException) => error.code === 'ENOENT' ? false : Promise.reject(error));
+}
+
+async function markGatewayReinstallPairingRequired(gatewayID: string, operationID: string): Promise<void> {
+  const markerPath = gatewayReinstallPairingMarkerPath(gatewayID);
+  const temporaryPath = `${markerPath}.${crypto.randomUUID()}.tmp`;
+  await fs.mkdir(path.dirname(markerPath), { recursive: true });
+  await fs.writeFile(temporaryPath, JSON.stringify({
+    schema_version: 1,
+    gateway_id: gatewayID,
+    operation_id: operationID,
+    marked_at_unix_ms: Date.now(),
+  }, null, 2), { encoding: 'utf8', mode: 0o600 });
+  await fs.rename(temporaryPath, markerPath);
+}
+
+async function clearGatewayReinstallPairingRequired(gatewayID: string): Promise<void> {
+  await fs.rm(gatewayReinstallPairingMarkerPath(gatewayID), { force: true });
 }
 
 function localRuntimeMatchesProvider(
@@ -3959,7 +4037,7 @@ async function buildCurrentDesktopWelcomeSnapshot(
   };
   const state = currentUtilityWindowState(kind);
   const gatewaySources = await loadGatewaySourcesForWelcome();
-  return buildDesktopWelcomeSnapshot({
+  const snapshot = buildDesktopWelcomeSnapshot({
     preferences,
     controlPlanes: currentControlPlaneSummaries(preferences),
     openSessions,
@@ -3977,6 +4055,30 @@ async function buildCurrentDesktopWelcomeSnapshot(
     selectedEnvironmentID: state.selectedEnvironmentID,
     flowerSettingsFocusRevision: state.flowerSettingsFocusRevision,
   });
+  const localGatewayID = stableGatewayID(gatewayBindingAudience(directRuntimeGatewayConnection(
+    { kind: 'local_host' },
+    localHostRuntimeLifecyclePlacement(preferences.local_environment),
+  )));
+  const localGateway = gatewaySources.find((source) => source.gateway_id === localGatewayID);
+  const localNeedsReinstall = await localEnvironmentReinstallRequired(preferences.local_environment)
+    || localGateway?.service_state?.status === 'needs_reinstall';
+  const localPairingRequired = !localNeedsReinstall
+    && await localEnvironmentReinstallPairingRequired(preferences.local_environment);
+  if (!localNeedsReinstall && !localPairingRequired) {
+    return snapshot;
+  }
+  return {
+    ...snapshot,
+    environments: snapshot.environments.map((environment) => environment.id === preferences.local_environment.id
+      ? {
+          ...environment,
+          reinstall_gateway_id: localGatewayID,
+          ...(localNeedsReinstall
+            ? { reinstall_required: true }
+            : { reinstall_pairing_required: true }),
+        }
+      : environment),
+  };
 }
 
 async function loadGatewaySourcesForWelcome(): Promise<readonly DesktopGatewaySource[]> {
@@ -3989,14 +4091,16 @@ async function loadGatewaySourcesForWelcome(): Promise<readonly DesktopGatewaySo
       supersedeGatewaySyncTask(gatewayID);
     }
   }
-  return records.map((record) => {
+  return Promise.all(records.map(async (record) => {
     const syncRecord = gatewaySyncStateByID.get(record.gateway_id);
     const diagnosis = gatewayDiagnosisByID.get(record.gateway_id);
-    if (syncRecord?.source) {
-      return mergeGatewaySourceRecord(syncRecord.source, record, syncRecord, undefined, diagnosis);
-    }
-    return mergeGatewaySourceRecord(gatewayRecordToSource(record), record, syncRecord, undefined, diagnosis);
-  });
+    const source = syncRecord?.source
+      ? mergeGatewaySourceRecord(syncRecord.source, record, syncRecord, undefined, diagnosis)
+      : mergeGatewaySourceRecord(gatewayRecordToSource(record), record, syncRecord, undefined, diagnosis);
+    return await gatewayReinstallPairingRequired(record.gateway_id)
+      ? { ...source, reinstall_pairing_required: true }
+      : source;
+  }));
 }
 
 function defaultGatewaySyncRecord(record: GatewayRecord): GatewaySyncRecord {
@@ -4155,6 +4259,9 @@ function setGatewayDiagnosis(record: GatewayRecord, diagnosis: DesktopGatewayDia
 }
 
 function gatewaySyncErrorCode(error: unknown): string {
+  if (error instanceof GatewayReinstallRequiredError) {
+    return 'gateway_reinstall_required';
+  }
   if (error instanceof GatewayTrustError || error instanceof GatewayClientError) {
     return error.code;
   }
@@ -4196,27 +4303,6 @@ function gatewayClientErrorIsPairingRejected(error: GatewayClientError): boolean
     || message.includes('pair this gateway');
 }
 
-function gatewayTrustErrorNeedsRepair(error: GatewayTrustError): boolean {
-  switch (compact(error.code).toUpperCase()) {
-    case 'GATEWAY_PAIRING_REQUIRED':
-    case 'GATEWAY_CLIENT_PRIVATE_KEY_REQUIRED':
-    case 'GATEWAY_TRUST_REVOKED':
-      return true;
-    default:
-      return false;
-  }
-}
-
-function gatewayErrorNeedsTrustRepair(error: unknown): boolean {
-  if (error instanceof GatewayClientError) {
-    return gatewayClientErrorIsPairingRejected(error);
-  }
-  if (error instanceof GatewayTrustError) {
-    return gatewayTrustErrorNeedsRepair(error);
-  }
-  return false;
-}
-
 function gatewayClientErrorIsTrustMismatch(error: GatewayClientError): boolean {
   switch (compact(error.code)) {
     case 'GATEWAY_ID_MISMATCH':
@@ -4229,8 +4315,18 @@ function gatewayClientErrorIsTrustMismatch(error: GatewayClientError): boolean {
   }
 }
 
-function gatewayCanRepairManagedTrust(record: GatewayRecord): boolean {
-  return record.connection.kind !== 'url' && !!record.trust_profile;
+function gatewayTrustErrorNeedsReinstall(error: GatewayTrustError): boolean {
+  switch (compact(error.code)) {
+    case 'GATEWAY_PROTOCOL_VERSION_UNSUPPORTED':
+    case 'GATEWAY_TRUST_CHANGED':
+    case 'GATEWAY_TRUST_ID_MISMATCH':
+    case 'GATEWAY_PAIRING_ID_MISMATCH':
+    case 'GATEWAY_PAIRING_COMPLETE_MISMATCH':
+    case 'GATEWAY_FINGERPRINT_INVALID':
+      return true;
+    default:
+      return false;
+  }
 }
 
 async function resetManagedGatewayTrust(record: GatewayRecord, secretStore: GatewaySecretStore): Promise<GatewayRecord> {
@@ -4286,7 +4382,36 @@ function gatewaySyncRecordFromError(
 }
 
 function gatewayServiceStateInvalidatesCatalog(serviceState: DesktopGatewayServiceState | undefined): boolean {
-  return serviceState?.status === 'service_needs_update';
+  return serviceState?.status === 'service_needs_update' || serviceState?.status === 'needs_reinstall';
+}
+
+function gatewayServiceStateForReinstall(
+  previous: DesktopGatewayServiceState | undefined,
+  message: string,
+): DesktopGatewayServiceState {
+  return {
+    ...previous,
+    status: 'needs_reinstall',
+    can_start: false,
+    can_stop: previous?.can_stop ?? true,
+    can_restart: false,
+    can_update: false,
+    can_pair_after_start: false,
+    message: compact(message) || 'This Gateway has incompatible state and must be reinstalled.',
+    checked_at_unix_ms: Date.now(),
+  };
+}
+
+function knownGatewayReinstallState(gatewayID: string): DesktopGatewayServiceState | undefined {
+  const syncState = gatewaySyncStateByID.get(gatewayID)?.source?.service_state;
+  if (syncState?.status === 'needs_reinstall') {
+    return syncState;
+  }
+  const diagnosis = gatewayDiagnosisByID.get(gatewayID);
+  if (diagnosis?.classification !== 'needs_reinstall') {
+    return undefined;
+  }
+  return gatewayServiceStateForReinstall(diagnosis.service_state, diagnosis.detail);
 }
 
 function gatewayErrorInvalidatesCatalog(error: unknown, serviceState?: DesktopGatewayServiceState): boolean {
@@ -4317,7 +4442,7 @@ function gatewayNeedsAutoSync(record: GatewayRecord, syncRecord?: GatewaySyncRec
     return false;
   }
   const serviceStatus = syncRecord?.source?.service_state?.status;
-  if (serviceStatus === 'not_started' || serviceStatus === 'service_needs_update') {
+  if (serviceStatus === 'not_started' || serviceStatus === 'service_needs_update' || serviceStatus === 'needs_reinstall') {
     return false;
   }
   return !gatewayCatalogFresh(record, syncRecord);
@@ -4474,9 +4599,20 @@ async function syncGatewayRecord(
     mode?: GatewaySyncOperationMode;
     priority?: GatewaySyncOperationPriority;
     startPolicy?: GatewayStartPolicy;
+    allowReinstallPairing?: boolean;
     progress?: GatewaySyncProgressObserver;
   }> = {},
 ): Promise<DesktopGatewaySource> {
+  if (await gatewayReinstallPairingRequired(record.gateway_id) && options.allowReinstallPairing !== true) {
+    throw new GatewayClientError(
+      'GATEWAY_PAIRING_REQUIRED',
+      'Explicit pairing is required before Desktop can sync this freshly reinstalled Gateway.',
+    );
+  }
+  const reinstallState = knownGatewayReinstallState(record.gateway_id);
+  if (reinstallState) {
+    throw new GatewayReinstallRequiredError(reinstallState, reinstallState.message);
+  }
   const priority = options.priority ?? (options.progress ? 'foreground' : 'background');
   const existingTaskRecord = gatewaySyncTaskByID.get(record.gateway_id);
   if (existingTaskRecord) {
@@ -4567,28 +4703,7 @@ async function syncGatewayRecord(
           signal,
         });
       };
-      let catalog: Awaited<ReturnType<typeof refreshCatalog>>;
-      try {
-        catalog = await refreshCatalog(currentRecord);
-      } catch (catalogError) {
-        if (!gatewayErrorNeedsTrustRepair(catalogError) || !gatewayCanRepairManagedTrust(currentRecord)) {
-          throw catalogError;
-        }
-        currentRecord = await resetManagedGatewayTrust(currentRecord, secretStore);
-        currentRecord = await assertSyncActive();
-        const repairClient = await gatewayClientForSync(currentRecord, {
-          startPolicy: 'require_ready',
-          signal,
-          onProgress: options.progress?.onGatewayServiceProgress,
-        });
-        currentRecord = await pairGatewayWithClient(currentRecord, repairClient, secretStore, {
-          signal,
-          onStage: options.progress?.onStage,
-          beforeStoreWrite: assertSyncActive,
-        });
-        currentRecord = await assertSyncActive();
-        catalog = await refreshCatalog(currentRecord);
-      }
+      const catalog = await refreshCatalog(currentRecord);
       currentRecord = await assertSyncActive();
       const syncedAtMS = Date.now();
       const syncedRecord = await gatewayStore().markCatalogSynced(currentRecord.gateway_id, syncedAtMS).catch(() => currentRecord);
@@ -4627,6 +4742,13 @@ async function syncGatewayRecord(
         source,
       });
       gatewayDiagnosisByID.delete(syncedRecord.gateway_id);
+      await clearGatewayReinstallPairingRequired(syncedRecord.gateway_id);
+      if (syncedRecord.runtime_environment_id) {
+        const currentPreferences = await loadDesktopPreferencesCached();
+        if (syncedRecord.runtime_environment_id === currentPreferences.local_environment.id) {
+          await fs.rm(path.join(localEnvironmentStateRoot(currentPreferences.local_environment), '.reinstall-marker.json'), { force: true });
+        }
+      }
       await refreshDirectGatewayRuntimeOperationAttachments(syncedRecord, catalogEnvironments, signal);
       return source;
     } catch (error) {
@@ -4640,7 +4762,21 @@ async function syncGatewayRecord(
         throw error;
       }
       const latestRecord = await gatewayStore().get(record.gateway_id).catch(() => null) ?? record;
-      const syncRecord = gatewaySyncRecordFromError(latestRecord, error, attemptAtMS, serviceState);
+      const diagnosis = completeGatewayDiagnosis(gatewayDiagnosisForError(latestRecord, error, serviceState));
+      gatewayDiagnosisByID.set(latestRecord.gateway_id, diagnosis);
+      if (diagnosis.classification === 'needs_reinstall' && latestRecord.runtime_environment_id) {
+        const currentPreferences = await loadDesktopPreferencesCached();
+        if (latestRecord.runtime_environment_id === currentPreferences.local_environment.id) {
+          await markLocalEnvironmentReinstallRequired(currentPreferences.local_environment, {
+            gatewayID: latestRecord.gateway_id,
+            reason: diagnosis.detail,
+          });
+        }
+      }
+      const failedServiceState = diagnosis.classification === 'needs_reinstall'
+        ? gatewayServiceStateForReinstall(serviceState, diagnosis.detail)
+        : serviceState;
+      const syncRecord = gatewaySyncRecordFromError(latestRecord, error, attemptAtMS, failedServiceState);
       commitGatewaySyncRecord(latestRecord, syncRecord);
       throw error;
     }
@@ -4655,6 +4791,9 @@ async function syncGatewayRecord(
 }
 
 async function syncGatewayIfNeeded(record: GatewayRecord, options: Readonly<{ force?: boolean }> = {}): Promise<void> {
+  if (await gatewayReinstallPairingRequired(record.gateway_id)) {
+    return;
+  }
   const syncRecord = gatewaySyncStateByID.get(record.gateway_id);
   if (!options.force && !gatewayNeedsAutoSync(record, syncRecord)) {
     return;
@@ -7525,7 +7664,7 @@ function gatewayOperationFailureNextActions(
   operationKey: string,
   input: Readonly<{
     gatewayID: string;
-    recoveryAction?: Extract<DesktopLauncherOperationNextAction, { kind: 'start_gateway' | 'restart_gateway' | 'update_gateway' }>;
+    recoveryAction?: Extract<DesktopLauncherOperationNextAction, { kind: 'start_gateway' | 'restart_gateway' | 'update_gateway' | 'reinstall_gateway' }>;
   }>,
 ): readonly DesktopLauncherOperationNextAction[] {
   return [
@@ -7545,10 +7684,10 @@ function gatewayOperationFailureNextActions(
 
 function gatewayServiceRecoveryAction(
   kind: Extract<DesktopLauncherActionRequest, {
-    kind: 'start_gateway' | 'stop_gateway' | 'restart_gateway' | 'update_gateway';
+    kind: 'start_gateway' | 'stop_gateway' | 'restart_gateway' | 'update_gateway' | 'reinstall_gateway';
   }>['kind'],
   gatewayID: string,
-): Extract<DesktopLauncherOperationNextAction, { kind: 'start_gateway' | 'restart_gateway' | 'update_gateway' }> | undefined {
+): Extract<DesktopLauncherOperationNextAction, { kind: 'start_gateway' | 'restart_gateway' | 'update_gateway' | 'reinstall_gateway' }> | undefined {
   switch (kind) {
     case 'start_gateway':
       return { kind: 'start_gateway', gateway_id: gatewayID, label: 'Start Gateway' };
@@ -7556,6 +7695,8 @@ function gatewayServiceRecoveryAction(
       return { kind: 'restart_gateway', gateway_id: gatewayID, label: 'Restart Gateway' };
     case 'update_gateway':
       return { kind: 'update_gateway', gateway_id: gatewayID, label: 'Update Gateway' };
+    case 'reinstall_gateway':
+      return { kind: 'reinstall_gateway', gateway_id: gatewayID, label: 'Reinstall', label_key: 'common.reinstall' };
     case 'stop_gateway':
       return undefined;
   }
@@ -7590,6 +7731,14 @@ function gatewayDiagnosisNextActions(
         label: 'Update Gateway',
       });
       break;
+    case 'reinstall_gateway':
+      primary.push({
+        kind: 'reinstall_gateway',
+        gateway_id: gatewayID,
+        label: 'Reinstall',
+        label_key: 'common.reinstall',
+      });
+      break;
     case undefined:
       break;
   }
@@ -7616,6 +7765,8 @@ function gatewayFailureTitleKeyForDiagnosis(
       return 'environmentCenter.gatewayGuidanceStoppedTitle';
     case 'needs_update':
       return 'environmentCenter.gatewayPanelUpdateRequiredTitle';
+    case 'needs_reinstall':
+      return 'environmentStatus.reinstallRequired';
     default:
       return undefined;
   }
@@ -7632,7 +7783,7 @@ function gatewayFailureDetailKeyForDiagnosis(
 
 function gatewayFailureFromDiagnosis(diagnosis: DesktopGatewayDiagnosis): DesktopOperationFailurePresentation {
   return desktopOperationFailurePresentation({
-    code: 'operation_failed',
+    code: diagnosis.classification === 'needs_reinstall' ? 'manual_recovery_required' : 'operation_failed',
     title: compact(diagnosis.summary) || 'Gateway check failed',
     titleKey: gatewayFailureTitleKeyForDiagnosis(diagnosis),
     summary: compact(diagnosis.detail) || compact(diagnosis.summary) || 'Desktop could not diagnose this Gateway.',
@@ -7652,6 +7803,8 @@ function gatewayRecommendedRecoveryForDiagnosis(
       return diagnosis.service_state?.can_start === false ? undefined : 'start_gateway';
     case 'needs_update':
       return diagnosis.service_state?.can_update === false ? undefined : 'update_gateway';
+    case 'needs_reinstall':
+      return 'reinstall_gateway';
     case 'bridge_unavailable':
       return diagnosis.service_state?.can_restart === false ? undefined : 'restart_gateway';
     case 'ready':
@@ -7682,8 +7835,9 @@ function gatewayProbeResultsForDiagnosis(
     || serviceStatus === 'container_unavailable'
     || serviceStatus === 'bridge_unavailable'
     || serviceStatus === 'error';
-  const serviceWarning = serviceStatus === 'service_needs_update';
-  const versionWarning = diagnosis.classification === 'needs_update';
+  const reinstallRequired = serviceStatus === 'needs_reinstall' || diagnosis.classification === 'needs_reinstall';
+  const serviceWarning = serviceStatus === 'service_needs_update' || reinstallRequired;
+  const versionWarning = diagnosis.classification === 'needs_update' || reinstallRequired;
   const trustFailed = diagnosis.classification === 'trust_failed' || diagnosis.trust_state === 'trust_changed' || diagnosis.trust_state === 'revoked';
   const pairingFailed = diagnosis.classification === 'pairing_required' || diagnosis.classification === 'identity_changed';
   const catalogFailed = diagnosis.classification === 'catalog_failed'
@@ -7750,6 +7904,13 @@ function gatewayDiagnosisForServiceState(
         classification: 'needs_update',
         summary: 'Gateway update required',
         detail: 'Desktop must update this Gateway service before Refresh can pair and refresh catalog data.',
+      };
+    case 'needs_reinstall':
+      return {
+        ...base,
+        classification: 'needs_reinstall',
+        summary: 'Gateway reinstall required',
+        detail: serviceState?.message || 'This Gateway has incompatible state and must be reinstalled before Desktop can use it.',
       };
     case 'ssh_unreachable':
       return {
@@ -7904,16 +8065,31 @@ function gatewayDiagnosisForError(
     error_code: code,
     error_message: message,
   };
-  if (error instanceof GatewayTrustError || code === 'GATEWAY_TRUST_CHANGED') {
+  if ((error instanceof GatewayTrustError && gatewayTrustErrorNeedsReinstall(error)) || code === 'GATEWAY_TRUST_CHANGED') {
     return {
       ...base,
-      classification: 'identity_changed',
+      classification: manageable ? 'needs_reinstall' : 'identity_changed',
       catalog_state: 'pairing_failed',
-      summary: 'Gateway identity changed',
+      summary: manageable ? 'Gateway reinstall required' : 'Gateway identity changed',
       detail: message || 'Desktop could not verify this Gateway identity.',
     };
   }
+  if (error instanceof GatewayTrustError) {
+    const pairingRequired = error.code === 'GATEWAY_PAIRING_REQUIRED'
+      || error.code === 'GATEWAY_PAIRING_TRUST_REQUIRED'
+      || error.code === 'GATEWAY_TRUST_REVOKED';
+    return {
+      ...base,
+      classification: pairingRequired ? 'pairing_required' : 'trust_failed',
+      catalog_state: 'pairing_failed',
+      summary: pairingRequired ? 'Gateway pairing required' : 'Gateway trust verification failed',
+      detail: message,
+    };
+  }
   if (error instanceof GatewayServiceStartRequiredError) {
+    return gatewayDiagnosisForServiceState(record, error.service_state);
+  }
+  if (error instanceof GatewayReinstallRequiredError) {
     return gatewayDiagnosisForServiceState(record, error.service_state);
   }
   if (error instanceof GatewayNotManageableError) {
@@ -7971,18 +8147,22 @@ function gatewayDiagnosisForError(
     if (gatewayClientErrorIsTrustMismatch(error)) {
       return {
         ...base,
-        classification: 'identity_changed',
+        classification: manageable ? 'needs_reinstall' : 'identity_changed',
         catalog_state: 'pairing_failed',
-        summary: 'Gateway identity changed',
+        summary: manageable ? 'Gateway reinstall required' : 'Gateway identity changed',
         detail: message,
       };
     }
-    if (error.code === 'GATEWAY_PROTOCOL_VERSION_UNSUPPORTED') {
+    if (
+      error.code === 'GATEWAY_PROTOCOL_VERSION_UNSUPPORTED'
+      || error.code === 'GATEWAY_INVALID_RESPONSE'
+      || error.code === 'GATEWAY_RUNTIME_CAPABILITY_INVALID'
+    ) {
       return {
         ...base,
-        classification: manageable ? 'needs_update' : 'catalog_failed',
+        classification: manageable ? 'needs_reinstall' : 'catalog_failed',
         catalog_state: 'catalog_failed',
-        summary: manageable ? 'Gateway update required' : 'Gateway protocol unsupported',
+        summary: manageable ? 'Gateway reinstall required' : 'Gateway response is incompatible',
         detail: message,
       };
     }
@@ -8261,6 +8441,23 @@ async function refreshGatewayFromLauncher(
       shouldRefreshSnapshot: true,
     });
   }
+  const reinstallState = knownGatewayReinstallState(record.gateway_id);
+  if (reinstallState) {
+    const failure = desktopOperationFailurePresentation({
+      code: 'reinstall_required',
+      severity: 'warning',
+      title: 'Gateway reinstall required',
+      titleKey: 'confirm.reinstallTargetTitle',
+      summary: reinstallState.message || 'This Gateway has incompatible state. Reinstall is the only safe recovery.',
+      summaryKey: 'confirm.reinstallRequiredDescription',
+    });
+    return launcherActionFailure('gateway_reinstall_required', 'gateway', failure.summary, {
+      gatewayID: record.gateway_id,
+      gatewayLabel: record.display_name,
+      failure,
+      shouldRefreshSnapshot: true,
+    });
+  }
   const operationKey = `${record.gateway_id}:refresh`;
   if (!record.local_enabled) {
     return launcherActionFailure('action_invalid', 'gateway', 'Enable this Gateway on this Desktop before refreshing it.', {
@@ -8341,6 +8538,7 @@ async function refreshGatewayFromLauncher(
       force: true,
       mode: 'sync',
       priority: 'foreground',
+      allowReinstallPairing: true,
       progress: {
         signal,
         onGatewayServiceProgress: (progress) => {
@@ -8488,7 +8686,7 @@ async function refreshGatewayAfterCompletedServiceAction(
 
 async function runGatewayServiceActionFromLauncher(
   request: Extract<DesktopLauncherActionRequest, {
-    kind: 'start_gateway' | 'stop_gateway' | 'restart_gateway' | 'update_gateway';
+    kind: 'start_gateway' | 'stop_gateway' | 'restart_gateway' | 'update_gateway' | 'reinstall_gateway';
   }>,
 ): Promise<DesktopLauncherActionResult> {
   const record = await gatewayStore().get(request.gateway_id);
@@ -8501,15 +8699,40 @@ async function runGatewayServiceActionFromLauncher(
     return launcherActionFailure(
       'gateway_not_manageable',
       'dialog',
-      'URL Gateways are external services and cannot be started, stopped, restarted, or updated from Desktop.',
+      'URL Gateways are external services and cannot be managed or reinstalled from Desktop.',
       { shouldRefreshSnapshot: true },
     );
   }
+  if (
+    request.kind !== 'reinstall_gateway'
+    && request.kind !== 'stop_gateway'
+    && knownGatewayReinstallState(record.gateway_id)
+  ) {
+    const failure = desktopOperationFailurePresentation({
+      code: 'reinstall_required',
+      severity: 'warning',
+      title: 'Gateway reinstall required',
+      titleKey: 'confirm.reinstallTargetTitle',
+      summary: 'This Gateway has incompatible state. Reinstall is the only safe recovery.',
+      summaryKey: 'confirm.reinstallRequiredDescription',
+      targetLabel: record.display_name,
+    });
+    return launcherActionFailure('gateway_reinstall_required', 'gateway', failure.summary, {
+      gatewayID: record.gateway_id,
+      gatewayLabel: record.display_name,
+      failure,
+      shouldRefreshSnapshot: true,
+    });
+  }
   const actionLabel = gatewayServiceActionLabel(request.kind);
-  if ((request.kind === 'stop_gateway' || request.kind === 'restart_gateway' || request.kind === 'update_gateway')
+  if ((request.kind === 'reinstall_gateway' || (
+    (request.kind === 'stop_gateway' || request.kind === 'restart_gateway' || request.kind === 'update_gateway')
     && gatewayOpenSessionSummaries(record.gateway_id).length > 0
+  ))
     && request.impact_acknowledged !== true) {
-    return launcherActionFailure('confirmation_required', 'gateway', `${actionLabel} Gateway requires confirmation because active Gateway sessions will be disconnected.`, {
+    return launcherActionFailure('confirmation_required', 'gateway', request.kind === 'reinstall_gateway'
+      ? 'Reinstall permanently deletes the complete registered Redeven environment and always requires confirmation.'
+      : `${actionLabel} Gateway requires confirmation because active Gateway sessions will be disconnected.`, {
       gatewayID: record.gateway_id,
       gatewayLabel: record.display_name,
       retryAction: {
@@ -8626,11 +8849,27 @@ async function runGatewayServiceActionFromLauncher(
       await lifecycleManager.stopGateway(record, { signal, onProgress, operationKey });
     } else if (request.kind === 'restart_gateway') {
       await lifecycleManager.restartGateway(record, { signal, onProgress, operationKey });
+    } else if (request.kind === 'reinstall_gateway') {
+      const reinstallOperationID = `${Date.now()}-${record.gateway_id.slice(0, 12)}`;
+      await lifecycleManager.reinstallTarget(record, {
+        operationID: reinstallOperationID,
+        signal,
+        onProgress,
+        operationKey,
+        beforeCleanup: async () => {
+          await markGatewayReinstallPairingRequired(record.gateway_id, reinstallOperationID);
+          await resetManagedGatewayTrust(record, gatewaySecretStore());
+          gatewaySyncStateByID.delete(record.gateway_id);
+          gatewayDiagnosisByID.delete(record.gateway_id);
+        },
+      });
     } else {
       await lifecycleManager.updateGateway(record, { signal, onProgress, operationKey });
     }
     const terminalPhase: DesktopRuntimeLifecyclePhase = request.kind === 'stop_gateway'
       ? 'gateway_service_stopped'
+      : request.kind === 'reinstall_gateway'
+        ? 'pairing_required'
       : lifecycleOperation === 'update'
         ? 'gateway_service_up_to_date'
         : 'gateway_service_ready';
@@ -8644,8 +8883,10 @@ async function runGatewayServiceActionFromLauncher(
       detail: `Desktop completed ${actionLabel.toLowerCase()} for ${record.display_name}.`,
     });
     clearGatewayRefreshDiagnosisState(record.gateway_id);
-    rememberCompletedGatewayServiceAction(record, request, descriptor);
-    if (request.kind !== 'stop_gateway') {
+    if (request.kind !== 'reinstall_gateway') {
+      rememberCompletedGatewayServiceAction(record, request, descriptor);
+    }
+    if (request.kind !== 'stop_gateway' && request.kind !== 'reinstall_gateway') {
       launcherOperations.updateCurrentAttempt(operationKey, lifecycleAttemptOwner, {
         phase: terminalPhase,
         title: `${actionLabel} Gateway`,
@@ -8659,6 +8900,8 @@ async function runGatewayServiceActionFromLauncher(
       title: `${actionLabel} complete`,
       detail: request.kind === 'update_gateway'
         ? `Desktop updated, restarted, and refreshed ${record.display_name}.`
+        : request.kind === 'reinstall_gateway'
+          ? `Desktop reinstalled ${record.display_name}. Pairing is required before catalog access resumes.`
         : `Desktop completed ${actionLabel.toLowerCase()} for ${record.display_name}.`,
       lifecycle_progress: completedServiceLifecycleProgress,
     });
@@ -8692,9 +8935,13 @@ async function runGatewayServiceActionFromLauncher(
     });
     const code = processConflict?.code ?? gatewayServiceActionFailureCode(request.kind, error);
     const failure = processConflict?.failure ?? desktopFailureFromError(error, {
-      code: 'operation_failed',
-      title: `${actionLabel} Gateway Failed`,
-      summary: `Desktop could not ${actionLabel.toLowerCase()} this Gateway.`,
+      code: request.kind === 'reinstall_gateway' ? 'manual_recovery_required' : 'operation_failed',
+      title: request.kind === 'reinstall_gateway' ? 'Gateway Reinstall Requires Manual Recovery' : `${actionLabel} Gateway Failed`,
+      titleKey: request.kind === 'reinstall_gateway' ? 'confirm.reinstallFailedTitle' : undefined,
+      summary: request.kind === 'reinstall_gateway'
+        ? 'Desktop could not finish reinstalling this Gateway. The old environment remains quarantined and will not be used automatically.'
+        : `Desktop could not ${actionLabel.toLowerCase()} this Gateway.`,
+      summaryKey: request.kind === 'reinstall_gateway' ? 'confirm.reinstallManualRecovery' : undefined,
       targetLabel: record.display_name,
     });
     const currentProgress = currentRuntimeLifecycleWorkflowProgress(operationKey, lifecycleAttemptOwner, {
@@ -8731,7 +8978,9 @@ async function runGatewayServiceActionFromLauncher(
           gatewayID: record.gateway_id,
           recoveryAction: processConflict
             ? undefined
-            : gatewayServiceRecoveryAction(request.kind, record.gateway_id),
+            : request.kind === 'reinstall_gateway'
+              ? undefined
+              : gatewayServiceRecoveryAction(request.kind, record.gateway_id),
         }),
       }),
     });
@@ -8755,9 +9004,277 @@ async function runGatewayServiceActionFromLauncher(
   }
 }
 
+async function resetLocalEnvironmentFromLauncher(
+  request: Extract<DesktopLauncherActionRequest, { kind: 'reset_local_environment' }>,
+): Promise<DesktopLauncherActionResult> {
+  const preferences = await loadDesktopPreferencesCached();
+  const environment = preferences.local_environment;
+  if (request.environment_id !== environment.id) {
+    return launcherActionFailure('environment_missing', 'environment', 'Local Environment was not found.', {
+      environmentID: request.environment_id,
+      shouldRefreshSnapshot: true,
+    });
+  }
+  if (request.impact_acknowledged !== true) {
+    return launcherActionFailure(
+      'confirmation_required',
+      'environment',
+      'Reinstall permanently deletes the complete Local Environment and always requires confirmation.',
+      {
+        environmentID: environment.id,
+        retryAction: {
+          kind: 'reset_local_environment',
+          environment_id: environment.id,
+          impact_acknowledged: true,
+        },
+        shouldRefreshSnapshot: true,
+      },
+    );
+  }
+
+  const hostAccess: DesktopRuntimeHostAccess = { kind: 'local_host' };
+  const placement = localHostRuntimeLifecyclePlacement(environment);
+  const record = await upsertDirectRuntimeGateway(environment.id, environment.label, hostAccess, placement);
+  if (record.connection.kind !== 'local_host') {
+    return launcherActionFailure('action_invalid', 'environment', 'Local Environment reinstall requires the registered local host target.', {
+      environmentID: environment.id,
+      shouldRefreshSnapshot: true,
+    });
+  }
+
+  const operationID = crypto.randomUUID();
+  await markLocalEnvironmentReinstallRequired(environment, {
+    gatewayID: record.gateway_id,
+    reason: `explicit_reinstall:${operationID}`,
+  });
+  const registeredGateways = await gatewayStore().list();
+  const operationKey = `local-environment-reinstall:${environment.id}`;
+  const existingOperation = launcherOperations.get(operationKey);
+  if (existingOperation && launcherOperationIsActive(existingOperation)) {
+    return launcherActionFailure('runtime_lifecycle_in_progress', 'environment', 'Local Environment reinstall is already in progress.', {
+      environmentID: environment.id,
+      operationKey,
+      shouldRefreshSnapshot: true,
+    });
+  }
+  const targetID = desktopRuntimeTargetID(hostAccess, placement);
+  const targetLabel = environment.label;
+  const initialPhase: DesktopRuntimeLifecyclePhase = 'checking_existing_runtime';
+  const reinstallStepIDs: readonly DesktopRuntimeLifecycleStepID[] = [
+    initialPhase,
+    'stopping_gateway_service',
+    'discovering_runtime_instances',
+    'stopping_runtime_process',
+    'verifying_runtime_inventory',
+    'quarantining_target',
+    'initializing_fresh_state',
+    'verifying_fresh_state',
+    'pairing_required',
+    'cleaning_quarantine',
+  ];
+  const initialProgress = runtimeLifecycleProgress({
+    location: 'local_host',
+    operation: 'reinstall',
+    planState: 'executing',
+    phase: initialPhase,
+    targetID,
+    targetLabel,
+    targetDetail: localEnvironmentStateRoot(environment),
+    stepStates: lifecycleStepStatesFromIDs(reinstallStepIDs, {
+      activeStepID: initialPhase,
+      detail: 'Desktop is validating the exact Local Environment target before reinstalling it.',
+    }),
+  });
+  const operation = launcherOperations.create({
+    operation_key: operationKey,
+    action: 'reset_local_environment',
+    subject_kind: 'local_environment',
+    subject_id: environment.id,
+    environment_id: environment.id,
+    environment_label: environment.label,
+    phase: initialPhase,
+    title: 'Reinstall Local Environment',
+    detail: 'Desktop is validating the exact Local Environment target before reinstalling it.',
+    lifecycle_progress: initialProgress,
+    cancelable: false,
+  });
+  const lifecycleAttemptOwner = {
+    action: operation.action,
+    started_at_unix_ms: operation.started_at_unix_ms,
+  };
+  beginRuntimeLifecycleWorkflowAttempt(operationKey, {
+    hostAccess,
+    placement,
+    operation: 'reinstall',
+    targetID,
+    targetLabel,
+  });
+  const updateReinstallProgress = (
+    phase: DesktopRuntimeLifecyclePhase,
+    title: string,
+    detail: string,
+  ): void => {
+    updateRuntimeLifecycleOperation(operationKey, lifecycleAttemptOwner, {
+      hostAccess,
+      placement,
+      operation: 'reinstall',
+      phase,
+      targetID,
+      targetLabel,
+      title,
+      detail,
+      cancelable: false,
+    });
+  };
+  try {
+    await preflightReinstallTarget({
+      kind: 'local_environment',
+      targetRoot: localEnvironmentStateRoot(environment),
+      operationId: operationID,
+    });
+    updateReinstallProgress('stopping_gateway_service', 'Stopping Local Environment', 'Desktop is closing Local Environment sessions and stopping the exact managed Gateway.');
+    for (const sessionRecord of [...sessionsByKey.values()]) {
+      if (!sessionRecord.closing && (
+        sessionRecord.target.environment_id === environment.id
+        || sessionRecord.target.kind === 'gateway_environment'
+      )) {
+        await finalizeSessionClosure(sessionRecord.session_key, { reason: 'runtime_restart' });
+      }
+    }
+    await gatewayLifecycleManager().stopGateway(record, {
+      operationKey: `local-reinstall-stop:${operationID}`,
+    }).catch(async (error) => {
+      const state = await gatewayLifecycleManager().inspectService(record).catch(() => null);
+      if (state?.status !== 'not_started') throw error;
+    });
+    for (const registeredGateway of registeredGateways) {
+      supersedeGatewaySyncTask(registeredGateway.gateway_id);
+      await gatewayLifecycleManager().clear(registeredGateway);
+    }
+    updateReinstallProgress('discovering_runtime_instances', 'Checking managed Runtime processes', 'Desktop is identifying Runtime processes owned by this Local Environment.');
+    const inventory = await inspectLocalManagedRuntimeProcesses({
+      executablePath: bundledRuntimeExecutablePath(),
+      runtimeRoot: localEnvironmentStateRoot(environment),
+      stateRoot: localEnvironmentStateRoot(environment),
+      env: process.env,
+    });
+    if (inventory.summary.blocked > 0) {
+      throw new Error('Desktop found a Runtime process whose ownership could not be verified. Reinstall was blocked before deleting data.');
+    }
+    if (inventory.instances.length > 0) {
+      updateReinstallProgress('stopping_runtime_process', 'Stopping managed Runtime processes', 'Desktop is stopping only verified Runtime processes owned by this Local Environment.');
+      await stopLocalManagedRuntimeProcesses({
+        executablePath: bundledRuntimeExecutablePath(),
+        runtimeRoot: localEnvironmentStateRoot(environment),
+        stateRoot: localEnvironmentStateRoot(environment),
+        env: process.env,
+        inventory,
+        timeoutMs: 5_000,
+      });
+    }
+    updateReinstallProgress('verifying_runtime_inventory', 'Verifying Local Environment stopped', 'Desktop is confirming that no managed Runtime process still owns the target.');
+    await gatewayLifecycleManager().clear(record);
+    localEnvironmentRuntimeRecord = null;
+
+    updateReinstallProgress('quarantining_target', 'Replacing Local Environment', 'Desktop is isolating the exact registered Local Environment before creating fresh state.');
+    await reinstallTarget({
+      kind: 'local_environment',
+      targetRoot: localEnvironmentStateRoot(environment),
+      operationId: operationID,
+    }, async () => {
+      gatewayStoreCache = null;
+      gatewaySyncStateByID.clear();
+      gatewayDiagnosisByID.clear();
+      await Promise.all(registeredGateways.map((registeredGateway) => (
+        clearGatewayReinstallPairingRequired(registeredGateway.gateway_id)
+      )));
+      const freshEnvironment = createDesktopLocalEnvironmentState({
+        stateDir: localEnvironmentStateRoot(environment),
+      });
+      await persistDesktopPreferences({
+        ...preferences,
+        local_environment: freshEnvironment,
+      });
+      const freshRecord = await upsertDirectRuntimeGateway(
+        freshEnvironment.id,
+        freshEnvironment.label,
+        hostAccess,
+        placement,
+      );
+      updateReinstallProgress('initializing_fresh_state', 'Initializing Local Environment', 'Desktop is installing the current bundled Gateway and Runtime into fresh state.');
+      await gatewayLifecycleManager().startGateway(freshRecord, {
+        operationKey: `local-reinstall-start:${operationID}`,
+      });
+      updateReinstallProgress('verifying_fresh_state', 'Verifying Local Environment', 'Desktop is verifying the fresh Gateway, Runtime, and Local UI.');
+      const attached = await attachLocalEnvironmentRuntime(freshEnvironment);
+      if (!attached || !runtimeServiceIsOpenable(attached.startup.runtime_service)) {
+        throw new Error('The fresh Local Environment did not expose a verified Runtime and Local UI. The old environment remains quarantined for manual recovery.');
+      }
+      await markGatewayReinstallPairingRequired(freshRecord.gateway_id, operationID);
+      await clearLocalEnvironmentReinstallRequired(freshEnvironment);
+      updateReinstallProgress('pairing_required', 'Pairing required', 'The old identity and trust were removed. Pair the fresh Gateway before using this Environment.');
+      updateReinstallProgress('cleaning_quarantine', 'Removing old Local Environment', 'Desktop verified the fresh environment and is deleting the isolated old environment.');
+    });
+
+    const completedProgress = completeRuntimeLifecycleWorkflowProgress(operationKey, lifecycleAttemptOwner, {
+      hostAccess,
+      placement,
+      operation: 'reinstall',
+      phase: 'cleaning_quarantine',
+      targetID,
+      targetLabel,
+      detail: 'The fresh Local Environment is ready. Pairing is required before use.',
+    });
+    launcherOperations.finishCurrentAttempt(operationKey, lifecycleAttemptOwner, 'succeeded', {
+      phase: 'cleaning_quarantine',
+      title: 'Reinstall complete',
+      detail: 'The Local Environment was reinstalled. Pair the new Gateway before using it.',
+      lifecycle_progress: completedProgress,
+    });
+    scheduleCurrentLauncherOperationRemoval(operationKey, lifecycleAttemptOwner);
+    clearRuntimeLifecycleWorkflow(operationKey, lifecycleAttemptOwner);
+    broadcastDesktopWelcomeSnapshots();
+    return launcherActionSuccess('reset_local_environment');
+  } catch (error) {
+    const failure = desktopFailureFromError(error, {
+      code: 'manual_recovery_required',
+      title: 'Local Environment Reinstall Failed',
+      titleKey: 'confirm.reinstallFailedTitle',
+      summary: error instanceof Error ? error.message : String(error),
+      summaryKey: 'confirm.reinstallManualRecovery',
+      targetLabel: environment.label,
+    });
+    const failedProgress = runtimeLifecycleWorkflowFailure(operationKey, lifecycleAttemptOwner, {
+      hostAccess,
+      placement,
+      operation: 'reinstall',
+      targetID,
+      targetLabel,
+      error,
+      fallback: failure,
+    }).lifecycle_progress;
+    launcherOperations.finishCurrentAttempt(operationKey, lifecycleAttemptOwner, 'failed', {
+      phase: failedProgress.active_step_id,
+      title: 'Reinstall requires manual recovery',
+      detail: failure.summary,
+      lifecycle_progress: failedProgress,
+      failure,
+      next_actions: gatewayOperationFailureNextActions(operationKey, { gatewayID: record.gateway_id }),
+    });
+    scheduleCurrentLauncherOperationRemoval(operationKey, lifecycleAttemptOwner);
+    clearRuntimeLifecycleWorkflow(operationKey, lifecycleAttemptOwner);
+    return launcherActionFailure('local_environment_reinstall_failed', 'environment', failure.summary, {
+      environmentID: environment.id,
+      operationKey,
+      failure,
+      shouldRefreshSnapshot: true,
+    });
+  }
+}
+
 function gatewayServiceOperationName(kind: Extract<DesktopLauncherActionRequest, {
-  kind: 'start_gateway' | 'stop_gateway' | 'restart_gateway' | 'update_gateway';
-}>['kind']): 'start' | 'stop' | 'restart' | 'update' {
+  kind: 'start_gateway' | 'stop_gateway' | 'restart_gateway' | 'update_gateway' | 'reinstall_gateway';
+}>['kind']): 'start' | 'stop' | 'restart' | 'update' | 'reinstall' {
   switch (kind) {
     case 'stop_gateway':
       return 'stop';
@@ -8765,6 +9282,8 @@ function gatewayServiceOperationName(kind: Extract<DesktopLauncherActionRequest,
       return 'restart';
     case 'update_gateway':
       return 'update';
+    case 'reinstall_gateway':
+      return 'reinstall';
     default:
       return 'start';
   }
@@ -8774,7 +9293,7 @@ function gatewayServiceLifecycleOperation(kind: Parameters<typeof gatewayService
   return gatewayServiceOperationName(kind);
 }
 
-function gatewayServiceActionLabel(kind: Parameters<typeof gatewayServiceOperationName>[0]): 'Start' | 'Stop' | 'Restart' | 'Update' {
+function gatewayServiceActionLabel(kind: Parameters<typeof gatewayServiceOperationName>[0]): 'Start' | 'Stop' | 'Restart' | 'Update' | 'Reinstall' {
   switch (kind) {
     case 'stop_gateway':
       return 'Stop';
@@ -8782,6 +9301,8 @@ function gatewayServiceActionLabel(kind: Parameters<typeof gatewayServiceOperati
       return 'Restart';
     case 'update_gateway':
       return 'Update';
+    case 'reinstall_gateway':
+      return 'Reinstall';
     default:
       return 'Start';
   }
@@ -8795,6 +9316,8 @@ function gatewayServiceActionOutcome(kind: Parameters<typeof gatewayServiceOpera
       return 'restarted_gateway';
     case 'update_gateway':
       return 'updated_gateway';
+    case 'reinstall_gateway':
+      return 'reinstalled_gateway';
     default:
       return 'started_gateway';
   }
@@ -8814,6 +9337,8 @@ function gatewayServiceActionFailureCode(
       return 'gateway_service_restart_failed';
     case 'update_gateway':
       return 'gateway_service_update_failed';
+    case 'reinstall_gateway':
+      return 'gateway_service_reinstall_failed';
     default:
       return gatewayServiceFailureCode(error) === 'gateway_container_unavailable'
         ? 'gateway_container_unavailable'
@@ -10837,9 +11362,68 @@ async function autoStartLocalRuntimeOnDesktopLaunch(): Promise<void> {
     const environment = preferences.local_environment;
     const hostAccess: DesktopRuntimeHostAccess = { kind: 'local_host' };
     const placement = localHostRuntimeLifecyclePlacement(environment);
-    const attachedBeforeStartup = await attachLocalEnvironmentRuntime(environment);
+    if (await localEnvironmentReinstallRequired(environment)) {
+      setLauncherViewState({
+        surface: 'connect_environment',
+        entryReason: 'blocked',
+        selectedEnvironmentID: environment.id,
+        issue: {
+          scope: 'local_environment',
+          code: 'needs_reinstall',
+          title: 'Local Environment reinstall required',
+          title_key: 'confirm.reinstallTargetTitle',
+          message: 'This Local Environment has incompatible state. Reinstall is the only safe recovery.',
+          message_key: 'confirm.reinstallRequiredDescription',
+          diagnostics_copy: 'status: blocked\ncode: needs_reinstall',
+          target_url: '',
+          environment_id: environment.id,
+        },
+      });
+      finishPhase('checking_access');
+      broadcastDesktopWelcomeSnapshots();
+      return;
+    }
     const record = await upsertDirectRuntimeGateway(environment.id, environment.label, hostAccess, placement);
+    const resetMarkerPresent = await localEnvironmentReinstallPairingRequired(environment);
     const serviceState = await gatewayLifecycleManager().inspectService(record);
+    if (serviceState.status === 'needs_reinstall') {
+      await markLocalEnvironmentReinstallRequired(environment, {
+        gatewayID: record.gateway_id,
+        reason: serviceState.message || 'incompatible_state',
+      });
+      const previous = defaultGatewaySyncRecord(record);
+      setGatewaySyncRecord(record, {
+        ...previous,
+        source: mergeGatewaySourceRecord(gatewayRecordToSource(record), record, previous, serviceState),
+      });
+      setGatewayDiagnosis(record, gatewayDiagnosisForServiceState(record, serviceState));
+      setLauncherViewState({
+        surface: 'connect_environment',
+        entryReason: 'blocked',
+        selectedEnvironmentID: environment.id,
+        issue: {
+          scope: 'local_environment',
+          code: 'needs_reinstall',
+          title: 'Local Environment reinstall required',
+          title_key: 'confirm.reinstallTargetTitle',
+          message: 'This Local Environment has incompatible state. Reinstall is the only safe recovery.',
+          message_key: 'confirm.reinstallRequiredDescription',
+          diagnostics_copy: `status: blocked\ncode: needs_reinstall\ngateway_id: ${record.gateway_id}`,
+          target_url: '',
+          environment_id: environment.id,
+        },
+      });
+      finishPhase('checking_access');
+      broadcastDesktopWelcomeSnapshots();
+      return;
+    }
+    if (resetMarkerPresent) {
+      finishPhase('checking_access');
+      console.info('[redeven:desktop-startup] Local Environment reinstall is awaiting explicit pairing; automatic startup was skipped.');
+      broadcastDesktopWelcomeSnapshots();
+      return;
+    }
+    const attachedBeforeStartup = await attachLocalEnvironmentRuntime(environment);
     finishPhase('checking_access');
 
     beginPhase('preparing_environment');
@@ -10921,22 +11505,40 @@ async function autoStartLocalRuntimeOnDesktopLaunch(): Promise<void> {
       diagnostic.text,
     ]);
     const workloadReviewRequired = structuredFailure?.code === 'confirmation_required';
+    const reinstallRequired = structuredFailure?.code === 'reinstall_required';
     console.warn(`[redeven:desktop-startup] Local runtime auto-start failed: ${message}`);
     const preferences = await loadDesktopPreferencesCached().catch(() => null);
+    if (reinstallRequired && preferences) {
+      const hostAccess: DesktopRuntimeHostAccess = { kind: 'local_host' };
+      const placement = localHostRuntimeLifecyclePlacement(preferences.local_environment);
+      const gatewayID = stableGatewayID(gatewayBindingAudience(directRuntimeGatewayConnection(hostAccess, placement)));
+      await markLocalEnvironmentReinstallRequired(preferences.local_environment, {
+        gatewayID,
+        reason: message,
+      });
+    }
     setLauncherViewState({
       surface: 'connect_environment',
-      entryReason: 'app_launch',
+      entryReason: reinstallRequired ? 'blocked' : 'app_launch',
       issue: {
-        scope: 'startup',
-        code: structuredFailure?.code ?? 'local_environment_startup_failed',
-        title: workloadReviewRequired ? 'Runtime Confirmation Required' : 'Local Environment startup failed',
-        title_key: workloadReviewRequired ? 'progress.runtimeConfirmationRequiredTitle' : 'issue.startupFailedTitle',
-        message: workloadReviewRequired
-          ? 'The Runtime workload changed before this operation could continue.'
-          : 'Redeven could not start this environment. Try again.',
-        message_key: workloadReviewRequired
-          ? 'progress.runtimeConfirmationRequiredSummary'
-          : 'environmentOpenFlow.startFailedDetail',
+        scope: reinstallRequired ? 'local_environment' : 'startup',
+        code: reinstallRequired ? 'needs_reinstall' : structuredFailure?.code ?? 'local_environment_startup_failed',
+        title: reinstallRequired
+          ? 'Local Environment reinstall required'
+          : workloadReviewRequired ? 'Runtime Confirmation Required' : 'Local Environment startup failed',
+        title_key: reinstallRequired
+          ? 'confirm.reinstallTargetTitle'
+          : workloadReviewRequired ? 'progress.runtimeConfirmationRequiredTitle' : 'issue.startupFailedTitle',
+        message: reinstallRequired
+          ? 'This Local Environment has incompatible state. Reinstall is the only safe recovery.'
+          : workloadReviewRequired
+            ? 'The Runtime workload changed before this operation could continue.'
+            : 'Redeven could not start this environment. Try again.',
+        message_key: reinstallRequired
+          ? 'confirm.reinstallRequiredDescription'
+          : workloadReviewRequired
+            ? 'progress.runtimeConfirmationRequiredSummary'
+            : 'environmentOpenFlow.startFailedDetail',
         diagnostics_copy: [
           'status: blocked',
           `code: ${structuredFailure?.code ?? 'local_environment_startup_failed'}`,
@@ -11799,6 +12401,21 @@ function gatewayServiceInitialStepIDs(
       'gateway_service_up_to_date',
     ];
   }
+  if (operation === 'reinstall') {
+    return [
+      firstCheck,
+      'stopping_gateway_service',
+      'verifying_gateway_stopped',
+      'quarantining_target',
+      'preparing_gateway_package',
+      'installing_gateway_package',
+      'initializing_fresh_state',
+      'opening_gateway_bridge',
+      'verifying_fresh_state',
+      'pairing_required',
+      'cleaning_quarantine',
+    ];
+  }
   return [
     firstCheck,
     'starting_gateway_service',
@@ -12417,6 +13034,16 @@ function runtimeLifecyclePhaseFromGateway(
       return 'stopping_gateway_service';
     case 'verifying_gateway_stopped':
       return 'verifying_gateway_stopped';
+    case 'quarantining_target':
+      return 'quarantining_target';
+    case 'initializing_fresh_state':
+      return 'initializing_fresh_state';
+    case 'verifying_fresh_state':
+      return 'verifying_fresh_state';
+    case 'pairing_required':
+      return 'pairing_required';
+    case 'cleaning_quarantine':
+      return 'cleaning_quarantine';
   }
 }
 
@@ -14762,10 +15389,6 @@ async function openProviderEnvironmentWithOpenSession(args: Readonly<{
 async function openLocalEnvironmentFromLauncher(
   request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'open_local_environment' }>>,
 ): Promise<DesktopLauncherActionResult> {
-  const bridgeOpenResult = await openRuntimePlacementBridgeFromLauncher(request);
-  if (bridgeOpenResult) {
-    return bridgeOpenResult;
-  }
   const preferences = await loadDesktopPreferencesCached();
   const environment = findLocalEnvironmentByID(preferences, request.environment_id);
   if (!environment) {
@@ -14778,6 +15401,42 @@ async function openLocalEnvironmentFromLauncher(
         shouldRefreshSnapshot: true,
       },
     );
+  }
+  if (await localEnvironmentReinstallRequired(environment)) {
+    const failure = desktopOperationFailurePresentation({
+      code: 'reinstall_required',
+      severity: 'warning',
+      title: 'Local Environment reinstall required',
+      titleKey: 'confirm.reinstallTargetTitle',
+      summary: 'This Local Environment has incompatible state. Reinstall is the only safe recovery.',
+      summaryKey: 'confirm.reinstallRequiredDescription',
+      targetLabel: environment.label,
+    });
+    return launcherActionFailure('local_environment_reinstall_required', 'environment', failure.summary, {
+      environmentID: environment.id,
+      failure,
+      shouldRefreshSnapshot: true,
+    });
+  }
+  if (await localEnvironmentReinstallPairingRequired(environment)) {
+    const failure = desktopOperationFailurePresentation({
+      code: 'operation_failed',
+      severity: 'warning',
+      title: 'Gateway pairing required',
+      titleKey: 'environmentStatus.pairingRequired',
+      summary: 'Pair the new Gateway before using this Environment.',
+      summaryKey: 'confirm.reinstallPairingRequired',
+      targetLabel: environment.label,
+    });
+    return launcherActionFailure('gateway_pairing_required', 'environment', failure.summary, {
+      environmentID: environment.id,
+      failure,
+      shouldRefreshSnapshot: true,
+    });
+  }
+  const bridgeOpenResult = await openRuntimePlacementBridgeFromLauncher(request);
+  if (bridgeOpenResult) {
+    return bridgeOpenResult;
   }
   const requestedRoute = request.route === 'local_host' || request.route === 'remote_desktop'
     ? request.route
@@ -17662,7 +18321,10 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
     case 'stop_gateway':
     case 'restart_gateway':
     case 'update_gateway':
+    case 'reinstall_gateway':
       return runGatewayServiceActionFromLauncher(request);
+    case 'reset_local_environment':
+      return resetLocalEnvironmentFromLauncher(request);
     case 'refresh_gateway_catalog':
       return refreshGatewayCatalogFromLauncher(request);
     case 'refresh_gateway_status':

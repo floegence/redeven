@@ -2414,7 +2414,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('100dvh');
     expect((styles.match(/100dvh/g) ?? []).length).toBe(2);
 
-    expect((appSrc.match(/<ConfirmDialog\b/g) ?? []).length).toBe(3);
+    expect((appSrc.match(/<ConfirmDialog\b/g) ?? []).length).toBe(4);
     expect((appSrc.match(/<Dialog\b/g) ?? []).length).toBe(5);
     expect((appSrc.match(/class=\{LOCAL_ENVIRONMENT_SETTINGS_DIALOG_CLASS\}/g) ?? []).length).toBe(1);
     expect((appSrc.match(/class=\{CONNECTION_DIALOG_CLASS\}/g) ?? []).length).toBe(2);

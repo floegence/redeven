@@ -838,6 +838,7 @@ function localizedEnvironmentStatusLabel(i18n: DesktopI18n, label: string): stri
     Disabled: 'environmentCenter.gatewayDisabledStatus',
     'Not started': 'environmentStatus.stopped',
     'Update available': 'environmentCenter.gatewayNeedsUpdate',
+    'Reinstall required': 'environmentStatus.reinstallRequired',
     'Service ready': 'progress.gatewayServiceReady',
     Refreshing: 'environmentCenter.gatewayActionSyncing',
   });
@@ -849,6 +850,7 @@ function localizedGatewaySourceStatusLabel(i18n: DesktopI18n, label: string): st
     Starting: 'environmentCenter.gatewayStatusStarting',
     Updating: 'environmentCenter.gatewayStatusUpdating',
     'Update available': 'environmentCenter.gatewayNeedsUpdate',
+    'Reinstall required': 'environmentStatus.reinstallRequired',
     'Service ready': 'progress.gatewayServiceReady',
     Disabled: 'environmentCenter.gatewayDisabledStatus',
     Refreshing: 'environmentCenter.gatewayActionSyncing',
@@ -898,6 +900,8 @@ function localizedEnvironmentActionLabel(i18n: DesktopI18n, label: string): stri
     'Restart Gateway': 'environmentCenter.gatewayActionRestart',
     'Update': 'environmentAction.updateRuntime',
     'Update Gateway': 'environmentCenter.gatewayActionUpdate',
+    Reinstall: 'common.reinstall',
+    'Pair Gateway': 'environmentCenter.gatewayPanelPairThisGatewayAria',
     // Keep legacy route-qualified plans user-facing neutral if an older
     // snapshot still contains those labels.
     'Start through Gateway': 'environmentAction.startRuntime',
@@ -997,6 +1001,10 @@ function localizedGatewaySourceText(i18n: DesktopI18n, value: string): string {
     'Desktop is preparing the Gateway service. Pairing and catalog refresh will be available when it reports ready.': 'environmentCenter.gatewayGuidanceStartingDetail',
     'Update before continuing': 'environmentCenter.gatewayGuidanceUpdateTitle',
     'Install the Gateway service update, then Desktop can pair and refresh the environments this Gateway exposes.': 'environmentCenter.gatewayGuidanceUpdateDetail',
+    'Gateway reinstall required': 'environmentStatus.reinstallRequired',
+    'Gateway pairing required': 'environmentStatus.pairingRequired',
+    'This Gateway has incompatible state. Reinstall replaces its complete Redeven environment and requires pairing again.': 'confirm.reinstallRequiredDescription',
+    'Reinstall completed. Pair the new Gateway before using this Environment.': 'confirm.reinstallPairingRequired',
     'Preparing Gateway': 'environmentCenter.gatewayGuidancePreparingTitle',
     'Gateway is stopped': 'environmentCenter.gatewayGuidanceStoppedTitle',
     'Desktop will start this managed Gateway automatically and then discover its environments.': 'environmentCenter.gatewayGuidancePreparingDetail',
@@ -1052,6 +1060,8 @@ function localizedGatewaySourceActionLabel(i18n: DesktopI18n, action: GatewaySou
       return i18n.t('environmentCenter.gatewayActionRestart');
     case 'update_gateway':
       return i18n.t('environmentCenter.gatewayActionUpdate');
+    case 'reinstall_gateway':
+      return i18n.t('common.reinstall');
     case 'setup_gateway':
       return i18n.t('environmentStatus.setupRequired');
     case 'cancel_gateway_action':
@@ -1104,6 +1114,11 @@ function localizedGatewayActionPanelText(i18n: DesktopI18n, value: string): stri
     'Run a check to identify whether this Gateway needs to start, update, or change configuration.': 'environmentCenter.gatewayPanelCheckFirstDetail',
     'Gateway is stopped': 'environmentCenter.gatewayGuidanceStoppedTitle',
     'Gateway update required': 'environmentCenter.gatewayPanelUpdateRequiredTitle',
+    'Gateway reinstall required': 'environmentStatus.reinstallRequired',
+    'Gateway pairing required': 'environmentStatus.pairingRequired',
+    'This Gateway has incompatible state. Reinstall replaces its complete Redeven environment and requires pairing again.': 'confirm.reinstallRequiredDescription',
+    'Reinstall completed. Pair the new Gateway before using this Environment.': 'confirm.reinstallPairingRequired',
+    'Reinstall Gateway': 'environmentCenter.gatewayPanelReinstallAria',
     'Gateway protocol check failed': 'environmentCenter.gatewayPanelProtocolCheckFailedTitle',
     'Gateway target needs review': 'environmentCenter.gatewayPanelTargetReviewTitle',
     'Gateway trust check failed': 'environmentCenter.gatewayPanelTrustCheckFailedTitle',
@@ -1168,6 +1183,8 @@ function localizedGatewayActionPanelDetail(
       return i18n.t('environmentCenter.gatewayPanelRestartDetail');
     case 'update_gateway_confirm':
       return i18n.t('environmentCenter.gatewayPanelUpdateDetail');
+    case 'reinstall_gateway_confirm':
+      return i18n.t('confirm.reinstallTargetDescription');
     default:
       return localizedGatewayActionPanelText(i18n, model.detail);
   }
@@ -1781,7 +1798,7 @@ function inlineFailurePresentation(
 
 function gatewayActionKindForRequest(
   request: DesktopLauncherActionRequest | undefined,
-): Extract<DesktopLauncherActionKind, 'refresh_gateway' | 'start_gateway' | 'stop_gateway' | 'restart_gateway' | 'update_gateway'> {
+): Extract<DesktopLauncherActionKind, 'refresh_gateway' | 'start_gateway' | 'stop_gateway' | 'restart_gateway' | 'update_gateway' | 'reinstall_gateway'> {
   switch (request?.kind) {
     case 'refresh_gateway':
     case 'check_gateway':
@@ -1794,6 +1811,7 @@ function gatewayActionKindForRequest(
     case 'stop_gateway':
     case 'restart_gateway':
     case 'update_gateway':
+    case 'reinstall_gateway':
       return request.kind;
     default:
       return 'refresh_gateway';
@@ -2883,6 +2901,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [runtimeContainerOptionsKey, setRuntimeContainerOptionsKey] = createSignal('');
   const [controlPlaneDialogState, setControlPlaneDialogState] = createSignal<ControlPlaneDialogState>(null);
   const [deleteTarget, setDeleteTarget] = createSignal<DesktopEnvironmentEntry | null>(null);
+  const [reinstallLocalTarget, setReinstallLocalTarget] = createSignal<DesktopEnvironmentEntry | null>(null);
   const [deleteGatewayTarget, setDeleteGatewayTarget] = createSignal<DesktopGatewaySource | null>(null);
   const [providerRuntimeLinkConfirmation, setProviderRuntimeLinkConfirmation] = createSignal<ProviderRuntimeLinkConfirmationState | null>(null);
   const [providerRuntimeLinkProviderEnvironmentID, setProviderRuntimeLinkProviderEnvironmentID] = createSignal('');
@@ -5242,6 +5261,23 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       }
       case 'refresh_runtime':
         return refreshEnvironmentRuntime(environment, errorTarget);
+      case 'reinstall_target':
+        if (environment.kind !== 'local_environment' || environment.reinstall_required !== true) {
+          return false;
+        }
+        setReinstallLocalTarget(environment);
+        return true;
+      case 'pair_gateway': {
+        const gatewayID = trimString(action.gateway_id);
+        if (environment.kind !== 'local_environment' || gatewayID === '') {
+          return false;
+        }
+        const result = await performLauncherAction({
+          kind: 'refresh_gateway',
+          gateway_id: gatewayID,
+        }, errorTarget);
+        return result?.outcome === 'refreshed_gateway';
+      }
       case 'review_network_exposure':
         openSettingsSurface(environment.id);
         return true;
@@ -5263,6 +5299,20 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       case 'opening':
       default:
         return false;
+    }
+  }
+
+  async function confirmLocalEnvironmentReinstall(): Promise<void> {
+    const target = reinstallLocalTarget();
+    if (!target) return;
+    const result = await performLauncherAction({
+      kind: 'reset_local_environment',
+      environment_id: target.id,
+      impact_acknowledged: true,
+    });
+    if (result?.outcome === 'reset_local_environment') {
+      setReinstallLocalTarget(null);
+      showActionToast(i18n().t('confirm.reinstallPairingRequired'), 'info', { autoDismiss: false });
     }
   }
 
@@ -6980,6 +7030,25 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       />
 
       <ConfirmDialog
+        open={reinstallLocalTarget() !== null}
+        onOpenChange={(open) => {
+          if (!open) setReinstallLocalTarget(null);
+        }}
+        title={i18n().t('confirm.reinstallTargetTitle')}
+        confirmText={i18n().t('common.reinstall')}
+        cancelText={i18n().t('common.cancel')}
+        variant="destructive"
+        loading={busyStateMatchesAction(busyState(), 'reset_local_environment')}
+        onConfirm={() => void confirmLocalEnvironmentReinstall()}
+      >
+        <div class="space-y-2">
+          <p class="text-sm font-medium">{i18n().t('confirm.reinstallRequiredDescription')}</p>
+          <p class="text-sm">{i18n().t('confirm.reinstallTargetDescription')}</p>
+          <p class="text-xs font-medium text-destructive">{i18n().t('confirm.reinstallIrreversible')}</p>
+        </div>
+      </ConfirmDialog>
+
+      <ConfirmDialog
         open={deleteTarget() !== null}
         onOpenChange={(open) => {
           if (!open) {
@@ -8651,6 +8720,10 @@ function isEnvironmentActionBusy(
       return busyStateBlocksEnvironmentAction(busyState, environmentID, ['restart_environment_runtime', 'run_gateway_environment_lifecycle', 'run_provider_environment_lifecycle'], runtimeLifecycleProgress);
     case 'update_runtime':
       return busyStateBlocksEnvironmentAction(busyState, environmentID, ['update_environment_runtime', 'manage_desktop_update', 'run_gateway_environment_lifecycle', 'run_provider_environment_lifecycle'], runtimeLifecycleProgress);
+    case 'reinstall_target':
+      return busyStateMatchesEnvironment(busyState, environmentID, ['reset_local_environment']);
+    case 'pair_gateway':
+      return busyStateMatchesGateway(busyState, action.gateway_id ?? '', ['refresh_gateway']);
     case 'update_desktop':
       return busyStateBlocksEnvironmentAction(busyState, environmentID, ['manage_desktop_update'], runtimeLifecycleProgress);
     case 'connect_provider_runtime':
@@ -8824,6 +8897,16 @@ function localizedRuntimeLifecyclePhaseLabel(i18n: DesktopI18n, phase: DesktopRu
       return i18n.t('progress.verifyingGatewayStopped');
     case 'gateway_service_stopped':
       return i18n.t('progress.gatewayServiceStopped');
+    case 'quarantining_target':
+      return i18n.t('progress.quarantiningEnvironment');
+    case 'initializing_fresh_state':
+      return i18n.t('progress.initializingFreshEnvironment');
+    case 'verifying_fresh_state':
+      return i18n.t('progress.verifyingFreshEnvironment');
+    case 'pairing_required':
+      return i18n.t('environmentCenter.gatewayPanelPairThisGatewayAria');
+    case 'cleaning_quarantine':
+      return i18n.t('progress.removingOldEnvironment');
   }
 }
 
@@ -8976,6 +9059,31 @@ function localizedProgressDetail(i18n: DesktopI18n, progress: DesktopLauncherAct
   if (lifecycle?.phase === 'runtime_ready') {
     return i18n.t('progress.detailRuntimeReady');
   }
+  if (lifecycle && progress.status !== 'failed' && progress.status !== 'cleanup_failed') {
+    switch (lifecycle.phase) {
+      case 'checking_existing_runtime':
+      case 'discovering_runtime_instances':
+        return i18n.t('progress.checkingExistingRuntime');
+      case 'stopping_gateway_service':
+        return i18n.t('progress.stoppingGatewayService');
+      case 'stopping_runtime_process':
+        return i18n.t('progress.stoppingRuntimeProcess');
+      case 'verifying_runtime_inventory':
+        return i18n.t('progress.verifyingRuntimeStopped');
+      case 'quarantining_target':
+        return i18n.t('progress.quarantiningEnvironmentDetail');
+      case 'initializing_fresh_state':
+        return i18n.t('progress.initializingFreshEnvironmentDetail');
+      case 'verifying_fresh_state':
+        return i18n.t('progress.verifyingFreshEnvironmentDetail');
+      case 'pairing_required':
+        return i18n.t('confirm.reinstallPairingRequired');
+      case 'cleaning_quarantine':
+        return i18n.t('progress.removingOldEnvironment');
+      default:
+        break;
+    }
+  }
   return localizedStringByValue(i18n, progress.detail, {
     'Desktop canceled this Gateway check.': 'progress.gatewayCheckCanceledDetail',
     'Desktop can reach the Gateway service. Continue checking trust and catalog access.': 'progress.gatewayCheckServiceReadyDetail',
@@ -9025,6 +9133,8 @@ function localizedProgressPlanningLabel(i18n: DesktopI18n, action: DesktopLaunch
       return i18n.t('progress.planningGatewayRestartPath');
     case 'update_gateway':
       return i18n.t('progress.planningGatewayUpdatePath');
+    case 'reinstall_gateway':
+      return i18n.t('common.reinstall');
     case 'stop_gateway':
       return i18n.t('progress.planningGatewayStopPath');
     case 'restart_environment_runtime':
@@ -9054,6 +9164,8 @@ function localizedFailureNoticeTitle(i18n: DesktopI18n, progress: DesktopLaunche
       return i18n.t('progress.gatewayRestartNeedsAttention');
     case 'update_gateway':
       return i18n.t('progress.gatewayUpdateNeedsAttention');
+    case 'reinstall_gateway':
+      return i18n.t('toast.needsAttention');
     case 'stop_gateway':
       return i18n.t('progress.gatewayStopNeedsAttention');
     case 'restart_environment_runtime':
@@ -9096,6 +9208,8 @@ function localizedNextActionLabel(i18n: DesktopI18n, action: DesktopLauncherOper
       return i18n.t('environmentCenter.gatewayActionRestart');
     case 'update_gateway':
       return i18n.t('environmentCenter.gatewayActionUpdate');
+    case 'reinstall_gateway':
+      return i18n.t('common.reinstall');
     case 'resolve_gateway':
       return localizedEnvironmentActionLabel(i18n, action.label);
     case 'open_gateway_environment':
@@ -9816,6 +9930,10 @@ function splitMenuIcon(intent: EnvironmentActionIntent): ((props?: { class?: str
       return Refresh;
     case 'review_network_exposure':
       return AlertTriangle;
+    case 'reinstall_target':
+      return AlertTriangle;
+    case 'pair_gateway':
+      return ShieldCheck;
     case 'connect_provider_runtime':
       return ShieldCheck;
     case 'disconnect_provider_runtime':
@@ -9834,8 +9952,10 @@ function welcomeLoadingShimmerSurface(
 function splitMenuItemToneData(intent: EnvironmentActionIntent): string {
   switch (intent) {
     case 'stop_runtime':
+    case 'reinstall_target':
       return 'danger';
     case 'start_runtime':
+    case 'pair_gateway':
     case 'connect_provider_runtime':
     case 'review_network_exposure':
       return 'primary';
@@ -11549,7 +11669,7 @@ type GatewayDiagnosisResultSnapshot = Readonly<{
   panel_model: GatewayActionPanelModel;
 }>;
 
-function gatewayOperationNameForAction(action: GatewaySourceActionModel): 'start' | 'stop' | 'restart' | 'update' | null {
+function gatewayOperationNameForAction(action: GatewaySourceActionModel): 'start' | 'stop' | 'restart' | 'update' | 'reinstall' | null {
   switch (action.intent) {
     case 'start_gateway':
       return 'start';
@@ -11559,6 +11679,8 @@ function gatewayOperationNameForAction(action: GatewaySourceActionModel): 'start
       return 'restart';
     case 'update_gateway':
       return 'update';
+    case 'reinstall_gateway':
+      return 'reinstall';
     default:
       return null;
   }
@@ -11600,6 +11722,8 @@ function gatewayForegroundServiceTitle(action: GatewaySourceActionModel): string
       return 'Restart Gateway';
     case 'update_gateway':
       return 'Update Gateway';
+    case 'reinstall_gateway':
+      return 'Reinstall';
     default:
       return action.label;
   }
@@ -11617,7 +11741,8 @@ function gatewayOperationKeyForAction(gateway: DesktopGatewaySource, action: Gat
     case 'start_gateway':
     case 'stop_gateway':
     case 'restart_gateway':
-    case 'update_gateway': {
+    case 'update_gateway':
+    case 'reinstall_gateway': {
       const targetID = gatewayServiceFallbackTargetID(gateway);
       return targetID || undefined;
     }
@@ -11711,6 +11836,7 @@ function pendingGatewayForegroundProgress(
     case 'stop_gateway':
     case 'restart_gateway':
     case 'update_gateway':
+    case 'reinstall_gateway':
       return pendingGatewayServiceProgress(gateway, action, operationKey, startedAtUnixMS);
     default:
       return null;
@@ -11836,6 +11962,7 @@ function gatewayActionShowsWorkflowProgress(action: GatewaySourceActionModel): b
     case 'stop_gateway':
     case 'restart_gateway':
     case 'update_gateway':
+    case 'reinstall_gateway':
       return true;
     default:
       return false;
@@ -11849,6 +11976,7 @@ function gatewayProgressCanRecoverForegroundAction(progress: DesktopLauncherActi
     case 'stop_gateway':
     case 'restart_gateway':
     case 'update_gateway':
+    case 'reinstall_gateway':
       return true;
     default:
       return false;
@@ -11919,6 +12047,13 @@ function gatewayActionFromNextAction(action: DesktopLauncherOperationNextAction 
         enabled: true,
         variant: 'default',
       };
+    case 'reinstall_gateway':
+      return {
+        intent: 'reinstall_gateway',
+        label: 'Reinstall',
+        enabled: true,
+        variant: 'default',
+      };
     default:
       return undefined;
   }
@@ -11929,6 +12064,7 @@ function primaryGatewayNextActionFromProgress(progress: DesktopLauncherActionPro
     candidate.kind === 'start_gateway'
     || candidate.kind === 'restart_gateway'
     || candidate.kind === 'update_gateway'
+    || candidate.kind === 'reinstall_gateway'
   ));
 }
 
@@ -11954,6 +12090,12 @@ function continuationActionForGatewayNextAction(action: DesktopLauncherOperation
         gateway_id: action.gateway_id,
         impact_acknowledged: true,
       };
+    case 'reinstall_gateway':
+      return {
+        kind: 'reinstall_gateway',
+        gateway_id: action.gateway_id,
+        impact_acknowledged: true,
+      };
     default:
       return undefined;
   }
@@ -11973,6 +12115,7 @@ function gatewayDiagnosisFromCheckProgress(
     candidate.kind === 'start_gateway'
     || candidate.kind === 'restart_gateway'
     || candidate.kind === 'update_gateway'
+    || candidate.kind === 'reinstall_gateway'
   ));
   const classification: DesktopGatewayDiagnosis['classification'] = nextAction?.kind === 'start_gateway'
     ? 'not_started'
@@ -11980,6 +12123,8 @@ function gatewayDiagnosisFromCheckProgress(
       ? 'bridge_unavailable'
     : nextAction?.kind === 'update_gateway'
       ? 'needs_update'
+    : nextAction?.kind === 'reinstall_gateway'
+      ? 'needs_reinstall'
       : 'ready';
   const recommendedAction: DesktopGatewayDiagnosis['recommended_recovery'] = nextAction?.kind === 'start_gateway'
     ? 'start_gateway'
@@ -11987,6 +12132,8 @@ function gatewayDiagnosisFromCheckProgress(
       ? 'restart_gateway'
     : nextAction?.kind === 'update_gateway'
       ? 'update_gateway'
+    : nextAction?.kind === 'reinstall_gateway'
+      ? 'reinstall_gateway'
       : undefined;
   return {
     checked_at_unix_ms: gatewayProgressTimestamp(progress),
@@ -12092,6 +12239,13 @@ function gatewaySourceActionForLauncherRequest(request: DesktopLauncherActionReq
         enabled: true,
         variant: 'default',
       };
+    case 'reinstall_gateway':
+      return {
+        intent: 'reinstall_gateway',
+        label: 'Reinstall',
+        enabled: true,
+        variant: 'default',
+      };
     case 'open_gateway_environment':
       return {
         intent: 'open_gateway_environment',
@@ -12133,6 +12287,13 @@ function gatewaySourceActionForLifecycleProgress(
       return {
         intent: 'update_gateway',
         label: 'Update Gateway',
+        enabled: true,
+        variant: 'default',
+      };
+    case 'reinstall_gateway':
+      return {
+        intent: 'reinstall_gateway',
+        label: 'Reinstall',
         enabled: true,
         variant: 'default',
       };
@@ -12820,10 +12981,11 @@ function GatewaySourceCard(props: Readonly<{
       case 'stop_gateway':
       case 'restart_gateway':
       case 'update_gateway':
+      case 'reinstall_gateway':
         return {
           kind: action.intent,
           gateway_id: props.gateway.gateway_id,
-          ...(action.intent === 'stop_gateway' || action.intent === 'restart_gateway' || action.intent === 'update_gateway'
+          ...(action.intent === 'stop_gateway' || action.intent === 'restart_gateway' || action.intent === 'update_gateway' || action.intent === 'reinstall_gateway'
             ? { impact_acknowledged: true }
             : {}),
         };
@@ -13215,6 +13377,13 @@ function GatewaySourceCard(props: Readonly<{
                             impact_acknowledged: true,
                           }, currentProgress);
                           break;
+                        case 'reinstall_gateway':
+                          runForegroundRequestFromProgress({
+                            kind: 'reinstall_gateway',
+                            gateway_id: action.gateway_id,
+                            impact_acknowledged: true,
+                          }, currentProgress);
+                          break;
                         case 'resolve_gateway':
                         case 'manage_desktop_update':
                           break;
@@ -13499,7 +13668,7 @@ function GatewayActionPanel(props: Readonly<{
 
 function gatewaySourceLauncherActionKind(
   action: GatewaySourceActionModel,
-): Extract<DesktopLauncherActionKind, 'open_gateway_environment' | 'refresh_gateway' | 'start_gateway' | 'stop_gateway' | 'restart_gateway' | 'update_gateway' | 'set_gateway_enabled'> | null {
+): Extract<DesktopLauncherActionKind, 'open_gateway_environment' | 'refresh_gateway' | 'start_gateway' | 'stop_gateway' | 'restart_gateway' | 'update_gateway' | 'reinstall_gateway' | 'set_gateway_enabled'> | null {
   switch (action.intent) {
     case 'open_gateway_environment':
       return 'open_gateway_environment';
@@ -13516,6 +13685,8 @@ function gatewaySourceLauncherActionKind(
       return 'restart_gateway';
     case 'update_gateway':
       return 'update_gateway';
+    case 'reinstall_gateway':
+      return 'reinstall_gateway';
     default:
       return null;
   }
@@ -13537,7 +13708,8 @@ function gatewaySourceActionBusy(
     && (actionKind === 'start_gateway'
       || actionKind === 'stop_gateway'
       || actionKind === 'restart_gateway'
-      || actionKind === 'update_gateway')
+      || actionKind === 'update_gateway'
+      || actionKind === 'reinstall_gateway')
     && progress.status !== 'failed'
     && progress.status !== 'cleanup_failed'
     && progress.status !== 'succeeded'
@@ -13581,6 +13753,8 @@ function GatewaySourceActionIcon(props: Readonly<{ intent: GatewaySourceActionMo
       return <Refresh class={iconClass()} />;
     case 'update_gateway':
       return <Package class={iconClass()} />;
+    case 'reinstall_gateway':
+      return <AlertTriangle class={iconClass()} />;
     case 'setup_gateway':
       return <Settings class={iconClass()} />;
     case 'cancel_gateway_action':

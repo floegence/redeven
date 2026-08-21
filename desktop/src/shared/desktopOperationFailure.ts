@@ -20,11 +20,13 @@ export type DesktopFailureCode =
   | 'runtime_host_command_failed'
   | 'runtime_update_required'
   | 'runtime_identity_mismatch'
+  | 'reinstall_required'
   | 'desktop_update_required'
   | 'environment_open_failed'
   | 'provider_link_failed'
   | 'workspace_engine_prepare_failed'
   | 'operation_canceled'
+  | 'manual_recovery_required'
   | 'operation_failed';
 
 export type DesktopFailureDiagnostic = Readonly<{
@@ -73,11 +75,13 @@ function normalizeFailureCode(value: unknown): DesktopFailureCode {
     case 'runtime_host_command_failed':
     case 'runtime_update_required':
     case 'runtime_identity_mismatch':
+    case 'reinstall_required':
     case 'desktop_update_required':
     case 'environment_open_failed':
     case 'provider_link_failed':
     case 'workspace_engine_prepare_failed':
     case 'operation_canceled':
+    case 'manual_recovery_required':
     case 'operation_failed':
       return code;
     default:

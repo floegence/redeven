@@ -60,7 +60,11 @@ describe('main routing', () => {
     expect(end).toBeGreaterThan(start);
     const startupSrc = mainSrc.slice(start, end);
     expect(startupSrc).toContain('const bundle = requireDesktopBundle();');
+    expect(startupSrc).toContain('if (await localEnvironmentReinstallRequired(environment)) {');
     expect(startupSrc).toContain('await upsertDirectRuntimeGateway(environment.id, environment.label, hostAccess, placement);');
+    expect(startupSrc).toContain("serviceState.status === 'needs_reinstall'");
+    expect(startupSrc).toContain('await localEnvironmentReinstallPairingRequired(environment)');
+    expect(startupSrc).toContain('Local Environment reinstall is awaiting explicit pairing; automatic startup was skipped.');
     expect(startupSrc).toContain('await gatewayLifecycleManager().restartGateway(record');
     expect(startupSrc).toContain('await gatewayLifecycleManager().startGateway(record');
     expect(startupSrc).toContain('await syncGatewayRecord(record');
@@ -68,12 +72,53 @@ describe('main routing', () => {
     expect(startupSrc).toContain('await gatewayLifecycleManager().runtimeManagementCapability(authorizedRecord');
     expect(startupSrc).not.toContain('await gatewayLifecycleManager().runtimeManagementCapability(record');
     expect(startupSrc).toContain('const attached = await attachLocalEnvironmentRuntime(environment);');
+    expect(startupSrc.indexOf("serviceState.status === 'needs_reinstall'")).toBeLessThan(
+      startupSrc.indexOf('const attachedBeforeStartup = await attachLocalEnvironmentRuntime(environment);'),
+    );
+    expect(startupSrc.indexOf('if (await localEnvironmentReinstallRequired(environment)) {')).toBeLessThan(
+      startupSrc.indexOf('await upsertDirectRuntimeGateway(environment.id, environment.label, hostAccess, placement);'),
+    );
+    expect(startupSrc).toContain("structuredFailure?.code === 'reinstall_required'");
+    expect(startupSrc).toContain('await markLocalEnvironmentReinstallRequired(preferences.local_environment');
     expect(startupSrc).toContain('await refreshWelcomeRuntimeHealthForEnvironment(environment.id, { force: true });');
     expect(startupSrc).toContain('resetLauncherIssueState();');
     expect(startupSrc).toContain('broadcastDesktopWelcomeSnapshots();');
     expect(startupSrc).not.toContain('initializeGatewayRuntime({');
     expect(startupSrc).not.toContain('prepareDesktopRuntimeUploadAsset');
     expect(startupSrc).not.toContain('prepareCustomRuntimeLifecycleArtifact');
+  });
+
+  it('keeps incompatible Local Environment state blocked across restart and pairing', () => {
+    const mainSrc = readMainSource();
+    expect(mainSrc).toContain("'maintenance', 'local-environment-reinstall-required.json'");
+    expect(mainSrc).toContain("'maintenance', 'gateway-pairing-required'");
+    expect(mainSrc).toContain('await markLocalEnvironmentReinstallRequired(environment, {');
+    expect(mainSrc).toContain('reason: `explicit_reinstall:${operationID}`');
+    expect(mainSrc).toContain('await localEnvironmentReinstallPairingRequired(preferences.local_environment)');
+    expect(mainSrc).toContain('reinstall_pairing_required: true');
+    const openStart = mainSrc.indexOf('async function openLocalEnvironmentFromLauncher(');
+    const openEnd = mainSrc.indexOf('async function openRemoteEnvironmentFromLauncher(', openStart);
+    const openSrc = mainSrc.slice(openStart, openEnd);
+    expect(openSrc).toContain('if (await localEnvironmentReinstallRequired(environment)) {');
+    expect(openSrc).toContain("launcherActionFailure('local_environment_reinstall_required'");
+    expect(openSrc).toContain('if (await localEnvironmentReinstallPairingRequired(environment)) {');
+    expect(openSrc).toContain("launcherActionFailure('gateway_pairing_required'");
+
+    const resetStart = mainSrc.indexOf('async function resetLocalEnvironmentFromLauncher(');
+    const resetEnd = mainSrc.indexOf('function gatewayServiceOperationName(', resetStart);
+    const resetSrc = mainSrc.slice(resetStart, resetEnd);
+    expect(resetSrc).toContain('gatewayStoreCache = null;');
+    expect(resetSrc).toContain('gatewaySyncStateByID.clear();');
+    expect(resetSrc).toContain('const freshEnvironment = createDesktopLocalEnvironmentState({');
+    expect(resetSrc).toContain('const freshRecord = await upsertDirectRuntimeGateway(');
+    expect(resetSrc).toContain('await gatewayLifecycleManager().startGateway(freshRecord');
+    expect(resetSrc).not.toContain('await resetManagedGatewayTrust(record');
+
+    const autoSyncStart = mainSrc.indexOf('async function syncGatewayIfNeeded(');
+    const autoSyncEnd = mainSrc.indexOf('async function syncVisibleGatewaysIfNeeded(', autoSyncStart);
+    const autoSyncSrc = mainSrc.slice(autoSyncStart, autoSyncEnd);
+    expect(autoSyncSrc).toContain('if (await gatewayReinstallPairingRequired(record.gateway_id)) {');
+    expect(mainSrc).toContain('await clearGatewayReinstallPairingRequired(syncedRecord.gateway_id);');
   });
 
   it('tracks environment windows by session key and scopes child windows per session', () => {
@@ -317,7 +362,7 @@ describe('main routing', () => {
     expect(helperEnd).toBeGreaterThan(helperStart);
     const helperSrc = mainSrc.slice(helperStart, helperEnd);
 
-    expect(helperSrc).toContain("serviceStatus === 'service_needs_update'");
+    expect(helperSrc).toContain("serviceStatus === 'service_needs_update' || reinstallRequired");
     expect(helperSrc).toContain("serviceWarning ? 'warning'");
     expect(helperSrc).not.toContain("serviceWarning ? 'unknown'");
     expect(helperSrc).toContain("const catalogSkipped = diagnosis.catalog_state === 'idle' || diagnosis.catalog_state === 'pairing_failed';");
@@ -332,7 +377,7 @@ describe('main routing', () => {
     expect(helperSrc).not.toContain("label: 'Review Trust'");
   });
 
-  it('limits Gateway diagnosis recovery guidance to Start, Restart, and Update', () => {
+  it('limits Gateway diagnosis recovery guidance to Start, Restart, Update, and explicit Reinstall', () => {
     const mainSrc = readMainSource();
     const gatewayTypeSrc = readSharedGatewaySource();
     const recoveryStart = mainSrc.indexOf('function gatewayRecommendedRecoveryForDiagnosis(');
@@ -350,10 +395,12 @@ describe('main routing', () => {
     expect(gatewayTypeSrc).not.toContain('recommended_action?:');
     expect(mainSrc).toContain('recommended_recovery: recommendedRecovery');
     expect(mainSrc).toContain('switch (diagnosis.recommended_recovery ?? gatewayRecommendedRecoveryForDiagnosis(diagnosis))');
-    expect(gatewayTypeSrc).toContain("recommended_recovery?: 'start_gateway' | 'restart_gateway' | 'update_gateway';");
+    expect(gatewayTypeSrc).toContain("recommended_recovery?: 'start_gateway' | 'restart_gateway' | 'update_gateway' | 'reinstall_gateway';");
     expect(recoverySrc).toContain("return diagnosis.service_state?.can_start === false ? undefined : 'start_gateway';");
     expect(recoverySrc).toContain("return diagnosis.service_state?.can_update === false ? undefined : 'update_gateway';");
     expect(recoverySrc).toContain("return diagnosis.service_state?.can_restart === false ? undefined : 'restart_gateway';");
+    expect(recoverySrc).toContain("case 'needs_reinstall':");
+    expect(recoverySrc).toContain("return 'reinstall_gateway';");
     expect(recoverySrc).toContain("case 'service_ready_catalog_failed':");
     expect(recoverySrc).toContain("case 'trust_failed':");
     expect(recoverySrc).toContain("case 'pairing_required':");
@@ -361,6 +408,7 @@ describe('main routing', () => {
     expect(nextActionsSrc).toContain("kind: 'start_gateway'");
     expect(nextActionsSrc).toContain("kind: 'restart_gateway'");
     expect(nextActionsSrc).toContain("kind: 'update_gateway'");
+    expect(nextActionsSrc).toContain("kind: 'reinstall_gateway'");
     expect(nextActionsSrc).not.toContain("kind: 'check_gateway'");
     expect(nextActionsSrc).not.toContain("kind: 'refresh_gateway_catalog'");
     expect(nextActionsSrc).not.toContain("kind: 'resolve_gateway'");
@@ -412,21 +460,41 @@ describe('main routing', () => {
     expect(diagnosisStart).toBeGreaterThanOrEqual(0);
     expect(diagnosisEnd).toBeGreaterThan(diagnosisStart);
     const diagnosisSrc = mainSrc.slice(diagnosisStart, diagnosisEnd);
-    const protocolStart = diagnosisSrc.indexOf("if (error.code === 'GATEWAY_PROTOCOL_VERSION_UNSUPPORTED') {");
+    const protocolStart = diagnosisSrc.indexOf("error.code === 'GATEWAY_PROTOCOL_VERSION_UNSUPPORTED'");
     const protocolEnd = diagnosisSrc.indexOf('classification: manageable && serviceState?.status', protocolStart);
     expect(protocolStart).toBeGreaterThanOrEqual(0);
     expect(protocolEnd).toBeGreaterThan(protocolStart);
     const protocolSrc = diagnosisSrc.slice(protocolStart, protocolEnd);
 
-    expect(protocolSrc).toContain("classification: manageable ? 'needs_update' : 'catalog_failed'");
+    expect(protocolSrc).toContain("classification: manageable ? 'needs_reinstall' : 'catalog_failed'");
     expect(protocolSrc).toContain("catalog_state: 'catalog_failed'");
-    expect(protocolSrc).toContain("summary: manageable ? 'Gateway update required' : 'Gateway protocol unsupported'");
+    expect(protocolSrc).toContain("error.code === 'GATEWAY_INVALID_RESPONSE'");
+    expect(protocolSrc).toContain("error.code === 'GATEWAY_RUNTIME_CAPABILITY_INVALID'");
+    expect(protocolSrc).toContain("summary: manageable ? 'Gateway reinstall required' : 'Gateway response is incompatible'");
     expect(protocolSrc).not.toContain("catalog_state: 'pairing_failed'");
     expect(protocolSrc).not.toContain("classification: 'pairing_required'");
     expect(protocolSrc).not.toContain("classification: 'identity_changed'");
     expect(protocolSrc).not.toContain("classification: 'ssh_unreachable'");
     expect(protocolSrc).not.toContain('Runtime Service');
     expect(protocolSrc).not.toContain('compatibility');
+  });
+
+  it('keeps first pairing failures distinct from incompatible saved trust', () => {
+    const mainSrc = readMainSource();
+    const helperStart = mainSrc.indexOf('function gatewayTrustErrorNeedsReinstall(');
+    const helperEnd = mainSrc.indexOf('async function resetManagedGatewayTrust(', helperStart);
+    expect(helperStart).toBeGreaterThanOrEqual(0);
+    expect(helperEnd).toBeGreaterThan(helperStart);
+    const helperSrc = mainSrc.slice(helperStart, helperEnd);
+    const diagnosisStart = mainSrc.indexOf('function gatewayDiagnosisForError(');
+    const diagnosisEnd = mainSrc.indexOf('async function checkGatewayRecord(', diagnosisStart);
+    const diagnosisSrc = mainSrc.slice(diagnosisStart, diagnosisEnd);
+
+    expect(helperSrc).toContain("case 'GATEWAY_TRUST_CHANGED':");
+    expect(helperSrc).toContain("case 'GATEWAY_TRUST_ID_MISMATCH':");
+    expect(helperSrc).not.toContain("case 'GATEWAY_PAIRING_REQUIRED':");
+    expect(diagnosisSrc).toContain("error.code === 'GATEWAY_PAIRING_REQUIRED'");
+    expect(diagnosisSrc).toContain("classification: pairingRequired ? 'pairing_required' : 'trust_failed'");
   });
 
   it('invalidates cached Gateway catalog entries after protocol mismatches', () => {
@@ -454,6 +522,7 @@ describe('main routing', () => {
     const serviceInvalidatesSrc = mainSrc.slice(serviceInvalidatesStart, serviceInvalidatesEnd);
 
     expect(serviceInvalidatesSrc).toContain("serviceState?.status === 'service_needs_update'");
+    expect(serviceInvalidatesSrc).toContain("serviceState?.status === 'needs_reinstall'");
     expect(invalidatesSrc).toContain('gatewayServiceStateInvalidatesCatalog(serviceState)');
     expect(invalidatesSrc).toContain("error.code === 'GATEWAY_PROTOCOL_VERSION_UNSUPPORTED'");
     expect(invalidatesSrc).toContain("error.code === 'GATEWAY_INVALID_RESPONSE'");
@@ -1556,7 +1625,7 @@ describe('main routing', () => {
     expect(mainSrc).toContain("last_synced_at_ms: 0,");
     expect(mainSrc).toContain('background_sync_running: false,');
     expect(mainSrc).toContain('const serviceStatus = syncRecord?.source?.service_state?.status;');
-    expect(mainSrc).toContain("serviceStatus === 'not_started' || serviceStatus === 'service_needs_update'");
+    expect(mainSrc).toContain("serviceStatus === 'not_started' || serviceStatus === 'service_needs_update' || serviceStatus === 'needs_reinstall'");
     expect(mainSrc).toContain('if (!syncRecord?.source) {');
     expect(mainSrc).toContain('if (!record.local_enabled) {');
     expect(mainSrc).toContain('if (activeGatewayServiceOperation(record.gateway_id)) {');
@@ -1768,38 +1837,45 @@ describe('main routing', () => {
     expect(mainSrc).toContain("return 'require_ready';");
   });
 
-  it('repairs managed Gateway trust internally when local or remote trust is stale', () => {
+  it('does not repair incompatible managed Gateway trust through the old sync fallback', () => {
     const mainSrc = readMainSource();
-    const helperStart = mainSrc.indexOf('function gatewayTrustErrorNeedsRepair(');
-    const helperEnd = mainSrc.indexOf('function gatewaySyncRecordFromError(', helperStart);
-    expect(helperStart).toBeGreaterThanOrEqual(0);
-    expect(helperEnd).toBeGreaterThan(helperStart);
-    const helperSrc = mainSrc.slice(helperStart, helperEnd);
     const syncStart = mainSrc.indexOf('async function syncGatewayRecord(');
     const syncEnd = mainSrc.indexOf('async function syncGatewayIfNeeded(', syncStart);
     expect(syncStart).toBeGreaterThanOrEqual(0);
     expect(syncEnd).toBeGreaterThan(syncStart);
     const syncSrc = mainSrc.slice(syncStart, syncEnd);
 
-    expect(mainSrc).toContain('revokeGatewayTrust,');
-    expect(helperSrc).toContain('function gatewayTrustErrorNeedsRepair(error: GatewayTrustError): boolean');
-    expect(helperSrc).toContain("case 'GATEWAY_PAIRING_REQUIRED':");
-    expect(helperSrc).toContain("case 'GATEWAY_CLIENT_PRIVATE_KEY_REQUIRED':");
-    expect(helperSrc).toContain("case 'GATEWAY_TRUST_REVOKED':");
-    expect(helperSrc).toContain('function gatewayErrorNeedsTrustRepair(error: unknown): boolean');
-    expect(helperSrc).toContain('return gatewayClientErrorIsPairingRejected(error);');
-    expect(helperSrc).toContain('return gatewayTrustErrorNeedsRepair(error);');
-    expect(helperSrc).toContain("record.connection.kind !== 'url' && !!record.trust_profile");
-    expect(helperSrc).toContain('await revokeGatewayTrust(profile, secretStore);');
-    expect(helperSrc).toContain('await gatewayLifecycleManager().clear(record);');
-    expect(helperSrc).toContain('return gatewayStore().updateTrustProfile(record.gateway_id, undefined);');
-    expect(syncSrc).toContain('catch (catalogError) {');
-    expect(syncSrc).toContain('gatewayErrorNeedsTrustRepair(catalogError)');
-    expect(syncSrc).toContain('gatewayCanRepairManagedTrust(currentRecord)');
-    expect(syncSrc).toContain('currentRecord = await resetManagedGatewayTrust(currentRecord, secretStore);');
-    expect(syncSrc).toContain('const repairClient = await gatewayClientForSync(currentRecord, {');
-    expect(syncSrc).toContain('currentRecord = await pairGatewayWithClient(currentRecord, repairClient, secretStore, {');
-    expect(syncSrc).toContain('catalog = await refreshCatalog(currentRecord);');
+    expect(mainSrc).not.toContain('function gatewayTrustErrorNeedsRepair(');
+    expect(mainSrc).not.toContain('function gatewayErrorNeedsTrustRepair(');
+    expect(mainSrc).not.toContain('function gatewayCanRepairManagedTrust(');
+    expect(syncSrc).not.toContain('catch (catalogError) {');
+    expect(syncSrc).not.toContain('repairClient');
+    expect(syncSrc).not.toContain('gatewayErrorNeedsTrustRepair');
+  });
+
+  it('blocks ordinary Gateway sync and lifecycle actions after reinstall is required', () => {
+    const mainSrc = readMainSource();
+    const syncStart = mainSrc.indexOf('async function syncGatewayRecord(');
+    const syncEnd = mainSrc.indexOf('async function syncGatewayIfNeeded(', syncStart);
+    const syncSrc = mainSrc.slice(syncStart, syncEnd);
+    expect(syncSrc).toContain('gatewayReinstallPairingRequired(record.gateway_id)');
+    expect(syncSrc).toContain('options.allowReinstallPairing !== true');
+    expect(syncSrc).toContain('knownGatewayReinstallState(record.gateway_id)');
+    expect(syncSrc).toContain('throw new GatewayReinstallRequiredError');
+
+    const actionStart = mainSrc.indexOf('async function runGatewayServiceActionFromLauncher(');
+    const actionEnd = mainSrc.indexOf('async function resetLocalEnvironmentFromLauncher(', actionStart);
+    const actionSrc = mainSrc.slice(actionStart, actionEnd);
+    expect(actionSrc).toContain("request.kind !== 'reinstall_gateway'");
+    expect(actionSrc).toContain("request.kind !== 'stop_gateway'");
+    expect(actionSrc).toContain("launcherActionFailure('gateway_reinstall_required'");
+
+    const refreshStart = mainSrc.indexOf('async function refreshGatewayFromLauncher(');
+    const refreshEnd = mainSrc.indexOf('async function checkGatewayFromLauncher(', refreshStart);
+    const refreshSrc = mainSrc.slice(refreshStart, refreshEnd);
+    expect(refreshSrc).toContain('knownGatewayReinstallState(record.gateway_id)');
+    expect(refreshSrc).toContain("launcherActionFailure('gateway_reinstall_required'");
+    expect(refreshSrc).toContain('allowReinstallPairing: true');
   });
 
   it('keeps Gateway service state stable while sync activity is running', () => {

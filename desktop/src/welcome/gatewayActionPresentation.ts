@@ -20,6 +20,7 @@ export type GatewayActionPanelKind =
   | 'stop_gateway_confirm'
   | 'restart_gateway_confirm'
   | 'update_gateway_confirm'
+  | 'reinstall_gateway_confirm'
   | 'start_and_refresh_catalog'
   | 'failure_recovery';
 
@@ -112,6 +113,8 @@ function serviceStatusLabel(status: string): string {
       return 'Container unavailable';
     case 'service_needs_update':
       return 'Update required';
+    case 'needs_reinstall':
+      return 'Reinstall required';
     case 'bridge_unavailable':
       return 'Bridge unavailable';
     case 'error':
@@ -231,10 +234,11 @@ function continuationActionFor(
     case 'stop_gateway':
     case 'restart_gateway':
     case 'update_gateway':
+    case 'reinstall_gateway':
       return {
         kind: action.intent,
         gateway_id: gateway.gateway_id,
-        ...((action.intent === 'update_gateway' || action.intent === 'restart_gateway' || action.intent === 'stop_gateway')
+        ...((action.intent === 'update_gateway' || action.intent === 'restart_gateway' || action.intent === 'stop_gateway' || action.intent === 'reinstall_gateway')
           ? { impact_acknowledged: true }
           : {}),
       } as DesktopLauncherActionRequest;
@@ -254,6 +258,8 @@ function gatewayDiagnosisTitle(gateway: DesktopGatewaySource): string {
       return diagnosis.manageable ? 'Gateway is stopped' : 'External Gateway endpoint';
     case 'needs_update':
       return diagnosis.manageable ? 'Gateway update required' : 'Gateway protocol check failed';
+    case 'needs_reinstall':
+      return 'Gateway reinstall required';
     case 'ssh_unreachable':
     case 'container_unavailable':
     case 'bridge_unavailable':
@@ -408,6 +414,16 @@ function gatewayRecoveryPlanFromRecommendedRecovery(
         continuation_action: continuationActionFor(gateway, updateAction),
       };
     }
+    case 'reinstall_gateway': {
+      const reinstallAction = gatewaySourceAction('reinstall_gateway', 'Reinstall', 'default', true);
+      return {
+        title: 'Gateway reinstall required',
+        detail: 'This Gateway has incompatible state. Reinstall replaces its complete Redeven environment and requires pairing again.',
+        aria_label: 'Reinstall Gateway',
+        primary_action: reinstallAction,
+        continuation_action: continuationActionFor(gateway, reinstallAction),
+      };
+    }
     default:
       return undefined;
   }
@@ -425,6 +441,17 @@ function gatewayRefreshRecoveryPlan(
       aria_label: 'Enable Gateway',
       primary_action: enableAction,
       continuation_action: continuationActionFor(gateway, enableAction),
+    };
+  }
+
+  if (gateway.reinstall_pairing_required === true) {
+    const pairAction = gatewaySourceAction('refresh_gateway', 'Pair Gateway', 'default', true);
+    return {
+      title: 'Gateway pairing required',
+      detail: 'Reinstall completed. Pair the new Gateway before using this Environment.',
+      aria_label: 'Pair Gateway',
+      primary_action: pairAction,
+      continuation_action: continuationActionFor(gateway, pairAction),
     };
   }
 
@@ -479,6 +506,16 @@ function gatewayRefreshRecoveryPlan(
         aria_label: 'Update Gateway before refreshing',
         primary_action: updateAction,
         continuation_action: continuationActionFor(gateway, updateAction),
+      };
+    }
+    case 'needs_reinstall': {
+      const reinstallAction = gatewaySourceAction('reinstall_gateway', 'Reinstall', 'default', true);
+      return {
+        title: 'Gateway reinstall required',
+        detail: 'This Gateway has incompatible state. Reinstall replaces its complete Redeven environment and requires pairing again.',
+        aria_label: 'Reinstall Gateway',
+        primary_action: reinstallAction,
+        continuation_action: continuationActionFor(gateway, reinstallAction),
       };
     }
     case 'ssh_unreachable':
@@ -563,6 +600,8 @@ function confirmationPanelKind(action: string): GatewayActionPanelKind {
       return 'stop_gateway_confirm';
     case 'restart_gateway':
       return 'restart_gateway_confirm';
+    case 'reinstall_gateway':
+      return 'reinstall_gateway_confirm';
     default:
       return 'update_gateway_confirm';
   }
@@ -578,6 +617,8 @@ function actionLabel(action: string): string {
       return 'Restart Gateway';
     case 'update_gateway':
       return 'Update Gateway';
+    case 'reinstall_gateway':
+      return 'Reinstall';
     default:
       return 'Gateway action';
   }
@@ -650,6 +691,7 @@ export function buildGatewayActionPresentation(
       tone: recovery.primary_action?.intent === 'start_gateway'
         || recovery.primary_action?.intent === 'restart_gateway'
         || recovery.primary_action?.intent === 'update_gateway'
+        || recovery.primary_action?.intent === 'reinstall_gateway'
         || gateway.sync_state === 'catalog_failed'
         || gateway.sync_state === 'gateway_unreachable'
         ? 'warning'
@@ -664,17 +706,19 @@ export function buildGatewayActionPresentation(
     });
   }
 
-  if ((action.intent === 'stop_gateway' || action.intent === 'restart_gateway' || action.intent === 'update_gateway') && manageable && (input.affected_sessions?.length ?? 0) > 0) {
+  if ((action.intent === 'stop_gateway' || action.intent === 'restart_gateway' || action.intent === 'update_gateway' || action.intent === 'reinstall_gateway') && manageable) {
     const label = actionLabel(action.intent);
     const sessions = input.affected_sessions ?? [];
     return buildPanel({
       gateway,
       kind: confirmationPanelKind(action.intent),
       execution_mode: 'confirm',
-      tone: sessions.length > 0 ? 'warning' : 'neutral',
+      tone: action.intent === 'reinstall_gateway' || sessions.length > 0 ? 'warning' : 'neutral',
       eyebrow: 'Gateway service',
       title: label,
-      detail: sessions.length > 0
+      detail: action.intent === 'reinstall_gateway'
+        ? 'This permanently replaces the complete Redeven environment, including project data, trust, and Gateway state. Pairing is required again.'
+        : sessions.length > 0
         ? `${sessions.length} environment session${sessions.length === 1 ? '' : 's'} opened through this Gateway will be disconnected.`
         : `Desktop will ${label.toLowerCase()} on the configured target.`,
       aria_label: label,

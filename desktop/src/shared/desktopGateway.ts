@@ -133,6 +133,7 @@ export type DesktopGatewayServiceStatus =
   | 'ssh_unreachable'
   | 'container_unavailable'
   | 'service_needs_update'
+  | 'needs_reinstall'
   | 'bridge_unavailable'
   | 'error';
 
@@ -162,6 +163,7 @@ export type DesktopGatewayDiagnosisClassification =
   | 'ready'
   | 'not_started'
   | 'needs_update'
+  | 'needs_reinstall'
   | 'ssh_unreachable'
   | 'container_unavailable'
   | 'bridge_unavailable'
@@ -217,7 +219,7 @@ export type DesktopGatewayDiagnosis = Readonly<{
   service_state?: DesktopGatewayServiceState;
   catalog_state?: DesktopGatewaySyncState;
   trust_state?: DesktopGatewayTrustState;
-  recommended_recovery?: 'start_gateway' | 'restart_gateway' | 'update_gateway';
+  recommended_recovery?: 'start_gateway' | 'restart_gateway' | 'update_gateway' | 'reinstall_gateway';
   probe_results?: readonly DesktopGatewayDiagnosisProbeResult[];
   managed_probe?: DesktopGatewayManagedProbe;
   error_code?: string;
@@ -247,6 +249,7 @@ export type DesktopGatewaySource = Readonly<{
   service_state?: DesktopGatewayServiceState;
   sync_state?: DesktopGatewaySyncState;
   background_sync_running?: boolean;
+  reinstall_pairing_required?: boolean;
   last_sync_attempt_at_ms?: number;
   last_synced_at_ms?: number;
   last_sync_error_code?: string;
