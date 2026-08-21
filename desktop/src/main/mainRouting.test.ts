@@ -104,7 +104,7 @@ describe('main routing', () => {
     expect(openSrc).toContain('if (await localEnvironmentReinstallRequired(environment)) {');
     expect(openSrc).toContain('return localEnvironmentReinstallRequiredLauncherFailure(environment);');
     expect(openSrc).toContain('if (await localEnvironmentReinstallPairingRequired(environment)) {');
-    expect(openSrc).toContain("launcherActionFailure('gateway_pairing_required'");
+    expect(openSrc).toContain('return localEnvironmentPairingRequiredLauncherFailure(environment);');
 
     const resetStart = mainSrc.indexOf('async function resetLocalEnvironmentFromLauncher(');
     const resetEnd = mainSrc.indexOf('function gatewayServiceOperationName(', resetStart);
@@ -131,7 +131,11 @@ describe('main routing', () => {
     const lifecycleEnd = mainSrc.indexOf('async function startEnvironmentRuntimeFromLauncher(', lifecycleStart);
     const lifecycleSrc = mainSrc.slice(lifecycleStart, lifecycleEnd);
     expect(lifecycleSrc).toContain('return localEnvironmentReinstallRequiredLauncherFailure(localEnvironment);');
+    expect(lifecycleSrc).toContain('return localEnvironmentPairingRequiredLauncherFailure(localEnvironment);');
     expect(lifecycleSrc.indexOf('await localEnvironmentReinstallRequired(localEnvironment)')).toBeLessThan(
+      lifecycleSrc.indexOf('await upsertDirectRuntimeGateway(environmentID, label, hostAccess, placement)'),
+    );
+    expect(lifecycleSrc.indexOf('await localEnvironmentReinstallPairingRequired(localEnvironment)')).toBeLessThan(
       lifecycleSrc.indexOf('await upsertDirectRuntimeGateway(environmentID, label, hostAccess, placement)'),
     );
 
@@ -139,6 +143,7 @@ describe('main routing', () => {
     const refreshEnd = mainSrc.indexOf('async function refreshAllEnvironmentRuntimesFromLauncher(', refreshStart);
     const refreshSrc = mainSrc.slice(refreshStart, refreshEnd);
     expect(refreshSrc).toContain('return localEnvironmentReinstallRequiredLauncherFailure(localEnvironment);');
+    expect(refreshSrc).toContain('return localEnvironmentPairingRequiredLauncherFailure(localEnvironment);');
     expect(refreshSrc.indexOf('await localEnvironmentReinstallRequired(localEnvironment)')).toBeLessThan(
       refreshSrc.indexOf('await refreshWelcomeRuntimeHealthForEnvironment(environmentID)'),
     );
