@@ -22,6 +22,42 @@ describe('applyFlowerRuntimeCurrentView', () => {
     expect(result.working_dir).toBe('/');
     expect(result.status).toBe('running');
     expect(result.messages.map((message) => message.content)).toEqual(['hello']);
+    expect(result.model_io_status).toMatchObject({ phase: 'streaming', run_id: 'turn-a' });
+  });
+
+  it('clears the derived model status after the runtime settles', () => {
+    const result = applyFlowerRuntimeCurrentView(summary(), {
+      thread_id: 'thread-a', view_version: 8, activity: 'idle', turn_id: 'turn-a', last_outcome: 'completed',
+      items: [{ id: 'assistant:turn-a:1', turn_id: 'turn-a', ordinal: 1, kind: 'assistant', text: 'done' }],
+    });
+
+    expect(result.model_io_status).toBeNull();
+  });
+
+  it('does not render a duplicated current item twice', () => {
+    const result = applyFlowerRuntimeCurrentView(summary(), {
+      thread_id: 'thread-a', view_version: 9, activity: 'idle', turn_id: 'turn-a', last_outcome: 'completed',
+      items: [
+        { id: 'assistant:turn-a:1', turn_id: 'turn-a', ordinal: 1, kind: 'assistant', text: 'same reply' },
+        { id: 'assistant:turn-a:1', turn_id: 'turn-a', ordinal: 2, kind: 'assistant', text: 'same reply' },
+      ],
+    });
+
+    expect(result.messages).toHaveLength(1);
+    expect(result.messages[0]).toMatchObject({ id: 'assistant:turn-a:1', content: 'same reply' });
+  });
+
+  it('keeps the later assistant segment when it contains an earlier repeated reply', () => {
+    const repeated = 'Current weather in Changsha: temperature 28-29C, humidity 85%, forecast is clear and dry.';
+    const result = applyFlowerRuntimeCurrentView(summary(), {
+      thread_id: 'thread-a', view_version: 10, activity: 'idle', turn_id: 'turn-a', last_outcome: 'completed',
+      items: [
+        { id: 'assistant:turn-a:1', turn_id: 'turn-a', ordinal: 1, kind: 'assistant', text: repeated },
+        { id: 'assistant:turn-a:2', turn_id: 'turn-a', ordinal: 2, kind: 'assistant', text: `I verified the sources. ${repeated}` },
+      ],
+    });
+
+    expect(result.messages.map((message) => message.id)).toEqual(['assistant:turn-a:2']);
   });
 
   it('projects an interrupted runtime outcome as a visible failed turn', () => {

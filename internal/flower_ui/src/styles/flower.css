@@ -4024,6 +4024,57 @@ html.dark .flower-component-shell {
   color: color-mix(in srgb, var(--muted-foreground) 90%, var(--foreground) 10%);
 }
 
+.flower-thinking-disclosure {
+  min-width: 0;
+  color: color-mix(in srgb, var(--muted-foreground) 90%, var(--foreground) 10%);
+}
+
+.flower-thinking-toggle {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.125rem 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.flower-thinking-toggle:hover,
+.flower-thinking-toggle:focus-visible {
+  color: var(--foreground);
+}
+
+.flower-thinking-toggle:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--primary) 48%, transparent);
+  outline-offset: 2px;
+}
+
+.flower-thinking-toggle-icon {
+  width: 0.9rem;
+  height: 0.9rem;
+  flex: 0 0 auto;
+  transition: transform 150ms ease;
+}
+
+.flower-thinking-disclosure[data-state='open'] .flower-thinking-toggle-icon {
+  transform: rotate(180deg);
+}
+
+.flower-thinking-content {
+  max-width: min(100%, 58rem);
+  margin-top: 0.3rem;
+  padding-left: 1.2rem;
+  border-left: 2px solid color-mix(in srgb, var(--flower-chat-surface-border) 42%, transparent);
+  color: color-mix(in srgb, var(--muted-foreground) 90%, var(--foreground) 10%);
+  font-size: 0.8rem;
+  line-height: 1.55;
+}
+
 .flower-chat-md-block {
   --flower-chat-md-code-font: SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', ui-monospace, monospace;
   display: block;

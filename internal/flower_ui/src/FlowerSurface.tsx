@@ -8128,6 +8128,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     copyAction: Accessor<JSX.Element | null>,
   ) => {
     const markdown = createMemo(() => block().block_type === 'markdown');
+    const thinking = createMemo(() => block().block_type === 'thinking');
+    const thinkingLive = createMemo(() => thinking() && message().live === true);
+    const [thinkingOpen, setThinkingOpen] = createSignal(false);
+    createEffect(() => {
+      if (!thinking()) return;
+      // Reasoning is useful while it streams, but settled reasoning must not
+      // keep a large transcript panel open or retain its layout cost.
+      setThinkingOpen(streaming() || thinkingLive());
+    });
     const assistantCopyLayout = createMemo(() => message().role === 'assistant' && block().block_type !== 'thinking');
     const ContentBody: Component = () => (
       <Show
@@ -8159,27 +8168,55 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       </Show>
     );
 
-    return (
-      <div class={cn(
-        'flower-message-bubble',
-        message().role === 'user'
-          ? 'flower-message-bubble-framed'
-          : 'flower-message-bubble-plain',
-        message().role === 'user'
-          ? 'flower-message-bubble-user'
-          : 'flower-message-bubble-assistant',
-        streaming() && 'flower-message-bubble-streaming',
-        failed() && 'flower-message-bubble-error',
-        block().block_type === 'thinking' && 'flower-message-bubble-thinking',
-      )}>
-        <Show when={failed()}>
-          <div class="flower-message-error-kicker">
-            <AlertTriangle class="h-3.5 w-3.5" />
-            <span>{copy().chat.messageErrorTitle}</span>
+    const ThinkingDisclosure: Component = () => (
+      <div
+        class="flower-thinking-disclosure"
+        data-state={thinkingOpen() ? 'open' : 'closed'}
+      >
+        <button
+          type="button"
+          class="flower-thinking-toggle"
+          aria-expanded={thinkingOpen()}
+          onClick={() => setThinkingOpen((open) => !open)}
+        >
+          <ChevronDown class="flower-thinking-toggle-icon" aria-hidden="true" />
+          <span>{trimString(copy().chat.modelStatus.streaming) || 'Thinking...'}</span>
+        </button>
+        <Show when={thinkingOpen()}>
+          <div class="flower-thinking-content">
+            <ContentBody />
           </div>
         </Show>
-        <StableContentBody />
       </div>
+    );
+
+    return (
+      <Show
+        when={thinking()}
+        fallback={(
+          <div class={cn(
+            'flower-message-bubble',
+            message().role === 'user'
+              ? 'flower-message-bubble-framed'
+              : 'flower-message-bubble-plain',
+            message().role === 'user'
+              ? 'flower-message-bubble-user'
+              : 'flower-message-bubble-assistant',
+            streaming() && 'flower-message-bubble-streaming',
+            failed() && 'flower-message-bubble-error',
+          )}>
+            <Show when={failed()}>
+              <div class="flower-message-error-kicker">
+                <AlertTriangle class="h-3.5 w-3.5" />
+                <span>{copy().chat.messageErrorTitle}</span>
+              </div>
+            </Show>
+            <StableContentBody />
+          </div>
+        )}
+      >
+        <ThinkingDisclosure />
+      </Show>
     );
   };
 

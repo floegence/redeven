@@ -109,6 +109,12 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).toContain('copy().chat.modelStatus');
     expect(src).toContain('DEFAULT_FLOWER_SURFACE_COPY.chat.modelStatus');
     expect(src).toContain('data-text={base}');
+    expect(src).toContain('const thinking = createMemo(() => block().block_type === \'thinking\')');
+    expect(src).toContain('const thinkingLive = createMemo(() => thinking() && message().live === true)');
+    expect(src).toContain('setThinkingOpen(streaming() || thinkingLive())');
+    expect(src).toContain('class="flower-thinking-disclosure"');
+    expect(src).toContain('class="flower-thinking-toggle"');
+    expect(src).toContain('class="flower-thinking-content"');
     expect(src).toContain('class="flower-composer-anchor"');
     expect(src).not.toContain('executeCompactContextCommand');
     expect(src).not.toContain('contextIndicator()');

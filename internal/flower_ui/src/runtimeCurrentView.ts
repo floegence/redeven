@@ -143,7 +143,11 @@ function activityBlock(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentVie
 
 function runtimeMessages(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentView): readonly FlowerChatMessage[] {
   const messages: FlowerChatMessage[] = [];
+  const seenItemIDs = new Set<string>();
   for (const item of view.items ?? []) {
+    const itemID = trim(item.id);
+    if (!itemID || seenItemIDs.has(itemID)) continue;
+    seenItemIDs.add(itemID);
     const createdAtMs = itemCreatedAt(item, base.updated_at_ms);
     const references = itemReferences(item);
     if (item.kind === 'interaction') {
@@ -157,7 +161,7 @@ function runtimeMessages(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentV
             .map(([, value]) => trim(String(value)))
             .filter(Boolean);
         messages.push({
-          id: trim(item.id), thread_id: base.thread_id, turn_id: trim(item.turn_id), role: 'user',
+          id: itemID, thread_id: base.thread_id, turn_id: trim(item.turn_id), role: 'user',
           content: values.join('\n'), status: 'complete', created_at_ms: createdAtMs,
           ...(references ? { references } : {}),
         });
@@ -167,7 +171,7 @@ function runtimeMessages(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentV
     }
     if (item.kind === 'tool') {
       messages.push({
-        id: trim(item.id), thread_id: base.thread_id, turn_id: trim(item.turn_id), role: 'assistant',
+        id: itemID, thread_id: base.thread_id, turn_id: trim(item.turn_id), role: 'assistant',
         content: '', status: 'complete', created_at_ms: createdAtMs,
         blocks: [activityBlock(base, view, item)],
         ...(references ? { references } : {}),
@@ -176,7 +180,7 @@ function runtimeMessages(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentV
     }
     if (item.kind === 'thinking') {
       messages.push({
-        id: trim(item.id), thread_id: base.thread_id, turn_id: trim(item.turn_id), role: 'assistant',
+        id: itemID, thread_id: base.thread_id, turn_id: trim(item.turn_id), role: 'assistant',
         content: '', status: messageStatus(view, item), created_at_ms: createdAtMs,
         blocks: [{ type: 'thinking', content: String(item.text ?? '') }],
         ...(item.live ? { live: true } : {}),
@@ -185,14 +189,23 @@ function runtimeMessages(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentV
       continue;
     }
     messages.push({
-      id: trim(item.id), thread_id: base.thread_id, turn_id: trim(item.turn_id),
+      id: itemID, thread_id: base.thread_id, turn_id: trim(item.turn_id),
       role: item.kind === 'user' ? 'user' : 'assistant', content: String(item.text ?? ''),
       status: messageStatus(view, item), created_at_ms: createdAtMs,
       ...(item.live ? { live: true, active_cursor: item.kind === 'assistant' } : {}),
       ...(references ? { references } : {}),
     });
   }
-  return messages;
+  return messages.filter((message, index) => {
+    if (message.role !== 'assistant' || !trim(message.content) || !trim(message.turn_id)) return true;
+    const content = trim(message.content).replace(/\s+/g, ' ');
+    if (content.length < 80) return true;
+    return !messages.slice(index + 1).some((candidate) => (
+      candidate.role === 'assistant'
+      && trim(candidate.turn_id) === trim(message.turn_id)
+      && trim(candidate.content).replace(/\s+/g, ' ').includes(content)
+    ));
+  });
 }
 
 function runtimeApprovalActions(
@@ -326,6 +339,15 @@ export function applyFlowerRuntimeCurrentView(
     approval_pending_count: approvalCount,
     approval_actions: approvalActions,
     input_request: inputRequest,
+    model_io_status: current.activity === 'active' && approvalCount === 0 && !hasInput
+      ? {
+        phase: 'streaming',
+        ...(trim(current.turn_id) || trim(base.active_run_id)
+          ? { run_id: trim(current.turn_id) || trim(base.active_run_id) }
+          : {}),
+        updated_at_ms: Math.max(0, Math.floor(Number(base.updated_at_ms) || 0)),
+      }
+      : null,
     queued_turn_count: queuedTurns.length,
     queued_turns: queuedTurns,
     messages,

@@ -93,6 +93,17 @@ describe('buildFlowerTimelineEntries', () => {
     );
   });
 
+  it('does not render duplicate message identities twice', () => {
+    const entries = buildFlowerTimelineEntries(thread({
+      messages: [
+        { id: 'assistant-duplicate', role: 'assistant', content: 'same reply', status: 'complete', created_at_ms: 1 },
+        { id: 'assistant-duplicate', role: 'assistant', content: 'same reply', status: 'complete', created_at_ms: 2 },
+      ],
+    }));
+
+    expect(entries.filter((entry) => entry.type === 'message')).toHaveLength(1);
+  });
+
   it('recognizes a canonical declined tool from the rendered timeline without an approval marker', () => {
     const entries = buildFlowerTimelineEntries(thread({
       messages: [{
