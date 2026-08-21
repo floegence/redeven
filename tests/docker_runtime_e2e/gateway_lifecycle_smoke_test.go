@@ -349,11 +349,8 @@ func runDockerLifecycleOperation(
 ) {
 	t.Helper()
 	prepared := prepareRuntimeOperation(t, client, target, compatibility, operationID, kind, gatewayprotocol.ArtifactPolicyPublishedRelease, nil)
-	if prepared.Operation.State != gatewayprotocol.RuntimeOperationAwaitingConfirmation {
-		t.Fatalf("%s prepare state = %q, want awaiting_confirmation", kind, prepared.Operation.State)
-	}
-	if confirmed := confirmRuntimeOperation(t, client, prepared.Operation); confirmed.State != gatewayprotocol.RuntimeOperationCommitReady {
-		t.Fatalf("%s confirmation state = %q, want commit_ready", kind, confirmed.State)
+	if prepared.ConfirmationRequired || prepared.Operation.State != gatewayprotocol.RuntimeOperationCommitReady {
+		t.Fatalf("%s idle prepare = %#v, want commit_ready without confirmation", kind, prepared)
 	}
 	if committed := decodeOperationResponse(t, client.call(t, http.MethodPost, "/gateway/v2/runtime-operations/"+operationID+"/commit", []byte(`{}`), nil, nil)); committed.State != gatewayprotocol.RuntimeOperationSucceeded {
 		t.Fatalf("%s commit state = %q, want succeeded", kind, committed.State)
@@ -377,11 +374,8 @@ func runDockerCustomRuntimeUpdate(
 		t, client, target, compatibility, operationID, gatewayprotocol.RuntimeOperationUpdate,
 		gatewayprotocol.ArtifactPolicyCustomBuild, buildInputs, desiredVersion,
 	)
-	if prepared.Operation.State != gatewayprotocol.RuntimeOperationAwaitingConfirmation {
-		t.Fatalf("custom update prepare state = %q, want awaiting_confirmation", prepared.Operation.State)
-	}
-	if confirmed := confirmRuntimeOperation(t, client, prepared.Operation); confirmed.State != gatewayprotocol.RuntimeOperationAwaitingArtifact {
-		t.Fatalf("custom update confirmation state = %q, want awaiting_artifact", confirmed.State)
+	if prepared.ConfirmationRequired || prepared.Operation.State != gatewayprotocol.RuntimeOperationAwaitingArtifact {
+		t.Fatalf("idle custom update prepare = %#v, want awaiting_artifact without confirmation", prepared)
 	}
 	artifact, metadata := makeCustomRuntimeArtifactFromBinary(t, f, binaryPath, operationID, target, compatibility, buildInputs)
 	metadataJSON := mustJSON(t, metadata)
@@ -400,7 +394,6 @@ func runDockerCustomRuntimeUpdate(
 func lifecycleCommitEvents() []gatewayprotocol.RuntimeOperationState {
 	return []gatewayprotocol.RuntimeOperationState{
 		gatewayprotocol.RuntimeOperationPreflighting,
-		gatewayprotocol.RuntimeOperationAwaitingConfirmation,
 		gatewayprotocol.RuntimeOperationCommitReady,
 		gatewayprotocol.RuntimeOperationFencing,
 		gatewayprotocol.RuntimeOperationCommitting,
@@ -411,7 +404,6 @@ func lifecycleCommitEvents() []gatewayprotocol.RuntimeOperationState {
 func customUpdateEvents() []gatewayprotocol.RuntimeOperationState {
 	return []gatewayprotocol.RuntimeOperationState{
 		gatewayprotocol.RuntimeOperationPreflighting,
-		gatewayprotocol.RuntimeOperationAwaitingConfirmation,
 		gatewayprotocol.RuntimeOperationAwaitingArtifact,
 		gatewayprotocol.RuntimeOperationStaging,
 		gatewayprotocol.RuntimeOperationCommitReady,
@@ -490,11 +482,8 @@ func TestDockerUbuntuGatewayRuntimeLifecycle(t *testing.T) {
 	initializeInputs := json.RawMessage(`{"source":"docker-runtime-e2e-initialize","target_version":"` + initialVersion + `"}`)
 	initializeID := "gateway-e2e-initialize"
 	initializePrepare := prepareRuntimeOperationWithVersion(t, lifecycleClient, target, compatibility, initializeID, gatewayprotocol.RuntimeOperationUpdate, gatewayprotocol.ArtifactPolicyCustomBuild, initializeInputs, initialVersion)
-	if initializePrepare.Operation.State != gatewayprotocol.RuntimeOperationAwaitingConfirmation {
-		t.Fatalf("initialize prepare state = %q, want awaiting_confirmation", initializePrepare.Operation.State)
-	}
-	if confirmed := confirmRuntimeOperation(t, lifecycleClient, initializePrepare.Operation); confirmed.State != gatewayprotocol.RuntimeOperationAwaitingArtifact {
-		t.Fatalf("initialize confirmation state = %q, want awaiting_artifact", confirmed.State)
+	if initializePrepare.ConfirmationRequired || initializePrepare.Operation.State != gatewayprotocol.RuntimeOperationAwaitingArtifact {
+		t.Fatalf("idle initialize prepare = %#v, want awaiting_artifact without confirmation", initializePrepare)
 	}
 	initializeArtifact, initializeMetadata := makeCustomRuntimeArtifactFromBinary(
 		t, f, filepath.Join(f.tempRoot, "redeven-linux"), initializeID, target, compatibility, initializeInputs,
@@ -517,7 +506,6 @@ func TestDockerUbuntuGatewayRuntimeLifecycle(t *testing.T) {
 	f.openBridgeAndAssertRequests(ctx, initial)
 	assertLifecycleEvents(t, lifecycleClient, initializeID, []gatewayprotocol.RuntimeOperationState{
 		gatewayprotocol.RuntimeOperationPreflighting,
-		gatewayprotocol.RuntimeOperationAwaitingConfirmation,
 		gatewayprotocol.RuntimeOperationAwaitingArtifact,
 		gatewayprotocol.RuntimeOperationStaging,
 		gatewayprotocol.RuntimeOperationCommitReady,
@@ -537,11 +525,8 @@ func TestDockerUbuntuGatewayRuntimeLifecycle(t *testing.T) {
 	compatibility = *capability.Compatibility
 	stopID := "gateway-e2e-stop"
 	stopPrepare := prepareRuntimeOperation(t, lifecycleClient, target, compatibility, stopID, gatewayprotocol.RuntimeOperationStop, gatewayprotocol.ArtifactPolicyPublishedRelease, nil)
-	if stopPrepare.Operation.State != gatewayprotocol.RuntimeOperationAwaitingConfirmation {
-		t.Fatalf("stop prepare state = %q, want awaiting_confirmation", stopPrepare.Operation.State)
-	}
-	if confirmed := confirmRuntimeOperation(t, lifecycleClient, stopPrepare.Operation); confirmed.State != gatewayprotocol.RuntimeOperationCommitReady {
-		t.Fatalf("stop confirmation state = %q, want commit_ready", confirmed.State)
+	if stopPrepare.ConfirmationRequired || stopPrepare.Operation.State != gatewayprotocol.RuntimeOperationCommitReady {
+		t.Fatalf("idle stop prepare = %#v, want commit_ready without confirmation", stopPrepare)
 	}
 	if stopped := decodeOperationResponse(t, lifecycleClient.call(t, http.MethodPost, "/gateway/v2/runtime-operations/"+stopID+"/commit", []byte(`{}`), nil, nil)); stopped.State != gatewayprotocol.RuntimeOperationSucceeded {
 		t.Fatalf("stop commit state = %q, want succeeded", stopped.State)
@@ -549,7 +534,6 @@ func TestDockerUbuntuGatewayRuntimeLifecycle(t *testing.T) {
 	f.stopRuntime(ctx)
 	assertLifecycleEvents(t, lifecycleClient, stopID, []gatewayprotocol.RuntimeOperationState{
 		gatewayprotocol.RuntimeOperationPreflighting,
-		gatewayprotocol.RuntimeOperationAwaitingConfirmation,
 		gatewayprotocol.RuntimeOperationCommitReady,
 		gatewayprotocol.RuntimeOperationFencing,
 		gatewayprotocol.RuntimeOperationCommitting,
@@ -567,12 +551,8 @@ func TestDockerUbuntuGatewayRuntimeLifecycle(t *testing.T) {
 	compatibility = *offlineCapability.Compatibility
 	startID := "gateway-e2e-start"
 	startPrepare := prepareRuntimeOperation(t, lifecycleClient, target, compatibility, startID, gatewayprotocol.RuntimeOperationStart, gatewayprotocol.ArtifactPolicyPublishedRelease, nil)
-	if startPrepare.Operation.State != gatewayprotocol.RuntimeOperationAwaitingConfirmation {
-		t.Fatalf("start prepare state = %q, want awaiting_confirmation", startPrepare.Operation.State)
-	}
-	confirmedStart := confirmRuntimeOperation(t, lifecycleClient, startPrepare.Operation)
-	if confirmedStart.State != gatewayprotocol.RuntimeOperationCommitReady {
-		t.Fatalf("start confirmation state = %q, want commit_ready", confirmedStart.State)
+	if startPrepare.ConfirmationRequired || startPrepare.Operation.State != gatewayprotocol.RuntimeOperationCommitReady {
+		t.Fatalf("start prepare = %#v, want commit_ready without confirmation", startPrepare)
 	}
 	committedStart := decodeOperationResponse(t, lifecycleClient.call(t, http.MethodPost, "/gateway/v2/runtime-operations/"+startID+"/commit", []byte(`{}`), nil, nil))
 	if committedStart.State != gatewayprotocol.RuntimeOperationSucceeded {
@@ -587,7 +567,6 @@ func TestDockerUbuntuGatewayRuntimeLifecycle(t *testing.T) {
 	f.openBridgeAndAssertRequests(ctx, afterStartStatus)
 	assertLifecycleEvents(t, lifecycleClient, startID, []gatewayprotocol.RuntimeOperationState{
 		gatewayprotocol.RuntimeOperationPreflighting,
-		gatewayprotocol.RuntimeOperationAwaitingConfirmation,
 		gatewayprotocol.RuntimeOperationCommitReady,
 		gatewayprotocol.RuntimeOperationFencing,
 		gatewayprotocol.RuntimeOperationCommitting,
@@ -602,21 +581,14 @@ func TestDockerUbuntuGatewayRuntimeLifecycle(t *testing.T) {
 
 	restartID := "gateway-e2e-restart"
 	restartPrepare := prepareRuntimeOperation(t, lifecycleClient, target, compatibility, restartID, gatewayprotocol.RuntimeOperationRestart, gatewayprotocol.ArtifactPolicyPublishedRelease, nil)
-	if restartPrepare.Operation.State != gatewayprotocol.RuntimeOperationAwaitingConfirmation {
-		t.Fatalf("restart prepare state = %q, want awaiting_confirmation", restartPrepare.Operation.State)
-	}
-	if response := lifecycleClient.call(t, http.MethodPost, "/gateway/v2/runtime-operations/"+restartID+"/commit", []byte(`{}`), nil, nil); response.OK || response.Error == nil || response.Error.Code != "operation_state_conflict" {
-		t.Fatalf("restart commit before confirmation = %#v, want operation_state_conflict", response)
+	if restartPrepare.ConfirmationRequired || restartPrepare.Operation.State != gatewayprotocol.RuntimeOperationCommitReady {
+		t.Fatalf("idle restart prepare = %#v, want commit_ready without confirmation", restartPrepare)
 	}
 	lockPrepare := prepareRuntimeOperationResponse(t, lifecycleClient, target, compatibility, "gateway-e2e-lock-conflict", gatewayprotocol.RuntimeOperationRestart, gatewayprotocol.ArtifactPolicyPublishedRelease, nil)
 	if lockPrepare.OK || lockPrepare.Error == nil || lockPrepare.Error.Code != "operation_in_progress" || lockPrepare.Error.Message != restartID {
 		t.Fatalf("second operation target-lock response = %#v, want operation_in_progress for %q", lockPrepare, restartID)
 	}
 
-	confirmedRestart := confirmRuntimeOperation(t, lifecycleClient, restartPrepare.Operation)
-	if confirmedRestart.State != gatewayprotocol.RuntimeOperationCommitReady {
-		t.Fatalf("restart confirmation state = %q, want commit_ready", confirmedRestart.State)
-	}
 	committedRestart := decodeOperationResponse(t, lifecycleClient.call(t, http.MethodPost, "/gateway/v2/runtime-operations/"+restartID+"/commit", []byte(`{}`), nil, nil))
 	if committedRestart.State != gatewayprotocol.RuntimeOperationSucceeded {
 		t.Fatalf("restart commit state = %q, want succeeded", committedRestart.State)
@@ -630,7 +602,6 @@ func TestDockerUbuntuGatewayRuntimeLifecycle(t *testing.T) {
 	}
 	assertLifecycleEvents(t, lifecycleClient, restartID, []gatewayprotocol.RuntimeOperationState{
 		gatewayprotocol.RuntimeOperationPreflighting,
-		gatewayprotocol.RuntimeOperationAwaitingConfirmation,
 		gatewayprotocol.RuntimeOperationCommitReady,
 		gatewayprotocol.RuntimeOperationFencing,
 		gatewayprotocol.RuntimeOperationCommitting,
@@ -640,8 +611,8 @@ func TestDockerUbuntuGatewayRuntimeLifecycle(t *testing.T) {
 	buildInputs := json.RawMessage(`{"source":"docker-runtime-e2e","target_version":"v9.9.9-e2e"}`)
 	tamperID := "gateway-e2e-tampered-artifact"
 	tamperPrepare := prepareRuntimeOperation(t, lifecycleClient, target, compatibility, tamperID, gatewayprotocol.RuntimeOperationUpdate, gatewayprotocol.ArtifactPolicyCustomBuild, buildInputs)
-	if confirmRuntimeOperation(t, lifecycleClient, tamperPrepare.Operation).State != gatewayprotocol.RuntimeOperationAwaitingArtifact {
-		t.Fatalf("tampered artifact operation did not await artifact")
+	if tamperPrepare.ConfirmationRequired || tamperPrepare.Operation.State != gatewayprotocol.RuntimeOperationAwaitingArtifact {
+		t.Fatalf("idle tampered-artifact prepare = %#v, want awaiting_artifact without confirmation", tamperPrepare)
 	}
 	tamperedArtifact, tamperedMetadata := makeCustomRuntimeArtifact(t, f, tamperID, target, compatibility, buildInputs)
 	tamperedMetadata.ExecutableSHA256 = "sha256:" + strings.Repeat("0", 64)
@@ -661,12 +632,8 @@ func TestDockerUbuntuGatewayRuntimeLifecycle(t *testing.T) {
 
 	updateID := "gateway-e2e-custom-build"
 	updatePrepare := prepareRuntimeOperation(t, lifecycleClient, target, compatibility, updateID, gatewayprotocol.RuntimeOperationUpdate, gatewayprotocol.ArtifactPolicyCustomBuild, buildInputs)
-	if updatePrepare.Operation.State != gatewayprotocol.RuntimeOperationAwaitingConfirmation {
-		t.Fatalf("custom-build prepare state = %q, want awaiting_confirmation", updatePrepare.Operation.State)
-	}
-	confirmedUpdate := confirmRuntimeOperation(t, lifecycleClient, updatePrepare.Operation)
-	if confirmedUpdate.State != gatewayprotocol.RuntimeOperationAwaitingArtifact {
-		t.Fatalf("custom-build confirmation state = %q, want awaiting_artifact", confirmedUpdate.State)
+	if updatePrepare.ConfirmationRequired || updatePrepare.Operation.State != gatewayprotocol.RuntimeOperationAwaitingArtifact {
+		t.Fatalf("idle custom-build prepare = %#v, want awaiting_artifact without confirmation", updatePrepare)
 	}
 
 	artifact, metadata := makeCustomRuntimeArtifact(t, f, updateID, target, compatibility, buildInputs)
@@ -714,7 +681,6 @@ func TestDockerUbuntuGatewayRuntimeLifecycle(t *testing.T) {
 	}
 	assertLifecycleEvents(t, lifecycleClient, updateID, []gatewayprotocol.RuntimeOperationState{
 		gatewayprotocol.RuntimeOperationPreflighting,
-		gatewayprotocol.RuntimeOperationAwaitingConfirmation,
 		gatewayprotocol.RuntimeOperationAwaitingArtifact,
 		gatewayprotocol.RuntimeOperationStaging,
 		gatewayprotocol.RuntimeOperationCommitReady,
@@ -737,7 +703,6 @@ func TestDockerUbuntuGatewayRuntimeLifecycle(t *testing.T) {
 	}
 	assertLifecycleEvents(t, lifecycleClient, updateID, []gatewayprotocol.RuntimeOperationState{
 		gatewayprotocol.RuntimeOperationPreflighting,
-		gatewayprotocol.RuntimeOperationAwaitingConfirmation,
 		gatewayprotocol.RuntimeOperationAwaitingArtifact,
 		gatewayprotocol.RuntimeOperationStaging,
 		gatewayprotocol.RuntimeOperationCommitReady,
@@ -1303,16 +1268,6 @@ func prepareRuntimeOperationResponseWithVersion(t *testing.T, client *gatewayLif
 		Operation: kind, DesiredRuntime: desired, BuildInputs: buildInputs, IdempotencyKey: "idem-" + operationID,
 	}
 	return client.call(t, http.MethodPost, "/gateway/v2/runtime-operations/prepare", mustJSON(t, request), nil, nil)
-}
-
-func confirmRuntimeOperation(t *testing.T, client *gatewayLifecycleClient, operation gatewayprotocol.RuntimeOperation) gatewayprotocol.RuntimeOperation {
-	t.Helper()
-	request := gatewayprotocol.RuntimeOperationConfirmationRequest{
-		ProtocolVersion: gatewayprotocol.Version, SnapshotRevision: operation.ExpectedSnapshot.SnapshotRevision,
-		ProcessInventoryDigest: operation.ExpectedSnapshot.ProcessInventoryDigest, WorkloadIdentityDigest: operation.ExpectedSnapshot.WorkloadIdentityDigest,
-		RiskSummaryDigest: security.SHA256Base64URL(operation.OperationID + ":risk"),
-	}
-	return decodeOperationResponse(t, client.call(t, http.MethodPost, "/gateway/v2/runtime-operations/"+operation.OperationID+"/confirm", mustJSON(t, request), nil, nil))
 }
 
 func readRuntimeCapability(t *testing.T, client *gatewayLifecycleClient) gatewayprotocol.RuntimeManagementCapability {
