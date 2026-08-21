@@ -77,6 +77,7 @@ const pluginLifecycleMocks = vi.hoisted(() => {
   const execute = vi.fn(async (_command: any) => ({}));
   const installOfficialRelease = vi.fn(async (
     _command: any,
+    _inspection: any,
     _requestID: string,
     _options: { signal?: AbortSignal },
     _onUpdate: (operation: any) => void,
@@ -2145,7 +2146,6 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 1, 40);
       await pluginPanelState.lastProps.onOpenCenter();
       await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onCommand), 40);
-      await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length >= 2, 40);
       const requestsBeforeMutation = pluginLifecycleMocks.loadInventoryProjection.mock.calls.length;
       currentProjection = officialContainersProjection('disabled');
       await pluginCenterViewState.lastProps.onCommand({
@@ -2671,6 +2671,7 @@ describe('EnvAppShell environment entry affordances', () => {
     let observationSignal: AbortSignal | undefined;
     pluginLifecycleMocks.installOfficialRelease.mockImplementationOnce(async (
       _command: any,
+      _inspection: any,
       _requestID: string,
       options: { signal?: AbortSignal },
       onUpdate: (execution: any, events: any[]) => void,
@@ -2716,7 +2717,9 @@ describe('EnvAppShell environment entry affordances', () => {
         type: 'install',
         pluginID: officialContainersCatalog.pluginID,
         source: 'official_catalog',
-      }, viewController.signal);
+      }, viewController.signal, {
+        inspection_id: 'release_inspection_shell_test',
+      });
       await flushUntil(() => pluginLifecycleMocks.installOfficialRelease.mock.calls.length === 1);
 
       expect(pluginCenterViewState.lastProps.installOperations[0]).toMatchObject({

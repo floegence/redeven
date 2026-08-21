@@ -635,7 +635,7 @@ export function EnvAppShell() {
     if (cleanupError !== undefined) throw cleanupError;
   };
   let pluginInventoryAbort: AbortController | undefined;
-  let pluginMarketRefreshPromise: Promise<void> | undefined;
+  let pluginMarketRefreshPromise: Promise<boolean> | undefined;
   let pluginMarketRefreshAbort: AbortController | undefined;
   const disposePluginPlatform = async () => {
     let coordinatorError: unknown;
@@ -1187,7 +1187,7 @@ export function EnvAppShell() {
     const state = await refetchPluginInventorySession();
     return state?.owner === pluginInventorySource() ? state.projection : undefined;
   };
-  const refreshPluginMarket = (): Promise<void> => {
+  const refreshPluginMarket = (): Promise<boolean> => {
     // Opening the center and restoring its activity surface can both request a
     // refresh in the same render turn. Share the complete market+inventory
     // refresh so the UI does not start duplicate network work.
@@ -1198,6 +1198,7 @@ export function EnvAppShell() {
     const refresh = (async () => {
       const deadline = performance.now() + 16_000;
       let delayMS = 250;
+      let inventoryRefreshed = false;
       while (!controller.signal.aborted) {
         let changed = false;
         try {
@@ -1206,19 +1207,23 @@ export function EnvAppShell() {
           // Keep the current inventory usable while the Host-owned background
           // refresh is still resolving or the market is unavailable.
         }
-        if (changed) await refetchPluginInventory();
-        if (!pluginLifecycle.marketCatalogNeedsRefresh()) return;
+        if (changed) {
+          await refetchPluginInventory();
+          inventoryRefreshed = true;
+        }
+        if (!pluginLifecycle.marketCatalogNeedsRefresh()) return inventoryRefreshed;
         const remainingMS = deadline - performance.now();
-        if (remainingMS <= 0) return;
+        if (remainingMS <= 0) return inventoryRefreshed;
         try {
           await abortableDelay(Math.min(delayMS, remainingMS), controller.signal);
         } catch {
-          return;
+          return inventoryRefreshed;
         }
         delayMS = Math.min(delayMS * 2, 2_000);
       }
+      return inventoryRefreshed;
     })();
-    let tracked: Promise<void>;
+    let tracked: Promise<boolean>;
     tracked = refresh.finally(() => {
       if (pluginMarketRefreshPromise === tracked) pluginMarketRefreshPromise = undefined;
       if (pluginMarketRefreshAbort === controller) pluginMarketRefreshAbort = undefined;
@@ -3498,7 +3503,8 @@ export function EnvAppShell() {
           onRetryInstall={(pluginInstanceID) => pluginInstallCoordinator?.retry(pluginInstanceID)}
           onDiscardRetainedDataAndRetry={(pluginInstanceID) => pluginInstallCoordinator?.discardRetainedDataAndRetry(pluginInstanceID)}
           onRefresh={async () => {
-            await refreshPluginMarket();
+            const inventoryRefreshed = await refreshPluginMarket();
+            if (!inventoryRefreshed) await refetchPluginInventory();
             await pluginInstallCoordinator?.resume();
           }}
           onCommand={handlePluginCenterCommand}
