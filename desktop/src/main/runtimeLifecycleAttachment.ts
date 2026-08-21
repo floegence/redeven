@@ -26,6 +26,28 @@ export type RuntimeLifecycleAttachmentProjection = Readonly<{
   }>;
 }>;
 
+/**
+ * A confirmation is only useful when the supervisor has identified workload
+ * that the requested operation can interrupt. Unknown counts stay
+ * conservative and require confirmation; two explicit zero counts do not.
+ */
+export function runtimeOperationRequiresConfirmation(
+  operation: GatewayRuntimeOperation,
+): boolean {
+  const workload = operation.expected_snapshot?.workload;
+  const affectedProcessCount = Number(workload?.affected_process_count);
+  const activeSessionCount = Number(workload?.active_session_count);
+  if (
+    !Number.isSafeInteger(affectedProcessCount)
+    || affectedProcessCount < 0
+    || !Number.isSafeInteger(activeSessionCount)
+    || activeSessionCount < 0
+  ) {
+    return true;
+  }
+  return affectedProcessCount > 0 || activeSessionCount > 0;
+}
+
 function operationTitle(kind: GatewayRuntimeOperationKind): Readonly<{
   title: string;
   title_key: DesktopTranslationKey;
@@ -209,7 +231,9 @@ export function projectAttachedRuntimeOperation(
   const owned = operation.observer_redacted !== true;
   const needsConfirmation = owned
     && operation.kind !== 'reconcile'
-    && (operation.state === 'awaiting_confirmation' || operation.state === 'confirmation_required');
+    && (operation.state === 'awaiting_confirmation' || operation.state === 'confirmation_required')
+    && operation.kind !== 'start'
+    && runtimeOperationRequiresConfirmation(operation);
   const snapshot = operation.expected_snapshot;
   return {
     state: operation.state,

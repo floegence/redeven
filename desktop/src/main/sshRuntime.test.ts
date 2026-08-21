@@ -28,6 +28,13 @@ function readSSHTransportManagerSource(): string {
 }
 
 describe('sshRuntime', () => {
+  it('uses the shared ten-second default for SSH connection establishment', () => {
+    const source = readSSHRuntimeSource();
+    expect(source).toContain('const DEFAULT_SSH_CONNECT_TIMEOUT_SECONDS = 10;');
+    expect(source).toContain('readyTimeoutMs: Math.max(1_000, connectTimeoutSeconds * 1_000)');
+    expect(source).not.toContain('readyTimeoutMs: startupTimeoutMs');
+  });
+
   it('returns a structured SSH connection failure without exposing stderr labels as the summary', async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'redeven-ssh-runtime-test-'));
     const fakeSSH = path.join(tempDir, 'ssh.cjs');

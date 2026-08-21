@@ -179,6 +179,9 @@ export class RuntimeLifecycleWorkflow {
         status: step.status,
         detail: step.detail,
         attempt_count: step.attempt_count,
+        started_at_unix_ms: step.started_at_unix_ms,
+        completed_at_unix_ms: step.completed_at_unix_ms,
+        duration_ms: step.duration_ms,
       });
     }
     workflow.activeStepID = progress.active_step_id;
@@ -448,13 +451,29 @@ export class RuntimeLifecycleWorkflow {
     attemptCount?: number,
   ): void {
     const index = this.stepIndex(stepID);
+    const previous = this.states.get(stepID);
+    const now = Date.now();
+    const started = status === 'running' || status === 'succeeded' || status === 'failed';
+    const continuesCurrentAttempt = previous?.status === 'running' || previous?.status === status;
+    const startedAt = started
+      ? continuesCurrentAttempt ? previous?.started_at_unix_ms ?? now : now
+      : undefined;
+    const completedAt = status === 'succeeded' || status === 'failed'
+      ? previous?.status === status ? previous.completed_at_unix_ms ?? now : now
+      : undefined;
+    const duration = startedAt !== undefined && completedAt !== undefined
+      ? Math.max(0, completedAt - startedAt)
+      : undefined;
     this.states.set(stepID, {
       id: stepID,
-      key: this.states.get(stepID)?.key ?? this.stepKey(stepID, index < 0 ? this.plan.length : index),
-      label: this.states.get(stepID)?.label,
+      key: previous?.key ?? this.stepKey(stepID, index < 0 ? this.plan.length : index),
+      label: previous?.label,
       status,
       ...(compact(detail) ? { detail: compact(detail) } : {}),
       ...(attemptCount !== undefined ? { attempt_count: Math.max(0, Math.floor(attemptCount)) } : {}),
+      ...(startedAt !== undefined ? { started_at_unix_ms: startedAt } : {}),
+      ...(completedAt !== undefined ? { completed_at_unix_ms: completedAt } : {}),
+      ...(duration !== undefined ? { duration_ms: duration } : {}),
     });
   }
 

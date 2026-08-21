@@ -946,6 +946,7 @@ export const enUS = {
     protectedWorkloadPresent: 'Protected workload is active',
     snapshotRevision: 'Snapshot revision {revision}',
     stepOf: 'Step {current} of {total}',
+    stageElapsed: 'Still working · {seconds}s',
     planningStartupPath: 'Planning startup path',
     planningRestartPath: 'Planning restart path',
     planningUpdatePath: 'Planning update path',

@@ -1695,6 +1695,7 @@
     "protectedWorkloadPresent": "保護されたワークロードが実行中です",
     "snapshotRevision": "スナップショットリビジョン {revision}",
     "stepOf": "{total} 中 {current} ステップ",
+    "stageElapsed": "処理中 · {seconds}秒",
     "planningStartupPath": "起動パスを計画中",
     "planningRestartPath": "再起動パスを計画中",
     "planningUpdatePath": "更新パスを計画中",

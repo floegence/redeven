@@ -9189,6 +9189,20 @@ function EnvironmentProgressPanel(props: Readonly<{
     return 'running';
   });
   const runtimeSteps = createMemo(() => runtimeLifecycle()?.steps ?? []);
+  const [clockNow, setClockNow] = createSignal(Date.now());
+  const elapsedTimer = setInterval(() => setClockNow(Date.now()), 1_000);
+  onCleanup(() => clearInterval(elapsedTimer));
+  const activeStageElapsedSeconds = createMemo(() => {
+    const lifecycle = runtimeLifecycle();
+    if (!lifecycle || props.progress.status === 'succeeded' || props.progress.status === 'failed' || props.progress.status === 'canceled') {
+      return 0;
+    }
+    const active = lifecycle.steps.find((step) => step.id === lifecycle.active_step_id);
+    if (!active?.started_at_unix_ms) {
+      return 0;
+    }
+    return Math.max(0, Math.floor((clockNow() - active.started_at_unix_ms) / 1_000));
+  });
   const stepEntering = createRuntimeLifecycleStepAnimation(
     runtimeSteps,
     () => runtimeLifecycle()?.plan_revision ?? 0,
@@ -9542,6 +9556,9 @@ function EnvironmentProgressPanel(props: Readonly<{
               </Show>
               <Show when={!stepProgress() && !runtimeTargetDetail() && openTargetDetail()}>
                 {(detail) => <span>{detail()}</span>}
+              </Show>
+              <Show when={activeStageElapsedSeconds() >= 5}>
+                <span>{props.i18n.t('progress.stageElapsed', { seconds: activeStageElapsedSeconds() })}</span>
               </Show>
             </div>
             {renderFailureNotice()}
