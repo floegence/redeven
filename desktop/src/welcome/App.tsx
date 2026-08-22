@@ -8473,13 +8473,13 @@ function localizedRuntimeLifecyclePhaseLabel(i18n: DesktopI18n, phase: DesktopRu
     case 'checking_runtime_package':
       return i18n.t('progress.checkingRuntimePackage');
     case 'discovering_runtime_instances':
-      return i18n.t('progress.checkingExistingRuntime');
+      return i18n.t('progress.discoveringRuntimeInstances');
     case 'stopping_runtime_process':
       return i18n.t('progress.stoppingRuntimeProcess');
     case 'verifying_runtime_stopped':
       return i18n.t('progress.verifyingRuntimeStopped');
     case 'verifying_runtime_inventory':
-      return i18n.t('progress.verifyingRuntimeStopped');
+      return i18n.t('progress.verifyingRuntimeInventory');
     case 'preparing_runtime_package':
       return i18n.t('progress.preparingRuntimePackage');
     case 'installing_runtime_package':
@@ -8681,14 +8681,15 @@ function localizedProgressDetail(i18n: DesktopI18n, progress: DesktopLauncherAct
   if (lifecycle && progress.status !== 'failed' && progress.status !== 'cleanup_failed') {
     switch (lifecycle.phase) {
       case 'checking_existing_runtime':
-      case 'discovering_runtime_instances':
         return i18n.t('progress.checkingExistingRuntime');
+      case 'discovering_runtime_instances':
+        return i18n.t('progress.discoveringRuntimeInstances');
       case 'stopping_gateway_service':
         return i18n.t('progress.stoppingGatewayService');
       case 'stopping_runtime_process':
         return i18n.t('progress.stoppingRuntimeProcess');
       case 'verifying_runtime_inventory':
-        return i18n.t('progress.verifyingRuntimeStopped');
+        return i18n.t('progress.verifyingRuntimeInventory');
       default:
         break;
     }

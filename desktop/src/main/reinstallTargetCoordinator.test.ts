@@ -161,6 +161,27 @@ describe('ReinstallTargetCoordinator', () => {
     await expect(fs.readFile(path.join(targetRoot, 'old-data'), 'utf8')).resolves.toBe('opaque');
   });
 
+  it('does not treat a legacy physical-root fingerprint as a changed registered target', async () => {
+    const parent = await temporaryRoot();
+    const targetRoot = path.join(parent, 'managed-redeven');
+    const current = descriptor(targetRoot);
+    const journalRoot = path.join(parent, 'journal');
+    const coordinator = new ReinstallTargetCoordinator(coordinatorDependencies(journalRoot, () => current, []));
+
+    await coordinator.preview({ environment_id: current.environment_id });
+    const [journal] = await coordinator.readPersistedJournals();
+    expect(journal).toBeDefined();
+    await fs.writeFile(
+      path.join(journalRoot, `${journal!.preflight_id}.json`),
+      JSON.stringify({ ...journal, physical_target_fingerprint: 'f'.repeat(64) }),
+    );
+
+    await expect(coordinator.validatePersistedJournalTarget({
+      ...journal!,
+      physical_target_fingerprint: 'f'.repeat(64),
+    })).resolves.toBeUndefined();
+  });
+
   it('keeps only the newest confirmation journal for one physical target', async () => {
     const parent = await temporaryRoot();
     const targetRoot = path.join(parent, 'managed-redeven');

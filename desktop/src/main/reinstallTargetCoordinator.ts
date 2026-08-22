@@ -290,6 +290,7 @@ const targetPreflightScript = [
   'set -eu',
   'raw="$1"',
   'default_root_token="$2"',
+  'allow_quarantine="${3:-}"',
   'if [ "$raw" = "$default_root_token" ]; then raw="${HOME%/}/.redeven"; fi',
   'case "$raw" in',
   '  "~") raw="${HOME:-}" ;;',
@@ -309,12 +310,14 @@ const targetPreflightScript = [
   '[ ! -L "$target" ] || { echo "runtime root is a symbolic link" >&2; exit 41; }',
   'exists=0',
   'if [ -e "$target" ]; then [ -d "$target" ] || { echo "runtime root is not a directory" >&2; exit 41; }; exists=1; fi',
-  'for prior in "$target".redeven-quarantine-*; do',
-  '  [ -e "$prior" ] || [ -L "$prior" ] || continue',
-  '  echo "previous reinstall quarantine requires manual recovery" >&2',
-  '  exit 42',
-  'done',
-  'printf "%s\\n%s\\n" "$target" "$exists"',
+  'if [ "$allow_quarantine" != "resume" ]; then',
+  '  for prior in "$target".redeven-quarantine-*; do',
+  '    [ -e "$prior" ] || [ -L "$prior" ] || continue',
+  '    echo "previous reinstall quarantine requires manual recovery" >&2',
+  '    exit 42',
+  '  done',
+  'fi',
+  'printf "%s\\n%s\\n%s\\n" "$target" "$exists" "$home"',
 ].join('\n');
 
 const isolateTargetScript = [
@@ -340,19 +343,21 @@ const cleanupQuarantineScript = [
   'if [ -e "$quarantine" ]; then [ -d "$quarantine" ] || exit 41; rm -rf -- "$quarantine"; fi',
 ].join('\n');
 
-function parsePreflightOutput(stdout: string): Readonly<{ root: string; exists: boolean }> {
+function parsePreflightOutput(stdout: string): Readonly<{ root: string; exists: boolean; home?: string }> {
   const lines = String(stdout ?? '').split(/\r?\n/u);
   const root = compact(lines[0]);
   if (!root.startsWith('/') || (lines[1] !== '0' && lines[1] !== '1')) {
     throw new ReinstallTargetCoordinatorError('reinstall_blocked', 'Desktop received an invalid target preflight result.');
   }
-  return { root, exists: lines[1] === '1' };
+  const home = compact(lines[2]);
+  return { root, exists: lines[1] === '1', ...(home.startsWith('/') ? { home } : {}) };
 }
 
 async function confirmedRootMatches(
   descriptor: ReinstallTargetDescriptor,
   expected: string,
   actual: string,
+  resolvedHome?: string,
 ): Promise<boolean> {
   if (expected === actual) {
     return true;
@@ -379,6 +384,9 @@ async function confirmedRootMatches(
   // helper. The helper resolves this token, so an absolute `.../.redeven`
   // result is the same registered target, not a target change.
   const defaultAlias = isRemoteDefaultRootAlias(expected);
+  if (defaultAlias && resolvedHome) {
+    return actual === `${resolvedHome.replace(/\/+$/u, '')}/.redeven`;
+  }
   return defaultAlias
     && actual.startsWith('/')
     && actual !== '/.redeven'
@@ -592,7 +600,7 @@ export class ReinstallTargetCoordinator {
         targetPreflightScript,
         [current.placement.runtime_root, DEFAULT_DESKTOP_SSH_RUNTIME_ROOT],
       ))).stdout);
-      if (!(await confirmedRootMatches(current, cached.preview.target_root, repeated.root))) {
+      if (!(await confirmedRootMatches(current, cached.preview.target_root, repeated.root, repeated.home))) {
         throw new ReinstallTargetCoordinatorError('target_changed', 'The runtime root changed after confirmation.');
       }
       quarantineRoot = `${repeated.root}.redeven-quarantine-${operationID}`;
@@ -792,10 +800,24 @@ export class ReinstallTargetCoordinator {
           'The reinstall stopped before verification completed. The isolated old target was preserved for manual recovery.',
         );
       }
+      const resolved = parsePreflightOutput((await executor.run(placementCommand(
+        descriptor.placement,
+        targetPreflightScript,
+        [journal.target_root, DEFAULT_DESKTOP_SSH_RUNTIME_ROOT, 'resume'],
+      ))).stdout);
+      if (!(await confirmedRootMatches(descriptor, journal.target_root, resolved.root, resolved.home))) {
+        throw new ReinstallTargetCoordinatorError('target_changed', 'The registered Redeven root changed before completion recovery.');
+      }
+      const resolvedQuarantineRoot = `${resolved.root}.redeven-quarantine-${journal.operation_id}`;
+      const legacyAliasQuarantine = isRemoteDefaultRootAlias(journal.target_root)
+        && journal.quarantine_root === `${journal.target_root}.redeven-quarantine-${journal.operation_id}`;
+      if (journal.quarantine_root !== resolvedQuarantineRoot && !legacyAliasQuarantine) {
+        throw new ReinstallTargetCoordinatorError('target_changed', 'The reinstall quarantine no longer matches the registered Redeven root.');
+      }
       if (journal.phase === 'installation_verifying') {
         await executor.run(placementCommand(descriptor.placement, cleanupQuarantineScript, [
-          journal.target_root,
-          journal.quarantine_root,
+          resolved.root,
+          resolvedQuarantineRoot,
         ]));
         await this.writeJournal({
           ...journal,
@@ -855,10 +877,10 @@ export class ReinstallTargetCoordinator {
 
   async validatePersistedJournalTarget(journal: ReinstallTargetJournal): Promise<void> {
     const descriptor = await this.dependencies.resolve_target({ environment_id: journal.environment_id });
-    if (
-      reinstallTargetDescriptorFingerprint(descriptor) !== journal.descriptor_fingerprint
-      || reinstallPhysicalTargetFingerprint(descriptor, journal.target_root) !== journal.physical_target_fingerprint
-    ) {
+    // Hydration only compares the durable registered identity. The physical
+    // root may be a remote alias or an old canonical representation; it is
+    // re-resolved through the direct maintenance channel when work resumes.
+    if (reinstallTargetDescriptorFingerprint(descriptor) !== journal.descriptor_fingerprint) {
       throw new ReinstallTargetCoordinatorError(
         'manual_recovery_required',
         'The registered host, container, or Redeven root changed while this reinstall was paused.',
