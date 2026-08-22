@@ -1934,6 +1934,10 @@
       "transferring": "Transferindo",
       "verifying": "Verificando",
       "ready": "Pronto"
+    },
+    "componentName": {
+      "gateway": "Gateway",
+      "runtime": "Ambiente de execução"
     }
   },
   "runtimeMessage": {

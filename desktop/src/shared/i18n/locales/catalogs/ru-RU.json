@@ -1956,6 +1956,10 @@
       "transferring": "Передача",
       "verifying": "Проверка",
       "ready": "Готово"
+    },
+    "componentName": {
+      "gateway": "Gateway",
+      "runtime": "Среда выполнения"
     }
   },
   "runtimeMessage": {

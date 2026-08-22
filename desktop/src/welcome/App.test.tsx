@@ -1823,6 +1823,11 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('@media (prefers-reduced-motion: reduce)');
     expect(styles).toContain('.redeven-environment-progress__meter');
     expect(styles).toContain('.redeven-environment-progress__meta');
+    expect(styles).toContain('.redeven-environment-progress__component-tasks');
+    expect(styles).toContain('grid-template-columns: minmax(0, 1fr) auto auto;');
+    expect(styles).toContain('font-size: 0.6rem;');
+    expect(appSrc).toContain("'progress.componentName.gateway'");
+    expect(appSrc).toContain("'progress.componentName.runtime'");
     expect(styles).toContain('.redeven-runtime-impact');
     expect(styles).toContain('.redeven-runtime-impact__metrics');
     expect(styles).toContain('.redeven-runtime-impact__technical');

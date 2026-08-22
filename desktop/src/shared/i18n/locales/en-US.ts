@@ -949,6 +949,10 @@ export const enUS = {
       verifying: 'Verifying',
       ready: 'Ready',
     },
+    componentName: {
+      gateway: 'Gateway',
+      runtime: 'Runtime',
+    },
     local: 'Local',
     localContainer: 'Local container',
     sshHost: 'SSH host',
