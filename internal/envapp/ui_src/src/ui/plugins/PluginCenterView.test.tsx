@@ -1368,6 +1368,87 @@ describe('PluginCenterView', () => {
     expect(document.querySelector('[data-plugin-install-review-dialog]')?.textContent).toContain('2.0.0');
   });
 
+  it('fills a missing preview with one market detail request without refreshing Host inventory', async () => {
+    const missingPreview = {
+      ...containersPlugin,
+      officialCatalog: {
+        ...containersPlugin.officialCatalog,
+        installPreview: undefined,
+      },
+    };
+    const onRefresh = vi.fn();
+    const onLoadMarketDetail = vi.fn(async () => OFFICIAL_PLUGIN_MARKET_DETAIL);
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={{ items: [missingPreview] }}
+        loading={false}
+        onCommand={vi.fn()}
+        onRefresh={onRefresh}
+        onLoadMarketDetail={onLoadMarketDetail}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    (mount.querySelector('[data-plugin-center-install="catalog:containers"]') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect(onLoadMarketDetail).toHaveBeenCalledOnce());
+    expect(onLoadMarketDetail).toHaveBeenCalledWith(
+      containersPlugin.pluginID,
+      0,
+      expect.any(AbortSignal),
+    );
+    expect(onRefresh).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect([...document.querySelectorAll<HTMLElement>('[data-plugin-install-review-dialog]')].at(-1)?.textContent).toContain('4.4.7'));
+  });
+
+  it('uses the current market release when the cached catalog version is stale', async () => {
+    const missingPreview = {
+      ...containersPlugin,
+      officialCatalog: {
+        ...containersPlugin.officialCatalog,
+        latestVersion: '4.4.4',
+        stableVersion: '4.4.4',
+        installPreview: undefined,
+      },
+    };
+    const currentDetail: PluginMarketDetail = {
+      ...OFFICIAL_PLUGIN_MARKET_DETAIL,
+      latest: OFFICIAL_PLUGIN_MARKET_DETAIL.latest.map((release) => ({
+        ...release,
+        version: '4.4.7',
+        install_preview: release.install_preview
+          ? { ...release.install_preview, release_ref: { ...release.install_preview.release_ref, version: '4.4.7' } }
+          : undefined,
+      })),
+    };
+    const onCommand = vi.fn(async () => undefined);
+    const onLoadMarketDetail = vi.fn(async () => currentDetail);
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={{ items: [missingPreview] }}
+        loading={false}
+        onCommand={onCommand}
+        onRefresh={vi.fn()}
+        onLoadMarketDetail={onLoadMarketDetail}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    (mount.querySelector('[data-plugin-center-install="catalog:containers"]') as HTMLButtonElement).click();
+    await vi.waitFor(() => expect([...document.querySelectorAll<HTMLButtonElement>('[data-plugin-install-review-confirm]')].at(-1)).not.toBeUndefined());
+    await vi.waitFor(() => expect([...document.querySelectorAll<HTMLElement>('[data-plugin-install-review-dialog]')].at(-1)?.textContent).toContain('4.4.7'));
+    [...document.querySelectorAll<HTMLButtonElement>('[data-plugin-install-review-confirm]')].at(-1)?.click();
+    await vi.waitFor(() => expect(onCommand).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'install',
+      releaseRef: expect.objectContaining({ version: '4.4.7' }),
+    }), expect.any(AbortSignal)));
+  });
+
   it('keeps a failed preview refresh inside one actionable dialog', async () => {
     const missingPreview = {
       ...containersPlugin,
