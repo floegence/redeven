@@ -3,7 +3,6 @@
 import { render } from 'solid-js/web';
 import { createSignal } from 'solid-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { PluginPlatformRequestError } from '@floegence/redevplugin-ui';
 
 import { PluginCenterView } from './PluginCenterView';
 import { OFFICIAL_CONTAINERS_RELEASE_REF } from './officialContainersRelease.generated';
@@ -14,7 +13,6 @@ import {
 import type {
   ExternalPluginCommitResult,
   ExternalPluginInspection,
-  OfficialPluginReleaseInspection,
   PluginInventoryProjection,
   PluginMarketDetail,
 } from './pluginTypes';
@@ -225,51 +223,6 @@ function externalCommitForCenter(source: ExternalPluginInspection): ExternalPlug
   };
 }
 
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-  return { promise, resolve, reject };
-}
-
-function officialInspection(
-  item: PluginInventoryProjection['items'][number] = containersPlugin,
-  permissions: readonly Readonly<{
-    permission_id: string;
-    methods: readonly string[];
-    required: boolean;
-    effects: readonly ('read' | 'write' | 'delete' | 'execute' | 'admin')[];
-  }>[] = [],
-): OfficialPluginReleaseInspection {
-  return {
-    inspection_id: `release_inspection_${item.pluginID}`,
-    expires_at: '2099-08-21T00:05:00Z',
-    plugin_instance_id: item.officialCatalog!.pluginInstanceID,
-    release_ref: item.officialCatalog!.distribution.releaseRef,
-    inspected_hashes: item.officialCatalog!.distribution.releaseRef.expected_hashes,
-    presentation: {
-      default_locale: 'en-US',
-      locales: [{
-        locale: 'en-US', plugin_name: item.displayName, summary: item.description,
-        description: [], highlights: [], keywords: [], surfaces: [], settings: [],
-      }],
-    },
-    presentation_sha256: 'sha256:' + 'a'.repeat(64),
-    security_summary: {
-      summary_sha256: 'sha256:' + 'b'.repeat(64),
-      permissions: permissions.map((permission) => ({
-        ...permission,
-        methods: [...permission.methods],
-        effects: [...permission.effects],
-      })),
-      methods: [], capability_contracts: [], workers: [], network: [], storage: [], secret_refs: [], core_actions: [], intents: [], surfaces: [],
-    },
-  } as unknown as OfficialPluginReleaseInspection;
-}
-
 describe('PluginCenterView', () => {
   it('presents Discover plugins with a compact identity and independent install and detail actions', async () => {
     const onCommand = vi.fn();
@@ -279,25 +232,6 @@ describe('PluginCenterView', () => {
       <PluginCenterView
         projection={{ items: [containersPlugin] }}
         loading={false}
-        onInspectOfficial={vi.fn(async () => ({
-          inspection_id: 'release_inspection_containers',
-          expires_at: '2099-08-21T00:05:00Z',
-          plugin_instance_id: containersPlugin.officialCatalog.pluginInstanceID,
-          release_ref: OFFICIAL_CONTAINERS_RELEASE_REF,
-          inspected_hashes: OFFICIAL_CONTAINERS_RELEASE_REF.expected_hashes,
-          presentation: {
-            default_locale: 'en-US',
-            locales: [{
-              locale: 'en-US', plugin_name: 'Containers', summary: 'Manage containers.',
-              description: [], highlights: [], keywords: [], surfaces: [], settings: [],
-            }],
-          },
-          presentation_sha256: 'sha256:' + 'a'.repeat(64),
-          security_summary: {
-            summary_sha256: 'sha256:' + 'b'.repeat(64),
-            permissions: [], methods: [], capability_contracts: [], workers: [], network: [], storage: [], secret_refs: [], core_actions: [], intents: [], surfaces: [],
-          },
-        }))}
         onCommand={onCommand}
         onRefresh={vi.fn()}
         canManagePlugins
@@ -318,9 +252,7 @@ describe('PluginCenterView', () => {
     await Promise.resolve();
     expect(onCommand).toHaveBeenCalledWith({
       type: 'install', pluginID: 'com.redeven.official.containers', source: 'official_catalog',
-    }, expect.any(AbortSignal), expect.objectContaining({
-      inspection_id: 'release_inspection_containers',
-    }));
+    }, expect.any(AbortSignal));
     expect(document.querySelector('[data-external-plugin-dialog]')).toBeNull();
   });
 
@@ -1346,422 +1278,67 @@ describe('PluginCenterView', () => {
     expect(document.activeElement).toBe(summary);
   });
 
-  it('opens an immediate loading dialog and then shows the complete authoritative review', async () => {
+  it('opens the cached official install preview without a package inspection request', async () => {
     const onCommand = vi.fn();
-    const inspection = deferred<OfficialPluginReleaseInspection>();
-    const onInspectOfficial = vi.fn(() => inspection.promise);
     const mount = document.createElement('div');
     document.body.append(mount);
-
     dispose = render(() => (
       <PluginCenterView
-        projection={projection}
+        projection={{ items: [containersPlugin] }}
         loading={false}
-        error={null}
         onCommand={onCommand}
-        onInspectOfficial={onInspectOfficial}
         onRefresh={vi.fn()}
         canManagePlugins
         canOpenPluginSurfaces
       />
     ), mount);
 
-    const install = mount.querySelector('[data-plugin-center-install="catalog:containers"]') as HTMLButtonElement;
-    expect(install.disabled).toBe(false);
-    expect(install.textContent).toContain('Install');
-    expect(containersPlugin.officialCatalog.distribution.releaseRef).toBe(OFFICIAL_CONTAINERS_RELEASE_REF);
+    const install = mount.querySelector<HTMLButtonElement>('[data-plugin-center-install="catalog:containers"]')!;
     install.click();
-
-    expect(install.disabled).toBe(true);
-    expect(install.getAttribute('aria-busy')).toBe('true');
-    expect(install.textContent).toContain('Checking package');
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    const loadingReview = document.querySelector<HTMLElement>('[data-plugin-install-review-dialog]')!;
-    expect(loadingReview).not.toBeNull();
-    expect(loadingReview.getAttribute('data-plugin-install-loading')).toBe('true');
-    expect(loadingReview.textContent).toContain('Getting plugin information');
-    expect(document.querySelector('[data-plugin-install-review-confirm]')).toBeNull();
-    install.click();
-    expect(onInspectOfficial).toHaveBeenCalledTimes(1);
-
-    inspection.resolve(officialInspection(containersPlugin, [
-      { permission_id: 'containers.read', methods: ['containers.list', 'containers.inspect'], required: true, effects: ['read'] },
-      { permission_id: 'containers.read', methods: ['containers.list'], required: true, effects: ['read'] },
-      { permission_id: 'containers.delete', methods: ['containers.remove'], required: false, effects: ['delete'] },
-    ]));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(onInspectOfficial).toHaveBeenCalledWith(containersPlugin, expect.any(AbortSignal));
+    await Promise.resolve();
     const review = document.querySelector<HTMLElement>('[data-plugin-install-review-dialog]')!;
     expect(review).not.toBeNull();
-    expect(review.getAttribute('data-plugin-install-loading')).toBeNull();
-    expect(review.textContent).not.toContain('Inspecting');
-    const readPermission = review.querySelector<HTMLElement>('[data-plugin-install-permission="containers.read"]')!;
-    const deletePermission = review.querySelector<HTMLElement>('[data-plugin-install-permission="containers.delete"]')!;
-    expect(readPermission.textContent).toContain('Containers read');
-    expect(readPermission.textContent).toContain('containers.read');
-    expect(readPermission.textContent).toContain('Read');
-    expect(readPermission.textContent).toContain('Required to open');
-    expect(deletePermission.textContent).toContain('Containers delete');
-    expect(deletePermission.textContent).toContain('containers.delete');
-    expect(deletePermission.textContent).toContain('Delete');
-    expect(deletePermission.textContent).toContain('Optional');
-    expect(onCommand).not.toHaveBeenCalled();
-    expect(document.querySelector('[data-plugin-install-verification]')).not.toBeNull();
-    expect(document.querySelector('[data-plugin-install-source]')?.textContent).toContain('redeven_official');
-    expect(document.querySelector('[data-plugin-install-source]')?.textContent).toContain('release.json');
-    expect(document.querySelector('[data-plugin-install-package-hash]')?.textContent)
-      .toBe(OFFICIAL_CONTAINERS_RELEASE_REF.expected_hashes.package_sha256);
+    expect(review.textContent).toContain('Containers');
+    expect(review.textContent).toContain('2.0.0');
+    expect(review.textContent).not.toContain('sha256:');
     (document.querySelector('[data-plugin-install-review-confirm]') as HTMLButtonElement).click();
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await Promise.resolve();
     expect(onCommand).toHaveBeenCalledWith({
-      type: 'install',
-      pluginID: 'com.redeven.official.containers',
-      source: 'official_catalog',
-    }, expect.any(AbortSignal), expect.objectContaining({
-      inspection_id: 'release_inspection_com.redeven.official.containers',
-    }));
-    expect(document.querySelector('[data-external-plugin-dialog]')).toBeNull();
+      type: 'install', pluginID: 'com.redeven.official.containers', source: 'official_catalog',
+    }, expect.any(AbortSignal));
   });
 
-  it('prefetches official releases before selection and reuses the exact inspection for review', async () => {
-    const inspection = deferred<OfficialPluginReleaseInspection>();
-    let prefetchSignal: AbortSignal | undefined;
-    const onInspectOfficial = vi.fn((_item: PluginInventoryProjection['items'][number], signal: AbortSignal) => {
-      prefetchSignal = signal;
-      return inspection.promise;
-    });
+  it('keeps the catalog usable while an install task is running', () => {
     const mount = document.createElement('div');
     document.body.append(mount);
     dispose = render(() => (
       <PluginCenterView
         projection={projection}
         loading={false}
-        onCommand={vi.fn()}
-        onInspectOfficial={onInspectOfficial}
-        onRefresh={vi.fn()}
-        canManagePlugins
-        canOpenPluginSurfaces
-      />
-    ), mount);
-
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(onInspectOfficial).toHaveBeenCalledTimes(1);
-    expect(prefetchSignal?.aborted).toBe(false);
-    openInventoryDetails(mount);
-    expect(onInspectOfficial).toHaveBeenCalledTimes(1);
-    const install = mount.querySelector('[data-plugin-action="install"]') as HTMLButtonElement;
-    expect(install.disabled).toBe(false);
-    install.click();
-    expect(install.disabled).toBe(true);
-    expect(install.textContent).toContain('Checking package');
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(document.querySelector<HTMLElement>('[data-plugin-install-review-dialog]')?.getAttribute('data-plugin-install-loading')).toBe('true');
-    expect(onInspectOfficial).toHaveBeenCalledTimes(1);
-
-    inspection.resolve(officialInspection(containersPlugin, [
-      { permission_id: 'containers.read', methods: ['containers.list'], required: true, effects: ['read'] },
-    ]));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(document.querySelector('[data-plugin-install-review-dialog]')).not.toBeNull();
-  });
-
-  it('limits background official inspection prefetch to three concurrent requests', async () => {
-    const items = Array.from({ length: 6 }, (_, index) => ({
-      ...containersPlugin,
-      inventoryKey: `catalog:plugin-${index}`,
-      pluginID: `com.redeven.official.plugin-${index}`,
-      displayName: `Plugin ${index}`,
-      officialCatalog: {
-        ...containersPlugin.officialCatalog,
-        pluginID: `com.redeven.official.plugin-${index}`,
-        pluginInstanceID: `plugini_redeven_official_plugin_${index}`,
-        displayName: `Plugin ${index}`,
-        distribution: {
-          ...containersPlugin.officialCatalog.distribution,
-          releaseRef: {
-            ...containersPlugin.officialCatalog.distribution.releaseRef,
-            plugin_id: `com.redeven.official.plugin-${index}`,
+        installOperations={[{
+          pluginID: containersPlugin.pluginID,
+          pluginInstanceID: containersPlugin.officialCatalog.pluginInstanceID,
+          observation: 'watching',
+          execution: {
+            execution_id: 'release_install_containers', plugin_instance_id: containersPlugin.officialCatalog.pluginInstanceID,
+            kind: 'operation', status: 'running', cursor: 3, cancelable: false,
+            created_at: '2026-08-22T00:00:00Z', updated_at: '2026-08-22T00:00:01Z',
           },
-        },
-      },
-    })) satisfies PluginInventoryProjection['items'];
-    const pending = new Map<string, ReturnType<typeof deferred<OfficialPluginReleaseInspection>>>();
-    let active = 0;
-    let maximumActive = 0;
-    const onInspectOfficial = vi.fn((item: PluginInventoryProjection['items'][number]) => {
-      const request = deferred<OfficialPluginReleaseInspection>();
-      pending.set(item.pluginID, request);
-      active += 1;
-      maximumActive = Math.max(maximumActive, active);
-      return request.promise.finally(() => { active -= 1; });
-    });
-    const mount = document.createElement('div');
-    document.body.append(mount);
-    dispose = render(() => (
-      <PluginCenterView
-        projection={{ items }}
-        loading={false}
+          events: [
+            { execution_id: 'release_install_containers', kind: 'progress', sequence: 1, payload: { install_progress: { task_id: 'release_install_containers', request_id: 'request', stage: 'download', status: 'completed' } } },
+            { execution_id: 'release_install_containers', kind: 'progress', sequence: 2, payload: { install_progress: { task_id: 'release_install_containers', request_id: 'request', stage: 'verify', status: 'running' } } },
+          ],
+        }]}
         onCommand={vi.fn()}
-        onInspectOfficial={onInspectOfficial}
         onRefresh={vi.fn()}
         canManagePlugins
         canOpenPluginSurfaces
       />
     ), mount);
-
-    await Promise.resolve();
-    expect(onInspectOfficial).toHaveBeenCalledTimes(3);
-    expect(maximumActive).toBe(3);
-    const first = items[0]!;
-    pending.get(first.pluginID)!.resolve(officialInspection(first));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(onInspectOfficial).toHaveBeenCalledTimes(4);
-    expect(maximumActive).toBe(3);
-  });
-
-  it('does not reuse an official inspection that is too close to expiry', async () => {
-    const expired = {
-      ...officialInspection(),
-      inspection_id: 'release_inspection_expiring',
-      expires_at: new Date(Date.now() + 1_000).toISOString(),
-    };
-    const fresh = {
-      ...officialInspection(),
-      inspection_id: 'release_inspection_fresh',
-    };
-    const onInspectOfficial = vi.fn()
-      .mockResolvedValueOnce(expired)
-      .mockResolvedValueOnce(fresh);
-    const onCommand = vi.fn();
-    const mount = document.createElement('div');
-    document.body.append(mount);
-    dispose = render(() => (
-      <PluginCenterView
-        projection={{ items: [containersPlugin] }}
-        loading={false}
-        onCommand={onCommand}
-        onInspectOfficial={onInspectOfficial}
-        onRefresh={vi.fn()}
-        canManagePlugins
-        canOpenPluginSurfaces
-      />
-    ), mount);
-
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    mount.querySelector<HTMLButtonElement>('[data-plugin-center-install="catalog:containers"]')!.click();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(onInspectOfficial).toHaveBeenCalledTimes(2);
-    document.querySelector<HTMLButtonElement>('[data-plugin-install-review-confirm]')!.click();
-    await Promise.resolve();
-    expect(onCommand).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'install' }),
-      expect.any(AbortSignal),
-      expect.objectContaining({ inspection_id: 'release_inspection_fresh' }),
-    );
-  });
-
-  it('invalidates an in-flight prefetch when the exact official release identity changes', async () => {
-    const first = deferred<OfficialPluginReleaseInspection>();
-    const second = deferred<OfficialPluginReleaseInspection>();
-    const signals: AbortSignal[] = [];
-    const onInspectOfficial = vi.fn((_item: PluginInventoryProjection['items'][number], signal: AbortSignal) => {
-      signals.push(signal);
-      return signals.length === 1 ? first.promise : second.promise;
-    });
-    const nextRelease = {
-      ...containersPlugin,
-      officialCatalog: {
-        ...containersPlugin.officialCatalog,
-        marketGeneration: 42,
-        distribution: {
-          ...containersPlugin.officialCatalog.distribution,
-          releaseRef: {
-            ...containersPlugin.officialCatalog.distribution.releaseRef,
-            release_metadata_sha256: 'c'.repeat(64),
-          },
-        },
-      },
-    } satisfies PluginInventoryProjection['items'][number];
-    const [currentProjection, setCurrentProjection] = createSignal<PluginInventoryProjection>({ items: [containersPlugin] });
-    const mount = document.createElement('div');
-    document.body.append(mount);
-    dispose = render(() => (
-      <PluginCenterView
-        projection={currentProjection()}
-        loading={false}
-        selectedInventoryKey="catalog:containers"
-        onCommand={vi.fn()}
-        onInspectOfficial={onInspectOfficial}
-        onRefresh={vi.fn()}
-        canManagePlugins
-        canOpenPluginSurfaces
-      />
-    ), mount);
-
-    await Promise.resolve();
-    expect(onInspectOfficial).toHaveBeenCalledTimes(1);
-    setCurrentProjection({ items: [nextRelease] });
-    await Promise.resolve();
-    expect(signals[0]?.aborted).toBe(true);
-    expect(onInspectOfficial).toHaveBeenCalledTimes(2);
-    first.resolve(officialInspection(containersPlugin));
-    await Promise.resolve();
-    expect(document.querySelector('[data-plugin-install-review-dialog]')).toBeNull();
-
-    mount.querySelector<HTMLButtonElement>('[data-plugin-action="install"]')!.click();
-    second.resolve(officialInspection(nextRelease));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(document.querySelector('[data-plugin-install-review-dialog]')).not.toBeNull();
-  });
-
-  it('aborts task-owned inspection work when Plugin Center is disposed', async () => {
-    const inspection = deferred<OfficialPluginReleaseInspection>();
-    let signal: AbortSignal | undefined;
-    const mount = document.createElement('div');
-    document.body.append(mount);
-    dispose = render(() => (
-      <PluginCenterView
-        projection={{ items: [containersPlugin] }}
-        loading={false}
-        selectedInventoryKey="catalog:containers"
-        onCommand={vi.fn()}
-        onInspectOfficial={vi.fn((_item, requestSignal) => {
-          signal = requestSignal;
-          return inspection.promise;
-        })}
-        onRefresh={vi.fn()}
-        canManagePlugins
-        canOpenPluginSurfaces
-      />
-    ), mount);
-
-    await Promise.resolve();
-    expect(signal?.aborted).toBe(false);
-    dispose();
-    dispose = undefined;
-    expect(signal?.aborted).toBe(true);
-  });
-
-  it('discards stale inspection completion when another official release becomes the review target', async () => {
-    const databaseOfficial = {
-      ...containersPlugin,
-      inventoryKey: 'catalog:database-tools',
-      pluginID: 'com.redeven.official.database-tools',
-      displayName: 'Database Tools',
-      description: 'Inspect local database connections.',
-      officialCatalog: {
-        ...containersPlugin.officialCatalog,
-        pluginID: 'com.redeven.official.database-tools',
-        pluginInstanceID: 'plugini_redeven_official_database_tools',
-        displayName: 'Database Tools',
-        distribution: {
-          ...containersPlugin.officialCatalog.distribution,
-          releaseRef: {
-            ...containersPlugin.officialCatalog.distribution.releaseRef,
-            plugin_id: 'com.redeven.official.database-tools',
-          },
-        },
-      },
-    } satisfies PluginInventoryProjection['items'][number];
-    const first = deferred<OfficialPluginReleaseInspection>();
-    const second = deferred<OfficialPluginReleaseInspection>();
-    const onInspectOfficial = vi.fn((item: PluginInventoryProjection['items'][number]) => (
-      item.pluginID === containersPlugin.pluginID ? first.promise : second.promise
-    ));
-    const mount = document.createElement('div');
-    document.body.append(mount);
-    dispose = render(() => (
-      <PluginCenterView
-        projection={{ items: [containersPlugin, databaseOfficial] }}
-        loading={false}
-        onCommand={vi.fn()}
-        onInspectOfficial={onInspectOfficial}
-        onRefresh={vi.fn()}
-        canManagePlugins
-        canOpenPluginSurfaces
-      />
-    ), mount);
-
-    mount.querySelector<HTMLButtonElement>('[data-plugin-center-install="catalog:containers"]')!.click();
-    mount.querySelector<HTMLButtonElement>('[data-plugin-center-install="catalog:database-tools"]')!.click();
-    first.resolve(officialInspection(containersPlugin));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(document.querySelector<HTMLElement>('[data-plugin-install-review-dialog]')?.getAttribute('data-plugin-install-loading')).toBe('true');
-
-    second.resolve(officialInspection(databaseOfficial));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(document.querySelector('[data-plugin-install-review-dialog]')?.textContent).toContain('Database Tools');
-    expect(document.querySelector('[data-plugin-install-review-dialog]')?.textContent).not.toContain('Manage Docker');
-  });
-
-  it('recovers an official install action after inspection failure and supports an immediate retry', async () => {
-    const failed = deferred<OfficialPluginReleaseInspection>();
-    const retry = deferred<OfficialPluginReleaseInspection>();
-    const onInspectOfficial = vi.fn()
-      .mockImplementationOnce(() => failed.promise)
-      .mockImplementationOnce(() => retry.promise);
-    const mount = document.createElement('div');
-    document.body.append(mount);
-    dispose = render(() => (
-      <PluginCenterView
-        projection={{ items: [containersPlugin] }}
-        loading={false}
-        selectedInventoryKey={containersPlugin.inventoryKey}
-        onCommand={vi.fn()}
-        onInspectOfficial={onInspectOfficial}
-        onRefresh={vi.fn()}
-        canManagePlugins
-        canOpenPluginSurfaces
-      />
-    ), mount);
-
-    const install = mount.querySelector<HTMLButtonElement>('[data-plugin-center-install="catalog:containers"]')!;
-    install.click();
-    failed.reject(new PluginPlatformRequestError(
-      'PLUGIN_RELEASE_TIMEOUT',
-      'low-level release request timeout',
-    ));
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(install.disabled).toBe(false);
-    const error = mount.querySelector<HTMLElement>('[data-plugin-install-inspection-error="catalog:containers"]')!;
-    expect(mount.querySelectorAll('[data-plugin-install-inspection-error="catalog:containers"]')).toHaveLength(1);
-    expect(mount.querySelector('[data-plugin-center-error]')).toBeNull();
-    expect(error.textContent).toContain('did not respond in time');
-    expect(error.textContent).not.toContain('low-level release request timeout');
-    expect(error.textContent).toContain('Retry');
-
-    error.querySelector<HTMLButtonElement>('button')!.click();
-    expect(install.disabled).toBe(true);
-    expect(onInspectOfficial).toHaveBeenCalledTimes(2);
-    retry.resolve(officialInspection());
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(document.querySelector('[data-plugin-install-review-dialog]')).not.toBeNull();
-  });
-
-  it('keeps a completed exact inspection reusable when review is canceled', async () => {
-    const onInspectOfficial = vi.fn(async () => officialInspection());
-    const mount = document.createElement('div');
-    document.body.append(mount);
-    dispose = render(() => (
-      <PluginCenterView
-        projection={{ items: [containersPlugin] }}
-        loading={false}
-        onCommand={vi.fn()}
-        onInspectOfficial={onInspectOfficial}
-        onRefresh={vi.fn()}
-        canManagePlugins
-        canOpenPluginSurfaces
-      />
-    ), mount);
-
-    const install = mount.querySelector<HTMLButtonElement>('[data-plugin-center-install="catalog:containers"]')!;
-    install.click();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    findDocumentButton('Cancel').click();
-    expect(document.querySelector('[data-plugin-install-review-dialog]')).toBeNull();
-    install.click();
-    expect(document.querySelector('[data-plugin-install-review-dialog]')).not.toBeNull();
-    expect(onInspectOfficial).toHaveBeenCalledTimes(1);
+    expect(mount.querySelector('[data-plugin-install-stage="download"]')?.getAttribute('data-plugin-install-stage-status')).toBe('completed');
+    expect(mount.querySelector('[data-plugin-install-stage="verify"]')?.getAttribute('data-plugin-install-stage-status')).toBe('running');
+    expect(mount.querySelector('[data-plugin-install-stage="install"]')?.getAttribute('data-plugin-install-stage-status')).toBe('pending');
+    expect(mount.querySelector('[data-plugin-center-item="catalog:database"]')).not.toBeNull();
   });
 
   it('shows authoritative byte progress only on the target plugin while browsing remains available', () => {
@@ -2871,52 +2448,6 @@ describe('PluginCenterView', () => {
       expectedManagementRevision: 23,
       dataRetention: 'delete_data',
     }, expect.any(AbortSignal));
-  });
-
-  it('keeps the fresh reinstall prefetch alive after uninstall inventory refresh', async () => {
-    const [currentProjection, setCurrentProjection] = createSignal<PluginInventoryProjection>({
-      items: [{
-        ...containersPlugin,
-        pluginInstanceID: 'plugini_redeven_official_containers',
-        version: '2.0.0',
-        managementRevision: 23,
-        lifecycleState: 'disabled',
-      }],
-    });
-    let reinstallSignal: AbortSignal | undefined;
-    const inspection = deferred<OfficialPluginReleaseInspection>();
-    const onInspectOfficial = vi.fn((_item: PluginInventoryProjection['items'][number], signal: AbortSignal) => {
-      reinstallSignal = signal;
-      return inspection.promise;
-    });
-    const onCommand = vi.fn(async () => {
-      setCurrentProjection({ items: [containersPlugin] });
-      await Promise.resolve();
-    });
-    const mount = document.createElement('div');
-    document.body.append(mount);
-    dispose = render(() => (
-      <PluginCenterView
-        projection={currentProjection()}
-        loading={false}
-        onCommand={onCommand}
-        onInspectOfficial={onInspectOfficial}
-        onRefresh={vi.fn()}
-        canManagePlugins
-        canOpenPluginSurfaces
-      />
-    ), mount);
-
-    openInventoryDetails(mount);
-    (mount.querySelector('[data-plugin-action="more"]') as HTMLButtonElement).click();
-    await Promise.resolve();
-    findDocumentButton('Uninstall').click();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    (document.querySelector('[data-plugin-uninstall-confirm]') as HTMLButtonElement).click();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(onInspectOfficial).toHaveBeenCalledTimes(1);
-    expect(reinstallSignal?.aborted).toBe(false);
   });
 
   it('restores keep data as the safe default after cancelling an uninstall', async () => {

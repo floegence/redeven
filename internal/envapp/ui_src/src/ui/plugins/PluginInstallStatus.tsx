@@ -244,6 +244,19 @@ function stageStates(projection?: PluginInstallExecutionProjection): Array<Insta
       ...(typeof value.failure_code === 'string' ? { failureCode: value.failure_code } : {}),
     });
   }
+  // The platform emits the current stage as a stable event stream. A stage
+  // transition implicitly completes every earlier stage, even when the
+  // persistence update that records that transition is the only event that
+  // survives a reconnect.
+  const currentIndex = [...states.values()].reduce((index, stage, candidateIndex) => (
+    stage.status === 'running' || stage.status === 'failed' ? candidateIndex : index
+  ), -1);
+  if (currentIndex > 0) {
+    for (let index = 0; index < currentIndex; index += 1) {
+      const stage = INSTALL_STAGES[index]!;
+      if (states.get(stage)?.status !== 'failed') states.set(stage, { stage, status: 'completed' });
+    }
+  }
   if (projection.execution?.status === 'completed') {
     for (const stage of INSTALL_STAGES) states.set(stage, { stage, status: 'completed' });
   }
