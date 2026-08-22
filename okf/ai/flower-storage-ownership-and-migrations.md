@@ -15,7 +15,7 @@ Fresh product databases initialize version 4 with thread settings, pending-input
 
 During service startup, after the Floret effect adapter is bound and before live subscriptions or maintenance start, the pending-input importer synchronously converts each migration row into Floret typed queue input. Only a successful canonical import is marked complete. If completion marking fails, startup fails and a restart repeats the same stable request keys; Floret idempotency prevents duplicates. Canonical import failure also stops startup and leaves staging intact. The legacy codecs live only beside that importer. Production handlers cannot create, read, reorder, settle, or recover a Redeven queue row.
 
-Published Floret v4.0.13 opens its own physical backend and migrates logical and session-tree domain state through its public runtime boundary. Those layers have independent versions and remain opaque to Redeven; Redeven neither labels them as one product journal schema nor inspects their records. Canonical user input, queue intent, interactions, effect intent/results, assistant output, and terminal facts stay upstream. High-frequency deltas, subscribers, and execution tokens are in memory and are not mirrored into Redeven SQL.
+Published Floret v4.0.14 opens its own physical backend and migrates logical and session-tree domain state through its public runtime boundary. Those layers have independent versions and remain opaque to Redeven; Redeven neither labels them as one product journal schema nor inspects their records. Canonical user input, queue intent, interactions, effect intent/results, assistant output, and terminal facts stay upstream. High-frequency deltas, subscribers, and execution tokens are in memory and are not mirrored into Redeven SQL.
 
 # Boundaries
 
@@ -29,5 +29,5 @@ Every future product schema change appends a contiguous automatic migration and 
 - `redeven:internal/ai/pending_input_import_startup_test.go` - Covers completion failure, restart dedupe, ordering, and canonical failure.
 - `redeven:internal/ai/threadstore/reviewed_schema_manifest.json` - Reviewed product schema source.
 - `redeven:internal/boundarycontract/threadstore_sql.go` - Closed product SQL ownership inventory.
-- `redeven:go.mod` - Pins the released Floret v4.0.13 module without local source wiring.
+- `redeven:go.mod` - Pins the released Floret v4.0.14 module without local source wiring.
 - `redeven:internal/session/floret_v4_dependency_contract_test.go` - Enforces exact published-v4 adoption and rejects replacement or retired imports.
