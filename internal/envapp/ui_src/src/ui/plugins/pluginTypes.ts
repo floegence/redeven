@@ -146,7 +146,12 @@ export type PluginMarketDetail = Readonly<{
   repository: Readonly<{ provider: string; repository_id: number; owner: string; name: string; url: string }>;
   compatibility: Readonly<{ min_redeven_version: string; min_redevplugin_version: string }>;
   status: string;
-  latest: readonly { channel: string; version: string; availability_status: 'visible' | 'disabled' | 'revoked' }[];
+  latest: readonly {
+    channel: string;
+    version: string;
+    availability_status: 'visible' | 'disabled' | 'revoked';
+    install_preview?: PluginMarketInstallPreview;
+  }[];
 }>;
 
 export type PluginAuthorPresentation = PluginRecord['presentation'];

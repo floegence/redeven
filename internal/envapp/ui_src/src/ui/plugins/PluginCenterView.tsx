@@ -108,6 +108,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const [permissionsFocusRequest, setPermissionsFocusRequest] = createSignal<{ id: number; inventoryKey: string }>();
   const [permissionsFocusTarget, setPermissionsFocusTarget] = createSignal<HTMLElement>();
   let commandController: AbortController | undefined;
+  let officialPreviewController: AbortController | undefined;
   let pluginCenterPanelRef: HTMLDivElement | undefined;
   let pluginCenterSearchRef: HTMLInputElement | undefined;
   let mobileDetailBackButton: HTMLButtonElement | undefined;
@@ -142,6 +143,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
 
   onCleanup(() => {
     commandController?.abort('Plugin Center disposed');
+    officialPreviewController?.abort('Plugin Center disposed');
     marketDetailController?.abort('Plugin Center disposed');
     cancelDeferredPermissionsFocus();
   });
@@ -248,7 +250,10 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     const flow = officialInstallFlow();
     if (flow.status !== 'review_ready' && flow.status !== 'error') return;
     const current = allItems().find((item) => item.inventoryKey === flow.item.inventoryKey);
-    if (current?.officialCatalog && officialInstallKey(current) === flow.key) return;
+    if (current?.officialCatalog && (
+      officialInstallKey(current) === flow.key
+      || (current.pluginID === flow.item.pluginID && !current.pluginInstanceID && !current.officialCatalog.installPreview)
+    )) return;
     setOfficialInstallDialogOpen(false);
     setOfficialInstallFlow({ status: 'idle' });
   });
@@ -480,31 +485,55 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     openExternalDialog();
   };
   const beginOfficialPreviewLoad = (item: PluginInventoryItem, key: string) => {
+    officialPreviewController?.abort('Superseded by a newer official preview request');
+    const controller = new AbortController();
+    officialPreviewController = controller;
     setOfficialInstallFlow({ status: 'loading_preview', key, item });
     setOfficialInstallDialogOpen(true);
     setCommandError(null);
-    void Promise.resolve().then(() => props.onRefresh()).then(() => {
-      marketDetailCache.clear();
-      setMarketDetailState(undefined);
-      const refreshed = allItems().find((candidate) => candidate.pluginID === item.pluginID && !candidate.pluginInstanceID);
-      const preview = refreshed?.officialCatalog?.installPreview;
-      if (refreshed?.officialCatalog && preview) {
+    const load = props.onLoadMarketDetail
+      ? props.onLoadMarketDetail(item.pluginID, item.officialCatalog?.marketGeneration ?? 0, controller.signal)
+          .then((detail) => {
+            const latest = detail.latest.find((candidate) => (
+              candidate.channel === 'stable'
+              && candidate.availability_status === 'visible'
+              && candidate.install_preview !== undefined
+            ));
+            const preview = latest?.install_preview;
+            if (!preview) throw new Error('Official install preview is unavailable');
+            const official = item.officialCatalog;
+            if (!official) throw new Error('Official plugin catalog item is unavailable');
+            const refreshed: PluginInventoryItem = {
+              ...item,
+              version: latest.version,
+              officialCatalog: {
+                ...official,
+                latestVersion: latest.version,
+                stableVersion: latest.version,
+                distribution: { ...official.distribution, releaseRef: preview.release_ref },
+                installPreview: preview,
+              },
+            };
+            setOfficialInstallFlow({ status: 'review_ready', key: officialInstallKey(refreshed), item: refreshed });
+          })
+      : Promise.resolve().then(() => props.onRefresh()).then(() => {
+        marketDetailCache.clear();
+        setMarketDetailState(undefined);
+        const refreshed = allItems().find((candidate) => candidate.pluginID === item.pluginID && !candidate.pluginInstanceID);
+        const preview = refreshed?.officialCatalog?.installPreview;
+        if (!refreshed?.officialCatalog || !preview) throw new Error('Official install preview is unavailable');
         setOfficialInstallFlow({ status: 'review_ready', key: officialInstallKey(refreshed), item: refreshed });
-      } else {
-        setOfficialInstallFlow({
-          status: 'preview_error',
-          key,
-          item,
-          message: i18n.t('uiCopy.plugin.marketUnavailable'),
-        });
-      }
-    }).catch(() => {
+      });
+    void load.catch(() => {
+      if (controller.signal.aborted) return;
       setOfficialInstallFlow({
         status: 'preview_error',
         key,
         item,
         message: i18n.t('uiCopy.plugin.marketUnavailable'),
       });
+    }).finally(() => {
+      if (officialPreviewController === controller) officialPreviewController = undefined;
     });
   };
   const confirmOfficialInstall = () => {
