@@ -1507,6 +1507,16 @@ function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly Envi
         variant: 'default',
         reinstall_mode: 'wipe_data',
       },
+    }, {
+      id: 'reinstall_target_preserve',
+      label: 'Reinstall Redeven and keep data',
+      action: {
+        intent: 'reinstall_target',
+        label: 'Reinstall Redeven and keep data',
+        enabled: true,
+        variant: 'outline',
+        reinstall_mode: 'preserve_data',
+      },
     }];
   }
   const items: EnvironmentActionMenuItemModel[] = [];

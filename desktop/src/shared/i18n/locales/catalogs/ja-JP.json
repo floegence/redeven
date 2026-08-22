@@ -1335,8 +1335,9 @@
   "confirm": {
     "reinstallTargetTitle": "この環境を再インストールしますか？",
     "reinstallTargetConfirm": "Redeven を再インストール",
-    "reinstallTargetDescription": "登録済みの Redeven 環境全体（Gateway、ランタイム、ワークスペース、プロジェクト、アプリデータ、Floret と ReDevPlugin のデータ、信頼情報、ID、Catalog、環境設定）を完全に削除します。この操作は元に戻せません。",
-    "reinstallTargetPreserveDescription": "管理対象の Gateway とランタイムのバイナリのみを置き換えます。ワークスペース、プロジェクト、アプリデータ、Floret と ReDevPlugin のデータ、信頼情報、ID、Catalog、環境設定は保持されます。互換性のないスキーマ、信頼情報、履歴データは修復されません。",
+    "reinstallTargetDescription": "ワークスペースやプロジェクトを含む Redeven データを消去し、新しいバージョンをインストールします。この操作は元に戻せません。",
+    "reinstallTargetPreserveDescription": "Redeven ファイルだけを置き換え、ワークスペースとプロジェクトは保持します。互換性のない履歴データは修復されません。",
+    "reinstallTargetDetails": "詳細を表示",
     "reinstallRequiredDescription": "この環境には互換性のない状態があります。安全に復旧する唯一の方法は再インストールです。",
     "reinstallTargetHost": "ホスト：{host}",
     "reinstallTargetContainer": "コンテナ：{container}",

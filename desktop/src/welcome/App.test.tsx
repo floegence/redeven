@@ -1751,7 +1751,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('localizedProgressPlanningLabel(props.i18n, props.progress.action)');
     expect(appSrc).toContain("props.progress.status === 'failed' || props.progress.status === 'cleanup_failed'");
     expect(appSrc).toContain('buildWelcomeOperationFailureDisplay({');
-    expect(appSrc).toContain("failureDisplay() ? '' : localizedProgressDetail(props.i18n, props.progress)");
+    expect(appSrc).toContain('const progressLeadDetail = createMemo(() => {');
     expect(appSrc).toContain('<Show when={failureDisplay()}>');
     expect(appSrc).toContain('<div class="redeven-action-popover__notice-detail">{failure().summary}</div>');
     expect(appSrc).toContain('redeven-action-popover__failure-details-viewport');

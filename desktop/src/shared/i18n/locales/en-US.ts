@@ -1401,8 +1401,9 @@ export const enUS = {
   confirm: {
     reinstallTargetTitle: 'Reinstall this environment?',
     reinstallTargetConfirm: 'Reinstall Redeven',
-    reinstallTargetDescription: 'This permanently deletes the complete registered Redeven environment, including Gateway, Runtime, workspaces, projects, app data, Floret and ReDevPlugin data, trust, identity, Catalog, and Environment settings. This cannot be undone.',
-    reinstallTargetPreserveDescription: 'This replaces only the managed Gateway and Runtime binaries. Workspace, projects, app data, Floret and ReDevPlugin data, trust, identity, Catalog, and Environment settings are kept. It does not repair incompatible schema, trust, or historical data.',
+    reinstallTargetDescription: 'This clears Redeven data, including workspaces and projects, then installs a fresh version. This cannot be undone.',
+    reinstallTargetPreserveDescription: 'This replaces Redeven files and keeps workspaces and projects. It does not repair incompatible historical data.',
+    reinstallTargetDetails: 'View details',
     reinstallRequiredDescription: 'This environment has incompatible state. Reinstall is the only safe recovery.',
     reinstallTargetHost: 'Host: {host}',
     reinstallTargetContainer: 'Container: {container}',

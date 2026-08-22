@@ -429,4 +429,35 @@ describe('ReinstallTargetCoordinator', () => {
       expect(commands.has(target.environment_id)).toBe(false);
     }
   });
+
+  it('accepts the SSH remote_default alias when the confirmed helper resolves it', async () => {
+    const parent = await temporaryRoot();
+    const current: ReinstallTargetDescriptor = {
+      ...descriptor('/home/ops/.redeven'),
+      host_access: {
+        kind: 'ssh_host',
+        ssh: { ssh_destination: 'ops@example.internal', ssh_port: null, auth_mode: 'key_agent' },
+      },
+      placement: { kind: 'host_process', runtime_root: 'remote_default' },
+      affected_environment_ids: ['env-ssh'],
+      environment_id: 'env-ssh',
+    };
+    const dependencies = coordinatorDependencies(path.join(parent, 'journal'), () => current, []);
+    const coordinator = new ReinstallTargetCoordinator({
+      ...dependencies,
+      resolve_candidates: async () => [current],
+      create_executor: () => ({
+        host_access: current.host_access,
+        run: async () => ({ stdout: '/home/ops/.redeven\n0\n', stderr: '' }),
+        release: async () => undefined,
+      }),
+      install_fresh: async () => undefined,
+      verify_fresh_identity: async () => undefined,
+    });
+
+    const preview = await coordinator.preview({ environment_id: current.environment_id });
+    await expect(coordinator.execute(preview.preflight_id)).resolves.toMatchObject({
+      target_root: '/home/ops/.redeven',
+    });
+  });
 });

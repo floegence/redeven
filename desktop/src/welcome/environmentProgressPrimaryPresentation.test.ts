@@ -31,6 +31,7 @@ function lifecycleActionProgress(input: Readonly<{
   operation?: DesktopRuntimeLifecycleOperation;
   phase?: DesktopRuntimeLifecyclePhase;
   status?: DesktopLauncherActionProgress['status'];
+  activeSurface?: DesktopLauncherActionProgress['active_progress_surface'];
   startedAt?: number;
   updatedAt?: number;
 }> = {}): DesktopLauncherActionProgress {
@@ -44,6 +45,7 @@ function lifecycleActionProgress(input: Readonly<{
     subject_id: 'local-environment',
     started_at_unix_ms: input.startedAt ?? 100,
     updated_at_unix_ms: input.updatedAt,
+    active_progress_surface: input.activeSurface,
     status: input.status ?? 'succeeded',
     phase,
     title: phase === 'runtime_ready' ? 'Runtime ready' : 'Runtime stopped',
@@ -530,6 +532,17 @@ describe('selectEnvironmentPanelProgress', () => {
     });
 
     expect(selectEnvironmentPanelProgress(staleOpenFailure, runtimeRunning)).toBe(runtimeRunning);
+  });
+
+  it('uses the explicitly active Runtime surface even when Open has a newer timestamp', () => {
+    const staleOpen = openConnectionProgress('running', { startedAt: 900, updatedAt: 900 });
+    const runtime = lifecycleActionProgress({
+      status: 'running',
+      startedAt: 100,
+      updatedAt: 100,
+      activeSurface: 'runtime_lifecycle',
+    });
+    expect(selectEnvironmentPanelProgress(staleOpen, runtime)).toBe(runtime);
   });
 
   it('uses a newer Gateway Runtime confirmation instead of the Open failure that requested it', () => {
