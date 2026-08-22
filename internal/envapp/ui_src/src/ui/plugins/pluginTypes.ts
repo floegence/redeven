@@ -426,7 +426,6 @@ import type {
   PluginPermissionGrant,
   PluginPlatformErrorCode,
   PluginRecord,
-  PluginReleasePackageInspection,
   PluginReleaseRef,
   PluginRecoveryResult,
   PluginSecurityPolicy,
