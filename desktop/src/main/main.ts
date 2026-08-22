@@ -205,10 +205,13 @@ import {
 import {
   RuntimeLifecycleStepFailureError,
   RuntimeLifecycleWorkflow,
+  runtimeLifecyclePlanPatchPreservingObservedHistory,
   runtimeLifecycleStepIDFromError,
+  type RuntimeLifecyclePlanPatch,
 } from './runtimeLifecycleWorkflow';
 import {
   initialRuntimeLifecyclePlan,
+  runtimeLifecyclePlanAfterProcessInventory,
   runtimeLifecyclePlanIncludingStep,
 } from './runtimeLifecycleExecutionPlan';
 import {
@@ -305,6 +308,8 @@ import {
   RuntimeProcessCommandError,
   desktopRuntimeProcessStopTargetCount,
   requireDesktopRuntimeProcessIdentity,
+  type DesktopRuntimeProcessInventory,
+  type DesktopRuntimeProcessStopResult,
 } from './runtimeProcessInventory';
 import { startDesktopModelSource, type ManagedDesktopModelSource } from './desktopModelSource';
 import {
@@ -11494,6 +11499,7 @@ function updateRuntimeLifecycleOperation(
     detailKey?: DesktopLauncherOperationSnapshot['detail_key'];
     status?: DesktopLauncherOperationSnapshot['status'];
     failedPhase?: DesktopRuntimeLifecyclePhase;
+    planPatch?: RuntimeLifecyclePlanPatch;
     failure?: DesktopOperationFailurePresentation;
     cancelable?: boolean;
   }>,
@@ -11527,17 +11533,24 @@ function updateRuntimeLifecycleOperation(
       targetLabel: input.targetLabel,
     }), input.failedPhase);
   } else {
-    const phasePlan = runtimeLifecyclePlanIncludingStep({
-      location,
-      operation,
-      currentSteps: workflow.currentStepIDs(),
-      step: input.phase,
-    });
-    const planUpdate = workflow.ensureStepPlanned(input.phase, {
-      state: phasePlan.state,
-      steps: phasePlan.steps.map((step) => step.id),
-      omitted_steps: phasePlan.omitted_steps,
-    });
+    const planUpdate = input.planPatch
+      ? workflow.commitPlan(runtimeLifecyclePlanPatchPreservingObservedHistory({
+          currentSteps: workflow.stepStates(),
+          patch: input.planPatch,
+        }))
+      : (() => {
+          const phasePlan = runtimeLifecyclePlanIncludingStep({
+            location,
+            operation,
+            currentSteps: workflow.currentStepIDs(),
+            step: input.phase,
+          });
+          return workflow.ensureStepPlanned(input.phase, {
+            state: phasePlan.state,
+            steps: phasePlan.steps.map((step) => step.id),
+            omitted_steps: phasePlan.omitted_steps,
+          });
+        })();
     const currentStep = workflow.progress().active_step_id;
     const currentStatus = workflow.stepStates().find((step) => step.id === input.phase)?.status;
     const currentStepIndex = workflow.currentStepIDs().indexOf(currentStep);
@@ -11704,6 +11717,88 @@ function updateOpenConnectionOperation(
     ...(input.failure ? { failure: input.failure } : {}),
     ...(input.cancelable !== undefined ? { cancelable: input.cancelable } : {}),
   });
+}
+
+type DirectRuntimeStopProgressInput = Readonly<{
+  operationKey: string;
+  owner: LauncherOperationAttemptIdentity;
+  hostAccess: DesktopRuntimeHostAccess;
+  placement: DesktopRuntimePlacement;
+  targetID: string;
+  targetLabel: string;
+  updateProgress: (
+    phase: DesktopRuntimeLifecyclePhase,
+    title: string,
+    detail: string,
+    planPatch?: RuntimeLifecyclePlanPatch,
+  ) => void;
+}>;
+
+type DirectRuntimeStopInput = DirectRuntimeStopProgressInput & Readonly<{
+  inspect: () => Promise<DesktopRuntimeProcessInventory>;
+  stop: (inventory: DesktopRuntimeProcessInventory) => Promise<DesktopRuntimeProcessStopResult>;
+}>;
+
+function directRuntimeAlreadyStoppedPlan(input: DirectRuntimeStopProgressInput): RuntimeLifecyclePlanPatch {
+  const workflow = runtimeLifecycleWorkflowForOperation(input.operationKey, input.owner, {
+    hostAccess: input.hostAccess,
+    placement: input.placement,
+    operation: 'stop',
+    targetID: input.targetID,
+    targetLabel: input.targetLabel,
+  });
+  const plan = runtimeLifecyclePlanAfterProcessInventory({
+    location: desktopRuntimeLifecycleLocation(input.hostAccess, input.placement),
+    operation: 'stop',
+    currentSteps: workflow.stepStates(),
+    hasProcesses: false,
+  });
+  return {
+    state: plan.state,
+    steps: plan.steps.map((step) => step.id),
+    omitted_steps: plan.omitted_steps,
+  };
+}
+
+function markDirectRuntimeAlreadyStopped(
+  input: DirectRuntimeStopProgressInput,
+  detail: string,
+): void {
+  input.updateProgress(
+    'runtime_already_stopped',
+    'Runtime already stopped',
+    detail,
+    directRuntimeAlreadyStoppedPlan(input),
+  );
+}
+
+async function executeDirectRuntimeStop(input: DirectRuntimeStopInput): Promise<void> {
+  input.updateProgress(
+    'discovering_runtime_instances',
+    'Discovering Runtime processes',
+    'Desktop is verifying the registered Runtime process identities.',
+  );
+  const inventory = await input.inspect();
+  requireDesktopRuntimeProcessIdentity(inventory);
+  if (inventory.instances.length === 0) {
+    markDirectRuntimeAlreadyStopped(input, 'Desktop found no Redeven Runtime process for this target.');
+    return;
+  }
+
+  input.updateProgress(
+    'stopping_runtime_process',
+    'Stopping Runtime processes',
+    `Desktop is stopping ${desktopRuntimeProcessStopTargetCount(inventory)} verified Runtime process(es).`,
+  );
+  const stopped = await input.stop(inventory);
+  input.updateProgress(
+    'verifying_runtime_inventory',
+    'Verifying Runtime process inventory',
+    'Desktop is confirming that no matching Redeven Runtime process remains.',
+  );
+  if (stopped.after.instances.length > 0) {
+    throw new Error('Desktop could not verify an empty Redeven Runtime process inventory.');
+  }
 }
 
 function runtimeLifecycleFailureToastTitle(
@@ -15071,7 +15166,12 @@ async function executeDirectManagedEnvironmentLifecycle(input: Readonly<{
       targetLabel: input.label,
       detail: 'Desktop is checking the registered direct Runtime target.',
     });
-    const updateProgress = (phase: DesktopRuntimeLifecyclePhase, title: string, detail: string): void => {
+    const updateProgress = (
+      phase: DesktopRuntimeLifecyclePhase,
+      title: string,
+      detail: string,
+      planPatch?: RuntimeLifecyclePlanPatch,
+    ): void => {
       updateRuntimeLifecycleOperation(input.operation_key, owner, {
         hostAccess: input.host_access,
         placement: input.placement,
@@ -15081,6 +15181,7 @@ async function executeDirectManagedEnvironmentLifecycle(input: Readonly<{
         targetLabel: input.label,
         title,
         detail,
+        planPatch,
       });
     };
     const preferences = await loadDesktopPreferencesCached();
@@ -15108,25 +15209,29 @@ async function executeDirectManagedEnvironmentLifecycle(input: Readonly<{
         }
         if (input.operation === 'stop') {
           await closeOwnedSessions();
-          updateProgress('discovering_runtime_instances', 'Discovering Runtime processes', 'Desktop is verifying local Runtime process identities.');
-          const inventory = await inspectLocalManagedRuntimeProcesses({
-            executablePath: bundledRuntimeExecutablePath(),
-            runtimeRoot: input.placement.runtime_root,
-            stateRoot: desktopRuntimePlacementStateRoot(input.placement),
-            env: process.env,
-          });
-          requireDesktopRuntimeProcessIdentity(inventory);
-          if (inventory.instances.length > 0) {
-            updateProgress('stopping_runtime_process', 'Stopping Runtime', `Desktop is stopping ${desktopRuntimeProcessStopTargetCount(inventory)} verified Runtime process(es).`);
-            await stopLocalManagedRuntimeProcesses({
+          await executeDirectRuntimeStop({
+            operationKey: input.operation_key,
+            owner,
+            hostAccess: input.host_access,
+            placement: input.placement,
+            targetID,
+            targetLabel: input.label,
+            updateProgress,
+            inspect: () => inspectLocalManagedRuntimeProcesses({
+              executablePath: bundledRuntimeExecutablePath(),
+              runtimeRoot: input.placement.runtime_root,
+              stateRoot: desktopRuntimePlacementStateRoot(input.placement),
+              env: process.env,
+            }),
+            stop: (inventory) => stopLocalManagedRuntimeProcesses({
               executablePath: bundledRuntimeExecutablePath(),
               runtimeRoot: input.placement.runtime_root,
               stateRoot: desktopRuntimePlacementStateRoot(input.placement),
               env: process.env,
               inventory,
               timeoutMs: 5_000,
-            });
-          }
+            }),
+          });
           clearLocalEnvironmentRuntimeRecord(environment);
         } else {
           const prepared = await prepareManagedEnvironmentRuntime({
@@ -15170,6 +15275,21 @@ async function executeDirectManagedEnvironmentLifecycle(input: Readonly<{
           },
         );
         if (input.operation === 'stop' && !preparedContainer.running) {
+          await closeOwnedSessions();
+          updateProgress(
+            'discovering_runtime_instances',
+            'Discovering Runtime processes',
+            'The target container is stopped; Desktop is recording the empty Runtime inventory.',
+          );
+          markDirectRuntimeAlreadyStopped({
+            operationKey: input.operation_key,
+            owner,
+            hostAccess: input.host_access,
+            placement: input.placement,
+            targetID,
+            targetLabel: input.label,
+            updateProgress,
+          }, 'The target container is already stopped; no Redeven Runtime process remains.');
           await clearRuntimePlacementTargetRecords(targetID).catch(() => undefined);
         } else if (input.operation === 'stop') {
           await closeOwnedSessions();
@@ -15189,11 +15309,17 @@ async function executeDirectManagedEnvironmentLifecycle(input: Readonly<{
               asset_cache_root: desktopRuntimePackageCacheRoot(),
               signal: lifecycleSignal,
             };
-            const inventory = await inspectContainerRuntimeProcesses(processArgs);
-            requireDesktopRuntimeProcessIdentity(inventory);
-            if (inventory.instances.length > 0) {
-              await stopContainerRuntimeProcesses(processArgs, inventory);
-            }
+            await executeDirectRuntimeStop({
+              operationKey: input.operation_key,
+              owner,
+              hostAccess: input.host_access,
+              placement: preparedContainer.placement,
+              targetID,
+              targetLabel: input.label,
+              updateProgress,
+              inspect: () => inspectContainerRuntimeProcesses(processArgs),
+              stop: (inventory) => stopContainerRuntimeProcesses(processArgs, inventory),
+            });
             runtimePlacementReadyByTargetID.delete(targetID);
           } finally {
             await executor.release();
@@ -15246,11 +15372,17 @@ async function executeDirectManagedEnvironmentLifecycle(input: Readonly<{
             tempRoot: app.getPath('temp'),
             signal: lifecycleSignal,
           };
-          const inventory = await inspectManagedSSHRuntimeProcesses(inventoryArgs);
-          requireDesktopRuntimeProcessIdentity(inventory);
-          if (inventory.instances.length > 0) {
-            await stopManagedSSHRuntimeProcesses(inventoryArgs, inventory);
-          }
+          await executeDirectRuntimeStop({
+            operationKey: input.operation_key,
+            owner,
+            hostAccess: input.host_access,
+            placement: input.placement,
+            targetID,
+            targetLabel: input.label,
+            updateProgress,
+            inspect: () => inspectManagedSSHRuntimeProcesses(inventoryArgs),
+            stop: (inventory) => stopManagedSSHRuntimeProcesses(inventoryArgs, inventory),
+          });
           clearSSHRuntimeReadyState(runtimeKey);
         } else {
           const ready = await ensureManagedSSHRuntimeReady({
@@ -15382,11 +15514,28 @@ async function runEnvironmentRuntimeLifecycleFromLauncher(
   const targetID = desktopRuntimeTargetID(hostAccess, placement, environmentID);
   const existingOperation = launcherOperations.get(failureOperationKey);
   const reusableOperation = existingOperation
+    && (options.openRecovery || existingOperation.subject_id === targetID)
     && (existingOperation.status === 'running'
       || existingOperation.status === 'canceling'
       || existingOperation.status === 'cleanup_running')
     ? existingOperation
     : null;
+  if (
+    existingOperation
+    && !reusableOperation
+    && !options.openRecovery
+    && (existingOperation.status === 'running'
+      || existingOperation.status === 'canceling'
+      || existingOperation.status === 'cleanup_running')
+    && existingOperation.subject_id !== targetID
+  ) {
+    return launcherActionFailure(
+      'runtime_lifecycle_in_progress',
+      'environment',
+      'Another Runtime operation is already running for a different registered target.',
+      { environmentID, operationKey: failureOperationKey },
+    );
+  }
   const operation = reusableOperation ?? launcherOperations.create({
     operation_key: failureOperationKey,
     action: request.kind,

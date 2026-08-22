@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   initialRuntimeLifecyclePlan,
   runtimeLifecyclePlanAfterDecision,
+  runtimeLifecyclePlanAfterProcessInventory,
   runtimeLifecyclePlanIncludingStep,
 } from './runtimeLifecycleExecutionPlan';
 
@@ -204,6 +205,29 @@ describe('runtimeLifecycleExecutionPlan', () => {
       'runtime_stopped',
     ]);
     expect(plan.steps.map((step) => step.id)).not.toContain('verifying_runtime_stopped');
+  });
+
+  it('keeps an empty direct stop ordered without starting a skipped terminal step', () => {
+    for (const location of ['local_host', 'ssh_host', 'local_container', 'ssh_container'] as const) {
+      const plan = runtimeLifecyclePlanAfterProcessInventory({
+        location,
+        operation: 'stop',
+        currentSteps: [{
+          id: location === 'local_host' ? 'checking_existing_runtime' : location === 'local_container' ? 'checking_container' : 'checking_host',
+          status: 'running',
+        }],
+        hasProcesses: false,
+      });
+      expect(plan.steps.map((step) => step.id)).toEqual([
+        plan.steps[0]!.id,
+        'runtime_already_stopped',
+        'runtime_stopped',
+      ]);
+      expect(plan.omitted_steps).toEqual([
+        { id: 'stopping_runtime_process', reason: 'runtime_already_stopped' },
+        { id: 'verifying_runtime_inventory', reason: 'runtime_already_stopped' },
+      ]);
+    }
   });
 
   it('keeps restart without a running process as start-from-stopped instead of package install', () => {

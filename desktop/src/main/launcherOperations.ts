@@ -225,10 +225,14 @@ function lifecycleProgressTitleKey(
       return 'progress.detectingPlatform';
     case 'checking_runtime_package':
       return 'progress.checkingRuntimePackage';
+    case 'discovering_runtime_instances':
+      return 'progress.discoveringRuntimeInstances';
     case 'stopping_runtime_process':
       return 'progress.stoppingRuntimeProcess';
     case 'verifying_runtime_stopped':
       return 'progress.verifyingRuntimeStopped';
+    case 'verifying_runtime_inventory':
+      return 'progress.verifyingRuntimeInventory';
     case 'preparing_runtime_package':
       return 'progress.preparingRuntimePackage';
     case 'installing_runtime_package':

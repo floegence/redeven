@@ -35,6 +35,11 @@ export type RuntimeLifecyclePlanStepInput = RuntimeLifecyclePlanInput & Readonly
   step: DesktopRuntimeLifecycleStepID;
 }>;
 
+export type RuntimeLifecycleProcessInventoryPlanInput = RuntimeLifecyclePlanInput & Readonly<{
+  currentSteps: readonly DesktopRuntimeLifecycleStepState[];
+  hasProcesses: boolean;
+}>;
+
 const HOST_PLANNING_STEPS: readonly DesktopRuntimeLifecycleStepID[] = [
   'checking_host',
   'checking_runtime_package',
@@ -359,6 +364,36 @@ export function runtimeLifecyclePlanIncludingStep(input: RuntimeLifecyclePlanSte
   return {
     state: 'executing',
     steps: stepStates(appendMissing(currentSteps, [input.step])),
+  };
+}
+
+/**
+ * The process inventory is the decision point for a direct stop. Keep the
+ * no-process path explicit so the terminal step never skips a pending stop or
+ * verification step.
+ */
+export function runtimeLifecyclePlanAfterProcessInventory(
+  input: RuntimeLifecycleProcessInventoryPlanInput,
+): RuntimeLifecyclePlanResult {
+  if (input.operation !== 'stop' || input.hasProcesses) {
+    const plan = runtimeLifecyclePlanIncludingStep({
+      location: input.location,
+      operation: input.operation,
+      currentSteps: input.currentSteps.map((step) => step.id),
+      step: 'stopping_runtime_process',
+    });
+    return plan;
+  }
+  const observed = input.currentSteps
+    .filter((step) => step.status === 'running' || step.status === 'succeeded' || step.status === 'failed')
+    .map((step) => step.id);
+  return {
+    state: 'executing',
+    steps: stepStates(uniqueStepIDs([...observed, 'runtime_already_stopped', 'runtime_stopped'])),
+    omitted_steps: omitted([
+      'stopping_runtime_process',
+      'verifying_runtime_inventory',
+    ], 'runtime_already_stopped'),
   };
 }
 

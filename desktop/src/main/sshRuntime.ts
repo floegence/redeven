@@ -1096,12 +1096,16 @@ export async function stopManagedSSHRuntimeProcesses(
   inventory: DesktopRuntimeProcessInventory,
   gracePeriodMs = DEFAULT_SSH_STOP_TIMEOUT_MS,
 ): Promise<DesktopRuntimeProcessStopResult> {
-  return parseDesktopRuntimeProcessStopResult(await runManagedSSHRuntimeProcessCommand(
+  const result = parseDesktopRuntimeProcessStopResult(await runManagedSSHRuntimeProcessCommand(
     { ...args, signal: undefined },
     'stop',
     inventory.inventory_digest,
     gracePeriodMs,
   ));
+  if (result.after.instances.length > 0) {
+    throw new Error('Desktop could not verify an empty Redeven Runtime process inventory after SSH stop.');
+  }
+  return result;
 }
 
 function probeResultFallbackReason(status: DesktopSSHRemoteRuntimeProbeStatus): string {
