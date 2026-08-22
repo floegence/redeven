@@ -20,7 +20,7 @@ export function PluginCenterItem(props: {
   onRetryRuntimeRecovery?: () => Promise<unknown> | unknown;
   managementDisabled: boolean;
   commandPendingType?: PluginPendingCommandType;
-  officialInstallPhase?: 'inspecting' | 'installing';
+  officialInstallPhase?: 'installing';
   officialInstallError?: string;
   installOperation?: PluginInstallExecutionProjection;
   entranceDelayMs?: number;
@@ -54,9 +54,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
   const update = () => props.tab === 'updates' || props.item.lifecycleState === 'update_available';
   const primaryAction = () => actions().primaryAction;
   const commandPending = () => props.commandPendingType !== undefined || props.officialInstallPhase !== undefined;
-  const pendingLabel = () => props.officialInstallPhase === 'inspecting'
-    ? i18n.t('uiCopy.plugin.checkingPackage')
-    : props.commandPendingType
+  const pendingLabel = () => props.commandPendingType
       ? pluginPendingCommandLabel(props.commandPendingType, i18n)
       : i18n.t('uiCopy.plugin.installOperation.starting');
   const runtimeRecovery = () => props.runtimeRecovery;
