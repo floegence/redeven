@@ -16,6 +16,7 @@ import type {
   ExternalPluginInspectionRequest,
   PluginInventoryProjection,
   PluginManagementCommand,
+  PluginOfficialInstallCommand,
   ReDevPluginRecord,
   PluginMarketSnapshot,
   PluginMarketDetail,
@@ -205,22 +206,19 @@ export function createPluginLifecycleAPI(
   );
 
   const installOfficialRelease = async (
-    command: Extract<PluginManagementCommand, { type: 'install' }>,
+    command: PluginOfficialInstallCommand,
     requestID: string,
     options: PluginRequestOptions = {},
     onUpdate?: (execution: PluginExecution, events: readonly PluginEvent[]) => void,
   ): Promise<PluginExecution> => {
-    const official = requireOfficialPlugin(officialByPluginID(), command.pluginID);
-    const preview = official.installPreview;
-    if (!preview) throw new Error('Official plugin market install preview is unavailable; refresh the market and retry');
     let execution = await client.startReleaseInstallExecution({
       request_id: requestID,
-      plugin_instance_id: official.pluginInstanceID,
-      release_ref: preview.release_ref,
-      release_identity_digest: preview.release_identity_digest,
-      manifest_sha256: preview.manifest_sha256,
-      contract_set_sha256: preview.contract_set_sha256,
-      summary_sha256: preview.summary_sha256,
+      plugin_instance_id: command.pluginInstanceID,
+      release_ref: command.releaseRef,
+      release_identity_digest: command.releaseIdentityDigest,
+      manifest_sha256: command.manifestSHA256,
+      contract_set_sha256: command.contractSetSHA256,
+      summary_sha256: command.summarySHA256,
     } as Parameters<PluginPlatformClient['startReleaseInstallExecution']>[0], options);
     onUpdate?.(execution, []);
     let cursor = execution.cursor;

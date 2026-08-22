@@ -81,6 +81,18 @@ const projection: PluginInventoryProjection = {
   items: [containersPlugin, databasePlugin],
 };
 
+const containersInstallCommand = {
+  type: 'install' as const,
+  pluginID: containersPlugin.pluginID,
+  source: 'official_catalog' as const,
+  pluginInstanceID: containersPlugin.officialCatalog.pluginInstanceID,
+  releaseRef: containersPlugin.officialCatalog.installPreview!.release_ref,
+  releaseIdentityDigest: containersPlugin.officialCatalog.installPreview!.release_identity_digest,
+  manifestSHA256: containersPlugin.officialCatalog.installPreview!.manifest_sha256,
+  contractSetSHA256: containersPlugin.officialCatalog.installPreview!.contract_set_sha256,
+  summarySHA256: containersPlugin.officialCatalog.installPreview!.summary_sha256,
+};
+
 function containersPermissionProjection(granted = false): PluginInventoryProjection {
   return {
     items: [{
@@ -250,9 +262,7 @@ describe('PluginCenterView', () => {
     expect(onCommand).not.toHaveBeenCalled();
     (document.querySelector('[data-plugin-install-review-confirm]') as HTMLButtonElement).click();
     await Promise.resolve();
-    expect(onCommand).toHaveBeenCalledWith({
-      type: 'install', pluginID: 'com.redeven.official.containers', source: 'official_catalog',
-    }, expect.any(AbortSignal));
+    expect(onCommand).toHaveBeenCalledWith(containersInstallCommand, expect.any(AbortSignal));
     expect(document.querySelector('[data-external-plugin-dialog]')).toBeNull();
   });
 
@@ -1303,9 +1313,7 @@ describe('PluginCenterView', () => {
     expect(review.textContent).not.toContain('sha256:');
     (document.querySelector('[data-plugin-install-review-confirm]') as HTMLButtonElement).click();
     await Promise.resolve();
-    expect(onCommand).toHaveBeenCalledWith({
-      type: 'install', pluginID: 'com.redeven.official.containers', source: 'official_catalog',
-    }, expect.any(AbortSignal));
+    expect(onCommand).toHaveBeenCalledWith(containersInstallCommand, expect.any(AbortSignal));
   });
 
   it('keeps the catalog usable while an install task is running', () => {

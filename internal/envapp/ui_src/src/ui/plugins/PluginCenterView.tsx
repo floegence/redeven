@@ -18,6 +18,7 @@ import type {
   PluginMarketDetail,
   PluginLifecycleCommand,
   PluginLifecycleState,
+  PluginOfficialInstallCommand,
   PluginPendingCommandType,
   PluginPresentationCategory,
   PluginRuntimeRecoveryPresentation,
@@ -471,13 +472,11 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const confirmOfficialInstall = () => {
     const flow = officialInstallFlow();
     if (flow.status !== 'review_ready' || !flow.item.officialCatalog) return;
+    const command = officialInstallCommand(flow.item);
+    if (!command) return;
     setOfficialInstallFlow({ status: 'installing', key: flow.key, item: flow.item });
     setOfficialInstallDialogOpen(true);
-    void runCommand({
-      type: 'install',
-      pluginID: flow.item.pluginID,
-      source: 'official_catalog',
-    });
+    void runCommand(command, flow.item);
   };
   const currentUpdateReviewItem = createMemo(() => {
     const reviewed = updateReviewItem();
@@ -485,9 +484,12 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     return allItems().find((item) => item.inventoryKey === reviewed.inventoryKey) ?? reviewed;
   });
 
-  const runCommand = async (command: PluginLifecycleCommand) => {
+  const runCommand = async (command: PluginLifecycleCommand, installItemOverride?: PluginInventoryItem) => {
     if (command.type === 'install') {
-      const item = allItems().find((candidate) => candidate.pluginID === command.pluginID && candidate.officialCatalog);
+      const item = installItemOverride ?? allItems().find((candidate) => (
+        candidate.pluginID === command.pluginID
+        && candidate.officialCatalog?.pluginInstanceID === command.pluginInstanceID
+      ));
       if (!item?.officialCatalog) {
         setCommandError(i18n.t('uiCopy.plugin.installOperation.failure.internal'));
         return;
@@ -2390,6 +2392,23 @@ function officialInstallKey(item: PluginInventoryItem): string {
     release.expected_hashes.manifest_sha256,
     release.expected_hashes.entries_sha256,
   ].join('|');
+}
+
+function officialInstallCommand(item: PluginInventoryItem): PluginOfficialInstallCommand | undefined {
+  const official = item.officialCatalog;
+  const preview = official?.installPreview;
+  if (!official || !preview) return undefined;
+  return {
+    type: 'install',
+    pluginID: item.pluginID,
+    source: 'official_catalog',
+    pluginInstanceID: official.pluginInstanceID,
+    releaseRef: preview.release_ref,
+    releaseIdentityDigest: preview.release_identity_digest,
+    manifestSHA256: preview.manifest_sha256,
+    contractSetSHA256: preview.contract_set_sha256,
+    summarySHA256: preview.summary_sha256,
+  };
 }
 
 function humanizePermissionID(permissionID: string): string {

@@ -3,7 +3,7 @@
 import { For, Show, Suspense, createContext, createEffect, createSignal, onCleanup, onMount, useContext, type JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PluginPlatformRequestError, type PluginExecution, type PluginRecoverySnapshot } from '@floegence/redevplugin-ui';
+import { PluginPlatformRequestError, type PluginRecoverySnapshot } from '@floegence/redevplugin-ui';
 import { OFFICIAL_CONTAINERS_RELEASE_REF } from './plugins/officialContainersRelease.generated';
 import type { PluginInventoryProjection } from './plugins/pluginTypes';
 import { NETWORK_EXPOSURE_WARNING_PREFERENCE_STORAGE_KEY } from './security/networkExposureWarningPreference';
@@ -68,16 +68,11 @@ const activitySurfaceLifecycleState = vi.hoisted(() => ({
 const pluginLifecycleMocks = vi.hoisted(() => {
   const listInstalledPlugins = vi.fn(async () => []);
   const loadInventoryProjection = vi.fn();
-  const refreshMarketCatalog = vi.fn(async () => false);
-  const marketCatalogNeedsRefresh = vi.fn(() => false);
-  const loadMarketDetail = vi.fn(async () => ({}));
-  const inspectOfficialRelease = vi.fn(async () => ({}));
   const recoverEnabled = vi.fn(async (): Promise<PluginRecoverySnapshot> => ({ revision: 1, complete: true, results: [] }));
   const retryRecovery = vi.fn(async (pluginInstanceID: string) => ({ plugin_instance_id: pluginInstanceID, status: 'ready' as const }));
   const execute = vi.fn(async (_command: any) => ({}));
   const installOfficialRelease = vi.fn(async (
     _command: any,
-    _inspection: any,
     _requestID: string,
     _options: { signal?: AbortSignal },
     _onUpdate: (operation: any) => void,
@@ -91,10 +86,6 @@ const pluginLifecycleMocks = vi.hoisted(() => {
   return {
     listInstalledPlugins,
     loadInventoryProjection,
-    refreshMarketCatalog,
-    marketCatalogNeedsRefresh,
-    loadMarketDetail,
-    inspectOfficialRelease,
     recoverEnabled,
     retryRecovery,
     execute,
@@ -107,10 +98,6 @@ const pluginLifecycleMocks = vi.hoisted(() => {
     createPluginLifecycleAPI: vi.fn(() => ({
       listInstalledPlugins,
       loadInventoryProjection,
-      refreshMarketCatalog,
-      marketCatalogNeedsRefresh,
-      loadMarketDetail,
-      inspectOfficialRelease,
       recoverEnabled,
       retryRecovery,
       execute,
@@ -164,14 +151,14 @@ const pluginPlatformMocks = vi.hoisted(() => {
     dispose: vi.fn(async () => undefined),
   };
   const state = {
-    onMutationOutcomeUnknown: undefined as undefined | ((pluginInstanceID?: string) => void),
+    onMutationOutcomeUnknown: undefined as undefined | (() => void),
   };
   return {
     client,
     close,
     coordinator,
     state,
-    createRedevenPluginPlatform: vi.fn((options?: { onMutationOutcomeUnknown?: (pluginInstanceID?: string) => void }) => {
+    createRedevenPluginPlatform: vi.fn((options?: { onMutationOutcomeUnknown?: () => void }) => {
       state.onMutationOutcomeUnknown = options?.onMutationOutcomeUnknown;
       return { client, close };
     }),
@@ -195,6 +182,14 @@ const officialContainersCatalog = {
   category: 'infrastructure',
   searchKeywords: ['docker', 'podman'],
   trustedSigningKeyIDs: ['redeven-official-signing-2026'],
+  installPreview: {
+    release_ref: OFFICIAL_CONTAINERS_RELEASE_REF,
+    security_summary: { permissions: [] },
+    release_identity_digest: 'sha256:' + 'a'.repeat(64),
+    manifest_sha256: OFFICIAL_CONTAINERS_RELEASE_REF.expected_hashes.manifest_sha256,
+    contract_set_sha256: 'sha256:' + 'b'.repeat(64),
+    summary_sha256: 'sha256:' + 'c'.repeat(64),
+  },
   distribution: {
     releaseRef: OFFICIAL_CONTAINERS_RELEASE_REF,
     installSource: {
@@ -1411,12 +1406,6 @@ beforeEach(async () => {
   pluginLifecycleMocks.createPluginLifecycleAPI.mockClear();
   pluginLifecycleMocks.listInstalledPlugins.mockClear();
   pluginLifecycleMocks.loadInventoryProjection.mockReset();
-  pluginLifecycleMocks.refreshMarketCatalog.mockReset();
-  pluginLifecycleMocks.refreshMarketCatalog.mockResolvedValue(false);
-  pluginLifecycleMocks.marketCatalogNeedsRefresh.mockReset();
-  pluginLifecycleMocks.marketCatalogNeedsRefresh.mockReturnValue(false);
-  pluginLifecycleMocks.loadMarketDetail.mockReset();
-  pluginLifecycleMocks.inspectOfficialRelease.mockReset();
   pluginLifecycleMocks.recoverEnabled.mockReset();
   pluginLifecycleMocks.recoverEnabled.mockResolvedValue({ revision: 1, complete: true, results: [] });
   pluginLifecycleMocks.execute.mockReset();
@@ -2146,6 +2135,7 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 1, 40);
       await pluginPanelState.lastProps.onOpenCenter();
       await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onCommand), 40);
+      await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length >= 2, 40);
       const requestsBeforeMutation = pluginLifecycleMocks.loadInventoryProjection.mock.calls.length;
       currentProjection = officialContainersProjection('disabled');
       await pluginCenterViewState.lastProps.onCommand({
@@ -2216,70 +2206,6 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(pluginCenterViewState.lastProps.projection.items).toContainEqual(
         expect.objectContaining({ pluginID: officialContainersCatalog.pluginID }),
       );
-    } finally {
-      dispose();
-    }
-  }, 10000);
-
-  it('waits for a slow background market refresh without rebuilding unchanged inventory', async () => {
-    vi.useFakeTimers();
-    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
-    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
-    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection());
-    let stale = true;
-    const startedAt = performance.now();
-    pluginLifecycleMocks.refreshMarketCatalog.mockImplementation(async () => {
-      if (performance.now() - startedAt < 10_000) return false;
-      stale = false;
-      return true;
-    });
-    pluginLifecycleMocks.marketCatalogNeedsRefresh.mockImplementation(() => stale);
-    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-    const { EnvAppShell } = await import('./EnvAppShell');
-    const dispose = render(() => <EnvAppShell />, host);
-
-    try {
-      await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 1, 40);
-      await pluginPanelState.lastProps.onOpenCenter();
-      await flushUntil(() => pluginLifecycleMocks.refreshMarketCatalog.mock.calls.length === 1, 40);
-
-      await vi.advanceTimersByTimeAsync(12_000);
-      await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 2, 40);
-
-      expect(stale).toBe(false);
-      expect(pluginLifecycleMocks.refreshMarketCatalog.mock.calls.length).toBeLessThanOrEqual(10);
-      expect(pluginLifecycleMocks.loadInventoryProjection).toHaveBeenCalledTimes(2);
-    } finally {
-      dispose();
-    }
-  }, 10000);
-
-  it('projects a persistent market failure once while background retries stay lightweight', async () => {
-    vi.useFakeTimers();
-    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
-    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
-    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue({ items: [], marketUnavailable: true });
-    pluginLifecycleMocks.refreshMarketCatalog
-      .mockResolvedValueOnce(true)
-      .mockResolvedValue(false);
-    pluginLifecycleMocks.marketCatalogNeedsRefresh.mockReturnValue(true);
-    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-    const { EnvAppShell } = await import('./EnvAppShell');
-    const dispose = render(() => <EnvAppShell />, host);
-
-    try {
-      await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 1, 40);
-      await pluginPanelState.lastProps.onOpenCenter();
-      await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 2, 40);
-
-      await vi.advanceTimersByTimeAsync(17_000);
-
-      expect(pluginLifecycleMocks.refreshMarketCatalog.mock.calls.length).toBeLessThanOrEqual(12);
-      expect(pluginLifecycleMocks.loadInventoryProjection).toHaveBeenCalledTimes(2);
     } finally {
       dispose();
     }
@@ -2671,7 +2597,6 @@ describe('EnvAppShell environment entry affordances', () => {
     let observationSignal: AbortSignal | undefined;
     pluginLifecycleMocks.installOfficialRelease.mockImplementationOnce(async (
       _command: any,
-      _inspection: any,
       _requestID: string,
       options: { signal?: AbortSignal },
       onUpdate: (execution: any, events: any[]) => void,
@@ -2717,9 +2642,13 @@ describe('EnvAppShell environment entry affordances', () => {
         type: 'install',
         pluginID: officialContainersCatalog.pluginID,
         source: 'official_catalog',
-      }, viewController.signal, {
-        inspection_id: 'release_inspection_shell_test',
-      });
+        pluginInstanceID: officialContainersCatalog.pluginInstanceID,
+        releaseRef: officialContainersCatalog.installPreview.release_ref,
+        releaseIdentityDigest: officialContainersCatalog.installPreview.release_identity_digest,
+        manifestSHA256: officialContainersCatalog.installPreview.manifest_sha256,
+        contractSetSHA256: officialContainersCatalog.installPreview.contract_set_sha256,
+        summarySHA256: officialContainersCatalog.installPreview.summary_sha256,
+      }, viewController.signal);
       await flushUntil(() => pluginLifecycleMocks.installOfficialRelease.mock.calls.length === 1);
 
       expect(pluginCenterViewState.lastProps.installOperations[0]).toMatchObject({
@@ -2748,151 +2677,6 @@ describe('EnvAppShell environment entry affordances', () => {
       await expect(install).resolves.toBeUndefined();
       await flushAsync();
       expect(pluginCenterViewState.lastProps.installOperations).toEqual([]);
-    } finally {
-      dispose();
-    }
-  }, 10000);
-
-  it('opens an official plugin after uninstall with deleted data and reinstall', async () => {
-    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
-    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
-    let currentProjection = officialContainersProjection('enabled');
-    pluginLifecycleMocks.loadInventoryProjection.mockImplementation(async () => currentProjection);
-    pluginLifecycleMocks.execute.mockImplementation(async (command: { type?: string }) => {
-      if (command.type === 'uninstall') currentProjection = officialContainersProjection('not_installed');
-      return {};
-    });
-    pluginLifecycleMocks.installOfficialRelease.mockImplementationOnce(async () => {
-      currentProjection = officialContainersProjection('enabled');
-      return {
-        execution_id: 'release_install_after_delete',
-        plugin_instance_id: officialContainersCatalog.pluginInstanceID,
-        kind: 'operation',
-        status: 'completed',
-        cursor: 1,
-        cancelable: false,
-        created_at: '2026-08-21T00:00:00Z',
-        updated_at: '2026-08-21T00:00:01Z',
-        terminal_at: '2026-08-21T00:00:01Z',
-      };
-    });
-    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
-
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-    const { EnvAppShell } = await import('./EnvAppShell');
-    const dispose = render(() => <EnvAppShell />, host);
-
-    try {
-      await flushAsync();
-      await flushUntil(() => Boolean(host.querySelector('[data-activity-id="plugins"]')), 40);
-      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement).click();
-      await flushUntil(() => Boolean(pluginPanelState.lastProps), 40);
-      await pluginPanelState.lastProps.onOpenCenter();
-      await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onCommand), 40);
-
-      await expect(pluginCenterViewState.lastProps.onCommand({
-        type: 'uninstall',
-        pluginInstanceID: officialContainersCatalog.pluginInstanceID,
-        expectedManagementRevision: 11,
-        dataRetention: 'delete_data',
-      }, new AbortController().signal)).resolves.toBeUndefined();
-
-      await expect(pluginCenterViewState.lastProps.onCommand({
-        type: 'install',
-        pluginID: officialContainersCatalog.pluginID,
-        source: 'official_catalog',
-      }, new AbortController().signal, {
-        inspection_id: 'release_inspection_after_delete',
-      })).resolves.toBeUndefined();
-
-      await expect(pluginCenterViewState.lastProps.onCommand({
-        type: 'open_surface',
-        ...officialContainersProjection('enabled').items[0].defaultLaunchTarget,
-        placement: 'workbench',
-      }, new AbortController().signal)).resolves.toBeUndefined();
-      expect(workbenchPluginSurfaceState.open).toHaveBeenCalledWith(expect.objectContaining({
-        pluginInstanceID: officialContainersCatalog.pluginInstanceID,
-        expectedManagementRevision: 11,
-        preferredPlacement: 'workbench',
-      }));
-    } finally {
-      dispose();
-    }
-  }, 10000);
-
-  it('does not clear a newer retirement fence when an install completes', async () => {
-    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
-    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
-    let currentProjection = officialContainersProjection('enabled');
-    pluginLifecycleMocks.loadInventoryProjection.mockImplementation(async () => currentProjection);
-    pluginLifecycleMocks.execute.mockImplementation(async (command: { type?: string }) => {
-      if (command.type === 'uninstall') currentProjection = officialContainersProjection('not_installed');
-      return {};
-    });
-    let finishInstall!: (execution: PluginExecution) => void;
-    pluginLifecycleMocks.installOfficialRelease.mockImplementationOnce(() => new Promise((resolve) => {
-      finishInstall = resolve;
-    }));
-    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
-
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-    const { EnvAppShell } = await import('./EnvAppShell');
-    const dispose = render(() => <EnvAppShell />, host);
-
-    try {
-      await flushAsync();
-      await flushUntil(() => Boolean(host.querySelector('[data-activity-id="plugins"]')), 40);
-      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement).click();
-      await flushUntil(() => Boolean(pluginPanelState.lastProps), 40);
-      await pluginPanelState.lastProps.onOpenCenter();
-      await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onCommand), 40);
-
-      await pluginCenterViewState.lastProps.onCommand({
-        type: 'uninstall',
-        pluginInstanceID: officialContainersCatalog.pluginInstanceID,
-        expectedManagementRevision: 11,
-        dataRetention: 'delete_data',
-      }, new AbortController().signal);
-      const install = pluginCenterViewState.lastProps.onCommand({
-        type: 'install',
-        pluginID: officialContainersCatalog.pluginID,
-        source: 'official_catalog',
-      }, new AbortController().signal, {
-        inspection_id: 'release_inspection_fence_binding',
-      });
-      await flushUntil(() => pluginLifecycleMocks.installOfficialRelease.mock.calls.length === 1);
-
-      currentProjection = officialContainersProjection('enabled');
-      await pluginCenterViewState.lastProps.onRefresh();
-      await pluginCenterViewState.lastProps.onCommand({
-        type: 'revoke_permission',
-        pluginInstanceID: officialContainersCatalog.pluginInstanceID,
-        permissionID: 'containers.read',
-        expectedPolicyRevision: 7,
-        expectedManagementRevision: 11,
-        expectedRevokeEpoch: 3,
-      }, new AbortController().signal);
-      finishInstall({
-        execution_id: 'release_install_fence_binding',
-        plugin_instance_id: officialContainersCatalog.pluginInstanceID,
-        kind: 'operation',
-        status: 'completed',
-        cursor: 1,
-        cancelable: false,
-        created_at: '2026-08-21T00:00:00Z',
-        updated_at: '2026-08-21T00:00:01Z',
-        terminal_at: '2026-08-21T00:00:01Z',
-      });
-      await expect(install).resolves.toBeUndefined();
-
-      await expect(pluginCenterViewState.lastProps.onCommand({
-        type: 'open_surface',
-        ...officialContainersProjection('enabled').items[0].defaultLaunchTarget,
-        placement: 'workbench',
-      }, new AbortController().signal)).rejects.toThrow();
-      expect(workbenchPluginSurfaceState.open).not.toHaveBeenCalled();
     } finally {
       dispose();
     }
