@@ -385,9 +385,9 @@ describe('v3.0.2 plugin lifecycle client integration', () => {
     });
   });
 
-  it('keeps the current catalog but marks stale market data unavailable', async () => {
+  it('marks an empty stale cache unavailable so the UI can offer a retry', async () => {
     const { mocks } = createClientHarness();
-    const staleSnapshot = { ...OFFICIAL_PLUGIN_MARKET_SNAPSHOT, stale: true, source: 'cache' as const };
+    const staleSnapshot = { ...OFFICIAL_PLUGIN_MARKET_SNAPSHOT, plugins: [], stale: true, source: 'cache' as const };
     const lifecycle = createPluginLifecycleAPI(
       mocks as unknown as PluginPlatformClient,
       undefined,
@@ -398,6 +398,25 @@ describe('v3.0.2 plugin lifecycle client integration', () => {
     await expect(lifecycle.loadInventoryProjection()).resolves.toMatchObject({
       marketUnavailable: true,
       items: [],
+    });
+  });
+
+  it('does not show an unavailable banner when a stale snapshot still contains catalog entries', async () => {
+    const { mocks } = createClientHarness();
+    const staleSnapshot = { ...OFFICIAL_PLUGIN_MARKET_SNAPSHOT, stale: true, source: 'cache' as const };
+    const lifecycle = createPluginLifecycleAPI(
+      mocks as unknown as PluginPlatformClient,
+      undefined,
+      async () => staleSnapshot,
+    );
+
+    await expect(lifecycle.refreshMarketCatalog()).resolves.toBe(true);
+    await expect(lifecycle.loadInventoryProjection()).resolves.toMatchObject({
+      marketUnavailable: false,
+      items: [expect.objectContaining({
+        pluginID: 'com.redeven.official.containers',
+        officialCatalog: expect.objectContaining({ latestVersion: '4.4.7' }),
+      })],
     });
   });
 

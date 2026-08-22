@@ -62,10 +62,19 @@ export function createPluginLifecycleAPI(
       INVENTORY_MARKET_TIMEOUT_MS,
       'Loading the plugin market',
     ).then((snapshot) => {
-      if (snapshot.stale || snapshot.source === 'cache') {
+      const nextCatalog = officialPluginCatalog(snapshot);
+      // A stale snapshot is still a valid read-only catalog. Keep it visible
+      // while the background refresh is retried; only an empty snapshot means
+      // there is no market data that the UI can safely present.
+      if ((snapshot.stale || snapshot.source === 'cache') && nextCatalog.length === 0) {
         throw new Error('The plugin market is using stale cached data');
       }
-      const nextCatalog = officialPluginCatalog(snapshot);
+      // Never let a delayed or cached response roll the UI back to an older
+      // generation after a newer catalog has already been accepted.
+      if (marketGeneration !== undefined && snapshot.generation < marketGeneration) {
+        marketUnavailable = false;
+        return false;
+      }
       const changed = marketGeneration !== snapshot.generation
         || catalog.length !== nextCatalog.length;
       catalog = nextCatalog;
@@ -73,7 +82,9 @@ export function createPluginLifecycleAPI(
       marketUnavailable = false;
       return changed;
     }).catch((error) => {
-      marketUnavailable = true;
+      // Existing catalog entries remain usable when a background refresh
+      // fails. Surface the retry state only when there is no catalog at all.
+      marketUnavailable = catalog.length === 0;
       throw error;
     }).finally(() => {
       marketRefreshPromise = undefined;
