@@ -1208,12 +1208,21 @@ export function EnvAppShell() {
   pluginInstallCoordinator = createPluginInstallCoordinator({
     lifecycle: pluginLifecycle,
     refreshInventory: refetchPluginInventory,
-    completeApprovedInstall: (pluginInstanceID, signal) => completeApprovedOfficialInstall({
-      pluginInstanceID,
-      lifecycle: pluginLifecycle,
-      refreshInventory: refetchPluginInventory,
-      signal,
-    }),
+    completeApprovedInstall: async (pluginInstanceID, signal) => {
+      const result = await completeApprovedOfficialInstall({
+        pluginInstanceID,
+        lifecycle: pluginLifecycle,
+        refreshInventory: refetchPluginInventory,
+        signal,
+      });
+      // Uninstall retires the old management revision so existing surfaces
+      // cannot be reused. A reinstall creates a fresh instance generation
+      // that may legitimately reuse the same revision number.
+      if (pluginInventoryProjection()?.items.some((item) => item.pluginInstanceID === pluginInstanceID)) {
+        retiredPluginManagementRevisionByInstanceID.delete(pluginInstanceID);
+      }
+      return result;
+    },
     createRequestID: () => createClientId('plugin-install'),
     resolvePluginID: (pluginInstanceID) => (
       pluginInventoryProjection()?.items.find((item) => (
