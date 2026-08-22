@@ -710,6 +710,12 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('redeven-welcome-surface h-full min-h-0 w-full min-w-0 overflow-auto bg-background');
   });
 
+  it('keeps the welcome scrollbar slot stable while switching between tabs', () => {
+    const styles = readWelcomeStyles();
+
+    expect(styles).toContain('.redeven-welcome-surface {\n  scrollbar-gutter: stable;');
+  });
+
   it('uses one fixed welcome shell while keeping environment grid density independent', () => {
     const appSrc = readWelcomeSource();
     const styles = readWelcomeStyles();
@@ -2018,7 +2024,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('redeven-control-plane-grid');
     expect(appSrc).toContain('redeven-control-plane-card');
     expect(styles).toContain('--redeven-control-plane-grid-column-size: 35rem;');
-    expect(styles).toContain('--redeven-control-plane-card-max-width: 44rem;');
+    expect(styles).not.toContain('--redeven-control-plane-card-max-width');
+    expect(styles).toContain('.redeven-control-plane-card {\n  width: 100%;\n}');
     expect(styles).toContain('.redeven-control-plane-grid');
     expect(styles).toContain('.redeven-control-plane-card');
     expect(appSrc).toContain('redeven-provider-shelf__metrics');
