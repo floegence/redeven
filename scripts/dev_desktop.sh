@@ -29,6 +29,11 @@ DEVELOPMENT_PORT_LEASE=""
 DEVELOPMENT_PORT_LEASE_ROOT=""
 DEVELOPMENT_DESKTOP_PID_FILE=""
 PORTS_EXPLICIT=0
+DESKTOP_PID=""
+DESKTOP_LAUNCHED=0
+SHUTDOWN_REQUESTED=0
+SHUTDOWN_EXIT_STATUS=0
+CLEANUP_RUNNING=0
 
 if [ -n "$REMOTE_DEBUGGING_PORT" ] || [ -n "$INSPECT_PORT" ] || [ -n "$LOCAL_UI_BIND" ]; then
 	PORTS_EXPLICIT=1
@@ -48,6 +53,7 @@ Options:
   --stop-only               Stop existing Redeven Desktop processes, then exit.
   --stop-runtimes           Also stop Redeven runtime processes (interrupts active work).
   --stop-timeout <seconds>  Seconds to wait before force-stopping processes (default: 8).
+                            Ctrl+C or SIGTERM stops the launched Desktop session and its local Runtime.
   --remote-debugging-port <port|0>
                             Electron Chrome DevTools Protocol port (checkout-derived default, 0 disables).
   --inspect-port <port|0>   Electron main-process inspector port (checkout-derived default, 0 disables).
@@ -461,17 +467,35 @@ process_is_current_development_runtime() {
 
 stop_current_instance_runtime() {
 	local managed_runtime="$DEVELOPMENT_STATE_ROOT/local-environment/runtime/managed/bin/redeven"
+	local stop_binary="$managed_runtime"
 	local runtime_state_root="$DEVELOPMENT_STATE_ROOT/local-environment"
-	if [ ! -x "$managed_runtime" ]; then
+	local legacy_state_root="$DEVELOPMENT_STATE_ROOT"
+	local failed=0
+	if [ ! -x "$stop_binary" ] && [ -n "$DEVELOPMENT_BUNDLE_ROOT" ] && [ -x "$DEVELOPMENT_BUNDLE_ROOT/redeven" ]; then
+		stop_binary="$DEVELOPMENT_BUNDLE_ROOT/redeven"
+	fi
+	if [ ! -x "$stop_binary" ]; then
 		ui_pkg_log "No managed Runtime is installed for this dev instance."
 		return 0
 	fi
 	ui_pkg_log "Stopping the exact managed Runtime for instance $DEVELOPMENT_INSTANCE_ID via its verified process inventory."
 	if [ "$DRY_RUN" -eq 1 ]; then
-		print_command "$managed_runtime" desktop-runtime-stop --state-root "$runtime_state_root" --grace-period "${STOP_TIMEOUT_SECONDS}s"
+		print_command "$stop_binary" desktop-runtime-stop --state-root "$runtime_state_root" --grace-period "${STOP_TIMEOUT_SECONDS}s"
+		if [ -e "$legacy_state_root/local-environment/agent.lock" ]; then
+			print_command "$stop_binary" desktop-runtime-stop --state-root "$legacy_state_root" --grace-period "${STOP_TIMEOUT_SECONDS}s"
+		fi
 		return 0
 	fi
-	"$managed_runtime" desktop-runtime-stop --state-root "$runtime_state_root" --grace-period "${STOP_TIMEOUT_SECONDS}s"
+	if ! "$stop_binary" desktop-runtime-stop --state-root "$runtime_state_root" --grace-period "${STOP_TIMEOUT_SECONDS}s"; then
+		failed=1
+	fi
+	if [ -e "$legacy_state_root/local-environment/agent.lock" ]; then
+		ui_pkg_log "Stopping the legacy top-level state-root Runtime for this dev instance."
+		if ! "$stop_binary" desktop-runtime-stop --state-root "$legacy_state_root" --grace-period "${STOP_TIMEOUT_SECONDS}s"; then
+			failed=1
+		fi
+	fi
+	return "$failed"
 }
 
 ensure_port_available() {
@@ -554,6 +578,48 @@ terminate_collected_pids() {
       kill -KILL "$pid" >/dev/null 2>&1 || true
     done
   fi
+}
+
+request_shutdown() {
+  local signal="$1"
+  SHUTDOWN_REQUESTED=1
+  if [ "$SHUTDOWN_EXIT_STATUS" -eq 0 ]; then
+    case "$signal" in
+      INT) SHUTDOWN_EXIT_STATUS=130 ;;
+      TERM) SHUTDOWN_EXIT_STATUS=143 ;;
+    esac
+  fi
+  ui_pkg_log "Received SIG$signal; stopping this development Desktop session..."
+  if [ -n "$DESKTOP_PID" ] && pid_exists "$DESKTOP_PID"; then
+    kill -TERM "$DESKTOP_PID" >/dev/null 2>&1 || true
+  fi
+}
+
+cleanup_development_session() {
+  local status="$?"
+  if [ "$CLEANUP_RUNNING" -eq 1 ]; then
+    exit "$status"
+  fi
+  CLEANUP_RUNNING=1
+  trap - EXIT INT TERM
+
+  if [ "$SHUTDOWN_REQUESTED" -eq 1 ] && [ "$DESKTOP_LAUNCHED" -eq 1 ]; then
+    reset_collected_pids
+    collect_desktop_pids
+    if [ -n "$DESKTOP_PID" ]; then
+      add_pid "$DESKTOP_PID"
+    fi
+    terminate_collected_pids "Redeven Desktop session"
+    if ! stop_current_instance_runtime; then
+      ui_pkg_log "Failed to stop the development Runtime during session cleanup; inspect the Runtime process inventory before retrying."
+    fi
+  fi
+
+  release_development_port_lock
+  if [ "$SHUTDOWN_EXIT_STATUS" -ne 0 ]; then
+    status="$SHUTDOWN_EXIT_STATUS"
+  fi
+  exit "$status"
 }
 
 stop_existing_processes() {
@@ -652,7 +718,7 @@ prepare_instance_bundle_snapshot() {
 }
 
 start_desktop() {
-	local electron_binary cmd
+	local electron_binary cmd previous_dir desktop_status
   local ssh_runtime_release_tag
 	electron_binary="$(cd "$DESKTOP_DIR" && node -e 'process.stdout.write(require("electron"))')"
 	[ -x "$electron_binary" ] || ui_pkg_die "Electron executable is unavailable: $electron_binary"
@@ -705,30 +771,41 @@ start_desktop() {
     return 0
   fi
 
+  export REDEVEN_DESKTOP_OPEN_DEVTOOLS="$OPEN_DEVTOOLS"
+  export REDEVEN_DESKTOP_AUTO_START_RUNTIME="${REDEVEN_DESKTOP_AUTO_START_RUNTIME:-1}"
+  export REDEVEN_STATE_ROOT="$DEVELOPMENT_STATE_ROOT"
+  export REDEVEN_DESKTOP_LOCAL_UI_BIND="$LOCAL_UI_BIND"
+  if [ -n "$ssh_runtime_release_tag" ]; then
+    export REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG="$ssh_runtime_release_tag"
+    export REDEVEN_DESKTOP_BUNDLE_VERSION="${REDEVEN_DESKTOP_BUNDLE_VERSION:-$ssh_runtime_release_tag}"
+  fi
+  export REDEVEN_DESKTOP_BUNDLE_COMMIT="${REDEVEN_DESKTOP_BUNDLE_COMMIT:-$(git -C "$ROOT_DIR" rev-parse --short=12 HEAD)}"
+  export REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT="${REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT:-$ROOT_DIR}"
+
+  previous_dir="$PWD"
+  cd "$DESKTOP_DIR"
+  npm run build
+  prepare_instance_bundle_snapshot
+  cd "$previous_dir"
+
+  mkdir -p "$(dirname -- "$DEVELOPMENT_DESKTOP_PID_FILE")"
   (
     cd "$DESKTOP_DIR"
-    export REDEVEN_DESKTOP_OPEN_DEVTOOLS="$OPEN_DEVTOOLS"
-    export REDEVEN_DESKTOP_AUTO_START_RUNTIME="${REDEVEN_DESKTOP_AUTO_START_RUNTIME:-1}"
-    export REDEVEN_STATE_ROOT="$DEVELOPMENT_STATE_ROOT"
-    export REDEVEN_DESKTOP_LOCAL_UI_BIND="$LOCAL_UI_BIND"
-    if [ -n "$ssh_runtime_release_tag" ]; then
-      export REDEVEN_DESKTOP_SSH_RUNTIME_RELEASE_TAG="$ssh_runtime_release_tag"
-      export REDEVEN_DESKTOP_BUNDLE_VERSION="${REDEVEN_DESKTOP_BUNDLE_VERSION:-$ssh_runtime_release_tag}"
-    fi
-    export REDEVEN_DESKTOP_BUNDLE_COMMIT="${REDEVEN_DESKTOP_BUNDLE_COMMIT:-$(git -C "$ROOT_DIR" rev-parse --short=12 HEAD)}"
-			export REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT="${REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT:-$ROOT_DIR}"
-			npm run build
-			prepare_instance_bundle_snapshot
-			mkdir -p "$(dirname -- "$DEVELOPMENT_DESKTOP_PID_FILE")"
-			exec env REDEVEN_DESKTOP_PID_FILE="$DEVELOPMENT_DESKTOP_PID_FILE" sh -c '
-				set -eu
-				pid_file=$REDEVEN_DESKTOP_PID_FILE
-				temporary_pid_file="${pid_file}.tmp.$$"
-				(umask 077; printf "%s\n" "$$" > "$temporary_pid_file")
-				mv "$temporary_pid_file" "$pid_file"
-				exec "$@"
-			' redeven-dev-desktop "${cmd[@]}"
-  )
+    exec env REDEVEN_DESKTOP_PID_FILE="$DEVELOPMENT_DESKTOP_PID_FILE" sh -c '
+      set -eu
+      pid_file=$REDEVEN_DESKTOP_PID_FILE
+      temporary_pid_file="${pid_file}.tmp.$$"
+      (umask 077; printf "%s\n" "$$" > "$temporary_pid_file")
+      mv "$temporary_pid_file" "$pid_file"
+      exec "$@"
+    ' redeven-dev-desktop "${cmd[@]}"
+  ) &
+  DESKTOP_LAUNCHED=1
+  DESKTOP_PID=$!
+  desktop_status=0
+  wait "$DESKTOP_PID" || desktop_status=$?
+  DESKTOP_PID=""
+  return "$desktop_status"
 }
 
 parse_args() {
@@ -814,5 +891,9 @@ main() {
   ensure_desktop_dependencies
   start_desktop
 }
+
+trap 'request_shutdown INT' INT
+trap 'request_shutdown TERM' TERM
+trap cleanup_development_session EXIT
 
 main "$@"
