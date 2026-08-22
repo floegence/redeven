@@ -60,7 +60,7 @@ export type PluginMarketLatestRelease = {
 };
 
 export type PluginMarketInstallPreview = Readonly<{
-  /** The exact release identity consumed by InstallCommit. */
+  /** The exact market release identity and digests consumed by the install Execution. */
   release_ref: PluginReleaseRef;
   compatibility?: {
     min_redeven_version: string;

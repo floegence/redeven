@@ -189,81 +189,53 @@ test('unlocked packaged renderer emits a current validated Floe acquisition enve
   }
 });
 
-test('packaged renderer fixture inspects the exact official release before install confirmation', async () => {
+test('packaged renderer fixture submits the market preview directly to the install Execution', async () => {
   const server = await createBuiltDistServer({ pluginInstallFlow: true });
   const releaseRef = {
     source_id: 'redeven_official',
     channel: 'stable',
-    release_metadata_ref: 'plugins/com.redeven.official/com.redeven.official.containers/4.4.4/release.json',
-    release_metadata_sha256: 'a1c0c9391816a04ea9269664f86fc00d8814c401f8a1bcbf4c4a14472d783577',
+    release_metadata_ref: 'plugins/com.redeven.official/com.redeven.official.containers/4.4.7/release.json',
+    release_metadata_sha256: '5128bda8747edf7936a16c643beb55fc84f8627f5bb1bcb185a0fc1d68dd0011',
     publisher_id: 'com.redeven.official',
     plugin_id: 'com.redeven.official.containers',
-    version: '4.4.4',
+    version: '4.4.7',
     expected_hashes: {
-      package_sha256: 'sha256:fdb81d456a11219fa3e5060b15ea55ad824790020c949dc17728ee8af18281a8',
-      manifest_sha256: 'sha256:28c0e3c9548b9528c068605e34d26ffbc73ab6543b62dc8ad98078855d39cf1f',
-      entries_sha256: 'sha256:33480ae1405e6ec1098cbeba1a559b83a021dae738de9da0fe5c9344fde3b177',
+      package_sha256: 'sha256:5d7295d070cc4eff4054ec5f241d7977f0a0a7841b2f984d5d0fff8192eba86d',
+      manifest_sha256: 'sha256:20b785d6455a7d16d35304ad6026259a39f5f0fa75890bcd0e1db470c8b3fdb4',
+      entries_sha256: 'sha256:79d852072629b98eafbfc6787ab97535fbd6b9f3fe7c32db06893e3fd40e463c',
     },
+  };
+  const installPreview = {
+    release_ref: releaseRef,
+    release_identity_digest: 'sha256:81e99dfc0d9e79690ce3b8ade87dd4f609b43f6159e3b2d1f4735e2f7788827a',
+    manifest_sha256: releaseRef.expected_hashes.manifest_sha256,
+    contract_set_sha256: 'sha256:9229d7b5a76273a40818deb9fedb64ee83146cf11ec66edda20743c38eebd9ab',
+    summary_sha256: 'sha256:ef067082e92647c5e5ab73787bc2f5e6d83ce9a60be56daf738293103e9d9673',
   };
 
   try {
-    const response = await fetch(new URL('/_redevplugin/api/plugins/release-packages/inspect', server.baseURL), {
+    const response = await fetch(new URL('/_redevplugin/api/plugins/executions/release-installs', server.baseURL), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
+        request_id: '00000000-0000-4000-8000-000000000001',
         plugin_instance_id: 'catalog_com.redeven.official_com.redeven.official.containers',
-        release_ref: releaseRef,
+        ...installPreview,
       }),
     });
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), {
-      ok: true,
-      data: {
-        plugin_instance_id: 'catalog_com.redeven.official_com.redeven.official.containers',
-        release_ref: releaseRef,
-        inspected_hashes: releaseRef.expected_hashes,
-        presentation: {
-          default_locale: 'en-US',
-          locales: [{
-            locale: 'en-US',
-            plugin_name: 'Fixture Plugin',
-            publisher_name: 'Fixture Publisher',
-            summary: 'A signed plugin fixture for renderer verification.',
-            description: ['This fixture exercises the signed plugin presentation path.'],
-            highlights: ['Provides deterministic renderer verification data.'],
-            keywords: ['fixture'],
-            surfaces: [{ surface_id: 'plugin.primary', label: 'Fixture Surface' }],
-            settings: [],
-          }],
-        },
-        presentation_sha256: `sha256:${'1'.repeat(64)}`,
-        security_summary: {
-          summary_sha256: `sha256:${'2'.repeat(64)}`,
-          permissions: [{
-            permission_id: 'containers.read',
-            methods: ['containers.list'],
-            required: true,
-            effects: ['read'],
-          }],
-          methods: [],
-          capability_contracts: [],
-          workers: [],
-          network: [],
-          storage: [],
-          secret_refs: [],
-          core_actions: [],
-          intents: [],
-          surfaces: [],
-        },
-      },
-    });
+    const result = await response.json();
+    assert.equal(result.ok, true);
+    assert.equal(result.data.execution_id, 'release_install_built_renderer');
 
-    const mismatchedResponse = await fetch(new URL('/_redevplugin/api/plugins/release-packages/inspect', server.baseURL), {
+    const mismatchedResponse = await fetch(new URL('/_redevplugin/api/plugins/executions/release-installs', server.baseURL), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
+        request_id: '00000000-0000-4000-8000-000000000002',
         plugin_instance_id: 'catalog_com.redeven.official_com.redeven.official.containers',
-        release_ref: { ...releaseRef, version: '4.4.3' },
+        ...installPreview,
+        release_ref: { ...releaseRef, version: '4.4.6' },
       }),
     });
     assert.notEqual(mismatchedResponse.status, 200);
@@ -303,7 +275,7 @@ test('unlocked packaged renderer opens Plugin Center through the empty launcher 
   assert.match(pluginInstallCheck, /\[data-plugin-center-market-action\]/u);
   assert.doesNotMatch(pluginInstallCheck, /\[data-plugin-panel-tile="plugin-center"\]/u);
   assert.match(pluginInstallCheck, /requiredPluginRequests/u);
-  assert.match(pluginInstallCheck, /exactlyOnceRequests/u);
+  assert.match(pluginInstallCheck, /exactRequestCounts/u);
   assert.doesNotMatch(pluginInstallCheck, /JSON\.stringify\(normalizedPluginRequests\)\s*!==/u);
 });
 

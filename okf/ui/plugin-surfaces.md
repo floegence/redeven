@@ -146,27 +146,19 @@ recovery flags.
 
 ## Official installation progress
 
-The pre-install interaction has one target-owned flow: `idle`, `inspecting`,
-`review_ready`, `installing`, then `installed`, with error or cancellation
-returning to a retryable state. A card or detail click enters `inspecting` in the
-same UI turn, disables only that target action, and shows package-checking
-feedback. Plugin Center mounts the install dialog in the same UI turn and first
-shows a loading state while the exact Host inspection is in flight. The same
-dialog then shows identity, source, package verification, permissions, required
-status, methods, effects, and actions before confirmation becomes available.
-Inspection failure restores the action and presents one contextual Retry;
-repeated clicks share one in-flight exact-release inspection.
+The pre-install interaction has one target-owned flow: `idle`, `review_ready`,
+`installing`, then `installed`, with error or cancellation returning to a
+retryable state. A card or detail click opens the dialog in the same UI turn and
+reads the market-cached `install_preview`; no package request or Host inspection
+is started. The concise review shows only icon, name, publisher, version, source,
+and grouped declared permissions, followed by `The publisher declares these
+permissions; they will be verified during installation.`
 
-Selecting an uninstalled official detail may prefetch only that release. The
-cache identity includes the plugin instance, market generation, complete release
-reference, release-metadata digest, and all expected hashes. Selection changes
-retain a still-exact result, review cancellation retains that result, and stale
-release completion cannot open another plugin's dialog. Identity changes,
-successful install, uninstall start, and Plugin Center disposal invalidate
-pre-existing affected evidence. A fresh prefetch started from the authoritative
-post-uninstall inventory remains active for immediate reinstall. Confirmation
-approves only the deduplicated required permission ids from that exact
-inspection and keeps the existing default-enable Host path.
+The preview identity includes the plugin instance, market generation, complete
+release reference, release-identity digest, manifest digest, contract-set digest,
+and summary digest. A changed target is stale and requires market refresh; stale
+completion cannot open another plugin's dialog. Confirmation submits exactly that
+identity and keeps the existing default-enable Host path.
 
 Uninstall retires the prior local management revision before the Host mutation.
 When a later official reinstall reaches terminal success, inventory refresh,
@@ -184,12 +176,13 @@ target is openable immediately only after that bounded setup succeeds; failed,
 superseded, or incomplete reinstalls cannot revive a stale surface.
 
 Official installation uses the released durable Execution instead of a
-page-bound pending flag. Only the target plugin card and inspector show its
-queued, trust verification, release inspection, download, package verification,
-commit, reconciliation, success, or failure state. A byte progress bar is shown
-only for Host-reported byte progress; all other active phases remain visibly
-indeterminate. Search, filters, scrolling, detail reading, panel close, and
-unrelated surface launch stay available while installation continues.
+page-bound pending flag. The dialog shows four fixed steps: `download`, `verify`,
+`install`, and `enable`, with completed, running, pending, or failed state. A
+total progress bar advances by stage; download may show byte progress, while
+verification, install, and enable remain indeterminate. Search, filters, scrolling,
+detail reading, panel close, and unrelated surface launch stay available while
+installation continues. Closing the dialog only hides it; the card or task area
+retains the current stage and one recovery action.
 
 The Shell retains the original request identity and reattaches to the same Host
 Execution after Plugin Center reopens, transport reconnects, or a start response
@@ -214,15 +207,16 @@ single-line target action such as `Update to vX`, `Install new build`, or
 `Replace current build`; low-height and narrow layouts scroll only the body.
 
 The immutable update candidate binds the exact plugin instance, management
-revision, current and target versions, package, manifest, and entries hashes.
-Before install, Redeven rechecks the current inventory revision and inspection
-expiry. A changed target is stale and requires a fresh review; it is never
-silently substituted. Version upgrades, same-version external replacements,
+revision, current and target versions, package, manifest, entries, contract-set,
+and summary hashes. Before install, Redeven rechecks the current inventory
+revision and market generation. A changed target is stale and requires a fresh
+review; it is never silently substituted. Version upgrades, same-version external replacements,
 exact-package no-ops, and downgrades are projected centrally rather than inferred
 separately by cards and dialogs.
 
-Host security evidence comes only from the released inspection result; only that
-evidence may claim no security-declaration changes. Redeven does not maintain
+Official security declarations come only from the market preview generated from
+the final package and exact capability contracts; installation is the final
+verification authority. Redeven does not maintain
 official-plugin release notes or synthesize publisher notes from manifests,
 source history, plugin identity, or host locale catalogs. Missing publisher notes
 remain visibly absent.

@@ -40,8 +40,10 @@ const builtPluginReleaseRef = Object.freeze({
   expected_hashes: builtPluginPackageHashes,
 });
 const builtPluginInstanceID = `catalog_${builtPluginReleaseRef.publisher_id}_${builtPluginReleaseRef.plugin_id}`;
-const builtPluginReleaseInspectionID = 'release_inspection_built_renderer';
 const builtPluginPresentationSHA256 = `sha256:${'1'.repeat(64)}`;
+const builtPluginReleaseIdentityDigest = 'sha256:81e99dfc0d9e79690ce3b8ade87dd4f609b43f6159e3b2d1f4735e2f7788827a';
+const builtPluginContractSetSHA256 = 'sha256:9229d7b5a76273a40818deb9fedb64ee83146cf11ec66edda20743c38eebd9ab';
+const builtPluginSummarySHA256 = 'sha256:ef067082e92647c5e5ab73787bc2f5e6d83ce9a60be56daf738293103e9d9673';
 const pluginMarketDetailPath = `/_redeven_proxy/api/plugins/market/plugins/${builtPluginReleaseRef.plugin_id}`;
 const builtPluginPackageURL = 'https://github.com/floegence/redeven-official-plugins/releases/download/v4.4.7/containers-4.4.7.redevplugin';
 
@@ -208,7 +210,22 @@ function builtPluginMarketSnapshot() {
       },
       categories: ['containers', 'development'],
       channels: ['stable'],
-      latest: { channel: 'stable', version: builtPluginReleaseRef.version, availability_status: 'visible' },
+      latest: {
+        channel: 'stable',
+        version: builtPluginReleaseRef.version,
+        availability_status: 'visible',
+        install_preview: {
+          release_ref: builtPluginReleaseRef,
+          security_summary: {
+            summary_sha256: builtPluginSummarySHA256,
+            permissions: [{ permission_id: 'containers.read', methods: ['containers.list'], required: true, effects: ['read'] }],
+          },
+          release_identity_digest: builtPluginReleaseIdentityDigest,
+          manifest_sha256: builtPluginPackageHashes.manifest_sha256,
+          contract_set_sha256: builtPluginContractSetSHA256,
+          summary_sha256: builtPluginSummarySHA256,
+        },
+      },
       release: {
         plugin_id: builtPluginReleaseRef.plugin_id,
         channel: 'stable',
@@ -236,36 +253,6 @@ function builtPluginPresentationCatalog() {
       surfaces: [{ surface_id: 'plugin.primary', label: 'Fixture Surface' }],
       settings: [],
     }],
-  };
-}
-
-function builtPluginReleaseInspection() {
-  return {
-    inspection_id: builtPluginReleaseInspectionID,
-    expires_at: '2099-08-21T00:05:00Z',
-    plugin_instance_id: builtPluginInstanceID,
-    release_ref: builtPluginReleaseRef,
-    inspected_hashes: builtPluginPackageHashes,
-    presentation: builtPluginPresentationCatalog(),
-    presentation_sha256: builtPluginPresentationSHA256,
-    security_summary: {
-      summary_sha256: `sha256:${'2'.repeat(64)}`,
-      permissions: [{
-        permission_id: 'containers.read',
-        methods: ['containers.list'],
-        required: true,
-        effects: ['read'],
-      }],
-      methods: [],
-      capability_contracts: [],
-      workers: [],
-      network: [],
-      storage: [],
-      secret_refs: [],
-      core_actions: [],
-      intents: [],
-      surfaces: [],
-    },
   };
 }
 
@@ -530,18 +517,6 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
         jsonResponse(response, { ok: true, data: { revision: 1, complete: true, results: [] } });
         return;
       }
-      if (pluginInstallFlow && requestURL.pathname === '/_redevplugin/api/plugins/release-packages/inspect') {
-        const body = await readJSONRequest(request);
-        const expected = {
-          plugin_instance_id: builtPluginInstanceID,
-          release_ref: builtPluginReleaseRef,
-        };
-        if (request.method !== 'POST' || JSON.stringify(body) !== JSON.stringify(expected)) {
-          throw new Error(`unexpected plugin release inspection request: ${JSON.stringify({ expected, actual: body })}`);
-        }
-        jsonResponse(response, { ok: true, data: builtPluginReleaseInspection() });
-        return;
-      }
       if (pluginInstallFlow && requestURL.pathname === '/_redevplugin/api/plugins/executions/query') {
         const body = await readJSONRequest(request);
         const expected = { limit: 100 };
@@ -556,8 +531,11 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
         const expected = {
           request_id: body.request_id,
           plugin_instance_id: builtPluginInstanceID,
-          inspection_id: builtPluginReleaseInspectionID,
           release_ref: builtPluginReleaseRef,
+          release_identity_digest: builtPluginReleaseIdentityDigest,
+          manifest_sha256: builtPluginPackageHashes.manifest_sha256,
+          contract_set_sha256: builtPluginContractSetSHA256,
+          summary_sha256: builtPluginSummarySHA256,
         };
         if (!/^[0-9a-f-]{36}$/u.test(body.request_id)
           || JSON.stringify(body) !== JSON.stringify(expected)) {
@@ -1065,20 +1043,15 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
       { method: 'POST', path: '/_redevplugin/api/plugins/executions/query', payload: { limit: 100 } },
       {
         method: 'POST',
-        path: '/_redevplugin/api/plugins/release-packages/inspect',
-        payload: {
-          plugin_instance_id: builtPluginInstanceID,
-          release_ref: builtPluginReleaseRef,
-        },
-      },
-      {
-        method: 'POST',
         path: '/_redevplugin/api/plugins/executions/release-installs',
         payload: {
           request_id: ':requestID',
           plugin_instance_id: builtPluginInstanceID,
-          inspection_id: builtPluginReleaseInspectionID,
           release_ref: builtPluginReleaseRef,
+          release_identity_digest: builtPluginReleaseIdentityDigest,
+          manifest_sha256: builtPluginPackageHashes.manifest_sha256,
+          contract_set_sha256: builtPluginContractSetSHA256,
+          summary_sha256: builtPluginSummarySHA256,
         },
       },
       {
@@ -1111,7 +1084,6 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
     const exactRequestCounts = new Map([
       ['POST /_redevplugin/api/plugins/runtime/recover-enabled', 1],
       ['POST /_redevplugin/api/plugins/executions/query', 1],
-      ['POST /_redevplugin/api/plugins/release-packages/inspect', 1],
       ['POST /_redevplugin/api/plugins/executions/release-installs', 1],
       ['POST /_redevplugin/api/plugins/executions/release_install_built_renderer/events/query', 1],
       ['POST /_redevplugin/api/plugins/executions/release_install_built_renderer/query', 1],
