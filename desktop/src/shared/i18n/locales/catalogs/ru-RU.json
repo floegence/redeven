@@ -1338,6 +1338,7 @@
     "reinstallTargetTitle": "Переустановить эту среду?",
     "reinstallTargetConfirm": "Переустановить Redeven",
     "reinstallTargetDescription": "Будет безвозвратно удалена вся зарегистрированная среда Redeven, включая Gateway, среду выполнения, рабочие пространства, проекты, данные приложений, данные Floret и ReDevPlugin, сведения о доверии, идентификатор, каталог и настройки среды. Отменить действие нельзя.",
+    "reinstallTargetPreserveDescription": "Будут заменены только управляемые двоичные файлы Gateway и среды выполнения. Рабочие пространства, проекты, данные приложений, данные Floret и ReDevPlugin, сведения о доверии, идентификатор, каталог и настройки среды сохранятся. Несовместимые схемы, сведения о доверии и исторические данные не исправляются.",
     "reinstallRequiredDescription": "Эта среда содержит несовместимое состояние. Переустановка — единственный безопасный способ восстановления.",
     "reinstallTargetHost": "Хост: {host}",
     "reinstallTargetContainer": "Контейнер: {container}",
@@ -1581,7 +1582,9 @@
     "initializeAndOpen": "Инициализировать и открыть",
     "startAndOpen": "Запустить и открыть",
     "requestAccess": "Запросить доступ",
-    "retryInitialization": "Повторить инициализацию"
+    "retryInitialization": "Повторить инициализацию",
+    "reinstallRedevenWipeData": "Удалить данные и переустановить Redeven",
+    "reinstallRedevenKeepData": "Переустановить Redeven с сохранением данных"
   },
   "environmentFacts": {
     "runsOn": "Работает на",
@@ -1732,7 +1735,13 @@
       "fresh_identity_verified": "Проверка новой идентификации",
       "catalog_and_local_ui_verified": "Проверка Catalog и Local UI",
       "quarantine_cleaned": "Удаление изолированных старых данных",
-      "completed": "Переустановка завершена"
+      "completed": "Переустановка завершена",
+      "maintenance_helper_ready": "Подготовка средства обслуживания",
+      "packages_preparing_and_transferring": "Подготовка и передача пакетов",
+      "redeven_processes_stop_attempted": "Остановка процессов Redeven",
+      "packages_applying": "Применение пакета",
+      "installation_verifying": "Проверка установки",
+      "cleanup": "Очистка изолированных данных"
     },
     "failed": "Ошибка",
     "canceled": "Отменено",
@@ -1938,7 +1947,16 @@
     "environmentOpenLocalTransportDetail": "По защищённому локальному подключению Desktop не удалось получить рабочую страницу Env App.",
     "environmentOpenLocalTransportRecoveryHint": "Перезапустите среду выполнения и повторите попытку. VPN, Tailscale и программы для работы с прокси-серверами можно не отключать.",
     "workspaceEnginePrepareFailedTitle": "Не удалось подготовить механизм рабочей области",
-    "workspaceEnginePrepareFailedSummary": "Desktop не удалось подготовить механизм рабочей области для «{target}»."
+    "workspaceEnginePrepareFailedSummary": "Desktop не удалось подготовить механизм рабочей области для «{target}».",
+    "reinstallPackagesPreparingDetail": "Desktop одновременно подготавливает и передаёт пакеты Gateway и среды выполнения.",
+    "reinstallPackagesApplyingDetail": "Desktop применяет проверенный пакет Gateway и среды выполнения.",
+    "componentTasks": "Прогресс установки компонентов",
+    "componentPhase": {
+      "preparing": "Подготовка",
+      "transferring": "Передача",
+      "verifying": "Проверка",
+      "ready": "Готово"
+    }
   },
   "runtimeMessage": {
     "runtimeOfflineRefresh": "сейчас отключена или недоступна. Запустите его из источника, затем обновите статус.",

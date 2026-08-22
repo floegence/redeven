@@ -164,6 +164,47 @@ func (c *Controller) ValidateTarget(_ context.Context, gatewayEnvID string, targ
 	return c.bindings.Validate(gatewayEnvID, target)
 }
 
+// StartActivatedRuntime starts the Runtime that Desktop has already activated
+// in the bound managed slot. It is intentionally a narrow post-install hook:
+// it does not inspect or replace the previous installation and it leaves
+// Runtime lifecycle ownership with this Gateway supervisor.
+func (c *Controller) StartActivatedRuntime(ctx context.Context, operationID, version, commit, executableSHA256 string) error {
+	if c == nil || c.bindings == nil {
+		return errors.New("Runtime lifecycle controller is unavailable")
+	}
+	operationID = strings.TrimSpace(operationID)
+	if operationID == "" {
+		return errors.New("activated Runtime startup operation ID is required")
+	}
+	binding := c.bindings.Binding()
+	operation := gatewayprotocol.RuntimeOperation{
+		OperationID:       operationID,
+		Kind:              gatewayprotocol.RuntimeOperationStart,
+		LifecycleTargetID: binding.LifecycleTargetID,
+		TargetGeneration:  binding.TargetGeneration,
+		GatewayEnvID:      gatewayprotocol.ReservedLocalEnvironmentID,
+		DesiredRuntime: gatewayprotocol.DesiredRuntime{
+			Version: strings.TrimSpace(version), Platform: runtime.GOOS, Architecture: runtime.GOARCH,
+		},
+	}
+	if digest := normalizeSHA256(executableSHA256); digest != "" {
+		operation.Artifact = &gatewayprotocol.RuntimeArtifact{ExecutableSHA256: digest}
+	}
+	checkpoint := operationCheckpoint{
+		OperationID: operationID,
+		ManagedRoot: filepath.Join(binding.RuntimeRoot, "runtime", "managed"),
+	}
+	provenance := &RuntimeInstallationProvenance{
+		Kind: "packaged_bundle", BundleCommit: strings.TrimSpace(commit),
+	}
+	if err := c.startAndVerifyWithProvenance(ctx, operation, &checkpoint, provenance); err != nil {
+		stopErr := c.terminateCandidate(ctx, checkpoint)
+		cleanupErr := removeFileDurably(c.checkpointPath(operationID))
+		return errors.Join(err, stopErr, cleanupErr)
+	}
+	return removeFileDurably(c.checkpointPath(operationID))
+}
+
 func (c *Controller) RefreshRuntimeValidation(ctx context.Context) (RuntimeValidation, error) {
 	if c == nil || c.bindings == nil {
 		return RuntimeValidation{}, errors.New("Runtime lifecycle controller is unavailable")

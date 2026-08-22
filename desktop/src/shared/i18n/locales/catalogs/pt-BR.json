@@ -1336,6 +1336,7 @@
     "reinstallTargetTitle": "Reinstalar este ambiente?",
     "reinstallTargetConfirm": "Reinstalar o Redeven",
     "reinstallTargetDescription": "Isso exclui permanentemente todo o ambiente Redeven registrado, incluindo Gateway, ambiente de execução, áreas de trabalho, projetos, dados de aplicativos, dados do Floret e do ReDevPlugin, confiança, identidade, catálogo e configurações do ambiente. Não é possível desfazer.",
+    "reinstallTargetPreserveDescription": "Isso substitui apenas os binários gerenciados do Gateway e do ambiente de execução. Áreas de trabalho, projetos, dados de aplicativos, dados do Floret e do ReDevPlugin, confiança, identidade, catálogo e configurações do ambiente são mantidos. Isso não corrige esquemas, informações de confiança ou dados históricos incompatíveis.",
     "reinstallRequiredDescription": "Este ambiente contém um estado incompatível. A reinstalação é a única recuperação segura.",
     "reinstallTargetHost": "Host: {host}",
     "reinstallTargetContainer": "Contêiner: {container}",
@@ -1559,7 +1560,9 @@
     "initializeAndOpen": "Inicializar e abrir",
     "startAndOpen": "Iniciar e abrir",
     "requestAccess": "Solicitar acesso",
-    "retryInitialization": "Tentar inicialização novamente"
+    "retryInitialization": "Tentar inicialização novamente",
+    "reinstallRedevenWipeData": "Apagar os dados e reinstalar o Redeven",
+    "reinstallRedevenKeepData": "Reinstalar o Redeven e manter os dados"
   },
   "environmentFacts": {
     "runsOn": "Executa em",
@@ -1710,7 +1713,13 @@
       "fresh_identity_verified": "Verificando a nova identidade",
       "catalog_and_local_ui_verified": "Verificando Catalog e Local UI",
       "quarantine_cleaned": "Removendo os dados antigos isolados",
-      "completed": "Reinstalação concluída"
+      "completed": "Reinstalação concluída",
+      "maintenance_helper_ready": "Preparando o auxiliar de manutenção",
+      "packages_preparing_and_transferring": "Preparando e transferindo pacotes",
+      "redeven_processes_stop_attempted": "Encerrando processos do Redeven",
+      "packages_applying": "Aplicando o lote de pacotes",
+      "installation_verifying": "Verificando a instalação",
+      "cleanup": "Limpando os dados isolados"
     },
     "failed": "Falhou",
     "canceled": "Cancelado",
@@ -1916,7 +1925,16 @@
     "environmentOpenLocalTransportDetail": "A conexão local protegida do Desktop não retornou uma página utilizável do Env App.",
     "environmentOpenLocalTransportRecoveryHint": "Reinicie o ambiente de execução e tente novamente. A VPN, o Tailscale e o software de proxy podem permanecer ativados.",
     "workspaceEnginePrepareFailedTitle": "Falha ao preparar o mecanismo da área de trabalho",
-    "workspaceEnginePrepareFailedSummary": "O Desktop não conseguiu preparar o mecanismo da área de trabalho para “{target}”."
+    "workspaceEnginePrepareFailedSummary": "O Desktop não conseguiu preparar o mecanismo da área de trabalho para “{target}”.",
+    "reinstallPackagesPreparingDetail": "O Desktop está preparando e transferindo juntos os pacotes do Gateway e do ambiente de execução.",
+    "reinstallPackagesApplyingDetail": "O Desktop está aplicando o lote verificado de pacotes do Gateway e do ambiente de execução.",
+    "componentTasks": "Progresso da instalação dos componentes",
+    "componentPhase": {
+      "preparing": "Preparando",
+      "transferring": "Transferindo",
+      "verifying": "Verificando",
+      "ready": "Pronto"
+    }
   },
   "runtimeMessage": {
     "runtimeOfflineRefresh": "O tempo de execução está off-line ou indisponível no momento. Inicie-o a partir de sua origem e atualize o status.",

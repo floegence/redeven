@@ -211,6 +211,7 @@ export type EnvironmentActionModel = Readonly<{
   runtime_operation?: DesktopRuntimeOperation;
   runtime_operation_method?: DesktopRuntimeOperationMethod;
   disabled_reason?: string;
+  reinstall_mode?: 'wipe_data' | 'preserve_data';
 }>;
 
 export type EnvironmentActionMenuItemModel = Readonly<{
@@ -1497,13 +1498,14 @@ function runtimeOperationMenuItem(plan: DesktopRuntimeOperationPlan | undefined)
 function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly EnvironmentActionMenuItemModel[] {
   if (environmentSupportsDirectReinstall(environment) && environment.reinstall_required === true) {
     return [{
-      id: 'reinstall_target',
-      label: 'Reinstall Redeven',
+      id: 'reinstall_target_wipe',
+      label: 'Erase data and reinstall Redeven',
       action: {
         intent: 'reinstall_target',
-        label: 'Reinstall Redeven',
+        label: 'Erase data and reinstall Redeven',
         enabled: true,
         variant: 'default',
+        reinstall_mode: 'wipe_data',
       },
     }];
   }
@@ -1536,13 +1538,24 @@ function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly Envi
   }
   if (environmentSupportsDirectReinstall(environment)) {
     items.push({
-      id: 'reinstall_target',
-      label: 'Reinstall Redeven',
+      id: 'reinstall_target_wipe',
+      label: 'Erase data and reinstall Redeven',
       action: {
         intent: 'reinstall_target',
-        label: 'Reinstall Redeven',
+        label: 'Erase data and reinstall Redeven',
         enabled: true,
         variant: 'outline',
+        reinstall_mode: 'wipe_data',
+      },
+    }, {
+      id: 'reinstall_target_preserve',
+      label: 'Reinstall Redeven and keep data',
+      action: {
+        intent: 'reinstall_target',
+        label: 'Reinstall Redeven and keep data',
+        enabled: true,
+        variant: 'outline',
+        reinstall_mode: 'preserve_data',
       },
     });
   }

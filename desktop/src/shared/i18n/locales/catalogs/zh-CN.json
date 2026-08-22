@@ -429,7 +429,7 @@
       "imageInput": "图片输入",
       "selectModelPlaceholder": "选择模型",
       "defaultPermissionTitle": "默认权限",
-    "defaultPermissionDescription": "控制新 Flower 线程默认可用的工具和审批方式；已有线程保留各自的权限。",
+      "defaultPermissionDescription": "控制新 Flower 线程默认可用的工具和审批方式；已有线程保留各自的权限。",
       "defaultPermissionBadge": "默认",
       "permissionReadonlyLabel": "只读",
       "permissionReadonlyDescription": "仅可读取与搜索。无 shell、文件编辑或写入工具。",
@@ -1336,6 +1336,7 @@
     "reinstallTargetTitle": "重装此环境？",
     "reinstallTargetConfirm": "重装 Redeven",
     "reinstallTargetDescription": "这会永久删除已登记的整个 Redeven 环境，包括 Gateway、运行时、工作区、项目、应用数据、Floret 和 ReDevPlugin 数据、信任信息、身份、Catalog 与环境配置。操作不可撤销。",
+    "reinstallTargetPreserveDescription": "这只会替换受管的 Gateway 和运行时二进制文件。工作区、项目、应用数据、Floret 和 ReDevPlugin 数据、信任信息、身份、Catalog 与环境配置都会保留。它不会修复不兼容的 schema、信任信息或历史数据。",
     "reinstallRequiredDescription": "此环境包含不兼容状态，重装是唯一安全的恢复方式。",
     "reinstallTargetHost": "主机：{host}",
     "reinstallTargetContainer": "容器：{container}",
@@ -1555,7 +1556,9 @@
     "initializeAndOpen": "初始化并打开",
     "startAndOpen": "启动并打开",
     "requestAccess": "请求访问",
-    "retryInitialization": "重试初始化"
+    "retryInitialization": "重试初始化",
+    "reinstallRedevenWipeData": "抹除数据重装 Redeven",
+    "reinstallRedevenKeepData": "保留数据重装 Redeven"
   },
   "environmentFacts": {
     "runsOn": "运行于",
@@ -1706,7 +1709,13 @@
       "fresh_identity_verified": "验证新身份",
       "catalog_and_local_ui_verified": "验证 Catalog 和 Local UI",
       "quarantine_cleaned": "删除隔离的旧数据",
-      "completed": "重装完成"
+      "completed": "重装完成",
+      "maintenance_helper_ready": "准备维护助手",
+      "packages_preparing_and_transferring": "同时准备并传输软件包",
+      "redeven_processes_stop_attempted": "停止 Redeven 进程",
+      "packages_applying": "应用软件包批次",
+      "installation_verifying": "验证安装结果",
+      "cleanup": "清理隔离数据"
     },
     "failed": "失败",
     "canceled": "已取消",
@@ -1912,7 +1921,16 @@
     "environmentOpenLocalTransportDetail": "Desktop 的受保护本地连接未返回可用的 Env App 页面。",
     "environmentOpenLocalTransportRecoveryHint": "请重启运行时后重试。无需关闭 VPN、Tailscale 或代理软件。",
     "workspaceEnginePrepareFailedTitle": "工作区引擎准备失败",
-    "workspaceEnginePrepareFailedSummary": "Desktop 无法为“{target}”准备工作区引擎。"
+    "workspaceEnginePrepareFailedSummary": "Desktop 无法为“{target}”准备工作区引擎。",
+    "reinstallPackagesPreparingDetail": "Desktop 正在同时准备并传输 Gateway 和运行时软件包。",
+    "reinstallPackagesApplyingDetail": "Desktop 正在应用已验证的 Gateway 和运行时软件包批次。",
+    "componentTasks": "组件安装进度",
+    "componentPhase": {
+      "preparing": "准备中",
+      "transferring": "传输中",
+      "verifying": "验证中",
+      "ready": "已就绪"
+    }
   },
   "runtimeMessage": {
     "runtimeOfflineRefresh": "运行时当前离线或不可用。从源头启动它，然后刷新状态。",

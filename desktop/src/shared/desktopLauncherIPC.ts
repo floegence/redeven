@@ -79,6 +79,15 @@ export type DesktopLauncherOperationStatus =
   | 'failed'
   | 'succeeded';
 export type DesktopStepProgressStepStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'canceled';
+export type DesktopComponentTaskProgress = Readonly<{
+  id: 'gateway' | 'runtime';
+  status: DesktopStepProgressStepStatus;
+  phase: 'preparing' | 'transferring' | 'verifying' | 'ready';
+  strategy: 'desktop_upload' | 'remote_install';
+  completed_bytes?: number;
+  total_bytes?: number;
+  detail_key?: DesktopTranslationKey;
+}>;
 export type DesktopStepProgressStep = Readonly<{
   id: string;
   backend_event?: string;
@@ -87,6 +96,7 @@ export type DesktopStepProgressStep = Readonly<{
   status: DesktopStepProgressStepStatus;
   detail?: string;
   detail_key?: DesktopTranslationKey;
+  tasks?: readonly DesktopComponentTaskProgress[];
 }>;
 export type DesktopStepProgress = Readonly<{
   active_step_id: string;
@@ -642,6 +652,9 @@ export type DesktopLauncherOperationNextAction = Readonly<
       environment_id: string;
       label: string;
       label_key?: DesktopTranslationKey;
+      mode?: 'wipe_data' | 'preserve_data';
+      preflight_id?: string;
+      operation_key?: string;
     }
   | {
       kind: 'resolve_gateway';
@@ -846,12 +859,14 @@ export type DesktopLauncherActionRequest = Readonly<
   | {
       kind: 'preview_reinstall_target';
       environment_id: string;
+      mode?: 'wipe_data' | 'preserve_data';
     }
   | {
       kind: 'reinstall_target';
       environment_id: string;
       preflight_id: string;
       operation_key?: string;
+      mode?: 'wipe_data' | 'preserve_data';
       impact_acknowledged: true;
     }
   | {
@@ -982,6 +997,7 @@ export type DesktopReinstallTargetPreview = Readonly<{
   container_engine?: string;
   target_root: string;
   target_exists: boolean;
+  target_exists_known: boolean;
   affected_environment_ids: readonly string[];
   processes: readonly Readonly<{
     pid: number;
@@ -1000,6 +1016,7 @@ export type DesktopReinstallTargetPreview = Readonly<{
     | 'trust_identity_catalog_environment_config'
   )[];
   expires_at_unix_ms: number;
+  mode: 'wipe_data' | 'preserve_data';
 }>;
 
 export type DesktopLauncherActionFailure = Readonly<{
@@ -1632,15 +1649,18 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       if (environmentID === '') {
         return null;
       }
+      const mode = (candidate as { mode?: unknown }).mode;
       return {
         kind,
         environment_id: environmentID,
+        ...(mode === 'wipe_data' || mode === 'preserve_data' ? { mode } : {}),
       };
     }
     case 'reinstall_target': {
       const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
       const preflightID = compact((candidate as { preflight_id?: unknown }).preflight_id);
       const operationKey = compact((candidate as { operation_key?: unknown }).operation_key);
+      const mode = (candidate as { mode?: unknown }).mode;
       if (environmentID === '' || !/^reinstall_[0-9a-f-]{36}$/iu.test(preflightID)) {
         return null;
       }
@@ -1652,6 +1672,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         environment_id: environmentID,
         preflight_id: preflightID,
         ...(operationKey ? { operation_key: operationKey } : {}),
+        ...(mode === 'wipe_data' || mode === 'preserve_data' ? { mode } : {}),
         impact_acknowledged: true,
       };
     }

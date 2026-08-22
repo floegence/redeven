@@ -18,7 +18,7 @@ const processHelperScript = [
   '[ -x "$helper" ] || { echo "current Redeven maintenance helper is missing" >&2; exit 50; }',
   'case "$operation" in',
   '  inventory) "$helper" desktop-target-process-inventory --target-root "$target_root" ;;',
-  '  stop) "$helper" desktop-target-process-stop --target-root "$target_root" --expected-inventory-digest "$inventory_digest" --grace-period 5s ;;',
+  '  stop) "$helper" desktop-target-process-stop --target-root "$target_root" --expected-inventory-digest "$inventory_digest" --best-effort --grace-period 5s ;;',
   '  *) echo "invalid Redeven target process operation" >&2; exit 51 ;;',
   'esac',
 ].join('\n');
@@ -34,7 +34,7 @@ function helperCommand(
   if (executor.host_access.kind === 'local_host' && placement.kind === 'host_process' && localHelperExecutable) {
     return operation === 'inventory'
       ? [localHelperExecutable, 'desktop-target-process-inventory', '--target-root', targetRoot]
-      : [localHelperExecutable, 'desktop-target-process-stop', '--target-root', targetRoot, '--expected-inventory-digest', inventoryDigest, '--grace-period', '5s'];
+      : [localHelperExecutable, 'desktop-target-process-stop', '--target-root', targetRoot, '--expected-inventory-digest', inventoryDigest, '--best-effort', '--grace-period', '5s'];
   }
   const argv = ['sh', '-c', processHelperScript, 'redeven-target-process-helper', operation, targetRoot, inventoryDigest || '-'];
   if (placement.kind === 'host_process') {

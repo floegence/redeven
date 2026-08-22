@@ -810,6 +810,12 @@ function localizedReinstallHost(i18n: DesktopI18n, value: string): string {
   return value === 'local_device' ? i18n.t('confirm.reinstallTargetLocalDevice') : value;
 }
 
+function reinstallTargetDescriptionKey(mode: string | undefined): DesktopTranslationKey {
+  return mode === 'preserve_data'
+    ? 'confirm.reinstallTargetPreserveDescription'
+    : 'confirm.reinstallTargetDescription';
+}
+
 function localizedEnvironmentStatusLabel(i18n: DesktopI18n, label: string): string {
   return localizedStringByValue(i18n, label, {
     Open: 'environmentStatus.open',
@@ -919,6 +925,8 @@ function localizedEnvironmentActionLabel(i18n: DesktopI18n, label: string): stri
     'Update Gateway': 'environmentCenter.gatewayActionUpdate',
     Reinstall: 'common.reinstall',
     'Reinstall Redeven': 'environmentAction.reinstallRedeven',
+    'Erase data and reinstall Redeven': 'environmentAction.reinstallRedevenWipeData',
+    'Reinstall Redeven and keep data': 'environmentAction.reinstallRedevenKeepData',
     'Pair Gateway': 'environmentCenter.gatewayPanelPairThisGatewayAria',
     // Keep legacy route-qualified plans user-facing neutral if an older
     // snapshot still contains those labels.
@@ -5005,6 +5013,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           const continuation = action as EnvironmentActionModel & {
             operation_key?: string;
             preflight_id?: string;
+            reinstall_mode?: 'wipe_data' | 'preserve_data';
           };
           if (continuation.operation_key && continuation.preflight_id) {
             const result = await performLauncherAction({
@@ -5012,6 +5021,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               environment_id: environment.id,
               preflight_id: continuation.preflight_id,
               operation_key: continuation.operation_key,
+              mode: continuation.reinstall_mode ?? 'wipe_data',
               impact_acknowledged: true,
             }, errorTarget);
             return result?.outcome === 'reinstalled_target';
@@ -5019,6 +5029,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           const result = await performLauncherAction({
             kind: 'preview_reinstall_target',
             environment_id: environment.id,
+            mode: action.reinstall_mode ?? 'wipe_data',
           }, errorTarget);
           return result?.outcome === 'previewed_reinstall_target';
         }
@@ -8946,7 +8957,7 @@ function EnvironmentProgressPanel(props: Readonly<{
   const showFallbackActions = createMemo(() => (
     canDismiss() && (showFallbackCopyAction() || showFallbackDismissAction())
   ));
-  const phaseSequence = createMemo<readonly { phase: string; key: string; label: string; status?: string; detail?: string }[]>(() => {
+  const phaseSequence = createMemo<readonly { phase: string; key: string; label: string; status?: string; detail?: string; tasks?: readonly import('../shared/desktopLauncherIPC').DesktopComponentTaskProgress[] }[]>(() => {
     const steps = stepProgress();
     if (steps) {
       return steps.steps.map((step, index) => ({
@@ -8955,6 +8966,7 @@ function EnvironmentProgressPanel(props: Readonly<{
         label: step.label_key ? props.i18n.t(step.label_key) : localizedGatewayCheckStepLabel(props.i18n, step.id, step.label),
         status: step.status,
         detail: step.detail_key ? props.i18n.t(step.detail_key) : localizedGatewayCheckStepDetail(props.i18n, step.detail),
+        tasks: step.tasks,
       }));
     }
     const current = runtimeLifecycle();
@@ -9188,7 +9200,7 @@ function EnvironmentProgressPanel(props: Readonly<{
       <Show when={props.progress.status === 'needs_confirmation' && props.progress.reinstall_preview}>
         {(preview) => (
           <div class="redeven-runtime-impact" data-tone="warning">
-            <div class="redeven-runtime-impact__summary">{props.i18n.t('confirm.reinstallTargetDescription')}</div>
+            <div class="redeven-runtime-impact__summary">{props.i18n.t(reinstallTargetDescriptionKey(preview().mode))}</div>
             <div class="redeven-runtime-impact__detail space-y-1">
               <div>{props.i18n.t('confirm.reinstallTargetHost', { host: localizedReinstallHost(props.i18n, preview().host_label) })}</div>
               <Show when={preview().container_id}>
@@ -9248,6 +9260,21 @@ function EnvironmentProgressPanel(props: Readonly<{
                         >{step().label}</span>
                         <Show when={step().detail}>
                           {(detail) => <span class="redeven-environment-progress__step-detail">{detail()}</span>}
+                        </Show>
+                        <Show when={step().tasks && step().tasks!.length > 0}>
+                          <div class="redeven-environment-progress__component-tasks" role="list" aria-label={props.i18n.t('progress.componentTasks')}>
+                            <For each={step().tasks ?? []}>
+                              {(task) => (
+                                <div class="redeven-environment-progress__component-task" role="listitem" data-status={task.status}>
+                                  <span class="redeven-environment-progress__component-task-name">
+                                    {props.i18n.t(task.id === 'gateway' ? 'progress.reinstallStep.gateway_package_preparing' : 'progress.reinstallStep.runtime_package_preparing')}
+                                  </span>
+                                  <span class="redeven-environment-progress__component-task-phase">{props.i18n.t(`progress.componentPhase.${task.phase}` as 'progress.componentPhase.preparing')}</span>
+                                  <span class="redeven-environment-progress__component-task-strategy">{props.i18n.t(task.strategy === 'desktop_upload' ? 'common.desktopUpload' : 'common.remoteInstall')}</span>
+                                </div>
+                              )}
+                            </For>
+                          </div>
                         </Show>
                       </span>
                     </div>
@@ -9964,6 +9991,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
                                     variant: 'outline',
                                     operation_key: p().operation_key,
                                     preflight_id: preview.preflight_id,
+                                    reinstall_mode: action.mode ?? preview.mode,
                                   } as EnvironmentActionModel);
                                 }
                                 break;

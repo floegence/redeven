@@ -335,6 +335,73 @@ func StopTargetProcesses(ctx context.Context, options TargetProcessOptions, expe
 	return stopTargetProcesses(ctx, systemTargetProcessController{}, options, expectedDigest, gracePeriod)
 }
 
+// StopTargetProcessesBestEffort is used only by destructive maintenance. It
+// attempts to stop processes that are positively identified as Redeven-owned,
+// skips entries whose identity is incomplete, and never turns an incomplete
+// inventory into a lifecycle block. SIGKILL remains identity-checked.
+func StopTargetProcessesBestEffort(ctx context.Context, options TargetProcessOptions, gracePeriod time.Duration) (TargetProcessStopResult, error) {
+	return stopTargetProcessesBestEffort(ctx, systemTargetProcessController{}, options, gracePeriod)
+}
+
+func stopTargetProcessesBestEffort(ctx context.Context, controller targetProcessController, options TargetProcessOptions, gracePeriod time.Duration) (TargetProcessStopResult, error) {
+	before, err := controller.Inspect(ctx, options)
+	if err != nil {
+		return TargetProcessStopResult{}, err
+	}
+	result := TargetProcessStopResult{SchemaVersion: TargetProcessInventorySchemaVersion, Before: before, After: before}
+	for _, target := range before.Instances {
+		if target.StopAuthority != RuntimeProcessStopAutomatic {
+			continue
+		}
+		current, inspectErr := controller.Inspect(ctx, options)
+		if inspectErr != nil {
+			return result, inspectErr
+		}
+		candidate, exists := targetProcessInstanceByPID(current, target.PID)
+		if !exists || !targetProcessInstancesEqual(target, candidate) {
+			continue
+		}
+		if signalErr := controller.Terminate(target.PID); signalErr != nil && !errors.Is(signalErr, os.ErrProcessDone) {
+			return result, signalErr
+		}
+	}
+	if gracePeriod <= 0 {
+		gracePeriod = 5 * time.Second
+	}
+	deadline := time.Now().Add(gracePeriod)
+	for time.Now().Before(deadline) {
+		after, inspectErr := controller.Inspect(ctx, options)
+		if inspectErr != nil {
+			return result, inspectErr
+		}
+		result.After = after
+		if len(after.Instances) == 0 {
+			return result, nil
+		}
+		if err := controller.Wait(ctx, 100*time.Millisecond); err != nil {
+			return result, err
+		}
+	}
+	observed, err := controller.Inspect(ctx, options)
+	if err != nil {
+		return result, err
+	}
+	for _, target := range before.Instances {
+		if target.StopAuthority != RuntimeProcessStopAutomatic {
+			continue
+		}
+		candidate, exists := targetProcessInstanceByPID(observed, target.PID)
+		if !exists || !targetProcessInstancesEqual(target, candidate) {
+			continue
+		}
+		if killErr := controller.Kill(target.PID); killErr != nil && !errors.Is(killErr, os.ErrProcessDone) {
+			return result, killErr
+		}
+	}
+	result.After, err = controller.Inspect(ctx, options)
+	return result, err
+}
+
 func stopTargetProcesses(ctx context.Context, controller targetProcessController, options TargetProcessOptions, expectedDigest string, gracePeriod time.Duration) (TargetProcessStopResult, error) {
 	before, err := controller.Inspect(ctx, options)
 	if err != nil {

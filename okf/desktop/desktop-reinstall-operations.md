@@ -7,7 +7,7 @@ timestamp: 2026-08-22T00:00:00Z
 ---
 # Summary
 
-Desktop owns one destructive `reinstall_target` operation for Local, SSH host, Local container, and SSH container Managed Environments. It uses the saved direct host or container channel and never depends on the old Gateway, Runtime, bridge, or state. The operation replaces the exact Redeven `runtime_root`, installs the current Gateway and Runtime packages, verifies the fresh services, and requires no Gateway pairing. A failure after isolation preserves quarantine and enters manual recovery without restarting the old installation.
+Desktop owns one `reinstall_target` operation with `wipe_data` and `preserve_data` modes for Local, SSH host, Local container, and SSH container Managed Environments. It uses the saved direct host or container channel and never depends on the old Gateway, Runtime, bridge, or state. Gateway and Runtime packages form one parallel batch: both are prepared, transferred, and verified before either is activated. Wipe replaces the exact Redeven `runtime_root`; preserve atomically replaces both managed component directories. A failure after isolation preserves quarantine and enters manual recovery without restarting the old installation.
 
 # Contract
 
@@ -18,23 +18,20 @@ The click creates a Launcher Operation before preflight, so the existing `Enviro
 The fixed plan is:
 
 ```text
-preflight -> confirmation -> target_locked -> sessions_closed
--> maintenance_helper_uploaded -> redeven_processes_inventory
--> redeven_processes_stopping -> redeven_processes_verified_stopped
--> target_quarantined -> gateway_package_preparing
--> gateway_package_installing -> runtime_package_preparing
--> runtime_package_installing -> gateway_and_runtime_starting
--> fresh_identity_verified -> catalog_and_local_ui_verified
--> quarantine_cleaned -> completed
+preflight -> confirmation -> target_locked -> maintenance_helper_ready
+-> packages_preparing_and_transferring -> sessions_closed
+-> redeven_processes_stop_attempted -> packages_applying
+-> gateway_and_runtime_starting -> installation_verifying
+-> cleanup -> completed
 ```
 
-Package details identify whether Desktop uploads a verified current bundle or the target downloads from its configured release endpoint. Both paths validate the manifest, version, commit, and digests through the existing package installers.
+The package phase shows independent Gateway and Runtime sub-progress. Desktop upload and remote install both validate manifest, release, commit, platform, architecture, archive size, and SHA-256. A suite manifest is required before activation; a failed task cancels its sibling and cleans staging, so partial installation is impossible.
 
 ## Direct-channel ownership
 
 Preflight validates the exact host, SSH identity, container engine and ID, canonical `runtime_root`, and operation quarantine name. A maintenance helper uploaded by Desktop inventories and stops only Redeven processes whose PID, start time, executable path, target root, and parent relationship match the target. Other processes are not inspected or treated as owners of Redeven data. The complete root is atomically moved to an operation-specific quarantine; every file below it is Redeven-owned and is removed only after fresh verification.
 
-The operation does not read, migrate, or call APIs in the quarantined installation. It does not invoke old Gateway APIs, bridge commands, service fallback, broad path deletion, home-directory deletion, container prune, or unregistered volumes. A missing target is a fresh install. A symlink, broad root, changed target, unknown quarantine, or failed stop verification fails closed. Once isolation succeeds, the old installation is never restarted.
+The operation does not read, migrate, or call APIs in the quarantined installation. It does not invoke old Gateway APIs, bridge commands, service fallback, broad path deletion, home-directory deletion, container prune, or unregistered volumes. A missing target is a fresh install. A symlink, broad root, changed target, unknown quarantine, or filesystem failure fails closed. Once isolation succeeds, the old installation is never restarted. Preserve mode stops any newly started processes before restoring both old managed directories and their suite manifest; rollback failure retains recovery evidence.
 
 ## Gateway separation
 

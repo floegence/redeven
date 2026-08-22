@@ -1336,6 +1336,7 @@
     "reinstallTargetTitle": "Diese Umgebung neu installieren?",
     "reinstallTargetConfirm": "Redeven neu installieren",
     "reinstallTargetDescription": "Dadurch wird die vollständig registrierte Redeven-Umgebung dauerhaft gelöscht, einschließlich Gateway, Laufzeit, Arbeitsbereichen, Projekten, App-Daten, Floret- und ReDevPlugin-Daten, Vertrauen, Identität, Katalog und Umgebungseinstellungen. Dies kann nicht rückgängig gemacht werden.",
+    "reinstallTargetPreserveDescription": "Dabei werden nur die verwalteten Gateway- und Laufzeit-Binärdateien ersetzt. Arbeitsbereiche, Projekte, App-Daten, Floret- und ReDevPlugin-Daten, Vertrauen, Identität, Katalog und Umgebungseinstellungen bleiben erhalten. Inkompatible Schemas, Vertrauensinformationen oder historische Daten werden dadurch nicht repariert.",
     "reinstallRequiredDescription": "Diese Umgebung enthält einen inkompatiblen Zustand. Eine Neuinstallation ist die einzige sichere Wiederherstellung.",
     "reinstallTargetHost": "Host: {host}",
     "reinstallTargetContainer": "Container: {container}",
@@ -1559,7 +1560,9 @@
     "initializeAndOpen": "Initialisieren und öffnen",
     "startAndOpen": "Starten und öffnen",
     "requestAccess": "Zugriff anfordern",
-    "retryInitialization": "Initialisierung wiederholen"
+    "retryInitialization": "Initialisierung wiederholen",
+    "reinstallRedevenWipeData": "Redeven-Daten löschen und neu installieren",
+    "reinstallRedevenKeepData": "Redeven neu installieren und Daten behalten"
   },
   "environmentFacts": {
     "runsOn": "Läuft auf",
@@ -1710,7 +1713,13 @@
       "fresh_identity_verified": "Neue Identität wird überprüft",
       "catalog_and_local_ui_verified": "Catalog und Local UI werden überprüft",
       "quarantine_cleaned": "Isolierte alte Daten werden entfernt",
-      "completed": "Neuinstallation abgeschlossen"
+      "completed": "Neuinstallation abgeschlossen",
+      "maintenance_helper_ready": "Wartungshelfer wird vorbereitet",
+      "packages_preparing_and_transferring": "Pakete werden gemeinsam vorbereitet und übertragen",
+      "redeven_processes_stop_attempted": "Redeven-Prozesse werden beendet",
+      "packages_applying": "Paketstapel wird angewendet",
+      "installation_verifying": "Installation wird überprüft",
+      "cleanup": "Isolierte Daten werden bereinigt"
     },
     "failed": "Fehlgeschlagen",
     "canceled": "Abgebrochen",
@@ -1916,7 +1925,16 @@
     "environmentOpenLocalTransportDetail": "Die geschützte lokale Verbindung von Desktop hat keine nutzbare Env App-Seite geliefert.",
     "environmentOpenLocalTransportRecoveryHint": "Starten Sie die Laufzeit neu und versuchen Sie es dann erneut. VPN, Tailscale und Proxysoftware müssen dafür nicht deaktiviert werden.",
     "workspaceEnginePrepareFailedTitle": "Arbeitsbereichs-Engine konnte nicht vorbereitet werden",
-    "workspaceEnginePrepareFailedSummary": "Desktop konnte die Arbeitsbereichs-Engine für „{target}“ nicht vorbereiten."
+    "workspaceEnginePrepareFailedSummary": "Desktop konnte die Arbeitsbereichs-Engine für „{target}“ nicht vorbereiten.",
+    "reinstallPackagesPreparingDetail": "Desktop bereitet Gateway- und Laufzeitpakete gemeinsam vor und überträgt sie.",
+    "reinstallPackagesApplyingDetail": "Desktop wendet das verifizierte Gateway- und Laufzeitpaket gemeinsam an.",
+    "componentTasks": "Fortschritt der Komponenteninstallation",
+    "componentPhase": {
+      "preparing": "Vorbereitung",
+      "transferring": "Übertragung",
+      "verifying": "Überprüfung",
+      "ready": "Bereit"
+    }
   },
   "runtimeMessage": {
     "runtimeOfflineRefresh": "Die Ausführungsumgebung ist derzeit offline oder nicht verfügbar. Starten Sie es von seiner Quelle und aktualisieren Sie dann den Status.",
