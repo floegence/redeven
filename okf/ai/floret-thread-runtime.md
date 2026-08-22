@@ -58,13 +58,17 @@ no registry tools to the provider. Redeven relies on the published Floret runtim
 to preserve that distinction; provider tool names that are absent from the
 resolved definitions remain rejected before dispatch.
 
-Redeven consumes Floret v4.0.13's public ordered `ThreadView.Items` and
+Redeven consumes Floret v4.0.14's public ordered `ThreadView.Items` and
 `ThreadContextReader`. User, thinking, assistant, tool, and independent
 interaction segments retain Floret-assigned IDs and ordinals across live
 updates, approval settlement, canonical reload, and renderer recovery. Redeven
 maps the sequence directly and does not consume the deprecated global draft
 fields, infer order from timestamps or tool identity, or persist a second
 presentation order.
+At terminal settlement, Floret's canonical ordered items replace temporary
+stream text. `TurnResult.Output` remains a run aggregate and is not another
+message source. Flower deduplicates exact item IDs only; equal text with
+different stable IDs remains visible.
 
 One endpoint/thread authority boundary resolves the product catalog record and
 rejects an absent, tombstoned, or foreign thread before every canonical
@@ -108,7 +112,7 @@ Redeven never imports Floret internals, reads Floret storage, copies canonical l
 
 # Evidence
 
-- `redeven:go.mod` - Pins the released Floret v4.0.13 typed runtime without local replacement.
+- `redeven:go.mod` - Pins the released Floret v4.0.14 typed runtime without local replacement.
 - `redeven:internal/session/floret_v4_dependency_contract_test.go` - Enforces exact published-v4 adoption and rejects retired imports.
 - `redeven:internal/ai/floret_runtime.go` - Published runtime composition.
 - `redeven:internal/ai/floret_thread_context.go` - Canonical compaction mapping and timeline anchoring.

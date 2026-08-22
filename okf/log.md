@@ -1,5 +1,12 @@
 # Redeven OKF Update Log
 
+## 2026-08-22
+* **Canonical Flower replies and Floret v4.0.14 adoption**: Redeven now
+  consumes the published Floret v4.0.14 module. Terminal current views come
+  from canonical ordered items instead of appending run-level output; Flower
+  continues to deduplicate only identical stable IDs and preserves equal text
+  carried by different IDs.
+
 ## 2026-08-18
 * **Flower runtime integrity and Floret v4.0.13 adoption**: Every existing-thread
   mutation now proves endpoint ownership before canonical state can change.
