@@ -188,6 +188,7 @@
       "toolApprovalWorkingDirectoryDetail": "Arbeitsverzeichnis: {target}",
       "toolApprovalComposerDescription": "Die Unterhaltung pausiert, bis du diese Aktion genehmigst oder ablehnst.",
       "toolApprovalQueueCount": "Weitere ausstehende Genehmigungen: {count}",
+      "toolApprovalPendingCount": "{count} ausstehende Tool-Genehmigung(en)",
       "toolApprovalRejectBatch": "Alle in diesem Batch ablehnen",
       "toolApprovalRejectBatchAction": "Alle {count} ausstehenden Tool-Genehmigungen ablehnen",
       "toolApprovalOutsideWorkspaceRisk": "Dieser Befehl kann auf Ressourcen außerhalb des Arbeitsbereichs zugreifen.",

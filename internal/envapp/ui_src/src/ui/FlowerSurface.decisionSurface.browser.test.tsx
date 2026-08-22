@@ -291,7 +291,7 @@ describe('Flower bottom decision surface', () => {
     expect(Array.from(surface.querySelectorAll('.flower-input-request-choice-selected')).map((node) => node.textContent?.trim())).toEqual([]);
   });
 
-  it('renders two pending approvals as one compact surface without mounting the chat composer', async () => {
+  it('renders and resolves multiple pending approvals independently', async () => {
     const action = {
       action_id: 'approval-decision-surface',
       origin: 'main_tool' as const,
@@ -376,6 +376,8 @@ describe('Flower bottom decision surface', () => {
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-bottom-mode="approval"]')));
 
     const surface = runtime.querySelector('[data-flower-bottom-mode="approval"]') as HTMLElement;
+    const rows = Array.from(surface.querySelectorAll<HTMLElement>('[data-flower-composer-approval="true"]'));
+    expect(rows).toHaveLength(2);
     const decisions = Array.from(surface.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision'));
     await waitFor(() => document.activeElement === decisions[0]);
     expect(surface.hasAttribute('tabindex')).toBe(false);
@@ -384,8 +386,8 @@ describe('Flower bottom decision surface', () => {
     expect(surface.querySelector('.flower-decision-surface')).toBeNull();
     expect(surface.querySelector('.flower-approval-card')).toBeNull();
     expect(surface.querySelector('.flower-approval-copy-btn')).toBeNull();
-    expect(surface.querySelectorAll('[data-flower-composer-approval="true"]')).toHaveLength(1);
-    expect(surface.querySelector('.flower-approval-queue-progress')?.textContent?.trim()).toBe('1 / 2');
+    expect(surface.querySelectorAll('[data-flower-composer-approval="true"]')).toHaveLength(2);
+    expect(surface.querySelector('.flower-approval-queue-progress')?.textContent?.trim()).toBe('2 pending tool approvals');
     expect(surface.querySelector('textarea')).toBeNull();
     expect(surface.querySelector('input[type="password"]')).toBeNull();
     expect(surface.querySelector('input[type="file"]')).toBeNull();
@@ -405,31 +407,32 @@ describe('Flower bottom decision surface', () => {
     expect(surface.textContent).toContain('Allow the following action?');
     expect(surface.querySelector('.flower-approval-intro')).toBeNull();
     expect(surface.textContent).not.toContain('terminal.exec');
-    expect(surface.textContent?.match(/printf flower-decision-surface/g)).toHaveLength(1);
-    expect(surface.textContent).toContain('1 / 2');
+    expect(surface.textContent?.match(/printf flower-decision-surface/g)).toHaveLength(2);
+    expect(surface.textContent).toContain('2 pending tool approvals');
 
-    expect(decisions.map((button) => button.textContent?.trim())).toEqual(['Reject all in this batch', 'Reject', 'Allow once']);
+    expect(decisions.map((button) => button.textContent?.trim())).toEqual(['Reject all in this batch', 'Reject', 'Allow once', 'Reject', 'Allow once']);
     const observedModes: string[] = [];
     const observer = new MutationObserver(() => {
       const mode = runtime.querySelector<HTMLElement>('[data-flower-bottom-mode]')?.dataset.flowerBottomMode;
       if (mode) observedModes.push(mode);
     });
     observer.observe(runtime, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-flower-bottom-mode'] });
-    decisions[2].click();
+    const firstRowAllow = Array.from(rows[0]!.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision'))
+      .find((button) => button.textContent?.trim() === 'Allow once')!;
+    firstRowAllow.click();
     await waitFor(() => submitApproval.mock.calls.length === 1);
     expect(submitApproval).toHaveBeenCalledWith({
       thread_id: approvalThread.thread_id,
       interaction_id: action.action_id,
       approved: true,
     });
-    await waitFor(() => runtime.querySelector('.flower-approval-queue-progress')?.textContent?.trim() === '1 / 1');
+    await waitFor(() => runtime.querySelector('.flower-approval-queue-progress')?.textContent?.trim() === '1 pending tool approval');
     const nextSurface = runtime.querySelector('[data-flower-bottom-mode="approval"]') as HTMLElement;
     expect(nextSurface.querySelector('textarea')).toBeNull();
     expect(nextSurface.querySelector('.flower-composer-footer')).toBeNull();
     expect(nextSurface.textContent).toContain('printf flower-decision-surface-2');
     const nextDecision = Array.from(nextSurface.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision'))
       .find((button) => button.textContent?.trim() === 'Allow once')!;
-    await waitFor(() => nextSurface.querySelector('.flower-composer-approval-decision:not([disabled])') === document.activeElement);
     expect(nextSurface.querySelectorAll('[data-flower-composer-approval="true"]')).toHaveLength(1);
     nextDecision.click();
     await waitFor(() => submitApproval.mock.calls.length === 2);
@@ -437,6 +440,91 @@ describe('Flower bottom decision surface', () => {
     observer.disconnect();
     expect(observedModes.slice(0, -1)).not.toContain('chat');
     await waitFor(() => document.activeElement === runtime.querySelector('[data-flower-bottom-mode="chat"] textarea'));
+  });
+
+  it('submits approval rows concurrently and ignores stale responses', async () => {
+    const firstAction = approval('approval-concurrent-first', { queue_order: 1 });
+    const secondAction = approval('approval-concurrent-second', { queue_order: 2 });
+    const approvalThread = thread({
+      thread_id: 'thread-approval-concurrent',
+      status: 'waiting_approval',
+      approval_actions: [firstAction, secondAction],
+    });
+    const firstResponse = deferred<ReturnType<typeof approvalCommandResult>>();
+    const secondResponse = deferred<ReturnType<typeof approvalCommandResult>>();
+    const submitApproval = vi.fn((input) => (
+      input.interaction_id === firstAction.action_id ? firstResponse.promise : secondResponse.promise
+    ));
+    const current = (version: number, firstResolved: boolean, secondResolved: boolean) => ({
+      ok: true as const,
+      current: {
+        thread_id: approvalThread.thread_id,
+        view_version: version,
+        activity: 'active' as const,
+        interactions: [
+          {
+            id: firstAction.action_id,
+            kind: 'approval' as const,
+            tool_call_id: firstAction.tool_id,
+            resolved: firstResolved,
+            ...(firstResolved ? { approved: true } : {}),
+            ...(!firstResolved ? {
+              approval: {
+                label: firstAction.summary.label,
+                command: firstAction.summary.command,
+                tool_name: firstAction.tool_name,
+                tool_call_id: firstAction.tool_id,
+              },
+            } : {}),
+          },
+          {
+            id: secondAction.action_id,
+            kind: 'approval' as const,
+            tool_call_id: secondAction.tool_id,
+            resolved: secondResolved,
+            ...(secondResolved ? { approved: true } : {}),
+            ...(!secondResolved ? {
+              approval: {
+                label: secondAction.summary.label,
+                command: secondAction.summary.command,
+                tool_name: secondAction.tool_name,
+                tool_call_id: secondAction.tool_id,
+              },
+            } : {}),
+          },
+        ],
+      },
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [approvalThread]),
+      loadThread: vi.fn(async () => liveBootstrap(approvalThread, 21)),
+      submitApproval,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${approvalThread.thread_id}"] button`)));
+    (runtime.querySelector(`[data-thread-id="${approvalThread.thread_id}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelectorAll('[data-flower-composer-approval="true"]').length === 2);
+    const rows = Array.from(runtime.querySelectorAll<HTMLElement>('[data-flower-composer-approval="true"]'));
+    for (const row of rows) {
+      row.querySelector<HTMLButtonElement>('.flower-composer-approval-decision:last-child')?.click();
+    }
+    await waitFor(() => submitApproval.mock.calls.length === 2);
+    expect(submitApproval.mock.calls.map(([input]) => input.interaction_id).sort()).toEqual([
+      firstAction.action_id,
+      secondAction.action_id,
+    ].sort());
+    expect(rows.every((row) => Array.from(row.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision')).every((button) => button.disabled))).toBe(true);
+
+    secondResponse.resolve(current(31, false, true));
+    await waitFor(() => runtime.querySelectorAll('[data-flower-composer-approval="true"]').length === 1);
+    expect(runtime.querySelector('[data-flower-approval-action-id="approval-concurrent-first"]')).not.toBeNull();
+
+    firstResponse.resolve(current(30, true, false));
+    await new Promise((resolve) => window.setTimeout(resolve, 30));
+    expect(runtime.querySelectorAll('[data-flower-composer-approval="true"]')).toHaveLength(1);
+    expect(runtime.querySelector('[data-flower-approval-action-id="approval-concurrent-first"]')).not.toBeNull();
+    expect(runtime.querySelector('[data-flower-approval-action-id="approval-concurrent-second"]')).toBeNull();
   });
 
   it('preserves the complete draft and thread navigation until approval resolves back to chat', async () => {
@@ -582,7 +670,7 @@ describe('Flower bottom decision surface', () => {
       .find((button) => button.textContent?.trim() === 'Allow once');
     expect(approve).toBeTruthy();
     approve?.click();
-    await waitFor(() => runtime.querySelector('.flower-approval-queue-progress')?.textContent?.trim() === '1 / 1');
+    await waitFor(() => runtime.querySelector('.flower-approval-queue-progress')?.textContent?.trim() === '1 pending tool approval');
     expect(runtime.querySelector('[data-flower-bottom-mode="approval"] textarea')).toBeNull();
     expect(coordinator.read(approvalThread.thread_id).value).toMatchObject({
       text: 'Keep this draft while approval is pending',

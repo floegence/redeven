@@ -93,11 +93,12 @@ describe('Flower status motion and thread menu', () => {
 
     const indicator = host.querySelector('.flower-model-status-indicator') as HTMLElement;
     const flower = indicator.querySelector('.flower-model-status-flower') as HTMLElement;
-    const dots = Array.from(indicator.querySelectorAll<HTMLElement>('.flower-model-status-dot'));
+    const dots = indicator.querySelector<HTMLElement>('.flower-model-status-dots');
     expect(getComputedStyle(flower).animationName).toBe('flower-model-status-flower-twirl');
     expect(getComputedStyle(flower).animationPlayState).toBe('running');
-    expect(dots).toHaveLength(3);
-    expect(dots.every((dot) => getComputedStyle(dot).animationName === 'flower-model-status-dot-bounce')).toBe(true);
+    expect(dots).not.toBeNull();
+    expect(dots?.textContent).toBe('...');
+    expect(getComputedStyle(dots!).animationName).toBe('flower-model-status-dots-reveal');
     const firstTransform = getComputedStyle(flower).transform;
     await new Promise((resolve) => window.setTimeout(resolve, 180));
     expect(getComputedStyle(flower).transform).not.toBe(firstTransform);
@@ -112,7 +113,7 @@ describe('Flower status motion and thread menu', () => {
     await mediaCommands.emulateMediaPreferences({ reducedMotion: 'reduce' });
     await nextFrame();
     expect(getComputedStyle(flower).animationName).toBe('none');
-    expect(dots.every((dot) => getComputedStyle(dot).animationName === 'none')).toBe(true);
+    expect(getComputedStyle(dots!).animationName).toBe('none');
   });
 
   it('keeps the real floating menu open across live thread metadata updates', async () => {

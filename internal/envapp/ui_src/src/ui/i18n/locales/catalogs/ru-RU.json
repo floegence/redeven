@@ -4069,6 +4069,7 @@
       "toolApprovalWorkingDirectoryDetail": "Рабочий каталог: {target}",
       "toolApprovalComposerDescription": "Диалог приостановлен, пока вы не одобрите или не отклоните это действие.",
       "toolApprovalQueueCount": "Еще ожидают подтверждения: {count}",
+      "toolApprovalPendingCount": "Ожидают подтверждения инструментов: {count}",
       "toolApprovalRejectBatch": "Отклонить весь пакет",
       "toolApprovalRejectBatchAction": "Отклонить все ожидающие подтверждения инструментов ({count})",
       "toolApprovalOutsideWorkspaceRisk": "Эта команда может обращаться к ресурсам за пределами рабочей области.",

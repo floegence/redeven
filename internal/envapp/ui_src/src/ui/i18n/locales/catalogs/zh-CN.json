@@ -3957,6 +3957,7 @@
       "toolApprovalWorkingDirectoryDetail": "工作目录：{target}",
       "toolApprovalComposerDescription": "在你批准或拒绝此操作前，对话会暂停。",
       "toolApprovalQueueCount": "还有 {count} 个批准等待处理",
+      "toolApprovalPendingCount": "{count} 个工具待批准",
       "toolApprovalRejectBatch": "拒绝本批全部",
       "toolApprovalRejectBatchAction": "拒绝全部 {count} 个待批准工具",
       "toolApprovalOutsideWorkspaceRisk": "此命令可能访问工作区之外的资源。",

@@ -183,6 +183,7 @@ export const flowerSurfaceEnUS = {
     toolApprovalWorkingDirectoryDetail: 'Working directory: {target}',
     toolApprovalComposerDescription: 'The conversation is paused until you approve or reject this action.',
     toolApprovalQueueCount: '{count} more approval(s) waiting',
+    toolApprovalPendingCount: '{count} pending tool approval(s)',
     toolApprovalRejectBatch: 'Reject all in this batch',
     toolApprovalRejectBatchAction: 'Reject all {count} pending tool approvals',
     toolApprovalOutsideWorkspaceRisk: 'This command may access resources outside the workspace.',
