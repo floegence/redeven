@@ -97,6 +97,16 @@ test('reports Chromium readback diagnostics without weakening renderer failures'
     text: '[.WebGL-0x4b40406e800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels',
   }), 'renderer_problem');
   assert.equal(classifyTerminalCarrierConsoleMessage({ type: 'log', text: 'ordinary output' }), 'ignore');
+  assert.equal(classifyTerminalCarrierConsoleMessage({
+    type: 'error',
+    text: 'Failed to load resource: the server responded with a status of 403 (Forbidden)',
+    location: { url: 'http://127.0.0.1:1234/_redevplugin/api/plugins/catalog/query' },
+  }), 'expected_environment');
+  assert.equal(classifyTerminalCarrierConsoleMessage({
+    type: 'error',
+    text: 'Failed to load resource: the server responded with a status of 403 (Forbidden)',
+    location: { url: 'http://127.0.0.1:1234/_redevplugin/api/plugins/catalog/query-extra' },
+  }), 'renderer_problem');
 });
 
 test('checks every semantic frame boundary before visual sampling', () => {

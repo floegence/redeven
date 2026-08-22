@@ -215,6 +215,8 @@ function observePage(page) {
       problems.browserDiagnostics.push(entry);
     } else if (classification === 'renderer_problem') {
       problems.console.push(entry);
+    } else if (classification === 'expected_environment') {
+      problems.browserDiagnostics.push(entry);
     }
   });
   page.on('pageerror', (error) => problems.page.push(error.message));

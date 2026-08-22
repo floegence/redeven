@@ -76,6 +76,9 @@ describe('terminal codec', () => {
       offset: 41,
       totalRows: 42,
       screenStartOffset: 41,
+      historyEpoch: 4,
+      firstRowOrdinal: 900,
+      screenStartRowOrdinal: 941,
       hasPrevious: true,
       hasNext: false,
     });
@@ -83,6 +86,9 @@ describe('terminal codec', () => {
     expect(response.snapshotId).toBe('snapshot');
     expect(response.lane).toBe('search');
     expect(response.payload).toEqual(new Uint8Array([1, 2, 3]));
+    expect(response.historyEpoch).toBe(4);
+    expect(response.firstRowOrdinal).toBe(900);
+    expect(response.screenStartRowOrdinal).toBe(941);
   });
 
   it('accepts only a real semantic clear actor cut', () => {
