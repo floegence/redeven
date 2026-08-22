@@ -9,7 +9,7 @@ quality_exception: Cross-repository platform boundary spanning published artifac
 # Summary
 
 ReDevPlugin is an independently released plugin platform. Redeven consumes its
-coordinated `v3.0.9` Go, npm, Rust source-crate, and machine-contract artifacts;
+coordinated `v3.0.11` Go, npm, Rust source-crate, and machine-contract artifacts;
 it does not fork platform mechanics. Redeven owns authenticated session mapping,
 product source policy and review UX, UI placement, product runtime builds, and
 concrete business adapters. Missing or unverifiable upstream identity, lifecycle,
@@ -43,17 +43,17 @@ external-package inspection or receipt store.
 
 ## Published dependency set
 
-The current integration consumes the coordinated ReDevPlugin `v3.0.9` set:
+The current integration consumes the coordinated ReDevPlugin `v3.0.11` set:
 
-- `github.com/floegence/redevplugin/v3 v3.0.9`;
-- `@floegence/redevplugin-contracts@3.0.9` and
-  `@floegence/redevplugin-ui@3.0.9`;
-- `redevplugin-runtime@3.0.9` and `redevplugin-worker-sdk@3.0.9` as the exact
+- `github.com/floegence/redevplugin/v3 v3.0.11`;
+- `@floegence/redevplugin-contracts@3.0.11` and
+  `@floegence/redevplugin-ui@3.0.11`;
+- `redevplugin-runtime@3.0.11` and `redevplugin-worker-sdk@3.0.11` as the exact
   public Rust source-crate boundary;
 - the released contract registry, release-manifest contract, contract hashes, and
   attested `platform-release-manifest.json` registry readback, whose
   SHA-256 is
-  `a656f967281c0a8aa612d1a0f3097f921b3a57a51892597b71e06fcca964f279`.
+  `dd886043e920de62b4fea537b20b4ab13d688177a56bc2820ef4ee8f59bc8720`.
 
 Redeven release tooling verifies the exact-one publication manifest against its
 tag, source commit, workflow, GitHub attestation, Go proxy and SumDB sums, npm
@@ -69,11 +69,14 @@ remain on a newer platform release.
 
 ReDevPlugin owns durable installation through its single control database.
 Official release installation is one public Execution with ordered Events,
-one cancellation identity, and one cursor. Before confirmation, release-package
-inspection fetches and verifies the exact signed package once, derives the
-presentation and permission review, and issues short-lived owner/session-bound
-evidence. The install Execution consumes that evidence and its cached verified
-package without downloading or parsing the package again. The platform always
+one cancellation identity, and one cursor. Before confirmation, Redeven reads
+only display-ready presentation, declared permissions, the exact release
+reference, and four binding digests from the validated market snapshot. It does
+not fetch, parse, or verify package bytes. The install Execution then downloads
+the exact release, validates trust, hashes, signature, final manifest, capability
+contracts, and market declarations, checks conflicts, commits the plugin
+enabled, and activates it. Its public progress is the stable
+`download|verify|install|enable` projection; finer work stays diagnostic. The platform always
 persists a successfully verified fresh install as enabled. Missing grants are
 not a disabled lifecycle state: Redeven projects the installed record as
 `needs_attention`, while only the affected open or capability call returns
@@ -85,15 +88,14 @@ platform state. Redeven may reconnect and refresh inventory, but must not create
 a local execution store, copy the state machine, invent progress, or cancel work
 when a panel closes.
 
-The `v3.0.9` release-package inspection is also the presentation authority for
-pre-install access review. Each permission carries its exact permission id,
-verified method set, explicit required status, and the stable
-`read|write|delete|execute|admin` effects derived from Host-verified capability
-contracts. Redeven may localize and arrange those facts, but it must not recover
-permission meaning from the market catalog, infer required status, or replace
-different permissions with one generic fallback.
+Pre-install access review uses market-cached declarations generated at ingest from
+the final package and exact Host-verified capability contracts. Each permission
+carries its exact permission id, required status, and stable
+`read|write|delete|execute|admin` effects. Redeven may localize and arrange those
+facts, but it must not parse the package, derive permissions itself, show method
+inventories in the primary UI, or treat the declaration as final verification.
 
-Enabled-plugin startup recovery remains ReDevPlugin work. The `v3.0.9` Host
+Enabled-plugin startup recovery remains ReDevPlugin work. The `v3.0.11` Host
 revalidates the installed package identity, SHA-256 hashes, Ed25519 status,
 revocation, grants, policy fences, runtime admission, and session scope before it
 publishes a runnable result. Invalid or revoked evidence, schema drift, tampering,

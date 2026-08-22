@@ -12,7 +12,7 @@ refreshes and atomically publishes a validated snapshot without restarting the
 Desktop, and serves that snapshot only to the trusted Env App origin. The market identifies a candidate GitHub Release; it
 does not host plugin packages, preserve version history, grant trust, or install
 anything. Redeven downloads the exact GitHub assets declared by the snapshot and
-passes the complete signed release transport to released ReDevPlugin `v3.0.9`.
+passes the complete signed release transport to released ReDevPlugin `v3.0.11`.
 An invalid current response fails closed. A valid last-known-good snapshot may
 keep discovery available as stale data, but it cannot authorize an automatic
 update.
@@ -62,25 +62,16 @@ Plugin Center accepts and caches a detail only when that generation matches the
 catalog snapshot generation. Missing, stale, or negative detail generations
 fail closed rather than allowing cross-generation presentation mixing.
 
-Plugin Center renders the current inventory immediately, refreshes the market in
-the background, and prefetches exact Host release-package inspections for
-uninstalled official plugins with at most three concurrent background requests.
-The process-local browser
-cache is keyed by plugin instance, market generation, every release-reference
-field, release-metadata digest, and expected package, manifest, and entries
-hash and the short evidence expiry. Concurrent detail and install consumers
-share one request. Selection changes do not invalidate still-exact results that
-remain safely inside their expiry window, while release or generation
-changes, successful installation, uninstall start, and Plugin Center disposal
-evict or abort the affected entry. Uninstall invalidates only evidence that predates
-the operation; once authoritative inventory projects the plugin as available
-again, its fresh reinstall prefetch remains active. Canceling a completed review
-returns the visible flow to idle without discarding its still-exact inspection.
-Confirmation removes
-the single-use evidence from the browser cache. A start response with unknown
-delivery is reconciled with the same request id and inspection evidence; only a
-new operation or expired/stale evidence requests a fresh inspection, and stale-
-release retries refresh the market first.
+Plugin Center renders the current inventory immediately and refreshes the market
+in the background. Installation review reads the selected entry's cached
+`install_preview` in one request; it never prefetches packages or Host inspection
+evidence. The preview is keyed by plugin instance, market generation, exact
+release reference, and its four binding digests. A generation or release change
+invalidates the preview and asks the user to refresh. Confirmation submits the
+same exact preview once with an idempotent request id. A lost response reattaches
+to that Execution; no second detail, download, or inspection request is made.
+Closing the dialog hides it while the task remains active in the card or task
+area.
 
 The market may expose one compact icon descriptor for the current verified
 release. Its URL, media type, dimensions, and digest are evidence-bound to the
@@ -123,19 +114,19 @@ publisher, plugin, version, channel, and host capability requirement, and only
 then changes registry state.
 
 Official installation is a durable ReDevPlugin Execution. Redeven submits the
-snapshot-derived release reference and inspection evidence with an idempotent
+snapshot-derived release reference and four preview digests with an idempotent
 request identity and observes ordered Events; it does not treat the market response, browser
 connection, or an Env App pending flag as installation authority. A failed or
 disconnected observer may reattach to the same Execution without selecting new
 assets or replaying the mutation. If submission response delivery is unknown,
-Redeven preserves and replays the same request id and inspection evidence so the
+Redeven preserves and replays the same request id and preview digests so the
 Host recovers the existing operation before attempting any evidence claim.
 
-Before that mutation, release inspection downloads, parses, and verifies the
-exact package and returns bounded process-local evidence. Install consumes the
-cached verified package without downloading or parsing it again, refreshes
-current trust and revocation state, and then performs runtime admission,
-lifecycle conflict checks, and approved required-permission handling.
+The Execution performs `download`, `verify`, `install`, and `enable` in that order.
+It downloads the package, validates trust and hashes, parses the final manifest,
+checks capability contracts and declaration digests, resolves conflicts and
+history-data recovery, commits enabled state, and activates the plugin. Detailed
+substeps remain diagnostics; the UI depends only on those four stable stages.
 
 Market `latest`, signer labels, compatibility text, and listing status are not
 installation authorization. Redeven pins the official Ed25519 root public key in
