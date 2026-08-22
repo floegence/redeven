@@ -29,7 +29,7 @@ import { ExternalPluginInstallDialog } from './ExternalPluginInstallDialog';
 import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_MOBILE_TOUCH_TARGET_CLASS, PLUGIN_PRESS_MOTION_CLASS, pluginLifecycleLabel, pluginPendingCommandLabel, pluginTrustLabel, presentPlugin, type PluginPrimaryAction } from './pluginPresentation';
 import { PluginCenterItem } from './PluginCenterItems';
 import { PluginIdentityHeader } from './PluginPresentationPrimitives';
-import { resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
+import { buildOfficialInstallCommand, resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
 import { PluginUpdateReviewDialog } from './PluginUpdateReviewDialog';
 import { PluginInstallStatus, PluginInstallSteps } from './PluginInstallStatus';
 
@@ -48,8 +48,8 @@ export type PluginCenterViewProps = {
   onRefresh: () => Promise<unknown> | unknown;
   onCommand: (command: PluginLifecycleCommand, signal: AbortSignal) => Promise<unknown> | unknown;
   installOperations?: readonly PluginInstallExecutionProjection[];
-  onRetryInstall?: (pluginInstanceID: string) => Promise<unknown> | unknown;
-  onDiscardRetainedDataAndRetry?: (pluginInstanceID: string) => Promise<unknown> | unknown;
+  onRetryInstall?: (pluginInstanceID: string, command?: PluginOfficialInstallCommand) => Promise<unknown> | unknown;
+  onDiscardRetainedDataAndRetry?: (pluginInstanceID: string, command?: PluginOfficialInstallCommand) => Promise<unknown> | unknown;
   onInspectExternal?: (request: ExternalPluginInspectionRequest, signal: AbortSignal) => Promise<ExternalPluginInspection>;
   onCommitExternal?: (inspection: ExternalPluginInspection, signal: AbortSignal) => Promise<ExternalPluginCommitResult>;
   onLoadMarketDetail?: (pluginID: string, generation: number, signal?: AbortSignal) => Promise<PluginMarketDetail>;
@@ -262,7 +262,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     setRetainedDataRecoveryPending(true);
     setRetainedDataRecoveryError(undefined);
     try {
-      await props.onDiscardRetainedDataAndRetry?.(pluginInstanceID);
+      await props.onDiscardRetainedDataAndRetry?.(pluginInstanceID, item ? buildOfficialInstallCommand(item) : undefined);
       setRetainedDataRecoveryItem(undefined);
     } catch (error) {
       setRetainedDataRecoveryError(messageFromUnknown(error) ?? i18n.t('uiCopy.plugin.installOperation.failure.internal'));
@@ -472,7 +472,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const confirmOfficialInstall = () => {
     const flow = officialInstallFlow();
     if (flow.status !== 'review_ready' || !flow.item.officialCatalog) return;
-    const command = officialInstallCommand(flow.item);
+    const command = buildOfficialInstallCommand(flow.item);
     if (!command) return;
     setOfficialInstallFlow({ status: 'installing', key: flow.key, item: flow.item });
     setOfficialInstallDialogOpen(true);
@@ -734,9 +734,9 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
                   }}
                   onOpenActivity={() => openItemSurface(item, 'activity')}
                   onOpenWorkbench={() => openItemSurface(item, 'workbench')}
-                  onRetryInstall={() => {
+                  onRetryInstall={(command) => {
                     const pluginInstanceID = item.pluginInstanceID ?? item.officialCatalog?.pluginInstanceID;
-                    if (pluginInstanceID) void props.onRetryInstall?.(pluginInstanceID);
+                    if (pluginInstanceID) void props.onRetryInstall?.(pluginInstanceID, command);
                   }}
                   onResolveRetainedData={() => requestRetainedDataRecovery(item)}
                 />
@@ -795,9 +795,9 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
               onExternalInstall={installItem}
               onRetryOfficialInstall={() => installItem(item)}
               onExternalUpdate={requestUpdate}
-              onRetryInstall={() => {
+              onRetryInstall={(command) => {
                 const pluginInstanceID = item.pluginInstanceID ?? item.officialCatalog?.pluginInstanceID;
-                if (pluginInstanceID) void props.onRetryInstall?.(pluginInstanceID);
+                if (pluginInstanceID) void props.onRetryInstall?.(pluginInstanceID, command);
               }}
               onResolveRetainedData={() => requestRetainedDataRecovery(item)}
               marketDetail={marketDetailState()?.pluginID === item.pluginID ? marketDetailState()?.detail : undefined}
@@ -819,7 +819,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
         onRetry={() => {
           const item = officialInstallDialog()?.item;
           const instanceID = item?.officialCatalog?.pluginInstanceID;
-          if (instanceID) void props.onRetryInstall?.(instanceID);
+          if (instanceID && item) void props.onRetryInstall?.(instanceID, buildOfficialInstallCommand(item));
         }}
         onResolveRetainedData={() => {
           const item = officialInstallDialog()?.item;
@@ -1372,7 +1372,7 @@ export function PluginCenterDetails(props: {
   onExternalInstall: (item: PluginInventoryItem) => void;
   onRetryOfficialInstall: () => void;
   onExternalUpdate: (item: PluginInventoryItem) => void;
-  onRetryInstall?: () => void;
+  onRetryInstall?: (command?: PluginOfficialInstallCommand) => void;
   onResolveRetainedData?: () => void;
 }): JSX.Element {
   const i18n = useI18n();
@@ -1993,7 +1993,7 @@ function PluginActions(props: {
   onExternalInstall: (item: PluginInventoryItem) => void;
   onRetryOfficialInstall: () => void;
   onExternalUpdate: (item: PluginInventoryItem) => void;
-  onRetryInstall?: () => void;
+  onRetryInstall?: (command?: PluginOfficialInstallCommand) => void;
   onResolveRetainedData?: () => void;
 }) {
   const i18n = useI18n();
@@ -2098,7 +2098,7 @@ function PluginActions(props: {
             <PluginInstallStatus
               projection={operation()}
               pluginName={item().displayName}
-              onRetry={props.onRetryInstall}
+              onRetry={() => props.onRetryInstall?.(buildOfficialInstallCommand(item()))}
               onResolveRetainedData={props.onResolveRetainedData}
             />
           </div>
@@ -2394,22 +2394,6 @@ function officialInstallKey(item: PluginInventoryItem): string {
   ].join('|');
 }
 
-function officialInstallCommand(item: PluginInventoryItem): PluginOfficialInstallCommand | undefined {
-  const official = item.officialCatalog;
-  const preview = official?.installPreview;
-  if (!official || !preview) return undefined;
-  return {
-    type: 'install',
-    pluginID: item.pluginID,
-    source: 'official_catalog',
-    pluginInstanceID: official.pluginInstanceID,
-    releaseRef: preview.release_ref,
-    releaseIdentityDigest: preview.release_identity_digest,
-    manifestSHA256: preview.manifest_sha256,
-    contractSetSHA256: preview.contract_set_sha256,
-    summarySHA256: preview.summary_sha256,
-  };
-}
 
 function humanizePermissionID(permissionID: string): string {
   const words = permissionID.split(/[._:-]+/u).filter(Boolean);

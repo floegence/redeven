@@ -3464,8 +3464,8 @@ export function EnvAppShell() {
           runtimeRecoveryByInstanceID={pluginRuntimeRecoveryByInstanceID()}
           onRetryRuntimeRecovery={retryPluginRuntimeRecovery}
           installOperations={pluginInstallCoordinator?.projections() ?? []}
-          onRetryInstall={(pluginInstanceID) => pluginInstallCoordinator?.retry(pluginInstanceID)}
-          onDiscardRetainedDataAndRetry={(pluginInstanceID) => pluginInstallCoordinator?.discardRetainedDataAndRetry(pluginInstanceID)}
+          onRetryInstall={(pluginInstanceID, command) => pluginInstallCoordinator?.retry(pluginInstanceID, command)}
+          onDiscardRetainedDataAndRetry={(pluginInstanceID, command) => pluginInstallCoordinator?.discardRetainedDataAndRetry(pluginInstanceID, command)}
           onRefresh={async () => {
             await refreshPluginMarket();
             await pluginInstallCoordinator?.resume();

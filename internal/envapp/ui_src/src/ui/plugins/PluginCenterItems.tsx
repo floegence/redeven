@@ -4,10 +4,10 @@ import { CheckCircle, Download, MoreHorizontal, Play, RefreshIcon } from '@floeg
 import { Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 
 import { useI18n } from '../i18n';
-import type { PluginCenterTab, PluginInstallExecutionProjection, PluginInventoryItem, PluginPendingCommandType, PluginRuntimeRecoveryPresentation } from './pluginTypes';
+import type { PluginCenterTab, PluginInstallExecutionProjection, PluginInventoryItem, PluginOfficialInstallCommand, PluginPendingCommandType, PluginRuntimeRecoveryPresentation } from './pluginTypes';
 import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_PRESS_MOTION_CLASS, pluginPendingCommandLabel, presentPlugin } from './pluginPresentation';
 import { PluginIcon, PluginStatusBadge, PluginTrustBadge } from './PluginPresentationPrimitives';
-import { resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
+import { buildOfficialInstallCommand, resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
 import { PluginInstallStatus } from './PluginInstallStatus';
 
 export function PluginCenterItem(props: {
@@ -33,7 +33,7 @@ export function PluginCenterItem(props: {
   onUninstall: () => void;
   onOpenActivity: () => void;
   onOpenWorkbench: () => void;
-  onRetryInstall?: () => void;
+  onRetryInstall?: (command?: PluginOfficialInstallCommand) => void;
   onResolveRetainedData?: () => void;
 }): JSX.Element {
   return <PluginDirectoryCard {...props} />;
@@ -196,7 +196,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
               projection={operation()}
               pluginName={props.item.displayName}
               compact
-              onRetry={props.onRetryInstall}
+              onRetry={() => props.onRetryInstall?.(buildOfficialInstallCommand(props.item))}
               onResolveRetainedData={props.onResolveRetainedData}
             />
           </div>

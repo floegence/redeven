@@ -1437,7 +1437,9 @@ describe('PluginCenterView', () => {
     expect(status.textContent).toContain('The plugin release could not be reached');
     expect(status.textContent).not.toContain('PLUGIN_RELEASE_NETWORK');
     (status.querySelector('[data-plugin-install-retry]') as HTMLButtonElement).click();
-    expect(onRetryInstall).toHaveBeenCalledWith(containersPlugin.officialCatalog.pluginInstanceID);
+    expect(onRetryInstall).toHaveBeenCalledWith(containersPlugin.officialCatalog.pluginInstanceID, expect.objectContaining({
+      releaseRef: containersPlugin.officialCatalog.installPreview!.release_ref,
+    }));
   });
 
   it('shows an incompatible-data recovery once and requires confirmation before deleting it', async () => {
@@ -1485,7 +1487,9 @@ describe('PluginCenterView', () => {
 
     (document.querySelector('[data-plugin-retained-data-confirm]') as HTMLButtonElement).click();
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(onDiscardRetainedDataAndRetry).toHaveBeenCalledWith(containersPlugin.officialCatalog.pluginInstanceID);
+    expect(onDiscardRetainedDataAndRetry).toHaveBeenCalledWith(containersPlugin.officialCatalog.pluginInstanceID, expect.objectContaining({
+      releaseRef: containersPlugin.officialCatalog.installPreview!.release_ref,
+    }));
   });
 
   it('keeps a release trust timeout retryable and distinct from permission denial', () => {
@@ -1526,7 +1530,9 @@ describe('PluginCenterView', () => {
     expect(status.textContent).toContain('did not respond in time');
     expect(status.textContent?.toLowerCase()).not.toContain('permission');
     (status.querySelector('[data-plugin-install-retry]') as HTMLButtonElement).click();
-    expect(onRetryInstall).toHaveBeenCalledWith(containersPlugin.officialCatalog.pluginInstanceID);
+    expect(onRetryInstall).toHaveBeenCalledWith(containersPlugin.officialCatalog.pluginInstanceID, expect.objectContaining({
+      releaseRef: containersPlugin.officialCatalog.installPreview!.release_ref,
+    }));
   });
 
   it('keeps a committed installation distinct when inventory refresh needs retrying', () => {
@@ -1566,7 +1572,9 @@ describe('PluginCenterView', () => {
     expect(status.textContent).toContain('installed, but Plugin Center could not refresh');
     expect(status.textContent).not.toContain('installation failed');
     (status.querySelector('[data-plugin-install-retry]') as HTMLButtonElement).click();
-    expect(onRetryInstall).toHaveBeenCalledWith(containersPlugin.officialCatalog.pluginInstanceID);
+    expect(onRetryInstall).toHaveBeenCalledWith(containersPlugin.officialCatalog.pluginInstanceID, expect.objectContaining({
+      releaseRef: containersPlugin.officialCatalog.installPreview!.release_ref,
+    }));
   });
 
   it('lets read-only users open surfaces while keeping management actions disabled', async () => {
