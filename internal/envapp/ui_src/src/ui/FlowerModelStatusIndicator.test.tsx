@@ -58,7 +58,7 @@ describe('FlowerModelStatusIndicator', () => {
     expect(host.querySelector('.flower-model-status-indicator')).toBe(indicator);
     expect(indicator?.getAttribute('data-model-io-phase')).toBe('streaming');
     expect(indicator?.textContent).toContain('Replying');
-    expect(indicator?.querySelectorAll('.flower-model-status-dot')).toHaveLength(3);
+    expect(indicator?.querySelector('.flower-model-status-dots')?.textContent).toBe('...');
   });
 
   it('keeps the current indicator through a transient empty status while the run remains active', async () => {

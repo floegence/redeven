@@ -406,6 +406,12 @@ export type FlowerSurfaceCopy = Readonly<{
     toolApprovalSubmitting: string;
     toolApprovalUnavailable: string;
     toolApprovalComposerTitle: string;
+    toolApprovalEditFile: (target: string) => string;
+    toolApprovalRunCommand: string;
+    toolApprovalAccessNetwork: (target: string) => string;
+    toolApprovalExecuteAction: (label: string) => string;
+    toolApprovalExecuteRequestedAction: string;
+    toolApprovalWorkingDirectoryDetail: (target: string) => string;
     toolApprovalComposerDescription: string;
     toolApprovalQueueCount: (count: number) => string;
     toolApprovalRejectBatch: string;
@@ -649,7 +655,13 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     toolApprovalReject: 'Reject',
     toolApprovalSubmitting: 'Submitting...',
     toolApprovalUnavailable: 'Approval is no longer available.',
-    toolApprovalComposerTitle: 'Allow this tool to run?',
+    toolApprovalComposerTitle: 'Allow the following action?',
+    toolApprovalEditFile: (target) => 'Edit file: ' + target,
+    toolApprovalRunCommand: 'Run command',
+    toolApprovalAccessNetwork: (target) => 'Access network resource: ' + target,
+    toolApprovalExecuteAction: (label) => 'Execute action: ' + label,
+    toolApprovalExecuteRequestedAction: 'Execute requested action',
+    toolApprovalWorkingDirectoryDetail: (target) => 'Working directory: ' + target,
     toolApprovalComposerDescription: 'The conversation is paused until you approve or reject this action.',
     toolApprovalQueueCount: (count) => `${count} more approval${count === 1 ? '' : 's'} waiting`,
     toolApprovalRejectBatch: 'Reject all in this batch',

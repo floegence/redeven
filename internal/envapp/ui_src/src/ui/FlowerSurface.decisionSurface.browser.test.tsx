@@ -402,7 +402,7 @@ describe('Flower bottom decision surface', () => {
     expect(stop?.disabled).toBe(false);
     expect(surface.querySelector('.flower-composer-attachment-button')).toBeNull();
     expect(surface.textContent).not.toContain('Review before this runs');
-    expect(surface.textContent).toContain('Allow this tool to run?');
+    expect(surface.textContent).toContain('Allow the following action?');
     expect(surface.querySelector('.flower-approval-intro')).toBeNull();
     expect(surface.textContent).not.toContain('terminal.exec');
     expect(surface.textContent?.match(/printf flower-decision-surface/g)).toHaveLength(1);

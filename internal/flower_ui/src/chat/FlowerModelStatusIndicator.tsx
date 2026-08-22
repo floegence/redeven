@@ -92,11 +92,7 @@ export const FlowerModelStatusIndicator: Component<FlowerModelStatusIndicatorPro
           </span>
           <span class="flower-model-status-text" data-text={displayedLabel()}>
             {displayedLabel()}
-            <span class="flower-model-status-dots" aria-hidden="true">
-              <span class="flower-model-status-dot" />
-              <span class="flower-model-status-dot" />
-              <span class="flower-model-status-dot" />
-            </span>
+            <span class="flower-model-status-dots" aria-hidden="true">...</span>
           </span>
         </div>
       )}

@@ -17,6 +17,17 @@ function trim(value: unknown): string {
   return String(value ?? '').trim();
 }
 
+function approvalTarget(value: unknown): { kind: string; label: string } | null {
+  const encoded = trim(value);
+  if (!encoded) return null;
+  const separator = encoded.indexOf(':');
+  if (separator <= 0) return { kind: 'resource', label: encoded };
+  const kind = trim(encoded.slice(0, separator));
+  const label = trim(encoded.slice(separator + 1));
+  if (!kind || !label) return { kind: 'resource', label: encoded };
+  return { kind, label };
+}
+
 function messageStatus(view: FlowerRuntimeCurrentView, item: FlowerRuntimeCurrentItem): FlowerChatMessage['status'] {
   if (item.live) return 'streaming';
   if (view.last_outcome === 'cancelled' && item.turn_id === view.turn_id) return 'canceled';
@@ -229,7 +240,7 @@ function runtimeApprovalActions(
         ...(trim(approval.command) ? { command: trim(approval.command) } : {}),
         ...(approval.effects?.length ? { effects: [...approval.effects] } : {}),
         ...(approval.targets?.length ? {
-          targets: approval.targets.map((target) => ({ kind: 'resource', label: target })),
+          targets: approval.targets.map(approvalTarget).filter((target) => target !== null),
         } : {}),
       },
     };
