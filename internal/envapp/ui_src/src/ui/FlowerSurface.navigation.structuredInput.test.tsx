@@ -95,6 +95,7 @@ describe('FlowerSurface navigation structured input', () => {
     expect(runtime.querySelectorAll('[data-flower-input-request-prompt]')).toHaveLength(1);
     expect(runtime.querySelector('.flower-activity-inline')).toBeNull();
     expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();
+    expect(runtime.querySelector('.flower-model-status-flower')).toBeNull();
     expect(runtime.querySelectorAll('textarea')).toHaveLength(0);
     expect(runtime.querySelector('[role="radiogroup"]')).not.toBeNull();
     expect(runtime.querySelector('.flower-input-request-choice')).not.toBeNull();
