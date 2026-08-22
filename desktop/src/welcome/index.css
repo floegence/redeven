@@ -19,7 +19,6 @@
   --redeven-environment-grid-gap: 1rem;
   --redeven-environment-grid-spacious-gap: 1.125rem;
   --redeven-control-plane-grid-column-size: 35rem;
-  --redeven-control-plane-card-max-width: 44rem;
   --redeven-provider-shelf-metric-min-size: 10.75rem;
   --redeven-welcome-window-bg: var(--background);
   --redeven-welcome-page-bg: var(--background);
@@ -68,6 +67,7 @@ body {
 }
 
 .redeven-welcome-surface {
+  scrollbar-gutter: stable;
   background:
     radial-gradient(ellipse at top right, color-mix(in srgb, var(--primary) 6%, transparent), transparent 50%),
     radial-gradient(ellipse at bottom left, color-mix(in srgb, var(--info) 4%, transparent), transparent 50%),
@@ -3018,7 +3018,6 @@ html:not(.dark) .redeven-provider-shelf {
 
 .redeven-control-plane-card {
   width: 100%;
-  max-width: var(--redeven-control-plane-card-max-width);
 }
 
 .redeven-provider-shelf__actions {
