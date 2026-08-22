@@ -195,7 +195,7 @@ func officialMarketReleaseFixture(t *testing.T) pluginmarket.LatestRelease {
 		Compatibility: pluginmarket.Compatibility{
 			MinRedevenVersion: officialMinHostVersion, MinReDevPluginVersion: "1.1.2",
 		},
-		ReleaseIdentityDigest: "cdee2f2f1170e65aa24694656d6662f77d9587f8c5642422cce7608cb638b02b",
+		ReleaseIdentityDigest: "sha256:cdee2f2f1170e65aa24694656d6662f77d9587f8c5642422cce7608cb638b02b",
 	}
 	release.TrustRoot.URL = "https://github.com/floegence/redeven-official-plugins/releases/download/v4.4.4/root.public.json"
 	release.TrustRoot.SHA256 = "5a625b201d0cc898932742daa69920aca1986567b145f477750a3f73540c3e7f"

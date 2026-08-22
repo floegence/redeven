@@ -529,5 +529,23 @@ func cloneLatestRelease(release *LatestRelease) *LatestRelease {
 	result := *release
 	result.PublisherReleaseRef.Files = slices.Clone(release.PublisherReleaseRef.Files)
 	result.TransportAssets = slices.Clone(release.TransportAssets)
+	if release.InstallPreview != nil {
+		preview := *release.InstallPreview
+		previewRelease := preview.Release
+		previewRelease.InstallPreview = nil
+		preview.Release = *cloneLatestRelease(&previewRelease)
+		preview.TransportAssets = slices.Clone(preview.TransportAssets)
+		preview.SecuritySummary.Permissions = slices.Clone(preview.SecuritySummary.Permissions)
+		preview.SecuritySummary.Methods = slices.Clone(preview.SecuritySummary.Methods)
+		preview.SecuritySummary.CapabilityContracts = slices.Clone(preview.SecuritySummary.CapabilityContracts)
+		preview.SecuritySummary.Workers = slices.Clone(preview.SecuritySummary.Workers)
+		preview.SecuritySummary.Network = slices.Clone(preview.SecuritySummary.Network)
+		preview.SecuritySummary.Storage = slices.Clone(preview.SecuritySummary.Storage)
+		preview.SecuritySummary.SecretRefs = slices.Clone(preview.SecuritySummary.SecretRefs)
+		preview.SecuritySummary.CoreActions = slices.Clone(preview.SecuritySummary.CoreActions)
+		preview.SecuritySummary.Intents = slices.Clone(preview.SecuritySummary.Intents)
+		preview.SecuritySummary.Surfaces = slices.Clone(preview.SecuritySummary.Surfaces)
+		result.InstallPreview = &preview
+	}
 	return &result
 }

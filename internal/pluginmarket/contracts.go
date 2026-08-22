@@ -26,12 +26,13 @@ var (
 )
 
 var (
-	idPattern      = regexp.MustCompile(`^[a-z][a-z0-9._-]{0,127}$`)
-	semverPattern  = regexp.MustCompile(`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$`)
-	tagPattern     = regexp.MustCompile(`^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$`)
-	shaPattern     = regexp.MustCompile(`^[0-9a-f]{64}$`)
-	commitPattern  = regexp.MustCompile(`^[0-9a-f]{40}$`)
-	locatorPattern = regexp.MustCompile(`^[A-Za-z0-9._@+-]+(?:/[A-Za-z0-9._@+-]+)*$`)
+	idPattern          = regexp.MustCompile(`^[a-z][a-z0-9._-]{0,127}$`)
+	semverPattern      = regexp.MustCompile(`^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$`)
+	tagPattern         = regexp.MustCompile(`^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$`)
+	shaPattern         = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	prefixedSHAPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+	commitPattern      = regexp.MustCompile(`^[0-9a-f]{40}$`)
+	locatorPattern     = regexp.MustCompile(`^[A-Za-z0-9._@+-]+(?:/[A-Za-z0-9._@+-]+)*$`)
 )
 
 type Meta struct {
@@ -43,9 +44,10 @@ type Meta struct {
 }
 
 type LatestPointer struct {
-	Channel            string `json:"channel"`
-	Version            string `json:"version"`
-	AvailabilityStatus string `json:"availability_status"`
+	Channel            string          `json:"channel"`
+	Version            string          `json:"version"`
+	AvailabilityStatus string          `json:"availability_status"`
+	InstallPreview     *InstallPreview `json:"install_preview,omitempty"`
 }
 
 type PluginSummary struct {
@@ -223,6 +225,22 @@ type LatestRelease struct {
 	SignerKeyID           string              `json:"signer_key_id"`
 	Compatibility         Compatibility       `json:"compatibility"`
 	ReleaseIdentityDigest string              `json:"release_identity_digest"`
+	InstallPreview        *InstallPreview     `json:"install_preview,omitempty"`
+}
+
+// InstallPreview is the market's verified, display-ready projection for the
+// exact release. ReDevPlugin remains the installation authority; Redeven only
+// transports this evidence to the UI and binds the command to its digests.
+type InstallPreview struct {
+	Release               LatestRelease                       `json:"release"`
+	ReleaseRef            host.PluginReleaseRef               `json:"release_ref"`
+	TransportAssets       []TransportAsset                    `json:"transport_assets"`
+	Compatibility         Compatibility                       `json:"compatibility"`
+	SecuritySummary       host.ExternalPackageSecuritySummary `json:"security_summary"`
+	ReleaseIdentityDigest string                              `json:"release_identity_digest"`
+	ManifestSHA256        string                              `json:"manifest_sha256"`
+	ContractSetSHA256     string                              `json:"contract_set_sha256"`
+	SummarySHA256         string                              `json:"summary_sha256"`
 }
 
 type LatestReleaseResponse struct {
@@ -360,6 +378,11 @@ func validatePluginSummary(plugin PluginSummary) error {
 	}
 	if !slices.Contains(plugin.Channels, plugin.Latest.Channel) {
 		return invalid("catalog latest channel is not declared")
+	}
+	if plugin.Latest.InstallPreview != nil {
+		if err := validateInstallPreview(*plugin.Latest.InstallPreview, plugin.PluginID, plugin.Latest.Channel, plugin.Latest.Version); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -570,6 +593,10 @@ func hasDuplicateIDs[T any](values []T, key func(T) string) bool {
 }
 
 func validateLatestRelease(release LatestRelease) error {
+	return validateLatestReleaseWithPreview(release, true)
+}
+
+func validateLatestReleaseWithPreview(release LatestRelease, validatePreview bool) error {
 	ref := release.PublisherReleaseRef.ReleaseRef
 	if !idPattern.MatchString(release.PluginID) || !idPattern.MatchString(release.Channel) || !semverPattern.MatchString(release.Version) ||
 		release.Source.Provider != "github" || release.Source.RepositoryID <= 0 || release.Source.ReleaseID <= 0 ||
@@ -579,7 +606,7 @@ func validateLatestRelease(release LatestRelease) error {
 		!idPattern.MatchString(ref.SourceID) || !idPattern.MatchString(ref.PublisherID) || !locatorPattern.MatchString(ref.ReleaseMetadataRef) || !shaPattern.MatchString(ref.ReleaseMetadataSHA256) ||
 		release.PublisherReleaseRef.Root.Algorithm != "ed25519" || !idPattern.MatchString(release.PublisherReleaseRef.Root.KeyID) || strings.TrimSpace(release.PublisherReleaseRef.Root.PublicKey) == "" ||
 		!idPattern.MatchString(release.SignerKeyID) || !semverPattern.MatchString(release.Compatibility.MinRedevenVersion) || !semverPattern.MatchString(release.Compatibility.MinReDevPluginVersion) ||
-		!shaPattern.MatchString(release.ReleaseIdentityDigest) || !shaPattern.MatchString(release.TrustRoot.SHA256) || !validHTTPSURL(release.TrustRoot.URL) {
+		!prefixedSHAPattern.MatchString(release.ReleaseIdentityDigest) || !shaPattern.MatchString(release.TrustRoot.SHA256) || !validHTTPSURL(release.TrustRoot.URL) {
 		return invalid("latest release identity is invalid")
 	}
 	for _, digest := range []string{ref.ExpectedHashes.PackageSHA256, ref.ExpectedHashes.ManifestSHA256, ref.ExpectedHashes.EntriesSHA256} {
@@ -604,6 +631,35 @@ func validateLatestRelease(release LatestRelease) error {
 		asset := release.TransportAssets[index]
 		if asset.Locator != file.Locator || asset.Name != file.AssetName || asset.SHA256 != file.SHA256 || asset.Size != file.Size || asset.AssetID <= 0 || !validHTTPSURL(asset.URL) {
 			return invalid("transport asset does not match publisher release file")
+		}
+	}
+	if validatePreview && release.InstallPreview != nil {
+		if err := validateInstallPreview(*release.InstallPreview, release.PluginID, release.Channel, release.Version); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateInstallPreview(preview InstallPreview, pluginID, channel, version string) error {
+	if preview.Release.PluginID != pluginID || preview.Release.Channel != channel || preview.Release.Version != version {
+		return invalid("install preview release does not match catalog pointer")
+	}
+	if err := validateLatestReleaseWithPreview(preview.Release, false); err != nil {
+		return err
+	}
+	if preview.ReleaseRef != preview.Release.PublisherReleaseRef.ReleaseRef || preview.Compatibility != preview.Release.Compatibility ||
+		preview.ReleaseIdentityDigest != preview.Release.ReleaseIdentityDigest || !prefixedSHAPattern.MatchString(preview.ReleaseIdentityDigest) ||
+		!prefixedSHAPattern.MatchString(preview.ManifestSHA256) || !prefixedSHAPattern.MatchString(preview.ContractSetSHA256) || !prefixedSHAPattern.MatchString(preview.SummarySHA256) ||
+		preview.SecuritySummary.SummarySHA256 != preview.SummarySHA256 {
+		return invalid("install preview identity is invalid")
+	}
+	if len(preview.TransportAssets) != len(preview.Release.TransportAssets) {
+		return invalid("install preview transport is incomplete")
+	}
+	for index, asset := range preview.TransportAssets {
+		if asset != preview.Release.TransportAssets[index] {
+			return invalid("install preview transport does not match release")
 		}
 	}
 	return nil

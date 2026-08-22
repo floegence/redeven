@@ -3,16 +3,20 @@ package pluginmarket
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/floegence/redevplugin/v3/pkg/host"
 )
 
 const validCatalogResponse = `{
@@ -142,7 +146,7 @@ const validLatestResponse = `{
     ],
     "signer_key_id": "redeven_official_signing_2026_08",
     "compatibility": {"min_redeven_version": "1.0.0", "min_redevplugin_version": "0.6.22"},
-    "release_identity_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    "release_identity_digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
   },
   "meta": {"request_id": "req_latest", "generation": 7, "stale": false}
 }`
@@ -181,6 +185,36 @@ func response(status int, body string, headers http.Header) *http.Response {
 		StatusCode: status,
 		Body:       io.NopCloser(strings.NewReader(body)),
 		Header:     headers,
+	}
+}
+
+func TestValidateLatestReleaseAcceptsInstallPreviewEvidence(t *testing.T) {
+	var release LatestRelease
+	if err := json.Unmarshal([]byte(validLatestResponse), &struct {
+		Data *LatestRelease `json:"data"`
+	}{Data: &release}); err != nil {
+		t.Fatalf("decode fixture: %v", err)
+	}
+	preview := InstallPreview{
+		Release:               release,
+		ReleaseRef:            release.PublisherReleaseRef.ReleaseRef,
+		TransportAssets:       slices.Clone(release.TransportAssets),
+		Compatibility:         release.Compatibility,
+		SecuritySummary:       host.ExternalPackageSecuritySummary{SummarySHA256: "sha256:" + strings.Repeat("a", 64)},
+		ReleaseIdentityDigest: release.ReleaseIdentityDigest,
+		ManifestSHA256:        "sha256:" + strings.Repeat("b", 64),
+		ContractSetSHA256:     "sha256:" + strings.Repeat("c", 64),
+		SummarySHA256:         "sha256:" + strings.Repeat("a", 64),
+	}
+	release.InstallPreview = &preview
+	if err := validateLatestRelease(release); err != nil {
+		t.Fatalf("validateLatestRelease() error = %v", err)
+	}
+
+	preview.ReleaseIdentityDigest = "sha256:" + strings.Repeat("d", 64)
+	release.InstallPreview = &preview
+	if err := validateLatestRelease(release); err == nil {
+		t.Fatal("validateLatestRelease() accepted mismatched preview identity")
 	}
 }
 
