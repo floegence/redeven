@@ -2855,6 +2855,50 @@ html:not(.dark) .redeven-header-separator {
   overflow-wrap: anywhere;
 }
 
+.redeven-environment-progress__component-tasks {
+  display: grid;
+  gap: 0.18rem;
+  margin: -0.08rem 0 0.35rem;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+  border-radius: 0.35rem;
+  background: color-mix(in srgb, var(--muted) 24%, transparent);
+}
+
+.redeven-environment-progress__component-task {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  min-width: 0;
+  align-items: baseline;
+  column-gap: 0.45rem;
+  font-size: 0.6rem;
+  line-height: 1.3;
+}
+
+.redeven-environment-progress__component-task-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--foreground);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.redeven-environment-progress__component-task-phase,
+.redeven-environment-progress__component-task-strategy {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: 0.56rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.redeven-environment-progress__component-task[data-status='failed'] .redeven-environment-progress__component-task-phase,
+.redeven-environment-progress__component-task[data-status='canceled'] .redeven-environment-progress__component-task-phase {
+  color: color-mix(in srgb, var(--error) 68%, var(--foreground) 32%);
+}
+
 .redeven-environment-progress__step:last-child .redeven-environment-progress__step-line {
   background: transparent;
 }

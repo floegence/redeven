@@ -1934,6 +1934,10 @@
       "transferring": "Transfert",
       "verifying": "Vérification",
       "ready": "Prêt"
+    },
+    "componentName": {
+      "gateway": "Gateway",
+      "runtime": "Moteur d’exécution"
     }
   },
   "runtimeMessage": {

@@ -1930,6 +1930,10 @@
       "transferring": "傳輸中",
       "verifying": "驗證中",
       "ready": "已就緒"
+    },
+    "componentName": {
+      "gateway": "Gateway",
+      "runtime": "執行階段"
     }
   },
   "runtimeMessage": {
