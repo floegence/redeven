@@ -3958,7 +3958,7 @@
       "toolApprovalComposerDescription": "A conversa fica pausada até você aprovar ou rejeitar esta ação.",
       "toolApprovalQueueCount": "Aprovações adicionais aguardando: {count}",
       "toolApprovalPendingCount": "{count} aprovação(ões) de ferramenta pendente(s)",
-      "toolApprovalRejectBatch": "Recusar todo este lote",
+      "toolApprovalRejectBatch": "Recusar tudo",
       "toolApprovalRejectBatchAction": "Recusar as {count} aprovações de ferramentas pendentes",
       "toolApprovalOutsideWorkspaceRisk": "Este comando pode acessar recursos fora do espaço de trabalho.",
       "toolApprovalWritesFilesRisk": "Esta ação modificará arquivos.",
@@ -4003,7 +4003,9 @@
       "workingDirPickerHomeLabel": "Início",
       "workingDirPickerTitle": "Selecionar diretório de trabalho",
       "workingDirPickerConfirm": "Selecionar",
-      "linkedContextLabel": "Contexto vinculado"
+      "linkedContextLabel": "Contexto vinculado",
+      "toolApprovalApproveBatch": "Permitir tudo",
+      "toolApprovalApproveBatchAction": "Permitir as {count} aprovações de ferramentas pendentes"
     },
     "threadList": {
       "title": "Conversas",

@@ -189,7 +189,7 @@
       "toolApprovalComposerDescription": "La conversation est suspendue jusqu'à ce que vous approuviez ou rejetiez cette action.",
       "toolApprovalQueueCount": "Approbations supplémentaires en attente : {count}",
       "toolApprovalPendingCount": "{count} approbation(s) d’outil en attente",
-      "toolApprovalRejectBatch": "Refuser tout ce lot",
+      "toolApprovalRejectBatch": "Tout refuser",
       "toolApprovalRejectBatchAction": "Refuser les {count} approbations d’outils en attente",
       "toolApprovalOutsideWorkspaceRisk": "Cette commande peut accéder à des ressources en dehors de l’espace de travail.",
       "toolApprovalWritesFilesRisk": "Cette action modifiera des fichiers.",
@@ -234,7 +234,9 @@
       "workingDirPickerHomeLabel": "Dossier personnel",
       "workingDirPickerTitle": "Choisir le répertoire de travail",
       "workingDirPickerConfirm": "Choisir",
-      "linkedContextLabel": "Contexte associé"
+      "linkedContextLabel": "Contexte associé",
+      "toolApprovalApproveBatch": "Tout autoriser",
+      "toolApprovalApproveBatchAction": "Autoriser les {count} approbations d’outils en attente"
     },
     "threadList": {
       "title": "Discussions",

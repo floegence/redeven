@@ -191,7 +191,7 @@
       "toolApprovalComposerDescription": "Диалог приостановлен, пока вы не одобрите или не отклоните это действие.",
       "toolApprovalQueueCount": "Еще ожидают подтверждения: {count}",
       "toolApprovalPendingCount": "Ожидают подтверждения инструментов: {count}",
-      "toolApprovalRejectBatch": "Отклонить весь пакет",
+      "toolApprovalRejectBatch": "Отклонить все",
       "toolApprovalRejectBatchAction": "Отклонить все ожидающие подтверждения инструментов ({count})",
       "toolApprovalOutsideWorkspaceRisk": "Эта команда может обращаться к ресурсам за пределами рабочей области.",
       "toolApprovalWritesFilesRisk": "Это действие изменит файлы.",
@@ -236,7 +236,9 @@
       "workingDirPickerHomeLabel": "Домашняя папка",
       "workingDirPickerTitle": "Выбрать рабочий каталог",
       "workingDirPickerConfirm": "Выбрать",
-      "linkedContextLabel": "Связанный контекст"
+      "linkedContextLabel": "Связанный контекст",
+      "toolApprovalApproveBatch": "Разрешить все",
+      "toolApprovalApproveBatchAction": "Разрешить все ожидающие подтверждения инструментов ({count})"
     },
     "threadList": {
       "title": "Беседы",

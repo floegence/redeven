@@ -3958,7 +3958,7 @@
       "toolApprovalComposerDescription": "이 작업을 승인하거나 거절할 때까지 대화가 일시 중지됩니다.",
       "toolApprovalQueueCount": "대기 중인 승인 {count}개 더 있음",
       "toolApprovalPendingCount": "대기 중인 도구 승인 {count}개",
-      "toolApprovalRejectBatch": "이 배치 모두 거부",
+      "toolApprovalRejectBatch": "모두 거부",
       "toolApprovalRejectBatchAction": "대기 중인 도구 승인 {count}개 모두 거부",
       "toolApprovalOutsideWorkspaceRisk": "이 명령은 작업 공간 외부의 리소스에 접근할 수 있습니다.",
       "toolApprovalWritesFilesRisk": "이 작업은 파일을 수정합니다.",
@@ -4003,7 +4003,9 @@
       "workingDirPickerHomeLabel": "홈",
       "workingDirPickerTitle": "작업 디렉터리 선택",
       "workingDirPickerConfirm": "선택",
-      "linkedContextLabel": "연결된 컨텍스트"
+      "linkedContextLabel": "연결된 컨텍스트",
+      "toolApprovalApproveBatch": "모두 허용",
+      "toolApprovalApproveBatchAction": "대기 중인 도구 승인 {count}개 모두 허용"
     },
     "threadList": {
       "title": "대화",

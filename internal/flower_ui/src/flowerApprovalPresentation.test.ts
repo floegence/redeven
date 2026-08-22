@@ -30,7 +30,8 @@ describe('presentFlowerApproval', () => {
 
     expect(presentation).toMatchObject({
       title: 'Allow the following action?',
-      operations: ['Edit file: 回声之王.md'],
+      operationLabel: 'Edit file',
+      targets: ['回声之王.md'],
     });
     expect(JSON.stringify(presentation)).not.toContain(toolName);
   });
@@ -44,7 +45,10 @@ describe('presentFlowerApproval', () => {
       },
     }), copy);
 
-    expect(presentation.operations).toEqual(['Edit file: a.ts', 'Edit file: b.ts']);
+    expect(presentation).toMatchObject({
+      operationLabel: 'Edit file',
+      targets: ['a.ts', 'b.ts'],
+    });
   });
 
   it('presents commands and their working directory separately', () => {
@@ -60,7 +64,7 @@ describe('presentFlowerApproval', () => {
     }), copy);
 
     expect(presentation).toMatchObject({
-      operations: ['Run command'],
+      operationLabel: 'Run command',
       command: 'pnpm test',
       details: ['Working directory: /workspace'],
     });
@@ -72,7 +76,10 @@ describe('presentFlowerApproval', () => {
       summary: { label: 'Fetch page', targets: [{ kind: 'web_url', label: 'https://example.test/docs' }] },
     }), copy);
 
-    expect(presentation.operations).toEqual(['Access network resource: https://example.test/docs']);
+    expect(presentation).toMatchObject({
+      operationLabel: 'Access network resource',
+      targets: ['https://example.test/docs'],
+    });
     expect(JSON.stringify(presentation)).not.toContain('web_url');
   });
 
@@ -82,7 +89,7 @@ describe('presentFlowerApproval', () => {
       summary: { label: 'internal.mutate_resource' },
     }), copy);
 
-    expect(presentation.operations).toEqual(['Execute requested action']);
+    expect(presentation.operationLabel).toBe('Execute requested action');
     expect(JSON.stringify(presentation)).not.toContain('internal.mutate_resource');
   });
 
@@ -92,6 +99,6 @@ describe('presentFlowerApproval', () => {
       summary: { label: 'internal.mutate_resource' },
     }), copy);
 
-    expect(presentation.operations).toEqual(['Execute requested action']);
+    expect(presentation.operationLabel).toBe('Execute requested action');
   });
 });
