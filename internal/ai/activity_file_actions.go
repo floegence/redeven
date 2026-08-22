@@ -273,23 +273,30 @@ func sanitizeActivityTimelineBlockRecord(block map[string]any) error {
 		if !ok {
 			continue
 		}
-		item["target_refs"] = sanitizeActivityTargetRefsValue(item["target_refs"])
-		if chips := sanitizeActivityChipsValue(item["chips"]); len(chips) > 0 {
-			item["chips"] = chips
+		presentation, nested := item["presentation"].(map[string]any)
+		if !nested {
+			presentation = item
+		}
+		presentation["target_refs"] = sanitizeActivityTargetRefsValue(presentation["target_refs"])
+		if chips := sanitizeActivityChipsValue(presentation["chips"]); len(chips) > 0 {
+			presentation["chips"] = chips
 		} else {
-			delete(item, "chips")
+			delete(presentation, "chips")
 		}
 		if metadata := sanitizeActivityMetadataValue(item["metadata"]); len(metadata) > 0 {
 			item["metadata"] = metadata
 		} else {
 			delete(item, "metadata")
 		}
-		renderer := fltools.ActivityRenderer(strings.TrimSpace(fmt.Sprint(item["renderer"])))
+		renderer := fltools.ActivityRenderer(strings.TrimSpace(fmt.Sprint(presentation["renderer"])))
 		toolName := strings.TrimSpace(fmt.Sprint(item["tool_name"]))
-		if payload, ok := sanitizeActivityPayloadValue(item["payload"], renderer, toolName); ok {
-			item["payload"] = payload
+		if payload, ok := sanitizeActivityPayloadValue(presentation["payload"], renderer, toolName); ok {
+			presentation["payload"] = payload
 		} else {
-			delete(item, "payload")
+			delete(presentation, "payload")
+		}
+		if nested {
+			item["presentation"] = presentation
 		}
 	}
 	actions, ok := block["file_actions"].(map[string]any)

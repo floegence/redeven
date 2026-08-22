@@ -58,7 +58,7 @@ no registry tools to the provider. Redeven relies on the published Floret runtim
 to preserve that distinction; provider tool names that are absent from the
 resolved definitions remain rejected before dispatch.
 
-Redeven consumes Floret v4.0.15's public ordered `ThreadView.Items` and
+Redeven consumes Floret v4.0.16's public ordered `ThreadView.Items` and
 `ThreadContextReader`. User, thinking, assistant, tool, and independent
 interaction segments retain Floret-assigned IDs and ordinals across live
 updates, approval settlement, canonical reload, and renderer recovery. Redeven
@@ -69,6 +69,13 @@ At terminal settlement, Floret's canonical ordered items replace temporary
 stream text. `TurnResult.Output` remains a run aggregate and is not another
 message source. Flower deduplicates exact item IDs only; equal text with
 different stable IDs remains visible.
+
+Every public Activity item passes through one host projection before it reaches
+current view, timeline pagination, live stream, or historical replay. The
+projection removes host paths, working directories, pending handles, and
+nested private values while keeping renderer, operation, status, summary,
+stable IDs, and display names. Flower's payload contract remains the final
+validation boundary.
 
 One endpoint/thread authority boundary resolves the product catalog record and
 rejects an absent, tombstoned, or foreign thread before every canonical
@@ -112,11 +119,13 @@ Redeven never imports Floret internals, reads Floret storage, copies canonical l
 
 # Evidence
 
-- `redeven:go.mod` - Pins the released Floret v4.0.15 typed runtime without local replacement.
+- `redeven:go.mod` - Pins the released Floret v4.0.16 typed runtime without local replacement.
 - `redeven:internal/session/floret_v4_dependency_contract_test.go` - Enforces exact published-v4 adoption and rejects retired imports.
 - `redeven:internal/ai/floret_runtime.go` - Published runtime composition.
 - `redeven:internal/ai/floret_thread_context.go` - Canonical compaction mapping and timeline anchoring.
 - `redeven:internal/ai/send_user_turn.go` - Thin product send mapping into typed Floret state.
+- `redeven:internal/ai/activity_file_actions.go` - Shared public Activity sanitizer for all projection paths.
+- `redeven:internal/ai/activity_timeline.go` - Applies Activity sanitization to typed timeline blocks.
 - `redeven:internal/ai/threads.go` - Single endpoint/thread ownership boundary before canonical mutation.
 - `redeven:internal/ai/execution_authority.go` - Current submitting-user authority capture for restart recovery.
 - `redeven:internal/ai/threadstore/execution_authority.go` - Minimal host authorization facts for restart redispatch.

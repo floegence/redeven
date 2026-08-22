@@ -11,6 +11,7 @@ import (
 	"github.com/floegence/floret/v4/identity"
 	"github.com/floegence/floret/v4/observation"
 	flruntime "github.com/floegence/floret/v4/runtime"
+	fltools "github.com/floegence/floret/v4/tools"
 )
 
 func TestTypedThreadItemsPreserveOrderedPresentation(t *testing.T) {
@@ -153,5 +154,54 @@ func TestTypedTimelineDoesNotConsumeDeprecatedGlobalDrafts(t *testing.T) {
 				t.Fatalf("%s still consumes deprecated global draft %s", sourceFile, forbidden)
 			}
 		}
+	}
+}
+
+func TestPublicFloretActivityProjectionRemovesPrivatePathsEverywhere(t *testing.T) {
+	t.Parallel()
+	pathPayload := fltools.FileActivityPayload{Path: "/workspace/private.md", Operation: "write", Status: "success", Summary: "updated"}
+	activity := &observation.ActivityItem{
+		ItemID: "activity:file-write", ToolID: "file-write", ToolName: "file.write",
+		Kind: observation.ActivityKindTool, Status: observation.ActivityStatusSuccess,
+		Presentation: &fltools.ActivityPresentation{
+			Label: "private.md", Renderer: fltools.ActivityRendererFile, Payload: pathPayload,
+			TargetRefs: []fltools.ActivityTargetRef{{Kind: "file", Label: "private.md", Path: "/workspace/private.md", URI: "file:///workspace/private.md", Line: 3}},
+		},
+		Metadata: map[string]string{"display_name": "private.md", "path": "/workspace/private.md", "pending_token": "secret"},
+	}
+	view := publicFloretThreadView(flruntime.ThreadView{Items: []flruntime.ThreadItem{{
+		ID: "tool:write", TurnID: "turn:write", Ordinal: 1, Kind: flruntime.ThreadItemTool, Activity: activity,
+	}}})
+	if view.Items[0].Activity == nil || view.Items[0].Activity.Presentation == nil {
+		t.Fatal("public activity was dropped")
+	}
+	raw, err := json.Marshal(view.Items[0].Activity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, forbidden := range []string{"\"path\"", "\"file_path\"", "\"pending_token\"", "private.md"} {
+		if strings.Contains(string(raw), forbidden) && forbidden != "private.md" {
+			t.Fatalf("public activity contains forbidden field %s: %s", forbidden, raw)
+		}
+	}
+	if _, ok := view.Items[0].Activity.Presentation.Payload.(fltools.FileActivityPayload); !ok {
+		t.Fatalf("payload type=%T, want file payload", view.Items[0].Activity.Presentation.Payload)
+	}
+	payload := view.Items[0].Activity.Presentation.Payload.(fltools.FileActivityPayload)
+	if payload.Path != "" || payload.Operation != "write" || payload.Status != "success" {
+		t.Fatalf("public file payload=%+v", payload)
+	}
+	if len(view.Items[0].Activity.Presentation.TargetRefs) != 1 || view.Items[0].Activity.Presentation.TargetRefs[0].Path != "" {
+		t.Fatalf("public target refs=%+v", view.Items[0].Activity.Presentation.TargetRefs)
+	}
+	if view.Items[0].Activity.Metadata["display_name"] != "private.md" || len(view.Items[0].Activity.Metadata) != 1 {
+		t.Fatalf("public metadata=%+v", view.Items[0].Activity.Metadata)
+	}
+	rawMessage, ok, err := typedThreadItemMessage("thread:write", view.Items[0])
+	if err != nil || !ok {
+		t.Fatalf("typed timeline projection: ok=%v err=%v", ok, err)
+	}
+	if strings.Contains(string(rawMessage), `"path"`) {
+		t.Fatalf("typed timeline contains private path: %s", rawMessage)
 	}
 }

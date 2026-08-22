@@ -273,6 +273,10 @@ func publicFloretThreadView(current flruntime.ThreadView) flruntime.ThreadView {
 	for index := range out.Items {
 		out.Items[index].Attachments = publicFloretAttachments(out.Items[index].Attachments)
 		out.Items[index].References = publicRuntimeReferences(out.Items[index].References)
+		if out.Items[index].Activity != nil {
+			activity := publicActivityItem(*out.Items[index].Activity)
+			out.Items[index].Activity = &activity
+		}
 		if out.Items[index].Interaction != nil {
 			interaction := publicFloretInteraction(*out.Items[index].Interaction)
 			out.Items[index].Interaction = &interaction
