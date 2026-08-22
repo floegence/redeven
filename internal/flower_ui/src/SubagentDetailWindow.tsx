@@ -44,6 +44,7 @@ export type SubagentDetailWindowProps = Readonly<{
   onLoadMore: () => void;
   onRetryLoad: () => void;
   modelStatus: JSX.Element | null;
+  modelStatusVisible?: boolean;
   tailLoading: boolean;
   tailError: string;
   onRetryTail: () => void;
@@ -241,7 +242,7 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
     );
   };
   const showStatusLane = createMemo(() => (
-    Boolean(modelStatus())
+    (Boolean(modelStatus()) && props.modelStatusVisible !== false)
     || props.tailLoading
     || Boolean(props.tailError)
   ));
@@ -376,7 +377,7 @@ export function SubagentDetailWindow(props: SubagentDetailWindowProps): JSX.Elem
             <Show when={showStatusLane()}>
               <div class="flower-subagent-detail-bottom-track">
                 <div class="flower-model-status-lane" role="status" aria-live="polite" aria-atomic="true">
-                  <Show when={modelStatus()}>{(status) => status()}</Show>
+                  <Show when={props.modelStatusVisible !== false && modelStatus()}>{(status) => status()}</Show>
                   <Show when={props.tailLoading}>
                     <span class="flower-subagent-detail-tail-state">
                       <span class="flower-subagent-detail-tail-pulse" aria-hidden="true" />

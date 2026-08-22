@@ -177,6 +177,7 @@ type FlowerThreadContextMenuProps = Readonly<{
   showDeleteAction: boolean;
   actionsBusy: boolean;
   busyAction: FlowerThreadMenuAction | null;
+  restore?: HTMLElement;
   onAction: (action: FlowerThreadMenuAction, item: FlowerThreadListItem) => void;
   onClose: () => void;
 }>;
@@ -193,14 +194,19 @@ const FlowerThreadContextMenu: Component<FlowerThreadContextMenuProps> = (props)
   const focusMenu = () => {
     const first = focusableItems()[0];
     if (first) {
-      first.focus();
+      first.focus({ preventScroll: true });
       return;
     }
-    menuRef?.focus();
+    menuRef?.focus({ preventScroll: true });
+  };
+  const eventPathContains = (event: Event, node: Node | undefined): boolean => {
+    if (!node) return false;
+    const path = event.composedPath();
+    return path.includes(node) || (event.target instanceof Node && node.contains(event.target));
   };
   createEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
-      if (menuRef && event.target instanceof Node && menuRef.contains(event.target)) return;
+      if (eventPathContains(event, menuRef) || eventPathContains(event, props.restore)) return;
       props.onClose();
     };
     const onKeyDown = (event: KeyboardEvent) => {
@@ -233,7 +239,7 @@ const FlowerThreadContextMenu: Component<FlowerThreadContextMenuProps> = (props)
       }
     };
     const onFocusIn = (event: FocusEvent) => {
-      if (!menuRef || !(event.target instanceof Node) || menuRef.contains(event.target)) return;
+      if (eventPathContains(event, menuRef) || eventPathContains(event, props.restore)) return;
       props.onClose();
     };
     const onScrollOrResize = () => props.onClose();
@@ -339,7 +345,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
   let listRef: HTMLDivElement | undefined;
   const copy = () => props.copy ?? DEFAULT_FLOWER_SURFACE_COPY.threadList;
   const filtered = createMemo(() => filterFlowerThreadItems(props.items, props.query));
-  const itemByID = createMemo(() => new Map(filtered().map((item) => [item.thread_id, item] as const)));
+  const itemByID = createMemo(() => new Map(props.items.map((item) => [item.thread_id, item] as const)));
   const groups = createMemo<readonly FlowerThreadRenderGroup[]>(() => groupFlowerThreadItems(filtered()).map((group) => (
     group.kind === 'pinned'
       ? { key: 'pinned', kind: group.kind, threadIDs: group.threads.map((thread) => thread.thread_id) }
@@ -402,7 +408,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
     const state = menu();
     const restore = state ? resolveMenuRestore(state) : undefined;
     setMenu(null);
-    restore?.focus();
+    restore?.focus({ preventScroll: true });
   };
 
   createEffect(on(
@@ -516,6 +522,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
             showDeleteAction={props.showDeleteAction === true}
             actionsBusy={!!props.actionsBusy}
             busyAction={props.busyThreadID === state().threadID ? props.busyAction ?? null : null}
+            restore={state().restore}
             onClose={closeMenu}
             onAction={(action, item) => {
               const restore = resolveMenuRestore(state());

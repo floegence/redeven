@@ -62,6 +62,7 @@ main() {
       src/ui/FlowerSurface.desktopModelSource.e2e.test.tsx \
       src/ui/FlowerSurface.visibility.shared.test.tsx \
       src/ui/FlowerThreadCard.performance.test.tsx \
+      src/ui/FlowerModelStatusIndicator.test.tsx \
       src/ui/FlowerThreadList.delete.test.tsx \
       src/ui/FlowerSurface.navigation.structuredInput.test.tsx \
       src/ui/FlowerSurface.canonicalReferences.test.tsx \
@@ -140,6 +141,7 @@ main() {
         src/ui/EnvAppShell.flowerCompanion.browser.test.tsx \
         src/ui/flowerCompanionTailMotion.browser.test.tsx \
         src/ui/FlowerSurface.finalArchitecture.browser.test.tsx \
+        src/ui/FlowerStatusAndThreadMenu.browser.test.tsx \
         src/ui/FlowerSurface.canonicalReferences.browser.test.tsx \
         src/ui/FlowerSurface.composerAttachments.browser.test.tsx \
         src/ui/FlowerSurface.composerReferences.browser.test.tsx \

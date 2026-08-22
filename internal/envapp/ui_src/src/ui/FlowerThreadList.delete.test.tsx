@@ -77,12 +77,14 @@ function renderList(showDeleteAction = true, initialItems: readonly FlowerThread
   document.body.appendChild(host);
   const onMenuAction = vi.fn();
   const [items, setItems] = createSignal(initialItems);
+  const [query, setQuery] = createSignal('');
+  const [activeThreadID, setActiveThreadID] = createSignal('thread-delete');
   disposers.push(render(() => (
     <FlowerThreadList
       items={items()}
-      activeThreadID="thread-delete"
-      query=""
-      onQueryChange={() => undefined}
+      activeThreadID={activeThreadID()}
+      query={query()}
+      onQueryChange={setQuery}
       onSelect={() => undefined}
       onRefresh={() => undefined}
       onMenuAction={onMenuAction}
@@ -92,7 +94,7 @@ function renderList(showDeleteAction = true, initialItems: readonly FlowerThread
       showDeleteAction={showDeleteAction}
     />
   ), host));
-  return { host, onMenuAction, setItems };
+  return { host, onMenuAction, setItems, setQuery, setActiveThreadID };
 }
 
 describe('FlowerThreadList deletion entry', () => {
@@ -145,6 +147,81 @@ describe('FlowerThreadList deletion entry', () => {
     const restore = onMenuAction.mock.calls[0]?.[2] as HTMLElement | undefined;
     expect(restore?.isConnected).toBe(true);
     expect(restore?.classList.contains('flower-thread-card-menu-button')).toBe(true);
+  });
+
+  it('keeps an open menu while its thread remains present but leaves the filtered rows', async () => {
+    const { host, setItems } = renderList();
+    (host.querySelector('.flower-thread-card-menu-button') as HTMLButtonElement).click();
+    await Promise.resolve();
+
+    setItems([{ ...thread(), title: '' }]);
+    await Promise.resolve();
+
+    expect(host.querySelector('[role="menu"]')).toBeTruthy();
+    expect(host.querySelector('[data-flower-thread-card]')).toBeNull();
+  });
+
+  it('does not close when focus returns to the menu trigger during opening', async () => {
+    const { host } = renderList();
+    const menuTrigger = host.querySelector('.flower-thread-card-menu-button') as HTMLButtonElement;
+    menuTrigger.click();
+    await Promise.resolve();
+    expect(host.querySelector('[role="menu"]')).toBeTruthy();
+
+    menuTrigger.focus();
+    await Promise.resolve();
+
+    expect(host.querySelector('[role="menu"]')).toBeTruthy();
+  });
+
+  it('closes on search, selection, outside focus, and Escape', async () => {
+    const { host, setQuery, setActiveThreadID } = renderList();
+    const open = async () => {
+      (host.querySelector('.flower-thread-card-menu-button') as HTMLButtonElement).click();
+      await Promise.resolve();
+      expect(host.querySelector('[role="menu"]')).toBeTruthy();
+    };
+
+    await open();
+    setQuery('release');
+    await Promise.resolve();
+    expect(host.querySelector('[role="menu"]')).toBeNull();
+
+    setQuery('');
+    await Promise.resolve();
+    await open();
+    setActiveThreadID('another-thread');
+    await Promise.resolve();
+    expect(host.querySelector('[role="menu"]')).toBeNull();
+
+    setActiveThreadID('thread-delete');
+    await Promise.resolve();
+    await open();
+    const outside = document.createElement('button');
+    document.body.appendChild(outside);
+    outside.focus();
+    await Promise.resolve();
+    expect(host.querySelector('[role="menu"]')).toBeNull();
+
+    await open();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    await Promise.resolve();
+    expect(host.querySelector('[role="menu"]')).toBeNull();
+
+    await open();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+    await Promise.resolve();
+    expect(host.querySelector('[role="menu"]')).toBeNull();
+
+    await open();
+    window.dispatchEvent(new Event('scroll'));
+    await Promise.resolve();
+    expect(host.querySelector('[role="menu"]')).toBeNull();
+
+    await open();
+    window.dispatchEvent(new Event('resize'));
+    await Promise.resolve();
+    expect(host.querySelector('[role="menu"]')).toBeNull();
   });
 
   it('restores focus to the current trigger after metadata moves a thread between groups', async () => {
