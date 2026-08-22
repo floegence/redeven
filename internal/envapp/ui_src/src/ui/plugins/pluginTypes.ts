@@ -55,7 +55,34 @@ export type PluginMarketLatestRelease = {
     min_redeven_version: string;
     min_redevplugin_version: string;
   };
+  /** Display-ready, market-cached evidence for an official install. */
+  install_preview?: PluginMarketInstallPreview;
 };
+
+export type PluginMarketInstallPreview = Readonly<{
+  /** The exact release identity consumed by InstallCommit. */
+  release_ref: PluginReleaseRef;
+  compatibility?: {
+    min_redeven_version: string;
+    min_redevplugin_version: string;
+  };
+  security_summary: Readonly<{
+    summary_sha256?: string;
+    permissions: readonly Readonly<{
+      permission_id: string;
+      methods?: readonly string[];
+      required: boolean;
+      effects: readonly string[];
+    }>[];
+  }>;
+  release_identity_digest: string;
+  manifest_sha256: string;
+  contract_set_sha256: string;
+  summary_sha256: string;
+  transport_assets?: readonly Readonly<{ locator: string; url: string }>[];
+  /** Transport is needed by the platform, but never rendered by the UI. */
+  release?: PluginMarketLatestRelease;
+}>;
 
 export type PluginMarketSnapshot = {
   schema_version: 'redeven.plugin_market_snapshot.v2';
@@ -74,6 +101,7 @@ export type PluginMarketSnapshot = {
       channel: string;
       version: string;
       availability_status: 'visible' | 'disabled' | 'revoked';
+      install_preview?: PluginMarketInstallPreview;
     };
     release?: PluginMarketLatestRelease;
   }>;
@@ -152,6 +180,7 @@ export type OfficialPluginCatalogItem = {
   searchKeywords: readonly string[];
   trustedSigningKeyIDs: readonly string[];
   permissions?: readonly OfficialPluginPermission[];
+  installPreview?: PluginMarketInstallPreview;
   distribution: OfficialPluginDistribution;
 };
 
@@ -375,7 +404,9 @@ export type ReDevPluginRecord = Omit<PluginRecord, 'presentation' | 'presentatio
 
 export type ReDevPluginCatalogResult = PluginCatalogResult;
 
+/** @deprecated Official market installs use the cached catalog install preview. */
 export type OfficialPluginReleaseInspection = PluginReleasePackageInspection;
+
 
 export type ExternalPluginInspection = Omit<PluginExternalPackageInspection, 'presentation' | 'presentation_sha256'> & {
   presentation?: PluginExternalPackageInspection['presentation'];

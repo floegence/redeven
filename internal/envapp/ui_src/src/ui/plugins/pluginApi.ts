@@ -1,5 +1,4 @@
 import {
-  pluginMutationOutcome,
   type PluginExecution,
   type PluginEvent,
   type PluginPlatformClient,
@@ -20,7 +19,6 @@ import type {
   ReDevPluginRecord,
   PluginMarketSnapshot,
   PluginMarketDetail,
-  OfficialPluginReleaseInspection,
 } from './pluginTypes';
 
 const INVENTORY_MARKET_TIMEOUT_MS = 5_000;
@@ -63,19 +61,19 @@ export function createPluginLifecycleAPI(
       INVENTORY_MARKET_TIMEOUT_MS,
       'Loading the plugin market',
     ).then((snapshot) => {
+      if (snapshot.stale || snapshot.source === 'cache') {
+        throw new Error('The plugin market is using stale cached data');
+      }
       const nextCatalog = officialPluginCatalog(snapshot);
-      const nextUnavailable = snapshot.stale || snapshot.source === 'cache';
       const changed = marketGeneration !== snapshot.generation
-        || catalog.length !== nextCatalog.length
-        || marketUnavailable !== nextUnavailable;
+        || catalog.length !== nextCatalog.length;
       catalog = nextCatalog;
       marketGeneration = snapshot.generation;
-      marketUnavailable = nextUnavailable;
+      marketUnavailable = false;
       return changed;
-    }).catch(() => {
-      const changed = !marketUnavailable;
+    }).catch((error) => {
       marketUnavailable = true;
-      return changed;
+      throw error;
     }).finally(() => {
       marketRefreshPromise = undefined;
     });
@@ -92,10 +90,7 @@ export function createPluginLifecycleAPI(
     const [permissionsResult, securityPoliciesResult, permissionRequirementResults] = installedPlugins.length > 0
       ? await Promise.all([
       withAbortTimeout(
-        // Installation recovery must see deny, revoked, and expired decisions
-        // so it cannot mistake historical user intent for a never-reviewed
-        // permission. The projection below computes current grant activity.
-        (signal) => client.listPermissions({ active_only: false }, { ...options, signal }),
+        (signal) => client.listPermissions({ active_only: true }, { ...options, signal }),
         options.signal,
         INVENTORY_MARKET_TIMEOUT_MS,
         'Loading plugin permissions',
@@ -199,17 +194,6 @@ export function createPluginLifecycleAPI(
     }, options);
   };
 
-  const inspectOfficialRelease = async (
-    pluginID: string,
-    options: PluginRequestOptions = {},
-  ): Promise<OfficialPluginReleaseInspection> => {
-    const official = requireOfficialPlugin(officialByPluginID(), pluginID);
-    return client.inspectReleasePackage({
-      plugin_instance_id: official.pluginInstanceID,
-      release_ref: official.distribution.releaseRef,
-    }, options);
-  };
-
   const installExternalPackage = async (
     inspection: ExternalPluginInspection,
     options: PluginRequestOptions = {},
@@ -222,18 +206,22 @@ export function createPluginLifecycleAPI(
 
   const installOfficialRelease = async (
     command: Extract<PluginManagementCommand, { type: 'install' }>,
-    inspection: OfficialPluginReleaseInspection,
     requestID: string,
     options: PluginRequestOptions = {},
     onUpdate?: (execution: PluginExecution, events: readonly PluginEvent[]) => void,
   ): Promise<PluginExecution> => {
     const official = requireOfficialPlugin(officialByPluginID(), command.pluginID);
+    const preview = official.installPreview;
+    if (!preview) throw new Error('Official plugin market install preview is unavailable; refresh the market and retry');
     let execution = await client.startReleaseInstallExecution({
       request_id: requestID,
       plugin_instance_id: official.pluginInstanceID,
-      inspection_id: inspection.inspection_id,
-      release_ref: official.distribution.releaseRef,
-    }, options);
+      release_ref: preview.release_ref,
+      release_identity_digest: preview.release_identity_digest,
+      manifest_sha256: preview.manifest_sha256,
+      contract_set_sha256: preview.contract_set_sha256,
+      summary_sha256: preview.summary_sha256,
+    } as Parameters<PluginPlatformClient['startReleaseInstallExecution']>[0], options);
     onUpdate?.(execution, []);
     let cursor = execution.cursor;
     while (!isExecutionTerminal(execution)) {
@@ -270,30 +258,14 @@ export function createPluginLifecycleAPI(
     options: PluginRequestOptions = {},
   ): Promise<void> => {
     const result = await client.listRetainedData({ plugin_instance_id: pluginInstanceID }, options);
-    if (result.retained_data.length === 0) return;
-    if (result.retained_data.length !== 1) throw new Error('The incompatible retained plugin data is ambiguous');
-    const binding = result.retained_data[0]!;
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      try {
-        await client.deleteRetainedData({
-          plugin_instance_id: pluginInstanceID,
-          expected_binding_revision: binding.revision,
-        }, options);
-        return;
-      } catch (error) {
-        if (pluginMutationOutcome(error) !== 'unknown') throw error;
-        const reconciled = await client.listRetainedData({ plugin_instance_id: pluginInstanceID }, options);
-        if (reconciled.retained_data.length === 0) return;
-        const current = reconciled.retained_data[0];
-        if (reconciled.retained_data.length !== 1
-          || !current
-          || current.generation_id !== binding.generation_id
-          || current.revision !== binding.revision) {
-          throw new Error('The incompatible retained plugin data changed while deletion was being confirmed');
-        }
-        if (attempt === 1) throw error;
-      }
+    if (result.retained_data.length !== 1) {
+      throw new Error('The incompatible retained plugin data is no longer available');
     }
+    const binding = result.retained_data[0]!;
+    await client.deleteRetainedData({
+      plugin_instance_id: pluginInstanceID,
+      expected_binding_revision: binding.revision,
+    }, options);
   };
 
   const recoverEnabled = (options: PluginRequestOptions = {}) => client.recoverEnabled(options);
@@ -368,10 +340,8 @@ export function createPluginLifecycleAPI(
   return Object.freeze({
     listInstalledPlugins,
     refreshMarketCatalog,
-    marketCatalogNeedsRefresh: () => marketUnavailable,
     loadInventoryProjection,
     loadMarketDetail: loadPluginMarketDetail,
-    inspectOfficialRelease,
     inspectExternalPackage,
     installExternalPackage,
     installOfficialRelease,
