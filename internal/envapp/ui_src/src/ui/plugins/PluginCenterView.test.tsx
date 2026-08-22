@@ -56,6 +56,7 @@ const containersPlugin = {
     category: 'infrastructure',
     searchKeywords: ['docker', 'podman'],
     trustedSigningKeyIDs: ['redeven_official_signing_2026_08'],
+    installPreview: OFFICIAL_PLUGIN_CATALOG_SEED[0]!.installPreview,
     distribution: {
       releaseRef: OFFICIAL_CONTAINERS_RELEASE_REF,
       installSource: {
@@ -1788,7 +1789,7 @@ describe('PluginCenterView', () => {
             execution_id: 'release_install_containers',
             sequence: 1,
             kind: 'progress',
-            payload: { phase: 'download_package', progress: { kind: 'bytes', completed: 262_144, total: 524_288 } },
+            payload: { install_progress: { task_id: 'task_1', request_id: 'request_1', stage: 'download', status: 'running', completed: 262_144, total: 524_288 } },
           }],
         }]}
         onCommand={vi.fn()}
@@ -1801,9 +1802,10 @@ describe('PluginCenterView', () => {
     const target = mount.querySelector('[data-plugin-directory-card="catalog:containers"]')!;
     const other = mount.querySelector('[data-plugin-directory-card="catalog:database"]')!;
     const progress = target.querySelector<HTMLElement>('[data-plugin-install-progress]')!;
-    expect(target.querySelector('[data-plugin-install-execution]')?.textContent).toContain('Downloading plugin package');
-    expect(progress.getAttribute('aria-valuenow')).toBe('262144');
-    expect(progress.getAttribute('aria-valuemax')).toBe('524288');
+    expect(target.querySelector('[data-plugin-install-stage="download"]')?.getAttribute('data-plugin-install-stage-status')).toBe('running');
+    expect(progress.getAttribute('aria-valuenow')).toBe('1');
+    expect(progress.getAttribute('aria-valuemax')).toBe('4');
+    expect(target.querySelector('[data-plugin-install-stage="download"]')?.textContent).toContain('256');
     expect(other.querySelector('[data-plugin-install-execution]')).toBeNull();
 
     (mount.querySelector('[data-plugin-center-item="catalog:database"]') as HTMLButtonElement).click();

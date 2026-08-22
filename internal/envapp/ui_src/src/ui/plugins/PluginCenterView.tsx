@@ -2,7 +2,6 @@ import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, 
 import { cn, createUIFirstSelection } from '@floegence/floe-webapp-core';
 import { AlertTriangle, ArrowLeft, CheckCircle, ChevronDown, Download, MoreHorizontal, Play, RefreshIcon, Search, Shield, X } from '@floegence/floe-webapp-core/icons';
 import { Button, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
-import { PluginPlatformRequestError, PluginTransportError } from '@floegence/redevplugin-ui';
 
 import { buildPluginCenterModel } from './pluginInventoryProjection';
 import { useI18n, type I18nHelpers } from '../i18n';
@@ -32,7 +31,7 @@ import { PluginCenterItem } from './PluginCenterItems';
 import { PluginIdentityHeader } from './PluginPresentationPrimitives';
 import { resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
 import { PluginUpdateReviewDialog } from './PluginUpdateReviewDialog';
-import { PluginInstallStatus, pluginInstallFailureLabel } from './PluginInstallStatus';
+import { PluginInstallStatus, PluginInstallSteps } from './PluginInstallStatus';
 
 export type PluginCenterViewProps = {
   projection: PluginInventoryProjection;
@@ -47,14 +46,11 @@ export type PluginCenterViewProps = {
   onRetryRuntimeRecovery?: (pluginInstanceID?: string) => Promise<unknown> | unknown;
   onClose?: () => void;
   onRefresh: () => Promise<unknown> | unknown;
-  onCommand: (
-    command: PluginLifecycleCommand,
-    signal: AbortSignal,
-    inspection?: OfficialPluginReleaseInspection,
-  ) => Promise<unknown> | unknown;
+  onCommand: (command: PluginLifecycleCommand, signal: AbortSignal) => Promise<unknown> | unknown;
   installOperations?: readonly PluginInstallExecutionProjection[];
   onRetryInstall?: (pluginInstanceID: string) => Promise<unknown> | unknown;
   onDiscardRetainedDataAndRetry?: (pluginInstanceID: string) => Promise<unknown> | unknown;
+  /** @deprecated Kept for source compatibility while external inspection remains separate. */
   onInspectOfficial?: (item: PluginInventoryItem, signal: AbortSignal) => Promise<OfficialPluginReleaseInspection>;
   onInspectExternal?: (request: ExternalPluginInspectionRequest, signal: AbortSignal) => Promise<ExternalPluginInspection>;
   onCommitExternal?: (inspection: ExternalPluginInspection, signal: AbortSignal) => Promise<ExternalPluginCommitResult>;
@@ -64,22 +60,13 @@ export type PluginCenterViewProps = {
 type PluginSourceFilter = 'all' | 'official' | 'external';
 type PluginTrustFilter = 'all' | PluginTrustBadge;
 type PluginLifecycleFilter = 'all' | Exclude<PluginLifecycleState, 'installed'>;
-type OfficialInstallPhase = 'inspecting' | 'installing';
+type OfficialInstallPhase = 'installing';
 type OfficialInstallFlow =
   | Readonly<{ status: 'idle' }>
-  | Readonly<{ status: 'inspecting'; key: string; item: PluginInventoryItem }>
-  | Readonly<{ status: 'review_ready'; key: string; item: PluginInventoryItem; inspection: OfficialPluginReleaseInspection }>
+  | Readonly<{ status: 'review_ready'; key: string; item: PluginInventoryItem }>
   | Readonly<{ status: 'installing'; key: string; item: PluginInventoryItem }>
   | Readonly<{ status: 'installed'; key: string; item: PluginInventoryItem }>
   | Readonly<{ status: 'error'; key: string; item: PluginInventoryItem; message: string }>;
-type OfficialInspectionCacheEntry = {
-  controller: AbortController;
-  promise: Promise<OfficialPluginReleaseInspection>;
-  inspection?: OfficialPluginReleaseInspection;
-};
-
-const OFFICIAL_INSPECTION_MIN_VALIDITY_MS = 5_000;
-const OFFICIAL_INSPECTION_PREFETCH_CONCURRENCY = 3;
 
 export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const i18n = useI18n();
@@ -105,16 +92,13 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const [mobileDetailOpen, setMobileDetailOpen] = createSignal(Boolean(props.selectedInventoryKey));
   const [externalDialogOpen, setExternalDialogOpen] = createSignal(false);
   const [officialInstallFlow, setOfficialInstallFlow] = createSignal<OfficialInstallFlow>({ status: 'idle' });
+  const [officialInstallDialogOpen, setOfficialInstallDialogOpen] = createSignal(false);
   const [retainedDataRecoveryItem, setRetainedDataRecoveryItem] = createSignal<PluginInventoryItem>();
   const [retainedDataRecoveryPending, setRetainedDataRecoveryPending] = createSignal(false);
   const [retainedDataRecoveryError, setRetainedDataRecoveryError] = createSignal<string>();
-  const officialInstallReview = createMemo(() => {
-    const flow = officialInstallFlow();
-    return flow.status === 'review_ready' ? flow : undefined;
-  });
   const officialInstallDialog = createMemo(() => {
     const flow = officialInstallFlow();
-    return flow.status === 'inspecting' || flow.status === 'review_ready' ? flow : undefined;
+    return officialInstallDialogOpen() && (flow.status === 'review_ready' || flow.status === 'installing' || flow.status === 'installed') ? flow : undefined;
   });
   const [externalUpdateItem, setExternalUpdateItem] = createSignal<PluginInventoryItem | undefined>();
   const [externalSourcePreset, setExternalSourcePreset] = createSignal<ExternalPluginSourcePreset | undefined>();
@@ -144,11 +128,6 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   }>();
   let marketDetailController: AbortController | undefined;
   const marketDetailCache = new Map<string, PluginMarketDetail>();
-  const officialInspectionCache = new Map<string, OfficialInspectionCacheEntry>();
-  const officialInspectionPrefetchQueue: Array<Readonly<{ key: string; item: PluginInventoryItem }>> = [];
-  const officialInspectionPrefetchQueued = new Set<string>();
-  let officialInspectionPrefetchActive = 0;
-  let disposed = false;
 
   const cancelDeferredPermissionsFocus = () => {
     if (deferredPermissionsFocusFrame !== undefined) {
@@ -162,13 +141,8 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   };
 
   onCleanup(() => {
-    disposed = true;
     commandController?.abort('Plugin Center disposed');
     marketDetailController?.abort('Plugin Center disposed');
-    for (const entry of officialInspectionCache.values()) entry.controller.abort('Plugin Center disposed');
-    officialInspectionCache.clear();
-    officialInspectionPrefetchQueue.length = 0;
-    officialInspectionPrefetchQueued.clear();
     cancelDeferredPermissionsFocus();
   });
 
@@ -222,7 +196,11 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       && projection.execution?.status !== 'orphaned'
     )
   );
-  const managementPending = createMemo(() => Boolean(pendingCommand()));
+  const installPending = createMemo(() => (
+    officialInstallFlow().status === 'installing'
+    || (props.installOperations ?? []).some(installOperationActive)
+  ));
+  const managementPending = createMemo(() => Boolean(pendingCommand()) || installPending());
   const pendingCommandTypeForItem = (item: PluginInventoryItem): PluginPendingCommandType | undefined => {
     const command = pendingCommand();
     const target = command?.target;
@@ -237,14 +215,14 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const itemManagementPending = (item: PluginInventoryItem) => {
     if (pendingCommandTypeForItem(item)) return true;
     const flow = officialInstallFlow();
-    if ((flow.status === 'inspecting' || flow.status === 'installing')
+    if (flow.status === 'installing'
       && flow.item.inventoryKey === item.inventoryKey) return true;
     const operation = installOperationForItem(item);
     return Boolean(operation && installOperationActive(operation));
   };
   const officialInstallPhaseForItem = (item: PluginInventoryItem): OfficialInstallPhase | undefined => {
     const flow = officialInstallFlow();
-    if ((flow.status === 'inspecting' || flow.status === 'installing')
+    if (flow.status === 'installing'
       && flow.item.inventoryKey === item.inventoryKey) return flow.status;
     return undefined;
   };
@@ -261,12 +239,8 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     if (installed && installed.lifecycleState !== 'not_installed') {
       tabSelection.commitNow('installed');
       setOfficialInstallFlow({ status: 'installed', key: flow.key, item: installed });
-      officialInspectionCache.delete(flow.key);
+      setOfficialInstallDialogOpen(true);
       return;
-    }
-    const operation = installOperationByInstanceID().get(flow.item.officialCatalog?.pluginInstanceID ?? '');
-    if (operation?.observation === 'failed' || operation?.execution?.status === 'failed') {
-      setOfficialInstallFlow({ status: 'idle' });
     }
   });
 
@@ -403,100 +377,6 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   });
 
   const selectedItem = createMemo(() => allItems().find((item) => item.inventoryKey === selectedInventoryKey()));
-  const ensureOfficialInspection = (item: PluginInventoryItem): Promise<OfficialPluginReleaseInspection> => {
-    if (!item.officialCatalog || item.pluginInstanceID) {
-      return Promise.reject(new Error(i18n.t('uiCopy.plugin.external.inspectFailed')));
-    }
-    const key = officialInspectionKey(item);
-    let cached = officialInspectionCache.get(key);
-    if (cached?.inspection && !officialInspectionIsFresh(cached.inspection)) {
-      cached.controller.abort('Official plugin inspection expired');
-      officialInspectionCache.delete(key);
-      cached = undefined;
-    }
-    if (cached?.inspection) return Promise.resolve(cached.inspection);
-    if (cached) return cached.promise;
-
-    const controller = new AbortController();
-    let request: Promise<OfficialPluginReleaseInspection>;
-    try {
-      request = props.onInspectOfficial?.(item, controller.signal)
-        ?? Promise.reject(new Error(i18n.t('uiCopy.plugin.external.inspectFailed')));
-    } catch (error) {
-      request = Promise.reject(error);
-    }
-    const entry: OfficialInspectionCacheEntry = {
-      controller,
-      promise: Promise.resolve(undefined as never),
-    };
-    entry.promise = request.then((inspection) => {
-      if (!officialInspectionMatchesItem(inspection, item)) {
-        throw new Error(i18n.t('uiCopy.plugin.officialInspectionMismatch'));
-      }
-      if (officialInspectionCache.get(key) === entry) entry.inspection = inspection;
-      return inspection;
-    }).catch((error: unknown) => {
-      if (officialInspectionCache.get(key) === entry) officialInspectionCache.delete(key);
-      throw error;
-    });
-    officialInspectionCache.set(key, entry);
-    return entry.promise;
-  };
-
-  const pumpOfficialInspectionPrefetch = () => {
-    if (disposed) return;
-    while (officialInspectionPrefetchActive < OFFICIAL_INSPECTION_PREFETCH_CONCURRENCY) {
-      const next = officialInspectionPrefetchQueue.shift();
-      if (!next) return;
-      officialInspectionPrefetchQueued.delete(next.key);
-      if (officialInspectionCache.has(next.key)
-        || !allItems().some((item) => officialInspectionKey(item) === next.key)) continue;
-      officialInspectionPrefetchActive += 1;
-      void ensureOfficialInspection(next.item).catch(() => {
-        // Prefetch failures stay silent until the user explicitly requests install.
-      }).finally(() => {
-        officialInspectionPrefetchActive -= 1;
-        pumpOfficialInspectionPrefetch();
-      });
-    }
-  };
-
-  createEffect(() => {
-    const validKeys = new Set(allItems().flatMap((item) => (
-      item.officialCatalog && !item.pluginInstanceID ? [officialInspectionKey(item)] : []
-    )));
-    for (const [key, entry] of officialInspectionCache) {
-      if (validKeys.has(key)) continue;
-      entry.controller.abort('Official plugin release identity changed');
-      officialInspectionCache.delete(key);
-    }
-    for (let index = officialInspectionPrefetchQueue.length - 1; index >= 0; index -= 1) {
-      const queued = officialInspectionPrefetchQueue[index];
-      if (queued && !validKeys.has(queued.key)) {
-        officialInspectionPrefetchQueue.splice(index, 1);
-        officialInspectionPrefetchQueued.delete(queued.key);
-      }
-    }
-    const flow = officialInstallFlow();
-    if (flow.status === 'idle' || flow.status === 'installed' || flow.status === 'installing') return;
-    if (!validKeys.has(flow.key)) setOfficialInstallFlow({ status: 'idle' });
-  });
-
-  createEffect(() => {
-    // Start Host-verified inspection as soon as the market projection arrives.
-    // The result is cached by the exact release identity, so clicking Install
-    // while this work is in flight reuses the same request and never starts a
-    // second trust/package validation pass.
-    if (loading() || !props.onInspectOfficial) return;
-    for (const item of allItems()) {
-      if (!item.officialCatalog || item.pluginInstanceID) continue;
-      const key = officialInspectionKey(item);
-      if (officialInspectionCache.has(key) || officialInspectionPrefetchQueued.has(key)) continue;
-      officialInspectionPrefetchQueued.add(key);
-      officialInspectionPrefetchQueue.push({ key, item });
-    }
-    pumpOfficialInspectionPrefetch();
-  });
 
   createEffect(() => {
     const item = selectedItem();
@@ -568,32 +448,16 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const installItem = (item: PluginInventoryItem) => {
     if (item.officialCatalog) {
       if (item.pluginInstanceID) return;
-      const key = officialInspectionKey(item);
+      const key = officialInstallKey(item);
       const flow = officialInstallFlow();
-      if ((flow.status === 'inspecting' || flow.status === 'installing') && flow.key === key) return;
-      const cached = officialInspectionCache.get(key);
-      if (cached?.inspection && officialInspectionIsFresh(cached.inspection)) {
-        setOfficialInstallFlow({ status: 'review_ready', key, item, inspection: cached.inspection });
+      if (flow.status === 'review_ready' && flow.key === key) {
+        setOfficialInstallDialogOpen(true);
         return;
       }
-      setOfficialInstallFlow({ status: 'inspecting', key, item });
+      if (flow.status === 'installing' && flow.key === key) return;
+      setOfficialInstallFlow({ status: 'review_ready', key, item });
+      setOfficialInstallDialogOpen(true);
       setCommandError(null);
-      void ensureOfficialInspection(item).then((inspection) => {
-        const current = officialInstallFlow();
-        if (current.status === 'inspecting' && current.key === key) {
-          setOfficialInstallFlow({ status: 'review_ready', key, item, inspection });
-        }
-      }).catch((error: unknown) => {
-        const current = officialInstallFlow();
-        if (current.status === 'inspecting' && current.key === key) {
-          setOfficialInstallFlow({
-            status: 'error',
-            key,
-            item,
-            message: officialInstallErrorMessage(error, i18n),
-          });
-        }
-      });
       return;
     }
     openExternalDialog();
@@ -601,36 +465,13 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const confirmOfficialInstall = () => {
     const flow = officialInstallFlow();
     if (flow.status !== 'review_ready' || !flow.item.officialCatalog) return;
-    if (!officialInspectionIsFresh(flow.inspection)) {
-      const cached = officialInspectionCache.get(flow.key);
-      cached?.controller.abort('Official plugin inspection expired before confirmation');
-      officialInspectionCache.delete(flow.key);
-      setOfficialInstallFlow({ status: 'inspecting', key: flow.key, item: flow.item });
-      void ensureOfficialInspection(flow.item).then((inspection) => {
-        const current = officialInstallFlow();
-        if (current.status === 'inspecting' && current.key === flow.key) {
-          setOfficialInstallFlow({ status: 'review_ready', key: flow.key, item: flow.item, inspection });
-        }
-      }).catch((error: unknown) => {
-        const current = officialInstallFlow();
-        if (current.status === 'inspecting' && current.key === flow.key) {
-          setOfficialInstallFlow({
-            status: 'error',
-            key: flow.key,
-            item: flow.item,
-            message: officialInstallErrorMessage(error, i18n),
-          });
-        }
-      });
-      return;
-    }
-    officialInspectionCache.delete(flow.key);
     setOfficialInstallFlow({ status: 'installing', key: flow.key, item: flow.item });
+    setOfficialInstallDialogOpen(true);
     void runCommand({
       type: 'install',
       pluginID: flow.item.pluginID,
       source: 'official_catalog',
-    }, flow.inspection);
+    });
   };
   const currentUpdateReviewItem = createMemo(() => {
     const reviewed = updateReviewItem();
@@ -638,34 +479,23 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     return allItems().find((item) => item.inventoryKey === reviewed.inventoryKey) ?? reviewed;
   });
 
-  const runCommand = async (
-    command: PluginLifecycleCommand,
-    inspection?: OfficialPluginReleaseInspection,
-  ) => {
+  const runCommand = async (command: PluginLifecycleCommand) => {
     if (command.type === 'install') {
       const item = allItems().find((candidate) => candidate.pluginID === command.pluginID && candidate.officialCatalog);
-      if (!item?.officialCatalog || !inspection) {
-        if (item?.officialCatalog) {
-          const key = officialInspectionKey(item);
-          setOfficialInstallFlow({
-            status: 'error',
-            key,
-            item,
-            message: i18n.t('uiCopy.plugin.external.inspectFailed'),
-          });
-        }
+      if (!item?.officialCatalog) {
+        setCommandError(i18n.t('uiCopy.plugin.installOperation.failure.internal'));
         return;
       }
-      const key = officialInspectionKey(item);
+      const key = officialInstallKey(item);
       setOfficialInstallFlow((current) => current.status === 'installing' && current.key === key
         ? current
         : { status: 'installing', key, item });
       setCommandError(null);
       try {
-        await props.onCommand(command, new AbortController().signal, inspection);
-      } catch (error) {
-        const message = officialInstallErrorMessage(error, i18n);
-        setOfficialInstallFlow({ status: 'error', key, item, message });
+        await props.onCommand(command, new AbortController().signal);
+      } catch {
+        // Keep the task projection visible so the failed step owns recovery.
+        setOfficialInstallFlow({ status: 'installing', key, item });
       }
       return;
     }
@@ -675,15 +505,6 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     const pendingTarget = command.pluginInstanceID;
     setPendingCommand({ type: command.type, target: pendingTarget });
     setCommandError(null);
-    if (command.type === 'uninstall') {
-      // Invalidate evidence that predates the uninstall before inventory can
-      // project the plugin as available and start a fresh reinstall prefetch.
-      for (const [key, entry] of officialInspectionCache) {
-        if (!key.startsWith(`${command.pluginInstanceID}|`)) continue;
-        entry.controller.abort('Official plugin uninstall started');
-        officialInspectionCache.delete(key);
-      }
-    }
     try {
       await props.onCommand(command, controller.signal);
       setUninstallChoiceFor(null);
@@ -692,6 +513,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
         if (flow.status !== 'idle' && flow.item.officialCatalog?.pluginInstanceID === command.pluginInstanceID) {
           setOfficialInstallFlow({ status: 'idle' });
         }
+        setOfficialInstallDialogOpen(false);
         clearDetailSelection();
         tabSelection.commitNow('discover');
       }
@@ -862,10 +684,10 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
                   managementDisabled={loading() || itemManagementPending(item)}
                   commandPendingType={pendingCommandTypeForItem(item)}
                   officialInstallPhase={officialInstallPhaseForItem(item)}
-                  officialInstallError={selectedInventoryKey() === item.inventoryKey
+                  officialInstallError={selectedItem()?.inventoryKey === item.inventoryKey
                     ? undefined
                     : officialInstallErrorForItem(item)}
-                  installOperation={selectedInventoryKey() === item.inventoryKey
+                  installOperation={selectedInventoryKey() === item.inventoryKey && mobileDetailOpen()
                     ? undefined
                     : installOperationForItem(item)}
                   entranceDelayMs={Math.min(index() * 18, 126)}
@@ -971,12 +793,26 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       </div>
       <OfficialPluginInstallDialog
         item={officialInstallDialog()?.item}
-        inspection={officialInstallReview()?.inspection}
-        loading={officialInstallDialog()?.status === 'inspecting'}
-        onOpenChange={(open) => {
-          if (!open && (officialInstallFlow().status === 'inspecting' || officialInstallFlow().status === 'review_ready')) {
-            setOfficialInstallFlow({ status: 'idle' });
+        installPreview={officialInstallDialog()?.item.officialCatalog?.installPreview}
+        operation={officialInstallDialog()?.status === 'installing' || officialInstallDialog()?.status === 'installed'
+          ? installOperationForItem(officialInstallDialog()!.item)
+          : undefined}
+        installing={officialInstallDialog()?.status === 'installing'}
+        installed={officialInstallDialog()?.status === 'installed'}
+        onRetry={() => {
+          const item = officialInstallDialog()?.item;
+          const instanceID = item?.officialCatalog?.pluginInstanceID;
+          if (instanceID) void props.onRetryInstall?.(instanceID);
+        }}
+        onResolveRetainedData={() => {
+          const item = officialInstallDialog()?.item;
+          if (item) {
+            setOfficialInstallDialogOpen(false);
+            requestRetainedDataRecovery(item);
           }
+        }}
+        onOpenChange={(open) => {
+          setOfficialInstallDialogOpen(open);
         }}
         onConfirm={confirmOfficialInstall}
       />
@@ -1093,42 +929,63 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
 
 function OfficialPluginInstallDialog(props: {
   item?: PluginInventoryItem;
-  inspection?: OfficialPluginReleaseInspection;
-  loading: boolean;
+  installPreview?: NonNullable<PluginInventoryItem['officialCatalog']>['installPreview'];
+  operation?: PluginInstallExecutionProjection;
+  installing: boolean;
+  installed: boolean;
+  onRetry?: () => void;
+  onResolveRetainedData?: () => void;
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
 }): JSX.Element {
   const i18n = useI18n();
-  const permissions = () => officialPermissionPresentation(props.inspection?.security_summary.permissions ?? []);
+  const permissions = () => props.installPreview?.security_summary.permissions ?? [];
+  const headerItem = () => props.item
+    ? { ...props.item, version: props.item.version ?? props.item.officialCatalog?.latestVersion }
+    : undefined;
+  const title = () => props.installing
+    ? i18n.t('uiCopy.plugin.installOperation.installingTitle', { plugin: props.item?.displayName ?? '' })
+    : props.installed
+      ? i18n.t('uiCopy.plugin.installOperation.complete')
+      : i18n.t('uiCopy.plugin.external.confirmInstallTitle');
   return (
     <Dialog
       open={Boolean(props.item)}
       onOpenChange={props.onOpenChange}
-      title={props.loading
-        ? i18n.t('uiCopy.plugin.external.loadingInstallTitle')
-        : i18n.t('uiCopy.plugin.external.confirmInstallTitle')}
-      description={props.loading
-        ? i18n.t('uiCopy.plugin.external.loadingInstallDescription')
-        : i18n.t('uiCopy.plugin.external.confirmInstallGuidance')}
+      title={title()}
+      description={props.installing
+        ? i18n.t('uiCopy.plugin.installOperation.backgroundDescription')
+        : props.installed
+          ? i18n.t('uiCopy.plugin.installOperation.complete')
+          : i18n.t('uiCopy.plugin.external.confirmInstallGuidance')}
       class="w-[min(34rem,calc(100%-1rem))] max-w-[34rem] bg-background text-foreground sm:w-[min(34rem,calc(100%-2rem))]"
       footer={(
         <div class="flex w-full flex-wrap justify-end gap-2">
-          <button
-            type="button"
-            class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted')}
-            onClick={() => props.onOpenChange(false)}
-          >
-            {i18n.t('common.actions.cancel')}
-          </button>
-          <Show when={!props.loading}>
+          <Show when={!props.installing && !props.installed}>
+            <button
+              type="button"
+              class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted')}
+              onClick={() => props.onOpenChange(false)}
+            >
+              {i18n.t('common.actions.cancel')}
+            </button>
             <button
               type="button"
               data-plugin-install-review-confirm
               class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90')}
               onClick={props.onConfirm}
-              disabled={!props.inspection}
+              disabled={!props.installPreview}
             >
               {i18n.t('uiCopy.plugin.external.confirmInstall')}
+            </button>
+          </Show>
+          <Show when={props.installing}>
+            <button
+              type="button"
+              class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted')}
+              onClick={() => props.onOpenChange(false)}
+            >
+              {i18n.t('common.actions.close')}
             </button>
           </Show>
         </div>
@@ -1136,91 +993,76 @@ function OfficialPluginInstallDialog(props: {
     >
       <Show when={props.item}>
         {(item) => (
-          <div data-plugin-install-review-dialog data-plugin-install-loading={props.loading || undefined} class="space-y-4">
-            <PluginIdentityHeader item={item()} description />
-            <Show when={props.loading} fallback={(
-              <div class="space-y-3">
-                <Show when={props.inspection}>
-                  {(inspection) => (
-                    <section data-plugin-install-verification class="rounded-md border border-[var(--redeven-status-success-foreground)] bg-[var(--redeven-status-success-soft)] px-4 py-3">
-                      <div class="flex items-center gap-2 text-sm font-semibold">
-                        <CheckCircle class="h-4 w-4 shrink-0 text-[var(--redeven-status-success-foreground)]" />
-                        <span>{i18n.t('uiCopy.plugin.external.signatureVerified')}</span>
+          <div data-plugin-install-review-dialog class="space-y-4">
+            <PluginIdentityHeader item={headerItem()!} description />
+            <Show when={props.installing || props.installed} fallback={(
+              <section class="space-y-3 rounded-md border bg-muted/10 px-4 py-3">
+              <div class="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                <span>{i18n.t('uiCopy.plugin.version')}</span>
+                <span class="text-right font-medium text-foreground">{item().officialCatalog?.latestVersion ?? '-'}</span>
+                <span>{i18n.t('uiCopy.plugin.publisher')}</span>
+                <span class="text-right font-medium text-foreground">{item().officialCatalog?.publisher ?? item().publisher}</span>
+                <span>{i18n.t('uiCopy.plugin.source')}</span>
+                <span class="text-right font-medium text-foreground">{i18n.t('uiCopy.plugin.officialSource')}</span>
+              </div>
+              <h3 class="text-sm font-semibold">
+                {i18n.t('uiCopy.plugin.permissionsTitle', { plugin: item().displayName })}
+              </h3>
+              <Show
+                when={permissions().length > 0}
+                fallback={<p class="mt-2 text-sm leading-6 text-muted-foreground">{i18n.t('uiCopy.plugin.noRequiredPermissions')}</p>}
+              >
+                <div class="mt-2 space-y-3">
+                  <For each={[true, false] as const}>
+                    {(required) => {
+                      const grouped = () => permissions().filter((permission) => permission.required === required);
+                      return (
+                        <Show when={grouped().length > 0}>
+                          <div data-plugin-install-permission-group={required ? 'required' : 'optional'}>
+                            <h4 class="text-xs font-semibold text-foreground">{required ? i18n.t('uiCopy.plugin.requiredToOpen') : i18n.t('uiCopy.plugin.optionalPermission')}</h4>
+                            <div class="divide-y">
+                              <For each={grouped()}>
+                                {(permission) => (
+                      <div class="flex items-start gap-3 py-2.5" data-plugin-install-permission={permission.permission_id}>
+                        <Shield class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                        <div class="min-w-0 flex-1">
+                          <div class="flex flex-wrap items-center gap-2">
+                            <span class="text-sm font-medium">{humanizePermissionID(permission.permission_id)}</span>
+                            <span class="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                              {permission.required
+                                ? i18n.t('uiCopy.plugin.requiredToOpen')
+                                : i18n.t('uiCopy.plugin.optionalPermission')}
+                            </span>
+                          </div>
+                          <p class="mt-1 text-xs leading-5 text-muted-foreground">{permission.effects.map((effect) => humanizePermissionID(effect)).join(', ')}</p>
+                        </div>
                       </div>
-                      <p class="mt-1 text-xs text-muted-foreground">{i18n.t('uiCopy.plugin.external.reviewReady')}</p>
-                      <dl class="mt-3 space-y-2 text-xs">
-                        <div>
-                          <dt class="font-medium text-muted-foreground">{i18n.t('uiCopy.plugin.external.source')}</dt>
-                          <dd class="mt-0.5 break-all font-mono" data-plugin-install-source>
-                            {inspection().release_ref.source_id} · {inspection().release_ref.channel}
-                            <span class="mt-0.5 block text-muted-foreground">{inspection().release_ref.release_metadata_ref}</span>
-                          </dd>
-                        </div>
-                        <div>
-                          <dt class="font-medium text-muted-foreground">{i18n.t('uiCopy.plugin.external.packageHash')}</dt>
-                          <dd class="mt-0.5 break-all font-mono" data-plugin-install-package-hash>{inspection().inspected_hashes.package_sha256}</dd>
-                        </div>
-                        <div class="grid gap-2 sm:grid-cols-2">
-                          <div>
-                            <dt class="font-medium text-muted-foreground">{i18n.t('uiCopy.plugin.external.manifestHash')}</dt>
-                            <dd class="mt-0.5 break-all font-mono">{inspection().inspected_hashes.manifest_sha256}</dd>
-                          </div>
-                          <div>
-                            <dt class="font-medium text-muted-foreground">{i18n.t('uiCopy.plugin.external.entriesHash')}</dt>
-                            <dd class="mt-0.5 break-all font-mono">{inspection().inspected_hashes.entries_sha256}</dd>
-                          </div>
-                        </div>
-                      </dl>
-                    </section>
-                  )}
-                </Show>
-                <section class="rounded-md border bg-muted/10 px-4 py-3">
-                  <h3 class="text-sm font-semibold">
-                    {i18n.t('uiCopy.plugin.permissionsTitle', { plugin: item().displayName })}
-                  </h3>
-                  <Show
-                    when={permissions().length > 0}
-                    fallback={<p class="mt-2 text-sm leading-6 text-muted-foreground">{i18n.t('uiCopy.plugin.noRequiredPermissions')}</p>}
-                  >
-                    <div class="mt-2 divide-y">
-                      <For each={permissions()}>
-                        {(permission) => (
-                          <div class="flex items-start gap-3 py-2.5" data-plugin-install-permission={permission.permission_id}>
-                            <Shield class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                            <div class="min-w-0 flex-1">
-                              <div class="flex flex-wrap items-center gap-2">
-                                <span class="text-sm font-medium">{humanizePermissionID(permission.permission_id)}</span>
-                                <span class="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                                  {permission.required
-                                    ? i18n.t('uiCopy.plugin.requiredToOpen')
-                                    : i18n.t('uiCopy.plugin.optionalPermission')}
-                                </span>
-                              </div>
-                              <code class="mt-1 block break-all text-[11px] text-muted-foreground">{permission.permission_id}</code>
-                              <p class="mt-1 text-xs leading-5 text-muted-foreground">
-                                {i18n.t('uiCopy.plugin.officialPermissionEffects', {
-                                  effects: permission.effects.map((effect) => officialPermissionEffectLabel(effect, i18n)).join(', '),
-                                })}
-                              </p>
-                              <p class="mt-0.5 break-words text-xs leading-5 text-muted-foreground">
-                                {i18n.t('uiCopy.plugin.officialPermissionMethods', { methods: permission.methods.join(', ') })}
-                              </p>
+                                )}
+                              </For>
                             </div>
                           </div>
-                        )}
-                      </For>
-                    </div>
-                  </Show>
-                </section>
-              </div>
-            )}>
-              <section role="status" aria-live="polite" aria-busy="true" class="flex items-center gap-3 rounded-md border bg-muted/10 px-4 py-5">
-                <RefreshIcon class="h-5 w-5 shrink-0 animate-spin motion-reduce:animate-none" />
-                <div class="min-w-0">
-                  <p class="text-sm font-semibold">{i18n.t('uiCopy.plugin.external.loadingInstallTitle')}</p>
-                  <p class="mt-1 text-xs text-muted-foreground">{i18n.t('uiCopy.plugin.external.loadingInstallDescription')}</p>
+                        </Show>
+                      );
+                    }}
+                  </For>
                 </div>
+              </Show>
+              <p class="text-xs text-muted-foreground">{i18n.t('uiCopy.plugin.installOperation.declarationNotice')}</p>
               </section>
+            )}>
+              <Show when={props.operation} fallback={<PluginInstallSteps />}>
+                {(operation) => (
+                  <PluginInstallStatus
+                    projection={operation()}
+                    compact
+                    onRetry={props.onRetry}
+                    onResolveRetainedData={props.onResolveRetainedData}
+                  />
+                )}
+              </Show>
+              <Show when={props.installed}>
+                <p class="text-sm font-medium text-emerald-600">{i18n.t('uiCopy.plugin.installOperation.complete')}</p>
+              </Show>
             </Show>
           </div>
         )}
@@ -2248,7 +2090,7 @@ function PluginActions(props: {
         {(message) => (
           <div
             role="alert"
-            data-plugin-install-inspection-error={item().inventoryKey}
+            data-plugin-install-error={item().inventoryKey}
             class="mb-3 flex min-w-0 items-center gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive"
           >
             <span class="min-w-0 flex-1">{message()}</span>
@@ -2273,11 +2115,9 @@ function PluginActions(props: {
           icon={primaryActionIcon(presentation().primaryAction)}
           onClick={runPrimaryAction}
         >
-          {props.officialInstallPhase === 'inspecting'
-            ? i18n.t('uiCopy.plugin.checkingPackage')
-            : props.commandPendingType
+          {props.commandPendingType
               ? pluginPendingCommandLabel(props.commandPendingType, i18n)
-              : props.officialInstallPhase === 'installing'
+                : props.officialInstallPhase === 'installing'
                 ? i18n.t('uiCopy.plugin.installOperation.starting')
             : primaryActionLabel(presentation().primaryAction)}
         </Button>
@@ -2511,13 +2351,18 @@ function tabForItem(item: PluginInventoryItem): PluginCenterTab {
   return 'discover';
 }
 
-function officialInspectionKey(item: PluginInventoryItem): string {
+function officialInstallKey(item: PluginInventoryItem): string {
   const official = item.officialCatalog;
   if (!official) return '';
+  const preview = official.installPreview;
   const release = official.distribution.releaseRef;
   return [
     official.pluginInstanceID,
     official.marketGeneration ?? 0,
+    preview?.release_identity_digest ?? '',
+    preview?.manifest_sha256 ?? '',
+    preview?.contract_set_sha256 ?? '',
+    preview?.summary_sha256 ?? '',
     release.source_id,
     release.channel,
     release.release_metadata_ref,
@@ -2531,74 +2376,6 @@ function officialInspectionKey(item: PluginInventoryItem): string {
   ].join('|');
 }
 
-function officialInspectionMatchesItem(
-  inspection: OfficialPluginReleaseInspection,
-  item: PluginInventoryItem,
-): boolean {
-  const official = item.officialCatalog;
-  if (!official || inspection.plugin_instance_id !== official.pluginInstanceID) return false;
-  const expected = official.distribution.releaseRef;
-  const actual = inspection.release_ref;
-  return actual.source_id === expected.source_id
-    && actual.channel === expected.channel
-    && actual.release_metadata_ref === expected.release_metadata_ref
-    && actual.release_metadata_sha256 === expected.release_metadata_sha256
-    && actual.publisher_id === expected.publisher_id
-    && actual.plugin_id === expected.plugin_id
-    && actual.version === expected.version
-    && actual.expected_hashes.package_sha256 === expected.expected_hashes.package_sha256
-    && actual.expected_hashes.manifest_sha256 === expected.expected_hashes.manifest_sha256
-    && actual.expected_hashes.entries_sha256 === expected.expected_hashes.entries_sha256
-    && inspection.inspected_hashes.package_sha256 === expected.expected_hashes.package_sha256
-    && inspection.inspected_hashes.manifest_sha256 === expected.expected_hashes.manifest_sha256
-    && inspection.inspected_hashes.entries_sha256 === expected.expected_hashes.entries_sha256;
-}
-
-function officialInspectionIsFresh(
-  inspection: OfficialPluginReleaseInspection,
-  now = Date.now(),
-): boolean {
-  const expiresAt = Date.parse(inspection.expires_at);
-  return Number.isFinite(expiresAt) && expiresAt > now + OFFICIAL_INSPECTION_MIN_VALIDITY_MS;
-}
-
-function officialInstallErrorMessage(error: unknown, i18n: I18nHelpers): string {
-  if (error instanceof PluginPlatformRequestError) {
-    return pluginInstallFailureLabel(error.errorCode, i18n);
-  }
-  if (error instanceof PluginTransportError) {
-    return pluginInstallFailureLabel('PLUGIN_RELEASE_NETWORK', i18n);
-  }
-  return messageFromUnknown(error) ?? i18n.t('uiCopy.plugin.installOperation.failure.internal');
-}
-
-function officialPermissionPresentation(
-  permissions: OfficialPluginReleaseInspection['security_summary']['permissions'],
-) {
-  const byID = new Map<string, {
-    permission_id: string;
-    methods: string[];
-    required: boolean;
-    effects: ('read' | 'write' | 'delete' | 'execute' | 'admin')[];
-  }>();
-  for (const permission of permissions) {
-    const existing = byID.get(permission.permission_id);
-    if (!existing) {
-      byID.set(permission.permission_id, {
-        permission_id: permission.permission_id,
-        methods: [...permission.methods],
-        required: permission.required,
-        effects: [...permission.effects],
-      });
-      continue;
-    }
-    existing.required ||= permission.required;
-    existing.methods = [...new Set([...existing.methods, ...permission.methods])];
-    existing.effects = [...new Set([...existing.effects, ...permission.effects])];
-  }
-  return [...byID.values()];
-}
-
 function humanizePermissionID(permissionID: string): string {
   const words = permissionID.split(/[._:-]+/u).filter(Boolean);
   if (words.length === 0) return permissionID;
@@ -2606,12 +2383,6 @@ function humanizePermissionID(permissionID: string): string {
   return `${label.charAt(0).toUpperCase()}${label.slice(1)}`;
 }
 
-function officialPermissionEffectLabel(
-  effect: 'read' | 'write' | 'delete' | 'execute' | 'admin',
-  i18n: I18nHelpers,
-): string {
-  return i18n.t(`uiCopy.plugin.permissionEffect.${effect}`);
-}
 
 function messageFromUnknown(error: unknown): string | null {
   if (!error) return null;

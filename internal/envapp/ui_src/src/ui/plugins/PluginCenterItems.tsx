@@ -175,7 +175,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
         {(message) => (
           <div
             role="alert"
-            data-plugin-install-inspection-error={props.item.inventoryKey}
+            data-plugin-install-error={props.item.inventoryKey}
             class="mt-2 flex min-w-0 items-center gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-2.5 py-2 text-xs text-destructive"
           >
             <span class="min-w-0 flex-1">{message()}</span>

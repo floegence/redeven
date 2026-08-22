@@ -1,5 +1,7 @@
 import type {
   OfficialPluginCatalogItem,
+  OfficialPluginPermission,
+  PluginMarketInstallPreview,
   PluginMarketSnapshot,
   PluginAuthorPresentation,
   PluginMarketDetail,
@@ -11,6 +13,62 @@ export function officialPluginCatalog(
   snapshot?: PluginMarketSnapshot,
 ): readonly OfficialPluginCatalogItem[] {
   return Object.freeze(snapshot ? projectMarketSnapshot(snapshot) : []);
+}
+
+const SHA256_DIGEST = /^sha256:[0-9a-f]{64}$/u;
+
+function normalizedInstallPreview(
+  plugin: PluginMarketSnapshot['plugins'][number],
+): PluginMarketInstallPreview | undefined {
+  const preview = plugin.latest.install_preview;
+  if (!preview || !preview.security_summary || !Array.isArray(preview.security_summary.permissions)) return undefined;
+  if (!SHA256_DIGEST.test(preview.release_identity_digest)
+    || !SHA256_DIGEST.test(preview.manifest_sha256)
+    || !SHA256_DIGEST.test(preview.contract_set_sha256)
+    || !SHA256_DIGEST.test(preview.summary_sha256)) return undefined;
+  const release = preview.release_ref;
+  if (!release || release.plugin_id !== plugin.plugin_id || release.publisher_id !== plugin.publisher_id
+    || release.channel !== plugin.latest.channel || release.version !== plugin.latest.version) return undefined;
+  return preview;
+}
+
+function normalizedPermissions(
+  preview: PluginMarketInstallPreview,
+): readonly OfficialPluginPermission[] {
+  const byID = new Map<string, OfficialPluginPermission>();
+  for (const permission of preview.security_summary.permissions) {
+    if (!/^[a-z][a-z0-9._:-]{0,127}$/u.test(permission.permission_id)) continue;
+    const group = permissionGroup(permission.effects);
+    const current = byID.get(permission.permission_id);
+    if (!current) {
+      byID.set(permission.permission_id, {
+        permissionID: permission.permission_id,
+        group,
+        requiredToOpen: permission.required === true,
+        methods: [],
+      });
+      continue;
+    }
+    byID.set(permission.permission_id, {
+      ...current,
+      requiredToOpen: current.requiredToOpen || permission.required === true,
+      group: current.group === 'other' ? group : current.group,
+    });
+  }
+  return [...byID.values()];
+}
+
+function packageURL(preview: PluginMarketInstallPreview): string {
+  const packageAsset = preview.transport_assets?.find((asset) => asset.locator.endsWith('/package.redevplugin'));
+  return packageAsset?.url ?? preview.release?.asset.url ?? '';
+}
+
+function permissionGroup(effects: readonly string[]): OfficialPluginPermission['group'] {
+  if (effects.includes('delete')) return 'delete';
+  if (effects.includes('execute')) return 'execute';
+  if (effects.includes('write')) return 'images_write';
+  if (effects.includes('read')) return 'read';
+  return 'other';
 }
 
 export function resolvePluginPresentation(
@@ -98,11 +156,9 @@ function projectMarketSnapshot(snapshot: PluginMarketSnapshot): OfficialPluginCa
     throw new Error('Plugin market snapshot metadata is invalid');
   }
   return snapshot.plugins.flatMap((plugin) => {
-    if (plugin.latest.channel !== 'stable'
-      || plugin.release?.plugin_id !== plugin.plugin_id
-      || plugin.release.channel !== plugin.latest.channel
-      || plugin.release.version !== plugin.latest.version) return [];
-    const releaseRef = plugin.release.publisher_release_ref.release_ref;
+    const installPreview = normalizedInstallPreview(plugin);
+    if (plugin.latest.channel !== 'stable' || !installPreview) return [];
+    const releaseRef = installPreview.release_ref;
     if (releaseRef.publisher_id !== plugin.publisher_id
       || releaseRef.plugin_id !== plugin.plugin_id
       || releaseRef.channel !== plugin.latest.channel
@@ -122,18 +178,23 @@ function projectMarketSnapshot(snapshot: PluginMarketSnapshot): OfficialPluginCa
       marketGeneration: snapshot.generation,
       latestVersion: plugin.latest.version,
       stableVersion: plugin.latest.version,
-      minRedevenVersion: plugin.release.compatibility.min_redeven_version,
-      minReDevPluginVersion: plugin.release.compatibility.min_redevplugin_version,
+      minRedevenVersion: installPreview.compatibility?.min_redeven_version ?? installPreview.release?.compatibility.min_redeven_version ?? '-',
+      minReDevPluginVersion: installPreview.compatibility?.min_redevplugin_version ?? installPreview.release?.compatibility.min_redevplugin_version ?? '-',
       rolloutState: marketRolloutState(plugin.latest.availability_status),
       defaultSurfaceID: 'plugin.primary',
       iconURL: validatedMarketIcon(presentation.icon, plugin.plugin_id),
       iconFallback: 'generic' as const,
       category: marketCategory(plugin.categories),
       searchKeywords: [...new Set(presentation.locales.flatMap((locale) => locale.keywords))],
-      trustedSigningKeyIDs: [plugin.release.signer_key_id],
+      trustedSigningKeyIDs: installPreview.release?.signer_key_id ? [installPreview.release.signer_key_id] : [],
+      permissions: normalizedPermissions(installPreview),
+      installPreview,
       distribution: {
         releaseRef,
-        installSource: { sourceKind: 'package_url' as const, url: plugin.release.asset.url },
+        installSource: {
+          sourceKind: 'package_url' as const,
+          url: packageURL(installPreview),
+        },
       },
     }];
   });

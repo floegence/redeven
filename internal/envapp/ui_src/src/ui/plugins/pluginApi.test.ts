@@ -611,6 +611,10 @@ describe('plugin lifecycle client integration', () => {
       plugin_instance_id: officialContainers.pluginInstanceID,
       inspection_id: inspection.inspection_id,
       release_ref: OFFICIAL_CONTAINERS_RELEASE_REF,
+      release_identity_digest: officialContainers.installPreview!.release_identity_digest,
+      manifest_sha256: officialContainers.installPreview!.manifest_sha256,
+      contract_set_sha256: officialContainers.installPreview!.contract_set_sha256,
+      summary_sha256: officialContainers.installPreview!.summary_sha256,
     }, {});
     expect(updates).toEqual([expect.objectContaining({ status: 'completed' })]);
     expect(OFFICIAL_CONTAINERS_RELEASE_REF).toMatchObject({
@@ -618,22 +622,6 @@ describe('plugin lifecycle client integration', () => {
       plugin_id: officialContainers.pluginID,
       version: officialContainers.stableVersion,
     });
-  });
-
-  it('inspects the exact official release before installation review', async () => {
-    const { lifecycle, mocks } = createClientHarness();
-
-    await expect(lifecycle.inspectOfficialRelease(officialContainers.pluginID)).resolves.toMatchObject({
-      plugin_instance_id: officialContainers.pluginInstanceID,
-      security_summary: {
-        permissions: [{ permission_id: 'containers.read' }],
-      },
-    });
-
-    expect(mocks.inspectReleasePackage).toHaveBeenCalledWith({
-      plugin_instance_id: officialContainers.pluginInstanceID,
-      release_ref: OFFICIAL_CONTAINERS_RELEASE_REF,
-    }, {});
   });
 
   it('returns an already terminal release installation execution', async () => {

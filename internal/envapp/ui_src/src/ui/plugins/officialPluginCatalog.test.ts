@@ -22,10 +22,12 @@ describe('official plugin catalog contracts', () => {
     });
   });
 
-  it('uses verified market icon metadata without embedding plugin-specific permissions', () => {
+  it('uses verified market icon metadata and cached declaration permissions', () => {
     expect(OFFICIAL_PLUGIN_CATALOG_SEED[0]).toMatchObject({ iconFallback: 'generic' });
     expect(OFFICIAL_PLUGIN_CATALOG_SEED[0]?.iconURL).toContain('/_redeven_proxy/api/plugins/market/plugins/com.redeven.official.containers/icon');
-    expect(officialPluginCatalog(OFFICIAL_PLUGIN_MARKET_SNAPSHOT)[0]?.permissions).toBeUndefined();
+    expect(officialPluginCatalog(OFFICIAL_PLUGIN_MARKET_SNAPSHOT)[0]?.permissions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ permissionID: 'containers.read', requiredToOpen: true }),
+    ]));
   });
 
   it('projects the latest version from the current frozen market snapshot', () => {
@@ -34,6 +36,7 @@ describe('official plugin catalog contracts', () => {
     next.plugins[0]!.latest.version = '4.2.0';
     next.plugins[0]!.release!.version = '4.2.0';
     next.plugins[0]!.release!.publisher_release_ref.release_ref.version = '4.2.0';
+    next.plugins[0]!.latest.install_preview!.release_ref.version = '4.2.0';
 
     expect(officialPluginCatalog(next)[0]).toMatchObject({
       latestVersion: '4.2.0',

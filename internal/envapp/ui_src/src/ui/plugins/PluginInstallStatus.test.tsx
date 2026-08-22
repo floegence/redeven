@@ -31,7 +31,7 @@ function projection(overrides: Partial<PluginInstallExecutionProjection> = {}): 
       execution_id: 'release_install_1',
       sequence: 1,
       kind: 'progress',
-      payload: { phase: 'download_package', progress: { kind: 'bytes', completed: 5, total: 10 } },
+      payload: { install_progress: { task_id: 'task_1', request_id: 'request_1', stage: 'download', status: 'running', completed: 5, total: 10 } },
     }],
     ...overrides,
   };
@@ -43,9 +43,12 @@ describe('PluginInstallStatus', () => {
     document.body.append(host);
     const dispose = render(() => <PluginInstallStatus projection={projection()} />, host);
     const progress = host.querySelector('[role="progressbar"]');
+    const download = host.querySelector('[data-plugin-install-stage="download"]');
 
-    expect(progress?.getAttribute('aria-valuenow')).toBe('5');
-    expect(progress?.getAttribute('aria-valuemax')).toBe('10');
+    expect(progress?.getAttribute('aria-valuenow')).toBe('1');
+    expect(progress?.getAttribute('aria-valuemax')).toBe('4');
+    expect(download?.textContent).toContain('5');
+    expect(download?.textContent).toContain('10');
     dispose();
     host.remove();
   });
