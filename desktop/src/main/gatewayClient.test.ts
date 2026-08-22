@@ -1136,7 +1136,7 @@ describe('GatewayURLClient', () => {
     expect(server.requests[0]?.headers['x-redeven-request-signature']).toBeTruthy();
   });
 
-  it('rejects SSH password profile writes before signing', async () => {
+  it('rejects non-URL profile writes before signing', async () => {
     const server = await startServer((_request, _body, response) => {
       response.setHeader('Content-Type', 'application/json');
       response.end(JSON.stringify({ ok: true, data: {} }));
@@ -1146,18 +1146,8 @@ describe('GatewayURLClient', () => {
 
     await expect(new GatewayURLClient(paired.secretStore).upsertEnvironmentProfile(paired.record, {
       display_name: 'SSH Profile',
-      access_route: {
-        kind: 'ssh_host',
-        ssh_destination: 'devbox',
-        ssh_port: 2222,
-        auth_mode: 'password',
-        ssh_runtime_root: '~/.redeven',
-      },
-      ssh_secret: {
-        mode: 'replace',
-        password: 'secret-password',
-      },
-    })).rejects.toThrow('Gateway profile SSH password auth is not supported.');
+      access_route: { kind: 'ssh_host' } as never,
+    })).rejects.toThrow('Gateway profile access must use an explicit URL endpoint.');
     expect(server.requests).toHaveLength(0);
   });
 
@@ -1553,7 +1543,7 @@ describe('GatewayBridgeClient', () => {
     expect(harness.requests[0]?.raw).not.toContain('__redeven_runtime_control');
   });
 
-  it('writes SSH container profiles through the gateway_protocol bridge', async () => {
+  it('writes URL profiles through the gateway_protocol bridge', async () => {
     const paired = pairedURLRecord('https://gateway.example/');
     const harness = createBridgeHandle(() => bridgeHTTPResponse({
       protocol_version: 'redeven-gateway-v2',
@@ -1573,13 +1563,8 @@ describe('GatewayBridgeClient', () => {
       gateway_env_id: 'env_container',
       display_name: 'Container Env',
       access_route: {
-        kind: 'ssh_container',
-        ssh_destination: 'devbox',
-        ssh_port: 2222,
-        ssh_runtime_root: '~/.redeven',
-        container_engine: 'docker',
-        container_id: 'workspace',
-        container_runtime_root: '~/.redeven',
+        kind: 'url',
+        url: 'https://environment.example/',
       },
     });
 
@@ -1594,13 +1579,8 @@ describe('GatewayBridgeClient', () => {
         gateway_env_id: 'env_container',
         display_name: 'Container Env',
         access_route: {
-          kind: 'ssh_container',
-          ssh_destination: 'devbox',
-          ssh_port: 2222,
-          ssh_runtime_root: '~/.redeven',
-          container_engine: 'docker',
-          container_id: 'workspace',
-          container_runtime_root: '~/.redeven',
+          kind: 'url',
+          url: 'https://environment.example/',
         },
       },
     });

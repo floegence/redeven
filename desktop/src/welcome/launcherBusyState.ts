@@ -40,14 +40,13 @@ export type BusyAction =
   | 'stop_gateway'
   | 'restart_gateway'
   | 'update_gateway'
-  | 'reinstall_gateway'
-  | 'reset_local_environment'
+  | 'preview_reinstall_target'
+  | 'reinstall_target'
   | 'refresh_gateway_status'
   | 'refresh_gateway_catalog'
   | 'delete_gateway'
   | 'upsert_gateway_environment_profile'
   | 'delete_gateway_environment_profile'
-  | 'run_gateway_environment_lifecycle'
   | 'run_provider_environment_lifecycle'
   | 'setup_provider_runtime_management_with_direct_card'
   | 'setup_direct_runtime_management'
@@ -264,7 +263,6 @@ export function runtimeLifecycleOperationForActionProgress(
       return 'restart';
     case 'update_environment_runtime':
       return 'update';
-    case 'run_gateway_environment_lifecycle':
     case 'run_provider_environment_lifecycle':
       break;
     default:

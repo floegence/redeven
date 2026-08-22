@@ -88,22 +88,14 @@ export type DesktopGatewayEnvironmentOriginKind =
   | 'network_target';
 
 export type DesktopGatewayEnvironmentProfileAccessRoute = Readonly<{
-  kind: 'url' | 'ssh_host' | 'ssh_container';
+  kind: 'url';
   url?: string;
   origin_label?: string;
-  ssh_destination?: string;
-  ssh_port?: number;
-  auth_mode?: 'key_agent' | 'password';
-  ssh_password_configured?: boolean;
-  ssh_runtime_root?: string;
-  container_engine?: string;
-  container_id?: string;
-  container_runtime_root?: string;
 }>;
 
 export type DesktopGatewayEnvironmentProfile = Readonly<{
   managed: boolean;
-  access_route_kind: DesktopGatewayConnectionKind;
+  access_route_kind: 'url';
 }>;
 
 export type DesktopGatewayEnvironment = Readonly<{
@@ -116,6 +108,7 @@ export type DesktopGatewayEnvironment = Readonly<{
   control_capabilities?: readonly DesktopGatewayEnvironmentCapability[];
   profile?: DesktopGatewayEnvironmentProfile;
   profile_access_route?: DesktopGatewayEnvironmentProfileAccessRoute;
+  access_endpoint?: DesktopGatewayEnvironmentProfileAccessRoute;
   runtime_management?: DesktopGatewayRuntimeManagementCapability;
   origin: Readonly<{
     kind: DesktopGatewayEnvironmentOriginKind;
@@ -219,7 +212,7 @@ export type DesktopGatewayDiagnosis = Readonly<{
   service_state?: DesktopGatewayServiceState;
   catalog_state?: DesktopGatewaySyncState;
   trust_state?: DesktopGatewayTrustState;
-  recommended_recovery?: 'start_gateway' | 'restart_gateway' | 'update_gateway' | 'reinstall_gateway';
+  recommended_recovery?: 'start_gateway' | 'restart_gateway' | 'update_gateway';
   probe_results?: readonly DesktopGatewayDiagnosisProbeResult[];
   managed_probe?: DesktopGatewayManagedProbe;
   error_code?: string;
@@ -249,7 +242,6 @@ export type DesktopGatewaySource = Readonly<{
   service_state?: DesktopGatewayServiceState;
   sync_state?: DesktopGatewaySyncState;
   background_sync_running?: boolean;
-  reinstall_pairing_required?: boolean;
   last_sync_attempt_at_ms?: number;
   last_synced_at_ms?: number;
   last_sync_error_code?: string;
@@ -385,10 +377,39 @@ export function desktopGatewayNeedsResolution(status: DesktopGatewayStatus): boo
 }
 
 export function desktopGatewayCanOpenEnvironment(
-  gateway: Pick<DesktopGatewaySource, 'status'>,
-  environment: Pick<DesktopGatewayEnvironment, 'state' | 'capabilities' | 'access_capabilities'>,
+  gateway: Pick<DesktopGatewaySource, 'status' | 'gateway_url'>,
+  environment: Pick<DesktopGatewayEnvironment, 'state' | 'capabilities' | 'access_capabilities' | 'access_endpoint'>,
 ): boolean {
   const accessCapabilities = environment.access_capabilities ?? [];
+  const endpoint = environment.access_endpoint;
+  if (!endpoint || endpoint.kind !== 'url' || !endpoint.url?.trim()) {
+    return false;
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(endpoint.url);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return false;
+  }
+  if (parsed.username || parsed.password) {
+    return false;
+  }
+  const endpointPath = parsed.pathname.toLowerCase();
+  if (endpointPath.includes('/gateway') || endpointPath.includes('/bridge') || endpointPath.includes('/open-session')) {
+    return false;
+  }
+  if (gateway.gateway_url) {
+    try {
+      if (new URL(gateway.gateway_url).origin === parsed.origin) {
+        return false;
+      }
+    } catch {
+      return false;
+    }
+  }
   return gateway.status === 'online'
     && environment.state === 'available'
     && accessCapabilities.includes('open');

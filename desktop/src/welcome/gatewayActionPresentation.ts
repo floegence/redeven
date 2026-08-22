@@ -1,5 +1,4 @@
 import {
-  desktopGatewayCanManageService,
   desktopGatewayConnectionKindLabel,
   type DesktopGatewayDiagnosisProbeResult,
   type DesktopGatewaySource,
@@ -20,7 +19,7 @@ export type GatewayActionPanelKind =
   | 'stop_gateway_confirm'
   | 'restart_gateway_confirm'
   | 'update_gateway_confirm'
-  | 'reinstall_gateway_confirm'
+  | 'reinstall_target_confirm'
   | 'start_and_refresh_catalog'
   | 'failure_recovery';
 
@@ -214,6 +213,11 @@ function continuationActionFor(
         kind: 'refresh_gateway',
         gateway_id: gateway.gateway_id,
       };
+    case 'pair_gateway':
+      return {
+        kind: 'pair_gateway',
+        gateway_id: gateway.gateway_id,
+      };
     case 'start_gateway':
       return {
         kind: 'start_gateway',
@@ -234,14 +238,11 @@ function continuationActionFor(
     case 'stop_gateway':
     case 'restart_gateway':
     case 'update_gateway':
-    case 'reinstall_gateway':
       return {
         kind: action.intent,
         gateway_id: gateway.gateway_id,
-        ...((action.intent === 'update_gateway' || action.intent === 'restart_gateway' || action.intent === 'stop_gateway' || action.intent === 'reinstall_gateway')
-          ? { impact_acknowledged: true }
-          : {}),
-      } as DesktopLauncherActionRequest;
+        impact_acknowledged: true,
+      };
     default:
       return undefined;
   }
@@ -259,7 +260,7 @@ function gatewayDiagnosisTitle(gateway: DesktopGatewaySource): string {
     case 'needs_update':
       return diagnosis.manageable ? 'Gateway update required' : 'Gateway protocol check failed';
     case 'needs_reinstall':
-      return 'Gateway reinstall required';
+      return 'Gateway requires host maintenance';
     case 'ssh_unreachable':
     case 'container_unavailable':
     case 'bridge_unavailable':
@@ -379,55 +380,6 @@ type GatewayRecoveryPlan = Readonly<{
   continuation_action?: DesktopLauncherActionRequest;
 }>;
 
-function gatewayRecoveryPlanFromRecommendedRecovery(
-  gateway: DesktopGatewaySource,
-): GatewayRecoveryPlan | undefined {
-  const diagnosis = gateway.diagnosis;
-  switch (diagnosis?.recommended_recovery) {
-    case 'start_gateway': {
-      const startAction = gatewaySourceAction('start_gateway', 'Start Gateway', 'default', gateway.service_state?.can_start !== false);
-      return {
-        title: 'Gateway is stopped',
-        detail: 'Desktop can start this Gateway service. Use Refresh again after it is ready to refresh environments.',
-        aria_label: 'Start Gateway service',
-        primary_action: startAction,
-        continuation_action: continuationActionFor(gateway, startAction),
-      };
-    }
-    case 'restart_gateway': {
-      const restartAction = gatewaySourceAction('restart_gateway', 'Restart Gateway', 'default', gateway.service_state?.can_restart !== false);
-      return {
-        title: 'Gateway service needs restart',
-        detail: 'Desktop can restart this Gateway service, then Refresh can retry pairing and catalog refresh.',
-        aria_label: 'Restart Gateway service',
-        primary_action: restartAction,
-        continuation_action: continuationActionFor(gateway, restartAction),
-      };
-    }
-    case 'update_gateway': {
-      const updateAction = gatewaySourceAction('update_gateway', 'Update Gateway', 'default', gateway.service_state?.can_update !== false);
-      return {
-        title: 'Gateway update required',
-        detail: 'Desktop needs to update this Gateway service before Refresh can safely pair and refresh the catalog.',
-        aria_label: 'Update Gateway before refreshing',
-        primary_action: updateAction,
-        continuation_action: continuationActionFor(gateway, updateAction),
-      };
-    }
-    case 'reinstall_gateway': {
-      const reinstallAction = gatewaySourceAction('reinstall_gateway', 'Reinstall', 'default', true);
-      return {
-        title: 'Gateway reinstall required',
-        detail: 'This Gateway has incompatible state. Reinstall replaces its complete Redeven environment and requires pairing again.',
-        aria_label: 'Reinstall Gateway',
-        primary_action: reinstallAction,
-        continuation_action: continuationActionFor(gateway, reinstallAction),
-      };
-    }
-    default:
-      return undefined;
-  }
-}
 
 function gatewayRefreshRecoveryPlan(
   gateway: DesktopGatewaySource,
@@ -444,14 +396,14 @@ function gatewayRefreshRecoveryPlan(
     };
   }
 
-  if (gateway.reinstall_pairing_required === true) {
-    const pairAction = gatewaySourceAction('refresh_gateway', 'Pair Gateway', 'default', true);
+  // Gateway records are access-only URL endpoints. Any legacy managed
+  // connection reaching this presenter is invalid and must not expose the
+  // old Gateway service lifecycle actions.
+  if (gateway.connection_kind !== 'url') {
     return {
-      title: 'Gateway pairing required',
-      detail: 'Reinstall completed. Pair the new Gateway before using this Environment.',
-      aria_label: 'Pair Gateway',
-      primary_action: pairAction,
-      continuation_action: continuationActionFor(gateway, pairAction),
+      title: 'Gateway requires host maintenance',
+      detail: 'Repair this Standalone Gateway on its own host, then refresh it here.',
+      aria_label: 'Standalone Gateway requires host maintenance',
     };
   }
 
@@ -472,52 +424,31 @@ function gatewayRefreshRecoveryPlan(
     };
   }
 
-  const recommendedRecovery = gatewayRecoveryPlanFromRecommendedRecovery(gateway);
-  if (recommendedRecovery) {
-    return recommendedRecovery;
-  }
-
   switch (diagnosis.classification) {
-    case 'not_started': {
-      const startAction = gatewaySourceAction('start_gateway', 'Start Gateway', 'default', true);
+    case 'not_started':
       return {
         title: 'Gateway is stopped',
-        detail: 'Desktop can start this Gateway service. Use Refresh again after it is ready to refresh environments.',
-        aria_label: 'Start Gateway service',
-        primary_action: startAction,
-        continuation_action: continuationActionFor(gateway, startAction),
+        detail: 'Start or repair this Standalone Gateway on its own host, then use Refresh here.',
+        aria_label: 'Standalone Gateway is stopped',
       };
-    }
-    case 'bridge_unavailable': {
-      const restartAction = gatewaySourceAction('restart_gateway', 'Restart Gateway', 'default', gateway.service_state?.can_restart !== false);
+    case 'bridge_unavailable':
       return {
-        title: 'Gateway service needs restart',
-        detail: 'Desktop can restart this Gateway service, then Refresh can retry pairing and catalog refresh.',
-        aria_label: 'Restart Gateway service',
-        primary_action: restartAction,
-        continuation_action: continuationActionFor(gateway, restartAction),
+        title: 'Gateway service needs attention',
+        detail: 'Repair this Standalone Gateway on its own host, then use Refresh here.',
+        aria_label: 'Standalone Gateway needs attention',
       };
-    }
-    case 'needs_update': {
-      const updateAction = gatewaySourceAction('update_gateway', 'Update Gateway', 'default', gateway.service_state?.can_update !== false);
+    case 'needs_update':
       return {
         title: 'Gateway update required',
-        detail: 'Desktop needs to update this Gateway service before Refresh can safely pair and refresh the catalog.',
-        aria_label: 'Update Gateway before refreshing',
-        primary_action: updateAction,
-        continuation_action: continuationActionFor(gateway, updateAction),
+        detail: 'Update this Standalone Gateway on its own host, then use Refresh here.',
+        aria_label: 'Standalone Gateway update required',
       };
-    }
-    case 'needs_reinstall': {
-      const reinstallAction = gatewaySourceAction('reinstall_gateway', 'Reinstall', 'default', true);
+    case 'needs_reinstall':
       return {
-        title: 'Gateway reinstall required',
-        detail: 'This Gateway has incompatible state. Reinstall replaces its complete Redeven environment and requires pairing again.',
-        aria_label: 'Reinstall Gateway',
-        primary_action: reinstallAction,
-        continuation_action: continuationActionFor(gateway, reinstallAction),
+        title: 'Gateway requires host maintenance',
+        detail: 'This Standalone Gateway has incompatible state. Repair or reinstall it on its own host, then refresh it here.',
+        aria_label: 'Standalone Gateway maintenance required',
       };
-    }
     case 'ssh_unreachable':
     case 'container_unavailable':
     case 'unknown':
@@ -594,19 +525,6 @@ function buildPanel(
   };
 }
 
-function confirmationPanelKind(action: string): GatewayActionPanelKind {
-  switch (action) {
-    case 'stop_gateway':
-      return 'stop_gateway_confirm';
-    case 'restart_gateway':
-      return 'restart_gateway_confirm';
-    case 'reinstall_gateway':
-      return 'reinstall_gateway_confirm';
-    default:
-      return 'update_gateway_confirm';
-  }
-}
-
 function actionLabel(action: string): string {
   switch (action) {
     case 'refresh_gateway':
@@ -617,8 +535,8 @@ function actionLabel(action: string): string {
       return 'Restart Gateway';
     case 'update_gateway':
       return 'Update Gateway';
-    case 'reinstall_gateway':
-      return 'Reinstall';
+    case 'reinstall_target':
+      return 'Reinstall Redeven';
     default:
       return 'Gateway action';
   }
@@ -628,7 +546,6 @@ export function buildGatewayActionPresentation(
   input: BuildGatewayActionPresentationInput,
 ): GatewayActionPanelModel {
   const { gateway, clicked_action: action } = input;
-  const manageable = desktopGatewayCanManageService(gateway);
 
   if (input.active_progress) {
     return buildPanel({
@@ -691,7 +608,6 @@ export function buildGatewayActionPresentation(
       tone: recovery.primary_action?.intent === 'start_gateway'
         || recovery.primary_action?.intent === 'restart_gateway'
         || recovery.primary_action?.intent === 'update_gateway'
-        || recovery.primary_action?.intent === 'reinstall_gateway'
         || gateway.sync_state === 'catalog_failed'
         || gateway.sync_state === 'gateway_unreachable'
         ? 'warning'
@@ -706,30 +622,11 @@ export function buildGatewayActionPresentation(
     });
   }
 
-  if ((action.intent === 'stop_gateway' || action.intent === 'restart_gateway' || action.intent === 'update_gateway' || action.intent === 'reinstall_gateway') && manageable) {
-    const label = actionLabel(action.intent);
-    const sessions = input.affected_sessions ?? [];
-    return buildPanel({
-      gateway,
-      kind: confirmationPanelKind(action.intent),
-      execution_mode: 'confirm',
-      tone: action.intent === 'reinstall_gateway' || sessions.length > 0 ? 'warning' : 'neutral',
-      eyebrow: 'Gateway service',
-      title: label,
-      detail: action.intent === 'reinstall_gateway'
-        ? 'This permanently replaces the complete Redeven environment, including project data, trust, and Gateway state. Pairing is required again.'
-        : sessions.length > 0
-        ? `${sessions.length} environment session${sessions.length === 1 ? '' : 's'} opened through this Gateway will be disconnected.`
-        : `Desktop will ${label.toLowerCase()} on the configured target.`,
-      aria_label: label,
-      affected_sessions: sessions,
-      continuation_action: {
-        kind: action.intent,
-        gateway_id: gateway.gateway_id,
-        impact_acknowledged: true,
-      } as DesktopLauncherActionRequest,
-      primary_action: gatewaySourceAction(action.intent, label, 'default', action.enabled),
-    });
+  if (action.intent === 'start_gateway'
+    || action.intent === 'stop_gateway'
+    || action.intent === 'restart_gateway'
+    || action.intent === 'update_gateway') {
+    return noGatewayActionPanel;
   }
 
   return buildPanel({

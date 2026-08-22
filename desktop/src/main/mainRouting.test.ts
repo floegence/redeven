@@ -52,102 +52,69 @@ describe('main routing', () => {
     expect(mainSrc).not.toContain("'window:settings'");
   });
 
-  it('starts the validated local Gateway and Runtime during Desktop launch without initialization or artifact upload', () => {
+  it('blocks Local Environment auto-start when the reinstall marker is present', () => {
     const mainSrc = readMainSource();
     const start = mainSrc.indexOf('async function autoStartLocalRuntimeOnDesktopLaunch()');
     const end = mainSrc.indexOf('function controlPlaneIssueForError(', start);
     expect(start).toBeGreaterThanOrEqual(0);
     expect(end).toBeGreaterThan(start);
     const startupSrc = mainSrc.slice(start, end);
-    expect(startupSrc).toContain('const bundle = requireDesktopBundle();');
-    expect(startupSrc).toContain('if (await localEnvironmentReinstallRequired(environment)) {');
-    expect(startupSrc).toContain('await upsertDirectRuntimeGateway(environment.id, environment.label, hostAccess, placement);');
-    expect(startupSrc).toContain("serviceState.status === 'needs_reinstall'");
-    expect(startupSrc).toContain('await localEnvironmentReinstallPairingRequired(environment)');
-    expect(startupSrc).toContain('Local Environment reinstall is awaiting explicit pairing; automatic startup was skipped.');
-    expect(startupSrc).toContain('await gatewayLifecycleManager().restartGateway(record');
-    expect(startupSrc).toContain('await gatewayLifecycleManager().startGateway(record');
-    expect(startupSrc).toContain('await syncGatewayRecord(record');
-    expect(startupSrc).toContain('const authorizedRecord = await gatewayStore().get(record.gateway_id);');
-    expect(startupSrc).toContain('await gatewayLifecycleManager().runtimeManagementCapability(authorizedRecord');
-    expect(startupSrc).not.toContain('await gatewayLifecycleManager().runtimeManagementCapability(record');
+    expect(startupSrc).toContain('if (await reinstallTargetRequired(environment.id)) {');
     expect(startupSrc).toContain('const attached = await attachLocalEnvironmentRuntime(environment);');
-    expect(startupSrc.indexOf("serviceState.status === 'needs_reinstall'")).toBeLessThan(
-      startupSrc.indexOf('const attachedBeforeStartup = await attachLocalEnvironmentRuntime(environment);'),
-    );
-    expect(startupSrc.indexOf('if (await localEnvironmentReinstallRequired(environment)) {')).toBeLessThan(
-      startupSrc.indexOf('await upsertDirectRuntimeGateway(environment.id, environment.label, hostAccess, placement);'),
-    );
     expect(startupSrc).toContain("structuredFailure?.code === 'reinstall_required'");
-    expect(startupSrc).toContain('await markLocalEnvironmentReinstallRequired(preferences.local_environment');
+    expect(startupSrc).toContain('await markReinstallTargetRequired(preferences.local_environment.id');
     expect(startupSrc).toContain('await refreshWelcomeRuntimeHealthForEnvironment(environment.id, { force: true });');
     expect(startupSrc).toContain('resetLauncherIssueState();');
     expect(startupSrc).toContain('broadcastDesktopWelcomeSnapshots();');
     expect(startupSrc).not.toContain('initializeGatewayRuntime({');
     expect(startupSrc).not.toContain('prepareDesktopRuntimeUploadAsset');
     expect(startupSrc).not.toContain('prepareCustomRuntimeLifecycleArtifact');
+    expect(startupSrc).not.toContain('upsertDirectRuntimeGateway');
+    expect(startupSrc).not.toContain('gatewayReinstallPairingRequired');
   });
 
-  it('keeps incompatible Local Environment state blocked across restart and pairing', () => {
+  it('keeps direct targets isolated from the Gateway store and pairing flow', () => {
     const mainSrc = readMainSource();
-    expect(mainSrc).toContain("'maintenance', 'local-environment-reinstall-required.json'");
-    expect(mainSrc).toContain("'maintenance', 'gateway-pairing-required'");
-    expect(mainSrc).toContain('await markLocalEnvironmentReinstallRequired(environment, {');
-    expect(mainSrc).toContain('reason: `explicit_reinstall:${operationID}`');
-    expect(mainSrc).toContain('await localEnvironmentReinstallPairingRequired(preferences.local_environment)');
-    expect(mainSrc).toContain('reinstall_pairing_required: true');
-    expect(mainSrc).toContain('const gatewaySources = localReinstallRequired ? [] : await loadGatewaySourcesForWelcome();');
-    expect(mainSrc).toContain('if (await localEnvironmentReinstallBlocksGateway(record)) {');
+    expect(mainSrc).toContain('await markReinstallTargetRequired(preferences.local_environment.id, {');
+    expect(mainSrc).toContain('await reinstallTargetRequiredFailureIfPresent(environmentID, label)');
+    expect(mainSrc).toContain('const gatewaySources = await loadGatewaySourcesForWelcome();');
     const openStart = mainSrc.indexOf('async function openLocalEnvironmentFromLauncher(');
     const openEnd = mainSrc.indexOf('async function openRemoteEnvironmentFromLauncher(', openStart);
     const openSrc = mainSrc.slice(openStart, openEnd);
-    expect(openSrc).toContain('if (await localEnvironmentReinstallRequired(environment)) {');
-    expect(openSrc).toContain('return localEnvironmentReinstallRequiredLauncherFailure(environment);');
-    expect(openSrc).toContain('if (await localEnvironmentReinstallPairingRequired(environment)) {');
-    expect(openSrc).toContain('return localEnvironmentPairingRequiredLauncherFailure(environment);');
+    expect(openSrc).toContain('if (await reinstallTargetRequired(environment.id)) {');
+    expect(openSrc).toContain('return reinstallTargetRequiredLauncherFailure(environment.id, environment.label);');
 
-    const resetStart = mainSrc.indexOf('async function resetLocalEnvironmentFromLauncher(');
-    const resetEnd = mainSrc.indexOf('function gatewayServiceOperationName(', resetStart);
-    const resetSrc = mainSrc.slice(resetStart, resetEnd);
-    expect(resetSrc).toContain('gatewayStoreCache = null;');
-    expect(resetSrc).toContain('gatewaySyncStateByID.clear();');
-    expect(resetSrc).toContain('const freshEnvironment = createDesktopLocalEnvironmentState({');
-    expect(resetSrc).toContain('const freshRecord = await upsertDirectRuntimeGateway(');
-    expect(resetSrc).toContain('await gatewayLifecycleManager().startGateway(freshRecord');
-    expect(resetSrc).not.toContain('await resetManagedGatewayTrust(record');
+    expect(mainSrc).toContain('new ReinstallTargetCoordinator({');
+    expect(mainSrc).toContain('close_sessions: closeDesktopSessionsForReinstallTarget');
+    expect(mainSrc).toContain('inspect_processes: async (descriptor, targetRoot, executor) => inspectReinstallTargetProcesses');
+    expect(mainSrc).toContain('stop_processes: async (descriptor, targetRoot, inventory, executor) => stopReinstallTargetProcesses');
+    const freshInstallStart = mainSrc.indexOf('async function installFreshDirectReinstallTarget(');
+    const freshInstallEnd = mainSrc.indexOf('async function verifyFreshDirectReinstallTarget(', freshInstallStart);
+    const freshInstallSrc = mainSrc.slice(freshInstallStart, freshInstallEnd);
+    expect(freshInstallSrc).toContain('ensureManagedGatewayServiceReady(serviceOptions)');
+    expect(freshInstallSrc).not.toContain('gatewayLifecycleManager()');
+    expect(freshInstallSrc).not.toContain('startManagedRuntime({');
+    expect(freshInstallSrc).not.toContain('syncGatewayRecord(');
+    expect(mainSrc).not.toContain('resetLocalEnvironmentFromLauncher');
 
     const autoSyncStart = mainSrc.indexOf('async function syncGatewayIfNeeded(');
     const autoSyncEnd = mainSrc.indexOf('async function syncVisibleGatewaysIfNeeded(', autoSyncStart);
     const autoSyncSrc = mainSrc.slice(autoSyncStart, autoSyncEnd);
-    expect(autoSyncSrc).toContain('if (await gatewayReinstallPairingRequired(record.gateway_id)) {');
-    const visibleSyncStart = mainSrc.indexOf('async function syncVisibleGatewaysIfNeeded(');
-    const visibleSyncEnd = mainSrc.indexOf('async function upsertGatewayFromLauncher(', visibleSyncStart);
-    const visibleSyncSrc = mainSrc.slice(visibleSyncStart, visibleSyncEnd);
-    expect(visibleSyncSrc.indexOf('await localEnvironmentReinstallRequired(preferences.local_environment)')).toBeLessThan(
-      visibleSyncSrc.indexOf('await gatewayStore().list()'),
-    );
+    expect(autoSyncSrc).not.toContain('reinstallTargetBlocksGateway');
 
     const lifecycleStart = mainSrc.indexOf('async function runEnvironmentRuntimeLifecycleFromLauncher(');
     const lifecycleEnd = mainSrc.indexOf('async function startEnvironmentRuntimeFromLauncher(', lifecycleStart);
     const lifecycleSrc = mainSrc.slice(lifecycleStart, lifecycleEnd);
-    expect(lifecycleSrc).toContain('return localEnvironmentReinstallRequiredLauncherFailure(localEnvironment);');
-    expect(lifecycleSrc).toContain('return localEnvironmentPairingRequiredLauncherFailure(localEnvironment);');
-    expect(lifecycleSrc.indexOf('await localEnvironmentReinstallRequired(localEnvironment)')).toBeLessThan(
-      lifecycleSrc.indexOf('await upsertDirectRuntimeGateway(environmentID, label, hostAccess, placement)'),
-    );
-    expect(lifecycleSrc.indexOf('await localEnvironmentReinstallPairingRequired(localEnvironment)')).toBeLessThan(
-      lifecycleSrc.indexOf('await upsertDirectRuntimeGateway(environmentID, label, hostAccess, placement)'),
-    );
+    expect(lifecycleSrc).toContain('await reinstallTargetRequiredFailureIfPresent(environmentID, label)');
+    expect(lifecycleSrc).not.toContain('localEnvironmentPairingRequiredLauncherFailure');
+    expect(lifecycleSrc).not.toContain('upsertDirectRuntimeGateway');
 
     const refreshStart = mainSrc.indexOf('async function refreshEnvironmentRuntimeFromLauncher(');
     const refreshEnd = mainSrc.indexOf('async function refreshAllEnvironmentRuntimesFromLauncher(', refreshStart);
     const refreshSrc = mainSrc.slice(refreshStart, refreshEnd);
-    expect(refreshSrc).toContain('return localEnvironmentReinstallRequiredLauncherFailure(localEnvironment);');
-    expect(refreshSrc).toContain('return localEnvironmentPairingRequiredLauncherFailure(localEnvironment);');
-    expect(refreshSrc.indexOf('await localEnvironmentReinstallRequired(localEnvironment)')).toBeLessThan(
-      refreshSrc.indexOf('await refreshWelcomeRuntimeHealthForEnvironment(environmentID)'),
-    );
-    expect(mainSrc).toContain('await clearGatewayReinstallPairingRequired(syncedRecord.gateway_id);');
+    expect(refreshSrc).toContain('await reinstallTargetRequiredFailureIfPresent(');
+    expect(refreshSrc).not.toContain('localEnvironmentPairingRequiredLauncherFailure');
+    expect(mainSrc).not.toContain('clearGatewayReinstallPairingRequired');
   });
 
   it('tracks environment windows by session key and scopes child windows per session', () => {
@@ -406,7 +373,7 @@ describe('main routing', () => {
     expect(helperSrc).not.toContain("label: 'Review Trust'");
   });
 
-  it('limits Gateway diagnosis recovery guidance to Start, Restart, Update, and explicit Reinstall', () => {
+  it('does not expose Gateway service lifecycle recovery actions', () => {
     const mainSrc = readMainSource();
     const gatewayTypeSrc = readSharedGatewaySource();
     const recoveryStart = mainSrc.indexOf('function gatewayRecommendedRecoveryForDiagnosis(');
@@ -424,12 +391,10 @@ describe('main routing', () => {
     expect(gatewayTypeSrc).not.toContain('recommended_action?:');
     expect(mainSrc).toContain('recommended_recovery: recommendedRecovery');
     expect(mainSrc).toContain('switch (diagnosis.recommended_recovery ?? gatewayRecommendedRecoveryForDiagnosis(diagnosis))');
-    expect(gatewayTypeSrc).toContain("recommended_recovery?: 'start_gateway' | 'restart_gateway' | 'update_gateway' | 'reinstall_gateway';");
+    expect(gatewayTypeSrc).toContain("recommended_recovery?: 'start_gateway' | 'restart_gateway' | 'update_gateway';");
     expect(recoverySrc).toContain("return diagnosis.service_state?.can_start === false ? undefined : 'start_gateway';");
     expect(recoverySrc).toContain("return diagnosis.service_state?.can_update === false ? undefined : 'update_gateway';");
     expect(recoverySrc).toContain("return diagnosis.service_state?.can_restart === false ? undefined : 'restart_gateway';");
-    expect(recoverySrc).toContain("case 'needs_reinstall':");
-    expect(recoverySrc).toContain("return 'reinstall_gateway';");
     expect(recoverySrc).toContain("case 'service_ready_catalog_failed':");
     expect(recoverySrc).toContain("case 'trust_failed':");
     expect(recoverySrc).toContain("case 'pairing_required':");
@@ -437,7 +402,7 @@ describe('main routing', () => {
     expect(nextActionsSrc).toContain("kind: 'start_gateway'");
     expect(nextActionsSrc).toContain("kind: 'restart_gateway'");
     expect(nextActionsSrc).toContain("kind: 'update_gateway'");
-    expect(nextActionsSrc).toContain("kind: 'reinstall_gateway'");
+    expect(nextActionsSrc).not.toContain("kind: 'reinstall_target'");
     expect(nextActionsSrc).not.toContain("kind: 'check_gateway'");
     expect(nextActionsSrc).not.toContain("kind: 'refresh_gateway_catalog'");
     expect(nextActionsSrc).not.toContain("kind: 'resolve_gateway'");
@@ -499,31 +464,13 @@ describe('main routing', () => {
     expect(protocolSrc).toContain("catalog_state: 'catalog_failed'");
     expect(protocolSrc).toContain("error.code === 'GATEWAY_INVALID_RESPONSE'");
     expect(protocolSrc).toContain("error.code === 'GATEWAY_RUNTIME_CAPABILITY_INVALID'");
-    expect(protocolSrc).toContain("summary: manageable ? 'Gateway reinstall required' : 'Gateway response is incompatible'");
+    expect(protocolSrc).toContain("summary: manageable ? 'Gateway requires host maintenance' : 'Gateway response is incompatible'");
     expect(protocolSrc).not.toContain("catalog_state: 'pairing_failed'");
     expect(protocolSrc).not.toContain("classification: 'pairing_required'");
     expect(protocolSrc).not.toContain("classification: 'identity_changed'");
     expect(protocolSrc).not.toContain("classification: 'ssh_unreachable'");
     expect(protocolSrc).not.toContain('Runtime Service');
     expect(protocolSrc).not.toContain('compatibility');
-  });
-
-  it('keeps first pairing failures distinct from incompatible saved trust', () => {
-    const mainSrc = readMainSource();
-    const helperStart = mainSrc.indexOf('function gatewayTrustErrorNeedsReinstall(');
-    const helperEnd = mainSrc.indexOf('async function resetManagedGatewayTrust(', helperStart);
-    expect(helperStart).toBeGreaterThanOrEqual(0);
-    expect(helperEnd).toBeGreaterThan(helperStart);
-    const helperSrc = mainSrc.slice(helperStart, helperEnd);
-    const diagnosisStart = mainSrc.indexOf('function gatewayDiagnosisForError(');
-    const diagnosisEnd = mainSrc.indexOf('async function checkGatewayRecord(', diagnosisStart);
-    const diagnosisSrc = mainSrc.slice(diagnosisStart, diagnosisEnd);
-
-    expect(helperSrc).toContain("case 'GATEWAY_TRUST_CHANGED':");
-    expect(helperSrc).toContain("case 'GATEWAY_TRUST_ID_MISMATCH':");
-    expect(helperSrc).not.toContain("case 'GATEWAY_PAIRING_REQUIRED':");
-    expect(diagnosisSrc).toContain("error.code === 'GATEWAY_PAIRING_REQUIRED'");
-    expect(diagnosisSrc).toContain("classification: pairingRequired ? 'pairing_required' : 'trust_failed'");
   });
 
   it('invalidates cached Gateway catalog entries after protocol mismatches', () => {
@@ -657,7 +604,7 @@ describe('main routing', () => {
     expect(mainSrc).toContain('open_progress: buildOpenConnectionProgress(input)');
     expect(mainSrc).toContain("interrupt_label: 'Stop opening'");
     expect(mainSrc).toContain('const runtimeLifecycleCoordinator = new RuntimeLifecycleCoordinator();');
-    expect(mainSrc).not.toContain('runtimeLifecycleCoordinator.run({');
+    expect(mainSrc).toContain('runtimeLifecycleCoordinator.run({');
     expect(mainSrc).toContain('runtimeLifecycleCoordinator.waitForReadyMutation(');
     expect(mainSrc).not.toContain('pendingSSHRuntimeStartByKey');
     expect(mainSrc).not.toContain('pendingRuntimePlacementStartByTargetID');
@@ -673,7 +620,9 @@ describe('main routing', () => {
     expect(mainSrc).toContain('const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;');
     expect(mainSrc).toContain('environment_label: label');
     expect(mainSrc).toContain('detail: progress.detail');
-    expect(mainSrc).not.toContain('const launch = await startManagedRuntime({');
+    const directLifecycleStart = mainSrc.indexOf('async function runEnvironmentRuntimeLifecycleFromLauncher(');
+    const directLifecycleEnd = mainSrc.indexOf('async function startEnvironmentRuntimeFromLauncher(', directLifecycleStart);
+    expect(mainSrc.slice(directLifecycleStart, directLifecycleEnd)).not.toContain('const launch = await startManagedRuntime({');
     expect(mainSrc).toContain('const startedAtUnixMs = snapshot?.started_at_unix_ms;');
     expect(mainSrc).toContain('current?.started_at_unix_ms !== startedAtUnixMs');
     expect(mainSrc).toContain('function desktopFailureFromError(');
@@ -835,7 +784,7 @@ describe('main routing', () => {
     expect(workflowSrc).not.toContain('if (currentProgress) {\n    const hydrated = RuntimeLifecycleWorkflow.fromProgress(currentProgress);');
 
     const updateLifecycleStart = mainSrc.indexOf('function updateRuntimeLifecycleOperation(');
-    const updateLifecycleEnd = mainSrc.indexOf('function runtimeLifecyclePhaseFromGateway(', updateLifecycleStart);
+    const updateLifecycleEnd = mainSrc.indexOf('function _runtimeLifecyclePhaseFromGateway(', updateLifecycleStart);
     expect(updateLifecycleStart).toBeGreaterThanOrEqual(0);
     expect(updateLifecycleEnd).toBeGreaterThan(updateLifecycleStart);
     const updateLifecycleSrc = mainSrc.slice(updateLifecycleStart, updateLifecycleEnd);
@@ -857,7 +806,7 @@ describe('main routing', () => {
     expect(removalSrc).toContain('launcherOperationMatchesAttempt(current, owner)');
   });
 
-  it('requires Gateway operations for product-managed Runtime lifecycle actions', () => {
+  it('keeps Managed Environment lifecycle actions on direct Desktop executors', () => {
     const mainSrc = readMainSource();
 
     expect(mainSrc).toContain('DESKTOP_SHELL_RUNTIME_MAINTENANCE_CONTEXT_CHANNEL');
@@ -865,7 +814,6 @@ describe('main routing', () => {
     expect(mainSrc).toContain('function runtimeMaintenanceContextFromSession(');
     expect(mainSrc).toContain("? 'runtime_gateway_setup_required'");
     expect(mainSrc).toContain("readiness: directTarget ? 'setup_required' : 'unknown'");
-    expect(mainSrc).toContain("presentation_state: unsupported ? 'unsupported' : directTarget ? 'setup_required' : 'unknown'");
     expect(mainSrc).toContain('async function manageDesktopUpdateFromLauncher(');
     expect(mainSrc).toContain('async function runEnvironmentRuntimeLifecycleFromLauncher(');
     expect(mainSrc).toContain("case 'manage_desktop_update':");
@@ -875,13 +823,10 @@ describe('main routing', () => {
     const directLifecycleStart = mainSrc.indexOf('async function runEnvironmentRuntimeLifecycleFromLauncher(');
     const directLifecycleEnd = mainSrc.indexOf('async function startEnvironmentRuntimeFromLauncher(', directLifecycleStart);
     const directLifecycleSrc = mainSrc.slice(directLifecycleStart, directLifecycleEnd);
-    expect(directLifecycleSrc).toContain('upsertDirectRuntimeGateway(');
-    expect(directLifecycleSrc).not.toContain('syncGatewayRecord(record');
-    expect(directLifecycleSrc).toContain('runGatewayEnvironmentLifecycleFromLauncher({');
-    expect(directLifecycleSrc).toContain("gateway_env_id: 'env_local'");
-    expect(directLifecycleSrc).not.toContain('ensureRuntimePlacementReadyRecordFromLauncher(');
-    expect(directLifecycleSrc).not.toContain('ensureSSHRuntimeReadyRecord(');
-    expect(directLifecycleSrc).not.toContain('startLocalHostRuntimeWithLifecycleProgress(');
+    expect(directLifecycleSrc).toContain('executeDirectManagedEnvironmentLifecycle({');
+    expect(directLifecycleSrc).not.toContain('upsertDirectRuntimeGateway(');
+    expect(directLifecycleSrc).not.toContain('runGatewayEnvironmentLifecycleFromLauncher(');
+    expect(directLifecycleSrc).not.toContain('gatewayLifecycleManager().prepareRuntimeOperation(');
 
     const shellActionStart = mainSrc.indexOf('ipcMain.handle(DESKTOP_SHELL_RUNTIME_ACTION_CHANNEL');
     const shellActionEnd = mainSrc.indexOf('ipcMain.handle(DESKTOP_CODE_WORKSPACE_PACKAGE_PREPARE_CHANNEL', shellActionStart);
@@ -890,51 +835,9 @@ describe('main routing', () => {
     expect(shellActionSrc).toContain("performRuntimeMaintenanceFromShell(event.sender.id, 'restart')");
     expect(shellActionSrc).not.toContain('restartManagedRuntimeFromShell(');
 
-    const gatewayLifecycleStart = mainSrc.indexOf('async function runGatewayEnvironmentLifecycleFromLauncher(');
-    const gatewayLifecycleEnd = mainSrc.indexOf('async function resolveProviderRuntimeLifecycleScope(', gatewayLifecycleStart);
-    const gatewayLifecycleSrc = mainSrc.slice(gatewayLifecycleStart, gatewayLifecycleEnd);
-    expect(gatewayLifecycleSrc).not.toContain('requireGatewayEnvironmentLifecycleCapability(record, request');
-    expect(gatewayLifecycleSrc.match(/refreshGatewaySourceForAuthorizedAction\(record/g)).toHaveLength(1);
-    expect(gatewayLifecycleSrc).toContain('onGatewayServiceProgress');
-    expect(gatewayLifecycleSrc).toContain("management.presentation_state !== 'allowed'");
-    expect(gatewayLifecycleSrc).toContain('gatewayLifecycleManager().prepareRuntimeOperation(record');
-    expect(gatewayLifecycleSrc).toContain('gatewayLifecycleManager().confirmRuntimeOperation(');
-    expect(gatewayLifecycleSrc).toContain('gatewayLifecycleManager().commitRuntimeOperation(');
-    expect(gatewayLifecycleSrc).toContain("if (runtimeOperationKind === 'start' || !runtimeOperationRequiresConfirmation(runtimeOperation)) {");
-    expect(gatewayLifecycleSrc).toContain("runtimeOperationKind === 'restart' && management.operations?.includes('update_runtime')");
-    expect(gatewayLifecycleSrc).toContain('Older Gateway bundles may report a conservative confirmation state');
-    expect(gatewayLifecycleSrc).not.toContain('await closeEnvironmentSessionsForRuntimeLifecycle({');
-    expect(gatewayLifecycleSrc.indexOf('refreshGatewaySourceForAuthorizedAction(record')).toBeLessThan(
-      gatewayLifecycleSrc.indexOf('gatewayLifecycleManager().prepareRuntimeOperation(record'),
-    );
-    expect(gatewayLifecycleSrc.indexOf('preflightPublishedRuntimeLifecycleArtifact({')).toBeLessThan(
-      gatewayLifecycleSrc.indexOf('gatewayLifecycleManager().prepareRuntimeOperation(record'),
-    );
-
-    const providerLifecycleStart = mainSrc.indexOf('async function runProviderEnvironmentLifecycleFromLauncher(');
-    const providerLifecycleEnd = mainSrc.indexOf('function gatewayStartRequiredFailure(', providerLifecycleStart);
-    expect(providerLifecycleStart).toBeGreaterThanOrEqual(0);
-    expect(providerLifecycleEnd).toBeGreaterThan(providerLifecycleStart);
-    const providerLifecycleSrc = mainSrc.slice(providerLifecycleStart, providerLifecycleEnd);
-    expect(providerLifecycleSrc.indexOf('preflightPublishedRuntimeLifecycleArtifact({')).toBeLessThan(
-      providerLifecycleSrc.indexOf('authorizeProviderRuntimeOperation('),
-    );
-    expect(providerLifecycleSrc.indexOf('authorizeProviderRuntimeOperation(')).toBeLessThan(
-      providerLifecycleSrc.indexOf('client.prepareRuntimeOperation(resolved.scope'),
-    );
-
-    const providerInitializationStart = mainSrc.indexOf('async function setupProviderRuntimeManagementWithDirectCardFromLauncher(');
-    const providerInitializationEnd = mainSrc.indexOf('async function runProviderEnvironmentLifecycleFromLauncher(', providerInitializationStart);
-    expect(providerInitializationStart).toBeGreaterThanOrEqual(0);
-    expect(providerInitializationEnd).toBeGreaterThan(providerInitializationStart);
-    const providerInitializationSrc = mainSrc.slice(providerInitializationStart, providerInitializationEnd);
-    expect(providerInitializationSrc.indexOf('authorizeProviderRuntimeEnrollment(preferences, environment)')).toBeLessThan(
-      providerInitializationSrc.indexOf('gatewayLifecycleManager().startGateway(record'),
-    );
-    expect(providerInitializationSrc.indexOf('gatewayLifecycleManager().startGateway(record')).toBeLessThan(
-      providerInitializationSrc.indexOf('gatewayLifecycleManager().enrollProviderSupervisor(record'),
-    );
-    expect(providerInitializationSrc).not.toContain('Runtime Management Setup Failed');
+    expect(mainSrc).toContain('async function runProviderEnvironmentLifecycleFromLauncher(');
+    expect(mainSrc).toContain('authorizeProviderRuntimeOperation(');
+    expect(mainSrc).not.toContain('upsertDirectRuntimeGateway(');
   });
 
   it('uses fresh provider health and SSH runtime-affecting settings for launcher routing', () => {
@@ -950,7 +853,11 @@ describe('main routing', () => {
 
     expect(mainSrc).not.toContain('async function ensureSSHRuntimeReadyRecord(');
     expect(mainSrc).not.toContain('async function ensureSSHRuntimeReadyRecordUncoordinated(');
-    expect(mainSrc).not.toContain('ensureManagedSSHRuntimeReady({');
+    expect(routeSnapshotSrc).not.toContain('ensureManagedSSHRuntimeReady({');
+    expect(mainSrc.slice(
+      mainSrc.indexOf('async function installFreshDirectReinstallTarget('),
+      mainSrc.indexOf('async function verifyFreshDirectReinstallTarget('),
+    )).toContain('ensureManagedSSHRuntimeReady({');
 
     const openSSHStart = mainSrc.indexOf('async function openSSHEnvironmentFromLauncher(');
     const openSSHEnd = mainSrc.indexOf('function thrownLauncherActionFailure(', openSSHStart);
@@ -1063,14 +970,11 @@ describe('main routing', () => {
     const startRuntimeStart = mainSrc.indexOf('async function runEnvironmentRuntimeLifecycleFromLauncher(');
     const startRuntimeEnd = mainSrc.indexOf('async function connectProviderRuntimeFromLauncher(', startRuntimeStart);
     const startRuntimeSrc = mainSrc.slice(startRuntimeStart, startRuntimeEnd);
-    expect(startRuntimeSrc).toContain('prepareRuntimeContainerForLifecycle(');
-    expect(startRuntimeSrc).toContain("startIfNeeded: requestedOperation !== 'stop'");
-    expect(startRuntimeSrc).toContain("requestedOperation === 'stop' && !prepared.running");
-    expect(startRuntimeSrc).toContain('upsertDirectRuntimeGateway(');
-    expect(startRuntimeSrc).toContain('runGatewayEnvironmentLifecycleFromLauncher({');
-    expect(startRuntimeSrc).not.toContain('ensureRuntimePlacementReadyRecordFromLauncher(request)');
-    expect(startRuntimeSrc).not.toContain('startRuntimePlacementBridgeSession({');
-    expect(startRuntimeSrc).not.toContain('const normalizedSSHTarget = sshDetailsFromRuntimeTargetRequest(request);');
+    expect(startRuntimeSrc).toContain('executeDirectManagedEnvironmentLifecycle({');
+    expect(startRuntimeSrc).toContain('runtimeHostAccessFromRequest(request)');
+    expect(startRuntimeSrc).not.toContain('upsertDirectRuntimeGateway(');
+    expect(startRuntimeSrc).not.toContain('runGatewayEnvironmentLifecycleFromLauncher({');
+    expect(startRuntimeSrc).not.toContain('gatewayLifecycleManager().prepareRuntimeOperation(');
 
     const stopRuntimeStart = mainSrc.indexOf('async function stopEnvironmentRuntimeFromLauncher(');
     const stopRuntimeEnd = mainSrc.indexOf('async function refreshEnvironmentRuntimeFromLauncher(', stopRuntimeStart);
@@ -1387,8 +1291,9 @@ describe('main routing', () => {
     expect(startRuntimeEnd).toBeGreaterThan(startRuntimeStart);
     const startRuntimeSrc = mainSrc.slice(startRuntimeStart, startRuntimeEnd);
     expect(startRuntimeSrc).not.toContain('syncLinkedProviderRuntimeHealthFromService(');
-    expect(startRuntimeSrc).toContain('upsertDirectRuntimeGateway(');
-    expect(startRuntimeSrc).toContain('runGatewayEnvironmentLifecycleFromLauncher({');
+    expect(startRuntimeSrc).toContain('executeDirectManagedEnvironmentLifecycle({');
+    expect(startRuntimeSrc).not.toContain('upsertDirectRuntimeGateway(');
+    expect(startRuntimeSrc).not.toContain('runGatewayEnvironmentLifecycleFromLauncher({');
 
     const connectStart = mainSrc.indexOf('async function connectProviderRuntimeFromLauncher(');
     const connectEnd = mainSrc.indexOf('async function disconnectProviderRuntimeFromLauncher(', connectStart);
@@ -1701,7 +1606,7 @@ describe('main routing', () => {
     expect(syncSrc).toContain('throw new GatewaySyncCanceledError(\'Gateway sync was canceled because this Gateway is disabled on this Desktop.\');');
   });
 
-  it('keeps first-click Runtime initialization as route setup only', () => {
+  it('keeps first-click Managed Environment setup on the direct target route', () => {
     const mainSrc = readMainSource();
     const initializeStart = mainSrc.indexOf('async function setupDirectRuntimeManagementFromLauncher(');
     const initializeEnd = mainSrc.indexOf(
@@ -1712,131 +1617,42 @@ describe('main routing', () => {
     expect(initializeEnd).toBeGreaterThan(initializeStart);
     const initializeSrc = mainSrc.slice(initializeStart, initializeEnd);
 
-    expect(initializeSrc.match(/syncGatewayRecord\(/g)).toHaveLength(1);
-    expect(initializeSrc).toContain('const authorizedRecord = await gatewayStore().get(record.gateway_id);');
-    expect(initializeSrc).toContain('const trustProfile = authorizedRecord?.trust_profile;');
-    expect(initializeSrc).toContain('if (!authorizedRecord || !trustProfile) {');
-    expect(initializeSrc).toContain('Initialization only establishes the direct Gateway management route.');
+    expect(initializeSrc).toContain('runEnvironmentRuntimeLifecycleFromLauncher({');
+    expect(initializeSrc).not.toContain('syncGatewayRecord(');
+    expect(initializeSrc).not.toContain('gatewayStore().get(');
+    expect(initializeSrc).toContain('Managed Environment setup is a direct Desktop lifecycle operation.');
     expect(initializeSrc).not.toContain('prepareRuntimeOperation(');
     expect(initializeSrc).not.toContain('initializeGatewayRuntime(');
     expect(initializeSrc).not.toContain('awaitEnvironmentRuntimeLifecycleReadiness(');
     expect(initializeSrc).not.toContain('refreshGatewaySourceForAuthorizedAction(record, {');
   });
 
-  it('waits for the real Desktop Runtime health projection after Gateway lifecycle success', () => {
+  it('waits for the real Desktop Runtime health projection after direct lifecycle success', () => {
     const mainSrc = readMainSource();
-    const lifecycleStart = mainSrc.indexOf('async function runGatewayEnvironmentLifecycleFromLauncher(');
-    const lifecycleEnd = mainSrc.indexOf('async function resolveProviderRuntimeLifecycleScope(', lifecycleStart);
-    const lifecycleSrc = mainSrc.slice(lifecycleStart, lifecycleEnd);
     const directStart = mainSrc.indexOf('async function runEnvironmentRuntimeLifecycleFromLauncher(');
     const directEnd = mainSrc.indexOf('async function connectProviderRuntimeFromLauncher(', directStart);
     const directSrc = mainSrc.slice(directStart, directEnd);
 
-    expect(lifecycleSrc.match(/await awaitEnvironmentRuntimeLifecycleReadiness\(request\.environment_id, runtimeOperationKind\);/g)).toHaveLength(1);
-    expect(lifecycleSrc).toContain('const finishLifecycleMutation = async (): Promise<void> => {');
-    expect(lifecycleSrc).toContain('after_success: finishLifecycleMutation');
-    expect(lifecycleSrc).toContain('await options.afterSuccess?.();');
-    expect(lifecycleSrc).not.toContain('await syncGatewayRecord(record');
-    expect(lifecycleSrc.indexOf('await options.afterSuccess?.();')).toBeLessThan(
-      lifecycleSrc.indexOf('await awaitEnvironmentRuntimeLifecycleReadiness('),
-    );
-    expect(directSrc).toContain("const lifecycleSessionKey = hostAccess.kind === 'local_host' && placement.kind === 'host_process'");
-    expect(directSrc).toContain('await closeEnvironmentSessionsForRuntimeLifecycle({');
-    expect(directSrc).toContain("operation: effectiveOperation === 'update_runtime' ? 'update' : effectiveOperation");
-    expect(directSrc).toContain("if (hostAccess.kind === 'ssh_host' && placement.kind === 'host_process')");
-    expect(directSrc).toContain('clearSSHRuntimeReadyState(sshDesktopSessionKey(sshDetailsFromRuntimePlacement(hostAccess, placement)))');
-    expect(directSrc).toContain('await clearRuntimePlacementTargetRecords(targetID).catch(() => undefined);');
-    expect(directSrc).not.toContain('await runtimePlacementBridgeRegistry.retire(targetID).catch(() => undefined);');
+    expect(mainSrc).toContain('await refreshWelcomeRuntimeHealthForEnvironment(input.environment_id, { force: true })');
+    expect(directSrc).not.toContain('syncGatewayRecord(');
+    expect(directSrc).toContain('return executeDirectManagedEnvironmentLifecycle({');
+    expect(directSrc).toContain("operation: requestedOperation === 'update_runtime' ? 'update' : requestedOperation");
+    expect(directSrc).toContain('await reinstallTargetRequiredFailureIfPresent(environmentID, label)');
+    expect(directSrc).not.toContain('gatewayLifecycleManager()');
+    expect(directSrc).not.toContain('open-session');
   });
 
   it('keeps foreground Runtime operations authoritative over persistence attachment recovery', () => {
     const mainSrc = readMainSource();
-    const completionStart = mainSrc.indexOf('async function completeRuntimeOperation(');
-    const completionEnd = mainSrc.indexOf('type AttachedRuntimeOperationAdapter', completionStart);
-    const attachmentStart = mainSrc.indexOf('function upsertRuntimeOperationAttachment(');
-    const attachmentEnd = mainSrc.indexOf('async function refreshDirectGatewayRuntimeOperationAttachments(', attachmentStart);
     const initializationStart = mainSrc.indexOf('async function setupDirectRuntimeManagementFromLauncher(');
-    const initializationEnd = mainSrc.indexOf(
-      'async function setupProviderRuntimeManagementWithDirectCardFromLauncher(',
-      initializationStart,
-    );
-    expect(completionStart).toBeGreaterThanOrEqual(0);
-    expect(completionEnd).toBeGreaterThan(completionStart);
-    expect(attachmentStart).toBeGreaterThanOrEqual(0);
-    expect(attachmentEnd).toBeGreaterThan(attachmentStart);
+    const initializationEnd = mainSrc.indexOf('async function setupProviderRuntimeManagementWithDirectCardFromLauncher(', initializationStart);
     expect(initializationStart).toBeGreaterThanOrEqual(0);
     expect(initializationEnd).toBeGreaterThan(initializationStart);
-    const completionSrc = mainSrc.slice(completionStart, completionEnd);
-    const attachmentSrc = mainSrc.slice(attachmentStart, attachmentEnd);
     const initializationSrc = mainSrc.slice(initializationStart, initializationEnd);
-
-    expect(mainSrc).toContain('const locallyDrivenRuntimeOperationIDs = new Set<string>();');
-    expect(mainSrc).toContain('async function driveRuntimeOperation<T>(');
-    expect(completionSrc).toContain('return driveRuntimeOperation(operation.operation_id, () => advanceGatewayRuntimeOperation(operation, {');
-    expect(attachmentSrc).toContain('locallyDrivenRuntimeOperationIDs.has(operation.operation_id)');
-    expect(attachmentSrc).toContain('foregroundRuntimeOperationIDs.has(operation.operation_id)');
+    expect(initializationSrc).toContain('runEnvironmentRuntimeLifecycleFromLauncher({');
     expect(initializationSrc).not.toContain('initializeGatewayRuntime(');
-  });
-
-  it('keeps attached start recovery and completion on user-facing stages without a confirmation barrier', () => {
-    const mainSrc = readMainSource();
-    const finishStart = mainSrc.indexOf('function finishAttachedRuntimeOperation(');
-    const finishEnd = mainSrc.indexOf('function upsertRuntimeOperationAttachment(', finishStart);
-    const confirmationStart = mainSrc.indexOf('function awaitRuntimeOperationConfirmation(');
-    const confirmationEnd = mainSrc.indexOf('async function confirmRuntimeOperationFromLauncher(', confirmationStart);
-    const confirmStart = confirmationEnd;
-    const confirmEnd = mainSrc.indexOf('async function reconcileRuntimeOperationFromLauncher(', confirmStart);
-
-    expect(finishStart).toBeGreaterThanOrEqual(0);
-    expect(finishEnd).toBeGreaterThan(finishStart);
-    expect(confirmationStart).toBeGreaterThanOrEqual(0);
-    expect(confirmationEnd).toBeGreaterThan(confirmationStart);
-    expect(confirmStart).toBeGreaterThanOrEqual(0);
-    expect(confirmEnd).toBeGreaterThan(confirmStart);
-
-    const finishSrc = mainSrc.slice(finishStart, finishEnd);
-    const confirmationSrc = mainSrc.slice(confirmationStart, confirmationEnd);
-    const confirmSrc = mainSrc.slice(confirmStart, confirmEnd);
-    expect(finishSrc).toContain('const presentation = projectAttachedRuntimeOperation(response);');
-    expect(confirmationSrc).toContain('const presentation = projectAttachedRuntimeOperation(pending.operation);');
-    expect(confirmSrc).toContain("state: 'fencing',");
-    expect(confirmSrc).toContain('const completedPresentation = projectAttachedRuntimeOperation(response);');
-    expect(confirmSrc).toContain('await pending.cancel().catch(() => undefined);');
-    expect(mainSrc).toContain('const autoConfirmOperation = projection.owned');
-    expect(mainSrc).toContain('runtime_confirmation: autoConfirmOperation ? undefined : projection.confirmation');
-    expect(mainSrc).toContain('complete: async (current) => adapter.complete(await adapter.confirm(');
-    expect(mainSrc).toContain('function publishGatewayRuntimeOperationProgress(');
-    expect(mainSrc).toContain('function runtimeLifecycleFailureProgress(');
-    expect(mainSrc).toContain('onProgress: publishRuntimeProgress');
-    expect(mainSrc).toContain('lifecycle_progress: completedLifecycleProgress');
-    expect(mainSrc).toContain("projection.should_resume || operation.state === 'succeeded'");
-    expect(mainSrc).toContain('RuntimeLifecycleWorkflow.fromProgress(existingProgress)');
-    expect(mainSrc).toContain('clearRuntimeLifecycleWorkflow(cleanOperationKey);');
-    expect(mainSrc).not.toContain('const stepStates: readonly DesktopRuntimeLifecycleStepState[] = plan.steps.map');
-  });
-
-  it('keeps foreground start operations on user-facing environment stages', () => {
-    const mainSrc = readMainSource();
-    const directStart = mainSrc.indexOf('async function runGatewayEnvironmentLifecycleFromLauncher(');
-    const directEnd = mainSrc.indexOf('async function resolveProviderRuntimeLifecycleScope(', directStart);
-    const providerStart = mainSrc.indexOf('async function runProviderEnvironmentLifecycleFromLauncher(');
-    const providerEnd = mainSrc.indexOf('function gatewayStartRequiredFailure(', providerStart);
-
-    expect(directStart).toBeGreaterThanOrEqual(0);
-    expect(directEnd).toBeGreaterThan(directStart);
-    expect(providerStart).toBeGreaterThanOrEqual(0);
-    expect(providerEnd).toBeGreaterThan(providerStart);
-
-    for (const lifecycleSrc of [
-      mainSrc.slice(directStart, directEnd),
-      mainSrc.slice(providerStart, providerEnd),
-    ]) {
-      expect(lifecycleSrc).toContain("request.operation === 'start'");
-      expect(lifecycleSrc).toContain('runtimeOperationConfirmationRequest(runtimeOperation)');
-      expect(lifecycleSrc).toContain("title_key: 'environmentOpenFlow.checkingAccessTitle'");
-      expect(lifecycleSrc).toContain("detail_key: 'environmentOpenFlow.checkingAccessDetail'");
-      expect(lifecycleSrc).toContain('const completedPresentation = projectAttachedRuntimeOperation(response);');
-    }
+    expect(initializationSrc).not.toContain('gatewayStore().');
+    expect(mainSrc).not.toContain('refreshDirectGatewayRuntimeOperationAttachments(');
   });
 
   it('routes legacy Gateway refresh requests through the unified Refresh workflow', () => {
@@ -1887,24 +1703,22 @@ describe('main routing', () => {
     const syncStart = mainSrc.indexOf('async function syncGatewayRecord(');
     const syncEnd = mainSrc.indexOf('async function syncGatewayIfNeeded(', syncStart);
     const syncSrc = mainSrc.slice(syncStart, syncEnd);
-    expect(syncSrc).toContain('gatewayReinstallPairingRequired(record.gateway_id)');
-    expect(syncSrc).toContain('options.allowReinstallPairing !== true');
-    expect(syncSrc).toContain('knownGatewayReinstallState(record.gateway_id)');
-    expect(syncSrc).toContain('throw new GatewayReinstallRequiredError');
+    expect(syncSrc).toContain('if (!currentRecord.trust_profile)');
+    expect(syncSrc).toContain('options.allowPairing !== true');
+    expect(syncSrc).toContain("classification: 'pairing_required'");
+    expect(syncSrc).not.toContain('gatewayReinstallPairingRequired');
 
     const actionStart = mainSrc.indexOf('async function runGatewayServiceActionFromLauncher(');
-    const actionEnd = mainSrc.indexOf('async function resetLocalEnvironmentFromLauncher(', actionStart);
+    const actionEnd = mainSrc.indexOf('function reinstallTargetFailureCode(', actionStart);
     const actionSrc = mainSrc.slice(actionStart, actionEnd);
-    expect(actionSrc).toContain("request.kind !== 'reinstall_gateway'");
-    expect(actionSrc).toContain("request.kind !== 'stop_gateway'");
-    expect(actionSrc).toContain("launcherActionFailure('gateway_reinstall_required'");
+    expect(actionSrc).not.toContain('gatewayLifecycleManager()');
+    expect(actionSrc).toContain("'action_invalid'");
 
     const refreshStart = mainSrc.indexOf('async function refreshGatewayFromLauncher(');
     const refreshEnd = mainSrc.indexOf('async function checkGatewayFromLauncher(', refreshStart);
     const refreshSrc = mainSrc.slice(refreshStart, refreshEnd);
-    expect(refreshSrc).toContain('knownGatewayReinstallState(record.gateway_id)');
-    expect(refreshSrc).toContain("launcherActionFailure('gateway_reinstall_required'");
-    expect(refreshSrc).toContain('allowReinstallPairing: true');
+    expect(refreshSrc).not.toContain('allowReinstallPairing');
+    expect(refreshSrc).toContain('allowPairing: options.allowPairing === true');
   });
 
   it('keeps Gateway service state stable while sync activity is running', () => {
@@ -1921,152 +1735,6 @@ describe('main routing', () => {
     expect(helperSrc).not.toContain("status: previous?.status === 'ready' ? 'ready' : 'starting'");
   });
 
-  it('keeps Gateway service actions in one foreground workflow with internal post-success state refresh', () => {
-    const mainSrc = readMainSource();
-    const serviceStart = mainSrc.indexOf('async function runGatewayServiceActionFromLauncher(');
-    const serviceEnd = mainSrc.indexOf('function gatewayServiceOperationName(', serviceStart);
-    expect(serviceStart).toBeGreaterThanOrEqual(0);
-    expect(serviceEnd).toBeGreaterThan(serviceStart);
-    const serviceSrc = mainSrc.slice(serviceStart, serviceEnd);
-    const nextActionsStart = mainSrc.indexOf('function gatewayOperationFailureNextActions(');
-    const nextActionsEnd = mainSrc.indexOf('function gatewayDiagnosisForServiceState(', nextActionsStart);
-    expect(nextActionsStart).toBeGreaterThanOrEqual(0);
-    expect(nextActionsEnd).toBeGreaterThan(nextActionsStart);
-    const nextActionsSrc = mainSrc.slice(nextActionsStart, nextActionsEnd);
-    const refreshStart = mainSrc.indexOf('async function refreshGatewayFromLauncher(');
-    const refreshEnd = mainSrc.indexOf('async function checkGatewayFromLauncher(', refreshStart);
-    expect(refreshStart).toBeGreaterThanOrEqual(0);
-    expect(refreshEnd).toBeGreaterThan(refreshStart);
-    const refreshSrc = mainSrc.slice(refreshStart, refreshEnd);
-    const checkWrapperStart = mainSrc.indexOf('async function checkGatewayFromLauncher(');
-    const pairWrapperEnd = mainSrc.indexOf('function gatewayOpenSessionSummaries(', checkWrapperStart);
-    expect(checkWrapperStart).toBeGreaterThanOrEqual(0);
-    expect(pairWrapperEnd).toBeGreaterThan(checkWrapperStart);
-    const legacyWrapperSrc = mainSrc.slice(checkWrapperStart, pairWrapperEnd);
-    const checkRecordStart = mainSrc.indexOf('async function checkGatewayRecord(');
-    const checkRecordEnd = mainSrc.indexOf('type GatewayLifecycleOperationContext', checkRecordStart);
-    expect(checkRecordStart).toBeGreaterThanOrEqual(0);
-    expect(checkRecordEnd).toBeGreaterThan(checkRecordStart);
-    const checkRecordSrc = mainSrc.slice(checkRecordStart, checkRecordEnd);
-
-    expect(serviceSrc).toContain('const operationKey = descriptor.target_id;');
-    expect(serviceSrc).toContain('const lifecycleManager = gatewayLifecycleManager();');
-    expect(serviceSrc).toContain('const activeLifecycle = lifecycleManager.activeLifecycle(record);');
-    expect(serviceSrc).toContain('launcherOperations.get(activeLifecycle.operation_key)');
-    expect(serviceSrc).toContain('if (activeLifecycle && activeServiceOperation && launcherOperationIsActive(activeServiceOperation)) {');
-    expect(serviceSrc).toContain('activeLifecycle.intent !== lifecycleOperation');
-    expect(serviceSrc).toContain('activeLifecycle.fingerprint !== requestedLifecycleFingerprint');
-    expect(serviceSrc).toContain("'runtime_lifecycle_in_progress'");
-    expect(serviceSrc).toContain('operationKey: activeLifecycle.operation_key');
-    expect(serviceSrc).toContain('gateway_id: record.gateway_id,');
-    expect(serviceSrc).toContain('supersedeGatewaySyncTask(record.gateway_id);');
-    expect(serviceSrc).toContain('clearGatewayRefreshDiagnosisState(record.gateway_id);');
-    expect(serviceSrc).toContain("scope: 'gateway',\n      gatewayID: record.gateway_id,");
-    expect(serviceSrc).toContain("const code = processConflict?.code ?? gatewayServiceActionFailureCode(request.kind, error);");
-    expect(serviceSrc).toContain('rememberCompletedGatewayServiceAction(record, request, descriptor);');
-    expect(serviceSrc).toContain('await refreshGatewayAfterCompletedServiceAction(record, request);');
-    expect(serviceSrc.indexOf('supersedeGatewaySyncTask(record.gateway_id);')).toBeLessThan(
-      serviceSrc.indexOf('const descriptor = gatewayServiceTargetDescriptor(record);'),
-    );
-    expect(serviceSrc.indexOf('clearGatewayRefreshDiagnosisState(record.gateway_id);')).toBeLessThan(
-      serviceSrc.indexOf('rememberCompletedGatewayServiceAction(record, request, descriptor);'),
-    );
-    expect(serviceSrc.indexOf('rememberCompletedGatewayServiceAction(record, request, descriptor);')).toBeLessThan(
-      serviceSrc.indexOf('await refreshGatewayAfterCompletedServiceAction(record, request);'),
-    );
-    expect(serviceSrc).toContain('const completedServiceLifecycleProgress = completeRuntimeLifecycleWorkflowProgress(operationKey, lifecycleAttemptOwner, {');
-    expect(serviceSrc).toContain('lifecycle_progress: completedServiceLifecycleProgress');
-    expect(serviceSrc).not.toContain('lifecycle_progress: undefined');
-    expect(serviceSrc).toContain("title: `${actionLabel} complete`");
-    expect(serviceSrc).toContain('Desktop updated, restarted, and refreshed ${record.display_name}.');
-    expect(serviceSrc).not.toContain('Use Refresh to refresh pairing and catalog.');
-    expect(serviceSrc).not.toContain('refreshing_gateway_catalog');
-    expect(serviceSrc).not.toContain('Gateway synced');
-    expect(serviceSrc).toContain('next_actions: gatewayOperationFailureNextActions(operationKey, {');
-    expect(serviceSrc).not.toContain("kind: 'sync_gateway'");
-    expect(mainSrc).not.toContain('function activeGatewayForegroundOperation(gatewayID: string): DesktopLauncherOperationSnapshot | null');
-    const postSuccessStart = mainSrc.indexOf('async function refreshGatewayAfterCompletedServiceAction(');
-    const postSuccessEnd = mainSrc.indexOf('async function runGatewayServiceActionFromLauncher(', postSuccessStart);
-    expect(postSuccessStart).toBeGreaterThanOrEqual(0);
-    expect(postSuccessEnd).toBeGreaterThan(postSuccessStart);
-    const postSuccessSrc = mainSrc.slice(postSuccessStart, postSuccessEnd);
-    expect(postSuccessSrc).toContain("if (request.kind === 'stop_gateway') {");
-    expect(postSuccessSrc).toContain('return;');
-    expect(postSuccessSrc).toContain('await syncGatewayRecord(latestRecord, {');
-    expect(postSuccessSrc).toContain("startPolicy: 'require_ready'");
-    expect(nextActionsSrc).not.toContain("kind: 'retry' as const");
-    expect(nextActionsSrc).not.toContain("kind: 'check_gateway' as const");
-    expect(nextActionsSrc).toContain("kind: 'copy_diagnostics' as const");
-    expect(nextActionsSrc).toContain("kind: 'dismiss' as const");
-    const failureHelperStart = mainSrc.indexOf('function gatewayFailureTitleKeyForDiagnosis(');
-    const failureHelperEnd = mainSrc.indexOf('function gatewayRecommendedRecoveryForDiagnosis(', failureHelperStart);
-    expect(failureHelperStart).toBeGreaterThanOrEqual(0);
-    expect(failureHelperEnd).toBeGreaterThan(failureHelperStart);
-    const failureHelperSrc = mainSrc.slice(failureHelperStart, failureHelperEnd);
-    expect(failureHelperSrc).toContain("case 'not_started':");
-    expect(failureHelperSrc).toContain("return 'environmentCenter.gatewayGuidanceStoppedTitle';");
-    expect(failureHelperSrc).toContain("return 'environmentCenter.gatewayPanelStartToSyncDetail';");
-    expect(failureHelperSrc).toContain("case 'needs_update':");
-    expect(failureHelperSrc).toContain("return 'environmentCenter.gatewayPanelUpdateRequiredTitle';");
-    expect(refreshSrc).toContain('const activeRefreshOperation = launcherOperations.get(operationKey);');
-    expect(refreshSrc).toContain('if (launcherOperationIsActive(activeRefreshOperation)) {\n    rebroadcastLauncherOperationProgress(activeRefreshOperation);');
-    expect(refreshSrc).toContain('cancelable: false');
-    expect(refreshSrc).toContain("action: 'refresh_gateway'");
-    expect(refreshSrc).toContain("phase: 'checking_gateway_service'");
-    expect(refreshSrc).toContain("step_progress: gatewayStepProgress(GATEWAY_REFRESH_WORKFLOW_STEPS, 'checking_gateway_service')");
-    expect(refreshSrc).toContain("title: 'Gateway is ready'");
-    expect(refreshSrc).toContain("detail: 'Desktop refreshed this Gateway and can reach its catalog.'");
-    expect(refreshSrc).toContain("step_progress: completeGatewayStepProgress(GATEWAY_REFRESH_WORKFLOW_STEPS, 'gateway_refreshed')");
-    expect(refreshSrc).toContain('gateway_diagnosis: completeGatewayDiagnosis(diagnosis)');
-    expect(refreshSrc).toContain('next_actions: gatewayDiagnosisNextActions(operationKey, latestRecord, diagnosis)');
-    expect(refreshSrc).toContain('const failure = gatewayFailureFromDiagnosis(diagnosis);');
-    expect(refreshSrc).not.toContain("title: 'Refresh Gateway Failed'");
-    expect(refreshSrc).not.toContain('targetLabel: record.display_name');
-    expect(legacyWrapperSrc).toContain("return refreshGatewayFromLauncher({");
-    expect(legacyWrapperSrc).toContain("kind: 'refresh_gateway'");
-    expect(checkRecordSrc).toContain('await gatewayLifecycleManager().refreshCatalog(record, {');
-    expect(checkRecordSrc).toContain("startPolicy: record.connection.kind === 'url' ? undefined : 'require_ready'");
-    expect(checkRecordSrc).toContain("catalog_state: 'ready'");
-    expect(checkRecordSrc).toContain("trust_state: 'unpaired'");
-    expect(checkRecordSrc).toContain("classification: 'pairing_required'");
-    expect(checkRecordSrc).not.toContain("recommended_recovery: 'sync_gateway'");
-    expect(checkRecordSrc).not.toContain("recommended_recovery: 'review_trust'");
-    expect(checkRecordSrc).not.toContain('markCatalogSynced(');
-    expect(checkRecordSrc).not.toContain('setGatewaySyncRecord(');
-  });
-
-  it('publishes confirmed Gateway service state after service actions without claiming catalog success', () => {
-    const mainSrc = readMainSource();
-    const stateStart = mainSrc.indexOf('function serviceStateForCompletedGatewayAction(');
-    const rememberStart = mainSrc.indexOf('function rememberCompletedGatewayServiceAction(', stateStart);
-    const diagnosisStart = mainSrc.indexOf('function setGatewayDiagnosis(', rememberStart);
-    expect(stateStart).toBeGreaterThanOrEqual(0);
-    expect(rememberStart).toBeGreaterThan(stateStart);
-    expect(diagnosisStart).toBeGreaterThan(rememberStart);
-    const stateSrc = mainSrc.slice(stateStart, rememberStart);
-    const rememberSrc = mainSrc.slice(rememberStart, diagnosisStart);
-
-    expect(stateSrc).toContain("request.kind === 'stop_gateway'");
-    expect(stateSrc).toContain("status: 'not_started'");
-    expect(stateSrc).toContain('can_start: true');
-    expect(stateSrc).toContain('can_stop: false');
-    expect(stateSrc).toContain("status: 'ready'");
-    expect(stateSrc).toContain('can_stop: true');
-    expect(stateSrc).toContain('can_restart: true');
-    expect(stateSrc).toContain('can_update: true');
-    expect(stateSrc).toContain('service_target_id: descriptor.target_id');
-    expect(stateSrc).toContain('service_state_root: descriptor.service_state_root');
-    expect(rememberSrc).toContain('previous.source ?? gatewayRecordToSource(record)');
-    expect(rememberSrc).toContain("sync_state: 'idle'");
-    expect(rememberSrc).toContain('background_sync_running: false');
-    expect(rememberSrc).toContain("last_sync_error_code: ''");
-    expect(rememberSrc).toContain("last_sync_error_message: ''");
-    expect(rememberSrc).toContain('serviceStateForCompletedGatewayAction(request, descriptor)');
-    expect(rememberSrc).not.toContain("sync_state: 'ready'");
-    expect(rememberSrc).not.toContain('gatewayRecordToSourceWithCatalog(');
-    expect(rememberSrc).not.toContain('markCatalogSynced(');
-  });
-
   it('does not erase the confirmed Gateway service state after stop actions finish', () => {
     const mainSrc = readMainSource();
     const sideEffectStart = mainSrc.indexOf('function scheduleGatewaySyncAfterLauncherAction(');
@@ -2079,75 +1747,36 @@ describe('main routing', () => {
     expect(sideEffectSrc).not.toContain('gatewaySyncStateByID.delete(gatewayID);\n        gatewayDiagnosisByID.delete(gatewayID);\n        broadcastDesktopWelcomeSnapshots();');
   });
 
-  it('plans Gateway service actions in the same order as the real host lifecycle', () => {
+  it('keeps Standalone Gateway lifecycle actions host-managed and unavailable in Desktop', () => {
     const mainSrc = readMainSource();
-    const helperStart = mainSrc.indexOf('function gatewayServiceInitialStepIDs(');
-    const helperEnd = mainSrc.indexOf('function buildGatewayServiceLifecycleProgress(', helperStart);
-    expect(helperStart).toBeGreaterThanOrEqual(0);
-    expect(helperEnd).toBeGreaterThan(helperStart);
-    const helperSrc = mainSrc.slice(helperStart, helperEnd);
-
-    expect(helperSrc).toContain("if (operation === 'restart') {");
-    expect(helperSrc).toContain("'stopping_gateway_service',\n      'verifying_gateway_stopped',\n      'starting_gateway_service'");
-    expect(helperSrc).toContain("if (operation === 'update') {");
-    expect(helperSrc).toContain("'stopping_gateway_service',\n      'verifying_gateway_stopped',\n      'preparing_gateway_package',\n      'installing_gateway_package'");
-    expect(helperSrc).toContain("'gateway_service_up_to_date'");
-    expect(helperSrc).toContain("'starting_gateway_service',\n    'opening_gateway_bridge',\n    'checking_gateway_service',\n    'gateway_service_ready'");
+    const serviceStart = mainSrc.indexOf('async function runGatewayServiceActionFromLauncher(');
+    const serviceEnd = mainSrc.indexOf('function reinstallTargetFailureCode(', serviceStart);
+    expect(serviceStart).toBeGreaterThanOrEqual(0);
+    expect(serviceEnd).toBeGreaterThan(serviceStart);
+    const serviceSrc = mainSrc.slice(serviceStart, serviceEnd);
+    expect(serviceSrc).toContain("'Standalone Gateways expose access and catalog operations only.");
+    expect(serviceSrc).toContain("'action_invalid'");
+    expect(serviceSrc).not.toContain('gatewayLifecycleManager()');
   });
 
-  it('keeps Gateway start-required failures specific enough for recovery popovers', () => {
-    const mainSrc = readMainSource();
-    const failureStart = mainSrc.indexOf('function gatewayStartRequiredFailure(');
-    const failureEnd = mainSrc.indexOf('function gatewayLauncherFailureFromError(', failureStart);
-    expect(failureStart).toBeGreaterThanOrEqual(0);
-    expect(failureEnd).toBeGreaterThan(failureStart);
-    const failureSrc = mainSrc.slice(failureStart, failureEnd);
-
-    expect(failureSrc).toContain('const failure = desktopOperationFailurePresentation({');
-    expect(failureSrc).toContain("title: 'Gateway is stopped'");
-    expect(failureSrc).toContain("titleKey: 'environmentCenter.gatewayGuidanceStoppedTitle'");
-    expect(failureSrc).toContain("detailKey: 'environmentCenter.gatewayPanelStartToSyncDetail'");
-    expect(failureSrc).not.toContain('targetLabel');
-    expect(failureSrc).toContain('failure,');
-  });
-
-  it('opens Gateway environments only through Gateway open-session without provider fallback', () => {
+  it('opens Gateway-backed Environments only through explicit access endpoints', () => {
     const mainSrc = readMainSource();
     const openStart = mainSrc.indexOf('async function openGatewayEnvironmentFromLauncher(');
-    const providerStart = mainSrc.indexOf('async function openProviderRemoteEnvironmentRecord(', openStart);
+    const openEnd = mainSrc.indexOf('async function openProviderRemoteEnvironmentRecord(', openStart);
     expect(openStart).toBeGreaterThanOrEqual(0);
-    expect(providerStart).toBeGreaterThan(openStart);
-    const openSrc = mainSrc.slice(openStart, providerStart);
-
-    expect(openSrc).toContain('const capabilityFailure = await requireGatewayEnvironmentOpenCapability(record, request, {');
-    expect(openSrc).toContain('onGatewayServiceProgress: lifecycleContext?.onProgress,');
-    expect(openSrc).toContain('return finishGatewayOpenCapabilityFailure(operationKey, record, request, operationTargetID, capabilityFailure);');
-    expect(openSrc).toContain('const clientNonce = crypto.randomBytes(24).toString(\'base64url\');');
-    expect(openSrc).toContain('const issued = await gatewayLifecycleManager().openSessionWithBridge(record, {');
-    expect(openSrc).toContain("requested_capability: 'env_app'");
-    expect(openSrc).toContain('if (error instanceof GatewayServiceStartRequiredError || error instanceof GatewayNotManageableError) {');
-    expect(openSrc).toContain("next_actions: gatewayOperationFailureNextActions(operationKey, {");
-    expect(openSrc).toContain("return gatewayLauncherFailureFromError(error, record, 'open_gateway_environment', {");
-    expect(openSrc).toContain('const artifactURL = gatewaySessionArtifactURL(record, response, bridgeSession);');
-    expect(openSrc).toContain('buildGatewayDesktopTarget({');
-    expect(openSrc).toContain('gatewaySessionID: response.gateway_session_id');
-    expect(openSrc).toContain('gatewayManagedSessionStartup(artifactURL)');
-    expect(openSrc).toContain('const sessionRecord = await createSessionRecord(openTarget, startup, {');
-    expect(openSrc).toContain("location: 'runtime_gateway'");
-    expect(openSrc).not.toContain('cookies.set(');
-    expect(openSrc).not.toContain('installGatewayLocalAccessCookies');
-    expect(openSrc).not.toContain('openRemoteEnvironmentFromLauncher');
-    expect(openSrc).not.toContain('openProviderEnvironmentFromLauncher');
-    expect(openSrc).not.toContain('openProviderEnvironmentWithOpenSession');
-    expect(openSrc).not.toContain('openProviderRemoteEnvironmentRecord');
-    expect(openSrc).toContain('const operationKey = `${operationTargetID}:open:${clientNonce}`;');
-    expect(openSrc.indexOf('const artifactURL = gatewaySessionArtifactURL(record, response, bridgeSession);')).toBeLessThan(
-      openSrc.indexOf('const sessionRecord = await createSessionRecord(openTarget, startup'),
-    );
-    expect(openSrc.indexOf('const openTarget = buildGatewayDesktopTarget({')).toBeGreaterThan(
-      openSrc.indexOf('const artifactURL = gatewaySessionArtifactURL(record, response, bridgeSession);'),
-    );
-    expect(mainSrc).toContain("case 'open_gateway_environment':\n      return openGatewayEnvironmentFromLauncher(request);");
+    expect(openEnd).toBeGreaterThan(openStart);
+    const openSrc = mainSrc.slice(openStart, openEnd);
+    expect(openSrc).toContain('gatewayEnvironmentAccessEndpoint(record, environment)');
+    expect(openSrc).toContain('openRemoteEnvironmentFromLauncher({');
+    expect(openSrc).not.toContain('openSessionWithBridge');
+    expect(openSrc).not.toContain('pairGatewayWithClient');
+    const endpointStart = mainSrc.indexOf('function gatewayEnvironmentAccessEndpoint(');
+    const endpointEnd = mainSrc.indexOf('async function upsertGatewayEnvironmentProfileFromLauncher(', endpointStart);
+    expect(endpointStart).toBeGreaterThanOrEqual(0);
+    expect(endpointEnd).toBeGreaterThan(endpointStart);
+    const endpointSrc = mainSrc.slice(endpointStart, endpointEnd);
+    expect(endpointSrc).toContain("route.kind !== 'url'");
+    expect(endpointSrc).toContain("pathName.includes('/gateway')");
   });
 
   it('parses Control Plane deep links through PKCE authorization state instead of bearer handoff tickets', () => {
@@ -2161,17 +1790,11 @@ describe('main routing', () => {
     expect(mainSrc).not.toContain("parsed.searchParams.get('handoff_ticket')");
   });
 
-  it('discovers active Runtime operations through each card own management route', () => {
+  it('keeps Managed Environment operation discovery out of Gateway sources', () => {
     const mainSrc = readMainSource();
-
-    expect(mainSrc).toContain('await refreshDirectGatewayRuntimeOperationAttachments(syncedRecord, catalogEnvironments, signal);');
-    expect(mainSrc).toContain('gatewayLifecycleManager().listRuntimeOperations(record, {');
-    expect(mainSrc).toContain("startPolicy: 'require_ready'");
-    expect(mainSrc).toContain('await refreshProviderRuntimeOperationAttachments(');
-    expect(mainSrc).toContain('const response = await client.listRuntimeOperations(scope, {');
-    expect(mainSrc).toContain('upsertRuntimeOperationAttachment(operation, surface, {');
-    expect(mainSrc).toContain('projectAttachedRuntimeOperation(operation)');
-    expect(mainSrc).not.toContain('requestProviderRuntimeGatewaySelection');
+    expect(mainSrc).not.toContain('refreshDirectGatewayRuntimeOperationAttachments(');
+    expect(mainSrc).not.toContain('upsertDirectRuntimeGateway(');
+    expect(mainSrc).toContain('executeDirectManagedEnvironmentLifecycle({');
   });
 
   it('allows only binding administrators to reconcile an isolated Runtime with an exact permit', () => {

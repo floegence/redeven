@@ -29,6 +29,7 @@ function gatewaySource(overrides: Partial<DesktopGatewaySource> = {}): DesktopGa
       env_kind: 'reachable_env',
       state: 'available',
       capabilities: ['open'],
+      access_endpoint: { kind: 'url', url: 'https://environment.example.invalid/' },
       origin: { kind: 'network_target', label: 'Bastion network' },
     }],
     ...overrides,
@@ -124,7 +125,7 @@ describe('environmentAggregator', () => {
     });
   });
 
-  it('keeps Gateway runtime management identity on the aggregated card', () => {
+  it('does not copy Runtime management from a Gateway catalog entry', () => {
     const source = gatewaySource({
       capabilities: ['env_lifecycle'],
       environments: [{
@@ -153,11 +154,9 @@ describe('environmentAggregator', () => {
       gatewaySources: [source],
     }).environments.find((candidate) => candidate.kind === 'gateway_environment');
 
-    expect(entry?.runtime_management).toMatchObject({
-      presentation_state: 'allowed',
-      target: { lifecycle_target_id: 'rlt_demo', target_generation: 9 },
-      operations: ['restart'],
-    });
+    expect(entry?.runtime_management).toBeUndefined();
+    expect(entry?.runtime_operations.start).toMatchObject({ availability: 'hidden' });
+    expect(entry?.runtime_operations.restart).toMatchObject({ availability: 'hidden' });
   });
 
   it('maps offline and trust-changed Gateway environments to Resolve without provider fallback', () => {
@@ -349,7 +348,7 @@ describe('environmentAggregator', () => {
     });
   });
 
-  it('shows Gateway lifecycle actions only when both Gateway and environment grant control', () => {
+  it('never renders managed Environment catalog entries as Gateway entries', () => {
     const environment = {
       gateway_env_id: 'env_managed',
       display_name: 'Managed',
@@ -375,20 +374,11 @@ describe('environmentAggregator', () => {
       })],
     }).environments.find((entry) => entry.kind === 'gateway_environment');
 
-    expect(withoutGatewayLifecycle?.runtime_operations.start).toMatchObject({
-      availability: 'hidden',
-    });
-    expect(withGatewayLifecycle?.runtime_operations.start).toMatchObject({
-      availability: 'available',
-      method: 'runtime_gateway',
-      label: 'Start runtime',
-    });
-    expect(withGatewayLifecycle?.runtime_operations.stop.label).toBe('Stop runtime');
-    expect(withGatewayLifecycle?.runtime_operations.restart.label).toBe('Restart runtime');
-    expect(withGatewayLifecycle?.runtime_operations.update.label).toBe('Update runtime');
+    expect(withoutGatewayLifecycle).toBeUndefined();
+    expect(withGatewayLifecycle).toBeUndefined();
   });
 
-  it('keeps legacy runtime update available when the runtime state is unknown', () => {
+  it('does not expose Runtime lifecycle from a managed Environment Gateway catalog entry', () => {
     const entry = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences(),
       gatewaySources: [gatewaySource({
@@ -416,14 +406,10 @@ describe('environmentAggregator', () => {
       })],
     }).environments.find((candidate) => candidate.gateway_env_id === 'orange');
 
-    expect(entry?.runtime_operations.update).toMatchObject({
-      availability: 'available',
-      method: 'runtime_gateway',
-      label: 'Update runtime',
-    });
+    expect(entry).toBeUndefined();
   });
 
-  it('projects the matching local supervisor onto the direct card without changing Open routing', () => {
+  it('keeps the direct Environment card independent of its internal supervisor', () => {
     const entry = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences(),
       managedRuntimePresenceByTargetID: { 'local:local': localPresence() },
@@ -459,19 +445,16 @@ describe('environmentAggregator', () => {
 
     expect(entry).toMatchObject({
       kind: 'local_environment',
-      gateway_id: 'local-supervisor',
-      gateway_env_id: 'env_local',
-      runtime_management: {
-        readiness: 'ready',
-        target: { lifecycle_target_id: 'rlt_local', target_generation: 3 },
-      },
       runtime_operations: {
         open: { method: 'local_host', availability: 'available' },
-        stop: { method: 'runtime_gateway', availability: 'available' },
-        restart: { method: 'runtime_gateway', availability: 'available' },
-        update: { method: 'runtime_gateway', availability: 'available' },
+        stop: { method: 'local_host', availability: 'available' },
+        restart: { method: 'local_host', availability: 'available' },
+        update: { method: 'local_host', availability: 'available' },
       },
     });
+    expect(entry?.gateway_id).toBeUndefined();
+    expect(entry?.gateway_env_id).toBeUndefined();
+    expect(entry?.runtime_management).toBeUndefined();
     const allEntries = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences(),
       managedRuntimePresenceByTargetID: { 'local:local': localPresence() },
@@ -541,30 +524,24 @@ describe('environmentAggregator', () => {
     }).environments.find((candidate) => candidate.kind === 'local_environment');
 
     expect(entry?.runtime_operations).toMatchObject({
-      start: { availability: 'available', method: 'runtime_gateway' },
-      stop: { availability: 'available', method: 'runtime_gateway' },
-      restart: { availability: 'available', method: 'runtime_gateway' },
-      update: { availability: 'available', method: 'runtime_gateway' },
+      start: { availability: 'available', method: 'local_host' },
+      stop: { availability: 'available', method: 'local_host' },
+      restart: { availability: 'available', method: 'local_host' },
+      update: { availability: 'available', method: 'local_host' },
     });
   });
 
-  it('projects supported setup-required management before a direct target has a Gateway', () => {
+  it('does not require Gateway setup for a direct Environment target', () => {
     const entry = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences(),
       managedRuntimePresenceByTargetID: { 'local:local': localPresence() },
       gatewaySources: [],
     }).environments.find((candidate) => candidate.kind === 'local_environment');
 
-    expect(entry?.runtime_management).toMatchObject({
-      support: 'supported',
-      authorization: { state: 'allowed' },
-      readiness: 'setup_required',
-      presentation_state: 'setup_required',
-      reason_code: 'runtime_gateway_setup_required',
-    });
+    expect(entry?.runtime_management).toBeUndefined();
     expect(entry?.runtime_operations.update).toMatchObject({
       availability: 'available',
-      method: 'runtime_gateway',
+      method: 'local_host',
     });
   });
 
@@ -582,17 +559,12 @@ describe('environmentAggregator', () => {
       })],
     }).environments.find((candidate) => candidate.kind === 'local_environment');
 
-    expect(entry?.runtime_management).toMatchObject({
-      support: 'supported',
-      authorization: { state: 'allowed' },
-      readiness: 'temporarily_unavailable',
-      presentation_state: 'temporarily_unavailable',
-    });
+    expect(entry?.runtime_management).toBeUndefined();
     expect(entry?.runtime_operations).toMatchObject({
       start: { availability: 'unavailable' },
-      stop: { availability: 'available', method: 'runtime_gateway' },
-      restart: { availability: 'available', method: 'runtime_gateway' },
-      update: { availability: 'available', method: 'runtime_gateway' },
+      stop: { availability: 'available', method: 'local_host' },
+      restart: { availability: 'available', method: 'local_host' },
+      update: { availability: 'available', method: 'local_host' },
     });
   });
 
@@ -612,7 +584,7 @@ describe('environmentAggregator', () => {
 
     expect(entry?.runtime_operations.update).toMatchObject({
       availability: 'available',
-      method: 'runtime_gateway',
+      method: 'local_host',
     });
   });
 
@@ -637,39 +609,6 @@ describe('environmentAggregator', () => {
               origin_label: 'Target',
             },
             origin: { kind: 'network_target', label: 'Target' },
-          },
-          {
-            gateway_env_id: 'env_ssh',
-            display_name: 'SSH Profile',
-            env_kind: 'reachable_env',
-            state: 'available',
-            capabilities: [],
-            access_capabilities: [],
-            control_capabilities: [],
-            profile: { managed: true, access_route_kind: 'ssh_host' },
-            profile_access_route: {
-              kind: 'ssh_host',
-              ssh_destination: 'devbox',
-              ssh_port: 2222,
-            },
-            origin: { kind: 'ssh_target', label: 'devbox' },
-          },
-          {
-            gateway_env_id: 'env_container',
-            display_name: 'Container Profile',
-            env_kind: 'reachable_env',
-            state: 'available',
-            capabilities: [],
-            access_capabilities: [],
-            control_capabilities: [],
-            profile: { managed: true, access_route_kind: 'ssh_container' },
-            profile_access_route: {
-              kind: 'ssh_container',
-              ssh_destination: 'devbox',
-              container_engine: 'docker',
-              container_id: 'workspace',
-            },
-            origin: { kind: 'container', label: 'devbox / workspace' },
           },
         ],
       })],
@@ -717,11 +656,9 @@ describe('environmentAggregator', () => {
       })],
     }).environments.find((entry) => entry.kind === 'gateway_environment');
 
-    expect(editable).toHaveLength(3);
+    expect(editable).toHaveLength(1);
     expect(editable.map((entry) => [entry.gateway_env_id, entry.can_edit, entry.can_delete]).sort()).toEqual([
       ['env_url', true, true],
-      ['env_ssh', true, true],
-      ['env_container', true, true],
     ].sort());
     const editableURL = editable.find((entry) => entry.gateway_env_id === 'env_url');
     expect(editableURL).toMatchObject({

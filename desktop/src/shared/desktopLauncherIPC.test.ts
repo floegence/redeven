@@ -632,23 +632,7 @@ describe('desktopLauncherIPC', () => {
     })).toBeNull();
   });
 
-  it('keeps Provider and Gateway Runtime lifecycle routes independent', () => {
-    expect(normalizeDesktopLauncherActionRequest({
-      kind: 'run_gateway_environment_lifecycle',
-      environment_id: 'provider-card',
-      provider_environment_id: 'provider-card',
-      gateway_id: 'gateway-demo',
-      gateway_env_id: 'env_demo',
-      operation: 'restart',
-      label: 'Demo',
-    })).toEqual({
-      kind: 'run_gateway_environment_lifecycle',
-      environment_id: 'provider-card',
-      gateway_id: 'gateway-demo',
-      gateway_env_id: 'env_demo',
-      operation: 'restart',
-      label: 'Demo',
-    });
+  it('keeps Provider Runtime lifecycle routes available', () => {
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'run_provider_environment_lifecycle',
       environment_id: 'provider-card',
@@ -915,7 +899,6 @@ describe('desktopLauncherIPC', () => {
       'stop_gateway',
       'restart_gateway',
       'update_gateway',
-      'reinstall_gateway',
     ] as const) {
       expect(normalizeDesktopLauncherActionRequest({
         kind,
@@ -927,23 +910,28 @@ describe('desktopLauncherIPC', () => {
       });
     }
     expect(normalizeDesktopLauncherActionRequest({
-      kind: 'reinstall_gateway',
-      gateway_id: ' gw-demo ',
+      kind: 'preview_reinstall_target',
+      environment_id: ' local ',
+    })).toEqual({
+      kind: 'preview_reinstall_target',
+      environment_id: 'local',
+    });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'reinstall_target',
+      environment_id: ' local ',
+      preflight_id: ' reinstall_123e4567-e89b-12d3-a456-426614174000 ',
       impact_acknowledged: true,
     })).toEqual({
-      kind: 'reinstall_gateway',
-      gateway_id: 'gw-demo',
+      kind: 'reinstall_target',
+      environment_id: 'local',
+      preflight_id: 'reinstall_123e4567-e89b-12d3-a456-426614174000',
       impact_acknowledged: true,
     });
     expect(normalizeDesktopLauncherActionRequest({
-      kind: 'reset_local_environment',
-      environment_id: ' local ',
-      impact_acknowledged: true,
-    })).toEqual({
-      kind: 'reset_local_environment',
+      kind: 'reinstall_target',
       environment_id: 'local',
-      impact_acknowledged: true,
-    });
+      preflight_id: 'reinstall_123e4567-e89b-12d3-a456-426614174000',
+    })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'refresh_gateway_runtime', gateway_id: 'gw-demo' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'check_gateway', gateway_id: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'start_gateway', gateway_id: '   ' })).toBeNull();

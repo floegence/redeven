@@ -17,8 +17,9 @@ function operationNextActionKey(action: DesktopLauncherOperationNextAction): str
     case 'stop_gateway':
     case 'restart_gateway':
     case 'update_gateway':
-    case 'reinstall_gateway':
       return `${action.kind}:gateway:${action.gateway_id}`;
+    case 'reinstall_target':
+      return `${action.kind}:environment:${action.environment_id}`;
     case 'resolve_gateway':
       return `${action.kind}:gateway:${action.gateway_id}:${action.resolve_focus ?? ''}`;
     case 'open_gateway_environment':
@@ -64,6 +65,7 @@ export function visibleOperationNextActions(
     push('start_gateway');
     push('restart_gateway');
     push('update_gateway');
+    push('reinstall_target');
   }
   push('confirm_runtime_operation');
   push('cancel_runtime_operation');
@@ -86,7 +88,8 @@ function operationNextActionIsPrimary(action: DesktopLauncherOperationNextAction
     || action.kind === 'refresh_gateway'
     || action.kind === 'start_gateway'
     || action.kind === 'restart_gateway'
-    || action.kind === 'update_gateway';
+    || action.kind === 'update_gateway'
+    || action.kind === 'reinstall_target';
 }
 
 export function groupedVisibleOperationNextActions(

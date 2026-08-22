@@ -1,12 +1,7 @@
-import {
-  desktopRuntimeOperationPlan,
-  hiddenDesktopRuntimeOperationPlan,
-  type DesktopRuntimeOperationPlans,
-} from '../shared/desktopRuntimeOperations';
+import { desktopRuntimeOperationPlan, hiddenDesktopRuntimeOperationPlan, type DesktopRuntimeOperationPlans } from '../shared/desktopRuntimeOperations';
 import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
 import {
   desktopGatewayCanOpenEnvironment,
-  desktopGatewayEnvironmentHasControlCapability,
   desktopGatewayEnvironmentEntryID,
   desktopGatewayNeedsResolution,
   desktopGatewaySourceID,
@@ -98,6 +93,11 @@ export function buildGatewayEnvironmentEntries(
       continue;
     }
     for (const environment of gateway.environments) {
+      // A managed Environment owns its Runtime supervisor and is rendered on
+      // the Environments surface. Gateway catalog entries are access-only.
+      if (environment.env_kind === 'managed_local_env') {
+        continue;
+      }
       const entry = buildGatewayEnvironmentEntry(gateway, environment, source, createdAtMS);
       if (entry) {
         entries.push(entry);
@@ -133,7 +133,6 @@ function buildGatewayEnvironmentEntry(
   const displayName = compact(environment.display_name) || environment.gateway_env_id;
   const gatewayLabel = compact(gateway.display_name) || gateway.gateway_id;
   const accessCapabilities = environment.access_capabilities ?? [];
-  const controlCapabilities = environment.control_capabilities ?? [];
   const isOpenable = desktopGatewayCanOpenEnvironment(gateway, environment);
   const needsResolve = desktopGatewayNeedsResolution(gateway.status);
   const canWriteGatewayProfile = gateway.status === 'online'
@@ -144,26 +143,8 @@ function buildGatewayEnvironmentEntry(
     && !!environment.profile_access_route
     && environment.profile_access_route.kind === environment.profile?.access_route_kind;
   const canEditGatewayProfile = canWriteGatewayProfile && hasEditableGatewayProfile;
-  const hasGatewayLifecycleControl = gateway.status === 'online'
-    && (gateway.capabilities.includes('env_lifecycle')
-      || environment.runtime_management?.presentation_state === 'allowed');
-  const canRecoverByUpdating = desktopGatewayEnvironmentHasControlCapability(environment, 'update_runtime');
-  const canStart = hasGatewayLifecycleControl
-    && environment.state !== 'available'
-    && (desktopGatewayEnvironmentHasControlCapability(environment, 'start') || canRecoverByUpdating);
-  const canStop = hasGatewayLifecycleControl
-    && environment.state !== 'stopped'
-    && desktopGatewayEnvironmentHasControlCapability(environment, 'stop');
-  const canRestart = hasGatewayLifecycleControl
-    && (desktopGatewayEnvironmentHasControlCapability(environment, 'restart') || canRecoverByUpdating);
-  const canUpdate = hasGatewayLifecycleControl
-    && desktopGatewayEnvironmentHasControlCapability(environment, 'update_runtime');
   const runtimeOperations = gatewayRuntimeOperations({
     openable: isOpenable,
-    canStart,
-    canStop,
-    canRestart,
-    canUpdate,
     needsResolve,
   });
   return {
@@ -184,11 +165,10 @@ function buildGatewayEnvironmentEntry(
     gateway_environment_kind: environment.env_kind,
     gateway_environment_capabilities: environment.capabilities,
     gateway_environment_access_capabilities: accessCapabilities,
-    gateway_environment_control_capabilities: controlCapabilities,
+    gateway_environment_control_capabilities: [],
     gateway_environment_profile: environment.profile,
     gateway_environment_profile_access_route: environment.profile_access_route,
     gateway_environment_origin: environment.origin,
-    runtime_management: environment.runtime_management,
     environment_source: source,
     pinned: false,
     tag: gateway.status === 'online' ? 'Gateway' : 'Resolve',
@@ -197,7 +177,7 @@ function buildGatewayEnvironmentEntry(
     is_open: false,
     is_opening: false,
     runtime_health: {
-      status: isOpenable || canStart ? 'online' : 'offline',
+      status: isOpenable ? 'online' : 'offline',
       checked_at_unix_ms: Date.now(),
       source: 'gateway_service_probe',
       freshness: needsResolve ? 'failed' : 'fresh',
@@ -217,10 +197,6 @@ function buildGatewayEnvironmentEntry(
 
 function gatewayRuntimeOperations(input: Readonly<{
   openable: boolean;
-  canStart: boolean;
-  canStop: boolean;
-  canRestart: boolean;
-  canUpdate: boolean;
   needsResolve: boolean;
 }>): DesktopRuntimeOperationPlans {
   const hidden = {
@@ -255,38 +231,6 @@ function gatewayRuntimeOperations(input: Readonly<{
     refresh: desktopRuntimeOperationPlan('refresh', 'available', 'runtime_gateway', {
       label: 'Refresh Gateway',
     }),
-    start: desktopRuntimeOperationPlan(
-      'start',
-      input.canStart ? 'available' : 'hidden',
-      'runtime_gateway',
-      {
-        menuVisibility: input.canStart ? 'contextual' : 'hidden',
-      },
-    ),
-    stop: desktopRuntimeOperationPlan(
-      'stop',
-      input.canStop ? 'available' : 'hidden',
-      'runtime_gateway',
-      {
-        menuVisibility: input.canStop ? 'stable' : 'hidden',
-      },
-    ),
-    restart: desktopRuntimeOperationPlan(
-      'restart',
-      input.canRestart ? 'available' : 'hidden',
-      'runtime_gateway',
-      {
-        menuVisibility: input.canRestart ? 'stable' : 'hidden',
-      },
-    ),
-    update: desktopRuntimeOperationPlan(
-      'update',
-      input.canUpdate ? 'available' : 'hidden',
-      'runtime_gateway',
-      {
-        menuVisibility: input.canUpdate ? 'stable' : 'hidden',
-      },
-    ),
   };
 }
 
@@ -375,139 +319,12 @@ export function aggregateDesktopEnvironmentEntries(
   }
   const gatewayOpenSessions = input.entries.filter((entry) => entry.kind === 'gateway_environment');
   const nonGatewayEntries = input.entries.filter((entry) => entry.kind !== 'gateway_environment');
-  const gatewaySources = input.gatewaySources ?? [];
-  const projectedDirectEntries = nonGatewayEntries.map((entry) => (
-    projectDirectRuntimeManagement(entry, gatewaySources)
-  ));
-  const gatewaySourcesForCards = gatewaySources.map((gateway) => {
-    const projectedOntoDirectCard = nonGatewayEntries.some((entry) => (
-      entry.kind !== 'provider_environment'
-      && entry.kind !== 'external_local_ui'
-      && gatewayMatchesDirectRuntimeTarget(gateway, entry)
-    ));
-    return projectedOntoDirectCard
-      ? {
-          ...gateway,
-          environments: gateway.environments.filter((environment) => environment.gateway_env_id !== 'env_local'),
-        }
-      : gateway;
-  });
   return [
-    ...attachEnvironmentSources(projectedDirectEntries, sources),
+    ...attachEnvironmentSources(nonGatewayEntries, sources),
     ...buildGatewayEnvironmentEntries({
-      gatewaySources: gatewaySourcesForCards,
+      gatewaySources: input.gatewaySources ?? [],
       openSessions: gatewayOpenSessions,
       createdAtMS: input.gatewayEntriesCreatedAtMS,
     }),
   ];
-}
-
-function gatewayMatchesDirectRuntimeTarget(
-  gateway: DesktopGatewaySource,
-  entry: DesktopEnvironmentEntry,
-): boolean {
-  const hostAccess = entry.managed_runtime_host_access;
-  const placement = entry.managed_runtime_placement;
-  if (!hostAccess || !placement || compact(gateway.runtime_root) !== compact(placement.runtime_root)) {
-    return false;
-  }
-  if (hostAccess.kind === 'local_host') {
-    if (placement.kind === 'host_process') {
-      return gateway.connection_kind === 'local_host';
-    }
-    return gateway.connection_kind === 'local_container'
-      && gateway.container_engine === placement.container_engine
-      && gateway.container_id === placement.container_id;
-  }
-  const gatewaySSH = gateway.ssh_details;
-  if (!gatewaySSH
-    || gatewaySSH.ssh_destination !== hostAccess.ssh.ssh_destination
-    || (gatewaySSH.ssh_port ?? null) !== (hostAccess.ssh.ssh_port ?? null)) {
-    return false;
-  }
-  if (placement.kind === 'host_process') {
-    return gateway.connection_kind === 'ssh_host';
-  }
-  return gateway.connection_kind === 'ssh_container'
-    && gateway.container_engine === placement.container_engine
-    && gateway.container_id === placement.container_id;
-}
-
-function directRuntimeGatewayOperations(
-  entry: DesktopEnvironmentEntry,
-): DesktopRuntimeOperationPlans {
-  // Direct cards own target coordinates and operation availability. Gateway
-  // catalog state is a cached protocol observation and must never replace the
-  // direct card's current Runtime plan; execution re-establishes and probes
-  // the Gateway authoritatively after the click.
-  return entry.runtime_operations;
-}
-
-function projectDirectRuntimeManagement(
-  entry: DesktopEnvironmentEntry,
-  gatewaySources: readonly DesktopGatewaySource[],
-): DesktopEnvironmentEntry {
-  if (
-    entry.kind === 'provider_environment'
-    || entry.kind === 'gateway_environment'
-    || entry.kind === 'external_local_ui'
-  ) {
-    return entry;
-  }
-  const gateway = gatewaySources.find((candidate) => gatewayMatchesDirectRuntimeTarget(candidate, entry));
-  if (!gateway) {
-    return {
-      ...entry,
-      runtime_management: {
-        support: 'supported',
-        authorization: {
-          state: 'allowed',
-          grants: ['manage_runtime', 'deploy_custom_runtime', 'manage_runtime_binding'],
-        },
-        readiness: 'setup_required',
-        presentation_state: 'setup_required',
-        operations: [],
-        artifact_policies: [],
-        binding_actions: ['setup_gateway'],
-        supervision_mode: 'redeven_gateway',
-        reason_code: 'runtime_gateway_setup_required',
-        checked_at_unix_ms: Date.now(),
-      },
-    };
-  }
-  const environment = gateway.environments.find((candidate) => candidate.gateway_env_id === 'env_local');
-  const fallbackManagement = {
-    support: 'supported' as const,
-    authorization: {
-      state: gateway.trust_state === 'paired' ? 'allowed' as const : 'unknown' as const,
-      ...(gateway.trust_state === 'paired' ? {
-        grants: ['manage_runtime', 'deploy_custom_runtime', 'manage_runtime_binding'] as const,
-      } : {}),
-    },
-    readiness: gateway.status === 'pairing_required' ? 'setup_required' as const : 'temporarily_unavailable' as const,
-    presentation_state: gateway.status === 'pairing_required' ? 'setup_required' as const : 'temporarily_unavailable' as const,
-    reason_code: gateway.status === 'pairing_required'
-      ? 'runtime_gateway_setup_required'
-      : 'runtime_gateway_temporarily_unavailable',
-    checked_at_unix_ms: Date.now(),
-  };
-  return {
-    ...entry,
-    gateway_id: gateway.gateway_id,
-    gateway_label: gateway.display_name,
-    gateway_env_id: environment?.gateway_env_id ?? 'env_local',
-    gateway_status: gateway.status,
-    gateway_connection_kind: gateway.connection_kind,
-    gateway_trust_state: gateway.trust_state,
-    gateway_status_message: gateway.status_message,
-    gateway_endpoint_label: gateway.endpoint_label,
-    gateway_environment_state: environment?.state,
-    gateway_environment_kind: environment?.env_kind,
-    gateway_environment_capabilities: environment?.capabilities,
-    gateway_environment_access_capabilities: environment?.access_capabilities,
-    gateway_environment_control_capabilities: environment?.control_capabilities,
-    gateway_environment_origin: environment?.origin,
-    runtime_management: environment?.runtime_management ?? fallbackManagement,
-    runtime_operations: directRuntimeGatewayOperations(entry),
-  };
 }

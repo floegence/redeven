@@ -229,13 +229,34 @@ func EnvironmentFromProfile(profile EnvironmentProfile) protocol.Environment {
 		},
 		LastSeenAtUnixMS: profile.UpdatedAtUnixMS,
 	}
+	// The access endpoint is part of the read-only catalog contract. Expose
+	// only a sanitized URL endpoint in the ordinary Gateway catalog; SSH and
+	// container routes require a future explicit tunnel protocol.
+	env.AccessEndpoint = profileURLAccessEndpointForCatalog(profile)
 	return protocol.NormalizeEnvironments([]protocol.Environment{env})[0]
 }
 
 func EnvironmentFromProfileWithEditableRoute(profile EnvironmentProfile) protocol.Environment {
 	env := EnvironmentFromProfile(profile)
 	env.ProfileAccessRoute = profileAccessRouteForCatalog(profile)
+	// The access endpoint is intentionally exposed even when the caller is not
+	// allowed to edit the profile. Desktop uses it for direct URL opening; it
+	// must never be interpreted as a Gateway session or bridge route.
+	if env.AccessEndpoint == nil {
+		env.AccessEndpoint = profileURLAccessEndpointForCatalog(profile)
+	}
 	return protocol.NormalizeEnvironments([]protocol.Environment{env})[0]
+}
+
+func profileURLAccessEndpointForCatalog(profile EnvironmentProfile) *protocol.EnvProfileAccessRoute {
+	if profile.AccessRoute.Kind != protocol.EnvProfileAccessRouteKindURL || strings.TrimSpace(profile.AccessRoute.URL) == "" {
+		return nil
+	}
+	return &protocol.EnvProfileAccessRoute{
+		Kind:        protocol.EnvProfileAccessRouteKindURL,
+		URL:         strings.TrimSpace(profile.AccessRoute.URL),
+		OriginLabel: strings.TrimSpace(profile.AccessRoute.OriginLabel),
+	}
 }
 
 func profileAccessRouteForCatalog(profile EnvironmentProfile) *protocol.EnvProfileAccessRoute {

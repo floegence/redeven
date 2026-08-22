@@ -565,12 +565,12 @@ describe('selectEnvironmentPanelProgress', () => {
   it('uses a newer Gateway Runtime confirmation instead of the Open failure that requested it', () => {
     const openFailure = openConnectionProgress('failed', { startedAt: 100, updatedAt: 110 });
     const runtimeConfirmation: DesktopLauncherActionProgress = {
-      action: 'run_gateway_environment_lifecycle',
+      action: 'run_provider_environment_lifecycle',
       environment_id: 'local-environment',
       environment_label: 'Local Environment',
       operation_key: 'local-environment:update_runtime',
-      subject_kind: 'gateway',
-      subject_id: 'gateway-local',
+      subject_kind: 'provider_environment',
+      subject_id: 'provider-local',
       started_at_unix_ms: 200,
       updated_at_unix_ms: 210,
       status: 'needs_confirmation',

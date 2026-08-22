@@ -12,6 +12,7 @@ vi.mock('./sshReleaseTrust', async (importOriginal) => ({
 }));
 
 import {
+  prepareDesktopReinstallHelperUploadAsset,
   prepareDesktopRuntimeUploadAsset,
   pruneDesktopRuntimePackageCache,
   runtimePackageCacheRoot,
@@ -385,6 +386,35 @@ describe('runtimePackageCache', () => {
       await expect(fs.readFile(fixture.originalDistPath, 'utf8')).resolves.toBe('original checkout dist');
       await expect(fs.readFile(fixture.originalBundlePath, 'utf8')).resolves.toBe('original bundled runtime');
       await expect(fs.readFile(fixture.originalDesktopReleasePath, 'utf8')).resolves.toBe('original desktop release package');
+    } finally {
+      await fs.rm(path.dirname(fixture.root), { recursive: true, force: true });
+    }
+  }, 15_000);
+
+  it('builds the source reinstall helper without staging the full Runtime suite', async () => {
+    const fixture = await createSourceRuntimeFixture();
+    const platform = resolveDesktopSSHRemotePlatform('linux', 'x86_64');
+    try {
+      const first = await prepareDesktopReinstallHelperUploadAsset({
+        runtimeReleaseTag: 'v1.2.3',
+        releaseBaseURL: 'https://mirror.example.invalid/releases',
+        assetCacheRoot: fixture.cacheRoot,
+        sourceRuntimeRoot: fixture.root,
+        platform,
+        fetchPolicy: runtimeReleaseFetchPolicy(45_000),
+      });
+      const cached = await prepareDesktopReinstallHelperUploadAsset({
+        runtimeReleaseTag: 'v1.2.3',
+        releaseBaseURL: 'https://mirror.example.invalid/releases',
+        assetCacheRoot: fixture.cacheRoot,
+        sourceRuntimeRoot: fixture.root,
+        platform,
+        fetchPolicy: runtimeReleaseFetchPolicy(45_000),
+      });
+
+      expect(tarGzipEntryNames(first)).toEqual(['redeven']);
+      expect(cached).toEqual(first);
+      await expect(fs.access(fixture.buildLogPath)).rejects.toMatchObject({ code: 'ENOENT' });
     } finally {
       await fs.rm(path.dirname(fixture.root), { recursive: true, force: true });
     }

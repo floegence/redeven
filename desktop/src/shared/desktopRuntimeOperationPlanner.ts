@@ -125,7 +125,10 @@ export function buildDesktopRuntimeOperationPlans(
 
   const method = managementMethod(input.host_access, input.placement);
   const hasManagement = method !== 'none';
-  const lifecycleMethod: DesktopRuntimeOperationMethod = hasManagement ? 'runtime_gateway' : 'none';
+  // Managed environments are controlled through the saved direct executor.
+  // `runtime_gateway` is reserved for access-only Gateway-backed opens and is
+  // never a lifecycle method for a Local, SSH, or container target.
+  const lifecycleMethod: DesktopRuntimeOperationMethod = hasManagement ? method : 'none';
   const requiresUpdate = packageRequiresUpdate(input.package_state);
   const maintenance = input.maintenance;
   const restartMaintenance = desktopRuntimeMaintenanceRequiresRestart(maintenance);

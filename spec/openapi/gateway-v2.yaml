@@ -714,6 +714,9 @@ components:
           $ref: '#/components/schemas/EnvironmentProfile'
         profile_access_route:
           $ref: '#/components/schemas/EnvProfileAccessRoute'
+        access_endpoint:
+          description: Immutable access-only endpoint for opening the Environment. This is never a Gateway API or bridge URL.
+          $ref: '#/components/schemas/EnvProfileAccessRoute'
         runtime_management:
           $ref: '#/components/schemas/RuntimeManagementCapability'
         origin:

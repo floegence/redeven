@@ -38,6 +38,10 @@ const (
 )
 
 type Options struct {
+	// Mode controls whether this process owns a managed Environment Runtime.
+	// Standalone gateways are access/catalog relays only and never create a
+	// Runtime lifecycle store or supervisor.
+	Mode                        string
 	StateRoot                   string
 	DesktopBridgeTransport      bool
 	AllowPrivateProfileTargets  bool
@@ -68,6 +72,7 @@ type PrecompiledRuntimeStartup interface {
 }
 
 type Server struct {
+	mode                   string
 	stateRoot              string
 	desktopBridgeTransport bool
 	profileWriteEnabled    bool
@@ -122,15 +127,27 @@ func New(options Options) (*Server, error) {
 	if stateRoot == "" {
 		stateRoot = filepath.Join(defaultStateRoot(), "gateways", "default", "state")
 	}
-	lifecycleStore, err := gatewaylifecycle.NewStore(gatewaylifecycle.Options{
-		StateRoot:        filepath.Join(stateRoot, "runtime-lifecycle"),
-		Controller:       options.LifecycleController,
-		ArtifactVerifier: options.LifecycleArtifactVerifier,
-	})
-	if err != nil {
-		return nil, err
+	mode := strings.TrimSpace(options.Mode)
+	if mode == "" {
+		mode = "managed_environment"
+	}
+	if mode != "managed_environment" && mode != "standalone" {
+		return nil, fmt.Errorf("unsupported Gateway mode %q", mode)
+	}
+	var lifecycleStore *gatewaylifecycle.Store
+	var err error
+	if mode == "managed_environment" {
+		lifecycleStore, err = gatewaylifecycle.NewStore(gatewaylifecycle.Options{
+			StateRoot:        filepath.Join(stateRoot, "runtime-lifecycle"),
+			Controller:       options.LifecycleController,
+			ArtifactVerifier: options.LifecycleArtifactVerifier,
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
 	return &Server{
+		mode:                   mode,
 		stateRoot:              stateRoot,
 		desktopBridgeTransport: options.DesktopBridgeTransport,
 		profileWriteEnabled:    options.ProfileWriteEnabled,
@@ -145,11 +162,16 @@ func New(options Options) (*Server, error) {
 		lifecycle:                   lifecycleStore,
 		lifecycleAuthorizer:         options.LifecycleAuthorizer,
 		lifecycleCapabilityProvider: options.LifecycleCapabilityProvider,
-		precompiledRuntimeStartup:   options.PrecompiledRuntimeStartup,
-		lifecycleAvailable:          options.LifecycleController != nil && options.LifecycleArtifactVerifier != nil && options.LifecycleAuthorizer != nil,
-		profileSessions:             make(map[string]*profileSession),
-		providerNonces:              make(map[string]int64),
-		providerUploads:             make(map[string]providerArtifactUpload),
+		precompiledRuntimeStartup: func() PrecompiledRuntimeStartup {
+			if mode == "standalone" {
+				return nil
+			}
+			return options.PrecompiledRuntimeStartup
+		}(),
+		lifecycleAvailable: mode == "managed_environment" && options.LifecycleController != nil && options.LifecycleArtifactVerifier != nil && options.LifecycleAuthorizer != nil,
+		profileSessions:    make(map[string]*profileSession),
+		providerNonces:     make(map[string]int64),
+		providerUploads:    make(map[string]providerArtifactUpload),
 		proxyTransport: gatewayProfileProxyTransport(gatewayenvprofiles.URLTargetPolicy{
 			AllowPrivateNetworkTargets: options.AllowPrivateProfileTargets,
 		}),
@@ -179,16 +201,18 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /gateway/v2/open-session", s.handleOpenSession)
 	mux.HandleFunc("POST /gateway/v2/env-profiles/upsert", s.handleEnvProfileUpsert)
 	mux.HandleFunc("POST /gateway/v2/env-profiles/delete", s.handleEnvProfileDelete)
-	mux.HandleFunc("POST /gateway/v2/runtime-operations/prepare", s.handleRuntimeOperationPrepare)
-	mux.HandleFunc("POST /gateway/v2/runtime-operations/list", s.handleRuntimeOperationList)
-	mux.HandleFunc("GET /gateway/v2/runtime-operations/{operation_id}", s.handleRuntimeOperationGet)
-	mux.HandleFunc("POST /gateway/v2/runtime-operations/{operation_id}/confirm", s.handleRuntimeOperationConfirm)
-	mux.HandleFunc("PUT /gateway/v2/runtime-operations/{operation_id}/artifact", s.handleRuntimeOperationArtifact)
-	mux.HandleFunc("POST /gateway/v2/runtime-operations/{operation_id}/commit", s.handleRuntimeOperationCommit)
-	mux.HandleFunc("POST /gateway/v2/runtime-operations/{operation_id}/cancel", s.handleRuntimeOperationCancel)
-	mux.HandleFunc("POST /gateway/v2/runtime-operations/{operation_id}/renew-deadline", s.handleRuntimeOperationRenewDeadline)
-	mux.HandleFunc("POST /gateway/v2/runtime-operations/{operation_id}/reconcile", s.handleRuntimeOperationReconcile)
-	mux.HandleFunc("GET /gateway/v2/runtime-operations/{operation_id}/events", s.handleRuntimeOperationEvents)
+	if s.lifecycleAvailable {
+		mux.HandleFunc("POST /gateway/v2/runtime-operations/prepare", s.handleRuntimeOperationPrepare)
+		mux.HandleFunc("POST /gateway/v2/runtime-operations/list", s.handleRuntimeOperationList)
+		mux.HandleFunc("GET /gateway/v2/runtime-operations/{operation_id}", s.handleRuntimeOperationGet)
+		mux.HandleFunc("POST /gateway/v2/runtime-operations/{operation_id}/confirm", s.handleRuntimeOperationConfirm)
+		mux.HandleFunc("PUT /gateway/v2/runtime-operations/{operation_id}/artifact", s.handleRuntimeOperationArtifact)
+		mux.HandleFunc("POST /gateway/v2/runtime-operations/{operation_id}/commit", s.handleRuntimeOperationCommit)
+		mux.HandleFunc("POST /gateway/v2/runtime-operations/{operation_id}/cancel", s.handleRuntimeOperationCancel)
+		mux.HandleFunc("POST /gateway/v2/runtime-operations/{operation_id}/renew-deadline", s.handleRuntimeOperationRenewDeadline)
+		mux.HandleFunc("POST /gateway/v2/runtime-operations/{operation_id}/reconcile", s.handleRuntimeOperationReconcile)
+		mux.HandleFunc("GET /gateway/v2/runtime-operations/{operation_id}/events", s.handleRuntimeOperationEvents)
+	}
 	return mux
 }
 
@@ -222,12 +246,12 @@ func (s *Server) handleRuntimeManagementCapability(w http.ResponseWriter, r *htt
 		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "Runtime management capability request is invalid.", false)
 		return
 	}
-	if s.lifecycleCapabilityProvider == nil {
+	if s.mode == "standalone" || s.lifecycleCapabilityProvider == nil {
 		capability := gatewayprotocol.NormalizeRuntimeManagementCapability(gatewayprotocol.RuntimeManagementCapability{
-			Support:       gatewayprotocol.CapabilitySupportSupported,
-			Authorization: gatewayprotocol.RuntimeManagementAuthorization{State: gatewayprotocol.AuthorizationUnknown},
+			Support:       gatewayprotocol.CapabilitySupportUnsupported,
+			Authorization: gatewayprotocol.RuntimeManagementAuthorization{State: gatewayprotocol.AuthorizationDenied},
 			Readiness:     gatewayprotocol.ManagementReadinessUnknown,
-			ReasonCode:    "runtime_management_unavailable", CheckedAtUnixMS: time.Now().UnixMilli(),
+			ReasonCode:    "standalone_gateway_runtime_management_unsupported", CheckedAtUnixMS: time.Now().UnixMilli(),
 		})
 		writeGatewayData(w, http.StatusOK, capability)
 		return
@@ -788,6 +812,16 @@ func (s *Server) catalogService(r *http.Request, verified gatewayauth.VerifiedRe
 }
 
 func (s *Server) runtimeManagementCapability(routeKind gatewayprotocol.EnvProfileAccessRouteKind, grants []gatewayprotocol.RuntimeGrant) *gatewayprotocol.RuntimeManagementCapability {
+	if s.mode == "standalone" {
+		capability := gatewayprotocol.NormalizeRuntimeManagementCapability(gatewayprotocol.RuntimeManagementCapability{
+			Support:         gatewayprotocol.CapabilitySupportUnsupported,
+			Authorization:   gatewayprotocol.RuntimeManagementAuthorization{State: gatewayprotocol.AuthorizationDenied},
+			Readiness:       gatewayprotocol.ManagementReadinessUnknown,
+			ReasonCode:      "standalone_gateway_runtime_management_unsupported",
+			CheckedAtUnixMS: time.Now().UnixMilli(),
+		})
+		return &capability
+	}
 	support := gatewayprotocol.CapabilitySupportSupported
 	reasonCode := "runtime_management_permission_required"
 	if routeKind == gatewayprotocol.EnvProfileAccessRouteKindURL {

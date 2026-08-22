@@ -127,12 +127,12 @@ describe('environment open flow decisions', () => {
         start: { ...base!.runtime_operations.start, reason_code: 'runtime_gateway_setup_required' },
       },
     };
-    expect(environmentOpenFlow(setupRequired)).toBe('initialize');
+    expect(environmentOpenFlow(setupRequired)).toBe('start');
     const initializationPresentation = buildProviderBackedEnvironmentActionModel(setupRequired).action_presentation;
     expect(initializationPresentation.primary_action.label).toBe('Open');
     expect(initializationPresentation.primary_action_overlay).toMatchObject({
       kind: 'popover',
-      title: 'Initialize and open',
+      title: 'Start and open',
     });
     expect(JSON.stringify(initializationPresentation.primary_action_overlay)).not.toMatch(/Gateway|Runtime management|Desktop ownership|binding target/u);
 
@@ -211,16 +211,7 @@ describe('environment open flow decisions', () => {
         },
       },
     };
-    expect(environmentOpenFlow(gatewayReadyButRuntimeMissing)).toBe('initialize');
-    expect(buildProviderBackedEnvironmentActionModel(gatewayReadyButRuntimeMissing).action_presentation.primary_action_overlay).toMatchObject({
-      kind: 'popover',
-      title: 'Initialize and open',
-      actions: expect.arrayContaining([
-        expect.objectContaining({
-          action: expect.objectContaining({ intent: 'initialize_and_open' }),
-        }),
-      ]),
-    });
+    expect(environmentOpenFlow(gatewayReadyButRuntimeMissing)).toBe('direct');
 
     const stoppedAfterDesktopRestart = {
       ...setupRequired,
@@ -248,22 +239,7 @@ describe('environment open flow decisions', () => {
         },
       },
     };
-    expect(environmentOpenFlow(stoppedAfterDesktopRestart)).toBe('start');
-    expect(buildProviderBackedEnvironmentActionModel(stoppedAfterDesktopRestart).action_presentation).toMatchObject({
-      primary_action: {
-        intent: 'open',
-        label: 'Open',
-      },
-      primary_action_overlay: {
-        kind: 'popover',
-        title: 'Start and open',
-        actions: expect.arrayContaining([
-          expect.objectContaining({
-            action: expect.objectContaining({ intent: 'start_and_open' }),
-          }),
-        ]),
-      },
-    });
+    expect(environmentOpenFlow(stoppedAfterDesktopRestart)).toBe('direct');
 
     expect(environmentOpenFlow({
       ...setupRequired,
@@ -536,7 +512,6 @@ describe('buildEnvironmentDisplayStateModel', () => {
     const model = buildProviderBackedEnvironmentActionModel({
       ...entry!,
       reinstall_required: true,
-      reinstall_gateway_id: 'gw-local',
     });
 
     expect(model.action_presentation.primary_action).toMatchObject({
@@ -544,7 +519,15 @@ describe('buildEnvironmentDisplayStateModel', () => {
       label: 'Reinstall Redeven',
       enabled: true,
     });
-    expect(model.action_presentation.menu_actions).toEqual([]);
+    expect(model.action_presentation.menu_actions.map((item) => item.id)).toEqual(['reinstall_target']);
+    expect(model.action_presentation.menu_actions.map((item) => item.id)).not.toEqual(expect.arrayContaining([
+      'start_runtime',
+      'stop_runtime',
+      'restart_runtime',
+      'update_runtime',
+      'refresh_runtime',
+      'open',
+    ]));
     expect(model.action_presentation.primary_action_overlay).toBeUndefined();
   });
 
@@ -570,7 +553,7 @@ describe('buildEnvironmentDisplayStateModel', () => {
     }]));
   });
 
-  it('requires Gateway pairing before reopening a freshly reinstalled Local Environment', () => {
+  it('does not require Gateway pairing after reinstall', () => {
     const local = testLocalEnvironment();
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({ local_environment: local }),
@@ -580,17 +563,26 @@ describe('buildEnvironmentDisplayStateModel', () => {
 
     const model = buildProviderBackedEnvironmentActionModel({
       ...entry!,
-      reinstall_pairing_required: true,
-      reinstall_gateway_id: 'gw-local',
     });
 
-    expect(model.action_presentation.primary_action).toMatchObject({
-      intent: 'pair_gateway',
-      label: 'Pair Gateway',
-      gateway_id: 'gw-local',
-    });
-    expect(model.action_presentation.menu_actions).toEqual([]);
+    expect(model.action_presentation.primary_action.intent).not.toBe('pair_gateway');
     expect(model.action_presentation.primary_action_overlay).toBeUndefined();
+  });
+
+  it('prioritizes required pairing while the reinstall journal still protects the target', () => {
+    const local = testLocalEnvironment();
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({ local_environment: local }),
+    });
+    const entry = snapshot.environments.find((candidate) => candidate.id === local.id);
+    expect(entry).toBeTruthy();
+
+    const model = buildProviderBackedEnvironmentActionModel({
+      ...entry!,
+      reinstall_required: true,
+    });
+
+    expect(model.action_presentation.primary_action).toMatchObject({ intent: 'reinstall_target' });
   });
 
   it('classifies openable online runtimes as ready without calling them open windows', () => {
@@ -2283,6 +2275,104 @@ describe('buildEnvironmentCardModel', () => {
     }));
   });
 
+  it('shows Reinstall Redeven for SSH hosts and both direct container placements', () => {
+    const containerID = 'a'.repeat(64);
+    const sshContainerID = 'b'.repeat(64);
+    const sshAccess = {
+      kind: 'ssh_host' as const,
+      ssh: {
+        ssh_destination: 'ops@example.internal',
+        ssh_port: 2222,
+        auth_mode: 'key_agent' as const,
+        connect_timeout_seconds: 10,
+      },
+    };
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        saved_ssh_environments: [{
+          id: 'ssh-host',
+          label: 'SSH Host',
+          ssh_destination: 'ops@example.internal',
+          ssh_port: 2222,
+          auth_mode: 'key_agent',
+          runtime_root: '/srv/redeven',
+          bootstrap_strategy: 'desktop_upload',
+          release_base_url: '',
+          pinned: false,
+          created_at_ms: 1,
+          last_used_at_ms: 1,
+        }],
+        saved_runtime_targets: [{
+          schema_version: 1,
+          id: 'local:container',
+          label: 'Local Container',
+          host_access: { kind: 'local_host' },
+          placement: {
+            kind: 'container_process',
+            container_engine: 'docker',
+            container_id: containerID,
+            container_ref: containerID,
+            container_label: 'local-container',
+            runtime_root: '/root/.redeven',
+            bridge_strategy: 'exec_stream',
+          },
+          pinned: false,
+          last_used_at_ms: 1,
+          created_at_ms: 1,
+          updated_at_ms: 1,
+        }, {
+          schema_version: 1,
+          id: 'ssh:container',
+          label: 'SSH Container',
+          host_access: sshAccess,
+          placement: {
+            kind: 'container_process',
+            container_engine: 'docker',
+            container_id: sshContainerID,
+            container_ref: sshContainerID,
+            container_label: 'ssh-container',
+            runtime_root: '/root/.redeven',
+            bridge_strategy: 'exec_stream',
+          },
+          pinned: false,
+          last_used_at_ms: 1,
+          created_at_ms: 1,
+          updated_at_ms: 1,
+        }],
+      }),
+    });
+
+    for (const environmentID of ['ssh-host', 'local:container', 'ssh:container']) {
+      const entry = snapshot.environments.find((environment) => environment.id === environmentID);
+      expect(entry).toBeTruthy();
+      expect(buildProviderBackedEnvironmentActionModel(entry!).action_presentation.menu_actions).toEqual(
+        expect.arrayContaining([expect.objectContaining({
+          id: 'reinstall_target',
+          label: 'Reinstall Redeven',
+        })]),
+      );
+    }
+  });
+
+  it('does not offer Reinstall Redeven for URL environments', () => {
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        saved_environments: [{
+          id: 'https://redeven.example/',
+          label: 'Managed URL',
+          local_ui_url: 'https://redeven.example/',
+          pinned: false,
+          created_at_ms: 1,
+          last_used_at_ms: 1,
+        }],
+      }),
+    });
+    const entry = snapshot.environments.find((environment) => environment.id === 'https://redeven.example/');
+    expect(entry).toBeTruthy();
+    expect(buildProviderBackedEnvironmentActionModel(entry!).action_presentation.menu_actions
+      .map((item) => item.id)).not.toContain('reinstall_target');
+  });
+
   it('builds provider-card actions around provider remote availability', () => {
     const controlPlane = buildControlPlaneSummary({
       status: 'offline',
@@ -3426,7 +3516,7 @@ describe('Gateway view models', () => {
     });
   });
 
-  it('projects Gateway source rows with Refresh as the default primary action and safe labels', () => {
+  it('projects Gateway source rows with Pair Gateway as the default primary action and safe labels', () => {
     expect(buildGatewaySourceRowModel(gatewaySource({
       status: 'pairing_required',
       trust_state: 'unpaired',
@@ -3437,8 +3527,8 @@ describe('Gateway view models', () => {
         tone: 'primary',
       }),
       primary_action: expect.objectContaining({
-        intent: 'refresh_gateway',
-        label: 'Refresh',
+        intent: 'pair_gateway',
+        label: 'Pair Gateway',
         enabled: true,
       }),
     });
@@ -3513,16 +3603,13 @@ describe('Gateway view models', () => {
     }));
     expect(stoppedUnpairedSSHRow).toMatchObject({
       status_label: 'Not started',
-      primary_action: expect.objectContaining({ intent: 'refresh_gateway', label: 'Refresh', enabled: true }),
+      primary_action: expect.objectContaining({ intent: 'pair_gateway', label: 'Pair Gateway', enabled: true }),
       guidance: expect.objectContaining({
         title: 'Preparing Gateway',
         tone: 'primary',
       }),
     });
-    expect(stoppedUnpairedSSHRow.secondary_actions.map((action) => action.intent)).toEqual([
-      'disable_gateway',
-      'start_gateway',
-    ]);
+    expect(stoppedUnpairedSSHRow.secondary_actions.map((action) => action.intent)).toEqual(['disable_gateway']);
 
     const stoppedSSHRow = buildGatewaySourceRowModel(gatewaySource({
       connection_kind: 'ssh_host',
@@ -3545,10 +3632,7 @@ describe('Gateway view models', () => {
         tone: 'warning',
       }),
     });
-    expect(stoppedSSHRow.secondary_actions.map((action) => action.intent)).toEqual([
-      'disable_gateway',
-      'start_gateway',
-    ]);
+    expect(stoppedSSHRow.secondary_actions.map((action) => action.intent)).toEqual(['disable_gateway']);
 
     const syncingGatewayRow = buildGatewaySourceRowModel(gatewaySource({
       connection_kind: 'ssh_host',
@@ -3569,8 +3653,8 @@ describe('Gateway view models', () => {
     expect(syncingGatewayRow).toMatchObject({
       status_label: 'Refreshing',
       primary_action: expect.objectContaining({
-        intent: 'refresh_gateway',
-        label: 'Refresh',
+        intent: 'pair_gateway',
+        label: 'Pair Gateway',
         enabled: true,
       }),
       guidance: expect.objectContaining({
@@ -3618,8 +3702,8 @@ describe('Gateway view models', () => {
       },
     }));
     expect(unreachableUnpairedRow.primary_action).toEqual(expect.objectContaining({
-      intent: 'refresh_gateway',
-      label: 'Refresh',
+      intent: 'pair_gateway',
+      label: 'Pair Gateway',
     }));
     expect(unreachableUnpairedRow.guidance).toMatchObject({
       title: 'Resolve the Gateway target',
@@ -3672,11 +3756,7 @@ describe('Gateway view models', () => {
       title: 'Update before continuing',
       tone: 'warning',
     });
-    expect(updateRequiredSSHRow.secondary_actions.map((action) => action.intent)).toEqual([
-      'disable_gateway',
-      'restart_gateway',
-      'update_gateway',
-    ]);
+    expect(updateRequiredSSHRow.secondary_actions.map((action) => action.intent)).toEqual(['disable_gateway']);
 
     const reinstallRequiredSSHRow = buildGatewaySourceRowModel(gatewaySource({
       connection_kind: 'ssh_host',
@@ -3691,22 +3771,13 @@ describe('Gateway view models', () => {
       },
     }));
     expect(reinstallRequiredSSHRow).toMatchObject({
-      status_label: 'Reinstall required',
-      primary_action: {
-        intent: 'reinstall_gateway',
-        label: 'Reinstall',
-      },
-      guidance: {
-        title: 'Gateway reinstall required',
-        tone: 'warning',
-      },
+      primary_action: expect.objectContaining({ intent: 'refresh_gateway' }),
     });
-    expect(reinstallRequiredSSHRow.secondary_actions).toEqual([]);
+    expect(reinstallRequiredSSHRow.secondary_actions.map((action) => action.intent)).toEqual(['disable_gateway']);
 
     const reinstallPairingSSHRow = buildGatewaySourceRowModel(gatewaySource({
       connection_kind: 'ssh_host',
       management_capability: 'managed_ssh_host',
-      reinstall_pairing_required: true,
       trust_state: 'unpaired',
       service_state: {
         status: 'ready',
@@ -3718,16 +3789,9 @@ describe('Gateway view models', () => {
       },
     }));
     expect(reinstallPairingSSHRow).toMatchObject({
-      primary_action: {
-        intent: 'refresh_gateway',
-        label: 'Pair Gateway',
-      },
-      guidance: {
-        title: 'Gateway pairing required',
-        tone: 'warning',
-      },
+      primary_action: expect.objectContaining({ intent: 'pair_gateway', label: 'Pair Gateway' }),
     });
-    expect(reinstallPairingSSHRow.secondary_actions).toEqual([]);
+    expect(reinstallPairingSSHRow.secondary_actions.map((action) => action.intent)).toEqual(['disable_gateway']);
 
     const readySSHRow = buildGatewaySourceRowModel(gatewaySource({
       connection_kind: 'ssh_host',
@@ -3751,18 +3815,8 @@ describe('Gateway view models', () => {
       detail: 'Desktop keeps this Gateway catalog synced. Open its environments from the Environments tab.',
       tone: 'success',
     });
-    expect(readySSHRow.secondary_actions.map((action) => action.intent)).toEqual([
-      'disable_gateway',
-      'stop_gateway',
-      'restart_gateway',
-      'update_gateway',
-    ]);
-    expect(readySSHRow.secondary_actions.map((action) => action.label)).toEqual([
-      'Disable',
-      'Stop Gateway',
-      'Restart Gateway',
-      'Update Gateway',
-    ]);
+    expect(readySSHRow.secondary_actions.map((action) => action.intent)).toEqual(['disable_gateway']);
+    expect(readySSHRow.secondary_actions.map((action) => action.label)).toEqual(['Disable']);
     const serviceReadyBeforeCatalogRow = buildGatewaySourceRowModel(gatewaySource({
       connection_kind: 'ssh_host',
       management_capability: 'managed_ssh_host',
@@ -3791,12 +3845,7 @@ describe('Gateway view models', () => {
         tone: 'success',
       }),
     });
-    expect(serviceReadyBeforeCatalogRow.secondary_actions.map((action) => action.intent)).toEqual([
-      'disable_gateway',
-      'stop_gateway',
-      'restart_gateway',
-      'update_gateway',
-    ]);
+    expect(serviceReadyBeforeCatalogRow.secondary_actions.map((action) => action.intent)).toEqual(['disable_gateway']);
     const allRows = [
       buildGatewaySourceRowModel(gatewaySource({
         status: 'pairing_required',
@@ -3815,6 +3864,7 @@ describe('Gateway view models', () => {
     ];
     const allowedActions = new Set([
       'refresh_gateway',
+      'pair_gateway',
       'start_gateway',
       'stop_gateway',
       'restart_gateway',

@@ -35,6 +35,10 @@ Commands:
               Inspect Runtime process identities.
   desktop-runtime-stop
               Stop verified Runtime processes.
+  desktop-target-process-inventory
+              Inspect Redeven processes for one exact managed target root.
+  desktop-target-process-stop
+              Stop verified Redeven processes for one exact managed target root.
   desktop-model-source
               Connect Desktop Local Environment models to runtime-control.
   local-authority
@@ -779,6 +783,10 @@ func lookupHelpText(args []string) (string, bool) {
 		return desktopRuntimeInventoryHelpText(), true
 	case "desktop-runtime-stop":
 		return desktopRuntimeStopHelpText(), true
+	case "desktop-target-process-inventory":
+		return desktopTargetProcessInventoryHelpText(), true
+	case "desktop-target-process-stop":
+		return desktopTargetProcessStopHelpText(), true
 	case "desktop-model-source":
 		return desktopModelSourceHelpText(), true
 	case "local-authority", "local-authority rotate-key":

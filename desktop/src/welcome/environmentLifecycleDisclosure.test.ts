@@ -222,12 +222,12 @@ describe('environmentLifecycleDisclosure', () => {
     const environment = localEnvironmentEntry();
     const state = beginEnvironmentLifecycleDisclosure(null, environment.id, 'update_runtime');
     const confirmation: DesktopLauncherActionProgress = {
-      action: 'run_gateway_environment_lifecycle',
+      action: 'run_provider_environment_lifecycle',
       environment_id: environment.id,
       environment_label: environment.label,
       operation_key: `${environment.id}:update_runtime`,
-      subject_kind: 'gateway',
-      subject_id: 'gateway-local',
+      subject_kind: 'provider_environment',
+      subject_id: 'provider-local',
       started_at_unix_ms: progressStartedAfter(state!),
       status: 'needs_confirmation',
       phase: 'runtime_operation_confirmation_required',

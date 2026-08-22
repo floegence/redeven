@@ -41,13 +41,10 @@ import type { DesktopGatewayServiceState } from '../shared/desktopGateway';
 import type { DesktopGatewayRuntimeManagementCapability } from '../shared/desktopGateway';
 import {
   ensureManagedGatewayServiceReady,
-  cleanupManagedGatewayQuarantine,
   enrollManagedGatewaySupervisor,
   gatewayServiceBinaryPath,
   probeManagedGatewayServiceDeep,
   probeManagedGatewayServiceStatus,
-  preflightManagedGatewayTarget,
-  quarantineManagedGatewayTarget,
   stopManagedGatewayService,
   type GatewayServiceDeepProbe,
   type GatewayServiceProgress,
@@ -118,11 +115,6 @@ export type GatewayServiceLifecycleProgress = Readonly<{
     | 'opening_bridge'
     | 'stopping_gateway'
     | 'verifying_gateway_stopped'
-    | 'quarantining_target'
-    | 'initializing_fresh_state'
-    | 'verifying_fresh_state'
-    | 'pairing_required'
-    | 'cleaning_quarantine'
     | 'enrolling_gateway'
     | 'gateway_ready';
   title: string;
@@ -507,6 +499,7 @@ export class GatewayLifecycleManager {
     if (record.connection.kind === 'url') {
       throw new GatewayNotManageableError();
     }
+    await this.throwIfReinstallRequired(record, options.signal);
     return this.runLifecycle(record, 'stop', options, (signal) => this.stopGatewayUncoordinated(record, { ...options, signal }));
   }
 
@@ -529,63 +522,28 @@ export class GatewayLifecycleManager {
     return this.runLifecycle(record, 'update', options, (signal) => this.updateGatewayUncoordinated(record, { ...options, signal }));
   }
 
-  async reinstallTarget(
-    record: GatewayRecord,
-    options: Readonly<{
-      operationID: string;
-      signal?: AbortSignal;
-      onProgress?: GatewayLifecycleProgressSink;
-      operationKey?: string;
-      beforeCleanup?: (session: GatewayLifecycleSession) => Promise<void>;
-    }>,
-  ): Promise<GatewayLifecycleSession> {
+  async installFreshGateway(record: GatewayRecord, options: Readonly<{ signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink; operationKey?: string }> = {}): Promise<void> {
     if (record.connection.kind === 'url') {
-      throw new GatewayNotManageableError('URL Gateways are managed by their service operator and must be reinstalled on that service.');
+      throw new GatewayNotManageableError();
     }
-    return this.runLifecycle(record, 'reinstall', options, async (signal) => {
-      const serviceOptions = await this.serviceOptions(record, { ...options, signal });
-      await preflightManagedGatewayTarget(serviceOptions, options.operationID);
-      options.onProgress?.({
-        phase: 'stopping_gateway',
-        title: 'Stopping Gateway service',
-        detail: 'Desktop is stopping the managed Gateway before reinstalling it.',
-      });
-      await this.stopGatewayUncoordinated(record, { ...options, signal });
-      options.onProgress?.({
-        phase: 'preparing_gateway_package',
-        title: 'Reinstalling Gateway',
-        detail: 'Desktop is replacing the Gateway state with a new environment.',
-      });
-      options.onProgress?.({
-        phase: 'quarantining_target',
-        title: 'Replacing Gateway environment',
-        detail: 'Desktop is isolating the exact registered Gateway environment before creating fresh state.',
-      });
-      const quarantine = await quarantineManagedGatewayTarget(serviceOptions, options.operationID);
-      options.onProgress?.({
-        phase: 'initializing_fresh_state',
-        title: 'Initializing Gateway environment',
-        detail: 'Desktop is installing the current bundled Gateway into the fresh environment.',
-      });
-      const session = await this.ensureBridgeSession(record, { ...options, signal });
-      options.onProgress?.({
-        phase: 'verifying_fresh_state',
-        title: 'Verifying Gateway environment',
-        detail: 'Desktop is verifying the new Gateway service and bridge identity.',
-      });
-      options.onProgress?.({
-        phase: 'pairing_required',
-        title: 'Pairing required',
-        detail: 'The previous Gateway identity and trust were removed. Pair this Gateway again to continue.',
-      });
-      await options.beforeCleanup?.(session);
-      options.onProgress?.({
-        phase: 'cleaning_quarantine',
-        title: 'Removing old Gateway environment',
-        detail: 'Desktop verified the new Gateway and is permanently deleting the isolated old environment.',
-      });
-      await cleanupManagedGatewayQuarantine(serviceOptions, quarantine);
-      return session;
+    return this.runLifecycle(record, 'update', options, async (signal) => {
+      await this.clear(record);
+      await this.ensureServiceReady(
+        record,
+        gatewayPlacement(record),
+        await this.gatewaySSHPassword(record),
+        signal,
+        { forceUpdate: true, onProgress: options.onProgress },
+      );
+      const state = await this.inspectService(record, signal);
+      if (state.status !== 'ready') {
+        throw new GatewayServiceUnavailableError(
+          record.connection.kind === 'ssh_container' || record.connection.kind === 'local_container'
+            ? 'gateway_container_unavailable'
+            : 'gateway_service_start_failed',
+          state.message ?? 'Desktop could not verify the freshly installed Gateway service.',
+        );
+      }
     });
   }
 
@@ -631,6 +589,7 @@ export class GatewayLifecycleManager {
     if (record.connection.kind === 'url') {
       throw new GatewayNotManageableError('Provider enrollment requires an explicitly selected direct connection.');
     }
+    await this.throwIfReinstallRequired(record, options.signal);
     const targetID = gatewayLifecycleTargetID(record);
     return this.options.lifecycle_coordinator.run({
       target_key: gatewayLifecycleCoordinatorTargetKey(record),
