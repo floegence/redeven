@@ -499,9 +499,15 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       setCommandError(null);
       try {
         await props.onCommand(command, new AbortController().signal);
-      } catch {
-        // Keep the task projection visible so the failed step owns recovery.
-        setOfficialInstallFlow({ status: 'installing', key, item });
+      } catch (error) {
+        // A coordinator failure can happen before an execution projection
+        // exists. Keep one actionable card-level error instead of leaving a
+        // modal in an unbounded loading state.
+        setOfficialInstallFlow({
+          status: 'error', key, item,
+          message: messageFromUnknown(error) ?? i18n.t('uiCopy.plugin.installOperation.failure.internal'),
+        });
+        setOfficialInstallDialogOpen(false);
       }
       return;
     }
@@ -693,7 +699,8 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
                   officialInstallError={selectedItem()?.inventoryKey === item.inventoryKey
                     ? undefined
                     : officialInstallErrorForItem(item)}
-                  installOperation={selectedInventoryKey() === item.inventoryKey && mobileDetailOpen()
+                  installOperation={officialInstallDialog()?.item.inventoryKey === item.inventoryKey
+                    || (selectedInventoryKey() === item.inventoryKey && mobileDetailOpen())
                     ? undefined
                     : installOperationForItem(item)}
                   entranceDelayMs={Math.min(index() * 18, 126)}
@@ -777,7 +784,9 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
               commandPendingType={pendingCommandTypeForItem(item)}
               officialInstallPhase={officialInstallPhaseForItem(item)}
               officialInstallError={officialInstallErrorForItem(item)}
-              installOperation={installOperationForItem(item)}
+              installOperation={officialInstallDialog()?.item.inventoryKey === item.inventoryKey
+                ? undefined
+                : installOperationForItem(item)}
               uninstallChoiceFor={uninstallChoiceFor()}
               onCommand={(command) => void runCommand(command)}
               onAskUninstall={setUninstallChoiceFor}

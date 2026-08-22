@@ -303,7 +303,8 @@ function installFailureLabel(code: string, i18n: I18nHelpers): string {
 function retryableFailureCode(code?: string): boolean {
   return code === 'PLUGIN_RELEASE_NETWORK'
     || code === 'PLUGIN_RELEASE_TIMEOUT'
-    || code === 'PLUGIN_INSTALL_INTERRUPTED';
+    || code === 'PLUGIN_INSTALL_INTERRUPTED'
+    || code === 'PLUGIN_INTERNAL_FAILURE';
 }
 
 function formatBytes(value: number, locale: string): string {
