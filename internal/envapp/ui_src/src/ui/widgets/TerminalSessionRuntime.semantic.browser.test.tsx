@@ -1180,6 +1180,8 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
 
     await vi.waitFor(() => expect(runtime.root.querySelector('[data-terminal-runtime-session]')
       ?.getAttribute('data-terminal-history-offset')).toBe('750000'), { timeout: 3_000 });
+    await vi.waitFor(() => expect(runtime.root.querySelector('[data-terminal-runtime-session]')
+      ?.getAttribute('data-terminal-history-busy')).toBe('false'), { timeout: 3_000 });
     expect(runtime.semanticHistory.mock.calls.length).toBeLessThanOrEqual(3);
     expect(runtime.semanticHistory.mock.calls[0]?.[1]).toMatchObject({
       lane: 'viewport', direction: 'end',
@@ -1562,7 +1564,7 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     expect(runtime.root.querySelector('[data-terminal-semantic-error="true"]')).toBeNull();
   });
 
-  it('keeps a semantic history scroll RPC failure local and retries from the live frame', async () => {
+  it('keeps a semantic history scroll RPC failure local and retries from its pending projection', async () => {
     const runtime = harness();
     mounted.push(runtime);
     runtime.emitPresentation(presentation(1, 'live-before-history-error'));
@@ -1579,10 +1581,10 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     expect(runtime.root.querySelector('[data-terminal-runtime-session]')?.getAttribute('data-terminal-history-busy')).toBe('false');
     expect(runtime.statuses.some((status) => status.state === 'blocking')).toBe(false);
     expect(runtime.root.querySelector('[data-terminal-semantic-error="true"]')).toBeNull();
-    expect(runtime.getViewport()?.getVisibleScreenText()).toContain('live-before-history-error');
+    expect(runtime.getViewport()?.getVisibleScreenText()).toBe('');
 
     runtime.emitPresentation(presentation(2, 'live-after-history-error'));
-    expect(runtime.getViewport()?.getVisibleScreenText()).toContain('live-after-history-error');
+    expect(runtime.getViewport()?.getVisibleScreenText()).toBe('');
     runtime.semanticHistory
       .mockResolvedValueOnce({
         ...historyViewport(),
@@ -1604,7 +1606,7 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     expect(runtime.root.querySelector('[data-terminal-semantic-history-error="true"]')).toBeNull();
   });
 
-  it('keeps a verified live frame when a later history page fails and retries from a stable boundary', async () => {
+  it('keeps the pending history projection when a later page fails and retries from a stable boundary', async () => {
     const runtime = harness();
     mounted.push(runtime);
     runtime.emitPresentation(presentation(1, 'live-before-paged-error'));
@@ -1627,7 +1629,7 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     expect(runtime.semanticHistory).toHaveBeenCalledTimes(2);
     expect(runtime.root.querySelector('[data-terminal-runtime-session]')?.getAttribute('data-terminal-history-busy')).toBe('false');
     expect(runtime.root.querySelector('[data-terminal-semantic-history-error="true"]')?.getAttribute('data-terminal-semantic-history-error-detail')).toContain('RPC transport error');
-    expect(runtime.getViewport()?.getVisibleScreenText()).toContain('live-before-paged-error');
+    expect(runtime.getViewport()?.getVisibleScreenText()).toBe('');
     expect(runtime.statuses.some((status) => status.state === 'blocking')).toBe(false);
 
     runtime.root.querySelector<HTMLButtonElement>('[data-terminal-semantic-history-retry]')?.click();
@@ -1671,22 +1673,22 @@ describe('TerminalSessionRuntime semantic-only surface', () => {
     await vi.waitFor(() => expect(runtime.semanticHistory).toHaveBeenCalledTimes(2));
     resolveBackward({
       ...historyViewport(),
-      offset: 16,
+      offset: 35,
       hasPrevious: true,
       hasNext: true,
-      frame: frame('older-trackpad-page', 80, 24, 16),
+      frame: frame('older-trackpad-page', 80, 24, 40),
     });
 
     await vi.waitFor(() => expect(runtime.semanticHistory).toHaveBeenCalledTimes(2));
     await vi.waitFor(() => expect(runtime.root.querySelector('[data-terminal-runtime-session]')?.getAttribute('data-terminal-history-busy')).toBe('false'));
-    expect(runtime.semanticHistory.mock.calls.map((call) => call[1].direction)).toEqual([
-      'end',
-      'backward',
-    ]);
+    const directions = runtime.semanticHistory.mock.calls.map((call) => call[1].direction);
+    expect(directions[0]).toBe('end');
+    expect(directions.some((direction) => direction === 'backward')).toBe(true);
+    expect(directions.at(-1)).toBe('backward');
     expect(runtime.root.querySelector('[data-terminal-runtime-session]')?.getAttribute('data-terminal-history-request-direction')).toBe('backward');
     expect(runtime.root.querySelector('[data-terminal-runtime-session]')?.getAttribute('data-terminal-history-request-state')).toBe('settled');
-    expect(runtime.root.querySelector('[data-terminal-runtime-session]')?.getAttribute('data-terminal-history-projected')).toBe('false');
-    expect(runtime.getViewport()?.getVisibleScreenText()).toContain('live-before-trackpad-burst');
+    expect(runtime.root.querySelector('[data-terminal-runtime-session]')?.getAttribute('data-terminal-history-projected')).toBe('true');
+    expect(runtime.getViewport()?.getVisibleScreenText()).not.toBe('');
     expect(runtime.statuses.some((status) => status.state === 'blocking')).toBe(false);
   });
 

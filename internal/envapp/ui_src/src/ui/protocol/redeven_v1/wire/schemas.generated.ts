@@ -5106,6 +5106,15 @@ export const redevenWireSchemas = {
       "screenStartOffset": {
         "kind": "number"
       },
+      "historyEpoch": {
+        "kind": "number"
+      },
+      "firstRowOrdinal": {
+        "kind": "number"
+      },
+      "screenStartRowOrdinal": {
+        "kind": "number"
+      },
       "hasPrevious": {
         "kind": "boolean"
       },

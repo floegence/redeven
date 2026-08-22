@@ -259,6 +259,9 @@ export function fromWireTerminalSemanticHistoryResponse(
     offset: resp.offset,
     totalRows: resp.totalRows,
     screenStartOffset: resp.screenStartOffset,
+    ...(resp.historyEpoch === undefined ? {} : { historyEpoch: resp.historyEpoch }),
+    ...(resp.firstRowOrdinal === undefined ? {} : { firstRowOrdinal: resp.firstRowOrdinal }),
+    ...(resp.screenStartRowOrdinal === undefined ? {} : { screenStartRowOrdinal: resp.screenStartRowOrdinal }),
     hasPrevious: resp.hasPrevious,
     hasNext: resp.hasNext,
   };

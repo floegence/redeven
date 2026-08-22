@@ -138,6 +138,9 @@ export type wire_terminal_history_resp = {
   offset: number;
   totalRows: number;
   screenStartOffset: number;
+  historyEpoch?: number;
+  firstRowOrdinal?: number;
+  screenStartRowOrdinal?: number;
   hasPrevious: boolean;
   hasNext: boolean;
 };
