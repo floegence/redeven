@@ -42,8 +42,8 @@ importers:
         specifier: 0.41.4
         version: 0.41.4(solid-js@1.9.13)
       '@floegence/floeterm-terminal-web':
-        specifier: 0.16.6
-        version: 0.16.6
+        specifier: 0.17.0
+        version: 0.17.0
       '@floegence/flowersec-core':
         specifier: 2.5.2
         version: 2.5.2
@@ -385,8 +385,8 @@ packages:
     peerDependencies:
       solid-js: ^1.8.0
 
-  '@floegence/floeterm-terminal-web@0.16.6':
-    resolution: {integrity: sha512-Kl/ejKUeFRQ48Qe8ikw1qov6FtZKbFE7YkqjbZH1F7FXkhhC52Q4qSLF3BDs4hZVQNTrfMhX25cQwOwgS0YOEQ==}
+  '@floegence/floeterm-terminal-web@0.17.0':
+    resolution: {integrity: sha512-7TtIROImcRYz/C7AADdcbI4qS91l3fFMgtLIn5bF97Xe7t1veswjY4j4D6CKT9rar35hixeDGyVZ2fOhvIuqQw==}
 
   '@floegence/flowersec-core@2.5.2':
     resolution: {integrity: sha512-TjyoHmsLvBZeT8bdx44Yd57I/OMJT10xOGp0jmmfzmUO0jawKyzj6/361Sb3k7kT21VIlz78YqpHGHPrxag+HA==}
@@ -623,13 +623,13 @@ packages:
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm]
     os: [linux]
+    libc: [glibc]
 
   '@rolldown/binding-linux-arm64-gnu@1.0.3':
     resolution: {integrity: sha512-jsO7R8To+AdlYgUmN5sHSCZbfhtMBkO0WUx8iORQnPcMMdgr7qM2DQmMwgabs3GhNztdmoKkMKQFHD6DTMCIQw==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [linux]
-    libc: [glibc]
 
   '@rolldown/binding-linux-arm64-musl@1.0.3':
     resolution: {integrity: sha512-VWkUHwWriDciit80wleYwKILoR/KMvxh/IdwS/paX+ZgpuRpCrKLUdadJbc0NpBEiyhpYawsJ73j9aCvOH+f7Q==}
@@ -773,13 +773,13 @@ packages:
     engines: {node: '>= 20'}
     cpu: [arm]
     os: [linux]
+    libc: [glibc]
 
   '@tailwindcss/oxide-linux-arm64-gnu@4.3.1':
     resolution: {integrity: sha512-gqdFoVJlw444GvpnheZLHmvTzSxI/cOUUh2KSNejQjTcYkW062SVD+En0rUgD+QV91bz1XGIGtt1HJd48xUGbQ==}
     engines: {node: '>= 20'}
     cpu: [arm64]
     os: [linux]
-    libc: [glibc]
 
   '@tailwindcss/oxide-linux-arm64-musl@4.3.1':
     resolution: {integrity: sha512-Bwv9KwOvE0VKa86xPFif9b9c3Y1NxOV1P0gLti/IYaWEsQYZXDlxfGEtA8mdDZ7SG3wyNXAWYT5SIn3giL57oA==}
@@ -1860,13 +1860,13 @@ packages:
     engines: {node: '>= 12.0.0'}
     cpu: [arm]
     os: [linux]
+    libc: [glibc]
 
   lightningcss-linux-arm64-gnu@1.32.0:
     resolution: {integrity: sha512-0nnMyoyOLRJXfbMOilaSRcLH3Jw5z9HDNGfT/gwCPgaDjnx0i8w7vBzFLFR1f6CMLKF8gVbebmkUN3fa/kQJpQ==}
     engines: {node: '>= 12.0.0'}
     cpu: [arm64]
     os: [linux]
-    libc: [glibc]
 
   lightningcss-linux-arm64-musl@1.32.0:
     resolution: {integrity: sha512-UpQkoenr4UJEzgVIYpI80lDFvRmPVg6oqboNHfoH4CQIfNA+HOrZ7Mo7KZP02dC6LjghPQJeBsvXhJod/wnIBg==}
@@ -2910,7 +2910,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@floegence/floeterm-terminal-web@0.16.6': {}
+  '@floegence/floeterm-terminal-web@0.17.0': {}
 
   '@floegence/flowersec-core@2.5.2':
     dependencies:
