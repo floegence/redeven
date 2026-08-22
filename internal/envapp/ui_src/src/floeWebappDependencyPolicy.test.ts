@@ -21,6 +21,7 @@ const PUBLISHED_NPM_DEPENDENCIES = [...FLOE_WEBAPP_DEPENDENCIES, '@floegence/flo
 const LOCAL_REFERENCE_PREFIXES = ['file:', 'link:', 'workspace:', 'portal:'] as const;
 
 type PackageJson = {
+  version?: string;
   dependencies?: Record<string, string>;
 };
 
@@ -35,6 +36,13 @@ function resolvePackageRoot(): string {
 
 function readText(relPath: string): string {
   return fs.readFileSync(path.join(resolvePackageRoot(), relPath), 'utf8');
+}
+
+function readInstalledFloetermDeclaration(relPath: string): string {
+  return fs.readFileSync(
+    path.join(resolvePackageRoot(), 'node_modules/@floegence/floeterm-terminal-web', relPath),
+    'utf8',
+  );
 }
 
 function readJson<T>(relPath: string): T {
@@ -140,6 +148,20 @@ describe('published npm dependency policy', () => {
     for (const [file, marker] of previousReleaseMarkers) {
       expect(readText(file), `${file} must not retain the previous Floeterm release`).not.toContain(marker);
     }
+  });
+
+  it('keeps the installed Floeterm release on the semantic runtime contract', () => {
+    const packageManifest = readJson<PackageJson>(
+      'node_modules/@floegence/floeterm-terminal-web/package.json',
+    );
+
+    expect(packageManifest.version).toBe('0.16.6');
+    expect(readInstalledFloetermDeclaration('dist/semantic/presentation.d.ts'))
+      .toMatch(/windowRows\?: number/);
+    expect(readInstalledFloetermDeclaration('dist/semantic/presentation.d.ts'))
+      .toMatch(/window\?: boolean/);
+    expect(readInstalledFloetermDeclaration('dist/semantic/RendererSurface.d.ts'))
+      .toMatch(/constructor\(canvas: HTMLCanvasElement, onError\?:[^\n]+onRender\?/);
   });
 
   it('keeps pnpm-lock aligned to declared published UI releases without local link entries', () => {
