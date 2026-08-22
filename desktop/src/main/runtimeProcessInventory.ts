@@ -239,6 +239,17 @@ export function desktopRuntimeProcessInventoryHasSingleCurrent(
     && instance.stop_authority === 'automatic';
 }
 
+export function desktopRuntimeProcessInventoryHasSingleUsable(
+  inventory: DesktopRuntimeProcessInventory,
+): boolean {
+  const instance = inventory.instances[0];
+  return inventory.instances.length === 1
+    && !!instance
+    && instance.identity_status === 'verified'
+    && (instance.layout_status === 'current' || instance.layout_status === 'verified_alternate')
+    && instance.stop_authority === 'automatic';
+}
+
 export function desktopRuntimeProcessInventoryNeedsMaintenance(inventory: DesktopRuntimeProcessInventory): boolean {
   return !desktopRuntimeProcessInventoryHasSingleCurrent(inventory);
 }

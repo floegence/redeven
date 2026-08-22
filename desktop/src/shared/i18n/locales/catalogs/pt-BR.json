@@ -1335,8 +1335,9 @@
   "confirm": {
     "reinstallTargetTitle": "Reinstalar este ambiente?",
     "reinstallTargetConfirm": "Reinstalar o Redeven",
-    "reinstallTargetDescription": "Isso exclui permanentemente todo o ambiente Redeven registrado, incluindo Gateway, ambiente de execução, áreas de trabalho, projetos, dados de aplicativos, dados do Floret e do ReDevPlugin, confiança, identidade, catálogo e configurações do ambiente. Não é possível desfazer.",
-    "reinstallTargetPreserveDescription": "Isso substitui apenas os binários gerenciados do Gateway e do ambiente de execução. Áreas de trabalho, projetos, dados de aplicativos, dados do Floret e do ReDevPlugin, confiança, identidade, catálogo e configurações do ambiente são mantidos. Isso não corrige esquemas, informações de confiança ou dados históricos incompatíveis.",
+    "reinstallTargetDescription": "Os dados do Redeven, incluindo áreas de trabalho e projetos, serão apagados antes da instalação de uma versão nova. Não é possível desfazer.",
+    "reinstallTargetPreserveDescription": "Os arquivos do Redeven serão substituídos, mantendo áreas de trabalho e projetos. Dados históricos incompatíveis não serão corrigidos.",
+    "reinstallTargetDetails": "Ver detalhes",
     "reinstallRequiredDescription": "Este ambiente contém um estado incompatível. A reinstalação é a única recuperação segura.",
     "reinstallTargetHost": "Host: {host}",
     "reinstallTargetContainer": "Contêiner: {container}",

@@ -165,6 +165,12 @@ export function selectEnvironmentPanelProgress(
   openConnectionProgress: DesktopLauncherActionProgress | null | undefined,
   runtimeLifecycleProgress: DesktopLauncherActionProgress | null | undefined,
 ): DesktopLauncherActionProgress | null {
+  if (runtimeLifecycleProgress?.active_progress_surface === 'runtime_lifecycle') {
+    return runtimeLifecycleProgress;
+  }
+  if (openConnectionProgress?.active_progress_surface === 'open') {
+    return openConnectionProgress;
+  }
   const openRank = rankedProgressCandidate(openConnectionProgress, 1);
   const runtimeRank = rankedProgressCandidate(runtimeLifecycleProgress, 0);
   if (!openRank) {

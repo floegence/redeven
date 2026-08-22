@@ -13,7 +13,7 @@ Desktop owns one `reinstall_target` operation with `wipe_data` and `preserve_dat
 
 ## One operation and one timeline
 
-The click creates a Launcher Operation before preflight, so the existing `EnvironmentProgressPanel` immediately shows the complete ordered plan. Preflight, confirmation, package acquisition, installation, startup, verification, and cleanup retain one `operation_key`. The panel keeps completed, running, and pending steps visible, carries elapsed time and structured diagnostics, and can be reopened from the Environment card after it is closed. Confirmation is a state of the same operation, not a second renderer dialog or a second preflight.
+The click creates a Launcher Operation before preflight, so the existing `EnvironmentProgressPanel` immediately shows the complete ordered plan. Preflight, confirmation, package acquisition, installation, startup, verification, and cleanup retain one `operation_key`. The panel keeps completed, running, and pending steps visible, carries elapsed time and structured diagnostics, and can be reopened from the Environment card after it is closed. Confirmation is a state of the same operation, not a second renderer dialog or a second preflight. Runtime lifecycle and Open recovery carry an explicit progress surface, so a stale Open snapshot cannot replace the active Update timeline.
 
 The fixed plan is:
 
@@ -47,7 +47,7 @@ Redeven clears the exact Desktop-registered root, including Gateway, Runtime, ma
 - `redeven:desktop/src/main/reinstallTargetCoordinator.ts:1` - Exact-target preflight, process inventory, quarantine, fresh install, verification, journal recovery, and fail-closed validation.
 - `redeven:desktop/src/main/main.ts:3039` - Current Gateway/Runtime package acquisition and progress mapping through direct host/container executors.
 - `redeven:desktop/src/main/main.ts:4481` - Launcher operation journal hydration after Desktop restart.
-- `redeven:desktop/src/welcome/App.tsx:9780` - Environment progress panel selection and immediate reinstall progress placeholder.
+- `redeven:desktop/src/welcome/App.tsx:8850` - Shared Environment progress panel, explicit surface selection, and concise reinstall confirmation details.
 - `redeven:desktop/src/main/gatewayStore.ts:779` - Gateway Store URL-only standalone record boundary.
 - `redeven:cmd/redeven-gateway/main.go:494` - Standalone Gateway startup omits Runtime supervisor and lifecycle state.
 - `redeven:desktop/src/main/reinstallTargetCoordinator.test.ts:1` - Exact-root replacement, quarantine retention, changed-target rejection, and direct executor coverage.

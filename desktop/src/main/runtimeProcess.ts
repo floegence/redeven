@@ -22,7 +22,7 @@ import {
   parseDesktopRuntimeProcessInventory,
   parseDesktopRuntimeProcessStopResult,
   requireDesktopRuntimeProcessIdentity,
-  desktopRuntimeProcessInventoryHasSingleCurrent,
+  desktopRuntimeProcessInventoryHasSingleUsable,
   desktopRuntimeProcessStopTargetCount,
   runtimeProcessCommandErrorFromOutput,
   type DesktopRuntimeProcessInventory,
@@ -758,7 +758,7 @@ async function verifyManagedLocalRuntimeProcessIdentity(args: Readonly<{
   const expectedRuntimeRoot = String(args.runtimeRoot ?? '').trim();
   const issues = [
     ...(inventory.summary.blocked > 0 ? [`blocked=${inventory.summary.blocked}`] : []),
-    ...(!desktopRuntimeProcessInventoryHasSingleCurrent(inventory) ? ['current_layout=invalid'] : []),
+    ...(!desktopRuntimeProcessInventoryHasSingleUsable(inventory) ? ['current_layout=invalid'] : []),
     ...(inventory.instances.length !== 1 ? [`instances=${inventory.instances.length}`] : []),
     ...(!instance ? ['instance=missing'] : []),
     ...(instance && instance.pid !== args.startup.pid ? [`pid=${instance.pid}, expected=${args.startup.pid}`] : []),

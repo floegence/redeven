@@ -1335,8 +1335,9 @@
   "confirm": {
     "reinstallTargetTitle": "重新安裝此環境？",
     "reinstallTargetConfirm": "重新安裝 Redeven",
-    "reinstallTargetDescription": "這會永久刪除已登錄的整個 Redeven 環境，包括 Gateway、執行階段、工作區、專案、應用程式資料、Floret 與 ReDevPlugin 資料、信任資訊、身分、Catalog 及環境設定。此操作無法復原。",
-    "reinstallTargetPreserveDescription": "這只會替換受管理的 Gateway 和執行階段二進位檔。工作區、專案、應用程式資料、Floret 與 ReDevPlugin 資料、信任資訊、身分、Catalog 及環境設定都會保留。它不會修復不相容的 schema、信任資訊或歷史資料。",
+    "reinstallTargetDescription": "將清除 Redeven 資料，包括工作區和專案，然後安裝全新版本。此操作無法復原。",
+    "reinstallTargetPreserveDescription": "只替換 Redeven 檔案，保留工作區和專案。它不能修復歷史資料不相容。",
+    "reinstallTargetDetails": "查看詳情",
     "reinstallRequiredDescription": "此環境包含不相容狀態，重新安裝是唯一安全的復原方式。",
     "reinstallTargetHost": "主機：{host}",
     "reinstallTargetContainer": "容器：{container}",

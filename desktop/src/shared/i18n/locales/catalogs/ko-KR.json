@@ -1335,8 +1335,9 @@
   "confirm": {
     "reinstallTargetTitle": "이 환경을 재설치할까요?",
     "reinstallTargetConfirm": "Redeven 재설치",
-    "reinstallTargetDescription": "등록된 Redeven 환경 전체를 영구적으로 삭제합니다. Gateway, 런타임, 작업 공간, 프로젝트, 앱 데이터, Floret 및 ReDevPlugin 데이터, 신뢰 정보, ID, Catalog, 환경 설정이 모두 포함됩니다. 이 작업은 되돌릴 수 없습니다.",
-    "reinstallTargetPreserveDescription": "관리되는 Gateway 및 런타임 바이너리만 교체합니다. 작업 공간, 프로젝트, 앱 데이터, Floret 및 ReDevPlugin 데이터, 신뢰 정보, ID, Catalog, 환경 설정은 유지됩니다. 호환되지 않는 스키마, 신뢰 정보 또는 기록 데이터는 복구하지 않습니다.",
+    "reinstallTargetDescription": "작업 공간과 프로젝트를 포함한 Redeven 데이터를 지운 뒤 새 버전을 설치합니다. 이 작업은 되돌릴 수 없습니다.",
+    "reinstallTargetPreserveDescription": "Redeven 파일만 교체하고 작업 공간과 프로젝트는 유지합니다. 호환되지 않는 기록 데이터는 복구하지 않습니다.",
+    "reinstallTargetDetails": "세부 정보 보기",
     "reinstallRequiredDescription": "이 환경에는 호환되지 않는 상태가 있습니다. 안전하게 복구하는 유일한 방법은 재설치입니다.",
     "reinstallTargetHost": "호스트: {host}",
     "reinstallTargetContainer": "컨테이너: {container}",

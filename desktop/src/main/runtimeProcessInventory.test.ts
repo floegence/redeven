@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   desktopRuntimeProcessInventoryHasSingleCurrent,
+  desktopRuntimeProcessInventoryHasSingleUsable,
   desktopRuntimeProcessInventoryNeedsMaintenance,
   desktopRuntimeProcessStopTargetCount,
   parseDesktopRuntimeProcessInventory,
@@ -100,6 +101,7 @@ describe('runtimeProcessInventory', () => {
     });
     expect(desktopRuntimeProcessStopTargetCount(alternate)).toBe(1);
     expect(desktopRuntimeProcessInventoryHasSingleCurrent(alternate)).toBe(false);
+    expect(desktopRuntimeProcessInventoryHasSingleUsable(alternate)).toBe(true);
     expect(desktopRuntimeProcessInventoryNeedsMaintenance(alternate)).toBe(true);
   });
 

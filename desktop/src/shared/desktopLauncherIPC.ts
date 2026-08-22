@@ -60,6 +60,7 @@ export type DesktopTargetKind = 'local_environment' | 'external_local_ui' | 'ssh
 export type DesktopWelcomeEntryReason = 'app_launch' | 'switch_environment' | 'connect_failed' | 'blocked';
 export type DesktopWelcomeIssueScope = 'local_environment' | 'remote_environment' | 'startup';
 export type DesktopLauncherSurface = 'connect_environment' | 'environment_settings' | 'flower';
+export type DesktopLauncherProgressSurface = 'open' | 'runtime_lifecycle' | 'reinstall' | 'gateway';
 export type DesktopEnvironmentEntryKind = 'local_environment' | 'provider_environment' | 'gateway_environment' | 'external_local_ui' | 'ssh_environment';
 export type DesktopEnvironmentEntryTag = 'Open' | 'Saved' | 'Local' | 'Provider' | 'Gateway' | 'Resolve' | '';
 export type DesktopEnvironmentEntryCategory = 'local' | 'provider' | 'gateway' | 'saved';
@@ -537,6 +538,7 @@ export type DesktopLauncherOperationSnapshot = Readonly<{
   title_key?: DesktopTranslationKey;
   detail: string;
   detail_key?: DesktopTranslationKey;
+  active_progress_surface?: DesktopLauncherProgressSurface;
   lifecycle_progress?: DesktopRuntimeLifecycleProgress;
   open_progress?: DesktopOpenConnectionProgress;
   open_timing?: DesktopOpenConnectionTiming;
@@ -1059,6 +1061,7 @@ export type DesktopLauncherActionProgress = Readonly<{
   title_key?: DesktopTranslationKey;
   detail: string;
   detail_key?: DesktopTranslationKey;
+  active_progress_surface?: DesktopLauncherProgressSurface;
   lifecycle_progress?: DesktopRuntimeLifecycleProgress;
   open_progress?: DesktopOpenConnectionProgress;
   open_timing?: DesktopOpenConnectionTiming;

@@ -8588,6 +8588,9 @@ function localizedProgressTitle(i18n: DesktopI18n, progress: DesktopLauncherActi
   if (progress.title_key) {
     return i18n.t(progress.title_key);
   }
+  if (progress.active_progress_surface === 'runtime_lifecycle' && progress.lifecycle_progress) {
+    return localizedRuntimeLifecyclePhaseLabel(i18n, progress.lifecycle_progress.phase);
+  }
   const open = progress.open_progress;
   if (open) {
     if (progress.status === 'failed') {
@@ -8640,6 +8643,13 @@ function localizedProgressTitle(i18n: DesktopI18n, progress: DesktopLauncherActi
 function localizedProgressDetail(i18n: DesktopI18n, progress: DesktopLauncherActionProgress): string {
   if (progress.detail_key) {
     return i18n.t(progress.detail_key);
+  }
+  if (progress.active_progress_surface === 'runtime_lifecycle' && progress.lifecycle_progress) {
+    const lifecycle = progress.lifecycle_progress;
+    if (lifecycle.phase === 'runtime_ready') {
+      return i18n.t('progress.detailRuntimeReady');
+    }
+    return i18n.t('progress.checkingExistingRuntime');
   }
   const open = progress.open_progress;
   if (open && progress.status !== 'failed' && progress.status !== 'canceled') {
@@ -8978,9 +8988,12 @@ function EnvironmentProgressPanel(props: Readonly<{
         })
       : null
   ));
-  const progressLeadDetail = createMemo(() => (
-    failureDisplay() ? '' : localizedProgressDetail(props.i18n, props.progress)
-  ));
+  const progressLeadDetail = createMemo(() => {
+    if (failureDisplay() || (props.progress.status === 'needs_confirmation' && props.progress.reinstall_preview)) {
+      return '';
+    }
+    return localizedProgressDetail(props.i18n, props.progress);
+  });
   const hasStepTimeline = createMemo(() => Boolean(stepProgress() || runtimeLifecycle() || openConnection()));
   const renderFailureNotice = () => (
     <Show when={failureDisplay()}>
@@ -9183,21 +9196,24 @@ function EnvironmentProgressPanel(props: Readonly<{
         {(preview) => (
           <div class="redeven-runtime-impact" data-tone="warning">
             <div class="redeven-runtime-impact__summary">{props.i18n.t(reinstallTargetDescriptionKey(preview().mode))}</div>
-            <div class="redeven-runtime-impact__detail space-y-1">
-              <div>{props.i18n.t('confirm.reinstallTargetHost', { host: localizedReinstallHost(props.i18n, preview().host_label) })}</div>
-              <Show when={preview().container_id}>
-                {(containerID) => <div>{props.i18n.t('confirm.reinstallTargetContainer', { container: containerID() })}</div>}
-              </Show>
-              <div class="font-mono break-all">{props.i18n.t('confirm.reinstallTargetRoot', { root: preview().target_root })}</div>
-              <div>{props.i18n.t('confirm.reinstallTargetProcessCount', { count: preview().processes.length })}</div>
-              <div>{props.i18n.t('confirm.reinstallAffectedEnvironmentCount', { count: preview().affected_environment_ids.length })}</div>
-              <ul class="list-disc space-y-1 pl-4">
-                <For each={preview().deleted_data_keys}>
-                  {(dataKey) => <li>{props.i18n.t(reinstallDeletedDataTranslationKey(dataKey))}</li>}
-                </For>
-              </ul>
-              <div class="font-medium text-destructive">{props.i18n.t('confirm.reinstallIrreversible')}</div>
-            </div>
+            <details class="redeven-runtime-impact__technical">
+              <summary>{props.i18n.t('confirm.reinstallTargetDetails')}</summary>
+              <div class="redeven-runtime-impact__detail space-y-1">
+                <div>{props.i18n.t('confirm.reinstallTargetHost', { host: localizedReinstallHost(props.i18n, preview().host_label) })}</div>
+                <Show when={preview().container_id}>
+                  {(containerID) => <div>{props.i18n.t('confirm.reinstallTargetContainer', { container: containerID() })}</div>}
+                </Show>
+                <div class="font-mono break-all">{props.i18n.t('confirm.reinstallTargetRoot', { root: preview().target_root })}</div>
+                <div>{props.i18n.t('confirm.reinstallTargetProcessCount', { count: preview().processes.length })}</div>
+                <div>{props.i18n.t('confirm.reinstallAffectedEnvironmentCount', { count: preview().affected_environment_ids.length })}</div>
+                <ul class="list-disc space-y-1 pl-4">
+                  <For each={preview().deleted_data_keys}>
+                    {(dataKey) => <li>{props.i18n.t(reinstallDeletedDataTranslationKey(dataKey))}</li>}
+                  </For>
+                </ul>
+                <div class="font-medium text-destructive">{props.i18n.t('confirm.reinstallIrreversible')}</div>
+              </div>
+            </details>
           </div>
         )}
       </Show>

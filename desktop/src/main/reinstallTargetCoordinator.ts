@@ -184,10 +184,36 @@ function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
 
+function isRemoteDefaultRootAlias(value: string): boolean {
+  return value === DEFAULT_DESKTOP_SSH_RUNTIME_ROOT || value === '~/.redeven';
+}
+
+function descriptorPlacementForFingerprint(
+  descriptor: ReinstallTargetDescriptor,
+): DesktopRuntimePlacement {
+  if (
+    descriptor.host_access.kind === 'ssh_host'
+    && isRemoteDefaultRootAlias(descriptor.placement.runtime_root)
+  ) {
+    return {
+      ...descriptor.placement,
+      runtime_root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
+    };
+  }
+  return descriptor.placement;
+}
+
+function registeredRootsMatch(left: string, right: string): boolean {
+  if (left === right) {
+    return true;
+  }
+  return isRemoteDefaultRootAlias(left) && isRemoteDefaultRootAlias(right);
+}
+
 export function reinstallTargetDescriptorFingerprint(descriptor: ReinstallTargetDescriptor): string {
   return crypto.createHash('sha256').update(runtimeLifecycleTargetKey(
     descriptor.host_access,
-    descriptor.placement,
+    descriptorPlacementForFingerprint(descriptor),
   )).digest('hex');
 }
 
@@ -195,9 +221,12 @@ function reinstallPhysicalTargetFingerprint(
   descriptor: ReinstallTargetDescriptor,
   canonicalTargetRoot: string,
 ): string {
+  const fingerprintRoot = isRemoteDefaultRootAlias(canonicalTargetRoot)
+    ? '<remote-default-root>'
+    : canonicalTargetRoot;
   return crypto.createHash('sha256').update(runtimeLifecycleTargetKey(
     descriptor.host_access,
-    { ...descriptor.placement, runtime_root: canonicalTargetRoot },
+    { ...descriptor.placement, runtime_root: fingerprintRoot },
   )).digest('hex');
 }
 
@@ -345,7 +374,15 @@ async function confirmedRootMatches(
       }
     }
   }
-  return false;
+  // SSH stores the default root as a logical token because the remote home
+  // directory is unknown until the confirmed account runs the maintenance
+  // helper. The helper resolves this token, so an absolute `.../.redeven`
+  // result is the same registered target, not a target change.
+  const defaultAlias = isRemoteDefaultRootAlias(expected);
+  return defaultAlias
+    && actual.startsWith('/')
+    && actual !== '/.redeven'
+    && path.posix.basename(actual) === '.redeven';
 }
 
 function journalFile(root: string, preflightID: string): string {
@@ -405,7 +442,7 @@ export class ReinstallTargetCoordinator {
       affected_environment_ids: (await this.dependencies.resolve_candidates())
         .filter((candidate) => (
           reinstallTargetAuthorityKey(candidate) === reinstallTargetAuthorityKey(descriptor)
-          && compact(candidate.placement.runtime_root) === rawRoot
+          && registeredRootsMatch(compact(candidate.placement.runtime_root), rawRoot)
         ))
         .map((candidate) => candidate.environment_id)
         .concat(descriptor.environment_id)
@@ -506,12 +543,10 @@ export class ReinstallTargetCoordinator {
     if (reinstallTargetDescriptorFingerprint(current) !== cached.descriptorFingerprint) {
       throw new ReinstallTargetCoordinatorError('target_changed', 'The registered host, container, or runtime root changed after confirmation.');
     }
-    if (this.locks.has(cached.physicalTargetFingerprint)) {
-      throw new ReinstallTargetCoordinatorError('reinstall_blocked', 'A reinstall is already running for this physical target.');
-    }
-    this.locks.add(cached.physicalTargetFingerprint);
     onProgress?.('target_locked');
     let executor: RuntimeHostAccessExecutor | null = null;
+    let lockKey = cached.physicalTargetFingerprint;
+    let lockKeys: string[] = [];
     const operationID = cached.operationID;
     let quarantineRoot = `${cached.preview.target_root}.redeven-quarantine-${operationID}`;
     let isolated = false;
@@ -550,7 +585,6 @@ export class ReinstallTargetCoordinator {
       onProgress?.(phase, detailKey, tasks);
     };
     try {
-      await this.writeJournal(currentJournal);
       executor = this.dependencies.create_executor(current);
       await validateRegisteredContainer(current, executor);
       const repeated = parsePreflightOutput((await executor.run(placementCommand(
@@ -563,6 +597,12 @@ export class ReinstallTargetCoordinator {
       }
       quarantineRoot = `${repeated.root}.redeven-quarantine-${operationID}`;
       const currentResolved = await this.descriptorWithCanonicalAffectedTargets(current, repeated.root, executor);
+      lockKey = reinstallPhysicalTargetFingerprint(currentResolved, repeated.root);
+      lockKeys = [...new Set([cached.physicalTargetFingerprint, lockKey])];
+      if (lockKeys.some((candidate) => this.locks.has(candidate))) {
+        throw new ReinstallTargetCoordinatorError('reinstall_blocked', 'A reinstall is already running for this physical target.');
+      }
+      lockKeys.forEach((candidate) => this.locks.add(candidate));
       activeDescriptor = currentResolved;
       activeTargetRoot = repeated.root;
       // Candidate aliases can resolve to a different canonical spelling on
@@ -574,7 +614,7 @@ export class ReinstallTargetCoordinator {
         operation_id: operationID,
         environment_id: current.environment_id,
         descriptor_fingerprint: cached.descriptorFingerprint,
-        physical_target_fingerprint: cached.physicalTargetFingerprint,
+        physical_target_fingerprint: lockKey,
         target_root: repeated.root,
         quarantine_root: quarantineRoot,
         target_existed: repeated.exists,
@@ -723,7 +763,9 @@ export class ReinstallTargetCoordinator {
       );
     } finally {
       await executor?.release();
-      this.locks.delete(cached.physicalTargetFingerprint);
+      for (const candidate of lockKeys.length > 0 ? lockKeys : [lockKey]) {
+        this.locks.delete(candidate);
+      }
     }
   }
 
@@ -846,7 +888,7 @@ export class ReinstallTargetCoordinator {
         || compact(journal.environment_id) === ''
         || !/^[0-9a-f]{64}$/iu.test(compact(journal.descriptor_fingerprint))
         || !/^[0-9a-f]{64}$/iu.test(compact(journal.physical_target_fingerprint))
-        || !compact(journal.target_root).startsWith('/')
+        || (!compact(journal.target_root).startsWith('/') && !isRemoteDefaultRootAlias(compact(journal.target_root)))
         || journal.quarantine_root !== `${journal.target_root}.redeven-quarantine-${journal.operation_id}`
         || !REINSTALL_TARGET_JOURNAL_PHASES.includes(journal.phase as ReinstallTargetJournalPhase)
         || !Array.isArray(journal.affected_environment_ids)

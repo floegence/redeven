@@ -16,7 +16,6 @@ import {
   closeEnvironmentLifecycleDisclosure,
   environmentActionStartsLifecycleDisclosure,
   environmentLifecycleDisclosureHasPendingRequest,
-  pendingEnvironmentLifecycleProgress,
   reconcileEnvironmentLifecycleDisclosure,
   reopenEnvironmentLifecycleDisclosure,
   visibleEnvironmentLifecycleProgress,
@@ -118,24 +117,18 @@ function actionLifecycleProgress(input: Readonly<{
 }
 
 describe('environmentLifecycleDisclosure', () => {
-  it('creates pending progress immediately from a lifecycle disclosure', () => {
+  it('waits for the main process snapshot instead of fabricating progress', () => {
     const environment = localEnvironmentEntry();
     const state = beginEnvironmentLifecycleDisclosure(null, environment.id, 'update_runtime');
-    const progress = pendingEnvironmentLifecycleProgress(environment, state!);
-
-    expect(progress.action).toBe('update_environment_runtime');
-    expect(progress.status).toBe('running');
-    expect(progress.title).toBe('Updating runtime');
-    expect(progress.lifecycle_progress).toEqual(expect.objectContaining({
-      kind: 'runtime_lifecycle',
-      location: 'local_host',
-      phase: 'checking_existing_runtime',
-      target_id: environment.managed_runtime_target_id,
-      target_label: environment.label,
-    }));
+    expect(visibleEnvironmentLifecycleProgress({
+      environment,
+      selectedProgress: null,
+      disclosure: state,
+      busyState: { action: 'update_environment_runtime', environment_id: environment.id },
+    })).toBeNull();
   });
 
-  it('uses pending lifecycle progress only until matching real progress exists', () => {
+  it('waits for the main process snapshot instead of fabricating progress', () => {
     const environment = localEnvironmentEntry();
     const state = beginEnvironmentLifecycleDisclosure(null, environment.id, 'restart_runtime');
     const progress = visibleEnvironmentLifecycleProgress({
@@ -144,11 +137,7 @@ describe('environmentLifecycleDisclosure', () => {
       disclosure: state,
     });
 
-    expect(progress).toMatchObject({
-      action: 'restart_environment_runtime',
-      status: 'running',
-      title: 'Restarting runtime',
-    });
+    expect(progress).toBeNull();
   });
 
   it('does not synthesize pending lifecycle progress when the current request no longer matches the disclosure', () => {
@@ -172,11 +161,7 @@ describe('environmentLifecycleDisclosure', () => {
         action: 'restart_environment_runtime',
         environment_id: environment.id,
       },
-    })).toMatchObject({
-      action: 'restart_environment_runtime',
-      status: 'running',
-      title: 'Restarting runtime',
-    });
+    })).toBeNull();
   });
 
   it('returns selected lifecycle progress directly when no disclosure is active', () => {
@@ -304,10 +289,7 @@ describe('environmentLifecycleDisclosure', () => {
     });
 
     expect(progress).not.toBe(oldUpdateFailure);
-    expect(progress).toMatchObject({
-      action: 'restart_environment_runtime',
-      status: 'running',
-    });
+    expect(progress).toBeNull();
   });
 
   it('does not let a different lifecycle action replace a new pending disclosure', () => {
@@ -330,10 +312,7 @@ describe('environmentLifecycleDisclosure', () => {
     });
 
     expect(progress).not.toBe(updateFailure);
-    expect(progress).toMatchObject({
-      action: 'restart_environment_runtime',
-      status: 'running',
-    });
+    expect(progress).toBeNull();
   });
 
   it('binds real progress and keeps terminal progress while the popup is open', () => {

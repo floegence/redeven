@@ -1335,8 +1335,9 @@
   "confirm": {
     "reinstallTargetTitle": "Diese Umgebung neu installieren?",
     "reinstallTargetConfirm": "Redeven neu installieren",
-    "reinstallTargetDescription": "Dadurch wird die vollständig registrierte Redeven-Umgebung dauerhaft gelöscht, einschließlich Gateway, Laufzeit, Arbeitsbereichen, Projekten, App-Daten, Floret- und ReDevPlugin-Daten, Vertrauen, Identität, Katalog und Umgebungseinstellungen. Dies kann nicht rückgängig gemacht werden.",
-    "reinstallTargetPreserveDescription": "Dabei werden nur die verwalteten Gateway- und Laufzeit-Binärdateien ersetzt. Arbeitsbereiche, Projekte, App-Daten, Floret- und ReDevPlugin-Daten, Vertrauen, Identität, Katalog und Umgebungseinstellungen bleiben erhalten. Inkompatible Schemas, Vertrauensinformationen oder historische Daten werden dadurch nicht repariert.",
+    "reinstallTargetDescription": "Redeven-Daten einschließlich Arbeitsbereichen und Projekten werden gelöscht und die aktuelle Version wird neu installiert. Dies kann nicht rückgängig gemacht werden.",
+    "reinstallTargetPreserveDescription": "Redeven-Dateien werden ersetzt, Arbeitsbereiche und Projekte bleiben erhalten. Inkompatible historische Daten werden dadurch nicht repariert.",
+    "reinstallTargetDetails": "Details anzeigen",
     "reinstallRequiredDescription": "Diese Umgebung enthält einen inkompatiblen Zustand. Eine Neuinstallation ist die einzige sichere Wiederherstellung.",
     "reinstallTargetHost": "Host: {host}",
     "reinstallTargetContainer": "Container: {container}",

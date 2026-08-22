@@ -519,7 +519,10 @@ describe('buildEnvironmentDisplayStateModel', () => {
       label: 'Reinstall Redeven',
       enabled: true,
     });
-    expect(model.action_presentation.menu_actions.map((item) => item.id)).toEqual(['reinstall_target']);
+    expect(model.action_presentation.menu_actions.map((item) => item.id)).toEqual([
+      'reinstall_target_wipe',
+      'reinstall_target_preserve',
+    ]);
     expect(model.action_presentation.menu_actions.map((item) => item.id)).not.toEqual(expect.arrayContaining([
       'start_runtime',
       'stop_runtime',
@@ -541,16 +544,16 @@ describe('buildEnvironmentDisplayStateModel', () => {
 
     const model = buildProviderBackedEnvironmentActionModel(entry!);
 
-    expect(model.action_presentation.menu_actions).toEqual(expect.arrayContaining([{
-      id: 'reinstall_target',
-      label: 'Reinstall Redeven',
-      action: {
-        intent: 'reinstall_target',
-        label: 'Reinstall Redeven',
-        enabled: true,
-        variant: 'outline',
-      },
-    }]));
+    expect(model.action_presentation.menu_actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'reinstall_target_wipe',
+        action: expect.objectContaining({ intent: 'reinstall_target', reinstall_mode: 'wipe_data' }),
+      }),
+      expect.objectContaining({
+        id: 'reinstall_target_preserve',
+        action: expect.objectContaining({ intent: 'reinstall_target', reinstall_mode: 'preserve_data' }),
+      }),
+    ]));
   });
 
   it('does not require Gateway pairing after reinstall', () => {
@@ -2347,8 +2350,8 @@ describe('buildEnvironmentCardModel', () => {
       expect(entry).toBeTruthy();
       expect(buildProviderBackedEnvironmentActionModel(entry!).action_presentation.menu_actions).toEqual(
         expect.arrayContaining([expect.objectContaining({
-          id: 'reinstall_target',
-          label: 'Reinstall Redeven',
+          id: 'reinstall_target_wipe',
+          label: 'Erase data and reinstall Redeven',
         })]),
       );
     }

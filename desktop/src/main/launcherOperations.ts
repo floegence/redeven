@@ -4,6 +4,7 @@ import type {
   DesktopLauncherOperationSnapshot,
   DesktopLauncherOperationStatus,
   DesktopLauncherOperationSubjectKind,
+  DesktopLauncherProgressSurface,
 } from '../shared/desktopLauncherIPC';
 import type { DesktopTranslationKey } from '../shared/i18n/desktopI18n';
 import { advanceOpenConnectionTiming } from '../shared/desktopOpenConnectionProgress';
@@ -30,6 +31,7 @@ type CreateLauncherOperationInput = Readonly<{
   title_key?: DesktopTranslationKey;
   detail: string;
   detail_key?: DesktopTranslationKey;
+  active_progress_surface?: DesktopLauncherProgressSurface;
   lifecycle_progress?: DesktopRuntimeLifecycleProgress;
   open_progress?: DesktopOpenConnectionProgress;
   open_timing?: DesktopOpenConnectionTiming;
@@ -74,6 +76,27 @@ function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
 
+function inferProgressSurface(input: Readonly<{
+  action: DesktopLauncherActionKind;
+  open_progress?: DesktopOpenConnectionProgress;
+  lifecycle_progress?: DesktopRuntimeLifecycleProgress;
+  step_progress?: DesktopLauncherOperationSnapshot['step_progress'];
+}>): DesktopLauncherProgressSurface | undefined {
+  if (input.action === 'reinstall_target' || input.action === 'preview_reinstall_target') {
+    return 'reinstall';
+  }
+  if (input.open_progress) {
+    return 'open';
+  }
+  if (input.lifecycle_progress) {
+    return input.action.includes('gateway') ? 'gateway' : 'runtime_lifecycle';
+  }
+  if (input.step_progress) {
+    return input.action.includes('gateway') ? 'gateway' : undefined;
+  }
+  return undefined;
+}
+
 function subjectKey(kind: DesktopLauncherOperationSubjectKind, id: string): string {
   return `${kind}:${compact(id)}`;
 }
@@ -104,6 +127,7 @@ function operationProgress(snapshot: DesktopLauncherOperationSnapshot): DesktopL
     title_key: snapshot.title_key,
     detail: snapshot.detail,
     detail_key: snapshot.detail_key,
+    active_progress_surface: snapshot.active_progress_surface,
     ...(snapshot.lifecycle_progress ? { lifecycle_progress: snapshot.lifecycle_progress } : {}),
     ...(snapshot.open_progress ? { open_progress: snapshot.open_progress } : {}),
     ...(snapshot.open_timing ? { open_timing: snapshot.open_timing } : {}),
@@ -336,6 +360,9 @@ export class LauncherOperationRegistry {
         ?? lifecycleProgressTitleKey(input.lifecycle_progress, input.status),
       detail: compact(input.detail),
       detail_key: input.detail_key ?? openProgressDetailKey(input.open_progress, input.status),
+      ...((input.active_progress_surface ?? inferProgressSurface(input))
+        ? { active_progress_surface: input.active_progress_surface ?? inferProgressSurface(input) }
+        : {}),
       ...(input.lifecycle_progress ? { lifecycle_progress: input.lifecycle_progress } : {}),
       ...(input.open_progress ? { open_progress: input.open_progress } : {}),
       ...(input.open_timing ? { open_timing: input.open_timing } : {}),

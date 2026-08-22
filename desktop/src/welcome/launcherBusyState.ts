@@ -288,7 +288,6 @@ export function environmentMatchesRuntimeLifecycleProgress(
 ): boolean {
   if (!progress || (
     runtimeLifecycleOperationForActionProgress(progress) === null
-    && !(progress.action === 'reinstall_target' && progress.subject_kind === 'runtime_target')
   )) {
     return false;
   }
