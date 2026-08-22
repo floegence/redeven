@@ -6,6 +6,8 @@ import type {
   PluginAuthorPresentation,
   PluginMarketDetail,
   PluginPresentationCategory,
+  PluginInventoryItem,
+  PluginOfficialInstallCommand,
 } from './pluginTypes';
 import { resolvePresentation } from '@floegence/redevplugin-contracts';
 
@@ -13,6 +15,23 @@ export function officialPluginCatalog(
   snapshot?: PluginMarketSnapshot,
 ): readonly OfficialPluginCatalogItem[] {
   return Object.freeze(snapshot ? projectMarketSnapshot(snapshot) : []);
+}
+
+export function buildOfficialInstallCommand(item: PluginInventoryItem): PluginOfficialInstallCommand | undefined {
+  const official = item.officialCatalog;
+  const preview = official?.installPreview;
+  if (!official || !preview) return undefined;
+  return {
+    type: 'install',
+    pluginID: item.pluginID,
+    source: 'official_catalog',
+    pluginInstanceID: official.pluginInstanceID,
+    releaseRef: preview.release_ref,
+    releaseIdentityDigest: preview.release_identity_digest,
+    manifestSHA256: preview.manifest_sha256,
+    contractSetSHA256: preview.contract_set_sha256,
+    summarySHA256: preview.summary_sha256,
+  };
 }
 
 const SHA256_DIGEST = /^sha256:[0-9a-f]{64}$/u;

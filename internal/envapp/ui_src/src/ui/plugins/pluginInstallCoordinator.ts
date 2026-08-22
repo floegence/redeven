@@ -27,8 +27,8 @@ export type PluginInstallCoordinator = Readonly<{
   projections: Accessor<readonly PluginInstallExecutionProjection[]>;
   start: (command: PluginOfficialInstallCommand) => Promise<void>;
   resume: () => Promise<void>;
-  retry: (pluginInstanceID: string) => Promise<void>;
-  discardRetainedDataAndRetry: (pluginInstanceID: string) => Promise<void>;
+  retry: (pluginInstanceID: string, command?: PluginOfficialInstallCommand) => Promise<void>;
+  discardRetainedDataAndRetry: (pluginInstanceID: string, command?: PluginOfficialInstallCommand) => Promise<void>;
   dispose: () => void;
 }>;
 
@@ -158,55 +158,55 @@ export function createPluginInstallCoordinator(options: Readonly<{
     const { pluginID, pluginInstanceID } = command;
     installCommands.set(pluginInstanceID, command);
     return runExclusive(pluginInstanceID, async () => {
-    const controller = new AbortController();
-    controllers.get(pluginInstanceID)?.abort('Plugin installation submission superseded');
-    controllers.set(pluginInstanceID, controller);
-    let current: PluginInstallExecutionProjection = {
-      pluginID,
-      pluginInstanceID,
-      observation: 'starting',
-      events: [],
-    };
-    put(current);
-    try {
-      const execution = await options.lifecycle.installOfficialRelease(
-        command,
-        options.createRequestID(),
-        { signal: controller.signal },
-        (update, events) => {
-          current = {
-            ...current,
-            observation: 'watching',
-            execution: update,
-            events: mergeEvents(current.events, events),
-          };
-          put(current);
-        },
-      );
-      current = { ...current, observation: 'watching', execution };
-      await finish(current, controller.signal);
-    } catch (error) {
-      if (disposed || controller.signal.aborted) return;
-      if (error instanceof PluginPlatformRequestError) {
-        put({
-          ...current,
-          observation: 'failed',
-          startFailure: {
-            code: error.errorCode,
-            retryable: startFailureRetryable(error.errorCode),
+      const controller = new AbortController();
+      controllers.get(pluginInstanceID)?.abort('Plugin installation submission superseded');
+      controllers.set(pluginInstanceID, controller);
+      let current: PluginInstallExecutionProjection = {
+        pluginID,
+        pluginInstanceID,
+        observation: 'starting',
+        events: [],
+      };
+      put(current);
+      try {
+        const execution = await options.lifecycle.installOfficialRelease(
+          command,
+          options.createRequestID(),
+          { signal: controller.signal },
+          (update, events) => {
+            current = {
+              ...current,
+              observation: 'watching',
+              execution: update,
+              events: mergeEvents(current.events, events),
+            };
+            put(current);
           },
-        });
-        return;
+        );
+        current = { ...current, observation: 'watching', execution };
+        await finish(current, controller.signal);
+      } catch (error) {
+        if (disposed || controller.signal.aborted) return;
+        if (error instanceof PluginPlatformRequestError) {
+          put({
+            ...current,
+            observation: 'failed',
+            startFailure: {
+              code: error.errorCode,
+              retryable: startFailureRetryable(error.errorCode),
+            },
+          });
+          return;
+        }
+        if (current.execution) {
+          put({ ...current, observation: 'reconnecting' });
+          await observe(current);
+          return;
+        }
+        put({ ...current, observation: 'failed' });
+      } finally {
+        if (controllers.get(pluginInstanceID) === controller) controllers.delete(pluginInstanceID);
       }
-      if (current.execution) {
-        put({ ...current, observation: 'reconnecting' });
-        await observe(current);
-        return;
-      }
-      put({ ...current, observation: 'failed' });
-    } finally {
-      if (controllers.get(pluginInstanceID) === controller) controllers.delete(pluginInstanceID);
-    }
     });
   };
 
@@ -252,7 +252,8 @@ export function createPluginInstallCoordinator(options: Readonly<{
     }));
   };
 
-  const retry = async (pluginInstanceID: string): Promise<void> => {
+  const retry = async (pluginInstanceID: string, reviewedCommand?: PluginOfficialInstallCommand): Promise<void> => {
+    if (reviewedCommand) installCommands.set(pluginInstanceID, reviewedCommand);
     const projection = projectionFor(pluginInstanceID);
     if (!projection) return;
     if (projection.observation === 'refresh_failed' || projection.observation === 'activation_failed') {
@@ -282,7 +283,8 @@ export function createPluginInstallCoordinator(options: Readonly<{
     await start(command);
   };
 
-  const discardRetainedDataAndRetry = async (pluginInstanceID: string): Promise<void> => {
+  const discardRetainedDataAndRetry = async (pluginInstanceID: string, reviewedCommand?: PluginOfficialInstallCommand): Promise<void> => {
+    if (reviewedCommand) installCommands.set(pluginInstanceID, reviewedCommand);
     const projection = projectionFor(pluginInstanceID);
     if (!projection || projection.execution?.failure_code !== 'PLUGIN_RETAINED_DATA_INCOMPATIBLE') return;
     await runExclusive(pluginInstanceID, () => options.lifecycle.deleteIncompatibleRetainedData(pluginInstanceID));
