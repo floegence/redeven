@@ -1056,17 +1056,18 @@ function OfficialPluginInstallDialog(props: {
               <p class="text-xs text-muted-foreground">{i18n.t('uiCopy.plugin.installOperation.declarationNotice')}</p>
               </section>
             )}>
-              <Show when={props.operation} fallback={<PluginInstallSteps />}>
-                {(operation) => (
-                  <PluginInstallStatus
-                    projection={operation()}
-                    compact
-                    onRetry={props.onRetry}
-                    onResolveRetainedData={props.onResolveRetainedData}
-                  />
-                )}
-              </Show>
-              <Show when={props.installed}>
+              <Show when={props.installed} fallback={(
+                <Show when={props.operation} fallback={<PluginInstallSteps />}>
+                  {(operation) => (
+                    <PluginInstallStatus
+                      projection={operation()}
+                      compact
+                      onRetry={props.onRetry}
+                      onResolveRetainedData={props.onResolveRetainedData}
+                    />
+                  )}
+                </Show>
+              )}>
                 <p class="text-sm font-medium text-emerald-600">{i18n.t('uiCopy.plugin.installOperation.complete')}</p>
               </Show>
             </Show>
