@@ -9494,6 +9494,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         type="button"
         class="flower-companion-thread-trigger"
         aria-label={props.companionCopy?.label}
+        title={selectedThreadTitle()}
         aria-haspopup="listbox"
         aria-expanded={threadSwitcherOpen()}
         onClick={() => {
@@ -9505,9 +9506,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           setThreadSwitcherOpen((open) => !open);
         }}
       >
-        <FlowerIcon class="h-4 w-4 shrink-0 text-primary" />
+        <FlowerIcon class="flower-companion-thread-trigger-icon h-4 w-4 shrink-0 text-primary" />
 		<span class="truncate">{selectedThreadTitle()}</span>
-        <ChevronDown class="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <ChevronDown class="flower-companion-thread-trigger-chevron h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
       </button>
       <Show when={threadSwitcherOpen() && props.companionCopy}>
         {(switcherCopy) => (

@@ -64,4 +64,20 @@ describe('Flower restrained selection and focus treatments', () => {
     expect(cssRule('.flower-activity-inline-details-content {')).toContain('border-left: 1px solid');
     expect(cssRule('.flower-activity-inline-details-content-terminal {')).toContain('border-left: 0');
   });
+
+  it('keeps the collapsed bottom-bar thread title compact and secondary to the composer', () => {
+    const titleRule = cssRule('.flower-surface-companion-collapsed .flower-companion-thread-trigger {');
+    const switcherRule = cssRule('.flower-surface-companion-collapsed .flower-companion-collapsed-thread-switcher {');
+
+    expect(surface).toContain('title={selectedThreadTitle()}');
+    expect(titleRule).toContain('height: 1.5rem');
+    expect(titleRule).toContain('font-size: 0.6875rem');
+    expect(titleRule).toContain('font-weight: 500');
+    expect(titleRule).toContain('color: color-mix');
+    expect(cssRule('.flower-surface-companion-collapsed .flower-companion-thread-trigger-icon {')).toContain('width: 0.875rem');
+    expect(cssRule('.flower-surface-companion-collapsed .flower-companion-thread-trigger-chevron {')).toContain('width: 0.75rem');
+    expect(switcherRule).toContain('flex: 0 1 11rem');
+    expect(switcherRule).toContain('max-width: min(11rem, 34%)');
+    expect(css).toContain('flex-basis: 7.5rem');
+  });
 });

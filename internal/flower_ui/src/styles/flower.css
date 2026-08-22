@@ -377,6 +377,51 @@
   min-width: 0;
 }
 
+/* Keep the collapsed bottom-bar title readable without competing with the composer. */
+.flower-surface-companion-collapsed .flower-companion-collapsed-thread-switcher {
+  display: flex;
+  min-width: 0;
+  flex: 0 1 11rem;
+  max-width: min(11rem, 34%);
+}
+
+.flower-surface-companion-collapsed .flower-companion-thread-switcher-anchor {
+  width: 100%;
+  max-width: none;
+}
+
+.flower-surface-companion-collapsed .flower-companion-thread-trigger {
+  width: 100%;
+  height: 1.5rem;
+  gap: 0.3rem;
+  border-radius: 0.25rem;
+  color: color-mix(in srgb, var(--foreground) 72%, var(--muted-foreground));
+  padding: 0 0.25rem;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  line-height: 1rem;
+}
+
+.flower-surface-companion-collapsed .flower-companion-thread-trigger > span {
+  flex: 1 1 auto;
+}
+
+.flower-surface-companion-collapsed .flower-companion-thread-trigger-icon {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+.flower-surface-companion-collapsed .flower-companion-thread-trigger-chevron {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.flower-surface-companion-collapsed .flower-companion-thread-trigger:hover,
+.flower-surface-companion-collapsed .flower-companion-thread-trigger:focus-visible,
+.flower-surface-companion-collapsed .flower-companion-thread-trigger[aria-expanded='true'] {
+  background: color-mix(in srgb, var(--muted) 38%, transparent);
+}
+
 .flower-companion-thread-switcher-popover {
   position: absolute;
   z-index: calc(var(--flower-layer-subagent-dropdown) + 2);
@@ -9240,6 +9285,11 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
     right: 0.5rem;
     left: 0.5rem;
     width: auto;
+  }
+
+  .flower-surface-companion-collapsed .flower-companion-collapsed-thread-switcher {
+    flex-basis: 7.5rem;
+    max-width: 38%;
   }
 
   .flower-chat-header-actions {
