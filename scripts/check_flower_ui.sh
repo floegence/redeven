@@ -107,6 +107,7 @@ main() {
       internal/flower_ui/src/flowerCompanionPresence.test.ts \
       internal/flower_ui/src/flowerCompanionLiveTail.test.ts \
       internal/flower_ui/src/flowerCompanionTailMotion.test.ts \
+      internal/flower_ui/src/flowerScrollTail.test.ts \
       internal/flower_ui/src/flowerPendingTurns.test.ts \
       internal/flower_ui/src/flowerTerminalOutput.test.ts \
       internal/flower_ui/src/FlowerSurface.references.test.ts \
