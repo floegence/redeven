@@ -360,6 +360,12 @@ export type PluginManagementCommand =
       type: 'install';
       pluginID: string;
       source: 'official_catalog';
+      pluginInstanceID: string;
+      releaseRef: PluginReleaseRef;
+      releaseIdentityDigest: string;
+      manifestSHA256: string;
+      contractSetSHA256: string;
+      summarySHA256: string;
     }
   | { type: 'enable'; pluginInstanceID: string; expectedManagementRevision: number }
   | { type: 'disable'; pluginInstanceID: string; expectedManagementRevision: number }
@@ -381,6 +387,8 @@ export type PluginManagementCommand =
       expectedManagementRevision: number;
       expectedRevokeEpoch: number;
     };
+
+export type PluginOfficialInstallCommand = Extract<PluginManagementCommand, { type: 'install' }>;
 
 export type PluginOpenSurfaceCommand = {
   type: 'open_surface';

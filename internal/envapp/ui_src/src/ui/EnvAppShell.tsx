@@ -82,7 +82,6 @@ import { createPluginLifecycleAPI } from './plugins/pluginApi';
 import {
   createPluginInstallCoordinator,
   type PluginInstallCoordinator,
-  type PluginInstallRetirementFence,
 } from './plugins/pluginInstallCoordinator';
 import { completeApprovedOfficialInstall } from './plugins/pluginApprovedInstallSetup';
 import {
@@ -96,7 +95,6 @@ import {
 import type {
   ExternalPluginCommitResult,
   ExternalPluginInspection,
-  OfficialPluginReleaseInspection,
   PluginInventoryProjection,
   PluginPanelModel,
   PluginLifecycleCommand,
@@ -555,27 +553,9 @@ export function EnvAppShell() {
   const [pluginRuntimeRecoveryComplete, setPluginRuntimeRecoveryComplete] = createSignal(false);
   const [pluginRuntimeRecoveryByInstanceID, setPluginRuntimeRecoveryByInstanceID] = createSignal<Record<string, import('./plugins/pluginTypes').PluginRuntimeRecoveryPresentation>>({});
   const retiredPluginManagementRevisionByInstanceID = new Map<string, number>();
-  const pluginManagementRetirementGenerationByInstanceID = new Map<string, number>();
-  let nextPluginManagementRetirementGeneration = 0;
-  const advancePluginManagementIntentGeneration = (pluginInstanceID: string) => {
-    pluginManagementRetirementGenerationByInstanceID.set(
-      pluginInstanceID,
-      ++nextPluginManagementRetirementGeneration,
-    );
-  };
   const retirePluginManagementRevision = (pluginInstanceID: string, revision: number) => {
     const previous = retiredPluginManagementRevisionByInstanceID.get(pluginInstanceID) ?? 0;
     if (revision > previous) retiredPluginManagementRevisionByInstanceID.set(pluginInstanceID, revision);
-    advancePluginManagementIntentGeneration(pluginInstanceID);
-  };
-  const capturePluginInstallRetirementFence = (
-    pluginInstanceID: string,
-  ): PluginInstallRetirementFence | undefined => {
-    const managementRevision = retiredPluginManagementRevisionByInstanceID.get(pluginInstanceID);
-    const generation = pluginManagementRetirementGenerationByInstanceID.get(pluginInstanceID);
-    return managementRevision !== undefined && generation !== undefined
-      ? { managementRevision, generation }
-      : undefined;
   };
   const reportPluginSurfaceRetirementError = (error: unknown) => {
     notify.error(i18n.t('uiCopy.plugin.needsAttention'), getErrorMessage(error));
@@ -654,8 +634,7 @@ export function EnvAppShell() {
     if (cleanupError !== undefined) throw cleanupError;
   };
   let pluginInventoryAbort: AbortController | undefined;
-  let pluginMarketRefreshPromise: Promise<boolean> | undefined;
-  let pluginMarketRefreshAbort: AbortController | undefined;
+  let pluginMarketRefreshPromise: Promise<void> | undefined;
   const disposePluginPlatform = async () => {
     let coordinatorError: unknown;
     try {
@@ -677,7 +656,6 @@ export function EnvAppShell() {
     setPluginSessionReady(false);
     clearPluginSessionCredential();
     pluginInventoryAbort?.abort('Env App shell disposed');
-    pluginMarketRefreshAbort?.abort('Env App shell disposed');
     pluginInstallCoordinator?.dispose();
     pluginLifecycle.dispose();
     pluginConfirmationQueue.cancelAll();
@@ -1206,46 +1184,23 @@ export function EnvAppShell() {
     const state = await refetchPluginInventorySession();
     return state?.owner === pluginInventorySource() ? state.projection : undefined;
   };
-  const refreshPluginMarket = (): Promise<boolean> => {
+  const refreshPluginMarket = (): Promise<void> => {
     // Opening the center and restoring its activity surface can both request a
     // refresh in the same render turn. Share the complete market+inventory
     // refresh so the UI does not start duplicate network work.
     if (pluginMarketRefreshPromise) return pluginMarketRefreshPromise;
-    const controller = new AbortController();
-    pluginMarketRefreshAbort?.abort('Plugin market refresh superseded');
-    pluginMarketRefreshAbort = controller;
     const refresh = (async () => {
-      const deadline = performance.now() + 16_000;
-      let delayMS = 250;
-      let inventoryRefreshed = false;
-      while (!controller.signal.aborted) {
-        let changed = false;
-        try {
-          changed = await pluginLifecycle.refreshMarketCatalog({ signal: controller.signal });
-        } catch {
-          // Keep the current inventory usable while the Host-owned background
-          // refresh is still resolving or the market is unavailable.
-        }
-        if (changed) {
-          await refetchPluginInventory();
-          inventoryRefreshed = true;
-        }
-        if (!pluginLifecycle.marketCatalogNeedsRefresh()) return inventoryRefreshed;
-        const remainingMS = deadline - performance.now();
-        if (remainingMS <= 0) return inventoryRefreshed;
-        try {
-          await abortableDelay(Math.min(delayMS, remainingMS), controller.signal);
-        } catch {
-          return inventoryRefreshed;
-        }
-        delayMS = Math.min(delayMS * 2, 2_000);
+      try {
+        await pluginLifecycle.refreshMarketCatalog();
+      } catch {
+        // Keep the current inventory usable and let the projection expose a
+        // retryable market-unavailable state.
       }
-      return inventoryRefreshed;
+      await refetchPluginInventory();
     })();
-    let tracked: Promise<boolean>;
+    let tracked: Promise<void>;
     tracked = refresh.finally(() => {
       if (pluginMarketRefreshPromise === tracked) pluginMarketRefreshPromise = undefined;
-      if (pluginMarketRefreshAbort === controller) pluginMarketRefreshAbort = undefined;
     });
     pluginMarketRefreshPromise = tracked;
     return tracked;
@@ -1253,26 +1208,12 @@ export function EnvAppShell() {
   pluginInstallCoordinator = createPluginInstallCoordinator({
     lifecycle: pluginLifecycle,
     refreshInventory: refetchPluginInventory,
-    refreshMarket: refreshPluginMarket,
     completeApprovedInstall: (pluginInstanceID, signal) => completeApprovedOfficialInstall({
       pluginInstanceID,
       lifecycle: pluginLifecycle,
       refreshInventory: refetchPluginInventory,
       signal,
     }),
-    captureInstallRetirementFence: capturePluginInstallRetirementFence,
-    // Clear only the exact pre-install retirement fence. A newer disable,
-    // revoke, uninstall, or unknown mutation outcome remains authoritative.
-    onInstallReady: (pluginInstanceID, installedFence) => {
-      const currentFence = capturePluginInstallRetirementFence(pluginInstanceID);
-      if (
-        currentFence?.managementRevision === installedFence.managementRevision
-        && currentFence.generation === installedFence.generation
-      ) {
-        retiredPluginManagementRevisionByInstanceID.delete(pluginInstanceID);
-        pluginManagementRetirementGenerationByInstanceID.delete(pluginInstanceID);
-      }
-    },
     createRequestID: () => createClientId('plugin-install'),
     resolvePluginID: (pluginInstanceID) => (
       pluginInventoryProjection()?.items.find((item) => (
@@ -1593,12 +1534,6 @@ export function EnvAppShell() {
       mutationError = error;
     }
     if (
-      permissionMutationPluginInstanceID
-      && (mutationError === undefined || pluginMutationOutcome(mutationError) === 'committed')
-    ) {
-      advancePluginManagementIntentGeneration(permissionMutationPluginInstanceID);
-    }
-    if (
       invalidatesManagementRevision
       && 'pluginInstanceID' in command
       && 'expectedManagementRevision' in command
@@ -1666,14 +1601,12 @@ export function EnvAppShell() {
       // revision openable instead of treating it as the stale revision that
       // was retired before the mutation completed.
       if (
-        command.type === 'enable'
-        && refreshedItem
+        refreshedItem
         && refreshedItem.managementRevision !== undefined
         && retiredRevision !== undefined
         && refreshedItem.managementRevision <= retiredRevision
       ) {
         retiredPluginManagementRevisionByInstanceID.delete(command.pluginInstanceID);
-        pluginManagementRetirementGenerationByInstanceID.delete(command.pluginInstanceID);
       }
     }
     if (permissionMutationPluginInstanceID && preservedPermissionTargets.length > 0) {
@@ -1708,7 +1641,6 @@ export function EnvAppShell() {
   const handlePluginCenterCommand = (
     command: PluginLifecycleCommand,
     signal: AbortSignal,
-    inspection?: OfficialPluginReleaseInspection,
   ): Promise<void> => {
     if (command.type === 'open_surface') {
       return openPluginSurface({
@@ -1721,16 +1653,8 @@ export function EnvAppShell() {
       });
     }
     if (command.type === 'install') {
-      const item = pluginInventoryProjection()?.items.find((candidate) => (
-        candidate.pluginID === command.pluginID && candidate.officialCatalog
-      ));
-      if (!item?.officialCatalog || !inspection) {
-        return Promise.reject(new Error(i18n.t('uiCopy.plugin.installOperation.failure.internal')));
-      }
       return pluginInstallCoordinator!.start(
-        command.pluginID,
-        item.officialCatalog.pluginInstanceID,
-        inspection,
+        command,
       );
     }
     return serializePluginPlacementOperation(() => performPluginCenterManagementCommand(command, signal));
@@ -3543,8 +3467,7 @@ export function EnvAppShell() {
           onRetryInstall={(pluginInstanceID) => pluginInstallCoordinator?.retry(pluginInstanceID)}
           onDiscardRetainedDataAndRetry={(pluginInstanceID) => pluginInstallCoordinator?.discardRetainedDataAndRetry(pluginInstanceID)}
           onRefresh={async () => {
-            const inventoryRefreshed = await refreshPluginMarket();
-            if (!inventoryRefreshed) await refetchPluginInventory();
+            await refreshPluginMarket();
             await pluginInstallCoordinator?.resume();
           }}
           onCommand={handlePluginCenterCommand}
@@ -5078,19 +5001,4 @@ export function EnvAppShell() {
       </TerminalSessionCatalogProvider>
     </EnvContext.Provider>
   );
-}
-
-function abortableDelay(delayMS: number, signal: AbortSignal): Promise<void> {
-  if (signal.aborted) return Promise.reject(signal.reason);
-  return new Promise((resolve, reject) => {
-    const timer = globalThis.setTimeout(() => {
-      signal.removeEventListener('abort', abort);
-      resolve();
-    }, delayMS);
-    const abort = () => {
-      globalThis.clearTimeout(timer);
-      reject(signal.reason);
-    };
-    signal.addEventListener('abort', abort, { once: true });
-  });
 }
