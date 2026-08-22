@@ -237,7 +237,10 @@ func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Met
 	}
 	s.floretEffects.put(identity.ThreadID(req.ThreadID), executionKey, floretEffectRequest{meta: *meta, req: req, effect: effect})
 	result, err := s.threadRuntime.Send(ctx, flruntime.SendInput{
-		ThreadID: identity.ThreadID(req.ThreadID), Input: turnInput, RequestKey: flruntime.RequestKey(executionKey),
+		ThreadID:            identity.ThreadID(req.ThreadID),
+		Input:               turnInput,
+		SupplementalContext: projection.Items,
+		RequestKey:          flruntime.RequestKey(executionKey),
 	})
 	if err != nil {
 		s.floretEffects.drop(identity.ThreadID(req.ThreadID), executionKey)

@@ -68,11 +68,11 @@ func TestTypedStopSucceedsWithoutLegacyHandler(t *testing.T) {
 		t.Fatal(err)
 	}
 	stop, err := svc.StopThread(t.Context(), meta, thread.ThreadID)
-	if err != nil || !stop.OK {
+	if err != nil || !stop.OK || stop.Thread.ThreadID != thread.ThreadID || stop.Current.ThreadID.String() != thread.ThreadID {
 		t.Fatalf("typed stop=%#v err=%v", stop, err)
 	}
 	second, err := svc.StopThread(t.Context(), meta, thread.ThreadID)
-	if err != nil || !second.OK {
+	if err != nil || !second.OK || second.Thread.ThreadID != thread.ThreadID || second.Current.ThreadID.String() != thread.ThreadID {
 		t.Fatalf("idempotent typed stop=%#v err=%v", second, err)
 	}
 }

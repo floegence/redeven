@@ -205,3 +205,26 @@ func TestPublicFloretActivityProjectionRemovesPrivatePathsEverywhere(t *testing.
 		t.Fatalf("typed timeline contains private path: %s", rawMessage)
 	}
 }
+
+func TestPublicFloretThreadViewHidesQueuedSupplementalContext(t *testing.T) {
+	t.Parallel()
+	view := publicFloretThreadView(flruntime.ThreadView{
+		Queue: []flruntime.QueuedInput{{
+			ID:         "queue:context",
+			RequestKey: "context-request",
+			Input:      flruntime.UserInput{Text: "review"},
+			SupplementalContext: []flruntime.TurnSupplementalContextItem{{
+				Kind: "file_path", Title: "User-selected file", Text: "private context", Metadata: map[string]string{"label": "secret.md"}, Sensitive: true,
+			}},
+		}},
+	})
+	if len(view.Queue) != 1 {
+		t.Fatalf("queue=%#v, want one queued input", view.Queue)
+	}
+	if len(view.Queue[0].SupplementalContext) != 0 {
+		t.Fatalf("public queue leaked supplemental context: %#v", view.Queue[0].SupplementalContext)
+	}
+	if view.Queue[0].Input.Text != "review" {
+		t.Fatalf("public queue input=%#v, want user text preserved", view.Queue[0].Input)
+	}
+}

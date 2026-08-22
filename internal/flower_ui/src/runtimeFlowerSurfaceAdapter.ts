@@ -406,8 +406,8 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     stopThread: async (threadID) => {
       const tid = trim(threadID);
       if (!tid) throw new Error(missingThreadIDMessage(options));
-      await options.stopThread(tid);
-      return loadThread(tid);
+      const response = await options.stopThread(tid);
+      return mapRuntimeThreadView(response, options);
     },
     submitInput: options.submitInput,
     submitApproval: async (input: FlowerSubmitApprovalRequest) => {

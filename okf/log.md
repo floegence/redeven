@@ -1,6 +1,12 @@
 # Redeven OKF Update Log
 
 ## 2026-08-22
+* **Supplemental context, atomic stop, and Floret v4.0.17 adoption**: Redeven now
+  consumes the published Floret v4.0.17 module. Flower passes turn-scoped file
+  context through Floret, consumes atomic cancel detail, and keeps private
+  supplemental metadata out of public queue views.
+
+## 2026-08-22
 * **Canonical refresh race and Floret v4.0.16 adoption**: Redeven now
   consumes the published Floret v4.0.16 module. Floret rejects a canonical
   snapshot read before a newer terminal view, while Flower continues to

@@ -31,6 +31,7 @@ import type {
   FlowerStagedLongTextReadResult,
   FlowerTerminalProcessSnapshot,
   FlowerThreadReadStatus,
+  FlowerThreadView,
   FlowerLiveStreamConnectInput,
 } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import type { FlowerCanonicalReferenceNavigationTarget } from './linkedContextNavigation';
@@ -984,7 +985,9 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     stopThread: async (threadID) => {
       const tid = trim(threadID);
       if (!tid) throw new Error(adapterCopy(options).missingThreadID);
-      await options.rpc.ai.stopThread({ threadId: tid });
+      return fetchLocalApiJSON<FlowerThreadView>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/cancel`, {
+        method: 'POST',
+      });
     },
     submitInput: async (input) => {
       const tid = trim(input.thread_id);

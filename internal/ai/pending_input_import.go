@@ -162,7 +162,11 @@ func (s *Service) importPendingInputGroup(ctx context.Context, records []threads
 			return fmt.Errorf("persist pending input %q execution authority: %w", record.RequestID, err)
 		}
 		s.floretEffects.put(identity.ThreadID(threadID), request.ClientRequestID, floretEffectRequest{meta: meta, req: request, effect: effect})
-		items = append(items, flruntime.ImportedPendingInput{RequestKey: flruntime.RequestKey(request.ClientRequestID), Input: input})
+		items = append(items, flruntime.ImportedPendingInput{
+			RequestKey:          flruntime.RequestKey(request.ClientRequestID),
+			Input:               input,
+			SupplementalContext: projection.Items,
+		})
 		requestIDs = append(requestIDs, request.ClientRequestID)
 	}
 	result, err := s.threadRuntime.ImportPendingInputs(ctxOrBackground(ctx), flruntime.ImportPendingInputsInput{
