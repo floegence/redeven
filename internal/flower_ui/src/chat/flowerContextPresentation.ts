@@ -22,6 +22,8 @@ export type FlowerComposerContextIndicatorView = Readonly<{
   thresholdValue: string;
   safeLimitLabel: string;
   safeLimitValue: string;
+  statusLabel: string;
+  statusValue: string;
 }>;
 
 export function formatContextTokenCount(tokens: number | undefined): string {
@@ -90,6 +92,15 @@ export function buildFlowerComposerContextIndicatorView(
   const total = formatFullContextTokenCount(usage.context_window_tokens);
   const threshold = formatFullContextTokenCount(usage.threshold_tokens);
   const safeLimit = formatFullContextTokenCount(usage.request_safe_limit_tokens);
+  const statusValue = (() => {
+    switch (trimString(usage.pressure_status)) {
+      case 'near_threshold': return trimString(labels.nearThreshold) || fallback.nearThreshold;
+      case 'will_compact': return trimString(labels.willCompact) || fallback.willCompact;
+      case 'hard_limit': return trimString(labels.hardLimit) || fallback.hardLimit;
+      case 'estimated': return trimString(labels.estimated) || fallback.estimated;
+      default: return trimString(labels.stable) || fallback.stable;
+    }
+  })();
   const usedValue = used && total ? labels.usage(used, total) : trimString(labels.unavailable) || fallback.unavailable;
   const ariaValueText = progressValue === null
     ? `${label}: ${unknownPercent}`
@@ -110,6 +121,8 @@ export function buildFlowerComposerContextIndicatorView(
     thresholdValue: threshold,
     safeLimitLabel: trimString(labels.safeLimitLabel) || fallback.safeLimitLabel,
     safeLimitValue: safeLimit,
+    statusLabel: trimString(labels.statusLabel) || fallback.statusLabel,
+    statusValue,
   };
 }
 

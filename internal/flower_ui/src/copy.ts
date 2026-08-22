@@ -302,6 +302,11 @@ export type FlowerSurfaceCopy = Readonly<{
     send: string;
     stop: string;
     commandMenuLabel: string;
+    commandCompactContext: string;
+    compactContext: string;
+    compactContextBlocked: string;
+    commandArgumentsInvalid: string;
+    commandUnknown: (command: string) => string;
     composerMoreLabel: string;
     composerReferencesLabel: string;
     composerReferenceLoading: string;
@@ -527,6 +532,11 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     send: 'Send',
     stop: 'Stop',
     commandMenuLabel: 'Flower commands',
+    commandCompactContext: 'Compact this conversation context',
+    compactContext: 'Compact context',
+    compactContextBlocked: 'Remove attachments and file references before compacting context.',
+    commandArgumentsInvalid: 'The /compact command does not take arguments.',
+    commandUnknown: (command) => `Unknown Flower command: ${command}`,
     composerMoreLabel: 'More input options',
     composerReferencesLabel: 'File and folder references',
     composerReferenceLoading: 'Searching files and folders...',

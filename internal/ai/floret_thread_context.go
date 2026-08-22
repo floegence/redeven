@@ -11,22 +11,36 @@ import (
 	flruntime "github.com/floegence/floret/v4/runtime"
 )
 
-func (s *Service) readCanonicalThreadContextProjection(ctx context.Context, current flruntime.ThreadView) ([]FlowerContextCompaction, []FlowerTimelineDecoration, error) {
+type flowerCanonicalContextProjection struct {
+	Usage       *FlowerContextUsage
+	Compactions []FlowerContextCompaction
+	Decorations []FlowerTimelineDecoration
+}
+
+func (s *Service) readCanonicalThreadContextProjection(ctx context.Context, current flruntime.ThreadView) (flowerCanonicalContextProjection, error) {
 	if s == nil || s.threadRuntime == nil {
-		return nil, nil, errors.New("Flower thread runtime is unavailable")
+		return flowerCanonicalContextProjection{}, errors.New("Flower thread runtime is unavailable")
 	}
 	reader, ok := s.threadRuntime.(flruntime.ThreadContextReader)
 	if !ok {
-		return nil, nil, errors.New("published Floret runtime does not expose canonical thread context reads")
+		return flowerCanonicalContextProjection{}, errors.New("published Floret runtime does not expose canonical thread context reads")
 	}
 	snapshot, err := reader.Context(ctxOrBackground(ctx), current.ThreadID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("read canonical Floret thread context: %w", err)
+		return flowerCanonicalContextProjection{}, fmt.Errorf("read canonical Floret thread context: %w", err)
 	}
 	return flowerThreadContextProjection(snapshot, current)
 }
 
-func flowerThreadContextProjection(snapshot flruntime.ThreadContextSnapshot, current flruntime.ThreadView) ([]FlowerContextCompaction, []FlowerTimelineDecoration, error) {
+func flowerThreadContextProjection(snapshot flruntime.ThreadContextSnapshot, current flruntime.ThreadView) (flowerCanonicalContextProjection, error) {
+	projection := flowerCanonicalContextProjection{}
+	if snapshot.Usage != nil {
+		usage, err := flowerContextUsageFromFloret(snapshot.Usage)
+		if err != nil {
+			return flowerCanonicalContextProjection{}, fmt.Errorf("project Floret context usage: %w", err)
+		}
+		projection.Usage = &usage
+	}
 	compactions := make([]FlowerContextCompaction, 0, len(snapshot.Compactions))
 	decorations := make([]FlowerTimelineDecoration, 0, len(snapshot.Compactions))
 	for _, canonical := range snapshot.Compactions {
@@ -39,11 +53,11 @@ func flowerThreadContextProjection(snapshot flruntime.ThreadContextSnapshot, cur
 			Error: canonical.Error, ObservedAt: canonical.ObservedAt,
 		})
 		if err != nil {
-			return nil, nil, err
+			return flowerCanonicalContextProjection{}, err
 		}
 		anchor, err := canonicalCompactionTimelineAnchor(current.Items, canonical.TurnID)
 		if err != nil {
-			return nil, nil, fmt.Errorf("project Floret compaction %q: %w", canonical.OperationID, err)
+			return flowerCanonicalContextProjection{}, fmt.Errorf("project Floret compaction %q: %w", canonical.OperationID, err)
 		}
 		decoration := FlowerTimelineDecoration{
 			DecorationID: "context-compaction:" + strings.TrimSpace(projected.OperationID),
@@ -51,12 +65,14 @@ func flowerThreadContextProjection(snapshot flruntime.ThreadContextSnapshot, cur
 			Ordinal: len(decorations), Compaction: projected, compactionPresent: true,
 		}
 		if err := decoration.Validate(); err != nil {
-			return nil, nil, err
+			return flowerCanonicalContextProjection{}, err
 		}
 		compactions = append(compactions, projected)
 		decorations = append(decorations, decoration)
 	}
-	return compactions, decorations, nil
+	projection.Compactions = compactions
+	projection.Decorations = decorations
+	return projection, nil
 }
 
 func canonicalCompactionTimelineAnchor(items []flruntime.ThreadItem, turnID identity.TurnID) (FlowerTimelineAnchor, error) {

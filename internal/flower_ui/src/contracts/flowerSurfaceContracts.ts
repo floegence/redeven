@@ -779,6 +779,7 @@ export type FlowerLiveStreamEnvelope = Readonly<{
   summaries?: readonly FlowerThreadSnapshot[];
   /** Typed current-state replacement from Floret; never contains replay metadata. */
   current?: FlowerRuntimeCurrentView;
+  context_usage?: FlowerContextUsage | null;
   context_compactions?: readonly FlowerContextCompaction[];
   timeline_decorations?: readonly FlowerTimelineDecoration[];
   read_status?: FlowerThreadReadStatus;

@@ -39,6 +39,30 @@ func TestFlowerWorkspaceStreamAcceptsEmptySelectionAndReceivesBackgroundThreadUp
 	}
 }
 
+func TestFlowerWorkspaceStreamPublishesContextUsageWithoutReplacingCurrentView(t *testing.T) {
+	t.Parallel()
+	svc := newFlowerLiveMemoryTestService()
+	meta := flowerLiveMemoryTestMeta("env_live_context_usage")
+	subscription, err := svc.SubscribeFlowerLiveStream(context.Background(), &meta, FlowerLiveStreamRequest{})
+	if err != nil {
+		t.Fatalf("workspace subscribe: %v", err)
+	}
+	defer subscription.Close()
+	_ = nextFlowerLiveStreamFrame(t, subscription)
+	svc.publishFlowerRuntimeContextUsage(meta.EndpointID, "thread-context-usage", FlowerContextUsage{
+		RunID: "run-context-usage", Phase: "provider_usage", InputTokens: 500,
+		ContextWindowTokens: 1000, UsedRatio: 0.5, PressureStatus: "stable", UpdatedAtMs: 42,
+	})
+	frame := nextFlowerLiveStreamFrame(t, subscription)
+	var envelope FlowerLiveStreamEnvelope
+	if err := json.Unmarshal(frame.Data, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if envelope.Current != nil || envelope.ContextUsage == nil || envelope.ContextUsage.InputTokens != 500 || envelope.ThreadID != "thread-context-usage" {
+		t.Fatalf("envelope=%#v, want usage-only thread batch", envelope)
+	}
+}
+
 func TestFlowerWorkspaceStreamReconnectsWithCompletePagedBaseline(t *testing.T) {
 	ctx := context.Background()
 	svc := newSendTurnTestService(t)

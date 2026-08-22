@@ -100,6 +100,7 @@ import {
 } from './flowerSubagentProjection';
 import { projectSubagentDetailThread } from './flowerSubagentDetailThread';
 import { formatFlowerCurrentModelLabel } from './flowerModelLabel';
+import { FLOWER_COMPACT_CONTEXT_COMMAND, parseFlowerSlashCommand } from './flowerSlashCommands';
 import {
   pendingApprovalCommandForActivityItem,
   presentFlowerActivityItem,
@@ -336,6 +337,8 @@ const SIDEBAR_STABLE_LIVE_STATUSES = new Set<FlowerThreadStatus>(['running']);
 const COMPOSER_STOP_THREAD_STATUSES = new Set<FlowerThreadStatus>(['running', 'waiting_approval', 'waiting_user']);
 const PENDING_NEW_THREAD_ID = '__new_thread__';
 const FLOWER_PERMISSION_TYPES: readonly FlowerPermissionType[] = ['readonly', 'approval_required', 'full_access'];
+const FLOWER_COMPOSER_COMMAND_MENU_ID = 'flower-composer-command-menu';
+const FLOWER_COMPOSER_COMPACT_COMMAND_OPTION_ID = 'flower-composer-command-compact-context';
 const FLOWER_COMPOSER_CONTROL_ORDER: readonly FlowerComposerControlID[] = ['working_dir', 'permission', 'model_reasoning', 'read_only'];
 const FLOWER_COMPOSER_CONTROL_OVERFLOW_ORDER: readonly FlowerComposerControlID[] = ['working_dir', 'model_reasoning', 'read_only', 'permission'];
 const FLOWER_COMPOSER_CONTROL_GAP_PX = 6;
@@ -2951,8 +2954,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const composerMorePanelEstimatedSize = (): Readonly<{ width: number; height: number }> => ({
     width: FLOWER_COMPOSER_MORE_PANEL_ESTIMATED_WIDTH,
     height: FLOWER_COMPOSER_MORE_PANEL_VERTICAL_CHROME
-      + (composerOverflowControlIDs().length + (companionCompactComposer() && selectedContextUsage() ? 1 : 0))
-        * FLOWER_COMPOSER_MORE_PANEL_ROW_HEIGHT,
+      + composerOverflowControlIDs().length * FLOWER_COMPOSER_MORE_PANEL_ROW_HEIGHT,
   });
   const scheduleComposerMorePanelPosition = () => {
     cancelComposerMorePanelPosition();
@@ -2988,7 +2990,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return;
     }
     void composerOverflowControlIDs().join('|');
-    void selectedContextUsage();
     scheduleComposerMorePanelPosition();
     window.addEventListener('resize', scheduleComposerMorePanelPosition);
     window.addEventListener('scroll', scheduleComposerMorePanelPosition, true);
@@ -3819,6 +3820,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const applyRuntimeCurrent = (
     current: FlowerTurnLaunchReceipt['current'],
     connectionEpoch = liveTransport.connectionEpoch(),
+    contextUsage?: FlowerLiveStreamEnvelope['context_usage'],
     contextCompactions?: FlowerLiveStreamEnvelope['context_compactions'],
     timelineDecorations?: FlowerLiveStreamEnvelope['timeline_decorations'],
   ): boolean => {
@@ -3853,6 +3855,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     } satisfies FlowerThreadSnapshot;
     const contextualBase = {
       ...base,
+      ...(contextUsage ? { context_usage: contextUsage } : {}),
       ...(contextCompactions ? { context_compactions: contextCompactions } : {}),
       ...(timelineDecorations ? { timeline_decorations: timelineDecorations } : {}),
     };
@@ -3890,7 +3893,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return;
     }
     if (envelope.current) {
-      applyRuntimeCurrent(envelope.current, connectionEpoch, envelope.context_compactions, envelope.timeline_decorations);
+      applyRuntimeCurrent(envelope.current, connectionEpoch, envelope.context_usage, envelope.context_compactions, envelope.timeline_decorations);
+      return;
+    }
+    if (envelope.kind === 'thread.batch' && envelope.context_usage) {
+      const threadID = trimString(envelope.thread_id);
+      const currentView = threadCache().views.get(threadID);
+      if (threadID && currentView && !retiredThreadIDs.has(threadID)) {
+        setThreadCache((cache) => cache.replaceView({
+          ...currentView,
+          thread: { ...currentView.thread, context_usage: envelope.context_usage },
+          connectionEpoch,
+        }));
+      }
       return;
     }
     if (envelope.kind === 'viewer.read_state') {
@@ -4970,6 +4985,24 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return event.key === 'Enter' && !event.shiftKey;
   };
 
+  const executeCompactContextCommand = async () => {
+    // Context compaction is a thread operation; never create a new thread for
+    // a slash command entered while the composer is in its empty state.
+    if (!trimString(selectedThreadID())) return;
+    if (composerHasAttachments() || composerHasReferences()) {
+      notifyComposerError(copy().chat.compactContextBlocked);
+      return;
+    }
+    const sessionKey = currentComposerSessionKey();
+    if (launchChatTurnInFlight.has(sessionKey)) return;
+    launchChatTurnInFlight.add(sessionKey);
+    try {
+      await launchChatTurn(FLOWER_COMPACT_CONTEXT_COMMAND);
+    } finally {
+      launchChatTurnInFlight.delete(sessionKey);
+    }
+  };
+
   const handleComposerKeyDown = (event: KeyboardEvent) => {
     if (event.isComposing || isComposing() || event.keyCode === 229) return;
     if (composerReferenceMutationActive()) {
@@ -5024,6 +5057,30 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           return;
         }
       }
+    }
+    const command = composerSlashCommand();
+    if (command.kind === 'suggest') {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        updateComposerText('');
+        return;
+      }
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        void executeCompactContextCommand();
+        return;
+      }
+    }
+    if (command.kind === 'invalid' && shouldSubmitOnEnterKeydown(event)) {
+      event.preventDefault();
+      notifyComposerError(command.reason === 'arguments'
+        ? copy().chat.commandArgumentsInvalid
+        : copy().chat.commandUnknown(command.command));
+      return;
     }
     if (shouldSubmitOnEnterKeydown(event)) {
       event.preventDefault();
@@ -6317,24 +6374,39 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const composerChatDraftText = createMemo(() => trimString(currentComposerSessionDraft().chatDraft));
   const composerChatDraftHasRawText = createMemo(() => currentComposerSessionDraft().chatDraft.length > 0);
+  const composerSlashCommand = createMemo(() => (selectedInputRequest() || selectedComposerApprovalDisplayAction())
+    ? { kind: 'none' as const }
+    : parseFlowerSlashCommand(composerChatDraftText()));
+  const composerCommandMenuVisible = createMemo(() => (
+    !composerReferenceMenuVisible()
+    && composerFocused()
+    && composerSlashCommand().kind === 'suggest'
+  ));
+  const composerPrimaryActionIsCommand = createMemo(() => composerSlashCommand().kind === 'intent');
   const composerPrimaryActionIsStop = createMemo(() => (
     longTextPreparing()
     || (selectedThreadCanStop() && !composerTextOverLimit() && !composerChatDraftText() && !composerHasAttachments() && !composerHasReferences())
   ));
-  type ComposerPrimaryAction = 'send' | 'stop' | 'cancel_long_text';
+  type ComposerPrimaryAction = 'send' | 'stop' | 'compact' | 'cancel_long_text';
   const composerPrimaryActionKind = createMemo<ComposerPrimaryAction>(() => (
     longTextPreparing()
       ? 'cancel_long_text'
       : composerPrimaryActionIsStop()
       ? 'stop'
+      : composerPrimaryActionIsCommand()
+      ? 'compact'
       : 'send'
   ));
-  const composerPrimaryActionIcon = createMemo(() => composerPrimaryActionIsStop() ? FlowerStopIcon : ArrowUp);
-  const composerPrimaryActionLabel = createMemo(() => composerPrimaryActionIsStop() ? copy().chat.stop : copy().chat.send);
+  const composerPrimaryActionIcon = createMemo(() => composerPrimaryActionIsStop() ? FlowerStopIcon : composerPrimaryActionIsCommand() ? Clock : ArrowUp);
+  const composerPrimaryActionLabel = createMemo(() => composerPrimaryActionIsStop() ? copy().chat.stop : composerPrimaryActionIsCommand() ? copy().chat.compactContext : copy().chat.send);
   const composerPrimaryActionDisabled = createMemo(() => {
     if (composerReferenceMutationCount() > 0) return true;
     if (longTextPreparing()) return false;
     if (selectedThreadReadOnly()) return true;
+    if (composerSlashCommand().kind === 'invalid') return true;
+    if (composerPrimaryActionIsCommand()) {
+      return composerHasAttachments() || composerHasReferences() || !readyForChat() || !selectedThreadID();
+    }
     if (composerHasSubmissionBlockingAttachments()) return true;
     if (composerTextOverLimit() && !currentAttachmentSnapshot().capability?.supports_long_text) return true;
     if (selectedThreadCanStop() && !composerTextOverLimit() && !composerHasAttachments() && !composerHasReferences()) return false;
@@ -6357,6 +6429,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return;
       case 'stop':
         void stopSelectedThreadFromComposer();
+        return;
+      case 'compact':
+        void executeCompactContextCommand();
         return;
       default:
         void submitChat();
@@ -9402,20 +9477,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               </div>
             )}
           </For>
-          <Show when={companionCompactComposer() && selectedContextUsage()}>
-            {(contextUsage) => (
-              <div class="flower-composer-more-row" data-flower-composer-more-item="context">
-                <span class="flower-composer-more-label">{copy().chat.contextIndicator.label}</span>
-                <span class="flower-composer-more-control">
-                  <FlowerComposerContextIndicator
-                    usage={contextUsage().usage}
-                    freshness={contextUsage().freshness}
-                    copy={copy()}
-                  />
-                </span>
-              </div>
-            )}
-          </Show>
         </div>
       </SurfaceFloatingLayer>
     </Show>
@@ -9656,17 +9717,21 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           readOnly={composerTextareaReadOnly()}
           aria-label={presentation() === 'companion' ? copy().chat.placeholder : undefined}
           data-flower-input-custom-answer={selectedInputRequest() && questionMode(activeInputQuestion()!) === 'select_or_write' ? 'true' : undefined}
-          aria-autocomplete={composerReferenceEditingAllowed() ? 'list' : undefined}
+          aria-autocomplete={composerReferenceEditingAllowed() || composerCommandMenuVisible() ? 'list' : undefined}
           aria-haspopup="listbox"
-          aria-expanded={composerReferenceMenuVisible() ? 'true' : undefined}
+          aria-expanded={composerReferenceMenuVisible() || composerCommandMenuVisible() ? 'true' : undefined}
           aria-controls={composerReferenceMenuVisible()
             ? FLOWER_COMPOSER_REFERENCE_MENU_ID
-            : companionCollapsed()
-              ? props.companionRegionID
-              : undefined}
+            : composerCommandMenuVisible()
+              ? FLOWER_COMPOSER_COMMAND_MENU_ID
+              : companionCollapsed()
+                ? props.companionRegionID
+                : undefined}
           aria-activedescendant={composerReferenceMenuVisible()
             ? composerReferenceActiveOptionID()
-            : undefined}
+            : composerCommandMenuVisible()
+              ? FLOWER_COMPOSER_COMPACT_COMMAND_OPTION_ID
+              : undefined}
           aria-describedby={companionCollapsed() ? companionDescriptionID() : undefined}
           onFocus={(event) => {
             setComposerFocused(true);
@@ -9884,6 +9949,29 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             <div class="flower-composer-anchor">
               <Show when={bottomActionMode() !== 'approval'}>
                 {composerReferenceMenu()}
+                <Show when={composerCommandMenuVisible()}>
+                  <div
+                    id={FLOWER_COMPOSER_COMMAND_MENU_ID}
+                    class="flower-composer-command-menu"
+                    role="listbox"
+                    aria-label={copy().chat.commandMenuLabel}
+                    aria-activedescendant={FLOWER_COMPOSER_COMPACT_COMMAND_OPTION_ID}
+                  >
+                    <button
+                      id={FLOWER_COMPOSER_COMPACT_COMMAND_OPTION_ID}
+                      type="button"
+                      role="option"
+                      aria-selected="true"
+                      class="flower-composer-command-item"
+                      onPointerDown={(event) => event.preventDefault()}
+                      onClick={() => void executeCompactContextCommand()}
+                    >
+                      <Clock class="h-3.5 w-3.5" aria-hidden="true" />
+                      <span class="flower-composer-command-token">{FLOWER_COMPACT_CONTEXT_COMMAND}</span>
+                      <span class="flower-composer-command-description">{copy().chat.commandCompactContext}</span>
+                    </button>
+                  </div>
+                </Show>
                 {queuedTurnsDock()}
               </Show>
               <div
@@ -10261,7 +10349,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   {composerMoreButton()}
                 </div>
                 {composerMorePanel()}
-                      <Show when={!companionCompactComposer() && selectedContextUsage()}>
+                      <Show when={selectedContextUsage()}>
                         {(contextUsage) => (
                           <FlowerComposerContextIndicator
                             usage={contextUsage().usage}

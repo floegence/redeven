@@ -46,7 +46,7 @@ function settingsSnapshot(): FlowerSettingsSnapshot {
 function approvalResult(threadID: string, interactionID = 'approval-1', approved = true, version = 1): FlowerApprovalCommandResult {
   return {
     ok: true,
-    current: {
+						current: {
       thread_id: threadID,
       view_version: version,
       activity: 'active',
@@ -297,7 +297,7 @@ describe('runtime Flower surface adapter read state', () => {
 						status: 'noop',
 						updated_at_ms: 4,
 					}],
-					timeline_decorations: [{
+						timeline_decorations: [{
 						decoration_id: 'context-compaction:compact_stream',
 						kind: 'context_compaction',
 						anchor: { target_kind: 'message', message_id: 'message_compact', edge: 'after' },
@@ -308,7 +308,11 @@ describe('runtime Flower surface adapter read state', () => {
 							status: 'noop',
 							updated_at_ms: 4,
 						},
-					}],
+						}],
+						context_usage: {
+							run_id: 'run_stream', phase: 'provider_usage', input_tokens: 500,
+							context_window_tokens: 1000, used_ratio: 0.5, pressure_status: 'stable', updated_at_ms: 5,
+						},
 					current: {
 						thread: { id: 'thread_stream', title: 'Streaming' },
 						version: 3,
@@ -334,8 +338,9 @@ describe('runtime Flower surface adapter read state', () => {
 				kind: 'ready',
 				summaries: [{ thread_id: 'thread_stream', messages: [] }],
 			});
-			expect(frames[1]).toMatchObject({
-				kind: 'thread.batch',
+				expect(frames[1]).toMatchObject({
+					kind: 'thread.batch',
+					context_usage: { input_tokens: 500, used_ratio: 0.5 },
 				context_compactions: [{ operation_id: 'compact_stream', status: 'noop' }],
 				timeline_decorations: [{ decoration_id: 'context-compaction:compact_stream' }],
 				current: { thread: { id: 'thread_stream', title: 'Streaming' }, version: 3, activity: 'active' },

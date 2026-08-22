@@ -41,6 +41,7 @@ type FlowerLiveStreamEnvelope struct {
 	ThreadID            string                     `json:"thread_id,omitempty"`
 	Summaries           []ThreadView               `json:"summaries,omitempty"`
 	Current             *flruntime.ThreadView      `json:"current,omitempty"`
+	ContextUsage        *FlowerContextUsage        `json:"context_usage,omitempty"`
 	ContextCompactions  []FlowerContextCompaction  `json:"context_compactions,omitempty"`
 	TimelineDecorations []FlowerTimelineDecoration `json:"timeline_decorations,omitempty"`
 	ReadStatus          *FlowerThreadReadView      `json:"read_status,omitempty"`
@@ -217,18 +218,42 @@ func (s *Service) publishFlowerRuntimeCurrent(endpointID string, current flrunti
 	}
 	if current.Activity != flruntime.ThreadActivityActive {
 		ctx, cancel := context.WithTimeout(context.Background(), s.persistTimeout())
-		compactions, decorations, err := s.readCanonicalThreadContextProjection(ctx, current)
+		contextProjection, err := s.readCanonicalThreadContextProjection(ctx, current)
 		cancel()
 		if err != nil {
 			if s.log != nil {
 				s.log.Warn("ai: project canonical Flower thread context", "thread_id", current.ThreadID.String(), "error", err)
 			}
 		} else {
-			envelope.ContextCompactions = compactions
-			envelope.TimelineDecorations = decorations
+			envelope.ContextUsage = contextProjection.Usage
+			envelope.ContextCompactions = contextProjection.Compactions
+			envelope.TimelineDecorations = contextProjection.Decorations
 		}
 	}
 	batch := newFlowerLiveEncodedBatch(envelope)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, subscriber := range s.flowerLiveSubscribers {
+		if subscriber.endpointID != endpointID || subscriber.closed {
+			continue
+		}
+		enqueueFlowerLiveSubscriberLocked(s, subscriber, batch)
+	}
+}
+
+func (s *Service) publishFlowerRuntimeContextUsage(endpointID string, threadID string, usage FlowerContextUsage) {
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	if s == nil || endpointID == "" || threadID == "" {
+		return
+	}
+	copy := usage
+	batch := newFlowerLiveEncodedBatch(FlowerLiveStreamEnvelope{
+		SchemaVersion: FlowerLiveSchemaVersion,
+		Kind:          FlowerLiveStreamThreadBatch,
+		ThreadID:      threadID,
+		ContextUsage:  &copy,
+	})
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, subscriber := range s.flowerLiveSubscribers {
