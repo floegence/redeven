@@ -72,6 +72,26 @@ describe('PluginInstallStatus', () => {
     host.remove();
   });
 
+  it('keeps an unknown platform failure actionable with one retry', () => {
+    const onRetry = vi.fn();
+    const host = document.createElement('div');
+    document.body.append(host);
+    const dispose = render(() => <PluginInstallStatus
+      projection={projection({
+        execution: execution({ status: 'failed', failure_code: 'PLUGIN_INTERNAL_FAILURE' }),
+        events: [],
+      })}
+      onRetry={onRetry}
+    />, host);
+
+    const retry = host.querySelector('[data-plugin-install-retry]') as HTMLButtonElement;
+    expect(retry).not.toBeNull();
+    retry.click();
+    expect(onRetry).toHaveBeenCalledOnce();
+    dispose();
+    host.remove();
+  });
+
   it('explains an incompatible plugin manifest instead of reporting an internal failure', () => {
     const host = document.createElement('div');
     document.body.append(host);
