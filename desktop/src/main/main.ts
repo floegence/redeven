@@ -4570,9 +4570,10 @@ async function hydratePersistedReinstallOperations(): Promise<void> {
       } catch (error) {
         targetError = error;
       }
-      const confirmationAvailable = journal.phase === 'confirmation'
-        && journal.preview.expires_at_unix_ms > Date.now()
-        && !targetError;
+      // Every incomplete journal is a resumable recovery checkpoint. A
+      // Desktop restart must ask for confirmation again, but an old phase or
+      // quarantine is never converted into a permanent manual-recovery block.
+      const confirmationAvailable = !targetError;
       const phase = confirmationAvailable ? 'confirmation' : journal.phase;
       const presentation = reinstallTargetProgressPresentation(phase);
       const failure = confirmationAvailable
@@ -4603,23 +4604,20 @@ async function hydratePersistedReinstallOperations(): Promise<void> {
             targetLabel: journal.preview.label,
           },
         );
-      const retryAction = journal.phase === 'confirmation'
-        ? {
-            kind: 'retry' as const,
-            operation_key: operationKey,
-            label: 'Review target',
-            label_key: 'common.retry' as const,
-            retry_action: {
-              kind: 'preview_reinstall_target' as const,
-              environment_id: journal.environment_id,
-            },
-          }
-        : {
-            kind: 'dismiss' as const,
-            operation_key: operationKey,
-            label: 'Dismiss',
-            label_key: 'progress.dismiss' as const,
-          };
+      const retryAction = {
+        kind: 'retry' as const,
+        operation_key: operationKey,
+        label: 'Continue reinstall',
+        label_key: 'common.retry' as const,
+        retry_action: {
+          kind: 'reinstall_target' as const,
+          environment_id: journal.environment_id,
+          preflight_id: journal.preflight_id,
+          operation_key: operationKey,
+          mode: journal.preview.mode,
+          impact_acknowledged: true as const,
+        },
+      };
       const snapshot: DesktopLauncherOperationSnapshot = {
         operation_key: operationKey,
         action: 'reinstall_target',
@@ -4648,8 +4646,11 @@ async function hydratePersistedReinstallOperations(): Promise<void> {
           ? [{
               kind: 'reinstall_target' as const,
               environment_id: journal.environment_id,
-              label: 'Reinstall Redeven',
-              label_key: 'environmentAction.reinstallRedeven' as const,
+              preflight_id: journal.preflight_id,
+              operation_key: operationKey,
+              mode: journal.preview.mode,
+              label: 'Continue reinstall',
+              label_key: 'common.retry' as const,
             }]
           : [
               { kind: 'copy_diagnostics' as const, operation_key: operationKey, label: 'Copy log', label_key: 'progress.copyLog' as const },
@@ -16695,17 +16696,45 @@ async function upsertSavedRuntimeTargetFromWelcome(
 
 async function deleteSavedEnvironmentFromWelcome(environmentID: string): Promise<void> {
   const preferences = await loadDesktopPreferencesCached();
+  if (!preferences.saved_environments.some((environment) => environment.id === compact(environmentID))) {
+    throw new Error('The saved Environment connection no longer exists.');
+  }
   await persistDesktopPreferences(deleteSavedEnvironment(preferences, environmentID));
+}
+
+function runtimeTargetMatchesSavedSSHEnvironment(
+  target: DesktopSavedRuntimeTarget,
+  environment: DesktopSavedSSHEnvironment,
+): boolean {
+  if (target.host_access.kind !== 'ssh_host' || target.placement.kind !== 'host_process') {
+    return false;
+  }
+  const normalizeRoot = (value: string): string => {
+    const root = compact(value);
+    return root === '~/.redeven' || root === DEFAULT_DESKTOP_SSH_RUNTIME_ROOT
+      ? DEFAULT_DESKTOP_SSH_RUNTIME_ROOT
+      : root;
+  };
+  const ssh = target.host_access.ssh;
+  return ssh.ssh_destination === environment.ssh_destination
+    && ssh.ssh_port === environment.ssh_port
+    && ssh.auth_mode === environment.auth_mode
+    && normalizeRoot(target.placement.runtime_root) === normalizeRoot(environment.runtime_root);
 }
 
 async function deleteSavedSSHEnvironmentFromWelcome(environmentID: string): Promise<void> {
   const preferences = await loadDesktopPreferencesCached();
   const existing = preferences.saved_ssh_environments.find((environment) => environment.id === environmentID) ?? null;
+  if (!existing) {
+    throw new Error('The SSH Environment connection no longer exists.');
+  }
+  const matchingTarget = preferences.saved_runtime_targets.find((target) => runtimeTargetMatchesSavedSSHEnvironment(target, existing)) ?? null;
   const runtimeKey = existing ? sshDesktopSessionKey(existing) : null;
+  const targetID = matchingTarget?.id ?? null;
   const targetKey = existing
     ? runtimeLifecycleTargetKey(
-        { kind: 'ssh_host', ssh: existing },
-        { kind: 'host_process', runtime_root: existing.runtime_root },
+        matchingTarget?.host_access ?? { kind: 'ssh_host', ssh: existing },
+        matchingTarget?.placement ?? { kind: 'host_process', runtime_root: existing.runtime_root },
       )
     : null;
   const active = targetKey ? runtimeLifecycleCoordinator.active(targetKey) : null;
@@ -16718,13 +16747,36 @@ async function deleteSavedSSHEnvironmentFromWelcome(environmentID: string): Prom
   if (runtimeKey !== null) {
     launcherOperations.markSubjectDeleted('ssh_environment', runtimeKey);
   }
-  await persistDesktopPreferences(deleteSavedSSHEnvironment(preferences, environmentID));
+  if (targetID !== null) {
+    launcherOperations.markSubjectDeleted('runtime_target', targetID);
+  }
+  for (const session of [...sessionsByKey.values()]) {
+    if (
+      session.target.kind === 'ssh_environment'
+      && (session.target.environment_id === environmentID || (targetID !== null && session.target.environment_id === targetID))
+    ) {
+      await finalizeSessionClosure(session.session_key).catch(() => undefined);
+    }
+  }
+  if (!matchingTarget) {
+    await persistDesktopPreferences(deleteSavedSSHEnvironment(preferences, environmentID));
+  } else {
+    const nextPreferences = deleteSavedRuntimeTarget(
+      deleteSavedSSHEnvironment(preferences, environmentID),
+      matchingTarget.id,
+    );
+    await persistDesktopPreferences(nextPreferences);
+  }
   if (runtimeKey && existing) {
-    sshRuntimeMaintenanceByKey.delete(runtimeKey);
+    clearSSHRuntimeReadyState(runtimeKey);
     if (targetKey && active) {
       await runtimeLifecycleCoordinator.waitForIdle(targetKey);
     }
     launcherOperations.markSubjectDeleted('ssh_environment', runtimeKey);
+    if (targetID !== null) {
+      launcherOperations.markSubjectDeleted('runtime_target', targetID);
+      await clearRuntimePlacementTargetRecords(targetID);
+    }
   }
 }
 
@@ -16732,6 +16784,9 @@ async function deleteSavedRuntimeTargetFromWelcome(environmentID: string): Promi
   const preferences = await loadDesktopPreferencesCached();
   const runtimeTargetID = compact(environmentID) as DesktopRuntimeTargetID;
   const existingTarget = preferences.saved_runtime_targets.find((target) => target.id === runtimeTargetID) ?? null;
+  if (!existingTarget) {
+    throw new Error('The saved Runtime target no longer exists.');
+  }
   const targetKey = existingTarget
     ? runtimeLifecycleTargetKey(existingTarget.host_access, existingTarget.placement)
     : null;
@@ -16743,13 +16798,23 @@ async function deleteSavedRuntimeTargetFromWelcome(environmentID: string): Promi
     runtimeLifecycleCoordinator.cancel(active.target_key, new DOMException(reason, 'AbortError'));
   }
   launcherOperations.markSubjectDeleted('runtime_target', runtimeTargetID);
-  if (existingTarget) {
-    if (targetKey && active) {
-      await runtimeLifecycleCoordinator.waitForIdle(targetKey);
-    }
+  if (targetKey && active) {
+    await runtimeLifecycleCoordinator.waitForIdle(targetKey);
   }
   launcherOperations.markSubjectDeleted('runtime_target', runtimeTargetID);
   await persistDesktopPreferences(deleteSavedRuntimeTarget(preferences, environmentID));
+  const matchingSSH = preferences.saved_ssh_environments.find((environment) => runtimeTargetMatchesSavedSSHEnvironment(existingTarget, environment)) ?? null;
+  if (matchingSSH) {
+    for (const session of [...sessionsByKey.values()]) {
+      if (session.target.kind === 'ssh_environment' && session.target.environment_id === matchingSSH.id) {
+        await finalizeSessionClosure(session.session_key).catch(() => undefined);
+      }
+    }
+    await persistDesktopPreferences(deleteSavedSSHEnvironment(await loadDesktopPreferencesCached(), matchingSSH.id));
+    const matchingSSHRuntimeKey = sshDesktopSessionKey(matchingSSH);
+    launcherOperations.markSubjectDeleted('ssh_environment', matchingSSHRuntimeKey);
+    clearSSHRuntimeReadyState(matchingSSHRuntimeKey);
+  }
   const runtimeRecord = runtimePlacementBridgeRegistry.get(runtimeTargetID);
   if (runtimeRecord) {
     const liveRuntimeSession = liveSession(desktopSessionKeyFromRuntimeTargetID(runtimeTargetID));

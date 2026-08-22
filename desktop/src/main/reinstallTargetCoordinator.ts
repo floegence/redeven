@@ -211,6 +211,24 @@ function registeredRootsMatch(left: string, right: string): boolean {
 }
 
 export function reinstallTargetDescriptorFingerprint(descriptor: ReinstallTargetDescriptor): string {
+  // Reinstall authorization is tied only to the registered target coordinate.
+  // Release strategy, state probes, labels, and other mutable runtime metadata
+  // must never turn a confirmed recovery into a false target-change failure.
+  const placement = descriptorPlacementForFingerprint(descriptor);
+  const root = placement.kind === 'host_process' || placement.kind === 'container_process'
+    ? placement.runtime_root
+    : '';
+  const identity = descriptor.host_access.kind === 'ssh_host'
+    ? ['ssh', desktopSSHAuthority(descriptor.host_access.ssh)]
+    : ['local'];
+  identity.push(placement.kind, compact(root));
+  if (placement.kind === 'container_process') {
+    identity.push(placement.container_engine, placement.container_id);
+  }
+  return crypto.createHash('sha256').update(JSON.stringify(identity)).digest('hex');
+}
+
+function legacyReinstallTargetDescriptorFingerprint(descriptor: ReinstallTargetDescriptor): string {
   return crypto.createHash('sha256').update(runtimeLifecycleTargetKey(
     descriptor.host_access,
     descriptorPlacementForFingerprint(descriptor),
@@ -266,8 +284,8 @@ async function validateRegisteredContainer(
       descriptor.placement.container_id,
     ))).stdout,
   );
-  if (inspected.container_id !== descriptor.placement.container_id || inspected.status !== 'running') {
-    throw new ReinstallTargetCoordinatorError('target_changed', 'The registered container identity or running state changed.');
+  if (inspected.container_id !== descriptor.placement.container_id) {
+    throw new ReinstallTargetCoordinatorError('target_changed', 'The registered container identity changed.');
   }
 }
 
@@ -290,7 +308,6 @@ const targetPreflightScript = [
   'set -eu',
   'raw="$1"',
   'default_root_token="$2"',
-  'allow_quarantine="${3:-}"',
   'if [ "$raw" = "$default_root_token" ]; then raw="${HOME%/}/.redeven"; fi',
   'case "$raw" in',
   '  "~") raw="${HOME:-}" ;;',
@@ -310,13 +327,6 @@ const targetPreflightScript = [
   '[ ! -L "$target" ] || { echo "runtime root is a symbolic link" >&2; exit 41; }',
   'exists=0',
   'if [ -e "$target" ]; then [ -d "$target" ] || { echo "runtime root is not a directory" >&2; exit 41; }; exists=1; fi',
-  'if [ "$allow_quarantine" != "resume" ]; then',
-  '  for prior in "$target".redeven-quarantine-*; do',
-  '    [ -e "$prior" ] || [ -L "$prior" ] || continue',
-  '    echo "previous reinstall quarantine requires manual recovery" >&2',
-  '    exit 42',
-  '  done',
-  'fi',
   'printf "%s\\n%s\\n%s\\n" "$target" "$exists" "$home"',
 ].join('\n');
 
@@ -325,7 +335,8 @@ const isolateTargetScript = [
   'target="$1"',
   'quarantine="$2"',
   '[ ! -L "$target" ] || { echo "runtime root became a symbolic link" >&2; exit 41; }',
-  '[ ! -e "$quarantine" ] && [ ! -L "$quarantine" ] || { echo "quarantine already exists" >&2; exit 42; }',
+  '# A previous interrupted reinstall is recoverable data, not a new target.',
+  'if [ -e "$quarantine" ] || [ -L "$quarantine" ]; then rm -rf -- "$quarantine"; fi',
   'if [ -e "$target" ]; then',
   '  [ -d "$target" ] || { echo "runtime root is not a directory" >&2; exit 41; }',
   '  mv -- "$target" "$quarantine"',
@@ -524,12 +535,11 @@ export class ReinstallTargetCoordinator {
     const onProgress = typeof operationKeyOrProgress === 'function' ? operationKeyOrProgress : progressListener;
     onProgress?.('target_locked');
     const cleanPreflightID = compact(preflightID);
+    let persistedPhase: ReinstallTargetJournalPhase = 'confirmation';
     let cached = this.preflights.get(cleanPreflightID);
     if (!cached) {
       const journal = await this.readJournal(cleanPreflightID);
-      if (journal.phase !== 'confirmation') {
-        throw new ReinstallTargetCoordinatorError('manual_recovery_required', 'This reinstall operation has already started. Review its recovery state before continuing.');
-      }
+      persistedPhase = journal.phase;
       const descriptor = await this.dependencies.resolve_target({ environment_id: journal.environment_id });
       cached = {
         descriptor: { ...descriptor, affected_environment_ids: [...journal.affected_environment_ids] },
@@ -540,15 +550,25 @@ export class ReinstallTargetCoordinator {
       };
       this.preflights.set(cleanPreflightID, cached);
     }
-    if (cached.preview.expires_at_unix_ms < Date.now()) {
-      this.preflights.delete(cleanPreflightID);
-      throw new ReinstallTargetCoordinatorError('preflight_expired', 'Reinstall preflight expired. Review the target again.');
-    }
+    // A confirmed recovery remains executable after Desktop restart. The
+    // journal is durable authority for the operation; its age never revives
+    // old processes and never blocks direct cleanup of the exact target.
     if (compact(operationKey) !== '' && compact(operationKey) !== cached.preview.operation_key) {
       throw new ReinstallTargetCoordinatorError('target_changed', 'The reinstall operation does not match the confirmed target.');
     }
+    if (persistedPhase === 'installation_verifying' || persistedPhase === 'cleanup') {
+      const journal = await this.readJournal(cleanPreflightID);
+      await this.resumeCompletion(cleanPreflightID, (phase) => onProgress?.(phase));
+      return {
+        ...journal,
+        phase: 'cleanup',
+        updated_at_unix_ms: Date.now(),
+      };
+    }
     const current = await this.dependencies.resolve_target({ environment_id: cached.descriptor.environment_id });
-    if (reinstallTargetDescriptorFingerprint(current) !== cached.descriptorFingerprint) {
+    const currentFingerprint = reinstallTargetDescriptorFingerprint(current);
+    const legacyFingerprint = legacyReinstallTargetDescriptorFingerprint(current);
+    if (currentFingerprint !== cached.descriptorFingerprint && legacyFingerprint !== cached.descriptorFingerprint) {
       throw new ReinstallTargetCoordinatorError('target_changed', 'The registered host, container, or runtime root changed after confirmation.');
     }
     onProgress?.('target_locked');
@@ -594,11 +614,19 @@ export class ReinstallTargetCoordinator {
     };
     try {
       executor = this.dependencies.create_executor(current);
-      await validateRegisteredContainer(current, executor);
+      // Container status and old service state are execution details. The
+      // direct channel is the only prerequisite; failures are reported by the
+      // concrete command that needs the target.
+      await validateRegisteredContainer(current, executor).catch((error) => {
+        if (error instanceof ReinstallTargetCoordinatorError && error.code === 'target_changed') {
+          throw error;
+        }
+        return undefined;
+      });
       const repeated = parsePreflightOutput((await executor.run(placementCommand(
         current.placement,
         targetPreflightScript,
-        [current.placement.runtime_root, DEFAULT_DESKTOP_SSH_RUNTIME_ROOT],
+        [current.placement.runtime_root, DEFAULT_DESKTOP_SSH_RUNTIME_ROOT, 'resume'],
       ))).stdout);
       if (!(await confirmedRootMatches(current, cached.preview.target_root, repeated.root, repeated.home))) {
         throw new ReinstallTargetCoordinatorError('target_changed', 'The runtime root changed after confirmation.');
@@ -639,16 +667,29 @@ export class ReinstallTargetCoordinator {
       preparedBatch = await this.dependencies.prepare_packages?.(currentResolved, repeated.root, operationID, (tasks) => {
         onProgress?.('packages_preparing_and_transferring', undefined, tasks);
       }) ?? null;
-      await this.dependencies.mark_in_progress(currentResolved, cached.preview.preflight_id);
-      targetDisruptionStarted = true;
-      await this.dependencies.close_sessions(currentResolved);
+      await this.dependencies.mark_in_progress(currentResolved, cached.preview.preflight_id).catch(() => undefined);
+      await this.dependencies.close_sessions(currentResolved).catch(() => undefined);
       await persistPhase('sessions_closed');
-      const inventory = await this.dependencies.inspect_processes(currentResolved, repeated.root, executor);
-      if (inventory.instances.length > 0) {
-        await persistPhase('redeven_processes_stop_attempted');
-        await this.dependencies.stop_processes(currentResolved, repeated.root, inventory, executor);
+      let inventory: ReinstallTargetProcessInventory | null = null;
+      try {
+        inventory = await this.dependencies.inspect_processes(currentResolved, repeated.root, executor);
+      } catch {
+        // A broken or unidentifiable old process is not a reason to preserve a
+        // broken installation. Continue with the exact-root cleanup.
+      }
+      await persistPhase('redeven_processes_stop_attempted');
+      if (inventory && inventory.instances.length > 0) {
+        try {
+          await this.dependencies.stop_processes(currentResolved, repeated.root, inventory, executor);
+        } catch {
+          // Best-effort stop. The subsequent filesystem operation is the
+          // authority for whether this reinstall can proceed.
+        }
       }
       if (cached.preview.mode === 'wipe_data') {
+        // The move may partially succeed before the command reports an OS
+        // error, so treat this boundary as destructive once it is attempted.
+        targetDisruptionStarted = true;
         await executor.run(placementCommand(currentResolved.placement, isolateTargetScript, [repeated.root, quarantineRoot]));
         isolated = true;
       }
@@ -784,8 +825,11 @@ export class ReinstallTargetCoordinator {
     const journal = await this.readJournal(preflightID);
     const selected = await this.dependencies.resolve_target({ environment_id: journal.environment_id });
     const descriptor = { ...selected, affected_environment_ids: [...journal.affected_environment_ids] };
+    const selectedFingerprint = reinstallTargetDescriptorFingerprint(selected);
+    const selectedLegacyFingerprint = legacyReinstallTargetDescriptorFingerprint(selected);
     if (
-      reinstallTargetDescriptorFingerprint(selected) !== journal.descriptor_fingerprint
+      selectedFingerprint !== journal.descriptor_fingerprint
+      && selectedLegacyFingerprint !== journal.descriptor_fingerprint
     ) {
       throw new ReinstallTargetCoordinatorError('target_changed', 'The reinstall target changed before completion recovery.');
     }
@@ -880,7 +924,9 @@ export class ReinstallTargetCoordinator {
     // Hydration only compares the durable registered identity. The physical
     // root may be a remote alias or an old canonical representation; it is
     // re-resolved through the direct maintenance channel when work resumes.
-    if (reinstallTargetDescriptorFingerprint(descriptor) !== journal.descriptor_fingerprint) {
+    const descriptorFingerprint = reinstallTargetDescriptorFingerprint(descriptor);
+    const legacyFingerprint = legacyReinstallTargetDescriptorFingerprint(descriptor);
+    if (descriptorFingerprint !== journal.descriptor_fingerprint && legacyFingerprint !== journal.descriptor_fingerprint) {
       throw new ReinstallTargetCoordinatorError(
         'manual_recovery_required',
         'The registered host, container, or Redeven root changed while this reinstall was paused.',

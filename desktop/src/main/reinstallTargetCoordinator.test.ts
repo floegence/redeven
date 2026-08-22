@@ -261,7 +261,7 @@ describe('ReinstallTargetCoordinator', () => {
     expect(markerAttempts).toBe(2);
   });
 
-  it('fails closed for symlinks, broad roots, old quarantine, and changed targets', async () => {
+  it('fails closed for unsafe roots while allowing old quarantine recovery', async () => {
     const parent = await temporaryRoot();
     const realRoot = path.join(parent, 'real');
     const symlinkRoot = path.join(parent, 'linked');
@@ -282,7 +282,8 @@ describe('ReinstallTargetCoordinator', () => {
     await fs.mkdir(`${targetRoot}.redeven-quarantine-previous`);
     current = descriptor(targetRoot);
     const oldQuarantinePreview = await coordinator.preview({ environment_id: current.environment_id });
-    await expect(coordinator.execute(oldQuarantinePreview.preflight_id)).rejects.toBeInstanceOf(Error);
+    await expect(coordinator.execute(oldQuarantinePreview.preflight_id)).resolves.toBeDefined();
+    await expect(fs.lstat(`${targetRoot}.redeven-quarantine-previous`)).resolves.toBeDefined();
     await fs.rm(`${targetRoot}.redeven-quarantine-previous`, { recursive: true });
 
     const preview = await coordinator.preview({ environment_id: current.environment_id });
