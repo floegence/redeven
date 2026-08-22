@@ -91,7 +91,11 @@ describe('main routing', () => {
     const freshInstallStart = mainSrc.indexOf('async function installFreshDirectReinstallTarget(');
     const freshInstallEnd = mainSrc.indexOf('async function verifyFreshDirectReinstallTarget(', freshInstallStart);
     const freshInstallSrc = mainSrc.slice(freshInstallStart, freshInstallEnd);
-    expect(freshInstallSrc).toContain('ensureManagedGatewayServiceReady(serviceOptions)');
+    expect(freshInstallSrc).toContain('activateManagedComponentBatch(');
+    expect(freshInstallSrc).toContain('startManagedComponentBatch(');
+    expect(freshInstallSrc).not.toContain('ensureManagedGatewayServiceReady(');
+    expect(freshInstallSrc).not.toContain('ensureRuntimePlacementReady(');
+    expect(freshInstallSrc).not.toContain('ensureManagedSSHRuntimeReady(');
     expect(freshInstallSrc).not.toContain('gatewayLifecycleManager()');
     expect(freshInstallSrc).not.toContain('startManagedRuntime({');
     expect(freshInstallSrc).not.toContain('syncGatewayRecord(');
@@ -843,7 +847,7 @@ describe('main routing', () => {
     expect(mainSrc.slice(
       mainSrc.indexOf('async function installFreshDirectReinstallTarget('),
       mainSrc.indexOf('async function verifyFreshDirectReinstallTarget('),
-    )).toContain('ensureManagedSSHRuntimeReady({');
+    )).not.toContain('ensureManagedSSHRuntimeReady({');
 
     const openSSHStart = mainSrc.indexOf('async function openSSHEnvironmentFromLauncher(');
     const openSSHEnd = mainSrc.indexOf('function thrownLauncherActionFailure(', openSSHStart);

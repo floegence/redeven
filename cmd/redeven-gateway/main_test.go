@@ -117,6 +117,7 @@ func TestGatewayServiceServeArgsPropagatesPrecompiledRuntimeManifest(t *testing.
 		"/tmp/redeven-runtime",
 		"/Applications/Redeven.app/Contents/Resources/bin/desktop-bundle-manifest.json",
 		"localhost:32140",
+		"", "", "", "",
 		"127.0.0.1:0",
 	)
 	joined := strings.Join(args, "\x00")
@@ -129,14 +130,14 @@ func TestGatewayServiceServeArgsPropagatesPrecompiledRuntimeManifest(t *testing.
 }
 
 func TestGatewayServiceServeArgsOmitsEmptyPrecompiledRuntimeManifest(t *testing.T) {
-	args := gatewayServiceServeArgs("managed_environment", "/tmp/state", "/tmp/runtime", "  ", "", "127.0.0.1:0")
+	args := gatewayServiceServeArgs("managed_environment", "/tmp/state", "/tmp/runtime", "  ", "", "", "", "", "", "127.0.0.1:0")
 	if strings.Contains(strings.Join(args, "\x00"), "precompiled-runtime-manifest") {
 		t.Fatalf("service-start child args contain an empty precompiled Runtime manifest: %#v", args)
 	}
 }
 
 func TestGatewayServiceServeArgsStandaloneOmitsRuntimeFlags(t *testing.T) {
-	args := gatewayServiceServeArgs("standalone", "/tmp/state", "", "", "", "127.0.0.1:0")
+	args := gatewayServiceServeArgs("standalone", "/tmp/state", "", "", "", "", "", "", "", "127.0.0.1:0")
 	joined := strings.Join(args, "\x00")
 	if !strings.Contains(joined, "--mode\x00standalone") {
 		t.Fatalf("standalone child args omit mode: %#v", args)
@@ -164,7 +165,7 @@ func TestStandaloneGatewayServiceDoesNotCreateRuntimeState(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	exitCode := (&cli{stdin: strings.NewReader(""), stdout: &stdout, stderr: &stderr}).runGatewayService(
-		ctx, "standalone", stateRoot, "", "", "", "127.0.0.1:0", false, false, false, false, "", "",
+		ctx, "standalone", stateRoot, "", "", "", "", "", "", "", "127.0.0.1:0", false, false, false, false, "", "",
 	)
 	if exitCode != 0 {
 		t.Fatalf("standalone service exit = %d stderr=%q", exitCode, stderr.String())

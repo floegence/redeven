@@ -1336,6 +1336,7 @@
     "reinstallTargetTitle": "이 환경을 재설치할까요?",
     "reinstallTargetConfirm": "Redeven 재설치",
     "reinstallTargetDescription": "등록된 Redeven 환경 전체를 영구적으로 삭제합니다. Gateway, 런타임, 작업 공간, 프로젝트, 앱 데이터, Floret 및 ReDevPlugin 데이터, 신뢰 정보, ID, Catalog, 환경 설정이 모두 포함됩니다. 이 작업은 되돌릴 수 없습니다.",
+    "reinstallTargetPreserveDescription": "관리되는 Gateway 및 런타임 바이너리만 교체합니다. 작업 공간, 프로젝트, 앱 데이터, Floret 및 ReDevPlugin 데이터, 신뢰 정보, ID, Catalog, 환경 설정은 유지됩니다. 호환되지 않는 스키마, 신뢰 정보 또는 기록 데이터는 복구하지 않습니다.",
     "reinstallRequiredDescription": "이 환경에는 호환되지 않는 상태가 있습니다. 안전하게 복구하는 유일한 방법은 재설치입니다.",
     "reinstallTargetHost": "호스트: {host}",
     "reinstallTargetContainer": "컨테이너: {container}",
@@ -1555,7 +1556,9 @@
     "initializeAndOpen": "초기화하고 열기",
     "startAndOpen": "시작하고 열기",
     "requestAccess": "액세스 요청",
-    "retryInitialization": "초기화 다시 시도"
+    "retryInitialization": "초기화 다시 시도",
+    "reinstallRedevenWipeData": "데이터를 삭제하고 Redeven 재설치",
+    "reinstallRedevenKeepData": "데이터를 보존하고 Redeven 재설치"
   },
   "environmentFacts": {
     "runsOn": "실행 위치",
@@ -1706,7 +1709,13 @@
       "fresh_identity_verified": "새 ID를 확인하는 중",
       "catalog_and_local_ui_verified": "Catalog 및 Local UI를 확인하는 중",
       "quarantine_cleaned": "격리한 이전 데이터를 삭제하는 중",
-      "completed": "재설치 완료"
+      "completed": "재설치 완료",
+      "maintenance_helper_ready": "유지 관리 도우미 준비 중",
+      "packages_preparing_and_transferring": "패키지 준비 및 전송 중",
+      "redeven_processes_stop_attempted": "Redeven 프로세스 중지 중",
+      "packages_applying": "패키지 배치 적용 중",
+      "installation_verifying": "설치 확인 중",
+      "cleanup": "격리된 데이터 정리 중"
     },
     "failed": "실패",
     "canceled": "취소됨",
@@ -1912,7 +1921,16 @@
     "environmentOpenLocalTransportDetail": "Desktop의 보호된 로컬 연결을 통해 사용 가능한 Env App 페이지가 반환되지 않았습니다.",
     "environmentOpenLocalTransportRecoveryHint": "런타임을 다시 시작한 다음 다시 시도하세요. VPN, Tailscale 및 프록시 소프트웨어는 활성화된 상태로 두어도 됩니다.",
     "workspaceEnginePrepareFailedTitle": "작업 공간 엔진 준비 실패",
-    "workspaceEnginePrepareFailedSummary": "Desktop에서 “{target}”의 작업 공간 엔진을 준비하지 못했습니다."
+    "workspaceEnginePrepareFailedSummary": "Desktop에서 “{target}”의 작업 공간 엔진을 준비하지 못했습니다.",
+    "reinstallPackagesPreparingDetail": "Desktop이 Gateway와 런타임 패키지를 함께 준비하고 전송하고 있습니다.",
+    "reinstallPackagesApplyingDetail": "Desktop이 검증된 Gateway 및 런타임 패키지 배치를 적용하고 있습니다.",
+    "componentTasks": "구성 요소 설치 진행",
+    "componentPhase": {
+      "preparing": "준비 중",
+      "transferring": "전송 중",
+      "verifying": "확인 중",
+      "ready": "준비 완료"
+    }
   },
   "runtimeMessage": {
     "runtimeOfflineRefresh": "현재 런타임이 오프라인이거나 사용할 수 없습니다. 소스에서 시작한 다음 상태를 새로 고칩니다.",

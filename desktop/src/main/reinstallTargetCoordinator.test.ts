@@ -96,12 +96,12 @@ describe('ReinstallTargetCoordinator', () => {
     const coordinator = new ReinstallTargetCoordinator(coordinatorDependencies(journalRoot, () => current, events));
 
     const preview = await coordinator.preview({ environment_id: current.environment_id });
-    expect(preview.target_exists).toBe(true);
+    expect(preview.target_exists_known).toBe(false);
+    expect(preview.target_exists).toBe(false);
     expect(preview.affected_environment_ids).toEqual(['env-alias', 'env-local']);
 
     const journal = await coordinator.execute(preview.preflight_id);
     expect(events).toEqual([
-      'inventory',
       'mark_in_progress',
       'close_sessions',
       'inventory',
@@ -129,6 +129,7 @@ describe('ReinstallTargetCoordinator', () => {
     ));
 
     const preview = await coordinator.preview({ environment_id: current.environment_id });
+    expect(preview.target_exists_known).toBe(false);
     expect(preview.target_exists).toBe(false);
     const journal = await coordinator.execute(preview.preflight_id);
     expect(journal.target_existed).toBe(false);
@@ -248,16 +249,19 @@ describe('ReinstallTargetCoordinator', () => {
     const events: string[] = [];
     let current = descriptor(symlinkRoot);
     const coordinator = new ReinstallTargetCoordinator(coordinatorDependencies(path.join(parent, 'journal'), () => current, events));
-    await expect(coordinator.preview({ environment_id: current.environment_id })).rejects.toBeInstanceOf(Error);
+    const symlinkPreview = await coordinator.preview({ environment_id: current.environment_id });
+    await expect(coordinator.execute(symlinkPreview.preflight_id)).rejects.toBeInstanceOf(Error);
 
     current = descriptor(path.parse(parent).root);
-    await expect(coordinator.preview({ environment_id: current.environment_id })).rejects.toBeInstanceOf(Error);
+    const broadPreview = await coordinator.preview({ environment_id: current.environment_id });
+    await expect(coordinator.execute(broadPreview.preflight_id)).rejects.toBeInstanceOf(Error);
 
     const targetRoot = path.join(parent, 'managed');
     await fs.mkdir(targetRoot);
     await fs.mkdir(`${targetRoot}.redeven-quarantine-previous`);
     current = descriptor(targetRoot);
-    await expect(coordinator.preview({ environment_id: current.environment_id })).rejects.toBeInstanceOf(Error);
+    const oldQuarantinePreview = await coordinator.preview({ environment_id: current.environment_id });
+    await expect(coordinator.execute(oldQuarantinePreview.preflight_id)).rejects.toBeInstanceOf(Error);
     await fs.rm(`${targetRoot}.redeven-quarantine-previous`, { recursive: true });
 
     const preview = await coordinator.preview({ environment_id: current.environment_id });
@@ -265,7 +269,7 @@ describe('ReinstallTargetCoordinator', () => {
     await expect(coordinator.execute(preview.preflight_id)).rejects.toBeInstanceOf(ReinstallTargetCoordinatorError);
   });
 
-  it('blocks an ambiguous Redeven inventory before closing sessions', async () => {
+  it('does not block confirmation for an ambiguous Redeven inventory', async () => {
     const parent = await temporaryRoot();
     const targetRoot = path.join(parent, 'managed');
     await fs.mkdir(targetRoot);
@@ -287,10 +291,9 @@ describe('ReinstallTargetCoordinator', () => {
         summary: { automatic: 0, blocked: 1 },
       })),
     });
-    await expect(coordinator.preview({ environment_id: current.environment_id })).rejects.toMatchObject({
-      code: 'reinstall_blocked',
-    });
-    expect(events).not.toContain('close_sessions');
+    const preview = await coordinator.preview({ environment_id: current.environment_id });
+    await expect(coordinator.execute(preview.preflight_id)).resolves.toBeDefined();
+    expect(events).toContain('close_sessions');
   });
 
   it('groups every Desktop record that resolves to the same canonical physical root', async () => {
@@ -317,13 +320,13 @@ describe('ReinstallTargetCoordinator', () => {
     });
 
     const preview = await coordinator.preview({ environment_id: selected.environment_id });
-    expect(preview.target_root).toBe(await fs.realpath(targetRoot));
+    expect(preview.target_root).toBe(targetRoot);
     expect(preview.affected_environment_ids).toEqual(['env-alias', 'env-selected']);
     const journal = await coordinator.execute(preview.preflight_id);
     expect(journal.affected_environment_ids).toEqual(['env-alias', 'env-selected']);
   });
 
-  it('routes Local, SSH host, local container, and SSH container through their direct executors', async () => {
+  it('does not connect any target before confirmation for every direct target kind', async () => {
     const parent = await temporaryRoot();
     const containerID = 'c'.repeat(64);
     const variants: readonly ReinstallTargetDescriptor[] = [{
@@ -423,15 +426,7 @@ describe('ReinstallTargetCoordinator', () => {
       const preview = await coordinator.preview({ environment_id: target.environment_id });
       expect(preview.target_kind).toBe(expectedKinds[variantIndex]);
       variantIndex++;
-      const targetCommands = commands.get(target.environment_id)!;
-      if (target.placement.kind === 'container_process') {
-        expect(targetCommands[0]).toEqual(['docker', 'inspect', containerID]);
-        expect(targetCommands[1]?.slice(0, 4)).toEqual(['docker', 'exec', '-i', containerID]);
-        expect(targetCommands).toHaveLength(3);
-      } else {
-        expect(targetCommands).toHaveLength(2);
-        expect(targetCommands[0]?.[0]).toBe('sh');
-      }
+      expect(commands.has(target.environment_id)).toBe(false);
     }
   });
 });

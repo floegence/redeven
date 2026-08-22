@@ -1038,4 +1038,31 @@ describe('desktopLauncherIPC', () => {
     expect(progress.lifecycle_progress).toBeUndefined();
     expect(progress.open_progress).toEqual(openProgress);
   });
+
+  it('preserves the selected reinstall mode across the renderer IPC boundary', () => {
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'preview_reinstall_target',
+      environment_id: 'container-env',
+      mode: 'preserve_data',
+    })).toEqual({
+      kind: 'preview_reinstall_target',
+      environment_id: 'container-env',
+      mode: 'preserve_data',
+    });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'reinstall_target',
+      environment_id: 'container-env',
+      preflight_id: 'reinstall_00000000-0000-4000-8000-000000000000',
+      operation_key: 'reinstall-target:test',
+      mode: 'preserve_data',
+      impact_acknowledged: true,
+    })).toEqual({
+      kind: 'reinstall_target',
+      environment_id: 'container-env',
+      preflight_id: 'reinstall_00000000-0000-4000-8000-000000000000',
+      operation_key: 'reinstall-target:test',
+      mode: 'preserve_data',
+      impact_acknowledged: true,
+    });
+  });
 });

@@ -31,6 +31,11 @@ function percentFromStepProgress(
 
   const completedSteps = steps.filter((step) => step.status === 'succeeded').length;
   const activeStep = steps.find((step) => step.id === progress?.active_step_id);
+  if (activeStep?.tasks && activeStep.tasks.length > 0) {
+    const completedTasks = activeStep.tasks.filter((task) => task.status === 'succeeded').length;
+    const activeTaskContribution = activeStep.tasks.some((task) => task.status === 'running') ? 0.35 : 0;
+    return clampPercent(Math.round(((completedSteps + (completedTasks + activeTaskContribution) / activeStep.tasks.length) / steps.length) * 100));
+  }
   const activeContribution = activeStep && (activeStep.status === 'running' || activeStep.status === 'canceled')
     ? 0.35
     : 0;

@@ -1336,6 +1336,7 @@
     "reinstallTargetTitle": "この環境を再インストールしますか？",
     "reinstallTargetConfirm": "Redeven を再インストール",
     "reinstallTargetDescription": "登録済みの Redeven 環境全体（Gateway、ランタイム、ワークスペース、プロジェクト、アプリデータ、Floret と ReDevPlugin のデータ、信頼情報、ID、Catalog、環境設定）を完全に削除します。この操作は元に戻せません。",
+    "reinstallTargetPreserveDescription": "管理対象の Gateway とランタイムのバイナリのみを置き換えます。ワークスペース、プロジェクト、アプリデータ、Floret と ReDevPlugin のデータ、信頼情報、ID、Catalog、環境設定は保持されます。互換性のないスキーマ、信頼情報、履歴データは修復されません。",
     "reinstallRequiredDescription": "この環境には互換性のない状態があります。安全に復旧する唯一の方法は再インストールです。",
     "reinstallTargetHost": "ホスト：{host}",
     "reinstallTargetContainer": "コンテナ：{container}",
@@ -1555,7 +1556,9 @@
     "initializeAndOpen": "初期化して開く",
     "startAndOpen": "起動して開く",
     "requestAccess": "アクセスをリクエスト",
-    "retryInitialization": "初期化を再試行"
+    "retryInitialization": "初期化を再試行",
+    "reinstallRedevenWipeData": "データを消去して Redeven を再インストール",
+    "reinstallRedevenKeepData": "データを保持して Redeven を再インストール"
   },
   "environmentFacts": {
     "runsOn": "実行先",
@@ -1706,7 +1709,13 @@
       "fresh_identity_verified": "新しい ID を確認しています",
       "catalog_and_local_ui_verified": "Catalog と Local UI を確認しています",
       "quarantine_cleaned": "隔離した古いデータを削除しています",
-      "completed": "再インストールが完了しました"
+      "completed": "再インストールが完了しました",
+      "maintenance_helper_ready": "メンテナンスヘルパーを準備中",
+      "packages_preparing_and_transferring": "パッケージを準備・転送中",
+      "redeven_processes_stop_attempted": "Redeven プロセスを停止中",
+      "packages_applying": "パッケージバッチを適用中",
+      "installation_verifying": "インストールを検証中",
+      "cleanup": "隔離データをクリーンアップ中"
     },
     "failed": "失敗",
     "canceled": "キャンセル済み",
@@ -1912,7 +1921,16 @@
     "environmentOpenLocalTransportDetail": "Desktop の保護されたローカル接続から、使用可能な Env App ページを取得できませんでした。",
     "environmentOpenLocalTransportRecoveryHint": "ランタイムを再起動してから、もう一度お試しください。VPN、Tailscale、プロキシソフトウェアは有効のままで構いません。",
     "workspaceEnginePrepareFailedTitle": "ワークスペースエンジンの準備に失敗しました",
-    "workspaceEnginePrepareFailedSummary": "Desktop は「{target}」のワークスペースエンジンを準備できませんでした。"
+    "workspaceEnginePrepareFailedSummary": "Desktop は「{target}」のワークスペースエンジンを準備できませんでした。",
+    "reinstallPackagesPreparingDetail": "Desktop は Gateway とランタイムのパッケージを同時に準備して転送しています。",
+    "reinstallPackagesApplyingDetail": "Desktop は検証済みの Gateway とランタイムパッケージを適用しています。",
+    "componentTasks": "コンポーネントインストールの進行状況",
+    "componentPhase": {
+      "preparing": "準備中",
+      "transferring": "転送中",
+      "verifying": "検証中",
+      "ready": "準備完了"
+    }
   },
   "runtimeMessage": {
     "runtimeOfflineRefresh": "ランタイムは現在オフラインか使用できません。ソースから起動してステータスを更新します。",

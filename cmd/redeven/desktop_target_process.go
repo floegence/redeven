@@ -17,7 +17,7 @@ func desktopTargetProcessInventoryHelpText() string {
 }
 
 func desktopTargetProcessStopHelpText() string {
-	return "redeven desktop-target-process-stop --target-root <path> --expected-inventory-digest <sha256> [--grace-period 5s]\n"
+	return "redeven desktop-target-process-stop --target-root <path> [--expected-inventory-digest <sha256>] [--best-effort] [--grace-period 5s]\n"
 }
 
 func (c *cli) desktopTargetProcessInventoryCmd(args []string) int {
@@ -51,6 +51,7 @@ func (c *cli) desktopTargetProcessStopCmd(args []string) int {
 	fs := newCLIFlagSet("desktop-target-process-stop")
 	targetRoot := fs.String("target-root", "", "Exact Redeven-owned target root.")
 	expectedDigest := fs.String("expected-inventory-digest", "", "Expected process inventory digest.")
+	bestEffort := fs.Bool("best-effort", false, "Attempt only positively identified Redeven processes and ignore incomplete identities.")
 	gracePeriod := fs.Duration("grace-period", 5*time.Second, "Time to wait after SIGTERM before identity-checked SIGKILL.")
 	if err := parseCommandFlags(fs, args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -60,16 +61,17 @@ func (c *cli) desktopTargetProcessStopCmd(args []string) int {
 		writeErrorWithHelp(c.stderr, err.Error(), nil, desktopTargetProcessStopHelpText())
 		return 2
 	}
-	if fs.NArg() != 0 || strings.TrimSpace(*expectedDigest) == "" {
+	if fs.NArg() != 0 || (!*bestEffort && strings.TrimSpace(*expectedDigest) == "") {
 		writeErrorWithHelp(c.stderr, "target root and expected inventory digest are required", nil, desktopTargetProcessStopHelpText())
 		return 2
 	}
-	result, err := runtimemanagement.StopTargetProcesses(
-		context.Background(),
-		runtimemanagement.TargetProcessOptions{TargetRoot: *targetRoot},
-		*expectedDigest,
-		*gracePeriod,
-	)
+	var result runtimemanagement.TargetProcessStopResult
+	var err error
+	if *bestEffort {
+		result, err = runtimemanagement.StopTargetProcessesBestEffort(context.Background(), runtimemanagement.TargetProcessOptions{TargetRoot: *targetRoot}, *gracePeriod)
+	} else {
+		result, err = runtimemanagement.StopTargetProcesses(context.Background(), runtimemanagement.TargetProcessOptions{TargetRoot: *targetRoot}, *expectedDigest, *gracePeriod)
+	}
 	if err != nil {
 		writeRuntimeProcessJSONError(c.stdout, err)
 		return 1

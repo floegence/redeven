@@ -1336,6 +1336,7 @@
     "reinstallTargetTitle": "Réinstaller cet environnement ?",
     "reinstallTargetConfirm": "Réinstaller Redeven",
     "reinstallTargetDescription": "Cette opération supprime définitivement l’intégralité de l’environnement Redeven enregistré, notamment Gateway, le moteur d’exécution, les espaces de travail, les projets, les données d’application, les données Floret et ReDevPlugin, la confiance, l’identité, le catalogue et la configuration de l’environnement. Elle est irréversible.",
+    "reinstallTargetPreserveDescription": "Cette opération remplace uniquement les binaires gérés de Gateway et du moteur d’exécution. Les espaces de travail, projets, données d’application, données Floret et ReDevPlugin, informations de confiance, identité, catalogue et paramètres d’environnement sont conservés. Elle ne répare pas les schémas, informations de confiance ou données historiques incompatibles.",
     "reinstallRequiredDescription": "Cet environnement contient un état incompatible. La réinstallation est la seule récupération sûre.",
     "reinstallTargetHost": "Hôte : {host}",
     "reinstallTargetContainer": "Conteneur : {container}",
@@ -1559,7 +1560,9 @@
     "initializeAndOpen": "Initialiser et ouvrir",
     "startAndOpen": "Démarrer et ouvrir",
     "requestAccess": "Demander l’accès",
-    "retryInitialization": "Réessayer l’initialisation"
+    "retryInitialization": "Réessayer l’initialisation",
+    "reinstallRedevenWipeData": "Effacer les données et réinstaller Redeven",
+    "reinstallRedevenKeepData": "Réinstaller Redeven en conservant les données"
   },
   "environmentFacts": {
     "runsOn": "S’exécute sur",
@@ -1710,7 +1713,13 @@
       "fresh_identity_verified": "Vérification de la nouvelle identité",
       "catalog_and_local_ui_verified": "Vérification de Catalog et de Local UI",
       "quarantine_cleaned": "Suppression des anciennes données isolées",
-      "completed": "Réinstallation terminée"
+      "completed": "Réinstallation terminée",
+      "maintenance_helper_ready": "Préparation de l’assistant de maintenance",
+      "packages_preparing_and_transferring": "Préparation et transfert des paquets",
+      "redeven_processes_stop_attempted": "Arrêt des processus Redeven",
+      "packages_applying": "Application du lot de paquets",
+      "installation_verifying": "Vérification de l’installation",
+      "cleanup": "Nettoyage des données isolées"
     },
     "failed": "Échec",
     "canceled": "Annulé",
@@ -1916,7 +1925,16 @@
     "environmentOpenLocalTransportDetail": "La connexion locale protégée de Desktop n’a pas renvoyé de page Env App utilisable.",
     "environmentOpenLocalTransportRecoveryHint": "Redémarrez l’environnement d’exécution, puis réessayez. Vous pouvez laisser le VPN, Tailscale et le logiciel de proxy activés.",
     "workspaceEnginePrepareFailedTitle": "Échec de la préparation du moteur d’espace de travail",
-    "workspaceEnginePrepareFailedSummary": "Desktop n’a pas pu préparer le moteur d’espace de travail pour « {target} »."
+    "workspaceEnginePrepareFailedSummary": "Desktop n’a pas pu préparer le moteur d’espace de travail pour « {target} ».",
+    "reinstallPackagesPreparingDetail": "Desktop prépare et transfère ensemble les paquets Gateway et d’environnement d’exécution.",
+    "reinstallPackagesApplyingDetail": "Desktop applique le lot vérifié des paquets Gateway et d’environnement d’exécution.",
+    "componentTasks": "Progression de l’installation des composants",
+    "componentPhase": {
+      "preparing": "Préparation",
+      "transferring": "Transfert",
+      "verifying": "Vérification",
+      "ready": "Prêt"
+    }
   },
   "runtimeMessage": {
     "runtimeOfflineRefresh": "est hors ligne ou indisponible pour le moment. Démarrez-le à partir de sa source, puis actualisez l'état.",

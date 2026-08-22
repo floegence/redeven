@@ -35,6 +35,32 @@ var (
 
 const managedDesktopBridgeEnv = "REDEVEN_GATEWAY_MANAGED_DESKTOP_BRIDGE"
 
+func activatedRuntimeStartupConfigured(operationID, version, commit, sha256 string) (bool, error) {
+	values := []string{operationID, version, commit, sha256}
+	configured := 0
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			configured++
+		}
+	}
+	if configured == 0 {
+		return false, nil
+	}
+	if configured != len(values) {
+		return false, errors.New("activated Runtime startup requires operation ID, version, commit, and SHA-256")
+	}
+	digest := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(sha256)), "sha256:")
+	if len(digest) != 64 {
+		return false, errors.New("activated Runtime SHA-256 is invalid")
+	}
+	for _, char := range digest {
+		if !strings.ContainsRune("0123456789abcdef", char) {
+			return false, errors.New("activated Runtime SHA-256 is invalid")
+		}
+	}
+	return true, nil
+}
+
 type cli struct {
 	stdin  io.Reader
 	stdout io.Writer
@@ -192,6 +218,10 @@ func (c *cli) serveCmd(args []string) int {
 	runtimeRoot := fs.String("runtime-root", "", "Target Runtime root managed by this Gateway supervisor.")
 	precompiledRuntimeManifest := fs.String("precompiled-runtime-manifest", "", "Validated Desktop bundle manifest used for automatic Runtime startup.")
 	precompiledRuntimeLocalUIBind := fs.String("precompiled-runtime-local-ui-bind", "", "Loopback Local UI bind for the automatically started Runtime.")
+	activatedRuntimeOperationID := fs.String("activated-runtime-operation-id", "", "Reinstall operation that activated the managed Runtime slot.")
+	activatedRuntimeVersion := fs.String("activated-runtime-version", "", "Version of the activated managed Runtime.")
+	activatedRuntimeCommit := fs.String("activated-runtime-commit", "", "Commit of the activated managed Runtime.")
+	activatedRuntimeSHA256 := fs.String("activated-runtime-sha256", "", "SHA-256 of the activated managed Runtime executable.")
 	listen := fs.String("listen", "127.0.0.1:0", "Gateway listen address.")
 	allowPrivateProfileTargets := fs.Bool("allow-private-profile-targets", false, "Allow URL profile targets on private networks.")
 	enableProfileWrite := fs.Bool("enable-profile-write", false, "Allow paired clients to create, edit, and delete Gateway environment profiles.")
@@ -213,8 +243,17 @@ func (c *cli) serveCmd(args []string) int {
 		writeError(c.stderr, "serve failed: --mode must be managed_environment or standalone")
 		return 2
 	}
-	if modeValue == "standalone" && (strings.TrimSpace(*runtimeRoot) != "" || strings.TrimSpace(*precompiledRuntimeManifest) != "" || strings.TrimSpace(*precompiledRuntimeLocalUIBind) != "") {
+	activatedRuntimeConfigured, activatedRuntimeErr := activatedRuntimeStartupConfigured(*activatedRuntimeOperationID, *activatedRuntimeVersion, *activatedRuntimeCommit, *activatedRuntimeSHA256)
+	if activatedRuntimeErr != nil {
+		writeError(c.stderr, fmt.Sprintf("serve failed: %v", activatedRuntimeErr))
+		return 2
+	}
+	if modeValue == "standalone" && (strings.TrimSpace(*runtimeRoot) != "" || strings.TrimSpace(*precompiledRuntimeManifest) != "" || strings.TrimSpace(*precompiledRuntimeLocalUIBind) != "" || activatedRuntimeConfigured) {
 		writeError(c.stderr, "serve failed: standalone mode cannot configure a Runtime root or precompiled Runtime")
+		return 2
+	}
+	if activatedRuntimeConfigured && strings.TrimSpace(*precompiledRuntimeManifest) != "" {
+		writeError(c.stderr, "serve failed: activated Runtime startup cannot be combined with precompiled Runtime convergence")
 		return 2
 	}
 	ctx, stop := signalContext()
@@ -228,7 +267,7 @@ func (c *cli) serveCmd(args []string) int {
 			return 1
 		}
 	}
-	return c.runGatewayService(ctx, modeValue, stateRootValue, normalizeRuntimeRoot(*runtimeRoot), *precompiledRuntimeManifest, *precompiledRuntimeLocalUIBind, *listen, managedDesktopBridgeService(), true, *allowPrivateProfileTargets, *enableProfileWrite, *pairingCode, managedBridgeToken)
+	return c.runGatewayService(ctx, modeValue, stateRootValue, normalizeRuntimeRoot(*runtimeRoot), *precompiledRuntimeManifest, *precompiledRuntimeLocalUIBind, *activatedRuntimeOperationID, *activatedRuntimeVersion, *activatedRuntimeCommit, *activatedRuntimeSHA256, *listen, managedDesktopBridgeService(), true, *allowPrivateProfileTargets, *enableProfileWrite, *pairingCode, managedBridgeToken)
 }
 
 func (c *cli) desktopBridgeCmd(args []string) int {
@@ -321,6 +360,10 @@ func (c *cli) serviceStartCmd(args []string) int {
 	runtimeRoot := fs.String("runtime-root", "", "Target Runtime root managed by this Gateway supervisor.")
 	precompiledRuntimeManifest := fs.String("precompiled-runtime-manifest", "", "Validated Desktop bundle manifest used for automatic Runtime startup.")
 	precompiledRuntimeLocalUIBind := fs.String("precompiled-runtime-local-ui-bind", "", "Loopback Local UI bind for the automatically started Runtime.")
+	activatedRuntimeOperationID := fs.String("activated-runtime-operation-id", "", "Reinstall operation that activated the managed Runtime slot.")
+	activatedRuntimeVersion := fs.String("activated-runtime-version", "", "Version of the activated managed Runtime.")
+	activatedRuntimeCommit := fs.String("activated-runtime-commit", "", "Commit of the activated managed Runtime.")
+	activatedRuntimeSHA256 := fs.String("activated-runtime-sha256", "", "SHA-256 of the activated managed Runtime executable.")
 	listen := fs.String("listen", "127.0.0.1:0", "Gateway listen address.")
 	allowPrivateProfileTargets := fs.Bool("allow-private-profile-targets", false, "Allow URL profile targets on private networks.")
 	enableProfileWrite := fs.Bool("enable-profile-write", true, "Allow paired clients to create, edit, and delete Gateway environment profiles.")
@@ -338,8 +381,17 @@ func (c *cli) serviceStartCmd(args []string) int {
 		writeError(c.stderr, "service-start failed: --mode must be managed_environment or standalone")
 		return 2
 	}
-	if modeValue == "standalone" && (strings.TrimSpace(*runtimeRoot) != "" || strings.TrimSpace(*precompiledRuntimeManifest) != "" || strings.TrimSpace(*precompiledRuntimeLocalUIBind) != "") {
+	activatedRuntimeConfigured, activatedRuntimeErr := activatedRuntimeStartupConfigured(*activatedRuntimeOperationID, *activatedRuntimeVersion, *activatedRuntimeCommit, *activatedRuntimeSHA256)
+	if activatedRuntimeErr != nil {
+		writeError(c.stderr, fmt.Sprintf("service-start failed: %v", activatedRuntimeErr))
+		return 2
+	}
+	if modeValue == "standalone" && (strings.TrimSpace(*runtimeRoot) != "" || strings.TrimSpace(*precompiledRuntimeManifest) != "" || strings.TrimSpace(*precompiledRuntimeLocalUIBind) != "" || activatedRuntimeConfigured) {
 		writeError(c.stderr, "service-start failed: standalone mode cannot configure a Runtime root or precompiled Runtime")
+		return 2
+	}
+	if activatedRuntimeConfigured && strings.TrimSpace(*precompiledRuntimeManifest) != "" {
+		writeError(c.stderr, "service-start failed: activated Runtime startup cannot be combined with precompiled Runtime convergence")
 		return 2
 	}
 	if status := readServiceStatus(stateRootValue); status.Status == "running" {
@@ -366,7 +418,7 @@ func (c *cli) serviceStartCmd(args []string) int {
 		return 1
 	}
 	defer logFile.Close()
-	cmdArgs := gatewayServiceServeArgs(modeValue, stateRootValue, normalizeRuntimeRoot(*runtimeRoot), strings.TrimSpace(*precompiledRuntimeManifest), strings.TrimSpace(*precompiledRuntimeLocalUIBind), strings.TrimSpace(*listen))
+	cmdArgs := gatewayServiceServeArgs(modeValue, stateRootValue, normalizeRuntimeRoot(*runtimeRoot), strings.TrimSpace(*precompiledRuntimeManifest), strings.TrimSpace(*precompiledRuntimeLocalUIBind), strings.TrimSpace(*activatedRuntimeOperationID), strings.TrimSpace(*activatedRuntimeVersion), strings.TrimSpace(*activatedRuntimeCommit), strings.TrimSpace(*activatedRuntimeSHA256), strings.TrimSpace(*listen))
 	if *allowPrivateProfileTargets {
 		cmdArgs = append(cmdArgs, "--allow-private-profile-targets")
 	}
@@ -393,7 +445,7 @@ func (c *cli) serviceStartCmd(args []string) int {
 	return 0
 }
 
-func gatewayServiceServeArgs(mode string, stateRoot string, runtimeRoot string, precompiledRuntimeManifest string, precompiledRuntimeLocalUIBind string, listen string) []string {
+func gatewayServiceServeArgs(mode string, stateRoot string, runtimeRoot string, precompiledRuntimeManifest string, precompiledRuntimeLocalUIBind string, activatedRuntimeOperationID string, activatedRuntimeVersion string, activatedRuntimeCommit string, activatedRuntimeSHA256 string, listen string) []string {
 	args := []string{"serve", "--mode", mode, "--state-root", stateRoot, "--listen", listen}
 	if strings.TrimSpace(mode) != "standalone" {
 		args = append(args, "--runtime-root", runtimeRoot)
@@ -403,6 +455,9 @@ func gatewayServiceServeArgs(mode string, stateRoot string, runtimeRoot string, 
 	}
 	if localUIBind := strings.TrimSpace(precompiledRuntimeLocalUIBind); localUIBind != "" {
 		args = append(args, "--precompiled-runtime-local-ui-bind", localUIBind)
+	}
+	if operationID := strings.TrimSpace(activatedRuntimeOperationID); operationID != "" {
+		args = append(args, "--activated-runtime-operation-id", operationID, "--activated-runtime-version", strings.TrimSpace(activatedRuntimeVersion), "--activated-runtime-commit", strings.TrimSpace(activatedRuntimeCommit), "--activated-runtime-sha256", strings.TrimSpace(activatedRuntimeSHA256))
 	}
 	return args
 }
@@ -491,7 +546,7 @@ func gatewayServiceStopped(stateRoot string, status serviceStatus) (bool, error)
 	return true, nil
 }
 
-func (c *cli) runGatewayService(ctx context.Context, mode string, stateRoot string, runtimeRoot string, precompiledRuntimeManifest string, precompiledRuntimeLocalUIBind string, listen string, desktopBridgeTransport bool, printListen bool, allowPrivateProfileTargets bool, enableProfileWrite bool, pairingCode string, managedBridgeToken string) int {
+func (c *cli) runGatewayService(ctx context.Context, mode string, stateRoot string, runtimeRoot string, precompiledRuntimeManifest string, precompiledRuntimeLocalUIBind string, activatedRuntimeOperationID string, activatedRuntimeVersion string, activatedRuntimeCommit string, activatedRuntimeSHA256 string, listen string, desktopBridgeTransport bool, printListen bool, allowPrivateProfileTargets bool, enableProfileWrite bool, pairingCode string, managedBridgeToken string) int {
 	stateRootValue := normalizeStateRoot(stateRoot)
 	if err := os.MkdirAll(stateRootValue, 0o700); err != nil {
 		writeError(c.stderr, fmt.Sprintf("serve failed: initialize Gateway state root: %v", err))
@@ -544,6 +599,14 @@ func (c *cli) runGatewayService(ctx context.Context, mode string, stateRoot stri
 	}
 	if mode != "standalone" && strings.TrimSpace(precompiledRuntimeManifest) != "" {
 		serviceOptions.PrecompiledRuntimeStartup = lifecycleController
+	}
+	if mode != "standalone" && strings.TrimSpace(activatedRuntimeOperationID) != "" {
+		if strings.TrimSpace(precompiledRuntimeManifest) != "" {
+			return c.failGatewayStartup(stateRootValue, errors.New("activated Runtime startup cannot be combined with precompiled Runtime convergence"))
+		}
+		if err := lifecycleController.StartActivatedRuntime(ctx, activatedRuntimeOperationID, activatedRuntimeVersion, activatedRuntimeCommit, activatedRuntimeSHA256); err != nil {
+			return c.failGatewayStartup(stateRootValue, fmt.Errorf("start activated Runtime: %w", err))
+		}
 	}
 	svc, err := gatewayservice.New(serviceOptions)
 	if err != nil {
