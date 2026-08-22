@@ -118,6 +118,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     Folder: Icon,
     FolderOpen: Icon,
     GitBranch: Icon,
+    Globe: Icon,
     GripVertical: Icon,
     MoreHorizontal: Icon,
     Paperclip: Icon,

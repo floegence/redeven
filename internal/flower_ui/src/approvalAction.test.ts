@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { FlowerApprovalAction, FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
-import { flowerDisplayApprovalAction } from './approvalAction';
+import { flowerDisplayApprovalAction, flowerPendingApprovalActions } from './approvalAction';
 
 const action = (overrides: Partial<FlowerApprovalAction> = {}): FlowerApprovalAction => ({
   action_id: 'approval-1', origin: 'main_tool', run_id: 'turn-1', tool_id: 'tool-1', tool_name: 'terminal.exec',
@@ -29,5 +29,27 @@ describe('flowerDisplayApprovalAction', () => {
       action_id: 'approval-1',
       can_approve: false,
     });
+  });
+});
+
+describe('flowerPendingApprovalActions', () => {
+  it('returns stable ordered primary approvals without mirrors or locators', () => {
+    const first = action({ action_id: 'approval-b', queue_order: 2 });
+    const second = action({ action_id: 'approval-a', queue_order: 1 });
+    const mirror = action({ action_id: 'approval-mirror', queue_order: 0, surface_role: 'mirror' });
+    const locator = action({ action_id: 'approval-locator', queue_order: 3, surface_role: 'locator', can_approve: false });
+    const resolved = action({ action_id: 'approval-resolved', queue_order: 4, status: 'resolved', state: 'approved' });
+
+    expect(flowerPendingApprovalActions(thread([first, mirror, resolved, locator, second])).map((candidate) => candidate.action_id))
+      .toEqual(['approval-a', 'approval-b']);
+  });
+
+  it('uses requested time and action id as deterministic fallbacks', () => {
+    const later = action({ action_id: 'approval-b', queue_order: undefined, requested_at_ms: 2 });
+    const earlier = action({ action_id: 'approval-a', queue_order: undefined, requested_at_ms: 1 });
+    const tie = action({ action_id: 'approval-c', queue_order: undefined, requested_at_ms: 1 });
+
+    expect(flowerPendingApprovalActions(thread([later, tie, earlier])).map((candidate) => candidate.action_id))
+      .toEqual(['approval-a', 'approval-c', 'approval-b']);
   });
 });

@@ -3957,6 +3957,7 @@
       "toolApprovalWorkingDirectoryDetail": "Diretório de trabalho: {target}",
       "toolApprovalComposerDescription": "A conversa fica pausada até você aprovar ou rejeitar esta ação.",
       "toolApprovalQueueCount": "Aprovações adicionais aguardando: {count}",
+      "toolApprovalPendingCount": "{count} aprovação(ões) de ferramenta pendente(s)",
       "toolApprovalRejectBatch": "Recusar todo este lote",
       "toolApprovalRejectBatchAction": "Recusar as {count} aprovações de ferramentas pendentes",
       "toolApprovalOutsideWorkspaceRisk": "Este comando pode acessar recursos fora do espaço de trabalho.",

@@ -188,6 +188,7 @@
       "toolApprovalWorkingDirectoryDetail": "工作目錄：{target}",
       "toolApprovalComposerDescription": "在你核准或拒絕此操作前，對話會暫停。",
       "toolApprovalQueueCount": "還有 {count} 個核准等待處理",
+      "toolApprovalPendingCount": "{count} 個工具待核准",
       "toolApprovalRejectBatch": "拒絕本批全部",
       "toolApprovalRejectBatchAction": "拒絕全部 {count} 個待核准工具",
       "toolApprovalOutsideWorkspaceRisk": "此命令可能存取工作區之外的資源。",

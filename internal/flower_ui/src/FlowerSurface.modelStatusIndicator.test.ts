@@ -68,7 +68,7 @@ describe('Flower model status indicator', () => {
     expect(flowerRule).toContain('flex: 0 0 1rem');
     expect(flowerRule).toContain('transform-box: fill-box');
     expect(flowerRule).toContain('transform-origin: 50% 50%');
-    expect(flowerRule).toContain('animation: flower-model-status-flower-twirl 2.1s ease-in-out infinite');
+    expect(flowerRule).toContain('animation: flower-model-status-flower-twirl 2.6s infinite');
     expect(flowerIconRule).toContain('display: block');
     expect(flowerIconRule).toContain('width: 100%');
     expect(flowerIconRule).toContain('height: 100%');
@@ -80,8 +80,11 @@ describe('Flower model status indicator', () => {
     expect(src).toContain('<span class="flower-model-status-dots" aria-hidden="true">...</span>');
     expect(src).not.toContain('class="flower-model-status-dot"');
     expect(css).toContain('@keyframes flower-model-status-flower-twirl');
-    expect(css).toContain('translateY(-1px) rotate(34deg) scale(1.04)');
-    expect(css).toContain('translateY(1px) rotate(178deg) scale(1.02)');
+    expect(css).toContain('translateY(-1px) rotate(142deg) scale(1.04)');
+    expect(css).toContain('translateY(0.5px) rotate(292deg) scale(1.01)');
+    expect(css).toContain('animation-timing-function: cubic-bezier(0.55, 0, 1, 0.45)');
+    expect(css).toContain('animation-timing-function: cubic-bezier(0.42, 0, 0.78, 0.35)');
+    expect(css).toContain('rotate(367deg)');
     expect(css).toContain('.flower-model-status-flower,');
     expect(css).toContain('@keyframes flower-model-status-dots-reveal');
     expect(css).toContain('animation: flower-model-status-dots-reveal 1.5s steps(4, end) infinite');

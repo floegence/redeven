@@ -3957,6 +3957,7 @@
       "toolApprovalWorkingDirectoryDetail": "作業ディレクトリ：{target}",
       "toolApprovalComposerDescription": "この操作を承認または拒否するまで会話は一時停止します。",
       "toolApprovalQueueCount": "ほかに {count} 件の承認待ち",
+      "toolApprovalPendingCount": "ツール承認待ち {count} 件",
       "toolApprovalRejectBatch": "このバッチをすべて拒否",
       "toolApprovalRejectBatchAction": "保留中のツール承認 {count} 件をすべて拒否",
       "toolApprovalOutsideWorkspaceRisk": "このコマンドはワークスペース外のリソースにアクセスする可能性があります。",

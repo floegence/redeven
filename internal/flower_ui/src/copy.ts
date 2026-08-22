@@ -414,6 +414,7 @@ export type FlowerSurfaceCopy = Readonly<{
     toolApprovalWorkingDirectoryDetail: (target: string) => string;
     toolApprovalComposerDescription: string;
     toolApprovalQueueCount: (count: number) => string;
+    toolApprovalPendingCount: (count: number) => string;
     toolApprovalRejectBatch: string;
     toolApprovalRejectBatchAction: (count: number) => string;
     toolApprovalOutsideWorkspaceRisk: string;
@@ -664,6 +665,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     toolApprovalWorkingDirectoryDetail: (target) => 'Working directory: ' + target,
     toolApprovalComposerDescription: 'The conversation is paused until you approve or reject this action.',
     toolApprovalQueueCount: (count) => `${count} more approval${count === 1 ? '' : 's'} waiting`,
+    toolApprovalPendingCount: (count) => `${count} pending tool approval${count === 1 ? '' : 's'}`,
     toolApprovalRejectBatch: 'Reject all in this batch',
     toolApprovalRejectBatchAction: (count) => `Reject all ${count} pending tool approvals`,
     toolApprovalOutsideWorkspaceRisk: 'This command may access resources outside the workspace.',
