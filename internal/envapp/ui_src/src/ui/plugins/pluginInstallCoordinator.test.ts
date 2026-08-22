@@ -172,6 +172,18 @@ describe('plugin install execution coordinator', () => {
     expect(coordinator.projections()).toEqual([]);
   });
 
+  it('forgets the completed install projection when the plugin is uninstalled', async () => {
+    const completeApprovedInstall = vi.fn().mockRejectedValue(new Error('grant failed'));
+    const { coordinator } = harness({ completeApprovedInstall });
+
+    await coordinator.start(installCommand);
+    expect(coordinator.projections()).toHaveLength(1);
+
+    coordinator.forget(pluginInstanceID);
+
+    expect(coordinator.projections()).toEqual([]);
+  });
+
   it('retries the complete approved setup after an inventory refresh failure', async () => {
     const { coordinator, refreshInventory, completeApprovedInstall } = harness();
     refreshInventory.mockRejectedValueOnce(new Error('offline')).mockResolvedValue(undefined);
