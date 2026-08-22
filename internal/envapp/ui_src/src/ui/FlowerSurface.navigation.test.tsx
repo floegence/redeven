@@ -21,13 +21,123 @@ import {
   renderSurfaceWithAdapter,
   renderSurfaceWithAdapterProps,
   retiredHandlerUnavailableCopy,
+  runtimeCurrentView,
   settingsSnapshot,
   thread,
   wait,
   waitFor,
 } from './FlowerSurface.navigation.testHarness';
 
+function attachTranscriptScrollMetrics(transcript: HTMLElement, metrics: {
+  clientHeight: number;
+  scrollHeight: number;
+  scrollTop: number;
+}): Readonly<{
+  scrollTop: () => number;
+  setScrollHeight: (value: number) => void;
+}> {
+  let scrollTopValue = metrics.scrollTop;
+  let scrollHeightValue = metrics.scrollHeight;
+  Object.defineProperties(transcript, {
+    clientHeight: { configurable: true, value: metrics.clientHeight },
+    scrollHeight: {
+      configurable: true,
+      get: () => scrollHeightValue,
+    },
+    scrollTop: {
+      configurable: true,
+      get: () => scrollTopValue,
+      set: (value: number) => {
+        scrollTopValue = Number(value);
+      },
+    },
+  });
+  return {
+    scrollTop: () => scrollTopValue,
+    setScrollHeight: (value: number) => {
+      scrollHeightValue = value;
+    },
+  };
+}
+
 describe('FlowerSurface navigation', () => {
+  it('follows selected current view updates when the transcript is already at the tail', async () => {
+    const initialThread = thread({
+      thread_id: 'thread-auto-scroll',
+      status: 'running',
+      active_run_id: 'run-auto-scroll',
+      messages: [
+        {
+          id: 'user-auto-scroll',
+          turn_id: 'turn-auto-scroll',
+          role: 'user',
+          content: 'Run the command.',
+          status: 'complete',
+          created_at_ms: 1,
+        },
+        {
+          id: 'assistant-auto-scroll',
+          turn_id: 'turn-auto-scroll',
+          run_id: 'run-auto-scroll',
+          role: 'assistant',
+          content: 'Initial output.',
+          status: 'streaming',
+          created_at_ms: 2,
+        },
+      ],
+    });
+    const updatedThread = {
+      ...initialThread,
+      updated_at_ms: 3,
+      messages: initialThread.messages.map((message) => (
+        message.id === 'assistant-auto-scroll'
+          ? { ...message, content: 'Initial output.\nNew output and tool activity.' }
+          : message
+      )),
+    };
+    const publishUpdate = deferred<void>();
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [initialThread]),
+      loadThread: vi.fn(async () => liveBootstrap(initialThread, 1)),
+      connectLiveStream: async function* ({ signal }) {
+        yield { schema_version: 1, kind: 'ready' as const, summaries: [initialThread] };
+        await Promise.race([
+          publishUpdate.promise,
+          new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true })),
+        ]);
+        if (signal.aborted) return;
+        yield {
+          schema_version: 1,
+          kind: 'thread.batch' as const,
+          thread_id: initialThread.thread_id,
+          current: runtimeCurrentView(updatedThread, 2),
+        };
+        await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
+      },
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-auto-scroll"] button')));
+    (runtime.querySelector('[data-thread-id="thread-auto-scroll"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.textContent?.includes('Initial output.') ?? false);
+
+    const transcript = runtime.querySelector('.flower-chat-transcript') as HTMLElement;
+    const metrics = attachTranscriptScrollMetrics(transcript, {
+      clientHeight: 100,
+      scrollHeight: 520,
+      scrollTop: 420,
+    });
+    transcript.dispatchEvent(new Event('scroll', { bubbles: true }));
+    metrics.setScrollHeight(760);
+    publishUpdate.resolve();
+
+    await waitFor(() => runtime.textContent?.includes('New output and tool activity.') ?? false);
+    await waitFor(() => metrics.scrollTop() === 660);
+
+    expect(metrics.scrollTop()).toBe(660);
+    expect(runtime.querySelector('.flower-scroll-to-latest-button')).toBeNull();
+  });
+
   it('focuses Flower settings from a host navigation request', async () => {
     const runtime = renderSurfaceWithAdapterProps(adapter(true), { settingsFocusRequest: 1 });
 

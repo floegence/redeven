@@ -6,11 +6,16 @@ import { describe, expect, it } from 'vitest';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const surfacePath = path.join(repoRoot, 'internal', 'flower_ui', 'src', 'FlowerSurface.tsx');
+const scrollTailPath = path.join(repoRoot, 'internal', 'flower_ui', 'src', 'flowerScrollTail.ts');
 const flowerCssPath = path.join(repoRoot, 'internal', 'flower_ui', 'src', 'styles', 'flower.css');
 const compactionDividerPath = path.join(repoRoot, 'internal', 'flower_ui', 'src', 'chat', 'FlowerContextCompactionDivider.tsx');
 
 function surfaceSource(): string {
   return fs.readFileSync(surfacePath, 'utf8');
+}
+
+function scrollTailSource(): string {
+  return fs.readFileSync(scrollTailPath, 'utf8');
 }
 
 function flowerCssSource(): string {
@@ -151,6 +156,7 @@ describe('FlowerSurface markdown rendering boundary', () => {
 
   it('renders the scroll-to-latest control as a floating dock affordance above the composer', () => {
     const src = surfaceSource();
+    const scrollTail = scrollTailSource();
     const dockIndex = src.indexOf('flower-chat-bottom-dock flower-chat-bottom-dock');
     const floatIndex = src.indexOf('flower-scroll-to-latest-float', dockIndex);
     const scrollButtonIndex = src.indexOf('flower-scroll-to-latest-button', floatIndex);
@@ -164,7 +170,7 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(dockTrackIndex).toBeGreaterThan(scrollButtonIndex);
     expect(statusLaneIndex).toBeGreaterThan(dockTrackIndex);
     expect(composerIndex).toBeGreaterThan(statusLaneIndex);
-    expect(src).toContain('function createFlowerScrollTailController');
+    expect(scrollTail).toContain('export function createFlowerScrollTailController');
     expect(src).toContain('const transcriptScroll = createFlowerScrollTailController');
     expect(src).toContain('const subagentDetailScroll = createFlowerScrollTailController');
     expect(src).toContain('const [transcriptLayoutRevision, setTranscriptLayoutRevision] = createSignal(0)');
@@ -173,8 +179,8 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).toContain('title={copy().chat.scrollToLatest}');
     expect(src).toContain('transcriptScroll.startFollowing();');
     expect(src).toContain('scrollTranscriptToBottom({ smooth: true });');
-    expect(src).toContain('TRANSCRIPT_SCROLL_TO_LATEST_MS');
-    expect(src).toContain('captureWasNearBottom');
+    expect(scrollTail).toContain('FLOWER_TRANSCRIPT_SCROLL_TO_LATEST_MS');
+    expect(scrollTail).toContain('captureWasNearBottom');
   });
 
   it('keeps selected thread tail reveal hidden without collapsing transcript layout', () => {
