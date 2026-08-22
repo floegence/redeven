@@ -404,10 +404,6 @@ export type ReDevPluginRecord = Omit<PluginRecord, 'presentation' | 'presentatio
 
 export type ReDevPluginCatalogResult = PluginCatalogResult;
 
-/** @deprecated Official market installs use the cached catalog install preview. */
-export type OfficialPluginReleaseInspection = PluginReleasePackageInspection;
-
-
 export type ExternalPluginInspection = Omit<PluginExternalPackageInspection, 'presentation' | 'presentation_sha256'> & {
   presentation?: PluginExternalPackageInspection['presentation'];
   presentation_sha256?: string;

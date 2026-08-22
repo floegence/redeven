@@ -22,7 +22,6 @@ import type {
   PluginPresentationCategory,
   PluginRuntimeRecoveryPresentation,
   PluginTrustBadge,
-  OfficialPluginReleaseInspection,
 } from './pluginTypes';
 import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
 import { ExternalPluginInstallDialog } from './ExternalPluginInstallDialog';
@@ -50,8 +49,6 @@ export type PluginCenterViewProps = {
   installOperations?: readonly PluginInstallExecutionProjection[];
   onRetryInstall?: (pluginInstanceID: string) => Promise<unknown> | unknown;
   onDiscardRetainedDataAndRetry?: (pluginInstanceID: string) => Promise<unknown> | unknown;
-  /** @deprecated Kept for source compatibility while external inspection remains separate. */
-  onInspectOfficial?: (item: PluginInventoryItem, signal: AbortSignal) => Promise<OfficialPluginReleaseInspection>;
   onInspectExternal?: (request: ExternalPluginInspectionRequest, signal: AbortSignal) => Promise<ExternalPluginInspection>;
   onCommitExternal?: (inspection: ExternalPluginInspection, signal: AbortSignal) => Promise<ExternalPluginCommitResult>;
   onLoadMarketDetail?: (pluginID: string, generation: number, signal?: AbortSignal) => Promise<PluginMarketDetail>;
@@ -242,6 +239,15 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       setOfficialInstallDialogOpen(true);
       return;
     }
+  });
+
+  createEffect(() => {
+    const flow = officialInstallFlow();
+    if (flow.status !== 'review_ready' && flow.status !== 'error') return;
+    const current = allItems().find((item) => item.inventoryKey === flow.item.inventoryKey);
+    if (current?.officialCatalog && officialInstallKey(current) === flow.key) return;
+    setOfficialInstallDialogOpen(false);
+    setOfficialInstallFlow({ status: 'idle' });
   });
 
   const requestRetainedDataRecovery = (item: PluginInventoryItem) => {
