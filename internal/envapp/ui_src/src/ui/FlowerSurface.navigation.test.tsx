@@ -663,7 +663,7 @@ describe('FlowerSurface navigation', () => {
     await waitFor(() => runtime.textContent?.includes('follow the accepted thread') ?? false);
     expect(runtime.textContent).toContain('follow the accepted thread');
     expect(runtime.querySelector('[data-flower-message-role="user"][data-flower-message-status="complete"]')).toBeTruthy();
-    expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();
+    expect(runtime.querySelector('.flower-model-status-indicator')?.textContent).toContain('Thinking');
     expect(loadThread).not.toHaveBeenCalled();
   });
 

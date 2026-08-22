@@ -73,8 +73,8 @@ describe('flower context presentation', () => {
     expect(view.progressValue).toBeNull();
     expect(view.percentLabel).toBe('--%');
     expect(view.usedValue).toBe('Not available');
-    expect(view).not.toHaveProperty('statusValue');
-    expect(view).not.toHaveProperty('statusLabel');
+    expect(view.statusValue).toBe('Estimated');
+    expect(view.statusLabel).toBe('Status');
     expect(view.ariaValueText).toBe('Context: --%');
     expect(view.tone).toBe('estimated');
   });

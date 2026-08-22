@@ -261,6 +261,9 @@ func (r *run) applyFloretContextStatus(status *observation.ContextStatus) {
 		Type:  "context-usage",
 		Usage: usage,
 	})
+	if r.host.publishContextUsage != nil {
+		r.host.publishContextUsage(usage)
+	}
 }
 
 func (r *run) applyFloretCompaction(compaction *observation.CompactionEvent) {

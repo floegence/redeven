@@ -226,7 +226,7 @@ function mapContextCompactionStatus(raw: unknown): FlowerContextCompaction['stat
   }
 }
 
-function mapContextUsage(raw: unknown): FlowerContextUsage | null {
+export function mapContextUsage(raw: unknown): FlowerContextUsage | null {
   const record = recordValue(raw);
   if (!record) return null;
   const phase = mapContextUsagePhase(record.phase);

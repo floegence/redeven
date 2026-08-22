@@ -19,6 +19,7 @@ type runHostCapabilities struct {
 	lastVisibleTimelineAnchor func(context.Context) (FlowerTimelineAnchor, error)
 	resolveRunModel           func(context.Context, *config.AIConfig, string, string, *run) (resolvedRunModel, error)
 	publishSubagentsPatch     func(context.Context)
+	publishContextUsage       func(FlowerContextUsage)
 	openLiveAttachment        func(context.Context, UploadOwner, string) (openedCanonicalAttachment, error)
 	terminal                  runTerminalHost
 }
@@ -53,6 +54,9 @@ func (s *Service) bindRunHostCapabilities(endpointID string, threadID string) (r
 	host.resolveRunModel = s.resolveRunModel
 	host.publishSubagentsPatch = func(ctx context.Context) {
 		s.publishFlowerSubagentsPatch(ctx, endpointID, threadID)
+	}
+	host.publishContextUsage = func(usage FlowerContextUsage) {
+		s.publishFlowerRuntimeContextUsage(endpointID, threadID, usage)
 	}
 	host.openLiveAttachment = func(ctx context.Context, owner UploadOwner, attachmentID string) (openedCanonicalAttachment, error) {
 		if owner.EndpointID != endpointID {
