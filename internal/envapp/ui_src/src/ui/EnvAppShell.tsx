@@ -1657,7 +1657,12 @@ export function EnvAppShell() {
         command,
       );
     }
-    return serializePluginPlacementOperation(() => performPluginCenterManagementCommand(command, signal));
+    return serializePluginPlacementOperation(async () => {
+      await performPluginCenterManagementCommand(command, signal);
+      if (command.type === 'uninstall') {
+        pluginInstallCoordinator?.forget(command.pluginInstanceID);
+      }
+    });
   };
 
   const commitExternalPluginPackage = (

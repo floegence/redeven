@@ -26,6 +26,7 @@ const INVENTORY_REFRESH_TIMEOUT_MS = 8_000;
 export type PluginInstallCoordinator = Readonly<{
   projections: Accessor<readonly PluginInstallExecutionProjection[]>;
   start: (command: PluginOfficialInstallCommand) => Promise<void>;
+  forget: (pluginInstanceID: string) => void;
   resume: () => Promise<void>;
   retry: (pluginInstanceID: string, command?: PluginOfficialInstallCommand) => Promise<void>;
   discardRetainedDataAndRetry: (pluginInstanceID: string, command?: PluginOfficialInstallCommand) => Promise<void>;
@@ -301,7 +302,13 @@ export function createPluginInstallCoordinator(options: Readonly<{
     installCommands.clear();
   };
 
-  return Object.freeze({ projections, start, resume, retry, discardRetainedDataAndRetry, dispose });
+  const forget = (pluginInstanceID: string) => {
+    controllers.get(pluginInstanceID)?.abort('Plugin was uninstalled');
+    installCommands.delete(pluginInstanceID);
+    remove(pluginInstanceID);
+  };
+
+  return Object.freeze({ projections, start, forget, resume, retry, discardRetainedDataAndRetry, dispose });
 }
 
 function isExecutionTerminal(execution: PluginExecution): boolean {

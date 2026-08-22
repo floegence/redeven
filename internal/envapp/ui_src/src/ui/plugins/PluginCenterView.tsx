@@ -590,10 +590,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       await props.onCommand(command, controller.signal);
       setUninstallChoiceFor(null);
       if (command.type === 'uninstall') {
-        const flow = officialInstallFlow();
-        if (flow.status !== 'idle' && flow.item.officialCatalog?.pluginInstanceID === command.pluginInstanceID) {
-          setOfficialInstallFlow({ status: 'idle' });
-        }
+        setOfficialInstallFlow({ status: 'idle' });
         setOfficialInstallDialogOpen(false);
         clearDetailSelection();
         tabSelection.commitNow('discover');
