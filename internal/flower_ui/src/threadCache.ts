@@ -8,6 +8,19 @@ export type ThreadView = Readonly<{
   connectionEpoch?: number;
 }>;
 
+/**
+ * A detail snapshot is ordered by the live connection first and by the
+ * runtime view version within that connection.  Callers that perform side
+ * effects after replacing a view must use the same predicate as the cache.
+ */
+export function canReplaceThreadView(current: ThreadView | undefined, candidate: ThreadView): boolean {
+  if (!current) return true;
+  const nextEpoch = Math.max(0, Math.floor(Number(candidate.connectionEpoch) || 0));
+  const currentEpoch = Math.max(0, Math.floor(Number(current.connectionEpoch) || 0));
+  return nextEpoch >= currentEpoch
+    && (nextEpoch !== currentEpoch || candidate.version >= current.version);
+}
+
 type CacheEntry = {
   view: ThreadView;
   usedAt: number;
@@ -80,10 +93,8 @@ function createCache(
     replaceView(view) {
       const id = view.thread.thread_id.trim();
       if (!id) return this;
-      const current = views.get(id);
-      const nextEpoch = Math.max(0, Math.floor(Number(view.connectionEpoch) || 0));
-      const currentEpoch = Math.max(0, Math.floor(Number(current?.view.connectionEpoch) || 0));
-      if (current && (nextEpoch < currentEpoch || nextEpoch === currentEpoch && view.version < current.view.version)) return this;
+      const current = views.get(id)?.view;
+      if (!canReplaceThreadView(current, view)) return this;
       const next = new Map(views);
       next.set(id, { view, usedAt: clock + 1 });
       while (next.size > MAX_VIEWS) {

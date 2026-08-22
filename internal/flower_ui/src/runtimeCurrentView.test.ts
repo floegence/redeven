@@ -410,6 +410,22 @@ describe('applyFlowerRuntimeCurrentView', () => {
     expect(result.status).toBe('waiting_approval');
   });
 
+  it('projects an unresolved approval as the composer authority instead of model thinking', () => {
+    const result = applyFlowerRuntimeCurrentView(summary(), {
+      thread_id: 'thread-a', view_version: 11, activity: 'active', turn_id: 'turn-a',
+      interactions: [{
+        id: 'approval-a', kind: 'approval', tool_call_id: 'tool-a',
+        approval: { label: 'Run command', tool_name: 'terminal.exec', tool_call_id: 'tool-a' },
+      }],
+    });
+
+    expect(result.status).toBe('waiting_approval');
+    expect(result.approval_pending).toBe(true);
+    expect(result.approval_pending_count).toBe(1);
+    expect(result.approval_actions).toHaveLength(1);
+    expect(result.model_io_status).toBeNull();
+  });
+
   it('decodes typed approval targets without exposing Floret target encoding', () => {
     const result = applyFlowerRuntimeCurrentView(summary(), {
       thread_id: 'thread-a', view_version: 12, activity: 'active', turn_id: 'turn-a',
