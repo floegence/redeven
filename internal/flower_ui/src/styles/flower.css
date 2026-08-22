@@ -4505,12 +4505,10 @@ html.dark .flower-component-shell {
 }
 
 .flower-approval-target {
-  display: inline-flex;
+  display: block;
   align-items: center;
-  border-radius: 0.25rem;
-  background: color-mix(in srgb, var(--muted) 28%, transparent);
   color: var(--foreground);
-  padding: 0.125rem 0.5rem;
+  padding: 0;
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
   font-size: 0.6875rem;
   line-height: 1.4;
@@ -6657,13 +6655,34 @@ html.dark .flower-component-shell {
   display: grid;
   width: 100%;
   min-width: 0;
-  gap: 0.625rem;
+  gap: 0.75rem;
   outline: none;
 }
 
 .flower-approval-surface .flower-approval-body {
   display: grid;
   gap: 0.5rem;
+}
+
+.flower-approval-surface[data-flower-approval-layout='single'] {
+  gap: 0.625rem;
+}
+
+.flower-approval-single {
+  display: grid;
+  min-width: 0;
+  gap: 0.75rem;
+  padding-inline: 0.125rem;
+}
+
+.flower-approval-single .flower-approval-actions {
+  justify-content: flex-start;
+  border-top: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 52%, transparent);
+  padding-top: 0.625rem;
+}
+
+.flower-approval-single .flower-composer-stop-thread {
+  margin-left: auto;
 }
 
 .flower-approval-queue-header {
@@ -6677,17 +6696,18 @@ html.dark .flower-component-shell {
 .flower-approval-queue-list {
   display: grid;
   min-width: 0;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 58%, transparent);
-  border-radius: 0.5rem;
-  background: color-mix(in srgb, var(--flower-chat-surface) 72%, transparent);
+  max-height: min(19rem, 36vh);
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .flower-approval-queue-row {
   display: grid;
   min-width: 0;
-  gap: 0.625rem;
-  padding: 0.625rem 0.75rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 0.125rem;
 }
 
 .flower-approval-queue-row + .flower-approval-queue-row {
@@ -6695,13 +6715,33 @@ html.dark .flower-component-shell {
 }
 
 .flower-approval-queue-row[data-flower-approval-submitting='true'] {
-  background: color-mix(in srgb, var(--primary) 5%, transparent);
+  opacity: 0.72;
 }
 
 .flower-approval-queue-row .flower-approval-body {
   display: grid;
   min-width: 0;
   gap: 0.4rem;
+}
+
+.flower-approval-operation-copy {
+  display: grid;
+  min-width: 0;
+  gap: 0.2rem;
+}
+
+.flower-approval-operation-label {
+  min-width: 0;
+  color: var(--foreground);
+  font-size: 0.8125rem;
+  font-weight: 680;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.flower-approval-operation-copy .flower-approval-targets {
+  display: grid;
+  gap: 0.15rem;
 }
 
 .flower-approval-operation {
@@ -6728,8 +6768,14 @@ html.dark .flower-component-shell {
   padding-top: 0.125rem;
 }
 
+.flower-approval-operation-copy .flower-approval-targets {
+  display: grid;
+  flex: none;
+  padding-top: 0;
+}
+
 .flower-approval-queue-row .flower-approval-targets {
-  gap: 0.25rem 0.375rem;
+  gap: 0.15rem;
 }
 
 .flower-approval-queue-row .flower-approval-actions {
@@ -6738,6 +6784,12 @@ html.dark .flower-component-shell {
 
 .flower-approval-queue-footer {
   justify-content: flex-end;
+  border-top: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 52%, transparent);
+  padding-top: 0.625rem;
+}
+
+.flower-approval-queue-footer .flower-approval-queue-progress {
+  margin-right: auto;
 }
 
 .flower-approval-question {
@@ -6768,6 +6820,10 @@ html.dark .flower-component-shell {
   gap: 0.5rem;
 }
 
+.flower-approval-surface[data-flower-approval-layout='single'] .flower-approval-single .flower-composer-approval-actions {
+  justify-content: flex-start;
+}
+
 .flower-approval-surface .flower-approval-action-pill {
   width: auto;
   min-width: 5.5rem;
@@ -6776,11 +6832,6 @@ html.dark .flower-component-shell {
   border-radius: 999px;
   padding-inline: 0.75rem;
   white-space: nowrap;
-}
-
-.flower-approval-reject-batch {
-  margin-right: auto;
-  color: var(--muted-foreground);
 }
 
 .flower-input-request-surface {
@@ -7366,19 +7417,29 @@ button.flower-attachment-preview-trigger:disabled {
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
-  .flower-approval-queue-header .flower-approval-reject-batch {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    justify-self: start;
-  }
-
   .flower-approval-queue-row .flower-approval-actions {
-    justify-content: stretch;
+    justify-content: flex-start;
   }
 
-  .flower-approval-surface .flower-composer-approval-actions {
+  .flower-approval-queue-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.625rem;
+  }
+
+  .flower-approval-surface[data-flower-approval-layout='single'] .flower-composer-approval-actions {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr)) 2.25rem;
+  }
+
+  .flower-approval-surface[data-flower-approval-layout='multi'] .flower-approval-queue-footer {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) 2.25rem;
+  }
+
+  .flower-approval-surface[data-flower-approval-layout='multi'] .flower-approval-queue-footer .flower-approval-queue-progress {
+    grid-column: 1 / -1;
+    justify-self: start;
+    margin-right: 0;
   }
 
   .flower-approval-surface .flower-composer-approval-decision {
@@ -7386,10 +7447,6 @@ button.flower-attachment-preview-trigger:disabled {
     justify-content: center;
   }
 
-  .flower-approval-surface .flower-approval-reject-batch {
-    grid-column: 1 / -1;
-    margin-right: 0;
-  }
 }
 
 .flower-composer-readonly-chip {

@@ -189,7 +189,7 @@
     "toolApprovalComposerDescription": "The conversation is paused until you approve or reject this action.",
     "toolApprovalQueueCount": "{count} more approval(s) waiting",
     "toolApprovalPendingCount": "{count} pending tool approval(s)",
-    "toolApprovalRejectBatch": "Reject all in this batch",
+    "toolApprovalRejectBatch": "Reject all",
     "toolApprovalRejectBatchAction": "Reject all {count} pending tool approvals",
     "toolApprovalOutsideWorkspaceRisk": "This command may access resources outside the workspace.",
     "toolApprovalWritesFilesRisk": "This action will modify files.",
@@ -233,7 +233,9 @@
     "newChat": "New chat",
     "workingDirPickerHomeLabel": "Home",
     "workingDirPickerTitle": "Select working directory",
-    "workingDirPickerConfirm": "Select"
+    "workingDirPickerConfirm": "Select",
+    "toolApprovalApproveBatch": "Allow all",
+    "toolApprovalApproveBatchAction": "Allow all {count} pending tool approvals"
   },
   "threadList": {
     "title": "Conversations",

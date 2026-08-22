@@ -3958,7 +3958,7 @@
       "toolApprovalComposerDescription": "Die Unterhaltung pausiert, bis du diese Aktion genehmigst oder ablehnst.",
       "toolApprovalQueueCount": "Weitere ausstehende Genehmigungen: {count}",
       "toolApprovalPendingCount": "{count} ausstehende Tool-Genehmigung(en)",
-      "toolApprovalRejectBatch": "Alle in diesem Batch ablehnen",
+      "toolApprovalRejectBatch": "Alle ablehnen",
       "toolApprovalRejectBatchAction": "Alle {count} ausstehenden Tool-Genehmigungen ablehnen",
       "toolApprovalOutsideWorkspaceRisk": "Dieser Befehl kann auf Ressourcen außerhalb des Arbeitsbereichs zugreifen.",
       "toolApprovalWritesFilesRisk": "Diese Aktion ändert Dateien.",
@@ -4003,7 +4003,9 @@
       "workingDirPickerHomeLabel": "Startordner",
       "workingDirPickerTitle": "Arbeitsverzeichnis auswählen",
       "workingDirPickerConfirm": "Auswählen",
-      "linkedContextLabel": "Verknüpfter Kontext"
+      "linkedContextLabel": "Verknüpfter Kontext",
+      "toolApprovalApproveBatch": "Alle zulassen",
+      "toolApprovalApproveBatchAction": "Alle {count} ausstehenden Tool-Genehmigungen zulassen"
     },
     "threadList": {
       "title": "Unterhaltungen",

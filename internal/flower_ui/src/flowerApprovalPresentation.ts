@@ -12,9 +12,11 @@ export type FlowerApprovalPresentationCopy = Readonly<{
 
 export type FlowerApprovalPresentation = Readonly<{
   title: string;
-  operations: readonly string[];
+  operationLabel: string;
+  targets: readonly string[];
   command?: string;
   details: readonly string[];
+  risk?: string;
 }>;
 
 const fileMutationTools = new Set(['file.write', 'file.edit', 'apply_patch']);
@@ -43,23 +45,36 @@ export function presentFlowerApproval(
   const workingDirectories = targetsOfKind(targets, 'working_directory');
   const commandTarget = targetsOfKind(targets, 'command')[0]?.label.trim();
   const command = action.summary.command?.trim() || commandTarget || '';
-  let operations: readonly string[] = [];
+  let operationLabel = copy.executeRequestedAction;
+  let displayTargets: readonly string[] = [];
 
   if (fileMutationTools.has(toolName) && fileTargets.length > 0) {
-    operations = fileTargets.map((target) => copy.editFile(target.label));
+    const firstTarget = fileTargets[0]?.label ?? '';
+    const formatted = copy.editFile(firstTarget);
+    operationLabel = firstTarget
+      ? formatted.slice(0, Math.max(0, formatted.length - firstTarget.length)).trim().replace(/[:：]\s*$/, '')
+      : formatted.trim().replace(/[:：]\s*$/, '');
+    displayTargets = fileTargets.map((target) => target.label);
   } else if (commandTools.has(toolName)) {
-    operations = [copy.runCommand];
+    operationLabel = copy.runCommand;
   } else if (networkTools.has(toolName) && networkTargets.length > 0) {
-    operations = networkTargets.map((target) => copy.accessNetwork(target.label));
+    const firstTarget = networkTargets[0]?.label ?? '';
+    const formatted = copy.accessNetwork(firstTarget);
+    operationLabel = firstTarget
+      ? formatted.slice(0, Math.max(0, formatted.length - firstTarget.length)).trim().replace(/[:：]\s*$/, '')
+      : formatted.trim().replace(/[:：]\s*$/, '');
+    displayTargets = networkTargets.map((target) => target.label);
   } else {
     const label = safeSummaryLabel(action);
-    operations = [label ? copy.executeAction(label) : copy.executeRequestedAction];
+    operationLabel = label ? copy.executeAction(label) : copy.executeRequestedAction;
   }
 
   return {
     title: copy.title,
-    operations,
+    operationLabel,
+    targets: displayTargets,
     ...(command ? { command } : {}),
     details: workingDirectories.map((target) => copy.workingDirectory(target.label)),
+    ...(action.summary.description?.trim() ? { risk: action.summary.description.trim() } : {}),
   };
 }
