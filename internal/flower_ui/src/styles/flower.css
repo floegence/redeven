@@ -385,6 +385,12 @@
   max-width: min(11rem, 34%);
 }
 
+.flower-surface-companion-collapsed .flower-companion-collapsed-thread-switcher[data-flower-companion-empty-selection='true'] {
+  flex: 0 0 auto;
+  width: 1.5rem;
+  max-width: 1.5rem;
+}
+
 .flower-surface-companion-collapsed .flower-companion-thread-switcher-anchor {
   width: 100%;
   max-width: none;
@@ -400,6 +406,13 @@
   font-size: 0.6875rem;
   font-weight: 500;
   line-height: 1rem;
+}
+
+.flower-surface-companion-collapsed .flower-companion-thread-trigger[data-flower-companion-empty-selection='true'] {
+  width: 1.5rem;
+  justify-content: center;
+  gap: 0;
+  padding: 0;
 }
 
 .flower-surface-companion-collapsed .flower-companion-thread-trigger > span {

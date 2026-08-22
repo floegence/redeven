@@ -1266,6 +1266,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 		return canonicalFlowerThreadSnapshotTitle(threadCache().summaries.get(threadID))
 			|| canonicalFlowerThreadSnapshotTitle(threadCache().views.get(threadID)?.thread);
 	});
+  const companionCollapsedEmptySelection = createMemo(() => (
+    companionCollapsed() && !trimString(selectedThreadID())
+  ));
   const selectedCanonicalQueuedTurns = createMemo<readonly FlowerQueuedTurn[]>(() => {
     const thread = selectedThread();
     return thread && trimString(thread.thread_id) === trimString(selectedThreadID())
@@ -9548,7 +9551,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         type="button"
         class="flower-companion-thread-trigger"
         aria-label={props.companionCopy?.label}
-        title={selectedThreadTitle()}
+        title={companionCollapsedEmptySelection()
+          ? props.companionCopy?.label || selectedThreadTitle()
+          : selectedThreadTitle()}
+        data-flower-companion-empty-selection={companionCollapsedEmptySelection() ? 'true' : undefined}
         aria-haspopup="listbox"
         aria-expanded={threadSwitcherOpen()}
         onClick={() => {
@@ -9561,8 +9567,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }}
       >
         <FlowerIcon class="flower-companion-thread-trigger-icon h-4 w-4 shrink-0 text-primary" />
-		<span class="truncate">{selectedThreadTitle()}</span>
-        <ChevronDown class="flower-companion-thread-trigger-chevron h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <Show when={!companionCollapsedEmptySelection()}>
+          <span class="truncate">{selectedThreadTitle()}</span>
+          <ChevronDown class="flower-companion-thread-trigger-chevron h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+        </Show>
       </button>
       <Show when={threadSwitcherOpen() && props.companionCopy}>
         {(switcherCopy) => (
@@ -9918,7 +9926,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   />
                 </Show>
                 <Show when={companionCollapsed() && props.companionCopy}>
-                  <div class="flower-companion-collapsed-thread-switcher">
+                  <div
+                    class="flower-companion-collapsed-thread-switcher"
+                    data-flower-companion-empty-selection={companionCollapsedEmptySelection() ? 'true' : undefined}
+                  >
                     {companionHeaderIdentity()}
                   </div>
                 </Show>
