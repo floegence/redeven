@@ -1221,6 +1221,9 @@ export function EnvAppShell() {
         || item.officialCatalog?.pluginInstanceID === pluginInstanceID
       ))?.pluginID
     ),
+    isPluginInstalled: (pluginInstanceID) => Boolean(
+      pluginInventoryProjection()?.items.some((item) => item.pluginInstanceID === pluginInstanceID),
+    ),
   });
   let pluginRuntimeRecoveryClient: unknown = null;
   let pluginRuntimeRecoveryAbort: AbortController | undefined;

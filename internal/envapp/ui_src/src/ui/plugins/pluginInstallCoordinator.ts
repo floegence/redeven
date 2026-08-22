@@ -39,11 +39,16 @@ export function createPluginInstallCoordinator(options: Readonly<{
   completeApprovedInstall: (pluginInstanceID: string, signal?: AbortSignal) => Promise<unknown>;
   createRequestID: () => string;
   resolvePluginID: (pluginInstanceID: string) => string | undefined;
+  /** Whether a durable plugin instance still exists for task recovery. */
+  isPluginInstalled?: (pluginInstanceID: string) => boolean;
 }>): PluginInstallCoordinator {
   const [projections, setProjections] = createSignal<readonly PluginInstallExecutionProjection[]>([]);
   const tasks = new Map<string, Promise<void>>();
   const controllers = new Map<string, AbortController>();
   const installCommands = new Map<string, PluginOfficialInstallCommand>();
+  // The platform keeps terminal executions as audit records. Do not let an
+  // uninstall resurrect that historical record as a current UI task.
+  const forgottenPluginInstanceIDs = new Set<string>();
   let disposed = false;
 
   const projectionFor = (pluginInstanceID: string) => (
@@ -157,6 +162,7 @@ export function createPluginInstallCoordinator(options: Readonly<{
 
   const start = (command: PluginOfficialInstallCommand): Promise<void> => {
     const { pluginID, pluginInstanceID } = command;
+    forgottenPluginInstanceIDs.delete(pluginInstanceID);
     installCommands.set(pluginInstanceID, command);
     return runExclusive(pluginInstanceID, async () => {
       const controller = new AbortController();
@@ -221,7 +227,11 @@ export function createPluginInstallCoordinator(options: Readonly<{
     }
     const latestByPlugin = new Map<string, PluginExecution>();
     for (const execution of listed) {
-      if (execution.kind !== 'operation' || !options.resolvePluginID(execution.plugin_instance_id)) continue;
+      if (
+        execution.kind !== 'operation'
+        || forgottenPluginInstanceIDs.has(execution.plugin_instance_id)
+        || !options.resolvePluginID(execution.plugin_instance_id)
+      ) continue;
       const previous = latestByPlugin.get(execution.plugin_instance_id);
       if (!previous || executionIsNewer(execution, previous)) {
         latestByPlugin.set(execution.plugin_instance_id, execution);
@@ -229,9 +239,17 @@ export function createPluginInstallCoordinator(options: Readonly<{
     }
     const now = Date.now();
     await Promise.all([...latestByPlugin.values()].flatMap((execution) => {
+      const pluginID = options.resolvePluginID(execution.plugin_instance_id);
+      if (!pluginID) return [];
       if (execution.status === 'completed') {
+        // Completed executions are retained for auditability. They are only
+        // actionable while the corresponding installed instance still exists.
+        if (
+          options.isPluginInstalled
+          && !options.isPluginInstalled(execution.plugin_instance_id)
+        ) return [];
         const projection: PluginInstallExecutionProjection = {
-          pluginID: options.resolvePluginID(execution.plugin_instance_id) ?? '',
+          pluginID,
           pluginInstanceID: execution.plugin_instance_id,
           observation: 'refreshing',
           execution,
@@ -242,7 +260,7 @@ export function createPluginInstallCoordinator(options: Readonly<{
       }
       if (isExecutionTerminal(execution) && !terminalFailureIsRecent(execution, now)) return [];
       const projection: PluginInstallExecutionProjection = {
-        pluginID: options.resolvePluginID(execution.plugin_instance_id) ?? '',
+        pluginID,
         pluginInstanceID: execution.plugin_instance_id,
         observation: isExecutionTerminal(execution) ? 'failed' : 'watching',
         execution,
@@ -300,9 +318,11 @@ export function createPluginInstallCoordinator(options: Readonly<{
     for (const controller of controllers.values()) controller.abort('Env App shell disposed');
     controllers.clear();
     installCommands.clear();
+    forgottenPluginInstanceIDs.clear();
   };
 
   const forget = (pluginInstanceID: string) => {
+    forgottenPluginInstanceIDs.add(pluginInstanceID);
     controllers.get(pluginInstanceID)?.abort('Plugin was uninstalled');
     installCommands.delete(pluginInstanceID);
     remove(pluginInstanceID);

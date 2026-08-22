@@ -208,4 +208,54 @@ describe('plugin install execution coordinator', () => {
     expect(completeApprovedInstall).toHaveBeenCalledWith(pluginInstanceID, undefined);
     expect(coordinator.projections()).toEqual([]);
   });
+
+  it('does not resurrect a completed execution after the installed instance was removed', async () => {
+    const completed = execution();
+    const { coordinator, refreshInventory, completeApprovedInstall } = harness({
+      listReleaseInstallExecutions: vi.fn(async () => [completed]),
+    });
+    const guarded = createPluginInstallCoordinator({
+      lifecycle: {
+        listReleaseInstallExecutions: vi.fn(async () => [completed]),
+        installOfficialRelease: vi.fn(),
+        getReleaseInstallExecution: vi.fn(),
+        listReleaseInstallExecutionEvents: vi.fn(),
+        deleteIncompatibleRetainedData: vi.fn(),
+      } as never,
+      refreshInventory,
+      completeApprovedInstall,
+      createRequestID: () => 'request-1',
+      resolvePluginID: () => 'com.redeven.official.containers',
+      isPluginInstalled: () => false,
+    });
+
+    await guarded.resume();
+
+    expect(refreshInventory).not.toHaveBeenCalled();
+    expect(completeApprovedInstall).not.toHaveBeenCalled();
+    expect(guarded.projections()).toEqual([]);
+  });
+
+  it('ignores a durable execution after uninstall until a new install starts', async () => {
+    const completed = execution();
+    const lifecycle = {
+      installOfficialRelease: vi.fn(async () => completed),
+      listReleaseInstallExecutions: vi.fn(async () => [completed]),
+      getReleaseInstallExecution: vi.fn(async () => completed),
+      listReleaseInstallExecutionEvents: vi.fn(async () => ({ execution_id: completed.execution_id, events: [], cursor: completed.cursor })),
+      deleteIncompatibleRetainedData: vi.fn(async () => undefined),
+    };
+    const coordinator = createPluginInstallCoordinator({
+      lifecycle: lifecycle as never,
+      refreshInventory: vi.fn(async () => undefined),
+      completeApprovedInstall: vi.fn(async () => undefined),
+      createRequestID: () => 'request-1',
+      resolvePluginID: () => 'com.redeven.official.containers',
+    });
+
+    coordinator.forget(pluginInstanceID);
+    await coordinator.resume();
+
+    expect(coordinator.projections()).toEqual([]);
+  });
 });
