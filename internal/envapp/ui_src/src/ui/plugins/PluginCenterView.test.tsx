@@ -1316,6 +1316,87 @@ describe('PluginCenterView', () => {
     expect(onCommand).toHaveBeenCalledWith(containersInstallCommand, expect.any(AbortSignal));
   });
 
+  it('opens an actionable loading dialog immediately when the market preview is missing', async () => {
+    const missingPreview = {
+      ...containersPlugin,
+      officialCatalog: {
+        ...containersPlugin.officialCatalog,
+        installPreview: undefined,
+      },
+    };
+    const [currentProjection, setCurrentProjection] = createSignal<PluginInventoryProjection>({ items: [missingPreview] });
+    let completeRefresh: (() => void) | undefined;
+    const onRefresh = vi.fn(() => new Promise<void>((resolve) => {
+      completeRefresh = () => {
+        setCurrentProjection({ items: [containersPlugin] });
+        resolve();
+      };
+    }));
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={currentProjection()}
+        loading={false}
+        onCommand={vi.fn()}
+        onRefresh={onRefresh}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    (mount.querySelector('[data-plugin-center-install="catalog:containers"]') as HTMLButtonElement).click();
+    await Promise.resolve();
+    expect(onRefresh).toHaveBeenCalledOnce();
+    expect(document.querySelector('[data-plugin-install-preview-loading]')).not.toBeNull();
+    expect(document.querySelector('[data-plugin-install-review-confirm]')).toBeNull();
+    expect(document.querySelector('[data-plugin-install-preview-loading]')?.closest('[role="dialog"]')).not.toBeNull();
+
+    const previewDialog = document.querySelector('[data-plugin-install-preview-loading]')?.closest('[role="dialog"]') as HTMLElement;
+    (previewDialog.querySelector('button') as HTMLButtonElement).click();
+    await Promise.resolve();
+    expect(document.querySelector('[data-plugin-install-preview-loading]')).toBeNull();
+    (mount.querySelector('[data-plugin-center-install="catalog:containers"]') as HTMLButtonElement).click();
+    await Promise.resolve();
+    expect(onRefresh).toHaveBeenCalledOnce();
+    expect(document.querySelector('[data-plugin-install-preview-loading]')).not.toBeNull();
+
+    completeRefresh?.();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(document.querySelector('[data-plugin-install-preview-loading]')).toBeNull();
+    expect(document.querySelector('[data-plugin-install-review-dialog]')?.textContent).toContain('2.0.0');
+  });
+
+  it('keeps a failed preview refresh inside one actionable dialog', async () => {
+    const missingPreview = {
+      ...containersPlugin,
+      officialCatalog: {
+        ...containersPlugin.officialCatalog,
+        installPreview: undefined,
+      },
+    };
+    const onRefresh = vi.fn(() => Promise.reject(new Error('market offline')));
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={{ items: [missingPreview] }}
+        loading={false}
+        onCommand={vi.fn()}
+        onRefresh={onRefresh}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    (mount.querySelector('[data-plugin-center-install="catalog:containers"]') as HTMLButtonElement).click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(document.querySelector('[data-plugin-install-preview-error]')?.textContent).toContain('plugin catalog is unavailable');
+    expect(document.querySelectorAll('[data-plugin-install-preview-retry]')).toHaveLength(1);
+    expect(mount.querySelector('[data-plugin-install-error]')).toBeNull();
+  });
+
   it('keeps the catalog usable while an install task is running', () => {
     const mount = document.createElement('div');
     document.body.append(mount);
@@ -1440,6 +1521,52 @@ describe('PluginCenterView', () => {
     expect(onRetryInstall).toHaveBeenCalledWith(containersPlugin.officialCatalog.pluginInstanceID, expect.objectContaining({
       releaseRef: containersPlugin.officialCatalog.installPreview!.release_ref,
     }));
+  });
+
+  it('does not duplicate a coordinator error when an authoritative install failure is present', async () => {
+    const onCommand = vi.fn(async () => {
+      throw new Error('coordinator start failed');
+    });
+    const failedOperation = {
+      pluginID: containersPlugin.pluginID,
+      pluginInstanceID: containersPlugin.officialCatalog.pluginInstanceID,
+      observation: 'watching' as const,
+      execution: {
+        execution_id: 'release_install_containers',
+        plugin_instance_id: containersPlugin.officialCatalog.pluginInstanceID,
+        kind: 'operation' as const,
+        status: 'failed' as const,
+        cursor: 1,
+        failure_code: 'PLUGIN_RELEASE_NETWORK',
+        cancelable: false,
+        created_at: '2026-08-05T08:00:00Z',
+        updated_at: '2026-08-05T08:00:03Z',
+        terminal_at: '2026-08-05T08:00:03Z',
+      },
+      events: [],
+    };
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={{ items: [containersPlugin] }}
+        loading={false}
+        installOperations={[failedOperation]}
+        onCommand={onCommand}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    (mount.querySelector('[data-plugin-center-install="catalog:containers"]') as HTMLButtonElement).click();
+    await Promise.resolve();
+    (document.querySelector('[data-plugin-install-review-confirm]') as HTMLButtonElement).click();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(onCommand).toHaveBeenCalledOnce();
+    expect(mount.querySelectorAll('[data-plugin-install-execution]')).toHaveLength(1);
+    expect(mount.querySelectorAll('[data-plugin-install-error]')).toHaveLength(0);
   });
 
   it('shows an incompatible-data recovery once and requires confirmation before deleting it', async () => {

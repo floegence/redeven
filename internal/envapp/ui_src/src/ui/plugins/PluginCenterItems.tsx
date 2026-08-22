@@ -171,7 +171,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
           )}
         </Show>
       </button>
-      <Show when={props.officialInstallError}>
+      <Show when={props.officialInstallError && !props.installOperation}>
         {(message) => (
           <div
             role="alert"

@@ -61,6 +61,8 @@ type PluginLifecycleFilter = 'all' | Exclude<PluginLifecycleState, 'installed'>;
 type OfficialInstallPhase = 'installing';
 type OfficialInstallFlow =
   | Readonly<{ status: 'idle' }>
+  | Readonly<{ status: 'loading_preview'; key: string; item: PluginInventoryItem; message?: string }>
+  | Readonly<{ status: 'preview_error'; key: string; item: PluginInventoryItem; message: string }>
   | Readonly<{ status: 'review_ready'; key: string; item: PluginInventoryItem }>
   | Readonly<{ status: 'installing'; key: string; item: PluginInventoryItem }>
   | Readonly<{ status: 'installed'; key: string; item: PluginInventoryItem }>
@@ -96,7 +98,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const [retainedDataRecoveryError, setRetainedDataRecoveryError] = createSignal<string>();
   const officialInstallDialog = createMemo(() => {
     const flow = officialInstallFlow();
-    return officialInstallDialogOpen() && (flow.status === 'review_ready' || flow.status === 'installing' || flow.status === 'installed') ? flow : undefined;
+    return officialInstallDialogOpen() && flow.status !== 'idle' ? flow : undefined;
   });
   const [externalUpdateItem, setExternalUpdateItem] = createSignal<PluginInventoryItem | undefined>();
   const [externalSourcePreset, setExternalSourcePreset] = createSignal<ExternalPluginSourcePreset | undefined>();
@@ -457,6 +459,14 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       if (item.pluginInstanceID) return;
       const key = officialInstallKey(item);
       const flow = officialInstallFlow();
+      if (!item.officialCatalog.installPreview) {
+        if (flow.status === 'loading_preview' && flow.key === key) {
+          setOfficialInstallDialogOpen(true);
+          return;
+        }
+        beginOfficialPreviewLoad(item, key);
+        return;
+      }
       if (flow.status === 'review_ready' && flow.key === key) {
         setOfficialInstallDialogOpen(true);
         return;
@@ -468,6 +478,34 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       return;
     }
     openExternalDialog();
+  };
+  const beginOfficialPreviewLoad = (item: PluginInventoryItem, key: string) => {
+    setOfficialInstallFlow({ status: 'loading_preview', key, item });
+    setOfficialInstallDialogOpen(true);
+    setCommandError(null);
+    void Promise.resolve().then(() => props.onRefresh()).then(() => {
+      marketDetailCache.clear();
+      setMarketDetailState(undefined);
+      const refreshed = allItems().find((candidate) => candidate.pluginID === item.pluginID && !candidate.pluginInstanceID);
+      const preview = refreshed?.officialCatalog?.installPreview;
+      if (refreshed?.officialCatalog && preview) {
+        setOfficialInstallFlow({ status: 'review_ready', key: officialInstallKey(refreshed), item: refreshed });
+      } else {
+        setOfficialInstallFlow({
+          status: 'preview_error',
+          key,
+          item,
+          message: i18n.t('uiCopy.plugin.marketUnavailable'),
+        });
+      }
+    }).catch(() => {
+      setOfficialInstallFlow({
+        status: 'preview_error',
+        key,
+        item,
+        message: i18n.t('uiCopy.plugin.marketUnavailable'),
+      });
+    });
   };
   const confirmOfficialInstall = () => {
     const flow = officialInstallFlow();
@@ -698,7 +736,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
                   managementDisabled={loading() || itemManagementPending(item)}
                   commandPendingType={pendingCommandTypeForItem(item)}
                   officialInstallPhase={officialInstallPhaseForItem(item)}
-                  officialInstallError={selectedItem()?.inventoryKey === item.inventoryKey
+                  officialInstallError={selectedItem()?.inventoryKey === item.inventoryKey || installOperationForItem(item)
                     ? undefined
                     : officialInstallErrorForItem(item)}
                   installOperation={officialInstallDialog()?.item.inventoryKey === item.inventoryKey
@@ -785,7 +823,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
               managementPending={managementPending()}
               commandPendingType={pendingCommandTypeForItem(item)}
               officialInstallPhase={officialInstallPhaseForItem(item)}
-              officialInstallError={officialInstallErrorForItem(item)}
+              officialInstallError={installOperationForItem(item) ? undefined : officialInstallErrorForItem(item)}
               installOperation={officialInstallDialog()?.item.inventoryKey === item.inventoryKey
                 ? undefined
                 : installOperationForItem(item)}
@@ -811,6 +849,10 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       <OfficialPluginInstallDialog
         item={officialInstallDialog()?.item}
         installPreview={officialInstallDialog()?.item.officialCatalog?.installPreview}
+        previewLoading={officialInstallDialog()?.status === 'loading_preview'}
+        previewError={officialInstallDialog()?.status === 'preview_error'
+          ? (officialInstallDialog() as Extract<OfficialInstallFlow, { status: 'preview_error' }>).message
+          : undefined}
         operation={officialInstallDialog()?.status === 'installing' || officialInstallDialog()?.status === 'installed'
           ? installOperationForItem(officialInstallDialog()!.item)
           : undefined}
@@ -820,6 +862,11 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
           const item = officialInstallDialog()?.item;
           const instanceID = item?.officialCatalog?.pluginInstanceID;
           if (instanceID && item) void props.onRetryInstall?.(instanceID, buildOfficialInstallCommand(item));
+        }}
+        onRetryPreview={() => {
+          const flow = officialInstallFlow();
+          if (flow.status !== 'preview_error') return;
+          beginOfficialPreviewLoad(flow.item, flow.key);
         }}
         onResolveRetainedData={() => {
           const item = officialInstallDialog()?.item;
@@ -947,10 +994,13 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
 function OfficialPluginInstallDialog(props: {
   item?: PluginInventoryItem;
   installPreview?: NonNullable<PluginInventoryItem['officialCatalog']>['installPreview'];
+  previewLoading?: boolean;
+  previewError?: string;
   operation?: PluginInstallExecutionProjection;
   installing: boolean;
   installed: boolean;
   onRetry?: () => void;
+  onRetryPreview?: () => void;
   onResolveRetainedData?: () => void;
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
@@ -960,7 +1010,11 @@ function OfficialPluginInstallDialog(props: {
   const headerItem = () => props.item
     ? { ...props.item, version: props.item.version ?? props.item.officialCatalog?.latestVersion }
     : undefined;
-  const title = () => props.installing
+  const title = () => props.previewLoading
+    ? i18n.t('uiCopy.plugin.external.loadingInstallTitle')
+    : props.previewError
+      ? i18n.t('uiCopy.plugin.marketUnavailable')
+      : props.installing
     ? i18n.t('uiCopy.plugin.installOperation.installingTitle', { plugin: props.item?.displayName ?? '' })
     : props.installed
       ? i18n.t('uiCopy.plugin.installOperation.complete')
@@ -970,7 +1024,11 @@ function OfficialPluginInstallDialog(props: {
       open={Boolean(props.item)}
       onOpenChange={props.onOpenChange}
       title={title()}
-      description={props.installing
+      description={props.previewLoading
+        ? i18n.t('uiCopy.plugin.external.loadingInstallDescription')
+        : props.previewError
+          ? undefined
+          : props.installing
         ? i18n.t('uiCopy.plugin.installOperation.backgroundDescription')
         : props.installed
           ? i18n.t('uiCopy.plugin.installOperation.complete')
@@ -978,7 +1036,33 @@ function OfficialPluginInstallDialog(props: {
       class="w-[min(34rem,calc(100%-1rem))] max-w-[34rem] bg-background text-foreground sm:w-[min(34rem,calc(100%-2rem))]"
       footer={(
         <div class="flex w-full flex-wrap justify-end gap-2">
-          <Show when={!props.installing && !props.installed}>
+          <Show when={props.previewError}>
+            <button
+              type="button"
+              class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted')}
+              onClick={() => props.onOpenChange(false)}
+            >
+              {i18n.t('common.actions.close')}
+            </button>
+            <button
+              type="button"
+              data-plugin-install-preview-retry
+              class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90')}
+              onClick={props.onRetryPreview}
+            >
+              {i18n.t('uiCopy.plugin.refreshOfficial')}
+            </button>
+          </Show>
+          <Show when={props.previewLoading}>
+            <button
+              type="button"
+              class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted')}
+              onClick={() => props.onOpenChange(false)}
+            >
+              {i18n.t('common.actions.close')}
+            </button>
+          </Show>
+          <Show when={!props.previewLoading && !props.previewError && !props.installing && !props.installed}>
             <button
               type="button"
               class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted')}
@@ -1012,8 +1096,18 @@ function OfficialPluginInstallDialog(props: {
         {(item) => (
           <div data-plugin-install-review-dialog class="space-y-4">
             <PluginIdentityHeader item={headerItem()!} description />
-            <Show when={props.installing || props.installed} fallback={(
-              <section class="space-y-3 rounded-md border bg-muted/10 px-4 py-3">
+            <Show when={props.previewLoading}>
+              <div role="status" data-plugin-install-preview-loading class="flex items-center gap-3 rounded-md border bg-muted/10 px-4 py-4 text-sm text-muted-foreground">
+                <RefreshIcon class="h-4 w-4 shrink-0 animate-spin motion-reduce:animate-none" />
+                <span>{i18n.t('uiCopy.plugin.external.loadingInstallDescription')}</span>
+              </div>
+            </Show>
+            <Show when={props.previewError}>
+              <p role="alert" data-plugin-install-preview-error class="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">{props.previewError}</p>
+            </Show>
+            <Show when={!props.previewLoading && !props.previewError}>
+              <Show when={props.installing || props.installed} fallback={(
+                <section class="space-y-3 rounded-md border bg-muted/10 px-4 py-3">
               <div class="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
                 <span>{i18n.t('uiCopy.plugin.version')}</span>
                 <span class="text-right font-medium text-foreground">{item().officialCatalog?.latestVersion ?? '-'}</span>
@@ -1065,8 +1159,8 @@ function OfficialPluginInstallDialog(props: {
                 </div>
               </Show>
               <p class="text-xs text-muted-foreground">{i18n.t('uiCopy.plugin.installOperation.declarationNotice')}</p>
-              </section>
-            )}>
+                </section>
+              )}>
               <Show when={props.installed} fallback={(
                 <Show when={props.operation} fallback={<PluginInstallSteps />}>
                   {(operation) => (
@@ -1080,6 +1174,7 @@ function OfficialPluginInstallDialog(props: {
                 </Show>
               )}>
                 <p class="text-sm font-medium text-emerald-600">{i18n.t('uiCopy.plugin.installOperation.complete')}</p>
+              </Show>
               </Show>
             </Show>
           </div>
@@ -2104,7 +2199,7 @@ function PluginActions(props: {
           </div>
         )}
       </Show>
-      <Show when={props.officialInstallError}>
+      <Show when={props.officialInstallError && !props.installOperation}>
         {(message) => (
           <div
             role="alert"
