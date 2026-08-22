@@ -286,7 +286,10 @@ export function environmentMatchesRuntimeLifecycleProgress(
   environment: RuntimeProgressEnvironmentMatch,
   progress: DesktopLauncherActionProgress | null | undefined,
 ): boolean {
-  if (!progress || runtimeLifecycleOperationForActionProgress(progress) === null) {
+  if (!progress || (
+    runtimeLifecycleOperationForActionProgress(progress) === null
+    && !(progress.action === 'reinstall_target' && progress.subject_kind === 'runtime_target')
+  )) {
     return false;
   }
   const progressIDs = [
@@ -359,10 +362,6 @@ export function gatewaySourceMatchesRuntimeLifecycleProgress(
     case 'check_gateway':
     case 'sync_gateway':
     case 'pair_gateway':
-    case 'start_gateway':
-    case 'stop_gateway':
-    case 'restart_gateway':
-    case 'update_gateway':
     case 'refresh_gateway_catalog':
     case 'refresh_gateway_status':
       return true;
@@ -429,6 +428,31 @@ export function selectedSnapshotRuntimeLifecycleProgressForEnvironment(
   return selectLauncherProgress(
     progressItems,
     (progress) => environmentMatchesRuntimeLifecycleProgress(environment, progress),
+  );
+}
+
+export function selectedSnapshotReinstallTargetProgressForEnvironment(
+  environment: DesktopEnvironmentEntry,
+  progressItems: readonly DesktopLauncherActionProgress[],
+): DesktopLauncherActionProgress | null {
+  if (
+    environment.kind === 'gateway_environment'
+    || environment.kind === 'provider_environment'
+    || environment.kind === 'external_local_ui'
+    || (!environment.managed_runtime_host_access && !environment.managed_runtime_placement)
+  ) {
+    return null;
+  }
+  const targetIDs = [
+    environment.id,
+    environment.managed_runtime_target_id,
+    environment.managed_runtime_placement_target_id,
+    environment.provider_runtime_link_target?.runtime_key,
+  ].map((value) => String(value ?? '').trim()).filter(Boolean);
+  return selectLauncherProgress(
+    progressItems,
+    (progress) => progress.action === 'reinstall_target'
+      && targetIDs.some((targetID) => environmentMatchesActionProgress(targetID, progress)),
   );
 }
 

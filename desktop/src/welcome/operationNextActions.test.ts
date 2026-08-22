@@ -183,11 +183,6 @@ describe('operationNextActions', () => {
           label: 'Sync Gateway',
         },
         {
-          kind: 'update_gateway',
-          gateway_id: 'bastion',
-          label: 'Update Gateway service',
-        },
-        {
           kind: 'retry',
           operation_key: 'gateway:bastion:start',
           retry_action: {
@@ -220,7 +215,6 @@ describe('operationNextActions', () => {
     };
 
     expect(visibleOperationNextActions(progress)).toEqual([
-      expect.objectContaining({ kind: 'update_gateway', label: 'Update Gateway service' }),
       expect.objectContaining({ kind: 'copy_diagnostics', label: 'Copy log' }),
       expect.objectContaining({ kind: 'dismiss', label: 'Dismiss' }),
     ]);
@@ -238,16 +232,6 @@ describe('operationNextActions', () => {
   it('shows Gateway service recommendations after a Refresh diagnosis completes', () => {
     const progress: DesktopLauncherActionProgress = {
       ...failedProgress([
-        {
-          kind: 'start_gateway',
-          gateway_id: 'bastion',
-          label: 'Start Gateway',
-        },
-        {
-          kind: 'update_gateway',
-          gateway_id: 'bastion',
-          label: 'Update Gateway',
-        },
         {
           kind: 'copy_diagnostics',
           operation_key: 'gateway:bastion:check',
@@ -268,8 +252,6 @@ describe('operationNextActions', () => {
     };
 
     expect(visibleOperationNextActions(progress)).toEqual([
-      expect.objectContaining({ kind: 'start_gateway', label: 'Start Gateway' }),
-      expect.objectContaining({ kind: 'update_gateway', label: 'Update Gateway' }),
       expect.objectContaining({ kind: 'copy_diagnostics', label: 'Copy log' }),
       expect.objectContaining({ kind: 'dismiss', label: 'Dismiss' }),
     ]);

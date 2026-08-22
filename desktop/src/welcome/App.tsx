@@ -21,7 +21,6 @@ import {
   ExternalLink,
   Globe,
   Lock,
-  Package,
   Highlighter,
   Pin,
   Play,
@@ -92,7 +91,6 @@ import type {
   DesktopLauncherOperationNextAction,
   DesktopLauncherSurface,
   DesktopLauncherRuntimeTarget,
-  DesktopReinstallTargetPreview,
   DesktopLocalEnvironmentStateRoute,
   DesktopWelcomeIssue,
   DesktopWelcomeSnapshot,
@@ -141,11 +139,8 @@ import {
 import type {
   DesktopRuntimeLifecyclePhase,
   DesktopRuntimeLifecycleStepSnapshot,
-  DesktopRuntimeLifecycleOperation,
 } from '../shared/desktopRuntimeLifecycleProgress';
-import {
-  runtimeLifecycleProgress,
-} from '../shared/desktopRuntimeLifecycleProgress';
+import { reinstallTargetStepProgress } from '../shared/desktopReinstallProgress';
 import {
   DEFAULT_DESKTOP_SSH_AUTH_MODE,
   DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
@@ -353,6 +348,7 @@ import {
   IDLE_LAUNCHER_BUSY_STATE,
   selectedSnapshotOpenConnectionProgressForEnvironment,
   selectedSnapshotRuntimeLifecycleProgressForEnvironment,
+  selectedSnapshotReinstallTargetProgressForEnvironment,
   selectedFlowerWarmupProgress,
   gatewaySourceMatchesRuntimeLifecycleProgress,
   type DesktopLauncherBusyState,
@@ -795,6 +791,25 @@ function localizedStringByValue(
   return key ? i18n.t(key) : clean;
 }
 
+function reinstallDeletedDataTranslationKey(value: string): DesktopTranslationKey {
+  switch (value) {
+    case 'gateway_runtime_managed_packages':
+      return 'confirm.reinstallTargetDeletedDataGatewayRuntime';
+    case 'workspace_projects_application_data':
+      return 'confirm.reinstallTargetDeletedDataWorkspace';
+    case 'floret_redevplugin_data':
+      return 'confirm.reinstallTargetDeletedDataFloretPlugin';
+    case 'trust_identity_catalog_environment_config':
+      return 'confirm.reinstallTargetDeletedDataIdentity';
+    default:
+      return 'confirm.reinstallTargetDescription';
+  }
+}
+
+function localizedReinstallHost(i18n: DesktopI18n, value: string): string {
+  return value === 'local_device' ? i18n.t('confirm.reinstallTargetLocalDevice') : value;
+}
+
 function localizedEnvironmentStatusLabel(i18n: DesktopI18n, label: string): string {
   return localizedStringByValue(i18n, label, {
     Open: 'environmentStatus.open',
@@ -1055,18 +1070,6 @@ function localizedGatewaySourceActionLabel(i18n: DesktopI18n, action: GatewaySou
       return i18n.t('common.refresh');
     case 'pair_gateway':
       return i18n.t('environmentCenter.gatewayPanelPairThisGatewayAria');
-    case 'start_gateway':
-      return action.label === 'Starting...'
-        ? i18n.t('progress.startingEllipsis')
-        : i18n.t('environmentCenter.gatewayActionStart');
-    case 'stop_gateway':
-      return i18n.t('environmentCenter.gatewayActionStop');
-    case 'restart_gateway':
-      return i18n.t('environmentCenter.gatewayActionRestart');
-    case 'update_gateway':
-      return i18n.t('environmentCenter.gatewayActionUpdate');
-    case 'reinstall_target':
-      return i18n.t('common.reinstall');
     case 'setup_gateway':
       return i18n.t('environmentStatus.setupRequired');
     case 'cancel_gateway_action':
@@ -1138,9 +1141,6 @@ function localizedGatewayActionPanelText(i18n: DesktopI18n, value: string): stri
     'Review the Gateway target, then refresh again when the Gateway is reachable.': 'environmentCenter.gatewayPanelResolveDetail',
     'Desktop will check Gateway service reachability, pair when needed, and refresh the environment catalog.': 'environmentCenter.gatewayPanelSyncManagedDetail',
     'Desktop will check this external Gateway endpoint and refresh its environment catalog. Start the Gateway on its host if it is offline.': 'environmentCenter.gatewayPanelSyncAccessOnlyDetail',
-    'Stop Gateway': 'environmentCenter.gatewayActionStop',
-    'Restart Gateway': 'environmentCenter.gatewayActionRestart',
-    'Update Gateway': 'environmentCenter.gatewayActionUpdate',
     'Review Gateway identity': 'environmentCenter.gatewayPanelReviewIdentityTitle',
     'Desktop pairs URL Gateways automatically during Refresh. Gateway service is managed on the Gateway host.': 'environmentCenter.gatewayPanelAccessOnlyPairDetail',
     'Start Gateway to sync': 'environmentCenter.gatewayPanelStartToSyncTitle',
@@ -1171,25 +1171,7 @@ function localizedGatewayActionPanelDetail(
   i18n: DesktopI18n,
   model: GatewayActionPanelModel,
 ): string {
-  if (model.affected_sessions.length > 0 && (
-    model.kind === 'stop_gateway_confirm'
-    || model.kind === 'restart_gateway_confirm'
-    || model.kind === 'update_gateway_confirm'
-  )) {
-    const count = model.affected_sessions.length;
-    return i18n.t(count === 1
-      ? 'environmentCenter.gatewayPanelConfirmSessionsOne'
-      : 'environmentCenter.gatewayPanelConfirmSessionsMany', { count });
-  }
   switch (model.kind) {
-    case 'stop_gateway_confirm':
-      return i18n.t('environmentCenter.gatewayPanelStopDetail');
-    case 'restart_gateway_confirm':
-      return i18n.t('environmentCenter.gatewayPanelRestartDetail');
-    case 'update_gateway_confirm':
-      return i18n.t('environmentCenter.gatewayPanelUpdateDetail');
-    case 'reinstall_target_confirm':
-      return i18n.t('confirm.reinstallTargetDescription');
     default:
       return localizedGatewayActionPanelText(i18n, model.detail);
   }
@@ -1803,7 +1785,7 @@ function inlineFailurePresentation(
 
 function gatewayActionKindForRequest(
   request: DesktopLauncherActionRequest | undefined,
-): Extract<DesktopLauncherActionKind, 'refresh_gateway' | 'start_gateway' | 'stop_gateway' | 'restart_gateway' | 'update_gateway' | 'reinstall_target'> {
+): Extract<DesktopLauncherActionKind, 'refresh_gateway'> {
   switch (request?.kind) {
     case 'refresh_gateway':
     case 'check_gateway':
@@ -1812,12 +1794,6 @@ function gatewayActionKindForRequest(
     case 'refresh_gateway_status':
     case 'refresh_gateway_catalog':
       return 'refresh_gateway';
-    case 'start_gateway':
-    case 'stop_gateway':
-    case 'restart_gateway':
-    case 'update_gateway':
-    case 'reinstall_target':
-      return request.kind;
     default:
       return 'refresh_gateway';
   }
@@ -2892,10 +2868,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [runtimeContainerOptionsKey, setRuntimeContainerOptionsKey] = createSignal('');
   const [controlPlaneDialogState, setControlPlaneDialogState] = createSignal<ControlPlaneDialogState>(null);
   const [deleteTarget, setDeleteTarget] = createSignal<DesktopEnvironmentEntry | null>(null);
-  const [reinstallTarget, setReinstallTarget] = createSignal<Readonly<{
-    environment: DesktopEnvironmentEntry;
-    preview: DesktopReinstallTargetPreview;
-  }> | null>(null);
   const [deleteGatewayTarget, setDeleteGatewayTarget] = createSignal<DesktopGatewaySource | null>(null);
   const [providerRuntimeLinkConfirmation, setProviderRuntimeLinkConfirmation] = createSignal<ProviderRuntimeLinkConfirmationState | null>(null);
   const [providerRuntimeLinkProviderEnvironmentID, setProviderRuntimeLinkProviderEnvironmentID] = createSignal('');
@@ -5030,15 +5002,25 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           return false;
         }
         {
+          const continuation = action as EnvironmentActionModel & {
+            operation_key?: string;
+            preflight_id?: string;
+          };
+          if (continuation.operation_key && continuation.preflight_id) {
+            const result = await performLauncherAction({
+              kind: 'reinstall_target',
+              environment_id: environment.id,
+              preflight_id: continuation.preflight_id,
+              operation_key: continuation.operation_key,
+              impact_acknowledged: true,
+            }, errorTarget);
+            return result?.outcome === 'reinstalled_target';
+          }
           const result = await performLauncherAction({
             kind: 'preview_reinstall_target',
             environment_id: environment.id,
           }, errorTarget);
-          if (result?.outcome !== 'previewed_reinstall_target' || !result.reinstall_preview) {
-            return false;
-          }
-          setReinstallTarget({ environment, preview: result.reinstall_preview });
-          return true;
+          return result?.outcome === 'previewed_reinstall_target';
         }
       case 'review_network_exposure':
         openSettingsSurface(environment.id);
@@ -5061,21 +5043,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       case 'opening':
       default:
         return false;
-    }
-  }
-
-  async function confirmTargetReinstall(): Promise<void> {
-    const target = reinstallTarget();
-    if (!target) return;
-    const result = await performLauncherAction({
-      kind: 'reinstall_target',
-      environment_id: target.environment.id,
-      preflight_id: target.preview.preflight_id,
-      impact_acknowledged: true,
-    });
-    if (result?.outcome === 'reinstalled_target') {
-      setReinstallTarget(null);
-      showActionToast(i18n().t('confirm.reinstallCompleted'));
     }
   }
 
@@ -5829,15 +5796,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   async function runGatewayLauncherAction(request: DesktopLauncherActionRequest): Promise<void> {
     const result = await performLauncherAction(request);
     if (!result) {
-      return;
-    }
-    if (result.outcome === 'previewed_reinstall_target' && result.reinstall_preview) {
-      const environment = snapshot().environments.find((candidate) => (
-        candidate.id === result.reinstall_preview?.environment_id
-      ));
-      if (environment) {
-        setReinstallTarget({ environment, preview: result.reinstall_preview });
-      }
       return;
     }
     await refreshSnapshot();
@@ -6715,40 +6673,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       />
 
       <ConfirmDialog
-        open={reinstallTarget() !== null}
-        onOpenChange={(open) => {
-          if (!open) setReinstallTarget(null);
-        }}
-        title={i18n().t('confirm.reinstallTargetTitle')}
-        confirmText={i18n().t('confirm.reinstallTargetConfirm')}
-        cancelText={i18n().t('common.cancel')}
-        variant="destructive"
-        loading={busyStateMatchesAction(busyState(), 'reinstall_target')}
-        onConfirm={() => void confirmTargetReinstall()}
-      >
-        <div class="space-y-2">
-          <Show when={reinstallTarget()?.environment.reinstall_required === true}>
-            <p class="text-sm font-medium">{i18n().t('confirm.reinstallRequiredDescription')}</p>
-          </Show>
-          <p class="text-sm">{i18n().t('confirm.reinstallTargetDescription')}</p>
-          <Show when={reinstallTarget()} keyed>
-            {(target) => (
-              <div class="space-y-1 rounded-md border border-border/70 bg-muted/30 p-3 text-xs">
-                <p>{i18n().t('confirm.reinstallTargetHost', { host: target.preview.host_label })}</p>
-                <Show when={target.preview.container_id}>
-                  {(containerID) => <p>{i18n().t('confirm.reinstallTargetContainer', { container: containerID() })}</p>}
-                </Show>
-                <p class="font-mono break-all">{i18n().t('confirm.reinstallTargetRoot', { root: target.preview.target_root })}</p>
-                <p>{i18n().t('confirm.reinstallTargetProcessCount', { count: target.preview.processes.length })}</p>
-                <p>{i18n().t('confirm.reinstallAffectedEnvironmentCount', { count: target.preview.affected_environment_ids.length })}</p>
-              </div>
-            )}
-          </Show>
-          <p class="text-xs font-medium text-destructive">{i18n().t('confirm.reinstallIrreversible')}</p>
-        </div>
-      </ConfirmDialog>
-
-      <ConfirmDialog
         open={deleteTarget() !== null}
         onOpenChange={(open) => {
           if (!open) {
@@ -7579,6 +7503,8 @@ function EnvironmentCardsPanel(props: Readonly<{
         const progressStillVisible = environment
           ? selectedSnapshotOpenConnectionProgressForEnvironment(environment, props.actionProgress) !== null
             || selectedSnapshotRuntimeLifecycleProgressForEnvironment(environment, props.actionProgress) !== null
+            || selectedSnapshotReinstallTargetProgressForEnvironment(environment, props.actionProgress) !== null
+            || busyStateMatchesEnvironment(props.busyState, environment.id, ['preview_reinstall_target', 'reinstall_target'])
           : false;
         const pendingDisclosureVisible = lifecycleDisclosure?.environment_id === current.environment_id
           && lifecycleDisclosure.visibility === 'open'
@@ -8803,20 +8729,13 @@ function localizedProgressPlanningLabel(i18n: DesktopI18n, action: DesktopLaunch
   switch (action) {
     case 'refresh_gateway':
     case 'check_gateway':
-    case 'start_gateway':
     case 'sync_gateway':
     case 'pair_gateway':
     case 'refresh_gateway_catalog':
     case 'refresh_gateway_status':
       return i18n.t('progress.planningGatewayStartPath');
-    case 'restart_gateway':
-      return i18n.t('progress.planningGatewayRestartPath');
-    case 'update_gateway':
-      return i18n.t('progress.planningGatewayUpdatePath');
     case 'reinstall_target':
       return i18n.t('common.reinstall');
-    case 'stop_gateway':
-      return i18n.t('progress.planningGatewayStopPath');
     case 'restart_environment_runtime':
       return i18n.t('progress.planningRestartPath');
     case 'update_environment_runtime':
@@ -8834,20 +8753,13 @@ function localizedFailureNoticeTitle(i18n: DesktopI18n, progress: DesktopLaunche
   }
   switch (progress.action) {
     case 'refresh_gateway':
-    case 'start_gateway':
     case 'check_gateway':
     case 'pair_gateway':
     case 'refresh_gateway_catalog':
     case 'refresh_gateway_status':
       return i18n.t('progress.gatewayNeedsAttention');
-    case 'restart_gateway':
-      return i18n.t('progress.gatewayRestartNeedsAttention');
-    case 'update_gateway':
-      return i18n.t('progress.gatewayUpdateNeedsAttention');
     case 'reinstall_target':
       return i18n.t('toast.needsAttention');
-    case 'stop_gateway':
-      return i18n.t('progress.gatewayStopNeedsAttention');
     case 'restart_environment_runtime':
       return i18n.t('progress.restartNeedsAttention');
     case 'update_environment_runtime':
@@ -8880,14 +8792,6 @@ function localizedNextActionLabel(i18n: DesktopI18n, action: DesktopLauncherOper
     case 'refresh_gateway_catalog':
     case 'check_gateway':
       return i18n.t('environmentAction.refreshStatus');
-    case 'start_gateway':
-      return i18n.t('environmentCenter.gatewayActionStart');
-    case 'stop_gateway':
-      return i18n.t('environmentCenter.gatewayActionStop');
-    case 'restart_gateway':
-      return i18n.t('environmentCenter.gatewayActionRestart');
-    case 'update_gateway':
-      return i18n.t('environmentCenter.gatewayActionUpdate');
     case 'reinstall_target':
       return i18n.t('common.reinstall');
     case 'resolve_gateway':
@@ -8901,6 +8805,7 @@ function localizedNextActionLabel(i18n: DesktopI18n, action: DesktopLauncherOper
     case 'retry':
       return localizedEnvironmentActionLabel(i18n, action.label);
   }
+  return localizedEnvironmentActionLabel(i18n, action.label);
 }
 
 function environmentActionForLauncherRetry(
@@ -8971,17 +8876,28 @@ function EnvironmentProgressPanel(props: Readonly<{
   });
   const runtimeSteps = createMemo(() => runtimeLifecycle()?.steps ?? []);
   const [clockNow, setClockNow] = createSignal(Date.now());
+  const [stepStartedAt, setStepStartedAt] = createSignal(Date.now());
+  let lastStepID = '';
+  createEffect(() => {
+    const stepID = stepProgress()?.active_step_id ?? '';
+    if (stepID !== '' && stepID !== lastStepID) {
+      lastStepID = stepID;
+      setStepStartedAt(Date.now());
+    }
+  });
   const elapsedTimer = setInterval(() => setClockNow(Date.now()), 1_000);
   onCleanup(() => clearInterval(elapsedTimer));
   const activeStageElapsedSeconds = createMemo(() => {
     const lifecycle = runtimeLifecycle();
-    if (!lifecycle || props.progress.status === 'succeeded' || props.progress.status === 'failed' || props.progress.status === 'canceled') {
+    if (props.progress.status === 'succeeded' || props.progress.status === 'failed' || props.progress.status === 'canceled') {
       return 0;
     }
+    if (stepProgress()) {
+      return Math.max(0, Math.floor((clockNow() - stepStartedAt()) / 1_000));
+    }
+    if (!lifecycle) return 0;
     const active = lifecycle.steps.find((step) => step.id === lifecycle.active_step_id);
-    if (!active?.started_at_unix_ms) {
-      return 0;
-    }
+    if (!active?.started_at_unix_ms) return 0;
     return Math.max(0, Math.floor((clockNow() - active.started_at_unix_ms) / 1_000));
   });
   const stepEntering = createRuntimeLifecycleStepAnimation(
@@ -9269,13 +9185,39 @@ function EnvironmentProgressPanel(props: Readonly<{
           </div>
         )}
       </Show>
+      <Show when={props.progress.status === 'needs_confirmation' && props.progress.reinstall_preview}>
+        {(preview) => (
+          <div class="redeven-runtime-impact" data-tone="warning">
+            <div class="redeven-runtime-impact__summary">{props.i18n.t('confirm.reinstallTargetDescription')}</div>
+            <div class="redeven-runtime-impact__detail space-y-1">
+              <div>{props.i18n.t('confirm.reinstallTargetHost', { host: localizedReinstallHost(props.i18n, preview().host_label) })}</div>
+              <Show when={preview().container_id}>
+                {(containerID) => <div>{props.i18n.t('confirm.reinstallTargetContainer', { container: containerID() })}</div>}
+              </Show>
+              <div class="font-mono break-all">{props.i18n.t('confirm.reinstallTargetRoot', { root: preview().target_root })}</div>
+              <div>{props.i18n.t('confirm.reinstallTargetProcessCount', { count: preview().processes.length })}</div>
+              <div>{props.i18n.t('confirm.reinstallAffectedEnvironmentCount', { count: preview().affected_environment_ids.length })}</div>
+              <ul class="list-disc space-y-1 pl-4">
+                <For each={preview().deleted_data_keys}>
+                  {(dataKey) => <li>{props.i18n.t(reinstallDeletedDataTranslationKey(dataKey))}</li>}
+                </For>
+              </ul>
+              <div class="font-medium text-destructive">{props.i18n.t('confirm.reinstallIrreversible')}</div>
+            </div>
+          </div>
+        )}
+      </Show>
       <Show when={!hasStepTimeline()}>
         {renderFailureNotice()}
         {renderNextActionGroups()}
       </Show>
       <Show when={hasStepTimeline()}>
         <>
-          <div class="redeven-environment-progress__steps" aria-hidden="true">
+          <div
+            class="redeven-environment-progress__steps"
+            role="list"
+            aria-label={props.i18n.t('progress.environmentProgress')}
+          >
               <Index each={phaseSequence()}>
                 {(step, index) => {
                   const state = () => stepState(
@@ -9287,6 +9229,7 @@ function EnvironmentProgressPanel(props: Readonly<{
                   return (
                     <div
                       class="redeven-environment-progress__step"
+                      role="listitem"
                       data-step-key={step().key}
                       data-plan-revision={runtimeLifecycle()?.plan_revision ?? 0}
                       data-entering={runtimeLifecycle() ? stepEntering(step().key) : false}
@@ -9301,6 +9244,7 @@ function EnvironmentProgressPanel(props: Readonly<{
                         <span
                           class="redeven-environment-progress__step-label"
                           data-state={state()}
+                          aria-current={state() === 'active' ? 'step' : undefined}
                         >{step().label}</span>
                         <Show when={step().detail}>
                           {(detail) => <span class="redeven-environment-progress__step-detail">{detail()}</span>}
@@ -9421,6 +9365,7 @@ function EnvironmentPrimaryActionPanel(props: Readonly<{
   environmentID: string;
   busyState?: DesktopLauncherBusyState;
   runtimeLifecycleProgress?: DesktopLauncherActionProgress | null;
+  reinstallTargetProgress?: DesktopLauncherActionProgress | null;
   session: EnvironmentGuidanceSessionState;
   onRunAction: (action: EnvironmentActionModel) => void;
 }>) {
@@ -9636,10 +9581,8 @@ function splitMenuItemToneData(intent: EnvironmentActionIntent): string {
 function gatewaySplitMenuItemToneData(intent: GatewaySourceActionModel['intent']): string {
   switch (intent) {
     case 'disable_gateway':
-    case 'stop_gateway':
       return 'accent';
     case 'refresh_gateway':
-    case 'start_gateway':
       return 'primary';
     default:
       return '';
@@ -9703,6 +9646,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
   busyState?: DesktopLauncherBusyState;
   loading?: boolean;
   runtimeLifecycleProgress?: DesktopLauncherActionProgress | null;
+  reinstallTargetProgress?: DesktopLauncherActionProgress | null;
   openConnectionProgress?: DesktopLauncherActionProgress | null;
   cancelOperation: (progress: DesktopLauncherActionProgress) => void;
   dismissOperation: (progress: DesktopLauncherActionProgress) => void;
@@ -9780,7 +9724,8 @@ function EnvironmentSplitActionButton(props: Readonly<{
   const panelProgress = createMemo(() => (
     guidanceSessionOwnsOpenFlowPanel(props.guidanceSession)
       ? null
-      : selectEnvironmentPanelProgress(primaryProgress(), runtimeMenuProgress())
+      : props.reinstallTargetProgress
+        ?? selectEnvironmentPanelProgress(primaryProgress(), runtimeMenuProgress())
   ));
   const hasPanelProgress = createMemo(() => panelProgress() !== null);
   const progressPanelVisible = createMemo(() => props.progressOpen && hasPanelProgress());
@@ -10007,6 +9952,20 @@ function EnvironmentSplitActionButton(props: Readonly<{
                               }
                               case 'manage_desktop_update': {
                                 void props.runDesktopUpdateHandoff(props.environmentID, props.environmentLabel);
+                                break;
+                              }
+                              case 'reinstall_target': {
+                                const preview = p().reinstall_preview;
+                                if (preview) {
+                                  props.onRunAction({
+                                    intent: 'reinstall_target',
+                                    label: 'Reinstall Redeven',
+                                    enabled: true,
+                                    variant: 'outline',
+                                    operation_key: p().operation_key,
+                                    preflight_id: preview.preflight_id,
+                                  } as EnvironmentActionModel);
+                                }
                                 break;
                               }
                               case 'retry': {
@@ -10307,6 +10266,36 @@ function EnvironmentConnectionCard(props: Readonly<{
   const runtimeLifecycleProgress = createMemo(() => (
     selectedSnapshotRuntimeLifecycleProgressForEnvironment(props.environment, props.actionProgress)
   ));
+  const reinstallTargetProgress = createMemo<DesktopLauncherActionProgress | null>(() => {
+    const persisted = selectedSnapshotReinstallTargetProgressForEnvironment(props.environment, props.actionProgress);
+    if (persisted) {
+      return persisted;
+    }
+    if (!busyStateMatchesEnvironment(
+      props.busyState,
+      props.environment.id,
+      ['preview_reinstall_target', 'reinstall_target'],
+    )) {
+      return null;
+    }
+    return {
+      action: 'reinstall_target',
+      environment_id: props.environment.id,
+      environment_label: props.environment.label,
+      subject_kind: 'runtime_target',
+      subject_id: props.environment.id,
+      started_at_unix_ms: props.busyState.request_started_at_unix_ms,
+      updated_at_unix_ms: props.busyState.request_started_at_unix_ms,
+      status: 'running',
+      phase: 'preflight',
+      title: 'Reinstall Redeven',
+      title_key: 'environmentAction.reinstallRedeven',
+      detail: 'Desktop is checking the exact direct target before showing the deletion list.',
+      detail_key: 'progress.reinstallCheckingDetail',
+      step_progress: reinstallTargetStepProgress('preflight'),
+      cancelable: false,
+    };
+  });
   const openConnectionProgress = createMemo(() => (
     selectedSnapshotOpenConnectionProgressForEnvironment(props.environment, props.actionProgress)
   ));
@@ -10358,6 +10347,8 @@ function EnvironmentConnectionCard(props: Readonly<{
     'manage_desktop_update',
     'stop_environment_runtime',
     'refresh_environment_runtime',
+    'preview_reinstall_target',
+    'reinstall_target',
   ] as const;
   const isWindowActionBusy = createMemo(() => (
     busyStateBlocksEnvironmentAction(
@@ -10377,6 +10368,7 @@ function EnvironmentConnectionCard(props: Readonly<{
     )
     || busyStateMatchesAction(props.busyState, 'refresh_all_environment_runtimes')
     || launcherProgressBlocksPrimaryAction(runtimeLifecycleProgress())
+    || launcherProgressBlocksPrimaryAction(reinstallTargetProgress())
   ));
   const isPinBusy = createMemo(() => (
     busyStateMatchesEnvironment(props.busyState, props.environment.id, [
@@ -10513,6 +10505,7 @@ function EnvironmentConnectionCard(props: Readonly<{
           busyState={props.busyState}
           loading={isWindowActionBusy() || isRuntimeActionBusy()}
           runtimeLifecycleProgress={visibleRuntimeLifecycleProgress()}
+          reinstallTargetProgress={reinstallTargetProgress()}
           openConnectionProgress={visibleOpenConnectionProgress()}
           cancelOperation={props.cancelOperation}
           dismissOperation={props.dismissOperation}
@@ -10526,6 +10519,11 @@ function EnvironmentConnectionCard(props: Readonly<{
           confirmRuntimeOperation={props.confirmRuntimeOperation}
           onRunAction={(action) => {
             void (async () => {
+              if (action.intent === 'reinstall_target') {
+                // Keep the shared timeline visible while direct SSH/container
+                // preflight runs and transitions into confirmation.
+                props.onLifecycleProgressOpenChange(true);
+              }
               if (action.intent === 'update_desktop') {
                 props.setGuidanceSession(null);
                 props.onPrimaryActionGuidanceOpenChange(false);
@@ -11335,23 +11333,6 @@ type GatewayDiagnosisResultSnapshot = Readonly<{
   panel_model: GatewayActionPanelModel;
 }>;
 
-function gatewayOperationNameForAction(action: GatewaySourceActionModel): 'start' | 'stop' | 'restart' | 'update' | null {
-  switch (action.intent) {
-    case 'start_gateway':
-      return 'start';
-    case 'stop_gateway':
-      return 'stop';
-    case 'restart_gateway':
-      return 'restart';
-    case 'update_gateway':
-      return 'update';
-    default:
-      return null;
-  }
-}
-
-type GatewayForegroundServiceOperationName = NonNullable<ReturnType<typeof gatewayOperationNameForAction>>;
-
 const GATEWAY_REFRESH_STEP_DEFINITIONS: readonly Readonly<{
   id: string;
   label: string;
@@ -11364,51 +11345,11 @@ const GATEWAY_REFRESH_STEP_DEFINITIONS: readonly Readonly<{
   { id: 'gateway_refreshed', label: 'Gateway refreshed' },
 ];
 
-function gatewayServiceFallbackTargetID(gateway: DesktopGatewaySource): string {
-  return trimString(gateway.service_state?.service_target_id) || trimString(gateway.gateway_id);
-}
-
-function gatewayForegroundServiceInitialPhase(operation: GatewayForegroundServiceOperationName): DesktopRuntimeLifecyclePhase {
-  return operation === 'stop' ? 'checking_gateway_service' : 'checking_host';
-}
-
-function gatewayForegroundServiceLifecycleOperation(operation: GatewayForegroundServiceOperationName): DesktopRuntimeLifecycleOperation {
-  return operation;
-}
-
-function gatewayForegroundServiceTitle(action: GatewaySourceActionModel): string {
-  switch (action.intent) {
-    case 'start_gateway':
-      return 'Start Gateway';
-    case 'stop_gateway':
-      return 'Stop Gateway';
-    case 'restart_gateway':
-      return 'Restart Gateway';
-    case 'update_gateway':
-      return 'Update Gateway';
-    default:
-      return action.label;
-  }
-}
-
-function gatewayForegroundServiceDetail(gateway: DesktopGatewaySource, action: GatewaySourceActionModel): string {
-  const label = gatewayForegroundServiceTitle(action).toLowerCase();
-  return `Desktop is preparing to ${label} for ${gateway.display_name}.`;
-}
-
 function gatewayOperationKeyForAction(gateway: DesktopGatewaySource, action: GatewaySourceActionModel): string | undefined {
   switch (action.intent) {
     case 'refresh_gateway':
     case 'pair_gateway':
       return `${gateway.gateway_id}:refresh`;
-    case 'start_gateway':
-    case 'stop_gateway':
-    case 'restart_gateway':
-    case 'update_gateway':
-    {
-      const targetID = gatewayServiceFallbackTargetID(gateway);
-      return targetID || undefined;
-    }
     default:
       return undefined;
   }
@@ -11443,46 +11384,6 @@ function pendingGatewayRefreshProgress(
   };
 }
 
-function pendingGatewayServiceProgress(
-  gateway: DesktopGatewaySource,
-  action: GatewaySourceActionModel,
-  operationKey: string,
-  startedAtUnixMS: number,
-): DesktopLauncherActionProgress | null {
-  const operationName = gatewayOperationNameForAction(action);
-  if (!operationName) {
-    return null;
-  }
-  const targetID = gatewayServiceFallbackTargetID(gateway);
-  const phase = gatewayForegroundServiceInitialPhase(operationName);
-  return {
-    action: gatewaySourceLauncherActionKind(action) ?? 'start_gateway',
-    operation_key: operationKey,
-    subject_kind: 'gateway',
-    subject_id: gateway.gateway_id,
-    gateway_id: gateway.gateway_id,
-    started_at_unix_ms: startedAtUnixMS,
-    updated_at_unix_ms: startedAtUnixMS,
-    status: 'running',
-    phase,
-    title: gatewayForegroundServiceTitle(action),
-    detail: gatewayForegroundServiceDetail(gateway, action),
-    lifecycle_progress: runtimeLifecycleProgress({
-      location: gateway.connection_kind === 'ssh_container' ? 'ssh_container' : 'ssh_host',
-      operation: gatewayForegroundServiceLifecycleOperation(operationName),
-      phase,
-      targetID,
-      targetLabel: gateway.display_name,
-      stepStates: [{
-        id: phase,
-        status: 'running',
-        detail: gatewayForegroundServiceDetail(gateway, action),
-      }],
-    }),
-    cancelable: false,
-  };
-}
-
 function pendingGatewayForegroundProgress(
   gateway: DesktopGatewaySource,
   action: GatewaySourceActionModel,
@@ -11496,11 +11397,6 @@ function pendingGatewayForegroundProgress(
     case 'refresh_gateway':
     case 'pair_gateway':
       return pendingGatewayRefreshProgress(gateway, operationKey, startedAtUnixMS);
-    case 'start_gateway':
-    case 'stop_gateway':
-    case 'restart_gateway':
-    case 'update_gateway':
-      return pendingGatewayServiceProgress(gateway, action, operationKey, startedAtUnixMS);
     default:
       return null;
   }
@@ -11575,28 +11471,10 @@ function gatewayProgressBelongsToForegroundAction(
     !gatewaySourceMatchesRuntimeLifecycleProgress(foreground.gateway_id, progress)
     && !(actionKind === 'open_gateway_environment' && gatewayProgressMatchesSubject(foreground.gateway_id, progress))
     && !(progress.step_progress !== undefined && gatewayProgressMatchesSubject(foreground.gateway_id, progress))
-    && !gatewayProgressMatchesOperationTarget(foreground.gateway, foreground.action, progress)
   ) {
     return false;
   }
   return progressStartedAt > 0 && progressStartedAt >= foreground.started_at_unix_ms;
-}
-
-function gatewayProgressMatchesOperationTarget(
-  gateway: DesktopGatewaySource,
-  action: GatewaySourceActionModel,
-  progress: DesktopLauncherActionProgress,
-): boolean {
-  const operation = gatewayOperationNameForAction(action);
-  const targetID = gatewayServiceFallbackTargetID(gateway);
-  if (!operation || targetID === '') {
-    return false;
-  }
-  return progress.operation_key === `${targetID}:${operation}`
-    || (
-      progress.lifecycle_progress?.target_id === targetID
-      && progress.lifecycle_progress.operation === operation
-    );
 }
 
 function gatewayBusyStateBelongsToForegroundAction(
@@ -11621,11 +11499,6 @@ function gatewayActionShowsWorkflowProgress(action: GatewaySourceActionModel): b
   switch (action.intent) {
     case 'open_gateway_environment':
     case 'refresh_gateway':
-    case 'start_gateway':
-    case 'stop_gateway':
-    case 'restart_gateway':
-    case 'update_gateway':
-    case 'reinstall_target':
       return true;
     default:
       return false;
@@ -11635,11 +11508,6 @@ function gatewayActionShowsWorkflowProgress(action: GatewaySourceActionModel): b
 function gatewayProgressCanRecoverForegroundAction(progress: DesktopLauncherActionProgress): boolean {
   switch (progress.action) {
     case 'refresh_gateway':
-    case 'start_gateway':
-    case 'stop_gateway':
-    case 'restart_gateway':
-    case 'update_gateway':
-    case 'reinstall_target':
       return true;
     default:
       return false;
@@ -11658,7 +11526,7 @@ function gatewayProgressMatchesAction(
   if (actionKind && progress.action === actionKind) {
     return true;
   }
-  return gatewayProgressMatchesOperationTarget(gateway, action, progress);
+  return false;
 }
 
 function gatewayProgressCanCompleteForegroundAction(
@@ -11684,80 +11552,6 @@ function gatewayForegroundDiagnosisBelongsToRefresh(
   return checkedAtUnixMS >= foreground.started_at_unix_ms;
 }
 
-function gatewayActionFromNextAction(action: DesktopLauncherOperationNextAction | undefined): GatewaySourceActionModel | undefined {
-  if (!action) {
-    return undefined;
-  }
-  switch (action.kind) {
-    case 'start_gateway':
-      return {
-        intent: 'start_gateway',
-        label: 'Start Gateway',
-        enabled: true,
-        variant: 'default',
-      };
-    case 'restart_gateway':
-      return {
-        intent: 'restart_gateway',
-        label: 'Restart Gateway',
-        enabled: true,
-        variant: 'default',
-      };
-    case 'update_gateway':
-      return {
-        intent: 'update_gateway',
-        label: 'Update Gateway',
-        enabled: true,
-        variant: 'default',
-      };
-    case 'reinstall_target':
-      return {
-        intent: 'reinstall_target',
-        label: 'Reinstall Redeven',
-        enabled: true,
-        variant: 'default',
-      };
-    default:
-      return undefined;
-  }
-}
-
-function primaryGatewayNextActionFromProgress(progress: DesktopLauncherActionProgress): DesktopLauncherOperationNextAction | undefined {
-  return progress.next_actions?.find((candidate) => (
-    candidate.kind === 'start_gateway'
-    || candidate.kind === 'restart_gateway'
-    || candidate.kind === 'update_gateway'
-    || candidate.kind === 'reinstall_target'
-  ));
-}
-
-function continuationActionForGatewayNextAction(action: DesktopLauncherOperationNextAction | undefined): DesktopLauncherActionRequest | undefined {
-  if (!action) {
-    return undefined;
-  }
-  switch (action.kind) {
-    case 'start_gateway':
-      return {
-        kind: 'start_gateway',
-        gateway_id: action.gateway_id,
-      };
-    case 'restart_gateway':
-      return {
-        kind: 'restart_gateway',
-        gateway_id: action.gateway_id,
-        impact_acknowledged: true,
-      };
-    case 'update_gateway':
-      return {
-        kind: 'update_gateway',
-        gateway_id: action.gateway_id,
-        impact_acknowledged: true,
-      };
-    default:
-      return undefined;
-  }
-}
-
 function gatewayDiagnosisFromCheckProgress(
   gateway: DesktopGatewaySource,
   progress: DesktopLauncherActionProgress,
@@ -11768,35 +11562,15 @@ function gatewayDiagnosisFromCheckProgress(
   if (gateway.diagnosis && gateway.diagnosis.checked_at_unix_ms >= gatewayProgressTimestamp(progress) - 1_000) {
     return gateway.diagnosis;
   }
-  const nextAction = progress.next_actions?.find((candidate) => (
-    candidate.kind === 'start_gateway'
-    || candidate.kind === 'restart_gateway'
-    || candidate.kind === 'update_gateway'
-  ));
-  const classification: DesktopGatewayDiagnosis['classification'] = nextAction?.kind === 'start_gateway'
-    ? 'not_started'
-    : nextAction?.kind === 'restart_gateway'
-      ? 'bridge_unavailable'
-    : nextAction?.kind === 'update_gateway'
-      ? 'needs_update'
-      : 'ready';
-  const recommendedAction: DesktopGatewayDiagnosis['recommended_recovery'] = nextAction?.kind === 'start_gateway'
-    ? 'start_gateway'
-    : nextAction?.kind === 'restart_gateway'
-      ? 'restart_gateway'
-    : nextAction?.kind === 'update_gateway'
-      ? 'update_gateway'
-      : undefined;
   return {
     checked_at_unix_ms: gatewayProgressTimestamp(progress),
-    classification,
-    manageable: gateway.management_capability !== 'access_only',
+    classification: gateway.diagnosis?.classification ?? 'ready',
+    manageable: false,
     summary: progress.title || 'Gateway diagnostics',
     detail: progress.detail || 'Desktop checked this Gateway.',
     service_state: gateway.service_state,
     trust_state: gateway.trust_state,
     catalog_state: gateway.sync_state,
-    ...(recommendedAction ? { recommended_recovery: recommendedAction } : {}),
     ...(gateway.diagnosis?.probe_results ? { probe_results: gateway.diagnosis.probe_results } : {}),
     ...(progress.failure ? {
       error_code: progress.failure.code,
@@ -11824,28 +11598,18 @@ function buildGatewayDiagnosisResultSnapshot(input: Readonly<{
   const diagnosisGateway = input.progress
     ? gatewayWithCheckProgressDiagnosis(input.gateway, input.progress)
     : input.gateway;
-  const primaryNextAction = input.progress ? primaryGatewayNextActionFromProgress(input.progress) : undefined;
-  const primaryAction = gatewayActionFromNextAction(primaryNextAction);
-  const continuationAction = continuationActionForGatewayNextAction(primaryNextAction);
   const panelModel = buildGatewayActionPresentation({
     gateway: diagnosisGateway,
     clicked_action: input.clicked_action,
     affected_sessions: input.affected_sessions,
     show_diagnosis_result: true,
   });
-  const resultPanel = primaryAction
-    ? {
-        ...panelModel,
-        primary_action: primaryAction,
-        ...(continuationAction ? { continuation_action: continuationAction } : {}),
-      }
-    : panelModel;
   return {
     gateway_id: input.gateway.gateway_id,
     checked_at_unix_ms: diagnosisGateway.diagnosis?.checked_at_unix_ms ?? (input.progress ? gatewayProgressTimestamp(input.progress) : Date.now()),
     ...(input.progress?.operation_key ? { operation_key: input.progress.operation_key } : {}),
     gateway: diagnosisGateway,
-    panel_model: resultPanel,
+    panel_model: panelModel,
   };
 }
 
@@ -11869,41 +11633,6 @@ function gatewaySourceActionForLauncherRequest(request: DesktopLauncherActionReq
         enabled: true,
         variant: 'default',
       };
-    case 'start_gateway':
-      return {
-        intent: 'start_gateway',
-        label: 'Start Gateway',
-        enabled: true,
-        variant: 'default',
-      };
-    case 'stop_gateway':
-      return {
-        intent: 'stop_gateway',
-        label: 'Stop Gateway',
-        enabled: true,
-        variant: 'default',
-      };
-    case 'restart_gateway':
-      return {
-        intent: 'restart_gateway',
-        label: 'Restart Gateway',
-        enabled: true,
-        variant: 'default',
-      };
-    case 'update_gateway':
-      return {
-        intent: 'update_gateway',
-        label: 'Update Gateway',
-        enabled: true,
-        variant: 'default',
-      };
-    case 'reinstall_target':
-      return {
-        intent: 'reinstall_target',
-        label: 'Reinstall Redeven',
-        enabled: true,
-        variant: 'default',
-      };
     case 'open_gateway_environment':
       return {
         intent: 'open_gateway_environment',
@@ -11919,45 +11648,14 @@ function gatewaySourceActionForLauncherRequest(request: DesktopLauncherActionReq
 function gatewaySourceActionForLifecycleProgress(
   progress: DesktopLauncherActionProgress | null | undefined,
 ): GatewaySourceActionModel | null {
-  switch (progress?.action) {
-    case 'start_gateway':
-      return {
-        intent: 'start_gateway',
-        label: 'Start Gateway',
+  return progress?.action === 'refresh_gateway'
+    ? {
+        intent: 'refresh_gateway',
+        label: 'Refresh',
         enabled: true,
         variant: 'default',
-      };
-    case 'stop_gateway':
-      return {
-        intent: 'stop_gateway',
-        label: 'Stop Gateway',
-        enabled: true,
-        variant: 'default',
-      };
-    case 'restart_gateway':
-      return {
-        intent: 'restart_gateway',
-        label: 'Restart Gateway',
-        enabled: true,
-        variant: 'default',
-      };
-    case 'update_gateway':
-      return {
-        intent: 'update_gateway',
-        label: 'Update Gateway',
-        enabled: true,
-        variant: 'default',
-      };
-    case 'reinstall_target':
-      return {
-        intent: 'reinstall_target',
-        label: 'Reinstall Redeven',
-        enabled: true,
-        variant: 'default',
-      };
-    default:
-      return null;
-  }
+      }
+    : null;
 }
 
 function GatewaySourceCard(props: Readonly<{
@@ -12636,21 +12334,6 @@ function GatewaySourceCard(props: Readonly<{
           kind: 'pair_gateway',
           gateway_id: props.gateway.gateway_id,
         };
-      case 'start_gateway':
-        return {
-          kind: 'start_gateway',
-          gateway_id: props.gateway.gateway_id,
-        };
-      case 'stop_gateway':
-      case 'restart_gateway':
-      case 'update_gateway':
-        return {
-          kind: action.intent,
-          gateway_id: props.gateway.gateway_id,
-          impact_acknowledged: true,
-        };
-      case 'reinstall_target':
-        return null;
       case 'enable_gateway':
         return {
           kind: 'set_gateway_enabled',
@@ -13012,39 +12695,6 @@ function GatewaySourceCard(props: Readonly<{
                         case 'refresh_gateway_status':
                         case 'refresh_gateway_catalog':
                           break;
-                        case 'start_gateway':
-                          runForegroundRequestFromProgress({
-                            kind: 'start_gateway',
-                            gateway_id: action.gateway_id,
-                          }, currentProgress);
-                          break;
-                        case 'stop_gateway':
-                          runForegroundRequestFromProgress({
-                            kind: 'stop_gateway',
-                            gateway_id: action.gateway_id,
-                            impact_acknowledged: true,
-                          }, currentProgress);
-                          break;
-                        case 'restart_gateway':
-                          runForegroundRequestFromProgress({
-                            kind: 'restart_gateway',
-                            gateway_id: action.gateway_id,
-                            impact_acknowledged: true,
-                          }, currentProgress);
-                          break;
-                        case 'update_gateway':
-                          runForegroundRequestFromProgress({
-                            kind: 'update_gateway',
-                            gateway_id: action.gateway_id,
-                            impact_acknowledged: true,
-                          }, currentProgress);
-                          break;
-                        case 'reinstall_target':
-                          runForegroundRequestFromProgress({
-                            kind: 'preview_reinstall_target',
-                            environment_id: action.environment_id,
-                          }, currentProgress);
-                          break;
                         case 'resolve_gateway':
                         case 'manage_desktop_update':
                           break;
@@ -13329,7 +12979,7 @@ function GatewayActionPanel(props: Readonly<{
 
 function gatewaySourceLauncherActionKind(
   action: GatewaySourceActionModel,
-): Extract<DesktopLauncherActionKind, 'open_gateway_environment' | 'refresh_gateway' | 'start_gateway' | 'stop_gateway' | 'restart_gateway' | 'update_gateway' | 'set_gateway_enabled'> | null {
+): Extract<DesktopLauncherActionKind, 'open_gateway_environment' | 'refresh_gateway' | 'set_gateway_enabled'> | null {
   switch (action.intent) {
     case 'open_gateway_environment':
       return 'open_gateway_environment';
@@ -13340,14 +12990,6 @@ function gatewaySourceLauncherActionKind(
     case 'enable_gateway':
     case 'disable_gateway':
       return 'set_gateway_enabled';
-    case 'start_gateway':
-      return 'start_gateway';
-    case 'stop_gateway':
-      return 'stop_gateway';
-    case 'restart_gateway':
-      return 'restart_gateway';
-    case 'update_gateway':
-      return 'update_gateway';
     default:
       return null;
   }
@@ -13363,19 +13005,6 @@ function gatewaySourceActionBusy(
   const actionKind = gatewaySourceLauncherActionKind(action);
   if (actionKind === null) {
     return false;
-  }
-  if (
-    progress?.lifecycle_progress
-    && (actionKind === 'start_gateway'
-      || actionKind === 'stop_gateway'
-      || actionKind === 'restart_gateway'
-      || actionKind === 'update_gateway')
-    && progress.status !== 'failed'
-    && progress.status !== 'cleanup_failed'
-    && progress.status !== 'succeeded'
-    && progress.status !== 'canceled'
-  ) {
-    return true;
   }
   if (
     progress?.action === actionKind
@@ -13405,16 +13034,6 @@ function GatewaySourceActionIcon(props: Readonly<{ intent: GatewaySourceActionMo
       return <GatewayDisabledIcon class={iconClass()} />;
     case 'refresh_gateway':
       return <Refresh class={iconClass()} />;
-    case 'start_gateway':
-      return <Play class={iconClass()} />;
-    case 'stop_gateway':
-      return <Stop class={iconClass()} />;
-    case 'restart_gateway':
-      return <Refresh class={iconClass()} />;
-    case 'update_gateway':
-      return <Package class={iconClass()} />;
-    case 'reinstall_target':
-      return <AlertTriangle class={iconClass()} />;
     case 'setup_gateway':
       return <Settings class={iconClass()} />;
     case 'cancel_gateway_action':

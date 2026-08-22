@@ -338,7 +338,7 @@ describe('environmentGuidanceSession', () => {
     expect(reconcileEnvironmentGuidanceSession(failedStart, [missingRuntime])).toMatchObject({
       environment_id: base!.id,
       pending_intent: null,
-      retry_intent: 'initialize_and_open',
+      retry_intent: 'start_and_open',
     });
   });
 });

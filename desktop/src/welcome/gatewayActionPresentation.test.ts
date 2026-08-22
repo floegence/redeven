@@ -114,7 +114,6 @@ describe('buildGatewayActionPresentation', () => {
         diagnosis: diagnosis('needs_update', {
           error_code: 'UNAUTHORIZED',
           error_message: 'Pair this Gateway before listing or opening environments.',
-          recommended_recovery: 'update_gateway',
           managed_probe: {
             package_status: 'ready',
             version: 'v0.0.0-dev',
@@ -187,29 +186,6 @@ describe('buildGatewayActionPresentation', () => {
     expect(accessOnly.continuation_action?.kind).not.toBe('reinstall_target');
     expect(JSON.stringify(accessOnly)).not.toContain('PRIVATE KEY');
     expect(JSON.stringify(accessOnly)).not.toContain('X-Redeven-Request-Signature');
-  });
-
-  it('delegates reinstall confirmation to the unified target dialog', () => {
-    const model = buildGatewayActionPresentation({
-      gateway: gateway({
-        service_state: {
-          status: 'needs_reinstall',
-          can_start: false,
-          can_stop: true,
-          can_restart: false,
-          can_update: false,
-          can_pair_after_start: false,
-        },
-      }),
-      clicked_action: action('reinstall_target'),
-      affected_sessions: [],
-    });
-
-    expect(model).toMatchObject({
-      kind: 'none',
-      execution_mode: 'direct',
-      tone: 'neutral',
-    });
   });
 
   it('keeps pairing as an explicit Refresh action for an unpaired URL Gateway', () => {
@@ -306,28 +282,11 @@ describe('buildGatewayActionPresentation', () => {
     expectNoLegacyGatewayActions(model);
   });
 
-  it('uses renderer-owned confirmation for Gateway service impact actions', () => {
-    const model = buildGatewayActionPresentation({
-      gateway: gateway(),
-      clicked_action: action('restart_gateway'),
-      affected_sessions: [
-        { session_key: 's1', label: 'Prod shell' },
-        { session_key: 's2', label: 'Build runner' },
-      ],
-    });
-
-    expect(model).toMatchObject({ kind: 'none', execution_mode: 'direct' });
-    expect(model.continuation_action).toBeUndefined();
-    expect(model.affected_sessions).toEqual([]);
-  });
-
   it('dispatches only the allowed Gateway source operations', async () => {
     const openCreateGatewaySetup = vi.fn();
     const runGatewayLauncherAction = vi.fn(async () => undefined);
 
     await runGatewaySourceAction(action('refresh_gateway'), gateway(), openCreateGatewaySetup, runGatewayLauncherAction);
-    await runGatewaySourceAction(action('start_gateway'), gateway(), openCreateGatewaySetup, runGatewayLauncherAction);
-    await runGatewaySourceAction(action('update_gateway'), gateway(), openCreateGatewaySetup, runGatewayLauncherAction);
     await runGatewaySourceAction(action('view_gateway_environments'), gateway(), openCreateGatewaySetup, runGatewayLauncherAction);
 
     expect(runGatewayLauncherAction).toHaveBeenCalledWith({

@@ -2438,11 +2438,6 @@ export type GatewaySourceActionIntent =
   | 'disable_gateway'
   | 'open_gateway_environment'
   | 'setup_gateway'
-  | 'start_gateway'
-  | 'stop_gateway'
-  | 'restart_gateway'
-  | 'update_gateway'
-  | 'reinstall_target'
   | 'view_gateway_environments'
   | 'cancel_gateway_action';
 

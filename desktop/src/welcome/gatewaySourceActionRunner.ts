@@ -41,16 +41,5 @@ export function runGatewaySourceAction(
         kind: 'pair_gateway',
         gateway_id: gateway.gateway_id,
       });
-    case 'start_gateway':
-    case 'stop_gateway':
-    case 'restart_gateway':
-    case 'update_gateway':
-      // Standalone Gateway cards never own a Runtime or Gateway service
-      // lifecycle. These legacy intents are intentionally inert.
-      return;
-    case 'reinstall_target':
-      // Reinstall is a Managed Environment action. Standalone Gateway cards
-      // never own a Runtime target and therefore cannot launch it.
-      return;
   }
 }

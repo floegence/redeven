@@ -318,7 +318,6 @@ describe('DesktopWelcomeShell', () => {
     expect(gatewaySourceActionRunnerSrc).not.toContain("case 'resolve_gateway':");
     expect(gatewaySourceActionRunnerSrc).not.toContain("case 'sync_gateway':");
     expect(gatewaySourceActionRunnerSrc).not.toContain("case 'check_gateway':");
-    expect(appSrc).toContain("case 'start_gateway':");
     expect(appSrc).toContain("case 'open_gateway_environment':");
     expect(appSrc).toContain("intent: 'open_gateway_environment'");
     expect(appSrc).not.toContain("case 'manage_desktop_update':\n                        case 'open_gateway_environment':\n                          break;");
@@ -864,8 +863,11 @@ describe('DesktopWelcomeShell', () => {
     const recoveryStart = appSrc.indexOf('function gatewayProgressCanRecoverForegroundAction(progress: DesktopLauncherActionProgress): boolean');
     const recoveryEnd = appSrc.indexOf('function gatewaySourceActionForLauncherRequest', recoveryStart);
     const recoverySrc = appSrc.slice(recoveryStart, recoveryEnd);
-    expect(recoverySrc).toContain("case 'restart_gateway':");
-    expect(recoverySrc).toContain("case 'update_gateway':");
+    expect(recoverySrc).toContain("case 'refresh_gateway':");
+    expect(recoverySrc).not.toContain("case 'start_gateway':");
+    expect(recoverySrc).not.toContain("case 'stop_gateway':");
+    expect(recoverySrc).not.toContain("case 'restart_gateway':");
+    expect(recoverySrc).not.toContain("case 'update_gateway':");
     expect(recoverySrc).not.toContain("case 'sync_gateway':");
     expect(appSrc).not.toContain('GATEWAY_FOREGROUND_PENDING_MIN_VISIBLE_MS');
     expect(appSrc).toContain('pending_progress?: DesktopLauncherActionProgress;');
@@ -893,7 +895,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('selectedVisibleGatewayProgress');
     expect(appSrc).not.toContain('if (selected && launcherActionProgressIsTerminal(selected)) {');
     expect(appSrc).toContain('const activeProgressForAction = (action: GatewaySourceActionModel): DesktopLauncherActionProgress | null => selectForegroundGatewayProgress(');
-    expect(appSrc).toContain('progress.lifecycle_progress.operation === operation');
+    expect(appSrc).not.toContain('progress.lifecycle_progress.operation === operation');
     expect(appSrc).not.toContain('const selectedActiveGatewaySnapshotProgress = createMemo(() => selectForegroundGatewayProgress(');
     expect(appSrc).not.toContain('?? selectedActiveGatewaySnapshotProgress()');
     expect(appSrc).toContain("'Legacy Gateway service residue': 'environmentCenter.gatewayPanelFactLegacyRuntimeResidue'");
@@ -989,8 +991,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('Start Gateway & Pair');
     expect(appSrc).not.toContain('gatewayStartRequiredDialog');
     expect(appSrc).toContain("case 'refresh_status':");
-    expect(appSrc).toContain("case 'update_gateway':\n                          runForegroundRequestFromProgress({");
-    expect(appSrc).not.toContain("case 'update_gateway':\n                          runForegroundRequest({");
+    expect(appSrc).not.toContain("case 'update_gateway':");
     expect(appSrc).toContain('<MoreHorizontal class="h-3.5 w-3.5" />');
     expect(appSrc).toContain('ariaLabel={moreActionsForLabel()}');
     expect(appSrc).toContain('moreActionsMenuOpen={gatewaySourceOverlayOpenFor(activeGatewayOverlayState(), \'more_actions_menu\', gatewayID)}');
@@ -1006,9 +1007,11 @@ describe('DesktopWelcomeShell', () => {
     expect(gatewaySourceActionIconEnd).toBeGreaterThan(gatewaySourceActionIconStart);
     const gatewaySourceActionIconSrc = appSrc.slice(gatewaySourceActionIconStart, gatewaySourceActionIconEnd);
     expect(gatewaySourceActionIconSrc).toContain("case 'disable_gateway':\n      return <GatewayDisabledIcon class={iconClass()} />;");
-    expect(gatewaySourceActionIconSrc).toContain("case 'stop_gateway':\n      return <Stop class={iconClass()} />;");
-    expect(gatewaySourceActionIconSrc).toContain("case 'restart_gateway':\n      return <Refresh class={iconClass()} />;");
-    expect(gatewaySourceActionIconSrc).toContain("case 'update_gateway':\n      return <Package class={iconClass()} />;");
+    expect(gatewaySourceActionIconSrc).toContain("case 'refresh_gateway':\n      return <Refresh class={iconClass()} />;");
+    expect(gatewaySourceActionIconSrc).not.toContain("case 'start_gateway':");
+    expect(gatewaySourceActionIconSrc).not.toContain("case 'stop_gateway':");
+    expect(gatewaySourceActionIconSrc).not.toContain("case 'restart_gateway':");
+    expect(gatewaySourceActionIconSrc).not.toContain("case 'update_gateway':");
     expect(gatewaySourceActionIconSrc).not.toContain("case 'disable_gateway':\n      return <Stop");
     expect(gatewaySourceActionIconSrc).not.toContain("case 'update_gateway':\n      return <Save");
     expect(gatewayCardSrc).not.toContain('<div class="p-1">');
@@ -1598,8 +1601,10 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('force_runtime_update');
     expect(appSrc).toContain('forceRuntimeUpdate: true');
     expect(appSrc).toContain("'Reinstall Redeven': 'environmentAction.reinstallRedeven'");
-    expect(appSrc).toContain("confirmText={i18n().t('confirm.reinstallTargetConfirm')}");
-    expect(appSrc).toContain("<Show when={reinstallTarget()?.environment.reinstall_required === true}>");
+    expect(appSrc).not.toContain("confirmText={i18n().t('confirm.reinstallTargetConfirm')}");
+    expect(appSrc).not.toContain('reinstallTarget()');
+    expect(appSrc).toContain('reinstallTargetStepProgress(\'preflight\')');
+    expect(appSrc).toContain('props.onLifecycleProgressOpenChange(true)');
     expect(appSrc).toContain("kind: 'preview_reinstall_target'");
     expect(appSrc).toContain("&& !(environment.kind === 'ssh_environment'");
     expect(appSrc).not.toContain("environment.reinstall_required !== true");
@@ -1666,18 +1671,19 @@ describe('DesktopWelcomeShell', () => {
     expect(environmentBusySrc).toContain('launcherProgressBlocksPrimaryAction(runtimeLifecycleProgress)');
 
     const gatewayBusyStart = appSrc.indexOf('function gatewaySourceActionBusy(');
-    const gatewayBusyEnd = appSrc.indexOf('function gatewaySourceActionIcon(', gatewayBusyStart);
+    const gatewayBusyEnd = appSrc.indexOf('function GatewaySourceActionIcon(', gatewayBusyStart);
     const gatewayBusySrc = appSrc.slice(gatewayBusyStart, gatewayBusyEnd);
-    for (const action of ['start_gateway', 'stop_gateway', 'restart_gateway', 'update_gateway']) {
-      expect(gatewayBusySrc).toContain(`actionKind === '${action}'`);
-    }
+    expect(gatewayBusySrc).not.toContain("actionKind === 'start_gateway'");
+    expect(gatewayBusySrc).not.toContain("actionKind === 'stop_gateway'");
+    expect(gatewayBusySrc).not.toContain("actionKind === 'restart_gateway'");
+    expect(gatewayBusySrc).not.toContain("actionKind === 'update_gateway'");
     expect(gatewayBusySrc).toContain("progress.status !== 'canceled'");
 
     const operationKeyStart = appSrc.indexOf('function gatewayOperationKeyForAction(');
     const operationKeyEnd = appSrc.indexOf('function pendingGatewayRefreshProgress(', operationKeyStart);
     const operationKeySrc = appSrc.slice(operationKeyStart, operationKeyEnd);
-    expect(operationKeySrc).toContain('return targetID || undefined;');
-    expect(operationKeySrc).not.toContain('`${targetID}:${operation}`');
+    expect(operationKeySrc).toContain('return `${gateway.gateway_id}:refresh`;');
+    expect(operationKeySrc).not.toContain('service_target_id');
   });
 
   it('renders lifecycle and Open connection progress inside the Open popup instead of the old SSH activity overlay', () => {
@@ -1764,7 +1770,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('loading={action().loading}');
     expect(appSrc).toContain('disabled={action().disabled}');
     expect(appSrc).not.toContain('props.progress.error_message');
-    expect(appSrc).toContain('guidanceSessionOwnsOpenFlowPanel(props.guidanceSession)\n      ? null\n      : selectEnvironmentPanelProgress(primaryProgress(), runtimeMenuProgress())');
+    expect(appSrc).toContain('guidanceSessionOwnsOpenFlowPanel(props.guidanceSession)\n      ? null\n      : props.reinstallTargetProgress\n        ?? selectEnvironmentPanelProgress(primaryProgress(), runtimeMenuProgress())');
     expect(appSrc).toContain('runtimeLifecycleProgress={runtimeMenuProgress()}');
     expect(appSrc).toContain('busyStateBlocksEnvironmentAction(busyState, environmentID, [\'stop_environment_runtime\', \'run_provider_environment_lifecycle\'], runtimeLifecycleProgress)');
     expect(appSrc).toContain('const progressPanelVisible = createMemo(() => props.progressOpen && hasPanelProgress());');
@@ -1805,11 +1811,14 @@ describe('DesktopWelcomeShell', () => {
     const steppedProgressStart = appSrc.indexOf('<Show when={hasStepTimeline()}>');
     const steppedProgressEnd = appSrc.indexOf('<Show when={canCancel()}>', steppedProgressStart);
     const steppedProgressSrc = appSrc.slice(steppedProgressStart, steppedProgressEnd);
+    expect(steppedProgressSrc).toContain('role="list"');
+    expect(steppedProgressSrc).toContain('role="listitem"');
+    expect(steppedProgressSrc).not.toContain('class="redeven-environment-progress__steps"\n            aria-hidden="true"');
     expect(steppedProgressSrc.indexOf('{renderFailureNotice()}')).toBeGreaterThan(
-      steppedProgressSrc.indexOf('<div class="redeven-environment-progress__steps" aria-hidden="true">'),
+      steppedProgressSrc.indexOf('class="redeven-environment-progress__steps"'),
     );
     expect(steppedProgressSrc.indexOf('{renderNextActionGroups()}')).toBeGreaterThan(
-      steppedProgressSrc.indexOf('<div class="redeven-environment-progress__steps" aria-hidden="true">'),
+      steppedProgressSrc.indexOf('class="redeven-environment-progress__steps"'),
     );
     expect(appSrc).toContain("data-placement={hasStepTimeline() ? 'after-steps' : 'inline'}");
     expect(styles).toContain(".redeven-action-popover__action-stack[data-placement='after-steps']");
@@ -2406,7 +2415,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('100dvh');
     expect((styles.match(/100dvh/g) ?? []).length).toBe(2);
 
-    expect((appSrc.match(/<ConfirmDialog\b/g) ?? []).length).toBe(4);
+    expect((appSrc.match(/<ConfirmDialog\b/g) ?? []).length).toBe(3);
     expect((appSrc.match(/<Dialog\b/g) ?? []).length).toBe(5);
     expect((appSrc.match(/class=\{LOCAL_ENVIRONMENT_SETTINGS_DIALOG_CLASS\}/g) ?? []).length).toBe(1);
     expect((appSrc.match(/class=\{CONNECTION_DIALOG_CLASS\}/g) ?? []).length).toBe(2);

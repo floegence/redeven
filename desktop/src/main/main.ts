@@ -23,6 +23,10 @@ import {
   type ReinstallTargetDescriptor,
 } from './reinstallTargetCoordinator';
 import {
+  reinstallTargetStepProgress,
+  type ReinstallTargetProgressPhase,
+} from '../shared/desktopReinstallProgress';
+import {
   inspectReinstallTargetProcesses,
   stopReinstallTargetProcesses,
 } from './reinstallTargetProcess';
@@ -901,6 +905,7 @@ let desktopStateStoreCache: DesktopStateStore | null = null;
 let gatewayStoreCache: GatewayStore | null = null;
 let gatewayLifecycleManagerCache: GatewayLifecycleManager | null = null;
 let reinstallTargetCoordinatorCache: ReinstallTargetCoordinator | null = null;
+let reinstallOperationsHydrationPromise: Promise<void> | null = null;
 let desktopBundleCache: DesktopBundle | null = null;
 let providerRuntimeLifecycleClientCache: ProviderRuntimeLifecycleClient | null = null;
 let desktopThemeStateCache: DesktopThemeState | null = null;
@@ -2453,6 +2458,7 @@ function clearPendingControlPlaneAuthorizations(providerOrigin: string): void {
 function launcherActionSuccess(
   outcome: DesktopLauncherActionSuccess['outcome'],
   options: Readonly<{
+    operationKey?: string;
     sessionKey?: string;
     utilityWindowKind?: DesktopLauncherActionSuccess['utility_window_kind'];
     reinstallPreview?: DesktopLauncherActionSuccess['reinstall_preview'];
@@ -2461,6 +2467,7 @@ function launcherActionSuccess(
   return {
     ok: true,
     outcome,
+    operation_key: compact(options.operationKey) || undefined,
     session_key: options.sessionKey,
     utility_window_kind: options.utilityWindowKind,
     reinstall_preview: options.reinstallPreview,
@@ -3031,12 +3038,38 @@ function directReinstallGatewayServiceOptions(
 
 async function installFreshDirectReinstallTarget(
   descriptor: ReinstallTargetDescriptor,
+  _targetRoot?: string,
+  onProgress?: (
+    phase: 'gateway_package_preparing' | 'gateway_package_installing' | 'runtime_package_preparing' | 'runtime_package_installing' | 'gateway_and_runtime_starting',
+    detailKey?: string,
+  ) => Promise<void>,
 ): Promise<void> {
-  const serviceOptions = directReinstallGatewayServiceOptions(descriptor, true);
+  let progressQueue = Promise.resolve();
+  const queueProgress = (
+    phase: 'gateway_package_preparing' | 'gateway_package_installing' | 'runtime_package_preparing' | 'runtime_package_installing' | 'gateway_and_runtime_starting',
+    detailKey?: string,
+  ): void => {
+    progressQueue = progressQueue.then(() => onProgress?.(phase, detailKey)).then(() => undefined);
+  };
+  const gatewayPackageDetail = 'common.desktopUpload';
+  const serviceOptions = {
+    ...directReinstallGatewayServiceOptions(descriptor, true),
+    onProgress: (progress: Parameters<NonNullable<GatewayServiceHostOptions['onProgress']>>[0]) => {
+    if (progress.phase === 'preparing_gateway_package') {
+      queueProgress('gateway_package_preparing', gatewayPackageDetail);
+    } else if (progress.phase === 'installing_gateway') {
+      queueProgress('gateway_package_installing', gatewayPackageDetail);
+    } else if (progress.phase === 'starting_gateway') {
+      queueProgress('gateway_and_runtime_starting');
+    }
+    },
+  } satisfies GatewayServiceHostOptions;
+  queueProgress('gateway_package_preparing', gatewayPackageDetail);
   await ensureManagedGatewayServiceReady(serviceOptions);
   if (descriptor.host_access.kind === 'local_host' && descriptor.placement.kind === 'host_process') {
     // The newly installed current Gateway supervisor owns the Local Runtime
     // child. Starting a second Runtime here would create two lifecycle owners.
+    await progressQueue;
     return;
   }
   const targetID = desktopRuntimeTargetID(
@@ -3058,6 +3091,15 @@ async function installFreshDirectReinstallTarget(
       force_runtime_update: true,
       runtime_process_intent: 'update',
       require_new_daemon: true,
+      on_progress: (progress) => {
+        if (progress.phase === 'preparing_runtime_package') {
+          queueProgress('runtime_package_preparing', 'common.desktopUpload');
+        } else if (progress.phase === 'installing_runtime') {
+          queueProgress('runtime_package_installing', 'common.desktopUpload');
+        } else if (progress.phase === 'starting_runtime_daemon') {
+          queueProgress('gateway_and_runtime_starting');
+        }
+      },
     });
     runtimePlacementReadyByTargetID.set(targetID, {
       runtime_key: targetID,
@@ -3069,6 +3111,7 @@ async function installFreshDirectReinstallTarget(
       runtime_binary_path: ready.runtime_binary_path,
       startup: ready.startup,
     });
+    await progressQueue;
     return;
   }
   if (descriptor.host_access.kind === 'ssh_host') {
@@ -3084,6 +3127,18 @@ async function installFreshDirectReinstallTarget(
       assetCacheRoot: desktopRuntimePackageCacheRoot(),
       forceRuntimeUpdate: true,
       runtimeProcessIntent: 'update',
+      onProgress: (progress) => {
+        if (progress.phase === 'ssh_remote_installing') {
+          queueProgress('runtime_package_preparing', 'common.remoteInstall');
+          queueProgress('runtime_package_installing', 'common.remoteInstall');
+        } else if (progress.phase === 'ssh_preparing_upload' || progress.phase === 'ssh_uploading_archive') {
+          queueProgress('runtime_package_preparing', 'common.desktopUpload');
+        } else if (progress.phase === 'ssh_installing_upload') {
+          queueProgress('runtime_package_installing', 'common.desktopUpload');
+        } else if (progress.phase === 'ssh_starting_runtime') {
+          queueProgress('gateway_and_runtime_starting');
+        }
+      },
     });
     sshRuntimeReadyByKey.set(sshDesktopSessionKey(details), {
       runtime_key: sshDesktopSessionKey(details),
@@ -3093,6 +3148,7 @@ async function installFreshDirectReinstallTarget(
       startup: ready.startup,
     });
   }
+  await progressQueue;
 }
 
 async function verifyFreshDirectReinstallTarget(
@@ -3239,7 +3295,7 @@ function reinstallTargetCoordinator(): ReinstallTargetCoordinator {
       }),
       close_sessions: closeDesktopSessionsForReinstallTarget,
       clear_desktop_state: clearDesktopStateForReinstallTarget,
-      install_fresh: (descriptor) => installFreshDirectReinstallTarget(descriptor),
+      install_fresh: (descriptor, targetRoot, onProgress) => installFreshDirectReinstallTarget(descriptor, targetRoot, onProgress),
       verify_fresh_identity: (descriptor) => verifyFreshDirectReinstallTarget(descriptor),
       verify_catalog_and_local_ui: (descriptor) => verifyReinstallTargetCatalogAndLocalUI(descriptor),
       clear_completed_marker: clearReinstallTargetRequired,
@@ -4338,10 +4394,6 @@ function launcherActionRefreshScope(
     case 'refresh_gateway':
     case 'sync_gateway':
     case 'pair_gateway':
-    case 'start_gateway':
-    case 'stop_gateway':
-    case 'restart_gateway':
-    case 'update_gateway':
     case 'refresh_gateway_catalog':
     case 'refresh_gateway_status':
     case 'delete_gateway':
@@ -4424,10 +4476,122 @@ function scheduleGatewaySyncAfterLauncherAction(
   }
 }
 
+async function hydratePersistedReinstallOperations(): Promise<void> {
+  if (reinstallOperationsHydrationPromise) {
+    return reinstallOperationsHydrationPromise;
+  }
+  reinstallOperationsHydrationPromise = (async () => {
+    const journals = await reinstallTargetCoordinator().readPersistedJournals();
+    for (const journal of journals) {
+      const operationKey = compact(journal.preview.operation_key);
+      if (!operationKey || launcherOperations.get(operationKey)) {
+        continue;
+      }
+      let targetError: unknown;
+      try {
+        await reinstallTargetCoordinator().validatePersistedJournalTarget(journal);
+      } catch (error) {
+        targetError = error;
+      }
+      const confirmationAvailable = journal.phase === 'confirmation'
+        && journal.preview.expires_at_unix_ms > Date.now()
+        && !targetError;
+      const phase = confirmationAvailable ? 'confirmation' : journal.phase;
+      const presentation = reinstallTargetProgressPresentation(phase);
+      const failure = confirmationAvailable
+        ? undefined
+        : desktopFailureFromError(
+          targetError ?? new ReinstallTargetCoordinatorError(
+            'manual_recovery_required',
+            journal.phase === 'confirmation'
+              ? 'The reinstall confirmation expired. Review the target again before continuing.'
+              : 'The previous reinstall stopped before completion. The isolated old target was preserved for manual recovery.',
+          ),
+          {
+            code: 'manual_recovery_required',
+            title: journal.phase === 'confirmation' && !targetError
+              ? 'Reinstall confirmation expired'
+              : 'Redeven reinstall requires manual recovery',
+            titleKey: journal.phase === 'confirmation' && !targetError
+              ? 'confirm.reinstallTargetTitle'
+              : 'confirm.reinstallFailedTitle',
+            summary: targetError instanceof Error
+              ? targetError.message
+              : journal.phase === 'confirmation'
+                ? 'The reinstall confirmation expired. Review the target again before continuing.'
+                : 'The previous reinstall stopped before completion. The isolated old target was preserved for manual recovery.',
+            summaryKey: journal.phase === 'confirmation' && !targetError
+              ? 'confirm.reinstallTargetDescription'
+              : 'confirm.reinstallManualRecovery',
+            targetLabel: journal.preview.label,
+          },
+        );
+      const retryAction = journal.phase === 'confirmation'
+        ? {
+            kind: 'retry' as const,
+            operation_key: operationKey,
+            label: 'Review target',
+            label_key: 'common.retry' as const,
+            retry_action: {
+              kind: 'preview_reinstall_target' as const,
+              environment_id: journal.environment_id,
+            },
+          }
+        : {
+            kind: 'dismiss' as const,
+            operation_key: operationKey,
+            label: 'Dismiss',
+            label_key: 'progress.dismiss' as const,
+          };
+      const snapshot: DesktopLauncherOperationSnapshot = {
+        operation_key: operationKey,
+        action: 'reinstall_target',
+        subject_kind: 'runtime_target',
+        subject_id: journal.environment_id,
+        subject_generation: launcherOperations.currentSubjectGeneration('runtime_target', journal.environment_id),
+        environment_id: journal.environment_id,
+        environment_label: journal.preview.label,
+        started_at_unix_ms: Math.max(1, journal.updated_at_unix_ms - 1),
+        updated_at_unix_ms: journal.updated_at_unix_ms,
+        status: confirmationAvailable ? 'needs_confirmation' : 'failed',
+        phase,
+        title: presentation.title,
+        title_key: presentation.title_key,
+        detail: confirmationAvailable
+          ? 'Review the deletion list and confirm before Redeven is reinstalled.'
+          : failure?.summary ?? presentation.detail,
+        detail_key: confirmationAvailable ? 'confirm.reinstallTargetDescription' : 'confirm.reinstallManualRecovery',
+        step_progress: reinstallTargetStepProgress(phase, confirmationAvailable ? 'running' : 'failed'),
+        reinstall_preview: journal.preview,
+        cancelable: false,
+        deleted_subject: false,
+        ...(failure ? { failure } : {}),
+        next_actions: confirmationAvailable
+          ? [{
+              kind: 'reinstall_target' as const,
+              environment_id: journal.environment_id,
+              label: 'Reinstall Redeven',
+              label_key: 'environmentAction.reinstallRedeven' as const,
+            }]
+          : [
+              { kind: 'copy_diagnostics' as const, operation_key: operationKey, label: 'Copy log', label_key: 'progress.copyLog' as const },
+              retryAction,
+            ],
+      };
+      launcherOperations.restore(snapshot);
+    }
+  })().catch((error) => {
+    reinstallOperationsHydrationPromise = null;
+    throw error;
+  });
+  return reinstallOperationsHydrationPromise;
+}
+
 async function buildCurrentDesktopWelcomeSnapshot(
   kind: DesktopUtilityWindowKind,
   overrides: Partial<Pick<BuildDesktopWelcomeSnapshotArgs, 'entryReason' | 'issue'>> = {},
 ) {
+  await hydratePersistedReinstallOperations();
   const preferences = await loadDesktopPreferencesCached();
   const openSessions = openSessionSummaries();
   const reinstallDescriptors = directReinstallTargetDescriptors(preferences);
@@ -5221,9 +5385,6 @@ async function syncVisibleGatewaysIfNeeded(options: Readonly<{ force?: boolean }
     if (!record.local_enabled) {
       return;
     }
-    if (activeGatewayServiceOperation(record.gateway_id)) {
-      return;
-    }
     await syncGatewayIfNeeded(record, options).catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(`[redeven:gateway-sync] Gateway sync failed for ${safeLogText(record.gateway_id, 128)}: ${safeLogText(message, 512)}`);
@@ -5266,14 +5427,6 @@ async function upsertGatewayConnectionRecord(
 ): Promise<GatewayRecord> {
   if (existing?.trust_profile && gatewayBindingAudience(existing.connection) !== gatewayBindingAudience(nextConnection)) {
     await gatewaySecretStore().deleteSecret(existing.trust_profile.paired_client_private_key_ref);
-    await gatewayLifecycleManager().clear(existing);
-  }
-  const existingPasswordRef = existing ? gatewayRecordSSHPasswordRef(existing) : '';
-  const nextPasswordRef = nextConnection.kind === 'ssh_host' || nextConnection.kind === 'ssh_container'
-    ? nextConnection.ssh_password_ref ?? ''
-    : '';
-  if (existingPasswordRef && existingPasswordRef !== nextPasswordRef) {
-    await gatewaySecretStore().deleteSecret(existingPasswordRef);
   }
   return gatewayStore().upsert({
     gateway_id: gatewayID,
@@ -6955,38 +7108,8 @@ function failGatewayStepProgress(
 
 function gatewayDiagnosisNextActions(
   operationKey: string,
-  record: GatewayRecord,
-  diagnosis: DesktopGatewayDiagnosis,
 ): readonly DesktopLauncherOperationNextAction[] {
-  const gatewayID = record.gateway_id;
-  const primary: DesktopLauncherOperationNextAction[] = [];
-  switch (diagnosis.recommended_recovery ?? gatewayRecommendedRecoveryForDiagnosis(diagnosis)) {
-    case 'start_gateway':
-      primary.push({
-        kind: 'start_gateway',
-        gateway_id: gatewayID,
-        label: 'Start Gateway',
-      });
-      break;
-    case 'restart_gateway':
-      primary.push({
-        kind: 'restart_gateway',
-        gateway_id: gatewayID,
-        label: 'Restart Gateway',
-      });
-      break;
-    case 'update_gateway':
-      primary.push({
-        kind: 'update_gateway',
-        gateway_id: gatewayID,
-        label: 'Update Gateway',
-      });
-      break;
-    case undefined:
-      break;
-  }
   return [
-    ...primary,
     {
       kind: 'copy_diagnostics',
       operation_key: operationKey,
@@ -7033,34 +7156,6 @@ function gatewayFailureFromDiagnosis(diagnosis: DesktopGatewayDiagnosis): Deskto
     detail: compact(diagnosis.detail),
     detailKey: gatewayFailureDetailKeyForDiagnosis(diagnosis),
   });
-}
-
-function gatewayRecommendedRecoveryForDiagnosis(
-  diagnosis: Pick<DesktopGatewayDiagnosis, 'classification' | 'manageable' | 'service_state'>,
-): DesktopGatewayDiagnosis['recommended_recovery'] {
-  if (!diagnosis.manageable) {
-    return undefined;
-  }
-  switch (diagnosis.classification) {
-    case 'not_started':
-      return diagnosis.service_state?.can_start === false ? undefined : 'start_gateway';
-    case 'needs_update':
-      return diagnosis.service_state?.can_update === false ? undefined : 'update_gateway';
-    case 'bridge_unavailable':
-      return diagnosis.service_state?.can_restart === false ? undefined : 'restart_gateway';
-    case 'ready':
-    case 'catalog_failed':
-    case 'service_ready_catalog_failed':
-    case 'ssh_unreachable':
-    case 'container_unavailable':
-    case 'unknown':
-    case 'trust_failed':
-    case 'pairing_required':
-    case 'identity_changed':
-    case 'disabled':
-    case 'unmanageable':
-      return undefined;
-  }
 }
 
 function gatewayProbeResultsForDiagnosis(
@@ -7111,10 +7206,8 @@ function gatewayProbeResultsForDiagnosis(
 }
 
 function completeGatewayDiagnosis(diagnosis: DesktopGatewayDiagnosis): DesktopGatewayDiagnosis {
-  const recommendedRecovery = diagnosis.recommended_recovery ?? gatewayRecommendedRecoveryForDiagnosis(diagnosis);
   return {
     ...diagnosis,
-    ...(recommendedRecovery ? { recommended_recovery: recommendedRecovery } : {}),
     probe_results: diagnosis.probe_results ?? gatewayProbeResultsForDiagnosis(diagnosis),
   };
 }
@@ -7372,7 +7465,6 @@ function gatewayDiagnosisForError(
           ...base,
           classification: 'needs_update',
           catalog_state: 'pairing_failed',
-          recommended_recovery: 'update_gateway',
           summary: 'Gateway update required',
           detail: 'Desktop can reach the Gateway service, but the service rejected the catalog request before pairing could be trusted. Update Gateway to align the managed service with this Desktop before refreshing again.',
         };
@@ -7682,7 +7774,7 @@ async function refreshGatewayFromLauncher(
       step_progress: failGatewayStepProgress(GATEWAY_REFRESH_WORKFLOW_STEPS, phase, diagnosis.detail),
       gateway_diagnosis: completeGatewayDiagnosis(diagnosis),
       failure,
-      next_actions: gatewayDiagnosisNextActions(operationKey, latestRecord, diagnosis),
+      next_actions: gatewayDiagnosisNextActions(operationKey),
     });
     return launcherActionFailure(gatewayLauncherActionFailureCode(error), 'gateway', diagnosis.detail, {
       gatewayID: record.gateway_id,
@@ -7743,19 +7835,6 @@ async function pairGatewayFromLauncher(
   }, { allowPairing: true });
 }
 
-async function runGatewayServiceActionFromLauncher(
-  request: Extract<DesktopLauncherActionRequest, {
-    kind: 'start_gateway' | 'stop_gateway' | 'restart_gateway' | 'update_gateway';
-  }>,
-): Promise<DesktopLauncherActionResult> {
-  return launcherActionFailure(
-    'action_invalid',
-    'gateway',
-    'Standalone Gateways expose access and catalog operations only. Manage the Gateway service on its own host.',
-    { gatewayID: request.gateway_id, shouldRefreshSnapshot: true },
-  );
-}
-
 function reinstallTargetFailureCode(error: unknown): DesktopLauncherActionFailureCode {
   if (error instanceof ReinstallTargetCoordinatorError) {
     switch (error.code) {
@@ -7777,33 +7856,92 @@ function reinstallTargetFailureCode(error: unknown): DesktopLauncherActionFailur
 async function previewReinstallTargetFromLauncher(
   request: Extract<DesktopLauncherActionRequest, { kind: 'preview_reinstall_target' }>,
 ): Promise<DesktopLauncherActionResult> {
+  const operationKey = `reinstall-target:${crypto.randomUUID()}`;
+  const operation = launcherOperations.create({
+    operation_key: operationKey,
+    action: 'reinstall_target',
+    subject_kind: 'runtime_target',
+    subject_id: request.environment_id,
+    environment_id: request.environment_id,
+    phase: 'preflight',
+    title: 'Reinstall Redeven',
+    title_key: 'environmentAction.reinstallRedeven',
+    detail: 'Desktop is checking the exact direct target before showing the deletion list.',
+    detail_key: 'progress.reinstallCheckingDetail',
+    step_progress: reinstallTargetStepProgress('preflight'),
+    cancelable: false,
+  });
   try {
     const preview = await reinstallTargetCoordinator().preview({
       environment_id: request.environment_id,
+      operation_key: operation.operation_key,
     });
-    return launcherActionSuccess('previewed_reinstall_target', { reinstallPreview: preview });
+    const affectedEnvironmentIDs = new Set(preview.affected_environment_ids);
+    for (const existing of launcherOperations.operations()) {
+      if (
+        existing.operation_key !== operation.operation_key
+        && existing.action === 'reinstall_target'
+        && existing.status === 'needs_confirmation'
+        && existing.environment_id
+        && affectedEnvironmentIDs.has(existing.environment_id)
+      ) {
+        launcherOperations.remove(existing.operation_key);
+      }
+    }
+    launcherOperations.finish(operation.operation_key, 'needs_confirmation', {
+      environment_label: preview.label,
+      phase: 'confirmation',
+      title: 'Reinstall Redeven',
+      title_key: 'environmentAction.reinstallRedeven',
+      detail: 'Review the deletion list and confirm before Redeven is reinstalled.',
+      detail_key: 'confirm.reinstallTargetDescription',
+      step_progress: reinstallTargetStepProgress('confirmation'),
+      reinstall_preview: preview,
+      next_actions: [{ kind: 'reinstall_target', environment_id: preview.environment_id, label: 'Reinstall Redeven', label_key: 'environmentAction.reinstallRedeven' }],
+    });
+    broadcastDesktopWelcomeSnapshots();
+    return launcherActionSuccess('previewed_reinstall_target', {
+      operationKey,
+      reinstallPreview: preview,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    const failure = desktopFailureFromError(error, {
+      code: 'operation_failed',
+      title: 'Redeven Reinstall Preflight Failed',
+      titleKey: 'confirm.reinstallFailedTitle',
+      summary: message,
+      targetLabel: request.environment_id,
+    });
+    launcherOperations.finish(operation.operation_key, 'failed', {
+      phase: 'preflight',
+      title: 'Redeven reinstall preflight failed',
+      title_key: 'confirm.reinstallFailedTitle',
+      detail: message,
+      failure,
+      step_progress: reinstallTargetStepProgress('preflight', 'failed'),
+      next_actions: [
+        { kind: 'copy_diagnostics', operation_key: operationKey, label: 'Copy log', label_key: 'progress.copyLog' },
+        { kind: 'dismiss', operation_key: operationKey, label: 'Dismiss', label_key: 'progress.dismiss' },
+      ],
+    });
     return launcherActionFailure(reinstallTargetFailureCode(error), 'environment', message, {
       environmentID: request.environment_id,
+      operationKey,
       shouldRefreshSnapshot: true,
-      failure: desktopFailureFromError(error, {
-        code: 'operation_failed',
-        title: 'Redeven Reinstall Preflight Failed',
-        titleKey: 'confirm.reinstallFailedTitle',
-        summary: message,
-        targetLabel: request.environment_id,
-      }),
+      failure,
     });
   }
 }
 
 function reinstallTargetProgressPresentation(
-  phase: Parameters<NonNullable<Parameters<ReinstallTargetCoordinator['execute']>[1]>>[0],
+  phase: ReinstallTargetProgressPhase,
 ){
   const title = 'Reinstall Redeven';
   const title_key = 'environmentAction.reinstallRedeven' as const;
   switch (phase) {
+    case 'confirmation':
+      return { title, title_key, detail: 'Review the deletion list and confirm before Redeven is reinstalled.', detail_key: 'confirm.reinstallTargetDescription' as const };
     case 'target_locked':
       return { title, title_key, detail: 'Desktop locked the exact registered Redeven target for this operation.', detail_key: 'progress.reinstallLockedDetail' as const };
     case 'sessions_closed':
@@ -7818,10 +7956,16 @@ function reinstallTargetProgressPresentation(
       return { title, title_key, detail: 'Desktop verified that no old Redeven process remains for this target.', detail_key: 'progress.reinstallProcessesStoppedDetail' as const };
     case 'target_quarantined':
       return { title, title_key, detail: 'Desktop replaced the complete old Redeven root with a fresh empty root.', detail_key: 'progress.quarantiningEnvironmentDetail' as const };
-    case 'fresh_components_installed':
-      return { title, title_key, detail: 'Desktop installed the current bundled Gateway and Runtime through the direct channel.', detail_key: 'progress.initializingFreshEnvironmentDetail' as const };
-    case 'fresh_gateway_and_runtime_started':
-      return { title, title_key, detail: 'Desktop started the fresh Gateway and Runtime from the new root.', detail_key: 'progress.reinstallFreshStartedDetail' as const };
+    case 'gateway_package_preparing':
+      return { title, title_key, detail: 'Desktop is preparing the current Gateway package.', detail_key: 'progress.initializingFreshEnvironmentDetail' as const };
+    case 'gateway_package_installing':
+      return { title, title_key, detail: 'Desktop is installing the current Gateway package.', detail_key: 'progress.initializingFreshEnvironmentDetail' as const };
+    case 'runtime_package_preparing':
+      return { title, title_key, detail: 'Desktop is preparing the current Runtime package.', detail_key: 'progress.initializingFreshEnvironmentDetail' as const };
+    case 'runtime_package_installing':
+      return { title, title_key, detail: 'Desktop is installing the current Runtime package.', detail_key: 'progress.initializingFreshEnvironmentDetail' as const };
+    case 'gateway_and_runtime_starting':
+      return { title, title_key, detail: 'Desktop is starting the fresh Gateway and Runtime.', detail_key: 'progress.reinstallFreshStartedDetail' as const };
     case 'fresh_identity_verified':
       return { title, title_key, detail: 'Desktop verified the new Gateway and Runtime process identities.', detail_key: 'progress.verifyingFreshEnvironmentDetail' as const };
     case 'catalog_and_local_ui_verified':
@@ -7839,30 +7983,51 @@ function reinstallTargetProgressPresentation(
 async function reinstallTargetFromLauncher(
   request: Extract<DesktopLauncherActionRequest, { kind: 'reinstall_target' }>,
 ): Promise<DesktopLauncherActionResult> {
-  const operationKey = `reinstall-target:${request.preflight_id}`;
-  const operation = launcherOperations.create({
-    operation_key: operationKey,
-    action: 'reinstall_target',
-    subject_kind: 'runtime_target',
-    subject_id: request.environment_id,
-    environment_id: request.environment_id,
+  const operationKey = compact(request.operation_key) || `reinstall-target:${request.preflight_id}`;
+  const existing = launcherOperations.get(operationKey);
+  if (!existing || existing.action !== 'reinstall_target' || existing.status !== 'needs_confirmation') {
+    return launcherActionFailure('operation_missing', 'environment', 'The reinstall operation is no longer available.', {
+      environmentID: request.environment_id,
+      operationKey,
+      shouldRefreshSnapshot: true,
+    });
+  }
+  const operation = launcherOperations.update(operationKey, {
+    status: 'running',
     phase: 'preflight',
     title: 'Reinstall Redeven',
     title_key: 'environmentAction.reinstallRedeven',
     detail: 'Desktop is revalidating the confirmed direct target before deleting Redeven data.',
     detail_key: 'progress.reinstallCheckingDetail',
+    step_progress: reinstallTargetStepProgress('preflight'),
     cancelable: false,
+    failure: undefined,
+    next_actions: undefined,
   });
+  if (!operation) {
+    return launcherActionFailure('operation_missing', 'environment', 'The reinstall operation is no longer available.', {
+      environmentID: request.environment_id,
+      operationKey,
+      shouldRefreshSnapshot: true,
+    });
+  }
   const owner = { action: operation.action, started_at_unix_ms: operation.started_at_unix_ms };
+  let activePhase: ReinstallTargetProgressPhase = 'preflight';
   try {
-    await reinstallTargetCoordinator().execute(request.preflight_id, (phase) => {
+    await reinstallTargetCoordinator().execute(request.preflight_id, operationKey, (phase, detailKey) => {
+      activePhase = phase;
       const presentation = reinstallTargetProgressPresentation(phase);
       launcherOperations.updateCurrentAttempt(operationKey, owner, {
         phase,
         title: presentation.title,
         title_key: presentation.title_key,
         detail: presentation.detail,
-        detail_key: presentation.detail_key,
+        detail_key: (detailKey as Parameters<typeof reinstallTargetStepProgress>[2]) ?? presentation.detail_key,
+        step_progress: reinstallTargetStepProgress(
+          phase,
+          'running',
+          detailKey as Parameters<typeof reinstallTargetStepProgress>[2],
+        ),
         cancelable: false,
       });
     });
@@ -7872,10 +8037,11 @@ async function reinstallTargetFromLauncher(
       title_key: 'environmentAction.reinstallRedeven',
       detail: 'Redeven reinstall completed.',
       detail_key: 'progress.reinstallCompletedDetail',
+      step_progress: reinstallTargetStepProgress('completed', 'succeeded'),
     });
     scheduleCurrentLauncherOperationRemoval(operationKey, owner);
     broadcastDesktopWelcomeSnapshots();
-    return launcherActionSuccess('reinstalled_target');
+    return launcherActionSuccess('reinstalled_target', { operationKey });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const failure = desktopFailureFromError(error, {
@@ -7886,21 +8052,37 @@ async function reinstallTargetFromLauncher(
       summaryKey: 'confirm.reinstallManualRecovery',
       targetLabel: request.environment_id,
     });
-    launcherOperations.finishCurrentAttempt(operationKey, owner, 'failed', {
-      phase: 'manual_recovery_required',
-      title: 'Redeven reinstall requires manual recovery',
-      title_key: 'confirm.reinstallFailedTitle',
-      detail: message,
-      detail_key: 'confirm.reinstallManualRecovery',
+    const retryable = error instanceof ReinstallTargetCoordinatorError
+      && (error.code === 'preflight_expired' || error.code === 'target_changed');
+    const blocked = error instanceof ReinstallTargetCoordinatorError
+      && (error.code === 'reinstall_blocked' || error.code === 'reinstall_unsupported');
+    const terminalStatus = retryable ? 'needs_confirmation' as const : 'failed' as const;
+    launcherOperations.finishCurrentAttempt(operationKey, owner, terminalStatus, {
+      phase: retryable ? 'confirmation' : activePhase,
+      title: retryable ? 'Review reinstall target' : blocked ? 'Reinstall blocked' : 'Redeven reinstall requires manual recovery',
+      title_key: retryable ? 'confirm.reinstallTargetTitle' : 'confirm.reinstallFailedTitle',
+      detail: retryable ? 'The target changed or the confirmation expired. Review the target again.' : message,
+      detail_key: retryable ? 'confirm.reinstallTargetDescription' : blocked ? 'confirm.reinstallManualRecovery' : 'confirm.reinstallManualRecovery',
+      step_progress: reinstallTargetStepProgress(retryable ? 'confirmation' : activePhase, 'failed'),
       failure,
       next_actions: [{
         kind: 'copy_diagnostics',
         operation_key: operationKey,
         label: 'Copy log',
+        label_key: 'progress.copyLog',
       }, {
+        ...(retryable ? {
+          kind: 'retry' as const,
+          operation_key: operationKey,
+          label: 'Review target',
+          label_key: 'common.retry' as const,
+          retry_action: { kind: 'preview_reinstall_target', environment_id: request.environment_id },
+        } : {
         kind: 'dismiss',
         operation_key: operationKey,
         label: 'Dismiss',
+        label_key: 'progress.dismiss' as const,
+        }),
       }],
     });
     return launcherActionFailure(reinstallTargetFailureCode(error), 'environment', message, {
@@ -8237,33 +8419,6 @@ function launcherOperationIsActive(snapshot: DesktopLauncherOperationSnapshot | 
   return snapshot?.status === 'running'
     || snapshot?.status === 'canceling'
     || snapshot?.status === 'cleanup_running';
-}
-
-function launcherOperationIsActiveGatewayServiceAction(snapshot: DesktopLauncherOperationSnapshot | null): boolean {
-  const current = snapshot;
-  if (!current || !launcherOperationIsActive(current) || current.subject_kind !== 'gateway') {
-    return false;
-  }
-  switch (current.action) {
-    case 'start_gateway':
-    case 'stop_gateway':
-    case 'restart_gateway':
-    case 'update_gateway':
-      return true;
-    default:
-      return false;
-  }
-}
-
-function activeGatewayServiceOperation(gatewayID: string): DesktopLauncherOperationSnapshot | null {
-  const cleanGatewayID = compact(gatewayID);
-  if (cleanGatewayID === '') {
-    return null;
-  }
-  return launcherOperations.operations().find((snapshot) => (
-    launcherOperationIsActiveGatewayServiceAction(snapshot)
-    && (snapshot.subject_id === cleanGatewayID || snapshot.gateway_id === cleanGatewayID)
-  )) ?? null;
 }
 
 function scheduleLauncherOperationRemoval(operationKey: string, delayMs = 4_000): void {
@@ -16482,7 +16637,12 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
     case 'stop_gateway':
     case 'restart_gateway':
     case 'update_gateway':
-      return runGatewayServiceActionFromLauncher(request);
+      return launcherActionFailure(
+        'action_invalid',
+        'gateway',
+        'Standalone Gateways expose access and catalog operations only. Manage the Gateway service on its own host.',
+        { gatewayID: request.gateway_id, shouldRefreshSnapshot: true },
+      );
     case 'preview_reinstall_target':
       return previewReinstallTargetFromLauncher(request);
     case 'reinstall_target':

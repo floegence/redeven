@@ -15,11 +15,6 @@ export type GatewayActionPanelKind =
   | 'none'
   | 'diagnosis_result'
   | 'disabled_gateway'
-  | 'start_gateway'
-  | 'stop_gateway_confirm'
-  | 'restart_gateway_confirm'
-  | 'update_gateway_confirm'
-  | 'reinstall_target_confirm'
   | 'start_and_refresh_catalog'
   | 'failure_recovery';
 
@@ -218,11 +213,6 @@ function continuationActionFor(
         kind: 'pair_gateway',
         gateway_id: gateway.gateway_id,
       };
-    case 'start_gateway':
-      return {
-        kind: 'start_gateway',
-        gateway_id: gateway.gateway_id,
-      };
     case 'enable_gateway':
       return {
         kind: 'set_gateway_enabled',
@@ -234,14 +224,6 @@ function continuationActionFor(
         kind: 'set_gateway_enabled',
         gateway_id: gateway.gateway_id,
         enabled: false,
-      };
-    case 'stop_gateway':
-    case 'restart_gateway':
-    case 'update_gateway':
-      return {
-        kind: action.intent,
-        gateway_id: gateway.gateway_id,
-        impact_acknowledged: true,
       };
     default:
       return undefined;
@@ -529,14 +511,6 @@ function actionLabel(action: string): string {
   switch (action) {
     case 'refresh_gateway':
       return 'Refresh Gateway';
-    case 'stop_gateway':
-      return 'Stop Gateway';
-    case 'restart_gateway':
-      return 'Restart Gateway';
-    case 'update_gateway':
-      return 'Update Gateway';
-    case 'reinstall_target':
-      return 'Reinstall Redeven';
     default:
       return 'Gateway action';
   }
@@ -605,10 +579,7 @@ export function buildGatewayActionPresentation(
       gateway,
       kind: 'diagnosis_result',
       execution_mode: 'guide',
-      tone: recovery.primary_action?.intent === 'start_gateway'
-        || recovery.primary_action?.intent === 'restart_gateway'
-        || recovery.primary_action?.intent === 'update_gateway'
-        || gateway.sync_state === 'catalog_failed'
+      tone: gateway.sync_state === 'catalog_failed'
         || gateway.sync_state === 'gateway_unreachable'
         ? 'warning'
         : 'primary',
@@ -620,13 +591,6 @@ export function buildGatewayActionPresentation(
       ...(recovery.continuation_action ? { continuation_action: recovery.continuation_action } : {}),
       ...(recovery.primary_action ? { primary_action: recovery.primary_action } : {}),
     });
-  }
-
-  if (action.intent === 'start_gateway'
-    || action.intent === 'stop_gateway'
-    || action.intent === 'restart_gateway'
-    || action.intent === 'update_gateway') {
-    return noGatewayActionPanel;
   }
 
   return buildPanel({
