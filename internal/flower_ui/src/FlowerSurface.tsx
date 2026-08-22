@@ -27,6 +27,7 @@ import {
 } from './attachments/flowerAttachmentModel';
 import { FlowerChatContextChips } from './chat/FlowerChatContextChips';
 import { FlowerChatContextPreview } from './chat/FlowerChatContextPreview';
+import { FlowerModelStatusIndicator } from './chat/FlowerModelStatusIndicator';
 import { parseChatContextAction, parseChatMessageReferences } from './chat/flowerChatContextModel';
 import {
   createFlowerClientRequestID,
@@ -5232,18 +5233,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const status = selectedModelIOStatus();
     return status ? modelStatusLabel(status.phase) : '';
   });
-  const modelStatusIndicator = (status: FlowerModelIOStatus | null, label: string) => {
-    const base = label.replace(/\.\.\.$/, '');
-    return (
-      <div class="flower-model-status-indicator" data-model-io-phase={status?.phase}>
-        <span class="flower-model-status-flower" aria-hidden="true">
-          <FlowerIcon class="flower-model-status-flower-icon" />
-        </span>
-        <span class="flower-model-status-text" data-text={base}>{base}<span class="flower-model-status-dots" aria-hidden="true">...</span></span>
-      </div>
-    );
-  };
-  const selectedModelStatusIndicator = () => modelStatusIndicator(selectedModelIOStatus(), selectedModelStatusLabel());
+  const selectedModelStatusIndicator = () => (
+    <FlowerModelStatusIndicator
+      status={selectedModelIOStatus()}
+      label={selectedModelStatusLabel()}
+      threadID={selectedThreadID()}
+      activeRunID={selectedThread()?.active_run_id}
+      running={selectedThreadLiveStatus() === 'running'}
+    />
+  );
 
   const formatMessageTime = (createdAtMs: number): string => {
     const value = Math.floor(Number(createdAtMs ?? 0));
@@ -8907,9 +8905,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       loadingMore={subagentDetailLoadingMore()}
       onLoadMore={() => void loadMoreSubagentDetail()}
       onRetryLoad={retrySubagentDetailLoad}
-      modelStatus={subagentDetailModelIOStatus()
-        ? modelStatusIndicator(subagentDetailModelIOStatus(), subagentDetailModelStatusLabel())
-        : null}
+      modelStatus={(
+        <FlowerModelStatusIndicator
+          status={subagentDetailModelIOStatus()}
+          label={subagentDetailModelStatusLabel()}
+          threadID={subagentDetail()?.summary.thread_id ?? ''}
+          activeRunID={subagentDetailModelIOStatus()?.run_id}
+          running={subagentDetailActiveStatus() === 'running'}
+        />
+      )}
+      modelStatusVisible={subagentDetailActiveStatus() === 'running'}
       tailLoading={subagentDetailTailLoading()}
       tailError={subagentDetailTailError()}
       onRetryTail={retrySubagentDetailTail}
@@ -9760,9 +9765,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           </Show>
           <div class="flower-chat-bottom-dock-track flower-chat-bottom-dock-track">
             <div class="flower-model-status-lane" role="status" aria-live="polite" aria-atomic="true">
-              <Show when={selectedThreadHasModelStatus()}>
-                {selectedModelStatusIndicator()}
-              </Show>
+              {selectedModelStatusIndicator()}
             </div>
             <div class="flower-composer-anchor">
               <Show when={bottomActionMode() !== 'approval'}>

@@ -104,8 +104,9 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(submitIndex).toBeGreaterThan(compactContextIndicatorIndex);
     expect(src).toContain('const selectedModelIOStatus = createMemo<FlowerModelIOStatus | null>(() => selectedThread()?.model_io_status ?? null)');
     expect(src).toContain('const selectedThreadHasModelStatus = createMemo(() => selectedModelIOStatus() != null)');
-    expect(src).toContain('<Show when={selectedThreadHasModelStatus()}>');
-    expect(src).toContain('const selectedModelStatusIndicator = () => modelStatusIndicator(selectedModelIOStatus(), selectedModelStatusLabel())');
+    expect(src).not.toContain('<Show when={selectedThreadHasModelStatus()}>');
+    expect(src).toContain('const selectedModelStatusIndicator = () => (');
+    expect(src).toContain('<FlowerModelStatusIndicator');
     expect(src).toContain('{selectedModelStatusIndicator()}');
     expect(src).not.toContain('data-flower-composer-more-item="context"');
     expect(src).toContain('<Show when={selectedContextUsage()}>');
@@ -113,7 +114,6 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).toContain('freshness={contextUsage().freshness}');
     expect(src).toContain('copy().chat.modelStatus');
     expect(src).toContain('DEFAULT_FLOWER_SURFACE_COPY.chat.modelStatus');
-    expect(src).toContain('data-text={base}');
     expect(src).toContain('const thinking = createMemo(() => block().block_type === \'thinking\')');
     expect(src).toContain('const thinkingLive = createMemo(() => thinking() && message().live === true)');
     expect(src).toContain('setThinkingOpen(streaming() || thinkingLive())');

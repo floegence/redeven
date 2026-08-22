@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const stylesPath = path.join(repoRoot, 'internal', 'flower_ui', 'src', 'styles', 'flower.css');
 const surfacePath = path.join(repoRoot, 'internal', 'flower_ui', 'src', 'FlowerSurface.tsx');
+const modelStatusIndicatorPath = path.join(repoRoot, 'internal', 'flower_ui', 'src', 'chat', 'FlowerModelStatusIndicator.tsx');
 const contextIndicatorPath = path.join(repoRoot, 'internal', 'flower_ui', 'src', 'chat', 'FlowerComposerContextIndicator.tsx');
 
 function flowerStyles(): string {
@@ -15,6 +16,10 @@ function flowerStyles(): string {
 
 function surfaceSource(): string {
   return fs.readFileSync(surfacePath, 'utf8');
+}
+
+function modelStatusIndicatorSource(): string {
+  return fs.readFileSync(modelStatusIndicatorPath, 'utf8');
 }
 
 function contextIndicatorSource(): string {
@@ -46,7 +51,7 @@ describe('Flower model status indicator', () => {
     const flowerIconRule = cssRule(css, '.flower-model-status-flower-icon');
     const textRule = cssRule(css, '.flower-model-status-text');
     const shimmerRule = cssRule(css, '.flower-model-status-text::after');
-    const src = surfaceSource();
+    const src = modelStatusIndicatorSource();
     const indicatorMarkupIndex = src.indexOf('class="flower-model-status-indicator"');
     const flowerMarkupIndex = src.indexOf('class="flower-model-status-flower"', indicatorMarkupIndex);
     const textMarkupIndex = src.indexOf('class="flower-model-status-text"', flowerMarkupIndex);
@@ -63,7 +68,7 @@ describe('Flower model status indicator', () => {
     expect(flowerRule).toContain('flex: 0 0 1rem');
     expect(flowerRule).toContain('transform-box: fill-box');
     expect(flowerRule).toContain('transform-origin: 50% 50%');
-    expect(flowerRule).toContain('animation: flower-model-status-flower-twirl 2.4s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite');
+    expect(flowerRule).toContain('animation: flower-model-status-flower-twirl 2.1s ease-in-out infinite');
     expect(flowerIconRule).toContain('display: block');
     expect(flowerIconRule).toContain('width: 100%');
     expect(flowerIconRule).toContain('height: 100%');
@@ -72,10 +77,15 @@ describe('Flower model status indicator', () => {
     expect(textMarkupIndex).toBeGreaterThan(flowerMarkupIndex);
     expect(src).toContain('<span class="flower-model-status-flower" aria-hidden="true">');
     expect(src).toContain('<FlowerIcon class="flower-model-status-flower-icon" />');
+    expect(src.match(/class="flower-model-status-dot"/g)).toHaveLength(3);
     expect(css).toContain('@keyframes flower-model-status-flower-twirl');
     expect(css).toContain('translateY(-1px) rotate(34deg) scale(1.04)');
     expect(css).toContain('translateY(1px) rotate(178deg) scale(1.02)');
     expect(css).toContain('.flower-model-status-flower,');
+    expect(css).toContain('@keyframes flower-model-status-dot-bounce');
+    expect(css).toContain('transform: translateY(-2px) scale(1)');
+    expect(css).toContain('.flower-model-status-dot:nth-child(2)');
+    expect(css).toContain('.flower-model-status-dot:nth-child(3)');
     expect(textRule).toContain('font-size: 0.75rem');
     expect(textRule).toContain('font-weight: 600');
     expect(textRule).toContain('white-space: nowrap');
@@ -96,6 +106,7 @@ describe('Flower model status indicator', () => {
     expect(css).toContain('background-position: -120% 0');
     expect(css).toContain('background-position: 180% 0');
     expect(css).toContain('.flower-model-status-text::after,');
+    expect(css).toContain('.flower-model-status-dot,');
     expect(css).toContain('.flower-model-status-text {\n    color: var(--muted-foreground);');
     expect(css).toContain('.flower-model-status-text::after {\n    content: none !important;');
     expect(indicatorRule).not.toContain('width: 1.65rem');
