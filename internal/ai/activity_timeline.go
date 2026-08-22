@@ -52,17 +52,45 @@ func publicActivityTimelineForBlock(timeline observation.ActivityTimeline, publi
 	items := make([]observation.ActivityItem, len(timeline.Items))
 	copy(items, timeline.Items)
 	for index := range items {
-		toolName := strings.TrimSpace(items[index].ToolName)
-		if toolName != "subagents" || items[index].Presentation == nil || items[index].Presentation.Payload == nil {
-			continue
-		}
-		payload := activityPayloadMap(items[index].Presentation.Payload)
-		publicPayload := publicActivityPayloadForTool(toolName, payload)
-		items[index].Presentation = cloneActivityPresentation(items[index].Presentation)
-		items[index].Presentation.Payload = activityPayloadForRenderer(items[index].Presentation.Renderer, publicPayload)
+		items[index] = publicActivityItem(items[index])
 	}
 	timeline.Items = items
 	return timeline
+}
+
+// publicActivityItem applies the same payload, target-ref, metadata, and
+// nested-value policy to every public Activity item. It is deliberately
+// renderer-agnostic so current view, timeline, and live projections cannot
+// drift into separate sanitizers.
+func publicActivityItem(item observation.ActivityItem) observation.ActivityItem {
+	raw, err := json.Marshal(item)
+	if err != nil {
+		return observation.ActivityItem{}
+	}
+	var record map[string]any
+	if err := json.Unmarshal(raw, &record); err != nil {
+		return observation.ActivityItem{}
+	}
+	block := map[string]any{
+		"type":  activityTimelineBlockType,
+		"items": []any{record},
+	}
+	if err := sanitizeActivityTimelineBlockRecord(block); err != nil {
+		return observation.ActivityItem{}
+	}
+	items, _ := block["items"].([]any)
+	if len(items) != 1 {
+		return observation.ActivityItem{}
+	}
+	safe, err := json.Marshal(items[0])
+	if err != nil {
+		return observation.ActivityItem{}
+	}
+	var out observation.ActivityItem
+	if err := json.Unmarshal(safe, &out); err != nil {
+		return observation.ActivityItem{}
+	}
+	return out
 }
 
 func cloneFlowerActivityFileActions(in map[string]FlowerActivityFileAction) map[string]FlowerActivityFileAction {

@@ -1448,16 +1448,16 @@ func activityPayloadForRenderer(renderer fltools.ActivityRenderer, payload map[s
 		return value
 	case fltools.ActivityRendererFile:
 		return fltools.FileActivityPayload{
-			Path:      firstNonEmptyString(anyToString(payload["path"]), anyToString(payload["file_path"]), anyToString(payload["display_name"])),
+			Path:      firstNonEmptyString(anyToString(payload["path"]), anyToString(payload["file_path"])),
 			Operation: operation, Status: status, Summary: summary,
 			SizeBytes: readInt64Field(payload, "size_bytes"), Error: activityError(),
 		}
 	case fltools.ActivityRendererPatch:
-		path := firstNonEmptyString(anyToString(payload["path"]), anyToString(payload["display_name"]), anyToString(payload["file_path"]), anyToString(payload["new_path"]), anyToString(payload["old_path"]))
+		path := firstNonEmptyString(anyToString(payload["path"]), anyToString(payload["file_path"]), anyToString(payload["new_path"]), anyToString(payload["old_path"]))
 		diff := firstNonEmptyString(anyToString(payload["diff"]), anyToString(payload["unified_diff"]))
 		if mutations := toAnySlice(payload["mutations"]); len(mutations) > 0 {
 			if mutation, ok := mutations[0].(map[string]any); ok {
-				path = firstNonEmptyString(path, anyToString(mutation["display_name"]), anyToString(mutation["file_path"]), anyToString(mutation["new_path"]), anyToString(mutation["old_path"]))
+				path = firstNonEmptyString(path, anyToString(mutation["file_path"]), anyToString(mutation["new_path"]), anyToString(mutation["old_path"]))
 				diff = firstNonEmptyString(diff, anyToString(mutation["unified_diff"]), anyToString(mutation["diff"]))
 			}
 		}
