@@ -175,7 +175,7 @@ import {
 } from './flowerCompanionPresence';
 import { createDirectoryPickerDataSource } from './filePicker/createDirectoryPickerDataSource';
 import { applyFlowerRuntimeCurrentView } from './runtimeCurrentView';
-import { createFlowerScrollTailController, type FlowerScrollTailController } from './flowerScrollTail';
+import { createFlowerScrollTailController } from './flowerScrollTail';
 import { toPickerTreeAbsolutePath, toPickerTreePath } from './filePicker/directoryPickerTree';
 import { basenameFromAbsolutePath, normalizeAbsolutePath } from './filePicker/path';
 import {
