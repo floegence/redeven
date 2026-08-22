@@ -987,10 +987,10 @@ describe('launcherBusyState', () => {
       provider_runtime_link_target: undefined,
     };
     const confirmation: DesktopLauncherActionProgress = {
-      action: 'run_gateway_environment_lifecycle',
+      action: 'run_provider_environment_lifecycle',
       operation_key: `${environment.id}:update_runtime`,
-      subject_kind: 'gateway',
-      subject_id: 'gateway-orange',
+      subject_kind: 'provider_environment',
+      subject_id: 'provider-orange',
       environment_id: environment.id,
       environment_label: 'orange',
       started_at_unix_ms: 200,

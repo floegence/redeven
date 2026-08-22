@@ -89,6 +89,7 @@ type RuntimeProcessInventory struct {
 
 type runtimeProcessSnapshot struct {
 	PID                    int
+	ParentPID              int
 	ProcessStartedAtUnixMS int64
 	UserIdentity           string
 	NamespaceID            string
@@ -225,6 +226,13 @@ func numericReflectField(value reflect.Value, name string) uint64 {
 }
 
 func loadSystemRuntimeProcessSnapshots(ctx context.Context) ([]runtimeProcessSnapshot, error) {
+	return loadSystemProcessSnapshots(ctx, runtimeProcessArgs)
+}
+
+func loadSystemProcessSnapshots(
+	ctx context.Context,
+	accept func([]string) bool,
+) ([]runtimeProcessSnapshot, error) {
 	processes, err := processlib.ProcessesWithContext(ctx)
 	if err != nil {
 		return nil, err
@@ -232,7 +240,13 @@ func loadSystemRuntimeProcessSnapshots(ctx context.Context) ([]runtimeProcessSna
 	snapshots := make([]runtimeProcessSnapshot, 0, len(processes))
 	for _, candidate := range processes {
 		args, argsErr := candidate.CmdlineSliceWithContext(ctx)
-		if argsErr != nil || !runtimeProcessArgs(args) {
+		if argsErr != nil && accept != nil {
+			continue
+		}
+		if argsErr != nil {
+			args = nil
+		}
+		if accept != nil && !accept(args) {
 			continue
 		}
 		snapshot, snapshotErr := loadSystemRuntimeProcessSnapshot(ctx, candidate, args)
@@ -248,10 +262,7 @@ func loadSystemRuntimeProcessSnapshot(ctx context.Context, candidate *processlib
 	if candidate == nil || candidate.Pid <= 0 {
 		return runtimeProcessSnapshot{}, errors.New("invalid process")
 	}
-	startedAt, err := candidate.CreateTimeWithContext(ctx)
-	if err != nil || startedAt <= 0 {
-		return runtimeProcessSnapshot{}, errors.New("process create time unavailable")
-	}
+	startedAt, _ := candidate.CreateTimeWithContext(ctx)
 	executablePath, _ := candidate.ExeWithContext(ctx)
 	executableDeleted := strings.HasSuffix(strings.TrimSpace(executablePath), " (deleted)")
 	executablePath = strings.TrimSuffix(strings.TrimSpace(executablePath), " (deleted)")
@@ -265,8 +276,10 @@ func loadSystemRuntimeProcessSnapshot(ctx context.Context, candidate *processlib
 		}
 	}
 	device, inode := processExecutableIdentity(int(candidate.Pid), executablePath)
+	parentPID, _ := candidate.PpidWithContext(ctx)
 	return runtimeProcessSnapshot{
 		PID:                    int(candidate.Pid),
+		ParentPID:              int(parentPID),
 		ProcessStartedAtUnixMS: startedAt,
 		UserIdentity:           strings.TrimSpace(username),
 		NamespaceID:            processMountNamespace(int(candidate.Pid)),

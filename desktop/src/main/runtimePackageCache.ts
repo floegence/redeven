@@ -69,6 +69,8 @@ const inFlightReleaseManifests = new Map<string, Promise<DesktopSSHVerifiedRelea
 const inFlightReleaseAssets = new Map<string, Promise<DesktopRuntimePackageCacheEntry>>();
 const inFlightSourceRuntimeAssets = new Map<string, Promise<DesktopRuntimeUploadAsset>>();
 const sourceRuntimePackageCache = new Map<string, DesktopSourceRuntimePackageCacheEntry>();
+const sourceReinstallHelperCache = new Map<string, Buffer>();
+const inFlightSourceReinstallHelpers = new Map<string, Promise<Buffer>>();
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
@@ -528,6 +530,81 @@ async function ensureSourceRuntimeUploadAsset(args: Readonly<{
     });
     return built;
   });
+}
+
+async function prepareSourceReinstallHelperArchive(args: Readonly<{
+  sourceRuntimeRoot: string;
+  runtimeReleaseTag: string;
+  platform: DesktopSSHRemotePlatform;
+  signal?: AbortSignal;
+}>): Promise<Buffer> {
+  const sourceRoot = normalizeSourceRuntimeRoot(args.sourceRuntimeRoot);
+  const commandRoot = path.join(sourceRoot, 'cmd', 'redeven');
+  const commandRootStat = await fs.stat(commandRoot).catch(() => null);
+  if (!commandRootStat?.isDirectory()) {
+    throw new Error(`Desktop reinstall helper source root is not a Redeven checkout: ${sourceRoot}`);
+  }
+  await checkSourceRuntimeCompiler(sourceRoot, args.platform, args.signal);
+  const buildRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-reinstall-helper-'));
+  try {
+    const binaryPath = path.join(buildRoot, 'redeven');
+    const goos = args.platform.goos;
+    const goarch = args.platform.goarch;
+    const version = normalizeRuntimeReleaseTag(args.runtimeReleaseTag);
+    const commit = await readSourceRuntimeCommit(sourceRoot, args.signal);
+    const buildTime = compact(process.env.REDEVEN_DESKTOP_BUNDLE_BUILD_TIME)
+      || new Date().toISOString().replace(/\.\d{3}Z$/u, 'Z');
+    await runLocalCommand('go', [
+      'build',
+      '-trimpath',
+      '-ldflags', `-s -w -X main.Version=${version} -X main.Commit=${commit} -X main.BuildTime=${buildTime}`,
+      '-o', binaryPath,
+      './cmd/redeven',
+    ], {
+      cwd: sourceRoot,
+      env: {
+        GOWORK: 'off',
+        GOOS: goos,
+        GOARCH: goarch,
+        CGO_ENABLED: '0',
+      },
+      signal: args.signal,
+    });
+    return createSingleFileTarGzip('redeven', await fs.readFile(binaryPath), 0o755);
+  } finally {
+    await fs.rm(buildRoot, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
+export async function prepareDesktopReinstallHelperUploadAsset(args: Readonly<{
+  runtimeReleaseTag: string;
+  releaseBaseURL: string;
+  assetCacheRoot: string;
+  sourceRuntimeRoot?: string;
+  platform: DesktopSSHRemotePlatform;
+  fetchPolicy: DesktopSSHReleaseFetchPolicy;
+  signal?: AbortSignal;
+}>): Promise<Buffer> {
+  const sourceRoot = compact(args.sourceRuntimeRoot);
+  if (sourceRoot === '') {
+    return (await prepareDesktopRuntimeUploadAsset(args)).archiveData;
+  }
+  const normalizedSourceRoot = normalizeSourceRuntimeRoot(sourceRoot);
+  const key = `reinstall-helper:${normalizedSourceRoot}:${normalizeRuntimeReleaseTag(args.runtimeReleaseTag)}:${args.platform.platform_id}`;
+  const cached = sourceReinstallHelperCache.get(key);
+  if (cached) {
+    return Buffer.from(cached);
+  }
+  const archive = await onceInFlight(inFlightSourceReinstallHelpers, key, () => (
+    prepareSourceReinstallHelperArchive({
+      sourceRuntimeRoot: normalizedSourceRoot,
+      runtimeReleaseTag: args.runtimeReleaseTag,
+      platform: args.platform,
+      signal: args.signal,
+    })
+  ));
+  sourceReinstallHelperCache.set(key, Buffer.from(archive));
+  return archive;
 }
 
 function isRuntimePackageCacheTemporaryName(name: string): boolean {

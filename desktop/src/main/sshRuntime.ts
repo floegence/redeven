@@ -727,6 +727,19 @@ export function buildManagedSSHUploadedInstallScript(): string {
     'fi',
     'mv "$binary_path" "${staging_root}/bin/redeven"',
     'chmod +x "${staging_root}/bin/redeven"',
+    // Runtime packages carry the verified ReDevPlugin release evidence next
+    // to the binary. Keep those files in the managed slot so a fresh daemon
+    // can validate its plugin runtime before opening the environment.
+    'for companion in .redevplugin-release-artifacts-verified.json REDEVPLUGIN_THIRD_PARTY_NOTICES.md REDEVPLUGIN_RUNTIME.spdx.json redevplugin-runtime.provenance.json redevplugin-runtime.sig redevplugin-runtime.pem redevplugin-runtime; do',
+    '  if [ "$companion" = "redevplugin-runtime" ]; then',
+    '    [ -x "${extract_dir}/$companion" ] || { echo "uploaded Runtime archive is missing $companion" >&2; exit 1; }',
+    '    cp "${extract_dir}/$companion" "${staging_root}/bin/$companion"',
+    '    chmod +x "${staging_root}/bin/$companion"',
+    '  else',
+    '    [ -f "${extract_dir}/$companion" ] || { echo "uploaded Runtime archive is missing $companion" >&2; exit 1; }',
+    '    cp "${extract_dir}/$companion" "${staging_root}/bin/$companion"',
+    '  fi',
+    'done',
     'if ! staged_version_output="$("${staging_root}/bin/redeven" version 2>/dev/null)"; then',
     '  echo "uploaded Redeven binary failed to report its version" >&2',
     '  exit 1',

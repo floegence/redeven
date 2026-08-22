@@ -131,18 +131,21 @@ type GatewayMetadata struct {
 }
 
 type Environment struct {
-	GatewayEnvID        string                       `json:"gateway_env_id"`
-	DisplayName         string                       `json:"display_name"`
-	EnvKind             EnvironmentKind              `json:"env_kind"`
-	State               EnvironmentState             `json:"state"`
-	Capabilities        []EnvironmentCapability      `json:"capabilities"`
-	AccessCapabilities  []EnvironmentCapability      `json:"access_capabilities"`
-	ControlCapabilities []EnvironmentCapability      `json:"control_capabilities"`
-	Profile             *EnvironmentProfile          `json:"profile,omitempty"`
-	ProfileAccessRoute  *EnvProfileAccessRoute       `json:"profile_access_route,omitempty"`
-	RuntimeManagement   *RuntimeManagementCapability `json:"runtime_management,omitempty"`
-	Origin              EnvironmentOrigin            `json:"origin"`
-	LastSeenAtUnixMS    int64                        `json:"last_seen_at_unix_ms,omitempty"`
+	GatewayEnvID        string                  `json:"gateway_env_id"`
+	DisplayName         string                  `json:"display_name"`
+	EnvKind             EnvironmentKind         `json:"env_kind"`
+	State               EnvironmentState        `json:"state"`
+	Capabilities        []EnvironmentCapability `json:"capabilities"`
+	AccessCapabilities  []EnvironmentCapability `json:"access_capabilities"`
+	ControlCapabilities []EnvironmentCapability `json:"control_capabilities"`
+	Profile             *EnvironmentProfile     `json:"profile,omitempty"`
+	ProfileAccessRoute  *EnvProfileAccessRoute  `json:"profile_access_route,omitempty"`
+	// AccessEndpoint is the immutable, access-only route used by Desktop to
+	// open a Gateway-backed Environment. It is never a Gateway API endpoint.
+	AccessEndpoint    *EnvProfileAccessRoute       `json:"access_endpoint,omitempty"`
+	RuntimeManagement *RuntimeManagementCapability `json:"runtime_management,omitempty"`
+	Origin            EnvironmentOrigin            `json:"origin"`
+	LastSeenAtUnixMS  int64                        `json:"last_seen_at_unix_ms,omitempty"`
 }
 
 type EnvironmentProfile struct {
@@ -455,6 +458,14 @@ func NormalizeEnvironments(environments []Environment) []Environment {
 				environment.ProfileAccessRoute = nil
 			} else {
 				environment.ProfileAccessRoute = &route
+			}
+		}
+		if environment.AccessEndpoint != nil {
+			route := normalizeEnvProfileAccessRouteForCatalog(*environment.AccessEndpoint)
+			if route.Kind == "" {
+				environment.AccessEndpoint = nil
+			} else {
+				environment.AccessEndpoint = &route
 			}
 		}
 		if environment.RuntimeManagement != nil {

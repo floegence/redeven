@@ -36,34 +36,21 @@ export function runGatewaySourceAction(
         kind: 'refresh_gateway',
         gateway_id: gateway.gateway_id,
       });
+    case 'pair_gateway':
+      return runGatewayLauncherAction({
+        kind: 'pair_gateway',
+        gateway_id: gateway.gateway_id,
+      });
     case 'start_gateway':
-      return runGatewayLauncherAction({
-        kind: 'start_gateway',
-        gateway_id: gateway.gateway_id,
-      });
     case 'stop_gateway':
-      return runGatewayLauncherAction({
-        kind: 'stop_gateway',
-        gateway_id: gateway.gateway_id,
-        impact_acknowledged: true,
-      });
     case 'restart_gateway':
-      return runGatewayLauncherAction({
-        kind: 'restart_gateway',
-        gateway_id: gateway.gateway_id,
-        impact_acknowledged: true,
-      });
     case 'update_gateway':
-      return runGatewayLauncherAction({
-        kind: 'update_gateway',
-        gateway_id: gateway.gateway_id,
-        impact_acknowledged: true,
-      });
-    case 'reinstall_gateway':
-      return runGatewayLauncherAction({
-        kind: 'reinstall_gateway',
-        gateway_id: gateway.gateway_id,
-        impact_acknowledged: true,
-      });
+      // Standalone Gateway cards never own a Runtime or Gateway service
+      // lifecycle. These legacy intents are intentionally inert.
+      return;
+    case 'reinstall_target':
+      // Reinstall is a Managed Environment action. Standalone Gateway cards
+      // never own a Runtime target and therefore cannot launch it.
+      return;
   }
 }

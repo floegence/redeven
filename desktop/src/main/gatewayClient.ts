@@ -69,26 +69,15 @@ export type GatewayOpenSessionResponse = Readonly<{
 }>;
 
 export type GatewayEnvProfileAccessRoute = Readonly<{
-  kind: 'url' | 'ssh_host' | 'ssh_container';
+  kind: 'url';
   url?: string;
   origin_label?: string;
-  ssh_destination?: string;
-  ssh_port?: number;
-  auth_mode?: 'key_agent' | 'password';
-  ssh_runtime_root?: string;
-  container_engine?: string;
-  container_id?: string;
-  container_runtime_root?: string;
 }>;
 
 export type GatewayEnvProfileUpsertRequest = Readonly<{
   gateway_env_id?: string;
   display_name: string;
   access_route: GatewayEnvProfileAccessRoute;
-  ssh_secret?: Readonly<{
-    mode: 'keep' | 'replace' | 'clear';
-    password?: string;
-  }>;
 }>;
 
 export type GatewayEnvProfileUpsertResponse = Readonly<{
@@ -990,14 +979,7 @@ function normalizeOriginKind(value: unknown): DesktopGatewayEnvironmentOriginKin
 }
 
 function normalizeProfileAccessRouteKind(value: unknown): DesktopGatewayEnvironmentProfileAccessRoute['kind'] | null {
-  switch (compact(value)) {
-    case 'url':
-    case 'ssh_host':
-    case 'ssh_container':
-      return compact(value) as DesktopGatewayEnvironmentProfileAccessRoute['kind'];
-    default:
-      return null;
-  }
+  return compact(value) === 'url' ? 'url' : null;
 }
 
 function normalizeGatewayEnvironmentProfileAccessRoute(value: unknown): DesktopGatewayEnvironmentProfileAccessRoute | undefined {
@@ -1013,24 +995,8 @@ function normalizeGatewayEnvironmentProfileAccessRoute(value: unknown): DesktopG
     kind,
     ...(compact(candidate.url) ? { url: compact(candidate.url) } : {}),
     ...(compact(candidate.origin_label) ? { origin_label: compact(candidate.origin_label) } : {}),
-    ...(compact(candidate.ssh_destination) ? { ssh_destination: compact(candidate.ssh_destination) } : {}),
-    ...(Number.isFinite(Number(candidate.ssh_port)) && Number(candidate.ssh_port) > 0
-      ? { ssh_port: Math.floor(Number(candidate.ssh_port)) }
-      : {}),
-    ...(compact(candidate.auth_mode) === 'password' ? { auth_mode: 'password' } : {}),
-    ...((candidate as { ssh_password_configured?: unknown }).ssh_password_configured === true ? { ssh_password_configured: true } : {}),
-    ...(compact(candidate.ssh_runtime_root) ? { ssh_runtime_root: compact(candidate.ssh_runtime_root) } : {}),
-    ...(compact(candidate.container_engine) ? { container_engine: compact(candidate.container_engine) } : {}),
-    ...(compact(candidate.container_id) ? { container_id: compact(candidate.container_id) } : {}),
-    ...(compact(candidate.container_runtime_root) ? { container_runtime_root: compact(candidate.container_runtime_root) } : {}),
   };
   if (route.kind === 'url' && (!route.url || desktopGatewayProfileURLHasEmbeddedCredentials(route.url))) {
-    return undefined;
-  }
-  if ((route.kind === 'ssh_host' || route.kind === 'ssh_container') && !route.ssh_destination) {
-    return undefined;
-  }
-  if (route.kind === 'ssh_container' && !route.container_id) {
     return undefined;
   }
   return route;
@@ -1179,6 +1145,7 @@ function normalizeGatewayEnvironment(value: unknown): DesktopGatewayEnvironment 
   const normalizedAccessCapabilities = [...new Set(accessCapabilities)];
   const normalizedControlCapabilities = [...new Set(controlCapabilities)];
   const profileAccessRoute = normalizeGatewayEnvironmentProfileAccessRoute(candidate.profile_access_route);
+  const accessEndpoint = normalizeGatewayEnvironmentProfileAccessRoute(candidate.access_endpoint);
   const profile = normalizeGatewayEnvironmentProfile(candidate.profile);
   const runtimeManagement = normalizeGatewayRuntimeManagementCapability(candidate.runtime_management);
   return {
@@ -1191,6 +1158,7 @@ function normalizeGatewayEnvironment(value: unknown): DesktopGatewayEnvironment 
     control_capabilities: normalizedControlCapabilities,
     ...(profile ? { profile } : {}),
     ...(profileAccessRoute ? { profile_access_route: profileAccessRoute } : {}),
+    ...(accessEndpoint ? { access_endpoint: accessEndpoint } : {}),
     ...(runtimeManagement ? { runtime_management: runtimeManagement } : {}),
     origin: {
       kind: normalizeOriginKind(origin.kind),
@@ -1452,11 +1420,8 @@ function normalizeGatewayProfileURL(value: string | undefined): string {
 }
 
 function gatewayEnvProfilePayload(request: GatewayEnvProfileUpsertRequest): unknown {
-  if (request.access_route.auth_mode === 'password') {
-    throw new Error('Gateway profile SSH password auth is not supported.');
-  }
-  if (request.ssh_secret) {
-    throw new Error('Gateway profile SSH secrets are not supported.');
+  if (request.access_route.kind !== 'url') {
+    throw new Error('Gateway profile access must use an explicit URL endpoint.');
   }
   const routeURL = normalizeGatewayProfileURL(request.access_route.url);
   return {
@@ -1465,18 +1430,9 @@ function gatewayEnvProfilePayload(request: GatewayEnvProfileUpsertRequest): unkn
       ...(compact(request.gateway_env_id) ? { gateway_env_id: compact(request.gateway_env_id) } : {}),
       display_name: compact(request.display_name),
       access_route: {
-        kind: request.access_route.kind,
+        kind: 'url',
         ...(routeURL ? { url: routeURL } : {}),
         ...(compact(request.access_route.origin_label) ? { origin_label: compact(request.access_route.origin_label) } : {}),
-        ...(compact(request.access_route.ssh_destination) ? { ssh_destination: compact(request.access_route.ssh_destination) } : {}),
-        ...(Number.isFinite(Number(request.access_route.ssh_port)) && Number(request.access_route.ssh_port) > 0
-          ? { ssh_port: Math.floor(Number(request.access_route.ssh_port)) }
-          : {}),
-        ...(request.access_route.auth_mode === 'key_agent' ? { auth_mode: 'key_agent' } : {}),
-        ...(compact(request.access_route.ssh_runtime_root) ? { ssh_runtime_root: compact(request.access_route.ssh_runtime_root) } : {}),
-        ...(compact(request.access_route.container_engine) ? { container_engine: compact(request.access_route.container_engine) } : {}),
-        ...(compact(request.access_route.container_id) ? { container_id: compact(request.access_route.container_id) } : {}),
-        ...(compact(request.access_route.container_runtime_root) ? { container_runtime_root: compact(request.access_route.container_runtime_root) } : {}),
       },
     },
   };

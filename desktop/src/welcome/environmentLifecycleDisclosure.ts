@@ -319,7 +319,6 @@ export function environmentLifecycleDisclosureHasPendingRequest(
     && state.environment_id === busyState.environment_id
     && (
       busyState.action === lifecycleActionKindForIntent(state.intent)
-      || busyState.action === 'run_gateway_environment_lifecycle'
       || busyState.action === 'run_provider_environment_lifecycle'
     );
 }

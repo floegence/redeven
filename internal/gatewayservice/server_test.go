@@ -89,6 +89,48 @@ func (gatewayPrecompiledRuntimeIdentityMismatch) PrecompiledRuntimeIdentityMisma
 	return true
 }
 
+func TestStandaloneGatewayHasNoRuntimeLifecycleSurface(t *testing.T) {
+	stateRoot := t.TempDir()
+	startup := &gatewayPrecompiledRuntimeStartup{targetID: "must-not-start"}
+	server, err := New(Options{
+		Mode:                      "standalone",
+		StateRoot:                 stateRoot,
+		LifecycleController:       &gatewayLifecycleTestController{},
+		LifecycleArtifactVerifier: gatewayLifecycleTestArtifactVerifier{},
+		LifecycleAuthorizer:       gatewayLifecycleTestAuthorizer{},
+		PrecompiledRuntimeStartup: startup,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if server.lifecycle != nil || server.lifecycleAvailable {
+		t.Fatal("standalone Gateway initialized Runtime lifecycle state")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	httpServer, _, err := server.Start(ctx, "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	_ = httpServer.Close()
+	if startup.called != 0 {
+		t.Fatalf("standalone Gateway started precompiled Runtime %d time(s)", startup.called)
+	}
+	if _, err := os.Stat(filepath.Join(stateRoot, "runtime-lifecycle")); !os.IsNotExist(err) {
+		t.Fatalf("standalone Gateway created Runtime lifecycle directory: %v", err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v2/runtime-operations/prepare", nil)
+	response := httptest.NewRecorder()
+	server.Handler().ServeHTTP(response, request)
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("standalone Runtime lifecycle route status = %d, want %d", response.Code, http.StatusNotFound)
+	}
+	capability := server.runtimeManagementCapability(protocol.EnvProfileAccessRouteKindURL, []protocol.RuntimeGrant{protocol.RuntimeGrantManage})
+	if capability.Support != protocol.CapabilitySupportUnsupported || capability.Authorization.State != protocol.AuthorizationDenied || capability.ReasonCode != "standalone_gateway_runtime_management_unsupported" {
+		t.Fatalf("standalone Runtime capability = %#v", capability)
+	}
+}
+
 func TestGatewayStartsPrecompiledRuntimeBeforeListening(t *testing.T) {
 	startup := &gatewayPrecompiledRuntimeStartup{targetID: "target-startup"}
 	server, err := New(Options{
@@ -1061,6 +1103,9 @@ func TestGatewayServiceProfileCatalogOpenAndDeleteRevokesProfileSession(t *testi
 	}
 	if env.ProfileAccessRoute != nil {
 		t.Fatalf("access catalog leaked editable route = %#v", env.ProfileAccessRoute)
+	}
+	if env.AccessEndpoint == nil || env.AccessEndpoint.Kind != protocol.EnvProfileAccessRouteKindURL || env.AccessEndpoint.URL != "https://target.example/" {
+		t.Fatalf("access catalog endpoint = %#v, want sanitized URL endpoint", env.AccessEndpoint)
 	}
 
 	openResp := openGatewayEnvViaHTTP(t, s, accessMaterial, "env_url", "client-nonce")

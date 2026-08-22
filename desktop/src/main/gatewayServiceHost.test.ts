@@ -23,9 +23,6 @@ import {
   gatewaySupervisorEnrollmentInvocation,
   ensureManagedGatewayServiceReady,
   probeManagedGatewayServiceStatus,
-  preflightManagedGatewayTarget,
-  quarantineManagedGatewayTarget,
-  cleanupManagedGatewayQuarantine,
   resolveGatewayHostPlatform,
 } from './gatewayServiceHost';
 import { DEFAULT_DESKTOP_SSH_RUNTIME_ROOT } from '../shared/desktopSSH';
@@ -367,56 +364,4 @@ describe('gatewayServiceHost', () => {
     }
   });
 
-  it('quarantines and cleans only the exact registered Gateway profile root', async () => {
-    const runtimeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'redeven-gateway-quarantine-'));
-    const targetRoot = path.join(runtimeRoot, 'gateways', 'gw_exact');
-    const stateRoot = path.join(targetRoot, 'state');
-    const siblingRoot = path.join(runtimeRoot, 'keep-me');
-    fs.mkdirSync(stateRoot, { recursive: true });
-    fs.mkdirSync(siblingRoot);
-    fs.writeFileSync(path.join(targetRoot, 'old-state'), 'old');
-    fs.writeFileSync(path.join(siblingRoot, 'data'), 'keep');
-    const options = {
-      sshTransportManager: null as never,
-      sshCredentialScope: 'gw_exact',
-      gatewayID: 'gw_exact',
-      hostAccess: { kind: 'local_host' as const },
-      placement: { kind: 'host_process' as const, runtime_root: runtimeRoot },
-      stateRoot,
-      releaseTag: 'v1.2.3',
-      releaseBaseURL: '',
-      assetCacheRoot: path.join(runtimeRoot, 'cache'),
-      tempRoot: path.join(runtimeRoot, 'tmp'),
-    };
-
-    try {
-      await expect(preflightManagedGatewayTarget(options, 'operation-1')).resolves.toEqual({
-        operation_id: 'operation-1',
-        target_root: targetRoot,
-        quarantine_root: `${targetRoot}.redeven-quarantine-operation-1`,
-      });
-      const quarantine = await quarantineManagedGatewayTarget(options, 'operation-1');
-      expect(quarantine).toEqual({
-        operation_id: 'operation-1',
-        target_root: targetRoot,
-        quarantine_root: `${targetRoot}.redeven-quarantine-operation-1`,
-      });
-      expect(fs.readFileSync(path.join(quarantine.quarantine_root, 'old-state'), 'utf8')).toBe('old');
-      expect(fs.readFileSync(path.join(siblingRoot, 'data'), 'utf8')).toBe('keep');
-      await cleanupManagedGatewayQuarantine(options, quarantine);
-      expect(fs.existsSync(quarantine.quarantine_root)).toBe(false);
-      expect(fs.readFileSync(path.join(siblingRoot, 'data'), 'utf8')).toBe('keep');
-
-      fs.mkdirSync(`${targetRoot}.redeven-quarantine-previous`);
-      await expect(preflightManagedGatewayTarget(options, 'operation-2')).rejects.toThrow('Desktop could not run the runtime host command');
-      expect(fs.existsSync(`${targetRoot}.redeven-quarantine-previous`)).toBe(true);
-
-      await expect(quarantineManagedGatewayTarget({
-        ...options,
-        stateRoot: path.join(runtimeRoot, 'wrong', 'state'),
-      }, 'operation-3')).rejects.toThrow('does not match');
-    } finally {
-      fs.rmSync(runtimeRoot, { recursive: true, force: true });
-    }
-  });
 });

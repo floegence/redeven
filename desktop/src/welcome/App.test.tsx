@@ -279,34 +279,22 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('function suggestGatewayDisplayName(state: GatewaySetupDialogState | null): string | null');
     expect(appSrc).toContain("return seed === '' ? null : `Gateway-${seed}`;");
     expect(appSrc).toContain('display_name_touched: overrides.display_name_touched === true');
-    expect(appSrc).toContain("runtimeRoot = trimString(state.runtime_root) || DEFAULT_DESKTOP_SSH_RUNTIME_ROOT");
-    expect(appSrc).toContain("placeholder={DEFAULT_DESKTOP_SSH_RUNTIME_ROOT_LABEL}");
-    expect(appSrc).not.toContain("placeholder={isContainer() ? '/root/.redeven' : DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}");
-    expect(appSrc).not.toContain("runtime_root: trimString(overrides.runtime_root) || (overrides.connection_kind === 'ssh_container' ? '/root/.redeven' : DEFAULT_DESKTOP_SSH_RUNTIME_ROOT)");
     expect(appSrc).toContain('function openCreateGatewaySetup(gateway?: DesktopGatewaySource, focusSection?: DesktopGatewayResolveFocus): void');
     expect(appSrc).toContain('function gatewaySetupFocusForGateway(');
     expect(appSrc).toContain('requestedFocus?: DesktopGatewayResolveFocus');
-    expect(appSrc).toContain('if (requestedFocus) {');
+    expect(appSrc).toContain("if (requestedFocus === 'url_endpoint' || requestedFocus === 'identity_trust') {");
     expect(appSrc).toContain('focus_section: gatewaySetupFocusForGateway(gateway, focusSection)');
     expect(appSrc).toContain("setActiveCenterTab('gateways')");
     expect(appSrc).toContain('<GatewaySetupDialog');
     expect(appSrc).toContain("kind: 'upsert_gateway'");
-    expect(appSrc).toContain('ssh_password_configured: gateway.ssh_password_configured === true');
-    expect(appSrc).toContain('removeSSHPassword={removeSSHPasswordFromGatewaySetupDialog}');
-    expect(appSrc).toContain('auth_mode: state.auth_mode');
+    expect(appSrc).toContain('Standalone Gateways are URL endpoints.');
     const gatewayDialogStart = appSrc.indexOf('function GatewaySetupDialog');
     const gatewayDialogEnd = appSrc.indexOf('function ControlPlaneDialog');
     const gatewayDialogSrc = appSrc.slice(gatewayDialogStart, gatewayDialogEnd);
-    const gatewayAdvancedCollapseOffset = gatewayDialogSrc.indexOf("'redeven-dialog-collapse'");
-    expect(gatewayAdvancedCollapseOffset).toBeGreaterThan(-1);
-    expect(gatewayDialogSrc).toContain('syncSSHConnectionDialogAdvancedState');
-    expect(gatewayDialogSrc).toContain('gatewayAdvancedDescription()');
-    expect(gatewayDialogSrc).toContain("props.i18n.t('connectionDialog.gatewayRuntimeRootHelp'");
-    expect(gatewayDialogSrc).not.toContain("props.i18n.t('connectionDialog.runtimeRootHelp'");
-    expect(gatewayDialogSrc).not.toContain("props.i18n.t('connectionDialog.connectTimeoutShort')");
-    expect(gatewayDialogSrc.indexOf('id="gateway-data-root"')).toBeGreaterThan(gatewayAdvancedCollapseOffset);
-    expect(gatewayDialogSrc.indexOf('id="gateway-ssh-connect-timeout"')).toBeGreaterThan(gatewayAdvancedCollapseOffset);
-    expect(gatewayDialogSrc.indexOf('id="gateway-release-base-url"')).toBeGreaterThan(gatewayAdvancedCollapseOffset);
+    expect(gatewayDialogSrc).toContain("props.i18n.t('connectionDialog.gatewayUrl')");
+    expect(gatewayDialogSrc).toContain("props.i18n.t('connectionDialog.gatewayPairingCode')");
+    expect(gatewayDialogSrc).not.toContain("props.i18n.t('connectionDialog.gatewayTransportSshHost')");
+    expect(gatewayDialogSrc).not.toContain("props.i18n.t('connectionDialog.gatewayTransportSshContainer')");
     expect(appSrc).toContain("performLauncherAction(action, 'gateway_dialog');");
     expect(appSrc).toContain('onClick={() => props.openCreateGatewaySetup()}');
     expect(appSrc).toContain("from './gatewaySourceActionRunner';");
@@ -379,15 +367,15 @@ describe('DesktopWelcomeShell', () => {
 	    expect(appSrc).not.toContain("gateway_environment') {\n      return openRemoteEnvironment");
 	  });
 
-	  it('keeps Gateway-backed SSH profile UI honest about container loading and auth support', () => {
+	  it('keeps Gateway-backed Environment access limited to explicit URL profiles', () => {
 	    const appSrc = readWelcomeSource();
 
-	    expect(appSrc).toContain("connectionState?.connection_kind === 'gateway_url_profile' && connectionState.profile_route_kind === 'ssh_container'");
-	    expect(appSrc).toContain("auth_mode: 'key_agent'");
-	    expect(appSrc).toContain("props.i18n.t('connectionDialog.gatewayEnvironmentSshAuthHelp')");
-	    expect(appSrc).toContain('const gatewaySSHProfileAuthOnly = createMemo');
-	    expect(appSrc).toContain('ssh_secret: undefined');
-	    expect(appSrc).not.toContain("mode: state.auth_mode === 'password' ? state.ssh_password_mode : 'clear'");
+    expect(appSrc).toContain("connection_kind: 'gateway_url_profile'");
+	    expect(appSrc).toContain("connection_kind: 'url'");
+	    expect(appSrc).toContain("kind: 'url'");
+	    expect(appSrc).not.toContain("profile_route_kind === 'ssh_container'");
+	    expect(appSrc).not.toContain("profile_route_kind === 'ssh_host'");
+	    expect(appSrc).not.toContain("connectionDialog.gatewayEnvironmentSshAuthHelp");
 	  });
 
   it('keeps open-flow steps on the shared timeline and progress styles', () => {
@@ -1611,8 +1599,9 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('forceRuntimeUpdate: true');
     expect(appSrc).toContain("'Reinstall Redeven': 'environmentAction.reinstallRedeven'");
     expect(appSrc).toContain("confirmText={i18n().t('confirm.reinstallTargetConfirm')}");
-    expect(appSrc).toContain("<Show when={reinstallLocalTarget()?.reinstall_required === true}>");
-    expect(appSrc).toContain("if (environment.kind !== 'local_environment') {");
+    expect(appSrc).toContain("<Show when={reinstallTarget()?.environment.reinstall_required === true}>");
+    expect(appSrc).toContain("kind: 'preview_reinstall_target'");
+    expect(appSrc).toContain("&& !(environment.kind === 'ssh_environment'");
     expect(appSrc).not.toContain("environment.reinstall_required !== true");
     expect(appSrc).not.toContain('allow_active_work_replacement');
     expect(appSrc).not.toContain('allowActiveWorkReplacement: true');
@@ -1777,7 +1766,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('props.progress.error_message');
     expect(appSrc).toContain('guidanceSessionOwnsOpenFlowPanel(props.guidanceSession)\n      ? null\n      : selectEnvironmentPanelProgress(primaryProgress(), runtimeMenuProgress())');
     expect(appSrc).toContain('runtimeLifecycleProgress={runtimeMenuProgress()}');
-    expect(appSrc).toContain('busyStateBlocksEnvironmentAction(busyState, environmentID, [\'stop_environment_runtime\', \'run_gateway_environment_lifecycle\', \'run_provider_environment_lifecycle\'], runtimeLifecycleProgress)');
+    expect(appSrc).toContain('busyStateBlocksEnvironmentAction(busyState, environmentID, [\'stop_environment_runtime\', \'run_provider_environment_lifecycle\'], runtimeLifecycleProgress)');
     expect(appSrc).toContain('const progressPanelVisible = createMemo(() => props.progressOpen && hasPanelProgress());');
     expect(appSrc).toContain('const primaryProgressPresentation = createMemo(() => localizedPrimaryProgressPresentation(');
     expect(appSrc).toContain('primaryProgressPresentation() || progressPanelVisible()');
@@ -2203,10 +2192,8 @@ describe('DesktopWelcomeShell', () => {
 
     expect(appSrc).toContain('type ConnectionDialogState = ExternalURLConnectionDialogState | SSHConnectionDialogState | RuntimeContainerConnectionDialogState | GatewayURLProfileConnectionDialogState | null;');
     expect(appSrc).toContain('props.switchKind(value as ConnectionDialogKind)');
-    expect(appSrc).toContain("profile_route_kind: DesktopGatewayEnvironmentProfileAccessRoute['kind'];");
-    expect(appSrc).toContain("props.updateField('profile_route_kind', value);");
+    expect(appSrc).toContain("profile_route_kind: 'url';");
     expect(appSrc).toContain("props.i18n.t('connectionDialog.gatewayEnvironmentRouteType')");
-    expect(appSrc).toContain("props.i18n.t('connectionDialog.gatewayEnvironmentManagedNotice')");
     expect(appSrc).not.toContain('const showCreateConnectAction = createMemo(() => isCreate() && connectionKind() === \'external_local_ui\');');
     expect(appSrc).not.toContain('onConnect={saveAndConnectURLFromDialog}');
     expect(appSrc).not.toContain('scope derived from Name.');

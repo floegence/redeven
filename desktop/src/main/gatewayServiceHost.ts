@@ -2,7 +2,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import {
-  DEFAULT_DESKTOP_SSH_GATEWAY_PROFILE_DIR,
   DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL,
   DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
   type DesktopSSHEnvironmentDetails,
@@ -117,12 +116,6 @@ export type GatewayServiceHostOptions = Readonly<{
   forceUpdate?: boolean;
   signal?: AbortSignal;
   onProgress?: (progress: GatewayServiceProgress) => void;
-}>;
-
-export type GatewayTargetQuarantine = Readonly<{
-  operation_id: string;
-  target_root: string;
-  quarantine_root: string;
 }>;
 
 type GatewayPackageProbe = Readonly<{
@@ -925,122 +918,6 @@ async function installGatewayPackage(
 export function gatewayServiceBinaryPath(placement: DesktopRuntimePlacement): string {
   const root = compact(placement.runtime_root) || DEFAULT_DESKTOP_SSH_RUNTIME_ROOT;
   return `${root.replace(/\/+$/u, '')}/gateway/managed/bin/redeven-gateway`;
-}
-
-function gatewayTargetProfileRoot(options: GatewayServiceHostOptions): string {
-  const runtimeRoot = compact(options.placement.runtime_root).replace(/\/+$/u, '');
-  const gatewayID = compact(options.gatewayID);
-  if (runtimeRoot === '' || runtimeRoot === '/' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(gatewayID)) {
-    throw new Error('Gateway reinstall requires an exact runtime root and Gateway identity.');
-  }
-  const expectedStateRoot = `${runtimeRoot}/${DEFAULT_DESKTOP_SSH_GATEWAY_PROFILE_DIR}/${gatewayID}/state`;
-  if (compact(options.stateRoot).replace(/\/+$/u, '') !== expectedStateRoot) {
-    throw new Error('Gateway reinstall target does not match the registered Gateway profile root.');
-  }
-  return `${runtimeRoot}/${DEFAULT_DESKTOP_SSH_GATEWAY_PROFILE_DIR}/${gatewayID}`;
-}
-
-function gatewayQuarantineCommand(
-  options: GatewayServiceHostOptions,
-  targetRoot: string,
-  quarantineRoot: string,
-): readonly string[] {
-  const script = [
-    'set -eu',
-    'target="$1"',
-    'quarantine="$2"',
-    '[ -d "$target" ] || { echo "target missing" >&2; exit 40; }',
-    '[ ! -L "$target" ] || { echo "target is symlink" >&2; exit 41; }',
-    'for existing in "$target".redeven-quarantine-*; do',
-    '  [ -e "$existing" ] || [ -L "$existing" ] || continue',
-    '  echo "previous quarantine exists" >&2',
-    '  exit 42',
-    'done',
-    '[ ! -e "$quarantine" ] || { echo "quarantine exists" >&2; exit 42; }',
-    'mv -- "$target" "$quarantine"',
-    'mkdir -p -- "$target/state"',
-  ].join('\n');
-  return commandForPlacement(options.placement, script, [targetRoot, quarantineRoot]);
-}
-
-function gatewayQuarantineCleanupCommand(
-  options: GatewayServiceHostOptions,
-  quarantineRoot: string,
-): readonly string[] {
-  const script = [
-    'set -eu',
-    'quarantine="$1"',
-    'case "$quarantine" in *.redeven-quarantine-*) ;; *) echo "invalid quarantine" >&2; exit 43;; esac',
-    '[ -d "$quarantine" ] || { echo "quarantine missing" >&2; exit 44; }',
-    'rm -rf -- "$quarantine"',
-  ].join('\n');
-  return commandForPlacement(options.placement, script, [quarantineRoot]);
-}
-
-function gatewayQuarantinePreflightCommand(
-  options: GatewayServiceHostOptions,
-  targetRoot: string,
-  quarantineRoot: string,
-): readonly string[] {
-  const script = [
-    'set -eu',
-    'target="$1"',
-    'quarantine="$2"',
-    '[ -d "$target" ] || { echo "target missing" >&2; exit 40; }',
-    '[ ! -L "$target" ] || { echo "target is symlink" >&2; exit 41; }',
-    'for existing in "$target".redeven-quarantine-*; do',
-    '  [ -e "$existing" ] || [ -L "$existing" ] || continue',
-    '  echo "previous quarantine exists" >&2',
-    '  exit 42',
-    'done',
-    '[ ! -e "$quarantine" ] || { echo "quarantine exists" >&2; exit 42; }',
-  ].join('\n');
-  return commandForPlacement(options.placement, script, [targetRoot, quarantineRoot]);
-}
-
-export async function preflightManagedGatewayTarget(
-  options: GatewayServiceHostOptions,
-  operationID: string,
-): Promise<GatewayTargetQuarantine> {
-  const cleanOperationID = compact(operationID);
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(cleanOperationID)) {
-    throw new Error('Gateway reinstall operation ID is invalid.');
-  }
-  const targetRoot = gatewayTargetProfileRoot(options);
-  const quarantineRoot = `${targetRoot}.redeven-quarantine-${cleanOperationID}`;
-  await withGatewayExecutor(options, async (executor) => {
-    await executor.run(gatewayQuarantinePreflightCommand(options, targetRoot, quarantineRoot), { signal: options.signal });
-  });
-  return { operation_id: cleanOperationID, target_root: targetRoot, quarantine_root: quarantineRoot };
-}
-
-export async function quarantineManagedGatewayTarget(
-  options: GatewayServiceHostOptions,
-  operationID: string,
-): Promise<GatewayTargetQuarantine> {
-  const cleanOperationID = compact(operationID);
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(cleanOperationID)) {
-    throw new Error('Gateway reinstall operation ID is invalid.');
-  }
-  const targetRoot = gatewayTargetProfileRoot(options);
-  const quarantineRoot = `${targetRoot}.redeven-quarantine-${cleanOperationID}`;
-  await withGatewayExecutor(options, async (executor) => {
-    await executor.run(gatewayQuarantineCommand(options, targetRoot, quarantineRoot), { signal: options.signal });
-  });
-  return { operation_id: cleanOperationID, target_root: targetRoot, quarantine_root: quarantineRoot };
-}
-
-export async function cleanupManagedGatewayQuarantine(
-  options: GatewayServiceHostOptions,
-  quarantine: GatewayTargetQuarantine,
-): Promise<void> {
-  const targetRoot = gatewayTargetProfileRoot(options);
-  if (quarantine.target_root !== targetRoot || quarantine.quarantine_root !== `${targetRoot}.redeven-quarantine-${quarantine.operation_id}`) {
-    throw new Error('Gateway quarantine does not match the registered target.');
-  }
-  await withGatewayExecutor(options, async (executor) => {
-    await executor.run(gatewayQuarantineCleanupCommand(options, quarantine.quarantine_root), { signal: options.signal });
-  });
 }
 
 async function probeManagedGatewayServiceStatusWithExecutor(

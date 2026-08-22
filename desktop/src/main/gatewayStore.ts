@@ -6,12 +6,11 @@ import {
   desktopGatewayConnectionKindLabel,
   desktopGatewayManagementCapability,
   type DesktopGatewayConnectionKind,
-  type DesktopGatewayEnvironment,
   type DesktopGatewayCapability,
-  type DesktopGatewayRuntimeManagementCapability,
   type DesktopGatewayServiceState,
   type DesktopGatewayStatus,
   type DesktopGatewaySource,
+  type DesktopGatewayEnvironment,
   type DesktopGatewayTrustState,
 } from '../shared/desktopGateway';
 import {
@@ -33,6 +32,7 @@ export type GatewayURLConnection = Readonly<{
   allow_loopback_http?: boolean;
 }>;
 
+/** Legacy direct-Environment shape retained only for migration input. */
 export type GatewaySSHHostConnection = Readonly<{
   kind: 'ssh_host';
   ssh_destination: string;
@@ -47,6 +47,7 @@ export type GatewaySSHHostConnection = Readonly<{
   runtime_root: string;
 }>;
 
+/** Legacy direct-Environment shape retained only for migration input. */
 export type GatewaySSHContainerConnection = Readonly<{
   kind: 'ssh_container';
   ssh_destination: string;
@@ -63,11 +64,13 @@ export type GatewaySSHContainerConnection = Readonly<{
   runtime_root: string;
 }>;
 
+/** Legacy direct-Environment shape retained only for migration input. */
 export type GatewayLocalHostConnection = Readonly<{
   kind: 'local_host';
   runtime_root: string;
 }>;
 
+/** Legacy direct-Environment shape retained only for migration input. */
 export type GatewayLocalContainerConnection = Readonly<{
   kind: 'local_container';
   container_engine: DesktopContainerEngine;
@@ -83,6 +86,9 @@ export type GatewayConnection =
   | GatewayLocalContainerConnection
   | GatewaySSHHostConnection
   | GatewaySSHContainerConnection;
+
+// New Gateway records are URL-only. Non-URL variants are parsed solely so the
+// startup migration can move legacy direct-Environment records to target storage.
 
 export type GatewayTrustProfile = Readonly<{
   trust_profile_id: string;
@@ -101,7 +107,6 @@ export type GatewayRecord = Readonly<{
   schema_version: 2;
   gateway_id: string;
   display_name: string;
-  runtime_environment_id?: string;
   local_enabled: boolean;
   connection: GatewayConnection;
   trust_profile?: GatewayTrustProfile;
@@ -113,6 +118,11 @@ export type GatewayRecord = Readonly<{
 export type GatewayStoreSnapshot = Readonly<{
   schema_version: 2;
   gateways: readonly GatewayRecord[];
+}>;
+
+export type LegacyDirectGatewayRecord = Readonly<{
+  record: GatewayRecord;
+  runtime_environment_id: string;
 }>;
 
 type GatewayStoreFile = Readonly<{
@@ -465,7 +475,6 @@ export function normalizeGatewayRecord(value: unknown, now = Date.now()): Gatewa
     schema_version: GATEWAY_STORE_SCHEMA_VERSION,
     gateway_id: gatewayID,
     display_name: compact(candidate.display_name) || gatewayID,
-    ...(compact(candidate.runtime_environment_id) ? { runtime_environment_id: compact(candidate.runtime_environment_id) } : {}),
     local_enabled: candidate.local_enabled !== false,
     connection,
     ...(trustProfile ? { trust_profile: trustProfile } : {}),
@@ -566,38 +575,6 @@ export function gatewayRecordToSourceWithCatalog(
         : 'Gateway catalog could not be refreshed.'),
     capabilities: [...new Set(catalog.capabilities ?? [])],
     environments: [...(catalog.environments ?? [])],
-  };
-}
-
-export function gatewayRecordToLocalEnvironment(
-  record: GatewayRecord,
-  runtimeManagement: DesktopGatewayRuntimeManagementCapability,
-): DesktopGatewayEnvironment {
-  const operations = new Set(runtimeManagement.operations ?? []);
-  const controls = (['start', 'stop', 'restart', 'update_runtime'] as const)
-    .filter((operation) => operations.has(operation));
-  const state: DesktopGatewayEnvironment['state'] = operations.has('stop') || operations.has('restart')
-    ? 'available'
-    : operations.has('start')
-      ? 'stopped'
-      : 'unknown';
-  const originKind: DesktopGatewayEnvironment['origin']['kind'] = record.connection.kind === 'local_host'
-    ? 'gateway_host'
-    : record.connection.kind === 'local_container' || record.connection.kind === 'ssh_container'
-      ? 'container'
-      : record.connection.kind === 'ssh_host'
-        ? 'ssh_target'
-        : 'network_target';
-  return {
-    gateway_env_id: 'env_local',
-    display_name: record.display_name,
-    env_kind: 'managed_local_env',
-    state,
-    capabilities: controls,
-    control_capabilities: controls,
-    runtime_management: runtimeManagement,
-    origin: { kind: originKind, label: record.display_name },
-    last_seen_at_unix_ms: runtimeManagement.checked_at_unix_ms,
   };
 }
 
@@ -805,6 +782,42 @@ export class GatewayStore {
     return (await this.load()).gateways;
   }
 
+  /**
+   * Read legacy direct-Environment mappings without making them Gateway
+   * records. Callers must migrate them to the Environment target store before
+   * deleting the old record; an incomplete mapping is left untouched.
+   */
+  async listLegacyDirectEnvironmentRecords(): Promise<readonly LegacyDirectGatewayRecord[]> {
+    let raw: unknown;
+    try {
+      raw = JSON.parse(await fs.readFile(this.filePath, 'utf8'));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return [];
+      }
+      if (error instanceof SyntaxError) {
+        throw new GatewayStoreError('GATEWAY_STORE_INVALID_JSON', 'Gateway store contains invalid JSON.', this.filePath);
+      }
+      throw error;
+    }
+    const candidates = raw && typeof raw === 'object' && Array.isArray((raw as { gateways?: unknown }).gateways)
+      ? (raw as { gateways: readonly unknown[] }).gateways
+      : [];
+    const out: LegacyDirectGatewayRecord[] = [];
+    for (const value of candidates) {
+      if (!value || typeof value !== 'object') {
+        continue;
+      }
+      const candidate = value as Record<string, unknown>;
+      const legacyID = compact(candidate.runtime_environment_id);
+      const record = normalizeGatewayRecord(candidate);
+      if (legacyID && record) {
+        out.push({ record, runtime_environment_id: legacyID });
+      }
+    }
+    return out;
+  }
+
   async get(gatewayID: string): Promise<GatewayRecord | null> {
     const cleanGatewayID = normalizeGatewayID(gatewayID);
     if (!cleanGatewayID) {
@@ -816,7 +829,6 @@ export class GatewayStore {
   async upsert(input: Readonly<{
     gateway_id: string;
     display_name?: string;
-    runtime_environment_id?: string | null;
     connection: GatewayConnection;
     trust_profile?: GatewayTrustProfile;
     now_ms?: number;
@@ -838,9 +850,6 @@ export class GatewayStore {
         schema_version: GATEWAY_STORE_SCHEMA_VERSION,
         gateway_id: gatewayID,
         display_name: compact(input.display_name) || existing?.display_name || defaultGatewayDisplayName(input.connection),
-        runtime_environment_id: input.runtime_environment_id === null
-          ? undefined
-          : compact(input.runtime_environment_id) || existing?.runtime_environment_id,
         local_enabled: existing?.local_enabled ?? true,
         connection: input.connection,
         trust_profile: input.trust_profile ?? existingTrustProfile,

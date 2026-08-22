@@ -10,8 +10,8 @@ function gateway(overrides: Partial<DesktopGatewaySource> = {}): DesktopGatewayS
     gateway_id: 'gw-demo',
     display_name: 'Gateway-demo',
     local_enabled: true,
-    connection_kind: 'ssh_host',
-    management_capability: 'managed_ssh_host',
+    connection_kind: 'url',
+    management_capability: 'access_only',
     capabilities: [],
     status: 'pairing_required',
     trust_state: 'unpaired',
@@ -81,7 +81,7 @@ describe('buildGatewayActionPresentation', () => {
     expectNoLegacyGatewayActions(model);
   });
 
-  it('maps Refresh diagnosis results to the only allowed popup recovery actions', () => {
+  it('keeps Standalone Gateway diagnosis access-only', () => {
     const stopped = buildGatewayActionPresentation({
       gateway: gateway({
         diagnosis: diagnosis('not_started', {
@@ -94,11 +94,9 @@ describe('buildGatewayActionPresentation', () => {
       clicked_action: action('refresh_gateway'),
       show_diagnosis_result: true,
     });
-    expect(stopped).toMatchObject({
-      kind: 'diagnosis_result',
-      primary_action: { intent: 'start_gateway', label: 'Start Gateway' },
-      continuation_action: { kind: 'start_gateway', gateway_id: 'gw-demo' },
-    });
+    expect(stopped).toMatchObject({ kind: 'diagnosis_result' });
+    expect(stopped.primary_action).toBeUndefined();
+    expect(stopped.continuation_action).toBeUndefined();
     expect(stopped.result_facts).toEqual([
       expect.objectContaining({ label: 'Gateway service', value: 'Not ready', tone: 'error' }),
     ]);
@@ -108,10 +106,8 @@ describe('buildGatewayActionPresentation', () => {
       clicked_action: action('refresh_gateway'),
       show_diagnosis_result: true,
     });
-    expect(bridgeUnavailable).toMatchObject({
-      primary_action: { intent: 'restart_gateway', label: 'Restart Gateway' },
-      continuation_action: { kind: 'restart_gateway', gateway_id: 'gw-demo' },
-    });
+    expect(bridgeUnavailable.primary_action).toBeUndefined();
+    expect(bridgeUnavailable.continuation_action).toBeUndefined();
 
     const needsUpdate = buildGatewayActionPresentation({
       gateway: gateway({
@@ -135,11 +131,9 @@ describe('buildGatewayActionPresentation', () => {
       clicked_action: action('refresh_gateway'),
       show_diagnosis_result: true,
     });
-    expect(needsUpdate).toMatchObject({
-      title: 'Gateway update required',
-      primary_action: { intent: 'update_gateway', label: 'Update Gateway' },
-      continuation_action: { kind: 'update_gateway', gateway_id: 'gw-demo', impact_acknowledged: true },
-    });
+    expect(needsUpdate).toMatchObject({ title: 'Gateway update required' });
+    expect(needsUpdate.primary_action).toBeUndefined();
+    expect(needsUpdate.continuation_action).toBeUndefined();
     expect(needsUpdate.diagnostic_facts).toEqual(expect.arrayContaining([
       expect.objectContaining({ label: 'Error code', value: 'UNAUTHORIZED' }),
       expect.objectContaining({ label: 'Error message', value: 'Pair this Gateway before listing or opening environments.', tone: 'error' }),
@@ -164,17 +158,13 @@ describe('buildGatewayActionPresentation', () => {
           manageable: true,
           error_code: 'GATEWAY_PROTOCOL_VERSION_UNSUPPORTED',
           error_message: 'Gateway protocol version is not supported.',
-          recommended_recovery: 'reinstall_gateway',
         }),
       }),
       clicked_action: action('refresh_gateway'),
       show_diagnosis_result: true,
     });
-    expect(managed).toMatchObject({
-      title: 'Gateway reinstall required',
-      primary_action: { intent: 'reinstall_gateway', label: 'Reinstall' },
-      continuation_action: { kind: 'reinstall_gateway', gateway_id: 'gw-demo', impact_acknowledged: true },
-    });
+    expect(managed).toMatchObject({ title: 'Gateway requires host maintenance' });
+    expect(managed.primary_action).toBeUndefined();
 
     const accessOnly = buildGatewayActionPresentation({
       gateway: gateway({
@@ -193,13 +183,13 @@ describe('buildGatewayActionPresentation', () => {
     expect(accessOnly).toMatchObject({
       title: 'Gateway protocol check failed',
     });
-    expect(accessOnly.primary_action?.intent).not.toBe('reinstall_gateway');
-    expect(accessOnly.continuation_action?.kind).not.toBe('reinstall_gateway');
+    expect(accessOnly.primary_action?.intent).not.toBe('reinstall_target');
+    expect(accessOnly.continuation_action?.kind).not.toBe('reinstall_target');
     expect(JSON.stringify(accessOnly)).not.toContain('PRIVATE KEY');
     expect(JSON.stringify(accessOnly)).not.toContain('X-Redeven-Request-Signature');
   });
 
-  it('always shows a destructive confirmation before reinstall, even without active sessions', () => {
+  it('delegates reinstall confirmation to the unified target dialog', () => {
     const model = buildGatewayActionPresentation({
       gateway: gateway({
         service_state: {
@@ -211,38 +201,28 @@ describe('buildGatewayActionPresentation', () => {
           can_pair_after_start: false,
         },
       }),
-      clicked_action: action('reinstall_gateway'),
+      clicked_action: action('reinstall_target'),
       affected_sessions: [],
     });
 
     expect(model).toMatchObject({
-      kind: 'reinstall_gateway_confirm',
-      execution_mode: 'confirm',
-      tone: 'warning',
-      primary_action: { intent: 'reinstall_gateway', label: 'Reinstall' },
-      continuation_action: {
-        kind: 'reinstall_gateway',
-        gateway_id: 'gw-demo',
-        impact_acknowledged: true,
-      },
+      kind: 'none',
+      execution_mode: 'direct',
+      tone: 'neutral',
     });
   });
 
-  it('requires an explicit pairing action after reinstall', () => {
+  it('keeps pairing as an explicit Refresh action for an unpaired URL Gateway', () => {
     const model = buildGatewayActionPresentation({
       gateway: gateway({
-        reinstall_pairing_required: true,
         trust_state: 'unpaired',
       }),
       clicked_action: action('refresh_gateway'),
     });
 
-    expect(model).toMatchObject({
-      title: 'Gateway pairing required',
-      detail: 'Reinstall completed. Pair the new Gateway before using this Environment.',
-      primary_action: { intent: 'refresh_gateway', label: 'Pair Gateway' },
-      continuation_action: { kind: 'refresh_gateway', gateway_id: 'gw-demo' },
-    });
+    expect(model).toMatchObject({ title: 'Refresh Gateway' });
+    expect(model.primary_action).toBeUndefined();
+    expect(model.continuation_action).toBeUndefined();
   });
 
   it('keeps auth, trust, catalog, and target failures facts-only when no service recovery is valid', () => {
@@ -303,11 +283,9 @@ describe('buildGatewayActionPresentation', () => {
       },
     });
 
-    expect(model).toMatchObject({
-      kind: 'failure_recovery',
-      primary_action: { intent: 'start_gateway', label: 'Start Gateway' },
-      continuation_action: { kind: 'start_gateway', gateway_id: 'gw-demo' },
-    });
+    expect(model).toMatchObject({ kind: 'failure_recovery' });
+    expect(model.primary_action).toBeUndefined();
+    expect(model.continuation_action).toBeUndefined();
     expectNoLegacyGatewayActions(model);
   });
 
@@ -338,20 +316,9 @@ describe('buildGatewayActionPresentation', () => {
       ],
     });
 
-    expect(model).toMatchObject({
-      kind: 'restart_gateway_confirm',
-      execution_mode: 'confirm',
-      continuation_action: {
-        kind: 'restart_gateway',
-        gateway_id: 'gw-demo',
-        impact_acknowledged: true,
-      },
-      affected_sessions: [
-        { session_key: 's1', label: 'Prod shell' },
-        { session_key: 's2', label: 'Build runner' },
-      ],
-      secondary_actions: [],
-    });
+    expect(model).toMatchObject({ kind: 'none', execution_mode: 'direct' });
+    expect(model.continuation_action).toBeUndefined();
+    expect(model.affected_sessions).toEqual([]);
   });
 
   it('dispatches only the allowed Gateway source operations', async () => {
@@ -361,28 +328,13 @@ describe('buildGatewayActionPresentation', () => {
     await runGatewaySourceAction(action('refresh_gateway'), gateway(), openCreateGatewaySetup, runGatewayLauncherAction);
     await runGatewaySourceAction(action('start_gateway'), gateway(), openCreateGatewaySetup, runGatewayLauncherAction);
     await runGatewaySourceAction(action('update_gateway'), gateway(), openCreateGatewaySetup, runGatewayLauncherAction);
-    await runGatewaySourceAction(action('reinstall_gateway'), gateway(), openCreateGatewaySetup, runGatewayLauncherAction);
     await runGatewaySourceAction(action('view_gateway_environments'), gateway(), openCreateGatewaySetup, runGatewayLauncherAction);
 
     expect(runGatewayLauncherAction).toHaveBeenCalledWith({
       kind: 'refresh_gateway',
       gateway_id: 'gw-demo',
     });
-    expect(runGatewayLauncherAction).toHaveBeenCalledWith({
-      kind: 'start_gateway',
-      gateway_id: 'gw-demo',
-    });
-    expect(runGatewayLauncherAction).toHaveBeenCalledWith({
-      kind: 'update_gateway',
-      gateway_id: 'gw-demo',
-      impact_acknowledged: true,
-    });
-    expect(runGatewayLauncherAction).toHaveBeenCalledWith({
-      kind: 'reinstall_gateway',
-      gateway_id: 'gw-demo',
-      impact_acknowledged: true,
-    });
-    expect(runGatewayLauncherAction).toHaveBeenCalledTimes(4);
+    expect(runGatewayLauncherAction).toHaveBeenCalledTimes(1);
     expect(openCreateGatewaySetup).not.toHaveBeenCalled();
   });
 });

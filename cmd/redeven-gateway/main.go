@@ -187,6 +187,7 @@ func (c *cli) supervisorEnrollCmd(args []string) int {
 
 func (c *cli) serveCmd(args []string) int {
 	fs := newFlagSet("serve")
+	mode := fs.String("mode", "managed_environment", "Gateway mode: managed_environment or standalone.")
 	stateRoot := fs.String("state-root", "", "Gateway state root.")
 	runtimeRoot := fs.String("runtime-root", "", "Target Runtime root managed by this Gateway supervisor.")
 	precompiledRuntimeManifest := fs.String("precompiled-runtime-manifest", "", "Validated Desktop bundle manifest used for automatic Runtime startup.")
@@ -207,6 +208,15 @@ func (c *cli) serveCmd(args []string) int {
 		writeError(c.stderr, "`redeven-gateway serve` does not accept positional arguments")
 		return 2
 	}
+	modeValue := strings.TrimSpace(strings.ToLower(*mode))
+	if modeValue != "managed_environment" && modeValue != "standalone" {
+		writeError(c.stderr, "serve failed: --mode must be managed_environment or standalone")
+		return 2
+	}
+	if modeValue == "standalone" && (strings.TrimSpace(*runtimeRoot) != "" || strings.TrimSpace(*precompiledRuntimeManifest) != "" || strings.TrimSpace(*precompiledRuntimeLocalUIBind) != "") {
+		writeError(c.stderr, "serve failed: standalone mode cannot configure a Runtime root or precompiled Runtime")
+		return 2
+	}
 	ctx, stop := signalContext()
 	defer stop()
 	stateRootValue := normalizeStateRoot(*stateRoot)
@@ -218,7 +228,7 @@ func (c *cli) serveCmd(args []string) int {
 			return 1
 		}
 	}
-	return c.runGatewayService(ctx, stateRootValue, normalizeRuntimeRoot(*runtimeRoot), *precompiledRuntimeManifest, *precompiledRuntimeLocalUIBind, *listen, managedDesktopBridgeService(), true, *allowPrivateProfileTargets, *enableProfileWrite, *pairingCode, managedBridgeToken)
+	return c.runGatewayService(ctx, modeValue, stateRootValue, normalizeRuntimeRoot(*runtimeRoot), *precompiledRuntimeManifest, *precompiledRuntimeLocalUIBind, *listen, managedDesktopBridgeService(), true, *allowPrivateProfileTargets, *enableProfileWrite, *pairingCode, managedBridgeToken)
 }
 
 func (c *cli) desktopBridgeCmd(args []string) int {
@@ -306,6 +316,7 @@ func (c *cli) serviceStatusCmd(args []string) int {
 
 func (c *cli) serviceStartCmd(args []string) int {
 	fs := newFlagSet("service-start")
+	mode := fs.String("mode", "managed_environment", "Gateway mode: managed_environment or standalone.")
 	stateRoot := fs.String("state-root", "", "Gateway state root.")
 	runtimeRoot := fs.String("runtime-root", "", "Target Runtime root managed by this Gateway supervisor.")
 	precompiledRuntimeManifest := fs.String("precompiled-runtime-manifest", "", "Validated Desktop bundle manifest used for automatic Runtime startup.")
@@ -322,6 +333,15 @@ func (c *cli) serviceStartCmd(args []string) int {
 		return 2
 	}
 	stateRootValue := normalizeStateRoot(*stateRoot)
+	modeValue := strings.TrimSpace(strings.ToLower(*mode))
+	if modeValue != "managed_environment" && modeValue != "standalone" {
+		writeError(c.stderr, "service-start failed: --mode must be managed_environment or standalone")
+		return 2
+	}
+	if modeValue == "standalone" && (strings.TrimSpace(*runtimeRoot) != "" || strings.TrimSpace(*precompiledRuntimeManifest) != "" || strings.TrimSpace(*precompiledRuntimeLocalUIBind) != "") {
+		writeError(c.stderr, "service-start failed: standalone mode cannot configure a Runtime root or precompiled Runtime")
+		return 2
+	}
 	if status := readServiceStatus(stateRootValue); status.Status == "running" {
 		_ = json.NewEncoder(c.stdout).Encode(status)
 		return 0
@@ -346,7 +366,7 @@ func (c *cli) serviceStartCmd(args []string) int {
 		return 1
 	}
 	defer logFile.Close()
-	cmdArgs := gatewayServiceServeArgs(stateRootValue, normalizeRuntimeRoot(*runtimeRoot), strings.TrimSpace(*precompiledRuntimeManifest), strings.TrimSpace(*precompiledRuntimeLocalUIBind), strings.TrimSpace(*listen))
+	cmdArgs := gatewayServiceServeArgs(modeValue, stateRootValue, normalizeRuntimeRoot(*runtimeRoot), strings.TrimSpace(*precompiledRuntimeManifest), strings.TrimSpace(*precompiledRuntimeLocalUIBind), strings.TrimSpace(*listen))
 	if *allowPrivateProfileTargets {
 		cmdArgs = append(cmdArgs, "--allow-private-profile-targets")
 	}
@@ -373,8 +393,11 @@ func (c *cli) serviceStartCmd(args []string) int {
 	return 0
 }
 
-func gatewayServiceServeArgs(stateRoot string, runtimeRoot string, precompiledRuntimeManifest string, precompiledRuntimeLocalUIBind string, listen string) []string {
-	args := []string{"serve", "--state-root", stateRoot, "--runtime-root", runtimeRoot, "--listen", listen}
+func gatewayServiceServeArgs(mode string, stateRoot string, runtimeRoot string, precompiledRuntimeManifest string, precompiledRuntimeLocalUIBind string, listen string) []string {
+	args := []string{"serve", "--mode", mode, "--state-root", stateRoot, "--listen", listen}
+	if strings.TrimSpace(mode) != "standalone" {
+		args = append(args, "--runtime-root", runtimeRoot)
+	}
 	if manifestPath := strings.TrimSpace(precompiledRuntimeManifest); manifestPath != "" {
 		args = append(args, "--precompiled-runtime-manifest", manifestPath)
 	}
@@ -468,7 +491,7 @@ func gatewayServiceStopped(stateRoot string, status serviceStatus) (bool, error)
 	return true, nil
 }
 
-func (c *cli) runGatewayService(ctx context.Context, stateRoot string, runtimeRoot string, precompiledRuntimeManifest string, precompiledRuntimeLocalUIBind string, listen string, desktopBridgeTransport bool, printListen bool, allowPrivateProfileTargets bool, enableProfileWrite bool, pairingCode string, managedBridgeToken string) int {
+func (c *cli) runGatewayService(ctx context.Context, mode string, stateRoot string, runtimeRoot string, precompiledRuntimeManifest string, precompiledRuntimeLocalUIBind string, listen string, desktopBridgeTransport bool, printListen bool, allowPrivateProfileTargets bool, enableProfileWrite bool, pairingCode string, managedBridgeToken string) int {
 	stateRootValue := normalizeStateRoot(stateRoot)
 	if err := os.MkdirAll(stateRootValue, 0o700); err != nil {
 		writeError(c.stderr, fmt.Sprintf("serve failed: initialize Gateway state root: %v", err))
@@ -485,23 +508,29 @@ func (c *cli) runGatewayService(ctx context.Context, stateRoot string, runtimeRo
 	}
 	defer func() { _ = serviceLock.Release() }()
 	_ = os.Remove(gatewayStartupFailurePath(stateRootValue))
-	bindingStore, err := gatewaysupervisor.OpenLocalBindingStore(stateRootValue, runtimeRoot)
-	if err != nil {
-		return c.failGatewayStartup(stateRootValue, fmt.Errorf("initialize Runtime target binding: %w", err))
-	}
-	lifecycleController, err := gatewaysupervisor.NewController(gatewaysupervisor.ControllerOptions{
-		BindingStore:                  bindingStore,
-		PrecompiledRuntimeManifest:    strings.TrimSpace(precompiledRuntimeManifest),
-		PrecompiledRuntimeLocalUIBind: strings.TrimSpace(precompiledRuntimeLocalUIBind),
-	})
-	if err != nil {
-		return c.failGatewayStartup(stateRootValue, fmt.Errorf("initialize Runtime lifecycle controller: %w", err))
-	}
-	lifecycleAuthorizer, err := gatewaysupervisor.NewAuthorizer(bindingStore)
-	if err != nil {
-		return c.failGatewayStartup(stateRootValue, fmt.Errorf("initialize Runtime lifecycle authorizer: %w", err))
+	var bindingStore *gatewaysupervisor.BindingStore
+	var lifecycleController *gatewaysupervisor.Controller
+	var lifecycleAuthorizer *gatewaysupervisor.Authorizer
+	if mode != "standalone" {
+		bindingStore, err = gatewaysupervisor.OpenLocalBindingStore(stateRootValue, runtimeRoot)
+		if err != nil {
+			return c.failGatewayStartup(stateRootValue, fmt.Errorf("initialize Runtime target binding: %w", err))
+		}
+		lifecycleController, err = gatewaysupervisor.NewController(gatewaysupervisor.ControllerOptions{
+			BindingStore:                  bindingStore,
+			PrecompiledRuntimeManifest:    strings.TrimSpace(precompiledRuntimeManifest),
+			PrecompiledRuntimeLocalUIBind: strings.TrimSpace(precompiledRuntimeLocalUIBind),
+		})
+		if err != nil {
+			return c.failGatewayStartup(stateRootValue, fmt.Errorf("initialize Runtime lifecycle controller: %w", err))
+		}
+		lifecycleAuthorizer, err = gatewaysupervisor.NewAuthorizer(bindingStore)
+		if err != nil {
+			return c.failGatewayStartup(stateRootValue, fmt.Errorf("initialize Runtime lifecycle authorizer: %w", err))
+		}
 	}
 	serviceOptions := gatewayservice.Options{
+		Mode:                        mode,
 		StateRoot:                   stateRootValue,
 		DesktopBridgeTransport:      desktopBridgeTransport,
 		AllowPrivateProfileTargets:  allowPrivateProfileTargets,
@@ -513,7 +542,7 @@ func (c *cli) runGatewayService(ctx context.Context, stateRoot string, runtimeRo
 		LifecycleAuthorizer:         lifecycleAuthorizer,
 		LifecycleCapabilityProvider: lifecycleController,
 	}
-	if strings.TrimSpace(precompiledRuntimeManifest) != "" {
+	if mode != "standalone" && strings.TrimSpace(precompiledRuntimeManifest) != "" {
 		serviceOptions.PrecompiledRuntimeStartup = lifecycleController
 	}
 	svc, err := gatewayservice.New(serviceOptions)
@@ -525,8 +554,10 @@ func (c *cli) runGatewayService(ctx context.Context, stateRoot string, runtimeRo
 		return c.failGatewayStartup(stateRootValue, err)
 	}
 	defer srv.Close()
-	go gatewaysupervisor.MaintainProviderHeartbeat(ctx, bindingStore, lifecycleController, Version)
-	go gatewaysupervisor.MaintainProviderRuntimeManagementTransport(ctx, nil, bindingStore, svc)
+	if mode != "standalone" {
+		go gatewaysupervisor.MaintainProviderHeartbeat(ctx, bindingStore, lifecycleController, Version)
+		go gatewaysupervisor.MaintainProviderRuntimeManagementTransport(ctx, nil, bindingStore, svc)
+	}
 	if len(listeners) > 0 {
 		actualListen := listeners[0].Addr().String()
 		_ = writePIDFile(stateRootValue, os.Getpid(), actualListen)
@@ -894,6 +925,7 @@ redeven-gateway serve
 Run the Gateway HTTP service.
 
 Flags:
+  --mode <mode>        Gateway mode: managed_environment or standalone.
   --state-root <path>   Gateway state root.
   --runtime-root <path> Target Runtime root managed by this Gateway.
   --precompiled-runtime-manifest <path>

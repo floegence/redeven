@@ -117,6 +117,8 @@ describe('sshRuntime', () => {
     expect(buildManagedSSHRuntimeProbeScript()).toContain("printf 'target_release_tag=%s\\n' \"$target_release_tag\"");
     expect(buildManagedSSHUploadedInstallScript()).toContain('archive_path="$3"');
     expect(buildManagedSSHUploadedInstallScript()).toContain('uploaded Redeven archive did not contain redeven');
+    expect(buildManagedSSHUploadedInstallScript()).toContain('uploaded Runtime archive is missing $companion');
+    expect(buildManagedSSHUploadedInstallScript()).toContain('cp "${extract_dir}/$companion" "${staging_root}/bin/$companion"');
     expect(buildManagedSSHUploadedInstallScript()).toContain('write_runtime_stamp "desktop_upload" "$target_release_tag"');
     expect(buildManagedSSHRemoteInstallScript()).toContain('runtime_root="${HOME%/}/.redeven"');
     expect(buildManagedSSHStartScript()).toContain('state_root="${HOME%/}/.redeven/${state_root#remote_default/}"');

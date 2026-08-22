@@ -9,7 +9,6 @@ import {
   defaultGatewayStorePath,
   gatewayBindingAudience,
   gatewayRecordToSource,
-  gatewayRecordToLocalEnvironment,
   gatewayRecordToSourceWithCatalog,
   gatewayRecordToSourceWithError,
   normalizeGatewayBaseURL,
@@ -30,39 +29,6 @@ describe('GatewayStore', () => {
       await fs.rm(root, { recursive: true, force: true });
       cleanupRoots.delete(root);
     }));
-  });
-
-  it('projects a direct managed card into the local lifecycle environment', () => {
-    const environment = gatewayRecordToLocalEnvironment({
-      schema_version: 2,
-      gateway_id: 'gw_direct',
-      display_name: 'Direct Runtime management',
-      runtime_environment_id: 'local:local',
-      local_enabled: true,
-      connection: { kind: 'local_host', runtime_root: '/tmp/redeven' },
-      created_at_ms: 1,
-      updated_at_ms: 1,
-    }, {
-      support: 'supported',
-      authorization: { state: 'allowed', grants: ['manage_runtime'] },
-      readiness: 'ready',
-      presentation_state: 'allowed',
-      target: { lifecycle_target_id: 'target-direct', target_generation: 4 },
-      operations: ['start', 'restart', 'update_runtime'],
-      artifact_policies: ['published_release'],
-      checked_at_unix_ms: 10,
-    });
-
-    expect(environment).toMatchObject({
-      gateway_env_id: 'env_local',
-      env_kind: 'managed_local_env',
-      capabilities: ['start', 'restart', 'update_runtime'],
-      control_capabilities: ['start', 'restart', 'update_runtime'],
-      runtime_management: {
-        readiness: 'ready',
-        target: { lifecycle_target_id: 'target-direct', target_generation: 4 },
-      },
-    });
   });
 
   it('persists URL Gateway records without writing private keys or pairing secrets', async () => {
@@ -148,7 +114,6 @@ describe('GatewayStore', () => {
     await store.upsert({
       gateway_id: 'gw_direct',
       display_name: 'Devbox Runtime management',
-      runtime_environment_id: 'ssh:devbox:default:key_agent:remote_default',
       connection: {
         kind: 'ssh_host',
         ssh_destination: 'devbox',
@@ -168,9 +133,7 @@ describe('GatewayStore', () => {
     });
 
     const reloaded = new GatewayStore(filePath);
-    expect(await reloaded.get('gw_direct')).toMatchObject({
-      runtime_environment_id: 'ssh:devbox:default:key_agent:remote_default',
-    });
+    expect(await reloaded.get('gw_direct')).not.toHaveProperty('runtime_environment_id');
     expect(await reloaded.get('gw_ordinary')).not.toHaveProperty('runtime_environment_id');
   });
 
@@ -182,14 +145,12 @@ describe('GatewayStore', () => {
 	await store.upsert({
 	  gateway_id: 'gw_reused',
 	  display_name: 'Direct Runtime management',
-	  runtime_environment_id: 'ssh:devbox:default:key_agent:remote_default',
 	  connection: { kind: 'ssh_host', ssh_destination: 'devbox', runtime_root: '~/.redeven' },
 	  now_ms: 10,
 	});
 	const explicit = await store.upsert({
 	  gateway_id: 'gw_reused',
 	  display_name: 'Shared Gateway',
-	  runtime_environment_id: null,
 	  connection: { kind: 'ssh_host', ssh_destination: 'devbox', runtime_root: '~/.redeven' },
 	  now_ms: 20,
 	});

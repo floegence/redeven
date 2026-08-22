@@ -70,9 +70,9 @@ describe('LauncherOperationRegistry', () => {
 
     const operation = registry.create({
       operation_key: 'runtime-attached-confirmation',
-      action: 'run_gateway_environment_lifecycle',
-      subject_kind: 'gateway',
-      subject_id: 'gateway-a',
+      action: 'run_provider_environment_lifecycle',
+      subject_kind: 'provider_environment',
+      subject_id: 'provider-a',
       status: 'needs_confirmation',
       phase: 'runtime_operation_confirmation_required',
       title: 'Review Runtime impact',

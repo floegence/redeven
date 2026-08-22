@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -111,6 +112,7 @@ func TestGatewayServiceStoppedRequiresReleasedServiceLock(t *testing.T) {
 
 func TestGatewayServiceServeArgsPropagatesPrecompiledRuntimeManifest(t *testing.T) {
 	args := gatewayServiceServeArgs(
+		"managed_environment",
 		"/tmp/redeven-gateway-state",
 		"/tmp/redeven-runtime",
 		"/Applications/Redeven.app/Contents/Resources/bin/desktop-bundle-manifest.json",
@@ -127,9 +129,51 @@ func TestGatewayServiceServeArgsPropagatesPrecompiledRuntimeManifest(t *testing.
 }
 
 func TestGatewayServiceServeArgsOmitsEmptyPrecompiledRuntimeManifest(t *testing.T) {
-	args := gatewayServiceServeArgs("/tmp/state", "/tmp/runtime", "  ", "", "127.0.0.1:0")
+	args := gatewayServiceServeArgs("managed_environment", "/tmp/state", "/tmp/runtime", "  ", "", "127.0.0.1:0")
 	if strings.Contains(strings.Join(args, "\x00"), "precompiled-runtime-manifest") {
 		t.Fatalf("service-start child args contain an empty precompiled Runtime manifest: %#v", args)
+	}
+}
+
+func TestGatewayServiceServeArgsStandaloneOmitsRuntimeFlags(t *testing.T) {
+	args := gatewayServiceServeArgs("standalone", "/tmp/state", "", "", "", "127.0.0.1:0")
+	joined := strings.Join(args, "\x00")
+	if !strings.Contains(joined, "--mode\x00standalone") {
+		t.Fatalf("standalone child args omit mode: %#v", args)
+	}
+	if strings.Contains(joined, "--runtime-root") || strings.Contains(joined, "--precompiled-runtime") {
+		t.Fatalf("standalone child args contain Runtime flags: %#v", args)
+	}
+}
+
+func TestStandaloneServeRejectsRuntimeConfiguration(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	exitCode := runCLI([]string{
+		"serve", "--mode", "standalone", "--runtime-root", filepath.Join(t.TempDir(), "runtime"),
+	}, strings.NewReader(""), &stdout, &stderr)
+	if exitCode != 2 || !strings.Contains(stderr.String(), "standalone mode cannot configure a Runtime") {
+		t.Fatalf("standalone Runtime configuration result = %d stderr=%q", exitCode, stderr.String())
+	}
+}
+
+func TestStandaloneGatewayServiceDoesNotCreateRuntimeState(t *testing.T) {
+	stateRoot := t.TempDir()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	exitCode := (&cli{stdin: strings.NewReader(""), stdout: &stdout, stderr: &stderr}).runGatewayService(
+		ctx, "standalone", stateRoot, "", "", "", "127.0.0.1:0", false, false, false, false, "", "",
+	)
+	if exitCode != 0 {
+		t.Fatalf("standalone service exit = %d stderr=%q", exitCode, stderr.String())
+	}
+	if _, err := os.Stat(filepath.Join(stateRoot, "runtime-lifecycle")); !os.IsNotExist(err) {
+		t.Fatalf("standalone Gateway created Runtime lifecycle state: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(stateRoot, "runtime-target-binding-v2.json")); !os.IsNotExist(err) {
+		t.Fatalf("standalone Gateway created Runtime binding state: %v", err)
 	}
 }
 
