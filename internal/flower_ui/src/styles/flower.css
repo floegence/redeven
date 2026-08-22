@@ -3641,31 +3641,12 @@ html.dark .flower-component-shell {
 }
 
 .flower-model-status-dots {
-  display: inline-flex;
-  width: 3ch;
-  align-items: baseline;
-  justify-content: flex-start;
-  gap: 0.08ch;
-  vertical-align: bottom;
-  white-space: nowrap;
-}
-
-.flower-model-status-dot {
   display: inline-block;
-  width: 0.28em;
-  height: 0.28em;
-  flex: 0 0 0.28em;
-  border-radius: 50%;
-  background: currentColor;
-  animation: flower-model-status-dot-bounce 1.25s ease-in-out infinite;
-}
-
-.flower-model-status-dot:nth-child(2) {
-  animation-delay: 0.16s;
-}
-
-.flower-model-status-dot:nth-child(3) {
-  animation-delay: 0.32s;
+  overflow: hidden;
+  vertical-align: bottom;
+  width: 3ch;
+  white-space: nowrap;
+  animation: flower-model-status-dots-reveal 1.5s steps(4, end) infinite;
 }
 
 @keyframes flower-model-status-flower-twirl {
@@ -3698,18 +3679,12 @@ html.dark .flower-component-shell {
   }
 }
 
-@keyframes flower-model-status-dot-bounce {
-  0%,
-  55%,
-  100% {
-    opacity: 0.35;
-    transform: translateY(0) scale(0.82);
-  }
-
-  25% {
-    opacity: 1;
-    transform: translateY(-2px) scale(1);
-  }
+@keyframes flower-model-status-dots-reveal {
+  0% { width: 0ch; }
+  25% { width: 1ch; }
+  50% { width: 2ch; }
+  75% { width: 3ch; }
+  100% { width: 3ch; }
 }
 
 .flower-error-card {
@@ -9485,7 +9460,7 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
 @media (prefers-reduced-motion: reduce) {
   .flower-model-status-flower,
   .flower-model-status-text::after,
-  .flower-model-status-dot,
+  .flower-model-status-dots,
   .flower-activity-waiting-clock,
   .flower-activity-waiting-clock::before,
   .flower-activity-waiting-clock::after,
@@ -9518,7 +9493,7 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
 
   .flower-model-status-dots {
     animation: none !important;
-    width: 3ch !important;
+    width: auto !important;
     overflow: visible !important;
   }
 

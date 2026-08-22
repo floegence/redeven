@@ -84,6 +84,7 @@ import type {
   FlowerWorkingDirectoryPathContext,
 } from './contracts/flowerSurfaceContracts';
 import { projectFlowerThreadListItem, trimString } from './flowerSurfaceModel';
+import { presentFlowerApproval } from './flowerApprovalPresentation';
 import { canonicalFlowerThreadSnapshotTitle } from './flowerThreadTitle';
 import { projectFlowerCompanionLiveTail, type FlowerCompanionProgressKind } from './flowerCompanionLiveTail';
 import { FlowerCompanionTailMotionController } from './flowerCompanionTailMotion';
@@ -6384,10 +6385,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
 
-  const copyApprovalCommand = async (action: FlowerApprovalAction) => {
-    const command = trimString(action.summary.command);
+  const copyApprovalCommand = async (actionID: string, rawCommand: string) => {
+    const command = trimString(rawCommand);
     if (!command) return;
-    const key = `approval:${action.action_id}:command`;
+    const key = `approval:${actionID}:command`;
     try {
       await writeTextToClipboard(command);
       setCopiedApprovalAction(key);
@@ -6705,14 +6706,23 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         : '';
     });
     const statusID = `flower-approval-status-${actionID}`;
-    const actionLabel = createMemo(() => action().summary.label || action().tool_name || copy().chat.toolApprovalRequired);
+    const presentation = createMemo(() => presentFlowerApproval(action(), {
+      title: copy().chat.toolApprovalComposerTitle,
+      editFile: copy().chat.toolApprovalEditFile,
+      runCommand: copy().chat.toolApprovalRunCommand,
+      accessNetwork: copy().chat.toolApprovalAccessNetwork,
+      executeAction: copy().chat.toolApprovalExecuteAction,
+      executeRequestedAction: copy().chat.toolApprovalExecuteRequestedAction,
+      workingDirectory: copy().chat.toolApprovalWorkingDirectoryDetail,
+    }));
+    const actionLabel = createMemo(() => presentation().operations[0] || copy().chat.toolApprovalRequired);
     const scopedThreadID = createMemo(() => (
       action().origin === 'delegated_subagent' && action().scope?.startsWith('thread:')
         ? action().scope!.slice('thread:'.length)
         : ''
     ));
     const subtaskLabel = createMemo(() => scopedThreadID() ? copy().chat.toolApprovalSubtaskSuffix(scopedThreadID()) : '');
-    const commandText = createMemo(() => trimString(action().summary.command));
+    const commandText = createMemo(() => trimString(presentation().command));
     const visibleEffects = createMemo(() => approvalVisibleEffects(action()));
     const visibleFlags = createMemo(() => approvalVisibleFlags(action()));
     const commandCopyKey = `approval:${actionID}:command`;
@@ -6744,7 +6754,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <Show when={!composerSurface || queueProgress()}>
             <div class="flower-approval-header">
               <Show when={!composerSurface}>
-                <p class="flower-approval-intro">{copy().chat.toolApprovalComposerTitle}</p>
+                <p class="flower-approval-intro">{presentation().title}</p>
               </Show>
               <Show when={queueProgress()}>
                 {(progress) => <span class="flower-approval-queue-progress" aria-label={`${copy().chat.toolApprovalRequired} ${progress()}`}>{progress()}</span>}
@@ -6756,7 +6766,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   data-copied={commandCopied() ? 'true' : 'false'}
                   aria-label={`${copy().chat.toolApprovalCopyCommand}${subtaskLabel()}`}
                   title={commandCopied() ? copy().chat.toolApprovalCopied : copy().chat.toolApprovalCopyCommand}
-                  onClick={() => void copyApprovalCommand(action())}
+                  onClick={() => void copyApprovalCommand(actionID, commandText())}
                 >
                   <Copy class="h-3.5 w-3.5" aria-hidden="true" />
                 </button>
@@ -6765,23 +6775,25 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           </Show>
           <Show when={composerSurface}>
             <p class="flower-approval-question" id={`flower-approval-question-${actionID}`}>
-              {copy().chat.toolApprovalComposerTitle}
+              {presentation().title}
             </p>
           </Show>
+          <div class="flower-approval-targets">
+            <For each={presentation().operations}>
+              {(operation) => <span class="flower-approval-target">{operation}</span>}
+            </For>
+          </div>
           <Show when={commandText()}>
             {(command) => (
               <pre class="flower-approval-command-text"><FlowerShellCommandHighlight command={command()} /></pre>
             )}
           </Show>
-          <Show when={!commandText() && (action().summary.targets?.length ?? 0) > 0}>
+          <Show when={presentation().details.length > 0}>
             <div class="flower-approval-targets">
-              <For each={action().summary.targets ?? []}>
-                {(target) => <span class="flower-approval-target">{target.label}</span>}
+              <For each={presentation().details}>
+                {(detail) => <span class="flower-approval-target">{detail}</span>}
               </For>
             </div>
-          </Show>
-          <Show when={!commandText() && !((action().summary.targets?.length ?? 0) > 0) && action().summary.label}>
-            <p class="flower-approval-fallback-label">{action().summary.label}</p>
           </Show>
           <Show when={riskNote()}>
             {(note) => <p class="flower-approval-risk">{note()}</p>}

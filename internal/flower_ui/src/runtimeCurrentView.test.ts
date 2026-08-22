@@ -409,4 +409,23 @@ describe('applyFlowerRuntimeCurrentView', () => {
     expect(result.input_request).toBeUndefined();
     expect(result.status).toBe('waiting_approval');
   });
+
+  it('decodes typed approval targets without exposing Floret target encoding', () => {
+    const result = applyFlowerRuntimeCurrentView(summary(), {
+      thread_id: 'thread-a', view_version: 12, activity: 'active', turn_id: 'turn-a',
+      interactions: [{
+        id: 'approval-file', turn_id: 'turn-a', kind: 'approval', tool_call_id: 'tool-file',
+        approval: {
+          label: 'Edit file', tool_name: 'file.write', tool_call_id: 'tool-file', effects: ['write'],
+          targets: ['file:回声之王.md', 'working_directory:/workspace:with:colons'],
+        },
+      }],
+    });
+
+    expect(result.approval_actions?.[0]?.summary.targets).toEqual([
+      { kind: 'file', label: '回声之王.md' },
+      { kind: 'working_directory', label: '/workspace:with:colons' },
+    ]);
+    expect(JSON.stringify(result.approval_actions)).not.toContain('file:回声之王.md');
+  });
 });
