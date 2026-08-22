@@ -14,7 +14,6 @@
   --font-sans: 'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-mono: 'Iosevka', 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace;
   --redeven-welcome-shell-max-width: 80rem;
-  --redeven-welcome-shell-spacious-max-width: 100rem;
   --redeven-environment-grid-min-column-size: 17rem;
   --redeven-environment-grid-spacious-column-size: 19rem;
   --redeven-environment-grid-gap: 1rem;
@@ -82,10 +81,6 @@ html:not(.dark) .redeven-welcome-surface {
 
 .redeven-welcome-shell {
   max-width: var(--redeven-welcome-shell-max-width);
-}
-
-.redeven-welcome-shell--spacious {
-  max-width: var(--redeven-welcome-shell-spacious-max-width);
 }
 
 .redeven-flower-topbar-button {

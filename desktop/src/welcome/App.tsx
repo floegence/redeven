@@ -218,7 +218,6 @@ import {
   type EnvironmentActionPresentation,
   type EnvironmentCenterTab,
   type EnvironmentPrimaryActionOverlayModel,
-  shouldUseSpaciousEnvironmentGrid,
 } from './viewModel';
 import {
   launcherActionFailurePresentation,
@@ -7160,29 +7159,12 @@ function ConnectEnvironmentSurface(props: Readonly<{
   const layoutReferenceEnvironmentCardCount = createMemo(() => (
     layoutReferenceEnvironmentCount() + 1
   ));
-  const useSpaciousEnvironmentLibraryLayout = createMemo(() => (
-    props.activeTab === 'environments'
-    && shouldUseSpaciousEnvironmentGrid(layoutReferenceEnvironmentCardCount())
-  ));
-  const useSpaciousControlPlaneLayout = createMemo(() => (
-    props.activeTab === 'control_planes'
-  ));
-  const useSpaciousGatewayLayout = createMemo(() => (
-    props.activeTab === 'gateways'
-  ));
-  const useSpaciousWelcomeShell = createMemo(() => (
-    useSpaciousEnvironmentLibraryLayout() || useSpaciousControlPlaneLayout() || useSpaciousGatewayLayout()
-  ));
   const headerCopy = createMemo(() => ENVIRONMENT_CENTER_HEADER_COPY[props.activeTab]);
 
   return (
     <div class="redeven-welcome-surface h-full min-h-0 w-full min-w-0 overflow-auto bg-background">
       <main id="redeven-desktop-main" class="w-full px-4 py-5 sm:px-6 lg:px-8">
-        <div class={cn(
-          'mx-auto w-full redeven-welcome-shell',
-          useSpaciousWelcomeShell() && 'redeven-welcome-shell--spacious',
-        )}
-        >
+        <div class="mx-auto w-full redeven-welcome-shell">
           <header class="redeven-header-separator mb-5 space-y-4">
             <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div class="space-y-1">
