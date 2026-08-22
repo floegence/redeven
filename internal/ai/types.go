@@ -353,7 +353,9 @@ type ReorderQueueRequest struct {
 }
 
 type StopThreadResponse struct {
-	OK bool `json:"ok"`
+	OK      bool                 `json:"ok"`
+	Thread  ThreadView           `json:"thread"`
+	Current flruntime.ThreadView `json:"current"`
 }
 
 type RetryThreadContinuationResponse struct {

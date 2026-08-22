@@ -153,6 +153,37 @@ function adapterOptions(
 }
 
 describe('runtime Flower surface adapter read state', () => {
+	it('maps the atomic stop detail without issuing a second thread load', async () => {
+		const loadThread = vi.fn(async () => { throw new Error('loadThread must not race stop'); });
+		const stopThread = vi.fn(async () => ({
+			thread: {
+				thread_id: 'thread_stop', title: 'Stopped', title_status: 'ready', model_id: 'default/gpt-5',
+				permission_type: 'approval_required', working_dir: '/workspace', queued_turn_count: 0,
+				run_status: 'canceled', created_at_unix_ms: 1, updated_at_unix_ms: 3, last_message_at_unix_ms: 3,
+				read_status: readStatus(),
+			},
+			current: {
+				thread_id: 'thread_stop', view_version: 9, activity: 'idle', last_outcome: 'cancelled',
+				items: [], queue: [], interactions: [],
+			},
+		}));
+		const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ loadThread }, { stopThread }));
+
+		const detail = await adapter.stopThread(' thread_stop ');
+
+		expect(stopThread).toHaveBeenCalledWith('thread_stop');
+		expect(loadThread).not.toHaveBeenCalled();
+		expect(detail.current.view_version).toBe(9);
+		expect(detail.thread.status).toBe('canceled');
+	});
+
+	it('rejects an incomplete stop response with a contract error', async () => {
+		const stopThread = vi.fn(async () => ({ ok: true }));
+		const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({}, { stopThread }));
+
+		await expect(adapter.stopThread('thread_stop')).rejects.toThrow('Flower thread detail requires product metadata and a typed current view.');
+	});
+
 	it('loads product metadata and typed current view without polling', async () => {
 		const loadThread = vi.fn(async () => ({
 			thread: {

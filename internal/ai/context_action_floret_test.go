@@ -194,8 +194,11 @@ func TestFloretSupplementalContextKeepsFileContextOnly(t *testing.T) {
 		t.Fatalf("items=%#v, want file path context only", projection.Items)
 	}
 	for _, item := range projection.Items {
-		if item.Text != "" {
-			t.Fatalf("metadata-only item carried text: %#v", item)
+		if item.Title != "User-selected file" || !strings.Contains(item.Text, "explicitly selected") || !strings.Contains(item.Text, "secret.txt") {
+			t.Fatalf("file item=%#v, want explicit selected-file instruction", item)
+		}
+		if item.Metadata["label"] != "secret.txt" || item.Metadata["path"] != "" || item.Metadata["suggested_working_dir_abs"] != "" {
+			t.Fatalf("file metadata=%#v, want safe label without path", item.Metadata)
 		}
 		if strings.Contains(item.Metadata["name"], "upl_secret") || strings.Contains(item.Metadata["path"], "package main") {
 			t.Fatalf("metadata leaked forbidden content: %#v", item.Metadata)

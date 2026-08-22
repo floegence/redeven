@@ -77,9 +77,14 @@ func floretContextActionItemsWithAuthority(action *ContextActionEnvelope, author
 		switch strings.TrimSpace(item.Kind) {
 		case contextActionKindFilePath:
 			reference, err = floretFilePathReferenceWithAuthority(action, item, index, authority)
+			label := contextReferencePathLabel(item.Path)
+			if label == "" {
+				label = nonEmptyString(item.RootLabel, "selected file")
+			}
 			supplemental = flruntime.TurnSupplementalContextItem{
 				Kind:      contextActionKindFilePath,
-				Title:     "Linked file path",
+				Title:     "User-selected file",
+				Text:      fmt.Sprintf("The user explicitly selected %q for this turn. Treat it as the referenced file and do not ask which file was selected. Read it with the file tool if its contents are needed.", label),
 				Metadata:  contextActionFilePathMetadata(action, item),
 				Sensitive: true,
 			}
@@ -336,7 +341,12 @@ func floretTextSnapshotSupplementalItem(action *ContextActionEnvelope, item Cont
 
 func contextActionFilePathMetadata(action *ContextActionEnvelope, item ContextActionContextItem) map[string]string {
 	metadata := contextActionBaseMetadata(action)
-	metadata["path"] = strings.TrimSpace(item.Path)
+	delete(metadata, "suggested_working_dir_abs")
+	if label := contextReferencePathLabel(item.Path); label != "" {
+		metadata["label"] = label
+	} else if rootLabel := strings.TrimSpace(item.RootLabel); rootLabel != "" {
+		metadata["label"] = rootLabel
+	}
 	metadata["is_directory"] = strconv.FormatBool(item.IsDirectory)
 	if rootLabel := strings.TrimSpace(item.RootLabel); rootLabel != "" {
 		metadata["root_label"] = rootLabel

@@ -872,30 +872,27 @@ describe('Env local Flower surface adapter', () => {
     ]));
   });
 
-  it('stops a thread through RPC and reloads the live bootstrap', async () => {
+	it('stops a thread through one atomic cancel bootstrap', async () => {
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
-      if (url === '/_redeven_proxy/api/ai/threads/thread_1' && init?.method === 'GET') {
-        return jsonResponse(liveBootstrap('thread_1'));
+      if (url === '/_redeven_proxy/api/ai/threads/thread_1/cancel' && init?.method === 'POST') {
+        return jsonResponse({ ok: true, data: liveBootstrap('thread_1') });
       }
       throw new Error(`unexpected fetch: ${url}`);
     });
-    const stopThread = vi.fn(async () => ({ ok: true }));
     const adapter = createEnvLocalFlowerSurfaceAdapter({
       envPublicID: 'env_a',
       envLabel: 'Demo Env',
       rpc: {
         ai: {
-          stopThread,
         },
       } as any,
     });
 
     const bootstrap = await adapter.stopThread('thread_1');
 
-    expect(stopThread).toHaveBeenCalledWith({ threadId: 'thread_1' });
     expect(fetchMock).toHaveBeenCalledWith(
-      '/_redeven_proxy/api/ai/threads/thread_1',
-      expect.objectContaining({ method: 'GET' }),
+      '/_redeven_proxy/api/ai/threads/thread_1/cancel',
+      expect.objectContaining({ method: 'POST' }),
     );
     expect(bootstrap.thread.thread_id).toBe('thread_1');
     expect(bootstrap.thread.status).toBe('canceled');

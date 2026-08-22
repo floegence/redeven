@@ -286,6 +286,9 @@ func publicFloretThreadView(current flruntime.ThreadView) flruntime.ThreadView {
 	for index := range out.Queue {
 		out.Queue[index].Input.Attachments = publicFloretAttachments(out.Queue[index].Input.Attachments)
 		out.Queue[index].Input.References = publicRuntimeReferences(out.Queue[index].Input.References)
+		// Supplemental context is turn-scoped host input. It is consumed by the
+		// provider execution, but must not cross the public Flower projection.
+		out.Queue[index].SupplementalContext = nil
 	}
 	out.Interactions = append([]flruntime.ThreadInteraction(nil), current.Interactions...)
 	for index := range out.Interactions {

@@ -399,6 +399,68 @@ func (s *Service) GetFlowerThreadDetail(ctx context.Context, meta *session.Meta,
 	return &FlowerThreadDetail{Thread: *thread, Current: publicFloretThreadView(current)}, nil
 }
 
+// flowerThreadDetailFromCurrent combines product metadata with the exact
+// current view returned by a lifecycle mutation. It deliberately does not
+// read Floret again, so cancellation and the rendered current view stay on
+// one authoritative result boundary.
+func (s *Service) flowerThreadDetailFromCurrent(ctx context.Context, meta *session.Meta, threadID string, current flruntime.ThreadView) (*FlowerThreadDetail, error) {
+	if s == nil || meta == nil {
+		return nil, errors.New("thread detail requires service and metadata")
+	}
+	s.mu.Lock()
+	db := s.threadsDB
+	s.mu.Unlock()
+	if db == nil {
+		return nil, errors.New("threads store not ready")
+	}
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" || current.ThreadID.String() != threadID {
+		return nil, errors.New("thread detail identity mismatch")
+	}
+	settings, err := db.GetThreadSettings(ctx, strings.TrimSpace(meta.EndpointID), threadID)
+	if err != nil {
+		return nil, err
+	}
+	if settings == nil {
+		return nil, nil
+	}
+	typed, err := s.typedFloretRuntime()
+	if err != nil {
+		return nil, err
+	}
+	summaries, err := typed.List(ctxOrBackground(ctx), flruntime.ThreadScope{})
+	if err != nil {
+		return nil, err
+	}
+	var summary *flruntime.ThreadSummary
+	for index := range summaries {
+		if summaries[index].ID.String() == threadID {
+			summary = &summaries[index]
+			break
+		}
+	}
+	if summary == nil {
+		return nil, fmt.Errorf("product thread settings reference missing canonical Floret root %q", threadID)
+	}
+	thread, err := s.threadViewFromRecord(ctx, settings, current, summary)
+	if err != nil {
+		return nil, err
+	}
+	thread.QueuedTurns = make([]QueuedTurnView, 0, len(current.Queue))
+	for _, queued := range current.Queue {
+		thread.QueuedTurns = append(thread.QueuedTurns, queuedInputView(queued))
+	}
+	contextProjection, err := s.readCanonicalThreadContextProjection(ctx, current)
+	if err != nil {
+		return nil, err
+	}
+	thread.ContextUsage = contextProjection.Usage
+	thread.ContextCompactions = contextProjection.Compactions
+	thread.TimelineDecorations = contextProjection.Decorations
+	applyThreadRuntimeSummary(&thread, current)
+	return &FlowerThreadDetail{Thread: thread, Current: publicFloretThreadView(current)}, nil
+}
+
 func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int, cursor string) (*ListThreadsResponse, error) {
 	if s == nil {
 		return nil, errors.New("nil service")

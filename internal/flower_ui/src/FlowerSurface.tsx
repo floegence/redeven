@@ -322,7 +322,6 @@ const THREAD_RAIL_WIDTH_DEFAULT = 272;
 const THREAD_RAIL_WIDTH_MIN = 220;
 const THREAD_RAIL_WIDTH_MAX = 380;
 const SIDEBAR_STABLE_LIVE_STATUSES = new Set<FlowerThreadStatus>(['running']);
-const COMPOSER_STOP_THREAD_STATUSES = new Set<FlowerThreadStatus>(['running', 'waiting_approval', 'waiting_user']);
 const PENDING_NEW_THREAD_ID = '__new_thread__';
 const FLOWER_PERMISSION_TYPES: readonly FlowerPermissionType[] = ['readonly', 'approval_required', 'full_access'];
 const FLOWER_COMPOSER_COMMAND_MENU_ID = 'flower-composer-command-menu';
@@ -1306,9 +1305,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const thread = selectedThread();
     return visibleInputRequest(thread);
   });
-  const selectedThreadCanStop = createMemo(() => (
-    !selectedThreadReadOnly() && COMPOSER_STOP_THREAD_STATUSES.has(selectedThreadLiveStatus())
-  ));
+  const selectedThreadCanStop = createMemo(() => {
+    const thread = selectedThread();
+    if (selectedThreadReadOnly() || !trimString(thread?.thread_id)) return false;
+    // A stale status snapshot may briefly leave the active run state behind.
+    // Keep Stop available while the admitted turn identity or waiting state
+    // proves that the runtime still owns a cancellable turn.
+    return Boolean(trimString(thread?.active_run_id))
+      || Boolean(trimString(thread?.model_io_status?.run_id))
+      || selectedThreadLiveStatus() === 'running'
+      || selectedThreadLiveStatus() === 'waiting_approval'
+      || selectedThreadLiveStatus() === 'waiting_user';
+  });
 	const selectedThreadDetailPending = createMemo(() => {
 		const threadID = trimString(selectedThreadID());
 		return Boolean(threadID && !threadCache().views.has(threadID));
@@ -6877,28 +6885,56 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           data-flower-approval-actions-row={composerSurface ? 'true' : undefined}
         >
             <Show when={canDecide() || composerSurface} fallback={<div class="flower-approval-unavailable">{unavailableCopy()}</div>}>
-              <Button
-                variant="outline"
-                size="sm"
-                class={composerSurface ? 'flower-composer-approval-decision flower-approval-action-pill' : undefined}
-                disabled={disabled()}
-                aria-label={copy().chat.toolApprovalRejectAction(actionLabel(), subtaskLabel())}
-                aria-describedby={describedBy() || undefined}
-                onClick={() => void submitApprovalAction(action(), false)}
-              >
-                {copy().chat.toolApprovalReject}
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                class={composerSurface ? 'flower-composer-approval-decision flower-approval-action-pill' : undefined}
-                disabled={disabled()}
-                aria-label={copy().chat.toolApprovalApproveAction(actionLabel(), subtaskLabel())}
-                aria-describedby={describedBy() || undefined}
-                onClick={() => void submitApprovalAction(action(), true)}
-              >
-                {copy().chat.toolApprovalApprove}
-              </Button>
+              <Show when={composerSurface} fallback={
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={disabled()}
+                    aria-label={copy().chat.toolApprovalRejectAction(actionLabel(), subtaskLabel())}
+                    aria-describedby={describedBy() || undefined}
+                    onClick={() => void submitApprovalAction(action(), false)}
+                  >
+                    {copy().chat.toolApprovalReject}
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    disabled={disabled()}
+                    aria-label={copy().chat.toolApprovalApproveAction(actionLabel(), subtaskLabel())}
+                    aria-describedby={describedBy() || undefined}
+                    onClick={() => void submitApprovalAction(action(), true)}
+                  >
+                    {copy().chat.toolApprovalApprove}
+                  </Button>
+                </>
+              }>
+                <div class="flower-approval-decision-group" role="group" aria-label={actionLabel()} data-flower-approval-decision-group="true">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    class="flower-composer-approval-decision flower-approval-action-pill flower-approval-decision-reject"
+                    disabled={disabled()}
+                    aria-label={copy().chat.toolApprovalRejectAction(actionLabel(), subtaskLabel())}
+                    aria-describedby={describedBy() || undefined}
+                    onClick={() => void submitApprovalAction(action(), false)}
+                  >
+                    {copy().chat.toolApprovalReject}
+                  </Button>
+                  <span class="flower-approval-decision-divider" aria-hidden="true" />
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    class="flower-composer-approval-decision flower-approval-action-pill flower-approval-decision-approve"
+                    disabled={disabled()}
+                    aria-label={copy().chat.toolApprovalApproveAction(actionLabel(), subtaskLabel())}
+                    aria-describedby={describedBy() || undefined}
+                    onClick={() => void submitApprovalAction(action(), true)}
+                  >
+                    {copy().chat.toolApprovalApprove}
+                  </Button>
+                </div>
+              </Show>
               <Show when={singleComposer}>
                 <Button
                   variant="secondary"
