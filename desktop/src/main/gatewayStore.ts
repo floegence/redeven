@@ -779,7 +779,10 @@ export class GatewayStore {
   }
 
   async list(): Promise<readonly GatewayRecord[]> {
-    return (await this.load()).gateways;
+    // Gateway Store owns standalone Gateways only. Legacy direct Environment
+    // records remain readable through listLegacyDirectEnvironmentRecords()
+    // until the startup migration can move them to Runtime Target storage.
+    return (await this.load()).gateways.filter((record) => record.connection.kind === 'url');
   }
 
   /**
@@ -823,7 +826,7 @@ export class GatewayStore {
     if (!cleanGatewayID) {
       return null;
     }
-    return (await this.load()).gateways.find((record) => record.gateway_id === cleanGatewayID) ?? null;
+    return (await this.list()).find((record) => record.gateway_id === cleanGatewayID) ?? null;
   }
 
   async upsert(input: Readonly<{
@@ -834,6 +837,13 @@ export class GatewayStore {
     now_ms?: number;
   }>): Promise<GatewayRecord> {
     return this.mutate(async () => {
+      if (input.connection.kind !== 'url') {
+        throw new GatewayStoreError(
+          'GATEWAY_STANDALONE_URL_REQUIRED',
+          'Standalone Gateway records require an explicit URL endpoint. Save SSH or container targets as Managed Environments.',
+          this.filePath,
+        );
+      }
       const now = timestampMS(input.now_ms, Date.now());
       const gatewayID = normalizeGatewayID(input.gateway_id);
       if (!gatewayID) {

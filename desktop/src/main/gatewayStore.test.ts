@@ -95,7 +95,7 @@ describe('GatewayStore', () => {
     await store.upsert({
       gateway_id: 'gw_fresh',
       display_name: 'Fresh Gateway',
-      connection: { kind: 'local_host', runtime_root: '/tmp/redeven' },
+      connection: { kind: 'url', base_url: 'https://gateway.example/' },
       now_ms: 10,
     });
 
@@ -105,58 +105,25 @@ describe('GatewayStore', () => {
     });
   });
 
-  it('persists the originating direct Runtime card without exposing it on ordinary Gateway records', async () => {
+  it('rejects direct Runtime coordinates from the standalone Gateway store', async () => {
     const root = await createTempRoot();
     cleanupRoots.add(root);
     const filePath = defaultGatewayStorePath(root);
     const store = new GatewayStore(filePath);
 
-    await store.upsert({
+    await expect(store.upsert({
       gateway_id: 'gw_direct',
       display_name: 'Devbox Runtime management',
-      connection: {
-        kind: 'ssh_host',
-        ssh_destination: 'devbox',
-        auth_mode: 'key_agent',
-        runtime_root: '~/.redeven',
-      },
+      connection: { kind: 'ssh_host', ssh_destination: 'devbox', auth_mode: 'key_agent', runtime_root: '~/.redeven' },
       now_ms: 10,
-    });
-    await store.upsert({
-      gateway_id: 'gw_ordinary',
-      display_name: 'Shared Gateway',
-      connection: {
-        kind: 'url',
-        base_url: 'https://gateway.example/',
-      },
+    })).rejects.toMatchObject({ code: 'GATEWAY_STANDALONE_URL_REQUIRED' });
+    await expect(store.upsert({
+      gateway_id: 'gw_container',
+      display_name: 'Container Runtime management',
+      connection: { kind: 'local_container', container_engine: 'docker', container_id: 'container', runtime_root: '/workspace/.redeven' },
       now_ms: 20,
-    });
-
-    const reloaded = new GatewayStore(filePath);
-    expect(await reloaded.get('gw_direct')).not.toHaveProperty('runtime_environment_id');
-    expect(await reloaded.get('gw_ordinary')).not.toHaveProperty('runtime_environment_id');
-  });
-
-  it('clears a direct Runtime card mapping when the same Gateway becomes an explicit record', async () => {
-	const root = await createTempRoot();
-	cleanupRoots.add(root);
-	const store = new GatewayStore(defaultGatewayStorePath(root));
-
-	await store.upsert({
-	  gateway_id: 'gw_reused',
-	  display_name: 'Direct Runtime management',
-	  connection: { kind: 'ssh_host', ssh_destination: 'devbox', runtime_root: '~/.redeven' },
-	  now_ms: 10,
-	});
-	const explicit = await store.upsert({
-	  gateway_id: 'gw_reused',
-	  display_name: 'Shared Gateway',
-	  connection: { kind: 'ssh_host', ssh_destination: 'devbox', runtime_root: '~/.redeven' },
-	  now_ms: 20,
-	});
-
-	expect(explicit).not.toHaveProperty('runtime_environment_id');
-	expect(await new GatewayStore(defaultGatewayStorePath(root)).get('gw_reused')).not.toHaveProperty('runtime_environment_id');
+    })).rejects.toMatchObject({ code: 'GATEWAY_STANDALONE_URL_REQUIRED' });
+    expect(await new GatewayStore(filePath).list()).toEqual([]);
   });
 
   it('migrates the exact v1 store to v2 and preserves user records', async () => {

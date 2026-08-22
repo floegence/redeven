@@ -7,13 +7,15 @@ timestamp: 2026-08-17T00:00:00Z
 ---
 # Summary
 
-`redeven-gateway` is an independent process and component version. It is optional for Runtime access but is the only executor and durable authority for Redeven-managed Runtime lifecycle operations. It runs as the target OS user, owns target locks and recovery, and exposes ordinary Gateway open-session separately from lifecycle control.
+`redeven-gateway` is an independent process and component version. In `standalone` mode it is an access and catalog endpoint only: it owns Gateway identity and trust, does not create Runtime binding or state, and exposes no Runtime lifecycle API. A Managed Environment may have an internal Gateway supervisor, but that supervisor is not a Gateway record and is never projected into Desktop's Gateway page. Direct Desktop host or container channels own destructive Environment reinstall.
 
 The service uses one state-root lock so two Gateway supervisors cannot control the same target concurrently. Its status record is accepted only when the PID still has the recorded executable and process start time; a stale or reused PID is treated as not running.
 
 # Contract
 
 ## Supervisor and compatibility
+
+`redeven-gateway --mode standalone` rejects Runtime-root and precompiled-Runtime options and starts without a Runtime binding store, lifecycle controller, or Runtime heartbeat. Its Runtime-management capability is `unsupported`; Gateway-backed Environments are opened only through their explicit access endpoint. Managed Environment supervisor mode remains an internal implementation detail and does not create a Desktop Gateway pairing requirement.
 
 Gateway persists its supervisor identity, installation marker, target id/generation, binding, operation store, checkpoint, and quarantine state. Registration rejects an installation-root alias that names another target. Gateway and Runtime versions need not match; a signed compatibility manifest, stable Gateway protocol, Runtime service protocol/epoch, capabilities, and artifact digest decide compatibility. Gateway-first setup is performed by Desktop installer or an administrator and has no self-update state machine.
 

@@ -109,7 +109,7 @@ describe('environmentAggregator', () => {
       gatewaySources: [gatewaySource({
         gateway_id: 'lab',
         display_name: 'Lab Docker',
-        connection_kind: 'ssh_container',
+        connection_kind: 'url',
       })],
     });
     const gatewayEntry = snapshot.environments.find((entry) => entry.kind === 'gateway_environment');
@@ -121,7 +121,7 @@ describe('environmentAggregator', () => {
         label: 'Lab Docker',
       },
       gateway_label: 'Lab Docker',
-      gateway_connection_kind: 'ssh_container',
+      gateway_connection_kind: 'url',
     });
   });
 

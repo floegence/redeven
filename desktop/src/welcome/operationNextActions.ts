@@ -13,10 +13,6 @@ function operationNextActionKey(action: DesktopLauncherOperationNextAction): str
     case 'check_gateway':
     case 'refresh_gateway_status':
     case 'refresh_gateway_catalog':
-    case 'start_gateway':
-    case 'stop_gateway':
-    case 'restart_gateway':
-    case 'update_gateway':
       return `${action.kind}:gateway:${action.gateway_id}`;
     case 'reinstall_target':
       return `${action.kind}:environment:${action.environment_id}`;
@@ -30,6 +26,8 @@ function operationNextActionKey(action: DesktopLauncherOperationNextAction): str
     case 'dismiss':
     case 'retry':
       return `${action.kind}:operation:${action.operation_key}`;
+    default:
+      return `${action.kind}:operation`;
   }
 }
 
@@ -56,16 +54,13 @@ export function visibleOperationNextActions(
       actions.push(action);
     }
   };
-  if (progress.subject_kind !== 'gateway') {
+  if (progress.action === 'reinstall_target') {
+    push('reinstall_target');
+  } else if (progress.subject_kind !== 'gateway') {
     push('update_runtime');
     push('manage_desktop_update');
     push('retry');
     push('refresh_status');
-  } else {
-    push('start_gateway');
-    push('restart_gateway');
-    push('update_gateway');
-    push('reinstall_target');
   }
   push('confirm_runtime_operation');
   push('cancel_runtime_operation');
@@ -86,9 +81,6 @@ function operationNextActionIsPrimary(action: DesktopLauncherOperationNextAction
     || action.kind === 'update_runtime'
     || action.kind === 'manage_desktop_update'
     || action.kind === 'refresh_gateway'
-    || action.kind === 'start_gateway'
-    || action.kind === 'restart_gateway'
-    || action.kind === 'update_gateway'
     || action.kind === 'reinstall_target';
 }
 

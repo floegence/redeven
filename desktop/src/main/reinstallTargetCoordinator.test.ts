@@ -136,6 +136,51 @@ describe('ReinstallTargetCoordinator', () => {
     await expect(fs.lstat(journal.quarantine_root)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
+  it('reads confirmation journals for Desktop restart without probing the old root', async () => {
+    const parent = await temporaryRoot();
+    const targetRoot = path.join(parent, 'managed-redeven');
+    await fs.mkdir(targetRoot);
+    await fs.writeFile(path.join(targetRoot, 'old-data'), 'opaque');
+    const current = descriptor(targetRoot);
+    const coordinator = new ReinstallTargetCoordinator(coordinatorDependencies(
+      path.join(parent, 'journal'),
+      () => current,
+      [],
+    ));
+
+    const preview = await coordinator.preview({ environment_id: current.environment_id });
+    const journals = await coordinator.readPersistedJournals();
+    expect(journals).toHaveLength(1);
+    expect(journals[0]).toMatchObject({
+      phase: 'confirmation',
+      operation_id: expect.any(String),
+      preview: { operation_key: preview.operation_key },
+    });
+    await expect(coordinator.validatePersistedJournalTarget(journals[0]!)).resolves.toBeUndefined();
+    await expect(fs.readFile(path.join(targetRoot, 'old-data'), 'utf8')).resolves.toBe('opaque');
+  });
+
+  it('keeps only the newest confirmation journal for one physical target', async () => {
+    const parent = await temporaryRoot();
+    const targetRoot = path.join(parent, 'managed-redeven');
+    await fs.mkdir(targetRoot);
+    const current = descriptor(targetRoot);
+    const coordinator = new ReinstallTargetCoordinator(coordinatorDependencies(
+      path.join(parent, 'journal'),
+      () => current,
+      [],
+    ));
+
+    const first = await coordinator.preview({ environment_id: current.environment_id });
+    const second = await coordinator.preview({ environment_id: current.environment_id });
+    expect(second.preflight_id).not.toBe(first.preflight_id);
+    await expect(fs.lstat(path.join(parent, 'journal', `${first.preflight_id}.json`)))
+      .rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(fs.lstat(path.join(parent, 'journal', `${second.preflight_id}.json`)))
+      .resolves.toBeDefined();
+    await expect(coordinator.readPersistedJournals()).resolves.toHaveLength(1);
+  });
+
   it('keeps quarantine and never restores old processes when fresh installation fails', async () => {
     const parent = await temporaryRoot();
     const targetRoot = path.join(parent, 'managed-redeven');

@@ -34,6 +34,7 @@ type CreateLauncherOperationInput = Readonly<{
   open_progress?: DesktopOpenConnectionProgress;
   open_timing?: DesktopOpenConnectionTiming;
   step_progress?: DesktopLauncherOperationSnapshot['step_progress'];
+  reinstall_preview?: DesktopLauncherOperationSnapshot['reinstall_preview'];
   gateway_diagnosis?: DesktopLauncherOperationSnapshot['gateway_diagnosis'];
   presentation_context?: DesktopLauncherOperationSnapshot['presentation_context'];
   runtime_confirmation?: DesktopLauncherOperationSnapshot['runtime_confirmation'];
@@ -107,6 +108,7 @@ function operationProgress(snapshot: DesktopLauncherOperationSnapshot): DesktopL
     ...(snapshot.open_progress ? { open_progress: snapshot.open_progress } : {}),
     ...(snapshot.open_timing ? { open_timing: snapshot.open_timing } : {}),
     ...(snapshot.step_progress ? { step_progress: snapshot.step_progress } : {}),
+    ...(snapshot.reinstall_preview ? { reinstall_preview: snapshot.reinstall_preview } : {}),
     ...(snapshot.gateway_diagnosis ? { gateway_diagnosis: snapshot.gateway_diagnosis } : {}),
     ...(snapshot.presentation_context ? { presentation_context: snapshot.presentation_context } : {}),
     ...(snapshot.runtime_confirmation ? { runtime_confirmation: snapshot.runtime_confirmation } : {}),
@@ -338,6 +340,7 @@ export class LauncherOperationRegistry {
       ...(input.open_progress ? { open_progress: input.open_progress } : {}),
       ...(input.open_timing ? { open_timing: input.open_timing } : {}),
       ...(input.step_progress ? { step_progress: input.step_progress } : {}),
+      ...(input.reinstall_preview ? { reinstall_preview: input.reinstall_preview } : {}),
       ...(input.gateway_diagnosis ? { gateway_diagnosis: input.gateway_diagnosis } : {}),
       ...(input.presentation_context ? { presentation_context: input.presentation_context } : {}),
       ...(input.runtime_confirmation ? { runtime_confirmation: input.runtime_confirmation } : {}),
@@ -353,6 +356,27 @@ export class LauncherOperationRegistry {
     };
     this.operationsByKey.set(operationKey, snapshot);
     this.abortControllersByKey.set(operationKey, new AbortController());
+    this.onChange(snapshot);
+    return snapshot;
+  }
+
+  restore(snapshot: DesktopLauncherOperationSnapshot): DesktopLauncherOperationSnapshot {
+    const operationKey = compact(snapshot.operation_key);
+    const subjectID = compact(snapshot.subject_id);
+    if (operationKey === '' || subjectID === '') {
+      throw new Error('Persisted launcher operation identity is invalid.');
+    }
+    const existing = this.operationsByKey.get(operationKey);
+    if (existing && operationIsActive(existing)) {
+      throw new LauncherOperationConflictError(operationKey);
+    }
+    this.lastStartedAtUnixMs = Math.max(this.lastStartedAtUnixMs, snapshot.started_at_unix_ms);
+    this.operationsByKey.set(operationKey, snapshot);
+    if (operationIsActive(snapshot)) {
+      this.abortControllersByKey.set(operationKey, new AbortController());
+    } else {
+      this.abortControllersByKey.delete(operationKey);
+    }
     this.onChange(snapshot);
     return snapshot;
   }

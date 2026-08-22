@@ -23,8 +23,8 @@ function expectLifecyclePlansProjected(
 ): void {
   for (const operation of operations) {
     expect(plans[operation]).toMatchObject({
-      method: 'runtime_gateway',
     });
+    expect(plans[operation].method).not.toBe('runtime_gateway');
     expect(plans[operation].reason_code).not.toBe('runtime_gateway_setup_required');
   }
 }
@@ -223,7 +223,7 @@ describe('desktopRuntimePresence', () => {
       });
       expect(plans.update).toMatchObject({
         availability: 'available',
-        method: 'runtime_gateway',
+        method: 'local_host',
         menu_visibility: 'stable',
       });
     }
@@ -437,7 +437,7 @@ describe('desktopRuntimePresence', () => {
     expect(plans.update).toMatchObject({
       availability: 'available',
       label: 'Update runtime',
-      method: 'runtime_gateway',
+      method: 'ssh_container_exec',
       menu_visibility: 'stable',
     });
   });
@@ -462,7 +462,7 @@ describe('desktopRuntimePresence', () => {
     });
     expect(plans.start).toMatchObject({
       availability: 'unavailable',
-      method: 'runtime_gateway',
+      method: 'local_container_exec',
       reason_code: 'runtime_already_running',
     });
     expect(plans.connect_provider).toMatchObject({

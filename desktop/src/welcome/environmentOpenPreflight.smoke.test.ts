@@ -45,8 +45,8 @@ function environment(overrides: Partial<DesktopEnvironmentEntry> = {}): DesktopE
       start: {
         ...base.runtime_operations.start,
         availability: 'blocked',
-        method: 'runtime_gateway',
-        reason_code: 'runtime_gateway_setup_required',
+        method: 'local_host',
+        reason_code: 'runtime_target_unavailable',
         ...runtimeOperationsOverride?.start,
       },
     },
@@ -249,25 +249,17 @@ describe('environment Open click smoke', () => {
           freshness: 'fresh',
           offline_reason_code: 'not_started',
         },
-        runtime_management: {
-          support: 'supported',
-          authorization: { state: 'allowed' },
-          readiness: 'temporarily_unavailable',
-          reason_code: 'runtime_gateway_temporarily_unavailable',
-        },
         runtime_operations: {
           start: {
             availability: 'available',
-            method: 'runtime_gateway',
+            method: testCase.kind === 'local_environment' ? 'local_host' : 'ssh_host',
           },
-          restart: { availability: 'available', method: 'runtime_gateway' },
-          update: { availability: 'available', method: 'runtime_gateway' },
+          restart: { availability: 'available', method: testCase.kind === 'local_environment' ? 'local_host' : 'ssh_host' },
+          update: { availability: 'available', method: testCase.kind === 'local_environment' ? 'local_host' : 'ssh_host' },
         },
       });
-      expect(stopped.gateway_id).toBe(`gw-${testCase.kind === 'local_environment'
-        ? `local-${testCase.platform}`
-        : `ssh-${testCase.platform}`}`);
-      expect(stopped.gateway_env_id).toBe('env_local');
+      expect(stopped.gateway_id).toBeUndefined();
+      expect(stopped.gateway_env_id).toBeUndefined();
       expect(environmentOpenFlow(stopped)).toBe('start');
       expect(environmentOpenFlowAfterPreflight(stopped)).toBe('start');
       expect(buildProviderBackedEnvironmentActionModel(stopped).action_presentation).toMatchObject({
@@ -290,6 +282,14 @@ describe('environment Open click smoke', () => {
         checked_at_unix_ms: 10,
         freshness: 'fresh',
       },
+      runtime_operations: {
+        ...unchecked.runtime_operations,
+        start: {
+          ...unchecked.runtime_operations.start,
+          availability: 'available',
+          reason_code: undefined,
+        },
+      },
     });
     const events: string[] = [];
 
@@ -308,7 +308,7 @@ describe('environment Open click smoke', () => {
     expect(events).toEqual(['preflight', 'refresh']);
     expect(result).toEqual({
       kind: 'guidance',
-      flow: 'initialize',
+      flow: 'start',
       environment: checked,
     });
   });

@@ -376,33 +376,20 @@ describe('main routing', () => {
   it('does not expose Gateway service lifecycle recovery actions', () => {
     const mainSrc = readMainSource();
     const gatewayTypeSrc = readSharedGatewaySource();
-    const recoveryStart = mainSrc.indexOf('function gatewayRecommendedRecoveryForDiagnosis(');
-    const recoveryEnd = mainSrc.indexOf('function gatewayProbeResultsForDiagnosis(', recoveryStart);
-    expect(recoveryStart).toBeGreaterThanOrEqual(0);
-    expect(recoveryEnd).toBeGreaterThan(recoveryStart);
-    const recoverySrc = mainSrc.slice(recoveryStart, recoveryEnd);
     const nextActionsStart = mainSrc.indexOf('function gatewayDiagnosisNextActions(');
-    const nextActionsEnd = mainSrc.indexOf('function gatewayRecommendedRecoveryForDiagnosis(', nextActionsStart);
+    const nextActionsEnd = mainSrc.indexOf('function gatewayFailureTitleKeyForDiagnosis(', nextActionsStart);
     expect(nextActionsStart).toBeGreaterThanOrEqual(0);
     expect(nextActionsEnd).toBeGreaterThan(nextActionsStart);
     const nextActionsSrc = mainSrc.slice(nextActionsStart, nextActionsEnd);
 
-    expect(gatewayTypeSrc).toContain('recommended_recovery?:');
-    expect(gatewayTypeSrc).not.toContain('recommended_action?:');
-    expect(mainSrc).toContain('recommended_recovery: recommendedRecovery');
-    expect(mainSrc).toContain('switch (diagnosis.recommended_recovery ?? gatewayRecommendedRecoveryForDiagnosis(diagnosis))');
-    expect(gatewayTypeSrc).toContain("recommended_recovery?: 'start_gateway' | 'restart_gateway' | 'update_gateway';");
-    expect(recoverySrc).toContain("return diagnosis.service_state?.can_start === false ? undefined : 'start_gateway';");
-    expect(recoverySrc).toContain("return diagnosis.service_state?.can_update === false ? undefined : 'update_gateway';");
-    expect(recoverySrc).toContain("return diagnosis.service_state?.can_restart === false ? undefined : 'restart_gateway';");
-    expect(recoverySrc).toContain("case 'service_ready_catalog_failed':");
-    expect(recoverySrc).toContain("case 'trust_failed':");
-    expect(recoverySrc).toContain("case 'pairing_required':");
-    expect(recoverySrc).toContain('return undefined;');
-    expect(nextActionsSrc).toContain("kind: 'start_gateway'");
-    expect(nextActionsSrc).toContain("kind: 'restart_gateway'");
-    expect(nextActionsSrc).toContain("kind: 'update_gateway'");
-    expect(nextActionsSrc).not.toContain("kind: 'reinstall_target'");
+    expect(gatewayTypeSrc).not.toContain('recommended_recovery?:');
+    expect(mainSrc).not.toContain('gatewayRecommendedRecoveryForDiagnosis');
+    expect(mainSrc).not.toContain("recommended_recovery: 'start_gateway'");
+    expect(mainSrc).not.toContain("recommended_recovery: 'restart_gateway'");
+    expect(mainSrc).not.toContain("recommended_recovery: 'update_gateway'");
+    expect(nextActionsSrc).not.toContain("kind: 'start_gateway'");
+    expect(nextActionsSrc).not.toContain("kind: 'restart_gateway'");
+    expect(nextActionsSrc).not.toContain("kind: 'update_gateway'");
     expect(nextActionsSrc).not.toContain("kind: 'check_gateway'");
     expect(nextActionsSrc).not.toContain("kind: 'refresh_gateway_catalog'");
     expect(nextActionsSrc).not.toContain("kind: 'resolve_gateway'");
@@ -439,7 +426,6 @@ describe('main routing', () => {
     expect(diagnosisSrc).toContain('if (gatewayManagedProbeNeedsUpdate(managedProbe)) {');
     expect(diagnosisSrc).toContain("classification: 'needs_update'");
     expect(diagnosisSrc).toContain("catalog_state: 'pairing_failed'");
-    expect(diagnosisSrc).toContain("recommended_recovery: 'update_gateway'");
     expect(diagnosisSrc).toContain("classification: 'pairing_required'");
     expect(diagnosisSrc).not.toContain("recommended_recovery: 'review_trust'");
     expect(diagnosisSrc.indexOf('if (gatewayClientErrorIsPairingRejected(error)) {')).toBeLessThan(
@@ -1554,15 +1540,12 @@ describe('main routing', () => {
     expect(mainSrc).toContain('function supersedeGatewaySyncTask(gatewayID: string): void');
     expect(mainSrc).toContain('function updateGatewaySyncPoller(): void');
     expect(mainSrc).toContain('async function syncVisibleGatewaysIfNeeded(');
-    expect(mainSrc).toContain('function launcherOperationIsActiveGatewayServiceAction(');
-    expect(mainSrc).toContain('function activeGatewayServiceOperation(gatewayID: string): DesktopLauncherOperationSnapshot | null');
     expect(mainSrc).toContain("last_synced_at_ms: 0,");
     expect(mainSrc).toContain('background_sync_running: false,');
     expect(mainSrc).toContain('const serviceStatus = syncRecord?.source?.service_state?.status;');
     expect(mainSrc).toContain("serviceStatus === 'not_started' || serviceStatus === 'service_needs_update' || serviceStatus === 'needs_reinstall'");
     expect(mainSrc).toContain('if (!syncRecord?.source) {');
     expect(mainSrc).toContain('if (!record.local_enabled) {');
-    expect(mainSrc).toContain('if (activeGatewayServiceOperation(record.gateway_id)) {');
     expect(mainSrc).toContain("gatewaySyncTaskByID.set(record.gateway_id, { priority, token: taskToken, controller, task });");
     expect(loadSrc).not.toContain('inspectRuntime(');
     expect(loadSrc).not.toContain('refreshCatalog(');
@@ -1663,7 +1646,7 @@ describe('main routing', () => {
     expect(syncEnd).toBeGreaterThan(syncStart);
     const syncSrc = mainSrc.slice(syncStart, syncEnd);
     const refreshStart = mainSrc.indexOf('async function refreshGatewayStatusFromLauncher(');
-    const refreshEnd = mainSrc.indexOf('async function runGatewayServiceActionFromLauncher(', refreshStart);
+    const refreshEnd = mainSrc.indexOf('function reinstallTargetFailureCode(', refreshStart);
     expect(refreshStart).toBeGreaterThanOrEqual(0);
     expect(refreshEnd).toBeGreaterThan(refreshStart);
     const refreshSrc = mainSrc.slice(refreshStart, refreshEnd);
@@ -1708,11 +1691,7 @@ describe('main routing', () => {
     expect(syncSrc).toContain("classification: 'pairing_required'");
     expect(syncSrc).not.toContain('gatewayReinstallPairingRequired');
 
-    const actionStart = mainSrc.indexOf('async function runGatewayServiceActionFromLauncher(');
-    const actionEnd = mainSrc.indexOf('function reinstallTargetFailureCode(', actionStart);
-    const actionSrc = mainSrc.slice(actionStart, actionEnd);
-    expect(actionSrc).not.toContain('gatewayLifecycleManager()');
-    expect(actionSrc).toContain("'action_invalid'");
+    expect(mainSrc).not.toContain('runGatewayServiceActionFromLauncher');
 
     const refreshStart = mainSrc.indexOf('async function refreshGatewayFromLauncher(');
     const refreshEnd = mainSrc.indexOf('async function checkGatewayFromLauncher(', refreshStart);
@@ -1749,14 +1728,7 @@ describe('main routing', () => {
 
   it('keeps Standalone Gateway lifecycle actions host-managed and unavailable in Desktop', () => {
     const mainSrc = readMainSource();
-    const serviceStart = mainSrc.indexOf('async function runGatewayServiceActionFromLauncher(');
-    const serviceEnd = mainSrc.indexOf('function reinstallTargetFailureCode(', serviceStart);
-    expect(serviceStart).toBeGreaterThanOrEqual(0);
-    expect(serviceEnd).toBeGreaterThan(serviceStart);
-    const serviceSrc = mainSrc.slice(serviceStart, serviceEnd);
-    expect(serviceSrc).toContain("'Standalone Gateways expose access and catalog operations only.");
-    expect(serviceSrc).toContain("'action_invalid'");
-    expect(serviceSrc).not.toContain('gatewayLifecycleManager()');
+    expect(mainSrc).not.toContain('runGatewayServiceActionFromLauncher');
   });
 
   it('opens Gateway-backed Environments only through explicit access endpoints', () => {

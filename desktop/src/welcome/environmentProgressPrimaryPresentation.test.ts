@@ -344,27 +344,6 @@ describe('environmentProgressPrimaryPresentation', () => {
       label: 'Refreshing...',
       icon: 'play',
     });
-    expect(environmentProgressPrimaryPresentation(
-      lifecycleActionProgress({ action: 'start_gateway', operation: 'start', status: 'running', phase: 'starting_gateway_service' }),
-    )).toMatchObject({
-      kind: 'progress_trigger',
-      label: 'Starting...',
-      icon: 'play',
-    });
-    expect(environmentProgressPrimaryPresentation(
-      lifecycleActionProgress({ action: 'restart_gateway', operation: 'restart', status: 'running', phase: 'starting_gateway_service' }),
-    )).toMatchObject({
-      kind: 'progress_trigger',
-      label: 'Restarting...',
-      icon: 'play',
-    });
-    expect(environmentProgressPrimaryPresentation(
-      lifecycleActionProgress({ action: 'update_gateway', operation: 'update', status: 'running', phase: 'installing_gateway_package' }),
-    )).toMatchObject({
-      kind: 'progress_trigger',
-      label: 'Updating...',
-      icon: 'play',
-    });
     expect(environmentProgressPrimaryPresentation({
       action: 'check_gateway',
       operation_key: 'gw-demo:check',
@@ -455,15 +434,6 @@ describe('environmentProgressPrimaryPresentation', () => {
     expect(environmentProgressPrimaryPresentation(
       lifecycleActionProgress({ action: 'refresh_gateway_catalog', operation: 'start', status: 'failed', phase: 'starting_runtime_process' }),
     )).toMatchObject({ label: 'Refresh failed' });
-    expect(environmentProgressPrimaryPresentation(
-      lifecycleActionProgress({ action: 'start_gateway', operation: 'start', status: 'failed', phase: 'starting_gateway_service' }),
-    )).toMatchObject({ label: 'Start failed' });
-    expect(environmentProgressPrimaryPresentation(
-      lifecycleActionProgress({ action: 'restart_gateway', operation: 'restart', status: 'failed', phase: 'starting_gateway_service' }),
-    )).toMatchObject({ label: 'Restart failed' });
-    expect(environmentProgressPrimaryPresentation(
-      lifecycleActionProgress({ action: 'update_gateway', operation: 'update', status: 'failed', phase: 'installing_gateway_package' }),
-    )).toMatchObject({ label: 'Update failed' });
     expect(environmentProgressPrimaryPresentation({
       action: 'check_gateway',
       operation_key: 'gw-demo:check',

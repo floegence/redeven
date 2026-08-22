@@ -2091,7 +2091,10 @@ export function buildDesktopWelcomeSnapshot(
     args.savedRuntimeTargetHealth ?? {},
     args.managedRuntimePresenceByTargetID ?? {},
   );
-  const gatewaySources = args.gatewaySources ?? [];
+  // Only explicit URL records are Standalone Gateways. Direct host/container
+  // targets belong to Environment storage and must never reach either the
+  // Gateway page or the Gateway-backed Environment projection.
+  const gatewaySources = (args.gatewaySources ?? []).filter((gateway) => gateway.connection_kind === 'url');
   const environments = sortEnvironmentEntriesByStableOrder(aggregateDesktopEnvironmentEntries({
     entries: baseEnvironments,
     controlPlanes,

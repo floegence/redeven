@@ -2,13 +2,7 @@ import type { DesktopSettingsSurfaceSnapshot } from './desktopSettingsSurface';
 import type { DesktopControlPlaneSummary, DesktopProviderRuntimeManagementCapability } from './controlPlaneProvider';
 import { normalizeControlPlaneOrigin } from './controlPlaneProvider';
 import {
-  normalizeDesktopSSHAuthMode,
-  normalizeDesktopSSHBootstrapStrategy,
   normalizeDesktopSSHConnectTimeoutSeconds,
-  normalizeDesktopSSHDestination,
-  normalizeDesktopSSHPort,
-  normalizeDesktopSSHReleaseBaseURL,
-  normalizeDesktopSSHRuntimeRoot,
   type DesktopSSHEnvironmentDetails,
 } from './desktopSSH';
 import type {
@@ -46,8 +40,6 @@ import type {
 import {
   normalizeDesktopRuntimeHostAccess,
   normalizeDesktopRuntimePlacement,
-  normalizeDesktopContainerEngine,
-  type DesktopContainerEngine,
   type DesktopRuntimeHostAccess,
   type DesktopRuntimePlacement,
   type DesktopRuntimeTargetID,
@@ -539,6 +531,7 @@ export type DesktopLauncherOperationSnapshot = Readonly<{
   open_progress?: DesktopOpenConnectionProgress;
   open_timing?: DesktopOpenConnectionTiming;
   step_progress?: DesktopStepProgress;
+  reinstall_preview?: DesktopReinstallTargetPreview;
   gateway_diagnosis?: DesktopGatewayDiagnosis;
   presentation_context?: 'flower_warmup';
   runtime_confirmation?: DesktopRuntimeOperationConfirmationSummary;
@@ -809,38 +802,6 @@ export type DesktopLauncherActionRequest = Readonly<
       allow_loopback_http: boolean;
     }
   | {
-      kind: 'upsert_gateway';
-      gateway_id?: string;
-      display_name: string;
-      connection_kind: 'ssh_host';
-      ssh_destination: string;
-      ssh_port: number | null;
-      auth_mode: DesktopSSHEnvironmentDetails['auth_mode'];
-      ssh_password: string;
-      ssh_password_mode: 'keep' | 'replace' | 'clear';
-      connect_timeout_seconds: number | null;
-      runtime_root: string;
-      bootstrap_strategy: DesktopSSHEnvironmentDetails['bootstrap_strategy'];
-      release_base_url: string;
-    }
-  | {
-      kind: 'upsert_gateway';
-      gateway_id?: string;
-      display_name: string;
-      connection_kind: 'ssh_container';
-      ssh_destination: string;
-      ssh_port: number | null;
-      auth_mode: DesktopSSHEnvironmentDetails['auth_mode'];
-      ssh_password: string;
-      ssh_password_mode: 'keep' | 'replace' | 'clear';
-      connect_timeout_seconds: number | null;
-      container_engine: DesktopContainerEngine;
-      container_id: string;
-      container_ref: string;
-      container_label: string;
-      runtime_root: string;
-    }
-  | {
       kind: 'refresh_gateway';
       gateway_id: string;
     }
@@ -890,6 +851,7 @@ export type DesktopLauncherActionRequest = Readonly<
       kind: 'reinstall_target';
       environment_id: string;
       preflight_id: string;
+      operation_key?: string;
       impact_acknowledged: true;
     }
   | {
@@ -1003,6 +965,7 @@ export type DesktopLauncherActionRequest = Readonly<
 export type DesktopLauncherActionSuccess = Readonly<{
   ok: true;
   outcome: DesktopLauncherActionOutcome;
+  operation_key?: string;
   session_key?: string;
   utility_window_kind?: 'launcher' | 'environment_settings';
   reinstall_preview?: DesktopReinstallTargetPreview;
@@ -1010,6 +973,7 @@ export type DesktopLauncherActionSuccess = Readonly<{
 
 export type DesktopReinstallTargetPreview = Readonly<{
   preflight_id: string;
+  operation_key: string;
   environment_id: string;
   label: string;
   target_kind: 'local_host' | 'ssh_host' | 'local_container' | 'ssh_container';
@@ -1029,7 +993,12 @@ export type DesktopReinstallTargetPreview = Readonly<{
     stop_authority: 'automatic' | 'blocked';
     reason_code?: string;
   }>[];
-  deleted_data: readonly string[];
+  deleted_data_keys: readonly (
+    | 'gateway_runtime_managed_packages'
+    | 'workspace_projects_application_data'
+    | 'floret_redevplugin_data'
+    | 'trust_identity_catalog_environment_config'
+  )[];
   expires_at_unix_ms: number;
 }>;
 
@@ -1077,6 +1046,7 @@ export type DesktopLauncherActionProgress = Readonly<{
   open_progress?: DesktopOpenConnectionProgress;
   open_timing?: DesktopOpenConnectionTiming;
   step_progress?: DesktopStepProgress;
+  reinstall_preview?: DesktopReinstallTargetPreview;
   gateway_diagnosis?: DesktopGatewayDiagnosis;
   presentation_context?: 'flower_warmup';
   runtime_confirmation?: DesktopRuntimeOperationConfirmationSummary;
@@ -1583,56 +1553,8 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
           allow_loopback_http: (candidate as { allow_loopback_http?: unknown }).allow_loopback_http === true,
         };
       }
-      if (connectionKind === 'ssh_host') {
-        try {
-          const runtimeRoot = normalizeDesktopSSHRuntimeRoot((candidate as { runtime_root?: unknown }).runtime_root);
-          return {
-            kind,
-            gateway_id: gatewayID,
-            display_name: displayName,
-            connection_kind: 'ssh_host',
-            ssh_destination: normalizeDesktopSSHDestination((candidate as { ssh_destination?: unknown }).ssh_destination),
-            ssh_port: normalizeDesktopSSHPort((candidate as { ssh_port?: unknown }).ssh_port),
-            auth_mode: normalizeDesktopSSHAuthMode((candidate as { auth_mode?: unknown }).auth_mode),
-            ssh_password: String((candidate as { ssh_password?: unknown }).ssh_password ?? ''),
-            ssh_password_mode: normalizeSSHPasswordMode((candidate as { ssh_password_mode?: unknown }).ssh_password_mode),
-            connect_timeout_seconds: normalizeDesktopSSHConnectTimeoutSeconds((candidate as { connect_timeout_seconds?: unknown }).connect_timeout_seconds),
-            runtime_root: runtimeRoot,
-            bootstrap_strategy: normalizeDesktopSSHBootstrapStrategy((candidate as { bootstrap_strategy?: unknown }).bootstrap_strategy),
-            release_base_url: normalizeDesktopSSHReleaseBaseURL((candidate as { release_base_url?: unknown }).release_base_url),
-          };
-        } catch {
-          return null;
-        }
-      }
-      if (connectionKind === 'ssh_container') {
-        const containerID = compact((candidate as { container_id?: unknown }).container_id);
-        if (containerID === '') {
-          return null;
-        }
-        try {
-          const runtimeRoot = normalizeDesktopSSHRuntimeRoot((candidate as { runtime_root?: unknown }).runtime_root);
-          return {
-            kind,
-            gateway_id: gatewayID,
-            display_name: displayName,
-            connection_kind: 'ssh_container',
-            ssh_destination: normalizeDesktopSSHDestination((candidate as { ssh_destination?: unknown }).ssh_destination),
-            ssh_port: normalizeDesktopSSHPort((candidate as { ssh_port?: unknown }).ssh_port),
-            auth_mode: normalizeDesktopSSHAuthMode((candidate as { auth_mode?: unknown }).auth_mode),
-            ssh_password: String((candidate as { ssh_password?: unknown }).ssh_password ?? ''),
-            ssh_password_mode: normalizeSSHPasswordMode((candidate as { ssh_password_mode?: unknown }).ssh_password_mode),
-            connect_timeout_seconds: normalizeDesktopSSHConnectTimeoutSeconds((candidate as { connect_timeout_seconds?: unknown }).connect_timeout_seconds),
-            container_engine: normalizeDesktopContainerEngine((candidate as { container_engine?: unknown }).container_engine),
-            container_id: containerID,
-            container_ref: compact((candidate as { container_ref?: unknown }).container_ref) || compact((candidate as { container_label?: unknown }).container_label) || containerID,
-            container_label: compact((candidate as { container_label?: unknown }).container_label) || containerID,
-            runtime_root: runtimeRoot,
-          };
-        } catch {
-          return null;
-        }
-      }
+      // SSH and container coordinates are Managed Environment targets. They
+      // must never be accepted as standalone Gateway records.
       return null;
     }
     case 'refresh_gateway':
@@ -1640,10 +1562,6 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
     case 'pair_gateway':
     case 'sync_gateway':
     case 'set_gateway_enabled':
-    case 'start_gateway':
-    case 'stop_gateway':
-    case 'restart_gateway':
-    case 'update_gateway':
     case 'refresh_gateway_status':
     case 'refresh_gateway_catalog':
     case 'delete_gateway': {
@@ -1691,15 +1609,6 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
           ...(startPolicy ? { start_policy: startPolicy as Extract<DesktopGatewayStartPolicy, 'start_if_needed'> } : {}),
         };
       }
-      if (kind === 'stop_gateway' || kind === 'restart_gateway' || kind === 'update_gateway') {
-        return {
-          kind,
-          gateway_id: gatewayID,
-          ...(((candidate as { impact_acknowledged?: unknown }).impact_acknowledged === true)
-            ? { impact_acknowledged: true }
-            : {}),
-        } as DesktopLauncherActionRequest;
-      }
       if (kind === 'refresh_gateway_status') {
         return {
           kind,
@@ -1711,6 +1620,13 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         gateway_id: gatewayID,
       };
     }
+    case 'start_gateway':
+    case 'stop_gateway':
+    case 'restart_gateway':
+    case 'update_gateway':
+      // Standalone Gateways are access/catalog sources. Runtime lifecycle is
+      // owned by Managed Environment targets and is never accepted here.
+      return null;
     case 'preview_reinstall_target': {
       const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
       if (environmentID === '') {
@@ -1724,6 +1640,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
     case 'reinstall_target': {
       const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
       const preflightID = compact((candidate as { preflight_id?: unknown }).preflight_id);
+      const operationKey = compact((candidate as { operation_key?: unknown }).operation_key);
       if (environmentID === '' || !/^reinstall_[0-9a-f-]{36}$/iu.test(preflightID)) {
         return null;
       }
@@ -1734,6 +1651,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         kind,
         environment_id: environmentID,
         preflight_id: preflightID,
+        ...(operationKey ? { operation_key: operationKey } : {}),
         impact_acknowledged: true,
       };
     }

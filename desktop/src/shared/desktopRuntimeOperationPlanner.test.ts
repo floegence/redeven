@@ -20,13 +20,13 @@ describe('desktopRuntimeOperationPlanner', () => {
     expect(plans.open).toMatchObject({ availability: 'available', method: 'ssh_host' });
     expect(plans.start).toMatchObject({
       availability: 'unavailable',
-      method: 'runtime_gateway',
+      method: 'ssh_host',
       reason_code: 'runtime_already_running',
     });
     for (const operation of ['stop', 'restart', 'update'] as const) {
       expect(plans[operation]).toMatchObject({
         availability: 'available',
-        method: 'runtime_gateway',
+        method: 'ssh_host',
       });
       expect(plans[operation].reason_code).not.toBe('runtime_gateway_setup_required');
     }
@@ -46,10 +46,10 @@ describe('desktopRuntimeOperationPlanner', () => {
       openable: false,
     });
 
-    expect(plans.start).toMatchObject({ availability: 'available', method: 'runtime_gateway' });
-    expect(plans.stop).toMatchObject({ availability: 'available', method: 'runtime_gateway' });
-    expect(plans.restart).toMatchObject({ availability: 'available', method: 'runtime_gateway' });
-    expect(plans.update).toMatchObject({ availability: 'available', method: 'runtime_gateway' });
+    expect(plans.start).toMatchObject({ availability: 'available', method: 'ssh_host' });
+    expect(plans.stop).toMatchObject({ availability: 'available', method: 'ssh_host' });
+    expect(plans.restart).toMatchObject({ availability: 'available', method: 'ssh_host' });
+    expect(plans.update).toMatchObject({ availability: 'available', method: 'ssh_host' });
   });
 
   it('does not expose lifecycle actions when the connection cannot host a supervisor', () => {

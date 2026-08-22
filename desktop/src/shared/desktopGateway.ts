@@ -212,7 +212,6 @@ export type DesktopGatewayDiagnosis = Readonly<{
   service_state?: DesktopGatewayServiceState;
   catalog_state?: DesktopGatewaySyncState;
   trust_state?: DesktopGatewayTrustState;
-  recommended_recovery?: 'start_gateway' | 'restart_gateway' | 'update_gateway';
   probe_results?: readonly DesktopGatewayDiagnosisProbeResult[];
   managed_probe?: DesktopGatewayManagedProbe;
   error_code?: string;

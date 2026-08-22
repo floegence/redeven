@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { normalizeDesktopControlPlaneProvider } from '../shared/controlPlaneProvider';
 import type { DesktopRuntimePresence } from '../shared/desktopRuntimePresence';
+import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import { buildDesktopRuntimeOperationPlans } from '../shared/desktopRuntimeOperationPlanner';
 import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
 import {
@@ -46,6 +47,22 @@ const testProvider = normalizeDesktopControlPlaneProvider({
   documentation_url: 'https://provider.example.invalid/help/control-plane-providers',
   access_points: [testAccessPoint],
 });
+
+function gatewaySource(overrides: Partial<DesktopGatewaySource> = {}): DesktopGatewaySource {
+  return {
+    gateway_id: 'legacy-direct',
+    display_name: 'Legacy direct target',
+    local_enabled: true,
+    connection_kind: 'ssh_container',
+    management_capability: 'managed_ssh_container',
+    capabilities: [],
+    status: 'online',
+    created_at_ms: 1,
+    updated_at_ms: 1,
+    environments: [],
+    ...overrides,
+  };
+}
 
 function providerRuntimeState(envPublicID = 'env_demo') {
   return {
@@ -233,6 +250,18 @@ function localRuntimePresence(
 }
 
 describe('desktopWelcomeState', () => {
+  it('keeps direct host and container targets out of Gateway sources', () => {
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences(),
+      gatewaySources: [gatewaySource({
+        connection_kind: 'ssh_container',
+        environments: [],
+      })],
+    });
+
+    expect(snapshot.gateway_sources).toEqual([]);
+    expect(snapshot.environments.some((entry) => entry.kind === 'gateway_environment')).toBe(false);
+  });
   it('orders environment entries by pinned state and stable creation time', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
@@ -698,7 +727,7 @@ describe('desktopWelcomeState', () => {
         runtime_operations: expect.objectContaining({
           stop: expect.objectContaining({
             availability: 'available',
-            method: 'runtime_gateway',
+            method: 'local_host',
           }),
         }),
         runtime_health: expect.objectContaining({
@@ -1136,7 +1165,7 @@ describe('desktopWelcomeState', () => {
         }),
         update: expect.objectContaining({
           availability: 'available',
-          method: 'runtime_gateway',
+          method: 'ssh_host',
         }),
       }),
     });
@@ -1487,7 +1516,7 @@ describe('desktopWelcomeState', () => {
       runtime_operations: expect.objectContaining({
         stop: expect.objectContaining({
           availability: 'available',
-          method: 'runtime_gateway',
+          method: 'local_host',
         }),
       }),
     });
@@ -1534,7 +1563,7 @@ describe('desktopWelcomeState', () => {
         }),
         update: expect.objectContaining({
           availability: 'available',
-          method: 'runtime_gateway',
+          method: 'local_host',
         }),
       }),
     });
@@ -1681,7 +1710,7 @@ describe('desktopWelcomeState', () => {
         open: expect.objectContaining({ availability: 'available' }),
         start: expect.objectContaining({
           availability: 'unavailable',
-          method: 'runtime_gateway',
+          method: 'local_container_exec',
           reason_code: 'runtime_already_running',
         }),
       }),
@@ -1756,19 +1785,19 @@ describe('desktopWelcomeState', () => {
         }),
         start: expect.objectContaining({
           availability: 'available',
-          method: 'runtime_gateway',
+          method: 'local_container_exec',
         }),
         stop: expect.objectContaining({
           availability: 'available',
-          method: 'runtime_gateway',
+          method: 'local_container_exec',
         }),
         restart: expect.objectContaining({
           availability: 'available',
-          method: 'runtime_gateway',
+          method: 'local_container_exec',
         }),
         update: expect.objectContaining({
           availability: 'available',
-          method: 'runtime_gateway',
+          method: 'local_container_exec',
         }),
       }),
       provider_runtime_link_target: expect.objectContaining({
@@ -1832,7 +1861,7 @@ describe('desktopWelcomeState', () => {
         }),
         start: expect.objectContaining({
           availability: 'available',
-          method: 'runtime_gateway',
+          method: 'local_container_exec',
         }),
       }),
       provider_runtime_link_target: expect.objectContaining({
