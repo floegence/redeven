@@ -6128,26 +6128,41 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       progress: null,
     });
     try {
+      let deleteResult: Awaited<ReturnType<typeof props.runtime.launcher.performAction>> | null = null;
       if (target.kind === 'gateway_environment') {
         const gatewayID = trimString(target.gateway_id);
         const gatewayEnvID = trimString(target.gateway_env_id);
         if (!gatewayID || !gatewayEnvID) {
           throw new Error(i18n().t('environmentCenter.gatewayEnvironmentProfileUnavailable'));
         }
-        await props.runtime.launcher.performAction({
+        deleteResult = await props.runtime.launcher.performAction({
           kind: 'delete_gateway_environment_profile',
           gateway_id: gatewayID,
           gateway_env_id: gatewayEnvID,
         });
       } else {
-        await props.runtime.launcher.performAction({
-          kind: target.managed_runtime_placement?.kind === 'container_process'
-            ? 'delete_saved_runtime_target'
-            : target.kind === 'ssh_environment'
-              ? 'delete_saved_ssh_environment'
-              : 'delete_saved_environment',
-          environment_id: target.id,
+        const registrationKind = target.registration_kind;
+        const deleteAction = registrationKind === 'runtime_target' || registrationKind === 'ssh_runtime_target'
+          ? 'delete_saved_runtime_target' as const
+          : registrationKind === 'ssh_environment'
+            ? 'delete_saved_ssh_environment' as const
+            : registrationKind === 'saved_environment'
+              ? 'delete_saved_environment' as const
+              : target.managed_runtime_placement_target_id
+                ? 'delete_saved_runtime_target' as const
+                : target.kind === 'ssh_environment'
+                  ? 'delete_saved_ssh_environment' as const
+                  : 'delete_saved_environment' as const;
+        const deleteEnvironmentID = target.registration_runtime_target_id
+          ?? target.registration_environment_id
+          ?? target.id;
+        deleteResult = await props.runtime.launcher.performAction({
+          kind: deleteAction,
+          environment_id: deleteEnvironmentID,
         });
+      }
+      if (!deleteResult || !deleteResult.ok || (deleteResult.outcome !== 'deleted_environment' && deleteResult.outcome !== 'deleted_gateway_environment')) {
+        throw new Error(deleteResult && !deleteResult.ok ? deleteResult.message : i18n().t('environmentCenter.connectionRemoved'));
       }
       await refreshSnapshot();
       setDeleteTarget(null);

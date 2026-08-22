@@ -349,6 +349,11 @@ export type DesktopGatewayStartRequiredPayload = Readonly<{
 export type DesktopEnvironmentEntry = Readonly<{
   id: string;
   kind: DesktopEnvironmentEntryKind;
+  /** Storage owner used for destructive Desktop actions; never infer this from UI kind. */
+  registration_kind?: 'local_environment' | 'saved_environment' | 'ssh_environment' | 'runtime_target' | 'ssh_runtime_target';
+  registration_environment_id?: string;
+  registration_runtime_target_id?: DesktopRuntimeTargetID;
+  registration_ssh_environment_id?: string;
   label: string;
   local_ui_url: string;
   secondary_text: string;

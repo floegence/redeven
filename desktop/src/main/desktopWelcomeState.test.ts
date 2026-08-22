@@ -2907,4 +2907,66 @@ describe('desktopWelcomeState', () => {
     expect(issue.diagnostics_copy).toContain('provider origin: https://dev.redeven.test');
     expect(issue.diagnostics_copy).toContain('http status: 502');
   });
+
+  it('merges an SSH connection and its matching Runtime target into one registered card', () => {
+    const connectionID = 'ssh:build-host:default:key_agent:remote_default';
+    const targetID = 'ssh:host:build-host:runtime';
+    const connection = {
+      id: connectionID,
+      label: 'Build host',
+      ssh_destination: 'build-host',
+      ssh_port: null,
+      auth_mode: 'key_agent' as const,
+      runtime_root: 'remote_default',
+      bootstrap_strategy: 'auto' as const,
+      release_base_url: '',
+      connect_timeout_seconds: 10,
+      pinned: false,
+      auto_runtime_probe_enabled: true,
+      created_at_ms: 1,
+      last_used_at_ms: 1,
+    };
+    const target = {
+      schema_version: 1 as const,
+      id: targetID as `ssh:${string}`,
+      label: 'Build runtime',
+      host_access: {
+        kind: 'ssh_host' as const,
+        ssh: {
+          ssh_destination: 'build-host',
+          ssh_port: null,
+          auth_mode: 'key_agent' as const,
+          connect_timeout_seconds: 10,
+        },
+      },
+      placement: {
+        kind: 'host_process' as const,
+        runtime_root: 'remote_default',
+        bootstrap_strategy: 'auto' as const,
+        release_base_url: '',
+      },
+      pinned: false,
+      auto_runtime_probe_enabled: true,
+      last_used_at_ms: 1,
+      created_at_ms: 1,
+      updated_at_ms: 1,
+    };
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        saved_ssh_environments: [connection],
+        saved_runtime_targets: [target],
+      }),
+    });
+    const cards = snapshot.environments.filter((entry) => (
+      entry.registration_ssh_environment_id === connectionID
+      || entry.registration_runtime_target_id === targetID
+    ));
+    expect(cards).toHaveLength(1);
+    expect(cards[0]).toMatchObject({
+      registration_kind: 'ssh_runtime_target',
+      registration_ssh_environment_id: connectionID,
+      registration_runtime_target_id: targetID,
+      ssh_details: expect.objectContaining({ ssh_destination: 'build-host' }),
+    });
+  });
 });

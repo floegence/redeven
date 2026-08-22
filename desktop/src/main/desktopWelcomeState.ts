@@ -1641,6 +1641,14 @@ function buildEnvironmentEntries(
     });
   });
   const runtimeLinkTargets = [localRuntimeTarget, ...sshRuntimeTargets, ...savedRuntimeLinkTargets];
+  const sshConnectionForRuntimeTarget = new Map<string, DesktopSavedSSHEnvironment>();
+  for (const connection of preferences.saved_ssh_environments) {
+    for (const target of preferences.saved_runtime_targets) {
+      if (runtimeTargetMatchesSSHConnection(target, connection)) {
+        sshConnectionForRuntimeTarget.set(target.id, connection);
+      }
+    }
+  }
   const providerEnvironmentCandidatesForTarget = (
     runtimeTargetID: DesktopProviderRuntimeLinkTargetID,
   ): readonly DesktopProviderEnvironmentCandidate[] => providerEnvironmentCandidatesForSnapshot(
@@ -1722,6 +1730,9 @@ function buildEnvironmentEntries(
     ));
   }
   for (const environment of sshCatalog) {
+    if ([...preferences.saved_runtime_targets].some((target) => runtimeTargetMatchesSSHConnection(target, environment))) {
+      continue;
+    }
     entries.push(buildSavedSSHEnvironmentEntry(
       environment,
       openSessionBySSHEnvironment(openSessions, environment),
@@ -1739,6 +1750,7 @@ function buildEnvironmentEntries(
       savedRuntimeTargetHealth[target.id],
       managedRuntimePresenceByTargetID[runtimeTargetID],
       providerEnvironmentCandidatesForTarget(runtimeTargetID),
+      sshConnectionForRuntimeTarget.get(target.id),
     ));
   }
 
@@ -1769,6 +1781,8 @@ function buildSavedEnvironmentEntry(
   return {
     id: environment.id,
     kind: 'external_local_ui',
+    registration_kind: 'saved_environment',
+    registration_environment_id: environment.id,
     label: environment.label,
     local_ui_url: environment.local_ui_url,
     secondary_text: environment.local_ui_url,
@@ -1862,6 +1876,9 @@ function buildSavedSSHEnvironmentEntry(
   return {
     id: environment.id,
     kind: 'ssh_environment',
+    registration_kind: 'ssh_environment',
+    registration_environment_id: environment.id,
+    registration_ssh_environment_id: environment.id,
     label: environment.label,
     local_ui_url: presence?.local_ui_url ?? openSession?.entry_url ?? openSession?.startup?.local_ui_url ?? runtimeHealth.local_ui_url ?? '',
     secondary_text: environment.ssh_port === null
@@ -1942,12 +1959,37 @@ function sshDetailsFromRuntimeTarget(target: DesktopSavedRuntimeTarget): Desktop
   };
 }
 
+function registeredRuntimeRootsMatch(left: string, right: string): boolean {
+  const normalize = (value: string): string => {
+    const compactValue = compact(value);
+    return compactValue === '~/.redeven' || compactValue === DEFAULT_DESKTOP_SSH_RUNTIME_ROOT
+      ? DEFAULT_DESKTOP_SSH_RUNTIME_ROOT
+      : compactValue;
+  };
+  return normalize(left) === normalize(right);
+}
+
+function runtimeTargetMatchesSSHConnection(
+  target: DesktopSavedRuntimeTarget,
+  connection: DesktopSavedSSHEnvironment,
+): boolean {
+  if (target.host_access.kind !== 'ssh_host' || target.placement.kind !== 'host_process') {
+    return false;
+  }
+  const ssh = target.host_access.ssh;
+  return ssh.ssh_destination === connection.ssh_destination
+    && ssh.ssh_port === connection.ssh_port
+    && ssh.auth_mode === connection.auth_mode
+    && registeredRuntimeRootsMatch(target.placement.runtime_root, connection.runtime_root);
+}
+
 function buildSavedRuntimeTargetEntry(
   target: DesktopSavedRuntimeTarget,
   openSession: DesktopSessionSummary | null,
   cachedRuntimeHealth: DesktopRuntimeHealth | undefined,
   presence: DesktopRuntimePresence | undefined,
   providerEnvironmentCandidates: readonly DesktopProviderEnvironmentCandidate[],
+  connection?: DesktopSavedSSHEnvironment,
 ): DesktopEnvironmentEntry {
   const isOpen = sessionIsOpen(openSession);
   const isOpening = sessionIsOpening(openSession);
@@ -2007,11 +2049,15 @@ function buildSavedRuntimeTargetEntry(
   return {
     id: target.id,
     kind: targetKind,
+    registration_kind: connection ? 'ssh_runtime_target' : 'runtime_target',
+    registration_environment_id: target.id,
+    registration_runtime_target_id: target.id,
+    ...(connection ? { registration_ssh_environment_id: connection.id } : {}),
     label: target.label,
     local_ui_url: localUIURL,
     secondary_text: runtimeTargetSecondaryText(effectiveTarget),
-    ssh_details: sshDetailsFromRuntimeTarget(target),
-    ssh_password_configured: target.ssh_password_configured,
+    ssh_details: connection ?? sshDetailsFromRuntimeTarget(target),
+    ssh_password_configured: connection?.ssh_password_configured ?? target.ssh_password_configured,
     pinned: target.pinned,
     tag: isOpen ? 'Open' : 'Saved',
     category: 'saved',
