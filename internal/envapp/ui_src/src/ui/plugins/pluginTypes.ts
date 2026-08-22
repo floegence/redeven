@@ -292,11 +292,6 @@ export type PluginInstallExecutionProjection = Readonly<{
   observation: PluginInstallObservation;
   execution?: PluginExecution;
   events: readonly PluginEvent[];
-  submission?: Readonly<{
-    requestID: string;
-    inspection: OfficialPluginReleaseInspection;
-    retrySameRequest: boolean;
-  }>;
   startFailure?: Readonly<{
     code: PluginPlatformErrorCode;
     retryable: boolean;
