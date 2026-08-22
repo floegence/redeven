@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
-import { createThreadCache, type ThreadView } from './threadCache';
+import { canReplaceThreadView, createThreadCache, type ThreadView } from './threadCache';
 
 function thread(id: string, version: number, text: string): FlowerThreadSnapshot {
   return {
@@ -17,6 +17,15 @@ function view(id: string, version: number, text: string): ThreadView {
 }
 
 describe('ThreadCache', () => {
+  it('uses the same ordering predicate for accepted and stale detail views', () => {
+    const current = view('a', 4, 'current');
+    expect(canReplaceThreadView(undefined, current)).toBe(true);
+    expect(canReplaceThreadView(current, view('a', 5, 'newer'))).toBe(true);
+    expect(canReplaceThreadView(current, view('a', 3, 'older'))).toBe(false);
+    expect(canReplaceThreadView({ ...current, connectionEpoch: 2 }, { ...view('a', 1, 'reconnected'), connectionEpoch: 1 })).toBe(false);
+    expect(canReplaceThreadView({ ...current, connectionEpoch: 2 }, { ...view('a', 1, 'reconnected'), connectionEpoch: 3 })).toBe(true);
+  });
+
   it('replaces the ordered summary collection without touching cached detail', () => {
     let cache = createThreadCache().replaceView(view('a', 4, 'detail-a'));
     cache = cache.replaceSummaries([

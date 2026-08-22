@@ -92,4 +92,58 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(cardB.getAttribute('data-flower-thread-active')).toBe('true');
     expect(runtime.querySelector('.flower-composer-mark-row')).toBeNull();
   });
+
+  it('recovers a waiting approval when only the selected summary arrives', async () => {
+    const running = thread({
+      thread_id: 'thread-summary-approval',
+      title: 'Summary approval',
+      status: 'running',
+      active_run_id: 'turn-a',
+    });
+    const approvalAction = {
+      action_id: 'approval-summary',
+      origin: 'main_tool' as const,
+      run_id: 'turn-a',
+      tool_id: 'tool-a',
+      tool_name: 'terminal.exec',
+      state: 'requested' as const,
+      status: 'pending' as const,
+      requested_at_ms: 4,
+      can_approve: true,
+      queue_order: 1,
+      summary: { label: 'Run command' },
+    };
+    const waiting = thread({
+      ...running,
+      status: 'waiting_approval',
+      approval_pending: true,
+      approval_pending_count: 1,
+      approval_actions: [approvalAction],
+      updated_at_ms: 4,
+    });
+    const stream = controlledWorkspaceStream([{
+      schema_version: 1,
+      kind: 'ready',
+      summaries: [running],
+    }]);
+    let latest = running;
+    const surfaceAdapter = {
+      ...adapter(true),
+      listThreads: vi.fn(async () => [latest]),
+      loadThread: vi.fn(async () => liveBootstrap(latest, latest === waiting ? 4 : 1)),
+      connectLiveStream: stream.connect,
+    };
+    const runtime = renderSurfaceWithAdapter(surfaceAdapter);
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-summary-approval"]')));
+    (runtime.querySelector('[data-thread-id="thread-summary-approval"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('[data-flower-thread-status="running"]') !== null);
+
+    latest = waiting;
+    stream.push({ schema_version: 1, kind: 'summary.batch', summaries: [waiting] });
+
+    await waitFor(() => runtime.querySelector('[data-flower-bottom-mode="approval"]') !== null);
+    expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();
+    expect(surfaceAdapter.loadThread.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
 });
