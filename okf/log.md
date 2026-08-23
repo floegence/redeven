@@ -1,5 +1,12 @@
 # Redeven OKF Update Log
 
+## 2026-08-23
+* **Flower terminal detail convergence**: Flower now orders every HTTP and live
+  detail through Floret `view_version`, uses SSE epochs only to fence old
+  callbacks, and revalidates a selected summary with one bounded recovery path.
+  Lost terminal frames no longer leave stale thinking visible or require a
+  thread switch; failed recovery preserves the transcript and offers retry.
+
 ## 2026-08-22
 * **Supplemental context, atomic stop, and Floret v4.0.17 adoption**: Redeven now
   consumes the published Floret v4.0.17 module. Flower passes turn-scoped file

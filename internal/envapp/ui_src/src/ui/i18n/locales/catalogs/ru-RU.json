@@ -4007,6 +4007,8 @@
       "loadErrorTitle": "Flower не удалось загрузить.",
       "threadLoadErrorTitle": "Не удалось загрузить беседу.",
       "threadLoading": "Беседа загружается...",
+      "threadSyncingLatest": "Синхронизация последнего ответа...",
+      "threadSyncFailed": "Flower не удалось синхронизировать последний ответ. Повторите попытку.",
       "composerErrorTitle": "Flower не смог отправить сообщение.",
       "stopErrorTitle": "Flower не смог остановить этот ответ.",
       "modelStatusPreparing": "Подготовка запроса к модели...",

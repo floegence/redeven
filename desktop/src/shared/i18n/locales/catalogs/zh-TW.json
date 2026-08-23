@@ -126,6 +126,8 @@
       "loadErrorTitle": "Flower 載入失敗。",
       "threadLoadErrorTitle": "對話載入失敗。",
       "threadLoading": "正在載入對話...",
+      "threadSyncingLatest": "正在同步最新回覆...",
+      "threadSyncFailed": "Flower 無法同步最新回覆，請再試一次。",
       "composerErrorTitle": "Flower 傳送失敗。",
       "stopErrorTitle": "Flower 無法停止此回覆。",
       "modelStatusPreparing": "正在準備模型請求...",

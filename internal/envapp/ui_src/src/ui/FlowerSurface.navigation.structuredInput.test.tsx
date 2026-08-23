@@ -18,6 +18,7 @@ import {
   inputAdmissionReceipt,
   launchReceipt,
   liveBootstrap,
+  readStatus,
   renderSurfaceWithAdapter,
   thread,
   threadOrder,
@@ -432,9 +433,13 @@ describe('FlowerSurface navigation structured input', () => {
       created_at_ms: 5_000,
       updated_at_ms: 5_100,
     });
-    const summaryOnlyBackground = {
+    const refreshedDetailedThread = {
       ...detailedThread,
       updated_at_ms: 4_500,
+      read_status: readStatus(false, 4_500, 'idle'),
+    };
+    const summaryOnlyBackground = {
+      ...refreshedDetailedThread,
       messages: [],
       error: undefined,
     };
@@ -443,7 +448,10 @@ describe('FlowerSurface navigation structured input', () => {
     const loadThread = vi.fn((threadID: string) => {
       if (threadID === 'thread-background') {
         backgroundLoads += 1;
-        return Promise.resolve(liveBootstrap(detailedThread));
+        return Promise.resolve(liveBootstrap(
+          backgroundLoads === 1 ? detailedThread : refreshedDetailedThread,
+          backgroundLoads,
+        ));
       }
       return Promise.resolve(liveBootstrap(selectedThread));
     });
@@ -464,9 +472,10 @@ describe('FlowerSurface navigation structured input', () => {
     await flush();
     (runtime.querySelector('[data-thread-id="thread-background"] button') as HTMLButtonElement).click();
     await waitFor(() => runtime.querySelector('.flower-thread-card-active')?.getAttribute('data-thread-id') === 'thread-background');
+    await waitFor(() => backgroundLoads === 2);
 
     expect(runtime.textContent).toContain('Background preview remains available.');
-    expect(backgroundLoads).toBe(1);
+    expect(backgroundLoads).toBe(2);
   });
 
   it('shows a loading state instead of the empty state while first-loading a summary-only thread', async () => {
