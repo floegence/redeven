@@ -97,6 +97,27 @@ function createTrigger(): HTMLButtonElement {
   return trigger;
 }
 
+function createWorkbenchTrigger(): { surface: HTMLDivElement; trigger: HTMLButtonElement } {
+  const surface = document.createElement('div');
+  surface.className = 'workbench-surface';
+  surface.dataset.floeDialogSurfaceHost = 'true';
+  surface.setAttribute('data-floe-surface-portal-layer', 'true');
+  surface.style.position = 'relative';
+  surface.getBoundingClientRect = vi.fn(() => ({
+    x: 100, y: 50, left: 100, top: 50, right: 1100, bottom: 750,
+    width: 1000, height: 700, toJSON: () => ({}),
+  }));
+  const trigger = document.createElement('button');
+  trigger.textContent = 'Plugins';
+  trigger.getBoundingClientRect = vi.fn(() => ({
+    x: 560, y: 680, left: 560, top: 680, right: 600, bottom: 720,
+    width: 40, height: 40, toJSON: () => ({}),
+  }));
+  surface.append(trigger);
+  document.body.append(surface);
+  return { surface, trigger };
+}
+
 function mountPanel(props: Partial<Parameters<typeof PluginPanel>[0]> = {}) {
   const mount = document.createElement('div');
   document.body.append(mount);
@@ -147,10 +168,11 @@ describe('PluginPanel', () => {
   it('keeps the popup mounted while it closes downward', async () => {
     vi.useFakeTimers();
     const [open, setOpen] = createSignal(true);
+    const { trigger } = createWorkbenchTrigger();
     const mount = document.createElement('div');
     document.body.append(mount);
     dispose = render(() => (
-      <PluginPanel open={open()} placement="workbench" model={panelModel()} onClose={() => setOpen(false)} onOpenCenter={vi.fn()} onOpenPluginDetails={vi.fn()} onOpenPluginSurface={vi.fn()} />
+      <PluginPanel open={open()} placement="workbench" trigger={trigger} model={panelModel()} onClose={() => setOpen(false)} onOpenCenter={vi.fn()} onOpenPluginDetails={vi.fn()} onOpenPluginSurface={vi.fn()} />
     ), mount);
 
     setOpen(false);
@@ -229,16 +251,57 @@ describe('PluginPanel', () => {
     expect(onOpenCenter).toHaveBeenCalledTimes(1);
   });
 
-  it('declares a vertical Dock-anchored motion contract without horizontal translation', () => {
-    const trigger = createTrigger();
+  it('mounts the Workbench launcher in the local floating layer with the Dock material', () => {
+    const { surface, trigger } = createWorkbenchTrigger();
     mountPanel({ placement: 'workbench', trigger });
 
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    const layer = surface.querySelector<HTMLElement>('[data-floe-surface-floating-layer="true"]')!;
     expect(dialog.dataset.pluginPanelMotionAxis).toBe('y');
     expect(dialog.dataset.pluginPanelMotionState).toBe('open');
-    expect(dialog.style.transformOrigin).toContain('calc(100% + 8px)');
+    expect(layer).not.toBeNull();
+    expect(layer.className).toContain('absolute');
+    expect(layer.className).not.toContain('fixed');
+    expect(dialog.className).toContain('workbench-dock-material');
+    expect(dialog.className).not.toContain('bg-popover');
+    expect(dialog.className).not.toContain('shadow-2xl');
+    expect(surface.querySelector('.workbench-dock-popover__arrow')).not.toBeNull();
+    expect(document.querySelector('[data-plugin-workbench-popover-arrow]')).toBeNull();
     expect(dialog.className).not.toContain('zoom-in');
     expect(dialog.className).not.toContain('slide-in-from-left');
+  });
+
+  it('delegates canvas placement and Dock pinning to the unified Workbench drag transaction', () => {
+    const { trigger } = createWorkbenchTrigger();
+    const onDropPlugin = vi.fn();
+    const onPinPlugin = vi.fn();
+    let dragItem: any;
+    mountPanel({
+      placement: 'workbench',
+      trigger,
+      onDropPlugin,
+      onPinPlugin,
+      externalDockDragController: { begin: (_event, item) => { dragItem = item; } },
+    });
+
+    const tile = document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]')!;
+    tile.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
+
+    expect(dragItem.canvasPlacement.widgetType).toBe('redeven.plugin');
+    const placement = {
+      widgetType: 'redeven.plugin',
+      centerWorld: { worldX: 820, worldY: 440 },
+      frame: { x: 260, y: 60, width: 1120, height: 760 },
+    } as const;
+    dragItem.canvasPlacement.onDrop(placement);
+    expect(onDropPlugin).toHaveBeenCalledWith(expect.objectContaining({
+      pluginInstanceID: 'plugininst_containers',
+      preferredPlacement: 'workbench',
+    }), placement);
+    expect(document.querySelector('[data-plugin-workbench-drag-ghost]')).toBeNull();
+
+    dragItem.onDropToDock();
+    expect(onPinPlugin).toHaveBeenCalledWith('instance:plugininst_containers');
   });
 
   it('uses the installed manifest presentation instead of a newer market projection', () => {

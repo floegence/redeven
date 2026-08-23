@@ -21,7 +21,7 @@ import {
   X,
 } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
-import type { WorkbenchExternalDockDragController, WorkbenchHostDockItem, WorkbenchExternalDockDragItem } from '@floegence/floe-webapp-core/workbench';
+import type { WorkbenchCanvasWidgetPlacement, WorkbenchExternalDockDragController, WorkbenchHostDockItem } from '@floegence/floe-webapp-core/workbench';
 import { Dialog } from './primitives/EnvAppModal';
 import { CodexNavigationIcon } from './icons/CodexIcon';
 import {
@@ -1041,6 +1041,13 @@ export function EnvAppShell() {
       icon: (iconProps) => <PluginIcon item={tile.item} size="dock" class={iconProps.class} />,
       active: false,
       onActivate: () => tile.item.defaultLaunchTarget && void openPluginSurface({ ...tile.item.defaultLaunchTarget, preferredPlacement: 'workbench' }).catch(reportPluginNavigationFailure),
+      canvasPlacement: tile.item.defaultLaunchTarget ? {
+        widgetType: 'redeven.plugin',
+        onDrop: (placement: WorkbenchCanvasWidgetPlacement) => void openPluginSurface(
+          { ...tile.item.defaultLaunchTarget!, preferredPlacement: 'workbench' },
+          { workbenchPlacement: placement },
+        ).catch(reportPluginNavigationFailure),
+      } : undefined,
     })));
   const [pluginCenterSelectedInventoryKey, setPluginCenterSelectedInventoryKey] = createSignal<string | undefined>();
   const [pluginCenterFocusRequest, setPluginCenterFocusRequest] = createSignal(0);
@@ -1405,7 +1412,6 @@ export function EnvAppShell() {
     return {
       ...currentTarget,
       preferredPlacement: target.preferredPlacement,
-      ...(target.workbenchDropPoint ? { workbenchDropPoint: target.workbenchDropPoint } : {}),
     };
   };
 
@@ -1441,7 +1447,12 @@ export function EnvAppShell() {
     return workbenchPluginSurfaceController;
   };
 
-  const performOpenPluginSurface = async (target: PluginSurfaceLaunchTarget & { keepPluginCenter?: boolean }) => {
+  type PluginSurfaceOpenOptions = Readonly<{ workbenchPlacement?: WorkbenchCanvasWidgetPlacement }>;
+
+  const performOpenPluginSurface = async (
+    target: PluginSurfaceLaunchTarget & { keepPluginCenter?: boolean },
+    options: PluginSurfaceOpenOptions = {},
+  ) => {
     if (pluginSessionRetired()) throw new Error(i18n.t('uiCopy.plugin.surfaceFailed'));
     const currentTarget = resolveCurrentPluginSurfaceTarget(target);
     if (
@@ -1456,7 +1467,11 @@ export function EnvAppShell() {
       setViewMode('workbench', { surfaceId: lastActivitySurface() });
       const controller = await resolveWorkbenchPluginSurfaceController();
       await closeMatchingActivityPluginWindows(currentTarget);
-      await controller.open(currentTarget);
+      if (options.workbenchPlacement) {
+        await controller.open(currentTarget, options.workbenchPlacement);
+      } else {
+        await controller.open(currentTarget);
+      }
       return;
     }
     if (workbenchPluginSurfaceController) {
@@ -1511,8 +1526,11 @@ export function EnvAppShell() {
     pluginPlacementTail = next.catch(() => undefined);
     return next;
   };
-  const openPluginSurface = (target: PluginSurfaceLaunchTarget & { keepPluginCenter?: boolean }): Promise<void> => (
-    serializePluginPlacementOperation(() => performOpenPluginSurface(target))
+  const openPluginSurface = (
+    target: PluginSurfaceLaunchTarget & { keepPluginCenter?: boolean },
+    options: PluginSurfaceOpenOptions = {},
+  ): Promise<void> => (
+    serializePluginPlacementOperation(() => performOpenPluginSurface(target, options))
   );
 
   const performPluginCenterManagementCommand = async (
@@ -4788,7 +4806,6 @@ export function EnvAppShell() {
           <EnvWorkbenchPage
             dockItems={pluginDockItems()}
             registerExternalDockDragController={setExternalDockDragController}
-            onExternalDockDrop={(item: WorkbenchExternalDockDragItem) => pinPlugin(item.id)}
             dockActions={[{
               id: 'plugins',
               label: i18n.t('uiCopy.plugin.panelTitle'),
@@ -4980,7 +4997,7 @@ export function EnvAppShell() {
           ...target,
           preferredPlacement: pluginsPanelPlacement() === 'workbench' ? 'workbench' : target.preferredPlacement,
         }).catch(reportPluginNavigationFailure)}
-        onDropPlugin={(target) => void openPluginSurface(target).catch(reportPluginNavigationFailure)}
+        onDropPlugin={(target, placement) => void openPluginSurface(target, { workbenchPlacement: placement }).catch(reportPluginNavigationFailure)}
         externalDockDragController={externalDockDragController()}
         onPinPlugin={pinPlugin}
       />

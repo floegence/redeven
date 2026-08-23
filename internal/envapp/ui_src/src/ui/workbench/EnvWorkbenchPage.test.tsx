@@ -3884,6 +3884,54 @@ describe('EnvWorkbenchPage', () => {
     expect(surface?.dataset.viewportY).toBe('60');
   });
 
+  it('places a dragged plugin at the Workbench-resolved world point without recentering', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const pluginWidget = persistedWidget('widget-plugin-drop', 'redeven.plugin', 'Plugin', 1, 500);
+    surfaceApiMocks.createWidget.mockImplementation(() => {
+      surfaceApiMocks.lastSetState((previous: any) => ({
+        ...previous,
+        widgets: [...previous.widgets, pluginWidget],
+        selectedWidgetId: pluginWidget.id,
+      }));
+      return pluginWidget;
+    });
+    let controller: any;
+    mount(() => (
+      <EnvWorkbenchPage
+        pluginSurfaceHost={{} as any}
+        registerPluginSurfaceController={(next) => { controller = next; }}
+      />
+    ), host);
+    await flushMicrotasks();
+
+    const target = {
+      pluginID: 'io.redeven.containers',
+      pluginInstanceID: 'instance-containers',
+      surfaceID: 'containers',
+      displayName: 'Containers',
+      expectedManagementRevision: 7,
+      preferredPlacement: 'workbench' as const,
+    };
+    const placement = {
+      widgetType: 'redeven.plugin' as const,
+      centerWorld: { worldX: 820, worldY: 440 },
+      frame: { x: 260, y: 60, width: 1120, height: 760 },
+    };
+    const opened = controller.open(target, placement);
+    await vi.advanceTimersByTimeAsync(200);
+    await flushMicrotasks();
+    await opened;
+
+    expect(surfaceApiMocks.createWidget).toHaveBeenCalledWith('redeven.plugin', {
+      centerViewport: false,
+      worldX: 820,
+      worldY: 440,
+    });
+    expect(surfaceApiMocks.focusWidget).toHaveBeenCalledWith(pluginWidget, { centerViewport: false });
+    expect(placement.frame).toEqual({ x: 260, y: 60, width: 1120, height: 760 });
+  });
+
   it('creates, persists, reuses, and revision-refreshes plugin widgets through the real controller', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

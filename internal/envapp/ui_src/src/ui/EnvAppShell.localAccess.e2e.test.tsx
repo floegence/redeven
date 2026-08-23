@@ -2260,7 +2260,8 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushAsync();
       expect(pluginPanelState.lastProps.open).toBe(true);
       expect(pluginPanelState.lastProps.placement).toBe('workbench');
-      expect(document.querySelectorAll('[data-plugin-launcher-backdrop]')).toHaveLength(1);
+      expect(document.querySelectorAll('[data-plugin-launcher-backdrop]')).toHaveLength(0);
+      expect(document.querySelectorAll('[data-floe-surface-floating-layer="true"]')).toHaveLength(1);
       (document.querySelector('[aria-label="Close plugins"]') as HTMLButtonElement).click();
       await flushAsync();
       expect(pluginPanelState.lastProps.open).toBe(false);
@@ -2268,7 +2269,8 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushAsync();
       expect(pluginPanelState.lastProps.open).toBe(true);
       expect(pluginPanelState.lastProps.placement).toBe('workbench');
-      expect(document.querySelectorAll('[data-plugin-launcher-backdrop]')).toHaveLength(1);
+      expect(document.querySelectorAll('[data-plugin-launcher-backdrop]')).toHaveLength(0);
+      expect(document.querySelectorAll('[data-floe-surface-floating-layer="true"]')).toHaveLength(1);
       expect(pluginPanelState.mounts).toBe(1);
       expect(pluginPanelState.maxActiveInstances).toBe(1);
     } finally {

@@ -41,11 +41,23 @@ content is inert, and arrow/Home/End navigation remains within the visible grid.
 Each plugin is a semantic list item containing a native primary button. The
 compact launcher header exposes one market icon action for Plugin Center;
 plugin tiles do not render an overflow menu. In Workbench placement, installed
-tiles use the released Floe Webapp external Dock drag session and can be pinned
-as an additional Dock projection without removing the inventory item. Pin
+tiles and pinned Dock items use the released Floe Webapp drag transaction. Over
+the canvas it projects the standard `redeven.plugin` frame from its 1120 by 760
+world-unit definition; pointer release commits the same resolved world center,
+so zoom, pan, and edge auto-pan cannot move the created widget away from its
+preview. A canvas drop creates a fresh widget without recentering the viewport,
+while a Dock drop only pins the inventory item. Cancellation or release outside
+both targets performs no action. Pin
 persistence is renderer- and environment-scoped, versioned, ordered,
 idempotent, and malformed or future state fails closed. Absent product mutation
 APIs are not simulated.
+
+The Workbench Launcher is a Dock companion, not a page-level modal. It mounts
+through `WorkbenchDockPopoverSurface` in the owning Workbench surface, delegates
+projection and clamping to the shared floating layer, and inherits the Dock
+background, border, shadow, blur, and theme material. Its own size, radius,
+content layout, search, focus loop, and close behavior remain product-owned.
+Activity placement keeps the existing Shell-root modal behavior.
 Plugin Center remains a dedicated Activity surface with a separate Launcher
 entry and uses the same category/search projection. Its local filters combine
 source (official catalog or external), trust, and lifecycle without rebuilding

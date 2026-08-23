@@ -240,6 +240,14 @@ released source/port-bound interaction callback drives only Redeven's projected
 wheel, text-selection, action, activation, focus, and floating-layer markers.
 It does not become an authorization input or a second bridge.
 
+Workbench plugin drag placement consumes Floe Webapp's released canvas
+placement result directly. Floe owns the standard-size preview, zoom and pan
+projection, edge auto-pan, final pointer snapshot, and world-coordinate
+resolution. Redeven owns only the target-to-widget binding and opens a fresh
+`redeven.plugin` widget at that world center without a second client-coordinate
+conversion or viewport-centering step. Launcher tiles and pinned Dock items use
+the same contract; there is no plugin-specific Ghost or fallback drag state.
+
 Opening the same placement reactivates it. Moving between Activity and Workbench,
 replacing a Workbench revision, or deleting a widget globally serializes the
 transition and awaits exact old-slot close before persisting or opening the new

@@ -29,6 +29,16 @@ Activity Flower placement is outside this lifecycle; [Flower Activity companion]
 
 Projected Workbench surfaces must delegate pointer-anchored overlays to the shared surface floating layer. Menus opened from right-click, menu buttons, or keyboard anchors should pass client or anchor coordinates to `SurfaceFloatingLayer`, which owns surface-local projection, clamping, z-index, and local interaction markers. Context menus, dropdowns, popovers, hover cards, tooltips, autocomplete panels, command palettes, color pickers, date pickers, and equivalent floating UI must not treat Workbench as ordinary document flow. Their panel content may own role, focus, keyboard navigation, item layout, and visual styling, but must not own `position: fixed`, inline viewport `left` / `top`, `window.innerWidth` / `window.innerHeight` clamping, body portals, or component-local viewport-to-surface coordinate conversion inside a transformed projected surface.
 
+Dock companion panels use `WorkbenchDockPopoverSurface`, which anchors to the
+exact Dock trigger, mounts in the same Workbench surface, and shares the Dock
+material variables across every preset and color mode. Product panels may
+choose independent dimensions and content layout, but they must not recreate
+Dock material, arrows, viewport projection, or boundary clamping. External,
+host, and built-in Dock drags use one Workbench drag transaction; the final
+pointer snapshot determines either a Dock action or one world-coordinate canvas
+placement, and the host must not convert that placement back through client
+coordinates or recenter the viewport after commit.
+
 Git entity menus use this shared projection for workspace sections and rows, branches, branch status entries, graph and history commits, compare files, and stashes. Mouse right-click and `ContextMenu` or `Shift+F10` open the same menu; the first action receives focus, Arrow keys plus Home and End navigate, Enter or Space activates, and Escape or Tab closes and restores focus to the trigger. Disabled actions remain focusable with `aria-disabled` and a reason. The controller snapshots the entity and repository or worktree root at open time so selection changes, refreshes, or later navigation cannot retarget an already-open action. Dangerous branch, stash, and discard actions still enter their existing review or confirmation owner rather than calling mutation RPCs from the menu.
 
 # Boundaries

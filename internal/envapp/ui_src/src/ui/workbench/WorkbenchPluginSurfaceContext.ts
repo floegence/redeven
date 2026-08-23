@@ -1,11 +1,12 @@
 import { createContext, useContext, type Accessor } from 'solid-js';
+import type { WorkbenchCanvasWidgetPlacement } from '@floegence/floe-webapp-core/workbench';
 
 import type { PluginConfirmationQueue } from '../plugins/PluginConfirmationQueue';
 import type { PluginSurfacePlacementCoordinator } from '../plugins/pluginPlatform';
 import type { PluginSurfaceLaunchTarget } from '../plugins/pluginTypes';
 
 export type WorkbenchPluginSurfaceController = Readonly<{
-  open: (target: PluginSurfaceLaunchTarget) => Promise<void>;
+  open: (target: PluginSurfaceLaunchTarget, placement?: WorkbenchCanvasWidgetPlacement) => Promise<void>;
   close: (target: Pick<PluginSurfaceLaunchTarget, 'pluginInstanceID' | 'surfaceID'>) => Promise<void>;
   closePlugin: (pluginInstanceID: string) => Promise<void>;
   closeAll: () => Promise<void>;
