@@ -354,6 +354,8 @@ export type FlowerSurfaceCopy = Readonly<{
     loadErrorTitle: string;
     threadLoadErrorTitle: string;
     threadLoading: string;
+    threadSyncingLatest: string;
+    threadSyncFailed: string;
     composerErrorTitle: string;
     stopErrorTitle: string;
     modelStatus: Readonly<{
@@ -593,6 +595,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     loadErrorTitle: 'Flower could not load.',
     threadLoadErrorTitle: 'Conversation could not load.',
     threadLoading: 'Loading conversation...',
+    threadSyncingLatest: 'Syncing the latest reply...',
+    threadSyncFailed: 'Flower could not sync the latest reply. Try again.',
     composerErrorTitle: 'Flower could not send.',
     stopErrorTitle: 'Flower could not stop this reply.',
     modelStatus: {

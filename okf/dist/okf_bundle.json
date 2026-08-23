@@ -671,7 +671,7 @@
               "threads",
               "ui"
             ],
-            "summary": "Flower uses one workspace SSE for every thread. The stream carries a baseline of summaries, summary replacements, active-thread current views, and viewer read state. Selecting a thread changes only `ThreadCache.selectedId`; it never reconnects transport or cancels background execution. Disconnect recovery refreshes summaries and the selected typed view without cursor replay or polling.",
+            "summary": "Flower uses one workspace SSE for every thread. The stream carries a baseline of summaries, summary replacements, active-thread current views, and viewer read state. Selecting a thread changes only `ThreadCache.selectedId`; it never reconnects transport or cancels background execution. A selected summary that advances beyond cached detail starts bounded detail revalidation without cursor replay or polling.",
             "section_count": 2
           },
           {
@@ -8122,15 +8122,15 @@
         "title": "Flower live current state",
         "type": "UI Contract"
       },
-      "body_length": 3875,
-      "summary": "Flower uses one workspace SSE for every thread. The stream carries a baseline of summaries, summary replacements, active-thread current views, and viewer read state. Selecting a thread changes only `ThreadCache.selectedId`; it never reconnects transport or cancels background execution. Disconnect recovery refreshes summaries and the selected typed view without cursor replay or polling.",
+      "body_length": 5050,
+      "summary": "Flower uses one workspace SSE for every thread. The stream carries a baseline of summaries, summary replacements, active-thread current views, and viewer read state. Selecting a thread changes only `ThreadCache.selectedId`; it never reconnects transport or cancels background execution. A selected summary that advances beyond cached detail starts bounded detail revalidation without cursor replay or polling.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "`ThreadCache` owns selected ID, summary map, and a bounded LRU of typed detail views. Summary updates are stripped of messages and interaction detail and can never overwrite a cached view. Only a detail GET or `LiveCurrent` update replaces detail, and older view versions are ignored.\n\n`LiveTransport` owns the single connection and a process-local `connectionEpoch`. Every reconnect invalidates callbacks from the prior connection. Normal network failures reconnect quietly with bounded backoff; authorization failure is terminal and visible. There is no browser event log, cursor, generation graph, replay endpoint, retention-gap reducer, polling loop, or per-selection SSE.\n\nThe server never silently drops an authoritative frame. An initial baseline\npaginates the complete workspace summary inventory and includes current views\nfor active and waiting threads, even when the inventory exceeds one catalog\npage or the ordinary live-frame count. A missing, repeated, or non-advancing\npage cursor fails the subscription before `ready`. If one subscriber exceeds\nits byte budget, or one encoded frame is itself oversized, the server closes\nthat subscriber. The client treats the disconnect as loss of cache authority\nand reconnects; the new baseline restores summaries and the selected current\nview. This fail-fast resynchronization contract avoids a second replay protocol\nwhile ensuring a lost terminal update cannot leave the UI permanently running\nor waiting.\n\nCanonical terminal updates and reconnect baselines converge the current view. Background running, waiting_user, waiting_approval, and completed summaries update without pointer or focus events. A missing detail may show a local loading state, but it never clears the rail or cached transcript.\n\nFloret installs a canonical fallback title with the first accepted user message.\nAutomatic-title pending and failure summaries retain it, provider success\nreplaces it through the existing summary stream, and a host rename remains\nauthoritative. Flower never renders an untitled label: list and switcher rows\nwithout a canonical title are omitted, while a legacy detail snapshot with an\nempty title may derive the same whitespace-normalized, 200-rune fallback from\nits first canonical user message or first attachment/reference label. The\nselected header reads the latest summary title before its cached detail title,\nso a provider update cannot flash empty or wait for transcript replacement.",
-          "char_count": 2451
+          "body": "`ThreadCache` owns selected ID, summary map, and a bounded LRU of typed detail views. Summary updates are stripped of messages and interaction detail and can never overwrite a cached view. HTTP detail, action responses, and `LiveCurrent` all use one receiver. Floret's monotonic `view_version` is the only detail ordering authority; accepted, unchanged, and stale results have one shared side-effect boundary.\n\n`LiveTransport` owns the single connection and a process-local `connectionEpoch`. The epoch only invalidates callbacks from the prior connection; it is not stored in `ThreadCache` and never orders detail content. Normal network failures reconnect quietly with bounded backoff; authorization failure is terminal and visible. There is no browser event log, cursor, generation graph, replay endpoint, retention-gap reducer, polling loop, or per-selection SSE.\n\nThe server never silently drops an authoritative frame. An initial baseline\npaginates the complete workspace summary inventory and includes current views\nfor active and waiting threads, even when the inventory exceeds one catalog\npage or the ordinary live-frame count. A missing, repeated, or non-advancing\npage cursor fails the subscription before `ready`. If one subscriber exceeds\nits byte budget, or one encoded frame is itself oversized, the server closes\nthat subscriber. The client treats the disconnect as loss of cache authority\nand reconnects; the new baseline restores summaries and the selected current\nview. This fail-fast resynchronization contract avoids a second replay protocol\nwhile ensuring a lost terminal update cannot leave the UI permanently running\nor waiting.\n\nCanonical terminal updates and reconnect baselines converge the current view. Background running, waiting_user, waiting_approval, and completed summaries update without pointer or focus events. When a selected summary is ahead, Flower issues a fresh detail request instead of reusing an older in-flight request. One recovery request runs per thread, tracks newer summary targets, and uses finite 100/300/900 ms retries for transient failure. Exhaustion preserves cached content and exposes an explicit retry action.\n\nSummary state only triggers revalidation. It never creates, merges, or replaces timeline messages. While a terminal summary is ahead of active detail, Flower hides the stale thinking and Stop presentation and shows that the latest reply is syncing. The next accepted detail replaces the timeline atomically. Stale or unchanged detail cannot confirm the outbox, move the transcript, clear an error, mark content read, or update status presentation.\n\nFloret installs a canonical fallback title with the first accepted user message.\nAutomatic-title pending and failure summaries retain it, provider success\nreplaces it through the existing summary stream, and a host rename remains\nauthoritative. Flower never renders an untitled label: list and switcher rows\nwithout a canonical title are omitted, while a legacy detail snapshot with an\nempty title may derive the same whitespace-normalized, 200-rune fallback from\nits first canonical user message or first attachment/reference label. The\nselected header reads the latest summary title before its cached detail title,\nso a provider update cannot flash empty or wait for transcript replacement.",
+          "char_count": 3313
         },
         {
           "id": "boundaries",
@@ -8160,6 +8160,16 @@
           "id": "redeven:internal/flower_ui/src/FlowerSurface.tsx:0:selection, current-view application, and quiet reconnect integration.",
           "source": "redeven:internal/flower_ui/src/FlowerSurface.tsx",
           "description": "Selection, current-view application, and quiet reconnect integration."
+        },
+        {
+          "id": "redeven:internal/flower_ui/src/FlowerSurface.terminalConvergence.test.ts:0:single receiver and obsolete-path removal checks.",
+          "source": "redeven:internal/flower_ui/src/FlowerSurface.terminalConvergence.test.ts",
+          "description": "Single receiver and obsolete-path removal checks."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.finalArchitecture.browser.test.tsx:0:terminal loss, stale request, bounded retry, and first-load fixtures.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/FlowerSurface.finalArchitecture.browser.test.tsx",
+          "description": "Terminal loss, stale request, bounded retry, and first-load fixtures."
         },
         {
           "id": "redeven:internal/flower_ui/src/flowerThreadTitle.ts:0:shared canonical title consumption and legacy first-message derivation.",
@@ -9627,5 +9637,5 @@
       ]
     }
   ],
-  "source_sha256": "001692b189c2a05f4c67e62fcb7bd5f12e09596758984991711e1e620ec1028c"
+  "source_sha256": "6d391a829b7d9db524c65bc191eb62ba5fc4ace37202b4a10c7cacd3c69bc552"
 }

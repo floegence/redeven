@@ -3895,6 +3895,8 @@
       "loadErrorTitle": "Flower n’a pas pu se charger.",
       "threadLoadErrorTitle": "La discussion n’a pas pu se charger.",
       "threadLoading": "Chargement de la discussion...",
+      "threadSyncingLatest": "Synchronisation de la dernière réponse...",
+      "threadSyncFailed": "Flower n’a pas pu synchroniser la dernière réponse. Réessayez.",
       "composerErrorTitle": "Flower n’a pas pu envoyer.",
       "stopErrorTitle": "Flower n’a pas pu arrêter cette réponse.",
       "modelStatusPreparing": "Préparation de la requête au modèle…",

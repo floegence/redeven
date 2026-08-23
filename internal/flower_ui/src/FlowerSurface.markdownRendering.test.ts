@@ -102,7 +102,7 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(compactContextIndicatorIndex).toBeGreaterThanOrEqual(0);
     expect(contextIndicatorIndex).toBe(-1);
     expect(submitIndex).toBeGreaterThan(compactContextIndicatorIndex);
-    expect(src).toContain('const selectedModelIOStatus = createMemo<FlowerModelIOStatus | null>(() => selectedThread()?.model_io_status ?? null)');
+    expect(src).toContain('selectedThreadTerminalSyncing() ? null : selectedThread()?.model_io_status ?? null');
     expect(src).toContain('const selectedThreadHasModelStatus = createMemo(() => selectedModelIOStatus() != null)');
     expect(src).not.toContain('<Show when={selectedThreadHasModelStatus()}>');
     expect(src).toContain('const selectedModelStatusIndicator = () => (');

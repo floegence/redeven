@@ -127,6 +127,7 @@ main() {
       internal/flower_ui/src/FlowerSurface.modelStatusIndicator.test.ts \
       internal/flower_ui/src/FlowerSurface.markdownRendering.test.ts \
       internal/flower_ui/src/FlowerSurface.markdownReadability.test.ts \
+      internal/flower_ui/src/FlowerSurface.terminalConvergence.test.ts \
       internal/flower_ui/src/shellCommandHighlight.test.ts
 
     (

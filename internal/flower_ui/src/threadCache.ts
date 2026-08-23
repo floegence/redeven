@@ -5,20 +5,50 @@ import type {
 export type ThreadView = Readonly<{
   thread: FlowerThreadSnapshot;
   version: number;
-  connectionEpoch?: number;
 }>;
 
-/**
- * A detail snapshot is ordered by the live connection first and by the
- * runtime view version within that connection.  Callers that perform side
- * effects after replacing a view must use the same predicate as the cache.
- */
-export function canReplaceThreadView(current: ThreadView | undefined, candidate: ThreadView): boolean {
-  if (!current) return true;
-  const nextEpoch = Math.max(0, Math.floor(Number(candidate.connectionEpoch) || 0));
-  const currentEpoch = Math.max(0, Math.floor(Number(current.connectionEpoch) || 0));
-  return nextEpoch >= currentEpoch
-    && (nextEpoch !== currentEpoch || candidate.version >= current.version);
+export type ThreadViewAcceptance = 'accepted' | 'unchanged' | 'stale';
+
+export function classifyThreadView(
+  current: ThreadView | undefined,
+  candidate: ThreadView,
+): ThreadViewAcceptance {
+  if (!current) return 'accepted';
+  if (candidate.version > current.version) return 'accepted';
+  if (candidate.version < current.version) return 'stale';
+  return 'unchanged';
+}
+
+export function threadSnapshotRevision(thread: FlowerThreadSnapshot | undefined): number {
+  if (!thread) return 0;
+  return Math.max(
+    0,
+    Math.floor(Number(thread.updated_at_ms) || 0),
+    Math.floor(Number(thread.read_status.snapshot.activity_revision) || 0),
+    Math.floor(Number(thread.read_status.snapshot.last_message_at_unix_ms) || 0),
+  );
+}
+
+function threadRuntimeStateKey(thread: FlowerThreadSnapshot): string {
+  return [
+    thread.status,
+    thread.active_run_id?.trim() ?? '',
+    thread.approval_pending ? '1' : '0',
+    String(Math.max(0, Math.floor(Number(thread.approval_pending_count) || 0))),
+  ].join('\x1f');
+}
+
+export function threadSummaryNeedsDetail(
+  summary: FlowerThreadSnapshot | undefined,
+  detail: FlowerThreadSnapshot | undefined,
+): boolean {
+  if (!summary) return false;
+  if (!detail) return true;
+  const summaryRevision = threadSnapshotRevision(summary);
+  const detailRevision = threadSnapshotRevision(detail);
+  if (summaryRevision > detailRevision) return true;
+  if (summaryRevision < detailRevision) return false;
+  return threadRuntimeStateKey(summary) !== threadRuntimeStateKey(detail);
 }
 
 type CacheEntry = {
@@ -33,7 +63,11 @@ export type ThreadCache = {
   select(id: string | null): ThreadCache;
   replaceSummary(summary: FlowerThreadSnapshot): ThreadCache;
   replaceSummaries(summaries: readonly FlowerThreadSnapshot[]): ThreadCache;
-  replaceView(view: ThreadView): ThreadCache;
+  receiveView(
+    view: ThreadView,
+    options?: Readonly<{ preserveSummary?: boolean }>,
+  ): Readonly<{ cache: ThreadCache; state: ThreadViewAcceptance }>;
+  updateDetailAdjuncts(id: string, update: (thread: FlowerThreadSnapshot) => FlowerThreadSnapshot): ThreadCache;
   updateThread(id: string, update: (thread: FlowerThreadSnapshot) => FlowerThreadSnapshot): ThreadCache;
   evict(id: string): ThreadCache;
 };
@@ -90,11 +124,12 @@ function createCache(
       }
       return createCache(selectedId, next, views, clock + 1);
     },
-    replaceView(view) {
+    receiveView(view, options) {
       const id = view.thread.thread_id.trim();
-      if (!id) return this;
+      if (!id) return { cache: this, state: 'stale' };
       const current = views.get(id)?.view;
-      if (!canReplaceThreadView(current, view)) return this;
+      const state = classifyThreadView(current, view);
+      if (state !== 'accepted') return { cache: this, state };
       const next = new Map(views);
       next.set(id, { view, usedAt: clock + 1 });
       while (next.size > MAX_VIEWS) {
@@ -103,8 +138,22 @@ function createCache(
         next.delete(oldest[0]);
       }
       const summary = new Map(summaries);
-      summary.set(id, summaryOnly(view.thread));
-      return createCache(selectedId, summary, next, clock + 1);
+      if (!options?.preserveSummary) {
+        summary.set(id, summaryOnly(view.thread));
+      }
+      return { cache: createCache(selectedId, summary, next, clock + 1), state };
+    },
+    updateDetailAdjuncts(id, update) {
+      const threadID = id.trim();
+      const current = views.get(threadID);
+      if (!threadID || !current) return this;
+      const next = new Map(views);
+      next.set(threadID, {
+        ...current,
+        view: { ...current.view, thread: update(current.view.thread) },
+        usedAt: clock + 1,
+      });
+      return createCache(selectedId, summaries, next, clock + 1);
     },
     updateThread(id, update) {
       const threadID = id.trim();

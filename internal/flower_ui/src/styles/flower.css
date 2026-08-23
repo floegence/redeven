@@ -3826,6 +3826,22 @@ html.dark .flower-component-shell {
   margin-top: 0.625rem;
 }
 
+.flower-thread-syncing-latest {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 0.45rem;
+  color: color-mix(in srgb, var(--muted-foreground) 82%, var(--foreground) 18%);
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.flower-thread-syncing-latest svg,
+.flower-thread-syncing-latest [data-icon] {
+  flex: 0 0 auto;
+  animation: flower-thread-syncing-spin 0.9s linear infinite;
+}
+
 .flower-thread-loading {
   display: grid;
   width: 100%;
@@ -3981,6 +3997,12 @@ html.dark .flower-component-shell {
   }
 }
 
+@keyframes flower-thread-syncing-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .flower-warmup-panel {
     animation: none;
@@ -3992,6 +4014,11 @@ html.dark .flower-component-shell {
     animation: none;
     background: color-mix(in srgb, var(--foreground) 15%, transparent);
     box-shadow: none;
+  }
+
+  .flower-thread-syncing-latest svg,
+  .flower-thread-syncing-latest [data-icon] {
+    animation: none;
   }
 
   .flower-scroll-to-latest-button {

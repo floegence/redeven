@@ -3895,6 +3895,8 @@
       "loadErrorTitle": "Flower konnte nicht geladen werden.",
       "threadLoadErrorTitle": "Unterhaltung konnte nicht geladen werden.",
       "threadLoading": "Unterhaltung wird geladen...",
+      "threadSyncingLatest": "Neueste Antwort wird synchronisiert...",
+      "threadSyncFailed": "Flower konnte die neueste Antwort nicht synchronisieren. Versuche es erneut.",
       "composerErrorTitle": "Flower konnte nicht senden.",
       "stopErrorTitle": "Flower konnte diese Antwort nicht stoppen.",
       "modelStatusPreparing": "Modellanfrage wird vorbereitet...",

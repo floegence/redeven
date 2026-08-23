@@ -126,6 +126,8 @@
       "loadErrorTitle": "Flower를 불러오지 못했습니다.",
       "threadLoadErrorTitle": "대화를 불러오지 못했습니다.",
       "threadLoading": "대화를 불러오는 중...",
+      "threadSyncingLatest": "최신 답변을 동기화하는 중...",
+      "threadSyncFailed": "Flower가 최신 답변을 동기화하지 못했습니다. 다시 시도하세요.",
       "composerErrorTitle": "Flower가 전송하지 못했습니다.",
       "stopErrorTitle": "Flower가 이 응답을 중지하지 못했습니다.",
       "modelStatusPreparing": "모델 요청을 준비 중...",
