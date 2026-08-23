@@ -989,7 +989,7 @@ Use this checklist when reviewing any Redeven plugin integration change:
 
 ## Flower / Floret Boundary
 
-Redeven consumes the published `github.com/floegence/floret/v4` typed thread runtime. Redeven owns product authorization, attachment resolution, effect execution, provider configuration, read acknowledgement, and UI mapping. Floret owns each thread current view, canonical journal, queue, interactions, effect-attempt identity, and restart recovery.
+Redeven consumes the published `github.com/floegence/floret/v5` typed thread runtime. Redeven owns product authorization, attachment resolution, effect execution, provider configuration, read acknowledgement, and UI mapping. Floret owns each thread current view, canonical journal, queue, interactions, effect-attempt identity, and restart recovery.
 
 Product handlers perform authorization and DTO mapping, then call typed `View`, `Send`, `Respond`, `Cancel`, `Retry`, `RetryEffect`, or `Subscribe` operations. They must not wait for provider work or maintain receipt, admission, authority, recovery, projection, replay, or lifecycle mirrors. Effects execute only through the exact one-shot authorization supplied by the Floret invocation.
 

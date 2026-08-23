@@ -4905,16 +4905,16 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 			}
-			th, err := aiSvc.GetThread(r.Context(), meta, threadID)
+			detail, err := aiSvc.GetFlowerThreadDetail(r.Context(), meta, threadID)
 			if err != nil {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 				return
 			}
-			if th == nil {
+			if detail == nil {
 				writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "thread not found"})
 				return
 			}
-			view, err := g.buildAIThreadEnvelope(r.Context(), meta, th)
+			view, err := g.buildAIFlowerThreadDetailEnvelope(r.Context(), meta, detail)
 			if err != nil {
 				writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: err.Error()})
 				return

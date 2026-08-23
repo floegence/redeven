@@ -169,6 +169,51 @@ func TestStoreThreadMetadataUpdatesDoNotCreateConversationState(t *testing.T) {
 	}
 }
 
+func TestStoreThreadSettingsRevisionAdvancesForEveryMutation(t *testing.T) {
+	store := openStoreForTest(t)
+	ctx := context.Background()
+	const initialRevision = int64(4_102_444_800_000)
+	if err := store.CreateThreadSettings(ctx, ThreadSettings{
+		ThreadID: "th_revision", EndpointID: "env_1", ModelID: "openai/gpt-5",
+		PermissionType: "approval_required", SettingsCreatedAtUnixMs: 10, SettingsUpdatedAtUnixMs: initialRevision,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	assertRevision := func(previous int64) int64 {
+		t.Helper()
+		thread, err := store.GetThreadSettings(ctx, "env_1", "th_revision")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if thread == nil || thread.SettingsUpdatedAtUnixMs <= previous {
+			t.Fatalf("settings revision=%v, want greater than %d", thread, previous)
+		}
+		return thread.SettingsUpdatedAtUnixMs
+	}
+
+	previous := initialRevision
+	if err := store.UpdateThreadModelID(ctx, "env_1", "th_revision", "openai/gpt-5.1"); err != nil {
+		t.Fatal(err)
+	}
+	previous = assertRevision(previous)
+	if err := store.UpdateThreadModelAndReasoningSelection(ctx, "env_1", "th_revision", "openai/gpt-5.2", `{"effort":"medium"}`); err != nil {
+		t.Fatal(err)
+	}
+	previous = assertRevision(previous)
+	if err := store.UpdateThreadReasoningSelection(ctx, "env_1", "th_revision", `{"effort":"high"}`); err != nil {
+		t.Fatal(err)
+	}
+	previous = assertRevision(previous)
+	if err := store.UpdateThreadPermissionType(ctx, "env_1", "th_revision", "full_access"); err != nil {
+		t.Fatal(err)
+	}
+	previous = assertRevision(previous)
+	if _, err := store.SetThreadPinned(ctx, "env_1", "th_revision", true, "user_1", "user@example.com"); err != nil {
+		t.Fatal(err)
+	}
+	_ = assertRevision(previous)
+}
+
 func TestStoreRejectsInvalidThreadPermissionContracts(t *testing.T) {
 	store := openStoreForTest(t)
 	ctx := context.Background()

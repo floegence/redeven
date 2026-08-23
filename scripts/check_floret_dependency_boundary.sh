@@ -18,13 +18,13 @@ fail() {
 require_source() {
   local file=$1
   local marker=$2
-  rg -Fq "$marker" "$file" || fail "$file is missing required Floret v4 boundary: $marker"
+  rg -Fq "$marker" "$file" || fail "$file is missing required Floret v5 boundary: $marker"
 }
 
-echo "[INFO] checking published Floret v4 dependency"
-rg -q '^\s*github\.com/floegence/floret/v4 v4\.0\.19$' go.mod \
-  || fail "go.mod must consume github.com/floegence/floret/v4 v4.0.19"
-if rg -n '^replace .*floegence/floret|github\.com/floegence/floret/v4\s*=>' go.mod; then
+echo "[INFO] checking published Floret v5 dependency"
+rg -q '^\s*github\.com/floegence/floret/v5 v5\.0\.0$' go.mod \
+  || fail "go.mod must consume github.com/floegence/floret/v5 v5.0.0"
+if rg -n '^replace .*floegence/floret|github\.com/floegence/floret/v5\s*=>' go.mod; then
   fail "Floret must not use a Go module replacement"
 fi
 for workspace in go.work go.work.sum; do
@@ -38,10 +38,10 @@ fi
 echo "[INFO] checking public imports and storage ownership"
 if rg -n --glob '*.go' --glob '!**/*_test.go' \
   'github\.com/floegence/floret(?:"$|/v[0-3](?:/|"$))' internal cmd; then
-  fail "production must import only the Floret v4 module"
+  fail "production must import only the Floret v5 module"
 fi
 if rg -n --glob '*.go' --glob '!**/*_test.go' \
-  'github\.com/floegence/floret/v4/internal/' internal cmd; then
+  'github\.com/floegence/floret/v5/internal/' internal cmd; then
   fail "Redeven must not import Floret internals"
 fi
 if rg -n --glob '*.go' --glob '!**/*_test.go' \
@@ -82,4 +82,4 @@ echo "[INFO] checking product schema boundary"
 GOWORK=off go run ./internal/cmd/threadstore-boundary-contract --check --root .
 GOWORK=off go test ./internal/ai/threadstore ./internal/boundarycontract -count=1
 
-echo "[INFO] Floret v4 dependency boundary passed"
+echo "[INFO] Floret v5 dependency boundary passed"

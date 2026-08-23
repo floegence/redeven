@@ -953,6 +953,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     signature: string;
   }>>();
   const summaryDetailRecoveryRuns = new Map<string, Promise<void>>();
+  const summaryDetailRecoveryExhaustedSignatures = new Map<string, string>();
   const initialThreadDetailRequests = new Map<string, Readonly<{
     sequence: number;
     summary: FlowerThreadSnapshot | undefined;
@@ -1598,10 +1599,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     composerSessionDraftFromValue(reactiveDraftSnapshotFor(currentComposerSessionKey()).value)
   ));
   const defaultComposerPermissionType = createMemo<FlowerPermissionType>(() => snapshot()?.defaults.permission_type ?? 'approval_required');
-  const selectedThreadPermissionType = createMemo<FlowerPermissionType>(() => selectedThread()?.permission_type ?? defaultComposerPermissionType());
+  const selectedThreadPermissionType = createMemo<FlowerPermissionType>(() => {
+    const pending = pendingPermissionPatch();
+    const threadID = trimString(selectedThreadID());
+    if (pending && threadID && pending.threadID === threadID) return pending.requested;
+    return selectedThread()?.permission_type ?? defaultComposerPermissionType();
+  });
   const composerPermissionType = createMemo<FlowerPermissionType>(() => {
     const thread = selectedThread();
-    if (thread) return thread.permission_type ?? defaultComposerPermissionType();
+    if (thread) return selectedThreadPermissionType();
     return currentComposerSessionDraft().permissionTypeOverride ?? defaultComposerPermissionType();
   });
   const composerPermissionCopy = createMemo(() => copy().settings.permissionTypes[composerPermissionType()]);
@@ -1850,6 +1856,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   onCleanup(() => {
     surfaceDisposed = true;
     summaryDetailRecoveryTargets.clear();
+    summaryDetailRecoveryExhaustedSignatures.clear();
     initialThreadDetailRequests.clear();
     composerAutosizeController?.dispose();
     composerAutosizeController = undefined;
@@ -2054,31 +2061,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setPermissionMenuOpen(true);
     queueMicrotask(() => focusPermissionMenuItem(permissionMenuActiveIndex()));
   };
-  const applyThreadPermissionLocally = (threadID: string, permissionType: FlowerPermissionType) => {
-    const tid = trimString(threadID);
-    if (!tid || retiredThreadIDs.has(tid)) return;
-    setThreadCache((cache) => cache.updateThread(tid, (thread) => {
-      if (thread.permission_type === permissionType) return thread;
-      return {
-        ...thread,
-        permission_type: permissionType,
-        updated_at_ms: Math.max(Number(thread.updated_at_ms ?? 0), Date.now()),
-      };
-    }));
-  };
-  const applyThreadModelLocally = (threadID: string, modelID: string) => {
-    const tid = trimString(threadID);
-    const mid = trimString(modelID);
-    if (!tid || !mid || retiredThreadIDs.has(tid)) return;
-    setThreadCache((cache) => cache.updateThread(tid, (thread) => {
-      if (thread.model_id === mid) return thread;
-      return {
-        ...thread,
-        model_id: mid,
-        updated_at_ms: Math.max(Number(thread.updated_at_ms ?? 0), Date.now()),
-      };
-    }));
-  };
   const applyPersistedDefaultModelLocally = (modelID: string) => {
     const mid = trimString(modelID);
     if (!mid) return;
@@ -2091,18 +2073,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (!belongsToProfile) return current;
       return { ...current, model_profile: { ...profile, current_model_id: mid } };
     });
-  };
-  const applyThreadReasoningLocally = (threadID: string, selection: FlowerReasoningSelection | undefined) => {
-    const tid = trimString(threadID);
-    if (!tid || retiredThreadIDs.has(tid)) return;
-    setThreadCache((cache) => cache.updateThread(tid, (thread) => {
-      if (sameFlowerReasoningSelection(thread.reasoning_selection, selection)) return thread;
-      return {
-        ...thread,
-        reasoning_selection: selection,
-        updated_at_ms: Math.max(Number(thread.updated_at_ms ?? 0), Date.now()),
-      };
-    }));
   };
   const updateComposerModelID = async (modelID: string) => {
     const mid = trimString(modelID);
@@ -2146,7 +2116,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (previous === mid) return;
     const previousSnapshot = snapshot();
     setPendingModelPatch({ threadID, requested: mid, previous });
-    applyThreadModelLocally(threadID, mid);
     try {
       const live = await props.adapter.setThreadModel(threadID, mid);
       const updated = receiveThreadView(live, 'user_action').thread;
@@ -2166,7 +2135,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         setSelectedThreadWithDetail(updated.thread_id);
       }
     } catch (error) {
-      applyThreadModelLocally(threadID, previous);
       if (selectedThreadDetailMatches(threadID)) {
         notifyModelError(getErrorMessage(error) || copy().chat.messageErrorFallback);
       }
@@ -2188,7 +2156,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!props.adapter.setThreadReasoningSelection || !composerReasoningInteractive()) return;
     const previous = normalizeFlowerReasoningSelection(selectedThread()?.reasoning_selection);
     if (sameFlowerReasoningSelection(previous, normalized)) return;
-    applyThreadReasoningLocally(threadID, normalized);
     try {
       const live = await props.adapter.setThreadReasoningSelection(threadID, normalized);
       const updated = receiveThreadView(live, 'user_action').thread;
@@ -2199,7 +2166,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         draft.reasoningOverride ? { ...draft, reasoningOverride: undefined } : draft
       ));
     } catch (error) {
-      applyThreadReasoningLocally(threadID, previous);
       if (selectedThreadDetailMatches(threadID)) {
         notifyComposerError(getErrorMessage(error) || copy().chat.messageErrorFallback);
       }
@@ -2219,21 +2185,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!props.adapter.setThreadPermissionType || !composerPermissionInteractive()) return;
     const previous = selectedThreadPermissionType();
     if (previous === permissionType) return;
+    const appliesToActiveTurn = flowerThreadHasActiveTurnEvidence(selectedThread());
     setPendingPermissionPatch({ threadID, requested: permissionType, previous });
-    applyThreadPermissionLocally(threadID, permissionType);
     try {
       const live = await props.adapter.setThreadPermissionType(threadID, permissionType);
       const updated = receiveThreadView(live, 'user_action').thread;
       if (selectedThreadDetailMatches(threadID)) {
         setSelectedThreadWithDetail(updated.thread_id);
+        if (appliesToActiveTurn) notifySuccess(copy().chat.permissionSelectorUpdatedForActiveTurn);
       }
     } catch (error) {
-      applyThreadPermissionLocally(threadID, previous);
-      try {
-        await reloadSelectedThread(threadID, threadLoadSequence, 'user_action');
-      } catch {
-        // Keep the concise permission error; the previous snapshot has already been restored locally.
-      }
       if (selectedThreadDetailMatches(threadID)) {
         notifyPermissionError(getErrorMessage(error));
       }
@@ -2355,6 +2316,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     | 'stop_confirmation';
   type ThreadDetailReceiveResult = Readonly<{
     state: ThreadViewAcceptance;
+    runtimeState: ThreadViewAcceptance;
+    settingsState: ThreadViewAcceptance;
     thread: FlowerThreadSnapshot;
   }>;
   const readStatusWithUnread = (thread: FlowerThreadSnapshot, isUnread: boolean): FlowerThreadSnapshot => (
@@ -2377,7 +2340,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const applyThreadReadStatus = (threadID: string, readStatus: FlowerThreadReadStatus) => {
     const tid = trimString(threadID);
     if (!tid || retiredThreadIDs.has(tid)) return;
-    setThreadCache((cache) => cache.updateThread(tid, (thread) => threadWithReadStatus(thread, readStatus)));
+    setThreadCache((cache) => cache.updateSummaryAdjuncts(tid, (thread) => threadWithReadStatus(thread, readStatus)));
   };
   const threadItemSignature = (t: FlowerThreadSnapshot): string => {
     const visibleThread = threadWithLocalReadVisibility(t);
@@ -2574,6 +2537,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return current?.model_source?.state === 'ready' ? trimString(current.model_source.current_model_id) : '';
   });
   const selectedComposerModelID = createMemo(() => {
+    const pending = pendingModelPatch();
+    const threadID = trimString(selectedThreadID());
+    if (pending && threadID && pending.threadID === threadID) return pending.requested;
     const thread = selectedThread();
     const threadModelID = thread?.thread_id === trimString(selectedThreadID())
       ? trimString(thread.model_id)
@@ -3101,7 +3067,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const applyOptimisticPinnedState = (threadID: string, pinned: boolean) => {
     const tid = trimString(threadID);
     if (!tid || retiredThreadIDs.has(tid)) return;
-    setThreadCache((cache) => cache.updateThread(tid, (thread) => ({
+    setThreadCache((cache) => cache.updateSummaryAdjuncts(tid, (thread) => ({
       ...thread,
       ...(pinned ? { pinned_at_ms: Date.now() } : { pinned_at_ms: undefined }),
     })));
@@ -3138,7 +3104,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ): ThreadDetailReceiveResult => {
     const threadID = trimString(candidate.thread.thread_id);
     if (!threadID || retiredThreadIDs.has(threadID)) {
-      return { state: 'stale', thread: candidate.thread };
+      return {
+        state: 'stale',
+        runtimeState: 'stale',
+        settingsState: 'stale',
+        thread: candidate.thread,
+      };
     }
     const previous = threadCache().views.get(threadID)?.thread
       ?? threadCache().summaries.get(threadID);
@@ -3153,15 +3124,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       reportThreadDetailDiagnostic(threadID, 'cache_receive', source, error, candidate.version);
       throw error;
     }
-    const state = result.state;
+    const { state, runtimeState, settingsState } = result;
     const retained = result.cache.views.get(threadID)?.thread ?? candidate.thread;
     setThreadCache(result.cache);
-    if (state !== 'accepted') return { state, thread: retained };
+    if (state !== 'accepted') return { state, runtimeState, settingsState, thread: retained };
+    if (runtimeState !== 'accepted') {
+      return { state, runtimeState, settingsState, thread: retained };
+    }
+    summaryDetailRecoveryExhaustedSignatures.delete(threadID);
     const acceptedSummary = result.cache.summaries.get(threadID);
     if (
       busyAdmissionThreadIDs().has(threadID)
-      && !flowerThreadHasActiveTurnEvidence(candidate.thread)
-      && !threadSummaryNeedsDetail(acceptedSummary, candidate.thread)
+      && !flowerThreadHasActiveTurnEvidence(retained)
+      && !threadSummaryNeedsDetail(acceptedSummary, retained)
     ) {
       updateThreadIDMembership(setBusyAdmissionThreadIDs, threadID, false);
       busyAdmissionNotifiedThreadIDs.delete(threadID);
@@ -3169,8 +3144,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
     if (
       previous
-      && previous.model_id !== candidate.thread.model_id
-      && !sameFlowerReasoningSelection(previous.reasoning_selection, candidate.thread.reasoning_selection)
+      && previous.model_id !== retained.model_id
+      && !sameFlowerReasoningSelection(previous.reasoning_selection, retained.reasoning_selection)
     ) {
       notifySuccess('Reasoning adjusted for this model.');
     }
@@ -3179,7 +3154,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       setThreadLoadError('');
       setTranscriptLayoutRevision((revision) => revision + 1);
     }
-    return { state, thread: candidate.thread };
+    return { state, runtimeState, settingsState, thread: retained };
   };
 
   const receiveThreadView = (
@@ -3354,7 +3329,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const summaryDetailRecoverySignature = (summary: FlowerThreadSnapshot): string => [
-    String(threadSnapshotRevision(summary)),
+    String(Math.max(0, Math.floor(Number(summary.read_status.snapshot.activity_revision) || 0))),
+    String(Math.max(0, Math.floor(Number(summary.read_status.snapshot.last_message_at_unix_ms) || 0))),
+    trimString(summary.read_status.snapshot.activity_signature),
     summary.status,
     trimString(summary.active_run_id),
     summary.approval_pending ? '1' : '0',
@@ -3387,6 +3364,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         if (attempt > THREAD_DETAIL_RECOVERY_RETRY_DELAYS_MS.length) {
           reportThreadDetailDiagnostic(tid, 'request_or_mapping', 'summary_recovery', lastError);
           if (tid === selectedThreadID()) setThreadLoadError(threadDetailUserError(lastError));
+          const exhaustedTarget = summaryDetailRecoveryTargets.get(tid);
+          if (exhaustedTarget) summaryDetailRecoveryExhaustedSignatures.set(tid, exhaustedTarget.signature);
           summaryDetailRecoveryTargets.delete(tid);
           return;
         }
@@ -3397,9 +3376,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }
         try {
           const result = await reloadSelectedThread(tid, sequence, 'summary_recovery');
-          lastError = result?.state === 'accepted'
+          lastError = result?.runtimeState === 'accepted'
             ? null
-            : new Error(`detail snapshot was ${result?.state ?? 'discarded'}`);
+            : new Error(`runtime detail snapshot was ${result?.runtimeState ?? 'discarded'}`);
         } catch (error) {
           lastError = error;
           if (getErrorMessage(error).startsWith('Flower contract error:')) {
@@ -3434,6 +3413,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       && !threadSummaryNeedsDetail(next, initialRequest.summary)
     ) return;
     const signature = summaryDetailRecoverySignature(next);
+    if (summaryDetailRecoveryExhaustedSignatures.get(tid) === signature) return;
+    summaryDetailRecoveryExhaustedSignatures.delete(tid);
     const currentTarget = summaryDetailRecoveryTargets.get(tid);
     if (currentTarget?.signature === signature && summaryDetailRecoveryRuns.has(tid)) return;
     summaryDetailRecoveryTargets.set(tid, {
@@ -3444,13 +3425,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (summaryDetailRecoveryRuns.has(tid)) return;
     const run = runSelectedThreadSummaryRecovery(tid).finally(() => {
       summaryDetailRecoveryRuns.delete(tid);
-      if (
-        summaryDetailRecoveryTargets.has(tid)
-        && summaryRecoveryStillNeeded(tid)
-        && tid === selectedThreadID()
-      ) {
-        queueMicrotask(() => recoverSelectedThreadFromSummary(tid, threadCache().summaries.get(tid)));
-      }
     });
     summaryDetailRecoveryRuns.set(tid, run);
   };
@@ -3998,6 +3972,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       status: 'idle' as const,
       source_label: props.adapter.runtime.display_name,
       target_labels: [],
+      settings_revision: 0,
       messages: [],
       read_status: {
         is_unread: false,
@@ -4024,7 +3999,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return receiveThreadDetail({
         thread: projected,
         version: Math.max(1, Math.floor(Number(current.view_version) || 0)),
-      }, source, current).state === 'accepted';
+      }, source, current).runtimeState === 'accepted';
     } catch (error) {
       reportThreadDetailDiagnostic(
         threadID,
@@ -4823,6 +4798,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (retiringSelected) engagementBootstrapSequence += 1;
 
     summaryDetailRecoveryTargets.delete(tid);
+    summaryDetailRecoveryExhaustedSignatures.delete(tid);
     locallyReadSnapshots.delete(tid);
     persistingReadThreadIDs.delete(tid);
     pendingReadPersistenceSnapshots.delete(tid);
@@ -4926,6 +4902,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     cancelDeferredThreadSelection();
     const claimedSequence = ++threadLoadSequence;
+    summaryDetailRecoveryExhaustedSignatures.delete(tid);
     transcriptScroll.startFollowing();
     closeSubagentOverlays();
     setSelectedThreadID(tid);
@@ -7361,6 +7338,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       presentFlowerActivityItem(item, timeline.file_actions, {
         subagents: subagentsCopy(),
         subagentSummaries: selectedThread()?.subagents ?? [],
+        terminal: {
+          runCommand: copy().chat.toolActivityRunCommand,
+          readCommandOutput: copy().chat.toolActivityReadCommandOutput,
+          writeCommandInput: copy().chat.toolActivityWriteCommandInput,
+          terminateCommand: copy().chat.toolActivityTerminateCommand,
+        },
       }).label,
       copy().chat.toolStatuses[item.status],
     ].filter(Boolean).join('. ')
@@ -8187,11 +8170,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const presentation = createMemo(() => presentFlowerActivityItem(item(), timeline().file_actions, {
       subagents: subagentsCopy(),
       subagentSummaries: selectedThread()?.subagents ?? [],
+      terminal: {
+        runCommand: copy().chat.toolActivityRunCommand,
+        readCommandOutput: copy().chat.toolActivityReadCommandOutput,
+        writeCommandInput: copy().chat.toolActivityWriteCommandInput,
+        terminateCommand: copy().chat.toolActivityTerminateCommand,
+      },
     }));
     const pendingApprovalCommand = createMemo(() => pendingApprovalCommandForActivityItem(item(), selectedApprovalActions()));
     const displayTitle = createMemo<FlowerActivityTitle>(() => {
       const command = pendingApprovalCommand();
-      return command && presentation().title.kind !== 'command'
+      return command && item().renderer !== 'terminal' && presentation().title.kind !== 'command'
         ? { kind: 'command', command }
         : presentation().title;
     });
@@ -9384,6 +9373,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const retrySelectedThreadDetail = () => {
     const threadID = trimString(selectedThreadID());
     if (!threadID || retiredThreadIDs.has(threadID)) return;
+    summaryDetailRecoveryExhaustedSignatures.delete(threadID);
+    setThreadLoadError('');
     const summary = threadCache().summaries.get(threadID);
     if (summaryRecoveryStillNeeded(threadID) && summary) {
       recoverSelectedThreadFromSummary(threadID, summary);

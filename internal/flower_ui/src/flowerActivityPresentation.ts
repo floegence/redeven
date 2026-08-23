@@ -246,7 +246,20 @@ export type FlowerActivityPresentation = Readonly<{
 type FlowerActivityPresentationCopy = Readonly<{
   subagents?: FlowerSubagentsCopy;
   subagentSummaries?: readonly FlowerSubagentSummary[];
+  terminal?: Readonly<{
+    runCommand: string;
+    readCommandOutput: string;
+    writeCommandInput: string;
+    terminateCommand: string;
+  }>;
 }>;
+
+const DEFAULT_TERMINAL_ACTIVITY_COPY = {
+  runCommand: 'Run command',
+  readCommandOutput: 'View command output',
+  writeCommandInput: 'Send input to command',
+  terminateCommand: 'Terminate command execution',
+} as const;
 
 const DETAIL_LABELS: Readonly<Record<string, string>> = {
   truncated: 'truncated',
@@ -382,6 +395,7 @@ function todoItemsFromPayload(payload: Readonly<Record<string, unknown>> | undef
 }
 
 function rendererForItem(item: FlowerActivityItem): FlowerActivityRenderer {
+  if (trimString(item.tool_name).startsWith('terminal.')) return 'terminal';
   return item.renderer ?? 'structured';
 }
 
@@ -477,12 +491,8 @@ function diffStatsMeta(files: readonly FlowerActivityDiffFile[]): string {
 }
 
 function metaForTerminalItem(item: FlowerActivityItem): string {
-  const command = payloadValue(item.payload, 'command');
-  const title = terminalTitleForItem(item);
-  const description = trimString(item.description);
   const error = errorMessageFromPayload(item.payload);
-  const compactDescription = title.kind === 'command' && command && description.includes(command) ? '' : description;
-  return [title.kind === 'command' ? '' : command, compactDescription, item.status === 'error' && item.approval_state !== 'rejected' ? error : '']
+  return [item.status === 'error' && item.approval_state !== 'rejected' ? error : '']
     .filter(Boolean)
     .filter((value, index, values) => values.indexOf(value) === index)
     .join(' · ');
@@ -1037,20 +1047,31 @@ function presentationForTodos(item: FlowerActivityItem): FlowerActivityPresentat
   };
 }
 
-function terminalTitleForItem(_item: FlowerActivityItem): FlowerActivityTitle {
-  const command = payloadValue(_item.payload, 'command');
-  return command
-    ? { kind: 'command', command }
-    : { kind: 'plain', text: trimString(_item.tool_name) || 'terminal.exec' };
+function terminalOperationLabel(item: FlowerActivityItem, copy?: FlowerActivityPresentationCopy): string {
+  const terminalCopy = copy?.terminal ?? DEFAULT_TERMINAL_ACTIVITY_COPY;
+  switch (trimString(item.tool_name)) {
+    case 'terminal.read': return terminalCopy.readCommandOutput;
+    case 'terminal.write': return terminalCopy.writeCommandInput;
+    case 'terminal.terminate': return terminalCopy.terminateCommand;
+    case 'terminal.exec':
+    default:
+      return terminalCopy.runCommand;
+  }
+}
+
+function terminalTitleForItem(item: FlowerActivityItem, copy?: FlowerActivityPresentationCopy): FlowerActivityTitle {
+  const operation = terminalOperationLabel(item, copy);
+  const description = trimString(item.description);
+  return { kind: 'plain', text: description ? `${operation}: ${description}` : operation };
 }
 
 function terminalOutputFromPayload(payload: Readonly<Record<string, unknown>>): string {
   return rawPayloadText(payload, 'output');
 }
 
-function presentationForTerminal(item: FlowerActivityItem): FlowerActivityPresentation {
+function presentationForTerminal(item: FlowerActivityItem, copy?: FlowerActivityPresentationCopy): FlowerActivityPresentation {
   const payload = item.payload ?? {};
-  const title = terminalTitleForItem(item);
+  const title = terminalTitleForItem(item, copy);
   const detailLines: readonly FlowerActivityDetailLine[] = [];
   const terminal: FlowerActivityTerminalDetail = {
     command: payloadValue(payload, 'command'),
@@ -1071,10 +1092,21 @@ function presentationForTerminal(item: FlowerActivityItem): FlowerActivityPresen
   const detailBlocks: FlowerActivityDetailBlock[] = [];
   const errorBlock = item.status === 'canceled' || item.approval_state === 'rejected' ? null : errorDetailBlockForItem(item, payload);
   if (errorBlock) detailBlocks.push(errorBlock);
-  detailBlocks.push({ kind: 'terminal_output', terminal });
+  const hasTerminalDetail = Boolean(
+    terminal.command.trim()
+    || terminal.output.trim()
+    || terminal.execution_location.trim()
+    || terminal.exit_code != null
+    || terminal.duration_ms != null
+    || terminal.total_bytes != null
+    || terminal.has_more
+    || terminal.truncated
+    || terminal.timed_out
+  );
+  if (hasTerminalDetail) detailBlocks.push({ kind: 'terminal_output', terminal });
   if (detailLines.length > 0) detailBlocks.push({ kind: 'structured', lines: detailLines });
   return {
-    label: payloadValue(payload, 'command') || titleText(title),
+    label: titleText(title),
     title,
     meta: metaForTerminalItem(item),
     detailLines,
@@ -1307,7 +1339,7 @@ function presentationForStructured(item: FlowerActivityItem): FlowerActivityPres
 
 const FLOWER_ACTIVITY_RENDERERS: Readonly<Record<FlowerActivityRenderer, FlowerActivityRendererHandler>> = {
   structured: (item) => presentationForStructured(item),
-  terminal: (item) => presentationForTerminal(item),
+  terminal: (item, context) => presentationForTerminal(item, context.copy),
   file: (item, context) => presentationForFile(item, context.fileActions),
   patch: (item, context) => presentationForPatch(item, context.fileActions),
   web_search: (item) => presentationForWebSearch(item),

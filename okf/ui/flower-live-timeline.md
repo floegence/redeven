@@ -11,7 +11,7 @@ Flower uses one workspace SSE for every thread. The stream carries a baseline of
 
 # Contract
 
-`ThreadCache` owns selected ID, summary map, and a bounded LRU of typed detail views. Summary updates are stripped of messages and interaction detail and can never overwrite a cached view. HTTP detail, action responses, and `LiveCurrent` all use one receiver. Floret's monotonic `view_version` is the only detail ordering authority; accepted, unchanged, and stale results have one shared side-effect boundary.
+`ThreadCache` owns selected ID, summary map, and a bounded LRU of typed detail views. Summary updates are stripped of messages and interaction detail and can never overwrite a cached view. HTTP detail, action responses, and `LiveCurrent` all use one receiver. Floret's monotonic `view_version` orders runtime content; Redeven's monotonic `settings_revision` orders product settings. The receiver merges those two authorities independently. Only accepted runtime content may confirm the outbox, move the transcript, clear runtime errors, or update status presentation.
 
 `LiveTransport` owns the single connection and a process-local `connectionEpoch`. The epoch only invalidates callbacks from the prior connection; it is not stored in `ThreadCache` and never orders detail content. Normal network failures reconnect quietly with bounded backoff; authorization failure is terminal and visible. There is no browser event log, cursor, generation graph, replay endpoint, retention-gap reducer, polling loop, or per-selection SSE.
 
@@ -29,7 +29,14 @@ or waiting.
 
 Canonical terminal updates and reconnect baselines converge the current view. Background running, waiting_user, waiting_approval, and completed summaries update without pointer or focus events. When a selected summary is ahead, Flower issues a fresh detail request instead of reusing an older in-flight request. One recovery request runs per thread, tracks newer summary targets, and uses finite 100/300/900 ms retries for transient failure. Exhaustion preserves cached content and exposes an explicit retry action.
 
-Summary state only triggers revalidation. It never creates, merges, or replaces timeline messages. While a terminal summary is ahead of active detail, Flower hides stale thinking and shows that the latest reply is syncing. Stop remains available while summary, detail, an active-turn admission failure, or an in-flight Stop request proves that a turn may still be active. The next accepted detail replaces the timeline atomically. Stale or unchanged detail cannot confirm the outbox, move the transcript, clear an error, mark content read, or update status presentation.
+Summary runtime state only triggers revalidation. Product settings revisions do not enter that signature and cannot start runtime recovery. Exhausted finite recovery remains stopped until a newer runtime signature or an explicit user reload arrives. Summary never creates, merges, or replaces timeline messages. While a terminal summary is ahead of active detail, Flower hides stale thinking and shows that the latest reply is syncing. Stop remains available while summary, detail, an active-turn admission failure, or an in-flight Stop request proves that a turn may still be active.
+
+Every product settings mutation advances `settings_revision` with `max(now,
+previous+1)`. A settings PATCH returns the complete thread and current view in
+one response. Flower shows the requested permission while that request is in
+flight, then accepts or rolls back to the server-confirmed value. A mid-run
+permission change applies only to later tool operations; running tools and
+already-created approvals are not reconsidered.
 
 Floret installs a canonical fallback title with the first accepted user message.
 Automatic-title pending and failure summaries retain it, provider success

@@ -484,6 +484,7 @@ export type FlowerThreadSnapshot = Readonly<{
   model_id: string;
   working_dir: string;
   pinned_at_ms?: number;
+  settings_revision: number;
   home_runtime_id?: string;
   home_runtime_kind?: 'local_environment' | 'env_local';
   origin_env_public_id?: string;

@@ -9,6 +9,13 @@ export type ThreadView = Readonly<{
 
 export type ThreadViewAcceptance = 'accepted' | 'unchanged' | 'stale';
 
+export type ThreadViewReceiveResult = Readonly<{
+  cache: ThreadCache;
+  state: ThreadViewAcceptance;
+  runtimeState: ThreadViewAcceptance;
+  settingsState: ThreadViewAcceptance;
+}>;
+
 export function classifyThreadView(
   current: ThreadView | undefined,
   candidate: ThreadView,
@@ -17,6 +24,43 @@ export function classifyThreadView(
   if (candidate.version > current.version) return 'accepted';
   if (candidate.version < current.version) return 'stale';
   return 'unchanged';
+}
+
+function classifyThreadSettings(
+  current: ThreadView | undefined,
+  candidate: ThreadView,
+): ThreadViewAcceptance {
+  if (!current) return 'accepted';
+  const currentRevision = Math.max(0, Math.floor(Number(current.thread.settings_revision) || 0));
+  const candidateRevision = Math.max(0, Math.floor(Number(candidate.thread.settings_revision) || 0));
+  if (candidateRevision > currentRevision) return 'accepted';
+  if (candidateRevision < currentRevision) return 'stale';
+  return 'unchanged';
+}
+
+function mergeThreadSettings(
+  runtime: FlowerThreadSnapshot,
+  settings: FlowerThreadSnapshot,
+): FlowerThreadSnapshot {
+  return {
+    ...runtime,
+    model_id: settings.model_id,
+    working_dir: settings.working_dir,
+    pinned_at_ms: settings.pinned_at_ms,
+    permission_type: settings.permission_type,
+    reasoning_selection: settings.reasoning_selection,
+    reasoning_capability: settings.reasoning_capability,
+    settings_revision: settings.settings_revision,
+  };
+}
+
+function aggregateAcceptance(
+  runtimeState: ThreadViewAcceptance,
+  settingsState: ThreadViewAcceptance,
+): ThreadViewAcceptance {
+  if (runtimeState === 'accepted' || settingsState === 'accepted') return 'accepted';
+  if (runtimeState === 'unchanged' || settingsState === 'unchanged') return 'unchanged';
+  return 'stale';
 }
 
 export function threadSnapshotRevision(thread: FlowerThreadSnapshot | undefined): number {
@@ -66,9 +110,9 @@ export type ThreadCache = {
   receiveView(
     view: ThreadView,
     options?: Readonly<{ preserveSummary?: boolean }>,
-  ): Readonly<{ cache: ThreadCache; state: ThreadViewAcceptance }>;
+  ): ThreadViewReceiveResult;
   updateDetailAdjuncts(id: string, update: (thread: FlowerThreadSnapshot) => FlowerThreadSnapshot): ThreadCache;
-  updateThread(id: string, update: (thread: FlowerThreadSnapshot) => FlowerThreadSnapshot): ThreadCache;
+  updateSummaryAdjuncts(id: string, update: (thread: FlowerThreadSnapshot) => FlowerThreadSnapshot): ThreadCache;
   evict(id: string): ThreadCache;
 };
 
@@ -126,12 +170,25 @@ function createCache(
     },
     receiveView(view, options) {
       const id = view.thread.thread_id.trim();
-      if (!id) return { cache: this, state: 'stale' };
+      if (!id) return {
+        cache: this,
+        state: 'stale',
+        runtimeState: 'stale',
+        settingsState: 'stale',
+      };
       const current = views.get(id)?.view;
-      const state = classifyThreadView(current, view);
-      if (state !== 'accepted') return { cache: this, state };
+      const runtimeState = classifyThreadView(current, view);
+      const settingsState = classifyThreadSettings(current, view);
+      const state = aggregateAcceptance(runtimeState, settingsState);
+      if (state !== 'accepted') return { cache: this, state, runtimeState, settingsState };
+      const runtimeView = current && runtimeState !== 'accepted' ? current : view;
+      const settingsThread = current && settingsState !== 'accepted' ? current.thread : view.thread;
+      const mergedView: ThreadView = {
+        version: runtimeView.version,
+        thread: mergeThreadSettings(runtimeView.thread, settingsThread),
+      };
       const next = new Map(views);
-      next.set(id, { view, usedAt: clock + 1 });
+      next.set(id, { view: mergedView, usedAt: clock + 1 });
       while (next.size > MAX_VIEWS) {
         const oldest = [...next.entries()].sort((left, right) => left[1].usedAt - right[1].usedAt)[0];
         if (!oldest) break;
@@ -139,9 +196,17 @@ function createCache(
       }
       const summary = new Map(summaries);
       if (!options?.preserveSummary) {
-        summary.set(id, summaryOnly(view.thread));
+        summary.set(id, summaryOnly(mergedView.thread));
+      } else if (settingsState === 'accepted') {
+        const currentSummary = summary.get(id);
+        if (currentSummary) summary.set(id, summaryOnly(mergeThreadSettings(currentSummary, settingsThread)));
       }
-      return { cache: createCache(selectedId, summary, next, clock + 1), state };
+      return {
+        cache: createCache(selectedId, summary, next, clock + 1),
+        state,
+        runtimeState,
+        settingsState,
+      };
     },
     updateDetailAdjuncts(id, update) {
       const threadID = id.trim();
@@ -155,7 +220,7 @@ function createCache(
       });
       return createCache(selectedId, summaries, next, clock + 1);
     },
-    updateThread(id, update) {
+    updateSummaryAdjuncts(id, update) {
       const threadID = id.trim();
       if (!threadID) return this;
       const nextSummaries = new Map(summaries);

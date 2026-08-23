@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/floegence/floret/v4/identity"
+	"github.com/floegence/floret/v5/identity"
 	"github.com/floegence/redeven/internal/runtimeservice"
 )
 

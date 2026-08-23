@@ -30,6 +30,7 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
     title: 'Parent',
     model_id: 'openai/gpt-5.2',
     working_dir: '/workspace/redeven',
+    settings_revision: 1,
     created_at_ms: 1,
     updated_at_ms: 20,
     status: 'idle',

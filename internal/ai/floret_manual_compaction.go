@@ -5,7 +5,7 @@ import (
 	"strings"
 	"sync/atomic"
 
-	flruntime "github.com/floegence/floret/v4/runtime"
+	flruntime "github.com/floegence/floret/v5/runtime"
 )
 
 const flowerManualCompactionSourceName = "flower_slash_command"

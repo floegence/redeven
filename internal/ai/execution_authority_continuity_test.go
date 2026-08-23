@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/floegence/floret/v4/identity"
-	flruntime "github.com/floegence/floret/v4/runtime"
+	"github.com/floegence/floret/v5/identity"
+	flruntime "github.com/floegence/floret/v5/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/session"
 )

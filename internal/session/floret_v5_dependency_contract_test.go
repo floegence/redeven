@@ -13,7 +13,7 @@ import (
 	"golang.org/x/mod/modfile"
 )
 
-func TestFloretDependencyIsExactPublishedV4(t *testing.T) {
+func TestFloretDependencyIsExactPublishedV5(t *testing.T) {
 	t.Parallel()
 
 	root := repoRootForTest(t)
@@ -25,8 +25,8 @@ func TestFloretDependencyIsExactPublishedV4(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const path = "github.com/floegence/floret/v4"
-	const version = "v4.0.19"
+	const path = "github.com/floegence/floret/v5"
+	const version = "v5.0.0"
 	found := false
 	for _, requirement := range module.Require {
 		if requirement.Mod.Path == path {
@@ -79,9 +79,9 @@ func TestFloretDependencyIsExactPublishedV4(t *testing.T) {
 			if unquoteErr != nil {
 				return unquoteErr
 			}
-			if path == "github.com/floegence/floret" || strings.HasPrefix(path, "github.com/floegence/floret/") && !strings.HasPrefix(path, "github.com/floegence/floret/v4/") {
+			if path == "github.com/floegence/floret" || strings.HasPrefix(path, "github.com/floegence/floret/") && !strings.HasPrefix(path, "github.com/floegence/floret/v5/") {
 				relative, _ := filepath.Rel(root, filePath)
-				t.Fatalf("%s imports the v1 Floret module path %q", relative, path)
+				t.Fatalf("%s imports retired Floret module path %q", relative, path)
 			}
 		}
 		return nil
@@ -91,10 +91,15 @@ func TestFloretDependencyIsExactPublishedV4(t *testing.T) {
 	}
 }
 
-func TestCurrentSourceAndOKFDoNotNameTheRetiredFloretContract(t *testing.T) {
+func TestCurrentSourceAndOKFDoNotNameRetiredFloretContracts(t *testing.T) {
 	t.Parallel()
 	root := repoRootForTest(t)
-	forbidden := []string{"Floret " + "v3", "v3." + "2.40"}
+	forbidden := []string{
+		"Floret " + "v3",
+		"v3." + "2.40",
+		"Floret " + "v4",
+		"v4." + "0.19",
+	}
 	for _, relativeRoot := range []string{"internal", "okf"} {
 		err := filepath.WalkDir(filepath.Join(root, relativeRoot), func(filePath string, entry fs.DirEntry, walkErr error) error {
 			if walkErr != nil {

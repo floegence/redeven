@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/floegence/floret/v4/observation"
-	fltools "github.com/floegence/floret/v4/tools"
+	"github.com/floegence/floret/v5/observation"
+	fltools "github.com/floegence/floret/v5/tools"
 	"github.com/floegence/redeven/internal/session"
 )
 

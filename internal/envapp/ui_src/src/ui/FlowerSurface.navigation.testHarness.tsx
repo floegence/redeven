@@ -388,6 +388,7 @@ export function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThr
     title: 'Deploy plan',
     model_id: 'openai/gpt-5.2',
     working_dir: '/workspace/redeven',
+    settings_revision: 1,
     created_at_ms: 1,
     updated_at_ms: 2,
     status: 'idle',

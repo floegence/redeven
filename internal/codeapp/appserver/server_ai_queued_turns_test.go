@@ -14,7 +14,7 @@ import (
 	"testing/fstest"
 	"time"
 
-	flruntime "github.com/floegence/floret/v4/runtime"
+	flruntime "github.com/floegence/floret/v5/runtime"
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"

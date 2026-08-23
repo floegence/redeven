@@ -1,6 +1,13 @@
 # Redeven OKF Update Log
 
 ## 2026-08-23
+* **Floret v5 terminal presentation and setting revisions**: Redeven now
+  consumes published Floret v5.0.0. Canonical tool results preserve call
+  descriptions and commands. Flower localizes every terminal tool title,
+  suppresses empty terminal detail, and merges runtime `view_version` with the
+  independent product `settings_revision`. Permission changes use one PATCH
+  receipt and apply to later operations in an active turn without a second GET.
+
 * **Authoritative Stop and Floret v4.0.19 adoption**: Redeven now consumes the
   published Floret v4.0.19 module. User Stop commits one terminal aborted turn,
   seals late execution and effect-retry work, and immediately reopens the

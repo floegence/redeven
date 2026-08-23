@@ -10,9 +10,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/floegence/floret/v4/identity"
-	"github.com/floegence/floret/v4/observation"
-	flruntime "github.com/floegence/floret/v4/runtime"
+	"github.com/floegence/floret/v5/identity"
+	"github.com/floegence/floret/v5/observation"
+	flruntime "github.com/floegence/floret/v5/runtime"
 )
 
 // threadTimelineMessage is an HTTP pagination envelope over the typed current

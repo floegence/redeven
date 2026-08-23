@@ -4,7 +4,7 @@ import (
 	"strings"
 	"sync"
 
-	flruntime "github.com/floegence/floret/v4/runtime"
+	flruntime "github.com/floegence/floret/v5/runtime"
 	"github.com/floegence/redeven/internal/runtimeservice"
 )
 

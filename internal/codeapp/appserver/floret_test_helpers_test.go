@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	flconfig "github.com/floegence/floret/v4/config"
-	"github.com/floegence/floret/v4/identity"
-	flprovider "github.com/floegence/floret/v4/provider"
-	flruntime "github.com/floegence/floret/v4/runtime"
-	flstorage "github.com/floegence/floret/v4/storage"
+	flconfig "github.com/floegence/floret/v5/config"
+	"github.com/floegence/floret/v5/identity"
+	flprovider "github.com/floegence/floret/v5/provider"
+	flruntime "github.com/floegence/floret/v5/runtime"
+	flstorage "github.com/floegence/floret/v5/storage"
 	"github.com/floegence/redeven/internal/ai"
 	redevenconfig "github.com/floegence/redeven/internal/config"
 )

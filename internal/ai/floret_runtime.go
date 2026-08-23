@@ -11,9 +11,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	flconfig "github.com/floegence/floret/v4/config"
-	flprovider "github.com/floegence/floret/v4/provider"
-	flruntime "github.com/floegence/floret/v4/runtime"
+	flconfig "github.com/floegence/floret/v5/config"
+	flprovider "github.com/floegence/floret/v5/provider"
+	flruntime "github.com/floegence/floret/v5/runtime"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/config"
 )

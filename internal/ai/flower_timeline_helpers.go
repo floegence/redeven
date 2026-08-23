@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	flruntime "github.com/floegence/floret/v4/runtime"
+	flruntime "github.com/floegence/floret/v5/runtime"
 )
 
 func flowerTimelineMessageFromRaw(threadID string, canonicalTurnID string, runID string, messageID string, raw json.RawMessage) (FlowerTimelineMessage, bool, error) {

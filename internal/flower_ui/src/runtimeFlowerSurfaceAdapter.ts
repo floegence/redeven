@@ -53,6 +53,7 @@ type ListThreadsResponse = Readonly<{
 type LoadThreadResponse = Readonly<{
   client_request_id?: string;
   thread?: ThreadView;
+  current?: FlowerRuntimeCurrentView;
 }>;
 
 type MarkThreadReadResponse = Readonly<{
@@ -285,8 +286,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
       renameThread: async (threadID: string, title: string) => {
         const tid = trim(threadID);
         if (!tid) throw new Error(missingThreadIDMessage(options));
-        const threadResp = await options.transport.patchThread(tid, { title });
-        return loadThread(trim(threadResp.thread?.thread_id) || tid);
+        return mapRuntimeThreadView(await options.transport.patchThread(tid, { title }), options);
       },
       setThreadPinned: async (threadID: string, pinned: boolean) => {
         const tid = trim(threadID);
@@ -297,8 +297,10 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
       setThreadPermissionType: async (threadID: string, permissionType: FlowerPermissionType) => {
         const tid = trim(threadID);
         if (!tid) throw new Error(missingThreadIDMessage(options));
-        const threadResp = await options.transport.patchThread(tid, { permission_type: permissionType });
-        return loadThread(trim(threadResp.thread?.thread_id) || tid);
+        return mapRuntimeThreadView(
+          await options.transport.patchThread(tid, { permission_type: permissionType }),
+          options,
+        );
       },
     }),
     persistDefaultModel: async (modelID) => {
@@ -312,14 +314,15 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
         const mid = trim(modelID);
         if (!tid) throw new Error(missingThreadIDMessage(options));
         if (!mid) throw new Error('Missing model id.');
-        const threadResp = await options.transport.patchThread(tid, { model_id: mid });
-        return loadThread(trim(threadResp.thread?.thread_id) || tid);
+        return mapRuntimeThreadView(await options.transport.patchThread(tid, { model_id: mid }), options);
       },
       setThreadReasoningSelection: async (threadID: string, selection: FlowerReasoningSelection | undefined) => {
         const tid = trim(threadID);
         if (!tid) throw new Error(missingThreadIDMessage(options));
-        const threadResp = await options.transport.patchThread(tid, { reasoning_selection: selection ?? null });
-        return loadThread(trim(threadResp.thread?.thread_id) || tid);
+        return mapRuntimeThreadView(
+          await options.transport.patchThread(tid, { reasoning_selection: selection ?? null }),
+          options,
+        );
       },
       ...(options.transport.reorderQueuedTurns ? {
         reorderQueuedTurns: async (threadID: string, orderedQueueIDs: readonly string[]) => {

@@ -14,8 +14,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/floegence/floret/v4/identity"
-	flruntime "github.com/floegence/floret/v4/runtime"
+	"github.com/floegence/floret/v5/identity"
+	flruntime "github.com/floegence/floret/v5/runtime"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/config"
 )
@@ -158,6 +158,7 @@ type ThreadView struct {
 	ReasoningSelection   config.AIReasoningSelection  `json:"reasoning_selection,omitempty"`
 	ReasoningCapability  config.AIReasoningCapability `json:"reasoning_capability,omitempty"`
 	PinnedAtUnixMs       int64                        `json:"pinned_at_unix_ms,omitempty"`
+	SettingsRevision     int64                        `json:"settings_revision"`
 	CreatedAtUnixMs      int64                        `json:"created_at_unix_ms"`
 	UpdatedAtUnixMs      int64                        `json:"updated_at_unix_ms"`
 	LastMessageAtUnixMs  int64                        `json:"last_message_at_unix_ms"`

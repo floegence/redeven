@@ -1,13 +1,13 @@
 ---
 type: AI Runtime Contract
 title: Floret thread runtime integration
-description: Typed Floret v4 thread runtime ownership and Redeven product boundaries.
+description: Typed Floret v5 thread runtime ownership and Redeven product boundaries.
 tags: [ai, floret, threads, runtime]
 timestamp: 2026-08-18T00:00:00Z
 ---
 # Summary
 
-Floret v4 `ThreadService` is the sole owner of active and canonical thread lifecycle. Redeven owns endpoint authorization, attachment resource resolution, provider and tool effects, and browser-safe mapping. Every existing-thread mutation proves that the ThreadID belongs to the authenticated endpoint before entering Floret. Send, Respond, Cancel, Retry, and RetryEffect return the current typed view without waiting for provider continuation. Canonical journal facts prevent duplicate user, assistant, tool, and interaction records; transient drafts and execution tokens remain in memory.
+Floret v5 `ThreadService` is the sole owner of active and canonical thread lifecycle. Redeven owns endpoint authorization, attachment resource resolution, provider and tool effects, and browser-safe mapping. Every existing-thread mutation proves that the ThreadID belongs to the authenticated endpoint before entering Floret. Send, Respond, Cancel, Retry, and RetryEffect return the current typed view without waiting for provider continuation. Canonical journal facts prevent duplicate user, assistant, tool, and interaction records; transient drafts and execution tokens remain in memory.
 
 # Contract
 
@@ -52,7 +52,7 @@ canonical permission snapshot before model dispatch.
 
 ## Redeven adapter
 
-Redeven keeps one typed adapter over the published Floret v4 module. HTTP and RPC handlers perform product authorization, ResourceRef and attachment resolution, DTO mapping, and a typed call. They do not wait for provider work, register a legacy run handler, observe a receipt, acquire an authority barrier, or persist a lifecycle projection.
+Redeven keeps one typed adapter over the published Floret v5 module. HTTP and RPC handlers perform product authorization, ResourceRef and attachment resolution, DTO mapping, and a typed call. They do not wait for provider work, register a legacy run handler, observe a receipt, acquire an authority barrier, or persist a lifecycle projection.
 
 A dynamic `ToolSurface` with registry tools and nil provider definitions inherits
 the registry definitions. A non-nil empty definitions slice intentionally exposes
@@ -60,7 +60,7 @@ no registry tools to the provider. Redeven relies on the published Floret runtim
 to preserve that distinction; provider tool names that are absent from the
 resolved definitions remain rejected before dispatch.
 
-Redeven consumes Floret v4.0.19's public ordered `ThreadView.Items` and
+Redeven consumes Floret v5.0.0's public ordered `ThreadView.Items` and
 `ThreadContextReader`. User, thinking, assistant, tool, and independent
 interaction segments retain Floret-assigned IDs and ordinals across live
 updates, approval settlement, canonical reload, and renderer recovery. Redeven
@@ -72,11 +72,16 @@ stream text. `TurnResult.Output` remains a run aggregate and is not another
 message source. Flower deduplicates exact item IDs only; equal text with
 different stable IDs remains visible.
 
+Floret v5 accumulates a tool result into the matching call Activity by stable
+`tool_call_id`. Result status and output advance the item without clearing the
+call description, command, safe targets, or other presentation facts. The same
+merge rule is used during execution and canonical journal reconstruction.
+
 Every public Activity item passes through one host projection before it reaches
 current view, timeline pagination, live stream, or historical replay. The
 projection removes host paths, working directories, pending handles, and
 nested private values while keeping renderer, operation, status, summary,
-stable IDs, and display names. Floret v4.0.19 `StructuredActivityPayload.Rows`
+stable IDs, and display names. Floret v5.0.0 `StructuredActivityPayload.Rows`
 is the only generic rich-detail contract: Redeven creates bounded, ordered,
 safe display rows before admission, and Flower expands only those rows, a
 meaningful summary, or an error. It never rebuilds detail from raw tool JSON.
@@ -124,8 +129,8 @@ Redeven never imports Floret internals, reads Floret storage, copies canonical l
 
 # Evidence
 
-- `redeven:go.mod` - Pins the released Floret v4.0.19 typed runtime without local replacement.
-- `redeven:internal/session/floret_v4_dependency_contract_test.go` - Enforces exact published-v4 adoption and rejects retired imports.
+- `redeven:go.mod` - Pins the released Floret v5.0.0 typed runtime without local replacement.
+- `redeven:internal/session/floret_v5_dependency_contract_test.go` - Enforces exact published-v5 adoption and rejects retired imports.
 - `redeven:internal/ai/floret_runtime.go` - Published runtime composition.
 - `redeven:internal/ai/floret_thread_context.go` - Canonical compaction mapping and timeline anchoring.
 - `redeven:internal/ai/send_user_turn.go` - Thin product send mapping into typed Floret state.

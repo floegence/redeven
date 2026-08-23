@@ -7,14 +7,14 @@ timestamp: 2026-08-15T00:00:00Z
 ---
 # Summary
 
-- Authority: Floret v4 parent-scoped `ThreadRuntime.List` owns child membership and typed `View` owns child execution detail.
+- Authority: Floret v5 parent-scoped `ThreadRuntime.List` owns child membership and typed `View` owns child execution detail.
 - Outcome: Flower opens a parent-scoped, read-only child view without navigating away from the parent conversation.
 - Invariants: every public child route uses canonical `thread_id`; `task_name` is required and never guessed from title, role, description, or message.
 - Failure boundary: malformed summaries, missing canonical identity, parent-child mismatch, or invalid detail contracts are rejected rather than mapped through legacy aliases.
 
 # Contract
 
-Thread-level child membership comes from Floret v4 `ThreadRuntime.List` scoped by canonical parent id. Redeven maps typed summaries and current views into `thread.subagents` for bootstrap and live current updates. Thread list refreshes that omit detail preserve selected-thread detail; only an explicit typed detail value replaces it. The header dropdown never scans transcript activity, audit rows, or product settings to infer membership.
+Thread-level child membership comes from Floret v5 `ThreadRuntime.List` scoped by canonical parent id. Redeven maps typed summaries and current views into `thread.subagents` for bootstrap and live current updates. Thread list refreshes that omit detail preserve selected-thread detail; only an explicit typed detail value replaces it. The header dropdown never scans transcript activity, audit rows, or product settings to infer membership.
 
 `FlowerSubagentSummary` contains `parent_thread_id`, canonical child `thread_id`, required `task_name`, task description, agent type, context mode, status, timing, and current control flags. There is no `subagent_id` or `title` compatibility field. Activity payloads route `Open messages` with `thread_id` only. Delegated approval presentation uses `child_thread_id`; it does not duplicate the same identity under another name.
 
@@ -29,7 +29,7 @@ Flower must not recover a missing child identity from activity sidecars, a title
 # Evidence
 
 - `redeven:internal/ai/types.go:172` - Backend SubAgent summaries expose canonical thread identity only.
-- `redeven:internal/ai/subagents_floret.go` - Membership and detail read through parent-scoped Floret v4 typed APIs.
+- `redeven:internal/ai/subagents_floret.go` - Membership and detail read through parent-scoped Floret v5 typed APIs.
 - `redeven:internal/flower_ui/src/contracts/flowerSurfaceContracts.ts:486` - UI contracts require `thread_id` and `task_name` without aliases.
 - `redeven:internal/flower_ui/src/flowerLiveMapper.ts:744` - Wire mapping accepts only canonical child thread identity.
 - `redeven:internal/flower_ui/src/flowerSubagentProjection.ts:128` - Header rows derive directly from canonical summaries.

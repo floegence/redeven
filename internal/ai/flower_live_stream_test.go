@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	flconfig "github.com/floegence/floret/v4/config"
-	"github.com/floegence/floret/v4/identity"
-	flprovider "github.com/floegence/floret/v4/provider"
-	flruntime "github.com/floegence/floret/v4/runtime"
+	flconfig "github.com/floegence/floret/v5/config"
+	"github.com/floegence/floret/v5/identity"
+	flprovider "github.com/floegence/floret/v5/provider"
+	flruntime "github.com/floegence/floret/v5/runtime"
 	"github.com/floegence/redeven/internal/session"
 )
 
