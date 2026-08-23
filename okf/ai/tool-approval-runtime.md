@@ -15,7 +15,7 @@ Each interaction has one stable identity and belongs to one thread and tool call
 
 Effect attempts have stable identities. Canonical effect intent is written before an irreversible operation. A known result is canonical and deduplicated. A crash with unknown outcome does not replay automatically; Flower keeps the original tool row and exposes RetryEffect with explicit risk acknowledgement. Normal provider retry may repeat dispatch, but stable canonical identities prevent duplicate visible output.
 
-Cancel clears unresolved interactions and produces one terminal canceled turn. Resolve and Cancel races converge through the single thread runtime owner. Redeven handlers return the typed current view without waiting for provider continuation, receipt observation, authority release, or a legacy local handler.
+Cancel atomically clears unresolved interactions, seals effect retries, and writes one terminal aborted turn before returning. A started effect whose result is unknown remains recorded as unknown and is never replayed automatically. Late provider, tool, save-point, and retry work cannot reactivate the canceled turn. Resolve and Cancel races converge through the single thread runtime owner. Redeven handlers return the typed terminal current view without waiting for provider continuation, receipt observation, authority release, or a legacy local handler.
 
 # Boundaries
 
@@ -23,7 +23,7 @@ Floret owns canonical interaction identity, atomic answer settlement, effect-att
 
 # Evidence
 
-- `redeven:go.mod` - Pins the released Floret v4.0.18 typed runtime.
+- `redeven:go.mod` - Pins the released Floret v4.0.19 typed runtime.
 - `redeven:internal/session/floret_v4_dependency_contract_test.go` - Enforces published-v4 adoption without local replacement.
 - `redeven:internal/ai/approval_command.go` - Product approval authorization and typed mapping.
 - `redeven:internal/ai/retry_thread_effect.go` - Unknown-effect retry boundary.

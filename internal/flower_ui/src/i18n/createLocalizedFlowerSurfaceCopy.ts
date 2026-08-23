@@ -140,6 +140,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       threadLoading: t(i18n, k('chat.threadLoading')),
       threadSyncingLatest: t(i18n, k('chat.threadSyncingLatest')),
       threadSyncFailed: t(i18n, k('chat.threadSyncFailed')),
+      activeTurnBusy: t(i18n, k('chat.activeTurnBusy')),
       composerErrorTitle: t(i18n, k('chat.composerErrorTitle')),
       stopErrorTitle: t(i18n, k('chat.stopErrorTitle')),
       toolStatuses: {

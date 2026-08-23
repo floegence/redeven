@@ -123,6 +123,7 @@ export const flowerSurfaceEnUS = {
     threadLoading: 'Loading conversation...',
     threadSyncingLatest: 'Syncing the latest reply...',
     threadSyncFailed: 'Flower could not sync the latest reply. Try again.',
+    activeTurnBusy: 'The previous reply is still active. You can stop it before sending again.',
     composerErrorTitle: 'Flower could not send.',
     stopErrorTitle: 'Flower could not stop this reply.',
     modelStatusPreparing: 'Preparing model request...',

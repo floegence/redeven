@@ -29,7 +29,7 @@ or waiting.
 
 Canonical terminal updates and reconnect baselines converge the current view. Background running, waiting_user, waiting_approval, and completed summaries update without pointer or focus events. When a selected summary is ahead, Flower issues a fresh detail request instead of reusing an older in-flight request. One recovery request runs per thread, tracks newer summary targets, and uses finite 100/300/900 ms retries for transient failure. Exhaustion preserves cached content and exposes an explicit retry action.
 
-Summary state only triggers revalidation. It never creates, merges, or replaces timeline messages. While a terminal summary is ahead of active detail, Flower hides the stale thinking and Stop presentation and shows that the latest reply is syncing. The next accepted detail replaces the timeline atomically. Stale or unchanged detail cannot confirm the outbox, move the transcript, clear an error, mark content read, or update status presentation.
+Summary state only triggers revalidation. It never creates, merges, or replaces timeline messages. While a terminal summary is ahead of active detail, Flower hides stale thinking and shows that the latest reply is syncing. Stop remains available while summary, detail, an active-turn admission failure, or an in-flight Stop request proves that a turn may still be active. The next accepted detail replaces the timeline atomically. Stale or unchanged detail cannot confirm the outbox, move the transcript, clear an error, mark content read, or update status presentation.
 
 Floret installs a canonical fallback title with the first accepted user message.
 Automatic-title pending and failure summaries retain it, provider success

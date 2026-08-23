@@ -11,9 +11,11 @@ import type {
 import {
   adapter,
   blockedDecision,
+  clearFlowerSurfaceNotifications,
   decision,
   deferred,
   flush,
+  flowerSurfaceNotifications,
   launchReceipt,
   liveBootstrap,
   mutableSettingsAdapter,
@@ -778,6 +780,71 @@ describe('FlowerSurface navigation', () => {
     expect(runtime.querySelector('.flower-model-status-flower')?.getAttribute('aria-hidden')).toBe('true');
     expect(runtime.querySelector('.flower-model-status-indicator')?.firstElementChild?.className).toContain('flower-model-status-flower');
     expect(loadThread).not.toHaveBeenCalled();
+  });
+
+  it('preserves the draft, restores Stop, and deduplicates active-turn admission errors', async () => {
+    clearFlowerSurfaceNotifications();
+    const idleThread = thread({
+      thread_id: 'thread-active-turn-admission',
+      title: 'Active turn admission',
+      status: 'idle',
+    });
+    const activeThread = thread({
+      ...idleThread,
+      status: 'running',
+      active_run_id: 'turn-still-active',
+      updated_at_ms: idleThread.updated_at_ms + 1,
+    });
+    const stoppedThread = thread({
+      ...activeThread,
+      status: 'canceled',
+      active_run_id: undefined,
+      updated_at_ms: activeThread.updated_at_ms + 1,
+    });
+    let detailLoads = 0;
+    const activeDetail = deferred<ReturnType<typeof liveBootstrap>>();
+    const loadThread = vi.fn(() => {
+      detailLoads += 1;
+      if (detailLoads === 1) return Promise.resolve(liveBootstrap(idleThread, 1));
+      if (detailLoads === 2) return activeDetail.promise;
+      return Promise.resolve(liveBootstrap(activeThread, detailLoads));
+    });
+    const admissionError = Object.assign(new Error('thread already has an active turn'), {
+      code: 'floret_thread_admission_blocked',
+    });
+    const launchTurn = vi.fn(async () => { throw admissionError; });
+    const stopThread = vi.fn(async () => liveBootstrap(stoppedThread, 10));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [idleThread]),
+      loadThread,
+      launchTurn,
+      stopThread,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${idleThread.thread_id}"] button`)));
+    (runtime.querySelector(`[data-thread-id="${idleThread.thread_id}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-composer textarea')));
+    const textarea = runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement;
+    textarea.value = 'Keep this draft while the previous reply stops';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+
+    await waitFor(() => launchTurn.mock.calls.length === 1);
+    await waitFor(() => Boolean(runtime.querySelector('.flower-composer-stop-inline')));
+    expect((runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement).value).toBe('Keep this draft while the previous reply stops');
+    expect(flowerSurfaceNotifications()).toHaveLength(1);
+    expect(flowerSurfaceNotifications()[0]?.message).not.toContain('thread already has an active turn');
+    activeDetail.resolve(liveBootstrap(activeThread, 2));
+
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+    await waitFor(() => launchTurn.mock.calls.length === 2);
+    expect(flowerSurfaceNotifications()).toHaveLength(1);
+
+    (runtime.querySelector('.flower-composer-stop-inline') as HTMLButtonElement).click();
+    await waitFor(() => stopThread.mock.calls.length === 1);
+    await waitFor(() => runtime.querySelector('.flower-composer-stop-inline') === null);
+    expect((runtime.querySelector('.flower-composer textarea') as HTMLTextAreaElement).value).toBe('Keep this draft while the previous reply stops');
   });
 
   it('renders run and message errors as structured error cards', async () => {

@@ -92,6 +92,7 @@ main() {
       internal/flower_ui/src/transportOutbox.test.ts \
       internal/flower_ui/src/runtimeCurrentView.test.ts \
       internal/flower_ui/src/flowerApprovalPresentation.test.ts \
+      internal/flower_ui/src/flowerSurfaceModel.test.ts \
       internal/flower_ui/src/approvalAction.test.ts \
       internal/flower_ui/src/attachments/flowerAttachmentModel.test.ts \
       internal/flower_ui/src/attachments/createFlowerAttachmentController.test.ts \

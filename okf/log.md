@@ -1,6 +1,13 @@
 # Redeven OKF Update Log
 
 ## 2026-08-23
+* **Authoritative Stop and Floret v4.0.19 adoption**: Redeven now consumes the
+  published Floret v4.0.19 module. User Stop commits one terminal aborted turn,
+  seals late execution and effect-retry work, and immediately reopens the
+  thread for input. Flower keeps Stop available from summary, detail, or local
+  request evidence, deduplicates active-turn admission notices, and uses one
+  capsule component for row and batch approvals.
+
 * **Typed tool activity presentation and Floret v4.0.18 adoption**: Redeven now
   consumes the published Floret v4.0.18 module. OKF tools publish bounded safe
   structured rows, while successful Skill activity stays static unless it has

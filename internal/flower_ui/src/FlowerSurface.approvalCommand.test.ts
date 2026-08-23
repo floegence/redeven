@@ -59,7 +59,7 @@ describe('Flower approval command presentation', () => {
     expect(surface).not.toContain('This command accesses the network.');
   });
 
-  it('uses one continuous decision capsule next to Stop for a single approval', () => {
+  it('uses one continuous decision capsule for row and batch approvals', () => {
     const css = readFile(stylesPath);
     const surface = readFile(surfacePath);
     const capsuleRule = cssRule(css, '.flower-approval-decision-group');
@@ -68,7 +68,9 @@ describe('Flower approval command presentation', () => {
 
     expect(surface).toContain('const FlowerApprovalDecisionCapsule: Component<FlowerApprovalDecisionCapsuleProps>');
     expect(surface).toContain('<FlowerApprovalDecisionCapsule');
+    expect(surface.match(/^\s+<FlowerApprovalDecisionCapsule/gmu)).toHaveLength(2);
     expect(surface).toContain('<span class="flower-approval-decision-divider"');
+    expect(surface).not.toContain('flower-approval-action-pill');
     expect(capsuleRule).toContain('border: 1px solid');
     expect(capsuleRule).toContain('border-radius: 9999px');
     expect(capsuleRule).toContain('overflow: hidden');
@@ -76,5 +78,15 @@ describe('Flower approval command presentation', () => {
     expect(decisionRule).toContain('border-radius: 0');
     expect(singleActionsRule).toContain('justify-content: flex-end');
     expect(css).not.toContain('.flower-approval-single .flower-composer-stop-thread {');
+    expect(css).not.toContain('.flower-approval-action-pill');
+  });
+
+  it('keeps ordinary tool descriptions inline and reserves the risk row for actual risk', () => {
+    const css = readFile(stylesPath);
+    const surface = readFile(surfacePath);
+
+    expect(surface).toContain('class="flower-approval-operation-description"');
+    expect(surface).not.toContain('presentation().risk');
+    expect(cssRule(css, '.flower-approval-operation-description')).toContain('text-overflow: ellipsis');
   });
 });
