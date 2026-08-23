@@ -391,6 +391,31 @@ describe('runtimePackageCache', () => {
     }
   }, 15_000);
 
+  it('does not reuse a source package after the Desktop source commit changes', async () => {
+    const fixture = await createSourceRuntimeFixture();
+    const platform = resolveDesktopSSHRemotePlatform('linux', 'x86_64');
+    try {
+      vi.stubEnv('REDEVEN_DESKTOP_BUNDLE_COMMIT', 'commit-a');
+      const first = await preparePackage({
+        cacheRoot: fixture.cacheRoot,
+        platform,
+        sourceRuntimeRoot: fixture.root,
+      });
+      vi.stubEnv('REDEVEN_DESKTOP_BUNDLE_COMMIT', 'commit-b');
+      const second = await preparePackage({
+        cacheRoot: fixture.cacheRoot,
+        platform,
+        sourceRuntimeRoot: fixture.root,
+      });
+
+      expect(first.source).toBe('source_build');
+      expect(second.source).toBe('source_build');
+      expect((await fs.readFile(fixture.buildLogPath, 'utf8')).match(/^assets:/gmu)).toHaveLength(2);
+    } finally {
+      await fs.rm(path.dirname(fixture.root), { recursive: true, force: true });
+    }
+  }, 15_000);
+
   it('builds the source maintenance helper without staging the full Runtime suite', async () => {
     const fixture = await createSourceRuntimeFixture();
     const platform = resolveDesktopSSHRemotePlatform('linux', 'x86_64');

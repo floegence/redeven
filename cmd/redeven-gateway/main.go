@@ -21,7 +21,6 @@ import (
 	"github.com/floegence/redeven/internal/gatewayservice"
 	"github.com/floegence/redeven/internal/lockfile"
 	"github.com/floegence/redeven/internal/processenv"
-	gatewaylifecycle "github.com/floegence/redeven/internal/runtimegateway/lifecycle"
 	gatewaysupervisor "github.com/floegence/redeven/internal/runtimegateway/supervisor"
 	processlib "github.com/shirou/gopsutil/v4/process"
 	"golang.org/x/term"
@@ -34,6 +33,8 @@ var (
 )
 
 const managedDesktopBridgeEnv = "REDEVEN_GATEWAY_MANAGED_DESKTOP_BRIDGE"
+
+const gatewayServiceReadyWait = gatewaysupervisor.DefaultRuntimeStartupWait + 5*time.Second
 
 func activatedRuntimeStartupConfigured(operationID, version, commit, sha256 string) (bool, error) {
 	values := []string{operationID, version, commit, sha256}
@@ -177,18 +178,13 @@ func (c *cli) supervisorEnrollCmd(args []string) int {
 		writeError(c.stderr, fmt.Sprintf("supervisor enroll failed: initialize Runtime lifecycle controller: %v", err))
 		return 1
 	}
-	targetCoordinator, err := gatewaylifecycle.NewStore(gatewaylifecycle.Options{StateRoot: filepath.Join(stateRootValue, "runtime-lifecycle")})
-	if err != nil {
-		writeError(c.stderr, fmt.Sprintf("supervisor enroll failed: open Runtime lifecycle coordination: %v", err))
-		return 1
-	}
 	signalCtx, stop := signalContext()
 	defer stop()
 	ctx, cancel := context.WithTimeout(signalCtx, 2*time.Minute)
 	defer cancel()
 	binding, err := gatewaysupervisor.EnrollProvider(ctx, gatewaysupervisor.ProviderEnrollmentOptions{
 		AccessPointOrigin: strings.TrimSpace(*provider), EnvironmentID: strings.TrimSpace(*environment),
-		EnrollmentCode: code, GatewayVersion: Version, BindingStore: bindingStore, Controller: controller, TargetCoordinator: targetCoordinator,
+		EnrollmentCode: code, GatewayVersion: Version, BindingStore: bindingStore, Controller: controller,
 	})
 	if err != nil {
 		writeError(c.stderr, fmt.Sprintf("supervisor enroll failed: %v", err))
@@ -426,6 +422,7 @@ func (c *cli) serviceStartCmd(args []string) int {
 		cmdArgs = append(cmdArgs, "--enable-profile-write")
 	}
 	cmd := exec.Command(exe, cmdArgs...)
+	configureDetachedProcess(cmd)
 	cmd.Env = append(processenv.Current(), managedDesktopBridgeEnv+"=1")
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
@@ -865,7 +862,7 @@ func serviceProcessMatches(status serviceStatus) bool {
 }
 
 func waitServiceReady(stateRoot string, expectedPID int) (serviceStatus, error) {
-	deadline := time.Now().Add(8 * time.Second)
+	deadline := time.Now().Add(gatewayServiceReadyWait)
 	for time.Now().Before(deadline) {
 		status := readServiceStatus(stateRoot)
 		if status.Status == "running" && status.PID == expectedPID && strings.TrimSpace(status.Listen) != "" {

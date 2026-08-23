@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -186,6 +187,56 @@ func TestRuntimeProcessInventoryFindsDeletedCurrentExecutableOnLinux(t *testing.
 		t.Fatalf("after = %#v", result.After)
 	}
 	waitRuntimeProcessHelper(t, process)
+}
+
+func TestTargetProcessInventoryStopsNonstandardExecutableInsideExactRootOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("target process signaling integration is Unix-only")
+	}
+	root := t.TempDir()
+	targetRoot := filepath.Join(root, ".redeven")
+	targetExecutable := filepath.Join(targetRoot, "strange", "old-redeven-worker")
+	externalExecutable := filepath.Join(root, "external", "viewer")
+	buildRuntimeProcessHelper(t, targetExecutable)
+	buildRuntimeProcessHelper(t, externalExecutable)
+	targetProcess := startRuntimeProcessHelper(
+		t,
+		targetExecutable,
+		targetRoot,
+		filepath.Join(root, "target.ready"),
+	)
+	externalProcess := startRuntimeProcessHelper(
+		t,
+		externalExecutable,
+		targetRoot,
+		filepath.Join(root, "external.ready"),
+	)
+
+	inventory, err := InspectTargetProcesses(context.Background(), TargetProcessOptions{TargetRoot: targetRoot})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(inventory.Instances) != 1 || inventory.Instances[0].PID != targetProcess.Process.Pid {
+		t.Fatalf("inventory = %#v", inventory)
+	}
+	if inventory.Instances[0].Role != "target_root_process" || inventory.Instances[0].StopAuthority != RuntimeProcessStopAutomatic {
+		t.Fatalf("instance = %#v", inventory.Instances[0])
+	}
+	result, err := StopTargetProcessesBestEffort(
+		context.Background(),
+		TargetProcessOptions{TargetRoot: targetRoot},
+		2*time.Second,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.After.Instances) != 0 {
+		t.Fatalf("after = %#v", result.After)
+	}
+	waitRuntimeProcessHelper(t, targetProcess)
+	if signalErr := externalProcess.Process.Signal(syscall.Signal(0)); signalErr != nil {
+		t.Fatalf("external process was stopped: %v", signalErr)
+	}
 }
 
 func TestRuntimeProcessInventoryStopsVerifiedAlternateBundle(t *testing.T) {

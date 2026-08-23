@@ -50,7 +50,7 @@ func TestBuildTargetProcessInventoryFindsEveryRedevenRoleAndManagedChildren(t *t
 	for _, instance := range inventory.Instances {
 		roles[instance.Role]++
 	}
-	for _, role := range []string{"runtime", "runtime_bridge", "gateway", "gateway_bridge", "managed_process", "managed_child"} {
+	for _, role := range []string{"runtime", "runtime_bridge", "gateway", "gateway_bridge", "target_root_process", "managed_child"} {
 		if roles[role] != 1 {
 			t.Fatalf("role %q count = %d, inventory = %#v", role, roles[role], inventory.Instances)
 		}

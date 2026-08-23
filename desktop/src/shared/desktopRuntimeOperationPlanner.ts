@@ -176,21 +176,17 @@ export function buildDesktopRuntimeOperationPlans(
       maintenance,
     }),
     refresh: desktopRuntimeOperationPlan('refresh', 'available', method, {
-      menuVisibility: 'contextual',
+      menuVisibility: hasManagement ? 'stable' : 'hidden',
     }),
     start: desktopRuntimeOperationPlan(
       'start',
-      hasManagement
-        ? input.running
-          ? 'unavailable'
-          : 'available'
-        : 'hidden',
+      hasManagement ? 'available' : 'hidden',
       lifecycleMethod,
       {
         reasonCode: input.running ? 'runtime_already_running' : undefined,
         packageState: input.package_state,
         maintenance,
-        menuVisibility: hasManagement && !input.running ? 'contextual' : 'hidden',
+        menuVisibility: hasManagement ? 'stable' : 'hidden',
       },
     ),
     stop: desktopRuntimeOperationPlan(

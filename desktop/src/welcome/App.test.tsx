@@ -888,7 +888,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('const visibleGatewayProgress = createMemo(() => {\n    const progress = selectedGatewayOperationProgress();\n    return progress;\n  });');
     expect(appSrc).toContain('const labelsByStepID: Readonly<Record<string, DesktopTranslationKey>> = {');
     expect(appSrc).toContain('const stepIDKey = labelsByStepID[cleanStepID];');
-    expect(appSrc).toContain('return fallbackKey ? i18n.t(fallbackKey) : cleanFallback || cleanStepID;');
+    expect(appSrc).toContain('return cleanFallback || cleanStepID;');
+    expect(appSrc).not.toContain('return fallbackKey ? i18n.t(fallbackKey)');
     expect(appSrc).toContain('if (pending && !selected) {');
     expect(appSrc).not.toContain('if (pending && (!selected || launcherActionProgressIsTerminal(selected))) {');
     expect(appSrc).toContain('if (progress && !launcherActionProgressIsTerminal(progress)) {');
@@ -1548,9 +1549,9 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('function localizedEnvironmentActionPresentation');
     expect(appSrc).toContain('primary_action: localizedEnvironmentAction(i18n, presentation.primary_action)');
     expect(appSrc).toContain('localizedEnvironmentOverlay(i18n, presentation.primary_action_overlay)');
-    expect(appSrc).toContain('menu_button_label: localizedEnvironmentActionLabel(i18n, presentation.menu_button_label)');
+    expect(appSrc).toContain("menu_button_label: i18n.t('environmentAction.runtimeActions')");
     expect(appSrc).toContain('menu_actions: presentation.menu_actions.map((item) => localizedEnvironmentMenuItem(i18n, item))');
-    expect(appSrc).toContain('label: localizedEnvironmentActionLabel(i18n, item.label)');
+    expect(appSrc).toContain('label: item.label_key ? i18n.t(item.label_key) : action.label');
     expect(appSrc).toContain('disabled_reason: localizedRuntimeMessage(i18n, action.disabled_reason)');
     expect(appSrc).toContain('const renderPrimaryButton = () => (');
     expect(appSrc).not.toContain('const primaryButton = (');
@@ -1745,9 +1746,10 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('data-plan-revision={runtimeLifecycle()?.plan_revision ?? 0}');
     expect(appSrc).toContain('data-entering={runtimeLifecycle() ? stepEntering(step().key) : false}');
     expect(appSrc).toContain("data-plan-state={runtimeLifecycle()?.plan_state ?? 'executing'}");
-    expect(appSrc).toContain("runtimeLifecycle()?.plan_state !== 'planning'");
     expect(appSrc).not.toContain("current.plan_state === 'planning'");
     expect(appSrc).toContain('localizedProgressPlanningLabel(props.i18n, props.progress.action)');
+    expect(appSrc).toContain("runtimeLifecycle()?.plan_state === 'planning'");
+    expect(appSrc).not.toContain("runtimeLifecycle()?.plan_state !== 'planning'");
     expect(appSrc).toContain("props.progress.status === 'failed' || props.progress.status === 'cleanup_failed'");
     expect(appSrc).toContain('buildWelcomeOperationFailureDisplay({');
     expect(appSrc).toContain('const progressLeadDetail = createMemo(() => {');
@@ -1903,10 +1905,12 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("class={shimmerBlocked() ? 'redeven-blocked-shimmer-overlay' : 'redeven-welcome-loading-shimmer-overlay'}");
     expect(appSrc).not.toContain('disabled={props.loading && !hasOpenConnectionProgress() && !hasRuntimeLifecycleProgress()}');
     expect(appSrc).not.toContain('disabled={props.loading && popoverPrimaryRunsAction()}');
-    expect(appSrc).toContain('disabled={props.loading && !primaryProgressPresentation()}');
+    expect(appSrc).not.toContain('disabled={props.loading && !primaryProgressPresentation()}');
     expect(appSrc).toContain('disabled={props.loading && primaryFallbackRunsAction()}');
     expect(appSrc).toContain('environmentActionStartsLifecycleDisclosure(action)');
     expect(appSrc).toContain('props.beginLifecycleDisclosure(action.intent, lifecycleAttempt);');
+    expect(appSrc).toContain("runtimeActionRequest(environment, 'refresh_environment_runtime', {");
+    expect(appSrc).toContain('return refreshEnvironmentRuntime(environment, errorTarget, { attempt });');
     expect(appSrc).not.toContain("step_progress: reinstallTargetStepProgress('preflight')");
     expect(appSrc).toContain('props.onProgressOpenChange(false);');
     expect(appSrc).toContain('props.setGuidanceSession(startEnvironmentGuidanceIntent(');

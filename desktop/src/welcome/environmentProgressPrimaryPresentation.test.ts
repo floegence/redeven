@@ -324,6 +324,7 @@ describe('environmentProgressPrimaryPresentation', () => {
     )).toMatchObject({
       kind: 'progress_trigger',
       label: 'Restarting...',
+      label_key: 'progress.restartingEllipsis',
       icon: 'play',
     });
     expect(environmentProgressPrimaryPresentation(
@@ -332,6 +333,14 @@ describe('environmentProgressPrimaryPresentation', () => {
       kind: 'progress_trigger',
       label: 'Stopping...',
       icon: 'stop',
+    });
+    expect(environmentProgressPrimaryPresentation(
+      lifecycleActionProgress({ action: 'refresh_environment_runtime', operation: 'refresh', status: 'running', phase: 'verifying_runtime_inventory' }),
+    )).toMatchObject({
+      kind: 'progress_trigger',
+      label: 'Refreshing...',
+      label_key: 'environmentCenter.gatewayActionSyncing',
+      icon: 'play',
     });
     expect(environmentProgressPrimaryPresentation(
       lifecycleActionProgress({ action: 'pair_gateway', operation: 'start', status: 'running', phase: 'starting_runtime_process' }),

@@ -53,6 +53,10 @@ type Controller struct {
 	artifactProbeTimeout          time.Duration
 }
 
+// DefaultRuntimeStartupWait is the supervisor's authoritative budget for a
+// managed Runtime to publish identity and health after launch.
+const DefaultRuntimeStartupWait = 30 * time.Second
+
 type operationCheckpoint struct {
 	OperationID              string                    `json:"operation_id"`
 	Phase                    operationCheckpointPhase  `json:"phase"`
@@ -113,7 +117,7 @@ func NewController(options ControllerOptions) (*Controller, error) {
 	}
 	startupWait := options.StartupWait
 	if startupWait <= 0 {
-		startupWait = 30 * time.Second
+		startupWait = DefaultRuntimeStartupWait
 	}
 	shutdownWait := options.ShutdownWait
 	if shutdownWait <= 0 {

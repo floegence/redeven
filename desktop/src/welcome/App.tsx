@@ -175,6 +175,10 @@ import {
   type DesktopOperationFailurePresentation,
 } from '../shared/desktopOperationFailure';
 import {
+  localizedOperationFailureSummary,
+  localizedOperationFailureTitle,
+} from './operationFailureI18n';
+import {
   applyDesktopAccessAutoPortToDraft,
   applyDesktopAccessFixedPortToDraft,
   applyDesktopAccessModeToDraft,
@@ -882,104 +886,42 @@ function localizedGatewaySourceStatusLabel(i18n: DesktopI18n, label: string): st
   }) || localizedEnvironmentStatusLabel(i18n, label);
 }
 
-function localizedEnvironmentActionLabel(i18n: DesktopI18n, label: string): string {
-  return localizedStringByValue(i18n, label, {
-    Open: 'environmentAction.open',
-    Focus: 'environmentAction.focus',
-    'Focus remote window': 'environmentAction.focusRemoteWindow',
-    'Remote window opening...': 'environmentAction.remoteWindowOpening',
-    'Remote window opening…': 'environmentAction.remoteWindowOpening',
-    'Initialize and open': 'environmentAction.initializeAndOpen',
-    'Start and open': 'environmentAction.startAndOpen',
-    'Request access': 'environmentAction.requestAccess',
-    'Retry initialization': 'environmentAction.retryInitialization',
-    'Runtime actions': 'environmentAction.runtimeActions',
-    'Refresh status': 'environmentAction.refreshStatus',
-    'Refresh runtime status': 'environmentAction.refreshRuntimeStatus',
-    'Refresh Runtime status': 'environmentAction.refreshRuntimeStatus',
-    'Refresh provider status': 'environmentAction.refreshProviderStatus',
-    'Refresh Gateway status': 'environmentAction.refreshStatus',
-    'Review network exposure': 'settings.reviewExposure',
-    'Refresh catalog': 'common.refresh',
-    'Enable Gateway': 'environmentCenter.gatewayActionEnable',
-    'Disable Gateway': 'environmentCenter.gatewayActionDisable',
-    'View Environments': 'environmentCenter.viewEnvironments',
-    'Add Env': 'environmentCenter.gatewayAddEnvironmentShort',
-    'Open settings': 'environmentCenter.gatewayActionManage',
-    'Edit Gateway Settings': 'environmentCenter.gatewayActionEditSettings',
-    Resolve: 'environmentAction.continue',
-    'Set up': 'environmentStatus.setupRequired',
-    Synced: 'environmentCenter.gatewayActionSynced',
-    'Needs Attention': 'progress.needsAttention',
-    'Syncing...': 'environmentCenter.gatewayActionSyncing',
-    'Pairing...': 'environmentCenter.gatewayActionSyncing',
-    Manage: 'environmentCenter.gatewayActionManage',
-    'Gateway settings': 'environmentCenter.gatewayActionManage',
-    'Start Gateway': 'environmentCenter.gatewayActionStart',
-    'Starting...': 'progress.startingRuntime',
-    'Starting…': 'progress.startingRuntime',
-    'Stop': 'environmentAction.stopRuntime',
-    'Stop Gateway': 'environmentCenter.gatewayActionStop',
-    'Restart': 'environmentAction.restartRuntime',
-    'Restart Gateway': 'environmentCenter.gatewayActionRestart',
-    'Update': 'environmentAction.updateRuntime',
-    'Update Gateway': 'environmentCenter.gatewayActionUpdate',
-    Reinstall: 'common.reinstall',
-    'Reinstall Redeven': 'environmentAction.reinstallRedeven',
-    'Erase data and reinstall Redeven': 'environmentAction.reinstallRedevenWipeData',
-    'Reinstall Redeven and keep data': 'environmentAction.reinstallRedevenKeepData',
-    'Pair Gateway': 'environmentCenter.gatewayPanelPairThisGatewayAria',
-    // Keep legacy route-qualified plans user-facing neutral if an older
-    // snapshot still contains those labels.
-    'Start through Gateway': 'environmentAction.startRuntime',
-    'Start through Gateway...': 'environmentAction.startRuntime',
-    'Stop through Gateway': 'environmentAction.stopRuntime',
-    'Stop through Gateway...': 'environmentAction.stopRuntime',
-    'Restart through Gateway': 'environmentAction.restartRuntime',
-    'Restart through Gateway...': 'environmentAction.restartRuntime',
-    'Update through Gateway': 'environmentAction.updateRuntime',
-    'Update through Gateway...': 'environmentAction.updateRuntime',
-    'Resolve Gateway': 'environmentCenter.gatewayPanelResolveTitle',
-    'Gateway action': 'environmentCenter.gatewayPanelGenericAction',
-    Cancel: 'common.cancel',
-    Refresh: 'environmentAction.refreshStatus',
-    Start: 'environmentAction.startRuntime',
-    'Start runtime': 'environmentAction.startRuntime',
-    'Start Runtime': 'environmentAction.startRuntime',
-    'Stop runtime': 'environmentAction.stopRuntime',
-    'Stop Runtime': 'environmentAction.stopRuntime',
-    'Restart runtime': 'environmentAction.restartRuntime',
-    'Restart Runtime': 'environmentAction.restartRuntime',
-    'Update runtime': 'environmentAction.updateRuntime',
-    'Update Runtime': 'environmentAction.updateRuntime',
-    'Update runtime and open': 'environmentAction.updateRuntimeAndOpen',
-    'Update Runtime and open': 'environmentAction.updateRuntimeAndOpen',
-    'Stop operation': 'progress.cancelRuntimeOperation',
-    'Update and restart...': 'environmentAction.updateAndRestart',
-    'Update and restart…': 'environmentAction.updateAndRestart',
-    'Restart runtime...': 'environmentAction.restartRuntimeEllipsis',
-    'Restart runtime…': 'environmentAction.restartRuntimeEllipsis',
-    'Connect to provider': 'environmentAction.connectToProvider',
-    'Connect to provider...': 'environmentAction.connectToProviderEllipsis',
-    'Connect to provider…': 'environmentAction.connectToProviderEllipsis',
-    'Disconnect from provider': 'environmentAction.disconnectFromProvider',
-    'Connecting to provider': 'environmentAction.connectingToProvider',
-    'Disconnecting from provider': 'environmentAction.disconnectingFromProvider',
-    'Provider link needs attention': 'environmentAction.providerLinkNeedsAttention',
-    'Provider link unavailable': 'environmentAction.providerLinkUnavailable',
-    Continue: 'environmentAction.continue',
-    'Manage in Desktop': 'environmentAction.manageInDesktop',
-    'Update Redeven Desktop': 'environmentAction.updateRedevenDesktop',
-  });
+function environmentActionTranslationKey(action: EnvironmentActionModel): DesktopTranslationKey | undefined {
+  if (action.label_key) return action.label_key;
+  switch (action.intent) {
+    case 'open':
+    case 'open_with_preflight': return 'environmentAction.open';
+    case 'focus': return 'environmentAction.focus';
+    case 'opening': return 'environmentAction.remoteWindowOpening';
+    case 'initialize_and_open': return 'environmentAction.initializeAndOpen';
+    case 'start_and_open': return 'environmentAction.startAndOpen';
+    case 'request_open_access': return 'environmentAction.requestAccess';
+    case 'resolve_gateway': return 'environmentStatus.resolveGateway';
+    case 'connect_provider_runtime': return 'environmentAction.connectToProviderEllipsis';
+    case 'disconnect_provider_runtime': return 'environmentAction.disconnectFromProvider';
+    case 'start_runtime': return 'environmentAction.startRuntime';
+    case 'stop_runtime': return 'environmentAction.stopRuntime';
+    case 'restart_runtime': return 'environmentAction.restartRuntime';
+    case 'update_runtime': return 'environmentAction.updateRuntime';
+    case 'update_desktop': return 'environmentAction.updateRedevenDesktop';
+    case 'refresh_runtime': return 'environmentAction.refreshRuntimeStatus';
+    case 'reinstall_target': return action.reinstall_mode === 'preserve_data'
+      ? 'environmentAction.reinstallRedevenKeepData'
+      : 'environmentAction.reinstallRedevenWipeData';
+    case 'pair_gateway': return 'environmentAction.pairGateway';
+    case 'review_network_exposure': return 'environmentStatus.reviewNetworkExposure';
+    case 'unavailable': return undefined;
+  }
 }
 
 function localizedEnvironmentAction(
   i18n: DesktopI18n,
   action: EnvironmentActionModel,
 ): EnvironmentActionModel {
+  const labelKey = environmentActionTranslationKey(action);
   return {
     ...action,
-    label: localizedEnvironmentActionLabel(i18n, action.label),
+    label: labelKey ? i18n.t(labelKey) : action.label,
     ...(action.disabled_reason
       ? { disabled_reason: localizedRuntimeMessage(i18n, action.disabled_reason) }
       : {}),
@@ -993,7 +935,7 @@ function localizedEnvironmentMenuItem(
   const action = localizedEnvironmentAction(i18n, item.action);
   return {
     ...item,
-    label: localizedEnvironmentActionLabel(i18n, item.label),
+    label: item.label_key ? i18n.t(item.label_key) : action.label,
     action,
   };
 }
@@ -1084,7 +1026,7 @@ function localizedGatewaySourceActionLabel(i18n: DesktopI18n, action: GatewaySou
     case 'cancel_gateway_action':
       return i18n.t('common.cancel');
     default:
-      return localizedEnvironmentActionLabel(i18n, action.label);
+      return action.label;
   }
 }
 
@@ -1093,7 +1035,7 @@ function localizedGatewayActionPanelText(i18n: DesktopI18n, value: string): stri
   const failedAction = clean.match(/^(.+) failed$/u);
   if (failedAction) {
     return i18n.t('environmentCenter.gatewayPanelActionFailedTitle', {
-      action: localizedEnvironmentActionLabel(i18n, failedAction[1] ?? ''),
+      action: failedAction[1] ?? '',
     });
   }
   const workingOn = clean.match(/^Desktop is working on (.+)\.$/u);
@@ -1103,7 +1045,7 @@ function localizedGatewayActionPanelText(i18n: DesktopI18n, value: string): stri
   const runAction = clean.match(/^Desktop will run (.+) for (.+)\.$/u);
   if (runAction) {
     return i18n.t('environmentCenter.gatewayPanelRunActionForLabel', {
-      action: localizedEnvironmentActionLabel(i18n, runAction[1] ?? ''),
+      action: runAction[1] ?? '',
       label: runAction[2] ?? '',
     });
   }
@@ -1280,10 +1222,11 @@ function localizedGuidanceAction(
   i18n: DesktopI18n,
   item: EnvironmentGuidanceActionModel,
 ): EnvironmentGuidanceActionModel {
+  const action = localizedEnvironmentAction(i18n, item.action);
   return {
     ...item,
-    label: localizedEnvironmentActionLabel(i18n, item.label),
-    action: localizedEnvironmentAction(i18n, item.action),
+    label: action.label,
+    action,
   };
 }
 
@@ -1525,7 +1468,7 @@ function localizedEnvironmentActionPresentation(
     primary_action_overlay: presentation.primary_action_overlay
       ? localizedEnvironmentOverlay(i18n, presentation.primary_action_overlay)
       : undefined,
-    menu_button_label: localizedEnvironmentActionLabel(i18n, presentation.menu_button_label),
+    menu_button_label: i18n.t('environmentAction.runtimeActions'),
     menu_actions: presentation.menu_actions.map((item) => localizedEnvironmentMenuItem(i18n, item)),
   };
 }
@@ -4658,7 +4601,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   async function refreshEnvironmentRuntime(
     environment: DesktopEnvironmentEntry,
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
-    options: Readonly<{ announceSuccess?: boolean }> = {},
+    options: Readonly<{
+      announceSuccess?: boolean;
+      attempt?: EnvironmentLifecycleAttempt;
+    }> = {},
   ): Promise<boolean> {
     if (environment.kind === 'gateway_environment') {
       const gatewayID = trimString(environment.gateway_id);
@@ -4676,7 +4622,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       }
       return refreshed;
     }
-    const request = runtimeActionRequest(environment, 'refresh_environment_runtime');
+    const request = runtimeActionRequest(environment, 'refresh_environment_runtime', {
+      attempt: options.attempt,
+    });
     if (!request) {
       setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', i18n().t('environmentCenter.resolveRuntimeTargetError'));
       return false;
@@ -5030,7 +4978,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         return true;
       }
       case 'refresh_runtime':
-        return refreshEnvironmentRuntime(environment, errorTarget);
+        return refreshEnvironmentRuntime(environment, errorTarget, { attempt });
       case 'reinstall_target':
         if (
           environment.kind !== 'local_environment'
@@ -5055,7 +5003,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               mode: continuation.reinstall_mode ?? 'wipe_data',
               impact_acknowledged: true,
             }, errorTarget);
-            return result?.outcome === 'reinstalled_target';
+            return result?.outcome === 'reinstalled_target'
+              || result?.outcome === 'reinstall_target_in_progress';
           }
           const result = await performLauncherAction({
             kind: 'preview_reinstall_target',
@@ -8535,33 +8484,15 @@ function localizedGatewayCheckStepLabel(i18n: DesktopI18n, stepID: string, fallb
   if (stepIDKey) {
     return i18n.t(stepIDKey);
   }
-  const labelsByFallback: Readonly<Record<string, DesktopTranslationKey>> = {
-    'Checking Gateway': 'progress.checkingGateway',
-    'Checking Gateway transport': 'progress.checkingGatewayTransport',
-    'Checking Gateway service': 'progress.checkingGatewayService',
-    'Checking Gateway version': 'progress.checkingGatewayVersion',
-    'Checking Gateway trust': 'progress.checkingGatewayTrust',
-    'Checking Gateway catalog': 'progress.checkingGatewayCatalog',
-    'Gateway checked': 'progress.gatewayChecked',
-    'Gateway refreshed': 'progress.gatewayChecked',
-  };
   const cleanFallback = trimString(fallback);
-  const fallbackKey = labelsByFallback[cleanFallback];
-  return fallbackKey ? i18n.t(fallbackKey) : cleanFallback || cleanStepID;
+  return cleanFallback || cleanStepID;
 }
 
 function localizedGatewayCheckStepDetail(i18n: DesktopI18n, detail: string | undefined): string | undefined {
   if (!detail) {
     return undefined;
   }
-  return localizedStringByValue(i18n, detail, {
-    'Gateway service is not running.': 'environmentCenter.gatewayPanelErrorServiceNotRunning',
-    'Gateway pairing challenge signature is invalid.': 'environmentCenter.gatewayPanelErrorPairSignatureInvalid',
-    'Gateway SSH host is unreachable.': 'environmentCenter.gatewayPanelErrorSshHostUnreachable',
-    'SSH host is unreachable.': 'environmentCenter.gatewayPanelErrorSshHostUnreachable',
-    'Gateway bridge is unavailable.': 'environmentCenter.gatewayPanelErrorBridgeUnavailable',
-    'Gateway bridge session is unavailable.': 'environmentCenter.gatewayPanelErrorBridgeUnavailable',
-  }) || detail;
+  return i18n.locale === 'en-US' ? detail : undefined;
 }
 
 function localizedProgressTitle(i18n: DesktopI18n, progress: DesktopLauncherActionProgress): string {
@@ -8604,20 +8535,12 @@ function localizedProgressTitle(i18n: DesktopI18n, progress: DesktopLauncherActi
   if (lifecycle) {
     return localizedRuntimeLifecyclePhaseLabel(i18n, lifecycle.phase);
   }
-  return localizedStringByValue(i18n, progress.title, {
-    'Check canceled': 'progress.gatewayCheckCanceled',
-    'Gateway checked': 'progress.gatewayChecked',
-    'Gateway check complete': 'progress.gatewayCheckComplete',
-    'Gateway is stopped': 'environmentCenter.gatewayGuidanceStoppedTitle',
-    'Gateway update required': 'environmentCenter.gatewayPanelUpdateRequiredTitle',
-    'Gateway service is ready': 'progress.gatewayServiceReady',
-    'Gateway trust check failed': 'environmentCenter.gatewayPanelTrustCheckFailedTitle',
-    'Gateway catalog check failed': 'environmentCenter.gatewayPanelCatalogCheckFailedTitle',
-    'Gateway check failed': 'progress.gatewayCheckFailed',
-    'Runtime ready': 'progress.titleRuntimeReady',
-    'Startup canceled': 'progress.titleStartupCanceled',
-    'Connection removed': 'progress.connectionRemoved',
-  });
+  if (progress.failure) return localizedOperationFailureTitle(i18n, progress.failure);
+  if (progress.status === 'canceled') return i18n.t('progress.canceled');
+  if (progress.status === 'failed' || progress.status === 'cleanup_failed') {
+    return i18n.t('progress.operationFailedTitle');
+  }
+  return localizedProgressPlanningLabel(i18n, progress.action);
 }
 
 function localizedProgressDetail(i18n: DesktopI18n, progress: DesktopLauncherActionProgress): string {
@@ -8674,39 +8597,32 @@ function localizedProgressDetail(i18n: DesktopI18n, progress: DesktopLauncherAct
         break;
     }
   }
-  return localizedStringByValue(i18n, progress.detail, {
-    'Desktop canceled this Gateway check.': 'progress.gatewayCheckCanceledDetail',
-    'Desktop can reach the Gateway service. Continue checking trust and catalog access.': 'progress.gatewayCheckServiceReadyDetail',
-    'Desktop can reach this Gateway, verify trust, and read the catalog.': 'progress.gatewayCheckReadyDetail',
-    'The runtime daemon is running. Open will prepare the Desktop bridge.': 'progress.detailRuntimeReady',
-    'Desktop stopped the container runtime startup and cleaned up local startup resources.': 'progress.detailStartupCanceled',
-    'Desktop stopped the Runtime startup and cleaned up local startup resources.': 'progress.detailStartupCanceled',
-  });
+  if (progress.failure) return localizedOperationFailureSummary(i18n, progress.failure);
+  if (progress.status === 'canceled') return i18n.t('progress.detailStartupCanceled');
+  if (progress.status === 'failed' || progress.status === 'cleanup_failed') {
+    return i18n.t('progress.operationFailedSummary');
+  }
+  return '';
 }
 
 function localizedProgressInterruptLabel(i18n: DesktopI18n, progress: DesktopLauncherActionProgress): string {
   if (progress.subject_kind === 'gateway') {
     return i18n.t('progress.interruptStopGatewayAction');
   }
-  return localizedStringByValue(i18n, progress.interrupt_label, {
-    'Stop opening': 'progress.interruptStopOpening',
-    'Stop startup': 'progress.interruptStopStartup',
-  }) || i18n.t('progress.stopStartup');
+  if (progress.interrupt_label_key) return i18n.t(progress.interrupt_label_key);
+  return progress.interrupt_kind === 'stop_opening'
+    ? i18n.t('progress.interruptStopOpening')
+    : i18n.t('progress.stopStartup');
 }
 
 function localizedProgressInterruptDetail(i18n: DesktopI18n, progress: DesktopLauncherActionProgress): string {
   if (progress.subject_kind === 'gateway') {
     return i18n.t('progress.interruptStopGatewayActionDetail');
   }
-  return localizedStringByValue(i18n, progress.interrupt_detail, {
-    'Desktop is stopping this runtime startup.': 'progress.interruptStopStartupDetail',
-    'Desktop is stopping this Runtime startup.': 'progress.interruptStopStartupDetail',
-    'Desktop is stopping this open request before opening the local environment window.': 'progress.interruptStopOpeningDetail',
-    'Desktop is stopping this open request and closing local SSH resources already created.': 'progress.interruptStopOpeningDetail',
-    'Desktop is stopping this open request and closing local connection resources already created.': 'progress.interruptStopOpeningDetail',
-    'Desktop is stopping this open request before opening the Redeven URL window.': 'progress.interruptStopOpeningDetail',
-    'Desktop is stopping this provider open request before opening the environment window.': 'progress.interruptStopOpeningDetail',
-  }) || i18n.t('progress.stopBackgroundTask');
+  if (progress.interrupt_detail_key) return i18n.t(progress.interrupt_detail_key);
+  return progress.interrupt_kind === 'stop_opening'
+    ? i18n.t('progress.interruptStopOpeningDetail')
+    : i18n.t('progress.stopBackgroundTask');
 }
 
 function localizedProgressPlanningLabel(i18n: DesktopI18n, action: DesktopLauncherActionKind): string {
@@ -8726,6 +8642,8 @@ function localizedProgressPlanningLabel(i18n: DesktopI18n, action: DesktopLaunch
       return i18n.t('progress.planningUpdatePath');
     case 'stop_environment_runtime':
       return i18n.t('progress.planningStopPath');
+    case 'refresh_environment_runtime':
+      return i18n.t('progress.verifyingRuntimeInventory');
     default:
       return i18n.t('progress.planningStartupPath');
   }
@@ -8779,7 +8697,7 @@ function localizedNextActionLabel(i18n: DesktopI18n, action: DesktopLauncherOper
     case 'reinstall_target':
       return i18n.t('common.reinstall');
     case 'resolve_gateway':
-      return localizedEnvironmentActionLabel(i18n, action.label);
+      return i18n.t('environmentStatus.resolveGateway');
     case 'open_gateway_environment':
       return i18n.t('environmentAction.open');
     case 'copy_diagnostics':
@@ -8787,9 +8705,9 @@ function localizedNextActionLabel(i18n: DesktopI18n, action: DesktopLauncherOper
     case 'dismiss':
       return i18n.t('progress.dismiss');
     case 'retry':
-      return localizedEnvironmentActionLabel(i18n, action.label);
+      return i18n.t('common.retry');
   }
-  return localizedEnvironmentActionLabel(i18n, action.label);
+  return action.label;
 }
 
 function environmentActionForLauncherRetry(
@@ -8826,7 +8744,7 @@ function localizedProgressPanelPrimaryAction(
     ? {
         ...action,
         action: localizedEnvironmentAction(i18n, action.action),
-        label: localizedEnvironmentActionLabel(i18n, action.label),
+        label: localizedEnvironmentAction(i18n, action.action).label,
       }
     : null;
 }
@@ -9297,7 +9215,7 @@ function EnvironmentProgressPanel(props: Readonly<{
                   })}
                 </span>
               </Show>
-              <Show when={!stepProgress() && runtimeLifecycle()?.plan_state !== 'planning'}>
+              <Show when={!stepProgress() && runtimeLifecycle()?.plan_state === 'planning'}>
                 <span>{localizedProgressPlanningLabel(props.i18n, props.progress.action)}</span>
               </Show>
               <Show when={!stepProgress() && runtimeTargetDetail()}>
@@ -9626,26 +9544,7 @@ function localizedPrimaryProgressPresentation(
   if (!presentation) {
     return null;
   }
-  const label = localizedStringByValue(i18n, presentation.label, {
-    'Canceling...': 'progress.canceling',
-    'Cleaning up...': 'progress.cleaningUp',
-    'Opening...': 'progress.opening',
-    'Checking...': 'progress.checkingEllipsis',
-    'Syncing...': 'environmentCenter.gatewayActionSyncing',
-    'Stopping...': 'progress.stoppingEllipsis',
-    'Restarting...': 'progress.restartingEllipsis',
-    'Updating...': 'progress.updatingEllipsis',
-    'Starting...': 'progress.startingEllipsis',
-    'Cleanup failed': 'progress.cleanupFailed',
-    'Open failed': 'progress.openFailed',
-    'Check failed': 'progress.checkFailed',
-    'Start failed': 'progress.startFailed',
-    'Restart failed': 'progress.restartFailed',
-    'Update failed': 'progress.updateFailed',
-    'Stop failed': 'progress.stopFailed',
-    'Needs attention': 'progress.needsAttention',
-    'Review required': 'progress.needsAttention',
-  });
+  const label = i18n.t(presentation.label_key);
   return {
     ...presentation,
     label,
@@ -10123,7 +10022,6 @@ function EnvironmentSplitActionButton(props: Readonly<{
           aria-label={props.presentation.menu_button_label}
           aria-haspopup="menu"
           aria-expanded={props.menuOpen}
-          disabled={props.loading && !primaryProgressPresentation()}
           onClick={() => props.onMenuOpenChange(!props.menuOpen)}
         >
           <ChevronDown class={cn('h-3.5 w-3.5 transition-transform duration-150', props.menuOpen && 'rotate-180')} />
@@ -10515,6 +10413,22 @@ function EnvironmentConnectionCard(props: Readonly<{
           confirmRuntimeOperation={props.confirmRuntimeOperation}
           onRunAction={(action) => {
             void (async () => {
+              const activeManagedOperation = reinstallTargetProgress() ?? visibleRuntimeLifecycleProgress();
+              if (
+                activeManagedOperation
+                && launcherProgressBlocksPrimaryAction(activeManagedOperation)
+                && (
+                  action.intent === 'start_runtime'
+                  || action.intent === 'stop_runtime'
+                  || action.intent === 'restart_runtime'
+                  || action.intent === 'update_runtime'
+                  || action.intent === 'refresh_runtime'
+                  || action.intent === 'reinstall_target'
+                )
+              ) {
+                props.onLifecycleProgressOpenChange(true);
+                return;
+              }
               if (action.intent === 'reinstall_target') {
                 // Keep the shared timeline visible while direct SSH/container
                 // preflight runs and transitions into confirmation.

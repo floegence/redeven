@@ -71,6 +71,9 @@ function planningStepIDs(
   location: DesktopRuntimeLifecycleLocation,
   operation: DesktopRuntimeLifecycleOperation,
 ): readonly DesktopRuntimeLifecycleStepID[] {
+  if (operation === 'refresh') {
+    return [firstCheckStep(location), 'verifying_runtime_inventory'];
+  }
   if (operation === 'stop') {
     return [firstCheckStep(location)];
   }
@@ -243,6 +246,8 @@ function stopTailForOperation(
           'installing_runtime_package',
           ...startReadySteps(),
         ];
+      case 'refresh':
+        return ['discovering_runtime_instances', 'verifying_runtime_inventory'];
     }
   }
   if (step === 'stopping_runtime_process') {

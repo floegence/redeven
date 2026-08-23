@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -280,33 +279,14 @@ func TestOpenLocalBindingStoreRejectsCorruptTargetMarker(t *testing.T) {
 	}
 }
 
-func TestOpenLocalBindingStoreConcurrentRegistrationHasSingleWinner(t *testing.T) {
+func TestOpenLocalBindingStoreDoesNotCreateTargetRegistrationLock(t *testing.T) {
 	runtimeRoot := filepath.Join(t.TempDir(), "runtime")
-	stateRoots := []string{filepath.Join(t.TempDir(), "gateway-a"), filepath.Join(t.TempDir(), "gateway-b")}
-	start := make(chan struct{})
-	results := make(chan error, len(stateRoots))
-	var group sync.WaitGroup
-	for _, stateRoot := range stateRoots {
-		stateRoot := stateRoot
-		group.Add(1)
-		go func() {
-			defer group.Done()
-			<-start
-			_, err := OpenLocalBindingStore(stateRoot, runtimeRoot)
-			results <- err
-		}()
+	stateRoot := filepath.Join(t.TempDir(), "gateway")
+	if _, err := OpenLocalBindingStore(stateRoot, runtimeRoot); err != nil {
+		t.Fatal(err)
 	}
-	close(start)
-	group.Wait()
-	close(results)
-	succeeded := 0
-	for err := range results {
-		if err == nil {
-			succeeded++
-		}
-	}
-	if succeeded != 1 {
-		t.Fatalf("concurrent registration successes = %d, want 1", succeeded)
+	if _, err := OpenLocalBindingStore(stateRoot, runtimeRoot); err != nil {
+		t.Fatalf("second binding store was blocked by target registration: %v", err)
 	}
 }
 

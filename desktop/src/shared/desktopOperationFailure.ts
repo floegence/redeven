@@ -17,6 +17,11 @@ export type DesktopFailureCode =
   | 'container_runtime_launch_failed'
   | 'container_runtime_stop_failed'
   | 'gateway_package_prepare_failed'
+  | 'reinstall_direct_channel_failed'
+  | 'reinstall_package_batch_failed'
+  | 'reinstall_filesystem_failed'
+  | 'reinstall_gateway_start_failed'
+  | 'reinstall_runtime_start_failed'
   | 'runtime_host_command_failed'
   | 'runtime_update_required'
   | 'runtime_identity_mismatch'
@@ -72,6 +77,11 @@ function normalizeFailureCode(value: unknown): DesktopFailureCode {
     case 'container_runtime_launch_failed':
     case 'container_runtime_stop_failed':
     case 'gateway_package_prepare_failed':
+    case 'reinstall_direct_channel_failed':
+    case 'reinstall_package_batch_failed':
+    case 'reinstall_filesystem_failed':
+    case 'reinstall_gateway_start_failed':
+    case 'reinstall_runtime_start_failed':
     case 'runtime_host_command_failed':
     case 'runtime_update_required':
     case 'runtime_identity_mismatch':

@@ -98,7 +98,7 @@ export type DesktopRuntimeLifecycleProgress = Readonly<{
   };
 }>;
 
-export type DesktopRuntimeLifecycleOperation = 'start' | 'restart' | 'update' | 'stop';
+export type DesktopRuntimeLifecycleOperation = 'start' | 'restart' | 'update' | 'stop' | 'refresh';
 
 export type DesktopRuntimeLifecycleStepState = Readonly<{
   id: DesktopRuntimeLifecycleStepID;

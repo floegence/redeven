@@ -82,7 +82,19 @@ case "$target" in
   *) die "unsupported ReDevPlugin runtime target: $target" ;;
 esac
 
-for command in cargo gh go jq node rustc rustup; do require_command "$command"; done
+for command in cargo curl go jq node rustc rustup; do require_command "$command"; done
+
+# The Desktop development launcher may provide an isolated HOME while Rustup
+# itself is installed in the user's normal Cargo home. Keep Rustup pointed at
+# the installation that supplied the executable; use a separate Cargo home
+# only for the build cache below.
+rustup_bin=$(command -v rustup)
+rustup_cargo_home=$(cd -- "$(dirname -- "$rustup_bin")/.." >/dev/null 2>&1 && pwd -P)
+rustup_home="${RUSTUP_HOME:-${HOME:?HOME is required}/.rustup}"
+rustup_exec() {
+  CARGO_HOME="$rustup_cargo_home" RUSTUP_HOME="$rustup_home" rustup "$@"
+}
+
 if [[ "$profile" == "release" ]]; then
   require_command cosign
   [[ "${GITHUB_REPOSITORY:-}" == "floegence/redeven" ]] || die "release build requires the floegence/redeven workflow identity"
@@ -113,7 +125,9 @@ tag=$(cd "$ROOT_DIR" && GOWORK=off go list -m -f '{{.Version}}' github.com/floeg
 [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "invalid ReDevPlugin module version: $tag"
 
 mkdir -p "$tmpdir/upstream"
-gh release download "$tag" --repo "$REPOSITORY" --dir "$tmpdir/upstream" --pattern "$RELEASE_MANIFEST_ASSET"
+curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location --retry 3 \
+  "https://github.com/$REPOSITORY/releases/download/$tag/$RELEASE_MANIFEST_ASSET" \
+  --output "$tmpdir/upstream/$RELEASE_MANIFEST_ASSET"
 manifest="$tmpdir/upstream/$RELEASE_MANIFEST_ASSET"
 version=$(jq -er '.platform_version' "$manifest")
 [[ "v$version" == "$tag" ]] || die "release manifest version does not match Go module version"
@@ -124,17 +138,23 @@ release_verification="$tmpdir/$RELEASE_VERIFICATION"
 node "$SCRIPT_DIR/redevplugin_release_contract.mjs" write-release-verification \
   "$manifest" "$tag" "$release_verification"
 
-rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
-rustup target add --toolchain "$RUST_TOOLCHAIN" "$rust_target"
-cargo_version=$(rustup run "$RUST_TOOLCHAIN" cargo --version)
-rustc_version=$(rustup run "$RUST_TOOLCHAIN" rustc --version)
+rustup_exec toolchain install "$RUST_TOOLCHAIN" --profile minimal
+rustup_exec target add --toolchain "$RUST_TOOLCHAIN" "$rust_target"
+toolchain_cargo=$(rustup_exec which --toolchain "$RUST_TOOLCHAIN" cargo)
+toolchain_root=$(cd -- "$(dirname -- "$toolchain_cargo")/.." >/dev/null 2>&1 && pwd -P)
+toolchain_rustc="$toolchain_root/bin/rustc"
+[[ -x "$toolchain_cargo" && -x "$toolchain_rustc" ]] || die "Rust toolchain $RUST_TOOLCHAIN is not installed"
+cargo_version=$("$toolchain_cargo" --version)
+rustc_version=$("$toolchain_rustc" --version)
 
 export CARGO_HOME="$tmpdir/cargo-home"
 install_root="$tmpdir/runtime-install"
 rustflags_key="CARGO_TARGET_$(printf '%s' "$rust_target" | tr '[:lower:]-' '[:upper:]_')_RUSTFLAGS"
 env \
   "$rustflags_key=-C target-feature=+crt-static -C relocation-model=pic -C linker=$SCRIPT_DIR/link_redevplugin_runtime_static_pie.sh" \
-  rustup run "$RUST_TOOLCHAIN" cargo install \
+  PATH="$toolchain_root/bin:$PATH" \
+  CARGO_HOME="$CARGO_HOME" \
+  "$toolchain_cargo" install \
   --locked \
   --root "$install_root" \
   --target "$rust_target" \
@@ -150,7 +170,7 @@ done < <(find "$CARGO_HOME/registry/src" \
 runtime_source="${runtime_sources[0]}"
 [[ ! -L "$runtime_source" && -f "$runtime_source/Cargo.toml" && -f "$runtime_source/Cargo.lock" ]] ||
   die "published runtime source is missing its locked Cargo manifest"
-rustup run "$RUST_TOOLCHAIN" cargo metadata \
+PATH="$toolchain_root/bin:$PATH" CARGO_HOME="$CARGO_HOME" "$toolchain_cargo" metadata \
   --format-version 1 \
   --locked \
   --filter-platform "$rust_target" \

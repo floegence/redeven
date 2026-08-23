@@ -1720,7 +1720,7 @@ describe('desktopWelcomeState', () => {
       runtime_operations: expect.objectContaining({
         open: expect.objectContaining({ availability: 'available' }),
         start: expect.objectContaining({
-          availability: 'unavailable',
+          availability: 'available',
           method: 'local_container_exec',
           reason_code: 'runtime_already_running',
         }),

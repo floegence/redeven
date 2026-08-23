@@ -2,20 +2,22 @@ import type { DesktopComponentTaskProgress, DesktopStepProgress } from './deskto
 import type { DesktopTranslationKey } from './i18n/desktopI18n';
 
 export const REINSTALL_TARGET_PROGRESS_STEPS = [
-  'preflight', 'confirmation', 'target_locked', 'preparing_maintenance_helper',
-  'packages_preparing_and_transferring', 'sessions_closed',
-  'redeven_processes_stop_attempted', 'packages_applying',
-  'gateway_and_runtime_starting', 'installation_verifying', 'cleanup', 'completed',
+  'confirmation', 'direct_channel_open', 'target_resolved',
+  'package_batch_prepared_and_verified', 'redeven_process_stop_attempted',
+  'old_root_isolated_or_cleared', 'fresh_suite_installed', 'gateway_started',
+  'runtime_started', 'runtime_verified', 'catalog_and_local_ui_verified',
+  'old_data_cleaned', 'completed',
 ] as const;
 export type ReinstallTargetProgressPhase = typeof REINSTALL_TARGET_PROGRESS_STEPS[number];
 export type ReinstallTargetStepStatus = 'pending' | 'running' | 'succeeded' | 'failed';
 
 // Durable journals never contain the transient preflight or terminal phase.
 export const REINSTALL_TARGET_JOURNAL_PHASES = [
-  'confirmation', 'target_locked', 'preparing_maintenance_helper',
-  'packages_preparing_and_transferring', 'sessions_closed',
-  'redeven_processes_stop_attempted', 'packages_applying',
-  'gateway_and_runtime_starting', 'installation_verifying', 'cleanup',
+  'confirmation', 'direct_channel_open', 'target_resolved',
+  'package_batch_prepared_and_verified', 'redeven_process_stop_attempted',
+  'old_root_isolated_or_cleared', 'fresh_suite_installed', 'gateway_started',
+  'runtime_started', 'runtime_verified', 'catalog_and_local_ui_verified',
+  'old_data_cleaned',
 ] as const;
 export type ReinstallTargetJournalPhase = typeof REINSTALL_TARGET_JOURNAL_PHASES[number];
 

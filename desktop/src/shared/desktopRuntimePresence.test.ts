@@ -461,7 +461,7 @@ describe('desktopRuntimePresence', () => {
       method: 'local_container_exec',
     });
     expect(plans.start).toMatchObject({
-      availability: 'unavailable',
+      availability: 'available',
       method: 'local_container_exec',
       reason_code: 'runtime_already_running',
     });

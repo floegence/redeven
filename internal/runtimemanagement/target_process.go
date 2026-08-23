@@ -135,21 +135,12 @@ func targetProcessKnownRole(snapshot runtimeProcessSnapshot, targetRoot string) 
 	return "", false
 }
 
-func targetManagedExecutable(executablePath string, targetRoot string) bool {
-	if !pathWithinTarget(executablePath, targetRoot) {
-		return false
-	}
-	relative, err := filepath.Rel(comparableRuntimePath(targetRoot), comparableRuntimePath(executablePath))
-	if err != nil {
-		return false
-	}
-	parts := strings.Split(filepath.ToSlash(relative), "/")
-	for index := 0; index+1 < len(parts); index++ {
-		if parts[index] == "managed" && (parts[index+1] == "bin" || strings.HasPrefix(parts[index+1], "bin.")) {
-			return true
-		}
-	}
-	return false
+func targetOwnedExecutable(executablePath string, targetRoot string) bool {
+	// The exact Redeven target root is an exclusive product-owned directory.
+	// During destructive recovery, every executable loaded from that root is a
+	// Redeven process regardless of its historical filename or layout. Merely
+	// reading files below the root does not grant an external process ownership.
+	return pathWithinTarget(executablePath, targetRoot)
 }
 
 func targetProcessIdentityComplete(snapshot runtimeProcessSnapshot, scope runtimeProcessExecutionScope) (bool, string) {
@@ -179,8 +170,8 @@ func buildTargetProcessInventory(options TargetProcessOptions, scope runtimeProc
 	matched := make(map[int]matchedProcess)
 	for _, snapshot := range snapshots {
 		role, known := targetProcessKnownRole(snapshot, options.TargetRoot)
-		if !known && targetManagedExecutable(snapshot.ExecutablePath, options.TargetRoot) {
-			role, known = "managed_process", true
+		if !known && targetOwnedExecutable(snapshot.ExecutablePath, options.TargetRoot) {
+			role, known = "target_root_process", true
 		}
 		if known && snapshot.PID != os.Getpid() {
 			matched[snapshot.PID] = matchedProcess{snapshot: snapshot, role: role}

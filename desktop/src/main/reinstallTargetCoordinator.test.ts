@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createLocalRuntimeHostExecutor } from './runtimeHostAccess';
 import type { RuntimeHostAccessExecutor } from './runtimeHostAccess';
+import type { PreparedComponentBatch } from './managedComponentBatchInstaller';
 import {
   ReinstallTargetCoordinator,
   ReinstallTargetCoordinatorError,
@@ -39,6 +40,20 @@ function emptyInventory(targetRoot: string): ReinstallTargetProcessInventory {
     inventory_digest: 'empty',
     instances: [],
     summary: { automatic: 0, blocked: 0 },
+  };
+}
+
+function preparedBatch(operationID = 'test-operation'): PreparedComponentBatch {
+  return {
+    operation_id: operationID,
+    tasks: [],
+    suite_manifest: {
+      release_tag: 'v1',
+      commit: 'abc',
+      platform: 'darwin',
+      architecture: 'arm64',
+      components: [],
+    },
   };
 }
 
@@ -131,6 +146,131 @@ describe('ReinstallTargetCoordinator', () => {
     await expect(fs.lstat(path.join(journalRoot, `${preview.preflight_id}.json`))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
+  it('publishes the fixed recovery timeline in commit order', async () => {
+    const parent = await temporaryRoot();
+    const targetRoot = path.join(parent, 'managed-redeven');
+    await fs.mkdir(targetRoot);
+    const current = descriptor(targetRoot);
+    const dependencies = coordinatorDependencies(path.join(parent, 'journal'), () => current, []);
+    const phases: string[] = [];
+    const coordinator = new ReinstallTargetCoordinator({
+      ...dependencies,
+      install_fresh: async (_descriptor, freshRoot, report) => {
+        await report?.('fresh_suite_installed');
+        await report?.('gateway_started');
+        await fs.writeFile(path.join(freshRoot, 'fresh-component'), 'current');
+      },
+    });
+    const preview = await coordinator.preview({ environment_id: current.environment_id });
+    await coordinator.execute(preview.preflight_id, (phase) => phases.push(phase));
+    expect(phases).toEqual([
+      'direct_channel_open',
+      'target_resolved',
+      'package_batch_prepared_and_verified',
+      'redeven_process_stop_attempted',
+      'old_root_isolated_or_cleared',
+      'fresh_suite_installed',
+      'gateway_started',
+      'runtime_started',
+      'runtime_verified',
+      'catalog_and_local_ui_verified',
+      'old_data_cleaned',
+      'completed',
+    ]);
+  });
+
+  it('commits the package-ready journal phase only after every preparation task finishes', async () => {
+    const parent = await temporaryRoot();
+    const targetRoot = path.join(parent, 'managed-redeven');
+    const journalRoot = path.join(parent, 'journal');
+    await fs.mkdir(targetRoot);
+    const current = descriptor(targetRoot);
+    let releasePackage!: () => void;
+    let packageStarted!: () => void;
+    const packageStartedPromise = new Promise<void>((resolve) => { packageStarted = resolve; });
+    const packageGate = new Promise<PreparedComponentBatch | null>((resolve) => {
+      releasePackage = () => resolve(null);
+    });
+    const coordinator = new ReinstallTargetCoordinator({
+      ...coordinatorDependencies(journalRoot, () => current, []),
+      prepare_packages: async () => {
+        packageStarted();
+        return packageGate;
+      },
+    });
+    const preview = await coordinator.preview({ environment_id: current.environment_id });
+    const execution = coordinator.execute(preview.preflight_id);
+    await packageStartedPromise;
+    const [duringPreparation] = await coordinator.readPersistedJournals();
+    expect(duringPreparation?.phase).toBe('target_resolved');
+    releasePackage();
+    await execution;
+  });
+
+  it('does not commit fresh installation phases before the start command returns', async () => {
+    const parent = await temporaryRoot();
+    const targetRoot = path.join(parent, 'managed-redeven');
+    const journalRoot = path.join(parent, 'journal');
+    await fs.mkdir(targetRoot);
+    const current = descriptor(targetRoot);
+    let installStarted!: () => void;
+    let releaseInstall!: () => void;
+    const installStartedPromise = new Promise<void>((resolve) => { installStarted = resolve; });
+    const installGate = new Promise<void>((resolve) => { releaseInstall = resolve; });
+    const coordinator = new ReinstallTargetCoordinator({
+      ...coordinatorDependencies(journalRoot, () => current, []),
+      prepare_packages: async () => preparedBatch(),
+      install_fresh: async (_descriptor, freshRoot, report) => {
+        await fs.writeFile(path.join(freshRoot, 'fresh-component'), 'current');
+        await report?.('fresh_suite_installed');
+        await report?.('gateway_started');
+        installStarted();
+        await installGate;
+      },
+    });
+    const preview = await coordinator.preview({ environment_id: current.environment_id });
+    const execution = coordinator.execute(preview.preflight_id);
+    await installStartedPromise;
+
+    const [duringInstall] = await coordinator.readPersistedJournals();
+    expect(duringInstall?.phase).toBe('old_root_isolated_or_cleared');
+
+    releaseInstall();
+    await execution;
+  });
+
+  it('rolls back preserve-data replacement failures and recommends wipe reinstall', async () => {
+    const parent = await temporaryRoot();
+    const targetRoot = path.join(parent, 'managed-redeven');
+    const journalRoot = path.join(parent, 'journal');
+    await fs.mkdir(targetRoot);
+    const current = descriptor(targetRoot);
+    const rollback = vi.fn(async () => undefined);
+    const finalize = vi.fn(async () => undefined);
+    const coordinator = new ReinstallTargetCoordinator({
+      ...coordinatorDependencies(journalRoot, () => current, []),
+      prepare_packages: async () => preparedBatch(),
+      install_fresh: async () => {
+        throw new Error('fresh runtime did not become healthy');
+      },
+      rollback_install: rollback,
+      finalize_install: finalize,
+    });
+    const preview = await coordinator.preview({
+      environment_id: current.environment_id,
+      mode: 'preserve_data',
+    });
+
+    await expect(coordinator.execute(preview.preflight_id)).rejects.toMatchObject({
+      code: 'reinstall_retryable',
+      recommended_mode: 'wipe_data',
+    });
+    expect(rollback).toHaveBeenCalledOnce();
+    expect(finalize).toHaveBeenCalledOnce();
+    await expect(fs.lstat(path.join(journalRoot, `${preview.preflight_id}.json`)))
+      .rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it('installs into a missing registered root without manufacturing old state', async () => {
     const parent = await temporaryRoot();
     const targetRoot = path.join(parent, 'missing-redeven');
@@ -181,7 +321,7 @@ describe('ReinstallTargetCoordinator', () => {
     await expect(fs.readFile(path.join(targetRoot, 'old-data'), 'utf8')).resolves.toBe('opaque');
   });
 
-  it('does not treat a legacy physical-root fingerprint as a changed registered target', async () => {
+  it('does not use the physical-root fingerprint as the registered target identity', async () => {
     const parent = await temporaryRoot();
     const targetRoot = path.join(parent, 'managed-redeven');
     const current = descriptor(targetRoot);
@@ -230,7 +370,24 @@ describe('ReinstallTargetCoordinator', () => {
     await expect(coordinator.readPersistedJournals()).resolves.toHaveLength(1);
   });
 
-  it('keeps quarantine and never restores old processes when fresh installation fails', async () => {
+  it('discards a corrupt Desktop journal without touching the target root', async () => {
+    const parent = await temporaryRoot();
+    const targetRoot = path.join(parent, 'managed-redeven');
+    const journalRoot = path.join(parent, 'journal');
+    await fs.mkdir(targetRoot);
+    await fs.mkdir(journalRoot);
+    await fs.writeFile(path.join(targetRoot, 'old-data'), 'opaque');
+    const journalPath = path.join(journalRoot, 'reinstall_11111111-1111-4111-8111-111111111111.json');
+    await fs.writeFile(journalPath, '{not-json');
+    const current = descriptor(targetRoot);
+    const coordinator = new ReinstallTargetCoordinator(coordinatorDependencies(journalRoot, () => current, []));
+
+    await expect(coordinator.readPersistedJournals()).resolves.toEqual([]);
+    await expect(fs.lstat(journalPath)).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(fs.readFile(path.join(targetRoot, 'old-data'), 'utf8')).resolves.toBe('opaque');
+  });
+
+  it('keeps quarantine and offers resumable wipe recovery when fresh installation fails', async () => {
     const parent = await temporaryRoot();
     const targetRoot = path.join(parent, 'managed-redeven');
     await fs.mkdir(targetRoot);
@@ -238,11 +395,15 @@ describe('ReinstallTargetCoordinator', () => {
     const current = descriptor(targetRoot);
     const events: string[] = [];
     const dependencies = coordinatorDependencies(path.join(parent, 'journal'), () => current, events);
+    let failInstall = true;
     const coordinator = new ReinstallTargetCoordinator({
       ...dependencies,
-      install_fresh: async () => {
-        events.push('install_failed');
-        throw new Error('package verification failed');
+      install_fresh: async (_descriptor, freshRoot) => {
+        if (failInstall) {
+          events.push('install_failed');
+          throw new Error('package verification failed');
+        }
+        await fs.writeFile(path.join(freshRoot, 'fresh-component'), 'current');
       },
     });
     const preview = await coordinator.preview({
@@ -250,7 +411,8 @@ describe('ReinstallTargetCoordinator', () => {
     });
 
     await expect(coordinator.execute(preview.preflight_id)).rejects.toMatchObject({
-      code: 'manual_recovery_required',
+      code: 'reinstall_retryable',
+      recommended_mode: 'wipe_data',
     });
     const entries = await fs.readdir(parent);
     const quarantine = entries.find((entry) => entry.startsWith('managed-redeven.redeven-quarantine-'));
@@ -260,7 +422,66 @@ describe('ReinstallTargetCoordinator', () => {
     expect(events).not.toContain('stop_old_processes_again');
     expect(events).toContain('mark_in_progress');
     expect(events).not.toContain('clear_completed_marker');
+
+    failInstall = false;
+    await expect(coordinator.execute(preview.preflight_id)).resolves.toBeDefined();
+    await expect(fs.readFile(path.join(targetRoot, 'fresh-component'), 'utf8')).resolves.toBe('current');
+    await expect(fs.lstat(path.join(parent, quarantine!))).rejects.toMatchObject({ code: 'ENOENT' });
   });
+
+  it.each(['verify_identity', 'verify_catalog'] as const)(
+    'continues wipe reinstall after an interrupted %s phase',
+    async (failurePoint) => {
+      const parent = await temporaryRoot();
+      const targetRoot = path.join(parent, 'managed-redeven');
+      await fs.mkdir(targetRoot);
+      await fs.writeFile(path.join(targetRoot, 'old-data'), 'old');
+      const current = descriptor(targetRoot);
+      const dependencies = coordinatorDependencies(path.join(parent, 'journal'), () => current, []);
+      let failOnce = true;
+      let installAttempts = 0;
+      let identityAttempts = 0;
+      let processSessionAttempts = 0;
+      const coordinatorOptions: ReinstallTargetCoordinatorDependencies = {
+        ...dependencies,
+        prepare_process_session: async (...args) => {
+          processSessionAttempts++;
+          return dependencies.prepare_process_session(...args);
+        },
+        install_fresh: async (_descriptor, freshRoot) => {
+          installAttempts++;
+          await fs.writeFile(path.join(freshRoot, 'fresh-component'), 'current');
+        },
+        verify_fresh_identity: async (_descriptor, freshRoot) => {
+          identityAttempts++;
+          if (failurePoint === 'verify_identity' && failOnce) {
+            failOnce = false;
+            throw new Error('simulated identity verification interruption');
+          }
+          await fs.stat(path.join(freshRoot, 'fresh-component'));
+        },
+        verify_catalog_and_local_ui: async () => {
+          if (failurePoint === 'verify_catalog' && failOnce) {
+            failOnce = false;
+            throw new Error('simulated Catalog verification interruption');
+          }
+        },
+      };
+      let coordinator = new ReinstallTargetCoordinator(coordinatorOptions);
+      const preview = await coordinator.preview({ environment_id: current.environment_id });
+      await expect(coordinator.execute(preview.preflight_id)).rejects.toMatchObject({
+        code: 'reinstall_retryable',
+        recommended_mode: 'wipe_data',
+      });
+      coordinator = new ReinstallTargetCoordinator(coordinatorOptions);
+      await expect(coordinator.execute(preview.preflight_id)).resolves.toBeDefined();
+      await expect(fs.readFile(path.join(targetRoot, 'fresh-component'), 'utf8')).resolves.toBe('current');
+      expect(installAttempts).toBe(1);
+      expect(identityAttempts).toBe(failurePoint === 'verify_identity' ? 2 : 1);
+      expect(processSessionAttempts).toBe(1);
+      expect((await fs.readdir(parent)).some((entry) => entry.startsWith('managed-redeven.redeven-quarantine-'))).toBe(false);
+    },
+  );
 
   it('resumes final cleanup without reusing old state when Desktop marker cleanup is interrupted', async () => {
     const parent = await temporaryRoot();
@@ -283,13 +504,45 @@ describe('ReinstallTargetCoordinator', () => {
     const preview = await coordinator.preview({
       environment_id: current.environment_id,
     });
-    await expect(coordinator.execute(preview.preflight_id)).rejects.toMatchObject({ code: 'manual_recovery_required' });
+    await expect(coordinator.execute(preview.preflight_id)).rejects.toMatchObject({ code: 'reinstall_retryable' });
     expect((await fs.readdir(parent)).some((entry) => entry.startsWith('managed-redeven.redeven-quarantine-'))).toBe(false);
     expect(events.filter((event) => event === 'verify_catalog_and_local_ui')).toHaveLength(1);
 
     await coordinator.resumeCompletion(preview.preflight_id);
     expect(events.filter((event) => event === 'verify_catalog_and_local_ui')).toHaveLength(1);
     expect(markerAttempts).toBe(2);
+  });
+
+  it('continues verified component cleanup without installing the suite again', async () => {
+    const parent = await temporaryRoot();
+    const targetRoot = path.join(parent, 'managed-redeven');
+    await fs.mkdir(targetRoot);
+    const current = descriptor(targetRoot);
+    let installAttempts = 0;
+    let finalizeAttempts = 0;
+    const coordinator = new ReinstallTargetCoordinator({
+      ...coordinatorDependencies(path.join(parent, 'journal'), () => current, []),
+      prepare_packages: async () => preparedBatch(),
+      install_fresh: async (_descriptor, freshRoot) => {
+        installAttempts++;
+        await fs.writeFile(path.join(freshRoot, 'fresh-component'), 'current');
+      },
+      finalize_install: async () => {
+        finalizeAttempts++;
+        if (finalizeAttempts === 1) {
+          throw new Error('simulated component cleanup interruption');
+        }
+      },
+    });
+    const preview = await coordinator.preview({ environment_id: current.environment_id });
+
+    await expect(coordinator.execute(preview.preflight_id)).rejects.toMatchObject({
+      code: 'reinstall_retryable',
+    });
+    await expect(coordinator.execute(preview.preflight_id)).resolves.toBeDefined();
+
+    expect(installAttempts).toBe(1);
+    expect(finalizeAttempts).toBe(2);
   });
 
   it('fails closed for unsafe roots while allowing old quarantine recovery', async () => {
@@ -320,10 +573,7 @@ describe('ReinstallTargetCoordinator', () => {
       environment_id: current.environment_id,
     });
     await expect(coordinator.execute(oldQuarantinePreview.preflight_id)).resolves.toBeDefined();
-    await expect(fs.lstat(`${targetRoot}.redeven-quarantine-previous`)).resolves.toBeDefined();
-    await fs.rm(`${targetRoot}.redeven-quarantine-previous`, {
-      recursive: true,
-    });
+    await expect(fs.lstat(`${targetRoot}.redeven-quarantine-previous`)).rejects.toMatchObject({ code: 'ENOENT' });
 
     const preview = await coordinator.preview({
       environment_id: current.environment_id,
@@ -361,6 +611,35 @@ describe('ReinstallTargetCoordinator', () => {
     const preview = await coordinator.preview({ environment_id: current.environment_id });
     await expect(coordinator.execute(preview.preflight_id)).resolves.toBeDefined();
     expect(events).toContain('close_sessions');
+  });
+
+  it('continues wipe reinstall when a verified old process cannot be stopped', async () => {
+    const parent = await temporaryRoot();
+    const targetRoot = path.join(parent, 'managed');
+    await fs.mkdir(targetRoot);
+    const current = descriptor(targetRoot);
+    const dependencies = coordinatorDependencies(path.join(parent, 'journal'), () => current, []);
+    const coordinator = new ReinstallTargetCoordinator({
+      ...dependencies,
+      prepare_process_session: async () => ({
+        inspect: async (): Promise<ReinstallTargetProcessInventory> => ({
+          ...emptyInventory(targetRoot),
+          instances: [{
+            pid: 99,
+            process_started_at_unix_ms: 1,
+            role: 'gateway',
+            executable_path: path.join(targetRoot, 'gateway', 'managed', 'bin', 'renamed-gateway'),
+            identity_status: 'verified',
+            stop_authority: 'automatic',
+          }],
+          summary: { automatic: 1, blocked: 0 },
+        }),
+        stop: async () => { throw new Error('simulated stale process stop failure'); },
+        close: async () => undefined,
+      }),
+    });
+    const preview = await coordinator.preview({ environment_id: current.environment_id });
+    await expect(coordinator.execute(preview.preflight_id)).resolves.toBeDefined();
   });
 
   it('groups every Desktop record that resolves to the same canonical physical root', async () => {

@@ -32,6 +32,16 @@ function failureTitleKey(failure: DesktopOperationFailurePresentation): DesktopT
       return 'progress.runtimeStartFailedTitle';
     case 'gateway_package_prepare_failed':
       return 'progress.gatewayPackagePrepareFailedTitle';
+    case 'reinstall_direct_channel_failed':
+      return 'progress.reinstallDirectChannelFailedTitle';
+    case 'reinstall_package_batch_failed':
+      return 'progress.reinstallPackageBatchFailedTitle';
+    case 'reinstall_filesystem_failed':
+      return 'progress.reinstallFilesystemFailedTitle';
+    case 'reinstall_gateway_start_failed':
+      return 'progress.reinstallGatewayStartFailedTitle';
+    case 'reinstall_runtime_start_failed':
+      return 'progress.reinstallRuntimeStartFailedTitle';
     case 'local_runtime_stop_failed':
     case 'container_runtime_stop_failed':
     case 'ssh_runtime_stop_failed':
@@ -80,6 +90,16 @@ function failureSummaryKey(failure: DesktopOperationFailurePresentation): Deskto
       return 'progress.runtimeStartFailedSummary';
     case 'gateway_package_prepare_failed':
       return 'progress.gatewayPackagePrepareFailedSummary';
+    case 'reinstall_direct_channel_failed':
+      return 'progress.reinstallDirectChannelFailedSummary';
+    case 'reinstall_package_batch_failed':
+      return 'progress.reinstallPackageBatchFailedSummary';
+    case 'reinstall_filesystem_failed':
+      return 'progress.reinstallFilesystemFailedSummary';
+    case 'reinstall_gateway_start_failed':
+      return 'progress.reinstallGatewayStartFailedSummary';
+    case 'reinstall_runtime_start_failed':
+      return 'progress.reinstallRuntimeStartFailedSummary';
     case 'local_runtime_stop_failed':
     case 'container_runtime_stop_failed':
     case 'ssh_runtime_stop_failed':

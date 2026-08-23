@@ -221,3 +221,9 @@ func TestWaitServiceReadyReadsPersistedStructuredStartupFailure(t *testing.T) {
 		t.Fatal(statErr)
 	}
 }
+
+func TestGatewayServiceReadyWaitCoversRuntimeStartup(t *testing.T) {
+	if gatewayServiceReadyWait <= gatewaysupervisor.DefaultRuntimeStartupWait {
+		t.Fatalf("Gateway startup wait %s must exceed Runtime startup wait %s", gatewayServiceReadyWait, gatewaysupervisor.DefaultRuntimeStartupWait)
+	}
+}

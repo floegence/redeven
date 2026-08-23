@@ -561,7 +561,7 @@ describe('environmentAggregator', () => {
 
     expect(entry?.runtime_management).toBeUndefined();
     expect(entry?.runtime_operations).toMatchObject({
-      start: { availability: 'unavailable' },
+      start: { availability: 'available', method: 'local_host' },
       stop: { availability: 'available', method: 'local_host' },
       restart: { availability: 'available', method: 'local_host' },
       update: { availability: 'available', method: 'local_host' },
