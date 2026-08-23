@@ -85,12 +85,14 @@ func TestOfficialReleaseProviderUsesMarketVersion(t *testing.T) {
 	}
 }
 
-func TestOfficialReleaseProviderAdvancesToRefreshedMarketRelease(t *testing.T) {
+func TestOfficialReleaseProviderAdvancesAcrossHistoricalMarketFixtures(t *testing.T) {
 	first := officialMarketReleaseFixture(t)
 	provider, err := newOfficialReleaseProvider(first, rejectingReleaseAssetFetcher{})
 	if err != nil {
 		t.Fatal(err)
 	}
+	// This synthetic 4.4.4 -> 4.4.7 sequence exercises stale-ref rejection; it
+	// is intentionally not the production latest-version fixture.
 	second := first
 	second.Version = "4.4.7"
 	second.Source.Tag = "v4.4.7"

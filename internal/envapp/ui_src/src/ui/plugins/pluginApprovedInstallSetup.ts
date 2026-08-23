@@ -9,10 +9,11 @@ export async function completeApprovedOfficialInstall(options: Readonly<{
   pluginInstanceID: string;
   lifecycle: ApprovedInstallLifecycle;
   refreshInventory: () => Promise<PluginInventoryProjection | undefined>;
+  inventory: PluginInventoryProjection;
   signal?: AbortSignal;
 }>): Promise<ApprovedOfficialInstallSetupResult> {
   const attemptedPermissions = new Set<string>();
-  let item = await requireInstalledItem(options);
+  let item = requireInstalledItem(options.pluginInstanceID, options.inventory);
 
   while (true) {
     const permission = item.authorization?.permissions.find((candidate) => (
@@ -42,7 +43,9 @@ export async function completeApprovedOfficialInstall(options: Readonly<{
       expectedManagementRevision: revisions.managementRevision,
       expectedRevokeEpoch: revisions.revokeEpoch,
     }, { signal: options.signal });
-    item = await requireInstalledItem(options);
+    const refreshed = await options.refreshInventory();
+    if (!refreshed) throw new Error('Plugin inventory is unavailable');
+    item = requireInstalledItem(options.pluginInstanceID, refreshed);
   }
 
   const unresolved = item.authorization?.permissions.find((permission) => (
@@ -62,12 +65,11 @@ export async function completeApprovedOfficialInstall(options: Readonly<{
   return 'ready';
 }
 
-async function requireInstalledItem(options: Readonly<{
-  pluginInstanceID: string;
-  refreshInventory: () => Promise<PluginInventoryProjection | undefined>;
-}>): Promise<PluginInventoryItem> {
-  const projection = await options.refreshInventory();
-  const item = projection?.items.find((candidate) => candidate.pluginInstanceID === options.pluginInstanceID);
+function requireInstalledItem(
+  pluginInstanceID: string,
+  projection: PluginInventoryProjection,
+): PluginInventoryItem {
+  const item = projection.items.find((candidate) => candidate.pluginInstanceID === pluginInstanceID);
   if (!item) throw new Error('Installed plugin is missing from the refreshed inventory');
   return item;
 }

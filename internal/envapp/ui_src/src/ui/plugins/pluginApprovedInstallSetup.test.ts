@@ -16,7 +16,7 @@ function item(granted: readonly string[], lifecycleState: PluginInventoryItem['l
     category: 'other',
     searchKeywords: [],
     publisher: 'Redeven Official',
-    version: '4.4.7',
+    version: '4.4.9',
     managementRevision: 7,
     canDisable: true,
     lifecycleState,
@@ -58,7 +58,12 @@ describe('approved official install setup', () => {
     ];
     const refreshInventory = vi.fn(async () => inventories.shift());
 
-    await completeApprovedOfficialInstall({ pluginInstanceID, lifecycle: lifecycle as never, refreshInventory });
+    await completeApprovedOfficialInstall({
+      pluginInstanceID,
+      lifecycle: lifecycle as never,
+      inventory: inventories.shift()!,
+      refreshInventory,
+    });
 
     expect(lifecycle.execute).toHaveBeenNthCalledWith(1, {
       type: 'grant_permission',
@@ -86,6 +91,7 @@ describe('approved official install setup', () => {
     await expect(completeApprovedOfficialInstall({
       pluginInstanceID,
       lifecycle: lifecycle as never,
+      inventory: projection(disabled),
       refreshInventory: vi.fn(async () => projection(disabled)),
     })).resolves.toBe('superseded');
 
@@ -107,6 +113,7 @@ describe('approved official install setup', () => {
     await expect(completeApprovedOfficialInstall({
       pluginInstanceID,
       lifecycle: lifecycle as never,
+      inventory: projection(revoked),
       refreshInventory: vi.fn(async () => projection(revoked)),
     })).resolves.toBe('superseded');
 
@@ -121,6 +128,7 @@ describe('approved official install setup', () => {
     await expect(completeApprovedOfficialInstall({
       pluginInstanceID,
       lifecycle: lifecycle as never,
+      inventory: projection(blocked),
       refreshInventory: vi.fn(async () => projection(blocked)),
     })).rejects.toThrow('blocked by policy');
     expect(lifecycle.execute).not.toHaveBeenCalled();

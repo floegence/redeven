@@ -51,7 +51,6 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
   const [category, setCategory] = createSignal<PluginPresentationCategory | 'all'>('all');
   const [mounted, setMounted] = createSignal(props.open);
   const [closing, setClosing] = createSignal(false);
-  let suppressTileClick = false;
   let panelRef: HTMLDivElement | undefined;
   let searchRef: HTMLInputElement | undefined;
   let gridRef: HTMLUListElement | undefined;
@@ -174,7 +173,6 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
       canvasPlacement: target && props.onDropPlugin ? {
         widgetType: 'redeven.plugin',
         onDrop: (placement) => {
-          suppressTileClick = true;
           props.onDropPlugin?.({ ...target, preferredPlacement: 'workbench' }, placement);
           dismiss();
         },
@@ -292,13 +290,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
                           moveGridFocus(event, index());
                         }}
                         onPointerDown={(event) => beginTileDrag(event, tile)}
-                        onClick={() => {
-                          if (suppressTileClick) {
-                            suppressTileClick = false;
-                            return;
-                          }
-                          activateTile(tile);
-                        }}
+                        onClick={() => activateTile(tile)}
                       >
                         <div class="relative">
                           <PluginIcon item={tile.item} size={isWorkbenchPopup() ? 'dock' : 'launcher'} class="transition-transform duration-200 ease-out group-hover:scale-[1.04] motion-reduce:transform-none motion-reduce:transition-none" />

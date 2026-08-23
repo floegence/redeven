@@ -21,6 +21,7 @@ import {
 import { useI18n } from '../i18n';
 import { Dialog } from '../primitives/EnvAppModal';
 import { ExternalPackageInspectionTerminalError } from './pluginApi';
+import { pluginFailureCategory } from './pluginInstallFailure';
 import { PLUGIN_MOBILE_TOUCH_TARGET_CLASS } from './pluginPresentation';
 import type {
   ExternalPluginCommitResult,
@@ -509,28 +510,24 @@ function inspectionRecovery(
 ): string {
   if (transportFailure) return i18n.t('uiCopy.plugin.external.inspectNetworkRecovery');
   if (!code) return i18n.t('uiCopy.plugin.external.inspectGeneralRecovery');
-  if (
-    code === 'PLUGIN_MANIFEST_INVALID'
-    || code === 'PLUGIN_PACKAGE_INVALID'
-    || code === 'PLUGIN_PACKAGE_TOO_LARGE'
-    || code === 'PLUGIN_PACKAGE_PATH_FORBIDDEN'
-    || code === 'PLUGIN_CONTRACT_MISMATCH'
-    || code === 'PLUGIN_INVALID_REQUEST'
-  ) return i18n.t('uiCopy.plugin.external.inspectPackageRecovery');
-  if (
-    code === 'PLUGIN_SIGNATURE_INVALID'
-    || code === 'PLUGIN_TRUST_STATE_DENIED'
-    || code === 'PLUGIN_TRUST_VERIFICATION_REQUIRED'
-    || code === 'PLUGIN_TRUST_VERIFICATION_INVALID'
-    || code === 'PLUGIN_RELEASE_REF_VERIFICATION_FAILED'
-    || code === 'PLUGIN_RELEASE_REF_POLICY_DENIED'
-    || code === 'PLUGIN_ORIGIN_DENIED'
-    || code === 'PLUGIN_DISABLED_BY_POLICY'
-  ) return i18n.t('uiCopy.plugin.external.inspectPolicyRecovery');
-  if (code === 'PLUGIN_RUNTIME_UNAVAILABLE' || code === 'PLUGIN_FEATURE_NOT_CONFIGURED') {
-    return i18n.t('uiCopy.plugin.external.inspectRuntimeRecovery');
+  switch (pluginFailureCategory(code)) {
+    case 'network':
+    case 'timeout': return i18n.t('uiCopy.plugin.external.inspectNetworkRecovery');
+    case 'manifest_invalid':
+    case 'package_invalid':
+    case 'package_too_large':
+    case 'package_path_forbidden': return i18n.t('uiCopy.plugin.external.inspectPackageRecovery');
+    case 'trust':
+    case 'denied': return i18n.t('uiCopy.plugin.external.inspectPolicyRecovery');
+    case 'runtime_unavailable':
+    case 'runtime_incompatible': return i18n.t('uiCopy.plugin.external.inspectRuntimeRecovery');
+    default:
+      if (code === 'PLUGIN_INVALID_REQUEST') return i18n.t('uiCopy.plugin.external.inspectPackageRecovery');
+      if (code === 'PLUGIN_ORIGIN_DENIED' || code === 'PLUGIN_DISABLED_BY_POLICY') {
+        return i18n.t('uiCopy.plugin.external.inspectPolicyRecovery');
+      }
+      return i18n.t('uiCopy.plugin.external.inspectGeneralRecovery');
   }
-  return i18n.t('uiCopy.plugin.external.inspectGeneralRecovery');
 }
 
 function readSafeErrorField(error: unknown, field: 'code' | 'errorCode' | 'message'): string | undefined {

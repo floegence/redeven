@@ -194,20 +194,20 @@ test('packaged renderer fixture submits the market preview directly to the insta
   const releaseRef = {
     source_id: 'redeven_official',
     channel: 'stable',
-    release_metadata_ref: 'plugins/com.redeven.official/com.redeven.official.containers/4.4.7/release.json',
-    release_metadata_sha256: '5128bda8747edf7936a16c643beb55fc84f8627f5bb1bcb185a0fc1d68dd0011',
+    release_metadata_ref: 'plugins/com.redeven.official/com.redeven.official.containers/4.4.9/release.json',
+    release_metadata_sha256: '7f36244ce5fe5f80751051f1aa2adcb49d049eab2f748d751ae7021cbf074a15',
     publisher_id: 'com.redeven.official',
     plugin_id: 'com.redeven.official.containers',
-    version: '4.4.7',
+    version: '4.4.9',
     expected_hashes: {
-      package_sha256: 'sha256:5d7295d070cc4eff4054ec5f241d7977f0a0a7841b2f984d5d0fff8192eba86d',
-      manifest_sha256: 'sha256:20b785d6455a7d16d35304ad6026259a39f5f0fa75890bcd0e1db470c8b3fdb4',
-      entries_sha256: 'sha256:79d852072629b98eafbfc6787ab97535fbd6b9f3fe7c32db06893e3fd40e463c',
+      package_sha256: 'sha256:954894fbc63c3490fe011c9a6baf8985258a3c9c98a16827ed8342aaf438ed32',
+      manifest_sha256: 'sha256:ab8c23c53758bba5165fd4d50c7972e94791dd1ccff75de02c51c554767fb12b',
+      entries_sha256: 'sha256:8b043db413f20ae08be6252f74bbd82fc17a82592192d40c9947a5fcb9983c0f',
     },
   };
   const installPreview = {
     release_ref: releaseRef,
-    release_identity_digest: 'sha256:81e99dfc0d9e79690ce3b8ade87dd4f609b43f6159e3b2d1f4735e2f7788827a',
+    release_identity_digest: 'sha256:824e51f410a597845d546835e61271b8a530044c51e2d14a098eb847adf1e181',
     manifest_sha256: releaseRef.expected_hashes.manifest_sha256,
     contract_set_sha256: 'sha256:9229d7b5a76273a40818deb9fedb64ee83146cf11ec66edda20743c38eebd9ab',
     summary_sha256: 'sha256:ef067082e92647c5e5ab73787bc2f5e6d83ce9a60be56daf738293103e9d9673',

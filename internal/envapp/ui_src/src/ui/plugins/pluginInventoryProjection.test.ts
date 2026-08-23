@@ -71,7 +71,7 @@ function installedRecord(overrides: Partial<ReDevPluginRecord> = {}): ReDevPlugi
       presentation: { locales: { default: 'en-US' }, icon: { path: iconPath } },
       surfaces: [
         {
-          surface_id: officialContainers.defaultSurfaceID,
+          surface_id: 'containers.dashboard',
           kind: 'view',
           intent: 'primary',
           label: officialContainers.displayName,
@@ -126,7 +126,7 @@ describe('plugin inventory projection', () => {
       defaultLaunchTarget: {
         pluginID: officialContainers.pluginID,
         pluginInstanceID: officialContainers.pluginInstanceID,
-        surfaceID: officialContainers.defaultSurfaceID,
+        surfaceID: 'containers.dashboard',
         expectedManagementRevision: 7,
         preferredPlacement: 'activity',
       },
@@ -155,6 +155,20 @@ describe('plugin inventory projection', () => {
     expect(item?.defaultLaunchTarget).toBeUndefined();
     expect(buildPluginPanelModel(projection).tiles).toHaveLength(1);
     expect(buildPluginCenterModel(projection).installed[0]?.defaultLaunchTarget).toBeUndefined();
+  });
+
+  it('does not invent a launch surface when the verified manifest has no primary view', () => {
+    const installed = installedRecord({
+      manifest: { ...installedRecord().manifest, surfaces: [] },
+    });
+    const projection = projectPluginInventory({
+      officialCatalog: [officialContainers],
+      installedPlugins: [installed],
+      permissionGrants: [readGrant],
+    });
+
+    expect(projection.items[0]?.defaultLaunchTarget).toBeUndefined();
+    expect(buildPluginPanelModel(projection).tiles).toHaveLength(1);
   });
 
   it('uses an installed package icon URL without a market catalog', () => {
@@ -653,7 +667,7 @@ describe('plugin inventory projection', () => {
     expect(projection.items[0]).toMatchObject({
       lifecycleState: 'needs_attention',
       attentionReason: 'permission_required',
-      defaultLaunchTarget: expect.objectContaining({ surfaceID: officialContainers.defaultSurfaceID }),
+      defaultLaunchTarget: expect.objectContaining({ surfaceID: 'containers.dashboard' }),
       authorization: {
         permissions: expect.arrayContaining([
           expect.objectContaining({ permissionID: 'containers.read', granted: false }),
@@ -690,7 +704,7 @@ describe('plugin inventory projection', () => {
     expect(projection.items[0]).toMatchObject({
       lifecycleState: 'needs_attention',
       attentionReason: 'permission_required',
-      defaultLaunchTarget: expect.objectContaining({ surfaceID: officialContainers.defaultSurfaceID }),
+      defaultLaunchTarget: expect.objectContaining({ surfaceID: 'containers.dashboard' }),
       authorization: {
         permissions: expect.arrayContaining([
           expect.objectContaining({ permissionID: 'containers.read', methods: ['containers.list'] }),
@@ -779,7 +793,7 @@ describe('plugin inventory projection', () => {
     expect(projection.items[0]).toMatchObject({
       lifecycleState: 'needs_attention',
       attentionReason: 'policy_restricted',
-      defaultLaunchTarget: expect.objectContaining({ surfaceID: officialContainers.defaultSurfaceID }),
+      defaultLaunchTarget: expect.objectContaining({ surfaceID: 'containers.dashboard' }),
       authorization: {
         permissions: expect.arrayContaining([
           expect.objectContaining({ permissionID: 'containers.read', granted: true, blockedByPolicy: true }),
@@ -807,7 +821,7 @@ describe('plugin inventory projection', () => {
     expect(projection.items[0]).toMatchObject({
       lifecycleState: 'enabled',
       attentionReason: undefined,
-      defaultLaunchTarget: expect.objectContaining({ surfaceID: officialContainers.defaultSurfaceID }),
+      defaultLaunchTarget: expect.objectContaining({ surfaceID: 'containers.dashboard' }),
       authorization: {
         permissions: expect.arrayContaining([
           expect.objectContaining({

@@ -4,10 +4,10 @@ import { CheckCircle, Download, MoreHorizontal, Play, RefreshIcon } from '@floeg
 import { Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 
 import { useI18n } from '../i18n';
-import type { PluginCenterTab, PluginInstallExecutionProjection, PluginInventoryItem, PluginOfficialInstallCommand, PluginPendingCommandType, PluginRuntimeRecoveryPresentation } from './pluginTypes';
+import type { PluginCenterTab, PluginInstallExecutionProjection, PluginInventoryItem, PluginPendingCommandType, PluginRuntimeRecoveryPresentation } from './pluginTypes';
 import { PLUGIN_ENTER_MOTION_CLASS, PLUGIN_PRESS_MOTION_CLASS, pluginPendingCommandLabel, presentPlugin } from './pluginPresentation';
 import { PluginIcon, PluginStatusBadge, PluginTrustBadge } from './PluginPresentationPrimitives';
-import { buildOfficialInstallCommand, resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
+import { resolveAuthorPresentation, resolvePluginPresentation } from './officialPluginCatalog';
 import { PluginInstallStatus } from './PluginInstallStatus';
 
 export function PluginCenterItem(props: {
@@ -20,20 +20,18 @@ export function PluginCenterItem(props: {
   onRetryRuntimeRecovery?: () => Promise<unknown> | unknown;
   managementDisabled: boolean;
   commandPendingType?: PluginPendingCommandType;
-  officialInstallPhase?: 'installing';
-  officialInstallError?: string;
   installOperation?: PluginInstallExecutionProjection;
   entranceDelayMs?: number;
   onOpenDetails: (target: HTMLButtonElement) => void;
   onInstall: () => void;
-  onRetryOfficialInstall: () => void;
   onUpdate: () => void;
   onEnable: () => void;
   onDisable: () => void;
   onUninstall: () => void;
   onOpenActivity: () => void;
   onOpenWorkbench: () => void;
-  onRetryInstall?: (command?: PluginOfficialInstallCommand) => void;
+  onRetryInstall?: () => void;
+  onReviewInstall?: () => void;
   onResolveRetainedData?: () => void;
 }): JSX.Element {
   return <PluginDirectoryCard {...props} />;
@@ -53,7 +51,7 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
   let menuTrigger: HTMLButtonElement | undefined;
   const update = () => props.tab === 'updates' || props.item.lifecycleState === 'update_available';
   const primaryAction = () => actions().primaryAction;
-  const commandPending = () => props.commandPendingType !== undefined || props.officialInstallPhase !== undefined;
+  const commandPending = () => props.commandPendingType !== undefined;
   const pendingLabel = () => props.commandPendingType
       ? pluginPendingCommandLabel(props.commandPendingType, i18n)
       : i18n.t('uiCopy.plugin.installOperation.starting');
@@ -169,24 +167,6 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
           )}
         </Show>
       </button>
-      <Show when={props.officialInstallError && !props.installOperation}>
-        {(message) => (
-          <div
-            role="alert"
-            data-plugin-install-error={props.item.inventoryKey}
-            class="mt-2 flex min-w-0 items-center gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-2.5 py-2 text-xs text-destructive"
-          >
-            <span class="min-w-0 flex-1">{message()}</span>
-            <button
-              type="button"
-              class="shrink-0 cursor-pointer rounded-md border border-destructive/40 px-2 py-1 font-semibold hover:bg-muted"
-              onClick={props.onRetryOfficialInstall}
-            >
-              {i18n.t('common.actions.retry')}
-            </button>
-          </div>
-        )}
-      </Show>
       <Show when={props.installOperation}>
         {(operation) => (
           <div class="mt-3">
@@ -194,7 +174,8 @@ function PluginDirectoryCard(props: Parameters<typeof PluginCenterItem>[0]): JSX
               projection={operation()}
               pluginName={props.item.displayName}
               compact
-              onRetry={() => props.onRetryInstall?.(buildOfficialInstallCommand(props.item))}
+              onRetry={props.onRetryInstall}
+              onReviewAgain={props.onReviewInstall}
               onResolveRetainedData={props.onResolveRetainedData}
             />
           </div>

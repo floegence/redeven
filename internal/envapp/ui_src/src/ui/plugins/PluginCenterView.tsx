@@ -18,7 +18,6 @@ import type {
   PluginMarketDetail,
   PluginLifecycleCommand,
   PluginLifecycleState,
-  PluginOfficialInstallCommand,
   PluginPendingCommandType,
   PluginPresentationCategory,
   PluginRuntimeRecoveryPresentation,
@@ -48,8 +47,9 @@ export type PluginCenterViewProps = {
   onRefresh: () => Promise<unknown> | unknown;
   onCommand: (command: PluginLifecycleCommand, signal: AbortSignal) => Promise<unknown> | unknown;
   installOperations?: readonly PluginInstallExecutionProjection[];
-  onRetryInstall?: (pluginInstanceID: string, command?: PluginOfficialInstallCommand) => Promise<unknown> | unknown;
-  onDiscardRetainedDataAndRetry?: (pluginInstanceID: string, command?: PluginOfficialInstallCommand) => Promise<unknown> | unknown;
+  onRetryInstall?: (pluginInstanceID: string) => Promise<unknown> | unknown;
+  onReviewOfficialInstall?: (pluginInstanceID: string) => Promise<unknown> | unknown;
+  onDiscardRetainedDataAndRetry?: (pluginInstanceID: string) => Promise<unknown> | unknown;
   onInspectExternal?: (request: ExternalPluginInspectionRequest, signal: AbortSignal) => Promise<ExternalPluginInspection>;
   onCommitExternal?: (inspection: ExternalPluginInspection, signal: AbortSignal) => Promise<ExternalPluginCommitResult>;
   onLoadMarketDetail?: (pluginID: string, generation: number, signal?: AbortSignal) => Promise<PluginMarketDetail>;
@@ -58,15 +58,13 @@ export type PluginCenterViewProps = {
 type PluginSourceFilter = 'all' | 'official' | 'external';
 type PluginTrustFilter = 'all' | PluginTrustBadge;
 type PluginLifecycleFilter = 'all' | Exclude<PluginLifecycleState, 'installed'>;
-type OfficialInstallPhase = 'installing';
 type OfficialInstallFlow =
   | Readonly<{ status: 'idle' }>
   | Readonly<{ status: 'loading_preview'; key: string; item: PluginInventoryItem; message?: string }>
   | Readonly<{ status: 'preview_error'; key: string; item: PluginInventoryItem; message: string }>
   | Readonly<{ status: 'review_ready'; key: string; item: PluginInventoryItem }>
   | Readonly<{ status: 'installing'; key: string; item: PluginInventoryItem }>
-  | Readonly<{ status: 'installed'; key: string; item: PluginInventoryItem }>
-  | Readonly<{ status: 'error'; key: string; item: PluginInventoryItem; message: string }>;
+  | Readonly<{ status: 'installed'; key: string; item: PluginInventoryItem }>;
 
 export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const i18n = useI18n();
@@ -175,7 +173,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
         pluginID: flow.item.pluginID,
         pluginInstanceID,
         observation: 'starting',
-        events: [],
+        progress: [],
       };
     }
     if (item.pluginInstanceID) return authoritative;
@@ -198,11 +196,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       && projection.execution?.status !== 'orphaned'
     )
   );
-  const installPending = createMemo(() => (
-    officialInstallFlow().status === 'installing'
-    || (props.installOperations ?? []).some(installOperationActive)
-  ));
-  const managementPending = createMemo(() => Boolean(pendingCommand()) || installPending());
+  const managementPending = createMemo(() => Boolean(pendingCommand()));
   const pendingCommandTypeForItem = (item: PluginInventoryItem): PluginPendingCommandType | undefined => {
     const command = pendingCommand();
     const target = command?.target;
@@ -216,39 +210,22 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   };
   const itemManagementPending = (item: PluginInventoryItem) => {
     if (pendingCommandTypeForItem(item)) return true;
-    const flow = officialInstallFlow();
-    if (flow.status === 'installing'
-      && flow.item.inventoryKey === item.inventoryKey) return true;
     const operation = installOperationForItem(item);
     return Boolean(operation && installOperationActive(operation));
-  };
-  const officialInstallPhaseForItem = (item: PluginInventoryItem): OfficialInstallPhase | undefined => {
-    const flow = officialInstallFlow();
-    if (flow.status === 'installing'
-      && flow.item.inventoryKey === item.inventoryKey) return flow.status;
-    return undefined;
-  };
-  const officialInstallErrorForItem = (item: PluginInventoryItem): string | undefined => {
-    const flow = officialInstallFlow();
-    return flow.status === 'error' && flow.item.inventoryKey === item.inventoryKey
-      ? flow.message
-      : undefined;
   };
   createEffect(() => {
     const flow = officialInstallFlow();
     if (flow.status !== 'installing') return;
     const installed = allItems().find((item) => item.pluginInstanceID === flow.item.officialCatalog?.pluginInstanceID);
     if (installed && installed.lifecycleState !== 'not_installed') {
-      tabSelection.commitNow('installed');
       setOfficialInstallFlow({ status: 'installed', key: flow.key, item: installed });
-      setOfficialInstallDialogOpen(true);
       return;
     }
   });
 
   createEffect(() => {
     const flow = officialInstallFlow();
-    if (flow.status !== 'review_ready' && flow.status !== 'error') return;
+    if (flow.status !== 'review_ready') return;
     const current = allItems().find((item) => item.inventoryKey === flow.item.inventoryKey);
     if (current?.officialCatalog && (
       officialInstallKey(current) === flow.key
@@ -262,6 +239,13 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     setRetainedDataRecoveryError(undefined);
     setRetainedDataRecoveryItem(item);
   };
+  const reviewOfficialInstall = (item: PluginInventoryItem) => {
+    const pluginInstanceID = item.pluginInstanceID ?? item.officialCatalog?.pluginInstanceID;
+    if (pluginInstanceID) void props.onReviewOfficialInstall?.(pluginInstanceID);
+    setOfficialInstallFlow({ status: 'review_ready', key: officialInstallKey(item), item });
+    setOfficialInstallDialogOpen(true);
+    setCommandError(null);
+  };
   const confirmRetainedDataRecovery = async () => {
     const item = retainedDataRecoveryItem();
     const pluginInstanceID = item?.pluginInstanceID ?? item?.officialCatalog?.pluginInstanceID;
@@ -269,7 +253,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     setRetainedDataRecoveryPending(true);
     setRetainedDataRecoveryError(undefined);
     try {
-      await props.onDiscardRetainedDataAndRetry?.(pluginInstanceID, item ? buildOfficialInstallCommand(item) : undefined);
+      await props.onDiscardRetainedDataAndRetry?.(pluginInstanceID);
       setRetainedDataRecoveryItem(undefined);
     } catch (error) {
       setRetainedDataRecoveryError(messageFromUnknown(error) ?? i18n.t('uiCopy.plugin.installOperation.failure.internal'));
@@ -476,7 +460,21 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
         setOfficialInstallDialogOpen(true);
         return;
       }
-      if (flow.status === 'installing' && flow.key === key) return;
+      if (flow.status === 'installing' && flow.key === key) {
+        const operation = installOperationForItem(item);
+        if (operation && installOperationActive(operation)) {
+          setOfficialInstallDialogOpen(true);
+          return;
+        }
+        reviewOfficialInstall(item);
+        return;
+      }
+      if (flow.status === 'installed' && flow.key === key) return;
+      const operation = installOperationForItem(item);
+      if (operation && !installOperationActive(operation)) {
+        reviewOfficialInstall(item);
+        return;
+      }
       setOfficialInstallFlow({ status: 'review_ready', key, item });
       setOfficialInstallDialogOpen(true);
       setCommandError(null);
@@ -566,18 +564,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
         ? current
         : { status: 'installing', key, item });
       setCommandError(null);
-      try {
-        await props.onCommand(command, new AbortController().signal);
-      } catch (error) {
-        // A coordinator failure can happen before an execution projection
-        // exists. Keep one actionable card-level error instead of leaving a
-        // modal in an unbounded loading state.
-        setOfficialInstallFlow({
-          status: 'error', key, item,
-          message: messageFromUnknown(error) ?? i18n.t('uiCopy.plugin.installOperation.failure.internal'),
-        });
-        setOfficialInstallDialogOpen(false);
-      }
+      await props.onCommand(command, new AbortController().signal);
       return;
     }
     if (command.type === 'open_surface' ? pendingCommand() : managementPending()) return;
@@ -761,18 +748,14 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
                   onRetryRuntimeRecovery={item.pluginInstanceID ? () => props.onRetryRuntimeRecovery?.(item.pluginInstanceID) : undefined}
                   managementDisabled={loading() || itemManagementPending(item)}
                   commandPendingType={pendingCommandTypeForItem(item)}
-                  officialInstallPhase={officialInstallPhaseForItem(item)}
-                  officialInstallError={selectedItem()?.inventoryKey === item.inventoryKey || installOperationForItem(item)
-                    ? undefined
-                    : officialInstallErrorForItem(item)}
                   installOperation={officialInstallDialog()?.item.inventoryKey === item.inventoryKey
+                    || retainedDataRecoveryItem()?.inventoryKey === item.inventoryKey
                     || (selectedInventoryKey() === item.inventoryKey && mobileDetailOpen())
                     ? undefined
                     : installOperationForItem(item)}
                   entranceDelayMs={Math.min(index() * 18, 126)}
                   onOpenDetails={(target) => openDetails(item.inventoryKey, target)}
                   onInstall={() => installItem(item)}
-                  onRetryOfficialInstall={() => installItem(item)}
                   onUpdate={() => requestUpdate(item)}
                   onEnable={() => {
                     if (!item.pluginInstanceID || item.managementRevision === undefined) return;
@@ -798,10 +781,11 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
                   }}
                   onOpenActivity={() => openItemSurface(item, 'activity')}
                   onOpenWorkbench={() => openItemSurface(item, 'workbench')}
-                  onRetryInstall={(command) => {
+                  onRetryInstall={() => {
                     const pluginInstanceID = item.pluginInstanceID ?? item.officialCatalog?.pluginInstanceID;
-                    if (pluginInstanceID) void props.onRetryInstall?.(pluginInstanceID, command);
+                    if (pluginInstanceID) void props.onRetryInstall?.(pluginInstanceID);
                   }}
+                  onReviewInstall={() => installItem(item)}
                   onResolveRetainedData={() => requestRetainedDataRecovery(item)}
                 />
               )}
@@ -846,23 +830,22 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
               canManage={canManage()}
               canOpenSurfaces={canOpenSurfaces()}
               runtimeRecovery={item.pluginInstanceID ? props.runtimeRecoveryByInstanceID?.[item.pluginInstanceID] : undefined}
-              managementPending={managementPending()}
+              managementPending={itemManagementPending(item)}
               commandPendingType={pendingCommandTypeForItem(item)}
-              officialInstallPhase={officialInstallPhaseForItem(item)}
-              officialInstallError={installOperationForItem(item) ? undefined : officialInstallErrorForItem(item)}
               installOperation={officialInstallDialog()?.item.inventoryKey === item.inventoryKey
+                || retainedDataRecoveryItem()?.inventoryKey === item.inventoryKey
                 ? undefined
                 : installOperationForItem(item)}
               uninstallChoiceFor={uninstallChoiceFor()}
               onCommand={(command) => void runCommand(command)}
               onAskUninstall={setUninstallChoiceFor}
               onExternalInstall={installItem}
-              onRetryOfficialInstall={() => installItem(item)}
               onExternalUpdate={requestUpdate}
-              onRetryInstall={(command) => {
+              onRetryInstall={() => {
                 const pluginInstanceID = item.pluginInstanceID ?? item.officialCatalog?.pluginInstanceID;
-                if (pluginInstanceID) void props.onRetryInstall?.(pluginInstanceID, command);
+                if (pluginInstanceID) void props.onRetryInstall?.(pluginInstanceID);
               }}
+              onReviewInstall={() => installItem(item)}
               onResolveRetainedData={() => requestRetainedDataRecovery(item)}
               marketDetail={marketDetailState()?.pluginID === item.pluginID ? marketDetailState()?.detail : undefined}
               marketDetailLoading={marketDetailState()?.pluginID === item.pluginID && marketDetailState()?.loading === true}
@@ -887,7 +870,11 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
         onRetry={() => {
           const item = officialInstallDialog()?.item;
           const instanceID = item?.officialCatalog?.pluginInstanceID;
-          if (instanceID && item) void props.onRetryInstall?.(instanceID, buildOfficialInstallCommand(item));
+          if (instanceID) void props.onRetryInstall?.(instanceID);
+        }}
+        onReviewAgain={() => {
+          const item = officialInstallDialog()?.item;
+          if (item) reviewOfficialInstall(item);
         }}
         onRetryPreview={() => {
           const flow = officialInstallFlow();
@@ -1026,6 +1013,7 @@ function OfficialPluginInstallDialog(props: {
   installing: boolean;
   installed: boolean;
   onRetry?: () => void;
+  onReviewAgain?: () => void;
   onRetryPreview?: () => void;
   onResolveRetainedData?: () => void;
   onOpenChange: (open: boolean) => void;
@@ -1194,12 +1182,13 @@ function OfficialPluginInstallDialog(props: {
                       projection={operation()}
                       compact
                       onRetry={props.onRetry}
+                      onReviewAgain={props.onReviewAgain}
                       onResolveRetainedData={props.onResolveRetainedData}
                     />
                   )}
                 </Show>
               )}>
-                <p class="text-sm font-medium text-emerald-600">{i18n.t('uiCopy.plugin.installOperation.complete')}</p>
+                <p class="text-sm font-medium text-[var(--redeven-status-success-foreground)]">{i18n.t('uiCopy.plugin.installOperation.complete')}</p>
               </Show>
               </Show>
             </Show>
@@ -1484,16 +1473,14 @@ export function PluginCenterDetails(props: {
   runtimeRecovery?: PluginRuntimeRecoveryPresentation;
   managementPending: boolean;
   commandPendingType?: PluginPendingCommandType;
-  officialInstallPhase?: OfficialInstallPhase;
-  officialInstallError?: string;
   installOperation?: PluginInstallExecutionProjection;
   uninstallChoiceFor: string | null;
   onCommand: (command: PluginLifecycleCommand) => void;
   onAskUninstall: (pluginInstanceID: string) => void;
   onExternalInstall: (item: PluginInventoryItem) => void;
-  onRetryOfficialInstall: () => void;
   onExternalUpdate: (item: PluginInventoryItem) => void;
-  onRetryInstall?: (command?: PluginOfficialInstallCommand) => void;
+  onRetryInstall?: () => void;
+  onReviewInstall?: () => void;
   onResolveRetainedData?: () => void;
 }): JSX.Element {
   const i18n = useI18n();
@@ -1559,15 +1546,13 @@ export function PluginCenterDetails(props: {
                 canOpenSurfaces={props.canOpenSurfaces}
                 managementPending={props.managementPending}
                 commandPendingType={props.commandPendingType}
-                officialInstallPhase={props.officialInstallPhase}
-                officialInstallError={props.officialInstallError}
                 installOperation={props.installOperation}
                 onCommand={props.onCommand}
                 onAskUninstall={props.onAskUninstall}
                 onExternalInstall={props.onExternalInstall}
-                onRetryOfficialInstall={props.onRetryOfficialInstall}
                 onExternalUpdate={props.onExternalUpdate}
               onRetryInstall={props.onRetryInstall}
+              onReviewInstall={props.onReviewInstall}
               onResolveRetainedData={props.onResolveRetainedData}
               />
             </div>
@@ -2106,20 +2091,18 @@ function PluginActions(props: {
   canOpenSurfaces: boolean;
   managementPending: boolean;
   commandPendingType?: PluginPendingCommandType;
-  officialInstallPhase?: OfficialInstallPhase;
-  officialInstallError?: string;
   installOperation?: PluginInstallExecutionProjection;
   onCommand: (command: PluginLifecycleCommand) => void;
   onAskUninstall: (pluginInstanceID: string) => void;
   onExternalInstall: (item: PluginInventoryItem) => void;
-  onRetryOfficialInstall: () => void;
   onExternalUpdate: (item: PluginInventoryItem) => void;
-  onRetryInstall?: (command?: PluginOfficialInstallCommand) => void;
+  onRetryInstall?: () => void;
+  onReviewInstall?: () => void;
   onResolveRetainedData?: () => void;
 }) {
   const i18n = useI18n();
   const presentation = () => presentPlugin(props.item);
-  const commandPending = () => props.commandPendingType !== undefined || props.officialInstallPhase !== undefined;
+  const commandPending = () => props.commandPendingType !== undefined;
   const disabledManagement = () => !props.canManage || props.managementPending || commandPending();
   const disabledOpen = () => commandPending() || !props.canOpenSurfaces;
   const item = () => props.item;
@@ -2219,27 +2202,10 @@ function PluginActions(props: {
             <PluginInstallStatus
               projection={operation()}
               pluginName={item().displayName}
-              onRetry={() => props.onRetryInstall?.(buildOfficialInstallCommand(item()))}
+              onRetry={props.onRetryInstall}
+              onReviewAgain={props.onReviewInstall}
               onResolveRetainedData={props.onResolveRetainedData}
             />
-          </div>
-        )}
-      </Show>
-      <Show when={props.officialInstallError && !props.installOperation}>
-        {(message) => (
-          <div
-            role="alert"
-            data-plugin-install-error={item().inventoryKey}
-            class="mb-3 flex min-w-0 items-center gap-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive"
-          >
-            <span class="min-w-0 flex-1">{message()}</span>
-            <button
-              type="button"
-              class="shrink-0 cursor-pointer rounded-md border border-destructive/40 px-2 py-1 font-semibold hover:bg-muted"
-              onClick={props.onRetryOfficialInstall}
-            >
-              {i18n.t('common.actions.retry')}
-            </button>
           </div>
         )}
       </Show>
@@ -2256,9 +2222,7 @@ function PluginActions(props: {
         >
           {props.commandPendingType
               ? pluginPendingCommandLabel(props.commandPendingType, i18n)
-                : props.officialInstallPhase === 'installing'
-                ? i18n.t('uiCopy.plugin.installOperation.starting')
-            : primaryActionLabel(presentation().primaryAction)}
+              : primaryActionLabel(presentation().primaryAction)}
         </Button>
         <Show when={overflowItems().length > 0}>
           <Dropdown

@@ -5,9 +5,10 @@ import { createPluginInstallCoordinator } from './pluginInstallCoordinator';
 import { OFFICIAL_CONTAINERS_RELEASE_REF } from './officialContainersRelease.generated';
 
 const pluginInstanceID = 'plugini_redeven_official_containers';
+const pluginID = 'com.redeven.official.containers';
 const installCommand = {
   type: 'install' as const,
-  pluginID: 'com.redeven.official.containers',
+  pluginID,
   source: 'official_catalog' as const,
   pluginInstanceID,
   releaseRef: OFFICIAL_CONTAINERS_RELEASE_REF,
@@ -22,240 +23,393 @@ function execution(overrides: Partial<PluginExecution> = {}): PluginExecution {
     execution_id: 'release_install_1',
     plugin_instance_id: pluginInstanceID,
     kind: 'operation',
-    status: 'completed',
-    cursor: 1,
+    status: 'running',
+    cursor: 0,
     cancelable: false,
-    created_at: '2026-08-14T00:00:00Z',
-    updated_at: '2026-08-14T00:00:01Z',
-    terminal_at: '2026-08-14T00:00:01Z',
+    created_at: '2026-08-23T00:00:00Z',
+    updated_at: '2026-08-23T00:00:01Z',
     ...overrides,
   };
 }
 
-function event(sequence = 1): PluginEvent {
+function terminalEvent(input: Readonly<{
+  executionID?: string;
+  requestID?: string;
+  status?: 'completed' | 'failed';
+  code?: string;
+  retryable?: boolean;
+}> = {}): PluginEvent {
+  const executionID = input.executionID ?? 'release_install_1';
+  const status = input.status ?? 'completed';
   return {
-    execution_id: 'release_install_1',
-    sequence,
-    kind: 'progress',
-    payload: { phase: 'download_package', progress: { kind: 'bytes', completed: 5, total: 10 } },
+    execution_id: executionID,
+    sequence: 1,
+    kind: 'terminal',
+    payload: {
+      install_progress: {
+        task_id: executionID,
+        request_id: input.requestID ?? 'request-1',
+        stage: status === 'completed' ? 'enable' : 'download',
+        status,
+        ...(status === 'failed' ? {
+          failure_code: input.code ?? 'PLUGIN_INTERNAL_FAILURE',
+          failure_stage: 'download',
+          retryable: input.retryable ?? true,
+        } : {}),
+      },
+    },
   };
 }
 
 function harness(overrides: Record<string, unknown> = {}) {
-  const {
-    completeApprovedInstall: completeApprovedInstallOverride,
-    ...lifecycleOverrides
-  } = overrides;
+  const requestIDs = ['request-1', 'request-2', 'request-3'];
+  const installOfficialRelease = vi.fn(async (_command, requestID: string) => execution({
+    execution_id: requestID === 'request-1' ? 'release_install_1' : 'release_install_2',
+  }));
+  const listReleaseInstallExecutionEvents = vi.fn(async (executionID: string) => ({
+    execution_id: executionID,
+    events: [terminalEvent({ executionID })],
+    cursor: 1,
+  }));
+  const getReleaseInstallExecution = vi.fn(async (executionID: string) => execution({
+    execution_id: executionID,
+    status: 'completed',
+    cursor: 1,
+    terminal_at: '2026-08-23T00:00:02Z',
+  }));
   const lifecycle = {
-    installOfficialRelease: vi.fn(async (_command, _requestID, _options, onUpdate) => {
-      const value = execution();
-      onUpdate?.(value, [event()]);
-      return value;
-    }),
+    installOfficialRelease,
     listReleaseInstallExecutions: vi.fn(async () => [] as PluginExecution[]),
-    getReleaseInstallExecution: vi.fn(async () => execution()),
-    listReleaseInstallExecutionEvents: vi.fn(async () => ({
-      execution_id: 'release_install_1', events: [event()], cursor: 1,
-    })),
+    getReleaseInstallExecution,
+    listReleaseInstallExecutionEvents,
+    getIncompatibleRetainedDataRevision: vi.fn(async () => 4),
     deleteIncompatibleRetainedData: vi.fn(async () => undefined),
-    ...lifecycleOverrides,
+    ...overrides,
   };
-  const refreshInventory = vi.fn(async () => undefined);
-  const completeApprovedInstall = typeof completeApprovedInstallOverride === 'function'
-    ? completeApprovedInstallOverride as (pluginInstanceID: string, signal?: AbortSignal) => Promise<unknown>
-    : vi.fn(async () => undefined);
+  const refreshInventory = vi.fn(async () => ({ items: [] }));
+  const completeApprovedInstall = vi.fn(async () => undefined);
+  const createRequestID = vi.fn(() => requestIDs.shift() ?? 'request-extra');
   const coordinator = createPluginInstallCoordinator({
     lifecycle: lifecycle as never,
     refreshInventory,
     completeApprovedInstall,
-    createRequestID: () => 'request-1',
-    resolvePluginID: (candidate) => candidate === pluginInstanceID ? 'com.redeven.official.containers' : undefined,
+    createRequestID,
+    resolvePluginID: (candidate) => candidate === pluginInstanceID ? pluginID : undefined,
   });
-  return { coordinator, lifecycle, refreshInventory, completeApprovedInstall };
+  return {
+    coordinator,
+    lifecycle,
+    installOfficialRelease,
+    listReleaseInstallExecutionEvents,
+    getReleaseInstallExecution,
+    refreshInventory,
+    completeApprovedInstall,
+    createRequestID,
+  };
 }
 
 describe('plugin install execution coordinator', () => {
-  it('submits one Host execution and removes presentation after authoritative inventory refresh', async () => {
-    const { coordinator, lifecycle, refreshInventory, completeApprovedInstall } = harness();
+  it('submits once and owns the only observation loop through completion', async () => {
+    const h = harness();
 
-    await coordinator.start(installCommand);
+    await h.coordinator.start(installCommand);
+    await flushUntil(() => h.completeApprovedInstall.mock.calls.length === 1);
 
-    expect(lifecycle.installOfficialRelease).toHaveBeenCalledOnce();
-    expect(refreshInventory).toHaveBeenCalledOnce();
-    expect(completeApprovedInstall).toHaveBeenCalledWith(pluginInstanceID, expect.any(AbortSignal));
-    expect(coordinator.projections()).toEqual([]);
+    expect(h.installOfficialRelease).toHaveBeenCalledOnce();
+    expect(h.listReleaseInstallExecutionEvents).toHaveBeenCalledOnce();
+    expect(h.getReleaseInstallExecution).toHaveBeenCalledOnce();
+    expect(h.refreshInventory).toHaveBeenCalledOnce();
+    expect(h.completeApprovedInstall).toHaveBeenCalledWith(pluginInstanceID, { items: [] }, expect.any(AbortSignal));
+    expect(h.coordinator.projections()).toEqual([]);
   });
 
-  it('keeps the unified failed execution as the retry authority', async () => {
-    const failed = execution({ status: 'failed', failure_code: 'PLUGIN_RELEASE_NETWORK' });
-    const { coordinator } = harness({
-      installOfficialRelease: vi.fn(async (_command, _requestID, _options, onUpdate) => {
-        onUpdate?.(failed, []);
-        return failed;
+  it('does not start a competing watcher when start and resume overlap', async () => {
+    let releaseEvents: (() => void) | undefined;
+    const gate = new Promise<void>((resolve) => { releaseEvents = resolve; });
+    const h = harness({
+      listReleaseInstallExecutions: vi.fn(async () => [execution()]),
+      listReleaseInstallExecutionEvents: vi.fn(async () => {
+        await gate;
+        return { execution_id: 'release_install_1', events: [terminalEvent()], cursor: 1 };
       }),
     });
 
-    await coordinator.start(installCommand);
+    await h.coordinator.start(installCommand);
+    await h.coordinator.resume();
+    releaseEvents?.();
+    await flushUntil(() => h.completeApprovedInstall.mock.calls.length === 1);
 
-    expect(coordinator.projections()).toEqual([
-      expect.objectContaining({
-        pluginInstanceID,
-        observation: 'failed',
-        execution: failed,
-        events: [],
-      }),
-    ]);
+    expect(h.lifecycle.listReleaseInstallExecutionEvents).toHaveBeenCalledOnce();
   });
 
-  it('deletes confirmed incompatible retained data before starting a new install execution', async () => {
-    const failed = execution({ status: 'failed', failure_code: 'PLUGIN_RETAINED_DATA_INCOMPATIBLE' });
+  it('replays an uncertain submission with the same request id', async () => {
     const installOfficialRelease = vi.fn()
-      .mockImplementationOnce(async (_command, _requestID, _options, onUpdate) => {
-        onUpdate?.(failed, []);
-        return failed;
-      })
+      .mockRejectedValueOnce(new TypeError('connection lost'))
       .mockResolvedValueOnce(execution());
-    const { coordinator, lifecycle } = harness({ installOfficialRelease });
+    const h = harness({ installOfficialRelease });
 
-    await coordinator.start(installCommand);
-    await coordinator.discardRetainedDataAndRetry(pluginInstanceID);
+    await h.coordinator.start(installCommand);
+    expect(h.coordinator.projections()[0]?.failure?.recovery).toBe('replay_submission');
+    await h.coordinator.retry(pluginInstanceID);
 
-    expect(lifecycle.deleteIncompatibleRetainedData).toHaveBeenCalledWith(pluginInstanceID);
-    expect(installOfficialRelease).toHaveBeenCalledTimes(2);
-    expect(coordinator.projections()).toEqual([]);
+    expect(installOfficialRelease).toHaveBeenNthCalledWith(1, installCommand, 'request-1', expect.any(Object));
+    expect(installOfficialRelease).toHaveBeenNthCalledWith(2, installCommand, 'request-1', expect.any(Object));
+    expect(h.createRequestID).toHaveBeenCalledOnce();
   });
 
-  it('retains public Execution events when inventory refresh needs retry', async () => {
-    const refreshInventory = vi.fn(async () => { throw new Error('offline'); });
-    const lifecycle = {
-      installOfficialRelease: vi.fn(async (_command: unknown, _requestID: string, _options: unknown, onUpdate?: (value: PluginExecution, events: PluginEvent[]) => void) => {
-        const value = execution();
-        onUpdate?.(value, [event()]);
-        return value;
+  it('reattaches a fresh observer when a same-request replay returns the same execution', async () => {
+    let releaseFirstObserver: (() => void) | undefined;
+    const firstObserverGate = new Promise<void>((resolve) => { releaseFirstObserver = resolve; });
+    const listReleaseInstallExecutionEvents = vi.fn(async () => {
+      if (listReleaseInstallExecutionEvents.mock.calls.length === 1) {
+        await firstObserverGate;
+        throw new DOMException('superseded', 'AbortError');
+      }
+      return {
+        execution_id: 'release_install_1',
+        events: [terminalEvent()],
+        cursor: 1,
+      };
+    });
+    const installOfficialRelease = vi.fn()
+      .mockResolvedValueOnce(execution())
+      .mockResolvedValueOnce(execution());
+    const h = harness({ installOfficialRelease, listReleaseInstallExecutionEvents });
+
+    await h.coordinator.start(installCommand);
+    await flushUntil(() => listReleaseInstallExecutionEvents.mock.calls.length === 1);
+
+    const first = h.coordinator.projections()[0]!;
+    // Model a lost committed submission response while its old observer is
+    // still unwinding, then replay the exact request identity.
+    Object.assign(first, {
+      observation: 'failed',
+      failure: {
+        source: 'submission',
+        code: 'PLUGIN_INTERNAL_FAILURE',
+        retryable: true,
+        recovery: 'replay_submission',
+      },
+    });
+    await h.coordinator.retry(pluginInstanceID);
+    releaseFirstObserver?.();
+    await flushUntil(() => h.completeApprovedInstall.mock.calls.length === 1);
+
+    expect(installOfficialRelease.mock.calls.map((call: unknown[]) => call[1])).toEqual(['request-1', 'request-1']);
+    expect(listReleaseInstallExecutionEvents).toHaveBeenCalledTimes(2);
+  });
+
+  it('uses platform retryable facts and creates a new request id for a new attempt', async () => {
+    let attempt = 0;
+    const h = harness({
+      installOfficialRelease: vi.fn(async (_command: unknown, _requestID: string) => {
+        attempt += 1;
+        return execution({ execution_id: `release_install_${attempt}`, cursor: 0 });
       }),
-      listReleaseInstallExecutions: vi.fn(async () => [] as PluginExecution[]),
-      getReleaseInstallExecution: vi.fn(async () => execution()),
-      listReleaseInstallExecutionEvents: vi.fn(async () => ({ execution_id: 'release_install_1', events: [], cursor: 1 })),
-    };
-    const coordinator = createPluginInstallCoordinator({
-      lifecycle: lifecycle as never,
-      refreshInventory,
-      completeApprovedInstall: vi.fn(async () => undefined),
-      createRequestID: () => 'request-1',
-      resolvePluginID: () => 'com.redeven.official.containers',
+      listReleaseInstallExecutionEvents: vi.fn(async (executionID: string) => ({
+        execution_id: executionID,
+        events: [attempt === 1
+          ? terminalEvent({ executionID, requestID: 'request-1', status: 'failed', code: 'PLUGIN_INTERNAL_FAILURE', retryable: true })
+          : terminalEvent({ executionID, requestID: 'request-2' })],
+        cursor: 1,
+      })),
+      getReleaseInstallExecution: vi.fn(async (executionID: string) => execution({
+        execution_id: executionID,
+        status: attempt === 1 ? 'failed' : 'completed',
+        failure_code: attempt === 1 ? 'PLUGIN_INTERNAL_FAILURE' : undefined,
+        cursor: 1,
+        terminal_at: '2026-08-23T00:00:02Z',
+      })),
     });
 
-    await coordinator.start(installCommand);
+    await h.coordinator.start(installCommand);
+    await flushUntil(() => h.coordinator.projections()[0]?.failure?.recovery === 'retry_install');
+    await h.coordinator.retry(pluginInstanceID);
+    await flushUntil(() => h.completeApprovedInstall.mock.calls.length === 1);
 
-    expect(coordinator.projections()[0]).toMatchObject({
-      observation: 'refresh_failed',
-      execution: { execution_id: 'release_install_1', status: 'completed' },
-      events: [{ sequence: 1, kind: 'progress' }],
+    expect(h.lifecycle.installOfficialRelease.mock.calls.map((call: unknown[]) => call[1])).toEqual(['request-1', 'request-2']);
+  });
+
+  it('offers review rather than guessing retryability for a recovered execution without its command', async () => {
+    const failed = execution({
+      status: 'failed',
+      cursor: 1,
+      failure_code: 'PLUGIN_RELEASE_NETWORK',
+      terminal_at: new Date().toISOString(),
+    });
+    const h = harness({
+      listReleaseInstallExecutions: vi.fn(async () => [failed]),
+      listReleaseInstallExecutionEvents: vi.fn(async () => ({
+        execution_id: failed.execution_id,
+        events: [terminalEvent({ status: 'failed', code: 'PLUGIN_RELEASE_NETWORK', retryable: true })],
+        cursor: 1,
+      })),
+      getReleaseInstallExecution: vi.fn(async () => failed),
+    });
+
+    await h.coordinator.resume();
+    await flushUntil(() => h.coordinator.projections()[0]?.observation === 'failed');
+
+    expect(h.coordinator.projections()[0]?.failure).toMatchObject({
+      code: 'PLUGIN_RELEASE_NETWORK',
+      retryable: true,
+      recovery: 'review_again',
     });
   });
 
-  it('keeps a committed install retryable when approved permission setup fails', async () => {
-    const completeApprovedInstall = vi.fn()
-      .mockRejectedValueOnce(new Error('grant failed'))
+  it('does not use a mismatched request event to authorize retry', async () => {
+    const h = harness({
+      listReleaseInstallExecutionEvents: vi.fn(async () => ({
+        execution_id: 'release_install_1',
+        events: [terminalEvent({
+          requestID: 'different-request',
+          status: 'failed',
+          code: 'PLUGIN_RELEASE_NETWORK',
+          retryable: true,
+        })],
+        cursor: 1,
+      })),
+      getReleaseInstallExecution: vi.fn(async () => execution({
+        status: 'failed',
+        failure_code: 'PLUGIN_RELEASE_NETWORK',
+        cursor: 1,
+        terminal_at: '2026-08-23T00:00:02Z',
+      })),
+    });
+
+    await h.coordinator.start(installCommand);
+    await flushUntil(() => h.coordinator.projections()[0]?.observation === 'failed');
+
+    expect(h.coordinator.projections()[0]?.failure).toMatchObject({
+      code: 'PLUGIN_INTERNAL_FAILURE',
+      retryable: false,
+      recovery: 'review_again',
+    });
+  });
+
+  it('deletes retained data and starts a new exact reviewed attempt', async () => {
+    let attempt = 0;
+    const h = harness({
+      installOfficialRelease: vi.fn(async () => execution({ execution_id: `release_install_${attempt += 1}` })),
+      listReleaseInstallExecutionEvents: vi.fn(async (executionID: string) => ({
+        execution_id: executionID,
+        events: [attempt === 1
+          ? terminalEvent({ executionID, status: 'failed', code: 'PLUGIN_RETAINED_DATA_INCOMPATIBLE', retryable: false })
+          : terminalEvent({ executionID, requestID: 'request-2' })],
+        cursor: 1,
+      })),
+      getReleaseInstallExecution: vi.fn(async (executionID: string) => execution({
+        execution_id: executionID,
+        status: attempt === 1 ? 'failed' : 'completed',
+        failure_code: attempt === 1 ? 'PLUGIN_RETAINED_DATA_INCOMPATIBLE' : undefined,
+        cursor: 1,
+        terminal_at: '2026-08-23T00:00:02Z',
+      })),
+    });
+
+    await h.coordinator.start(installCommand);
+    await flushUntil(() => h.coordinator.projections()[0]?.failure?.recovery === 'erase_retained_data');
+    await h.coordinator.discardRetainedDataAndRetry(pluginInstanceID);
+
+    expect(h.lifecycle.getIncompatibleRetainedDataRevision).toHaveBeenCalledWith(pluginInstanceID, expect.any(Object));
+    expect(h.lifecycle.deleteIncompatibleRetainedData).toHaveBeenCalledWith(pluginInstanceID, 4, expect.any(Object));
+    expect(h.lifecycle.installOfficialRelease.mock.calls.map((call: unknown[]) => call[1])).toEqual(['request-1', 'request-2']);
+  });
+
+  it('reconciles a lost retained-data delete response with the same confirmed revision', async () => {
+    let attempt = 0;
+    const deleteIncompatibleRetainedData = vi.fn()
+      .mockRejectedValueOnce(new TypeError('connection lost'))
       .mockResolvedValueOnce(undefined);
-    const { coordinator } = harness({ completeApprovedInstall });
-
-    await coordinator.start(installCommand);
-
-    expect(coordinator.projections()[0]).toMatchObject({
-      pluginInstanceID,
-      observation: 'activation_failed',
-      execution: { status: 'completed' },
+    const h = harness({
+      deleteIncompatibleRetainedData,
+      installOfficialRelease: vi.fn(async () => execution({ execution_id: `release_install_${attempt += 1}` })),
+      listReleaseInstallExecutionEvents: vi.fn(async (executionID: string) => ({
+        execution_id: executionID,
+        events: [terminalEvent({ executionID, status: 'failed', code: 'PLUGIN_RETAINED_DATA_INCOMPATIBLE', retryable: false })],
+        cursor: 1,
+      })),
+      getReleaseInstallExecution: vi.fn(async (executionID: string) => execution({
+        execution_id: executionID,
+        status: 'failed',
+        failure_code: 'PLUGIN_RETAINED_DATA_INCOMPATIBLE',
+        cursor: 1,
+        terminal_at: '2026-08-23T00:00:02Z',
+      })),
     });
-    await coordinator.retry(pluginInstanceID);
-    expect(completeApprovedInstall).toHaveBeenCalledTimes(2);
-    expect(coordinator.projections()).toEqual([]);
+
+    await h.coordinator.start(installCommand);
+    await flushUntil(() => h.coordinator.projections()[0]?.failure?.recovery === 'erase_retained_data');
+    await expect(h.coordinator.discardRetainedDataAndRetry(pluginInstanceID)).rejects.toThrow('connection lost');
+    await h.coordinator.discardRetainedDataAndRetry(pluginInstanceID);
+
+    expect(h.lifecycle.getIncompatibleRetainedDataRevision).toHaveBeenCalledOnce();
+    expect(deleteIncompatibleRetainedData).toHaveBeenCalledTimes(2);
+    expect(deleteIncompatibleRetainedData.mock.calls[0]?.[1]).toBe(4);
+    expect(deleteIncompatibleRetainedData.mock.calls[1]?.[1]).toBe(4);
   });
 
-  it('forgets the completed install projection when the plugin is uninstalled', async () => {
-    const completeApprovedInstall = vi.fn().mockRejectedValue(new Error('grant failed'));
-    const { coordinator } = harness({ completeApprovedInstall });
+  it('retries inventory projection without restarting the completed install', async () => {
+    const h = harness();
+    h.refreshInventory.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ items: [] });
 
-    await coordinator.start(installCommand);
-    expect(coordinator.projections()).toHaveLength(1);
+    await h.coordinator.start(installCommand);
+    await flushUntil(() => h.coordinator.projections()[0]?.failure?.recovery === 'refresh_inventory');
+    await h.coordinator.retry(pluginInstanceID);
+    await flushUntil(() => h.completeApprovedInstall.mock.calls.length === 1);
 
-    coordinator.forget(pluginInstanceID);
-
-    expect(coordinator.projections()).toEqual([]);
+    expect(h.installOfficialRelease).toHaveBeenCalledOnce();
+    expect(h.refreshInventory).toHaveBeenCalledTimes(2);
   });
 
-  it('retries the complete approved setup after an inventory refresh failure', async () => {
-    const { coordinator, refreshInventory, completeApprovedInstall } = harness();
-    refreshInventory.mockRejectedValueOnce(new Error('offline')).mockResolvedValue(undefined);
-
-    await coordinator.start(installCommand);
-    await coordinator.retry(pluginInstanceID);
-
-    expect(refreshInventory).toHaveBeenCalledTimes(2);
-    expect(completeApprovedInstall).toHaveBeenCalledOnce();
-    expect(coordinator.projections()).toEqual([]);
-  });
-
-  it('finishes a completed install after the UI restarts', async () => {
-    const completed = execution();
-    const { coordinator, refreshInventory, completeApprovedInstall } = harness({
+  it('retries inventory projection after resuming a completed install without a reviewed command', async () => {
+    const completed = execution({
+      status: 'completed',
+      cursor: 1,
+      terminal_at: new Date().toISOString(),
+    });
+    const h = harness({
       listReleaseInstallExecutions: vi.fn(async () => [completed]),
     });
+    h.refreshInventory.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ items: [] });
 
-    await coordinator.resume();
+    await h.coordinator.resume();
+    await flushUntil(() => h.coordinator.projections()[0]?.failure?.recovery === 'refresh_inventory');
+    await h.coordinator.retry(pluginInstanceID);
+    await flushUntil(() => h.completeApprovedInstall.mock.calls.length === 1);
 
-    expect(refreshInventory).toHaveBeenCalledOnce();
-    expect(completeApprovedInstall).toHaveBeenCalledWith(pluginInstanceID, undefined);
-    expect(coordinator.projections()).toEqual([]);
+    expect(h.installOfficialRelease).not.toHaveBeenCalled();
+    expect(h.refreshInventory).toHaveBeenCalledTimes(2);
   });
 
-  it('does not resurrect a completed execution after the installed instance was removed', async () => {
-    const completed = execution();
-    const { coordinator, refreshInventory, completeApprovedInstall } = harness({
-      listReleaseInstallExecutions: vi.fn(async () => [completed]),
-    });
-    const guarded = createPluginInstallCoordinator({
-      lifecycle: {
-        listReleaseInstallExecutions: vi.fn(async () => [completed]),
-        installOfficialRelease: vi.fn(),
-        getReleaseInstallExecution: vi.fn(),
-        listReleaseInstallExecutionEvents: vi.fn(),
-        deleteIncompatibleRetainedData: vi.fn(),
-      } as never,
-      refreshInventory,
-      completeApprovedInstall,
-      createRequestID: () => 'request-1',
-      resolvePluginID: () => 'com.redeven.official.containers',
-      isPluginInstalled: () => false,
-    });
+  it('retries the terminal execution read without starting a second event loop', async () => {
+    vi.useFakeTimers();
+    try {
+      const getReleaseInstallExecution = vi.fn()
+        .mockRejectedValueOnce(new TypeError('connection lost'))
+        .mockResolvedValueOnce(execution({
+          status: 'completed',
+          cursor: 1,
+          terminal_at: '2026-08-23T00:00:02Z',
+        }));
+      const h = harness({ getReleaseInstallExecution });
 
-    await guarded.resume();
+      await h.coordinator.start(installCommand);
+      await vi.runAllTimersAsync();
 
-    expect(refreshInventory).not.toHaveBeenCalled();
-    expect(completeApprovedInstall).not.toHaveBeenCalled();
-    expect(guarded.projections()).toEqual([]);
-  });
-
-  it('ignores a durable execution after uninstall until a new install starts', async () => {
-    const completed = execution();
-    const lifecycle = {
-      installOfficialRelease: vi.fn(async () => completed),
-      listReleaseInstallExecutions: vi.fn(async () => [completed]),
-      getReleaseInstallExecution: vi.fn(async () => completed),
-      listReleaseInstallExecutionEvents: vi.fn(async () => ({ execution_id: completed.execution_id, events: [], cursor: completed.cursor })),
-      deleteIncompatibleRetainedData: vi.fn(async () => undefined),
-    };
-    const coordinator = createPluginInstallCoordinator({
-      lifecycle: lifecycle as never,
-      refreshInventory: vi.fn(async () => undefined),
-      completeApprovedInstall: vi.fn(async () => undefined),
-      createRequestID: () => 'request-1',
-      resolvePluginID: () => 'com.redeven.official.containers',
-    });
-
-    coordinator.forget(pluginInstanceID);
-    await coordinator.resume();
-
-    expect(coordinator.projections()).toEqual([]);
+      expect(h.lifecycle.listReleaseInstallExecutionEvents).toHaveBeenCalledOnce();
+      expect(getReleaseInstallExecution).toHaveBeenCalledTimes(2);
+      expect(h.completeApprovedInstall).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
+
+async function flushUntil(predicate: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  throw new Error('condition did not become true');
+}

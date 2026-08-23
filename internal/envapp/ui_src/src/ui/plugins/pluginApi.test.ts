@@ -37,6 +37,7 @@ function createClientHarness() {
     installReleaseRef: vi.fn(async () => ({})),
     startReleaseInstallExecution: vi.fn(async () => releaseInstallExecution()),
     listExecutions: vi.fn(async () => ({ executions: [] as PluginExecution[] })),
+    listReleaseInstallExecutions: vi.fn(async (): ReturnType<PluginPlatformClient['listReleaseInstallExecutions']> => ({ executions: [] as PluginExecution[] })),
     getExecution: vi.fn(async () => releaseInstallExecution()),
     listExecutionEvents: vi.fn(async () => ({ execution_id: 'release_install_4c9d48a3', events: [], cursor: 1 })),
     updateReleaseRef: vi.fn(async () => ({})),
@@ -139,7 +140,7 @@ const generatedContainersRecord: ReDevPluginRecord = {
     permissions: [],
     presentation: { locales: { default: 'en-US' } },
     surfaces: [{
-      surface_id: officialContainers.defaultSurfaceID, kind: 'view', intent: 'primary',
+      surface_id: 'containers.dashboard', kind: 'view', intent: 'primary',
       label: officialContainers.displayName, entry: 'ui/index.html',
     }],
     workers: [],
@@ -346,7 +347,7 @@ describe('v3.0.2 plugin lifecycle client integration', () => {
       items: [expect.objectContaining({
         pluginID: 'com.redeven.official.containers',
         lifecycleState: 'not_installed',
-        officialCatalog: expect.objectContaining({ latestVersion: '4.4.7' }),
+        officialCatalog: expect.objectContaining({ latestVersion: '4.4.9' }),
       })],
     });
     expect(loadMarket).toHaveBeenCalledOnce();
@@ -380,7 +381,7 @@ describe('v3.0.2 plugin lifecycle client integration', () => {
     await expect(lifecycle.loadInventoryProjection()).resolves.toMatchObject({
       items: [expect.objectContaining({
         pluginID: 'com.redeven.official.containers',
-        officialCatalog: expect.objectContaining({ latestVersion: '4.4.7' }),
+        officialCatalog: expect.objectContaining({ latestVersion: '4.4.9' }),
       })],
     });
   });
@@ -415,7 +416,7 @@ describe('v3.0.2 plugin lifecycle client integration', () => {
       marketUnavailable: false,
       items: [expect.objectContaining({
         pluginID: 'com.redeven.official.containers',
-        officialCatalog: expect.objectContaining({ latestVersion: '4.4.7' }),
+        officialCatalog: expect.objectContaining({ latestVersion: '4.4.9' }),
       })],
     });
   });
@@ -520,9 +521,8 @@ describe('v3.0.2 plugin lifecycle client integration', () => {
 
   it('starts the generated signed release installation with one stable request id', async () => {
     const { lifecycle, mocks } = createClientHarness();
-    const updates: PluginExecution[] = [];
 
-    await expect(lifecycle.installOfficialRelease(officialInstallCommand, releaseInstallRequestID, {}, (execution) => updates.push(execution))).resolves.toMatchObject({
+    await expect(lifecycle.installOfficialRelease(officialInstallCommand, releaseInstallRequestID)).resolves.toMatchObject({
       status: 'completed',
     });
 
@@ -536,7 +536,8 @@ describe('v3.0.2 plugin lifecycle client integration', () => {
       summary_sha256: officialContainers.installPreview!.summary_sha256,
     }, {});
     expect(mocks.installReleaseRef).not.toHaveBeenCalled();
-    expect(updates).toEqual([expect.objectContaining({ status: 'completed' })]);
+    expect(mocks.listExecutionEvents).not.toHaveBeenCalled();
+    expect(mocks.getExecution).not.toHaveBeenCalled();
     expect(OFFICIAL_CONTAINERS_RELEASE_REF).toMatchObject({
       publisher_id: officialContainers.publisherID,
       plugin_id: officialContainers.pluginID,
@@ -561,30 +562,63 @@ describe('v3.0.2 plugin lifecycle client integration', () => {
   it('lists and reads release installation executions through the unified client helpers', async () => {
     const { lifecycle, mocks } = createClientHarness();
     const execution = releaseInstallExecution();
-    mocks.listExecutions.mockResolvedValueOnce({ executions: [execution] });
+    mocks.listReleaseInstallExecutions
+      .mockResolvedValueOnce({ executions: [execution], next_cursor: 101 })
+      .mockResolvedValueOnce({ executions: [] });
     mocks.getExecution.mockResolvedValueOnce(execution);
 
     await expect(lifecycle.listReleaseInstallExecutions()).resolves.toEqual([execution]);
     await expect(lifecycle.getReleaseInstallExecution(execution.execution_id)).resolves.toEqual(execution);
     await expect(lifecycle.listReleaseInstallExecutionEvents(execution.execution_id, 0)).resolves.toMatchObject({ cursor: 1 });
 
-    expect(mocks.listExecutions).toHaveBeenCalledWith({ limit: 100 }, {});
+    expect(mocks.listReleaseInstallExecutions).toHaveBeenNthCalledWith(1, { limit: 500 }, {});
+    expect(mocks.listReleaseInstallExecutions).toHaveBeenNthCalledWith(2, { limit: 500, cursor: 101 }, {});
     expect(mocks.getExecution).toHaveBeenCalledWith(execution.execution_id, {});
-    expect(mocks.listExecutionEvents).toHaveBeenCalledWith(execution.execution_id, { after_cursor: 0 }, {});
+    expect(mocks.listExecutionEvents).toHaveBeenCalledWith(execution.execution_id, { after_cursor: 0, limit: 1_000 }, {});
   });
 
   it('deletes the exact retained data revision before an incompatible-data reinstall', async () => {
     const { lifecycle, mocks } = createClientHarness();
 
-    await lifecycle.deleteIncompatibleRetainedData(officialContainers.pluginInstanceID);
+    const revision = await lifecycle.getIncompatibleRetainedDataRevision(officialContainers.pluginInstanceID);
+    await lifecycle.deleteIncompatibleRetainedData(officialContainers.pluginInstanceID, revision);
 
-    expect(mocks.listRetainedData).toHaveBeenCalledWith({
+    expect(mocks.listRetainedData).toHaveBeenNthCalledWith(1, {
+      plugin_instance_id: officialContainers.pluginInstanceID,
+    }, {});
+    expect(mocks.listRetainedData).toHaveBeenNthCalledWith(2, {
       plugin_instance_id: officialContainers.pluginInstanceID,
     }, {});
     expect(mocks.deleteRetainedData).toHaveBeenCalledWith({
       plugin_instance_id: officialContainers.pluginInstanceID,
       expected_binding_revision: 4,
     }, {});
+  });
+
+  it('treats an already absent confirmed retained binding as a reconciled delete', async () => {
+    const { lifecycle, mocks } = createClientHarness();
+    mocks.listRetainedData.mockResolvedValueOnce({ retained_data: [] });
+
+    await lifecycle.deleteIncompatibleRetainedData(officialContainers.pluginInstanceID, 4);
+
+    expect(mocks.deleteRetainedData).not.toHaveBeenCalled();
+  });
+
+  it('rejects deleting retained data when the confirmed revision changed', async () => {
+    const { lifecycle, mocks } = createClientHarness();
+    mocks.listRetainedData.mockResolvedValueOnce({ retained_data: [{
+      plugin_instance_id: officialContainers.pluginInstanceID,
+      generation_id: 'gen-new',
+      state: 'retained',
+      revision: 5,
+      shape_hash: 'b'.repeat(64),
+    }] });
+
+    await expect(lifecycle.deleteIncompatibleRetainedData(
+      officialContainers.pluginInstanceID,
+      4,
+    )).rejects.toThrow('changed after confirmation');
+    expect(mocks.deleteRetainedData).not.toHaveBeenCalled();
   });
 
   it('updates the exact installed instance with its management revision and generated release ref', async () => {
