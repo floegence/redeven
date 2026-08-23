@@ -413,6 +413,49 @@ const FlowerStopIcon: Component<{ class?: string }> = (props) => (
   </svg>
 );
 
+type FlowerApprovalDecisionCapsuleProps = Readonly<{
+  label: string;
+  rejectLabel: string;
+  approveLabel: string;
+  rejectAriaLabel: string;
+  approveAriaLabel: string;
+  describedBy?: string;
+  disabled: boolean;
+  onReject: () => void;
+  onApprove: () => void;
+}>;
+
+const FlowerApprovalDecisionCapsule: Component<FlowerApprovalDecisionCapsuleProps> = (props) => (
+  <div
+    class="flower-approval-decision-group"
+    role="group"
+    aria-label={props.label}
+    data-flower-approval-decision-group="true"
+  >
+    <button
+      type="button"
+      class="flower-composer-approval-decision flower-approval-decision-reject"
+      disabled={props.disabled}
+      aria-label={props.rejectAriaLabel}
+      aria-describedby={props.describedBy || undefined}
+      onClick={props.onReject}
+    >
+      {props.rejectLabel}
+    </button>
+    <span class="flower-approval-decision-divider" aria-hidden="true" />
+    <button
+      type="button"
+      class="flower-composer-approval-decision flower-approval-decision-approve"
+      disabled={props.disabled}
+      aria-label={props.approveAriaLabel}
+      aria-describedby={props.describedBy || undefined}
+      onClick={props.onApprove}
+    >
+      {props.approveLabel}
+    </button>
+  </div>
+);
+
 export {
   projectFlowerThreadListItem,
 } from './flowerSurfaceModel';
@@ -7093,31 +7136,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   </Button>
                 </>
               }>
-                <div class="flower-approval-decision-group" role="group" aria-label={actionLabel()} data-flower-approval-decision-group="true">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    class="flower-composer-approval-decision flower-approval-action-pill flower-approval-decision-reject"
-                    disabled={disabled()}
-                    aria-label={copy().chat.toolApprovalRejectAction(actionLabel(), subtaskLabel())}
-                    aria-describedby={describedBy() || undefined}
-                    onClick={() => void submitApprovalAction(action(), false)}
-                  >
-                    {copy().chat.toolApprovalReject}
-                  </Button>
-                  <span class="flower-approval-decision-divider" aria-hidden="true" />
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    class="flower-composer-approval-decision flower-approval-action-pill flower-approval-decision-approve"
-                    disabled={disabled()}
-                    aria-label={copy().chat.toolApprovalApproveAction(actionLabel(), subtaskLabel())}
-                    aria-describedby={describedBy() || undefined}
-                    onClick={() => void submitApprovalAction(action(), true)}
-                  >
-                    {copy().chat.toolApprovalApprove}
-                  </Button>
-                </div>
+                <FlowerApprovalDecisionCapsule
+                  label={actionLabel()}
+                  rejectLabel={copy().chat.toolApprovalReject}
+                  approveLabel={copy().chat.toolApprovalApprove}
+                  rejectAriaLabel={copy().chat.toolApprovalRejectAction(actionLabel(), subtaskLabel())}
+                  approveAriaLabel={copy().chat.toolApprovalApproveAction(actionLabel(), subtaskLabel())}
+                  describedBy={describedBy()}
+                  disabled={disabled()}
+                  onReject={() => void submitApprovalAction(action(), false)}
+                  onApprove={() => void submitApprovalAction(action(), true)}
+                />
               </Show>
               <Show when={singleComposer}>
                 <Button
@@ -7401,6 +7430,41 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         )}
       </For>
     </>
+  );
+
+  const structuredRowsBlock = (block: Extract<FlowerActivityDetailBlock, { kind: 'structured_rows' }>) => (
+    <div class="flower-activity-structured-rows" role="list">
+      <For each={block.rows}>
+        {(row) => (
+          <div class="flower-activity-structured-row" role="listitem" data-format={row.format}>
+            <Show when={row.title || row.meta}>
+              <div class="flower-activity-structured-row-heading">
+                <Show when={row.title}>{(title) => <strong>{title()}</strong>}</Show>
+                <Show when={row.meta}>{(meta) => <span>{meta()}</span>}</Show>
+              </div>
+            </Show>
+            <Show when={row.content}>
+              {(content) => (
+                <Show
+                  when={row.format === 'markdown'}
+                  fallback={row.format === 'code'
+                    ? <pre class="flower-activity-structured-row-code"><code>{content()}</code></pre>
+                    : <p class="flower-activity-structured-row-text">{content()}</p>}
+                >
+                  <FlowerMarkdownBlock
+                    content={content()}
+                    streaming={false}
+                    copyCodeLabel={copy().chat.copyCode}
+                    codeCopiedLabel={copy().chat.codeCopied}
+                    class="flower-activity-structured-row-markdown"
+                  />
+                </Show>
+              )}
+            </Show>
+          </div>
+        )}
+      </For>
+    </div>
   );
 
   const normalizeTerminalSnapshotStatus = (raw: unknown): FlowerActivityStatus | '' => {
@@ -7995,6 +8059,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     block: FlowerNonTerminalDetailBlock,
   ) => {
     if (block.kind === 'error') return errorDetailBlock(block);
+    if (block.kind === 'structured_rows') return structuredRowsBlock(block);
     if (block.kind === 'subagents') return subagentsDetailBlock(block);
     if (block.kind === 'todos') {
       return (
@@ -8125,6 +8190,28 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         ? value.ended_at_unix_ms - value.started_at_unix_ms
         : undefined) ?? timeline().summary.duration_ms);
     });
+    const activityRowContent = () => (
+      <>
+        <span class="flower-activity-inline-icon">
+          {statusIcon(displayStatus())}
+          <Show when={item().approval_state === 'rejected'}>
+            <span class="flower-activity-user-rejected-marker" aria-hidden="true">-</span>
+          </Show>
+        </span>
+        <span class="flower-activity-inline-copy">
+          <span class="flower-activity-inline-title">{activityTitle(displayTitle())}</span>
+          <Show when={presentation().meta}>
+            {(meta) => <span class="flower-activity-inline-detail">{meta()}</span>}
+          </Show>
+        </span>
+        <Show when={duration()}>
+          {(value) => <span class="flower-activity-inline-duration">{value()}</span>}
+        </Show>
+        <Show when={expandable()}>
+          <ChevronDown class={cn('flower-activity-inline-chevron h-3.5 w-3.5', open() && 'flower-activity-inline-chevron-open')} />
+        </Show>
+      </>
+    );
     return (
       <div
         class={cn('flower-activity-inline-row', `flower-activity-inline-row-${displayStatus()}`, subagentsDetail() && 'flower-activity-inline-row-subagents')}
@@ -8136,33 +8223,20 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         aria-label={activityItemAriaLabel(item(), timeline())}
       >
         <div class="flower-activity-inline-line">
-          <button
-            ref={toggleButtonRef}
-            type="button"
-            class={cn('flower-activity-inline-button', !expandable() && 'flower-activity-inline-button-static')}
-            aria-expanded={expandable() ? open() : undefined}
-            disabled={!expandable()}
-            onClick={disclosureControl.toggle}
+          <Show
+            when={expandable()}
+            fallback={<div class="flower-activity-inline-button flower-activity-inline-button-static">{activityRowContent()}</div>}
           >
-            <span class="flower-activity-inline-icon">
-              {statusIcon(displayStatus())}
-              <Show when={item().approval_state === 'rejected'}>
-                <span class="flower-activity-user-rejected-marker" aria-hidden="true">-</span>
-              </Show>
-            </span>
-            <span class="flower-activity-inline-copy">
-              <span class="flower-activity-inline-title">{activityTitle(displayTitle())}</span>
-              <Show when={presentation().meta}>
-                {(meta) => <span class="flower-activity-inline-detail">{meta()}</span>}
-              </Show>
-            </span>
-            <Show when={duration()}>
-              {(value) => <span class="flower-activity-inline-duration">{value()}</span>}
-            </Show>
-            <Show when={expandable()}>
-              <ChevronDown class={cn('flower-activity-inline-chevron h-3.5 w-3.5', open() && 'flower-activity-inline-chevron-open')} />
-            </Show>
-          </button>
+            <button
+              ref={toggleButtonRef}
+              type="button"
+              class="flower-activity-inline-button"
+              aria-expanded={open()}
+              onClick={disclosureControl.toggle}
+            >
+              {activityRowContent()}
+            </button>
+          </Show>
           {fileActionButtons(
             messageID(),
             blockIndex(),

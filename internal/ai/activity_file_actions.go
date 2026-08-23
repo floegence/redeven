@@ -470,12 +470,52 @@ func sanitizeActivityPayloadValue(value any, renderer fltools.ActivityRenderer, 
 			}
 			continue
 		}
+		if key == "rows" {
+			if rows := sanitizeStructuredActivityRows(item); len(rows) > 0 {
+				out[key] = rows
+			}
+			continue
+		}
 		out[key] = sanitizeActivityPublicValue(item)
 	}
 	if len(out) == 0 {
 		return nil, false
 	}
 	return out, true
+}
+
+func sanitizeStructuredActivityRows(value any) []any {
+	values, _ := value.([]any)
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]any, 0, len(values))
+	for _, value := range values {
+		record, ok := value.(map[string]any)
+		if !ok {
+			continue
+		}
+		row := map[string]any{}
+		for _, key := range []string{"title", "meta", "content"} {
+			if text := activityMapString(record, key); text != "" {
+				row[key] = text
+			}
+		}
+		format := activityMapString(record, "format")
+		if format == "" {
+			format = string(fltools.StructuredActivityRowFormatText)
+		}
+		switch fltools.StructuredActivityRowFormat(format) {
+		case fltools.StructuredActivityRowFormatText, fltools.StructuredActivityRowFormatMarkdown, fltools.StructuredActivityRowFormatCode:
+			row["format"] = format
+		default:
+			continue
+		}
+		if len(row) > 1 {
+			out = append(out, row)
+		}
+	}
+	return out
 }
 
 func sanitizeSubagentsActivityPayloadValue(payload map[string]any) (map[string]any, bool) {
@@ -674,24 +714,7 @@ func activityPayloadAllowedKeys(renderer fltools.ActivityRenderer) map[string]st
 	case fltools.ActivityRendererCompletion:
 		return stringSet("result", "evidence_refs", "remaining_risks", "next_actions", "truncated", "summary", "details", "status", "error", "content_ref")
 	case fltools.ActivityRendererStructured:
-		return stringSet(
-			"operation", "query", "count", "provider", "name", "action", "limit",
-			"data", "result", "content", "content_ref", "activation_id", "already_active",
-			"permission_hints", "dependencies", "dependency_degraded", "reason", "id",
-			"status", "message", "timed_out", "targets", "stats", "output", "structured",
-			"key_files", "rows", "cards", "items", "thread_id",
-			"parent_thread_id", "parent_turn_id", "task_name", "task_description",
-			"title", "agent_type", "context_mode", "okf_version", "total_sections",
-			"sections", "filters", "total_concepts", "total_matches", "match_count",
-			"max_results", "has_more", "matches", "concept_title", "concept",
-			"body_offset", "body_length", "returned_body_length", "link_count",
-			"backlink_count", "links", "backlinks", "queued_inputs", "started_at_ms",
-			"updated_at_ms", "created_at_ms", "closed", "can_open", "agent_count",
-			"target", "target_ids", "requested_ids", "requested_count", "found_count",
-			"missing_count", "missing_ids", "closed_count", "affected_ids", "accepted",
-			"running_only", "total", "scope", "evidence_refs", "remaining_risks",
-			"next_actions", "truncated", "omitted_count", "summary", "details", "error",
-		)
+		return stringSet("operation", "status", "display_name", "summary", "duration_ms", "error", "rows")
 	default:
 		return nil
 	}

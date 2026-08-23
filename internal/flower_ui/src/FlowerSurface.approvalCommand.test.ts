@@ -58,4 +58,23 @@ describe('Flower approval command presentation', () => {
     expect(surface).not.toContain("notes.push('This command may access resources outside the workspace.')");
     expect(surface).not.toContain('This command accesses the network.');
   });
+
+  it('uses one continuous decision capsule next to Stop for a single approval', () => {
+    const css = readFile(stylesPath);
+    const surface = readFile(surfacePath);
+    const capsuleRule = cssRule(css, '.flower-approval-decision-group');
+    const decisionRule = cssRule(css, '.flower-approval-decision-group .flower-composer-approval-decision');
+    const singleActionsRule = cssRule(css, '.flower-approval-single .flower-approval-actions');
+
+    expect(surface).toContain('const FlowerApprovalDecisionCapsule: Component<FlowerApprovalDecisionCapsuleProps>');
+    expect(surface).toContain('<FlowerApprovalDecisionCapsule');
+    expect(surface).toContain('<span class="flower-approval-decision-divider"');
+    expect(capsuleRule).toContain('border: 1px solid');
+    expect(capsuleRule).toContain('border-radius: 9999px');
+    expect(capsuleRule).toContain('overflow: hidden');
+    expect(decisionRule).toContain('border: 0');
+    expect(decisionRule).toContain('border-radius: 0');
+    expect(singleActionsRule).toContain('justify-content: flex-end');
+    expect(css).not.toContain('.flower-approval-single .flower-composer-stop-thread {');
+  });
 });

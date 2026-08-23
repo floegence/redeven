@@ -1,6 +1,12 @@
 # Redeven OKF Update Log
 
 ## 2026-08-23
+* **Typed tool activity presentation and Floret v4.0.18 adoption**: Redeven now
+  consumes the published Floret v4.0.18 module. OKF tools publish bounded safe
+  structured rows, while successful Skill activity stays static unless it has
+  a real error detail. Flower no longer invents expand content from raw tool
+  payload fields.
+
 * **Flower terminal detail convergence**: Flower now orders every HTTP and live
   detail through Floret `view_version`, uses SSE epochs only to fence old
   callbacks, and revalidates a selected summary with one bounded recovery path.

@@ -472,6 +472,46 @@ function sanitizeActivityPublicValue(value: unknown, path: string): unknown {
   return value;
 }
 
+const structuredActivityRowKeys = new Set(['title', 'meta', 'content', 'format']);
+const structuredActivityRowFormats = new Set(['text', 'markdown', 'code']);
+const structuredActivityRowLimit = 200;
+
+function mapStructuredActivityRows(raw: unknown): readonly Readonly<Record<string, string>>[] {
+  if (!Array.isArray(raw)) {
+    throw new Error('Flower contract error: activity_item.presentation.payload.rows must be an array.');
+  }
+  if (raw.length > structuredActivityRowLimit) {
+    throw new Error(`Flower contract error: activity_item.presentation.payload.rows exceeds ${structuredActivityRowLimit} rows.`);
+  }
+  return raw.map((value, index) => {
+    const row = plainRecordValue(value);
+    if (!row) {
+      throw new Error(`Flower contract error: activity_item.presentation.payload.rows[${index}] must be an object.`);
+    }
+    for (const key of Object.keys(row)) {
+      if (!structuredActivityRowKeys.has(key)) {
+        throw new Error(`Flower contract error: activity_item.presentation.payload.rows[${index}].${key} is not part of the structured activity row contract.`);
+      }
+    }
+    const title = trim(row.title);
+    const meta = trim(row.meta);
+    const content = trim(row.content);
+    const format = trim(row.format) || 'text';
+    if (!structuredActivityRowFormats.has(format)) {
+      throw new Error(`Flower contract error: activity_item.presentation.payload.rows[${index}].format is unsupported.`);
+    }
+    if (!title && !meta && !content) {
+      throw new Error(`Flower contract error: activity_item.presentation.payload.rows[${index}] must contain display content.`);
+    }
+    return {
+      ...(title ? { title } : {}),
+      ...(meta ? { meta } : {}),
+      ...(content ? { content } : {}),
+      format,
+    };
+  });
+}
+
 function mapActivityPayload(raw: unknown): Readonly<Record<string, unknown>> | undefined {
   const payload = plainRecordValue(raw);
   if (!payload) return undefined;
@@ -480,7 +520,9 @@ function mapActivityPayload(raw: unknown): Readonly<Record<string, unknown>> | u
     const safeKey = trim(key);
     if (!safeKey) continue;
     assertPublicActivityPayloadKey('activity_item.presentation.payload', safeKey);
-    out[safeKey] = sanitizeActivityPublicValue(value, `activity_item.presentation.payload.${safeKey}`);
+    out[safeKey] = safeKey === 'rows'
+      ? mapStructuredActivityRows(value)
+      : sanitizeActivityPublicValue(value, `activity_item.presentation.payload.${safeKey}`);
   }
   return Object.keys(out).length > 0 ? out : undefined;
 }

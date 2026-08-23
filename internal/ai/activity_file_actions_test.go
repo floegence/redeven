@@ -38,7 +38,7 @@ func TestSanitizeActivityTimelineMessageJSONFiltersPublicPayloadContract(t *test
 		"timestamp":1700000000000,
 		"blocks":[
 			{"type":"activity-timeline","schema_version":1,"run_id":"run_1","thread_id":"thread_1","turn_id":"msg_1","trace_id":"trace_1","summary":{"status":"success","severity":"quiet","needs_attention":false,"total_items":2,"counts":{"success":2}},"items":[
-				{"item_id":"tool_structured","tool_id":"tool_structured","tool_name":"use_skill","kind":"tool","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false,"label":"use_skill","renderer":"structured","target_refs":[{"kind":"file","label":"app.ts","path":"/workspace/private/app.ts","uri":"https://example.test/app.ts","line":7}],"payload":{"operation":"use_skill","name":"frontend-design","root_dir":"/Users/alice/.codex/skills/frontend-design","data":{"filePath":"/workspace/private/app.ts","cwd":"/workspace/private","visible":"kept"},"result":{"workdir":"/workspace/private","items":[{"previewPath":"/workspace/private/app.ts","status":"kept"}]}}},
+				{"item_id":"tool_structured","tool_id":"tool_structured","tool_name":"use_skill","kind":"tool","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false,"label":"use_skill","renderer":"structured","target_refs":[{"kind":"file","label":"app.ts","path":"/workspace/private/app.ts","uri":"https://example.test/app.ts","line":7}],"payload":{"operation":"use_skill","name":"frontend-design","root_dir":"/Users/alice/.codex/skills/frontend-design","data":{"filePath":"/workspace/private/app.ts","cwd":"/workspace/private","visible":"kept"},"rows":[{"title":"Safe result","meta":"1 match","content":"Visible detail","format":"text","path":"/workspace/private/app.ts","internal_id":"private"}],"result":{"workdir":"/workspace/private","items":[{"previewPath":"/workspace/private/app.ts","status":"kept"}]}}},
 				{"item_id":"tool_patch","tool_id":"tool_patch","tool_name":"apply_patch","kind":"tool","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false,"label":"apply_patch","renderer":"patch","payload":{"operation":"apply_patch","mutations":[{"display_name":"app.ts","file_action_id":"edit_app","change_type":"update","additions":1,"deletions":1,"unified_diff":"--- a/app.ts\n+++ b/app.ts\n@@ -1 +1 @@\n-old\n+new","content":"secret full file","directoryPath":"/workspace/private","stdin":"secret"}]}}
 			],"file_actions":{"edit_app":{"action_id":"edit_app","display_name":"app.ts","preview_path":"/workspace/private/app.ts","directory_path":"/workspace/private"}}}
 		]
@@ -60,6 +60,10 @@ func TestSanitizeActivityTimelineMessageJSONFiltersPublicPayloadContract(t *test
 		`preview_path`,
 		`directory_path`,
 		`root_dir`,
+		`internal_id`,
+		`"name":"frontend-design"`,
+		`"data"`,
+		`"result"`,
 	} {
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("sanitized message contains %q: %s", forbidden, body)
@@ -68,7 +72,7 @@ func TestSanitizeActivityTimelineMessageJSONFiltersPublicPayloadContract(t *test
 	for _, required := range []string{
 		`"uri":"https://example.test/app.ts"`,
 		`"line":7`,
-		`"visible":"kept"`,
+		`"rows":[{"content":"Visible detail","format":"text","meta":"1 match","title":"Safe result"}]`,
 		`"unified_diff"`,
 		`"can_preview":true`,
 		`"can_browse_directory":true`,

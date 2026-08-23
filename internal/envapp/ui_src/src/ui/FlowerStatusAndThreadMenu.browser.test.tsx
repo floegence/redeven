@@ -153,4 +153,40 @@ describe('Flower status motion and thread menu', () => {
     expect(document.querySelector('[role="menu"]')).toBe(menu);
     expect(menu?.getAttribute('aria-label')).toContain('Updated live task');
   });
+
+  it('hides the pending label while thread actions are focused', async () => {
+    await page.viewport(800, 600);
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    disposers.push(render(() => (
+      <FlowerThreadList
+        items={[thread({ status: 'waiting_approval' })]}
+        activeThreadID="thread-menu"
+        query=""
+        onQueryChange={() => undefined}
+        onSelect={() => undefined}
+        onRefresh={() => undefined}
+        onMenuAction={() => undefined}
+        canFork
+        canRename
+        canPin
+      />
+    ), host));
+    await nextFrame();
+
+    const card = host.querySelector('[data-flower-thread-card]') as HTMLElement;
+    const select = card.querySelector('.flower-thread-card-select-button') as HTMLButtonElement;
+    const indicator = card.querySelector('.flower-thread-card-approval-indicator') as HTMLElement;
+    const menuButton = card.querySelector('.flower-thread-card-menu-button') as HTMLButtonElement;
+    expect(select.getAttribute('aria-label')).toContain('Waiting for approval');
+    expect(getComputedStyle(indicator).visibility).toBe('visible');
+
+    menuButton.focus();
+    await nextFrame();
+    await new Promise((resolve) => window.setTimeout(resolve, 180));
+
+    expect(getComputedStyle(indicator).visibility).toBe('hidden');
+    expect(getComputedStyle(menuButton).opacity).toBe('1');
+    expect(Number(getComputedStyle(menuButton).zIndex)).toBeGreaterThan(Number(getComputedStyle(indicator).zIndex));
+  });
 });

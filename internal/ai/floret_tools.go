@@ -1157,6 +1157,9 @@ func floretActivityForToolResult(r *run, result ToolResult) (*fltools.ActivityPr
 			payload["error"] = map[string]any{"message": message}
 		}
 	}
+	if rows := structuredActivityRowsForTool(toolName, payload); len(rows) > 0 {
+		payload["rows"] = rows
+	}
 	payload = publicActivityPayloadForTool(toolName, payload)
 	payload, payloadTruncated := contractSafePayloadMapForTool(toolName, payload, 0)
 	if payloadTruncated && !isOKFToolName(toolName) {
@@ -1555,8 +1558,125 @@ func activityPayloadForRenderer(renderer fltools.ActivityRenderer, payload map[s
 		return fltools.StructuredActivityPayload{
 			Status: status, Operation: operation, DisplayName: strings.TrimSpace(anyToString(payload["display_name"])),
 			Summary: summary, DurationMS: readInt64Field(payload, "duration_ms"), Error: activityError(),
+			Rows: structuredActivityRowsFromValue(payload["rows"]),
 		}
 	}
+}
+
+func structuredActivityRowsForTool(toolName string, payload map[string]any) []map[string]any {
+	switch strings.TrimSpace(toolName) {
+	case "okf.index":
+		rows := make([]map[string]any, 0)
+		for _, value := range toAnySlice(payload["sections"]) {
+			section, _ := value.(map[string]any)
+			title := strings.TrimSpace(anyToString(section["title"]))
+			if title == "" {
+				continue
+			}
+			rows = appendStructuredActivityRow(rows, title, fmt.Sprintf("%d concepts", len(toAnySlice(section["entries"]))), "", fltools.StructuredActivityRowFormatText)
+		}
+		return rows
+	case "okf.search":
+		rows := make([]map[string]any, 0)
+		for _, value := range toAnySlice(payload["matches"]) {
+			match, _ := value.(map[string]any)
+			title := strings.TrimSpace(anyToString(match["title"]))
+			if title == "" {
+				continue
+			}
+			meta := joinStructuredActivityMeta(anyToString(match["type"]), anyToString(match["section_title"]))
+			content := firstNonEmptyString(anyToString(match["snippet"]), anyToString(match["summary"]), anyToString(match["description"]))
+			rows = appendStructuredActivityRow(rows, title, meta, content, fltools.StructuredActivityRowFormatText)
+		}
+		return rows
+	case "okf.open":
+		concept, _ := payload["concept"].(map[string]any)
+		title := firstNonEmptyString(anyToString(payload["concept_title"]), anyToString(concept["title"]), anyToString(payload["section_title"]))
+		body := strings.TrimSpace(anyToString(payload["body"]))
+		content := body
+		format := fltools.StructuredActivityRowFormatMarkdown
+		if content == "" {
+			content = firstNonEmptyString(anyToString(payload["summary"]), anyToString(concept["summary"]), anyToString(concept["description"]))
+			format = fltools.StructuredActivityRowFormatText
+		}
+		if title == "" && content == "" {
+			return nil
+		}
+		meta := joinStructuredActivityMeta(anyToString(concept["type"]), anyToString(payload["section_title"]))
+		return appendStructuredActivityRow(nil, title, meta, content, format)
+	default:
+		return nil
+	}
+}
+
+const structuredActivityRowLimit = 200
+
+func appendStructuredActivityRow(rows []map[string]any, title string, meta string, content string, format fltools.StructuredActivityRowFormat) []map[string]any {
+	if len(rows) >= structuredActivityRowLimit {
+		return rows
+	}
+	title, _ = contractSafeString(strings.TrimSpace(title), activityPayloadStringLimit)
+	meta, _ = contractSafeString(strings.TrimSpace(meta), activityPayloadStringLimit)
+	content, _ = contractSafeString(strings.TrimSpace(content), activityPayloadStringLimit)
+	if title == "" && meta == "" && content == "" {
+		return rows
+	}
+	row := map[string]any{"format": string(format)}
+	if title != "" {
+		row["title"] = title
+	}
+	if meta != "" {
+		row["meta"] = meta
+	}
+	if content != "" {
+		row["content"] = content
+	}
+	return append(rows, row)
+}
+
+func joinStructuredActivityMeta(values ...string) string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		key := strings.ToLower(value)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, value)
+	}
+	return strings.Join(out, " · ")
+}
+
+func structuredActivityRowsFromValue(value any) []fltools.StructuredActivityRow {
+	rows := make([]fltools.StructuredActivityRow, 0)
+	for _, raw := range toAnySlice(value) {
+		if len(rows) >= structuredActivityRowLimit {
+			break
+		}
+		record, _ := raw.(map[string]any)
+		format := fltools.StructuredActivityRowFormat(strings.TrimSpace(anyToString(record["format"])))
+		switch format {
+		case "":
+			format = fltools.StructuredActivityRowFormatText
+		case fltools.StructuredActivityRowFormatText, fltools.StructuredActivityRowFormatMarkdown, fltools.StructuredActivityRowFormatCode:
+		default:
+			continue
+		}
+		row := fltools.StructuredActivityRow{
+			Title: strings.TrimSpace(anyToString(record["title"])), Meta: strings.TrimSpace(anyToString(record["meta"])),
+			Content: strings.TrimSpace(anyToString(record["content"])), Format: format,
+		}
+		if row.Title == "" && row.Meta == "" && row.Content == "" {
+			continue
+		}
+		rows = append(rows, row)
+	}
+	return rows
 }
 
 func firstNonZeroInt64(values ...int64) int64 {

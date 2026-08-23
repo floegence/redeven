@@ -15,6 +15,13 @@ export type FlowerActivityDetailLine = Readonly<{
   tone?: 'code' | 'muted';
 }>;
 
+export type FlowerActivityStructuredRow = Readonly<{
+  title: string;
+  meta: string;
+  content: string;
+  format: 'text' | 'markdown' | 'code';
+}>;
+
 export type FlowerActivityTodoStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
 
 export type FlowerActivityTodoItem = Readonly<{
@@ -182,6 +189,10 @@ export type FlowerActivityDetailBlock =
     lines: readonly FlowerActivityDetailLine[];
   }>
   | Readonly<{
+    kind: 'structured_rows';
+    rows: readonly FlowerActivityStructuredRow[];
+  }>
+  | Readonly<{
     kind: 'error';
     error: FlowerActivityErrorDetail;
   }>
@@ -238,133 +249,9 @@ type FlowerActivityPresentationCopy = Readonly<{
 }>;
 
 const DETAIL_LABELS: Readonly<Record<string, string>> = {
-  command: 'command',
-  operation: 'operation',
-  name: 'name',
-  action: 'action',
-  content: 'content',
-  activation_id: 'activation',
-  already_active: 'already active',
-  permission_hints: 'permission hints',
-  dependencies: 'dependencies',
-  dependency_degraded: 'dependency degraded',
-  reason: 'reason',
-  id: 'id',
-  message: 'message',
-  targets: 'targets',
-  stats: 'stats',
-  output: 'output',
-  structured: 'structured',
-  key_files: 'key files',
-  rows: 'rows',
-  cards: 'cards',
-  items: 'items',
-  process_id: 'process',
-  execution_location: 'location',
-  first_seq: 'first seq',
-  last_seq: 'last seq',
-  latest_seq: 'latest seq',
-  total_bytes: 'bytes',
-  started_at_ms: 'started',
-  ended_at_ms: 'ended',
-  exit_code: 'exit',
-  duration_ms: 'duration',
-  timed_out: 'timed out',
   truncated: 'truncated',
-  query: 'query',
-  provider: 'provider',
-  count: 'count',
-  sources: 'sources',
-  results: 'results',
-  sections: 'sections',
-  matches: 'matches',
-  filters: 'filters',
-  total_concepts: 'concepts',
-  total_matches: 'total matches',
-  match_count: 'matches',
-  max_results: 'limit',
-  has_more: 'more',
-  concept_title: 'concept',
-  okf_version: 'OKF',
-  total_sections: 'sections',
-  concept: 'concept',
-  body_offset: 'body offset',
-  body_length: 'body length',
-  returned_body_length: 'returned',
-  links: 'links',
-  backlinks: 'backlinks',
-  link_count: 'links',
-  backlink_count: 'backlinks',
-  reason_code: 'reason',
-  required_from_user: 'required',
-  questions: 'questions',
-  contains_secret: 'secret',
-  result: 'result',
-  thread_id: 'thread',
-  task_name: 'task',
-  task_description: 'task',
-  title: 'title',
-  agent_type: 'profile',
-  context_mode: 'context mode',
-  target: 'target',
-  target_ids: 'targets',
-  ids: 'ids',
-  accepted: 'accepted',
-  closed: 'closed',
-  closed_count: 'closed',
-  affected_ids: 'affected',
-  agent_count: 'agents',
-  total: 'total',
-  running_only: 'running only',
-  queued: 'queued',
-  running: 'running',
-  waiting_input: 'waiting',
-  completed: 'completed',
-  failed: 'failed',
-  canceled: 'canceled',
-  requested_ids: 'requested',
-  requested_count: 'requested',
-  found_count: 'found',
-  missing_count: 'missing',
-  missing_ids: 'missing ids',
-  final_handoff_report: 'final handoff',
-  progress_summary: 'progress summary',
-  evidence_refs: 'evidence',
-  remaining_risks: 'risks',
-  next_actions: 'next actions',
   summary: 'summary',
-  details: 'details',
-  status: 'result status',
-  error_code: 'error code',
-  error_message: 'error message',
-  error_retryable: 'retryable',
-  content_ref: 'content ref',
-  path: 'path',
-  paths: 'paths',
-  pattern: 'pattern',
-  glob: 'pattern',
-  root: 'root',
-  type: 'type',
-  result_count: 'results',
-  url: 'URL',
 };
-
-const RENDERER_DETAIL_KEYS: Readonly<Record<'structured', readonly string[]>> = {
-  structured: ['operation', 'name', 'action', 'content', 'content_ref', 'activation_id', 'already_active', 'permission_hints', 'dependencies', 'dependency_degraded', 'reason', 'id', 'message', 'timed_out', 'targets', 'stats', 'output', 'structured', 'key_files', 'rows', 'cards', 'items', 'query', 'path', 'pattern', 'url', 'count', 'provider', 'okf_version', 'total_sections', 'sections', 'filters', 'total_concepts', 'total_matches', 'match_count', 'max_results', 'has_more', 'omitted_count', 'matches', 'concept_title', 'concept', 'body_offset', 'body_length', 'returned_body_length', 'link_count', 'backlink_count', 'links', 'backlinks', 'data', 'result', 'limit', 'evidence_refs', 'remaining_risks', 'next_actions', 'truncated'],
-};
-
-const RICH_STRUCTURED_TOOL_NAMES = new Set([
-  'okf.index',
-  'okf.search',
-  'okf.open',
-  'use_skill',
-]);
-
-const SAFE_STRUCTURED_DETAIL_KEYS = [
-  'operation', 'name', 'action', 'query', 'path', 'paths', 'pattern', 'glob', 'root', 'type', 'url',
-  'final_url', 'content_type', 'count', 'match_count', 'result_count', 'max_results', 'max_matches',
-  'context_lines', 'truncated', 'message',
-] as const;
 
 function scalarText(value: unknown): string {
   if (typeof value === 'string') return trimString(value);
@@ -605,81 +492,8 @@ function isSubagentsActivityItem(item: FlowerActivityItem): boolean {
   return trimString(item.tool_name) === 'subagents';
 }
 
-function detailLineTone(key: string): FlowerActivityDetailLine['tone'] {
-  return key === 'command' ? 'code' : undefined;
-}
-
-function detailLabel(key: string, copy?: FlowerActivityPresentationCopy): string {
-  const subagents = copy?.subagents?.activity.labels;
-  switch (key) {
-    case 'action':
-      return subagents?.action ?? DETAIL_LABELS[key] ?? key;
-    case 'status':
-      return subagents?.status ?? DETAIL_LABELS[key] ?? key;
-    case 'thread_id':
-      return subagents?.thread ?? DETAIL_LABELS[key] ?? key;
-    case 'task_name':
-    case 'task_description':
-      return subagents?.task ?? DETAIL_LABELS[key] ?? key;
-    case 'title':
-      return subagents?.title ?? DETAIL_LABELS[key] ?? key;
-    case 'agent_type':
-      return subagents?.profile ?? DETAIL_LABELS[key] ?? key;
-    case 'target':
-      return subagents?.target ?? DETAIL_LABELS[key] ?? key;
-    case 'target_ids':
-      return subagents?.targets ?? DETAIL_LABELS[key] ?? key;
-    case 'ids':
-      return subagents?.ids ?? DETAIL_LABELS[key] ?? key;
-    case 'accepted':
-      return subagents?.accepted ?? DETAIL_LABELS[key] ?? key;
-    case 'closed':
-    case 'closed_count':
-      return subagents?.closed ?? DETAIL_LABELS[key] ?? key;
-    case 'affected_ids':
-      return subagents?.affected ?? DETAIL_LABELS[key] ?? key;
-    case 'agent_count':
-      return subagents?.agents ?? DETAIL_LABELS[key] ?? key;
-    case 'total':
-      return subagents?.total ?? DETAIL_LABELS[key] ?? key;
-    case 'running_only':
-      return subagents?.runningOnly ?? DETAIL_LABELS[key] ?? key;
-    case 'queued':
-      return subagents?.queued ?? DETAIL_LABELS[key] ?? key;
-    case 'running':
-      return subagents?.running ?? DETAIL_LABELS[key] ?? key;
-    case 'waiting_input':
-      return subagents?.waiting ?? DETAIL_LABELS[key] ?? key;
-    case 'completed':
-      return subagents?.completed ?? DETAIL_LABELS[key] ?? key;
-    case 'failed':
-      return subagents?.failed ?? DETAIL_LABELS[key] ?? key;
-    case 'canceled':
-      return subagents?.canceled ?? DETAIL_LABELS[key] ?? key;
-    case 'timed_out':
-      return subagents?.timedOut ?? DETAIL_LABELS[key] ?? key;
-    case 'requested_ids':
-    case 'requested_count':
-      return subagents?.requested ?? DETAIL_LABELS[key] ?? key;
-    case 'found_count':
-      return subagents?.found ?? DETAIL_LABELS[key] ?? key;
-    case 'missing_count':
-      return subagents?.missing ?? DETAIL_LABELS[key] ?? key;
-    case 'missing_ids':
-      return subagents?.missingIds ?? DETAIL_LABELS[key] ?? key;
-    case 'summary':
-      return subagents?.summary ?? DETAIL_LABELS[key] ?? key;
-    case 'details':
-      return subagents?.details ?? DETAIL_LABELS[key] ?? key;
-    case 'error_code':
-      return subagents?.errorCode ?? DETAIL_LABELS[key] ?? key;
-    case 'error_message':
-      return subagents?.errorMessage ?? DETAIL_LABELS[key] ?? key;
-    case 'error_retryable':
-      return subagents?.retryable ?? DETAIL_LABELS[key] ?? key;
-    default:
-      return DETAIL_LABELS[key] ?? key;
-  }
+function detailLabel(key: string): string {
+  return DETAIL_LABELS[key] ?? key;
 }
 
 function errorMessageFromPayload(payload: Readonly<Record<string, unknown>> | undefined): string {
@@ -726,29 +540,14 @@ function shouldHideDetailLine(key: string, value: string): boolean {
   return key === 'status' || key === 'summary' || key === 'details' || key === 'message';
 }
 
-function detailLineFromPayload(payload: Readonly<Record<string, unknown>>, key: string, copy?: FlowerActivityPresentationCopy): FlowerActivityDetailLine | null {
+function detailLineFromPayload(payload: Readonly<Record<string, unknown>>, key: string): FlowerActivityDetailLine | null {
   if (!(key in payload)) return null;
   const value = compactJSON(payload[key]);
   if (!value) return null;
   if (shouldHideDetailLine(key, value)) return null;
   return {
-    label: detailLabel(key, copy),
-    value,
-    ...(detailLineTone(key) ? { tone: detailLineTone(key) } : {}),
-  };
-}
-
-function safeDetailLineFromPayload(payload: Readonly<Record<string, unknown>>, key: string): FlowerActivityDetailLine | null {
-  if (!(key in payload)) return null;
-  const raw = payload[key];
-  const value = Array.isArray(raw)
-    ? raw.map((entry) => scalarText(entry)).filter(Boolean).join(', ')
-    : scalarText(raw);
-  if (!value || shouldHideDetailLine(key, value)) return null;
-  return {
     label: detailLabel(key),
     value,
-    ...(detailLineTone(key) ? { tone: detailLineTone(key) } : {}),
   };
 }
 
@@ -764,19 +563,27 @@ function uniqueDetailLines(lines: readonly FlowerActivityDetailLine[]): readonly
   return out;
 }
 
-function genericDetailLinesForItem(item: FlowerActivityItem, renderer: 'structured'): readonly FlowerActivityDetailLine[] {
-  const payload = item.payload ?? {};
-  const toolName = trimString(item.tool_name);
-  const richStructured = RICH_STRUCTURED_TOOL_NAMES.has(toolName);
-  const orderedKeys = new Set<string>(richStructured
-    ? (RENDERER_DETAIL_KEYS[renderer] ?? RENDERER_DETAIL_KEYS.structured)
-    : SAFE_STRUCTURED_DETAIL_KEYS);
-  const lines = Array.from(orderedKeys)
-    .map((key) => richStructured
-      ? detailLineFromPayload(payload, key)
-      : safeDetailLineFromPayload(payload, key))
-    .filter((line): line is FlowerActivityDetailLine => line !== null);
-  return uniqueDetailLines(lines);
+function structuredRowsFromPayload(payload: Readonly<Record<string, unknown>> | undefined): readonly FlowerActivityStructuredRow[] {
+  return asArray(payload?.rows).flatMap((value) => {
+    const record = asRecord(value);
+    const title = typeof record.title === 'string' ? trimString(record.title) : '';
+    const meta = typeof record.meta === 'string' ? trimString(record.meta) : '';
+    const content = typeof record.content === 'string' ? trimString(record.content) : '';
+    const format = typeof record.format === 'string' ? trimString(record.format) : 'text';
+    if ((!title && !meta && !content) || (format !== 'text' && format !== 'markdown' && format !== 'code')) return [];
+    return [{ title, meta, content, format }];
+  });
+}
+
+function meaningfulStructuredSummary(item: FlowerActivityItem, title: FlowerActivityTitle): readonly FlowerActivityDetailLine[] {
+  const summary = payloadValue(item.payload, 'summary');
+  if (!summary || shouldHideDetailLine('summary', summary)) return [];
+  const normalizedSummary = trimString(summary).toLowerCase();
+  const repeatedValues = [titleText(title), item.label, item.description]
+    .map((value) => trimString(value).toLowerCase())
+    .filter(Boolean);
+  if (repeatedValues.includes(normalizedSummary)) return [];
+  return [{ label: detailLabel('summary'), value: summary }];
 }
 
 function subagentsCopy(copy?: FlowerActivityPresentationCopy): FlowerSubagentsCopy {
@@ -1483,9 +1290,11 @@ type FlowerActivityRendererHandler = (
 function presentationForStructured(item: FlowerActivityItem): FlowerActivityPresentation {
   const title = titleForGenericItem(item, 'structured');
   const errorBlock = errorDetailBlockForItem(item, item.payload);
-  const detailLines = genericDetailLinesForItem(item, 'structured');
+  const rows = structuredRowsFromPayload(item.payload);
+  const detailLines = rows.length > 0 ? [] : meaningfulStructuredSummary(item, title);
   const detailBlocks: FlowerActivityDetailBlock[] = [];
   if (errorBlock) detailBlocks.push(errorBlock);
+  if (rows.length > 0) detailBlocks.push({ kind: 'structured_rows', rows });
   if (detailLines.length > 0) detailBlocks.push({ kind: 'structured', lines: detailLines });
   return {
     label: titleText(title),

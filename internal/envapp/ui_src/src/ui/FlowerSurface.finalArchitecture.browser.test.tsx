@@ -92,6 +92,78 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();
   });
 
+  it('expands typed OKF rows and keeps a successful Skill activity static', async () => {
+    const threadID = 'thread-structured-activity-rows';
+    const activityThread = thread({
+      thread_id: threadID,
+      title: 'Structured activity rows',
+      status: 'success',
+      messages: [{
+        id: 'structured-activity-message',
+        turn_id: 'structured-activity-turn',
+        role: 'assistant',
+        content: '',
+        status: 'complete',
+        created_at_ms: 10,
+        blocks: [activityTimeline({
+          thread_id: threadID,
+          run_id: 'structured-activity-turn',
+          turn_id: 'structured-activity-turn',
+          items: [
+            activityItem({
+              item_id: 'okf-search',
+              tool_id: 'okf-search',
+              tool_name: 'okf.search',
+              renderer: 'structured',
+              label: 'OKF search results',
+              payload: {
+                operation: 'okf.search',
+                rows: [{
+                  title: 'Flower runtime',
+                  meta: 'Architecture · Summary',
+                  content: 'The current-view boundary.',
+                  format: 'text',
+                }],
+              },
+            }),
+            activityItem({
+              item_id: 'skill-success',
+              tool_id: 'skill-success',
+              tool_name: 'use_skill',
+              renderer: 'structured',
+              label: 'redeven-environment',
+              payload: { operation: 'use_skill', status: 'success' },
+            }),
+          ],
+        })],
+      }],
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [activityThread]),
+      loadThread: vi.fn(async () => liveBootstrap(activityThread, 10)),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${threadID}"] button`)));
+    (runtime.querySelector(`[data-thread-id="${threadID}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelectorAll('[data-flower-activity-item-id]').length === 2);
+
+    const okfRow = runtime.querySelector('[data-flower-activity-item-id="okf-search"]') as HTMLElement;
+    const skillRow = runtime.querySelector('[data-flower-activity-item-id="skill-success"]') as HTMLElement;
+    const okfToggle = okfRow.querySelector('.flower-activity-inline-button') as HTMLElement;
+    const skillStatic = skillRow.querySelector('.flower-activity-inline-button') as HTMLElement;
+    expect(okfToggle.tagName).toBe('BUTTON');
+    expect(okfToggle.getAttribute('aria-expanded')).toBe('false');
+    expect(skillStatic.tagName).toBe('DIV');
+    expect(skillRow.querySelector('button.flower-activity-inline-button')).toBeNull();
+    expect(skillRow.querySelector('.flower-activity-inline-chevron')).toBeNull();
+
+    (okfToggle as HTMLButtonElement).click();
+    await waitFor(() => okfRow.textContent?.includes('The current-view boundary.') === true);
+    expect(okfRow.textContent).toContain('Flower runtime');
+    expect(okfToggle.getAttribute('aria-expanded')).toBe('true');
+  });
+
   it('keeps waiting-user navigation interactive and applies background state without pointer activity', async () => {
     const waiting = thread({
       thread_id: 'thread-a', title: 'Waiting A', status: 'waiting_user', active_run_id: 'turn-a',

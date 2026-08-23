@@ -2,6 +2,7 @@ package ai
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 	flruntime "github.com/floegence/floret/v4/runtime"
 	fltools "github.com/floegence/floret/v4/tools"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
+	redevenokf "github.com/floegence/redeven/internal/okf"
 )
 
 func TestDetachedRunIgnoresPresentationUpdates(t *testing.T) {
@@ -301,6 +303,104 @@ func TestToolStartActivityPresentationTrimsLabelToContract(t *testing.T) {
 	}}, 1000)
 	if err := observation.ValidateActivityTimeline(timeline); err != nil {
 		t.Fatalf("ValidateActivityTimeline: %v", err)
+	}
+}
+
+func TestFloretActivityForOKFResultBuildsSafeStructuredRows(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		toolName string
+		data     any
+		want     []fltools.StructuredActivityRow
+	}{
+		{
+			name:     "index sections",
+			toolName: "okf.index",
+			data: redevenokf.IndexResult{Sections: []redevenokf.IndexSection{{
+				Title: "AI", Slug: "private-slug", Entries: []redevenokf.IndexEntry{
+					{ConceptSummary: redevenokf.ConceptSummary{ConceptID: "private-1", Path: "/private/one"}},
+					{ConceptSummary: redevenokf.ConceptSummary{ConceptID: "private-2", Path: "/private/two"}},
+				},
+			}}},
+			want: []fltools.StructuredActivityRow{{Title: "AI", Meta: "2 concepts", Format: fltools.StructuredActivityRowFormatText}},
+		},
+		{
+			name:     "search matches",
+			toolName: "okf.search",
+			data: redevenokf.SearchResult{Matches: []redevenokf.SearchMatch{{
+				Title: "Flower runtime", Type: "Architecture", SectionTitle: "Summary", Snippet: "The current-view boundary.", ConceptID: "private-id", Path: "/private/path",
+			}}},
+			want: []fltools.StructuredActivityRow{{Title: "Flower runtime", Meta: "Architecture · Summary", Content: "The current-view boundary.", Format: fltools.StructuredActivityRowFormatText}},
+		},
+		{
+			name:     "open markdown body",
+			toolName: "okf.open",
+			data: redevenokf.OpenResult{
+				Concept:      redevenokf.ConceptSummary{Title: "Flower Runtime", Type: "Architecture", ConceptID: "private-id", Path: "/private/path"},
+				SectionTitle: "Contract",
+				Body:         "## Contract\n\nOne current view.",
+			},
+			want: []fltools.StructuredActivityRow{{Title: "Flower Runtime", Meta: "Architecture · Contract", Content: "## Contract\n\nOne current view.", Format: fltools.StructuredActivityRowFormatMarkdown}},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			presentation, err := floretActivityForToolResult(nil, ToolResult{
+				ToolID: "tool-okf", ToolName: test.toolName, Status: toolResultStatusSuccess, Data: test.data,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			payload, ok := presentation.Payload.(fltools.StructuredActivityPayload)
+			if !ok {
+				t.Fatalf("payload type = %T", presentation.Payload)
+			}
+			if !reflect.DeepEqual(payload.Rows, test.want) {
+				t.Fatalf("rows = %#v, want %#v", payload.Rows, test.want)
+			}
+			encoded, err := json.Marshal(payload)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, forbidden := range []string{"private-id", "/private/path", "private-slug", "concept_id"} {
+				if strings.Contains(string(encoded), forbidden) {
+					t.Fatalf("payload contains private field %q: %s", forbidden, encoded)
+				}
+			}
+		})
+	}
+}
+
+func TestFloretActivityForSkillSuccessHasNoExpandableDetails(t *testing.T) {
+	t.Parallel()
+
+	presentation, err := floretActivityForToolResult(nil, ToolResult{
+		ToolID: "tool-skill", ToolName: "use_skill", Status: toolResultStatusSuccess,
+		Data: map[string]any{
+			"name": "redeven-environment", "activation_id": "private-activation", "content": "private skill body", "content_ref": "private-content-ref",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, ok := presentation.Payload.(fltools.StructuredActivityPayload)
+	if !ok {
+		t.Fatalf("payload type = %T", presentation.Payload)
+	}
+	if len(payload.Rows) != 0 || payload.Summary != "" || payload.Error != nil {
+		t.Fatalf("skill payload = %#v", payload)
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, forbidden := range []string{"private-activation", "private skill body", "private-content-ref", "activation_id", "content_ref"} {
+		if strings.Contains(string(encoded), forbidden) {
+			t.Fatalf("skill payload contains %q: %s", forbidden, encoded)
+		}
 	}
 }
 
