@@ -5,7 +5,6 @@ import {
   findProviderEnvironmentByID,
   type DesktopSavedEnvironment,
   type DesktopSavedRuntimeTarget,
-  type DesktopSavedSSHEnvironment,
   type DesktopPreferences,
 } from './desktopPreferences';
 import type { DesktopSessionLifecycle, DesktopSessionSummary } from './desktopTarget';
@@ -33,7 +32,6 @@ import {
   DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
   DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL,
   DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
-  desktopSSHEnvironmentID,
   type DesktopSSHEnvironmentDetails,
 } from '../shared/desktopSSH';
 import {
@@ -110,7 +108,6 @@ export type BuildDesktopWelcomeSnapshotArgs = Readonly<{
   openSessions?: readonly DesktopSessionSummary[];
   localRuntimeHealth?: Readonly<Record<string, DesktopRuntimeHealth>>;
   savedExternalRuntimeHealth?: Readonly<Record<string, DesktopRuntimeHealth>>;
-  savedSSHRuntimeHealth?: Readonly<Record<string, DesktopRuntimeHealth>>;
   savedRuntimeTargetHealth?: Readonly<Record<string, DesktopRuntimeHealth>>;
   managedRuntimePresenceByTargetID?: Readonly<Record<string, DesktopRuntimePresence>>;
   gatewaySources?: readonly DesktopGatewaySource[];
@@ -556,23 +553,6 @@ function openSessionByURL(
   }
   return sessions.find((session) => (
     session.target.kind === 'external_local_ui' && session.target.external_local_ui_url === targetURL
-  )) ?? null;
-}
-
-function openSessionBySSHEnvironment(
-  sessions: readonly DesktopSessionSummary[],
-  environment: DesktopSavedSSHEnvironment,
-): DesktopSessionSummary | null {
-  return sessions.find((session) => (
-    session.target.kind === 'ssh_environment'
-    && (
-      session.target.environment_id === environment.id
-      || (
-        session.target.ssh_destination === environment.ssh_destination
-        && session.target.ssh_port === environment.ssh_port
-        && session.target.runtime_root === environment.runtime_root
-      )
-    )
   )) ?? null;
 }
 
@@ -1320,6 +1300,7 @@ function buildLocalEnvironmentEntry(
   return {
     id: environment.id,
     kind: 'local_environment',
+    registration_ref: { kind: 'local_environment', id: environment.id },
     label: environment.label,
     local_ui_url: localSession?.entry_url ?? localSession?.startup?.local_ui_url ?? resolvedLocalRuntimeURL,
     secondary_text: kind === 'local'
@@ -1589,7 +1570,6 @@ function buildEnvironmentEntries(
   openSessions: readonly DesktopSessionSummary[],
   localRuntimeHealth: Readonly<Record<string, DesktopRuntimeHealth>>,
   savedExternalRuntimeHealth: Readonly<Record<string, DesktopRuntimeHealth>>,
-  savedSSHRuntimeHealth: Readonly<Record<string, DesktopRuntimeHealth>>,
   savedRuntimeTargetHealth: Readonly<Record<string, DesktopRuntimeHealth>>,
   managedRuntimePresenceByTargetID: Readonly<Record<string, DesktopRuntimePresence>>,
 ): readonly DesktopEnvironmentEntry[] {
@@ -1607,23 +1587,6 @@ function buildEnvironmentEntries(
     runtimeControlStatus: localPresence?.runtime_control_status,
     runtimeService: preferredRuntimeService(localEnvironmentRuntimeService(preferences.local_environment), undefined, localPresence),
   });
-  const sshRuntimeTargets = preferences.saved_ssh_environments.map((environment) => {
-    const runtimeHealth = savedSSHRuntimeHealth[environment.id];
-    const runtimeKey = desktopSSHEnvironmentID(environment);
-    const runtimeTargetID = desktopProviderRuntimeLinkTargetID('ssh_environment', runtimeKey);
-    const presence = managedRuntimePresenceByTargetID[runtimeTargetID];
-    return buildProviderRuntimeLinkTarget({
-      id: runtimeTargetID,
-      kind: 'ssh_environment',
-      environmentID: environment.id,
-      label: environment.label,
-      runtimeKey,
-      runtimeURL: presence?.local_ui_url ?? runtimeHealth?.local_ui_url ?? '',
-      runtimeRunning: presence?.running ?? runtimeHealth?.status === 'online',
-      runtimeControlStatus: presence?.runtime_control_status,
-      runtimeService: preferredRuntimeService(undefined, runtimeHealth, presence),
-    });
-  });
   const savedRuntimeLinkTargets = preferences.saved_runtime_targets.map((target) => {
     const targetKind = providerRuntimeLinkKindForHostAccess(target.host_access);
     const runtimeTargetID = desktopProviderRuntimeLinkTargetID(targetKind, target.id);
@@ -1640,15 +1603,7 @@ function buildEnvironmentEntries(
       runtimeService: preferredRuntimeService(undefined, undefined, presence),
     });
   });
-  const runtimeLinkTargets = [localRuntimeTarget, ...sshRuntimeTargets, ...savedRuntimeLinkTargets];
-  const sshConnectionForRuntimeTarget = new Map<string, DesktopSavedSSHEnvironment>();
-  for (const connection of preferences.saved_ssh_environments) {
-    for (const target of preferences.saved_runtime_targets) {
-      if (runtimeTargetMatchesSSHConnection(target, connection)) {
-        sshConnectionForRuntimeTarget.set(target.id, connection);
-      }
-    }
-  }
+  const runtimeLinkTargets = [localRuntimeTarget, ...savedRuntimeLinkTargets];
   const providerEnvironmentCandidatesForTarget = (
     runtimeTargetID: DesktopProviderRuntimeLinkTargetID,
   ): readonly DesktopProviderEnvironmentCandidate[] => providerEnvironmentCandidatesForSnapshot(
@@ -1685,6 +1640,11 @@ function buildEnvironmentEntries(
       return [{
         id: gatewaySessionEnvironmentEntryID(target),
         kind: 'gateway_environment' as const,
+        registration_ref: {
+          kind: 'gateway_environment' as const,
+          gateway_id: target.gateway_id,
+          gateway_env_id: target.gateway_env_id,
+        },
         label: target.label,
         local_ui_url: session.entry_url ?? session.startup?.local_ui_url ?? '',
         secondary_text: target.gateway_label,
@@ -1721,24 +1681,11 @@ function buildEnvironmentEntries(
   ];
 
   const catalog = preferences.saved_environments;
-  const sshCatalog = preferences.saved_ssh_environments;
   for (const environment of catalog) {
     entries.push(buildSavedEnvironmentEntry(
       environment,
       openSessionByURL(openSessions, environment.local_ui_url),
       savedExternalRuntimeHealth[environment.id],
-    ));
-  }
-  for (const environment of sshCatalog) {
-    if ([...preferences.saved_runtime_targets].some((target) => runtimeTargetMatchesSSHConnection(target, environment))) {
-      continue;
-    }
-    entries.push(buildSavedSSHEnvironmentEntry(
-      environment,
-      openSessionBySSHEnvironment(openSessions, environment),
-      savedSSHRuntimeHealth[environment.id],
-      managedRuntimePresenceByTargetID[desktopProviderRuntimeLinkTargetID('ssh_environment', desktopSSHEnvironmentID(environment))],
-      providerEnvironmentCandidatesForTarget(desktopProviderRuntimeLinkTargetID('ssh_environment', desktopSSHEnvironmentID(environment))),
     ));
   }
   for (const target of preferences.saved_runtime_targets) {
@@ -1750,7 +1697,6 @@ function buildEnvironmentEntries(
       savedRuntimeTargetHealth[target.id],
       managedRuntimePresenceByTargetID[runtimeTargetID],
       providerEnvironmentCandidatesForTarget(runtimeTargetID),
-      sshConnectionForRuntimeTarget.get(target.id),
     ));
   }
 
@@ -1781,8 +1727,7 @@ function buildSavedEnvironmentEntry(
   return {
     id: environment.id,
     kind: 'external_local_ui',
-    registration_kind: 'saved_environment',
-    registration_environment_id: environment.id,
+    registration_ref: { kind: 'saved_environment', id: environment.id },
     label: environment.label,
     local_ui_url: environment.local_ui_url,
     secondary_text: environment.local_ui_url,
@@ -1809,113 +1754,6 @@ function buildSavedEnvironmentEntry(
       checked_at_unix_ms: runtimeHealth.checked_at_unix_ms,
     },
     runtime_operations: externalLocalUIRuntimeOperations(externalOpenable),
-    auto_runtime_probe_enabled: environment.auto_runtime_probe_enabled,
-    open_session_key: openSession?.session_key ?? '',
-    open_session_lifecycle: sessionLifecycle(openSession),
-    open_action: isOpen ? 'focus' : isOpening ? 'opening' : 'open',
-    can_edit: true,
-    can_delete: true,
-    created_at_ms: environment.created_at_ms,
-    last_used_at_ms: environment.last_used_at_ms,
-  };
-}
-
-function buildSavedSSHEnvironmentEntry(
-  environment: DesktopSavedSSHEnvironment,
-  openSession: DesktopSessionSummary | null,
-  savedRuntimeHealth: DesktopRuntimeHealth | undefined,
-  presence: DesktopRuntimePresence | undefined,
-  providerEnvironmentCandidates: readonly DesktopProviderEnvironmentCandidate[],
-): DesktopEnvironmentEntry {
-  const isOpen = sessionIsOpen(openSession);
-  const isOpening = sessionIsOpening(openSession);
-  const sessionRuntimeHealth = (isOpen || isOpening)
-    ? onlineRuntimeHealth('ssh_runtime_probe', openSession?.entry_url ?? openSession?.startup?.local_ui_url ?? '', openSession?.startup?.runtime_service)
-    : undefined;
-  const runtimeHealth = sessionRuntimeHealth
-    ?? runtimeHealthFromPresence(
-      'ssh_runtime_probe',
-      presence,
-      savedRuntimeHealth
-        ?? unknownRuntimeHealth('ssh_runtime_probe'),
-    )
-    ?? savedRuntimeHealth
-    ?? unknownRuntimeHealth('ssh_runtime_probe');
-  const startedAtUnixMS = runtimeStartedAtUnixMS(
-    presence?.started_at_unix_ms,
-    openSession?.startup?.started_at_unix_ms,
-    savedRuntimeHealth?.started_at_unix_ms,
-  );
-  const runtimeService = preferredRuntimeService(openSession?.startup?.runtime_service, savedRuntimeHealth, presence);
-  const runtimeMaintenance = runtimeMaintenanceFromHealth(runtimeHealth);
-  const runtimeKey = desktopSSHEnvironmentID(environment);
-  const hostAccess: DesktopRuntimeHostAccess = { kind: 'ssh_host', ssh: environment };
-  const placement: DesktopRuntimePlacement = { kind: 'host_process', runtime_root: environment.runtime_root };
-  const runtimeOperations = managedRuntimeOperations({
-    presence,
-    hostAccess,
-    placement,
-    running: runtimeHealth.status === 'online',
-    openable: runtimeServiceIsOpenable(runtimeService),
-    openConnectionRequired: presence?.open_connection_required === true,
-    runtimeService,
-    runtimeControlStatus: presence?.runtime_control_status ?? defaultRuntimeControlStatusForRunningState(runtimeHealth.status === 'online'),
-    maintenance: runtimeMaintenance,
-  });
-  const providerRuntimeLinkTarget = buildProviderRuntimeLinkTarget({
-    id: desktopProviderRuntimeLinkTargetID('ssh_environment', runtimeKey),
-    kind: 'ssh_environment',
-    environmentID: environment.id,
-    label: environment.label,
-    runtimeKey,
-    runtimeURL: presence?.local_ui_url ?? openSession?.entry_url ?? openSession?.startup?.local_ui_url ?? runtimeHealth.local_ui_url ?? '',
-    runtimeRunning: runtimeHealth.status === 'online',
-    runtimeControlStatus: presence?.runtime_control_status,
-    runtimeService,
-  });
-  return {
-    id: environment.id,
-    kind: 'ssh_environment',
-    registration_kind: 'ssh_environment',
-    registration_environment_id: environment.id,
-    registration_ssh_environment_id: environment.id,
-    label: environment.label,
-    local_ui_url: presence?.local_ui_url ?? openSession?.entry_url ?? openSession?.startup?.local_ui_url ?? runtimeHealth.local_ui_url ?? '',
-    secondary_text: environment.ssh_port === null
-      ? environment.ssh_destination
-      : `${environment.ssh_destination}:${environment.ssh_port}`,
-    ssh_details: {
-      ssh_destination: environment.ssh_destination,
-      ssh_port: environment.ssh_port,
-      auth_mode: environment.auth_mode,
-      runtime_root: environment.runtime_root,
-      bootstrap_strategy: environment.bootstrap_strategy,
-      release_base_url: environment.release_base_url,
-      connect_timeout_seconds: environment.connect_timeout_seconds,
-    },
-    ssh_password_configured: environment.ssh_password_configured,
-    pinned: environment.pinned,
-    tag: isOpen ? 'Open' : 'Saved',
-    category: 'saved',
-    window_state: environmentWindowState(openSession),
-    is_open: isOpen,
-    is_opening: isOpening,
-    runtime_health: runtimeHealth,
-    runtime_service: runtimeService,
-    runtime_started_at_unix_ms: startedAtUnixMS,
-    runtime_maintenance: runtimeMaintenance,
-    provider_runtime_link_target: providerRuntimeLinkTarget,
-    provider_environment_candidates: providerEnvironmentCandidates,
-    ...managedRuntimeEntryFields(presence),
-    managed_runtime_target_id: presence?.target_id ?? desktopRuntimeTargetID(
-      presence?.host_access ?? hostAccess,
-      presence?.placement ?? placement,
-    ),
-    managed_runtime_placement_target_id: presence?.placement_target_id
-      ?? desktopRuntimeTargetID(presence?.host_access ?? hostAccess, presence?.placement ?? placement, environment.id),
-    managed_runtime_host_access: presence?.host_access ?? hostAccess,
-    managed_runtime_placement: presence?.placement ?? placement,
-    runtime_operations: runtimeOperations,
     auto_runtime_probe_enabled: environment.auto_runtime_probe_enabled,
     open_session_key: openSession?.session_key ?? '',
     open_session_lifecycle: sessionLifecycle(openSession),
@@ -1959,37 +1797,12 @@ function sshDetailsFromRuntimeTarget(target: DesktopSavedRuntimeTarget): Desktop
   };
 }
 
-function registeredRuntimeRootsMatch(left: string, right: string): boolean {
-  const normalize = (value: string): string => {
-    const compactValue = compact(value);
-    return compactValue === '~/.redeven' || compactValue === DEFAULT_DESKTOP_SSH_RUNTIME_ROOT
-      ? DEFAULT_DESKTOP_SSH_RUNTIME_ROOT
-      : compactValue;
-  };
-  return normalize(left) === normalize(right);
-}
-
-function runtimeTargetMatchesSSHConnection(
-  target: DesktopSavedRuntimeTarget,
-  connection: DesktopSavedSSHEnvironment,
-): boolean {
-  if (target.host_access.kind !== 'ssh_host' || target.placement.kind !== 'host_process') {
-    return false;
-  }
-  const ssh = target.host_access.ssh;
-  return ssh.ssh_destination === connection.ssh_destination
-    && ssh.ssh_port === connection.ssh_port
-    && ssh.auth_mode === connection.auth_mode
-    && registeredRuntimeRootsMatch(target.placement.runtime_root, connection.runtime_root);
-}
-
 function buildSavedRuntimeTargetEntry(
   target: DesktopSavedRuntimeTarget,
   openSession: DesktopSessionSummary | null,
   cachedRuntimeHealth: DesktopRuntimeHealth | undefined,
   presence: DesktopRuntimePresence | undefined,
   providerEnvironmentCandidates: readonly DesktopProviderEnvironmentCandidate[],
-  connection?: DesktopSavedSSHEnvironment,
 ): DesktopEnvironmentEntry {
   const isOpen = sessionIsOpen(openSession);
   const isOpening = sessionIsOpening(openSession);
@@ -2049,15 +1862,12 @@ function buildSavedRuntimeTargetEntry(
   return {
     id: target.id,
     kind: targetKind,
-    registration_kind: connection ? 'ssh_runtime_target' : 'runtime_target',
-    registration_environment_id: target.id,
-    registration_runtime_target_id: target.id,
-    ...(connection ? { registration_ssh_environment_id: connection.id } : {}),
+    registration_ref: { kind: 'runtime_target', id: target.id },
     label: target.label,
     local_ui_url: localUIURL,
     secondary_text: runtimeTargetSecondaryText(effectiveTarget),
-    ssh_details: connection ?? sshDetailsFromRuntimeTarget(target),
-    ssh_password_configured: connection?.ssh_password_configured ?? target.ssh_password_configured,
+    ssh_details: sshDetailsFromRuntimeTarget(target),
+    ssh_password_configured: target.ssh_password_configured,
     pinned: target.pinned,
     tag: isOpen ? 'Open' : 'Saved',
     category: 'saved',
@@ -2133,7 +1943,6 @@ export function buildDesktopWelcomeSnapshot(
     openSessions,
     args.localRuntimeHealth ?? {},
     args.savedExternalRuntimeHealth ?? {},
-    args.savedSSHRuntimeHealth ?? {},
     args.savedRuntimeTargetHealth ?? {},
     args.managedRuntimePresenceByTargetID ?? {},
   );

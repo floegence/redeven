@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
-import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
 import type { DesktopRuntimeHealth } from '../shared/desktopRuntimeHealth';
+import { desktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 import {
   testDesktopPreferences,
   testLocalEnvironment,
@@ -93,35 +93,50 @@ const directRuntimeSmokeCases: readonly DirectRuntimeSmokeCase[] = [
 ];
 
 function stoppedRuntimeEnvironment(testCase: DirectRuntimeSmokeCase): DesktopEnvironmentEntry {
-  const environmentID = testCase.kind === 'local_environment'
-    ? `local-${testCase.platform}`
-    : `ssh-${testCase.platform}`;
   const localEnvironment = testLocalEnvironment({
     label: `${testCase.platform} Local`,
     stateDir: testCase.runtimeRoot,
   });
+  const sshHostAccess = {
+    kind: 'ssh_host' as const,
+    ssh: {
+      ssh_destination: testCase.sshDestination ?? '',
+      ssh_port: 22,
+      auth_mode: 'key_agent' as const,
+      connect_timeout_seconds: 10,
+    },
+  };
+  const sshPlacement = {
+    kind: 'host_process' as const,
+    runtime_root: testCase.runtimeRoot,
+    bootstrap_strategy: 'desktop_upload' as const,
+    release_base_url: '',
+  };
+  const sshTargetID = testCase.kind === 'ssh_environment'
+    ? desktopRuntimeTargetID(sshHostAccess, sshPlacement)
+    : 'ssh:unused';
   const preferences = testDesktopPreferences({
     local_environment: localEnvironment,
-    saved_ssh_environments: testCase.kind === 'ssh_environment'
+    saved_runtime_targets: testCase.kind === 'ssh_environment'
       ? [{
-          id: environmentID,
+          schema_version: 1,
+          id: sshTargetID,
           label: testCase.label,
-          ssh_destination: testCase.sshDestination ?? '',
-          ssh_port: 22,
-          auth_mode: 'key_agent',
-          runtime_root: testCase.runtimeRoot,
-          bootstrap_strategy: 'desktop_upload',
-          release_base_url: '',
-          connect_timeout_seconds: 10,
+          host_access: sshHostAccess,
+          placement: sshPlacement,
+          ssh_password: '',
+          ssh_password_configured: false,
           pinned: false,
+          auto_runtime_probe_enabled: true,
           created_at_ms: 10,
+          updated_at_ms: 10,
           last_used_at_ms: 10,
         }]
       : [],
   });
   const directEnvironmentID = testCase.kind === 'local_environment'
     ? preferences.local_environment.id
-    : environmentID;
+    : sshTargetID;
   const runtimeHealth: DesktopRuntimeHealth = {
     status: 'offline',
     checked_at_unix_ms: 10,
@@ -130,42 +145,14 @@ function stoppedRuntimeEnvironment(testCase: DirectRuntimeSmokeCase): DesktopEnv
     offline_reason_code: 'not_started',
     offline_reason: 'Runtime is not running.',
   };
-  const gateway: DesktopGatewaySource = {
-    gateway_id: `gw-${environmentID}`,
-    display_name: `${testCase.label} supervisor`,
-    local_enabled: true,
-    connection_kind: testCase.kind === 'local_environment' ? 'local_host' : 'ssh_host',
-    management_capability: testCase.kind === 'local_environment' ? 'managed_local_host' : 'managed_ssh_host',
-    capabilities: ['env_lifecycle'],
-    status: 'error',
-    trust_state: 'paired',
-    status_message: 'Gateway service must be started before this action can continue.',
-    endpoint_label: testCase.sshDestination ?? 'This device',
-    runtime_root: testCase.runtimeRoot,
-    ...(testCase.kind === 'ssh_environment' ? {
-      ssh_details: {
-        ssh_destination: testCase.sshDestination ?? '',
-        ssh_port: 22,
-        auth_mode: 'key_agent' as const,
-        connect_timeout_seconds: 10,
-        runtime_root: testCase.runtimeRoot,
-        bootstrap_strategy: 'desktop_upload' as const,
-        release_base_url: '',
-      },
-    } : {}),
-    created_at_ms: 10,
-    updated_at_ms: 10,
-    environments: [],
-  };
   const snapshot = buildDesktopWelcomeSnapshot({
     preferences,
     localRuntimeHealth: testCase.kind === 'local_environment'
       ? { [directEnvironmentID]: runtimeHealth }
       : {},
-    savedSSHRuntimeHealth: testCase.kind === 'ssh_environment'
+    savedRuntimeTargetHealth: testCase.kind === 'ssh_environment'
       ? { [directEnvironmentID]: runtimeHealth }
       : {},
-    gatewaySources: [gateway],
   });
   const entry = snapshot.environments.find((candidate) => (
     candidate.kind === testCase.kind && candidate.id === directEnvironmentID

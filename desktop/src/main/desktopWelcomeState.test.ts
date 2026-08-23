@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { normalizeDesktopControlPlaneProvider } from '../shared/controlPlaneProvider';
 import type { DesktopRuntimePresence } from '../shared/desktopRuntimePresence';
+import { desktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import { buildDesktopRuntimeOperationPlans } from '../shared/desktopRuntimeOperationPlanner';
 import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
@@ -26,6 +27,69 @@ import {
   controlPlaneDesktopSessionKey,
   buildSSHDesktopTarget,
 } from './desktopTarget';
+import type { DesktopSavedRuntimeTarget } from './desktopPreferences';
+
+function sshRuntimeTarget(input: Readonly<{
+  id: string;
+  label: string;
+  ssh_destination: string;
+  ssh_port: number | null;
+  auth_mode: 'key_agent' | 'password';
+  runtime_root: string;
+  bootstrap_strategy: 'auto' | 'desktop_upload' | 'remote_install';
+  release_base_url: string;
+  connect_timeout_seconds?: number;
+  pinned: boolean;
+  auto_runtime_probe_enabled?: boolean;
+  created_at_ms: number;
+  last_used_at_ms: number;
+}>): DesktopSavedRuntimeTarget {
+  const hostAccess = {
+    kind: 'ssh_host' as const,
+    ssh: {
+      ssh_destination: input.ssh_destination,
+      ssh_port: input.ssh_port,
+      auth_mode: input.auth_mode,
+      connect_timeout_seconds: input.connect_timeout_seconds ?? 10,
+    },
+  };
+  const placement = {
+    kind: 'host_process' as const,
+    runtime_root: input.runtime_root,
+    bootstrap_strategy: input.bootstrap_strategy,
+    release_base_url: input.release_base_url,
+  };
+  return {
+    schema_version: 1,
+    id: desktopRuntimeTargetID(hostAccess, placement),
+    label: input.label,
+    host_access: hostAccess,
+    placement,
+    ssh_password: '',
+    ssh_password_configured: false,
+    pinned: input.pinned,
+    auto_runtime_probe_enabled: input.auto_runtime_probe_enabled ?? true,
+    created_at_ms: input.created_at_ms,
+    updated_at_ms: input.last_used_at_ms,
+    last_used_at_ms: input.last_used_at_ms,
+  };
+}
+
+const TEST_SSH_RUNTIME_TARGET = sshRuntimeTarget({
+  id: 'ignored',
+  label: 'SSH Lab',
+  ssh_destination: 'devbox',
+  ssh_port: 2222,
+  auth_mode: 'key_agent',
+  runtime_root: 'remote_default',
+  bootstrap_strategy: 'desktop_upload',
+  release_base_url: '',
+  pinned: false,
+  created_at_ms: 10,
+  last_used_at_ms: 100,
+});
+const TEST_SSH_RUNTIME_TARGET_ID = TEST_SSH_RUNTIME_TARGET.id;
+const TEST_SSH_RUNTIME_PRESENCE_ID = `ssh:${TEST_SSH_RUNTIME_TARGET_ID}`;
 
 const testAccessPoint = {
   access_point_id: 'dev',
@@ -128,12 +192,12 @@ function sshRuntimePresence(
   overrides: Partial<DesktopRuntimePresence> = {},
 ): DesktopRuntimePresence {
   const presence = {
-    target_id: 'ssh:ssh:devbox:2222:key_agent:remote_default',
-    placement_target_id: 'ssh:host:devbox%3A2222:remote_default',
+    target_id: TEST_SSH_RUNTIME_PRESENCE_ID,
+    placement_target_id: TEST_SSH_RUNTIME_TARGET_ID,
     kind: 'ssh_environment',
-    environment_id: 'ssh:devbox:2222:key_agent:remote_default',
+    environment_id: TEST_SSH_RUNTIME_TARGET_ID,
     label: 'SSH Lab',
-    runtime_key: 'ssh:devbox:2222:key_agent:remote_default',
+    runtime_key: TEST_SSH_RUNTIME_TARGET_ID,
     host_access: {
       kind: 'ssh_host',
       ssh: {
@@ -285,7 +349,7 @@ describe('desktopWelcomeState', () => {
           created_at_ms: 20,
           last_used_at_ms: 500,
         }],
-        saved_ssh_environments: [{
+        saved_runtime_targets: [sshRuntimeTarget({
           id: 'ssh:devbox:2222:key_agent:remote_default',
           label: 'SSH',
           ssh_destination: 'devbox',
@@ -298,7 +362,7 @@ describe('desktopWelcomeState', () => {
           pinned: true,
           created_at_ms: 5,
           last_used_at_ms: 100,
-        }],
+        })],
       }),
     });
 
@@ -926,26 +990,27 @@ describe('desktopWelcomeState', () => {
   });
 
   it('builds saved and open SSH environments without replacing them with forwarded localhost urls', () => {
+    const sshTarget = sshRuntimeTarget({
+      id: 'ignored',
+      label: 'SSH Lab',
+      ssh_destination: 'devbox',
+      ssh_port: 2222,
+      auth_mode: 'key_agent',
+      runtime_root: 'remote_default',
+      bootstrap_strategy: 'desktop_upload',
+      release_base_url: 'https://mirror.example.invalid/releases',
+      connect_timeout_seconds: 10,
+      pinned: true,
+      created_at_ms: 10,
+      last_used_at_ms: 100,
+    });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        saved_ssh_environments: [{
-          id: 'ssh:devbox:2222:key_agent:remote_default',
-          label: 'SSH Lab',
-          ssh_destination: 'devbox',
-          ssh_port: 2222,
-          auth_mode: 'key_agent',
-          runtime_root: 'remote_default',
-          bootstrap_strategy: 'desktop_upload',
-          release_base_url: 'https://mirror.example.invalid/releases',
-          connect_timeout_seconds: 10,
-          pinned: true,
-          created_at_ms: 10,
-          last_used_at_ms: 100,
-        }],
+        saved_runtime_targets: [sshTarget],
       }),
       openSessions: [
         {
-          session_key: 'ssh:devbox:2222:key_agent:remote_default',
+          session_key: sshTarget.id as `ssh:${string}`,
           target: buildSSHDesktopTarget({
             ssh_destination: 'devbox',
             ssh_port: 2222,
@@ -954,6 +1019,7 @@ describe('desktopWelcomeState', () => {
             bootstrap_strategy: 'desktop_upload',
             release_base_url: 'https://mirror.example.invalid/releases',
           }, {
+            environmentID: sshTarget.id,
             label: 'SSH Lab',
             forwardedLocalUIURL: 'http://127.0.0.1:40111/',
           }),
@@ -976,7 +1042,7 @@ describe('desktopWelcomeState', () => {
 
     expect(snapshot.environments).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        id: 'ssh:devbox:2222:key_agent:remote_default',
+        id: sshTarget.id,
         kind: 'ssh_environment',
         label: 'SSH Lab',
         secondary_text: 'devbox:2222',
@@ -998,68 +1064,13 @@ describe('desktopWelcomeState', () => {
     });
   });
 
-  it('preserves probed SSH runtime service metadata before a window is open', () => {
-    const sshID = 'ssh:devbox:2222:key_agent:remote_default';
-    const snapshot = buildDesktopWelcomeSnapshot({
-      preferences: testDesktopPreferences({
-        saved_ssh_environments: [{
-          id: sshID,
-          label: 'SSH Lab',
-          ssh_destination: 'devbox',
-          ssh_port: 2222,
-          auth_mode: 'key_agent',
-          runtime_root: 'remote_default',
-          bootstrap_strategy: 'desktop_upload',
-          release_base_url: '',
-          connect_timeout_seconds: 10,
-          pinned: false,
-          created_at_ms: 10,
-          last_used_at_ms: 100,
-        }],
-      }),
-      savedSSHRuntimeHealth: {
-        [sshID]: {
-          status: 'online',
-          checked_at_unix_ms: 1000,
-          source: 'ssh_runtime_probe',
-          local_ui_url: 'http://127.0.0.1:40111/',
-          runtime_service: {
-            runtime_version: 'v1.8.0',
-            protocol_version: 'redeven-runtime-v1',
-            compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
-            remote_enabled: false,
-            compatibility: 'compatible',
-            open_readiness: { state: 'openable' },
-            active_workload: {
-              terminal_count: 1,
-              session_count: 0,
-              task_count: 0,
-              port_forward_count: 0,
-            },
-          },
-        },
-      },
-    });
-
-    expect(snapshot.environments).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: sshID,
-        kind: 'ssh_environment',
-        is_open: false,
-        runtime_service: expect.objectContaining({
-          runtime_version: 'v1.8.0',
-          open_readiness: { state: 'openable' },
-        }),
-      }),
-    ]));
-  });
 
   it('keeps a running SSH runtime connectable before a window is open', () => {
-    const sshID = 'ssh:devbox:2222:key_agent:remote_default';
+    const sshID = TEST_SSH_RUNTIME_TARGET_ID;
     const providerEnvironment = testProviderEnvironment('https://provider.example.invalid', 'env_demo');
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        saved_ssh_environments: [{
+        saved_runtime_targets: [sshRuntimeTarget({
           id: sshID,
           label: 'SSH Lab',
           ssh_destination: 'devbox',
@@ -1072,11 +1083,11 @@ describe('desktopWelcomeState', () => {
           pinned: false,
           created_at_ms: 10,
           last_used_at_ms: 100,
-        }],
+        })],
         provider_environments: [providerEnvironment],
       }),
       managedRuntimePresenceByTargetID: {
-        'ssh:ssh:devbox:2222:key_agent:remote_default': sshRuntimePresence({
+        [TEST_SSH_RUNTIME_PRESENCE_ID]: sshRuntimePresence({
           started_at_unix_ms: 1778755555555,
         }),
       },
@@ -1087,8 +1098,8 @@ describe('desktopWelcomeState', () => {
       is_open: false,
       local_ui_url: 'http://127.0.0.1:40111/',
       runtime_started_at_unix_ms: 1778755555555,
-      managed_runtime_target_id: 'ssh:ssh:devbox:2222:key_agent:remote_default',
-      managed_runtime_placement_target_id: 'ssh:host:devbox%3A2222:remote_default',
+      managed_runtime_target_id: TEST_SSH_RUNTIME_TARGET_ID,
+      managed_runtime_placement_target_id: TEST_SSH_RUNTIME_TARGET_ID,
       managed_runtime_host_access: expect.objectContaining({
         kind: 'ssh_host',
       }),
@@ -1109,7 +1120,7 @@ describe('desktopWelcomeState', () => {
   });
 
   it('keeps a running SSH runtime Open operation available when compatibility requires an update', () => {
-    const sshID = 'ssh:devbox:2222:key_agent:remote_default';
+    const sshID = TEST_SSH_RUNTIME_TARGET_ID;
     const updateRequiredPresence = sshRuntimePresence({
       openable: false,
       runtime_service: {
@@ -1132,7 +1143,7 @@ describe('desktopWelcomeState', () => {
     });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        saved_ssh_environments: [{
+        saved_runtime_targets: [sshRuntimeTarget({
           id: sshID,
           label: 'SSH Lab',
           ssh_destination: 'devbox',
@@ -1145,10 +1156,10 @@ describe('desktopWelcomeState', () => {
           pinned: false,
           created_at_ms: 10,
           last_used_at_ms: 100,
-        }],
+        })],
       }),
       managedRuntimePresenceByTargetID: {
-        'ssh:ssh:devbox:2222:key_agent:remote_default': updateRequiredPresence,
+        [TEST_SSH_RUNTIME_PRESENCE_ID]: updateRequiredPresence,
       },
     });
 
@@ -1156,7 +1167,7 @@ describe('desktopWelcomeState', () => {
 
     expect(sshEntry).toMatchObject({
       kind: 'ssh_environment',
-      managed_runtime_target_id: 'ssh:ssh:devbox:2222:key_agent:remote_default',
+      managed_runtime_target_id: TEST_SSH_RUNTIME_TARGET_ID,
       runtime_maintenance: undefined,
       runtime_operations: expect.objectContaining({
         open: expect.objectContaining({
@@ -1204,11 +1215,11 @@ describe('desktopWelcomeState', () => {
         },
       },
     };
-    const sshID = 'ssh:devbox:2222:key_agent:remote_default';
+    const sshID = TEST_SSH_RUNTIME_TARGET_ID;
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         provider_environments: [providerEnvironment],
-        saved_ssh_environments: [{
+        saved_runtime_targets: [sshRuntimeTarget({
           id: sshID,
           label: 'SSH Lab',
           ssh_destination: 'devbox',
@@ -1221,13 +1232,13 @@ describe('desktopWelcomeState', () => {
           pinned: false,
           created_at_ms: 10,
           last_used_at_ms: 100,
-        }],
+        })],
       }),
       managedRuntimePresenceByTargetID: {
         'local:local': localRuntimePresence({
           runtime_service: localService,
         }),
-        'ssh:ssh:devbox:2222:key_agent:remote_default': sshRuntimePresence(),
+        [TEST_SSH_RUNTIME_PRESENCE_ID]: sshRuntimePresence(),
       },
     });
 
@@ -1946,146 +1957,7 @@ describe('desktopWelcomeState', () => {
     expect(JSON.stringify(entry?.runtime_operations)).not.toContain('runtime_restart_required');
   });
 
-  it('preserves SSH runtime maintenance requirements before a window is open', () => {
-    const sshID = 'ssh:devbox:2222:key_agent:remote_default';
-    const snapshot = buildDesktopWelcomeSnapshot({
-      preferences: testDesktopPreferences({
-        saved_ssh_environments: [{
-          id: sshID,
-          label: 'SSH Lab',
-          ssh_destination: 'devbox',
-          ssh_port: 2222,
-          auth_mode: 'key_agent',
-          runtime_root: 'remote_default',
-          bootstrap_strategy: 'desktop_upload',
-          release_base_url: '',
-          connect_timeout_seconds: 10,
-          pinned: false,
-          created_at_ms: 10,
-          last_used_at_ms: 100,
-        }],
-      }),
-      savedSSHRuntimeHealth: {
-        [sshID]: {
-          status: 'online',
-          checked_at_unix_ms: 1000,
-          source: 'ssh_runtime_probe',
-          runtime_maintenance: {
-            kind: 'desktop_model_source_requires_runtime_update',
-            required_for: 'desktop_model_source',
-            recovery_action: 'update_runtime',
-            can_desktop_start: false,
-            can_desktop_restart: true,
-            has_active_work: true,
-            active_work_label: '2 sessions',
-            current_runtime_version: 'v0.5.9',
-            target_runtime_version: 'v0.6.7',
-            message: 'Update and restart this SSH runtime before Desktop can make your local model settings available here.',
-          },
-        },
-      },
-    });
 
-    expect(snapshot.environments).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: sshID,
-        kind: 'ssh_environment',
-        runtime_health: expect.objectContaining({
-          status: 'online',
-          runtime_maintenance: expect.objectContaining({
-            kind: 'desktop_model_source_requires_runtime_update',
-            active_work_label: '2 sessions',
-          }),
-        }),
-        runtime_maintenance: expect.objectContaining({
-          kind: 'desktop_model_source_requires_runtime_update',
-          target_runtime_version: 'v0.6.7',
-        }),
-      }),
-    ]));
-  });
-
-  it('prefers an open SSH session over a stale saved SSH probe', () => {
-    const sshID = 'ssh:devbox:2222:key_agent:remote_default';
-    const snapshot = buildDesktopWelcomeSnapshot({
-      preferences: testDesktopPreferences({
-        saved_ssh_environments: [{
-          id: sshID,
-          label: 'SSH Lab',
-          ssh_destination: 'devbox',
-          ssh_port: 2222,
-          auth_mode: 'key_agent',
-          runtime_root: 'remote_default',
-          bootstrap_strategy: 'desktop_upload',
-          release_base_url: '',
-          connect_timeout_seconds: 10,
-          pinned: false,
-          created_at_ms: 10,
-          last_used_at_ms: 100,
-        }],
-      }),
-      openSessions: [
-        {
-          session_key: sshID,
-          target: buildSSHDesktopTarget({
-            ssh_destination: 'devbox',
-            ssh_port: 2222,
-            auth_mode: 'key_agent',
-            runtime_root: 'remote_default',
-            bootstrap_strategy: 'desktop_upload',
-            release_base_url: '',
-          }, {
-            label: 'SSH Lab',
-            forwardedLocalUIURL: 'http://127.0.0.1:40111/',
-          }),
-          lifecycle: 'open',
-          startup: {
-            local_ui_url: 'http://127.0.0.1:40111/',
-            local_ui_urls: ['http://127.0.0.1:40111/'],
-            runtime_service: {
-              runtime_version: 'v1.9.0',
-              protocol_version: 'redeven-runtime-v1',
-              compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
-              remote_enabled: false,
-              compatibility: 'compatible',
-              open_readiness: { state: 'openable' },
-              active_workload: {
-                terminal_count: 1,
-                session_count: 1,
-                task_count: 0,
-                port_forward_count: 0,
-              },
-            },
-          },
-        },
-      ],
-      savedSSHRuntimeHealth: {
-        [sshID]: {
-          status: 'offline',
-          checked_at_unix_ms: 1000,
-          source: 'ssh_runtime_probe',
-          offline_reason_code: 'not_started',
-          offline_reason: 'Serve the runtime first',
-        },
-      },
-    });
-
-    expect(snapshot.environments).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: sshID,
-        kind: 'ssh_environment',
-        is_open: true,
-        runtime_health: expect.objectContaining({
-          status: 'online',
-          source: 'ssh_runtime_probe',
-        }),
-        runtime_service: expect.objectContaining({
-          runtime_version: 'v1.9.0',
-          open_readiness: { state: 'openable' },
-        }),
-      }),
-    ]));
-  });
 
   it('builds a dedicated settings snapshot when requested by the desktop shell', () => {
     const local = testLocalEnvironment({
@@ -2813,7 +2685,7 @@ describe('desktopWelcomeState', () => {
   it('keeps offline Local and SSH cards eligible for explicit Gateway setup', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        saved_ssh_environments: [{
+        saved_runtime_targets: [sshRuntimeTarget({
           id: 'ssh:build',
           label: 'Build host',
           ssh_destination: 'alice@build.example',
@@ -2827,12 +2699,12 @@ describe('desktopWelcomeState', () => {
           auto_runtime_probe_enabled: false,
           created_at_ms: 2,
           last_used_at_ms: 2,
-        }],
+        })],
       }),
     });
 
     const localEntry = snapshot.environments.find((entry) => entry.kind === 'local_environment');
-    const sshEntry = snapshot.environments.find((entry) => entry.id === 'ssh:build');
+    const sshEntry = snapshot.environments.find((entry) => entry.label === 'Build host');
     expect(localEntry).toMatchObject({
       managed_runtime_host_access: { kind: 'local_host' },
       managed_runtime_placement: { kind: 'host_process' },
@@ -2908,65 +2780,5 @@ describe('desktopWelcomeState', () => {
     expect(issue.diagnostics_copy).toContain('http status: 502');
   });
 
-  it('merges an SSH connection and its matching Runtime target into one registered card', () => {
-    const connectionID = 'ssh:build-host:default:key_agent:remote_default';
-    const targetID = 'ssh:host:build-host:runtime';
-    const connection = {
-      id: connectionID,
-      label: 'Build host',
-      ssh_destination: 'build-host',
-      ssh_port: null,
-      auth_mode: 'key_agent' as const,
-      runtime_root: 'remote_default',
-      bootstrap_strategy: 'auto' as const,
-      release_base_url: '',
-      connect_timeout_seconds: 10,
-      pinned: false,
-      auto_runtime_probe_enabled: true,
-      created_at_ms: 1,
-      last_used_at_ms: 1,
-    };
-    const target = {
-      schema_version: 1 as const,
-      id: targetID as `ssh:${string}`,
-      label: 'Build runtime',
-      host_access: {
-        kind: 'ssh_host' as const,
-        ssh: {
-          ssh_destination: 'build-host',
-          ssh_port: null,
-          auth_mode: 'key_agent' as const,
-          connect_timeout_seconds: 10,
-        },
-      },
-      placement: {
-        kind: 'host_process' as const,
-        runtime_root: 'remote_default',
-        bootstrap_strategy: 'auto' as const,
-        release_base_url: '',
-      },
-      pinned: false,
-      auto_runtime_probe_enabled: true,
-      last_used_at_ms: 1,
-      created_at_ms: 1,
-      updated_at_ms: 1,
-    };
-    const snapshot = buildDesktopWelcomeSnapshot({
-      preferences: testDesktopPreferences({
-        saved_ssh_environments: [connection],
-        saved_runtime_targets: [target],
-      }),
-    });
-    const cards = snapshot.environments.filter((entry) => (
-      entry.registration_ssh_environment_id === connectionID
-      || entry.registration_runtime_target_id === targetID
-    ));
-    expect(cards).toHaveLength(1);
-    expect(cards[0]).toMatchObject({
-      registration_kind: 'ssh_runtime_target',
-      registration_ssh_environment_id: connectionID,
-      registration_runtime_target_id: targetID,
-      ssh_details: expect.objectContaining({ ssh_destination: 'build-host' }),
-    });
-  });
+
 });

@@ -85,6 +85,7 @@ function localOpenActionProgress(input: Readonly<{
     started_at_unix_ms: input.startedAt ?? 100,
     updated_at_unix_ms: input.updatedAt,
     status: input.status,
+    active_progress_surface: 'open',
     phase: input.phase,
     title: input.title,
     detail: 'Desktop is updating the local Env App window.',
@@ -203,8 +204,8 @@ describe('launcherBusyState', () => {
     });
 
     expect(busyStateForLauncherRequest({
-      kind: 'delete_saved_environment',
-      environment_id: 'saved_demo',
+      kind: 'delete_environment_registration',
+      registration_ref: { kind: 'saved_environment', id: 'saved_demo' },
     })).toMatchObject({
       action: 'delete_environment',
       environment_id: 'saved_demo',
@@ -254,10 +255,10 @@ describe('launcherBusyState', () => {
     });
 
     expect(busyStateMatchesAction(state, 'set_provider_environment_pinned')).toBe(true);
-    expect(busyStateMatchesAction(state, 'set_local_environment_pinned')).toBe(false);
+    expect(busyStateMatchesAction(state, 'set_environment_registration_pinned')).toBe(false);
     expect(busyStateMatchesAnyAction(state, [
       'set_provider_environment_pinned',
-      'set_saved_environment_pinned',
+      'set_environment_registration_pinned',
     ])).toBe(true);
     expect(busyStateMatchesAnyAction(IDLE_LAUNCHER_BUSY_STATE, ['set_provider_environment_pinned'])).toBe(false);
   });
@@ -630,7 +631,7 @@ describe('launcherBusyState', () => {
     )).toBe(true);
   });
 
-  it('uses the newest Open attempt even when an older snapshot operation is still active', () => {
+  it('selects the single active Open attempt without comparing timestamps', () => {
     const environment: RuntimeProgressEnvironmentMatch = {
       id: 'local',
       managed_runtime_target_id: runtimeID('local:local'),
@@ -658,11 +659,7 @@ describe('launcherBusyState', () => {
       [olderRunningProgress, newerFailedProgress],
     );
 
-    expect(selectedProgress).toBe(newerFailedProgress);
-    expect(environmentProgressPrimaryPresentation(selectedProgress)).toMatchObject({
-      kind: 'attention_trigger',
-      label: 'Open failed',
-    });
+    expect(selectedProgress).toBe(olderRunningProgress);
   });
 
   it('clears busy progress when the accepted snapshot contains matching Open progress', () => {

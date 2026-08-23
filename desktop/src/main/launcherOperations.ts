@@ -31,7 +31,7 @@ type CreateLauncherOperationInput = Readonly<{
   title_key?: DesktopTranslationKey;
   detail: string;
   detail_key?: DesktopTranslationKey;
-  active_progress_surface?: DesktopLauncherProgressSurface;
+  active_progress_surface: DesktopLauncherProgressSurface;
   lifecycle_progress?: DesktopRuntimeLifecycleProgress;
   open_progress?: DesktopOpenConnectionProgress;
   open_timing?: DesktopOpenConnectionTiming;
@@ -48,6 +48,7 @@ type CreateLauncherOperationInput = Readonly<{
   interrupt_kind?: DesktopLauncherOperationSnapshot['interrupt_kind'];
   failure?: DesktopOperationFailurePresentation;
   next_actions?: DesktopLauncherOperationSnapshot['next_actions'];
+  started_at_unix_ms?: number;
 }>;
 
 export type LauncherOperationAttemptIdentity = Readonly<{
@@ -74,27 +75,6 @@ export type LauncherOperationFinishPatch = Partial<Omit<
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
-}
-
-function inferProgressSurface(input: Readonly<{
-  action: DesktopLauncherActionKind;
-  open_progress?: DesktopOpenConnectionProgress;
-  lifecycle_progress?: DesktopRuntimeLifecycleProgress;
-  step_progress?: DesktopLauncherOperationSnapshot['step_progress'];
-}>): DesktopLauncherProgressSurface | undefined {
-  if (input.action === 'reinstall_target' || input.action === 'preview_reinstall_target') {
-    return 'reinstall';
-  }
-  if (input.open_progress) {
-    return 'open';
-  }
-  if (input.lifecycle_progress) {
-    return input.action.includes('gateway') ? 'gateway' : 'runtime_lifecycle';
-  }
-  if (input.step_progress) {
-    return input.action.includes('gateway') ? 'gateway' : undefined;
-  }
-  return undefined;
 }
 
 function subjectKey(kind: DesktopLauncherOperationSubjectKind, id: string): string {
@@ -254,6 +234,26 @@ function lifecycleProgressTitleKey(
   }
 }
 
+function progressTitleKeyForSurface(
+  snapshot: Pick<DesktopLauncherOperationSnapshot, 'active_progress_surface' | 'open_progress' | 'lifecycle_progress' | 'status'>,
+): DesktopTranslationKey | undefined {
+  if (snapshot.active_progress_surface === 'open') {
+    return openProgressTitleKey(snapshot.open_progress, snapshot.status);
+  }
+  if (snapshot.active_progress_surface === 'runtime_lifecycle') {
+    return lifecycleProgressTitleKey(snapshot.lifecycle_progress, snapshot.status);
+  }
+  return undefined;
+}
+
+function progressDetailKeyForSurface(
+  snapshot: Pick<DesktopLauncherOperationSnapshot, 'active_progress_surface' | 'open_progress' | 'status'>,
+): DesktopTranslationKey | undefined {
+  return snapshot.active_progress_surface === 'open'
+    ? openProgressDetailKey(snapshot.open_progress, snapshot.status)
+    : undefined;
+}
+
 function operationAttemptMatches(
   snapshot: DesktopLauncherOperationSnapshot | null,
   attempt: LauncherOperationAttemptIdentity,
@@ -279,7 +279,7 @@ function cancelPhaseForSnapshot(snapshot: DesktopLauncherOperationSnapshot): Rea
       detailKey: 'progress.detailCancelingDeletedConnection',
     };
   }
-  if (snapshot.lifecycle_progress) {
+  if (snapshot.active_progress_surface === 'runtime_lifecycle') {
     return {
       phase: 'runtime_lifecycle_canceling',
       title: 'Stopping runtime startup',
@@ -288,7 +288,7 @@ function cancelPhaseForSnapshot(snapshot: DesktopLauncherOperationSnapshot): Rea
       detailKey: 'progress.detailStoppingRuntimeStartup',
     };
   }
-  if (snapshot.open_progress) {
+  if (snapshot.active_progress_surface === 'open') {
     return {
       phase: 'open_connection_canceling',
       title: 'Stopping open',
@@ -327,8 +327,11 @@ export class LauncherOperationRegistry {
 
   create(input: CreateLauncherOperationInput): DesktopLauncherOperationSnapshot {
     const now = Date.now();
-    const startedAtUnixMs = Math.max(now, this.lastStartedAtUnixMs + 1);
-    this.lastStartedAtUnixMs = startedAtUnixMs;
+    const requestedStartedAtUnixMs = Number(input.started_at_unix_ms);
+    const startedAtUnixMs = Number.isFinite(requestedStartedAtUnixMs) && requestedStartedAtUnixMs > 0
+      ? Math.floor(requestedStartedAtUnixMs)
+      : Math.max(now, this.lastStartedAtUnixMs + 1);
+    this.lastStartedAtUnixMs = Math.max(this.lastStartedAtUnixMs, startedAtUnixMs);
     const operationKey = compact(input.operation_key);
     const subjectID = compact(input.subject_id);
     if (operationKey === '') {
@@ -359,14 +362,19 @@ export class LauncherOperationRegistry {
       status: input.status ?? 'running',
       phase: compact(input.phase),
       title: compact(input.title),
-      title_key: input.title_key
-        ?? openProgressTitleKey(input.open_progress, input.status)
-        ?? lifecycleProgressTitleKey(input.lifecycle_progress, input.status),
+      title_key: input.title_key ?? progressTitleKeyForSurface({
+        active_progress_surface: input.active_progress_surface,
+        open_progress: input.open_progress,
+        lifecycle_progress: input.lifecycle_progress,
+        status: input.status ?? 'running',
+      }),
       detail: compact(input.detail),
-      detail_key: input.detail_key ?? openProgressDetailKey(input.open_progress, input.status),
-      ...((input.active_progress_surface ?? inferProgressSurface(input))
-        ? { active_progress_surface: input.active_progress_surface ?? inferProgressSurface(input) }
-        : {}),
+      detail_key: input.detail_key ?? progressDetailKeyForSurface({
+        active_progress_surface: input.active_progress_surface,
+        open_progress: input.open_progress,
+        status: input.status ?? 'running',
+      }),
+      active_progress_surface: input.active_progress_surface,
       ...(input.lifecycle_progress ? { lifecycle_progress: input.lifecycle_progress } : {}),
       ...(input.open_progress ? { open_progress: input.open_progress } : {}),
       ...(input.open_timing ? { open_timing: input.open_timing } : {}),
@@ -457,22 +465,24 @@ export class LauncherOperationRegistry {
     const titlePresentationChanged = patch.status !== undefined
       || patch.phase !== undefined
       || patch.title !== undefined
+      || patch.active_progress_surface !== undefined
       || patch.open_progress !== undefined
       || patch.lifecycle_progress !== undefined;
     const detailPresentationChanged = patch.status !== undefined
       || patch.phase !== undefined
       || patch.detail !== undefined
+      || patch.active_progress_surface !== undefined
       || patch.open_progress !== undefined
       || patch.lifecycle_progress !== undefined;
     const titleKey = Object.hasOwn(patch, 'title_key')
       ? patch.title_key
       : titlePresentationChanged
-        ? openProgressTitleKey(next.open_progress, next.status) ?? lifecycleProgressTitleKey(next.lifecycle_progress, next.status)
+        ? progressTitleKeyForSurface(next)
         : current.title_key;
     const detailKey = Object.hasOwn(patch, 'detail_key')
       ? patch.detail_key
       : detailPresentationChanged
-        ? openProgressDetailKey(next.open_progress, next.status)
+        ? progressDetailKeyForSurface(next)
         : current.detail_key;
     const patchedNext: DesktopLauncherOperationSnapshot = {
       ...next,

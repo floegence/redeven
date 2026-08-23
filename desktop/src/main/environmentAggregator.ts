@@ -150,6 +150,11 @@ function buildGatewayEnvironmentEntry(
   return {
     id,
     kind: 'gateway_environment',
+    registration_ref: {
+      kind: 'gateway_environment',
+      gateway_id: gateway.gateway_id,
+      gateway_env_id: environment.gateway_env_id,
+    },
     label: displayName,
     local_ui_url: '',
     secondary_text: environment.origin.label || gatewayLabel,

@@ -31,7 +31,7 @@ function lifecycleActionProgress(input: Readonly<{
   operation?: DesktopRuntimeLifecycleOperation;
   phase?: DesktopRuntimeLifecyclePhase;
   status?: DesktopLauncherActionProgress['status'];
-  activeSurface?: DesktopLauncherActionProgress['active_progress_surface'];
+  activeSurface?: DesktopLauncherActionProgress['active_progress_surface'] | null;
   startedAt?: number;
   updatedAt?: number;
 }> = {}): DesktopLauncherActionProgress {
@@ -45,7 +45,7 @@ function lifecycleActionProgress(input: Readonly<{
     subject_id: 'local-environment',
     started_at_unix_ms: input.startedAt ?? 100,
     updated_at_unix_ms: input.updatedAt,
-    active_progress_surface: input.activeSurface,
+    active_progress_surface: input.activeSurface === null ? undefined : input.activeSurface ?? 'runtime_lifecycle',
     status: input.status ?? 'succeeded',
     phase,
     title: phase === 'runtime_ready' ? 'Runtime ready' : 'Runtime stopped',
@@ -77,6 +77,7 @@ function openConnectionProgress(
     operation_key: 'open-operation',
     subject_kind: 'local_environment',
     subject_id: 'local-environment',
+    active_progress_surface: 'open',
     started_at_unix_ms: input.startedAt ?? 200,
     updated_at_unix_ms: input.updatedAt,
     status,
@@ -529,6 +530,7 @@ describe('selectEnvironmentPanelProgress', () => {
       status: 'running',
       startedAt: 200,
       updatedAt: 210,
+      activeSurface: 'runtime_lifecycle',
     });
 
     expect(selectEnvironmentPanelProgress(staleOpenFailure, runtimeRunning)).toBe(runtimeRunning);
@@ -557,6 +559,7 @@ describe('selectEnvironmentPanelProgress', () => {
       started_at_unix_ms: 200,
       updated_at_unix_ms: 210,
       status: 'needs_confirmation',
+      active_progress_surface: 'runtime_lifecycle',
       phase: 'runtime_operation_confirmation_required',
       title: 'Review Runtime impact',
       detail: 'Confirm the Runtime update.',
@@ -577,6 +580,7 @@ describe('selectEnvironmentPanelProgress', () => {
       action: 'stop_environment_runtime',
       operation: 'stop',
       status: 'failed',
+      activeSurface: null,
       startedAt: 100,
       updatedAt: 120,
     });
@@ -584,41 +588,10 @@ describe('selectEnvironmentPanelProgress', () => {
     expect(selectEnvironmentPanelProgress(openRunning, staleRuntimeFailure)).toBe(openRunning);
   });
 
-  it('uses the newest operation instead of letting stale active progress mask a newer failure', () => {
-    const staleOpenRunning = openConnectionProgress('running', { startedAt: 100, updatedAt: 500 });
-    const newerRuntimeFailure = lifecycleActionProgress({
-      action: 'stop_environment_runtime',
-      operation: 'stop',
-      status: 'failed',
-      startedAt: 200,
-      updatedAt: 220,
-    });
-    const staleRuntimeRunning = lifecycleActionProgress({
-      action: 'restart_environment_runtime',
-      status: 'running',
-      startedAt: 100,
-      updatedAt: 500,
-    });
-    const newerOpenFailure = openConnectionProgress('failed', { startedAt: 200, updatedAt: 220 });
-
-    expect(selectEnvironmentPanelProgress(staleOpenRunning, newerRuntimeFailure)).toBe(newerRuntimeFailure);
-    expect(selectEnvironmentPanelProgress(newerOpenFailure, staleRuntimeRunning)).toBe(newerOpenFailure);
-  });
-
-  it('uses the latest progress within the same priority and Open as the final tie breaker', () => {
-    const openFailure = openConnectionProgress('failed', { startedAt: 100, updatedAt: 150 });
-    const newerRuntimeFailure = lifecycleActionProgress({
-      action: 'restart_environment_runtime',
-      status: 'failed',
-      startedAt: 100,
-      updatedAt: 200,
-    });
-
-    expect(selectEnvironmentPanelProgress(openFailure, newerRuntimeFailure)).toBe(newerRuntimeFailure);
-    expect(selectEnvironmentPanelProgress(
-      openConnectionProgress('succeeded', { startedAt: 500, updatedAt: 600 }),
-      lifecycleActionProgress({ status: 'succeeded', startedAt: 500, updatedAt: 600 }),
-    )?.open_progress).toBeDefined();
+  it('does not guess a panel owner when neither progress record declares an active surface', () => {
+    const runtime = lifecycleActionProgress({ status: 'failed', activeSurface: null });
+    const open = { ...openConnectionProgress('failed'), active_progress_surface: undefined };
+    expect(selectEnvironmentPanelProgress(open, runtime)).toBeNull();
   });
 });
 

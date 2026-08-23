@@ -11,6 +11,7 @@ describe('LauncherOperationRegistry', () => {
     registry.create({
       operation_key: 'runtime-a',
       action: 'start_environment_runtime',
+      active_progress_surface: 'runtime_lifecycle',
       subject_kind: 'local_environment',
       subject_id: 'local',
       phase: 'starting',
@@ -20,6 +21,7 @@ describe('LauncherOperationRegistry', () => {
     expect(() => registry.create({
       operation_key: 'runtime-a',
       action: 'stop_environment_runtime',
+      active_progress_surface: 'runtime_lifecycle',
       subject_kind: 'local_environment',
       subject_id: 'local',
       phase: 'stopping',
@@ -33,6 +35,7 @@ describe('LauncherOperationRegistry', () => {
     const operation = registry.create({
       operation_key: 'runtime-confirmation',
       action: 'restart_environment_runtime',
+      active_progress_surface: 'runtime_lifecycle',
       subject_kind: 'local_environment',
       subject_id: 'local',
       phase: 'discovering_runtime_instances',
@@ -50,6 +53,7 @@ describe('LauncherOperationRegistry', () => {
     expect(() => registry.create({
       operation_key: operation.operation_key,
       action: 'restart_environment_runtime',
+      active_progress_surface: 'runtime_lifecycle',
       subject_kind: 'local_environment',
       subject_id: 'local',
       phase: 'checking_existing_runtime',
@@ -72,6 +76,7 @@ describe('LauncherOperationRegistry', () => {
     const operation = registry.create({
       operation_key: 'runtime-attached-confirmation',
       action: 'run_provider_environment_lifecycle',
+      active_progress_surface: 'runtime_lifecycle',
       subject_kind: 'provider_environment',
       subject_id: 'provider-a',
       status: 'needs_confirmation',
@@ -90,6 +95,7 @@ describe('LauncherOperationRegistry', () => {
     const persisted = source.create({
       operation_key: 'reinstall-target:resume-me',
       action: 'reinstall_target',
+      active_progress_surface: 'reinstall',
       subject_kind: 'runtime_target',
       subject_id: 'env-ssh',
       environment_id: 'env-ssh',
@@ -115,6 +121,7 @@ describe('LauncherOperationRegistry', () => {
     const operation = registry.create({
       operation_key: 'gateway:refresh',
       action: 'refresh_gateway',
+      active_progress_surface: 'gateway',
       subject_kind: 'gateway',
       subject_id: 'gateway',
       phase: 'checking_gateway',
@@ -141,6 +148,78 @@ describe('LauncherOperationRegistry', () => {
     }));
   });
 
+  it('preserves the renderer-owned attempt identity exactly', () => {
+    const registry = new LauncherOperationRegistry();
+    const operation = registry.create({
+      operation_key: 'runtime:explicit-attempt',
+      started_at_unix_ms: 42_001,
+      action: 'update_environment_runtime',
+      active_progress_surface: 'runtime_lifecycle',
+      subject_kind: 'runtime_target',
+      subject_id: 'runtime:explicit-attempt',
+      phase: 'checking_existing_runtime',
+      title: 'Checking runtime',
+      detail: 'Desktop is checking the runtime.',
+      lifecycle_progress: runtimeLifecycleProgress({
+        location: 'ssh_host',
+        operation: 'update',
+        phase: 'checking_existing_runtime',
+        targetID: 'runtime:explicit-attempt',
+        targetLabel: 'Explicit attempt',
+      }),
+    });
+
+    expect(operation.started_at_unix_ms).toBe(42_001);
+    expect(registry.progressItems()[0]?.started_at_unix_ms).toBe(42_001);
+  });
+
+  it('derives presentation and cancellation only from the active surface', () => {
+    const registry = new LauncherOperationRegistry();
+    const operation = registry.create({
+      operation_key: 'open:runtime-child',
+      action: 'open_ssh_environment',
+      active_progress_surface: 'runtime_lifecycle',
+      subject_kind: 'runtime_target',
+      subject_id: 'open:runtime-child',
+      phase: 'checking_existing_runtime',
+      title: 'Recovering runtime',
+      detail: 'Desktop is recovering the runtime before opening.',
+      open_progress: openConnectionProgress({
+        location: 'ssh_host',
+        phase: 'checking_runtime_record',
+        environmentID: 'open:runtime-child',
+        environmentLabel: 'Runtime child',
+      }),
+      lifecycle_progress: runtimeLifecycleProgress({
+        location: 'ssh_host',
+        operation: 'update',
+        phase: 'checking_existing_runtime',
+        targetID: 'open:runtime-child',
+        targetLabel: 'Runtime child',
+      }),
+      cancelable: true,
+    });
+
+    expect(operation.title_key).toBe('progress.checkingExistingRuntime');
+    const open = registry.update(operation.operation_key, {
+      active_progress_surface: 'open',
+      phase: 'checking_runtime_record',
+      title: 'Opening environment',
+      detail: 'Desktop resumed the parent Open workflow.',
+    });
+    expect(open).toEqual(expect.objectContaining({
+      title_key: 'progress.titleCheckingRuntimeStatus',
+      detail_key: 'progress.detailCheckingRuntimeStatus',
+    }));
+
+    const canceled = registry.cancel(operation.operation_key, '');
+    expect(canceled).toEqual(expect.objectContaining({
+      phase: 'open_connection_canceling',
+      title_key: 'progress.titleStoppingOpen',
+      detail_key: 'progress.detailStoppingOpen',
+    }));
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -154,6 +233,7 @@ describe('LauncherOperationRegistry', () => {
     const operation = registry.create({
       operation_key: 'ssh:devbox:default:key_agent:remote_default',
       action: 'start_environment_runtime',
+      active_progress_surface: 'runtime_lifecycle',
       subject_kind: 'ssh_environment',
       subject_id: 'ssh:devbox:default:key_agent:remote_default',
       environment_id: 'ssh:devbox:default:key_agent:remote_default',
@@ -178,6 +258,7 @@ describe('LauncherOperationRegistry', () => {
       expect.objectContaining({
         operation_key: operation.operation_key,
         action: 'start_environment_runtime',
+        active_progress_surface: 'runtime_lifecycle',
         subject_kind: 'ssh_environment',
         subject_id: operation.subject_id,
         status: 'running',
@@ -201,6 +282,7 @@ describe('LauncherOperationRegistry', () => {
     registry.create({
       operation_key: targetID,
       action: 'start_environment_runtime',
+      active_progress_surface: 'runtime_lifecycle',
       subject_kind: 'runtime_target',
       subject_id: targetID,
       environment_id: targetID,
@@ -233,6 +315,7 @@ describe('LauncherOperationRegistry', () => {
     const update = registry.create({
       operation_key: targetID,
       action: 'update_environment_runtime',
+      active_progress_surface: 'runtime_lifecycle',
       subject_kind: 'runtime_target',
       subject_id: targetID,
       environment_id: targetID,
@@ -279,6 +362,7 @@ describe('LauncherOperationRegistry', () => {
     const operation = registry.create({
       operation_key: operationKey,
       action: 'start_environment_runtime',
+      active_progress_surface: 'runtime_lifecycle',
       subject_kind: 'local_environment',
       subject_id: 'local',
       environment_id: 'local',
@@ -335,6 +419,7 @@ describe('LauncherOperationRegistry', () => {
     const first = registry.create({
       operation_key: operationKey,
       action: 'start_environment_runtime',
+      active_progress_surface: 'runtime_lifecycle',
       subject_kind: 'local_environment',
       subject_id: 'dev',
       environment_id: 'dev',
@@ -356,6 +441,7 @@ describe('LauncherOperationRegistry', () => {
     const second = registry.create({
       operation_key: operationKey,
       action: 'update_environment_runtime',
+      active_progress_surface: 'runtime_lifecycle',
       subject_kind: 'local_environment',
       subject_id: 'dev',
       environment_id: 'dev',
@@ -403,6 +489,7 @@ describe('LauncherOperationRegistry', () => {
     const current = registry.get(operationKey);
     expect(current).toEqual(expect.objectContaining({
       action: 'update_environment_runtime',
+      active_progress_surface: 'runtime_lifecycle',
       started_at_unix_ms: second.started_at_unix_ms,
       status: 'running',
       phase: 'checking_existing_runtime',
@@ -418,6 +505,7 @@ describe('LauncherOperationRegistry', () => {
       detail: 'The active update attempt is checking the runtime service.',
     })).toEqual(expect.objectContaining({
       action: 'update_environment_runtime',
+      active_progress_surface: 'runtime_lifecycle',
       phase: 'checking_runtime_service',
     }));
   });
@@ -429,6 +517,7 @@ describe('LauncherOperationRegistry', () => {
     const first = registry.create({
       operation_key: operationKey,
       action: 'update_environment_runtime',
+      active_progress_surface: 'runtime_lifecycle',
       subject_kind: 'local_environment',
       subject_id: 'dev',
       environment_id: 'dev',
@@ -449,6 +538,7 @@ describe('LauncherOperationRegistry', () => {
     const second = registry.create({
       operation_key: operationKey,
       action: 'update_environment_runtime',
+      active_progress_surface: 'runtime_lifecycle',
       subject_kind: 'local_environment',
       subject_id: 'dev',
       environment_id: 'dev',
@@ -487,6 +577,7 @@ describe('LauncherOperationRegistry', () => {
     const operation = registry.create({
       operation_key: 'ssh:devbox:default:key_agent:remote_default',
       action: 'start_environment_runtime',
+      active_progress_surface: 'runtime_lifecycle',
       subject_kind: 'ssh_environment',
       subject_id: 'ssh:devbox:default:key_agent:remote_default',
       phase: 'ssh_uploading_archive',
@@ -541,6 +632,7 @@ describe('LauncherOperationRegistry', () => {
     const operation = registry.create({
       operation_key: 'ssh:devbox:default:key_agent:remote_default',
       action: 'start_environment_runtime',
+      active_progress_surface: 'runtime_lifecycle',
       subject_kind: 'ssh_environment',
       subject_id: 'ssh:devbox:default:key_agent:remote_default',
       phase: 'ssh_waiting_report',
@@ -586,6 +678,7 @@ describe('LauncherOperationRegistry', () => {
     const operation = registry.create({
       operation_key: 'ssh:devbox:default:key_agent:remote_default',
       action: 'start_environment_runtime',
+      active_progress_surface: 'runtime_lifecycle',
       subject_kind: 'ssh_environment',
       subject_id: 'ssh:devbox:default:key_agent:remote_default',
       phase: 'ssh_remote_installing',
@@ -613,6 +706,7 @@ describe('LauncherOperationRegistry', () => {
     const operation = registry.create({
       operation_key: 'ssh:dify:default:key_agent:remote_default',
       action: 'start_environment_runtime',
+      active_progress_surface: 'runtime_lifecycle',
       subject_kind: 'ssh_environment',
       subject_id: 'ssh:dify:default:key_agent:remote_default',
       phase: 'ssh_waiting_report',
@@ -647,6 +741,7 @@ describe('LauncherOperationRegistry', () => {
     const operation = registry.create({
       operation_key: 'ssh:devbox:default:key_agent:remote_default',
       action: 'update_environment_runtime',
+      active_progress_surface: 'runtime_lifecycle',
       subject_kind: 'ssh_environment',
       subject_id: 'ssh:devbox:default:key_agent:remote_default',
       phase: 'checking_runtime_package',
@@ -685,6 +780,7 @@ describe('LauncherOperationRegistry', () => {
     const operation = registry.create({
       operation_key: 'local:host:local:open',
       action: 'open_local_environment',
+      active_progress_surface: 'open',
       subject_kind: 'local_environment',
       subject_id: 'local',
       environment_id: 'local',
@@ -752,6 +848,7 @@ describe('LauncherOperationRegistry', () => {
     const operation = registry.create({
       operation_key: 'ssh:container:missing:open',
       action: 'open_ssh_environment',
+      active_progress_surface: 'open',
       subject_kind: 'ssh_environment',
       subject_id: 'ssh:container:missing',
       environment_id: 'ssh:container:missing',
@@ -791,6 +888,7 @@ describe('LauncherOperationRegistry', () => {
     const operation = registry.create({
       operation_key: 'ssh:runtime:failed',
       action: 'update_environment_runtime',
+      active_progress_surface: 'runtime_lifecycle',
       subject_kind: 'ssh_environment',
       subject_id: 'ssh:runtime:failed',
       status: 'failed',
@@ -815,6 +913,7 @@ describe('LauncherOperationRegistry', () => {
     const operation = registry.create({
       operation_key: 'env:provider%3Ahttps%253A%252F%252Fprovider.example.invalid%3Aenv%3Aenv_demo:remote_desktop:open',
       action: 'open_provider_environment',
+      active_progress_surface: 'open',
       subject_kind: 'provider_environment',
       subject_id: 'provider:https%3A%2F%2Fprovider.example.invalid:env:env_demo',
       environment_id: 'provider:https%3A%2F%2Fprovider.example.invalid:env:env_demo',
@@ -839,6 +938,7 @@ describe('LauncherOperationRegistry', () => {
     expect(registry.progressItems()[0]).toEqual(expect.objectContaining({
       operation_key: operation.operation_key,
       action: 'open_provider_environment',
+      active_progress_surface: 'open',
       subject_kind: 'provider_environment',
       status: 'running',
       open_progress: expect.objectContaining({
@@ -858,6 +958,7 @@ describe('LauncherOperationRegistry', () => {
     const operation = registry.create({
       operation_key: 'ssh:devbox:open',
       action: 'open_ssh_environment',
+      active_progress_surface: 'open',
       subject_kind: 'ssh_environment',
       subject_id: 'ssh:devbox',
       environment_id: 'ssh:devbox',

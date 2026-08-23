@@ -239,24 +239,28 @@ describe('desktopLauncherIPC', () => {
       session_key: 'url:http://192.168.1.11:24000/',
     });
     expect(normalizeDesktopLauncherActionRequest({
-      kind: 'upsert_saved_environment',
-      environment_id: ' env-1 ',
-      label: ' Work laptop ',
-      external_local_ui_url: ' http://192.168.1.11:24000/ ',
-      auto_runtime_probe_enabled: true,
+      kind: 'upsert_environment_registration',
+      registration: {
+        registration_ref: { kind: 'saved_environment', id: ' env-1 ' },
+        label: ' Work laptop ',
+        external_local_ui_url: ' http://192.168.1.11:24000/ ',
+        auto_runtime_probe_enabled: true,
+      },
     })).toEqual({
-      kind: 'upsert_saved_environment',
-      environment_id: 'env-1',
-      label: 'Work laptop',
-      external_local_ui_url: 'http://192.168.1.11:24000/',
-      auto_runtime_probe_enabled: true,
+      kind: 'upsert_environment_registration',
+      registration: {
+        registration_ref: { kind: 'saved_environment', id: 'env-1' },
+        label: 'Work laptop',
+        external_local_ui_url: 'http://192.168.1.11:24000/',
+        auto_runtime_probe_enabled: true,
+      },
     });
     expect(normalizeDesktopLauncherActionRequest({
-      kind: 'delete_saved_environment',
-      environment_id: ' env-1 ',
+      kind: 'delete_environment_registration',
+      registration_ref: { kind: 'saved_environment', id: ' env-1 ' },
     })).toEqual({
-      kind: 'delete_saved_environment',
-      environment_id: 'env-1',
+      kind: 'delete_environment_registration',
+      registration_ref: { kind: 'saved_environment', id: 'env-1' },
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'upsert_gateway',
@@ -355,12 +359,12 @@ describe('desktopLauncherIPC', () => {
       display_label: 'Example Control Plane',
     });
     expect(normalizeDesktopLauncherActionRequest({
-      kind: 'set_local_environment_pinned',
-      environment_id: ' local ',
+      kind: 'set_environment_registration_pinned',
+      registration_ref: { kind: 'local_environment', id: ' local ' },
       pinned: true,
     })).toEqual({
-      kind: 'set_local_environment_pinned',
-      environment_id: 'local',
+      kind: 'set_environment_registration_pinned',
+      registration_ref: { kind: 'local_environment', id: 'local' },
       pinned: true,
     });
     expect(normalizeDesktopLauncherActionRequest({
@@ -373,16 +377,12 @@ describe('desktopLauncherIPC', () => {
       pinned: true,
     });
     expect(normalizeDesktopLauncherActionRequest({
-      kind: 'set_saved_environment_pinned',
-      environment_id: ' env-1 ',
-      label: ' Work laptop ',
-      external_local_ui_url: ' http://192.168.1.11:24000/ ',
+      kind: 'set_environment_registration_pinned',
+      registration_ref: { kind: 'saved_environment', id: ' env-1 ' },
       pinned: false,
     })).toEqual({
-      kind: 'set_saved_environment_pinned',
-      environment_id: 'env-1',
-      label: 'Work laptop',
-      external_local_ui_url: 'http://192.168.1.11:24000/',
+      kind: 'set_environment_registration_pinned',
+      registration_ref: { kind: 'saved_environment', id: 'env-1' },
       pinned: false,
     });
     expect(normalizeDesktopLauncherActionRequest({
@@ -447,38 +447,6 @@ describe('desktopLauncherIPC', () => {
       }),
     }));
     expect(normalizeDesktopLauncherActionRequest({
-      kind: 'upsert_saved_ssh_environment',
-      environment_id: ' ssh-1 ',
-      label: ' SSH lab ',
-      ssh_destination: ' devbox ',
-      ssh_port: '',
-      auth_mode: ' ',
-      runtime_root: ' ',
-      bootstrap_strategy: ' ',
-      release_base_url: ' ',
-    })).toEqual({
-      kind: 'upsert_saved_ssh_environment',
-      environment_id: 'ssh-1',
-      label: 'SSH lab',
-      ssh_destination: 'devbox',
-      ssh_port: null,
-      auth_mode: '',
-      runtime_root: '',
-      bootstrap_strategy: '',
-      release_base_url: '',
-      connect_timeout_seconds: 10,
-      ssh_password: '',
-      ssh_password_mode: 'replace',
-      auto_runtime_probe_enabled: false,
-    });
-    expect(normalizeDesktopLauncherActionRequest({
-      kind: 'delete_saved_ssh_environment',
-      environment_id: ' ssh-1 ',
-    })).toEqual({
-      kind: 'delete_saved_ssh_environment',
-      environment_id: 'ssh-1',
-    });
-    expect(normalizeDesktopLauncherActionRequest({
       kind: 'cancel_launcher_operation',
       operation_key: ' ssh:devbox:default:key_agent:remote_default ',
     })).toEqual({
@@ -500,45 +468,25 @@ describe('desktopLauncherIPC', () => {
       operation_key: 'ssh:devbox:default:key_agent:remote_default',
     });
     expect(normalizeDesktopLauncherActionRequest({
-      kind: 'set_saved_ssh_environment_pinned',
-      environment_id: ' ssh-1 ',
-      label: ' SSH lab ',
-      pinned: true,
-      ssh_destination: ' devbox ',
-      ssh_port: ' 2222 ',
-      auth_mode: ' key_agent ',
-      runtime_root: ' /opt/redeven ',
-      bootstrap_strategy: ' desktop_upload ',
-      release_base_url: ' https://mirror.example.invalid/releases/ ',
-    })).toEqual({
-      kind: 'set_saved_ssh_environment_pinned',
-      environment_id: 'ssh-1',
-      label: 'SSH lab',
-      pinned: true,
-      ssh_destination: 'devbox',
-      ssh_port: 2222,
-      auth_mode: 'key_agent',
-      runtime_root: '/opt/redeven',
-      bootstrap_strategy: 'desktop_upload',
-      release_base_url: 'https://mirror.example.invalid/releases/',
-      connect_timeout_seconds: 10,
-    });
-    expect(normalizeDesktopLauncherActionRequest({
-      kind: 'upsert_saved_runtime_target',
-      label: ' Local Container ',
-      host_access: { kind: 'local_host' },
-      placement: {
+      kind: 'upsert_environment_registration',
+      registration: {
+        registration_ref: { kind: 'runtime_target', id: '' },
+        label: ' Local Container ',
+        host_access: { kind: 'local_host' },
+        placement: {
         kind: 'container_process',
         container_engine: 'podman',
         container_id: 'dev',
         runtime_root: '/root/.redeven',
+        },
       },
     })).toEqual({
-      kind: 'upsert_saved_runtime_target',
-      environment_id: undefined,
-      label: 'Local Container',
-      host_access: { kind: 'local_host' },
-      placement: {
+      kind: 'upsert_environment_registration',
+      registration: {
+        registration_ref: { kind: 'runtime_target', id: '' },
+        label: 'Local Container',
+        host_access: { kind: 'local_host' },
+        placement: {
         kind: 'container_process',
         container_engine: 'podman',
         container_id: 'dev',
@@ -546,45 +494,27 @@ describe('desktopLauncherIPC', () => {
         container_label: 'dev',
         runtime_root: '/root/.redeven',
         bridge_strategy: 'exec_stream',
-      },
-      ssh_password: '',
-      ssh_password_mode: 'replace',
-      auto_runtime_probe_enabled: false,
-    });
-    expect(normalizeDesktopLauncherActionRequest({
-      kind: 'set_saved_runtime_target_pinned',
-      environment_id: ' local:container:podman:dev:12345678 ',
-      label: ' Local Container ',
-      pinned: true,
-      host_access: { kind: 'local_host' },
-      placement: {
-        kind: 'container_process',
-        container_engine: 'podman',
-        container_id: 'dev',
-        runtime_root: '/root/.redeven',
-      },
-    })).toEqual({
-      kind: 'set_saved_runtime_target_pinned',
-      environment_id: 'local:container:podman:dev:12345678',
-      label: 'Local Container',
-      pinned: true,
-      host_access: { kind: 'local_host' },
-      placement: {
-        kind: 'container_process',
-        container_engine: 'podman',
-        container_id: 'dev',
-        container_ref: 'dev',
-        container_label: 'dev',
-        runtime_root: '/root/.redeven',
-        bridge_strategy: 'exec_stream',
+        },
+        ssh_password: '',
+        ssh_password_mode: 'replace',
+        auto_runtime_probe_enabled: false,
       },
     });
     expect(normalizeDesktopLauncherActionRequest({
-      kind: 'delete_saved_runtime_target',
-      environment_id: ' local:container:podman:dev:12345678 ',
+      kind: 'set_environment_registration_pinned',
+      registration_ref: { kind: 'runtime_target', id: ' local:container:podman:dev:12345678 ' },
+      pinned: true,
     })).toEqual({
-      kind: 'delete_saved_runtime_target',
-      environment_id: 'local:container:podman:dev:12345678',
+      kind: 'set_environment_registration_pinned',
+      registration_ref: { kind: 'runtime_target', id: 'local:container:podman:dev:12345678' },
+      pinned: true,
+    });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'delete_environment_registration',
+      registration_ref: { kind: 'runtime_target', id: ' local:container:podman:dev:12345678 ' },
+    })).toEqual({
+      kind: 'delete_environment_registration',
+      registration_ref: { kind: 'runtime_target', id: 'local:container:podman:dev:12345678' },
     });
   });
 
@@ -905,7 +835,10 @@ describe('desktopLauncherIPC', () => {
     expect(normalizeDesktopLauncherActionRequest({ kind: 'restart_gateway', gateway_id: 'gw-demo', impact_acknowledged: true })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'update_gateway', gateway_id: 'gw-demo', impact_acknowledged: true })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'delete_gateway', gateway_id: '   ' })).toBeNull();
-    expect(normalizeDesktopLauncherActionRequest({ kind: 'delete_saved_environment', environment_id: '   ' })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'delete_environment_registration',
+      registration_ref: { kind: 'saved_environment', id: '   ' },
+    })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest(null)).toBeNull();
   });
 

@@ -9,22 +9,7 @@ import {
   parseLocalUIBind,
 } from './localUIBind';
 import { normalizeLocalUIBaseURL } from './localUIURL';
-import {
-  DEFAULT_DESKTOP_SSH_AUTH_MODE,
-  DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
-  DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
-  defaultSavedSSHEnvironmentLabel,
-  normalizeDesktopSSHAuthMode,
-  desktopSSHEnvironmentID,
-  normalizeDesktopSSHBootstrapStrategy,
-  normalizeDesktopSSHEnvironmentDetails,
-  normalizeDesktopSSHPort,
-  normalizeDesktopSSHReleaseBaseURL,
-  normalizeDesktopSSHRuntimeRoot,
-  normalizeDesktopSSHDestination,
-  normalizeDesktopSSHConnectTimeoutSeconds,
-  type DesktopSSHEnvironmentDetails,
-} from '../shared/desktopSSH';
+import { defaultSavedSSHEnvironmentLabel } from '../shared/desktopSSH';
 import {
   desktopControlPlaneKey,
   normalizeControlPlaneDisplayLabel,
@@ -75,22 +60,17 @@ import {
   providerEnvironmentStableSortKey,
   type DesktopProviderEnvironmentRecord,
 } from '../shared/desktopProviderEnvironment';
+import {
+  decodeLegacySSHEnvironmentRegistrations,
+  legacySSHEnvironmentMigrationJournalSource,
+  migrateDesktopEnvironmentRegistrations,
+  type DesktopEnvironmentRegistrationMigrationJournal,
+} from './desktopEnvironmentRegistrationMigration';
 
 export type DesktopSavedEnvironment = Readonly<{
   id: string;
   label: string;
   local_ui_url: string;
-  pinned: boolean;
-  auto_runtime_probe_enabled: boolean;
-  created_at_ms: number;
-  last_used_at_ms: number;
-}>;
-
-export type DesktopSavedSSHEnvironment = Readonly<DesktopSSHEnvironmentDetails & {
-  id: string;
-  label: string;
-  ssh_password?: string;
-  ssh_password_configured?: boolean;
   pinned: boolean;
   auto_runtime_probe_enabled: boolean;
   created_at_ms: number;
@@ -123,7 +103,6 @@ export type DesktopPreferences = Readonly<{
   local_environment: DesktopLocalEnvironmentState;
   provider_environments: readonly DesktopProviderEnvironmentRecord[];
   saved_environments: readonly DesktopSavedEnvironment[];
-  saved_ssh_environments: readonly DesktopSavedSSHEnvironment[];
   saved_runtime_targets: readonly DesktopSavedRuntimeTarget[];
   control_plane_refresh_tokens: Readonly<Record<string, string>>;
   control_planes: readonly DesktopSavedControlPlane[];
@@ -159,16 +138,6 @@ type ProviderEnvironmentNormalizationResult = Readonly<{
   didCanonicalizeProviderIdentity: boolean;
 }>;
 
-type SavedSSHEnvironmentCandidateNormalizationResult = Readonly<{
-  environment: DesktopSavedSSHEnvironment | null;
-  didCanonicalize: boolean;
-}>;
-
-type SavedSSHEnvironmentNormalizationResult = Readonly<{
-  environments: readonly DesktopSavedSSHEnvironment[];
-  didCanonicalize: boolean;
-}>;
-
 type SavedRuntimeTargetNormalizationResult = Readonly<{
   targets: readonly DesktopSavedRuntimeTarget[];
   didCanonicalize: boolean;
@@ -186,25 +155,6 @@ type DesktopSavedEnvironmentFile = Readonly<{
   pinned?: unknown;
   auto_runtime_probe_enabled?: unknown;
   created_at_ms?: unknown;
-  last_used_at_ms?: unknown;
-}>;
-
-type DesktopSavedSSHEnvironmentFile = Readonly<{
-  id?: unknown;
-  label?: unknown;
-  ssh_destination?: unknown;
-  ssh_port?: unknown;
-  auth_mode?: unknown;
-  runtime_root?: unknown;
-  bootstrap_strategy?: unknown;
-  release_base_url?: unknown;
-  connect_timeout_seconds?: unknown;
-  host_access?: unknown;
-  placement?: unknown;
-  created_at_ms?: unknown;
-  updated_at_ms?: unknown;
-  pinned?: unknown;
-  auto_runtime_probe_enabled?: unknown;
   last_used_at_ms?: unknown;
 }>;
 
@@ -329,7 +279,6 @@ type DesktopControlPlaneSecretFile = Readonly<{
 type DesktopSecretsFile = Readonly<{
   version?: number;
   local_environment?: DesktopLocalEnvironmentStateSecretFile;
-  saved_ssh_environments?: readonly DesktopSSHEnvironmentSecretFile[];
   saved_runtime_targets?: readonly DesktopRuntimeTargetSecretFile[];
   control_planes?: readonly DesktopControlPlaneSecretFile[];
 }>;
@@ -337,11 +286,6 @@ type DesktopSecretsFile = Readonly<{
 type DesktopLocalEnvironmentStateSecretFile = Readonly<{
   environment_id?: unknown;
   local_ui_password?: StoredSecret;
-}>;
-
-type DesktopSSHEnvironmentSecretFile = Readonly<{
-  environment_id?: unknown;
-  ssh_password?: StoredSecret;
 }>;
 
 type DesktopRuntimeTargetSecretFile = Readonly<{
@@ -364,17 +308,6 @@ export type UpsertDesktopSavedEnvironmentInput = Readonly<{
   environment_id: string;
   label: string;
   local_ui_url: string;
-  auto_runtime_probe_enabled?: boolean;
-  pinned?: boolean;
-  created_at_ms?: number;
-  last_used_at_ms?: number;
-}>;
-
-export type UpsertDesktopSavedSSHEnvironmentInput = Readonly<DesktopSSHEnvironmentDetails & {
-  environment_id: string;
-  label: string;
-  ssh_password?: string;
-  ssh_password_configured?: boolean;
   auto_runtime_probe_enabled?: boolean;
   pinned?: boolean;
   created_at_ms?: number;
@@ -406,7 +339,6 @@ export type UpsertDesktopSavedControlPlaneInput = Readonly<{
 }>;
 
 const MAX_SAVED_ENVIRONMENTS = 20;
-const MAX_SAVED_SSH_ENVIRONMENTS = 20;
 const MAX_SAVED_RUNTIME_TARGETS = 40;
 
 export function createPlaintextSecretCodec(): DesktopSecretCodec {
@@ -448,7 +380,6 @@ export function defaultDesktopPreferences(): DesktopPreferences {
     local_environment: createDesktopLocalEnvironmentState(),
     provider_environments: [],
     saved_environments: [],
-    saved_ssh_environments: [],
     saved_runtime_targets: [],
     control_plane_refresh_tokens: {},
     control_planes: [],
@@ -550,19 +481,6 @@ function sortSavedEnvironmentsByStableOrder(
     || left.created_at_ms - right.created_at_ms
     || left.label.localeCompare(right.label)
     || left.local_ui_url.localeCompare(right.local_ui_url)
-  ));
-}
-
-function sortSavedSSHEnvironmentsByStableOrder(
-  environments: readonly DesktopSavedSSHEnvironment[],
-): readonly DesktopSavedSSHEnvironment[] {
-  return [...environments].sort((left, right) => (
-    (left.pinned ? 0 : 1) - (right.pinned ? 0 : 1)
-    || left.created_at_ms - right.created_at_ms
-    || left.label.localeCompare(right.label)
-    || left.ssh_destination.localeCompare(right.ssh_destination)
-    || String(left.ssh_port ?? '').localeCompare(String(right.ssh_port ?? ''))
-    || left.runtime_root.localeCompare(right.runtime_root)
   ));
 }
 
@@ -731,66 +649,6 @@ function normalizeSavedEnvironmentCandidate(
   };
 }
 
-function normalizeSavedSSHEnvironmentCandidate(
-  value: unknown,
-  fallbackCreatedAtMS: number,
-  fallbackLastUsedAtMS: number,
-): SavedSSHEnvironmentCandidateNormalizationResult {
-  if (!value || typeof value !== 'object') {
-    return {
-      environment: null,
-      didCanonicalize: false,
-    };
-  }
-
-  const candidate = value as DesktopSavedSSHEnvironmentFile;
-  let details: DesktopSSHEnvironmentDetails;
-  try {
-    details = normalizeDesktopSSHEnvironmentDetails({
-      ssh_destination: normalizeDesktopSSHDestination(candidate.ssh_destination),
-      ssh_port: normalizeDesktopSSHPort(candidate.ssh_port),
-      auth_mode: normalizeDesktopSSHAuthMode(candidate.auth_mode),
-      runtime_root: normalizeDesktopSSHRuntimeRoot(candidate.runtime_root),
-      bootstrap_strategy: normalizeDesktopSSHBootstrapStrategy(candidate.bootstrap_strategy),
-      release_base_url: normalizeDesktopSSHReleaseBaseURL(candidate.release_base_url),
-      connect_timeout_seconds: normalizeDesktopSSHConnectTimeoutSeconds(candidate.connect_timeout_seconds),
-    });
-  } catch {
-    return {
-      environment: null,
-      didCanonicalize: false,
-    };
-  }
-
-  const environmentID = desktopSSHEnvironmentID(details);
-  const label = compact(candidate.label) || defaultSavedSSHEnvironmentLabel(details);
-  const sshPassword = details.auth_mode === 'password'
-    ? String((candidate as { ssh_password?: unknown }).ssh_password ?? '')
-    : '';
-  const sshPasswordConfigured = details.auth_mode === 'password'
-    && ((candidate as { ssh_password_configured?: unknown }).ssh_password_configured === true || compact(sshPassword) !== '');
-  return {
-    environment: {
-      id: environmentID,
-      label,
-      ssh_destination: details.ssh_destination,
-      ssh_port: details.ssh_port,
-      auth_mode: details.auth_mode,
-      runtime_root: details.runtime_root,
-      bootstrap_strategy: details.bootstrap_strategy,
-      release_base_url: details.release_base_url,
-      connect_timeout_seconds: details.connect_timeout_seconds,
-      ssh_password: sshPassword,
-      ssh_password_configured: sshPasswordConfigured,
-      pinned: normalizePinned(candidate.pinned),
-      auto_runtime_probe_enabled: normalizeRuntimeAutoProbeEnabled(candidate.auto_runtime_probe_enabled),
-      created_at_ms: normalizeCreatedAtMS(candidate.created_at_ms, fallbackCreatedAtMS),
-      last_used_at_ms: normalizeLastUsedAtMS(candidate.last_used_at_ms, fallbackLastUsedAtMS),
-    },
-    didCanonicalize: compact(candidate.id) !== environmentID,
-  };
-}
-
 function defaultSavedRuntimeTargetLabel(
   hostAccess: DesktopRuntimeHostAccess,
   placement: DesktopRuntimePlacement,
@@ -922,42 +780,6 @@ export function normalizeSavedEnvironments(
   return sortSavedEnvironmentsByStableOrder(normalized).slice(0, MAX_SAVED_ENVIRONMENTS);
 }
 
-function collectSavedSSHEnvironmentNormalizationResult(
-  values: readonly unknown[] | null | undefined,
-): SavedSSHEnvironmentNormalizationResult {
-  const sourceValues = Array.isArray(values) ? values : [];
-  const normalized: DesktopSavedSSHEnvironment[] = [];
-  const seenIDs = new Set<string>();
-  let didCanonicalize = false;
-
-  for (let index = 0; index < sourceValues.length; index += 1) {
-    const fallbackCreatedAtMS = Date.now() + index + 1;
-    const fallbackLastUsedAtMS = sourceValues.length - index;
-    const result = normalizeSavedSSHEnvironmentCandidate(
-      sourceValues[index],
-      fallbackCreatedAtMS,
-      fallbackLastUsedAtMS,
-    );
-    didCanonicalize ||= result.didCanonicalize;
-    if (!result.environment || seenIDs.has(result.environment.id)) {
-      continue;
-    }
-    seenIDs.add(result.environment.id);
-    normalized.push(result.environment);
-  }
-
-  return {
-    environments: sortSavedSSHEnvironmentsByStableOrder(normalized).slice(0, MAX_SAVED_SSH_ENVIRONMENTS),
-    didCanonicalize,
-  };
-}
-
-export function normalizeSavedSSHEnvironments(
-  values: readonly unknown[] | null | undefined,
-): readonly DesktopSavedSSHEnvironment[] {
-  return collectSavedSSHEnvironmentNormalizationResult(values).environments;
-}
-
 function collectSavedRuntimeTargetNormalizationResult(
   values: readonly unknown[] | null | undefined,
 ): SavedRuntimeTargetNormalizationResult {
@@ -1019,24 +841,6 @@ function decodeDesktopControlPlaneRefreshTokens(
   return out;
 }
 
-function decodeSSHEnvironmentPasswords(
-  codec: DesktopSecretCodec,
-  values: readonly DesktopSSHEnvironmentSecretFile[] | null | undefined,
-): ReadonlyMap<string, string> {
-  const out = new Map<string, string>();
-  if (!Array.isArray(values)) {
-    return out;
-  }
-  for (const value of values) {
-    const environmentID = compact(value?.environment_id);
-    const password = decodeOptionalSecret(codec, value?.ssh_password);
-    if (environmentID !== '' && compact(password) !== '') {
-      out.set(environmentID, password);
-    }
-  }
-  return out;
-}
-
 function decodeRuntimeTargetPasswords(
   codec: DesktopSecretCodec,
   values: readonly DesktopRuntimeTargetSecretFile[] | null | undefined,
@@ -1053,28 +857,6 @@ function decodeRuntimeTargetPasswords(
     }
   }
   return out;
-}
-
-function attachSSHEnvironmentPasswords(
-  environments: readonly DesktopSavedSSHEnvironment[],
-  passwordsByID: ReadonlyMap<string, string>,
-): readonly DesktopSavedSSHEnvironment[] {
-  return environments.map((environment) => {
-    if (environment.auth_mode !== 'password') {
-      return {
-        ...environment,
-        ssh_password: '',
-        ssh_password_configured: false,
-      };
-    }
-    const password = passwordsByID.get(environment.id) ?? environment.ssh_password;
-    const configured = compact(password) !== '' || environment.ssh_password_configured === true;
-    return {
-      ...environment,
-      ssh_password: password,
-      ssh_password_configured: configured,
-    };
-  });
 }
 
 function attachRuntimeTargetPasswords(
@@ -1679,78 +1461,6 @@ export function upsertSavedEnvironment(
   };
 }
 
-export function upsertSavedSSHEnvironment(
-  preferences: DesktopPreferences,
-  input: UpsertDesktopSavedSSHEnvironmentInput,
-): DesktopPreferences {
-  const details = normalizeDesktopSSHEnvironmentDetails(input);
-  const environmentID = desktopSSHEnvironmentID(details);
-  const requestedEnvironmentID = compact(input.environment_id);
-  const existing = preferences.saved_ssh_environments.find((environment) => (
-    environment.id === requestedEnvironmentID
-    || environment.id === environmentID
-    || (
-      environment.ssh_destination === details.ssh_destination
-      && environment.ssh_port === details.ssh_port
-      && environment.auth_mode === details.auth_mode
-      && environment.runtime_root === details.runtime_root
-    )
-  ));
-  const existingSameIdentity = existing?.id === environmentID;
-  const inputPassword = String(input.ssh_password ?? '');
-  const explicitPasswordClear = input.ssh_password_configured === false;
-  const sshPassword = details.auth_mode === 'password'
-    ? explicitPasswordClear
-      ? ''
-      : compact(inputPassword) !== ''
-      ? inputPassword
-      : existingSameIdentity
-        ? existing?.ssh_password ?? ''
-        : ''
-    : '';
-  const sshPasswordConfigured = details.auth_mode === 'password'
-    && !explicitPasswordClear
-    && (compact(inputPassword) !== '' || (existingSameIdentity && existing?.ssh_password_configured === true));
-  const label = compact(input.label) || existing?.label || defaultSavedSSHEnvironmentLabel(details);
-  const now = Date.now();
-  const nextEnvironment: DesktopSavedSSHEnvironment = {
-    id: environmentID,
-    label,
-    ssh_destination: details.ssh_destination,
-    ssh_port: details.ssh_port,
-    auth_mode: details.auth_mode,
-    runtime_root: details.runtime_root,
-    bootstrap_strategy: details.bootstrap_strategy,
-    release_base_url: details.release_base_url,
-    connect_timeout_seconds: details.connect_timeout_seconds,
-    ssh_password: sshPassword,
-    ssh_password_configured: sshPasswordConfigured,
-    pinned: input.pinned ?? existing?.pinned ?? false,
-    auto_runtime_probe_enabled: input.auto_runtime_probe_enabled ?? existing?.auto_runtime_probe_enabled ?? false,
-    created_at_ms: normalizeCreatedAtMS(input.created_at_ms, existing?.created_at_ms ?? now),
-    last_used_at_ms: normalizeLastUsedAtMS(input.last_used_at_ms, now),
-  };
-
-  const savedSSHEnvironments = sortSavedSSHEnvironmentsByStableOrder([
-    nextEnvironment,
-    ...preferences.saved_ssh_environments.filter((environment) => (
-      environment.id !== environmentID
-      && environment.id !== requestedEnvironmentID
-      && (
-        environment.ssh_destination !== details.ssh_destination
-        || environment.ssh_port !== details.ssh_port
-        || environment.auth_mode !== details.auth_mode
-        || environment.runtime_root !== details.runtime_root
-      )
-    )),
-  ]).slice(0, MAX_SAVED_SSH_ENVIRONMENTS);
-
-  return {
-    ...preferences,
-    saved_ssh_environments: savedSSHEnvironments,
-  };
-}
-
 export function upsertSavedRuntimeTarget(
   preferences: DesktopPreferences,
   input: UpsertDesktopSavedRuntimeTargetInput,
@@ -1931,37 +1641,15 @@ export function setSavedEnvironmentPinned(
     last_used_at_ms?: number;
   }>,
 ): DesktopPreferences {
-  return upsertSavedEnvironment(preferences, {
-    environment_id: input.environment_id,
-    label: input.label,
-    local_ui_url: input.local_ui_url,
-    pinned: input.pinned,
-    last_used_at_ms: input.last_used_at_ms,
-  });
-}
-
-export function setSavedSSHEnvironmentPinned(
-  preferences: DesktopPreferences,
-  input: Readonly<{
-    environment_id: string;
-    label: string;
-    pinned: boolean;
-    last_used_at_ms?: number;
-  }> & DesktopSSHEnvironmentDetails,
-): DesktopPreferences {
-  return upsertSavedSSHEnvironment(preferences, {
-    environment_id: input.environment_id,
-    label: input.label,
-    ssh_destination: input.ssh_destination,
-    ssh_port: input.ssh_port,
-    auth_mode: input.auth_mode,
-    runtime_root: input.runtime_root,
-    bootstrap_strategy: input.bootstrap_strategy,
-    release_base_url: input.release_base_url,
-    connect_timeout_seconds: input.connect_timeout_seconds,
-    pinned: input.pinned,
-    last_used_at_ms: input.last_used_at_ms,
-  });
+  const environmentID = compact(input.environment_id);
+  const existing = preferences.saved_environments.find((environment) => environment.id === environmentID);
+  if (!existing) return preferences;
+  return {
+    ...preferences,
+    saved_environments: preferences.saved_environments.map((environment) => (
+      environment.id === environmentID ? { ...environment, pinned: input.pinned } : environment
+    )),
+  };
 }
 
 export function setSavedRuntimeTargetPinned(
@@ -1975,14 +1663,15 @@ export function setSavedRuntimeTargetPinned(
     last_used_at_ms?: number;
   }>,
 ): DesktopPreferences {
-  return upsertSavedRuntimeTarget(preferences, {
-    id: input.environment_id,
-    label: input.label,
-    host_access: input.host_access,
-    placement: input.placement,
-    pinned: input.pinned,
-    last_used_at_ms: input.last_used_at_ms,
-  });
+  const environmentID = compact(input.environment_id);
+  const existing = preferences.saved_runtime_targets.find((target) => target.id === environmentID);
+  if (!existing) return preferences;
+  return {
+    ...preferences,
+    saved_runtime_targets: preferences.saved_runtime_targets.map((target) => (
+      target.id === environmentID ? { ...target, pinned: input.pinned, updated_at_ms: Date.now() } : target
+    )),
+  };
 }
 
 export function deleteSavedEnvironment(
@@ -1994,17 +1683,6 @@ export function deleteSavedEnvironment(
   return {
     ...preferences,
     saved_environments: savedEnvironments,
-  };
-}
-
-export function deleteSavedSSHEnvironment(
-  preferences: DesktopPreferences,
-  environmentID: string,
-): DesktopPreferences {
-  const cleanEnvironmentID = compact(environmentID);
-  return {
-    ...preferences,
-    saved_ssh_environments: preferences.saved_ssh_environments.filter((environment) => environment.id !== cleanEnvironmentID),
   };
 }
 
@@ -2050,64 +1728,6 @@ export function markSavedEnvironmentUsed(
     environment_id: existing.id,
     label: existing.label,
     local_ui_url: existing.local_ui_url,
-    pinned: existing.pinned,
-    last_used_at_ms: input.last_used_at_ms ?? Date.now(),
-  });
-}
-
-export function markSavedSSHEnvironmentUsed(
-  preferences: DesktopPreferences,
-  input: Readonly<{
-    environment_id?: string;
-    ssh_destination?: string;
-    ssh_port?: number | null;
-    auth_mode?: DesktopSSHEnvironmentDetails['auth_mode'];
-    runtime_root?: string;
-    bootstrap_strategy?: DesktopSSHEnvironmentDetails['bootstrap_strategy'];
-    release_base_url?: string;
-    connect_timeout_seconds?: number | null;
-    last_used_at_ms?: number;
-  }>,
-): DesktopPreferences {
-  const environmentID = compact(input.environment_id);
-  const normalizedDetails = (
-    compact(input.ssh_destination) !== ''
-      ? normalizeDesktopSSHEnvironmentDetails({
-          ssh_destination: input.ssh_destination ?? '',
-          ssh_port: input.ssh_port ?? null,
-          auth_mode: input.auth_mode ?? DEFAULT_DESKTOP_SSH_AUTH_MODE,
-          runtime_root: input.runtime_root ?? DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
-          bootstrap_strategy: input.bootstrap_strategy ?? DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
-          release_base_url: input.release_base_url ?? '',
-          connect_timeout_seconds: input.connect_timeout_seconds ?? null,
-        })
-      : null
-  );
-  const existing = preferences.saved_ssh_environments.find((environment) => (
-    environmentID !== ''
-      ? environment.id === environmentID
-      : normalizedDetails != null
-        && environment.ssh_destination === normalizedDetails.ssh_destination
-        && environment.ssh_port === normalizedDetails.ssh_port
-        && environment.auth_mode === normalizedDetails.auth_mode
-        && environment.runtime_root === normalizedDetails.runtime_root
-        && environment.bootstrap_strategy === normalizedDetails.bootstrap_strategy
-        && environment.release_base_url === normalizedDetails.release_base_url
-        && environment.connect_timeout_seconds === normalizedDetails.connect_timeout_seconds
-  ));
-  if (!existing) {
-    return preferences;
-  }
-  return upsertSavedSSHEnvironment(preferences, {
-    environment_id: existing.id,
-    label: existing.label,
-    ssh_destination: existing.ssh_destination,
-    ssh_port: existing.ssh_port,
-    auth_mode: existing.auth_mode,
-    runtime_root: existing.runtime_root,
-    bootstrap_strategy: existing.bootstrap_strategy,
-    release_base_url: existing.release_base_url,
-    connect_timeout_seconds: existing.connect_timeout_seconds,
     pinned: existing.pinned,
     last_used_at_ms: input.last_used_at_ms ?? Date.now(),
   });
@@ -2498,27 +2118,6 @@ function serializeSavedEnvironmentCatalog(environment: DesktopSavedEnvironment):
   };
 }
 
-function serializeSavedSSHEnvironmentCatalog(environment: DesktopSavedSSHEnvironment): DesktopConnectionCatalogFile {
-  return {
-    schema_version: 1,
-    record_kind: 'connection',
-    kind: 'ssh',
-    id: environment.id,
-    label: environment.label,
-    ssh_destination: environment.ssh_destination,
-    ssh_port: environment.ssh_port,
-    auth_mode: environment.auth_mode,
-    runtime_root: environment.runtime_root,
-    bootstrap_strategy: environment.bootstrap_strategy,
-    release_base_url: environment.release_base_url,
-    connect_timeout_seconds: environment.connect_timeout_seconds,
-    pinned: environment.pinned,
-    auto_runtime_probe_enabled: environment.auto_runtime_probe_enabled,
-    created_at_ms: environment.created_at_ms,
-    last_used_at_ms: environment.last_used_at_ms,
-  };
-}
-
 function serializeSavedRuntimeTargetCatalog(target: DesktopSavedRuntimeTarget): DesktopConnectionCatalogFile {
   return {
     schema_version: 1,
@@ -2590,12 +2189,13 @@ function serializeProviderEnvironmentCatalog(
 export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, codec: DesktopSecretCodec): Promise<DesktopPreferences> {
   const secretsFile = await readJSONFile<DesktopSecretsFile>(paths.secretsFile);
   const catalogPaths = defaultDesktopCatalogPaths(paths.stateRoot);
+  const migrationJournalPath = path.join(paths.stateRoot, 'maintenance', 'environment-registration-migration.json');
+  const migrationJournal = await readJSONFile<DesktopEnvironmentRegistrationMigrationJournal>(migrationJournalPath);
   const catalogLocalEnvironment = await readJSONFile(catalogPaths.localEnvironmentFile);
   const catalogConnections = await readJSONDirectory(catalogPaths.connectionsDir);
   const catalogProviders = await readJSONDirectory(catalogPaths.providersDir);
   const catalogProviderEnvironments = await readJSONDirectory(catalogPaths.providerEnvironmentsDir);
   const controlPlaneRefreshTokensByKey = decodeDesktopControlPlaneRefreshTokens(codec, secretsFile?.control_planes);
-  const sshEnvironmentPasswordsByID = decodeSSHEnvironmentPasswords(codec, secretsFile?.saved_ssh_environments);
   const runtimeTargetPasswordsByID = decodeRuntimeTargetPasswords(codec, secretsFile?.saved_runtime_targets);
 
   const hasCurrentCatalogData = (
@@ -2609,14 +2209,11 @@ export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, cod
       !!value && typeof value === 'object' && compact((value as DesktopConnectionCatalogFile).kind) === 'url'
     )),
   );
-  const savedSSHEnvironmentResult = collectSavedSSHEnvironmentNormalizationResult(
-    catalogConnections.filter((value) => (
-      !!value && typeof value === 'object' && compact((value as DesktopConnectionCatalogFile).kind) === 'ssh'
-    )),
-  );
-  const savedSSHEnvironments = attachSSHEnvironmentPasswords(
-    savedSSHEnvironmentResult.environments,
-    sshEnvironmentPasswordsByID,
+  const legacySSHEnvironments = decodeLegacySSHEnvironmentRegistrations(
+    catalogConnections,
+    secretsFile,
+    migrationJournal,
+    (secret) => decodeOptionalSecret(codec, secret as StoredSecret),
   );
   const savedRuntimeTargetResult = collectSavedRuntimeTargetNormalizationResult(
     catalogConnections.filter((value) => (
@@ -2645,22 +2242,48 @@ export async function loadDesktopPreferences(paths: DesktopPreferencesPaths, cod
     controlPlanes,
   });
 
-  const nextPreferences: DesktopPreferences = {
+  const registrationMigration = migrateDesktopEnvironmentRegistrations({
     local_environment: localEnvironmentCatalogResult.environment,
+    saved_runtime_targets: savedRuntimeTargets,
+    legacy_ssh_environments: legacySSHEnvironments,
+  });
+  const nextPreferences: DesktopPreferences = {
+    local_environment: registrationMigration.local_environment,
     provider_environments: providerEnvironments,
     saved_environments: savedEnvironments,
-    saved_ssh_environments: savedSSHEnvironments,
-    saved_runtime_targets: savedRuntimeTargets,
+    saved_runtime_targets: normalizeSavedRuntimeTargets(registrationMigration.saved_runtime_targets),
     control_plane_refresh_tokens: Object.fromEntries(controlPlaneRefreshTokensByKey),
     control_planes: controlPlanes,
   };
+  if (registrationMigration.changed) {
+    await fs.mkdir(path.dirname(migrationJournalPath), { recursive: true, mode: 0o700 });
+    const legacyJournalSource = legacySSHEnvironmentMigrationJournalSource(catalogConnections, secretsFile);
+    const nextMigrationJournal = migrationJournal?.schema_version === 1
+      ? migrationJournal
+      : {
+      schema_version: 1,
+      phase: 'prepared',
+      ...legacyJournalSource,
+      migrated_ssh_environment_ids: registrationMigration.migrated_ssh_environment_ids,
+      removed_local_runtime_target_ids: registrationMigration.removed_local_runtime_target_ids,
+      updated_at_unix_ms: Date.now(),
+    } as const;
+    const temporaryJournalPath = `${migrationJournalPath}.${process.pid}.${Date.now()}.tmp`;
+    await fs.writeFile(temporaryJournalPath, `${JSON.stringify(nextMigrationJournal, null, 2)}\n`, { mode: 0o600 });
+    await fs.rename(temporaryJournalPath, migrationJournalPath);
+    await saveDesktopPreferences(paths, nextPreferences, codec);
+    await fs.rm(migrationJournalPath, { force: true });
+    return nextPreferences;
+  }
+  await fs.rm(migrationJournalPath, { force: true });
   if (
-    !hasCurrentCatalogData
-    || catalogLocalEnvironment == null
-    || localEnvironmentCatalogResult.didCanonicalizeProviderIdentity
-    || providerEnvironmentCatalogResult.didCanonicalizeProviderIdentity
-    || savedSSHEnvironmentResult.didCanonicalize
-    || savedRuntimeTargetResult.didCanonicalize
+    (
+      !hasCurrentCatalogData
+      || catalogLocalEnvironment == null
+      || localEnvironmentCatalogResult.didCanonicalizeProviderIdentity
+      || providerEnvironmentCatalogResult.didCanonicalizeProviderIdentity
+      || savedRuntimeTargetResult.didCanonicalize
+    )
   ) {
     await saveDesktopPreferences(paths, nextPreferences, codec);
   }
@@ -2677,14 +2300,8 @@ export async function saveDesktopPreferences(
   const localEnvironment = normalizeLocalEnvironmentState(preferences.local_environment, paths.stateRoot);
   const providerEnvironments = normalizeProviderEnvironmentCollection(preferences.provider_environments);
   const savedEnvironments = normalizeSavedEnvironments(preferences.saved_environments);
-  const savedSSHEnvironments = normalizeSavedSSHEnvironments(preferences.saved_ssh_environments);
   const savedRuntimeTargets = normalizeSavedRuntimeTargets(preferences.saved_runtime_targets);
   const controlPlanes = sortSavedControlPlanes(preferences.control_planes);
-  const existingSSHEnvironmentSecrets = new Map(
-    (existingSecretsFile?.saved_ssh_environments ?? [])
-      .map((entry) => [compact(entry.environment_id), entry.ssh_password] as const)
-      .filter(([environmentID, secret]) => environmentID !== '' && secret),
-  );
   const existingRuntimeTargetSecrets = new Map(
     (existingSecretsFile?.saved_runtime_targets ?? [])
       .map((entry) => [compact(entry.target_id), entry.ssh_password] as const)
@@ -2694,7 +2311,7 @@ export async function saveDesktopPreferences(
     version: 13,
   };
   const secretsFile: DesktopSecretsFile = {
-    version: 3,
+    version: 4,
     local_environment: (() => {
       const access = localEnvironmentAccess(localEnvironment);
       if (!access.local_ui_password_configured) {
@@ -2708,20 +2325,6 @@ export async function saveDesktopPreferences(
           : existingSecret?.local_ui_password,
       };
     })(),
-    saved_ssh_environments: savedSSHEnvironments.flatMap((environment) => {
-      if (environment.auth_mode !== 'password' || !environment.ssh_password_configured) {
-        return [];
-      }
-      const password = compact(environment.ssh_password);
-      const existingSecret = existingSSHEnvironmentSecrets.get(environment.id);
-      const secret = password !== ''
-        ? codec.encodeSecret(environment.ssh_password ?? '')
-        : existingSecret;
-      return secret ? [{
-        environment_id: environment.id,
-        ssh_password: secret,
-      }] : [];
-    }),
     saved_runtime_targets: savedRuntimeTargets.flatMap((target) => {
       if (target.host_access.kind !== 'ssh_host' || target.host_access.ssh.auth_mode !== 'password' || !target.ssh_password_configured) {
         return [];
@@ -2761,7 +2364,6 @@ export async function saveDesktopPreferences(
     catalogPaths.connectionsDir,
     Object.fromEntries([
       ...savedEnvironments.map((environment) => [environment.id, serializeSavedEnvironmentCatalog(environment)] as const),
-      ...savedSSHEnvironments.map((environment) => [environment.id, serializeSavedSSHEnvironmentCatalog(environment)] as const),
       ...savedRuntimeTargets.map((target) => [target.id, serializeSavedRuntimeTargetCatalog(target)] as const),
     ]),
   );

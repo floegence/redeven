@@ -3,11 +3,16 @@ import type { DesktopLauncherActionProgress, DesktopStepProgress } from '../shar
 export function environmentProgressMeterPercent(
   progress: DesktopLauncherActionProgress,
 ): number {
-  const stepPercent = percentFromStepProgress(progress.step_progress, progress.status);
-  if (stepPercent !== null) {
-    return stepPercent;
+  if (progress.active_progress_surface === 'reinstall' || progress.active_progress_surface === 'gateway') {
+    return percentFromStepProgress(progress.step_progress, progress.status) ?? 0;
   }
-  return percentFromStageProgress(progress.lifecycle_progress ?? progress.open_progress);
+  if (progress.active_progress_surface === 'runtime_lifecycle') {
+    return percentFromStageProgress(progress.lifecycle_progress);
+  }
+  if (progress.active_progress_surface === 'open') {
+    return percentFromStageProgress(progress.open_progress);
+  }
+  return 0;
 }
 
 function percentFromStageProgress(current: Readonly<{ stage_index: number; stage_count: number }> | undefined): number {
