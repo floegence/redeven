@@ -809,7 +809,13 @@ describe('Flower bottom decision surface', () => {
     await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${approvalThread.thread_id}"] button`)));
     (runtime.querySelector(`[data-thread-id="${approvalThread.thread_id}"] button`) as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-bottom-mode="approval"]')));
+    const capsule = runtime.querySelector('[data-flower-approval-decision-group="true"]') as HTMLElement;
     const stop = runtime.querySelector('.flower-composer-stop-thread') as HTMLButtonElement;
+    const actions = capsule.parentElement as HTMLElement;
+    expect(actions.classList.contains('flower-composer-approval-actions')).toBe(true);
+    expect(capsule.nextElementSibling).toBe(stop);
+    expect(capsule.querySelectorAll(':scope > button.flower-composer-approval-decision')).toHaveLength(2);
+    expect(capsule.querySelectorAll(':scope > .flower-approval-decision-divider')).toHaveLength(1);
     stop.focus();
     stop.click();
     await waitFor(() => stopThread.mock.calls.length === 1);

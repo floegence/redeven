@@ -1145,7 +1145,8 @@ describe('presentFlowerActivityItem', () => {
     }));
 
     expect(presentation.title).toEqual({ kind: 'plain', text: 'Called vendor internal call' });
-    expect(presentation.detailLines).toEqual([{ label: 'query', value: 'release notes' }]);
+    expect(presentation.detailLines).toEqual([]);
+    expect(presentation.detailBlocks).toEqual([]);
     expect(JSON.stringify(presentation)).not.toContain('must-not-render');
     expect(JSON.stringify(presentation)).not.toContain('internal_id');
   });
@@ -1162,7 +1163,6 @@ describe('presentFlowerActivityItem', () => {
         matches: [{ path: 'internal/ai/floret_tools.go', line: 12, text: 'private protocol row' }],
         data: { internal_cursor: 'must-not-render' },
       },
-      visible: ['activity contract', 'internal/flower_ui, internal/ai', '*.ts, *.go', '4'],
     },
     {
       tool_name: 'find',
@@ -1175,9 +1175,8 @@ describe('presentFlowerActivityItem', () => {
         results: [{ path: 'internal/flower_ui/src/FlowerSurface.tsx', private_id: 'must-not-render' }],
         result: { transport_shape: 'must-not-render' },
       },
-      visible: ['internal', 'FlowerSurface.tsx', 'file', '1'],
     },
-  ])('renders only semantic scalar fields for $tool_name', ({ tool_name, label, payload, visible }) => {
+  ])('does not invent structured details for legacy $tool_name payloads', ({ tool_name, label, payload }) => {
     const presentation = presentFlowerActivityItem(item({
       tool_name,
       renderer: 'structured',
@@ -1185,8 +1184,8 @@ describe('presentFlowerActivityItem', () => {
       payload,
     }));
 
-    const detail = presentation.detailLines.map((line) => line.value);
-    for (const value of visible) expect(detail).toContain(value);
+    expect(presentation.detailLines).toEqual([]);
+    expect(presentation.detailBlocks).toEqual([]);
     expect(JSON.stringify(presentation)).not.toContain('must-not-render');
     expect(JSON.stringify(presentation)).not.toContain('private protocol row');
   });
@@ -1204,11 +1203,12 @@ describe('presentFlowerActivityItem', () => {
     }));
 
     expect(presentation.title).toEqual({ kind: 'plain', text: 'Inspect release metadata' });
-    expect(presentation.detailLines).toEqual([{ label: 'query', value: 'release metadata' }]);
+    expect(presentation.detailLines).toEqual([]);
+    expect(presentation.detailBlocks).toEqual([]);
     expect(JSON.stringify(presentation)).not.toContain('must-not-render');
   });
 
-  it('renders structured use_skill payloads with their real result fields', () => {
+  it('keeps a successful Skill activity static when it has no meaningful detail block', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'use_skill',
       renderer: 'structured',
@@ -1223,12 +1223,61 @@ describe('presentFlowerActivityItem', () => {
       },
     }));
 
-    const rows = presentation.detailLines.map((line) => `${line.label}:${line.value}`);
-    expect(rows).toContain('operation:use_skill');
-    expect(rows).toContain('name:frontend-design');
-    expect(rows).toContain('content:Loaded frontend design guidance.');
-    expect(rows).toContain('content ref:content_123');
-    expect(rows).toContain('activation:act_123');
-    expect(rows).not.toContain('tool:use_skill');
+    expect(presentation.detailLines).toEqual([]);
+    expect(presentation.detailBlocks).toEqual([]);
+    expect(JSON.stringify(presentation)).not.toContain('content_123');
+    expect(JSON.stringify(presentation)).not.toContain('act_123');
+  });
+
+  it('keeps a failed Skill activity expandable when it has a real error', () => {
+    const presentation = presentFlowerActivityItem(item({
+      tool_name: 'use_skill',
+      renderer: 'structured',
+      status: 'error',
+      label: 'frontend-design',
+      payload: {
+        operation: 'use_skill',
+        status: 'error',
+        error: { message: 'Skill package could not be loaded.' },
+      },
+    }));
+
+    expect(presentation.detailLines).toEqual([]);
+    expect(presentation.detailBlocks).toEqual([{
+      kind: 'error',
+      error: { message: 'Skill package could not be loaded.' },
+    }]);
+  });
+
+  it('renders only typed structured rows for OKF details', () => {
+    const presentation = presentFlowerActivityItem(item({
+      tool_name: 'okf.search',
+      renderer: 'structured',
+      label: 'OKF search results',
+      payload: {
+        operation: 'okf.search',
+        status: 'success',
+        name: 'repeated title',
+        query: 'must-not-be-invented',
+        rows: [{
+          title: 'Flower runtime',
+          meta: 'Architecture · Summary',
+          content: 'The current-view boundary.',
+          format: 'text',
+        }],
+      },
+    }));
+
+    expect(presentation.detailLines).toEqual([]);
+    expect(presentation.detailBlocks).toEqual([{
+      kind: 'structured_rows',
+      rows: [{
+        title: 'Flower runtime',
+        meta: 'Architecture · Summary',
+        content: 'The current-view boundary.',
+        format: 'text',
+      }],
+    }]);
+    expect(JSON.stringify(presentation.detailBlocks)).not.toContain('must-not-be-invented');
   });
 });

@@ -7,7 +7,7 @@ timestamp: 2026-06-17T00:00:00Z
 ---
 # Summary
 
-Redeven exposes the embedded OKF bundle through read-only `okf.index`, `okf.search`, and `okf.open` builtin tools, and the shared Flower surface renders OKF activity as project knowledge lookup rows with expandable detail.
+Redeven exposes the embedded OKF bundle through read-only `okf.index`, `okf.search`, and `okf.open` builtin tools. Redeven projects bounded safe results into Floret v4.0.18 structured Activity rows, and the shared Flower surface expands those rows without reading raw OKF result JSON.
 
 OKF tools expose read-only Redeven repository knowledge through index browsing, short search, and concept opening.
 
@@ -15,7 +15,7 @@ OKF tools expose read-only Redeven repository knowledge through index browsing, 
 
 ## Mechanism
 
-Runtime OKF code loads the embedded bundle once, indexes root directory sections, scores structured summaries and sections in memory, and opens a concept summary or one selected section by id or path. The bundle builder parses internal Markdown links into deterministic `links` and `backlinks` and parses Evidence into structured references. Builtin tool registration advertises OKF tools as non-mutating local-read tools with structured presentation metadata, tool execution dispatches behind a read-permission gate, and Flower activity rows render compact knowledge-lookup details. OKF activity labels and operation values come from `ToolPresentationSpec`, so the Floret projection does not own a separate OKF display vocabulary.
+Runtime OKF code loads the embedded bundle once, indexes root directory sections, scores structured summaries and sections in memory, and opens a concept summary or one selected section by id or path. The bundle builder parses internal Markdown links into deterministic `links` and `backlinks` and parses Evidence into structured references. Builtin tool registration advertises OKF tools as non-mutating local-read tools with structured presentation metadata, tool execution dispatches behind a read-permission gate, and Redeven converts index sections, search matches, and open content into ordered title, metadata, and text or Markdown rows. Internal ids, paths, and unfiltered result objects never enter that display contract. OKF activity labels and operation values come from `ToolPresentationSpec`, so the Floret projection does not own a separate OKF display vocabulary.
 
 ## Tool workflow
 

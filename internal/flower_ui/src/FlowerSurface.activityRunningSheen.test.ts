@@ -60,7 +60,7 @@ describe('Flower activity running sheen', () => {
     const css = flowerStyles();
     const activityInlineRule = cssRule(css, '.flower-activity-inline');
     const buttonRule = cssRule(css, '.flower-activity-inline-button');
-    const buttonHoverRule = cssRule(css, '.flower-activity-inline-button:not(:disabled):hover,\n.flower-activity-inline-button:not(:disabled):focus-visible');
+    const buttonHoverRule = cssRule(css, '.flower-activity-inline-button:is(button):hover,\n.flower-activity-inline-button:is(button):focus-visible');
     const loaderRule = cssRule(css, '.flower-activity-inline-loader');
     const loaderSquareRule = cssRule(css, '.flower-activity-inline-loader-square');
     const titleRule = cssRule(css, '.flower-activity-inline-title');
@@ -85,6 +85,7 @@ describe('Flower activity running sheen', () => {
     expect(buttonRule).toContain('color: var(--flower-activity-tool-row-foreground)');
     expect(buttonHoverRule).toContain('background: var(--flower-activity-tool-row-soft)');
     expect(buttonHoverRule).not.toContain('color: var(--flower-activity-tool-row-foreground-strong)');
+    expect(css).toContain('.flower-activity-inline-button-static');
     expect(css).not.toContain('flower-activity-running-sheen');
     expect(css).not.toContain('.flower-activity-inline-row-running .flower-activity-inline-button::before');
     expect(css).not.toContain('.flower-activity-inline-row-waiting .flower-activity-inline-button::before');
