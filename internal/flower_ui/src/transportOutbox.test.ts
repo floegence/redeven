@@ -27,21 +27,36 @@ describe('TransportOutbox', () => {
     expect(outbox.entries.has('request-1')).toBe(false);
   });
 
-  it('moves a new-thread request to the canonical thread without changing its identity', () => {
-    const pending = createTransportOutbox().put({
+  it('confirms a new-thread request directly from its canonical identity', () => {
+    const outbox = createTransportOutbox().put({
       requestId: 'req-new',
       threadId: '__new_thread__',
       input: { client_request_id: 'req-new', prompt: 'hello' },
       attachmentLabels: [],
       createdAtMs: 1,
+    }).confirm({
+      thread_id: 'thread-created',
+      view_version: 1,
+      items: [{ id: 'user:req-new', ordinal: 1, kind: 'user', text: 'hello' }],
     });
 
-    const assigned = pending.assignThread('req-new', 'thread-created');
+    expect(outbox.entries.has('req-new')).toBe(false);
+  });
 
-    expect(assigned.forThread('__new_thread__')).toEqual([]);
-    expect(assigned.forThread('thread-created')).toEqual([
-      expect.objectContaining({ requestId: 'req-new', input: expect.objectContaining({ prompt: 'hello' }) }),
-    ]);
+  it('does not confirm an existing-thread request from another thread', () => {
+    const outbox = createTransportOutbox().put({
+      requestId: 'request-a',
+      threadId: 'thread-a',
+      input: { client_request_id: 'request-a', thread_id: 'thread-a', prompt: 'same text' },
+      attachmentLabels: [],
+      createdAtMs: 1,
+    }).confirm({
+      thread_id: 'thread-b',
+      view_version: 2,
+      items: [{ id: 'user:request-a', ordinal: 1, kind: 'user', text: 'same text' }],
+    });
+
+    expect(outbox.entries.has('request-a')).toBe(true);
   });
 
   it('confirms a busy send from the canonical queue without modeling queue state', () => {
@@ -163,11 +178,15 @@ describe('TransportOutbox', () => {
         return request;
       }),
     });
-    const recovered = outbox.assignThread('transport-unknown', 'thread-recovered');
+    const recovered = outbox.confirm({
+      thread_id: 'thread-a',
+      view_version: 2,
+      items: [{ id: 'user:transport-unknown', ordinal: 1, kind: 'user', text: 'keep me' }],
+    });
 
     await expect(recovered.flushPersistence()).resolves.toBeUndefined();
     expect(recovered.persistenceError()).toBeNull();
-    expect(recovered.entries.get('transport-unknown')?.threadId).toBe('thread-recovered');
+    expect(recovered.entries.has('transport-unknown')).toBe(false);
     recovered.dispose();
   });
 

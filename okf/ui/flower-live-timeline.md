@@ -11,7 +11,9 @@ Flower uses one workspace SSE for every thread. The stream carries a baseline of
 
 # Contract
 
-`ThreadCache` owns selected ID, summary map, and a bounded LRU of typed detail views. Summary updates are stripped of messages and interaction detail and can never overwrite a cached view. HTTP detail, action responses, and `LiveCurrent` all use one receiver. Floret's monotonic `view_version` orders runtime content; Redeven's monotonic `settings_revision` orders product settings. The receiver merges those two authorities independently. Only accepted runtime content may confirm the outbox, move the transcript, clear runtime errors, or update status presentation.
+`ThreadCache` owns selected ID, summary map, and a bounded LRU of typed detail views. Summary updates are stripped of messages and interaction detail and can never overwrite a cached view. HTTP detail, action responses, and `LiveCurrent` all use one receiver. Floret's monotonic `view_version` orders runtime content; Redeven's monotonic `settings_revision` orders product settings. The receiver merges those two authorities independently.
+
+A valid current view independently confirms any outbox entry with the same canonical request key, even when its runtime detail is unchanged or older than the cached view. Request identity proves admission; it does not order runtime content. Outbox and cache changes commit in one UI batch, so the optimistic row disappears before the canonical row renders. Only accepted runtime content may move the transcript, clear runtime errors, or update status presentation.
 
 `LiveTransport` owns the single connection and a process-local `connectionEpoch`. The epoch only invalidates callbacks from the prior connection; it is not stored in `ThreadCache` and never orders detail content. Normal network failures reconnect quietly with bounded backoff; authorization failure is terminal and visible. There is no browser event log, cursor, generation graph, replay endpoint, retention-gap reducer, polling loop, or per-selection SSE.
 

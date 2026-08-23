@@ -15,7 +15,6 @@ export type TransportOutboxEntry = Readonly<{
 export type TransportOutbox = Readonly<{
   entries: ReadonlyMap<string, TransportOutboxEntry>;
   put(entry: TransportOutboxEntry): TransportOutbox;
-  assignThread(requestId: string, threadId: string): TransportOutbox;
   dropThread(threadId: string): TransportOutbox;
   drop(requestId: string): TransportOutbox;
   pruneExpired(nowMs?: number): TransportOutbox;
@@ -170,15 +169,6 @@ function create(
       });
       return replace(next);
     },
-    assignThread(requestId, threadId) {
-      const id = clean(requestId);
-      const target = clean(threadId);
-      const entry = currentEntries.get(id);
-      if (!entry || !target || entry.threadId === target) return this;
-      const next = new Map(currentEntries);
-      next.set(id, { ...entry, threadId: target, input: { ...entry.input, thread_id: target } });
-      return replace(next);
-    },
     dropThread(threadId) {
       const id = clean(threadId);
       if (!id) return this;
@@ -211,7 +201,11 @@ function create(
       if (confirmed.size === 0) return this;
       const next = new Map(currentEntries);
       for (const requestId of confirmed) {
-        if (next.get(requestId)?.threadId === threadId) next.delete(requestId);
+        const entry = next.get(requestId);
+        if (!entry) continue;
+        const admittedThreadId = clean(entry.input.thread_id);
+        if (admittedThreadId && admittedThreadId !== threadId) continue;
+        next.delete(requestId);
       }
       if (next.size === currentEntries.size) return this;
       return replace(next);
