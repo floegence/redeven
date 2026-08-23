@@ -20,6 +20,6 @@ describe('Flower terminal detail convergence architecture', () => {
     expect(cacheSource).not.toContain('connectionEpoch');
     expect(cacheSource).not.toContain('canReplaceThreadView');
     expect(cacheSource.match(/function classifyThreadView/gu)).toHaveLength(1);
-    expect(cacheSource.match(/^    receiveView\(view/gmu)).toHaveLength(1);
+    expect(cacheSource.match(/^ {4}receiveView\(view/gmu)).toHaveLength(1);
   });
 });
