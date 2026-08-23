@@ -1,12 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { FlowerLiveStreamEnvelope } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type {
+  FlowerLiveStreamEnvelope,
+  FlowerTurnLaunchInput,
+  FlowerTurnLaunchReceipt,
+} from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import {
   activityItem,
   activityTimeline,
   adapter,
   deferred,
   inputRequest,
+  launchReceipt,
   liveBootstrap,
   modelIOStatus,
   readStatus,
@@ -75,6 +80,70 @@ function completedTerminalThread() {
 }
 
 describe('Flower final thread cache and workspace transport', () => {
+  it('atomically replaces a new-thread outbox row when live current wins the launch race', async () => {
+    const stream = controlledWorkspaceStream([{ schema_version: 1, kind: 'ready', summaries: [] }]);
+    const launchResponse = deferred<FlowerTurnLaunchReceipt>();
+    const launchTurn = vi.fn((_input: FlowerTurnLaunchInput) => launchResponse.promise);
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => []),
+      launchTurn,
+      connectLiveStream: stream.connect,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('textarea')));
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'hi';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await waitFor(() => {
+      const submit = runtime.querySelector('.flower-composer-submit') as HTMLButtonElement | null;
+      return Boolean(submit && !submit.disabled);
+    });
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+
+    await waitFor(() => launchTurn.mock.calls.length === 1);
+    const requestID = launchTurn.mock.calls[0]![0].client_request_id;
+    await waitFor(() => runtime.querySelector(`[data-flower-transport-outbox-id="${requestID}"]`) !== null);
+    const receipt = launchReceipt('thread-new-race', 'turn-new-race', 'start', requestID);
+    const current = {
+      ...receipt.current,
+      items: [{
+        id: `user:${requestID}`,
+        turn_id: 'turn-new-race',
+        ordinal: 1,
+        kind: 'user' as const,
+        text: 'hi',
+      }],
+    };
+    let maxVisibleUserRows = 0;
+    const observeVisibleRows = () => {
+      maxVisibleUserRows = Math.max(maxVisibleUserRows, runtime.querySelectorAll(
+        '[data-flower-message-role="user"], [data-flower-transport-outbox-id]',
+      ).length);
+    };
+    const observer = new MutationObserver(observeVisibleRows);
+    observer.observe(runtime, { childList: true, subtree: true });
+    observeVisibleRows();
+
+    stream.push({
+      schema_version: 1,
+      kind: 'thread.batch',
+      thread_id: receipt.thread_id,
+      current,
+    });
+    await waitFor(() => runtime.querySelector(`[data-flower-transport-outbox-id="${requestID}"]`) === null);
+    launchResponse.resolve({ ...receipt, current });
+
+    await waitFor(() => runtime.querySelector(`[data-flower-message-id="user:${requestID}"]`) !== null);
+    await Promise.resolve();
+    observeVisibleRows();
+    observer.disconnect();
+    expect(launchTurn).toHaveBeenCalledTimes(1);
+    expect(runtime.querySelectorAll(`[data-flower-message-id="user:${requestID}"]`)).toHaveLength(1);
+    expect(runtime.querySelector(`[data-flower-transport-outbox-id="${requestID}"]`)).toBeNull();
+    expect(maxVisibleUserRows).toBe(1);
+  });
+
   it('renders the complete six-item terminal fixture on first detail load', async () => {
     const completed = completedTerminalThread();
     const surfaceAdapter = {

@@ -61,6 +61,18 @@ describe('applyFlowerRuntimeCurrentView', () => {
     expect(result.messages.map((message) => message.id)).toEqual(['assistant:turn-a:1', 'assistant:turn-a:2']);
   });
 
+  it('keeps user messages with different request identities even when text repeats', () => {
+    const result = applyFlowerRuntimeCurrentView(summary(), {
+      thread_id: 'thread-a', view_version: 11, activity: 'active', turn_id: 'turn-b',
+      items: [
+        { id: 'user:request-a', turn_id: 'turn-a', ordinal: 1, kind: 'user', text: 'same message' },
+        { id: 'user:request-b', turn_id: 'turn-b', ordinal: 2, kind: 'user', text: 'same message' },
+      ],
+    });
+
+    expect(result.messages.map((message) => message.id)).toEqual(['user:request-a', 'user:request-b']);
+  });
+
   it('projects an interrupted runtime outcome as a visible failed turn', () => {
     const result = applyFlowerRuntimeCurrentView(summary(), {
       thread_id: 'thread-a', view_version: 8, activity: 'idle', turn_id: 'turn-a', last_outcome: 'interrupted',

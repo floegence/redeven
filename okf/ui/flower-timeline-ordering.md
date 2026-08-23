@@ -7,7 +7,7 @@ timestamp: 2026-08-14T00:00:00Z
 ---
 # Summary
 
-Flower renders the ordered items in Floret's typed current view. Canonical stable IDs determine user, assistant, tool, interaction, queue, and terminal rows. A short-lived transport outbox may show an unconfirmed user input at its final transcript position, but canonical confirmation removes it instead of moving or duplicating it. Summaries never write timeline detail.
+Flower renders the ordered items in Floret's typed current view. Canonical stable IDs determine user, assistant, tool, interaction, queue, and terminal rows. A short-lived transport outbox may show an unconfirmed user input at its final transcript position, but matching request-key confirmation atomically replaces it with the canonical row. Summaries never write timeline detail.
 
 # Contract
 

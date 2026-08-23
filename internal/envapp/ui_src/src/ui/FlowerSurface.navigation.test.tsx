@@ -774,7 +774,8 @@ describe('FlowerSurface navigation', () => {
     await waitFor(() => launchTurn.mock.calls.length > 0);
     await waitFor(() => runtime.textContent?.includes('follow the accepted thread') ?? false);
     expect(runtime.textContent).toContain('follow the accepted thread');
-    expect(runtime.querySelector('[data-flower-message-role="user"][data-flower-message-status="complete"]')).toBeTruthy();
+    expect(runtime.querySelectorAll('[data-flower-message-role="user"][data-flower-message-status="complete"]')).toHaveLength(1);
+    expect(runtime.querySelector('[data-flower-transport-outbox-id]')).toBeNull();
     expect(runtime.querySelector('.flower-model-status-indicator')?.textContent).toContain('Thinking');
     expect(runtime.querySelector('.flower-model-status-flower')).toBeTruthy();
     expect(runtime.querySelector('.flower-model-status-flower')?.getAttribute('aria-hidden')).toBe('true');

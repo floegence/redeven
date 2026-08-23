@@ -1,6 +1,11 @@
 # Redeven OKF Update Log
 
 ## 2026-08-23
+* **Flower outbox admission convergence**: Flower now confirms transport input
+  by canonical request key independently of runtime detail-version acceptance.
+  New-thread live-current races atomically replace the optimistic row, while
+  equal text with different stable request identities remains distinct.
+
 * **Floret v5 terminal presentation and setting revisions**: Redeven now
   consumes published Floret v5.0.0. Canonical tool results preserve call
   descriptions and commands. Flower localizes every terminal tool title,

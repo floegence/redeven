@@ -1563,7 +1563,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 				const retryTimer = outboxRetryTimers.get(entry.requestId);
 				if (retryTimer !== undefined) clearTimeout(retryTimer);
 				outboxRetryTimers.delete(entry.requestId);
-				setTransportOutbox((outbox) => outbox.assignThread(entry.requestId, receipt.thread_id));
 				applyRuntimeCurrent(receipt.current);
 				if (entry.threadId === PENDING_NEW_THREAD_ID && !selectedThreadID()) setSelectedThreadWithDetail(receipt.thread_id);
 			}).catch(() => {
@@ -3126,7 +3125,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     const { state, runtimeState, settingsState } = result;
     const retained = result.cache.views.get(threadID)?.thread ?? candidate.thread;
-    setThreadCache(result.cache);
+    const confirmedOutbox = current ? transportOutbox().confirm(current) : transportOutbox();
+    batch(() => {
+      setTransportOutbox(confirmedOutbox);
+      setThreadCache(result.cache);
+    });
     if (state !== 'accepted') return { state, runtimeState, settingsState, thread: retained };
     if (runtimeState !== 'accepted') {
       return { state, runtimeState, settingsState, thread: retained };
@@ -3149,7 +3152,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     ) {
       notifySuccess('Reasoning adjusted for this model.');
     }
-    if (current) setTransportOutbox((outbox) => outbox.confirm(current));
     if (threadID === selectedThreadID()) {
       setThreadLoadError('');
       setTranscriptLayoutRevision((revision) => revision + 1);
@@ -4661,7 +4663,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }
         return;
       }
-      setTransportOutbox((outbox) => outbox.assignThread(clientRequestID, receipt.thread_id));
       applyRuntimeCurrent(receipt.current);
       updateThreadIDMembership(setBusyAdmissionThreadIDs, receipt.thread_id, false);
       busyAdmissionNotifiedThreadIDs.delete(trimString(receipt.thread_id));
