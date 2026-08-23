@@ -17,7 +17,7 @@ function deferred<T>() {
 }
 
 describe('RuntimeLifecycleCoordinator', () => {
-  it('keys local host runtimes by their resolved physical runtime and state roots', () => {
+  it('keys local host runtimes by their resolved physical runtime root', () => {
     const key = runtimeLifecycleTargetKey(
       { kind: 'local_host' },
       { kind: 'host_process', runtime_root: './runtime-state' },
@@ -33,6 +33,21 @@ describe('RuntimeLifecycleCoordinator', () => {
       { kind: 'local_host' },
       { kind: 'host_process', runtime_root: '' },
     )).toThrow('Runtime target root is required');
+  });
+
+  it('does not create a second owner when registrations disagree only about the state-root projection', () => {
+    const hostAccess = { kind: 'local_host' as const };
+    const first = runtimeLifecycleTargetKey(hostAccess, {
+      kind: 'host_process',
+      runtime_root: '/srv/redeven',
+      runtime_state_root: '/srv/redeven/state-a',
+    });
+    const second = runtimeLifecycleTargetKey(hostAccess, {
+      kind: 'host_process',
+      runtime_root: '/srv/redeven',
+      runtime_state_root: '/srv/redeven/state-b',
+    });
+    expect(second).toBe(first);
   });
 
   it('separates SSH and container runtime identities', () => {

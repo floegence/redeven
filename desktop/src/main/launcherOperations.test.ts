@@ -112,7 +112,7 @@ describe('LauncherOperationRegistry', () => {
 
     expect(restored.get(persisted.operation_key)).toEqual(persisted);
     expect(restored.progressItems()[0]?.operation_key).toBe(persisted.operation_key);
-    expect(restored.progressItems()[0]?.step_progress?.steps).toHaveLength(12);
+    expect(restored.progressItems()[0]?.step_progress?.steps).toHaveLength(13);
     expect(restored.progressItems()[0]?.step_progress?.active_step_id).toBe('confirmation');
   });
 

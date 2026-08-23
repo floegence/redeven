@@ -124,7 +124,7 @@ describe('reinstall component staging', () => {
     try {
       const gatewayArchive = await archiveFor('gateway', root);
       const runtimeArchive = await archiveFor('runtime', root);
-      const operationID = 'op-transaction';
+      const operationID = 'op-replacement';
       const gateway = await stageManagedComponent({ executor, placement: { kind: 'host_process' as const, runtime_root: targetRoot }, target_root: targetRoot, operation_id: operationID, task: task('gateway'), archive: gatewayArchive, archive_sha256: createHash('sha256').update(gatewayArchive).digest('hex') });
       const runtime = await stageManagedComponent({ executor, placement: { kind: 'host_process' as const, runtime_root: targetRoot }, target_root: targetRoot, operation_id: operationID, task: task('runtime'), archive: runtimeArchive, archive_sha256: createHash('sha256').update(runtimeArchive).digest('hex') });
       const prepared: PreparedComponentBatch = { operation_id: operationID, tasks: [gateway, runtime], suite_manifest: { release_tag: 'v1', commit: 'abc', platform: 'linux', architecture: 'amd64', components: [gateway, runtime].map((item) => ({ ...item.task, staging_id: item.staging_id, ...item.evidence })) } };
@@ -136,6 +136,121 @@ describe('reinstall component staging', () => {
       await expect(fs.readFile(path.join(targetRoot, 'runtime', 'managed', 'old'), 'utf8')).resolves.toBe('runtime-old');
       await cleanupManagedComponentBatch(executor, { kind: 'host_process', runtime_root: targetRoot }, targetRoot, operationID);
       await expect(fs.stat(path.join(targetRoot, '.redeven-staging-' + operationID + '-gateway'))).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      await executor.release();
+    }
+  });
+
+  it('restores an interrupted preserve-data replacement before retrying the same operation', async () => {
+    const root = await tempRoot();
+    const targetRoot = path.join(root, 'redeven');
+    const placement = { kind: 'host_process' as const, runtime_root: targetRoot };
+    await fs.mkdir(path.join(targetRoot, 'gateway', 'managed'), { recursive: true });
+    await fs.mkdir(path.join(targetRoot, 'runtime', 'managed'), { recursive: true });
+    await fs.writeFile(path.join(targetRoot, 'gateway', 'managed', 'original'), 'gateway-original');
+    await fs.writeFile(path.join(targetRoot, 'runtime', 'managed', 'original'), 'runtime-original');
+    const executor = createLocalRuntimeHostExecutor();
+    const operationID = 'op-preserve-resume';
+    const stageBatch = async (): Promise<PreparedComponentBatch> => {
+      const gatewayArchive = await archiveFor('gateway', root);
+      const runtimeArchive = await archiveFor('runtime', root);
+      const common = { executor, placement, target_root: targetRoot, operation_id: operationID };
+      const gateway = await stageManagedComponent({ ...common, task: task('gateway'), archive: gatewayArchive, archive_sha256: createHash('sha256').update(gatewayArchive).digest('hex') });
+      const runtime = await stageManagedComponent({ ...common, task: task('runtime'), archive: runtimeArchive, archive_sha256: createHash('sha256').update(runtimeArchive).digest('hex') });
+      return {
+        operation_id: operationID,
+        tasks: [gateway, runtime],
+        suite_manifest: {
+          release_tag: 'v1',
+          commit: 'abc',
+          platform: 'linux',
+          architecture: 'amd64',
+          components: [gateway, runtime].map((item) => ({ ...item.task, staging_id: item.staging_id, ...item.evidence })),
+        },
+      };
+    };
+    try {
+      await activateManagedComponentBatch(executor, placement, targetRoot, await stageBatch(), 'preserve_data');
+      // Simulate a Desktop crash before verification/rollback, then prepare the
+      // same operation again. Activation must recover the original pair first.
+      await activateManagedComponentBatch(executor, placement, targetRoot, await stageBatch(), 'preserve_data');
+      await rollbackManagedComponentBatch(executor, placement, targetRoot, operationID);
+      await expect(fs.readFile(path.join(targetRoot, 'gateway', 'managed', 'original'), 'utf8')).resolves.toBe('gateway-original');
+      await expect(fs.readFile(path.join(targetRoot, 'runtime', 'managed', 'original'), 'utf8')).resolves.toBe('runtime-original');
+    } finally {
+      await executor.release();
+    }
+  });
+
+  it.each([
+    {
+      name: 'after only the Gateway backup moved',
+      hadRuntime: true,
+      arrange: async (targetRoot: string, operationID: string) => {
+        await fs.rename(
+          path.join(targetRoot, 'gateway', 'managed'),
+          path.join(targetRoot, `.managed-component-rollback-${operationID}`, 'gateway'),
+        );
+      },
+    },
+    {
+      name: 'after both backups moved and the fresh Gateway activated',
+      hadRuntime: true,
+      arrange: async (targetRoot: string, operationID: string) => {
+        await fs.rename(
+          path.join(targetRoot, 'gateway', 'managed'),
+          path.join(targetRoot, `.managed-component-rollback-${operationID}`, 'gateway'),
+        );
+        await fs.rename(
+          path.join(targetRoot, 'runtime', 'managed'),
+          path.join(targetRoot, `.managed-component-rollback-${operationID}`, 'runtime'),
+        );
+        await fs.mkdir(path.join(targetRoot, 'gateway', 'managed'), { recursive: true });
+        await fs.writeFile(path.join(targetRoot, 'gateway', 'managed', 'fresh'), 'fresh');
+      },
+    },
+    {
+      name: 'when Runtime did not exist before activation',
+      hadRuntime: false,
+      arrange: async (targetRoot: string, operationID: string) => {
+        await fs.rename(
+          path.join(targetRoot, 'gateway', 'managed'),
+          path.join(targetRoot, `.managed-component-rollback-${operationID}`, 'gateway'),
+        );
+        await fs.rm(path.join(targetRoot, 'runtime', 'managed'), { recursive: true, force: true });
+        await fs.writeFile(
+          path.join(targetRoot, `.managed-component-rollback-${operationID}`, 'runtime.absent'),
+          '',
+        );
+        await fs.mkdir(path.join(targetRoot, 'runtime', 'managed'), { recursive: true });
+        await fs.writeFile(path.join(targetRoot, 'runtime', 'managed', 'fresh'), 'fresh');
+      },
+    },
+  ])('rolls back safely $name', async ({ hadRuntime, arrange }) => {
+    const root = await tempRoot();
+    const targetRoot = path.join(root, 'redeven');
+    const placement = { kind: 'host_process' as const, runtime_root: targetRoot };
+    const operationID = 'op-partial-backup';
+    await fs.mkdir(path.join(targetRoot, 'gateway', 'managed'), { recursive: true });
+    await fs.mkdir(path.join(targetRoot, 'runtime', 'managed'), { recursive: true });
+    await fs.mkdir(path.join(targetRoot, `.managed-component-rollback-${operationID}`));
+    await fs.writeFile(path.join(targetRoot, 'gateway', 'managed', 'original'), 'gateway-original');
+    await fs.writeFile(path.join(targetRoot, 'runtime', 'managed', 'original'), 'runtime-original');
+    await arrange(targetRoot, operationID);
+    const executor = createLocalRuntimeHostExecutor();
+    try {
+      await rollbackManagedComponentBatch(executor, placement, targetRoot, operationID);
+      await expect(fs.readFile(path.join(targetRoot, 'gateway', 'managed', 'original'), 'utf8'))
+        .resolves.toBe('gateway-original');
+      if (hadRuntime) {
+        await expect(fs.readFile(path.join(targetRoot, 'runtime', 'managed', 'original'), 'utf8'))
+          .resolves.toBe('runtime-original');
+      } else {
+        await expect(fs.stat(path.join(targetRoot, 'runtime', 'managed')))
+          .rejects.toMatchObject({ code: 'ENOENT' });
+      }
+      await expect(fs.stat(path.join(targetRoot, `.managed-component-rollback-${operationID}`)))
+        .rejects.toMatchObject({ code: 'ENOENT' });
     } finally {
       await executor.release();
     }

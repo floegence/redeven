@@ -1,13 +1,12 @@
 import path from 'node:path';
 
 import {
-  desktopRuntimePlacementStateRoot,
   type DesktopRuntimeHostAccess,
   type DesktopRuntimePlacement,
 } from '../shared/desktopRuntimePlacement';
 import { desktopSSHAuthority } from '../shared/desktopSSH';
 
-export type RuntimeLifecycleIntent = 'open' | 'start' | 'stop' | 'restart' | 'update' | 'reinstall';
+export type RuntimeLifecycleIntent = 'open' | 'start' | 'stop' | 'restart' | 'update' | 'refresh' | 'reinstall';
 
 export type RuntimeLifecycleOperationSnapshot = Readonly<{
   target_key: string;
@@ -90,14 +89,9 @@ export function runtimeLifecycleTargetKey(
   placement: DesktopRuntimePlacement,
 ): string {
   const runtimeRoot = normalizedTargetRoot(hostAccess, placement, placement.runtime_root);
-  const stateRoot = normalizedTargetRoot(
-    hostAccess,
-    placement,
-    desktopRuntimePlacementStateRoot(placement),
-  );
   if (hostAccess.kind === 'local_host') {
     if (placement.kind === 'host_process') {
-      return targetKey(['local_host', 'host_process', runtimeRoot, stateRoot]);
+      return targetKey(['local_host', 'host_process', runtimeRoot]);
     }
     return targetKey([
       'local_host',
@@ -105,12 +99,11 @@ export function runtimeLifecycleTargetKey(
       required(placement.container_engine, 'Container engine'),
       required(placement.container_id, 'Container identity'),
       runtimeRoot,
-      stateRoot,
     ]);
   }
   const sshAuthority = required(desktopSSHAuthority(hostAccess.ssh), 'SSH authority');
   if (placement.kind === 'host_process') {
-    return targetKey(['ssh_host', sshAuthority, 'host_process', runtimeRoot, stateRoot]);
+    return targetKey(['ssh_host', sshAuthority, 'host_process', runtimeRoot]);
   }
   return targetKey([
     'ssh_host',
@@ -119,7 +112,6 @@ export function runtimeLifecycleTargetKey(
     required(placement.container_engine, 'Container engine'),
     required(placement.container_id, 'Container identity'),
     runtimeRoot,
-    stateRoot,
   ]);
 }
 

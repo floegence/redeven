@@ -109,11 +109,6 @@ func OpenLocalBindingStore(stateRoot string, runtimeRoot string) (*BindingStore,
 	if err := os.MkdirAll(runtimeRoot, 0o700); err != nil {
 		return nil, fmt.Errorf("create Runtime root: %w", err)
 	}
-	releaseTargetLock, err := acquireTargetRegistrationLock(runtimeRoot)
-	if err != nil {
-		return nil, err
-	}
-	defer releaseTargetLock()
 	store := &BindingStore{filePath: filepath.Join(stateRoot, "runtime-target-binding-v1.json")}
 	if err := store.loadLocked(); err != nil {
 		return nil, err
@@ -490,18 +485,6 @@ func decodeTargetMarker(raw []byte) (targetMarker, error) {
 		return targetMarker{}, errors.New("Runtime installation root target marker contains trailing data")
 	}
 	return marker, nil
-}
-
-func acquireTargetRegistrationLock(runtimeRoot string) (func(), error) {
-	path := filepath.Join(runtimeRoot, ".redeven-runtime-lifecycle-target.lock")
-	lock, err := lockfile.Acquire(path)
-	if err != nil {
-		if errors.Is(err, lockfile.ErrAlreadyLocked) {
-			return nil, errors.New("Runtime installation root registration is already in progress")
-		}
-		return nil, err
-	}
-	return func() { _ = lock.Release() }, nil
 }
 
 func normalizeRuntimeValidation(validation RuntimeValidation) RuntimeValidation {

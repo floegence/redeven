@@ -62,6 +62,21 @@ describe('prepareAndStageBatch', () => {
     expect(discarded).toEqual(['runtime']);
   });
 
+  it('reports the initiating failure instead of an earlier task-order cancellation', async () => {
+    await expect(prepareAndStageBatch(tasks, new AbortController().signal, vi.fn(), {
+      run: async (task, signal) => {
+        if (task.component === 'gateway') {
+          await new Promise<void>((resolve) => {
+            signal.addEventListener('abort', () => resolve(), { once: true });
+          });
+          throw new DOMException('Gateway preparation was canceled.', 'AbortError');
+        }
+        await Promise.resolve();
+        throw new Error('runtime build failed');
+      },
+    })).rejects.toThrow('runtime build failed');
+  });
+
   it('discards a prepared sibling when the parent operation is canceled', async () => {
     const parent = new AbortController();
     const discarded: string[] = [];

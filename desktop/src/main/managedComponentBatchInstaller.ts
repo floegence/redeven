@@ -199,8 +199,13 @@ export async function prepareAndStageBatch(
     }));
     const failure = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
     if (failure) {
-      controller.abort(failure.reason);
-      throw signal.aborted ? (signal.reason ?? failure.reason) : failure.reason;
+      // The task that fails first owns the shared controller reason. Siblings
+      // can reject with a generic AbortError earlier in task-array order, so
+      // selecting the first allSettled rejection would hide the actionable
+      // package/build error that initiated cancellation.
+      const initiatingFailure = controller.signal.reason ?? failure.reason;
+      controller.abort(initiatingFailure);
+      throw signal.aborted ? (signal.reason ?? initiatingFailure) : initiatingFailure;
     }
     throwIfAborted(controller.signal);
     const releaseTag = tasks[0]?.release_tag ?? '';

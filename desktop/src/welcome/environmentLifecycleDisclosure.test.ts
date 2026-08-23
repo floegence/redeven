@@ -83,7 +83,7 @@ function restartReadyProgress(environmentID: string, startedAt = 200): DesktopLa
 
 function beginDisclosure(
   environmentID: string,
-  intent: 'start_runtime' | 'stop_runtime' | 'restart_runtime' | 'update_runtime',
+  intent: 'start_runtime' | 'stop_runtime' | 'restart_runtime' | 'update_runtime' | 'refresh_runtime',
 ) {
   const operationKey = intent === 'update_runtime'
     ? 'runtime-op'
@@ -507,6 +507,23 @@ describe('environmentLifecycleDisclosure', () => {
       enabled: true,
       variant: 'outline',
       runtime_operation_method: 'runtime_gateway',
+    })).toBe(true);
+  });
+
+  it('keeps a direct Runtime refresh inside the shared lifecycle disclosure', () => {
+    const environment = localEnvironmentEntry();
+    const state = beginDisclosure(environment.id, 'refresh_runtime');
+
+    expect(environmentActionStartsLifecycleDisclosure({
+      intent: 'refresh_runtime',
+      label: 'Refresh Runtime status',
+      enabled: true,
+      variant: 'outline',
+      runtime_operation_method: 'runtime_gateway',
+    })).toBe(true);
+    expect(environmentLifecycleDisclosureHasPendingRequest(state, {
+      action: 'refresh_environment_runtime',
+      environment_id: environment.id,
     })).toBe(true);
   });
 });

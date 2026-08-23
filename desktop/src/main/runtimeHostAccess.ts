@@ -29,6 +29,7 @@ export type RuntimeHostCommandResult = Readonly<{
 export type RuntimeHostAccessExecutor = Readonly<{
   host_access: DesktopRuntimeHostAccess;
   run: (argv: readonly string[], options?: RuntimeHostCommandOptions) => Promise<RuntimeHostCommandResult>;
+  stream?: (argv: readonly string[], options?: RuntimeHostCommandOptions) => Promise<RuntimeHostStreamingCommand>;
   release: () => Promise<void>;
 }>;
 
@@ -314,6 +315,7 @@ export function createLocalRuntimeHostExecutor(): RuntimeHostAccessExecutor {
         targetLabel: 'Local Host',
       });
     },
+    stream: async (argv, options = {}) => spawnLocalRuntimeHostCommand(argv, options),
     release: async () => undefined,
   };
 }
@@ -405,6 +407,17 @@ export function createSSHRuntimeHostExecutor(
         });
       }
     },
+    stream: async (argv, commandOptions = {}) => spawnSSHRuntimeHostCommand(
+      transportManager,
+      ssh,
+      argv,
+      {
+        ...commandOptions,
+        sshBinary: options.sshBinary,
+        sshPassword: options.sshPassword,
+        credentialScope: options.credentialScope,
+      },
+    ),
     release: async () => {
       if (released) {
         return;

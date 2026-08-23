@@ -264,6 +264,8 @@ export function runtimeLifecycleOperationForActionProgress(
       return 'restart';
     case 'update_environment_runtime':
       return 'update';
+    case 'refresh_environment_runtime':
+      return 'refresh';
     case 'run_provider_environment_lifecycle':
       break;
     default:
@@ -278,6 +280,8 @@ export function runtimeLifecycleOperationForActionProgress(
       return operation;
     case 'update_runtime':
       return 'update';
+    case 'refresh':
+      return 'refresh';
     default:
       return null;
   }

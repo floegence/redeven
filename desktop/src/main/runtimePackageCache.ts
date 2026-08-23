@@ -61,6 +61,7 @@ type LocalCommandResult = Readonly<{
 
 type DesktopSourceRuntimePackageCacheEntry = Readonly<{
   source_root: string;
+  source_commit: string;
   package_kind: DesktopSSHReleasePackageKind;
   runtime_release_tag: string;
   platform_id: string;
@@ -112,11 +113,12 @@ function normalizeSourceRuntimeRoot(sourceRoot: string): string {
 
 function sourceRuntimeAssetCacheKey(
   sourceRoot: string,
+  sourceCommit: string,
   releaseTag: string,
   platformID: string,
   packageKind: DesktopSSHReleasePackageKind,
 ): string {
-  return `source:${sourceRoot}:${releaseTag}:${platformID}:${packageKind}`;
+  return `source:${sourceRoot}:${sourceCommit}:${releaseTag}:${platformID}:${packageKind}`;
 }
 
 const sourceRuntimeCopyExcludedSubtrees = [
@@ -422,6 +424,7 @@ function runtimePackagePreparationFailure(
 
 async function prepareSourceRuntimeUploadAsset(args: Readonly<{
   sourceRuntimeRoot: string;
+  sourceCommit: string;
   runtimeReleaseTag: string;
   packageKind: DesktopSSHReleasePackageKind;
   platform: DesktopSSHRemotePlatform;
@@ -443,7 +446,7 @@ async function prepareSourceRuntimeUploadAsset(args: Readonly<{
     const binaryPath = path.join(buildRoot, commandName);
     const buildTime = compact(process.env.REDEVEN_DESKTOP_BUNDLE_BUILD_TIME)
       || new Date().toISOString().replace(/\.\d{3}Z$/u, 'Z');
-    const commit = await readSourceRuntimeCommit(sourceRoot, args.signal);
+    const commit = args.sourceCommit;
     await buildSourceRuntimeAssets(buildSourceRoot, args.signal);
     await buildSourceRuntimeBinary({
       sourceRoot: buildSourceRoot,
@@ -506,7 +509,14 @@ async function ensureSourceRuntimeUploadAsset(args: Readonly<{
     return null;
   }
   const sourceRoot = normalizeSourceRuntimeRoot(requestedSourceRoot);
-  const key = sourceRuntimeAssetCacheKey(sourceRoot, args.runtimeReleaseTag, args.platform.platform_id, args.packageKind);
+  const sourceCommit = await readSourceRuntimeCommit(sourceRoot, args.signal);
+  const key = sourceRuntimeAssetCacheKey(
+    sourceRoot,
+    sourceCommit,
+    args.runtimeReleaseTag,
+    args.platform.platform_id,
+    args.packageKind,
+  );
   const cached = sourceRuntimePackageCache.get(key);
   if (cached) {
     return {
@@ -519,6 +529,7 @@ async function ensureSourceRuntimeUploadAsset(args: Readonly<{
   return onceInFlight(inFlightSourceRuntimeAssets, key, async () => {
     const built = await prepareSourceRuntimeUploadAsset({
       sourceRuntimeRoot: sourceRoot,
+      sourceCommit,
       runtimeReleaseTag: args.runtimeReleaseTag,
       packageKind: args.packageKind,
       platform: args.platform,
@@ -526,6 +537,7 @@ async function ensureSourceRuntimeUploadAsset(args: Readonly<{
     });
     sourceRuntimePackageCache.set(key, {
       source_root: sourceRoot,
+      source_commit: sourceCommit,
       package_kind: args.packageKind,
       runtime_release_tag: args.runtimeReleaseTag,
       platform_id: args.platform.platform_id,

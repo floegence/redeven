@@ -19,9 +19,10 @@ describe('desktopRuntimeOperationPlanner', () => {
 
     expect(plans.open).toMatchObject({ availability: 'available', method: 'ssh_host' });
     expect(plans.start).toMatchObject({
-      availability: 'unavailable',
+      availability: 'available',
       method: 'ssh_host',
       reason_code: 'runtime_already_running',
+      menu_visibility: 'stable',
     });
     for (const operation of ['stop', 'restart', 'update'] as const) {
       expect(plans[operation]).toMatchObject({

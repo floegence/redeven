@@ -15,7 +15,7 @@ import {
 
 export type EnvironmentLifecycleDisclosureIntent = Extract<
   EnvironmentActionIntent,
-  'start_runtime' | 'stop_runtime' | 'restart_runtime' | 'update_runtime'
+  'start_runtime' | 'stop_runtime' | 'restart_runtime' | 'update_runtime' | 'refresh_runtime'
 >;
 
 export type EnvironmentLifecycleDisclosureVisibility = 'open' | 'user_closed';
@@ -44,7 +44,8 @@ export function environmentActionStartsLifecycleDisclosure(
   return action.intent === 'start_runtime'
     || action.intent === 'stop_runtime'
     || action.intent === 'restart_runtime'
-    || action.intent === 'update_runtime';
+    || action.intent === 'update_runtime'
+    || action.intent === 'refresh_runtime';
 }
 
 export function isEnvironmentLifecycleDisclosureIntent(
@@ -53,7 +54,8 @@ export function isEnvironmentLifecycleDisclosureIntent(
   return intent === 'start_runtime'
     || intent === 'stop_runtime'
     || intent === 'restart_runtime'
-    || intent === 'update_runtime';
+    || intent === 'update_runtime'
+    || intent === 'refresh_runtime';
 }
 
 export function lifecycleDisclosureIntentForActionKind(
@@ -68,6 +70,8 @@ export function lifecycleDisclosureIntentForActionKind(
       return 'restart_runtime';
     case 'update_environment_runtime':
       return 'update_runtime';
+    case 'refresh_environment_runtime':
+      return 'refresh_runtime';
     default:
       return null;
   }
@@ -81,6 +85,8 @@ function lifecycleActionKindForIntent(intent: EnvironmentLifecycleDisclosureInte
       return 'restart_environment_runtime';
     case 'update_runtime':
       return 'update_environment_runtime';
+    case 'refresh_runtime':
+      return 'refresh_environment_runtime';
     default:
       return 'start_environment_runtime';
   }
@@ -98,6 +104,8 @@ function lifecycleDisclosureIntentForProgress(
       return 'restart_runtime';
     case 'update':
       return 'update_runtime';
+    case 'refresh':
+      return 'refresh_runtime';
     default:
       return null;
   }

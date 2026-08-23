@@ -1,5 +1,6 @@
 import type { DesktopLauncherActionKind, DesktopLauncherActionProgress } from '../shared/desktopLauncherIPC';
 import type { DesktopRuntimeLifecycleOperation } from '../shared/desktopRuntimeLifecycleProgress';
+import type { DesktopTranslationKey } from '../shared/i18n';
 import type { EnvironmentActionModel } from './viewModel';
 
 export type EnvironmentProgressPrimaryPresentation = Readonly<
@@ -7,6 +8,7 @@ export type EnvironmentProgressPrimaryPresentation = Readonly<
       kind: 'progress_trigger';
       progress: DesktopLauncherActionProgress;
       label: string;
+      label_key: DesktopTranslationKey;
       ariaLabel: string;
       icon: 'play' | 'stop';
     }
@@ -14,6 +16,7 @@ export type EnvironmentProgressPrimaryPresentation = Readonly<
       kind: 'attention_trigger';
       progress: DesktopLauncherActionProgress;
       label: string;
+      label_key: DesktopTranslationKey;
       ariaLabel: string;
     }
 >;
@@ -132,22 +135,24 @@ export function environmentProgressPrimaryPresentation(
     case 'running':
     case 'canceling':
     case 'cleanup_running': {
-      const label = runningProgressPrimaryLabel(progress);
+      const { label, label_key } = runningProgressPrimaryLabel(progress);
       return {
         kind: 'progress_trigger',
         progress,
         label,
+        label_key,
         ariaLabel: `${sentenceForLabel(label)} Show progress.`,
         icon: runningProgressPrimaryIcon(progress),
       };
     }
     case 'failed':
     case 'cleanup_failed': {
-      const label = failedProgressPrimaryLabel(progress);
+      const { label, label_key } = failedProgressPrimaryLabel(progress);
       return {
         kind: 'attention_trigger',
         progress,
         label,
+        label_key,
         ariaLabel: `${sentenceForLabel(label)} Show details.`,
       };
     }
@@ -156,6 +161,7 @@ export function environmentProgressPrimaryPresentation(
         kind: 'attention_trigger',
         progress,
         label: 'Review required',
+        label_key: 'progress.needsAttention',
         ariaLabel: 'Review required. Show details.',
       };
     default:
@@ -176,15 +182,17 @@ export function selectEnvironmentPanelProgress(
   return null;
 }
 
-function runningProgressPrimaryLabel(progress: DesktopLauncherActionProgress): string {
+type ProgressPrimaryLabel = Readonly<{ label: string; label_key: DesktopTranslationKey }>;
+
+function runningProgressPrimaryLabel(progress: DesktopLauncherActionProgress): ProgressPrimaryLabel {
   if (progress.status === 'canceling') {
-    return 'Canceling...';
+    return { label: 'Canceling...', label_key: 'progress.canceling' };
   }
   if (progress.status === 'cleanup_running') {
-    return 'Cleaning up...';
+    return { label: 'Cleaning up...', label_key: 'progress.cleaningUp' };
   }
   if (progress.active_progress_surface === 'open' && progress.open_progress) {
-    return 'Opening...';
+    return { label: 'Opening...', label_key: 'progress.opening' };
   }
   if (
     progress.subject_kind === 'gateway'
@@ -194,27 +202,29 @@ function runningProgressPrimaryLabel(progress: DesktopLauncherActionProgress): s
       || progress.action === 'refresh_gateway'
     )
   ) {
-    return 'Refreshing...';
+    return { label: 'Refreshing...', label_key: 'environmentCenter.gatewayActionSyncing' };
   }
   switch (progress.action) {
     case 'refresh_gateway':
     case 'check_gateway':
-      return 'Refreshing...';
+      return { label: 'Refreshing...', label_key: 'environmentCenter.gatewayActionSyncing' };
     case 'stop_environment_runtime':
-      return 'Stopping...';
+      return { label: 'Stopping...', label_key: 'progress.stoppingEllipsis' };
     case 'restart_environment_runtime':
-      return 'Restarting...';
+      return { label: 'Restarting...', label_key: 'progress.restartingEllipsis' };
     case 'update_environment_runtime':
-      return 'Updating...';
+      return { label: 'Updating...', label_key: 'progress.updatingEllipsis' };
+    case 'refresh_environment_runtime':
+      return { label: 'Refreshing...', label_key: 'environmentCenter.gatewayActionSyncing' };
     case 'reinstall_target':
-      return 'Reinstalling...';
+      return { label: 'Reinstalling...', label_key: 'progress.reinstalling' };
     case 'sync_gateway':
     case 'pair_gateway':
     case 'refresh_gateway_catalog':
     case 'refresh_gateway_status':
-      return 'Refreshing...';
+      return { label: 'Refreshing...', label_key: 'environmentCenter.gatewayActionSyncing' };
     default:
-      return 'Starting...';
+      return { label: 'Starting...', label_key: 'progress.startingEllipsis' };
   }
 }
 
@@ -232,31 +242,33 @@ function sentenceForLabel(label: string): string {
 }
 
 
-function failedProgressPrimaryLabel(progress: DesktopLauncherActionProgress): string {
+function failedProgressPrimaryLabel(progress: DesktopLauncherActionProgress): ProgressPrimaryLabel {
   if (progress.status === 'cleanup_failed') {
-    return 'Cleanup failed';
+    return { label: 'Cleanup failed', label_key: 'progress.cleanupFailed' };
   }
   if (progress.active_progress_surface === 'open' && progress.open_progress) {
-    return 'Open failed';
+    return { label: 'Open failed', label_key: 'progress.openFailed' };
   }
   switch (progress.action) {
     case 'refresh_gateway':
     case 'check_gateway':
-      return 'Refresh failed';
+      return { label: 'Refresh failed', label_key: 'progress.checkFailed' };
     case 'start_environment_runtime':
-      return 'Start failed';
+      return { label: 'Start failed', label_key: 'progress.startFailed' };
     case 'restart_environment_runtime':
-      return 'Restart failed';
+      return { label: 'Restart failed', label_key: 'progress.restartFailed' };
     case 'update_environment_runtime':
-      return 'Update failed';
+      return { label: 'Update failed', label_key: 'progress.updateFailed' };
     case 'stop_environment_runtime':
-      return 'Stop failed';
+      return { label: 'Stop failed', label_key: 'progress.stopFailed' };
+    case 'refresh_environment_runtime':
+      return { label: 'Refresh failed', label_key: 'progress.checkFailed' };
     case 'sync_gateway':
     case 'pair_gateway':
     case 'refresh_gateway_catalog':
     case 'refresh_gateway_status':
-      return 'Refresh failed';
+      return { label: 'Refresh failed', label_key: 'progress.checkFailed' };
     default:
-      return 'Needs attention';
+      return { label: 'Needs attention', label_key: 'progress.needsAttention' };
   }
 }

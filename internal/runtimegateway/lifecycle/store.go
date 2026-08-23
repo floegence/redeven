@@ -16,7 +16,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/floegence/redeven/internal/lockfile"
 	gatewayprotocol "github.com/floegence/redeven/internal/runtimegateway/protocol"
 )
 
@@ -266,11 +265,6 @@ func (s *Store) Prepare(ctx context.Context, request gatewayprotocol.RuntimeOper
 		return gatewayprotocol.RuntimeOperationPrepareResponse{}, lifecycleError(ErrorPermitConsumed, "The Runtime operation authorization permit was already consumed.", false)
 	}
 	s.mu.Unlock()
-	releaseTargetMutation, err := s.beginTargetMutation(request.LifecycleTargetID, false)
-	if err != nil {
-		return gatewayprotocol.RuntimeOperationPrepareResponse{}, err
-	}
-	defer releaseTargetMutation()
 	if err := s.controller.ValidateTarget(ctx, request.GatewayEnvID, gatewayprotocol.LifecycleTarget{
 		LifecycleTargetID: request.LifecycleTargetID,
 		TargetGeneration:  request.TargetGeneration,
@@ -369,61 +363,6 @@ func (s *Store) Prepare(ctx context.Context, request gatewayprotocol.RuntimeOper
 		return s.prepareResponse(current), lifecycleError(ErrorUnavailable, "Runtime workload inspection failed.", true)
 	}
 	return s.prepareResponse(current), nil
-}
-
-func (s *Store) BeginTargetMutation(lifecycleTargetID string) (func(), error) {
-	return s.beginTargetMutation(lifecycleTargetID, true)
-}
-
-func (s *Store) beginTargetMutation(lifecycleTargetID string, reload bool) (func(), error) {
-	if s == nil {
-		return nil, lifecycleError(ErrorUnavailable, "Runtime lifecycle supervisor is unavailable.", true)
-	}
-	lifecycleTargetID = strings.TrimSpace(lifecycleTargetID)
-	if lifecycleTargetID == "" {
-		return nil, lifecycleError(ErrorInvalidRequest, "lifecycle_target_id is required.", false)
-	}
-	lockDigest := sha256.Sum256([]byte(lifecycleTargetID))
-	lockPath := filepath.Join(s.stateRoot, "target-mutation-locks", hex.EncodeToString(lockDigest[:])+".lock")
-	if err := os.MkdirAll(filepath.Dir(lockPath), 0o700); err != nil {
-		return nil, fmt.Errorf("create Runtime lifecycle target lock directory: %w", err)
-	}
-	mutationLock, err := lockfile.Acquire(lockPath)
-	if err != nil {
-		if errors.Is(err, lockfile.ErrAlreadyLocked) {
-			return nil, lifecycleError(ErrorOperationInProgress, "A Runtime target mutation is already in progress.", false)
-		}
-		return nil, fmt.Errorf("lock Runtime lifecycle target mutation: %w", err)
-	}
-	release := func() { _ = mutationLock.Release() }
-
-	s.mu.Lock()
-	if reload {
-		state, loadErr := readStateFile(s.statePath)
-		if loadErr != nil {
-			s.mu.Unlock()
-			release()
-			return nil, loadErr
-		}
-		if validateErr := s.validateLoadedState(state); validateErr != nil {
-			s.mu.Unlock()
-			release()
-			return nil, validateErr
-		}
-		s.state = state
-	}
-	quarantinedBy := s.state.Quarantined[lifecycleTargetID]
-	lockedBy := s.state.TargetLocks[lifecycleTargetID]
-	s.mu.Unlock()
-	if quarantinedBy != "" {
-		release()
-		return nil, lifecycleError(ErrorRecoveryFailed, "The Runtime target is isolated pending administrator recovery.", false)
-	}
-	if lockedBy != "" {
-		release()
-		return nil, lifecycleError(ErrorOperationInProgress, lockedBy, false)
-	}
-	return release, nil
 }
 
 func (s *Store) Get(_ context.Context, operationID string, access Access) (gatewayprotocol.RuntimeOperation, error) {

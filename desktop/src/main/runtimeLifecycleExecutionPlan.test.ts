@@ -31,6 +31,16 @@ describe('runtimeLifecycleExecutionPlan', () => {
     ]);
   });
 
+  it('models refresh as a read-only target check and inventory verification', () => {
+    expect(initialRuntimeLifecyclePlan({
+      location: 'ssh_host',
+      operation: 'refresh',
+    }).steps.map((step) => step.id)).toEqual([
+      'checking_host',
+      'verifying_runtime_inventory',
+    ]);
+  });
+
   it('uses short plans for openable and already-current runtimes', () => {
     expect(runtimeLifecyclePlanAfterDecision({
       location: 'ssh_host',

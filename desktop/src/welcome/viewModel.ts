@@ -4,7 +4,7 @@ import type {
   DesktopLocalEnvironmentStateRoute,
   DesktopWelcomeSnapshot,
 } from '../shared/desktopLauncherIPC';
-import type { DesktopI18n } from '../shared/i18n';
+import type { DesktopI18n, DesktopTranslationKey } from '../shared/i18n';
 import { desktopControlPlaneKey, type DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
 import type { DesktopControlPlaneSyncState } from '../shared/providerEnvironmentState';
 import {
@@ -30,11 +30,10 @@ import {
 } from '../shared/providerRuntimeLinkTarget';
 import {
   desktopEntryKindSupportsRuntimeManagement,
-  desktopEntryKindCanInitiateRuntimeManagement,
   desktopProviderEnvironmentOpenRoute,
 } from '../shared/environmentManagementPrinciples';
 import {
-  desktopRuntimeOperationIsVisible,
+  desktopRuntimeOperationLabel,
   type DesktopRuntimeOperation,
   type DesktopRuntimeOperationMethod,
   type DesktopRuntimeOperationPlan,
@@ -201,6 +200,7 @@ export type EnvironmentActionIntent =
 export type EnvironmentActionModel = Readonly<{
   intent: EnvironmentActionIntent;
   label: string;
+  label_key?: DesktopTranslationKey;
   enabled: boolean;
   variant: 'default' | 'outline';
   continue_open_after_completion?: boolean;
@@ -217,6 +217,7 @@ export type EnvironmentActionModel = Readonly<{
 export type EnvironmentActionMenuItemModel = Readonly<{
   id: string;
   label: string;
+  label_key?: DesktopTranslationKey;
   action: EnvironmentActionModel;
 }>;
 
@@ -1352,39 +1353,58 @@ function runtimeProviderLinkMenuAction(
   }
   const target = environment.provider_runtime_link_target;
   if (!target) {
-    return null;
+    return {
+      id: 'connect_provider_runtime',
+      label: 'Connect to provider...',
+      label_key: 'environmentAction.connectToProviderEllipsis',
+      action: {
+        intent: 'connect_provider_runtime',
+        label: 'Connect to provider...',
+        label_key: 'environmentAction.connectToProviderEllipsis',
+        enabled: false,
+        variant: 'outline',
+        disabled_reason: 'Choose an available Provider Environment before connecting this runtime.',
+      },
+    };
   }
   switch (target.provider_connection_state) {
     case 'connected':
       return {
         id: 'disconnect_provider_runtime',
         label: 'Disconnect from provider',
+        label_key: 'environmentAction.disconnectFromProvider',
         action: {
           intent: 'disconnect_provider_runtime',
           label: 'Disconnect from provider',
-          enabled: target.can_disconnect_provider,
+          label_key: 'environmentAction.disconnectFromProvider',
+          enabled: true,
           variant: 'outline',
         },
       };
     case 'connecting':
       return {
-        id: 'provider_link_connecting',
-        label: 'Connecting to provider',
+        id: 'connect_provider_runtime',
+        label: 'Connect to provider...',
+        label_key: 'environmentAction.connectToProviderEllipsis',
         action: {
-          intent: 'unavailable',
-          label: 'Connecting to provider',
+          intent: 'connect_provider_runtime',
+          label: 'Connect to provider...',
+          label_key: 'environmentAction.connectToProviderEllipsis',
           enabled: false,
           variant: 'outline',
+          disabled_reason: 'A Provider connection operation is already running.',
         },
       };
     case 'disconnecting':
       return {
-        id: 'provider_link_disconnecting',
-        label: 'Disconnecting from provider',
+        id: 'disconnect_provider_runtime',
+        label: 'Disconnect from provider',
+        label_key: 'environmentAction.disconnectFromProvider',
         action: {
-          intent: 'unavailable',
-          label: 'Disconnecting from provider',
-          enabled: false,
+          intent: 'disconnect_provider_runtime',
+          label: 'Disconnect from provider',
+          label_key: 'environmentAction.disconnectFromProvider',
+          enabled: true,
           variant: 'outline',
         },
       };
@@ -1393,29 +1413,43 @@ function runtimeProviderLinkMenuAction(
         return {
           id: 'disconnect_provider_runtime',
           label: 'Disconnect from provider',
+          label_key: 'environmentAction.disconnectFromProvider',
           action: {
             intent: 'disconnect_provider_runtime',
             label: 'Disconnect from provider',
+            label_key: 'environmentAction.disconnectFromProvider',
             enabled: true,
             variant: 'outline',
           },
         };
       }
       return {
-        id: 'provider_link_needs_attention',
-        label: 'Provider link needs attention',
+        id: 'connect_provider_runtime',
+        label: 'Connect to provider...',
+        label_key: 'environmentAction.connectToProviderEllipsis',
         action: {
-          intent: 'unavailable',
-          label: 'Provider link needs attention',
+          intent: 'connect_provider_runtime',
+          label: 'Connect to provider...',
+          label_key: 'environmentAction.connectToProviderEllipsis',
           enabled: false,
           variant: 'outline',
           disabled_reason: 'Provider link needs attention.',
         },
       };
     case 'unsupported':
-      // Provider linking is optional. An unsupported link must not replace
-      // the runtime lifecycle actions on a Local or SSH environment card.
-      return null;
+      return {
+        id: 'connect_provider_runtime',
+        label: 'Connect to provider...',
+        label_key: 'environmentAction.connectToProviderEllipsis',
+        action: {
+          intent: 'connect_provider_runtime',
+          label: 'Connect to provider...',
+          label_key: 'environmentAction.connectToProviderEllipsis',
+          enabled: false,
+          variant: 'outline',
+          disabled_reason: 'Choose an available Provider Environment before connecting this runtime.',
+        },
+      };
     case 'unlinked':
       break;
   }
@@ -1424,9 +1458,11 @@ function runtimeProviderLinkMenuAction(
   return {
     id: 'connect_provider_runtime',
     label,
+    label_key: 'environmentAction.connectToProviderEllipsis',
     action: {
       intent: 'connect_provider_runtime',
       label,
+      label_key: 'environmentAction.connectToProviderEllipsis',
       enabled: canConnect,
       variant: 'outline',
       ...(!canConnect ? { disabled_reason: 'Choose an available Provider Environment before connecting this runtime.' } : {}),
@@ -1450,6 +1486,7 @@ const runtimeOperationMenuOrder: readonly DesktopRuntimeOperation[] = [
   'stop',
   'restart',
   'update',
+  'refresh',
 ];
 
 function runtimeOperationIntent(operation: DesktopRuntimeOperation): EnvironmentActionIntent | null {
@@ -1469,56 +1506,59 @@ function runtimeOperationIntent(operation: DesktopRuntimeOperation): Environment
   }
 }
 
-function runtimeOperationMenuItem(plan: DesktopRuntimeOperationPlan | undefined): EnvironmentActionMenuItemModel | null {
-  if (!plan || !desktopRuntimeOperationIsVisible(plan) || plan.menu_visibility === 'hidden') {
+function runtimeOperationLabelKey(operation: DesktopRuntimeOperation): DesktopTranslationKey | undefined {
+  switch (operation) {
+    case 'start': return 'environmentAction.startRuntime';
+    case 'stop': return 'environmentAction.stopRuntime';
+    case 'restart': return 'environmentAction.restartRuntime';
+    case 'update': return 'environmentAction.updateRuntime';
+    case 'refresh': return 'environmentAction.refreshRuntimeStatus';
+    default: return undefined;
+  }
+}
+
+function runtimeOperationMenuItem(
+  plan: DesktopRuntimeOperationPlan | undefined,
+  operation?: DesktopRuntimeOperation,
+  forceManaged = false,
+): EnvironmentActionMenuItemModel | null {
+  const resolvedOperation = plan?.operation ?? operation;
+  if (!resolvedOperation) {
     return null;
   }
-  if (plan.menu_visibility === 'contextual' && plan.availability === 'unavailable') {
+  if (!forceManaged && (!plan || plan.availability === 'hidden' || plan.menu_visibility === 'hidden')) {
     return null;
   }
-  const intent = runtimeOperationIntent(plan.operation);
+  if (!forceManaged && plan?.menu_visibility === 'contextual' && plan.availability === 'unavailable') {
+    return null;
+  }
+  const intent = runtimeOperationIntent(resolvedOperation);
   if (!intent) {
     return null;
   }
+  const label = plan?.label ?? desktopRuntimeOperationLabel(resolvedOperation);
+  const labelKey = runtimeOperationLabelKey(resolvedOperation);
   return {
     id: intent,
-    label: plan.label,
+    label,
+    ...(labelKey ? { label_key: labelKey } : {}),
     action: {
         intent,
-        label: plan.label,
-        enabled: plan.availability === 'available',
+        label,
+        ...(labelKey ? { label_key: labelKey } : {}),
+        // A diagnostic describes the current target; it never removes the
+        // user's direct recovery controls. The main process remains the
+        // authority and returns the concrete result for an idempotent action.
+        enabled: forceManaged || plan?.availability === 'available',
         variant: 'outline',
-        runtime_operation: plan.operation,
-        runtime_operation_method: plan.method,
-        ...(plan.message ? { disabled_reason: plan.message } : {}),
+        runtime_operation: resolvedOperation,
+        runtime_operation_method: plan?.method ?? 'none',
+        ...(!forceManaged && plan?.message ? { disabled_reason: plan.message } : {}),
       },
   };
 }
 
 function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly EnvironmentActionMenuItemModel[] {
-  if (environmentSupportsDirectReinstall(environment) && environment.reinstall_required === true) {
-    return [{
-      id: 'reinstall_target_wipe',
-      label: 'Erase data and reinstall Redeven',
-      action: {
-        intent: 'reinstall_target',
-        label: 'Erase data and reinstall Redeven',
-        enabled: true,
-        variant: 'default',
-        reinstall_mode: 'wipe_data',
-      },
-    }, {
-      id: 'reinstall_target_preserve',
-      label: 'Reinstall Redeven and keep data',
-      action: {
-        intent: 'reinstall_target',
-        label: 'Reinstall Redeven and keep data',
-        enabled: true,
-        variant: 'outline',
-        reinstall_mode: 'preserve_data',
-      },
-    }];
-  }
   const items: EnvironmentActionMenuItemModel[] = [];
   if (environment.kind === 'gateway_environment') {
     const refreshPlan = environment.runtime_operations.refresh;
@@ -1538,9 +1578,9 @@ function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly Envi
   if (remoteRouteAction) {
     items.push(remoteRouteAction);
   }
-  if (desktopEntryKindCanInitiateRuntimeManagement(environment.kind)) {
+  if (desktopEntryKindSupportsRuntimeManagement(environment.kind)) {
     for (const operation of runtimeOperationMenuOrder) {
-      const item = runtimeOperationMenuItem(environment.runtime_operations[operation]);
+      const item = runtimeOperationMenuItem(environment.runtime_operations[operation], operation, true);
       if (item) {
         items.push(item);
       }
@@ -1550,9 +1590,11 @@ function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly Envi
     items.push({
       id: 'reinstall_target_wipe',
       label: 'Erase data and reinstall Redeven',
+      label_key: 'environmentAction.reinstallRedevenWipeData',
       action: {
         intent: 'reinstall_target',
         label: 'Erase data and reinstall Redeven',
+        label_key: 'environmentAction.reinstallRedevenWipeData',
         enabled: true,
         variant: 'outline',
         reinstall_mode: 'wipe_data',
@@ -1560,9 +1602,11 @@ function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly Envi
     }, {
       id: 'reinstall_target_preserve',
       label: 'Reinstall Redeven and keep data',
+      label_key: 'environmentAction.reinstallRedevenKeepData',
       action: {
         intent: 'reinstall_target',
         label: 'Reinstall Redeven and keep data',
+        label_key: 'environmentAction.reinstallRedevenKeepData',
         enabled: true,
         variant: 'outline',
         reinstall_mode: 'preserve_data',
@@ -1573,18 +1617,20 @@ function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly Envi
   if (runtimeProviderLinkAction) {
     items.push(runtimeProviderLinkAction);
   }
-  const refreshPlan = environment.runtime_operations.refresh;
-  const refreshLabel = environment.kind === 'provider_environment' ? 'Refresh provider status' : 'Refresh runtime status';
-  items.push({
-    id: 'refresh_runtime',
-    label: refreshLabel,
-    action: {
-      intent: 'refresh_runtime',
+  if (!desktopEntryKindSupportsRuntimeManagement(environment.kind)) {
+    const refreshPlan = environment.runtime_operations.refresh;
+    const refreshLabel = environment.kind === 'provider_environment' ? 'Refresh provider status' : 'Refresh runtime status';
+    items.push({
+      id: 'refresh_runtime',
       label: refreshLabel,
-      enabled: refreshPlan?.availability !== 'blocked',
-      variant: 'outline',
-    },
-  });
+      action: {
+        intent: 'refresh_runtime',
+        label: refreshLabel,
+        enabled: refreshPlan?.availability !== 'blocked',
+        variant: 'outline',
+      },
+    });
+  }
   return items;
 }
 

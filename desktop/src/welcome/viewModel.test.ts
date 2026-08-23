@@ -549,7 +549,7 @@ function gatewaySource(overrides: Partial<DesktopGatewaySource> = {}): DesktopGa
 }
 
 describe('buildEnvironmentDisplayStateModel', () => {
-  it('shows only Reinstall for an incompatible Local Environment', () => {
+  it('keeps every direct lifecycle action available for an incompatible Local Environment', () => {
     const local = testLocalEnvironment();
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({ local_environment: local }),
@@ -567,19 +567,54 @@ describe('buildEnvironmentDisplayStateModel', () => {
       label: 'Reinstall Redeven',
       enabled: true,
     });
-    expect(model.action_presentation.menu_actions.map((item) => item.id)).toEqual([
-      'reinstall_target_wipe',
-      'reinstall_target_preserve',
-    ]);
-    expect(model.action_presentation.menu_actions.map((item) => item.id)).not.toEqual(expect.arrayContaining([
+    expect(model.action_presentation.menu_actions.map((item) => item.id)).toEqual(expect.arrayContaining([
       'start_runtime',
       'stop_runtime',
       'restart_runtime',
       'update_runtime',
       'refresh_runtime',
-      'open',
+      'reinstall_target_wipe',
+      'reinstall_target_preserve',
     ]));
+    expect(model.action_presentation.menu_actions
+      .filter((item) => item.id !== 'connect_provider_runtime')
+      .every((item) => item.action.enabled)).toBe(true);
     expect(model.action_presentation.primary_action_overlay).toBeUndefined();
+  });
+
+  it('keeps the complete managed menu even when a stale snapshot hides every lifecycle plan', () => {
+    const local = testLocalEnvironment();
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({ local_environment: local }),
+    });
+    const entry = snapshot.environments.find((candidate) => candidate.id === local.id);
+    expect(entry).toBeTruthy();
+    const hiddenOperations = Object.fromEntries(Object.entries(entry!.runtime_operations).map(([operation, plan]) => [
+      operation,
+      { ...plan, availability: 'hidden', menu_visibility: 'hidden' },
+    ])) as NonNullable<typeof entry>['runtime_operations'];
+
+    const actions = buildProviderBackedEnvironmentActionModel({
+      ...entry!,
+      runtime_operations: hiddenOperations,
+      reinstall_required: true,
+    }).action_presentation.menu_actions;
+
+    expect(actions.slice(0, 7).map((item) => item.id)).toEqual([
+      'start_runtime',
+      'stop_runtime',
+      'restart_runtime',
+      'update_runtime',
+      'refresh_runtime',
+      'reinstall_target_wipe',
+      'reinstall_target_preserve',
+    ]);
+    expect(actions.filter((item) => item.id !== 'connect_provider_runtime')
+      .every((item) => item.action.enabled)).toBe(true);
+    expect(actions).toEqual(expect.arrayContaining([expect.objectContaining({
+      id: 'connect_provider_runtime',
+      action: expect.objectContaining({ enabled: false }),
+    })]));
   });
 
   it('keeps Reinstall Redeven in the normal Local Environment runtime menu', () => {
@@ -1583,7 +1618,7 @@ describe('buildEnvironmentCardModel', () => {
       'restart_runtime',
       'update_runtime',
     ]));
-    expect(actionModel.action_presentation.menu_actions.map((item) => item.id)).not.toContain('start_runtime');
+    expect(actionModel.action_presentation.menu_actions.map((item) => item.id)).toContain('start_runtime');
   });
 
   it('uses the runtime open operation plan as the primary Open source for saved containers', () => {
@@ -2413,9 +2448,11 @@ describe('buildEnvironmentCardModel', () => {
         menu_actions: expect.arrayContaining([{
           id: 'connect_provider_runtime',
           label: 'Connect to provider...',
+          label_key: 'environmentAction.connectToProviderEllipsis',
           action: {
             intent: 'connect_provider_runtime',
             label: 'Connect to provider...',
+            label_key: 'environmentAction.connectToProviderEllipsis',
             enabled: true,
             variant: 'outline',
           },
@@ -2447,7 +2484,7 @@ describe('buildEnvironmentCardModel', () => {
       'restart_runtime',
       'update_runtime',
     ]));
-    expect(managedMenuActionIDs).not.toContain('start_runtime');
+    expect(managedMenuActionIDs).toContain('start_runtime');
 
     const openLocalServeSnapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
@@ -2508,9 +2545,11 @@ describe('buildEnvironmentCardModel', () => {
         menu_actions: expect.arrayContaining([{
           id: 'disconnect_provider_runtime',
           label: 'Disconnect from provider',
+          label_key: 'environmentAction.disconnectFromProvider',
           action: {
             intent: 'disconnect_provider_runtime',
             label: 'Disconnect from provider',
+            label_key: 'environmentAction.disconnectFromProvider',
             enabled: true,
             variant: 'outline',
           },
@@ -2580,9 +2619,11 @@ describe('buildEnvironmentCardModel', () => {
         menu_actions: expect.arrayContaining([{
           id: 'disconnect_provider_runtime',
           label: 'Disconnect from provider',
+          label_key: 'environmentAction.disconnectFromProvider',
           action: {
             intent: 'disconnect_provider_runtime',
             label: 'Disconnect from provider',
+            label_key: 'environmentAction.disconnectFromProvider',
             enabled: true,
             variant: 'outline',
           },

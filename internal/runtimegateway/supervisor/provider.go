@@ -43,16 +43,11 @@ type ProviderEnrollmentOptions struct {
 	GatewayVersion    string
 	BindingStore      *BindingStore
 	Controller        RuntimeValidationRefresher
-	TargetCoordinator TargetMutationCoordinator
 	HTTPClient        *http.Client
 }
 
 type RuntimeValidationRefresher interface {
 	RefreshRuntimeValidation(context.Context) (RuntimeValidation, error)
-}
-
-type TargetMutationCoordinator interface {
-	BeginTargetMutation(string) (func(), error)
 }
 
 type providerEnrollmentExchangeRequest struct {
@@ -179,17 +174,6 @@ func EnrollProvider(ctx context.Context, options ProviderEnrollmentOptions) (Tar
 		return TargetBinding{}, fmt.Errorf("validate current Runtime before enrollment: %w", err)
 	}
 	binding := options.BindingStore.Binding()
-	if options.TargetCoordinator != nil {
-		releaseTargetMutation, err := options.TargetCoordinator.BeginTargetMutation(binding.LifecycleTargetID)
-		if err != nil {
-			return TargetBinding{}, fmt.Errorf("reserve Runtime target for enrollment: %w", err)
-		}
-		defer releaseTargetMutation()
-		if err := options.BindingStore.Reload(); err != nil {
-			return TargetBinding{}, err
-		}
-		binding = options.BindingStore.Binding()
-	}
 	targetGeneration := providerEnrollmentTargetGeneration(binding)
 	proofRequest := EnrollmentProofRequest{
 		ProtocolVersion: EnrollmentProtocolVersion, ChallengeID: codeScope.ChallengeID, ProofNonce: codeScope.ProofNonce,

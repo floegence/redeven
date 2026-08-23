@@ -38,7 +38,7 @@ if [[ "$self_test" -eq 1 ]]; then
 fi
 
 [[ -n "$artifact_dir" && -d "$artifact_dir" && -n "$tag" ]] || { usage >&2; exit 2; }
-for command in curl gh go jq node npm sha256sum; do require_command "$command"; done
+for command in curl go jq node npm sha256sum; do require_command "$command"; done
 artifact_dir=$(cd -- "$artifact_dir" >/dev/null 2>&1 && pwd -P)
 manifest="$artifact_dir/$ASSET_NAME"
 [[ -f "$manifest" && ! -L "$manifest" ]] || die "release is missing $ASSET_NAME"
@@ -47,10 +47,11 @@ entries=$(find "$artifact_dir" -mindepth 1 -maxdepth 1 -type f -print | wc -l | 
 [[ "$entries" == 1 ]] || die "release artifact directory must contain only $ASSET_NAME"
 node "$SCRIPT_DIR/redevplugin_release_contract.mjs" verify-release-manifest "$manifest" "$tag" >/dev/null
 
-release_json=$(gh release view "$tag" --repo "$REPOSITORY" --json isDraft,isPrerelease,tagName,assets)
+release_json=$(curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location --retry 3 \
+  "https://api.github.com/repos/$REPOSITORY/releases/tags/$tag")
 RELEASE_JSON="$release_json" EXPECTED_TAG="$tag" node --input-type=module <<'NODE'
 const value = JSON.parse(process.env.RELEASE_JSON);
-if (value.isDraft || value.isPrerelease || value.tagName !== process.env.EXPECTED_TAG) throw new Error('release state is invalid');
+if (value.draft || value.prerelease || value.tag_name !== process.env.EXPECTED_TAG) throw new Error('release state is invalid');
 if (!Array.isArray(value.assets) || value.assets.length !== 1 || value.assets[0].name !== 'platform-release-manifest.json') {
   throw new Error('release asset inventory is invalid');
 }
