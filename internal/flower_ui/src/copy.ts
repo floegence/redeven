@@ -295,6 +295,11 @@ export type FlowerSurfaceCopy = Readonly<{
     permissionSelectorLabel: string;
     permissionSelectorSaving: string;
     permissionSelectorErrorTitle: string;
+    permissionSelectorUpdatedForActiveTurn: string;
+    toolActivityRunCommand: string;
+    toolActivityReadCommandOutput: string;
+    toolActivityWriteCommandInput: string;
+    toolActivityTerminateCommand: string;
     handlerBlockedTitle: string;
     handlerStartFailedTitle: string;
     handlerStillStarting: string;
@@ -537,6 +542,11 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     permissionSelectorLabel: 'Thread permission',
     permissionSelectorSaving: 'Saving permission...',
     permissionSelectorErrorTitle: 'Flower could not save permission.',
+    permissionSelectorUpdatedForActiveTurn: 'Permission updated. It applies to later operations in this reply.',
+    toolActivityRunCommand: 'Run command',
+    toolActivityReadCommandOutput: 'View command output',
+    toolActivityWriteCommandInput: 'Send input to command',
+    toolActivityTerminateCommand: 'Terminate command execution',
     handlerBlockedTitle: 'Flower needs attention',
     handlerStartFailedTitle: 'Flower could not start',
     handlerStillStarting: 'Flower is still starting.',

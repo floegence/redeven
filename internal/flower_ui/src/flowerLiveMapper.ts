@@ -1063,6 +1063,7 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
     model_id: trim(record.model_id),
     working_dir: trim(record.working_dir),
     ...(Number(record.pinned_at_unix_ms ?? 0) > 0 ? { pinned_at_ms: Math.floor(Number(record.pinned_at_unix_ms)) } : {}),
+    settings_revision: nonNegativeInteger(record.settings_revision ?? 0, 'thread.settings_revision'),
     home_runtime_id: options.runtimeID,
     home_runtime_kind: options.runtimeKind,
     ...(trim(options.originEnvPublicID) ? { origin_env_public_id: trim(options.originEnvPublicID) } : {}),

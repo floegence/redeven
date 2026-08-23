@@ -623,8 +623,8 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 	t.Parallel()
 
 	const (
-		floretModule  = "github.com/floegence/floret/v4"
-		floretVersion = "v4.0.19"
+		floretModule  = "github.com/floegence/floret/v5"
+		floretVersion = "v5.0.0"
 	)
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")
@@ -702,7 +702,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 	root := repoRootForTest(t)
 	expectedMarkers := map[string][]string{
 		filepath.Join("okf", "ai", "floret-thread-runtime.md"): {
-			"Floret v4 `ThreadService`",
+			"Floret v5 `ThreadService`",
 			"canonical journal is the only durable lifecycle fact source",
 			"`View`, `Send`, `Respond`, `Cancel`, `Retry`, `RetryEffect`",
 		},
@@ -712,7 +712,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"without cursor replay or polling",
 		},
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
-			"github.com/floegence/floret/v4 v4.0.19",
+			"github.com/floegence/floret/v5 v5.0.0",
 			"runtime-permission-lifecycle-v2",
 			"published Flowersec Go and Core v2.5.2 plus Floe Webapp v0.42.2",
 			"Floret ThreadService is the only lifecycle boundary",
@@ -889,7 +889,7 @@ func TestFloretCanonicalThreadCreationIsCreateCoordinatorOnly(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			if importPath != "github.com/floegence/floret/v4/runtime" {
+			if importPath != "github.com/floegence/floret/v5/runtime" {
 				continue
 			}
 			alias := "runtime"
@@ -1059,7 +1059,7 @@ func TestFloretContextLifecycleBoundaryDoesNotUseHostHistoryAPIs(t *testing.T) {
 
 	root := repoRootForTest(t)
 	forbidden := []string{
-		"github.com/floegence/floret/v4/" + "internal",
+		"github.com/floegence/floret/v5/" + "internal",
 		"Run" + "ProjectedTurn",
 		"ProjectedTurn" + "Request",
 		"ProjectedTurn" + "Result",

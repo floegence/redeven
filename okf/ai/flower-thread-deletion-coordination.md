@@ -27,7 +27,7 @@ Redeven never opens or edits Floret tables, never restores a deleted canonical t
 
 - `redeven:internal/ai/threads.go` - Performs typed canonical delete followed by idempotent product cleanup.
 - `redeven:internal/ai/threadstore/catalog_mutation.go` - Removes only Redeven-owned thread product data in one transaction.
-- `redeven:internal/ai/thread_delete_v4_test.go` - Covers product cleanup failure after canonical deletion and successful retry convergence.
+- `redeven:internal/ai/thread_delete_test.go` - Covers product cleanup failure after canonical deletion and successful retry convergence.
 - `redeven:internal/codeapp/appserver/server.go` - Exposes the synchronous DELETE response and strict force query.
 - `redeven:internal/codeapp/appserver/server_test.go` - Covers success, idempotent absence, read-state retirement, and force parsing.
 - `redeven:internal/flower_ui/src/runtimeFlowerSurfaceAdapter.ts` - Maps deletion to `Promise<void>` without lifecycle receipts.

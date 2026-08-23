@@ -164,6 +164,67 @@ describe('Flower final thread cache and workspace transport', () => {
     expect(okfToggle.getAttribute('aria-expanded')).toBe('true');
   });
 
+  it('uses semantic terminal titles and omits empty terminal disclosures', async () => {
+    const threadID = 'thread-terminal-semantic-presentation';
+    const terminalThread = thread({
+      thread_id: threadID,
+      title: 'Terminal presentation',
+      status: 'success',
+      messages: [{
+        id: 'terminal-activity-message',
+        turn_id: 'terminal-activity-turn',
+        role: 'assistant',
+        content: '',
+        status: 'complete',
+        created_at_ms: 10,
+        blocks: [activityTimeline({
+          thread_id: threadID,
+          run_id: 'terminal-activity-turn',
+          turn_id: 'terminal-activity-turn',
+          items: [
+            activityItem({
+              item_id: 'terminal-exec-semantic',
+              tool_id: 'terminal-exec-semantic',
+              tool_name: 'terminal.exec',
+              renderer: 'structured',
+              label: 'terminal.exec',
+              description: 'Fetch official specifications',
+              payload: { command: 'curl -s https://example.test/specifications' },
+            }),
+            activityItem({
+              item_id: 'terminal-terminate-semantic',
+              tool_id: 'terminal-terminate-semantic',
+              tool_name: 'terminal.terminate',
+              renderer: 'structured',
+              label: 'terminal.terminate',
+              description: 'Stop the stalled request',
+              payload: {},
+            }),
+          ],
+        })],
+      }],
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [terminalThread]),
+      loadThread: vi.fn(async () => liveBootstrap(terminalThread, 10)),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${threadID}"] button`)));
+    (runtime.querySelector(`[data-thread-id="${threadID}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelectorAll('[data-flower-activity-item-id]').length === 2);
+
+    const execRow = runtime.querySelector('[data-flower-activity-item-id="terminal-exec-semantic"]') as HTMLElement;
+    const terminateRow = runtime.querySelector('[data-flower-activity-item-id="terminal-terminate-semantic"]') as HTMLElement;
+    expect(execRow.textContent).toContain('Run command: Fetch official specifications');
+    expect(terminateRow.textContent).toContain('Terminate command execution: Stop the stalled request');
+    expect(runtime.textContent).not.toContain('terminal.exec');
+    expect(runtime.textContent).not.toContain('terminal.terminate');
+    expect(execRow.querySelector('button.flower-activity-inline-button')).not.toBeNull();
+    expect(terminateRow.querySelector('button.flower-activity-inline-button')).toBeNull();
+    expect(terminateRow.querySelector('.flower-activity-inline-chevron')).toBeNull();
+  });
+
   it('keeps waiting-user navigation interactive and applies background state without pointer activity', async () => {
     const waiting = thread({
       thread_id: 'thread-a', title: 'Waiting A', status: 'waiting_user', active_run_id: 'turn-a',

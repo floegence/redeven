@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	fltools "github.com/floegence/floret/v4/tools"
+	fltools "github.com/floegence/floret/v5/tools"
 	"github.com/floegence/redeven/internal/session"
 )
 

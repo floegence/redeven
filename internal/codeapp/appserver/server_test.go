@@ -20,9 +20,9 @@ import (
 	"testing/fstest"
 	"time"
 
-	"github.com/floegence/floret/v4/identity"
-	flprovider "github.com/floegence/floret/v4/provider"
-	flruntime "github.com/floegence/floret/v4/runtime"
+	"github.com/floegence/floret/v5/identity"
+	flprovider "github.com/floegence/floret/v5/provider"
+	flruntime "github.com/floegence/floret/v5/runtime"
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/auditlog"
 	"github.com/floegence/redeven/internal/codeapp/codeserver"
@@ -2776,8 +2776,10 @@ func TestServer_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 		ReadState aiThreadReadStatusState    `json:"read_state"`
 	}
 	type aiThreadView struct {
-		ThreadID   string             `json:"thread_id"`
-		ReadStatus aiThreadReadStatus `json:"read_status"`
+		ThreadID         string             `json:"thread_id"`
+		PermissionType   string             `json:"permission_type"`
+		SettingsRevision int64              `json:"settings_revision"`
+		ReadStatus       aiThreadReadStatus `json:"read_status"`
 	}
 	type aiListResponse struct {
 		OK   bool `json:"ok"`
@@ -2788,7 +2790,11 @@ func TestServer_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 	type aiDetailResponse struct {
 		OK   bool `json:"ok"`
 		Data struct {
-			Thread aiThreadView `json:"thread"`
+			Thread  aiThreadView `json:"thread"`
+			Current struct {
+				ThreadID    string `json:"thread_id"`
+				ViewVersion int64  `json:"view_version"`
+			} `json:"current"`
 		} `json:"data"`
 	}
 	type aiMarkReadResponse struct {
@@ -2812,6 +2818,29 @@ func TestServer_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 	)
 	if patchWorkingDir.Code != http.StatusBadRequest {
 		t.Fatalf("PATCH working_dir status=%d body=%s, want %d", patchWorkingDir.Code, patchWorkingDir.Body.String(), http.StatusBadRequest)
+	}
+	patchPermission := performServerRequest(
+		srv,
+		http.MethodPatch,
+		"/_redeven_proxy/api/ai/threads/"+url.PathEscape(thread.ThreadID),
+		originUser1,
+		`{"permission_type":"full_access"}`,
+	)
+	if patchPermission.Code != http.StatusOK {
+		t.Fatalf("PATCH permission status=%d body=%s", patchPermission.Code, patchPermission.Body.String())
+	}
+	var permissionResponse aiDetailResponse
+	if err := json.Unmarshal(patchPermission.Body.Bytes(), &permissionResponse); err != nil {
+		t.Fatalf("unmarshal PATCH permission response: %v", err)
+	}
+	if permissionResponse.Data.Thread.PermissionType != "full_access" {
+		t.Fatalf("PATCH permission=%q, want full_access", permissionResponse.Data.Thread.PermissionType)
+	}
+	if permissionResponse.Data.Thread.SettingsRevision <= 0 {
+		t.Fatalf("PATCH settings_revision=%d, want positive", permissionResponse.Data.Thread.SettingsRevision)
+	}
+	if permissionResponse.Data.Current.ThreadID != thread.ThreadID || permissionResponse.Data.Current.ViewVersion <= 0 {
+		t.Fatalf("PATCH current=%+v, want authoritative current view", permissionResponse.Data.Current)
 	}
 
 	readList := func(origin string) aiListResponse {

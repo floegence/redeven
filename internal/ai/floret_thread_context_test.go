@@ -4,10 +4,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/floegence/floret/v4/config"
-	"github.com/floegence/floret/v4/identity"
-	"github.com/floegence/floret/v4/observation"
-	flruntime "github.com/floegence/floret/v4/runtime"
+	"github.com/floegence/floret/v5/config"
+	"github.com/floegence/floret/v5/identity"
+	"github.com/floegence/floret/v5/observation"
+	flruntime "github.com/floegence/floret/v5/runtime"
 )
 
 func TestFlowerThreadContextProjectionRestoresOneTerminalCompactionDivider(t *testing.T) {

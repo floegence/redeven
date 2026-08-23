@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	flruntime "github.com/floegence/floret/v4/runtime"
+	flruntime "github.com/floegence/floret/v5/runtime"
 )
 
 var (

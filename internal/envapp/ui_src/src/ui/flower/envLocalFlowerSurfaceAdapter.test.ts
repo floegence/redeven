@@ -1667,9 +1667,6 @@ describe('Env local Flower surface adapter', () => {
 		fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
 			if (url === '/_redeven_proxy/api/ai/threads/thread_reasoning' && init?.method === 'PATCH') {
 				patchBodies.push(JSON.parse(String(init.body ?? '{}')));
-				return jsonResponse({ thread: { thread_id: 'thread_reasoning', read_status: readStatus('idle') } });
-			}
-      if (url === '/_redeven_proxy/api/ai/threads/thread_reasoning' && init?.method === 'GET') {
 				return jsonResponse(liveBootstrap('thread_reasoning', 'idle'));
 			}
 			throw new Error(`unexpected fetch: ${url}`);
@@ -1690,9 +1687,6 @@ describe('Env local Flower surface adapter', () => {
 		fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
 			if (url === '/_redeven_proxy/api/ai/threads/thread_permission' && init?.method === 'PATCH') {
 				patchBodies.push(JSON.parse(String(init.body ?? '{}')));
-				return jsonResponse({ thread: { thread_id: 'thread_permission', read_status: readStatus('running') } });
-			}
-      if (url === '/_redeven_proxy/api/ai/threads/thread_permission' && init?.method === 'GET') {
 					const detail = liveBootstrap('thread_permission', 'running');
 					detail.thread = {
 						...detail.thread,
@@ -1719,9 +1713,6 @@ describe('Env local Flower surface adapter', () => {
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/ai/threads/thread_model' && init?.method === 'PATCH') {
         patchBodies.push(JSON.parse(String(init.body ?? '{}')));
-        return jsonResponse({ thread: { thread_id: 'thread_model', read_status: readStatus('idle') } });
-      }
-      if (url === '/_redeven_proxy/api/ai/threads/thread_model' && init?.method === 'GET') {
         const detail = liveBootstrap('thread_model', 'idle');
         detail.thread = {
           ...detail.thread,

@@ -154,7 +154,7 @@ describe('presentFlowerActivityItem', () => {
     });
 
     const presentation = presentFlowerActivityItem(declined);
-    expect(presentation.title).toEqual({ kind: 'command', command: 'rm -f generated.tmp' });
+    expect(presentation.title).toEqual({ kind: 'plain', text: 'Run command' });
     expect(presentation.detailBlocks).toEqual([
       expect.objectContaining({ kind: 'terminal_output', terminal: expect.objectContaining({ status: 'declined', output: '' }) }),
     ]);
@@ -200,14 +200,14 @@ describe('presentFlowerActivityItem', () => {
         },
       }));
 
-      expect(presentation.label).toBe('date +%s');
+      expect(presentation.label).toBe('Run command');
       expect(presentation.detailLines).toHaveLength(0);
       expect(JSON.stringify(presentation.detailBlocks).toLowerCase()).not.toContain('approval');
       expect(JSON.stringify(presentation.detailBlocks)).not.toContain(`"approval_state":"${approvalState}"`);
     }
   });
 
-  it('uses the real command as the compact terminal row title', () => {
+  it('uses a semantic title and keeps the command in terminal detail', () => {
     const presentation = presentFlowerActivityItem(item({
       renderer: 'terminal',
       status: 'running',
@@ -229,8 +229,8 @@ describe('presentFlowerActivityItem', () => {
       chips: [{ kind: 'exit_code', label: 'exit', value: '0', tone: 'neutral' }],
     }));
 
-    expect(presentation.label).toBe('npm run build -- --mode production');
-    expect(presentation.title).toEqual({ kind: 'command', command: 'npm run build -- --mode production' });
+    expect(presentation.label).toBe('Run command');
+    expect(presentation.title).toEqual({ kind: 'plain', text: 'Run command' });
     expect(presentation.meta).not.toContain('npm run build -- --mode production');
     expect(presentation.meta).not.toContain('exit 0');
     expect(presentation.detailBlocks[0]).toMatchObject({
@@ -253,7 +253,7 @@ describe('presentFlowerActivityItem', () => {
     expect(JSON.stringify(presentation.detailBlocks)).not.toContain('stdin');
   });
 
-  it('does not repeat the terminal command in compact metadata when the title already shows it', () => {
+  it('uses the user-facing description in the semantic terminal title', () => {
     const command = 'printf flower-decision-surface-live';
     const presentation = presentFlowerActivityItem(item({
       renderer: 'terminal',
@@ -264,11 +264,11 @@ describe('presentFlowerActivityItem', () => {
       payload: { command },
     }));
 
-    expect(presentation.title).toEqual({ kind: 'command', command });
+    expect(presentation.title).toEqual({ kind: 'plain', text: `Run command: 运行 ${command}` });
     expect(presentation.meta).not.toContain(command);
   });
 
-  it('prefers the terminal payload command over a stale generic label', () => {
+  it('does not expose an internal terminal label when only a command is available', () => {
     const presentation = presentFlowerActivityItem(item({
       renderer: 'terminal',
       label: 'terminal.exec',
@@ -277,14 +277,19 @@ describe('presentFlowerActivityItem', () => {
       },
     }));
 
-    expect(presentation.label).toBe('pnpm run test:browser -- src/ui/FlowerSurface.activityDisclosure.browser.test.tsx');
+    expect(presentation.label).toBe('Run command');
+    expect(presentation.detailBlocks[0]).toMatchObject({
+      kind: 'terminal_output',
+      terminal: { command: 'pnpm run test:browser -- src/ui/FlowerSurface.activityDisclosure.browser.test.tsx' },
+    });
   });
 
-  it('keeps terminal read intent out of the semantic title and preserves the real command', () => {
+  it('presents terminal read intent and preserves the real command in detail', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'terminal.read',
       renderer: 'terminal',
       label: 'Check the latest Docker build output again',
+      description: 'Check the latest Docker build output again',
       payload: {
         command: 'docker compose up --build -d',
         process_id: 'tp_build',
@@ -297,8 +302,8 @@ describe('presentFlowerActivityItem', () => {
       },
     }));
 
-    expect(presentation.label).toBe('docker compose up --build -d');
-    expect(presentation.title).toEqual({ kind: 'command', command: 'docker compose up --build -d' });
+    expect(presentation.label).toBe('View command output: Check the latest Docker build output again');
+    expect(presentation.title).toEqual({ kind: 'plain', text: 'View command output: Check the latest Docker build output again' });
     expect(presentation.meta).not.toContain('docker compose up --build -d');
     expect(presentation.detailBlocks[0]).toMatchObject({
       kind: 'terminal_output',
@@ -399,18 +404,39 @@ describe('presentFlowerActivityItem', () => {
       },
     }));
 
-    expect(presentation.meta).toContain('Compiling the workspace');
+    expect(presentation.title).toEqual({ kind: 'plain', text: 'Run command: Compiling the workspace' });
+    expect(presentation.meta).toBe('');
     expect(presentation.meta).not.toContain('512ms');
   });
 
-  it('keeps the generic fallback title independent from tool_name', () => {
+  it('presents terminal termination without exposing the internal tool name', () => {
+    const presentation = presentFlowerActivityItem(item({
+      tool_name: 'terminal.terminate',
+      renderer: 'terminal',
+      description: '停止挂起的维基百科搜索请求',
+      payload: {},
+    }), undefined, {
+      terminal: {
+        runCommand: '运行命令',
+        readCommandOutput: '查看命令输出',
+        writeCommandInput: '向命令发送输入',
+        terminateCommand: '终止命令执行',
+      },
+    });
+
+    expect(presentation.label).toBe('终止命令执行: 停止挂起的维基百科搜索请求');
+    expect(JSON.stringify(presentation)).not.toContain('terminal.terminate');
+    expect(presentation.detailBlocks).toHaveLength(0);
+  });
+
+  it('routes every terminal tool through the semantic terminal presenter', () => {
     const presentation = presentFlowerActivityItem(item({
       renderer: 'structured',
       label: 'Resolve workspace status',
       tool_name: 'terminal.exec',
     }));
 
-    expect(presentation.label).toBe('Resolve workspace status');
+    expect(presentation.label).toBe('Run command');
   });
 
   it('renders subagent tool activity as delegation instead of raw structured payload', () => {
@@ -778,7 +804,7 @@ describe('presentFlowerActivityItem', () => {
     });
   });
 
-  it('renders the published Floret v4 todo items payload', () => {
+  it('renders the published Floret v5 todo items payload', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'write_todos',
       renderer: 'todos',
@@ -1125,8 +1151,8 @@ describe('presentFlowerActivityItem', () => {
       label: undefined,
     }));
 
-    expect(presentation.label).toBe('terminal.exec');
-    expect(presentation.title).toEqual({ kind: 'plain', text: 'terminal.exec' });
+    expect(presentation.label).toBe('Run command');
+    expect(presentation.title).toEqual({ kind: 'plain', text: 'Run command' });
     expect(presentation.meta).toBe('');
     expect(presentation.detailLines).toHaveLength(0);
     expect(presentation.detailBlocks).toHaveLength(0);

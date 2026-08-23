@@ -11,6 +11,7 @@ import {
 function thread(id: string, version: number, text: string): FlowerThreadSnapshot {
   return {
     thread_id: id, title: id, title_status: 'ready', model_id: 'model', working_dir: '/',
+    settings_revision: 1, permission_type: 'approval_required',
     created_at_ms: 1, updated_at_ms: version, status: 'success', source_label: 'test', target_labels: [],
     messages: [{ id: `${id}-message`, role: 'assistant', content: text, status: 'complete', created_at_ms: version }],
     read_status: { is_unread: false, snapshot: { activity_revision: version, last_message_at_unix_ms: version, activity_signature: text }, read_state: { last_seen_activity_revision: version, last_read_message_at_unix_ms: version, last_seen_activity_signature: text } },
@@ -37,6 +38,46 @@ describe('ThreadCache', () => {
     expect(classifyThreadView(current, view('a', 5, 'newer'))).toBe('accepted');
     expect(classifyThreadView(current, view('a', 4, 'same version'))).toBe('unchanged');
     expect(classifyThreadView(current, view('a', 3, 'older'))).toBe('stale');
+  });
+
+  it('accepts a newer settings revision without replacing runtime content', () => {
+    let cache = receive(createThreadCache(), view('a', 4, 'runtime-current'));
+    const candidate = view('a', 4, 'runtime-duplicate');
+    const result = cache.receiveView({
+      ...candidate,
+      thread: {
+        ...candidate.thread,
+        settings_revision: 2,
+        permission_type: 'full_access',
+      },
+    });
+
+    cache = result.cache;
+    expect(result.state).toBe('accepted');
+    expect(result.runtimeState).toBe('unchanged');
+    expect(result.settingsState).toBe('accepted');
+    expect(cache.views.get('a')?.thread.messages[0]?.content).toBe('runtime-current');
+    expect(cache.views.get('a')?.thread.permission_type).toBe('full_access');
+  });
+
+  it('accepts newer runtime content without restoring stale settings', () => {
+    const initial = view('a', 4, 'runtime-current');
+    let cache = receive(createThreadCache(), {
+      ...initial,
+      thread: { ...initial.thread, settings_revision: 5, permission_type: 'full_access' },
+    });
+    const candidate = view('a', 6, 'runtime-new');
+    const result = cache.receiveView({
+      ...candidate,
+      thread: { ...candidate.thread, settings_revision: 3, permission_type: 'approval_required' },
+    });
+
+    cache = result.cache;
+    expect(result.runtimeState).toBe('accepted');
+    expect(result.settingsState).toBe('stale');
+    expect(cache.views.get('a')?.thread.messages[0]?.content).toBe('runtime-new');
+    expect(cache.views.get('a')?.thread.permission_type).toBe('full_access');
+    expect(cache.views.get('a')?.thread.settings_revision).toBe(5);
   });
 
   it('detects when a summary revision or lifecycle state is ahead of detail', () => {
@@ -84,11 +125,14 @@ describe('ThreadCache', () => {
 
   it('updates summary metadata without mutating the cached detail view', () => {
     let cache = receive(createThreadCache(), view('a', 4, 'detail-a'));
-    cache = cache.updateThread('a', (current) => ({ ...current, model_id: 'new-model' }));
+    cache = cache.updateSummaryAdjuncts('a', (current) => ({
+      ...current,
+      read_status: { ...current.read_status, is_unread: true },
+    }));
 
-    expect(cache.summaries.get('a')?.model_id).toBe('new-model');
+    expect(cache.summaries.get('a')?.read_status.is_unread).toBe(true);
     expect(cache.summaries.get('a')?.messages).toEqual([]);
-    expect(cache.views.get('a')?.thread.model_id).toBe('model');
+    expect(cache.views.get('a')?.thread.read_status.is_unread).toBe(false);
     expect(cache.views.get('a')?.thread.messages[0]?.content).toBe('detail-a');
   });
 

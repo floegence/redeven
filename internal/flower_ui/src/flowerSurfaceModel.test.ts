@@ -9,6 +9,7 @@ function snapshot(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSn
     title_status: 'ready',
     model_id: 'provider/model',
     working_dir: '/workspace',
+    settings_revision: 1,
     created_at_ms: 1,
     updated_at_ms: 2,
     status: 'idle',

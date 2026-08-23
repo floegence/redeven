@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	flruntime "github.com/floegence/floret/v4/runtime"
-	fltools "github.com/floegence/floret/v4/tools"
+	flruntime "github.com/floegence/floret/v5/runtime"
+	fltools "github.com/floegence/floret/v5/tools"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
 

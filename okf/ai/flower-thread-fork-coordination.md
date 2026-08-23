@@ -14,7 +14,7 @@ timestamp: 2026-07-18T00:00:00Z
 
 # Contract
 
-`ForkThreadWithOptions` validates RWX access, the source ThreadID, endpoint identity, and a stable `client_request_id`. The shared endpoint/thread authority boundary must find a live product settings row for that exact endpoint before any Floret call. Redeven then reads the source's current product settings and invokes published Floret v4 `Fork` with the source ThreadID and client request key.
+`ForkThreadWithOptions` validates RWX access, the source ThreadID, endpoint identity, and a stable `client_request_id`. The shared endpoint/thread authority boundary must find a live product settings row for that exact endpoint before any Floret call. Redeven then reads the source's current product settings and invokes published Floret v5 `Fork` with the source ThreadID and client request key.
 
 Floret returns the canonical destination. Redeven copies only product-owned settings into a new root settings value, preserves the source endpoint, namespace, model, reasoning selection, permission, and working directory, clears pin state, and records the current requesting user as the destination creator/updater. `AdoptCanonicalRootSettings` inserts that exact destination or accepts an identical existing record; a conflicting record fails closed. A non-empty requested title is then sent through typed `SetTitle` with a derived stable key.
 
@@ -30,4 +30,4 @@ Redeven never stores a fork saga, source/destination turn or run identity mappin
 - `redeven:internal/ai/threadstore/orphan_adoption.go` - Inserts exact canonical-root settings idempotently and rejects conflicting settings.
 - `redeven:internal/ai/threadstore/orphan_adoption_test.go` - Covers exact adoption and conflict handling.
 - `redeven:internal/ai/thread_authority_boundary_test.go` - Proves foreign endpoint ThreadIDs fail before canonical mutation.
-- `redeven:internal/session/floret_v4_dependency_contract_test.go` - Enforces the released typed v4 dependency boundary.
+- `redeven:internal/session/floret_v5_dependency_contract_test.go` - Enforces the released typed v4 dependency boundary.

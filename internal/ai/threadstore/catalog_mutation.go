@@ -20,6 +20,30 @@ func requireThreadWritableTx(ctx context.Context, tx *sql.Tx, endpointID, thread
 	return err
 }
 
+func nextThreadSettingsRevisionTx(ctx context.Context, tx *sql.Tx, endpointID, threadID string) (int64, error) {
+	if tx == nil {
+		return 0, errors.New("store not initialized")
+	}
+	var current int64
+	err := tx.QueryRowContext(
+		ctxOrBackground(ctx),
+		`SELECT settings_updated_at_unix_ms FROM ai_thread_settings WHERE endpoint_id = ? AND thread_id = ?`,
+		strings.TrimSpace(endpointID),
+		strings.TrimSpace(threadID),
+	).Scan(&current)
+	if err != nil {
+		return 0, err
+	}
+	next := time.Now().UnixMilli()
+	if next <= current {
+		next = current + 1
+	}
+	if next <= current {
+		return 0, errors.New("thread settings revision overflow")
+	}
+	return next, nil
+}
+
 // RequireThreadSettingsWritable verifies product catalog ownership only.
 // Floret owns thread lifecycle and deletion tombstones.
 func (s *Store) RequireThreadSettingsWritable(ctx context.Context, endpointID, threadID string) error {

@@ -21,6 +21,43 @@ describe('mapFlowerThread title contract', () => {
       targetLabels: [],
     })).toThrow('title_status may be empty only when title is empty');
   });
+
+  it('maps the product settings revision independently from runtime activity', () => {
+    const mapped = mapFlowerThread({
+      thread_id: 'thread-settings-revision',
+      title: '',
+      title_status: '',
+      model_id: 'openai/gpt-5-mini',
+      working_dir: '/',
+      permission_type: 'full_access',
+      settings_revision: 42,
+      created_at_unix_ms: 1,
+      updated_at_unix_ms: 9,
+      run_status: 'running',
+      queued_turn_count: 0,
+      read_status: {
+        is_unread: false,
+        snapshot: {
+          activity_revision: 9,
+          last_message_at_unix_ms: 9,
+          activity_signature: 'running',
+        },
+        read_state: {
+          last_seen_activity_revision: 9,
+          last_read_message_at_unix_ms: 9,
+          last_seen_activity_signature: 'running',
+        },
+      },
+    }, [], {
+      runtimeID: 'runtime-test',
+      runtimeKind: 'local_environment',
+      sourceLabel: 'Local',
+      targetLabels: [],
+    });
+
+    expect(mapped.settings_revision).toBe(42);
+    expect(mapped.permission_type).toBe('full_access');
+  });
 });
 
 describe('mapFlowerActivityItem structured rows contract', () => {

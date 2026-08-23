@@ -68,6 +68,7 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
     title_status: 'ready',
     model_id: 'default/model',
     working_dir: '/workspace/redeven',
+    settings_revision: 1,
     created_at_ms: 1,
     updated_at_ms: 2,
     status: 'running',
@@ -124,7 +125,7 @@ describe('projectFlowerCompanionLiveTail', () => {
     expect(projectFlowerCompanionLiveTail(thread({
       model_io_status: { phase: 'streaming', run_id: 'run-live', updated_at_ms: 3 },
       messages: [message({ blocks: [activityBlock([activityItem()])] })],
-    }), label)).toMatchObject({ kind: 'tool', text: 'pnpm test --filter flower' });
+    }), label)).toMatchObject({ kind: 'tool', text: 'Run command' });
   });
 
   it('keeps the beginning of a long tool summary for ordinary end ellipsis', () => {

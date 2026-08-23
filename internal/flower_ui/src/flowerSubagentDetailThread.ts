@@ -69,6 +69,7 @@ export function projectSubagentDetailThread(detail: FlowerSubagentDetail | null)
     title_status: 'ready',
     model_id: '',
     working_dir: '',
+    settings_revision: 0,
     created_at_ms: Math.max(0, Math.floor(Number(summary.created_at_ms ?? updatedAt))),
     updated_at_ms: updatedAt,
     status,

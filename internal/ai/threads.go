@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/floegence/floret/v4/identity"
-	flruntime "github.com/floegence/floret/v4/runtime"
+	"github.com/floegence/floret/v5/identity"
+	flruntime "github.com/floegence/floret/v5/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/filesystemscope"
@@ -117,6 +117,7 @@ func (s *Service) threadViewFromRecord(ctx context.Context, th *threadstore.Thre
 		ReasoningSelection:  reasoningSelection,
 		ReasoningCapability: capability,
 		PinnedAtUnixMs:      th.PinnedAtUnixMs,
+		SettingsRevision:    th.SettingsUpdatedAtUnixMs,
 		CreatedAtUnixMs:     createdAt,
 		UpdatedAtUnixMs:     updatedAt,
 		LastMessageAtUnixMs: lastMessageAt,

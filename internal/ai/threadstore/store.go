@@ -538,11 +538,16 @@ func (s *Store) UpdateThreadModelID(ctx context.Context, endpointID string, thre
 	if err := requireThreadWritableTx(ctx, tx, endpointID, threadID); err != nil {
 		return err
 	}
+	revision, err := nextThreadSettingsRevisionTx(ctx, tx, endpointID, threadID)
+	if err != nil {
+		return err
+	}
 	res, err := tx.ExecContext(ctx, `
 UPDATE ai_thread_settings
-SET model_id = ?
+SET model_id = ?,
+    settings_updated_at_unix_ms = ?
 WHERE endpoint_id = ? AND thread_id = ?
-`, modelID, endpointID, threadID)
+`, modelID, revision, endpointID, threadID)
 	if err != nil {
 		return err
 	}
@@ -578,12 +583,17 @@ func (s *Store) UpdateThreadModelAndReasoningSelection(ctx context.Context, endp
 	if err := requireThreadWritableTx(ctx, tx, endpointID, threadID); err != nil {
 		return err
 	}
+	revision, err := nextThreadSettingsRevisionTx(ctx, tx, endpointID, threadID)
+	if err != nil {
+		return err
+	}
 	res, err := tx.ExecContext(ctx, `
 UPDATE ai_thread_settings
 SET model_id = ?,
-    reasoning_selection_json = ?
+    reasoning_selection_json = ?,
+    settings_updated_at_unix_ms = ?
 WHERE endpoint_id = ? AND thread_id = ?
-`, modelID, reasoningSelectionJSON, endpointID, threadID)
+`, modelID, reasoningSelectionJSON, revision, endpointID, threadID)
 	if err != nil {
 		return err
 	}
@@ -615,11 +625,16 @@ func (s *Store) UpdateThreadReasoningSelection(ctx context.Context, endpointID s
 	if err := requireThreadWritableTx(ctx, tx, endpointID, threadID); err != nil {
 		return err
 	}
+	revision, err := nextThreadSettingsRevisionTx(ctx, tx, endpointID, threadID)
+	if err != nil {
+		return err
+	}
 	res, err := tx.ExecContext(ctx, `
 UPDATE ai_thread_settings
-SET reasoning_selection_json = ?
+SET reasoning_selection_json = ?,
+    settings_updated_at_unix_ms = ?
 WHERE endpoint_id = ? AND thread_id = ?
-`, reasoningSelectionJSON, endpointID, threadID)
+`, reasoningSelectionJSON, revision, endpointID, threadID)
 	if err != nil {
 		return err
 	}
@@ -655,11 +670,16 @@ func (s *Store) UpdateThreadPermissionType(ctx context.Context, endpointID strin
 	if err := requireThreadWritableTx(ctx, tx, endpointID, threadID); err != nil {
 		return err
 	}
+	revision, err := nextThreadSettingsRevisionTx(ctx, tx, endpointID, threadID)
+	if err != nil {
+		return err
+	}
 	res, err := tx.ExecContext(ctx, `
 UPDATE ai_thread_settings
-SET permission_type = ?
+SET permission_type = ?,
+    settings_updated_at_unix_ms = ?
 WHERE endpoint_id = ? AND thread_id = ?
-`, permissionType, endpointID, threadID)
+`, permissionType, revision, endpointID, threadID)
 	if err != nil {
 		return err
 	}
@@ -694,13 +714,18 @@ func (s *Store) SetThreadPinned(ctx context.Context, endpointID string, threadID
 	if err := requireThreadWritableTx(ctx, tx, endpointID, threadID); err != nil {
 		return 0, err
 	}
+	revision, err := nextThreadSettingsRevisionTx(ctx, tx, endpointID, threadID)
+	if err != nil {
+		return 0, err
+	}
 	res, err := tx.ExecContext(ctx, `
 UPDATE ai_thread_settings
 SET pinned_at_unix_ms = ?,
     updated_by_user_public_id = ?,
-    updated_by_user_email = ?
+    updated_by_user_email = ?,
+    settings_updated_at_unix_ms = ?
 WHERE endpoint_id = ? AND thread_id = ?
-`, pinnedAt, strings.TrimSpace(updatedByID), strings.TrimSpace(updatedByEmail), endpointID, threadID)
+`, pinnedAt, strings.TrimSpace(updatedByID), strings.TrimSpace(updatedByEmail), revision, endpointID, threadID)
 	if err != nil {
 		return 0, err
 	}

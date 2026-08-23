@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/floegence/floret/v4/identity"
-	"github.com/floegence/floret/v4/observation"
-	flruntime "github.com/floegence/floret/v4/runtime"
+	"github.com/floegence/floret/v5/identity"
+	"github.com/floegence/floret/v5/observation"
+	flruntime "github.com/floegence/floret/v5/runtime"
 )
 
 type flowerCanonicalContextProjection struct {

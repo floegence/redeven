@@ -608,9 +608,8 @@ describe('runtime Flower surface adapter read state', () => {
 	  expect(readTerminalProcess).not.toHaveBeenCalled();
 	});
 
-  it('patches thread permission type and reloads the thread', async () => {
-    const patchThread = vi.fn(async () => ({ thread: { thread_id: 'thread_permission', read_status: readStatus() } }));
-    const loadThread = vi.fn(async () => ({
+  it('uses the authoritative thread returned by a permission patch', async () => {
+    const patchThread = vi.fn(async () => ({
 	      thread: {
         thread_id: 'thread_permission',
         title: 'Permission thread',
@@ -622,17 +621,15 @@ describe('runtime Flower surface adapter read state', () => {
         updated_at_unix_ms: 2,
         read_status: readStatus(),
 	      },
-	      current: { thread: { id: 'thread_permission' }, version: 5 },
+	      current: { thread_id: 'thread_permission', view_version: 5, activity: 'active' as const, items: [] },
 	    }));
-    const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({
-      patchThread,
-      loadThread,
-    }));
+    const loadThread = vi.fn();
+    const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ patchThread, loadThread }));
 
     const result = await adapter.setThreadPermissionType?.(' thread_permission ', 'full_access');
 
     expect(patchThread).toHaveBeenCalledWith('thread_permission', { permission_type: 'full_access' });
-    expect(loadThread).toHaveBeenCalledWith('thread_permission');
+    expect(loadThread).not.toHaveBeenCalled();
     expect(result?.thread.permission_type).toBe('full_access');
   });
 

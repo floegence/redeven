@@ -6,6 +6,7 @@ import { flowerThreadReadSnapshotKey, sameThreadSnapshot } from './flowerThreadL
 function summary(status: FlowerThreadSnapshot['status']): FlowerThreadSnapshot {
   return {
     thread_id: 'thread-a', title: 'A', title_status: 'ready', model_id: 'model', working_dir: '/',
+    settings_revision: 1,
     created_at_ms: 1, updated_at_ms: 2, status, source_label: 'test', target_labels: [], messages: [],
     read_status: {
       is_unread: false,

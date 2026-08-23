@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	flruntime "github.com/floegence/floret/v4/runtime"
+	flruntime "github.com/floegence/floret/v5/runtime"
 )
 
 func TestOpenFloretRuntimeColdStart(t *testing.T) {

@@ -918,6 +918,42 @@ describe('Flower bottom decision surface', () => {
     expect(runtime.querySelector('.flower-composer-reference-menu')).toBeNull();
   });
 
+  it('updates permission during an active turn from one authoritative receipt', async () => {
+    const runningThread = thread({
+      thread_id: 'thread-active-permission',
+      status: 'running',
+      active_run_id: 'turn-active-permission',
+      permission_type: 'approval_required',
+      settings_revision: 10,
+    });
+    const confirmedThread = {
+      ...runningThread,
+      permission_type: 'full_access' as const,
+      settings_revision: 11,
+    };
+    const loadThread = vi.fn(async () => liveBootstrap(runningThread, 21));
+    const setThreadPermissionType = vi.fn(async () => liveBootstrap(confirmedThread, 21));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [runningThread]),
+      loadThread,
+      setThreadPermissionType,
+    });
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${runningThread.thread_id}"] button`)));
+    (runtime.querySelector(`[data-thread-id="${runningThread.thread_id}"] button`) as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-permission-trigger')));
+
+    (runtime.querySelector('.flower-permission-trigger') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-permission-menu-item[data-permission-type="full_access"]')));
+    const fullAccess = runtime.querySelector<HTMLButtonElement>('.flower-permission-menu-item[data-permission-type="full_access"]')!;
+    fullAccess.click();
+
+    await waitFor(() => setThreadPermissionType.mock.calls.length === 1);
+    await waitFor(() => runtime.querySelector('.flower-permission-trigger')?.getAttribute('data-permission-type') === 'full_access');
+    expect(setThreadPermissionType).toHaveBeenCalledWith(runningThread.thread_id, 'full_access');
+    expect(loadThread).toHaveBeenCalledTimes(1);
+  });
+
   it('uses the same single-layer decision contract in the narrow companion surface', async () => {
     const request = inputRequest({ prompt_id: 'prompt-companion-decision-surface' });
     const waitingThread = thread({

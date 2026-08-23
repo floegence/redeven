@@ -27,6 +27,7 @@ describe('Flower thread list projection', () => {
       title_status: 'ready',
       model_id: 'primary/gpt-4.1',
       working_dir: '/workspace/redeven',
+      settings_revision: 1,
       pinned_at_ms: 123,
       created_at_ms: 1,
       updated_at_ms: 2,
