@@ -9,6 +9,7 @@ import {
 } from '../shared/controlPlaneProvider';
 import type { DesktopSettingsDraft } from '../shared/settingsIPC';
 import { localEnvironmentAccess } from '../shared/desktopLocalEnvironmentState';
+import { migrateDesktopEnvironmentRegistrations } from './desktopEnvironmentRegistrationMigration';
 import {
   testDesktopPreferences,
   testLocalAccess,
@@ -24,7 +25,6 @@ import {
   deleteSavedControlPlane,
   deleteSavedEnvironment,
   deleteSavedRuntimeTarget,
-  deleteSavedSSHEnvironment,
   desktopEnvironmentID,
   desktopPreferencesToDraft,
   findLocalEnvironmentByID,
@@ -32,7 +32,6 @@ import {
   localEnvironmentDesktopLaunchKey,
   markSavedEnvironmentUsed,
   markSavedRuntimeTargetUsed,
-  markSavedSSHEnvironmentUsed,
   normalizeSavedRuntimeTargets,
   rememberProviderEnvironmentUse,
   saveDesktopPreferences,
@@ -40,13 +39,11 @@ import {
   setProviderEnvironmentPinned,
   setSavedEnvironmentPinned,
   setSavedRuntimeTargetPinned,
-  setSavedSSHEnvironmentPinned,
   updateLocalEnvironmentAccess,
   updateLocalEnvironmentSettings,
   upsertSavedControlPlane,
   upsertSavedEnvironment,
   upsertSavedRuntimeTarget,
-  upsertSavedSSHEnvironment,
   validateDesktopSettingsDraft,
 } from './desktopPreferences';
 
@@ -222,18 +219,25 @@ describe('desktopPreferences', () => {
     });
     expect(withURLOptIn.saved_environments[0]?.auto_runtime_probe_enabled).toBe(true);
 
-    const withSSH = upsertSavedSSHEnvironment(withURLOptIn, {
-      environment_id: '',
+    const withSSH = upsertSavedRuntimeTarget(withURLOptIn, {
       label: 'SSH Lab',
-      ssh_destination: 'devbox',
-      ssh_port: 2222,
-      auth_mode: 'key_agent',
-      runtime_root: 'remote_default',
-      bootstrap_strategy: 'desktop_upload',
-      release_base_url: '',
-      connect_timeout_seconds: 10,
+      host_access: {
+        kind: 'ssh_host',
+        ssh: {
+          ssh_destination: 'devbox',
+          ssh_port: 2222,
+          auth_mode: 'key_agent',
+          connect_timeout_seconds: 10,
+        },
+      },
+      placement: {
+        kind: 'host_process',
+        runtime_root: 'remote_default',
+        bootstrap_strategy: 'desktop_upload',
+        release_base_url: '',
+      },
     });
-    expect(withSSH.saved_ssh_environments[0]?.auto_runtime_probe_enabled).toBe(false);
+    expect(withSSH.saved_runtime_targets[0]?.auto_runtime_probe_enabled).toBe(false);
 
     const withLocalContainer = upsertSavedRuntimeTarget(withSSH, {
       label: 'Local Container Runtime',
@@ -276,6 +280,114 @@ describe('desktopPreferences', () => {
     expect(withSSHContainer.saved_runtime_targets.find((target) => target.label === 'SSH Container Runtime')?.auto_runtime_probe_enabled).toBe(false);
   });
 
+  it('migrates legacy SSH registrations into the single Runtime Target owner idempotently', () => {
+    const base = defaultDesktopPreferences();
+    const withTarget = upsertSavedRuntimeTarget(base, {
+      label: 'Current visible name',
+      host_access: {
+        kind: 'ssh_host',
+        ssh: {
+          ssh_destination: 'devbox',
+          ssh_port: 2222,
+          auth_mode: 'key_agent',
+          connect_timeout_seconds: 10,
+        },
+      },
+      placement: {
+        kind: 'host_process',
+        runtime_root: 'remote_default',
+        bootstrap_strategy: 'desktop_upload',
+        release_base_url: '',
+      },
+      pinned: false,
+      created_at_ms: 20,
+      last_used_at_ms: 30,
+    });
+    const legacySSHEnvironments = [{
+        id: 'ssh:devbox:2222:password:remote_default',
+        label: 'Legacy name',
+        ssh_destination: 'devbox',
+        ssh_port: 2222,
+        auth_mode: 'password' as const,
+        runtime_root: '~/.redeven',
+        bootstrap_strategy: 'desktop_upload' as const,
+        release_base_url: '',
+        connect_timeout_seconds: 15,
+        ssh_password: 'legacy-secret',
+        ssh_password_configured: true,
+        pinned: true,
+        auto_runtime_probe_enabled: true,
+        created_at_ms: 10,
+        last_used_at_ms: 40,
+      }];
+
+    const migrated = migrateDesktopEnvironmentRegistrations({
+      local_environment: withTarget.local_environment,
+      saved_runtime_targets: withTarget.saved_runtime_targets,
+      legacy_ssh_environments: legacySSHEnvironments,
+      now_unix_ms: 50,
+    });
+    expect(migrated.changed).toBe(true);
+    expect(migrated.saved_runtime_targets).toHaveLength(1);
+    expect(migrated.saved_runtime_targets[0]).toMatchObject({
+      label: 'Current visible name',
+      host_access: {
+        kind: 'ssh_host',
+        ssh: {
+          ssh_destination: 'devbox',
+          ssh_port: 2222,
+          auth_mode: 'password',
+          connect_timeout_seconds: 15,
+        },
+      },
+      placement: {
+        kind: 'host_process',
+        runtime_root: '~/.redeven',
+        bootstrap_strategy: 'desktop_upload',
+        release_base_url: '',
+      },
+      ssh_password: 'legacy-secret',
+      ssh_password_configured: true,
+      pinned: true,
+      auto_runtime_probe_enabled: true,
+      last_used_at_ms: 40,
+    });
+
+    const repeated = migrateDesktopEnvironmentRegistrations({
+      local_environment: migrated.local_environment,
+      saved_runtime_targets: migrated.saved_runtime_targets,
+      legacy_ssh_environments: [],
+      now_unix_ms: 60,
+    });
+    expect(repeated.changed).toBe(false);
+    expect(repeated.local_environment).toEqual(migrated.local_environment);
+    expect(repeated.saved_runtime_targets).toEqual(migrated.saved_runtime_targets);
+  });
+
+  it('removes retired Runtime Target projections of the built-in Local Environment', () => {
+    const base = defaultDesktopPreferences();
+    const duplicate = upsertSavedRuntimeTarget(base, {
+      label: 'Retired Local projection',
+      host_access: { kind: 'local_host' },
+      placement: {
+        kind: 'host_process',
+        runtime_root: base.local_environment.local_hosting.state_dir,
+      },
+      pinned: true,
+      created_at_ms: 10,
+      last_used_at_ms: base.local_environment.last_used_at_ms + 100,
+    });
+
+    const migrated = migrateDesktopEnvironmentRegistrations({
+      local_environment: duplicate.local_environment,
+      saved_runtime_targets: duplicate.saved_runtime_targets,
+      legacy_ssh_environments: [],
+    });
+    expect(migrated.saved_runtime_targets).toEqual([]);
+    expect(migrated.local_environment.pinned).toBe(true);
+    expect(migrated.local_environment.last_used_at_ms).toBe(base.local_environment.last_used_at_ms + 100);
+  });
+
   it('keeps or clears the stored password according to the write-only mode', () => {
     expect(validateDesktopSettingsDraft(draft({
       local_ui_bind: '0.0.0.0:24000',
@@ -303,7 +415,7 @@ describe('desktopPreferences', () => {
     }));
   });
 
-  it('round-trips preferences through the local files with saved environments, SSH targets, and saved runtime targets', async () => {
+  it('round-trips preferences through the local files with URL and managed Runtime targets', async () => {
     await withTempPreferencesDir(async (root) => {
       const paths = defaultDesktopPreferencesPaths(root);
       const codec = createPlaintextSecretCodec();
@@ -325,25 +437,6 @@ describe('desktopPreferences', () => {
             auto_runtime_probe_enabled: true,
             created_at_ms: 50,
             last_used_at_ms: 100,
-          },
-        ],
-        saved_ssh_environments: [
-          {
-            id: 'ssh:devbox:2222:key_agent:remote_default',
-            label: 'SSH Lab',
-            ssh_destination: 'devbox',
-            ssh_port: 2222,
-            auth_mode: 'key_agent',
-            runtime_root: 'remote_default',
-            bootstrap_strategy: 'desktop_upload',
-            release_base_url: 'https://mirror.example.invalid/releases',
-            connect_timeout_seconds: 10,
-            ssh_password: '',
-            ssh_password_configured: false,
-            pinned: false,
-            auto_runtime_probe_enabled: true,
-            created_at_ms: 60,
-            last_used_at_ms: 90,
           },
         ],
         saved_runtime_targets: [
@@ -377,7 +470,7 @@ describe('desktopPreferences', () => {
     });
   });
 
-  it('canonicalizes legacy SSH catalog records onto host-scoped SSH ids', async () => {
+  it('journal-migrates a legacy SSH catalog into the sole Runtime Target registration', async () => {
     await withTempPreferencesDir(async (root) => {
       const paths = defaultDesktopPreferencesPaths(root);
       const codec = createPlaintextSecretCodec();
@@ -404,22 +497,86 @@ describe('desktopPreferences', () => {
       );
 
       const loaded = await loadDesktopPreferences(paths, codec);
-      expect(loaded.saved_ssh_environments).toHaveLength(1);
-      expect(loaded.saved_ssh_environments[0]).toEqual(expect.objectContaining({
+      expect(loaded.saved_runtime_targets).toHaveLength(1);
+      expect(loaded.saved_runtime_targets[0]).toEqual(expect.objectContaining({
         label: 'SSH Lab',
-        ssh_destination: 'devbox',
-        ssh_port: 2222,
-        auth_mode: 'key_agent',
-        runtime_root: 'remote_default',
-        bootstrap_strategy: 'desktop_upload',
-        release_base_url: 'https://mirror.example.invalid/releases',
         pinned: false,
+        host_access: expect.objectContaining({
+          kind: 'ssh_host',
+          ssh: expect.objectContaining({ ssh_destination: 'devbox', ssh_port: 2222, auth_mode: 'key_agent' }),
+        }),
+        placement: expect.objectContaining({
+          kind: 'host_process',
+          runtime_root: 'remote_default',
+          bootstrap_strategy: 'desktop_upload',
+          release_base_url: 'https://mirror.example.invalid/releases',
+        }),
       }));
-      expect(loaded.saved_ssh_environments[0].id).toBe('ssh:devbox:2222:key_agent:remote_default');
 
-      const rewrittenFiles = await fs.readdir(connectionsDir);
-      expect(rewrittenFiles).toHaveLength(1);
-      expect(rewrittenFiles[0]).toContain(encodeURIComponent(loaded.saved_ssh_environments[0].id));
+      const retainedFiles = await fs.readdir(connectionsDir);
+      expect(retainedFiles).toHaveLength(1);
+      expect(retainedFiles[0]).not.toBe(`${encodeURIComponent(legacyID)}.json`);
+      await expect(fs.access(path.join(paths.stateRoot, 'maintenance', 'environment-registration-migration.json'))).rejects.toMatchObject({ code: 'ENOENT' });
+      await expect(loadDesktopPreferences(paths, codec)).resolves.toEqual(loaded);
+    });
+  });
+
+  it('recovers the complete legacy SSH registration and password from an interrupted migration journal', async () => {
+    await withTempPreferencesDir(async (root) => {
+      const paths = defaultDesktopPreferencesPaths(root);
+      const codec = createPlaintextSecretCodec();
+      const migrationJournalPath = path.join(paths.stateRoot, 'maintenance', 'environment-registration-migration.json');
+      const legacyID = 'ssh:devbox:2222:password:remote_default';
+      await fs.mkdir(path.dirname(migrationJournalPath), { recursive: true });
+      await fs.writeFile(migrationJournalPath, `${JSON.stringify({
+        schema_version: 1,
+        phase: 'prepared',
+        legacy_connections: [{
+          kind: 'ssh',
+          id: legacyID,
+          label: 'Recovered SSH Lab',
+          ssh_destination: 'devbox',
+          ssh_port: 2222,
+          auth_mode: 'password',
+          runtime_root: 'remote_default',
+          bootstrap_strategy: 'remote_install',
+          release_base_url: 'https://mirror.example.invalid/releases',
+          connect_timeout_seconds: 27,
+          auto_runtime_probe_enabled: true,
+          last_used_at_ms: 90,
+        }],
+        legacy_ssh_secrets: [{
+          environment_id: legacyID,
+          ssh_password: codec.encodeSecret('journal-secret'),
+        }],
+      }, null, 2)}\n`);
+
+      const loaded = await loadDesktopPreferences(paths, codec);
+      expect(loaded.saved_runtime_targets).toEqual([
+        expect.objectContaining({
+          label: 'Recovered SSH Lab',
+          ssh_password: 'journal-secret',
+          ssh_password_configured: true,
+          auto_runtime_probe_enabled: true,
+          host_access: {
+            kind: 'ssh_host',
+            ssh: {
+              ssh_destination: 'devbox',
+              ssh_port: 2222,
+              auth_mode: 'password',
+              connect_timeout_seconds: 27,
+            },
+          },
+          placement: {
+            kind: 'host_process',
+            runtime_root: 'remote_default',
+            bootstrap_strategy: 'remote_install',
+            release_base_url: 'https://mirror.example.invalid/releases',
+          },
+        }),
+      ]);
+      await expect(fs.access(migrationJournalPath)).rejects.toMatchObject({ code: 'ENOENT' });
+      await expect(loadDesktopPreferences(paths, codec)).resolves.toEqual(loaded);
     });
   });
 
@@ -471,7 +628,6 @@ describe('desktopPreferences', () => {
       const loaded = await loadDesktopPreferences(paths, codec);
       expect(loaded).toEqual(expect.objectContaining({
         saved_environments: [],
-        saved_ssh_environments: [],
         control_plane_refresh_tokens: preferences.control_plane_refresh_tokens,
         control_planes: preferences.control_planes,
       }));
@@ -633,7 +789,6 @@ describe('desktopPreferences', () => {
       const loaded = await loadDesktopPreferences(paths, codec);
       expect(loaded).toEqual(expect.objectContaining({
         saved_environments: [],
-        saved_ssh_environments: [],
         control_plane_refresh_tokens: {},
         control_planes: [],
       }));
@@ -702,7 +857,6 @@ describe('desktopPreferences', () => {
       const loaded = await loadDesktopPreferences(paths, createPlaintextSecretCodec());
       expect(loaded).toEqual(expect.objectContaining({
         saved_environments: [],
-        saved_ssh_environments: [],
         control_plane_refresh_tokens: {},
         control_planes: [],
       }));
@@ -732,7 +886,6 @@ describe('desktopPreferences', () => {
       const loaded = await loadDesktopPreferences(paths, createPlaintextSecretCodec());
       expect(loaded).toEqual(expect.objectContaining({
         saved_environments: [],
-        saved_ssh_environments: [],
         control_plane_refresh_tokens: {},
         control_planes: [],
       }));
@@ -772,7 +925,6 @@ describe('desktopPreferences', () => {
       const loaded = await loadDesktopPreferences(paths, createPlaintextSecretCodec());
       expect(loaded).toEqual(expect.objectContaining({
         saved_environments: [],
-        saved_ssh_environments: [],
         control_plane_refresh_tokens: {},
         control_planes: [],
       }));
@@ -850,174 +1002,6 @@ describe('desktopPreferences', () => {
     })).toBe(empty);
   });
 
-  it('marks and deletes saved SSH environments without creating catalog entries', () => {
-    const saved = upsertSavedSSHEnvironment(defaultDesktopPreferences(), {
-      environment_id: '',
-      label: 'SSH Lab',
-      ssh_destination: 'devbox',
-      ssh_port: 2222,
-      auth_mode: 'key_agent',
-      runtime_root: 'remote_default',
-      bootstrap_strategy: 'desktop_upload',
-      release_base_url: 'https://mirror.example.invalid/releases',
-      created_at_ms: 10,
-      last_used_at_ms: 100,
-    });
-    const marked = markSavedSSHEnvironmentUsed(saved, {
-      environment_id: 'ssh:devbox:2222:key_agent:remote_default',
-      last_used_at_ms: 500,
-    });
-
-    expect(marked.saved_ssh_environments).toEqual([
-      {
-        id: 'ssh:devbox:2222:key_agent:remote_default',
-        label: 'SSH Lab',
-        ssh_destination: 'devbox',
-        ssh_port: 2222,
-        auth_mode: 'key_agent',
-        runtime_root: 'remote_default',
-        bootstrap_strategy: 'desktop_upload',
-        release_base_url: 'https://mirror.example.invalid/releases',
-        connect_timeout_seconds: 10,
-        ssh_password: '',
-        ssh_password_configured: false,
-        pinned: false,
-        auto_runtime_probe_enabled: false,
-        created_at_ms: 10,
-        last_used_at_ms: 500,
-      },
-    ]);
-
-    const empty = defaultDesktopPreferences();
-    expect(markSavedSSHEnvironmentUsed(empty, {
-      ssh_destination: 'devbox',
-      ssh_port: 2222,
-      auth_mode: 'key_agent',
-      runtime_root: 'remote_default',
-      bootstrap_strategy: 'desktop_upload',
-      release_base_url: 'https://mirror.example.invalid/releases',
-      last_used_at_ms: 900,
-    })).toBe(empty);
-
-    expect(deleteSavedSSHEnvironment(marked, 'ssh:devbox:2222:key_agent:remote_default').saved_ssh_environments).toEqual([]);
-  });
-
-  it('keeps saved SSH environment order stable when usage changes', () => {
-    const first = upsertSavedSSHEnvironment(defaultDesktopPreferences(), {
-      environment_id: '',
-      label: 'SSH Alpha',
-      ssh_destination: 'alpha',
-      ssh_port: null,
-      auth_mode: 'key_agent',
-      runtime_root: 'remote_default',
-      bootstrap_strategy: 'desktop_upload',
-      release_base_url: '',
-      created_at_ms: 10,
-      last_used_at_ms: 100,
-    });
-    const second = upsertSavedSSHEnvironment(first, {
-      environment_id: '',
-      label: 'SSH Beta',
-      ssh_destination: 'beta',
-      ssh_port: null,
-      auth_mode: 'key_agent',
-      runtime_root: 'remote_default',
-      bootstrap_strategy: 'desktop_upload',
-      release_base_url: '',
-      created_at_ms: 20,
-      last_used_at_ms: 50,
-    });
-
-    const marked = markSavedSSHEnvironmentUsed(second, {
-      environment_id: 'ssh:beta:default:key_agent:remote_default',
-      last_used_at_ms: 500,
-    });
-
-    expect(marked.saved_ssh_environments.map((environment) => environment.label)).toEqual([
-      'SSH Alpha',
-      'SSH Beta',
-    ]);
-  });
-
-  it('keeps, replaces, and clears saved SSH environment passwords by saved identity', () => {
-    const saved = upsertSavedSSHEnvironment(defaultDesktopPreferences(), {
-      environment_id: '',
-      label: 'SSH Lab',
-      ssh_destination: 'devbox',
-      ssh_port: 2222,
-      auth_mode: 'password',
-      runtime_root: 'remote_default',
-      bootstrap_strategy: 'desktop_upload',
-      release_base_url: '',
-      ssh_password: 'first-secret',
-      ssh_password_configured: true,
-    });
-
-    const kept = upsertSavedSSHEnvironment(saved, {
-      environment_id: saved.saved_ssh_environments[0]!.id,
-      label: 'SSH Lab Renamed',
-      ssh_destination: 'devbox',
-      ssh_port: 2222,
-      auth_mode: 'password',
-      runtime_root: 'remote_default',
-      bootstrap_strategy: 'desktop_upload',
-      release_base_url: '',
-    });
-    expect(kept.saved_ssh_environments[0]).toMatchObject({
-      ssh_password: 'first-secret',
-      ssh_password_configured: true,
-    });
-
-    const replaced = upsertSavedSSHEnvironment(kept, {
-      environment_id: kept.saved_ssh_environments[0]!.id,
-      label: 'SSH Lab Renamed',
-      ssh_destination: 'devbox',
-      ssh_port: 2222,
-      auth_mode: 'password',
-      runtime_root: 'remote_default',
-      bootstrap_strategy: 'desktop_upload',
-      release_base_url: '',
-      ssh_password: 'second-secret',
-      ssh_password_configured: true,
-    });
-    expect(replaced.saved_ssh_environments[0]).toMatchObject({
-      ssh_password: 'second-secret',
-      ssh_password_configured: true,
-    });
-
-    const changedHost = upsertSavedSSHEnvironment(replaced, {
-      environment_id: replaced.saved_ssh_environments[0]!.id,
-      label: 'SSH Lab Renamed',
-      ssh_destination: 'otherbox',
-      ssh_port: 2222,
-      auth_mode: 'password',
-      runtime_root: 'remote_default',
-      bootstrap_strategy: 'desktop_upload',
-      release_base_url: '',
-    });
-    expect(changedHost.saved_ssh_environments[0]).toMatchObject({
-      ssh_destination: 'otherbox',
-      ssh_password: '',
-      ssh_password_configured: false,
-    });
-
-    const cleared = upsertSavedSSHEnvironment(replaced, {
-      environment_id: replaced.saved_ssh_environments[0]!.id,
-      label: 'SSH Lab Renamed',
-      ssh_destination: 'devbox',
-      ssh_port: 2222,
-      auth_mode: 'password',
-      runtime_root: 'remote_default',
-      bootstrap_strategy: 'desktop_upload',
-      release_base_url: '',
-      ssh_password_configured: false,
-    });
-    expect(cleared.saved_ssh_environments[0]).toMatchObject({
-      ssh_password: '',
-      ssh_password_configured: false,
-    });
-  });
-
   it('upserts, pins, marks, and deletes saved runtime targets by host access plus placement', () => {
     const placement = {
       kind: 'container_process' as const,
@@ -1063,7 +1047,7 @@ describe('desktopPreferences', () => {
     expect(pinned.saved_runtime_targets[0]).toEqual(expect.objectContaining({
       id: targetID,
       pinned: true,
-      last_used_at_ms: 40,
+      last_used_at_ms: 30,
     }));
 
     const marked = markSavedRuntimeTargetUsed(pinned, {
@@ -1077,7 +1061,21 @@ describe('desktopPreferences', () => {
       last_used_at_ms: 50,
     }));
 
-    expect(deleteSavedRuntimeTarget(marked, targetID).saved_runtime_targets).toEqual([]);
+    const deleted = deleteSavedRuntimeTarget(marked, targetID);
+    expect(deleted.saved_runtime_targets).toEqual([]);
+    expect(markSavedRuntimeTargetUsed(deleted, {
+      environment_id: targetID,
+      host_access: { kind: 'local_host' },
+      placement,
+      last_used_at_ms: 60,
+    })).toBe(deleted);
+    expect(setSavedRuntimeTargetPinned(deleted, {
+      environment_id: targetID,
+      label: 'Stale target',
+      pinned: true,
+      host_access: { kind: 'local_host' },
+      placement,
+    })).toBe(deleted);
   });
 
   it('keeps, replaces, and clears saved SSH runtime target passwords by target identity', () => {
@@ -1265,7 +1263,7 @@ describe('desktopPreferences', () => {
     });
   });
 
-  it('persists pin state for managed, URL, and SSH environments', () => {
+  it('persists pin state for Local, URL, and managed Runtime environments', () => {
     const base = testDesktopPreferences({
       local_environment: testLocalEnvironment({ pinned: false }),
       saved_environments: [{
@@ -1276,18 +1274,31 @@ describe('desktopPreferences', () => {
         created_at_ms: 10,
         last_used_at_ms: 20,
       }],
-      saved_ssh_environments: [{
-        id: 'ssh:devbox:2222:key_agent:remote_default',
+      saved_runtime_targets: [{
+        schema_version: 1,
+        id: 'ssh:host:devbox:test',
         label: 'SSH Lab',
-        ssh_destination: 'devbox',
-        ssh_port: 2222,
-        auth_mode: 'key_agent',
-        runtime_root: 'remote_default',
-        bootstrap_strategy: 'desktop_upload',
-        release_base_url: '',
-        connect_timeout_seconds: 10,
+        host_access: {
+          kind: 'ssh_host',
+          ssh: {
+            ssh_destination: 'devbox',
+            ssh_port: 2222,
+            auth_mode: 'key_agent',
+            connect_timeout_seconds: 10,
+          },
+        },
+        placement: {
+          kind: 'host_process',
+          runtime_root: 'remote_default',
+          bootstrap_strategy: 'desktop_upload',
+          release_base_url: '',
+        },
+        ssh_password: '',
+        ssh_password_configured: false,
         pinned: false,
+        auto_runtime_probe_enabled: true,
         created_at_ms: 20,
+        updated_at_ms: 20,
         last_used_at_ms: 10,
       }],
     });
@@ -1299,21 +1310,30 @@ describe('desktopPreferences', () => {
       local_ui_url: 'http://192.168.1.12:24000/',
       pinned: true,
     });
-    const sshPinned = setSavedSSHEnvironmentPinned(urlPinned, {
-      environment_id: 'ssh:devbox:2222:key_agent:remote_default',
+    const sshPinned = setSavedRuntimeTargetPinned(urlPinned, {
+      environment_id: 'ssh:host:devbox:test',
       label: 'SSH Lab',
       pinned: true,
-      ssh_destination: 'devbox',
-      ssh_port: 2222,
-      auth_mode: 'key_agent',
-      runtime_root: 'remote_default',
-      bootstrap_strategy: 'desktop_upload',
-      release_base_url: '',
+      host_access: {
+        kind: 'ssh_host',
+        ssh: {
+          ssh_destination: 'devbox',
+          ssh_port: 2222,
+          auth_mode: 'key_agent',
+          connect_timeout_seconds: 10,
+        },
+      },
+      placement: {
+        kind: 'host_process',
+        runtime_root: 'remote_default',
+        bootstrap_strategy: 'desktop_upload',
+        release_base_url: '',
+      },
     });
 
     expect(sshPinned.local_environment).toEqual(expect.objectContaining({ pinned: true }));
     expect(sshPinned.saved_environments[0]).toEqual(expect.objectContaining({ pinned: true }));
-    expect(sshPinned.saved_ssh_environments[0]).toEqual(expect.objectContaining({ pinned: true }));
+    expect(sshPinned.saved_runtime_targets[0]).toEqual(expect.objectContaining({ pinned: true }));
   });
 
   it('remembers provider-card usage without rewriting the preferred route', () => {

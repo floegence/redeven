@@ -140,7 +140,6 @@ import type {
   DesktopRuntimeLifecyclePhase,
   DesktopRuntimeLifecycleStepSnapshot,
 } from '../shared/desktopRuntimeLifecycleProgress';
-import { reinstallTargetStepProgress } from '../shared/desktopReinstallProgress';
 import {
   DEFAULT_DESKTOP_SSH_AUTH_MODE,
   DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
@@ -155,6 +154,7 @@ import {
 import type {
   DesktopContainerEngine,
   DesktopRuntimeHostAccess,
+  DesktopRuntimeTargetID,
 } from '../shared/desktopRuntimePlacement';
 import {
   buildDesktopProviderRuntimeLinkPlan,
@@ -314,6 +314,7 @@ import {
 import {
   beginEnvironmentLifecycleDisclosure,
   closeEnvironmentLifecycleDisclosure,
+  createEnvironmentLifecycleAttempt,
   environmentActionStartsLifecycleDisclosure,
   environmentLifecycleDisclosureForEnvironment,
   environmentLifecycleDisclosureHasPendingRequest,
@@ -322,6 +323,7 @@ import {
   visibleEnvironmentLifecycleProgress,
   type EnvironmentLifecycleDisclosureIntent,
   type EnvironmentLifecycleDisclosureState,
+  type EnvironmentLifecycleAttempt,
 } from './environmentLifecycleDisclosure';
 import { environmentProgressMeterPercent } from './environmentProgressMeter';
 import {
@@ -3883,10 +3885,42 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function startEditingEnvironment(environment: DesktopEnvironmentEntry): void {
-    if (environment.managed_runtime_placement?.kind === 'container_process' && environment.managed_runtime_host_access) {
+    if (environment.kind === 'provider_environment') {
+      openSettingsSurface(environment.id);
+      return;
+    }
+    const registrationRef = environment.registration_ref;
+    if (!registrationRef) {
+      setErrorMessage('connect', i18n().t('environmentCenter.environmentRegistrationUnavailable'));
+      return;
+    }
+    if (registrationRef.kind === 'local_environment') {
+      openSettingsSurface(environment.id);
+      return;
+    }
+    if (registrationRef.kind === 'runtime_target') {
+      if (environment.managed_runtime_placement?.kind !== 'container_process' || !environment.managed_runtime_host_access) {
+        setConnectionDialogState(createSSHConnectionDialogState('edit', {
+          environment_id: registrationRef.id,
+          label: environment.label,
+          ssh_destination: environment.ssh_details?.ssh_destination ?? '',
+          ssh_port: environment.ssh_details?.ssh_port == null ? '' : String(environment.ssh_details.ssh_port),
+          auth_mode: environment.ssh_details?.auth_mode ?? DEFAULT_DESKTOP_SSH_AUTH_MODE,
+          ssh_password_configured: environment.ssh_password_configured === true,
+          runtime_root: environment.ssh_details?.runtime_root === DEFAULT_DESKTOP_SSH_RUNTIME_ROOT
+            ? ''
+            : (environment.ssh_details?.runtime_root ?? ''),
+          bootstrap_strategy: environment.ssh_details?.bootstrap_strategy ?? DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
+          release_base_url: environment.ssh_details?.release_base_url ?? '',
+          connect_timeout_seconds: environment.ssh_details?.connect_timeout_seconds == null ? '' : String(environment.ssh_details.connect_timeout_seconds),
+          auto_runtime_probe_enabled: environment.auto_runtime_probe_enabled === true,
+        }));
+        setConnectionDialogError('');
+        return;
+      }
       const isSSHContainer = environment.managed_runtime_host_access.kind === 'ssh_host';
       setConnectionDialogState(createRuntimeContainerConnectionDialogState('edit', isSSHContainer ? 'ssh_container_runtime' : 'local_container_runtime', {
-        environment_id: environment.id,
+        environment_id: registrationRef.id,
         label: environment.label,
         ssh_destination: isSSHContainer ? environment.managed_runtime_host_access.ssh.ssh_destination : '',
         ssh_port: isSSHContainer && environment.managed_runtime_host_access.ssh.ssh_port != null ? String(environment.managed_runtime_host_access.ssh.ssh_port) : '',
@@ -3903,43 +3937,23 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         auto_runtime_probe_enabled: environment.auto_runtime_probe_enabled === true,
         auto_runtime_probe_configurable: environment.auto_runtime_probe_configurable !== false,
       }));
-    } else if (environment.kind === 'local_environment') {
-      openSettingsSurface(environment.id);
-    } else if (environment.kind === 'provider_environment') {
-      openSettingsSurface(environment.id);
-    } else if (environment.kind === 'gateway_environment') {
+    } else if (registrationRef.kind === 'gateway_environment') {
       const route = environment.gateway_environment_profile_access_route;
       if (!route || route.kind !== 'url') {
         setErrorMessage('connect', i18n().t('environmentCenter.gatewayEnvironmentProfileUnavailable'));
         return;
       }
       setConnectionDialogState(createGatewayURLProfileConnectionDialogState('edit', {
-        environment_id: environment.gateway_env_id ?? '',
-        gateway_id: environment.gateway_id ?? '',
+        environment_id: registrationRef.gateway_env_id,
+        gateway_id: registrationRef.gateway_id,
         label: environment.label,
         profile_route_kind: route.kind,
         target_url: route.url ?? '',
         origin_label: route.origin_label ?? environment.gateway_environment_origin?.label ?? '',
       }));
-    } else if (environment.kind === 'ssh_environment') {
-      setConnectionDialogState(createSSHConnectionDialogState('edit', {
-        environment_id: environment.id,
-        label: environment.label,
-        ssh_destination: environment.ssh_details?.ssh_destination ?? '',
-        ssh_port: environment.ssh_details?.ssh_port == null ? '' : String(environment.ssh_details.ssh_port),
-        auth_mode: environment.ssh_details?.auth_mode ?? DEFAULT_DESKTOP_SSH_AUTH_MODE,
-        ssh_password_configured: environment.ssh_password_configured === true,
-        runtime_root: environment.ssh_details?.runtime_root === DEFAULT_DESKTOP_SSH_RUNTIME_ROOT
-          ? ''
-          : (environment.ssh_details?.runtime_root ?? ''),
-        bootstrap_strategy: environment.ssh_details?.bootstrap_strategy ?? DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
-        release_base_url: environment.ssh_details?.release_base_url ?? '',
-        connect_timeout_seconds: environment.ssh_details?.connect_timeout_seconds == null ? '' : String(environment.ssh_details.connect_timeout_seconds),
-        auto_runtime_probe_enabled: environment.auto_runtime_probe_enabled === true,
-      }));
     } else {
       setConnectionDialogState(createExternalURLConnectionDialogState('edit', {
-        environment_id: environment.id,
+        environment_id: registrationRef.id,
         label: environment.label,
         external_local_ui_url: environment.local_ui_url,
         auto_runtime_probe_enabled: environment.auto_runtime_probe_enabled === true,
@@ -4394,7 +4408,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   function runtimeActionRequest(
     environment: DesktopEnvironmentEntry,
     kind: RuntimeLauncherActionKind,
-    options: Readonly<{ forceRuntimeUpdate?: boolean }> = {},
+    options: Readonly<{
+      forceRuntimeUpdate?: boolean;
+      attempt?: EnvironmentLifecycleAttempt;
+    }> = {},
   ): DesktopEnvironmentRuntimeActionRequest | null {
     function withKind(target: DesktopLauncherRuntimeTarget): DesktopEnvironmentRuntimeActionRequest {
       switch (kind) {
@@ -4412,6 +4429,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
 
     const runtimeTarget: DesktopLauncherRuntimeTarget = {
+      ...(options.attempt ? {
+        operation_key: options.attempt.operation_key,
+        operation_started_at_unix_ms: options.attempt.started_at_unix_ms,
+      } : {}),
       ...(environment.managed_runtime_target_id ? { runtime_target_id: environment.managed_runtime_target_id } : {}),
       ...(environment.managed_runtime_placement_target_id ? { placement_target_id: environment.managed_runtime_placement_target_id } : {}),
       ...(environment.managed_runtime_host_access ? { host_access: environment.managed_runtime_host_access } : {}),
@@ -4470,6 +4491,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     operation: Extract<DesktopLauncherActionRequest, { kind: 'run_provider_environment_lifecycle' }>['operation'],
     expectedOutcome: DesktopLauncherActionSuccess['outcome'],
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
+    attempt?: EnvironmentLifecycleAttempt,
   ): Promise<boolean> {
     if (environment.kind !== 'provider_environment') {
       return false;
@@ -4479,6 +4501,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       environment_id: environment.id,
       operation,
       label: environment.label,
+      ...(attempt ? {
+        operation_key: attempt.operation_key,
+        operation_started_at_unix_ms: attempt.started_at_unix_ms,
+      } : {}),
     }, errorTarget);
     if (result?.outcome !== expectedOutcome) {
       return false;
@@ -4499,12 +4525,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
     options: Readonly<{
       announceSuccess?: boolean;
+      attempt?: EnvironmentLifecycleAttempt;
     }> = {},
   ): Promise<boolean> {
     if (environment.kind === 'provider_environment') {
-      return runProviderEnvironmentLifecycle(environment, 'start', 'started_gateway_environment_runtime', errorTarget);
+      return runProviderEnvironmentLifecycle(environment, 'start', 'started_gateway_environment_runtime', errorTarget, options.attempt);
     }
-    const request = runtimeActionRequest(environment, 'start_environment_runtime');
+    const request = runtimeActionRequest(environment, 'start_environment_runtime', { attempt: options.attempt });
     if (!request) {
       setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', i18n().t('environmentCenter.resolveRuntimeTargetError'));
       return false;
@@ -4547,8 +4574,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel | undefined,
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
+    attempt?: EnvironmentLifecycleAttempt,
   ): Promise<boolean> {
-    const operationKey = `${environment.id}:update_runtime`;
+    const operationKey = attempt?.operation_key ?? `${environment.id}:update_runtime`;
     const continueOpen = action?.continue_open_after_completion === true;
     if (continueOpen) {
       runtimeOpenContinuationByOperationKey.set(operationKey, environment.id);
@@ -4563,10 +4591,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return updated;
     };
     if (environment.kind === 'provider_environment') {
-      return finish(await runProviderEnvironmentLifecycle(environment, 'update_runtime', 'updated_gateway_environment_runtime', errorTarget));
+      return finish(await runProviderEnvironmentLifecycle(environment, 'update_runtime', 'updated_gateway_environment_runtime', errorTarget, attempt));
     }
     const request = runtimeActionRequest(environment, 'update_environment_runtime', {
       forceRuntimeUpdate: true,
+      attempt,
     });
     if (!request) {
       setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', i18n().t('environmentCenter.resolveRuntimeTargetError'));
@@ -4583,11 +4612,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   async function restartEnvironmentRuntime(
     environment: DesktopEnvironmentEntry,
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
+    attempt?: EnvironmentLifecycleAttempt,
   ): Promise<boolean> {
     if (environment.kind === 'provider_environment') {
-      return runProviderEnvironmentLifecycle(environment, 'restart', 'restarted_gateway_environment_runtime', errorTarget);
+      return runProviderEnvironmentLifecycle(environment, 'restart', 'restarted_gateway_environment_runtime', errorTarget, attempt);
     }
-    const request = runtimeActionRequest(environment, 'restart_environment_runtime');
+    const request = runtimeActionRequest(environment, 'restart_environment_runtime', { attempt });
     if (!request) {
       setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', i18n().t('environmentCenter.resolveRuntimeTargetError'));
       return false;
@@ -4603,11 +4633,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   async function stopEnvironmentRuntime(
     environment: DesktopEnvironmentEntry,
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
+    attempt?: EnvironmentLifecycleAttempt,
   ): Promise<boolean> {
     if (environment.kind === 'provider_environment') {
-      return runProviderEnvironmentLifecycle(environment, 'stop', 'stopped_gateway_environment_runtime', errorTarget);
+      return runProviderEnvironmentLifecycle(environment, 'stop', 'stopped_gateway_environment_runtime', errorTarget, attempt);
     }
-    const request = runtimeActionRequest(environment, 'stop_environment_runtime');
+    const request = runtimeActionRequest(environment, 'stop_environment_runtime', { attempt });
     if (!request) {
       setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', i18n().t('environmentCenter.resolveRuntimeTargetError'));
       return false;
@@ -4965,6 +4996,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
+    attempt?: EnvironmentLifecycleAttempt,
   ): Promise<boolean> {
     switch (action.intent) {
       case 'open':
@@ -4978,13 +5010,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         return resolution.close_panel;
       }
       case 'start_runtime':
-        return startEnvironmentRuntime(environment, errorTarget);
+        return startEnvironmentRuntime(environment, errorTarget, { attempt });
       case 'stop_runtime':
-        return stopEnvironmentRuntime(environment, errorTarget);
+        return stopEnvironmentRuntime(environment, errorTarget, attempt);
       case 'restart_runtime':
-        return restartEnvironmentRuntime(environment, errorTarget);
+        return restartEnvironmentRuntime(environment, errorTarget, attempt);
       case 'update_runtime':
-        return updateEnvironmentRuntime(environment, action, errorTarget);
+        return updateEnvironmentRuntime(environment, action, errorTarget, attempt);
       case 'update_desktop': {
         const result = await performLauncherAction({
           kind: 'manage_desktop_update',
@@ -5060,6 +5092,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
     updateSession?: (state: EnvironmentGuidanceSessionState) => void,
+    attempt?: EnvironmentLifecycleAttempt,
   ): Promise<EnvironmentGuidanceActionResolution> {
     const currentSession = isEnvironmentGuidancePendingIntent(action.intent)
       ? startEnvironmentGuidanceIntent(null, environment.id, action.intent)
@@ -5326,7 +5359,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       || action.intent === 'restart_runtime'
       || action.intent === 'update_runtime'
     ) {
-      const completed = await triggerLocalEnvironmentAction(environment, action, 'connect');
+      const completed = await triggerLocalEnvironmentAction(environment, action, 'connect', attempt);
       if (completed && action.continue_open_after_completion) {
         return runEnvironmentGuidanceAction(environment, {
           intent: 'open_with_preflight',
@@ -5400,7 +5433,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       };
     }
 
-    const completed = await triggerLocalEnvironmentAction(environment, action, 'connect');
+    const completed = await triggerLocalEnvironmentAction(environment, action, 'connect', attempt);
     return {
       close_panel: completed,
       next_session: completed
@@ -5596,13 +5629,16 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       progress: null,
     });
     try {
-      await props.runtime.launcher.performAction({
-        kind: 'upsert_saved_environment',
-        environment_id: trimString(request.environment_id),
-        label: trimString(request.label),
-        external_local_ui_url: normalizedTargetURL,
-        auto_runtime_probe_enabled: request.autoRuntimeProbeEnabled,
-      });
+      const result = await performLauncherAction({
+        kind: 'upsert_environment_registration',
+        registration: {
+          registration_ref: { kind: 'saved_environment', id: trimString(request.environment_id) },
+          label: trimString(request.label),
+          external_local_ui_url: normalizedTargetURL,
+          auto_runtime_probe_enabled: request.autoRuntimeProbeEnabled,
+        },
+      }, request.errorTarget);
+      if (result?.outcome !== 'saved_environment') return false;
       await refreshSnapshot();
       showActionToast(request.successMessage);
       return true;
@@ -5614,7 +5650,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
   }
 
-  async function upsertSavedSSHEnvironment(
+  async function upsertSSHRuntimeTarget(
     request: Readonly<{
       environment_id: string;
       label: string;
@@ -5637,21 +5673,32 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       progress: null,
     });
     try {
-      await props.runtime.launcher.performAction({
-        kind: 'upsert_saved_ssh_environment',
-        environment_id: trimString(request.environment_id),
-        label: trimString(request.label),
-        ssh_destination: request.details.ssh_destination,
-        ssh_port: request.details.ssh_port,
-        auth_mode: request.details.auth_mode,
-        runtime_root: request.details.runtime_root,
-        bootstrap_strategy: request.details.bootstrap_strategy,
-        release_base_url: request.details.release_base_url,
-        connect_timeout_seconds: request.details.connect_timeout_seconds,
-        ssh_password: request.sshPassword,
-        ssh_password_mode: request.sshPasswordMode,
-        auto_runtime_probe_enabled: request.autoRuntimeProbeEnabled,
-      });
+      const result = await performLauncherAction({
+        kind: 'upsert_environment_registration',
+        registration: {
+          registration_ref: { kind: 'runtime_target', id: trimString(request.environment_id) as DesktopRuntimeTargetID },
+          label: trimString(request.label),
+          host_access: {
+          kind: 'ssh_host',
+          ssh: {
+            ssh_destination: request.details.ssh_destination,
+            ssh_port: request.details.ssh_port,
+            auth_mode: request.details.auth_mode,
+            connect_timeout_seconds: request.details.connect_timeout_seconds,
+          },
+        },
+          placement: {
+          kind: 'host_process',
+          runtime_root: request.details.runtime_root,
+          bootstrap_strategy: request.details.bootstrap_strategy,
+          release_base_url: request.details.release_base_url,
+        },
+          ssh_password: request.sshPassword,
+          ssh_password_mode: request.sshPasswordMode,
+          auto_runtime_probe_enabled: request.autoRuntimeProbeEnabled,
+        },
+      }, request.errorTarget);
+      if (result?.outcome !== 'saved_environment') return false;
       await refreshSnapshot();
       showActionToast(request.successMessage);
       return true;
@@ -5684,11 +5731,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     });
     try {
       const isSSHContainer = request.state.connection_kind === 'ssh_container_runtime';
-      await props.runtime.launcher.performAction({
-        kind: 'upsert_saved_runtime_target',
-        environment_id: trimString(request.environment_id) || undefined,
-        label: trimString(request.label),
-        host_access: isSSHContainer
+      const result = await performLauncherAction({
+        kind: 'upsert_environment_registration',
+        registration: {
+          registration_ref: { kind: 'runtime_target', id: trimString(request.environment_id) as DesktopRuntimeTargetID },
+          label: trimString(request.label),
+          host_access: isSSHContainer
           ? {
               kind: 'ssh_host',
               ssh: {
@@ -5699,7 +5747,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               },
             }
           : { kind: 'local_host' },
-        placement: {
+          placement: {
           kind: 'container_process',
           container_engine: request.state.container_engine,
           container_id: trimString(request.state.container_id),
@@ -5710,10 +5758,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           ),
           bridge_strategy: 'exec_stream',
         },
-        ssh_password: request.state.ssh_password,
-        ssh_password_mode: request.state.ssh_password_mode,
-        auto_runtime_probe_enabled: request.state.auto_runtime_probe_enabled,
-      });
+          ssh_password: request.state.ssh_password,
+          ssh_password_mode: request.state.ssh_password_mode,
+          auto_runtime_probe_enabled: request.state.auto_runtime_probe_enabled,
+        },
+      }, request.errorTarget);
+      if (result?.outcome !== 'saved_environment') return false;
       await refreshSnapshot();
       showActionToast(request.successMessage);
       return true;
@@ -5742,11 +5792,16 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     setConnectionDialogError('');
     const result = await performLauncherAction({
-      kind: 'upsert_gateway_environment_profile',
-      gateway_id: gatewayID,
-      ...(trimString(request.gateway_env_id) ? { gateway_env_id: trimString(request.gateway_env_id) } : {}),
-      display_name: trimString(request.label),
-      access_route: request.access_route,
+      kind: 'upsert_environment_registration',
+      registration: {
+        registration_ref: {
+          kind: 'gateway_environment',
+          gateway_id: gatewayID,
+          gateway_env_id: trimString(request.gateway_env_id),
+        },
+        display_name: trimString(request.label),
+        access_route: request.access_route,
+      },
     }, request.errorTarget);
     if (result?.outcome !== 'saved_gateway_environment') {
       return false;
@@ -5947,7 +6002,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setConnectionDialogFieldErrors({});
     let saved = false;
     if (state.connection_kind === 'ssh_environment') {
-      saved = await upsertSavedSSHEnvironment({
+      saved = await upsertSSHRuntimeTarget({
         environment_id: state.environment_id,
         label: state.label,
         details: {
@@ -6004,39 +6059,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   async function toggleEnvironmentPinned(environment: DesktopEnvironmentEntry): Promise<void> {
-    if (environment.kind === 'gateway_environment') {
-      setErrorMessage('connect', i18n().t('environmentCenter.gatewayEnvironmentPinUnavailable'));
-      return;
-    }
     const nextPinned = !environment.pinned;
     const successMessage = nextPinned
       ? i18n().t('toast.pinned', { label: environment.label })
       : i18n().t('toast.unpinned', { label: environment.label });
-    if (environment.kind === 'local_environment') {
-      if (environment.managed_runtime_placement?.kind === 'container_process' && environment.managed_runtime_host_access) {
-        const result = await performLauncherAction({
-          kind: 'set_saved_runtime_target_pinned',
-          environment_id: environment.id,
-          label: environment.label,
-          pinned: nextPinned,
-          host_access: environment.managed_runtime_host_access,
-          placement: environment.managed_runtime_placement,
-        }, 'connect');
-        if (result?.outcome === 'saved_environment') {
-          showActionToast(successMessage);
-        }
-        return;
-      }
-      const result = await performLauncherAction({
-        kind: 'set_local_environment_pinned',
-        environment_id: environment.id,
-        pinned: nextPinned,
-      }, 'connect');
-      if (result?.outcome === 'saved_environment') {
-        showActionToast(successMessage);
-      }
-      return;
-    }
     if (environment.kind === 'provider_environment') {
       const result = await performLauncherAction({
         kind: 'set_provider_environment_pinned',
@@ -6048,49 +6074,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       }
       return;
     }
-    if (environment.kind === 'ssh_environment') {
-      if (environment.managed_runtime_placement?.kind === 'container_process' && environment.managed_runtime_host_access) {
-        const result = await performLauncherAction({
-          kind: 'set_saved_runtime_target_pinned',
-          environment_id: environment.id,
-          label: environment.label,
-          pinned: nextPinned,
-          host_access: environment.managed_runtime_host_access,
-          placement: environment.managed_runtime_placement,
-        }, 'connect');
-        if (result?.outcome === 'saved_environment') {
-          showActionToast(successMessage);
-        }
-        return;
-      }
-      const details = environment.ssh_details;
-      if (!details) {
-        setErrorMessage('connect', i18n().t('environmentCenter.sshConnectionDetailsMissing'));
-        return;
-      }
-      const result = await performLauncherAction({
-        kind: 'set_saved_ssh_environment_pinned',
-        environment_id: environment.id,
-        label: environment.label,
-        pinned: nextPinned,
-        ssh_destination: details.ssh_destination,
-        ssh_port: details.ssh_port,
-        auth_mode: details.auth_mode,
-        runtime_root: details.runtime_root,
-        bootstrap_strategy: details.bootstrap_strategy,
-        release_base_url: details.release_base_url,
-        connect_timeout_seconds: details.connect_timeout_seconds,
-      }, 'connect');
-      if (result?.outcome === 'saved_environment') {
-        showActionToast(successMessage);
-      }
+    if (!environment.registration_ref) {
+      setErrorMessage('connect', i18n().t('environmentCenter.environmentRegistrationUnavailable'));
       return;
     }
     const result = await performLauncherAction({
-      kind: 'set_saved_environment_pinned',
-      environment_id: environment.id,
-      label: environment.label,
-      external_local_ui_url: environment.local_ui_url,
+      kind: 'set_environment_registration_pinned',
+      registration_ref: environment.registration_ref,
       pinned: nextPinned,
     }, 'connect');
     if (result?.outcome === 'saved_environment') {
@@ -6109,69 +6099,37 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (!target) {
       return;
     }
-    if (
-      target.kind !== 'ssh_environment'
-      && target.kind !== 'external_local_ui'
-      && target.kind !== 'gateway_environment'
-      && !(target.kind === 'local_environment' && target.managed_runtime_placement?.kind === 'container_process')
-    ) {
-      throw new Error('Unsupported delete target.');
-    }
     const hadBackgroundOperation = deleteTargetOperation() !== null;
+    const registrationRef = target.registration_ref;
     setBusyState({
       action: 'delete_environment',
       environment_id: target.id,
       provider_origin: '',
       provider_id: '',
-      gateway_id: target.kind === 'gateway_environment' ? target.gateway_id ?? '' : '',
+      gateway_id: registrationRef?.kind === 'gateway_environment' ? registrationRef.gateway_id : '',
       request_started_at_unix_ms: Date.now(),
       progress: null,
     });
     try {
       let deleteResult: Awaited<ReturnType<typeof props.runtime.launcher.performAction>> | null = null;
-      if (target.kind === 'gateway_environment') {
-        const gatewayID = trimString(target.gateway_id);
-        const gatewayEnvID = trimString(target.gateway_env_id);
-        if (!gatewayID || !gatewayEnvID) {
-          throw new Error(i18n().t('environmentCenter.gatewayEnvironmentProfileUnavailable'));
-        }
-        deleteResult = await props.runtime.launcher.performAction({
-          kind: 'delete_gateway_environment_profile',
-          gateway_id: gatewayID,
-          gateway_env_id: gatewayEnvID,
-        });
-      } else {
-        const registrationKind = target.registration_kind;
-        const deleteAction = registrationKind === 'runtime_target' || registrationKind === 'ssh_runtime_target'
-          ? 'delete_saved_runtime_target' as const
-          : registrationKind === 'ssh_environment'
-            ? 'delete_saved_ssh_environment' as const
-            : registrationKind === 'saved_environment'
-              ? 'delete_saved_environment' as const
-              : target.managed_runtime_placement_target_id
-                ? 'delete_saved_runtime_target' as const
-                : target.kind === 'ssh_environment'
-                  ? 'delete_saved_ssh_environment' as const
-                  : 'delete_saved_environment' as const;
-        const deleteEnvironmentID = target.registration_runtime_target_id
-          ?? target.registration_environment_id
-          ?? target.id;
-        deleteResult = await props.runtime.launcher.performAction({
-          kind: deleteAction,
-          environment_id: deleteEnvironmentID,
-        });
+      if (!registrationRef || registrationRef.kind === 'local_environment') {
+        throw new Error(i18n().t('environmentCenter.environmentRegistrationUnavailable'));
       }
+      deleteResult = await props.runtime.launcher.performAction({
+        kind: 'delete_environment_registration',
+        registration_ref: registrationRef,
+      });
       if (!deleteResult || !deleteResult.ok || (deleteResult.outcome !== 'deleted_environment' && deleteResult.outcome !== 'deleted_gateway_environment')) {
-        throw new Error(deleteResult && !deleteResult.ok ? deleteResult.message : i18n().t('environmentCenter.connectionRemoved'));
+        throw new Error(deleteResult && !deleteResult.ok ? deleteResult.message : i18n().t('environmentCenter.environmentRegistrationUnavailable'));
       }
       await refreshSnapshot();
       setDeleteTarget(null);
       showActionToast(
-        target.kind === 'gateway_environment'
+        registrationRef.kind === 'gateway_environment'
           ? i18n().t('environmentCenter.gatewayEnvironmentRemoved')
           : hadBackgroundOperation
-            ? i18n().t('environmentCenter.connectionRemovedCleanup')
-            : i18n().t('environmentCenter.connectionRemoved'),
+            ? i18n().t('environmentCenter.environmentRemovedCleanup')
+            : i18n().t('environmentCenter.environmentRemoved'),
         'info',
       );
     } catch (error) {
@@ -6704,8 +6662,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             setDeleteTarget(null);
           }
         }}
-        title={deleteTargetIsGatewayEnvironment() ? i18n().t('confirm.deleteGatewayEnvironmentTitle') : i18n().t('confirm.deleteConnectionTitle')}
-        confirmText={deleteTargetIsGatewayEnvironment() ? i18n().t('confirm.deleteGatewayEnvironmentConfirm') : i18n().t('confirm.deleteConnectionConfirm')}
+        title={deleteTargetIsGatewayEnvironment() ? i18n().t('confirm.deleteGatewayEnvironmentTitle') : i18n().t('confirm.removeEnvironmentTitle')}
+        confirmText={deleteTargetIsGatewayEnvironment() ? i18n().t('confirm.deleteGatewayEnvironmentConfirm') : i18n().t('confirm.removeEnvironmentConfirm')}
         variant="destructive"
         loading={busyStateMatchesAction(busyState(), 'delete_environment')}
         onConfirm={() => void deleteEnvironment()}
@@ -6717,14 +6675,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                   label: deleteTarget()?.label ?? '',
                   gateway: deleteTarget()?.gateway_label ?? i18n().t('environmentCenter.thisGateway'),
                 })
-              : i18n().t('confirm.deleteConnectionQuestion', { label: deleteTarget()?.label ?? '' })}
+              : i18n().t('confirm.removeEnvironmentQuestion', { label: deleteTarget()?.label ?? '' })}
           </p>
           <p class="text-xs text-muted-foreground">
             <Show
               when={deleteTargetOperation()}
-              fallback={<>{deleteTargetIsGatewayEnvironment() ? i18n().t('confirm.deleteGatewayEnvironmentDescription') : i18n().t('confirm.deleteConnectionDescription')}</>}
+              fallback={<>{deleteTargetIsGatewayEnvironment() ? i18n().t('confirm.deleteGatewayEnvironmentDescription') : i18n().t('confirm.removeEnvironmentDescription')}</>}
             >
-              <>{deleteTargetIsGatewayEnvironment() ? i18n().t('confirm.deleteGatewayEnvironmentBusyDescription') : i18n().t('confirm.deleteConnectionBusyDescription')}</>
+              <>{deleteTargetIsGatewayEnvironment() ? i18n().t('confirm.deleteGatewayEnvironmentBusyDescription') : i18n().t('confirm.removeEnvironmentBusyDescription')}</>
             </Show>
           </p>
         </div>
@@ -7030,6 +6988,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
     errorTarget?: 'connect' | 'dialog' | 'settings',
+    attempt?: EnvironmentLifecycleAttempt,
   ) => Promise<boolean>;
   refreshEnvironmentRuntime: (
     environment: DesktopEnvironmentEntry,
@@ -7040,6 +6999,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
     updateSession?: (state: EnvironmentGuidanceSessionState) => void,
+    attempt?: EnvironmentLifecycleAttempt,
   ) => Promise<EnvironmentGuidanceActionResolution>;
   runDesktopUpdateHandoff: (environmentID: string, label?: string) => Promise<void>;
   confirmRuntimeOperation: (operationKey: string) => void;
@@ -7453,6 +7413,7 @@ function EnvironmentCardsPanel(props: Readonly<{
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
     errorTarget?: 'connect' | 'dialog' | 'settings',
+    attempt?: EnvironmentLifecycleAttempt,
   ) => Promise<boolean>;
   refreshEnvironmentRuntime: (
     environment: DesktopEnvironmentEntry,
@@ -7463,6 +7424,7 @@ function EnvironmentCardsPanel(props: Readonly<{
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
     updateSession?: (state: EnvironmentGuidanceSessionState) => void,
+    attempt?: EnvironmentLifecycleAttempt,
   ) => Promise<EnvironmentGuidanceActionResolution>;
   runDesktopUpdateHandoff: (environmentID: string, label?: string) => Promise<void>;
   confirmRuntimeOperation: (operationKey: string) => void;
@@ -7636,12 +7598,13 @@ function EnvironmentCardsPanel(props: Readonly<{
   const beginLifecycleProgressDisclosure = (
     environmentID: string,
     intent: EnvironmentLifecycleDisclosureIntent,
+    attempt: EnvironmentLifecycleAttempt,
   ) => {
     setGuidanceSessionState((current) => (
       current?.environment_id === environmentID ? null : current
     ));
     setLifecycleDisclosureState((current) => (
-      beginEnvironmentLifecycleDisclosure(current, environmentID, intent)
+      beginEnvironmentLifecycleDisclosure(current, environmentID, intent, attempt)
     ));
     setActiveEnvironmentOverlayState(openEnvironmentLibraryOverlayState('lifecycle_progress', environmentID));
   };
@@ -7763,7 +7726,7 @@ function EnvironmentCardsPanel(props: Readonly<{
                     dismissOperation={props.dismissOperation}
                     copyOperationDiagnostics={props.copyOperationDiagnostics}
                     setGuidanceSession={(nextSession) => setGuidanceSessionState(nextSession)}
-                    beginLifecycleDisclosure={(intent) => beginLifecycleProgressDisclosure(environmentID, intent)}
+                    beginLifecycleDisclosure={(intent, attempt) => beginLifecycleProgressDisclosure(environmentID, intent, attempt)}
                   />
                 )}
               </For>
@@ -7808,7 +7771,7 @@ function EnvironmentCardsPanel(props: Readonly<{
                     dismissOperation={props.dismissOperation}
                     copyOperationDiagnostics={props.copyOperationDiagnostics}
                     setGuidanceSession={(nextSession) => setGuidanceSessionState(nextSession)}
-                    beginLifecycleDisclosure={(intent) => beginLifecycleProgressDisclosure(environmentID, intent)}
+                    beginLifecycleDisclosure={(intent, attempt) => beginLifecycleProgressDisclosure(environmentID, intent, attempt)}
                   />
                 )}
               </For>
@@ -8419,12 +8382,12 @@ function localizedProgressLocation(i18n: DesktopI18n, location: string): string 
 }
 
 function environmentProgressLabel(i18n: DesktopI18n, progress: DesktopLauncherActionProgress): string {
-  const open = progress.open_progress;
+  const open = progress.active_progress_surface === 'open' ? progress.open_progress : undefined;
   if (open) {
     const environmentLabel = trimString(open.environment_label) || trimString(progress.environment_label) || 'Environment';
     return `${environmentLabel} · ${localizedProgressLocation(i18n, open.location)}`;
   }
-  const startup = progress.lifecycle_progress;
+  const startup = progress.active_progress_surface === 'runtime_lifecycle' ? progress.lifecycle_progress : undefined;
   if (!startup) {
     return i18n.t('progress.environmentProgress');
   }
@@ -8606,7 +8569,7 @@ function localizedProgressTitle(i18n: DesktopI18n, progress: DesktopLauncherActi
   if (progress.active_progress_surface === 'runtime_lifecycle' && progress.lifecycle_progress) {
     return localizedRuntimeLifecyclePhaseLabel(i18n, progress.lifecycle_progress.phase);
   }
-  const open = progress.open_progress;
+  const open = progress.active_progress_surface === 'open' ? progress.open_progress : undefined;
   if (open) {
     if (progress.status === 'failed') {
       return i18n.t('progress.openFailed');
@@ -8635,7 +8598,7 @@ function localizedProgressTitle(i18n: DesktopI18n, progress: DesktopLauncherActi
         return localizedOpenConnectionPhaseLabel(i18n, open.phase);
     }
   }
-  const lifecycle = progress.lifecycle_progress;
+  const lifecycle = progress.active_progress_surface === 'runtime_lifecycle' ? progress.lifecycle_progress : undefined;
   if (lifecycle) {
     return localizedRuntimeLifecyclePhaseLabel(i18n, lifecycle.phase);
   }
@@ -8666,7 +8629,7 @@ function localizedProgressDetail(i18n: DesktopI18n, progress: DesktopLauncherAct
     }
     return i18n.t('progress.checkingExistingRuntime');
   }
-  const open = progress.open_progress;
+  const open = progress.active_progress_surface === 'open' ? progress.open_progress : undefined;
   if (open && progress.status !== 'failed' && progress.status !== 'canceled') {
     switch (open.phase) {
       case 'checking_runtime_record':
@@ -8877,9 +8840,22 @@ function EnvironmentProgressPanel(props: Readonly<{
   runNextAction?: (action: DesktopLauncherOperationNextAction, progress: DesktopLauncherActionProgress) => void;
   runPrimaryAction?: (action: EnvironmentActionModel) => void;
 }>) {
-  const runtimeLifecycle = createMemo(() => props.progress.lifecycle_progress);
-  const openConnection = createMemo(() => props.progress.open_progress);
-  const stepProgress = createMemo(() => props.progress.step_progress);
+  const runtimeLifecycle = createMemo(() => (
+    props.progress.active_progress_surface === 'runtime_lifecycle'
+      ? props.progress.lifecycle_progress
+      : undefined
+  ));
+  const openConnection = createMemo(() => (
+    props.progress.active_progress_surface === 'open'
+      ? props.progress.open_progress
+      : undefined
+  ));
+  const stepProgress = createMemo(() => (
+    props.progress.active_progress_surface === 'reinstall'
+    || props.progress.active_progress_surface === 'gateway'
+      ? props.progress.step_progress
+      : undefined
+  ));
   const runtimeTargetDetail = createMemo(() => localizedRuntimeTargetDetail(props.i18n, runtimeLifecycle()));
   const openTargetDetail = createMemo(() => localizedRuntimeTargetDetail(props.i18n, openConnection()));
   const iconTone = createMemo(() => environmentProgressStatusIconTone(props.progress));
@@ -10255,7 +10231,10 @@ function EnvironmentConnectionCard(props: Readonly<{
   lifecycleDisclosure: EnvironmentLifecycleDisclosureState;
   guidanceSession: EnvironmentGuidanceSessionState;
   setGuidanceSession: (state: EnvironmentGuidanceSessionState) => void;
-  beginLifecycleDisclosure: (intent: EnvironmentLifecycleDisclosureIntent) => void;
+  beginLifecycleDisclosure: (
+    intent: EnvironmentLifecycleDisclosureIntent,
+    attempt: EnvironmentLifecycleAttempt,
+  ) => void;
   openEnvironment: (
     environment: DesktopEnvironmentEntry,
     errorTarget?: 'connect' | 'dialog',
@@ -10265,6 +10244,7 @@ function EnvironmentConnectionCard(props: Readonly<{
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
     errorTarget?: 'connect' | 'dialog' | 'settings',
+    attempt?: EnvironmentLifecycleAttempt,
   ) => Promise<boolean>;
   refreshEnvironmentRuntime: (
     environment: DesktopEnvironmentEntry,
@@ -10275,6 +10255,7 @@ function EnvironmentConnectionCard(props: Readonly<{
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
     updateSession?: (state: EnvironmentGuidanceSessionState) => void,
+    attempt?: EnvironmentLifecycleAttempt,
   ) => Promise<EnvironmentGuidanceActionResolution>;
   runDesktopUpdateHandoff: (environmentID: string, label?: string) => Promise<void>;
   confirmRuntimeOperation: (operationKey: string) => void;
@@ -10309,34 +10290,7 @@ function EnvironmentConnectionCard(props: Readonly<{
     selectedSnapshotRuntimeLifecycleProgressForEnvironment(props.environment, props.actionProgress)
   ));
   const reinstallTargetProgress = createMemo<DesktopLauncherActionProgress | null>(() => {
-    const persisted = selectedSnapshotReinstallTargetProgressForEnvironment(props.environment, props.actionProgress);
-    if (persisted) {
-      return persisted;
-    }
-    if (!busyStateMatchesEnvironment(
-      props.busyState,
-      props.environment.id,
-      ['preview_reinstall_target', 'reinstall_target'],
-    )) {
-      return null;
-    }
-    return {
-      action: 'reinstall_target',
-      environment_id: props.environment.id,
-      environment_label: props.environment.label,
-      subject_kind: 'runtime_target',
-      subject_id: props.environment.id,
-      started_at_unix_ms: props.busyState.request_started_at_unix_ms,
-      updated_at_unix_ms: props.busyState.request_started_at_unix_ms,
-      status: 'running',
-      phase: 'preflight',
-      title: 'Reinstall Redeven',
-      title_key: 'environmentAction.reinstallRedeven',
-      detail: 'Desktop is checking the exact direct target before showing the deletion list.',
-      detail_key: 'progress.reinstallCheckingDetail',
-      step_progress: reinstallTargetStepProgress('preflight'),
-      cancelable: false,
-    };
+    return selectedSnapshotReinstallTargetProgressForEnvironment(props.environment, props.actionProgress);
   });
   const openConnectionProgress = createMemo(() => (
     selectedSnapshotOpenConnectionProgressForEnvironment(props.environment, props.actionProgress)
@@ -10414,19 +10368,12 @@ function EnvironmentConnectionCard(props: Readonly<{
   ));
   const isPinBusy = createMemo(() => (
     busyStateMatchesEnvironment(props.busyState, props.environment.id, [
-      'set_local_environment_pinned',
       'set_provider_environment_pinned',
-      'set_saved_environment_pinned',
-      'set_saved_ssh_environment_pinned',
-      'set_saved_runtime_target_pinned',
+      'set_environment_registration_pinned',
     ])
   ));
   const isContainerRuntimeTarget = createMemo(() => props.environment.managed_runtime_placement?.kind === 'container_process');
-  const deleteTitle = createMemo(() => (
-    isContainerRuntimeTarget()
-      ? props.i18n.t('environmentCenter.deleteRuntimeTarget')
-      : props.i18n.t('environmentCenter.deleteConnection')
-  ));
+  const deleteTitle = createMemo(() => props.i18n.t('environmentCenter.removeEnvironment'));
   const runOpenWithPreflight = async (action: EnvironmentActionModel): Promise<void> => {
     const nextSession = startEnvironmentGuidanceIntent(
       props.guidanceSession,
@@ -10574,8 +10521,10 @@ function EnvironmentConnectionCard(props: Readonly<{
                 await runOpenWithPreflight(action);
                 return;
               }
+              let lifecycleAttempt: EnvironmentLifecycleAttempt | undefined;
               if (environmentActionStartsLifecycleDisclosure(action)) {
-                props.beginLifecycleDisclosure(action.intent);
+                lifecycleAttempt = createEnvironmentLifecycleAttempt(props.environment.id, action.intent);
+                props.beginLifecycleDisclosure(action.intent, lifecycleAttempt);
               } else if (isEnvironmentGuidancePendingIntent(action.intent)) {
                 props.setGuidanceSession(startEnvironmentGuidanceIntent(
                   props.guidanceSession,
@@ -10588,6 +10537,7 @@ function EnvironmentConnectionCard(props: Readonly<{
                 props.environment,
                 action,
                 'connect',
+                lifecycleAttempt,
               );
               if (!completed || !action.continue_open_after_completion) {
                 return;
@@ -10602,9 +10552,10 @@ function EnvironmentConnectionCard(props: Readonly<{
           }}
           onRunGuidanceAction={(action) => {
             void (async () => {
-              const startsLifecycleDisclosure = environmentActionStartsLifecycleDisclosure(action);
-              if (startsLifecycleDisclosure) {
-                props.beginLifecycleDisclosure(action.intent);
+              let lifecycleAttempt: EnvironmentLifecycleAttempt | undefined;
+              if (environmentActionStartsLifecycleDisclosure(action)) {
+                lifecycleAttempt = createEnvironmentLifecycleAttempt(props.environment.id, action.intent);
+                props.beginLifecycleDisclosure(action.intent, lifecycleAttempt);
               } else if (isEnvironmentGuidancePendingIntent(action.intent)) {
                 props.setGuidanceSession(startEnvironmentGuidanceIntent(
                   props.guidanceSession,
@@ -10616,8 +10567,9 @@ function EnvironmentConnectionCard(props: Readonly<{
                 props.environment,
                 action,
                 props.setGuidanceSession,
+                lifecycleAttempt,
               );
-              props.setGuidanceSession(startsLifecycleDisclosure ? null : resolution.next_session);
+              props.setGuidanceSession(lifecycleAttempt ? null : resolution.next_session);
               if (resolution.close_panel) {
                 props.onPrimaryActionGuidanceOpenChange(false);
               }
@@ -10669,7 +10621,7 @@ function EnvironmentConnectionCard(props: Readonly<{
             <DesktopTooltip content={props.i18n.t('common.delete')} placement="top">
               <ConsoleActionIconButton
                 title={deleteTitle()}
-                aria-label={props.i18n.t('environmentCenter.deleteLabel', { label: props.environment.label })}
+                aria-label={props.i18n.t('environmentCenter.removeLabel', { label: props.environment.label })}
                 danger
                 onClick={() => props.deleteEnvironment(props.environment)}
               >
@@ -14560,7 +14512,7 @@ function ConnectionDialog(props: Readonly<{
           <Button
             size="sm"
             variant="default"
-            loading={busyStateMatchesAction(props.busyState, 'save_environment') || busyStateMatchesAction(props.busyState, 'upsert_gateway_environment_profile')}
+            loading={busyStateMatchesAction(props.busyState, 'save_environment') || busyStateMatchesAction(props.busyState, 'upsert_environment_registration')}
             onClick={() => {
               void props.onSave();
             }}

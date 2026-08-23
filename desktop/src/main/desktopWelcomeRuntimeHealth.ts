@@ -5,7 +5,6 @@ import type { DesktopProviderRuntimeLinkTargetID } from '../shared/providerRunti
 export type DesktopWelcomeRuntimeHealthSlot =
   | 'local_environment'
   | 'external_local_ui'
-  | 'ssh_environment'
   | 'runtime_target';
 
 export type DesktopWelcomeRuntimeHealthProbeEvent = Readonly<{
@@ -38,7 +37,6 @@ export type DesktopWelcomeRuntimeHealthTarget = Readonly<{
 export type DesktopWelcomeRuntimeHealthSnapshot = Readonly<{
   localRuntimeHealth: Readonly<Record<string, DesktopRuntimeHealth>>;
   savedExternalRuntimeHealth: Readonly<Record<string, DesktopRuntimeHealth>>;
-  savedSSHRuntimeHealth: Readonly<Record<string, DesktopRuntimeHealth>>;
   savedRuntimeTargetHealth: Readonly<Record<string, DesktopRuntimeHealth>>;
   managedRuntimePresenceByTargetID: Readonly<Record<string, DesktopRuntimePresence>>;
 }>;
@@ -60,7 +58,6 @@ export function desktopWelcomeRuntimeHealthForEnvironment(
     return undefined;
   }
   return snapshot.localRuntimeHealth[cleanEnvironmentID]
-    ?? snapshot.savedSSHRuntimeHealth[cleanEnvironmentID]
     ?? snapshot.savedRuntimeTargetHealth[cleanEnvironmentID]
     ?? snapshot.savedExternalRuntimeHealth[cleanEnvironmentID]
     ?? (cleanTargetID !== ''
@@ -138,7 +135,6 @@ export class DesktopWelcomeRuntimeHealthStore {
   snapshot(): DesktopWelcomeRuntimeHealthSnapshot {
     const localRuntimeHealth: Record<string, DesktopRuntimeHealth> = {};
     const savedExternalRuntimeHealth: Record<string, DesktopRuntimeHealth> = {};
-    const savedSSHRuntimeHealth: Record<string, DesktopRuntimeHealth> = {};
     const savedRuntimeTargetHealth: Record<string, DesktopRuntimeHealth> = {};
     const managedRuntimePresenceByTargetID: Record<string, DesktopRuntimePresence> = {};
 
@@ -150,9 +146,6 @@ export class DesktopWelcomeRuntimeHealthStore {
             break;
           case 'external_local_ui':
             savedExternalRuntimeHealth[entry.target.environment_id] = entry.health;
-            break;
-          case 'ssh_environment':
-            savedSSHRuntimeHealth[entry.target.environment_id] = entry.health;
             break;
           case 'runtime_target':
             savedRuntimeTargetHealth[entry.target.environment_id] = entry.health;
@@ -167,7 +160,6 @@ export class DesktopWelcomeRuntimeHealthStore {
     return {
       localRuntimeHealth,
       savedExternalRuntimeHealth,
-      savedSSHRuntimeHealth,
       savedRuntimeTargetHealth,
       managedRuntimePresenceByTargetID,
     };

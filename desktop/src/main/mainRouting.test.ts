@@ -666,16 +666,14 @@ describe('main routing', () => {
     expect(bridgeObservationModuleSrc).toContain('registry.updateIfCurrent(');
     expect(bridgeObservationModuleSrc).not.toContain('.retire(');
 
-    const sshProbeStart = mainSrc.indexOf('async function probeSavedSSHRuntimeHealth(');
-    const sshProbeEnd = mainSrc.indexOf('function runtimeTargetProbeSource(', sshProbeStart);
-    expect(sshProbeStart).toBeGreaterThanOrEqual(0);
-    expect(sshProbeEnd).toBeGreaterThan(sshProbeStart);
-    const sshProbeSrc = mainSrc.slice(sshProbeStart, sshProbeEnd);
-    expect(sshProbeSrc).toContain('const bridgeObservation = await observeRuntimePlacementBridgeRecord(placementTargetID)');
-    expect(sshProbeSrc).toContain("bridgeObservation.kind === 'recovering' ? 'runtime_disconnected' : 'probe_failed'");
-    expect(sshProbeSrc).toContain('const probe = await probeManagedSSHRuntimeStatus({');
-    expect(sshProbeSrc).toContain('sshRuntimeReadyByKey.set(runtimeKey, readyRuntimeRecord)');
-    expect(sshProbeSrc).toContain('sshRuntimeReadyByKey.delete(runtimeKey)');
+    const runtimeTargetProbeStart = mainSrc.indexOf('async function probeSavedRuntimeTargetHealth(');
+    const runtimeTargetProbeEnd = mainSrc.indexOf('function welcomeRuntimeProbeCoordinatorKey(', runtimeTargetProbeStart);
+    expect(runtimeTargetProbeStart).toBeGreaterThanOrEqual(0);
+    expect(runtimeTargetProbeEnd).toBeGreaterThan(runtimeTargetProbeStart);
+    const runtimeTargetProbeSrc = mainSrc.slice(runtimeTargetProbeStart, runtimeTargetProbeEnd);
+    expect(runtimeTargetProbeSrc).toContain('const state = await inspectSavedRuntimeTargetState(target);');
+    expect(runtimeTargetProbeSrc).toContain('runtimeTargetHealthFromState(target, state)');
+    expect(runtimeTargetProbeSrc).toContain('runtimeTargetPresenceFromState(target, state)');
 
     const openSSHStart = mainSrc.indexOf('async function openSSHEnvironmentFromLauncher(');
     const openSSHEnd = mainSrc.indexOf('function thrownLauncherActionFailure(', openSSHStart);
@@ -1329,26 +1327,27 @@ describe('main routing', () => {
 
   it('settles deleted runtime lifecycle tasks while preventing stale SSH and provider tasks from resurrecting entries', () => {
     const mainSrc = readMainSource();
-    const sshDeleteStart = mainSrc.indexOf('async function deleteSavedSSHEnvironmentFromWelcome');
+    const runtimeTargetDeleteStart = mainSrc.indexOf('async function deleteSavedRuntimeTargetFromWelcome');
     const providerDeleteStart = mainSrc.indexOf('async function deleteControlPlaneFromLauncher');
     const providerCleanupStart = mainSrc.indexOf('async function cleanupDeletedControlPlane');
     const syncAccountStart = mainSrc.indexOf('async function syncSavedControlPlaneAccount(');
     const syncStart = mainSrc.indexOf('async function syncSavedControlPlaneAccountWithState');
     const syncEnd = mainSrc.indexOf('async function ensureControlPlaneAccessToken');
 
-    expect(sshDeleteStart).toBeGreaterThanOrEqual(0);
-    const sshDeleteSrc = mainSrc.slice(sshDeleteStart, mainSrc.indexOf('async function performDesktopLauncherAction', sshDeleteStart));
-    expect(sshDeleteSrc).toContain("launcherOperations.markSubjectDeleted('ssh_environment', runtimeKey");
-    expect(sshDeleteSrc.indexOf('launcherOperations.cancel(active.operation_key')).toBeLessThan(
-      sshDeleteSrc.indexOf('await persistDesktopPreferences(deleteSavedSSHEnvironment(preferences, environmentID));'),
+    expect(runtimeTargetDeleteStart).toBeGreaterThanOrEqual(0);
+    const runtimeTargetDeleteSrc = mainSrc.slice(runtimeTargetDeleteStart, mainSrc.indexOf('async function listRuntimeContainersFromLauncher', runtimeTargetDeleteStart));
+    expect(runtimeTargetDeleteSrc).toContain('await mutateDesktopPreferences((current) => {');
+    expect(runtimeTargetDeleteSrc.indexOf('return deleteSavedRuntimeTarget(current, runtimeTargetID);')).toBeLessThan(
+      runtimeTargetDeleteSrc.indexOf("launcherOperations.markSubjectDeleted('runtime_target', runtimeTargetID);"),
     );
-    expect(sshDeleteSrc).toContain('await runtimeLifecycleCoordinator.waitForIdle(targetKey);');
+    expect(runtimeTargetDeleteSrc).toContain('void (async () => {');
+    expect(runtimeTargetDeleteSrc).toContain('await runtimeLifecycleCoordinator.waitForIdle(targetKey).catch(() => undefined);');
 
     expect(providerDeleteStart).toBeGreaterThanOrEqual(0);
     expect(providerCleanupStart).toBeGreaterThan(providerDeleteStart);
     const providerDeleteSrc = mainSrc.slice(providerDeleteStart, providerCleanupStart);
     expect(providerDeleteSrc).toContain("launcherOperations.markSubjectDeleted(\n    'control_plane'");
-    expect(providerDeleteSrc).toContain('await persistDesktopPreferences(deleteSavedControlPlane(preferences, request.provider_origin, request.provider_id));');
+    expect(providerDeleteSrc).toContain('await mutateDesktopPreferences((current) => deleteSavedControlPlane(current, request.provider_origin, request.provider_id));');
     expect(providerDeleteSrc).toContain('void cleanupDeletedControlPlane(controlPlane, refreshToken, providerSessionKeys);');
     expect(providerDeleteSrc).not.toContain('await revokeProviderDesktopAuthorization');
     expect(providerDeleteSrc).not.toContain('await finalizeSessionClosure(sessionKey)');
@@ -1407,7 +1406,7 @@ describe('main routing', () => {
 
     expect(mainSrc).toContain('async function saveLocalEnvironmentSettingsFromWelcome(');
     expect(mainSrc).toContain("case 'save_local_environment_settings':");
-    expect(mainSrc).toContain('updateLocalEnvironmentSettings(preferences, {');
+    expect(mainSrc).toContain('mutateDesktopPreferences((current) => updateLocalEnvironmentSettings(current, {');
     expect(mainSrc).not.toContain('autoRuntimeProbeEnabled: draft.auto_runtime_probe_enabled');
     expect(mainSrc).toContain("'action_invalid',");
     expect(mainSrc).toContain("'dialog',");
@@ -1627,6 +1626,25 @@ describe('main routing', () => {
     expect(directSrc).toContain('await reinstallTargetRequiredFailureIfPresent(environmentID, label)');
     expect(directSrc).not.toContain('gatewayLifecycleManager()');
     expect(directSrc).not.toContain('open-session');
+  });
+
+  it('keeps Runtime recovery inside Open as a child of the parent Launcher Operation', () => {
+    const mainSrc = readMainSource();
+    const executeStart = mainSrc.indexOf('async function executeDirectManagedEnvironmentLifecycle(');
+    const executeEnd = mainSrc.indexOf('async function runEnvironmentRuntimeLifecycleFromLauncher(', executeStart);
+    expect(executeStart).toBeGreaterThanOrEqual(0);
+    expect(executeEnd).toBeGreaterThan(executeStart);
+    const executeSrc = mainSrc.slice(executeStart, executeEnd);
+
+    expect(executeSrc).toContain("operation_owner: 'runtime_lifecycle' | 'open'");
+    expect(executeSrc).toContain("if (input.operation_owner === 'runtime_lifecycle') {");
+    expect(executeSrc).toContain('launcherOperations.finishCurrentAttempt(input.operation_key, owner, \'succeeded\'');
+    expect(executeSrc).toContain('scheduleCurrentLauncherOperationRemoval(input.operation_key, owner);');
+    expect(executeSrc).toContain('launcherOperations.updateCurrentAttempt(input.operation_key, owner, {');
+    const standaloneBranch = executeSrc.indexOf("if (input.operation_owner === 'runtime_lifecycle') {");
+    const childUpdate = executeSrc.indexOf('launcherOperations.updateCurrentAttempt(input.operation_key, owner, {', standaloneBranch);
+    expect(childUpdate).toBeGreaterThan(standaloneBranch);
+    expect(executeSrc.slice(childUpdate)).not.toContain('scheduleCurrentLauncherOperationRemoval(input.operation_key, owner);');
   });
 
   it('keeps foreground Runtime operations authoritative over persistence attachment recovery', () => {

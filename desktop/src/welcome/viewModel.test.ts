@@ -23,6 +23,7 @@ import type {
 } from '../shared/runtimeService';
 import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
 import type { DesktopRuntimePresence } from '../shared/desktopRuntimePresence';
+import { desktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 import { buildDesktopRuntimeOperationPlans } from '../shared/desktopRuntimeOperationPlanner';
 import {
   testDesktopPreferences,
@@ -59,6 +60,53 @@ import {
   splitPinnedEnvironmentEntries,
 } from './viewModel';
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
+import type { DesktopSavedRuntimeTarget } from '../main/desktopPreferences';
+
+function sshRuntimeTarget(input: Readonly<{
+  id: string;
+  label: string;
+  ssh_destination: string;
+  ssh_port: number | null;
+  auth_mode: 'key_agent' | 'password';
+  runtime_root: string;
+  bootstrap_strategy: 'auto' | 'desktop_upload' | 'remote_install';
+  release_base_url: string;
+  connect_timeout_seconds?: number;
+  pinned: boolean;
+  auto_runtime_probe_enabled?: boolean;
+  created_at_ms: number;
+  last_used_at_ms: number;
+}>): DesktopSavedRuntimeTarget {
+  const hostAccess = {
+    kind: 'ssh_host' as const,
+    ssh: {
+      ssh_destination: input.ssh_destination,
+      ssh_port: input.ssh_port,
+      auth_mode: input.auth_mode,
+      connect_timeout_seconds: input.connect_timeout_seconds ?? 10,
+    },
+  };
+  const placement = {
+    kind: 'host_process' as const,
+    runtime_root: input.runtime_root,
+    bootstrap_strategy: input.bootstrap_strategy,
+    release_base_url: input.release_base_url,
+  };
+  return {
+    schema_version: 1,
+    id: desktopRuntimeTargetID(hostAccess, placement),
+    label: input.label,
+    host_access: hostAccess,
+    placement,
+    ssh_password: '',
+    ssh_password_configured: false,
+    pinned: input.pinned,
+    auto_runtime_probe_enabled: input.auto_runtime_probe_enabled ?? true,
+    created_at_ms: input.created_at_ms,
+    updated_at_ms: input.last_used_at_ms,
+    last_used_at_ms: input.last_used_at_ms,
+  };
+}
 
 function defaultFact(label: string, value: string, extras?: Record<string, unknown>) {
   const labelIcon = FACT_LABEL_ICONS[label];
@@ -888,6 +936,19 @@ describe('buildEnvironmentCardModel', () => {
       label: 'Demo Local Serve',
     });
     const controlPlane = buildControlPlaneSummary({});
+    const sshTarget = sshRuntimeTarget({
+      id: 'ignored',
+      label: 'Prod SSH',
+      ssh_destination: 'ops@example.internal',
+      ssh_port: 2222,
+      auth_mode: 'key_agent',
+      runtime_root: '/root/.redeven',
+      bootstrap_strategy: 'desktop_upload',
+      release_base_url: '',
+      pinned: false,
+      created_at_ms: 30,
+      last_used_at_ms: 30,
+    });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         local_environment: local,
@@ -901,21 +962,7 @@ describe('buildEnvironmentCardModel', () => {
             last_used_at_ms: 20,
           },
         ],
-        saved_ssh_environments: [
-          {
-            id: 'ssh_saved',
-            label: 'Prod SSH',
-            ssh_destination: 'ops@example.internal',
-            ssh_port: 2222,
-            auth_mode: 'key_agent',
-            runtime_root: '/root/.redeven',
-            bootstrap_strategy: 'desktop_upload',
-            release_base_url: '',
-            pinned: false,
-            created_at_ms: 30,
-            last_used_at_ms: 30,
-          },
-        ],
+        saved_runtime_targets: [sshTarget],
       }),
       controlPlanes: [controlPlane],
       openSessions: [
@@ -992,7 +1039,7 @@ describe('buildEnvironmentCardModel', () => {
           },
         },
         {
-          session_key: 'ssh:ops@example.internal:2222:key_agent:/root/.redeven',
+          session_key: sshTarget.id as `ssh:${string}`,
           target: buildSSHDesktopTarget(
             {
               ssh_destination: 'ops@example.internal',
@@ -1003,7 +1050,7 @@ describe('buildEnvironmentCardModel', () => {
               release_base_url: '',
             },
             {
-              environmentID: 'ssh_saved',
+              environmentID: sshTarget.id,
               label: 'Prod SSH',
               forwardedLocalUIURL: 'http://127.0.0.1:24111/',
             },
@@ -1140,7 +1187,7 @@ describe('buildEnvironmentCardModel', () => {
           created_at_ms: 20,
           last_used_at_ms: 20,
         }],
-        saved_ssh_environments: [{
+        saved_runtime_targets: [sshRuntimeTarget({
           id: 'ssh_saved',
           label: 'Prod SSH',
           ssh_destination: 'ops@example.internal',
@@ -1152,7 +1199,7 @@ describe('buildEnvironmentCardModel', () => {
           pinned: false,
           created_at_ms: 30,
           last_used_at_ms: 30,
-        }],
+        })],
       }),
       controlPlanes: [controlPlane],
     });
@@ -1777,216 +1824,8 @@ describe('buildEnvironmentCardModel', () => {
     expectEnvironmentInitialization(actionModel);
   });
 
-  it('keeps an online SSH runtime openable while exposing lifecycle actions separately from Provider linking', () => {
-    const snapshot = buildDesktopWelcomeSnapshot({
-      preferences: testDesktopPreferences({
-        saved_ssh_environments: [{
-          id: 'ssh_saved',
-          label: 'Prod SSH',
-          ssh_destination: 'ops@example.internal',
-          ssh_port: 2222,
-          auth_mode: 'key_agent',
-          runtime_root: '/root/.redeven',
-          bootstrap_strategy: 'desktop_upload',
-          release_base_url: '',
-          pinned: false,
-          created_at_ms: 30,
-          last_used_at_ms: 30,
-        }],
-      }),
-      savedSSHRuntimeHealth: {
-        ssh_saved: {
-          status: 'online',
-          checked_at_unix_ms: Date.now(),
-          source: 'ssh_runtime_probe',
-          local_ui_url: 'http://127.0.0.1:24111/',
-          runtime_maintenance: {
-            kind: 'runtime_update_required',
-            required_for: 'open',
-            recovery_action: 'update_runtime',
-            can_desktop_start: false,
-            can_desktop_restart: true,
-            has_active_work: true,
-            active_work_label: '1 terminal, 1 session, 1 port forward',
-            current_runtime_version: 'v0.5.9',
-            target_runtime_version: 'v0.6.7',
-            message: 'Update and restart this SSH runtime before opening this environment.',
-          },
-          runtime_service: {
-            runtime_version: 'v0.5.9',
-            protocol_version: 'redeven-runtime-v1',
-            effective_run_mode: 'desktop',
-            remote_enabled: false,
-            compatibility: 'compatible',
-            open_readiness: {
-              state: 'blocked',
-              reason_code: 'runtime_open_readiness_unavailable',
-              message: 'This running runtime is older than this Desktop. Install the update, then restart the runtime when it is safe to interrupt active work.',
-            },
-            active_workload: {
-              terminal_count: 1,
-              session_count: 1,
-              task_count: 0,
-              port_forward_count: 1,
-            },
-          },
-        },
-      },
-    });
-    const entry = snapshot.environments.find((environment) => environment.kind === 'ssh_environment');
 
-    expect(entry).toBeTruthy();
-    expect(buildEnvironmentCardModel(entry!)).toEqual(expect.objectContaining({
-      kind_label: 'SSH Host',
-      status_label: 'READY',
-      status_tone: 'success',
-      target_secondary: 'http://127.0.0.1:24111/',
-    }));
-    expect(buildEnvironmentCardFactsModel(entry!)).toEqual([
-      defaultFact('RUNS ON', 'ops@example.internal:2222', {
-        endpoints: [
-          { label: 'SSH HOST', value: 'ops@example.internal:2222', monospace: true, copy_label: 'Copy SSH host' },
-          { label: 'FORWARDED URL', value: 'http://127.0.0.1:24111/', monospace: true, copy_label: 'Copy forwarded URL' },
-        ],
-      }),
-      defaultFact('VERSION', 'v0.5.9'),
-    ]);
-    const actionModel = buildProviderBackedEnvironmentActionModel(entry!);
-    expect(actionModel).toMatchObject({
-      status_label: 'READY',
-      status_tone: 'success',
-      action_presentation: {
-        primary_action: {
-          intent: 'open',
-          enabled: true,
-        },
-        primary_action_overlay: undefined,
-      },
-    });
-    expectEnvironmentInitialization(actionModel);
-    const menuActions = actionModel.action_presentation.menu_actions;
-    expect(menuActions.map((item) => item.id)).not.toContain('provider_link_unavailable');
-    expect(menuActions.map((item) => item.label)).toEqual(expect.arrayContaining([
-      'Stop runtime',
-      'Restart runtime',
-      'Update runtime',
-    ]));
-    expect(menuActions.map((item) => item.label)).not.toContain('Start runtime');
-  });
 
-  it('treats a missing Env App shell as an update-required SSH runtime block', () => {
-    const snapshot = buildDesktopWelcomeSnapshot({
-      preferences: testDesktopPreferences({
-        saved_ssh_environments: [{
-          id: 'ssh_saved',
-          label: 'Dev SSH',
-          ssh_destination: 'dev@example.internal',
-          ssh_port: 22,
-          auth_mode: 'key_agent',
-          runtime_root: '/root/.redeven',
-          bootstrap_strategy: 'desktop_upload',
-          release_base_url: '',
-          pinned: false,
-          created_at_ms: 30,
-          last_used_at_ms: 30,
-        }],
-      }),
-      savedSSHRuntimeHealth: {
-        ssh_saved: {
-          status: 'online',
-          checked_at_unix_ms: Date.now(),
-          source: 'ssh_runtime_probe',
-          local_ui_url: 'http://127.0.0.1:24111/',
-          runtime_service: {
-            runtime_version: 'v0.0.0-dev',
-            protocol_version: 'redeven-runtime-v1',
-            effective_run_mode: 'desktop',
-            remote_enabled: false,
-            compatibility: 'compatible',
-            open_readiness: {
-              state: 'blocked',
-              reason_code: 'env_app_shell_unavailable',
-              message: 'The Environment App shell is not available in this runtime build. Install the update, then restart the runtime when it is safe to interrupt active work.',
-            },
-            active_workload: {
-              terminal_count: 0,
-              session_count: 0,
-              task_count: 0,
-              port_forward_count: 0,
-            },
-          },
-        },
-      },
-    });
-    const entry = snapshot.environments.find((environment) => environment.kind === 'ssh_environment');
-
-    expect(entry).toBeTruthy();
-    expect(buildEnvironmentCardModel(entry!)).toMatchObject({
-      status_label: 'READY',
-      status_tone: 'success',
-    });
-    expect(buildEnvironmentCardFactsModel(entry!)).toContainEqual(defaultFact('VERSION', 'v0.0.0-dev'));
-    expect(buildProviderBackedEnvironmentActionModel(entry!).action_presentation.primary_action).toMatchObject({
-      intent: 'open',
-      enabled: true,
-    });
-    expect(buildProviderBackedEnvironmentActionModel(entry!).action_presentation.primary_action_overlay).toBeUndefined();
-  });
-
-  it('keeps SSH runtime-control restart maintenance separate from initialization', () => {
-    const snapshot = buildDesktopWelcomeSnapshot({
-      preferences: testDesktopPreferences({
-        saved_ssh_environments: [{
-          id: 'ssh_saved',
-          label: 'Dev SSH',
-          ssh_destination: 'dev@example.internal',
-          ssh_port: 22,
-          auth_mode: 'key_agent',
-          runtime_root: '/root/.redeven',
-          bootstrap_strategy: 'desktop_upload',
-          release_base_url: '',
-          pinned: false,
-          created_at_ms: 30,
-          last_used_at_ms: 30,
-        }],
-      }),
-      savedSSHRuntimeHealth: {
-        ssh_saved: {
-          status: 'online',
-          checked_at_unix_ms: Date.now(),
-          source: 'ssh_runtime_probe',
-          runtime_maintenance: {
-            kind: 'runtime_restart_required',
-            required_for: 'open',
-            recovery_action: 'restart_runtime',
-            can_desktop_start: false,
-            can_desktop_restart: true,
-            has_active_work: true,
-            active_work_label: '1 terminal, 1 session, 1 port forward',
-            current_runtime_version: 'v0.0.0-dev',
-            target_runtime_version: 'v0.0.0-dev',
-            message: 'Restart this SSH runtime so Desktop can prepare runtime-control before provider linking or opening this environment.',
-          },
-        },
-      },
-    });
-    const entry = snapshot.environments.find((environment) => environment.kind === 'ssh_environment');
-
-    expect(entry).toBeTruthy();
-    const actionModel = buildProviderBackedEnvironmentActionModel(entry!);
-    const overlay = actionModel.action_presentation.primary_action_overlay;
-    expect(actionModel.status_label).toBe('RESTART REQUIRED');
-    expect(overlay).toMatchObject({
-      kind: 'popover',
-      title: 'Runtime restart required',
-    });
-    expect(overlay?.kind).toBe('popover');
-    if (overlay?.kind !== 'popover') {
-      throw new Error('expected runtime-control maintenance overlay to be a popover');
-    }
-    expect(overlay.actions.map((item) => item.action.intent)).not.toContain('initialize_and_open');
-    expect(actionModel.action_presentation.menu_actions.map((item) => item.id)).not.toContain('initialize_and_open');
-  });
 
   it('keeps running local container restart maintenance separate from initialization', () => {
     const restartMaintenance = {
@@ -2292,7 +2131,7 @@ describe('buildEnvironmentCardModel', () => {
     };
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
-        saved_ssh_environments: [{
+        saved_runtime_targets: [sshRuntimeTarget({
           id: 'ssh-host',
           label: 'SSH Host',
           ssh_destination: 'ops@example.internal',
@@ -2304,8 +2143,7 @@ describe('buildEnvironmentCardModel', () => {
           pinned: false,
           created_at_ms: 1,
           last_used_at_ms: 1,
-        }],
-        saved_runtime_targets: [{
+        }), {
           schema_version: 1,
           id: 'local:container',
           label: 'Local Container',
@@ -2345,8 +2183,8 @@ describe('buildEnvironmentCardModel', () => {
       }),
     });
 
-    for (const environmentID of ['ssh-host', 'local:container', 'ssh:container']) {
-      const entry = snapshot.environments.find((environment) => environment.id === environmentID);
+    for (const environmentLabel of ['SSH Host', 'Local Container', 'SSH Container']) {
+      const entry = snapshot.environments.find((environment) => environment.label === environmentLabel);
       expect(entry).toBeTruthy();
       expect(buildProviderBackedEnvironmentActionModel(entry!).action_presentation.menu_actions).toEqual(
         expect.arrayContaining([expect.objectContaining({

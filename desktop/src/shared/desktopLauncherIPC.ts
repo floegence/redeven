@@ -223,11 +223,8 @@ export type DesktopLauncherActionKind =
   | 'refresh_environment_runtime'
   | 'refresh_all_environment_runtimes'
   | 'start_control_plane_connect'
-  | 'set_local_environment_pinned'
   | 'set_provider_environment_pinned'
-  | 'set_saved_environment_pinned'
-  | 'set_saved_ssh_environment_pinned'
-  | 'set_saved_runtime_target_pinned'
+  | 'set_environment_registration_pinned'
   | 'open_environment_settings'
   | 'open_flower'
   | 'open_environment_center'
@@ -249,20 +246,14 @@ export type DesktopLauncherActionKind =
   | 'refresh_gateway_catalog'
   | 'refresh_gateway_status'
   | 'delete_gateway'
-  | 'upsert_gateway_environment_profile'
-  | 'delete_gateway_environment_profile'
+  | 'upsert_environment_registration'
+  | 'delete_environment_registration'
   | 'run_provider_environment_lifecycle'
   | 'setup_provider_runtime_management_with_direct_card'
   | 'setup_direct_runtime_management'
   | 'confirm_runtime_operation'
   | 'reconcile_runtime_operation'
   | 'save_local_environment_settings'
-  | 'upsert_saved_environment'
-  | 'upsert_saved_ssh_environment'
-  | 'upsert_saved_runtime_target'
-  | 'delete_saved_environment'
-  | 'delete_saved_ssh_environment'
-  | 'delete_saved_runtime_target'
   | 'cancel_launcher_operation'
   | 'dismiss_launcher_operation'
   | 'close_launcher_or_quit';
@@ -305,6 +296,8 @@ export type DesktopLauncherRuntimeTarget = Readonly<
     auto_runtime_probe_enabled: boolean;
     ssh_password: string;
     ssh_password_mode: 'keep' | 'replace' | 'clear';
+    operation_key: string;
+    operation_started_at_unix_ms: number;
   }>
   & Partial<DesktopSSHEnvironmentDetails>
 >;
@@ -346,14 +339,41 @@ export type DesktopGatewayStartRequiredPayload = Readonly<{
   retry_action: DesktopGatewayStartRequiredRetryAction;
 }>;
 
+export type EnvironmentRegistrationRef =
+  | Readonly<{ kind: 'local_environment'; id: string }>
+  | Readonly<{ kind: 'runtime_target'; id: DesktopRuntimeTargetID }>
+  | Readonly<{ kind: 'saved_environment'; id: string }>
+  | Readonly<{ kind: 'gateway_environment'; gateway_id: string; gateway_env_id: string }>;
+
+export type DesktopEnvironmentRegistrationUpsert = Readonly<
+  | {
+      registration_ref: Extract<EnvironmentRegistrationRef, { kind: 'saved_environment' }>;
+      label: string;
+      external_local_ui_url: string;
+      auto_runtime_probe_enabled: boolean;
+    }
+  | ({
+      registration_ref: Extract<EnvironmentRegistrationRef, { kind: 'runtime_target' }>;
+      label: string;
+      auto_runtime_probe_enabled: boolean;
+    } & Required<Pick<DesktopLauncherRuntimeTarget, 'host_access' | 'placement'>>
+      & Pick<DesktopLauncherRuntimeTarget, 'ssh_password' | 'ssh_password_mode'>)
+  | {
+      registration_ref: Extract<EnvironmentRegistrationRef, { kind: 'gateway_environment' }>;
+      display_name: string;
+      access_route: Readonly<{
+        kind: 'url';
+        url?: string;
+        origin_label?: string;
+      }>;
+    }
+>;
+
 export type DesktopEnvironmentEntry = Readonly<{
   id: string;
   kind: DesktopEnvironmentEntryKind;
-  /** Storage owner used for destructive Desktop actions; never infer this from UI kind. */
-  registration_kind?: 'local_environment' | 'saved_environment' | 'ssh_environment' | 'runtime_target' | 'ssh_runtime_target';
-  registration_environment_id?: string;
-  registration_runtime_target_id?: DesktopRuntimeTargetID;
-  registration_ssh_environment_id?: string;
+  /** Authoritative registration owner; never infer storage from the presentation kind. */
+  registration_ref?: EnvironmentRegistrationRef;
   label: string;
   local_ui_url: string;
   secondary_text: string;
@@ -759,35 +779,15 @@ export type DesktopLauncherActionRequest = Readonly<
       display_label?: string;
     }
   | {
-      kind: 'set_local_environment_pinned';
-      environment_id: string;
-      pinned: boolean;
-    }
-  | {
       kind: 'set_provider_environment_pinned';
       environment_id: string;
       pinned: boolean;
     }
   | {
-      kind: 'set_saved_environment_pinned';
-      environment_id: string;
-      label: string;
-      external_local_ui_url: string;
+      kind: 'set_environment_registration_pinned';
+      registration_ref: EnvironmentRegistrationRef;
       pinned: boolean;
     }
-  | ({
-      kind: 'set_saved_ssh_environment_pinned';
-      environment_id: string;
-      label: string;
-      pinned: boolean;
-    }
-    & DesktopSSHEnvironmentDetails)
-  | ({
-      kind: 'set_saved_runtime_target_pinned';
-      environment_id: string;
-      label: string;
-      pinned: boolean;
-    } & Required<Pick<DesktopLauncherRuntimeTarget, 'host_access' | 'placement'>>)
   | {
       kind: 'open_environment_settings';
       environment_id: string;
@@ -881,26 +881,20 @@ export type DesktopLauncherActionRequest = Readonly<
       gateway_id: string;
     }
   | {
-      kind: 'upsert_gateway_environment_profile';
-      gateway_id: string;
-      gateway_env_id?: string;
-      display_name: string;
-      access_route: Readonly<{
-        kind: 'url';
-        url?: string;
-        origin_label?: string;
-      }>;
+      kind: 'upsert_environment_registration';
+      registration: DesktopEnvironmentRegistrationUpsert;
     }
   | {
-      kind: 'delete_gateway_environment_profile';
-      gateway_id: string;
-      gateway_env_id: string;
+      kind: 'delete_environment_registration';
+      registration_ref: EnvironmentRegistrationRef;
     }
   | {
       kind: 'run_provider_environment_lifecycle';
       environment_id: string;
       operation: 'start' | 'stop' | 'restart' | 'update_runtime';
       label?: string;
+      operation_key?: string;
+      operation_started_at_unix_ms?: number;
     }
   | ({
       kind: 'setup_provider_runtime_management_with_direct_card';
@@ -936,40 +930,6 @@ export type DesktopLauncherActionRequest = Readonly<
       local_ui_password: string;
       local_ui_password_mode: 'keep' | 'replace' | 'clear';
       auto_runtime_probe_enabled: boolean;
-    }
-  | {
-      kind: 'upsert_saved_environment';
-      environment_id: string;
-      label: string;
-      external_local_ui_url: string;
-      auto_runtime_probe_enabled: boolean;
-    }
-  | ({
-      kind: 'upsert_saved_ssh_environment';
-      environment_id: string;
-      label: string;
-      ssh_password: string;
-      ssh_password_mode: 'keep' | 'replace' | 'clear';
-      auto_runtime_probe_enabled: boolean;
-    } & DesktopSSHEnvironmentDetails)
-  | ({
-      kind: 'upsert_saved_runtime_target';
-      environment_id?: string;
-      label: string;
-      auto_runtime_probe_enabled: boolean;
-    } & Required<Pick<DesktopLauncherRuntimeTarget, 'host_access' | 'placement'>>
-      & Pick<DesktopLauncherRuntimeTarget, 'ssh_password' | 'ssh_password_mode'>)
-  | {
-      kind: 'delete_saved_environment';
-      environment_id: string;
-    }
-  | {
-      kind: 'delete_saved_ssh_environment';
-      environment_id: string;
-    }
-  | {
-      kind: 'delete_saved_runtime_target';
-      environment_id: string;
     }
   | {
       kind: 'cancel_launcher_operation';
@@ -1115,6 +1075,31 @@ function normalizeGatewayStartPolicy(
   return allowed.includes(policy) ? policy : undefined;
 }
 
+function normalizeEnvironmentRegistrationRef(
+  value: unknown,
+  options: Readonly<{ allow_empty_id?: boolean }> = {},
+): EnvironmentRegistrationRef | null {
+  if (!value || typeof value !== 'object') return null;
+  const candidate = value as Record<string, unknown>;
+  const kind = compact(candidate.kind);
+  const allowEmptyID = options.allow_empty_id === true;
+  if (kind === 'gateway_environment') {
+    const gatewayID = compact(candidate.gateway_id);
+    const gatewayEnvID = compact(candidate.gateway_env_id);
+    return gatewayID !== '' && (allowEmptyID || gatewayEnvID !== '')
+      ? { kind, gateway_id: gatewayID, gateway_env_id: gatewayEnvID }
+      : null;
+  }
+  if (kind === 'local_environment' || kind === 'runtime_target' || kind === 'saved_environment') {
+    const id = compact(candidate.id);
+    if (!allowEmptyID && id === '') return null;
+    return kind === 'runtime_target'
+      ? { kind, id: id as DesktopRuntimeTargetID }
+      : { kind, id };
+  }
+  return null;
+}
+
 
 function normalizeDesktopLauncherRuntimeTarget(
   candidate: Record<string, unknown>,
@@ -1123,6 +1108,7 @@ function normalizeDesktopLauncherRuntimeTarget(
     'kind', 'runtime_target_id', 'placement_target_id', 'host_access', 'placement',
     'environment_id', 'provider_origin', 'provider_id', 'env_public_id', 'external_local_ui_url',
     'label', 'force_runtime_update', 'auto_runtime_probe_enabled', 'ssh_password', 'ssh_password_mode',
+    'operation_key', 'operation_started_at_unix_ms',
     'ssh_destination', 'ssh_port', 'auth_mode', 'connect_timeout_seconds', 'runtime_root',
     'bootstrap_strategy', 'release_base_url',
   ]);
@@ -1153,6 +1139,8 @@ function normalizeDesktopLauncherRuntimeTarget(
   const envPublicID = compact(candidate.env_public_id);
   const externalLocalUIURL = compact(candidate.external_local_ui_url);
   const label = compact(candidate.label);
+  const operationKey = compact(candidate.operation_key);
+  const operationStartedAtUnixMS = Number(candidate.operation_started_at_unix_ms);
   const sshDestination = compact(candidate.ssh_destination);
   const sshPortText = compact(candidate.ssh_port);
   const sshAuthMode = compact(candidate.auth_mode);
@@ -1198,6 +1186,10 @@ function normalizeDesktopLauncherRuntimeTarget(
     ...(candidate.connect_timeout_seconds != null ? { connect_timeout_seconds: normalizeDesktopSSHConnectTimeoutSeconds(candidate.connect_timeout_seconds) } : {}),
     ...(candidate.force_runtime_update === true ? { force_runtime_update: true } : {}),
     ...(candidate.auto_runtime_probe_enabled === true ? { auto_runtime_probe_enabled: true } : {}),
+    ...(operationKey !== '' ? { operation_key: operationKey } : {}),
+    ...(Number.isFinite(operationStartedAtUnixMS) && operationStartedAtUnixMS > 0
+      ? { operation_started_at_unix_ms: Math.floor(operationStartedAtUnixMS) }
+      : {}),
   };
 
   if (
@@ -1443,17 +1435,6 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
           return null;
         }
       }
-    case 'set_local_environment_pinned': {
-      const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
-      if (environmentID === '') {
-        return null;
-      }
-      return {
-        kind,
-        environment_id: environmentID,
-        pinned: (candidate as { pinned?: unknown }).pinned === true,
-      };
-    }
     case 'set_provider_environment_pinned': {
       const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
       if (environmentID === '') {
@@ -1465,62 +1446,15 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         pinned: (candidate as { pinned?: unknown }).pinned === true,
       };
     }
-    case 'set_saved_environment_pinned': {
-      const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
-      if (environmentID === '') {
-        return null;
-      }
+    case 'set_environment_registration_pinned': {
+      const registrationRef = normalizeEnvironmentRegistrationRef(
+        (candidate as { registration_ref?: unknown }).registration_ref,
+      );
+      if (!registrationRef || registrationRef.kind === 'gateway_environment') return null;
       return {
         kind,
-        environment_id: environmentID,
-        label: compact((candidate as { label?: unknown }).label),
-        external_local_ui_url: compact((candidate as { external_local_ui_url?: unknown }).external_local_ui_url),
+        registration_ref: registrationRef,
         pinned: (candidate as { pinned?: unknown }).pinned === true,
-      };
-    }
-    case 'set_saved_ssh_environment_pinned':
-      {
-        const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
-        if (environmentID === '') {
-          return null;
-        }
-        const sshPortText = compact((candidate as { ssh_port?: unknown }).ssh_port);
-        return {
-          kind,
-          environment_id: environmentID,
-          label: compact((candidate as { label?: unknown }).label),
-          pinned: (candidate as { pinned?: unknown }).pinned === true,
-          ssh_destination: compact((candidate as { ssh_destination?: unknown }).ssh_destination),
-          ssh_port: (candidate as { ssh_port?: unknown }).ssh_port == null || sshPortText === ''
-            ? null
-            : Number.parseInt(sshPortText, 10),
-          auth_mode: compact((candidate as { auth_mode?: unknown }).auth_mode) as DesktopSSHEnvironmentDetails['auth_mode'],
-          runtime_root: compact((candidate as { runtime_root?: unknown }).runtime_root),
-          bootstrap_strategy: compact((candidate as { bootstrap_strategy?: unknown }).bootstrap_strategy) as DesktopSSHEnvironmentDetails['bootstrap_strategy'],
-          release_base_url: compact((candidate as { release_base_url?: unknown }).release_base_url),
-          connect_timeout_seconds: normalizeDesktopSSHConnectTimeoutSeconds((candidate as { connect_timeout_seconds?: unknown }).connect_timeout_seconds),
-        };
-      }
-    case 'set_saved_runtime_target_pinned': {
-      const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
-      if (environmentID === '') {
-        return null;
-      }
-      let hostAccess: DesktopRuntimeHostAccess;
-      let placement: DesktopRuntimePlacement;
-      try {
-        hostAccess = normalizeDesktopRuntimeHostAccess((candidate as { host_access?: unknown }).host_access);
-        placement = normalizeDesktopRuntimePlacement((candidate as { placement?: unknown }).placement);
-      } catch {
-        return null;
-      }
-      return {
-        kind,
-        environment_id: environmentID,
-        label: compact((candidate as { label?: unknown }).label),
-        pinned: (candidate as { pinned?: unknown }).pinned === true,
-        host_access: hostAccess,
-        placement,
       };
     }
     case 'save_local_environment_settings': {
@@ -1684,43 +1618,82 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         impact_acknowledged: true,
       };
     }
-    case 'upsert_gateway_environment_profile': {
-      const gatewayID = compact((candidate as { gateway_id?: unknown }).gateway_id);
-      const displayName = compact((candidate as { display_name?: unknown }).display_name);
-      const accessRouteRaw = (candidate as { access_route?: unknown }).access_route;
+    case 'upsert_environment_registration': {
+      const registrationRaw = (candidate as { registration?: unknown }).registration;
+      if (!registrationRaw || typeof registrationRaw !== 'object') return null;
+      const registrationCandidate = registrationRaw as Record<string, unknown>;
+      const registrationRef = normalizeEnvironmentRegistrationRef(registrationCandidate.registration_ref, {
+        allow_empty_id: true,
+      });
+      if (!registrationRef) return null;
+      if (registrationRef.kind === 'saved_environment') {
+        return {
+          kind,
+          registration: {
+            registration_ref: registrationRef,
+            label: compact(registrationCandidate.label),
+            external_local_ui_url: compact(registrationCandidate.external_local_ui_url),
+            auto_runtime_probe_enabled: registrationCandidate.auto_runtime_probe_enabled === true,
+          },
+        };
+      }
+      if (registrationRef.kind === 'runtime_target') {
+        let hostAccess: DesktopRuntimeHostAccess;
+        let placement: DesktopRuntimePlacement;
+        try {
+          hostAccess = normalizeDesktopRuntimeHostAccess(registrationCandidate.host_access);
+          placement = normalizeDesktopRuntimePlacement(registrationCandidate.placement);
+        } catch {
+          return null;
+        }
+        return {
+          kind,
+          registration: {
+            registration_ref: registrationRef,
+            label: compact(registrationCandidate.label),
+            host_access: hostAccess,
+            placement,
+            ssh_password: String(registrationCandidate.ssh_password ?? ''),
+            ssh_password_mode: normalizeSSHPasswordMode(registrationCandidate.ssh_password_mode),
+            auto_runtime_probe_enabled: registrationCandidate.auto_runtime_probe_enabled === true,
+          },
+        };
+      }
+      if (registrationRef.kind === 'local_environment') return null;
+      const displayName = compact(registrationCandidate.display_name);
+      const accessRouteRaw = registrationCandidate.access_route;
       const accessRoute = accessRouteRaw && typeof accessRouteRaw === 'object'
         ? accessRouteRaw as Record<string, unknown>
         : {};
       const routeKind = compact(accessRoute.kind);
-      if (gatewayID === '' || displayName === '' || routeKind !== 'url') {
+      if (displayName === '' || routeKind !== 'url') {
         return null;
       }
       const normalizedRoute = {
         kind: 'url' as const,
         url: compact(accessRoute.url) || undefined,
         origin_label: compact(accessRoute.origin_label) || undefined,
-      } as Extract<DesktopLauncherActionRequest, { kind: 'upsert_gateway_environment_profile' }>['access_route'];
+      } as Extract<DesktopEnvironmentRegistrationUpsert, { registration_ref: { kind: 'gateway_environment' } }>['access_route'];
       if (!normalizedRoute.url) {
         return null;
       }
       return {
         kind,
-        gateway_id: gatewayID,
-        gateway_env_id: compact((candidate as { gateway_env_id?: unknown }).gateway_env_id) || undefined,
-        display_name: displayName,
-        access_route: normalizedRoute,
+        registration: {
+          registration_ref: registrationRef,
+          display_name: displayName,
+          access_route: normalizedRoute,
+        },
       };
     }
-    case 'delete_gateway_environment_profile': {
-      const gatewayID = compact((candidate as { gateway_id?: unknown }).gateway_id);
-      const gatewayEnvID = compact((candidate as { gateway_env_id?: unknown }).gateway_env_id);
-      if (gatewayID === '' || gatewayEnvID === '') {
-        return null;
-      }
+    case 'delete_environment_registration': {
+      const registrationRef = normalizeEnvironmentRegistrationRef(
+        (candidate as { registration_ref?: unknown }).registration_ref,
+      );
+      if (!registrationRef || registrationRef.kind === 'local_environment') return null;
       return {
         kind,
-        gateway_id: gatewayID,
-        gateway_env_id: gatewayEnvID,
+        registration_ref: registrationRef,
       };
     }
     case 'run_provider_environment_lifecycle': {
@@ -1734,85 +1707,12 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         environment_id: environmentID,
         operation,
         label: compact((candidate as { label?: unknown }).label) || undefined,
-      };
-    }
-    case 'upsert_saved_environment':
-      return {
-        kind,
-        environment_id: compact((candidate as { environment_id?: unknown }).environment_id),
-        label: compact((candidate as { label?: unknown }).label),
-        external_local_ui_url: compact((candidate as { external_local_ui_url?: unknown }).external_local_ui_url),
-        auto_runtime_probe_enabled: (candidate as { auto_runtime_probe_enabled?: unknown }).auto_runtime_probe_enabled === true,
-      };
-    case 'upsert_saved_ssh_environment':
-      {
-        const sshPortText = compact((candidate as { ssh_port?: unknown }).ssh_port);
-      return {
-        kind,
-        environment_id: compact((candidate as { environment_id?: unknown }).environment_id),
-        label: compact((candidate as { label?: unknown }).label),
-        ssh_password: String((candidate as { ssh_password?: unknown }).ssh_password ?? ''),
-        ssh_password_mode: normalizeSSHPasswordMode((candidate as { ssh_password_mode?: unknown }).ssh_password_mode),
-        ssh_destination: compact((candidate as { ssh_destination?: unknown }).ssh_destination),
-        ssh_port: (candidate as { ssh_port?: unknown }).ssh_port == null || sshPortText === ''
-          ? null
-          : Number.parseInt(sshPortText, 10),
-        auth_mode: compact((candidate as { auth_mode?: unknown }).auth_mode) as DesktopSSHEnvironmentDetails['auth_mode'],
-        runtime_root: compact((candidate as { runtime_root?: unknown }).runtime_root),
-        bootstrap_strategy: compact((candidate as { bootstrap_strategy?: unknown }).bootstrap_strategy) as DesktopSSHEnvironmentDetails['bootstrap_strategy'],
-        release_base_url: compact((candidate as { release_base_url?: unknown }).release_base_url),
-        connect_timeout_seconds: normalizeDesktopSSHConnectTimeoutSeconds((candidate as { connect_timeout_seconds?: unknown }).connect_timeout_seconds),
-        auto_runtime_probe_enabled: (candidate as { auto_runtime_probe_enabled?: unknown }).auto_runtime_probe_enabled === true,
-      };
-      }
-    case 'upsert_saved_runtime_target': {
-      let hostAccess: DesktopRuntimeHostAccess;
-      let placement: DesktopRuntimePlacement;
-      try {
-        hostAccess = normalizeDesktopRuntimeHostAccess((candidate as { host_access?: unknown }).host_access);
-        placement = normalizeDesktopRuntimePlacement((candidate as { placement?: unknown }).placement);
-      } catch {
-        return null;
-      }
-      return {
-        kind,
-        environment_id: compact((candidate as { environment_id?: unknown }).environment_id) || undefined,
-        label: compact((candidate as { label?: unknown }).label),
-        host_access: hostAccess,
-        placement,
-        ssh_password: String((candidate as { ssh_password?: unknown }).ssh_password ?? ''),
-        ssh_password_mode: normalizeSSHPasswordMode((candidate as { ssh_password_mode?: unknown }).ssh_password_mode),
-        auto_runtime_probe_enabled: (candidate as { auto_runtime_probe_enabled?: unknown }).auto_runtime_probe_enabled === true,
-      };
-    }
-    case 'delete_saved_environment': {
-      const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
-      if (environmentID === '') {
-        return null;
-      }
-      return {
-        kind,
-        environment_id: environmentID,
-      };
-    }
-    case 'delete_saved_ssh_environment': {
-      const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
-      if (environmentID === '') {
-        return null;
-      }
-      return {
-        kind,
-        environment_id: environmentID,
-      };
-    }
-    case 'delete_saved_runtime_target': {
-      const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
-      if (environmentID === '') {
-        return null;
-      }
-      return {
-        kind,
-        environment_id: environmentID,
+        ...(compact((candidate as { operation_key?: unknown }).operation_key)
+          ? { operation_key: compact((candidate as { operation_key?: unknown }).operation_key) }
+          : {}),
+        ...(Number((candidate as { operation_started_at_unix_ms?: unknown }).operation_started_at_unix_ms) > 0
+          ? { operation_started_at_unix_ms: Math.floor(Number((candidate as { operation_started_at_unix_ms?: unknown }).operation_started_at_unix_ms)) }
+          : {}),
       };
     }
     case 'confirm_runtime_operation':

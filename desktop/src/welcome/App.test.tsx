@@ -193,7 +193,6 @@ describe('DesktopWelcomeShell', () => {
             last_used_at_ms: 10,
           },
         ],
-        saved_ssh_environments: [],
       }),
       surface: 'connect_environment',
     });
@@ -518,6 +517,7 @@ describe('DesktopWelcomeShell', () => {
       started_at_unix_ms: 300,
       updated_at_unix_ms: 320,
       status: 'failed',
+      active_progress_surface: 'open',
       phase: 'failed',
       title: 'Open failed',
       detail: 'Desktop could not open the local environment.',
@@ -616,7 +616,6 @@ describe('DesktopWelcomeShell', () => {
             last_used_at_ms: 10,
           },
         ],
-        saved_ssh_environments: [],
       }),
       controlPlanes: [testControlPlaneSummary()],
     });
@@ -1558,7 +1557,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('function openProviderLocalServeDialog');
     expect(appSrc).toContain('openSettingsSurface(environment.id);');
     expect(appSrc).toContain("route: 'remote_desktop'");
-    expect(appSrc).toContain('return startEnvironmentRuntime(environment, errorTarget);');
+    expect(appSrc).toContain('return startEnvironmentRuntime(environment, errorTarget, { attempt });');
     expect(appSrc).toContain("props.i18n.t('environmentCenter.refreshRuntimeStatus')");
     expect(appSrc).toContain("props.i18n.t('environmentCenter.refreshRuntimeStatuses')");
     expect(appSrc).toContain('const secondaryIconOnly = () => isSecondary && props.overlay.actions.length > 1;');
@@ -1605,7 +1604,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("'Reinstall Redeven': 'environmentAction.reinstallRedeven'");
     expect(appSrc).not.toContain("confirmText={i18n().t('confirm.reinstallTargetConfirm')}");
     expect(appSrc).not.toContain('reinstallTarget()');
-    expect(appSrc).toContain('reinstallTargetStepProgress(\'preflight\')');
+    expect(appSrc).not.toContain('reinstallTargetStepProgress(\'preflight\')');
     expect(appSrc).toContain('props.onLifecycleProgressOpenChange(true)');
     expect(appSrc).toContain("kind: 'preview_reinstall_target'");
     expect(appSrc).toContain("&& !(environment.kind === 'ssh_environment'");
@@ -1907,7 +1906,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('disabled={props.loading && !primaryProgressPresentation()}');
     expect(appSrc).toContain('disabled={props.loading && primaryFallbackRunsAction()}');
     expect(appSrc).toContain('environmentActionStartsLifecycleDisclosure(action)');
-    expect(appSrc).toContain('props.beginLifecycleDisclosure(action.intent);');
+    expect(appSrc).toContain('props.beginLifecycleDisclosure(action.intent, lifecycleAttempt);');
+    expect(appSrc).not.toContain("step_progress: reinstallTargetStepProgress('preflight')");
     expect(appSrc).toContain('props.onProgressOpenChange(false);');
     expect(appSrc).toContain('props.setGuidanceSession(startEnvironmentGuidanceIntent(');
     expect(appSrc).not.toContain('function environmentActionOpensRuntimeLifecycleProgress(action: EnvironmentActionModel): boolean');
@@ -2452,17 +2452,17 @@ describe('DesktopWelcomeShell', () => {
   it('uses Gateway-specific deletion copy for Gateway-owned profiles', () => {
     const appSrc = readWelcomeSource();
 
-    expect(appSrc).toContain("i18n().t('confirm.deleteConnectionTitle')");
-    expect(appSrc).toContain("i18n().t('confirm.deleteConnectionConfirm')");
-    expect(appSrc).toContain("i18n().t('confirm.deleteConnectionQuestion'");
+    expect(appSrc).toContain("i18n().t('confirm.removeEnvironmentTitle')");
+    expect(appSrc).toContain("i18n().t('confirm.removeEnvironmentConfirm')");
+    expect(appSrc).toContain("i18n().t('confirm.removeEnvironmentQuestion'");
     expect(appSrc).toContain("i18n().t('confirm.deleteGatewayEnvironmentTitle')");
     expect(appSrc).toContain("i18n().t('confirm.deleteGatewayEnvironmentConfirm')");
     expect(appSrc).toContain("i18n().t('confirm.deleteGatewayEnvironmentQuestion'");
     expect(appSrc).toContain("i18n().t('confirm.deleteGatewayEnvironmentDescription')");
     expect(appSrc).toContain('const deleteTargetOperation = createMemo(() => {');
-    expect(appSrc).toContain("i18n().t('confirm.deleteConnectionBusyDescription')");
+    expect(appSrc).toContain("i18n().t('confirm.removeEnvironmentBusyDescription')");
     expect(appSrc).toContain("i18n().t('confirm.deleteGatewayEnvironmentBusyDescription')");
-    expect(appSrc).toContain("i18n().t('environmentCenter.connectionRemovedCleanup')");
+    expect(appSrc).toContain("i18n().t('environmentCenter.environmentRemovedCleanup')");
     expect(appSrc).toContain("i18n().t('environmentCenter.gatewayEnvironmentRemoved')");
   });
 

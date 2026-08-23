@@ -20,12 +20,17 @@ export type EnvironmentLifecycleDisclosureIntent = Extract<
 
 export type EnvironmentLifecycleDisclosureVisibility = 'open' | 'user_closed';
 
+export type EnvironmentLifecycleAttempt = Readonly<{
+  operation_key: string;
+  started_at_unix_ms: number;
+}>;
+
 export type EnvironmentLifecycleDisclosureState = Readonly<{
   environment_id: string;
   intent: EnvironmentLifecycleDisclosureIntent;
   visibility: EnvironmentLifecycleDisclosureVisibility;
   started_at_unix_ms: number;
-  operation_key?: string;
+  operation_key: string;
   last_progress?: DesktopLauncherActionProgress;
 }> | null;
 
@@ -102,12 +107,28 @@ export function beginEnvironmentLifecycleDisclosure(
   _state: EnvironmentLifecycleDisclosureState,
   environmentID: string,
   intent: EnvironmentLifecycleDisclosureIntent,
+  attempt: EnvironmentLifecycleAttempt,
 ): EnvironmentLifecycleDisclosureState {
   return {
     environment_id: environmentID,
     intent,
     visibility: 'open',
-    started_at_unix_ms: Date.now(),
+    started_at_unix_ms: attempt.started_at_unix_ms,
+    operation_key: attempt.operation_key,
+  };
+}
+
+export function createEnvironmentLifecycleAttempt(
+  environmentID: string,
+  intent: EnvironmentLifecycleDisclosureIntent,
+): EnvironmentLifecycleAttempt {
+  const startedAtUnixMS = Date.now();
+  const nonce = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `${startedAtUnixMS}-${Math.random().toString(16).slice(2)}`;
+  return {
+    operation_key: `${compact(environmentID)}:${intent}:${nonce}`,
+    started_at_unix_ms: startedAtUnixMS,
   };
 }
 
@@ -140,13 +161,6 @@ export function reopenEnvironmentLifecycleDisclosure(
   };
 }
 
-function progressOperationKey(progress: DesktopLauncherActionProgress): string {
-  return [
-    compact(progress.operation_key) || compact(progress.subject_id),
-    String(progress.started_at_unix_ms ?? ''),
-  ].filter(Boolean).join(':');
-}
-
 function progressIsTerminal(progress: DesktopLauncherActionProgress): boolean {
   return progress.status === 'succeeded'
     || progress.status === 'failed'
@@ -170,8 +184,8 @@ function progressBelongsToDisclosure(
   ) {
     return false;
   }
-  const progressStarted = progressStartedAt(progress);
-  return progressStarted === 0 || progressStarted >= state.started_at_unix_ms;
+  return compact(progress.operation_key) === state.operation_key
+    && progressStartedAt(progress) === state.started_at_unix_ms;
 }
 
 export function reconcileEnvironmentLifecycleDisclosure(
@@ -187,13 +201,12 @@ export function reconcileEnvironmentLifecycleDisclosure(
     return null;
   }
   const progress = progressItems.find((candidate) => (
-    progressBelongsToDisclosure(candidate, state)
-    && environmentMatchesRuntimeLifecycleProgress(environment, candidate)
-  )) ?? null;
+      progressBelongsToDisclosure(candidate, state)
+      && environmentMatchesRuntimeLifecycleProgress(environment, candidate)
+    )) ?? null;
   if (progress) {
     return {
       ...state,
-      operation_key: progressOperationKey(progress) || state.operation_key,
       last_progress: progress,
     };
   }

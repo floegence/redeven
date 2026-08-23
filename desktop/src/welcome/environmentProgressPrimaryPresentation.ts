@@ -44,7 +44,8 @@ export function runtimeLifecycleReadyPrimaryAction(
 ): EnvironmentActionModel | null {
   const lifecycle = progress.lifecycle_progress;
   if (
-    progress.status !== 'succeeded'
+    progress.active_progress_surface !== 'runtime_lifecycle'
+    || progress.status !== 'succeeded'
     || lifecycle?.phase !== 'runtime_ready'
     || !RUNTIME_READY_ACTIONS.includes(progress.action)
     || !RUNTIME_READY_OPERATIONS.includes(lifecycle.operation)
@@ -61,7 +62,8 @@ export function openConnectionFailurePrimaryAction(
   primaryAction: EnvironmentActionModel | undefined,
 ): EnvironmentActionModel | null {
   if (
-    !progress.open_progress
+    progress.active_progress_surface !== 'open'
+    || !progress.open_progress
     || (progress.status !== 'failed' && progress.status !== 'cleanup_failed')
     || !primaryAction
   ) {
@@ -171,24 +173,7 @@ export function selectEnvironmentPanelProgress(
   if (openConnectionProgress?.active_progress_surface === 'open') {
     return openConnectionProgress;
   }
-  const openRank = rankedProgressCandidate(openConnectionProgress, 1);
-  const runtimeRank = rankedProgressCandidate(runtimeLifecycleProgress, 0);
-  if (!openRank) {
-    return runtimeRank?.progress ?? null;
-  }
-  if (!runtimeRank) {
-    return openRank.progress;
-  }
-  if (openRank.startedAt !== runtimeRank.startedAt) {
-    return openRank.startedAt > runtimeRank.startedAt ? openRank.progress : runtimeRank.progress;
-  }
-  if (openRank.timestamp !== runtimeRank.timestamp) {
-    return openRank.timestamp > runtimeRank.timestamp ? openRank.progress : runtimeRank.progress;
-  }
-  if (openRank.priority !== runtimeRank.priority) {
-    return openRank.priority > runtimeRank.priority ? openRank.progress : runtimeRank.progress;
-  }
-  return openRank.tieBreak > runtimeRank.tieBreak ? openRank.progress : runtimeRank.progress;
+  return null;
 }
 
 function runningProgressPrimaryLabel(progress: DesktopLauncherActionProgress): string {
@@ -198,7 +183,7 @@ function runningProgressPrimaryLabel(progress: DesktopLauncherActionProgress): s
   if (progress.status === 'cleanup_running') {
     return 'Cleaning up...';
   }
-  if (progress.open_progress) {
+  if (progress.active_progress_surface === 'open' && progress.open_progress) {
     return 'Opening...';
   }
   if (
@@ -246,51 +231,12 @@ function sentenceForLabel(label: string): string {
   return label.endsWith('.') || label.endsWith('...') ? label : `${label}.`;
 }
 
-function rankedProgressCandidate(
-  progress: DesktopLauncherActionProgress | null | undefined,
-  tieBreak: number,
-): Readonly<{
-  progress: DesktopLauncherActionProgress;
-  priority: number;
-  startedAt: number;
-  timestamp: number;
-  tieBreak: number;
-}> | null {
-  if (!progress) {
-    return null;
-  }
-  return {
-    progress,
-    priority: progressSelectionPriority(progress),
-    startedAt: progress.started_at_unix_ms ?? 0,
-    timestamp: progress.updated_at_unix_ms ?? progress.started_at_unix_ms ?? 0,
-    tieBreak,
-  };
-}
-
-function progressSelectionPriority(progress: DesktopLauncherActionProgress): number {
-  switch (progress.status) {
-    case 'running':
-    case 'canceling':
-    case 'cleanup_running':
-      return 3;
-    case 'failed':
-    case 'cleanup_failed':
-    case 'needs_confirmation':
-      return 2;
-    case 'succeeded':
-    case 'canceled':
-      return 1;
-    default:
-      return 0;
-  }
-}
 
 function failedProgressPrimaryLabel(progress: DesktopLauncherActionProgress): string {
   if (progress.status === 'cleanup_failed') {
     return 'Cleanup failed';
   }
-  if (progress.open_progress) {
+  if (progress.active_progress_surface === 'open' && progress.open_progress) {
     return 'Open failed';
   }
   switch (progress.action) {

@@ -38,6 +38,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Desktop transport recovery](desktop/desktop-transport-recovery.md) - Preserve bridge identity, recovery generations, and terminal session disposal.
 - [Desktop SSH runtime operations](desktop/desktop-ssh-runtime-operations.md) - Coordinate shared SSH transports, operation generations, host discovery, and process inventory.
 - [Desktop session and model source](desktop/desktop-session-model-source.md) - Project session routes, opaque Desktop models, Flower attach, and lifecycle invalidation.
+- [Desktop Environment registration ownership](desktop/desktop-environment-registrations.md) - Keep one storage owner per card, migrate retired SSH records once, and serialize rename, pin, and removal safely.
 - [Desktop runtime process lifecycle](desktop/desktop-runtime-process-lifecycle.md) - Scoped inventory, historical process reconciliation, package activation ordering, and lifecycle success conditions.
 - [Desktop managed Environment reinstall](desktop/desktop-reinstall-operations.md) - Direct-channel destructive reinstall, one Launcher progress operation, quarantine recovery, and Gateway separation.
 

@@ -45,18 +45,15 @@ export type BusyAction =
   | 'refresh_gateway_status'
   | 'refresh_gateway_catalog'
   | 'delete_gateway'
-  | 'upsert_gateway_environment_profile'
-  | 'delete_gateway_environment_profile'
+  | 'upsert_environment_registration'
+  | 'delete_environment_registration'
   | 'run_provider_environment_lifecycle'
   | 'setup_provider_runtime_management_with_direct_card'
   | 'setup_direct_runtime_management'
   | 'confirm_runtime_operation'
   | 'reconcile_runtime_operation'
-  | 'set_local_environment_pinned'
   | 'set_provider_environment_pinned'
-  | 'set_saved_environment_pinned'
-  | 'set_saved_ssh_environment_pinned'
-  | 'set_saved_runtime_target_pinned'
+  | 'set_environment_registration_pinned'
   | 'delete_control_plane'
   | 'cancel_launcher_operation'
   | 'dismiss_launcher_operation'
@@ -110,26 +107,30 @@ export function busyStateForLauncherRequest(
         gateway_id: '',
         progress: null,
       });
-    case 'upsert_saved_environment':
-    case 'upsert_saved_ssh_environment':
-    case 'upsert_saved_runtime_target':
+    case 'upsert_environment_registration':
       return withRequestTimestamp({
         action: 'save_environment',
-        environment_id: request.environment_id ?? '',
+        environment_id: request.registration.registration_ref.kind === 'gateway_environment'
+          ? request.registration.registration_ref.gateway_env_id
+          : request.registration.registration_ref.id,
         provider_origin: '',
         provider_id: '',
-        gateway_id: '',
+        gateway_id: request.registration.registration_ref.kind === 'gateway_environment'
+          ? request.registration.registration_ref.gateway_id
+          : '',
         progress: null,
       });
-    case 'delete_saved_environment':
-    case 'delete_saved_ssh_environment':
-    case 'delete_saved_runtime_target':
+    case 'delete_environment_registration':
       return withRequestTimestamp({
         action: 'delete_environment',
-        environment_id: request.environment_id,
+        environment_id: request.registration_ref.kind === 'gateway_environment'
+          ? request.registration_ref.gateway_env_id
+          : request.registration_ref.id,
         provider_origin: '',
         provider_id: '',
-        gateway_id: '',
+        gateway_id: request.registration_ref.kind === 'gateway_environment'
+          ? request.registration_ref.gateway_id
+          : '',
         progress: null,
       });
     case 'refresh_control_plane':
@@ -509,14 +510,6 @@ export function selectedSnapshotGatewayProgress(
 
 type LauncherProgressActivity = 'active' | 'attention' | 'released' | 'unknown';
 
-type LauncherProgressCandidate = Readonly<{
-  progress: DesktopLauncherActionProgress;
-  activity: LauncherProgressActivity;
-  identity: string;
-  startedAt: number;
-  timestamp: number;
-}>;
-
 function launcherProgressActivity(
   progress: DesktopLauncherActionProgress | null | undefined,
 ): LauncherProgressActivity {
@@ -570,108 +563,28 @@ function launcherProgressStartedAt(progress: DesktopLauncherActionProgress): num
   return Number.isFinite(startedAt) && startedAt > 0 ? startedAt : 0;
 }
 
-function launcherProgressTimestamp(progress: DesktopLauncherActionProgress): number {
-  const updatedAt = Number(progress.updated_at_unix_ms);
-  if (Number.isFinite(updatedAt) && updatedAt > 0) {
-    return updatedAt;
-  }
-  return launcherProgressStartedAt(progress);
-}
-
-function launcherProgressActivityRank(activity: LauncherProgressActivity): number {
-  switch (activity) {
-    case 'active':
-      return 3;
-    case 'attention':
-      return 2;
-    case 'released':
-      return 1;
-    default:
-      return 0;
-  }
-}
-
-function sameOperationProgressionRank(activity: LauncherProgressActivity): number {
-  switch (activity) {
-    case 'attention':
-    case 'released':
-      return 3;
-    case 'active':
-      return 2;
-    default:
-      return 1;
-  }
-}
-
-function candidateForProgress(
-  progress: DesktopLauncherActionProgress,
-): LauncherProgressCandidate {
-  return {
-    progress,
-    activity: launcherProgressActivity(progress),
-    identity: launcherProgressIdentity(progress),
-    startedAt: launcherProgressStartedAt(progress),
-    timestamp: launcherProgressTimestamp(progress),
-  };
-}
-
-function compareSameOperationCandidate(
-  left: LauncherProgressCandidate,
-  right: LauncherProgressCandidate,
-): number {
-  if (left.timestamp !== right.timestamp) {
-    return left.timestamp - right.timestamp;
-  }
-  const leftProgressionRank = sameOperationProgressionRank(left.activity);
-  const rightProgressionRank = sameOperationProgressionRank(right.activity);
-  if (leftProgressionRank !== rightProgressionRank) {
-    return leftProgressionRank - rightProgressionRank;
-  }
-  return 0;
-}
-
-function compareVisibleProgressCandidate(
-  left: LauncherProgressCandidate,
-  right: LauncherProgressCandidate,
-): number {
-  if (left.startedAt !== right.startedAt) {
-    return left.startedAt - right.startedAt;
-  }
-  if (left.timestamp !== right.timestamp) {
-    return left.timestamp - right.timestamp;
-  }
-  const leftActivityRank = launcherProgressActivityRank(left.activity);
-  const rightActivityRank = launcherProgressActivityRank(right.activity);
-  if (leftActivityRank !== rightActivityRank) {
-    return leftActivityRank - rightActivityRank;
-  }
-  return 0;
-}
-
 function selectLauncherProgress(
   progressItems: readonly DesktopLauncherActionProgress[],
   matchesProgress: (progress: DesktopLauncherActionProgress) => boolean,
 ): DesktopLauncherActionProgress | null {
-  const candidates: LauncherProgressCandidate[] = [];
-  for (const progress of progressItems) {
-    if (matchesProgress(progress)) {
-      candidates.push(candidateForProgress(progress));
-    }
+  const byAttempt = new Map<string, DesktopLauncherActionProgress[]>();
+  for (const progress of progressItems.filter(matchesProgress)) {
+    const identity = launcherProgressIdentity(progress);
+    byAttempt.set(identity, [...(byAttempt.get(identity) ?? []), progress]);
   }
-  if (candidates.length === 0) {
-    return null;
-  }
-
-  const latestByIdentity = new Map<string, LauncherProgressCandidate>();
-  for (const candidate of candidates) {
-    const current = latestByIdentity.get(candidate.identity);
-    if (!current || compareSameOperationCandidate(current, candidate) < 0) {
-      latestByIdentity.set(candidate.identity, candidate);
-    }
-  }
-
-  return [...latestByIdentity.values()]
-    .sort((left, right) => compareVisibleProgressCandidate(right, left))[0]?.progress ?? null;
+  const attempts = [...byAttempt.values()].map((items) => (
+    items.find((progress) => launcherProgressActivity(progress) === 'attention')
+    ?? items.find((progress) => launcherProgressActivity(progress) === 'released')
+    ?? items.find((progress) => launcherProgressActivity(progress) === 'active')
+    ?? items[0]!
+  ));
+  const visible = attempts.filter((progress) => launcherProgressActivity(progress) !== 'released');
+  const active = visible.filter((progress) => launcherProgressActivity(progress) === 'active');
+  if (active.length === 1) return active[0];
+  if (active.length > 1) return null;
+  if (visible.length === 1) return visible[0];
+  if (visible.length > 1) return null;
+  return attempts.length === 1 ? attempts[0] : null;
 }
 
 export function busyStateMatchesAction(
