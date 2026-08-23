@@ -2,7 +2,7 @@ import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX 
 import { Portal } from 'solid-js/web';
 import { cn } from '@floegence/floe-webapp-core';
 import { Package, Search, X } from '@floegence/floe-webapp-core/icons';
-import type { WorkbenchExternalDockDragController } from '@floegence/floe-webapp-core/workbench';
+import { WorkbenchDockPopoverSurface, type WorkbenchCanvasWidgetPlacement, type WorkbenchExternalDockDragController } from '@floegence/floe-webapp-core/workbench';
 import { ENV_APP_FLOATING_LAYER } from '../utils/envAppLayers';
 
 import type {
@@ -40,22 +40,15 @@ export type PluginPanelProps = {
   onOpenCenter: () => void;
   onOpenPluginSurface: (target: PluginSurfaceLaunchTarget) => void;
   onOpenPluginDetails: (inventoryKey: string) => void;
-  onDropPlugin?: (target: PluginSurfaceLaunchTarget) => void;
+  onDropPlugin?: (target: PluginSurfaceLaunchTarget, placement: WorkbenchCanvasWidgetPlacement) => void;
   externalDockDragController?: WorkbenchExternalDockDragController | null;
   onPinPlugin?: (inventoryKey: string) => void;
 };
-
-type PluginTileDragState = Readonly<{
-  tile: Extract<PluginPanelTile, { kind: 'plugin' }>;
-  clientX: number;
-  clientY: number;
-}>;
 
 export function PluginPanel(props: PluginPanelProps): JSX.Element {
   const i18n = useI18n();
   const [query, setQuery] = createSignal('');
   const [category, setCategory] = createSignal<PluginPresentationCategory | 'all'>('all');
-  const [dragState, setDragState] = createSignal<PluginTileDragState | null>(null);
   const [mounted, setMounted] = createSignal(props.open);
   const [closing, setClosing] = createSignal(false);
   let suppressTileClick = false;
@@ -64,12 +57,9 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
   let gridRef: HTMLUListElement | undefined;
   let restoreFocusAfterClose = false;
   let focusRestoreTarget: HTMLElement | null = null;
-  let cancelActiveTileDrag: (() => void) | undefined;
   let closeTimer: number | undefined;
 
   onCleanup(() => {
-    cancelActiveTileDrag?.();
-    cancelActiveTileDrag = undefined;
     if (closeTimer !== undefined) window.clearTimeout(closeTimer);
   });
 
@@ -105,29 +95,6 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
   )).length);
   const visible = () => props.open || mounted();
   const isWorkbenchPopup = () => props.placement === 'workbench';
-  const [popupPosition, setPopupPosition] = createSignal<{
-    left: number;
-    bottom: number;
-    arrowLeft: number;
-  }>({ left: 0, bottom: 88, arrowLeft: 24 });
-
-  const updatePopupPosition = () => {
-    if (!isWorkbenchPopup()) return;
-    const trigger = props.trigger?.isConnected
-      ? props.trigger
-      : document.querySelector<HTMLButtonElement>('[data-workbench-dock-action="plugins"]');
-    if (!trigger) return;
-    const rect = trigger.getBoundingClientRect();
-    const width = Math.min(320, Math.max(280, window.innerWidth - 24));
-    const left = Math.max(12, Math.min(window.innerWidth - width - 12, rect.left + rect.width / 2 - width / 2));
-    const triggerCenter = rect.left + rect.width / 2;
-    setPopupPosition({
-      left,
-      bottom: Math.max(76, window.innerHeight - rect.top + 16),
-      arrowLeft: Math.max(18, Math.min(width - 18, triggerCenter - left)),
-    });
-  };
-
   const dismiss = () => {
     restoreFocusAfterClose = true;
     props.onClose();
@@ -168,17 +135,12 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
     };
     const onPointerDown = (event: PointerEvent) => {
       if (!isWorkbenchPopup() || !panelRef) return;
-      const trigger = props.trigger?.isConnected
-        ? props.trigger
-        : document.querySelector<HTMLButtonElement>('[data-workbench-dock-action="plugins"]');
+      const trigger = props.trigger?.isConnected ? props.trigger : null;
       if (panelRef.contains(event.target as Node) || trigger?.contains(event.target as Node)) return;
       dismiss();
     };
     document.addEventListener('keydown', onKeyDown);
     if (isWorkbenchPopup()) {
-      updatePopupPosition();
-      window.addEventListener('resize', updatePopupPosition);
-      window.addEventListener('scroll', updatePopupPosition, true);
       document.addEventListener('pointerdown', onPointerDown, true);
     }
     const restoreIsolation = panelRef && !isWorkbenchPopup() ? isolateDocumentBranch(panelRef) : null;
@@ -190,8 +152,6 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
       focusCancelled = true;
       document.removeEventListener('keydown', onKeyDown);
       if (isWorkbenchPopup()) {
-        window.removeEventListener('resize', updatePopupPosition);
-        window.removeEventListener('scroll', updatePopupPosition, true);
         document.removeEventListener('pointerdown', onPointerDown, true);
       }
       restoreIsolation?.();
@@ -201,86 +161,26 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
     });
   });
 
-  const isCanvasDropPoint = (clientX: number, clientY: number): boolean => {
-    const frame = document.querySelector<HTMLElement>('[data-floe-workbench-canvas-frame="true"]');
-    const rect = frame?.getBoundingClientRect();
-    return Boolean(rect
-      && clientX >= rect.left
-      && clientX <= rect.right
-      && clientY >= rect.top
-      && clientY <= rect.bottom);
-  };
-
   const beginTileDrag = (
     event: PointerEvent,
     tile: Extract<PluginPanelTile, { kind: 'plugin' }>,
   ) => {
-    if (!isWorkbenchPopup() || event.button !== 0) return;
-    if (props.externalDockDragController) {
-      props.externalDockDragController.begin(event, {
-        id: tile.item.inventoryKey,
-        label: tile.item.displayName,
-        icon: (iconProps) => <PluginIcon item={tile.item} size="dock" class={iconProps.class} />,
-      });
-      return;
-    }
-    cancelActiveTileDrag?.();
-    const startX = event.clientX;
-    const startY = event.clientY;
-    const pointerID = event.pointerId;
-    const captureTarget = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
-    let moved = false;
-    try {
-      captureTarget?.setPointerCapture(pointerID);
-    } catch {
-      // The window listeners below remain the fallback for older browsers.
-    }
-    const onMove = (moveEvent: PointerEvent) => {
-      if (moveEvent.pointerId !== pointerID) return;
-      const distance = Math.hypot(moveEvent.clientX - startX, moveEvent.clientY - startY);
-      if (distance > 6) moved = true;
-      if (moved) {
-        moveEvent.preventDefault();
-        setDragState({ tile, clientX: moveEvent.clientX, clientY: moveEvent.clientY });
-      }
-    };
-    const cleanup = () => {
-      window.removeEventListener('pointermove', onMove, true);
-      window.removeEventListener('pointerup', onUp, true);
-      window.removeEventListener('pointercancel', onCancel, true);
-      try {
-        if (captureTarget?.hasPointerCapture(pointerID)) {
-          captureTarget.releasePointerCapture(pointerID);
-        }
-      } catch {
-        // The pointer may already have been released by the browser.
-      }
-      if (cancelActiveTileDrag === cleanup) cancelActiveTileDrag = undefined;
-      setDragState(null);
-    };
-    const finish = (upEvent: PointerEvent, cancelled: boolean) => {
-      if (upEvent.pointerId !== pointerID) return;
-      const dropped = !cancelled
-        && moved
-        && isCanvasDropPoint(upEvent.clientX, upEvent.clientY)
-        && tile.item.defaultLaunchTarget
-        && props.onDropPlugin;
-      cleanup();
-      if (moved) suppressTileClick = true;
-      if (!dropped) return;
-      props.onDropPlugin?.({
-        ...tile.item.defaultLaunchTarget!,
-        preferredPlacement: 'workbench',
-        workbenchDropPoint: { clientX: upEvent.clientX, clientY: upEvent.clientY },
-      });
-      dismiss();
-    };
-    const onUp = (upEvent: PointerEvent) => finish(upEvent, false);
-    const onCancel = (cancelEvent: PointerEvent) => finish(cancelEvent, true);
-    window.addEventListener('pointermove', onMove, true);
-    window.addEventListener('pointerup', onUp, true);
-    window.addEventListener('pointercancel', onCancel, true);
-    cancelActiveTileDrag = cleanup;
+    if (!isWorkbenchPopup() || event.button !== 0 || !props.externalDockDragController) return;
+    const target = tile.item.defaultLaunchTarget;
+    props.externalDockDragController.begin(event, {
+      id: tile.item.inventoryKey,
+      label: tile.item.displayName,
+      icon: (iconProps) => <PluginIcon item={tile.item} size="dock" class={iconProps.class} />,
+      canvasPlacement: target && props.onDropPlugin ? {
+        widgetType: 'redeven.plugin',
+        onDrop: (placement) => {
+          suppressTileClick = true;
+          props.onDropPlugin?.({ ...target, preferredPlacement: 'workbench' }, placement);
+          dismiss();
+        },
+      } : undefined,
+      onDropToDock: props.onPinPlugin ? () => props.onPinPlugin?.(tile.item.inventoryKey) : undefined,
+    });
   };
 
   const activateTile = (tile: PluginPanelTile) => {
@@ -317,49 +217,8 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
     buttons[next]?.focus({ preventScroll: true });
   };
 
-  return (
-    <Portal>
-        <div
-          data-plugin-launcher-backdrop={visible() ? '' : undefined}
-          hidden={!visible()}
-          inert={!visible()}
-          aria-hidden={visible() ? undefined : 'true'}
-          class={cn(
-            'redeven-plugin-motion fixed inset-0 flex animate-in fade-in duration-150 motion-reduce:animate-none',
-            isWorkbenchPopup() ? 'pointer-events-none items-end' : 'bg-[var(--redeven-overlay-scrim)]',
-            props.mobile ? 'items-end' : 'items-center justify-center p-4',
-          )}
-            style={{ 'z-index': ENV_APP_FLOATING_LAYER.pluginPanel }}
-          onPointerDown={(event) => {
-            if (event.target === event.currentTarget) dismiss();
-          }}
-        >
-          <div
-            id={props.id}
-            ref={panelRef}
-            role={visible() ? 'dialog' : undefined}
-            data-plugin-panel-motion-axis="y"
-            data-plugin-panel-motion-state={visible() ? (closing() ? 'closing' : 'open') : undefined}
-            tabIndex={-1}
-            aria-modal={visible() && !isWorkbenchPopup() ? 'true' : undefined}
-            aria-label={visible() && isWorkbenchPopup() ? i18n.t('uiCopy.plugin.launcherTitle') : undefined}
-            aria-labelledby={visible() && !isWorkbenchPopup() ? 'plugin-launcher-title' : undefined}
-            aria-describedby={visible() ? 'plugin-launcher-description' : undefined}
-            class={cn(
-              'redeven-plugin-motion pointer-events-auto flex min-h-0 origin-bottom flex-col overflow-hidden border bg-popover text-popover-foreground shadow-2xl ease-out motion-reduce:animate-none',
-              isWorkbenchPopup()
-                ? `fixed max-h-[min(380px,calc(100vh-120px))] w-[min(320px,calc(100vw-24px))] rounded-lg ${closing() ? 'plugin-panel-popover-close' : 'plugin-panel-popover-open'} duration-150`
-                : 'w-full',
-              !isWorkbenchPopup() && props.mobile
-                ? 'h-[min(680px,92dvh)] rounded-t-lg border-x-0 border-b-0 animate-in fade-in duration-200'
-                : !isWorkbenchPopup() ? 'h-[min(680px,78dvh)] max-w-[820px] rounded-lg animate-in fade-in duration-200' : '',
-            )}
-            style={isWorkbenchPopup() ? {
-              left: `${popupPosition().left}px`,
-              bottom: `${popupPosition().bottom}px`,
-              'transform-origin': `${popupPosition().arrowLeft}px calc(100% + 8px)`,
-            } : undefined}
-          >
+  const panelContents = () => (
+    <>
             <header class={cn('shrink-0 border-b', isWorkbenchPopup() ? 'px-2.5 py-2' : 'px-4 py-3 sm:px-5')}>
               <div class={cn('flex items-center', isWorkbenchPopup() ? 'gap-2' : 'gap-3')}>
                 <button type="button" data-plugin-center-market-action aria-label={i18n.t('uiCopy.plugin.centerTitle')} title={i18n.t('uiCopy.plugin.centerTitle')} class="order-last inline-flex h-[44px] w-[44px] shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none sm:h-8 sm:w-8" onClick={() => { props.onOpenCenter(); props.onClose(); }}>
@@ -485,39 +344,74 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
                   </div>
               </footer>
             </Show>
-          </div>
-        </div>
-        <Show when={visible() && isWorkbenchPopup()}>
-          <span
-            data-plugin-workbench-popover-arrow
-            class="pointer-events-none fixed h-3 w-3 rotate-45 border-b border-r bg-popover"
-            style={{
-              'z-index': ENV_APP_FLOATING_LAYER.pluginPanel,
-              left: `${popupPosition().left + popupPosition().arrowLeft - 6}px`,
-              bottom: `${popupPosition().bottom - 6}px`,
+    </>
+  );
+
+  return (
+    <>
+      <Show when={visible() && isWorkbenchPopup() && props.trigger?.isConnected ? props.trigger : null}>
+        {(trigger) => (
+          <WorkbenchDockPopoverSurface
+            id={props.id}
+            owner={trigger()}
+            estimatedSize={{ width: 320, height: 380 }}
+            surfaceRef={(element) => { panelRef = element; }}
+            onOwnerDisconnect={dismiss}
+            role="dialog"
+            data-plugin-panel-motion-axis="y"
+            data-plugin-panel-motion-state={closing() ? 'closing' : 'open'}
+            tabIndex={-1}
+            aria-label={i18n.t('uiCopy.plugin.launcherTitle')}
+            aria-describedby="plugin-launcher-description"
+            class={cn(
+              'redeven-plugin-motion pointer-events-auto flex max-h-[min(380px,calc(100dvh-120px))] w-[min(320px,calc(100vw-24px))] min-h-0 origin-bottom flex-col overflow-hidden rounded-lg text-foreground ease-out duration-150 motion-reduce:animate-none',
+              closing() ? 'plugin-panel-popover-close' : 'plugin-panel-popover-open',
+            )}
+          >
+            {panelContents()}
+          </WorkbenchDockPopoverSurface>
+        )}
+      </Show>
+      <Show when={!isWorkbenchPopup()}>
+        <Portal>
+          <div
+            data-plugin-launcher-backdrop={visible() ? '' : undefined}
+            hidden={!visible()}
+            inert={!visible()}
+            aria-hidden={visible() ? undefined : 'true'}
+            class={cn(
+              'redeven-plugin-motion fixed inset-0 flex animate-in fade-in duration-150 motion-reduce:animate-none',
+              'bg-[var(--redeven-overlay-scrim)]',
+              props.mobile ? 'items-end' : 'items-center justify-center p-4',
+            )}
+            style={{ 'z-index': ENV_APP_FLOATING_LAYER.pluginPanel }}
+            onPointerDown={(event) => {
+              if (event.target === event.currentTarget) dismiss();
             }}
-            aria-hidden="true"
-          />
-        </Show>
-        <Show when={visible() ? dragState() : null}>
-          {(state) => (
+          >
             <div
-              data-plugin-workbench-drag-ghost
-              class="pointer-events-none fixed left-0 top-0 flex items-center gap-2 rounded-lg border bg-popover/95 px-3 py-2 text-popover-foreground shadow-xl backdrop-blur-md"
-              style={{
-                'z-index': ENV_APP_FLOATING_LAYER.pluginPanel + 1,
-                transform: `translate3d(${state().clientX + 14}px, ${state().clientY - 34}px, 0)`,
-              }}
-              aria-hidden="true"
+              id={props.id}
+              ref={panelRef}
+              role={visible() ? 'dialog' : undefined}
+              data-plugin-panel-motion-axis="y"
+              data-plugin-panel-motion-state={visible() ? (closing() ? 'closing' : 'open') : undefined}
+              tabIndex={-1}
+              aria-modal={visible() ? 'true' : undefined}
+              aria-labelledby={visible() ? 'plugin-launcher-title' : undefined}
+              aria-describedby={visible() ? 'plugin-launcher-description' : undefined}
+              class={cn(
+                'redeven-plugin-motion pointer-events-auto flex min-h-0 w-full origin-bottom flex-col overflow-hidden border bg-popover text-popover-foreground shadow-2xl ease-out motion-reduce:animate-none',
+                props.mobile
+                  ? 'h-[min(680px,92dvh)] rounded-t-lg border-x-0 border-b-0 animate-in fade-in duration-200'
+                  : 'h-[min(680px,78dvh)] max-w-[820px] rounded-lg animate-in fade-in duration-200',
+              )}
             >
-              <PluginIcon item={state().tile.item} size="dock" />
-              <span class="max-w-40 truncate text-xs font-semibold">
-                {resolvedPluginPresentation(state().tile.item, i18n.locale())?.plugin_name ?? state().tile.item.displayName}
-              </span>
+              {panelContents()}
             </div>
-          )}
-        </Show>
-    </Portal>
+          </div>
+        </Portal>
+      </Show>
+    </>
   );
 }
 

@@ -8,9 +8,11 @@ import { LayoutProvider } from '@floegence/floe-webapp-core';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import {
   DEFAULT_WORKBENCH_THEME,
+  WORKBENCH_THEME_IDS,
   WorkbenchSurface,
   createWorkbenchViewportFitForWidget,
   type WorkbenchState,
+  type WorkbenchThemeId,
   type WorkbenchWidgetDefinition,
   type WorkbenchWidgetItem,
 } from '@floegence/floe-webapp-core/workbench';
@@ -282,6 +284,51 @@ function mountPanel(mobile: boolean, model: PluginPanelModel = panelModel): Read
     </>
   ), host));
   return { host, trigger, setOpen };
+}
+
+function mountWorkbenchPanel(): Readonly<{
+  dock: () => HTMLDivElement | undefined;
+  setTheme: (theme: WorkbenchThemeId) => void;
+  surface: () => HTMLDivElement | undefined;
+}> {
+  const host = fixedHost();
+  const [dock, setDock] = createSignal<HTMLDivElement>();
+  const [surface, setSurface] = createSignal<HTMLDivElement>();
+  const [theme, setTheme] = createSignal<WorkbenchThemeId>(DEFAULT_WORKBENCH_THEME);
+  const [trigger, setTrigger] = createSignal<HTMLButtonElement>();
+  disposers.push(render(() => (
+    <div
+      ref={setSurface}
+      class="workbench-surface relative h-full w-full"
+      data-floe-dialog-surface-host="true"
+      data-floe-surface-portal-layer="true"
+      data-workbench-theme={theme()}
+    >
+      <div ref={setDock} class="workbench-dock workbench-dock-material">
+        <button
+          ref={(element) => queueMicrotask(() => setTrigger(element))}
+          type="button"
+          data-workbench-dock-action="plugins"
+          class="h-11 w-11"
+        >
+          Plugins
+        </button>
+      </div>
+      <PluginPanel
+        id="plugin-switcher-workbench-browser-test"
+        open
+        mobile={false}
+        placement="workbench"
+        trigger={trigger()}
+        model={panelModel}
+        onClose={() => undefined}
+        onOpenCenter={() => undefined}
+        onOpenPluginSurface={() => undefined}
+        onOpenPluginDetails={() => undefined}
+      />
+    </div>
+  ), host));
+  return { dock, setTheme, surface };
 }
 
 function mountPluginCenter(): HTMLElement {
@@ -636,6 +683,45 @@ afterEach(async () => {
 });
 
 describe('plugin management browser geometry and interaction', () => {
+  it('keeps the Workbench plugin panel in the local layer with the Dock material in every theme', async () => {
+    const mounted = mountWorkbenchPanel();
+    await settle();
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 180));
+
+    for (const colorMode of ['light', 'dark'] as const) {
+      document.documentElement.classList.remove('light', 'dark');
+      document.documentElement.classList.add(colorMode);
+      for (const theme of WORKBENCH_THEME_IDS) {
+        mounted.setTheme(theme);
+        await settle();
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 180));
+
+        const surface = mounted.surface()!;
+        const dock = mounted.dock()!;
+        const panel = surface.querySelector<HTMLElement>('#plugin-switcher-workbench-browser-test')!;
+        const layer = panel.closest<HTMLElement>('[data-floe-surface-floating-layer="true"]')!;
+        const dockStyle = getComputedStyle(dock);
+        const panelStyle = getComputedStyle(panel);
+
+        expect(surface.contains(layer)).toBe(true);
+        expect(layer.closest('.workbench-surface')).toBe(surface);
+        expect(getComputedStyle(layer).position).toBe('absolute');
+        expect(panelStyle.position).not.toBe('fixed');
+        expect({
+          backgroundColor: panelStyle.backgroundColor,
+          borderTopColor: panelStyle.borderTopColor,
+          boxShadow: panelStyle.boxShadow,
+          backdropFilter: panelStyle.backdropFilter,
+        }).toEqual({
+          backgroundColor: dockStyle.backgroundColor,
+          borderTopColor: dockStyle.borderTopColor,
+          boxShadow: dockStyle.boxShadow,
+          backdropFilter: dockStyle.backdropFilter,
+        });
+      }
+    }
+  });
+
   it.each(viewportCases.filter(({ width }) => width >= 768))(
     'centers the modal Plugin Launcher without overflow at $width px',
     async (viewport) => {

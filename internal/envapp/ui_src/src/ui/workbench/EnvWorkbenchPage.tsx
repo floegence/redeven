@@ -1,10 +1,10 @@
 import {
   createDefaultWorkbenchState,
   sanitizeWorkbenchState,
+  type WorkbenchCanvasWidgetPlacement,
   type WorkbenchContextMenuItem,
   type WorkbenchDockAction,
   type WorkbenchExternalDockDragController,
-  type WorkbenchExternalDockDragItem,
   type WorkbenchHostDockItem,
   type WorkbenchDockItemActivation,
   type WorkbenchState,
@@ -709,7 +709,6 @@ export type EnvWorkbenchPageProps = Readonly<{
   dockActions?: readonly WorkbenchDockAction[];
   dockItems?: readonly WorkbenchHostDockItem[];
   registerExternalDockDragController?: (controller: WorkbenchExternalDockDragController | null) => void;
-  onExternalDockDrop?: (item: WorkbenchExternalDockDragItem) => void;
 }>;
 
 export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
@@ -2186,26 +2185,26 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
     throw new Error(i18n.t('uiCopy.plugin.surfaceFailed'));
   };
 
-  const openPluginWorkbenchSurface = async (target: PluginSurfaceLaunchTarget): Promise<void> => {
+  const openPluginWorkbenchSurface = async (
+    target: PluginSurfaceLaunchTarget,
+    placement?: WorkbenchCanvasWidgetPlacement,
+  ): Promise<void> => {
     const api = surfaceApi();
     if (!api || !runtimeLayoutReady()) {
       throw new Error(i18n.t('uiCopy.plugin.surfaceFailed'));
     }
 
-    // A drag from the launcher is an explicit placement request. Always create
-    // a new surface at the drop point instead of focusing an existing one.
-    const currentState = target.workbenchDropPoint
+    // A drag placement is explicit. Always create a new surface at the exact
+    // world coordinate already resolved by the Workbench drag transaction.
+    const currentState = placement
       ? undefined
       : runtimeSnapshot().widget_states.find((state) => pluginStateMatchesTarget(state, target));
     let widget = currentState ? api.findWidgetById(currentState.widget_id) : null;
     const created = !widget;
     if (!widget) {
-      const dropPoint = target.workbenchDropPoint
-        ? resolveWorkbenchAnchorWorldPoint(target.workbenchDropPoint)
-        : null;
       widget = api.createWidget('redeven.plugin', {
         centerViewport: false,
-        ...(dropPoint ?? {}),
+        ...(placement?.centerWorld ?? {}),
       });
     }
     if (!widget) {
@@ -2215,7 +2214,7 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
     const widgetID = widget.id;
     const title = target.displayName ?? target.pluginID;
     updateWidgetTitle(widgetID, title);
-    api.focusWidget(widget, { centerViewport: created });
+    api.focusWidget(widget, { centerViewport: created && !placement });
     try {
       if (created) await waitForRuntimePluginWidget(widgetID);
       if (
@@ -2292,7 +2291,7 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
     return next;
   };
   const pluginSurfaceController: WorkbenchPluginSurfaceController = {
-    open: (target) => serializePluginControllerOperation(() => openPluginWorkbenchSurface(target)),
+    open: (target, placement) => serializePluginControllerOperation(() => openPluginWorkbenchSurface(target, placement)),
     close: (target) => serializePluginControllerOperation(() => closePluginWorkbenchSurface(target)),
     closePlugin: (pluginInstanceID) => serializePluginControllerOperation(() => closePluginWorkbenchSurfaces(pluginInstanceID)),
     closeAll: () => serializePluginControllerOperation(closeAllPluginWorkbenchSurfaces),
@@ -2955,7 +2954,6 @@ export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
             dockActions={props.dockActions}
             dockItems={props.dockItems}
             registerExternalDockDragController={props.registerExternalDockDragController}
-            onExternalDockDrop={props.onExternalDockDrop}
             onRequestDelete={requestWidgetRemoval}
             onLayoutInteractionStart={beginSurfaceLayoutInteraction}
             onLayoutInteractionEnd={endSurfaceLayoutInteraction}

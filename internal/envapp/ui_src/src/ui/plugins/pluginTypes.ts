@@ -221,8 +221,6 @@ export type PluginSurfaceLaunchTarget = {
   displayName?: string;
   expectedManagementRevision: number;
   preferredPlacement: 'activity' | 'workbench';
-  /** Ephemeral client point used when a Workbench launcher tile is dropped. */
-  workbenchDropPoint?: Readonly<{ clientX: number; clientY: number }>;
 };
 
 export type PluginInventoryItem = {

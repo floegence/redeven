@@ -9,7 +9,6 @@ import {
   type WorkbenchDockAction,
   type WorkbenchDockItemActivation,
   type WorkbenchExternalDockDragController,
-  type WorkbenchExternalDockDragItem,
   type WorkbenchHostDockItem,
   type WorkbenchSurfaceApi,
   type WorkbenchState,
@@ -103,7 +102,6 @@ export interface RedevenWorkbenchSurfaceProps {
   dockActions?: readonly WorkbenchDockAction[];
   dockItems?: readonly WorkbenchHostDockItem[];
   registerExternalDockDragController?: (controller: WorkbenchExternalDockDragController | null) => void;
-  onExternalDockDrop?: (item: WorkbenchExternalDockDragItem) => void;
   onLayoutInteractionStart?: (kind?: WorkbenchTerminalInteractionKind) => void;
   onLayoutInteractionEnd?: (kind?: WorkbenchTerminalInteractionKind) => void;
   onViewportInteractionPulse?: () => void;
@@ -560,7 +558,6 @@ export function RedevenWorkbenchSurface(props: RedevenWorkbenchSurfaceProps) {
         dockActions={props.dockActions}
         dockItems={props.dockItems}
         registerExternalDockDragController={props.registerExternalDockDragController}
-        onExternalDockDrop={props.onExternalDockDrop}
         onLayoutInteractionStart={props.onLayoutInteractionStart}
         onLayoutInteractionEnd={props.onLayoutInteractionEnd}
         widgetActivationMode={props.widgetActivationMode}
