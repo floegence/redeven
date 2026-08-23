@@ -35,7 +35,11 @@ function runtimeStatusPayloadForEpoch(
   const openReadiness = runtimeServiceOverrides.open_readiness
     ?? (readiness === 'openable'
       ? { state: 'openable' }
-      : { state: 'starting', reason_code: 'env_app_app_server_starting', message: 'Env App app server is starting.' });
+      : {
+          state: 'starting',
+          reason_code: 'env_app_app_server_starting',
+          message: 'Env App app server is starting.',
+        });
   return {
     status: 'ready',
     local_ui_url: baseURL,
@@ -310,7 +314,10 @@ server.listen(0, '127.0.0.1', () => {
   payload.pid = process.pid;
   if (statusFile) {
     if (mode === 'status_after_inventory') {
-      setTimeout(() => writeJSON(statusFile, payload), 1_500);
+      setTimeout(
+        () => writeJSON(statusFile, payload),
+        Math.max(0, Number(process.env.REDEVEN_TEST_STATUS_PUBLISH_DELAY_MS) || 1_500),
+      );
     } else {
       writeJSON(statusFile, payload);
     }
@@ -485,7 +492,9 @@ describe('runtimeProcess', () => {
         tempRoot: dir,
         runtimeAttachTimeoutMs: 5_000,
       })).rejects.toMatchObject({ name: 'RuntimeProcessIdentityBlockedError' });
-      await expect(fs.stat(statusFile)).rejects.toMatchObject({ code: 'ENOENT' });
+      await expect(fs.stat(statusFile)).rejects.toMatchObject({
+        code: 'ENOENT',
+      });
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
     }
@@ -524,6 +533,7 @@ describe('runtimeProcess', () => {
       expect(progressPhases).toEqual(expect.arrayContaining([
         'discovering_runtime_instances',
         'stopping_runtime_process',
+        'verifying_runtime_stopped',
         'verifying_runtime_inventory',
         'starting_runtime',
       ]));
@@ -566,7 +576,10 @@ describe('runtimeProcess', () => {
       });
       expect(launch.kind).toBe('ready');
       const deadline = Date.now() + 2_000;
-      let captured: { stdin: string; secret_env: Record<string, string> } | null = null;
+      let captured: {
+        stdin: string;
+        secret_env: Record<string, string>;
+      } | null = null;
       while (Date.now() < deadline && captured === null) {
         try {
           captured = JSON.parse(await fs.readFile(startupInputFile, 'utf8')) as typeof captured;
@@ -632,6 +645,7 @@ describe('runtimeProcess', () => {
         REDEVEN_TEST_STATUS_COUNTER_FILE: statusCounterFile,
         REDEVEN_TEST_STATUS_PAYLOAD_FILE: statusPayloadFile,
         REDEVEN_TEST_PROCESS_INVENTORY_FILE: inventoryFile,
+        REDEVEN_TEST_STATUS_PUBLISH_DELAY_MS: '2500',
       },
     });
     try {
@@ -640,13 +654,14 @@ describe('runtimeProcess', () => {
         executablePath,
         stateRoot,
         runtimeAttachTimeoutMs: 100,
-        runtimeAttachRetryWindowMs: 3_000,
+        runtimeStartupTimeoutMs: 3_000,
         env: {
           REDEVEN_TEST_RUNTIME_MODE: 'status_after_inventory',
           REDEVEN_TEST_STATUS_FILE: statusFile,
           REDEVEN_TEST_STATUS_COUNTER_FILE: statusCounterFile,
           REDEVEN_TEST_STATUS_PAYLOAD_FILE: statusPayloadFile,
           REDEVEN_TEST_PROCESS_INVENTORY_FILE: inventoryFile,
+          REDEVEN_TEST_STATUS_PUBLISH_DELAY_MS: '2500',
         },
       });
       expect(attached?.attached).toBe(true);
@@ -797,6 +812,7 @@ describe('runtimeProcess', () => {
         'checking_existing_runtime',
         'starting_runtime',
         'waiting_for_readiness',
+        'verifying_runtime_inventory',
         'runtime_ready',
       ]);
       await launch.managedRuntime.stop();
@@ -854,8 +870,12 @@ describe('runtimeProcess', () => {
       controller.abort(new DOMException('User canceled startup.', 'AbortError'));
 
       await expect(launch).rejects.toMatchObject({ name: 'AbortError' });
-      await expect(fs.stat(inventoryFile)).rejects.toMatchObject({ code: 'ENOENT' });
-      await expect(fs.stat(statusFile)).rejects.toMatchObject({ code: 'ENOENT' });
+      await expect(fs.stat(inventoryFile)).rejects.toMatchObject({
+        code: 'ENOENT',
+      });
+      await expect(fs.stat(statusFile)).rejects.toMatchObject({
+        code: 'ENOENT',
+      });
       expect((await fs.readdir(dir)).filter((entry) => entry.startsWith('redeven-desktop-'))).toEqual([]);
       expect(() => process.kill(pid, 0)).toThrow();
     } finally {

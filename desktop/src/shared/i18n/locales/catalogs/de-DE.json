@@ -1689,7 +1689,7 @@
     "reinstallCheckingDetail": "Desktop prüft den bestätigten Host, Container und das Redeven-Stammverzeichnis erneut.",
     "reinstallLockedDetail": "Desktop hat das exakt registrierte Redeven-Ziel für diesen Vorgang gesperrt.",
     "reinstallSessionsClosedDetail": "Desktop hat die mit diesem Ziel verbundenen Umgebungsfenster und Bridges geschlossen.",
-    "reinstallHelperReadyDetail": "Desktop hat den aktuellen Wartungshelfer außerhalb des alten Redeven-Stammverzeichnisses vorbereitet.",
+    "reinstallHelperPreparingDetail": "Desktop bereitet den aktuellen Wartungshelfer außerhalb des alten Redeven-Stammverzeichnisses vor.",
     "reinstallInventoryDetail": "Desktop ermittelt die Redeven-Prozesse, die genau zu diesem Ziel gehören.",
     "reinstallStoppingProcessesDetail": "Desktop beendet verifizierte Gateway-, Laufzeit-, Bridge-, Local UI- und verwaltete Kindprozesse.",
     "reinstallProcessesStoppedDetail": "Desktop hat bestätigt, dass für dieses Ziel keine alten Redeven-Prozesse mehr vorhanden sind.",
@@ -1717,7 +1717,7 @@
       "catalog_and_local_ui_verified": "Catalog und Local UI werden überprüft",
       "quarantine_cleaned": "Isolierte alte Daten werden entfernt",
       "completed": "Neuinstallation abgeschlossen",
-      "maintenance_helper_ready": "Wartungshelfer wird vorbereitet",
+      "preparing_maintenance_helper": "Wartungshelfer wird vorbereitet",
       "packages_preparing_and_transferring": "Pakete werden gemeinsam vorbereitet und übertragen",
       "redeven_processes_stop_attempted": "Redeven-Prozesse werden beendet",
       "packages_applying": "Paketstapel wird angewendet",
@@ -1830,6 +1830,7 @@
     "checkingContainer": "Container wird geprüft",
     "detectingPlatform": "Plattform wird erkannt",
     "checkingRuntimePackage": "Laufzeitpaket prüfen",
+    "preparingMaintenanceHelper": "Laufzeitressourcen vorbereiten",
     "stoppingRuntimeProcess": "Ausführungsumgebungsprozess stoppen",
     "verifyingRuntimeStopped": "Stopp der Ausführungsumgebung überprüfen",
     "verifyingRuntimeInventory": "Laufzeitprozessbestand überprüfen",
@@ -1942,7 +1943,8 @@
     },
     "componentName": {
       "gateway": "Gateway",
-      "runtime": "Laufzeit"
+      "runtime": "Laufzeit",
+      "maintenanceHelper": "Wartungshelfer"
     }
   },
   "runtimeMessage": {

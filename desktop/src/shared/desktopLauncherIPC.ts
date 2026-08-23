@@ -24,6 +24,7 @@ import type { DesktopOperationFailurePresentation } from './desktopOperationFail
 import type { DesktopLocalRuntimeOpenPlan } from './localRuntimeSupervisor';
 import type { RuntimeServiceProviderConnectionState, RuntimeServiceSnapshot } from './runtimeService';
 import type { DesktopTranslationKey } from './i18n/desktopI18n';
+import type { DesktopComponentTaskProgress } from './desktopComponentTaskProgress';
 import type {
   DesktopEnvironmentSource,
   DesktopGatewayConnectionKind,
@@ -50,6 +51,8 @@ import type {
   DesktopProviderRuntimeLinkTargetID,
 } from './providerRuntimeLinkTarget';
 import { normalizeDesktopProviderRuntimeLinkRequestTarget } from './environmentManagementPrinciples';
+
+export type { DesktopComponentTaskProgress } from './desktopComponentTaskProgress';
 
 export const DESKTOP_LAUNCHER_GET_SNAPSHOT_CHANNEL = 'redeven-desktop:launcher-get-snapshot';
 export const DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL = 'redeven-desktop:launcher-perform-action';
@@ -80,15 +83,6 @@ export type DesktopLauncherOperationStatus =
   | 'failed'
   | 'succeeded';
 export type DesktopStepProgressStepStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'canceled';
-export type DesktopComponentTaskProgress = Readonly<{
-  id: 'gateway' | 'runtime';
-  status: DesktopStepProgressStepStatus;
-  phase: 'preparing' | 'transferring' | 'verifying' | 'ready';
-  strategy: 'desktop_upload' | 'remote_install';
-  completed_bytes?: number;
-  total_bytes?: number;
-  detail_key?: DesktopTranslationKey;
-}>;
 export type DesktopStepProgressStep = Readonly<{
   id: string;
   backend_event?: string;

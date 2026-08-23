@@ -1685,7 +1685,7 @@
     "reinstallCheckingDetail": "Desktop は確認済みのホスト、コンテナ、Redeven ルートを再検証しています。",
     "reinstallLockedDetail": "Desktop はこの操作のために正確に登録された Redeven ターゲットをロックしました。",
     "reinstallSessionsClosedDetail": "Desktop はこのターゲットに接続された環境ウィンドウと bridge を閉じました。",
-    "reinstallHelperReadyDetail": "Desktop は現在のメンテナンス helper を古い Redeven ルートの外に用意しました。",
+    "reinstallHelperPreparingDetail": "Desktop は現在のメンテナンス helper を古い Redeven ルートの外に準備しています。",
     "reinstallInventoryDetail": "Desktop はこの正確なターゲットに属する Redeven プロセスを識別しています。",
     "reinstallStoppingProcessesDetail": "Desktop は検証済みの Gateway、ランタイム、bridge、Local UI、管理対象の子プロセスを停止しています。",
     "reinstallProcessesStoppedDetail": "Desktop はこのターゲットに古い Redeven プロセスが残っていないことを確認しました。",
@@ -1713,7 +1713,7 @@
       "catalog_and_local_ui_verified": "Catalog と Local UI を確認しています",
       "quarantine_cleaned": "隔離した古いデータを削除しています",
       "completed": "再インストールが完了しました",
-      "maintenance_helper_ready": "メンテナンスヘルパーを準備中",
+      "preparing_maintenance_helper": "メンテナンスヘルパーを準備中",
       "packages_preparing_and_transferring": "パッケージを準備・転送中",
       "redeven_processes_stop_attempted": "Redeven プロセスを停止中",
       "packages_applying": "パッケージバッチを適用中",
@@ -1826,6 +1826,7 @@
     "checkingContainer": "コンテナを確認中",
     "detectingPlatform": "プラットフォームを検出中",
     "checkingRuntimePackage": "ランタイム パッケージの確認",
+    "preparingMaintenanceHelper": "ランタイムリソースを準備",
     "stoppingRuntimeProcess": "ランタイム プロセスの停止",
     "verifyingRuntimeStopped": "ランタイムの停止の確認",
     "verifyingRuntimeInventory": "ランタイムプロセス一覧を確認",
@@ -1938,7 +1939,8 @@
     },
     "componentName": {
       "gateway": "Gateway",
-      "runtime": "ランタイム"
+      "runtime": "ランタイム",
+      "maintenanceHelper": "メンテナンスヘルパー"
     }
   },
   "runtimeMessage": {

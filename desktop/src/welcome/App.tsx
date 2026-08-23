@@ -8450,6 +8450,8 @@ function localizedRuntimeLifecyclePhaseLabel(i18n: DesktopI18n, phase: DesktopRu
       return i18n.t('progress.detectingPlatform');
     case 'checking_runtime_package':
       return i18n.t('progress.checkingRuntimePackage');
+    case 'preparing_maintenance_helper':
+      return i18n.t('progress.preparingMaintenanceHelper');
     case 'discovering_runtime_instances':
       return i18n.t('progress.discoveringRuntimeInstances');
     case 'stopping_runtime_process':
@@ -8967,6 +8969,7 @@ function EnvironmentProgressPanel(props: Readonly<{
       key: step.key,
       label: localizedRuntimeLifecycleStepLabel(props.i18n, step),
       status: step.status,
+      tasks: step.tasks,
     }));
   });
   const failureNoticeTitle = createMemo(() => localizedFailureNoticeTitle(props.i18n, props.progress));
@@ -9257,7 +9260,11 @@ function EnvironmentProgressPanel(props: Readonly<{
                               {(task) => (
                                 <div class="redeven-environment-progress__component-task" role="listitem" data-status={task.status}>
                                   <span class="redeven-environment-progress__component-task-name">
-                                    {props.i18n.t(task.id === 'gateway' ? 'progress.componentName.gateway' : 'progress.componentName.runtime')}
+                                    {props.i18n.t(task.id === 'gateway'
+                                      ? 'progress.componentName.gateway'
+                                      : task.id === 'maintenance_helper'
+                                        ? 'progress.componentName.maintenanceHelper'
+                                        : 'progress.componentName.runtime')}
                                   </span>
                                   <span class="redeven-environment-progress__component-task-phase">{props.i18n.t(`progress.componentPhase.${task.phase}` as 'progress.componentPhase.preparing')}</span>
                                   <span class="redeven-environment-progress__component-task-strategy">{props.i18n.t(task.strategy === 'desktop_upload' ? 'common.desktopUpload' : 'common.remoteInstall')}</span>

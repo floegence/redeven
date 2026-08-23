@@ -1689,7 +1689,7 @@
     "reinstallCheckingDetail": "Desktop revérifie l’hôte, le conteneur et la racine Redeven confirmés.",
     "reinstallLockedDetail": "Desktop a verrouillé la cible Redeven enregistrée avec précision pour cette opération.",
     "reinstallSessionsClosedDetail": "Desktop a fermé les fenêtres d’environnement et les bridges connectés à cette cible.",
-    "reinstallHelperReadyDetail": "Desktop a préparé le helper de maintenance actuel hors de l’ancienne racine Redeven.",
+    "reinstallHelperPreparingDetail": "Desktop prépare le helper de maintenance actuel hors de l’ancienne racine Redeven.",
     "reinstallInventoryDetail": "Desktop identifie les processus Redeven appartenant précisément à cette cible.",
     "reinstallStoppingProcessesDetail": "Desktop arrête les processus vérifiés de Gateway, d’environnement d’exécution, de bridge, de Local UI et les processus enfants gérés.",
     "reinstallProcessesStoppedDetail": "Desktop a vérifié qu’aucun ancien processus Redeven ne subsiste pour cette cible.",
@@ -1717,7 +1717,7 @@
       "catalog_and_local_ui_verified": "Vérification de Catalog et de Local UI",
       "quarantine_cleaned": "Suppression des anciennes données isolées",
       "completed": "Réinstallation terminée",
-      "maintenance_helper_ready": "Préparation de l’assistant de maintenance",
+      "preparing_maintenance_helper": "Préparation de l’assistant de maintenance",
       "packages_preparing_and_transferring": "Préparation et transfert des paquets",
       "redeven_processes_stop_attempted": "Arrêt des processus Redeven",
       "packages_applying": "Application du lot de paquets",
@@ -1830,6 +1830,7 @@
     "checkingContainer": "Vérification du conteneur",
     "detectingPlatform": "Détection de la plateforme",
     "checkingRuntimePackage": "Vérification du package d'exécution",
+    "preparingMaintenanceHelper": "Préparation des ressources d’exécution",
     "stoppingRuntimeProcess": "Arrêt du processus d'exécution",
     "verifyingRuntimeStopped": "Vérification de l'arrêt du processus d'exécution",
     "verifyingRuntimeInventory": "Vérification de l’inventaire des processus d’exécution",
@@ -1942,7 +1943,8 @@
     },
     "componentName": {
       "gateway": "Gateway",
-      "runtime": "Moteur d’exécution"
+      "runtime": "Moteur d’exécution",
+      "maintenanceHelper": "Assistant de maintenance"
     }
   },
   "runtimeMessage": {

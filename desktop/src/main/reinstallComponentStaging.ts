@@ -1,9 +1,12 @@
 import { createHash } from 'node:crypto';
 
-import type { DesktopComponentTaskProgress } from '../shared/desktopLauncherIPC';
 import type { DesktopRuntimePlacement } from '../shared/desktopRuntimePlacement';
 import { containerRuntimeExecCommand } from './containerRuntime';
-import type { ManagedComponentTask, PreparedComponent } from './managedComponentBatchInstaller';
+import type {
+  ManagedComponentTask,
+  ManagedComponentTaskProgress,
+  PreparedComponent,
+} from './managedComponentBatchInstaller';
 import type { RuntimeHostAccessExecutor } from './runtimeHostAccess';
 
 function commandForPlacement(
@@ -195,7 +198,7 @@ export async function stageManagedComponent(args: Readonly<{
   archive_size_bytes?: number;
   remote_url?: string;
   signal?: AbortSignal;
-  on_progress?: (progress: DesktopComponentTaskProgress) => void;
+  on_progress?: (progress: ManagedComponentTaskProgress) => void;
 }>): Promise<PreparedComponent> {
   args.on_progress?.({ id: args.task.component, status: 'running', phase: 'transferring', strategy: args.task.strategy });
   const localDigest = args.archive ? createHash('sha256').update(args.archive).digest('hex') : args.archive_sha256;

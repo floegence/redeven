@@ -68,7 +68,7 @@ describe('runtimeLifecycleExecutionPlan', () => {
     expect(plan.omitted_steps).toEqual([
       { id: 'discovering_runtime_instances', reason: 'runtime_process_absent' },
       { id: 'stopping_runtime_process', reason: 'runtime_process_absent' },
-      { id: 'verifying_runtime_inventory', reason: 'runtime_process_absent' },
+      { id: 'verifying_runtime_stopped', reason: 'runtime_process_absent' },
     ]);
   });
 
@@ -85,7 +85,7 @@ describe('runtimeLifecycleExecutionPlan', () => {
     expect(plan.omitted_steps).toEqual([
       { id: 'discovering_runtime_instances', reason: 'runtime_process_absent' },
       { id: 'stopping_runtime_process', reason: 'runtime_process_absent' },
-      { id: 'verifying_runtime_inventory', reason: 'runtime_process_absent' },
+      { id: 'verifying_runtime_stopped', reason: 'runtime_process_absent' },
     ]);
   });
 
@@ -103,7 +103,7 @@ describe('runtimeLifecycleExecutionPlan', () => {
     expect(plan.omitted_steps).toEqual([
       { id: 'discovering_runtime_instances', reason: 'runtime_process_absent' },
       { id: 'stopping_runtime_process', reason: 'runtime_process_absent' },
-      { id: 'verifying_runtime_inventory', reason: 'runtime_process_absent' },
+      { id: 'verifying_runtime_stopped', reason: 'runtime_process_absent' },
     ]);
   });
 
@@ -166,6 +166,7 @@ describe('runtimeLifecycleExecutionPlan', () => {
       'installing_runtime_package',
       'starting_runtime_process',
       'checking_runtime_service',
+      'verifying_runtime_inventory',
       'runtime_ready',
     ]);
     expect(afterPackagePrepare.steps.map((step) => step.id)).not.toContain('runtime_up_to_date');
@@ -185,11 +186,11 @@ describe('runtimeLifecycleExecutionPlan', () => {
     expect(plan.omitted_steps).toEqual([
       { id: 'discovering_runtime_instances', reason: 'runtime_already_stopped' },
       { id: 'stopping_runtime_process', reason: 'runtime_already_stopped' },
-      { id: 'verifying_runtime_inventory', reason: 'runtime_already_stopped' },
+      { id: 'verifying_runtime_stopped', reason: 'runtime_already_stopped' },
     ]);
   });
 
-  it('finishes an explicit stop directly after the final runtime inventory verification', () => {
+  it('finishes an explicit stop directly after verifying the old runtime stopped', () => {
     const plan = runtimeLifecyclePlanIncludingStep({
       location: 'local_host',
       operation: 'stop',
@@ -201,10 +202,10 @@ describe('runtimeLifecycleExecutionPlan', () => {
       'checking_existing_runtime',
       'discovering_runtime_instances',
       'stopping_runtime_process',
-      'verifying_runtime_inventory',
+      'verifying_runtime_stopped',
       'runtime_stopped',
     ]);
-    expect(plan.steps.map((step) => step.id)).not.toContain('verifying_runtime_stopped');
+    expect(plan.steps.map((step) => step.id)).not.toContain('verifying_runtime_inventory');
   });
 
   it('keeps an empty direct stop ordered without starting a skipped terminal step', () => {
@@ -225,7 +226,7 @@ describe('runtimeLifecycleExecutionPlan', () => {
       ]);
       expect(plan.omitted_steps).toEqual([
         { id: 'stopping_runtime_process', reason: 'runtime_already_stopped' },
-        { id: 'verifying_runtime_inventory', reason: 'runtime_already_stopped' },
+        { id: 'verifying_runtime_stopped', reason: 'runtime_already_stopped' },
       ]);
     }
   });
@@ -261,6 +262,7 @@ describe('runtimeLifecycleExecutionPlan', () => {
       'installing_runtime_package',
       'starting_runtime_process',
       'checking_runtime_service',
+      'verifying_runtime_inventory',
       'runtime_ready',
     ]);
   });
@@ -315,6 +317,7 @@ describe('runtimeLifecycleExecutionPlan', () => {
       'installing_runtime_package',
       'starting_runtime_process',
       'checking_runtime_service',
+      'verifying_runtime_inventory',
       'runtime_ready',
     ]);
   });
@@ -353,6 +356,7 @@ describe('runtimeLifecycleExecutionPlan', () => {
       'installing_runtime_package',
       'starting_runtime_process',
       'checking_runtime_service',
+      'verifying_runtime_inventory',
       'runtime_ready',
     ]);
   });

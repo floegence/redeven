@@ -1685,7 +1685,7 @@
     "reinstallCheckingDetail": "Desktop 正在重新核验已确认的主机、容器和 Redeven 根目录。",
     "reinstallLockedDetail": "Desktop 已为本次操作锁定准确登记的 Redeven 目标。",
     "reinstallSessionsClosedDetail": "Desktop 已关闭连接到此目标的环境窗口和 bridge。",
-    "reinstallHelperReadyDetail": "Desktop 已在旧 Redeven 根目录之外准备好当前版本的维护 helper。",
+    "reinstallHelperPreparingDetail": "Desktop 正在旧 Redeven 根目录之外准备当前版本的维护 helper。",
     "reinstallInventoryDetail": "Desktop 正在识别属于此准确目标的 Redeven 进程。",
     "reinstallStoppingProcessesDetail": "Desktop 正在停止已验证的 Gateway、运行时、bridge、Local UI 和受管子进程。",
     "reinstallProcessesStoppedDetail": "Desktop 已确认此目标没有残留旧 Redeven 进程。",
@@ -1713,7 +1713,7 @@
       "catalog_and_local_ui_verified": "验证 Catalog 和 Local UI",
       "quarantine_cleaned": "删除隔离的旧数据",
       "completed": "重装完成",
-      "maintenance_helper_ready": "准备维护助手",
+      "preparing_maintenance_helper": "准备维护助手",
       "packages_preparing_and_transferring": "同时准备并传输软件包",
       "redeven_processes_stop_attempted": "停止 Redeven 进程",
       "packages_applying": "应用软件包批次",
@@ -1826,9 +1826,10 @@
     "checkingContainer": "检查容器",
     "detectingPlatform": "检测平台",
     "checkingRuntimePackage": "检查运行时包",
+    "preparingMaintenanceHelper": "准备运行时资源",
     "stoppingRuntimeProcess": "停止运行时进程",
     "verifyingRuntimeStopped": "验证运行时已停止",
-    "verifyingRuntimeInventory": "验证运行时进程已停止",
+    "verifyingRuntimeInventory": "验证运行时进程",
     "preparingRuntimePackage": "准备运行时包",
     "installingRuntimePackage": "正在安装运行时包",
     "startingRuntime": "正在启动运行时",
@@ -1938,7 +1939,8 @@
     },
     "componentName": {
       "gateway": "Gateway",
-      "runtime": "运行时"
+      "runtime": "运行时",
+      "maintenanceHelper": "维护助手"
     }
   },
   "runtimeMessage": {

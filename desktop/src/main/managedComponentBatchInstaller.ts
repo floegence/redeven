@@ -1,6 +1,9 @@
 import type { DesktopComponentTaskProgress } from '../shared/desktopLauncherIPC';
 
 export type ManagedComponentKind = 'gateway' | 'runtime';
+export type ManagedComponentTaskProgress = DesktopComponentTaskProgress & Readonly<{
+  id: ManagedComponentKind;
+}>;
 
 export type ManagedComponentTask = Readonly<{
   component: ManagedComponentKind;
@@ -53,7 +56,7 @@ export type PreparedComponentBatch = Readonly<{
 export type ManagedComponentTaskRunner = (
   task: ManagedComponentTask,
   signal: AbortSignal,
-  onProgress: (progress: DesktopComponentTaskProgress) => void,
+  onProgress: (progress: ManagedComponentTaskProgress) => void,
 ) => Promise<PreparedComponent>;
 
 export type ManagedComponentBatchInstallerOptions = Readonly<{
@@ -167,7 +170,7 @@ function partialBatch(
 export async function prepareAndStageBatch(
   tasks: readonly ManagedComponentTask[],
   signal: AbortSignal,
-  onProgress: (progress: DesktopComponentTaskProgress) => void,
+  onProgress: (progress: ManagedComponentTaskProgress) => void,
   options: ManagedComponentBatchInstallerOptions,
 ): Promise<PreparedComponentBatch> {
   validateTasks(tasks);

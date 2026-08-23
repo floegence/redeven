@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import type { Dirent } from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -22,6 +23,7 @@ import {
   DesktopOperationFailureError,
   desktopOperationFailurePresentation,
 } from './desktopOperationFailure';
+import { runtimeExecutableFromArchive } from './runtimeArchive';
 
 export type DesktopRuntimePackageCacheKey = Readonly<{
   package_kind: DesktopSSHReleasePackageKind;
@@ -69,8 +71,9 @@ const inFlightReleaseManifests = new Map<string, Promise<DesktopSSHVerifiedRelea
 const inFlightReleaseAssets = new Map<string, Promise<DesktopRuntimePackageCacheEntry>>();
 const inFlightSourceRuntimeAssets = new Map<string, Promise<DesktopRuntimeUploadAsset>>();
 const sourceRuntimePackageCache = new Map<string, DesktopSourceRuntimePackageCacheEntry>();
-const sourceReinstallHelperCache = new Map<string, Buffer>();
-const inFlightSourceReinstallHelpers = new Map<string, Promise<Buffer>>();
+const sourceMaintenanceHelperCache = new Map<string, Buffer>();
+const inFlightSourceMaintenanceHelpers = new Map<string, Promise<Buffer>>();
+const inFlightReleaseMaintenanceHelpers = new Map<string, Promise<Buffer>>();
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
@@ -532,7 +535,7 @@ async function ensureSourceRuntimeUploadAsset(args: Readonly<{
   });
 }
 
-async function prepareSourceReinstallHelperArchive(args: Readonly<{
+async function prepareSourceMaintenanceHelperArchive(args: Readonly<{
   sourceRuntimeRoot: string;
   runtimeReleaseTag: string;
   platform: DesktopSSHRemotePlatform;
@@ -542,10 +545,10 @@ async function prepareSourceReinstallHelperArchive(args: Readonly<{
   const commandRoot = path.join(sourceRoot, 'cmd', 'redeven');
   const commandRootStat = await fs.stat(commandRoot).catch(() => null);
   if (!commandRootStat?.isDirectory()) {
-    throw new Error(`Desktop reinstall helper source root is not a Redeven checkout: ${sourceRoot}`);
+    throw new Error(`Desktop maintenance helper source root is not a Redeven checkout: ${sourceRoot}`);
   }
   await checkSourceRuntimeCompiler(sourceRoot, args.platform, args.signal);
-  const buildRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-reinstall-helper-'));
+  const buildRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-maintenance-helper-'));
   try {
     const binaryPath = path.join(buildRoot, 'redeven');
     const goos = args.platform.goos;
@@ -576,7 +579,7 @@ async function prepareSourceReinstallHelperArchive(args: Readonly<{
   }
 }
 
-export async function prepareDesktopReinstallHelperUploadAsset(args: Readonly<{
+export async function prepareDesktopRuntimeMaintenanceHelperAsset(args: Readonly<{
   runtimeReleaseTag: string;
   releaseBaseURL: string;
   assetCacheRoot: string;
@@ -587,23 +590,47 @@ export async function prepareDesktopReinstallHelperUploadAsset(args: Readonly<{
 }>): Promise<Buffer> {
   const sourceRoot = compact(args.sourceRuntimeRoot);
   if (sourceRoot === '') {
-    return (await prepareDesktopRuntimeUploadAsset(args)).archiveData;
+    const runtimeAsset = await prepareDesktopRuntimeUploadAsset(args);
+    const executable = runtimeExecutableFromArchive(runtimeAsset.archiveData);
+    const executableSHA = createHash('sha256').update(executable).digest('hex');
+    const helperPath = path.join(
+      args.assetCacheRoot,
+      'maintenance-helpers',
+      normalizeRuntimeReleaseTag(args.runtimeReleaseTag),
+      args.platform.platform_id,
+      `${executableSHA}.tar.gz`,
+    );
+    return onceInFlight(inFlightReleaseMaintenanceHelpers, helperPath, async () => {
+      const cached = await fs.readFile(helperPath).catch(() => null);
+      if (cached) return cached;
+      const archive = createSingleFileTarGzip('redeven', executable, 0o755);
+      await fs.mkdir(path.dirname(helperPath), { recursive: true });
+      const temporaryPath = `${helperPath}.tmp-${process.pid}-${Date.now()}`;
+      await fs.writeFile(temporaryPath, archive, { mode: 0o600 });
+      await fs.rename(temporaryPath, helperPath).catch(async (error) => {
+        await fs.rm(temporaryPath, { force: true }).catch(() => undefined);
+        const existing = await fs.readFile(helperPath).catch(() => null);
+        if (!existing) throw error;
+      });
+      return await fs.readFile(helperPath);
+    });
   }
   const normalizedSourceRoot = normalizeSourceRuntimeRoot(sourceRoot);
-  const key = `reinstall-helper:${normalizedSourceRoot}:${normalizeRuntimeReleaseTag(args.runtimeReleaseTag)}:${args.platform.platform_id}`;
-  const cached = sourceReinstallHelperCache.get(key);
+  const sourceCommit = await readSourceRuntimeCommit(normalizedSourceRoot, args.signal);
+  const key = `maintenance-helper:${normalizedSourceRoot}:${sourceCommit}:${normalizeRuntimeReleaseTag(args.runtimeReleaseTag)}:${args.platform.platform_id}`;
+  const cached = sourceMaintenanceHelperCache.get(key);
   if (cached) {
     return Buffer.from(cached);
   }
-  const archive = await onceInFlight(inFlightSourceReinstallHelpers, key, () => (
-    prepareSourceReinstallHelperArchive({
+  const archive = await onceInFlight(inFlightSourceMaintenanceHelpers, key, () => (
+    prepareSourceMaintenanceHelperArchive({
       sourceRuntimeRoot: normalizedSourceRoot,
       runtimeReleaseTag: args.runtimeReleaseTag,
       platform: args.platform,
       signal: args.signal,
     })
   ));
-  sourceReinstallHelperCache.set(key, Buffer.from(archive));
+  sourceMaintenanceHelperCache.set(key, Buffer.from(archive));
   return archive;
 }
 

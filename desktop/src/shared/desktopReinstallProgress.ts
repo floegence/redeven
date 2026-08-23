@@ -2,7 +2,7 @@ import type { DesktopComponentTaskProgress, DesktopStepProgress } from './deskto
 import type { DesktopTranslationKey } from './i18n/desktopI18n';
 
 export const REINSTALL_TARGET_PROGRESS_STEPS = [
-  'preflight', 'confirmation', 'target_locked', 'maintenance_helper_ready',
+  'preflight', 'confirmation', 'target_locked', 'preparing_maintenance_helper',
   'packages_preparing_and_transferring', 'sessions_closed',
   'redeven_processes_stop_attempted', 'packages_applying',
   'gateway_and_runtime_starting', 'installation_verifying', 'cleanup', 'completed',
@@ -12,7 +12,7 @@ export type ReinstallTargetStepStatus = 'pending' | 'running' | 'succeeded' | 'f
 
 // Durable journals never contain the transient preflight or terminal phase.
 export const REINSTALL_TARGET_JOURNAL_PHASES = [
-  'confirmation', 'target_locked', 'maintenance_helper_ready',
+  'confirmation', 'target_locked', 'preparing_maintenance_helper',
   'packages_preparing_and_transferring', 'sessions_closed',
   'redeven_processes_stop_attempted', 'packages_applying',
   'gateway_and_runtime_starting', 'installation_verifying', 'cleanup',

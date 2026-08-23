@@ -54,13 +54,14 @@ describe('main routing', () => {
 
   it('blocks Local Environment auto-start when the reinstall marker is present', () => {
     const mainSrc = readMainSource();
-    const start = mainSrc.indexOf('async function autoStartLocalRuntimeOnDesktopLaunch()');
+    const start = mainSrc.indexOf('async function autoStartLocalRuntimeOnDesktopLaunch(');
     const end = mainSrc.indexOf('function controlPlaneIssueForError(', start);
     expect(start).toBeGreaterThanOrEqual(0);
     expect(end).toBeGreaterThan(start);
     const startupSrc = mainSrc.slice(start, end);
-    expect(startupSrc).toContain('if (await reinstallTargetRequired(environment.id)) {');
-    expect(startupSrc).toContain('const attached = await attachLocalEnvironmentRuntime(environment);');
+    expect(startupSrc).toContain('await runEnvironmentRuntimeLifecycleFromLauncher({');
+    expect(startupSrc).not.toContain('attachLocalEnvironmentRuntime(environment)');
+    expect(startupSrc).not.toContain('prepareManagedEnvironmentRuntime({');
     expect(startupSrc).toContain("structuredFailure?.code === 'reinstall_required'");
     expect(startupSrc).toContain('await markReinstallTargetRequired(preferences.local_environment.id');
     expect(startupSrc).toContain('await refreshWelcomeRuntimeHealthForEnvironment(environment.id, { force: true });');
@@ -76,7 +77,7 @@ describe('main routing', () => {
   it('keeps direct targets isolated from the Gateway store and pairing flow', () => {
     const mainSrc = readMainSource();
     expect(mainSrc).toContain('await markReinstallTargetRequired(preferences.local_environment.id, {');
-    expect(mainSrc).toContain('await reinstallTargetRequiredFailureIfPresent(environmentID, label)');
+    expect(mainSrc).toContain('await reinstallTargetRequiredFailureIfPresent(input.environment_id, input.label)');
     expect(mainSrc).toContain('const gatewaySources = await loadGatewaySourcesForWelcome();');
     const openStart = mainSrc.indexOf('async function openLocalEnvironmentFromLauncher(');
     const openEnd = mainSrc.indexOf('async function openRemoteEnvironmentFromLauncher(', openStart);
@@ -86,8 +87,9 @@ describe('main routing', () => {
 
     expect(mainSrc).toContain('new ReinstallTargetCoordinator({');
     expect(mainSrc).toContain('close_sessions: closeDesktopSessionsForReinstallTarget');
-    expect(mainSrc).toContain('inspect_processes: async (descriptor, targetRoot, executor) => inspectReinstallTargetProcesses');
-    expect(mainSrc).toContain('stop_processes: async (descriptor, targetRoot, inventory, executor) => stopReinstallTargetProcesses');
+    expect(mainSrc).toContain(
+      'prepare_process_session: async (descriptor, targetRoot, executor, platform) => openReinstallTargetProcessSession',
+    );
     const freshInstallStart = mainSrc.indexOf('async function installFreshDirectReinstallTarget(');
     const freshInstallEnd = mainSrc.indexOf('async function verifyFreshDirectReinstallTarget(', freshInstallStart);
     const freshInstallSrc = mainSrc.slice(freshInstallStart, freshInstallEnd);
@@ -109,7 +111,15 @@ describe('main routing', () => {
     const lifecycleStart = mainSrc.indexOf('async function runEnvironmentRuntimeLifecycleFromLauncher(');
     const lifecycleEnd = mainSrc.indexOf('async function startEnvironmentRuntimeFromLauncher(', lifecycleStart);
     const lifecycleSrc = mainSrc.slice(lifecycleStart, lifecycleEnd);
-    expect(lifecycleSrc).toContain('await reinstallTargetRequiredFailureIfPresent(environmentID, label)');
+    const executeLifecycleStart = mainSrc.indexOf('async function executeDirectManagedEnvironmentLifecycle(');
+    const executeLifecycleEnd = mainSrc.indexOf(
+      'async function runEnvironmentRuntimeLifecycleFromLauncher(',
+      executeLifecycleStart,
+    );
+    const executeLifecycleSrc = mainSrc.slice(executeLifecycleStart, executeLifecycleEnd);
+    expect(executeLifecycleSrc).toContain(
+      'await reinstallTargetRequiredFailureIfPresent(input.environment_id, input.label)',
+    );
     expect(lifecycleSrc).not.toContain('localEnvironmentPairingRequiredLauncherFailure');
     expect(lifecycleSrc).not.toContain('upsertDirectRuntimeGateway');
 
@@ -525,7 +535,11 @@ describe('main routing', () => {
 
     expect(mainSrc).toContain('function runtimePlacementMaintenanceForRuntimeService(');
     expect(mainSrc).toContain('runtimePlacementMaintenanceByTargetID.delete(targetID)');
-    expect(inspectSrc.indexOf('const bridgeRecord = await verifyRuntimePlacementBridgeRecord(target.targetID)')).toBeLessThan(
+    expect(inspectSrc.indexOf('const bridgeState = await runtimePlacementInspectionFromBridge(target)')).toBeLessThan(
+      inspectSrc.indexOf('resolveRuntimeContainerPlacement('),
+    );
+    expect(inspectSrc).toContain('const status = await probeManagedSSHRuntimeStatus({');
+    expect(inspectSrc.indexOf('const status = await probeManagedSSHRuntimeStatus({')).toBeLessThan(
       inspectSrc.indexOf('resolveRuntimeContainerPlacement('),
     );
     expect(inspectSrc).not.toContain('const bridgeRecord = runtimePlacementBridgeByTargetID.get(target.targetID) ?? null');
@@ -595,7 +609,15 @@ describe('main routing', () => {
     expect(mainSrc).toContain("interrupt_label: 'Stop opening'");
     expect(mainSrc).toContain('const runtimeLifecycleCoordinator = new RuntimeLifecycleCoordinator();');
     expect(mainSrc).toContain('runtimeLifecycleCoordinator.run({');
-    expect(mainSrc).toContain('runtimeLifecycleCoordinator.waitForReadyMutation(');
+    expect(mainSrc).not.toContain('runtimeLifecycleCoordinator.waitForReadyMutation(');
+    expect(mainSrc).toContain('runtimeLifecycleCoordinator.runWhenReady({');
+    expect(mainSrc).toContain("snapshot.operation_key !== preservedOperationKey");
+    expect(mainSrc).toContain("preserved_open_operation_key: input.operation_key");
+    expect(mainSrc).toContain('const matchingActiveOperation = activeLifecycle');
+    expect(mainSrc).toContain('const failureOperationKey = matchingActiveOperation?.operation_key');
+    expect(mainSrc).toContain('clearSupersededRuntimeLifecycleFailures(targetID, input.operation_key)');
+    expect(mainSrc).toContain("intent: 'reinstall'");
+    expect(mainSrc).toContain("Redeven reinstall is taking ownership of this target.");
     expect(mainSrc).not.toContain('pendingSSHRuntimeStartByKey');
     expect(mainSrc).not.toContain('pendingRuntimePlacementStartByTargetID');
     expect(mainSrc).not.toContain('pendingLocalHostRuntimeStartByTargetID');
@@ -876,13 +898,13 @@ describe('main routing', () => {
     const bridgeOpenSrc = mainSrc.slice(bridgeOpenStart, bridgeOpenEnd);
     expect(bridgeOpenSrc).toContain('const pendingOpen = pendingRuntimePlacementOpenByTargetID.get(targetID) ?? null');
     expect(bridgeOpenSrc).toContain('return pendingOpen');
-    expect(bridgeOpenSrc).toContain('const runOpenTask = async (): Promise<DesktopLauncherActionResult | null> => {');
-    expect(bridgeOpenSrc).toContain('const openTask = Promise.resolve()');
-    expect(bridgeOpenSrc).toContain('.then(runOpenTask)');
+    expect(bridgeOpenSrc).toContain('const runOpenTask = async (');
+    expect(bridgeOpenSrc).toContain('const openTask = runtimeLifecycleCoordinator.runWhenReady({');
+    expect(bridgeOpenSrc).toContain('execute: ({ joined_ready_mutation }) => runOpenTask(joined_ready_mutation)');
     expect(bridgeOpenSrc).toContain('pendingRuntimePlacementOpenByTargetID.set(targetID, openTask)');
     expect(bridgeOpenSrc).toContain('pendingRuntimePlacementOpenByTargetID.delete(targetID)');
     expect(bridgeOpenSrc).not.toContain('(async (): Promise<DesktopLauncherActionResult | null> =>');
-    expect(bridgeOpenSrc.indexOf('.then(runOpenTask)')).toBeLessThan(
+    expect(bridgeOpenSrc.indexOf('runtimeLifecycleCoordinator.runWhenReady({')).toBeLessThan(
       bridgeOpenSrc.indexOf('pendingRuntimePlacementOpenByTargetID.set(targetID, openTask)'),
     );
     expect(bridgeOpenSrc.indexOf('pendingRuntimePlacementOpenByTargetID.set(targetID, openTask)')).toBeLessThan(
@@ -892,7 +914,7 @@ describe('main routing', () => {
     expect(bridgeOpenSrc.indexOf('const existingSession = liveSession(sessionKey)')).toBeLessThan(
       bridgeOpenSrc.indexOf('await refreshWelcomeRuntimeHealthForEnvironment(environmentID)'),
     );
-    expect(bridgeOpenSrc).toContain('await runtimeLifecycleCoordinator.waitForReadyMutation(lifecycleTargetKey)');
+    expect(bridgeOpenSrc).not.toContain('await runtimeLifecycleCoordinator.waitForReadyMutation(lifecycleTargetKey)');
     expect(bridgeOpenSrc).toContain('launcherActionFailureFromRuntimeLifecycleError(error');
     expect(bridgeOpenSrc).toContain("title: 'Checking runtime status'");
     expect(bridgeOpenSrc).toContain("if (placement.kind !== 'container_process' && hostAccess.kind !== 'ssh_host')");
@@ -980,14 +1002,16 @@ describe('main routing', () => {
     expect(refreshRuntimeSrc).not.toContain('markSavedRuntimeTargetUsed(preferences');
   });
 
-  it('keeps container package preparation ahead of inventory stop and slot activation', () => {
+  it('prepares the container package and process session together before inventory and activation', () => {
     const managerSrc = fs.readFileSync(path.join(__dirname, 'runtimePlacementManager.ts'), 'utf8');
-    const prepareIndex = managerSrc.indexOf('preparedRuntimeAsset = await prepareDesktopRuntimeUploadAsset({');
-    const inventoryIndex = managerSrc.indexOf('const processInventory = await inspectContainerRuntimeProcesses(processCommandArgs);');
-    const stopIndex = managerSrc.indexOf('await stopContainerRuntimeProcesses(processCommandArgs, processInventory);');
-    const installIndex = managerSrc.indexOf('await executor.run(containerRuntimeUploadedInstallCommand({');
+    const prepareIndex = managerSrc.indexOf('return prepareDesktopRuntimeUploadAsset({');
+    const batchIndex = managerSrc.indexOf('[preparedRuntimeAsset, processSession] = await Promise.all([');
+    const inventoryIndex = managerSrc.indexOf('const processInventory = await processSession.inspect();');
+    const stopIndex = managerSrc.indexOf('await processSession.stop(processInventory);');
+    const installIndex = managerSrc.indexOf('containerRuntimeUploadedInstallCommand({');
     expect(prepareIndex).toBeGreaterThanOrEqual(0);
-    expect(inventoryIndex).toBeGreaterThan(prepareIndex);
+    expect(batchIndex).toBeGreaterThan(prepareIndex);
+    expect(inventoryIndex).toBeGreaterThan(batchIndex);
     expect(stopIndex).toBeGreaterThan(inventoryIndex);
     expect(installIndex).toBeGreaterThan(stopIndex);
   });
@@ -1008,6 +1032,7 @@ describe('main routing', () => {
     expect(localOpenSrc).toContain('open_progress: buildOpenConnectionProgress({');
     expect(localOpenSrc).toContain('await refreshWelcomeRuntimeHealthForEnvironment(environment.id)');
     expect(localOpenSrc).toContain('runtimeRecord = await attachLocalEnvironmentRuntime(environment)');
+    expect(mainSrc).toContain('runtimeStartupTimeoutMs: 0');
     expect(localOpenSrc).toContain('localRuntimeHealthForOpenPreflight(environment.id)');
     expect(localOpenSrc).toContain('finishLocalHostOpenFailure(operationKey, openTarget, signal, result, preferences)');
     expect(localOpenSrc).toContain("phase: 'checking_env_app_readiness'");
@@ -1622,8 +1647,8 @@ describe('main routing', () => {
     expect(mainSrc).toContain('await refreshWelcomeRuntimeHealthForEnvironment(input.environment_id, { force: true })');
     expect(directSrc).not.toContain('syncGatewayRecord(');
     expect(directSrc).toContain('return executeDirectManagedEnvironmentLifecycle({');
-    expect(directSrc).toContain("operation: requestedOperation === 'update_runtime' ? 'update' : requestedOperation");
-    expect(directSrc).toContain('await reinstallTargetRequiredFailureIfPresent(environmentID, label)');
+    expect(directSrc).toContain('operation: coordinatorIntent');
+    expect(mainSrc).toContain('await reinstallTargetRequiredFailureIfPresent(input.environment_id, input.label)');
     expect(directSrc).not.toContain('gatewayLifecycleManager()');
     expect(directSrc).not.toContain('open-session');
   });

@@ -1711,7 +1711,7 @@
     "reinstallCheckingDetail": "Desktop повторно проверяет подтверждённые хост, контейнер и корневой каталог Redeven.",
     "reinstallLockedDetail": "Desktop заблокировал точно зарегистрированную цель Redeven для этой операции.",
     "reinstallSessionsClosedDetail": "Desktop закрыл окна сред и bridges, подключённые к этой цели.",
-    "reinstallHelperReadyDetail": "Desktop подготовил текущий служебный helper вне старого корневого каталога Redeven.",
+    "reinstallHelperPreparingDetail": "Desktop готовит текущий служебный helper вне старого корневого каталога Redeven.",
     "reinstallInventoryDetail": "Desktop определяет процессы Redeven, принадлежащие именно этой цели.",
     "reinstallStoppingProcessesDetail": "Desktop останавливает проверенные процессы Gateway, среды выполнения, bridge, Local UI и управляемые дочерние процессы.",
     "reinstallProcessesStoppedDetail": "Desktop подтвердил, что для этой цели не осталось старых процессов Redeven.",
@@ -1739,7 +1739,7 @@
       "catalog_and_local_ui_verified": "Проверка Catalog и Local UI",
       "quarantine_cleaned": "Удаление изолированных старых данных",
       "completed": "Переустановка завершена",
-      "maintenance_helper_ready": "Подготовка средства обслуживания",
+      "preparing_maintenance_helper": "Подготовка средства обслуживания",
       "packages_preparing_and_transferring": "Подготовка и передача пакетов",
       "redeven_processes_stop_attempted": "Остановка процессов Redeven",
       "packages_applying": "Применение пакета",
@@ -1852,6 +1852,7 @@
     "checkingContainer": "Проверка контейнера",
     "detectingPlatform": "Определение платформы",
     "checkingRuntimePackage": "Проверка пакета среды выполнения",
+    "preparingMaintenanceHelper": "Подготовка ресурсов среды выполнения",
     "stoppingRuntimeProcess": "Остановка процесса среды выполнения",
     "verifyingRuntimeStopped": "Проверка среды выполнения остановлено",
     "verifyingRuntimeInventory": "Проверка списка процессов среды выполнения",
@@ -1964,7 +1965,8 @@
     },
     "componentName": {
       "gateway": "Gateway",
-      "runtime": "Среда выполнения"
+      "runtime": "Среда выполнения",
+      "maintenanceHelper": "Служебный помощник"
     }
   },
   "runtimeMessage": {

@@ -13,9 +13,8 @@ vi.mock('./sshReleaseTrust', async (importOriginal) => ({
 import {
   DesktopSSHRuntimeCanceledError,
   ensureManagedSSHRuntimeReady,
-  inspectManagedSSHRuntimeProcesses,
+  openManagedSSHRuntimeProcessSession,
   probeManagedSSHRuntimeStatus,
-  stopManagedSSHRuntimeProcesses,
   type ManagedSSHRuntimeReady,
   type StartManagedSSHRuntimeArgs,
 } from './sshRuntime';
@@ -460,6 +459,7 @@ if (args.includes('-M') && args.includes('-N')) {
       process.exit(0);
       break;
     case 'redeven-ssh-runtime-helper-platform':
+      appendLog('helper_platform');
       process.stdout.write('Linux\nx86_64\n');
       process.exit(0);
       break;
@@ -623,7 +623,7 @@ if (args.includes('-M') && args.includes('-N')) {
       break;
     case 'redeven-ssh-runtime-process-helper': {
       const state = readState();
-      const helperOperation = remoteScriptArgs()[2];
+      const helperOperation = remoteScriptArgs()[3];
       const stopOperation = helperOperation === 'stop';
       const live = state.runtime_live === true;
       const runtimePID = Number(state.runtime_pid || 4242);
@@ -828,6 +828,7 @@ async function startWithFakeSSH(
     allowActiveWorkReplacement?: boolean;
     signal?: AbortSignal;
     onLog?: StartManagedSSHRuntimeArgs['onLog'];
+    onProgress?: StartManagedSSHRuntimeArgs['onProgress'];
   }> = {},
 ): Promise<ManagedSSHRuntimeReady> {
   const runtime = await withFakeSSHEnv(fixture, () => ensureManagedSSHRuntimeReady({
@@ -847,6 +848,7 @@ async function startWithFakeSSH(
     connectTimeoutSeconds: 1,
     signal: options.signal,
     onLog: options.onLog,
+    onProgress: options.onProgress,
   }));
   const stop = async () => await withFakeSSHEnv(fixture, runtime.stop);
   return {
@@ -1029,12 +1031,20 @@ describe('sshRuntime integration', () => {
         assetCacheRoot: path.join(fixture.root, 'asset-cache'),
         connectTimeoutSeconds: 1,
       };
-      const inventory = await withFakeSSHEnv(fixture, () => inspectManagedSSHRuntimeProcesses(processArgs));
-      expect(inventory.instances).toEqual([
-        expect.objectContaining({ pid: 4242, stop_authority: 'automatic' }),
-      ]);
-      const stopped = await withFakeSSHEnv(fixture, () => stopManagedSSHRuntimeProcesses(processArgs, inventory));
-      expect(stopped.after.instances).toEqual([]);
+      const processSession = await withFakeSSHEnv(fixture, () => openManagedSSHRuntimeProcessSession({
+        ...processArgs,
+        helperBinaryPath: 'managed',
+      }));
+      try {
+        const inventory = await withFakeSSHEnv(fixture, () => processSession.inspect());
+        expect(inventory.instances).toEqual([
+          expect.objectContaining({ pid: 4242, stop_authority: 'automatic' }),
+        ]);
+        const stopped = await withFakeSSHEnv(fixture, () => processSession.stop(inventory));
+        expect(stopped.after.instances).toEqual([]);
+      } finally {
+        await withFakeSSHEnv(fixture, () => processSession.close());
+      }
 
       const events = await readFakeSSHEvents(fixture);
       expect(events.find((event) => event.event === 'stop_runtime')?.data).toEqual({ count: 1 });
@@ -1098,7 +1108,9 @@ describe('sshRuntime integration', () => {
       await runtime?.disconnect();
     }
 
-    const state = JSON.parse(await fs.readFile(fixture.statePath, 'utf8')) as { installed_version?: string };
+    const state = JSON.parse(await fs.readFile(fixture.statePath, 'utf8')) as {
+      installed_version?: string;
+    };
     expect(state.installed_version).toBe('v0.6.10');
     const events = await readFakeSSHEvents(fixture);
     const eventNames = events.map((event) => event.event);
@@ -1620,10 +1632,12 @@ describe('sshRuntime integration', () => {
     process.env.PATH = `${source.binDir}${path.delimiter}${previousPath ?? ''}`;
 
     let runtime: ManagedSSHRuntimeReady | null = null;
+    const progressPhases: string[] = [];
     try {
       runtime = await startWithFakeSSH(fixture, 'auto', {
         sourceRuntimeRoot: source.sourceRoot,
         forceRuntimeUpdate: true,
+        onProgress: (progress) => progressPhases.push(progress.phase),
       });
     } finally {
       if (previousPath === undefined) {
@@ -1643,6 +1657,16 @@ describe('sshRuntime integration', () => {
       'upload_install',
       'start_runtime',
     ]));
+    expect(eventNames.filter((event) => event === 'probe_platform')).toHaveLength(1);
+    expect(eventNames).not.toContain('helper_platform');
+    expect(progressPhases).toContain('ssh_process_helper_ready');
+    expect(progressPhases).toContain('ssh_runtime_package_ready');
+    expect(progressPhases.indexOf('ssh_process_helper_ready')).toBeLessThan(
+      progressPhases.indexOf('ssh_discovering_runtime_instances'),
+    );
+    expect(progressPhases.indexOf('ssh_runtime_package_ready')).toBeLessThan(
+      progressPhases.indexOf('ssh_discovering_runtime_instances'),
+    );
     await removeFakeSSHFixture(fixture);
   }, SSH_RUNTIME_MAINTENANCE_TEST_TIMEOUT_MS);
 

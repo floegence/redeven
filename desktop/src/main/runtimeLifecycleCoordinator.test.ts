@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   RuntimeLifecycleCoordinator,
@@ -17,7 +17,7 @@ function deferred<T>() {
 }
 
 describe('RuntimeLifecycleCoordinator', () => {
-  it('keys local host runtimes by their resolved physical state root', () => {
+  it('keys local host runtimes by their resolved physical runtime and state roots', () => {
     const key = runtimeLifecycleTargetKey(
       { kind: 'local_host' },
       { kind: 'host_process', runtime_root: './runtime-state' },
@@ -32,7 +32,7 @@ describe('RuntimeLifecycleCoordinator', () => {
     expect(() => runtimeLifecycleTargetKey(
       { kind: 'local_host' },
       { kind: 'host_process', runtime_root: '' },
-    )).toThrow('Runtime state root is required');
+    )).toThrow('Runtime target root is required');
   });
 
   it('separates SSH and container runtime identities', () => {
@@ -52,6 +52,18 @@ describe('RuntimeLifecycleCoordinator', () => {
       kind: 'host_process',
       runtime_root: '~/.redeven',
       runtime_state_root: 'remote_default',
+    });
+    const hostTildeAlias = runtimeLifecycleTargetKey(hostAccess, {
+      kind: 'host_process',
+      runtime_root: '~/.redeven',
+    });
+    const hostResolvedAlias = runtimeLifecycleTargetKey(hostAccess, {
+      kind: 'host_process',
+      runtime_root: '/home/dev/.redeven',
+    });
+    const explicitHostRoot = runtimeLifecycleTargetKey(hostAccess, {
+      kind: 'host_process',
+      runtime_root: '/opt/team/.redeven',
     });
     const container = runtimeLifecycleTargetKey(hostAccess, {
       kind: 'container_process',
@@ -73,7 +85,20 @@ describe('RuntimeLifecycleCoordinator', () => {
       runtime_state_root: 'remote_default',
       bridge_strategy: 'exec_stream',
     });
+    const resolvedContainerAlias = runtimeLifecycleTargetKey(hostAccess, {
+      kind: 'container_process',
+      container_engine: 'docker',
+      container_id: 'container-id',
+      container_ref: 'dev-container',
+      container_label: 'Dev Container',
+      runtime_root: '/root/.redeven',
+      bridge_strategy: 'exec_stream',
+    });
     expect(host).not.toBe(container);
+    expect(hostTildeAlias).toBe(host);
+    expect(hostResolvedAlias).toBe(host);
+    expect(explicitHostRoot).not.toBe(host);
+    expect(resolvedContainerAlias).toBe(container);
     expect(replacementContainer).not.toBe(container);
   });
 
@@ -153,6 +178,59 @@ describe('RuntimeLifecycleCoordinator', () => {
     });
     stopGate.resolve();
     await stop;
+
+    const reinstallGate = deferred<void>();
+    const reinstall = coordinator.run({
+      target_key: 'runtime-a',
+      intent: 'reinstall',
+      fingerprint: 'reinstall-v1',
+      operation_key: 'operation-reinstall',
+      execute: () => reinstallGate.promise,
+    });
+    await expect(coordinator.waitForReadyMutation('runtime-a')).rejects.toMatchObject({
+      name: 'RuntimeLifecycleInProgressError',
+      message: expect.stringContaining('being reinstalled'),
+    });
+    reinstallGate.resolve();
+    await reinstall;
+  });
+
+  it('holds one stable Open owner after joining a readiness mutation', async () => {
+    const coordinator = new RuntimeLifecycleCoordinator();
+    const startGate = deferred<void>();
+    const openGate = deferred<string>();
+    const start = coordinator.run({
+      target_key: 'runtime-a',
+      intent: 'start',
+      fingerprint: 'start-v1',
+      operation_key: 'operation-start',
+      execute: () => startGate.promise,
+    });
+    const open = coordinator.runWhenReady({
+      target_key: 'runtime-a',
+      fingerprint: 'open-v1',
+      operation_key: 'operation-open',
+      execute: ({ joined_ready_mutation }) => {
+        expect(joined_ready_mutation).toBe(true);
+        return openGate.promise;
+      },
+    });
+    startGate.resolve();
+    await start;
+    await vi.waitFor(() => expect(coordinator.active('runtime-a')).toMatchObject({ intent: 'open' }));
+    await expect(coordinator.run({
+      target_key: 'runtime-a',
+      intent: 'restart',
+      fingerprint: 'restart-v1',
+      operation_key: 'operation-restart',
+      execute: async () => undefined,
+    })).rejects.toMatchObject({
+      code: 'runtime_lifecycle_in_progress',
+      active_operation: { intent: 'open', operation_key: 'operation-open' },
+    });
+    openGate.resolve('ready');
+    await expect(open).resolves.toBe('ready');
+    expect(coordinator.active('runtime-a')).toBeNull();
   });
 
   it('releases ownership after failure without allowing stale settlement to clear a new operation', async () => {
