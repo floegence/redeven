@@ -50,6 +50,7 @@ describe('desktopLauncherIPC', () => {
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'open_local_environment',
       environment_id: ' local-container ',
+      route: 'local_host',
       runtime_target_id: ' local:container:docker:container-stable-id:e832df85 ',
       placement_target_id: ' local:container:docker:container-stable-id:e832df85 ',
       host_access: { kind: 'local_host' },
@@ -64,6 +65,7 @@ describe('desktopLauncherIPC', () => {
     })).toEqual({
       kind: 'open_local_environment',
       environment_id: 'local-container',
+      route: 'local_host',
       runtime_target_id: 'local:container:docker:container-stable-id:e832df85',
       placement_target_id: 'local:container:docker:container-stable-id:e832df85',
       host_access: { kind: 'local_host' },
@@ -76,7 +78,6 @@ describe('desktopLauncherIPC', () => {
         runtime_root: '/workspace/.redeven',
         bridge_strategy: 'exec_stream',
       },
-      route: 'auto',
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'open_environment_settings',

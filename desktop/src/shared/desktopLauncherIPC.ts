@@ -1101,6 +1101,7 @@ function normalizeDesktopLauncherRuntimeTarget(
   const allowedFields = new Set([
     'kind', 'runtime_target_id', 'placement_target_id', 'host_access', 'placement',
     'environment_id', 'provider_origin', 'provider_id', 'env_public_id', 'external_local_ui_url',
+    'route',
     'label', 'force_runtime_update', 'auto_runtime_probe_enabled', 'ssh_password', 'ssh_password_mode',
     'operation_key', 'operation_started_at_unix_ms',
     'ssh_destination', 'ssh_port', 'auth_mode', 'connect_timeout_seconds', 'runtime_root',
