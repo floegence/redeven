@@ -1798,6 +1798,63 @@ describe('PluginCenterView', () => {
     expect(document.querySelector('[data-plugin-install-review-dialog]')).toBeNull();
   });
 
+  it('keeps the completion dialog on the current installed state and opens the plugin directly', async () => {
+    const [currentProjection, setCurrentProjection] = createSignal<PluginInventoryProjection>({ items: [containersPlugin] });
+    const onCommand = vi.fn(async () => undefined);
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={currentProjection()}
+        loading={false}
+        onCommand={onCommand}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    (mount.querySelector('[data-plugin-center-install="catalog:containers"]') as HTMLButtonElement).click();
+    await Promise.resolve();
+    (document.querySelector('[data-plugin-install-review-confirm]') as HTMLButtonElement).click();
+    await Promise.resolve();
+    const installed = {
+      ...containersPlugin,
+      inventoryKey: `instance:${containersPlugin.officialCatalog.pluginInstanceID}`,
+      pluginInstanceID: containersPlugin.officialCatalog.pluginInstanceID,
+      version: containersPlugin.officialCatalog.latestVersion,
+      managementRevision: 7,
+      lifecycleState: 'needs_attention' as const,
+      attentionReason: 'permission_required' as const,
+      defaultLaunchTarget: {
+        pluginID: containersPlugin.pluginID,
+        pluginInstanceID: containersPlugin.officialCatalog.pluginInstanceID,
+        surfaceID: 'containers.dashboard',
+        expectedManagementRevision: 7,
+        preferredPlacement: 'activity' as const,
+      },
+    };
+    setCurrentProjection({ items: [installed] });
+    await Promise.resolve();
+    expect(document.querySelector('[data-plugin-install-review-dialog]')?.textContent).toContain('Needs attention');
+
+    setCurrentProjection({ items: [{ ...installed, lifecycleState: 'enabled', attentionReason: undefined }] });
+    await Promise.resolve();
+    const dialog = document.querySelector('[data-plugin-install-review-dialog]')?.closest('[role="dialog"]') as HTMLElement;
+    expect(dialog.textContent).toContain('Enabled');
+    expect(dialog.textContent).not.toContain('Needs attention');
+    expect(dialog.textContent?.match(/Installation complete\./g)).toHaveLength(1);
+
+    (dialog.querySelector('[data-plugin-install-open]') as HTMLButtonElement).click();
+    await Promise.resolve();
+    expect(onCommand).toHaveBeenLastCalledWith(expect.objectContaining({
+      type: 'open_surface',
+      pluginInstanceID: containersPlugin.officialCatalog.pluginInstanceID,
+      surfaceID: 'containers.dashboard',
+    }), expect.any(AbortSignal));
+    expect(document.querySelector('[data-plugin-install-review-dialog]')).toBeNull();
+  });
+
   it('keeps a release trust timeout retryable and distinct from permission denial', () => {
     const onRetryInstall = vi.fn();
     const mount = document.createElement('div');

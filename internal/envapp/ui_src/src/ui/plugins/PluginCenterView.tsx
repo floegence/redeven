@@ -215,6 +215,13 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   };
   createEffect(() => {
     const flow = officialInstallFlow();
+    if (flow.status === 'installed') {
+      const current = allItems().find((item) => item.pluginInstanceID === flow.item.pluginInstanceID);
+      if (current && current !== flow.item) {
+        setOfficialInstallFlow({ status: 'installed', key: flow.key, item: current });
+      }
+      return;
+    }
     if (flow.status !== 'installing') return;
     const installed = allItems().find((item) => item.pluginInstanceID === flow.item.officialCatalog?.pluginInstanceID);
     if (installed && installed.lifecycleState !== 'not_installed') {
@@ -891,6 +898,15 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
         onOpenChange={(open) => {
           setOfficialInstallDialogOpen(open);
         }}
+        onOpenInstalled={officialInstallDialog()?.status === 'installed'
+          && officialInstallDialog()?.item.defaultLaunchTarget
+          ? () => {
+              const flow = officialInstallFlow();
+              if (flow.status !== 'installed' || !flow.item.defaultLaunchTarget) return;
+              setOfficialInstallDialogOpen(false);
+              openItemSurface(flow.item, 'activity');
+            }
+          : undefined}
         onConfirm={confirmOfficialInstall}
       />
       <Dialog
@@ -1016,6 +1032,7 @@ function OfficialPluginInstallDialog(props: {
   onReviewAgain?: () => void;
   onRetryPreview?: () => void;
   onResolveRetainedData?: () => void;
+  onOpenInstalled?: () => void;
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
 }): JSX.Element {
@@ -1045,7 +1062,7 @@ function OfficialPluginInstallDialog(props: {
           : props.installing
         ? i18n.t('uiCopy.plugin.installOperation.backgroundDescription')
         : props.installed
-          ? i18n.t('uiCopy.plugin.installOperation.complete')
+          ? undefined
           : i18n.t('uiCopy.plugin.external.confirmInstallGuidance')}
       class="w-[min(34rem,calc(100%-1rem))] max-w-[34rem] bg-background text-foreground sm:w-[min(34rem,calc(100%-2rem))]"
       footer={(
@@ -1102,6 +1119,25 @@ function OfficialPluginInstallDialog(props: {
             >
               {i18n.t('common.actions.close')}
             </button>
+          </Show>
+          <Show when={props.installed}>
+            <button
+              type="button"
+              class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md border bg-background px-3 text-sm font-medium hover:bg-muted')}
+              onClick={() => props.onOpenChange(false)}
+            >
+              {i18n.t('common.actions.close')}
+            </button>
+            <Show when={props.onOpenInstalled}>
+              <button
+                type="button"
+                data-plugin-install-open
+                class={cn(PLUGIN_MOBILE_TOUCH_TARGET_CLASS, 'cursor-pointer rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90')}
+                onClick={props.onOpenInstalled}
+              >
+                {i18n.t('common.actions.open')}
+              </button>
+            </Show>
           </Show>
         </div>
       )}
@@ -1175,7 +1211,7 @@ function OfficialPluginInstallDialog(props: {
               <p class="text-xs text-muted-foreground">{i18n.t('uiCopy.plugin.installOperation.declarationNotice')}</p>
                 </section>
               )}>
-              <Show when={props.installed} fallback={(
+              <Show when={!props.installed}>
                 <Show when={props.operation} fallback={<PluginInstallSteps />}>
                   {(operation) => (
                     <PluginInstallStatus
@@ -1187,8 +1223,6 @@ function OfficialPluginInstallDialog(props: {
                     />
                   )}
                 </Show>
-              )}>
-                <p class="text-sm font-medium text-[var(--redeven-status-success-foreground)]">{i18n.t('uiCopy.plugin.installOperation.complete')}</p>
               </Show>
               </Show>
             </Show>
