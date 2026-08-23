@@ -14,6 +14,7 @@ import {
   operationFailureFromUnknown,
 } from './desktopOperationFailure';
 import type { DesktopOperationFailurePresentation } from '../shared/desktopOperationFailure';
+import type { DesktopComponentTaskProgress } from '../shared/desktopComponentTaskProgress';
 import { initialRuntimeLifecyclePlan } from './runtimeLifecycleExecutionPlan';
 
 function compact(value: unknown): string {
@@ -182,6 +183,7 @@ export class RuntimeLifecycleWorkflow {
         started_at_unix_ms: step.started_at_unix_ms,
         completed_at_unix_ms: step.completed_at_unix_ms,
         duration_ms: step.duration_ms,
+        tasks: step.tasks,
       });
     }
     workflow.activeStepID = progress.active_step_id;
@@ -335,6 +337,23 @@ export class RuntimeLifecycleWorkflow {
     };
   }
 
+  updateStepTasks(
+    stepID: DesktopRuntimeLifecycleStepID,
+    tasks: readonly DesktopComponentTaskProgress[],
+    detail = '',
+  ): RuntimeLifecycleStepUpdate {
+    const current = this.states.get(stepID);
+    if (!current || current.status !== 'running') {
+      throw new Error(`Runtime lifecycle tasks cannot update because step "${stepID}" is not running.`);
+    }
+    this.setStepState(stepID, 'running', detail || current.detail, current.attempt_count, tasks);
+    return {
+      title: '',
+      detail: compact(detail || current.detail),
+      progress: this.progress(),
+    };
+  }
+
   completeStep(stepID: DesktopRuntimeLifecycleStepID = this.activeStepID): RuntimeLifecycleStepUpdate {
     const current = this.states.get(stepID);
     if (!current || current.status !== 'running') {
@@ -449,6 +468,7 @@ export class RuntimeLifecycleWorkflow {
     status: DesktopRuntimeLifecycleStepStatus,
     detail = '',
     attemptCount?: number,
+    tasks?: readonly DesktopComponentTaskProgress[],
   ): void {
     const index = this.stepIndex(stepID);
     const previous = this.states.get(stepID);
@@ -474,6 +494,7 @@ export class RuntimeLifecycleWorkflow {
       ...(startedAt !== undefined ? { started_at_unix_ms: startedAt } : {}),
       ...(completedAt !== undefined ? { completed_at_unix_ms: completedAt } : {}),
       ...(duration !== undefined ? { duration_ms: duration } : {}),
+      ...((tasks ?? previous?.tasks) ? { tasks: tasks ?? previous?.tasks } : {}),
     });
   }
 

@@ -2,6 +2,7 @@ import type {
   DesktopRuntimeHostAccess,
   DesktopRuntimePlacement,
 } from './desktopRuntimePlacement';
+import type { DesktopComponentTaskProgress } from './desktopComponentTaskProgress';
 
 export type DesktopRuntimeLifecycleLocation =
   | 'local_host'
@@ -15,6 +16,7 @@ export type DesktopRuntimeLifecyclePhase =
   | 'checking_container'
   | 'detecting_platform'
   | 'checking_runtime_package'
+  | 'preparing_maintenance_helper'
   | 'discovering_runtime_instances'
   | 'stopping_runtime_process'
   | 'verifying_runtime_stopped'
@@ -61,6 +63,7 @@ export type DesktopRuntimeLifecycleStepSnapshot = Readonly<{
   started_at_unix_ms?: number;
   completed_at_unix_ms?: number;
   duration_ms?: number;
+  tasks?: readonly DesktopComponentTaskProgress[];
 }>;
 
 export type DesktopRuntimeLifecycleOmittedStepReason =
@@ -107,6 +110,7 @@ export type DesktopRuntimeLifecycleStepState = Readonly<{
   started_at_unix_ms?: number;
   completed_at_unix_ms?: number;
   duration_ms?: number;
+  tasks?: readonly DesktopComponentTaskProgress[];
 }>;
 
 export const RUNTIME_LIFECYCLE_PHASE_LABELS: Record<DesktopRuntimeLifecyclePhase, string> = {
@@ -115,6 +119,7 @@ export const RUNTIME_LIFECYCLE_PHASE_LABELS: Record<DesktopRuntimeLifecyclePhase
   checking_container: 'Checking container',
   detecting_platform: 'Detecting platform',
   checking_runtime_package: 'Checking runtime package',
+  preparing_maintenance_helper: 'Preparing maintenance helper',
   discovering_runtime_instances: 'Discovering runtime processes',
   stopping_runtime_process: 'Stopping runtime process',
   verifying_runtime_stopped: 'Verifying runtime stopped',
@@ -191,6 +196,7 @@ export function runtimeLifecycleStepsFromStates(input: Readonly<{
       ...(startedAt !== undefined ? { started_at_unix_ms: startedAt } : {}),
       ...(completedAt !== undefined ? { completed_at_unix_ms: completedAt } : {}),
       ...(duration !== undefined ? { duration_ms: duration } : {}),
+      ...(step.tasks ? { tasks: step.tasks } : {}),
     };
   });
 }

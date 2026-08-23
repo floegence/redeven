@@ -7,7 +7,7 @@ import {
 } from '../shared/desktopRuntimePlacement';
 import { desktopSSHAuthority } from '../shared/desktopSSH';
 
-export type RuntimeLifecycleIntent = 'start' | 'stop' | 'restart' | 'update';
+export type RuntimeLifecycleIntent = 'open' | 'start' | 'stop' | 'restart' | 'update' | 'reinstall';
 
 export type RuntimeLifecycleOperationSnapshot = Readonly<{
   target_key: string;
@@ -30,7 +30,11 @@ export class RuntimeLifecycleInProgressError extends Error {
   constructor(readonly active_operation: RuntimeLifecycleOperationSnapshot) {
     super(active_operation.intent === 'stop'
       ? 'The Runtime is stopping and cannot be started or opened until shutdown finishes.'
-      : `Runtime lifecycle operation ${active_operation.intent} is already in progress.`);
+      : active_operation.intent === 'reinstall'
+        ? 'Redeven is being reinstalled and cannot be started or opened until reinstall finishes.'
+        : active_operation.intent === 'open'
+          ? 'Desktop is opening this Runtime target. Wait for Open to finish before changing its lifecycle.'
+        : `Runtime lifecycle operation ${active_operation.intent} is already in progress.`);
     this.name = 'RuntimeLifecycleInProgressError';
   }
 }
@@ -51,36 +55,62 @@ function targetKey(parts: readonly string[]): string {
   return JSON.stringify(parts);
 }
 
-function normalizedStateRoot(
+function normalizedTargetRoot(
   hostAccess: DesktopRuntimeHostAccess,
   placement: DesktopRuntimePlacement,
+  rootValue: string,
 ): string {
-  const stateRoot = required(desktopRuntimePlacementStateRoot(placement), 'Runtime state root');
-  return hostAccess.kind === 'local_host' && placement.kind === 'host_process'
-    ? path.resolve(stateRoot)
-    : path.posix.normalize(stateRoot);
+  const targetRoot = required(rootValue, 'Runtime target root');
+  if (hostAccess.kind === 'local_host' && placement.kind === 'host_process') {
+    return path.resolve(targetRoot);
+  }
+  const normalized = path.posix.normalize(targetRoot);
+  const isResolvedDefaultRemoteRoot = normalized === '/root/.redeven'
+    || normalized === '/var/root/.redeven'
+    || /^\/(?:home|Users)\/[^/]+\/\.redeven$/u.test(normalized);
+  if (
+    (hostAccess.kind === 'ssh_host' || placement.kind === 'container_process')
+    && (
+      normalized === 'remote_default'
+      || normalized === '~/.redeven'
+      || isResolvedDefaultRemoteRoot
+    )
+  ) {
+    // The remote account resolves all default-root spellings. Using one
+    // conservative lock identity prevents aliases from creating concurrent
+    // lifecycle owners; the operation fingerprint still keeps distinct
+    // registrations from being incorrectly coalesced.
+    return '$TARGET_HOME/.redeven';
+  }
+  return normalized;
 }
 
 export function runtimeLifecycleTargetKey(
   hostAccess: DesktopRuntimeHostAccess,
   placement: DesktopRuntimePlacement,
 ): string {
-  const stateRoot = normalizedStateRoot(hostAccess, placement);
+  const runtimeRoot = normalizedTargetRoot(hostAccess, placement, placement.runtime_root);
+  const stateRoot = normalizedTargetRoot(
+    hostAccess,
+    placement,
+    desktopRuntimePlacementStateRoot(placement),
+  );
   if (hostAccess.kind === 'local_host') {
     if (placement.kind === 'host_process') {
-      return targetKey(['local_host', 'host_process', stateRoot]);
+      return targetKey(['local_host', 'host_process', runtimeRoot, stateRoot]);
     }
     return targetKey([
       'local_host',
       'container_process',
       required(placement.container_engine, 'Container engine'),
       required(placement.container_id, 'Container identity'),
+      runtimeRoot,
       stateRoot,
     ]);
   }
   const sshAuthority = required(desktopSSHAuthority(hostAccess.ssh), 'SSH authority');
   if (placement.kind === 'host_process') {
-    return targetKey(['ssh_host', sshAuthority, 'host_process', stateRoot]);
+    return targetKey(['ssh_host', sshAuthority, 'host_process', runtimeRoot, stateRoot]);
   }
   return targetKey([
     'ssh_host',
@@ -88,6 +118,7 @@ export function runtimeLifecycleTargetKey(
     'container_process',
     required(placement.container_engine, 'Container engine'),
     required(placement.container_id, 'Container identity'),
+    runtimeRoot,
     stateRoot,
   ]);
 }
@@ -135,6 +166,49 @@ export class RuntimeLifecycleCoordinator {
     await Promise.allSettled([...this.activeByTargetKey.values()].map((operation) => operation.task));
   }
 
+  async runWhenReady<T>(input: Readonly<{
+    target_key: string;
+    fingerprint: string;
+    operation_key: string;
+    signal?: AbortSignal;
+    execute: (context: Readonly<{ joined_ready_mutation: boolean }>) => Promise<T>;
+  }>): Promise<T> {
+    const key = required(input.target_key, 'Runtime lifecycle target key');
+    let joinedReadyMutation = false;
+    for (;;) {
+      const active = this.activeByTargetKey.get(key);
+      if (active) {
+        if (active.intent === 'stop' || active.intent === 'reinstall') {
+          throw new RuntimeLifecycleInProgressError(this.snapshot(active));
+        }
+        if (active.intent === 'open') {
+          if (active.fingerprint === input.fingerprint) {
+            return active.task as Promise<T>;
+          }
+          throw new RuntimeLifecycleInProgressError(this.snapshot(active));
+        }
+        await active.task;
+        joinedReadyMutation = true;
+        continue;
+      }
+      try {
+        return await this.run({
+          target_key: key,
+          intent: 'open',
+          fingerprint: input.fingerprint,
+          operation_key: input.operation_key,
+          signal: input.signal,
+          execute: () => input.execute({ joined_ready_mutation: joinedReadyMutation }),
+        });
+      } catch (error) {
+        if (error instanceof RuntimeLifecycleInProgressError) {
+          continue;
+        }
+        throw error;
+      }
+    }
+  }
+
   cancel(targetKeyValue: string, reason?: unknown): RuntimeLifecycleOperationSnapshot | null {
     const active = this.activeByTargetKey.get(required(targetKeyValue, 'Runtime lifecycle target key'));
     if (!active) {
@@ -158,7 +232,7 @@ export class RuntimeLifecycleCoordinator {
     if (!active) {
       return null;
     }
-    if (active.intent === 'stop') {
+    if (active.intent === 'stop' || active.intent === 'reinstall') {
       throw new RuntimeLifecycleInProgressError(this.snapshot(active));
     }
     await active.task;

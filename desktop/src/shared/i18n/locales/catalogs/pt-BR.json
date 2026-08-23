@@ -1689,7 +1689,7 @@
     "reinstallCheckingDetail": "O Desktop está validando novamente o host, o contêiner e a raiz do Redeven confirmados.",
     "reinstallLockedDetail": "O Desktop bloqueou o destino exato do Redeven registrado para esta operação.",
     "reinstallSessionsClosedDetail": "O Desktop fechou as janelas de ambiente e os bridges conectados a este destino.",
-    "reinstallHelperReadyDetail": "O Desktop preparou o helper de manutenção atual fora da raiz antiga do Redeven.",
+    "reinstallHelperPreparingDetail": "O Desktop está preparando o helper de manutenção atual fora da raiz antiga do Redeven.",
     "reinstallInventoryDetail": "O Desktop está identificando os processos do Redeven pertencentes a este destino exato.",
     "reinstallStoppingProcessesDetail": "O Desktop está interrompendo processos verificados do Gateway, ambiente de execução, bridge, Local UI e processos filhos gerenciados.",
     "reinstallProcessesStoppedDetail": "O Desktop verificou que nenhum processo antigo do Redeven permanece neste destino.",
@@ -1717,7 +1717,7 @@
       "catalog_and_local_ui_verified": "Verificando Catalog e Local UI",
       "quarantine_cleaned": "Removendo os dados antigos isolados",
       "completed": "Reinstalação concluída",
-      "maintenance_helper_ready": "Preparando o auxiliar de manutenção",
+      "preparing_maintenance_helper": "Preparando o auxiliar de manutenção",
       "packages_preparing_and_transferring": "Preparando e transferindo pacotes",
       "redeven_processes_stop_attempted": "Encerrando processos do Redeven",
       "packages_applying": "Aplicando o lote de pacotes",
@@ -1830,6 +1830,7 @@
     "checkingContainer": "Verificando contêiner",
     "detectingPlatform": "Detectando plataforma",
     "checkingRuntimePackage": "Verificando o pacote de tempo de execução",
+    "preparingMaintenanceHelper": "Preparando recursos do ambiente de execução",
     "stoppingRuntimeProcess": "Parando o processo de tempo de execução",
     "verifyingRuntimeStopped": "Verificando o tempo de execução interrompido",
     "verifyingRuntimeInventory": "Verificando o inventário de processos do tempo de execução",
@@ -1942,7 +1943,8 @@
     },
     "componentName": {
       "gateway": "Gateway",
-      "runtime": "Ambiente de execução"
+      "runtime": "Ambiente de execução",
+      "maintenanceHelper": "Auxiliar de manutenção"
     }
   },
   "runtimeMessage": {

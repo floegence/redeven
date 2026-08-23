@@ -9,6 +9,7 @@ import {
   type DesktopSSHReleaseFetchPolicy,
 } from './sshReleaseAssets';
 import {
+  prepareDesktopRuntimeMaintenanceHelperAsset,
   prepareDesktopRuntimeUploadAsset,
   runtimeReleaseFetchPolicy,
   type DesktopRuntimeUploadAsset,
@@ -120,6 +121,13 @@ export type ManagedSSHRuntimeProcessInventoryArgs = Readonly<{
   onLog?: StartManagedSSHRuntimeArgs['onLog'];
   onProgress?: StartManagedSSHRuntimeArgs['onProgress'];
 }>;
+
+export type ManagedSSHRuntimeProcessSession = Readonly<{
+  inspect: () => Promise<DesktopRuntimeProcessInventory>;
+  stop: (inventory: DesktopRuntimeProcessInventory, gracePeriodMs?: number) => Promise<DesktopRuntimeProcessStopResult>;
+  useManagedHelper: () => void;
+  close: () => Promise<void>;
+}>;
 export type DesktopSSHRemoteRuntimeStamp = Readonly<{
   schema_version: typeof MANAGED_SSH_RUNTIME_STAMP_SCHEMA_VERSION;
   managed_by: 'redeven-desktop';
@@ -150,13 +158,17 @@ export type DesktopSSHRuntimeProgressPhase =
   | 'ssh_checking_runtime'
   | 'ssh_runtime_ready'
   | 'ssh_detecting_platform'
+  | 'ssh_preparing_process_helper'
+  | 'ssh_process_helper_ready'
   | 'ssh_preparing_upload'
+  | 'ssh_runtime_package_ready'
   | 'ssh_remote_installing'
   | 'ssh_creating_upload_dir'
   | 'ssh_uploading_archive'
   | 'ssh_installing_upload'
   | 'ssh_discovering_runtime_instances'
   | 'ssh_stopping_runtime_process'
+  | 'ssh_verifying_runtime_stopped'
   | 'ssh_verifying_runtime_inventory'
   | 'ssh_activating_runtime_package'
   | 'ssh_starting_runtime'
@@ -851,24 +863,33 @@ function buildManagedSSHRuntimeStatusScript(): string {
   ].join('\n');
 }
 
-function buildManagedSSHRuntimeProcessHelperScript(): string {
+function buildManagedSSHRuntimeProcessHelperStageScript(): string {
   return [
     'set -eu',
-    buildRemoteInstallRootShell(),
-    buildRemoteStateRootShell(),
-    'operation="${3:-}"',
-    'inventory_digest="${4:-}"',
-    'grace_period="${5:-5s}"',
-    'maintenance_root="${runtime_root%/}/runtime/maintenance"',
-    'mkdir -p "$maintenance_root"',
-    'helper_root="$(mktemp -d "${maintenance_root%/}/process-helper.XXXXXX")"',
+    'helper_root="$(mktemp -d "${TMPDIR:-/tmp}/redeven-runtime-process-helper.XXXXXX")"',
     'archive_path="${helper_root}/runtime.tar.gz"',
     'cleanup() { rm -rf "$helper_root"; }',
     'trap cleanup EXIT INT TERM',
     'cat > "$archive_path"',
     'tar -xzf "$archive_path" -C "$helper_root"',
     'binary="${helper_root}/redeven"',
+    '[ -x "$binary" ] || { echo "Desktop runtime process helper is missing redeven" >&2; exit 1; }',
+    'trap - EXIT INT TERM',
+    'printf "%s\\n" "$binary"',
+  ].join('\n');
+}
+
+function buildManagedSSHRuntimeProcessCommandScript(): string {
+  return [
+    'set -eu',
+    buildRemoteInstallRootShell(),
+    buildRemoteStateRootShell(),
+    'binary="$3"',
+    'operation="${4:-}"',
+    'inventory_digest="${5:-}"',
+    'grace_period="${6:-5s}"',
     'managed_binary="${runtime_root%/}/runtime/managed/bin/redeven"',
+    'if [ "$binary" = managed ]; then binary="$managed_binary"; fi',
     'if [ ! -x "$binary" ]; then',
     '  echo "Desktop runtime process helper is missing redeven" >&2',
     '  exit 1',
@@ -884,6 +905,18 @@ function buildManagedSSHRuntimeProcessHelperScript(): string {
     '    echo "runtime helper operation is invalid" >&2',
     '    exit 2',
     '    ;;',
+    'esac',
+  ].join('\n');
+}
+
+function buildManagedSSHRuntimeProcessHelperCleanupScript(): string {
+  return [
+    'set -eu',
+    'binary="$1"',
+    'helper_root="${binary%/redeven}"',
+    'case "$helper_root" in',
+    '  "${TMPDIR:-/tmp}"/redeven-runtime-process-helper.*) rm -rf -- "$helper_root" ;;',
+    '  *) echo "refusing to clean an unknown Runtime helper path" >&2; exit 1 ;;',
     'esac',
   ].join('\n');
 }
@@ -1007,24 +1040,29 @@ export async function probeManagedSSHRuntimeStatus(
   }
 }
 
-async function runManagedSSHRuntimeProcessCommand(
-  args: ManagedSSHRuntimeProcessInventoryArgs,
-  operation: 'inventory' | 'stop',
-  inventoryDigest = '',
-  gracePeriodMs = DEFAULT_SSH_STOP_TIMEOUT_MS,
-): Promise<string> {
+export async function openManagedSSHRuntimeProcessSession(
+  args: ManagedSSHRuntimeProcessInventoryArgs &
+    Readonly<{
+      helperBinaryPath?: string;
+      helperArchive?: Buffer;
+      platform?: DesktopSSHRemotePlatform;
+      preferManagedHelper?: boolean;
+    }>,
+): Promise<ManagedSSHRuntimeProcessSession> {
   const target = normalizeDesktopSSHEnvironmentDetails(args.target);
   const runtimeReleaseTag = normalizeRuntimeReleaseTag(args.runtimeReleaseTag);
   const logs = createMutableRecentLogs();
   let ownedLease: DesktopSSHTransportLease | null = null;
-  const lease = args.transportLease ?? await args.sshTransportManager.acquire({
-    target,
-    credentialScope: args.sshCredentialScope,
-    sshPassword: args.sshPassword,
-    sshBinary: args.sshBinary,
-    readyTimeoutMs: Math.max(1_000, (args.connectTimeoutSeconds ?? DEFAULT_SSH_CONNECT_TIMEOUT_SECONDS) * 1_000),
-    signal: args.signal,
-  });
+  const lease =
+    args.transportLease ??
+    (await args.sshTransportManager.acquire({
+      target,
+      credentialScope: args.sshCredentialScope,
+      sshPassword: args.sshPassword,
+      sshBinary: args.sshBinary,
+      readyTimeoutMs: Math.max(1_000, (args.connectTimeoutSeconds ?? DEFAULT_SSH_CONNECT_TIMEOUT_SECONDS) * 1_000),
+      signal: args.signal,
+    }));
   if (!args.transportLease) {
     ownedLease = lease;
   }
@@ -1035,77 +1073,149 @@ async function runManagedSSHRuntimeProcessCommand(
     onLog: args.onLog,
     signal: args.signal,
   };
+  let helperBinary = compact(args.helperBinaryPath) || '';
+  let uploadedHelperBinary = '';
+  let closed = false;
   try {
-    const platformResult = await runSSHControlCommand(
-      session,
-      remoteShellCommand('set -eu\nuname -s\nuname -m', 'redeven-ssh-runtime-helper-platform'),
-    );
-    if (platformResult.exit_code !== 0) {
-      throw runtimeProcessCommandErrorFromOutput(
-        platformResult.stdout,
-        platformResult.stderr,
-        'Desktop could not detect the SSH host platform for Runtime process identity validation.',
+    if (helperBinary === '' && args.preferManagedHelper) {
+      const managedProbe = await probeRemoteRuntimeCompatibility({
+        session,
+        runtimeReleaseTag,
+        onProgress: undefined,
+      }).catch(() => null);
+      if (managedProbe?.status === 'ready') {
+        helperBinary = managedProbe.binary_path;
+      }
+    }
+    if (helperBinary === '') {
+      emitSSHRuntimeProgress(
+        args.onProgress,
+        'ssh_preparing_process_helper',
+        'Preparing maintenance helper',
+        'Desktop is preparing the lightweight Runtime process helper for this SSH operation.',
+      );
+      let platform = args.platform;
+      if (!platform) {
+        const platformResult = await runSSHControlCommand(
+          session,
+          remoteShellCommand('set -eu\nuname -s\nuname -m', 'redeven-ssh-runtime-helper-platform'),
+        );
+        if (platformResult.exit_code !== 0) {
+          throw runtimeProcessCommandErrorFromOutput(
+            platformResult.stdout,
+            platformResult.stderr,
+            'Desktop could not detect the SSH host platform for Runtime process identity validation.',
+          );
+        }
+        const platformLines = platformResult.stdout
+          .split(/\r?\n/u)
+          .map((line) => line.trim())
+          .filter(Boolean);
+        if (platformLines.length < 2) {
+          throw new Error(
+            'Desktop received an incomplete SSH host platform result for Runtime process identity validation.',
+          );
+        }
+        platform = resolveDesktopSSHRemotePlatform(platformLines[0] ?? '', platformLines[1] ?? '');
+      }
+      const archive =
+        args.helperArchive ??
+        (await prepareDesktopRuntimeMaintenanceHelperAsset({
+          runtimeReleaseTag,
+          releaseBaseURL: target.release_base_url,
+          assetCacheRoot: args.assetCacheRoot,
+          sourceRuntimeRoot: args.sourceRuntimeRoot,
+          platform,
+          fetchPolicy: runtimeReleaseFetchPolicy(DEFAULT_DESKTOP_SSH_RELEASE_FETCH_TIMEOUT_MS, args.signal),
+          signal: args.signal,
+        }));
+      const stageResult = await runSSHControlCommand(
+        session,
+        remoteShellCommand(
+          buildManagedSSHRuntimeProcessHelperStageScript(),
+          'redeven-ssh-runtime-process-helper-stage',
+        ),
+        archive,
+      );
+      if (stageResult.exit_code !== 0 || compact(stageResult.stdout) === '') {
+        throw runtimeProcessCommandErrorFromOutput(
+          stageResult.stdout,
+          stageResult.stderr,
+          'Desktop could not stage the current Runtime process helper on the SSH host.',
+        );
+      }
+      helperBinary = compact(stageResult.stdout.split(/\r?\n/u).filter(Boolean).at(-1));
+      uploadedHelperBinary = helperBinary;
+      emitSSHRuntimeProgress(
+        args.onProgress,
+        'ssh_process_helper_ready',
+        'Maintenance helper ready',
+        'Desktop staged the current lightweight Runtime process helper on the SSH host.',
       );
     }
-    const platformLines = platformResult.stdout.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean);
-    if (platformLines.length < 2) {
-      throw new Error('Desktop received an incomplete SSH host platform result for Runtime process identity validation.');
-    }
-    const platform = resolveDesktopSSHRemotePlatform(platformLines[0] ?? '', platformLines[1] ?? '');
-    const asset = await prepareDesktopRuntimeUploadAsset({
-      runtimeReleaseTag,
-      releaseBaseURL: target.release_base_url,
-      assetCacheRoot: args.assetCacheRoot,
-      sourceRuntimeRoot: args.sourceRuntimeRoot,
-      platform,
-      fetchPolicy: runtimeReleaseFetchPolicy(DEFAULT_DESKTOP_SSH_RELEASE_FETCH_TIMEOUT_MS, args.signal),
-      signal: args.signal,
-    });
-    const helperResult = await runSSHControlCommand(
-      session,
-      remoteShellCommand(buildManagedSSHRuntimeProcessHelperScript(), 'redeven-ssh-runtime-process-helper', [
-        target.runtime_root,
-        args.runtimeStateRoot ?? target.runtime_root,
-        operation,
-        inventoryDigest,
-        `${Math.max(1, Math.ceil(gracePeriodMs / 1000))}s`,
-      ]),
-      asset.archiveData,
-    );
-    if (helperResult.exit_code !== 0) {
-      throw runtimeProcessCommandErrorFromOutput(
-        helperResult.stdout,
-        helperResult.stderr,
-        `Desktop runtime process helper could not ${operation === 'inventory' ? 'inspect' : 'stop'} the SSH runtime processes.`,
+
+    const run = async (
+      operation: 'inventory' | 'stop',
+      inventoryDigest = '',
+      gracePeriodMs = DEFAULT_SSH_STOP_TIMEOUT_MS,
+    ): Promise<string> => {
+      if (closed) {
+        throw new Error('SSH Runtime process session is closed.');
+      }
+      const helperResult = await runSSHControlCommand(
+        session,
+        remoteShellCommand(buildManagedSSHRuntimeProcessCommandScript(), 'redeven-ssh-runtime-process-helper', [
+          target.runtime_root,
+          args.runtimeStateRoot ?? target.runtime_root,
+          helperBinary,
+          operation,
+          inventoryDigest,
+          `${Math.max(1, Math.ceil(gracePeriodMs / 1000))}s`,
+        ]),
       );
-    }
-    return helperResult.stdout;
-  } finally {
+      if (helperResult.exit_code !== 0) {
+        throw runtimeProcessCommandErrorFromOutput(
+          helperResult.stdout,
+          helperResult.stderr,
+          `Desktop runtime process helper could not ${operation === 'inventory' ? 'inspect' : 'stop'} the SSH runtime processes.`,
+        );
+      }
+      return helperResult.stdout;
+    };
+    return {
+      inspect: async () => parseDesktopRuntimeProcessInventory(await run('inventory')),
+      stop: async (inventory, gracePeriodMs = DEFAULT_SSH_STOP_TIMEOUT_MS) => {
+        const result = parseDesktopRuntimeProcessStopResult(
+          await run('stop', inventory.inventory_digest, gracePeriodMs),
+        );
+        if (result.after.instances.length > 0) {
+          throw new Error('Desktop could not verify an empty Redeven Runtime process inventory after SSH stop.');
+        }
+        return result;
+      },
+      useManagedHelper: () => {
+        helperBinary = 'managed';
+      },
+      close: async () => {
+        if (closed) return;
+        closed = true;
+        if (uploadedHelperBinary !== '') {
+          await runSSHControlCommand(
+            session,
+            remoteShellCommand(
+              buildManagedSSHRuntimeProcessHelperCleanupScript(),
+              'redeven-ssh-runtime-process-helper-cleanup',
+              [uploadedHelperBinary],
+            ),
+          ).catch(() => undefined);
+        }
+        await ownedLease?.release();
+      },
+    };
+  } catch (error) {
     await ownedLease?.release();
+    throw error;
   }
-}
-
-export async function inspectManagedSSHRuntimeProcesses(
-  args: ManagedSSHRuntimeProcessInventoryArgs,
-): Promise<DesktopRuntimeProcessInventory> {
-  return parseDesktopRuntimeProcessInventory(await runManagedSSHRuntimeProcessCommand(args, 'inventory'));
-}
-
-export async function stopManagedSSHRuntimeProcesses(
-  args: ManagedSSHRuntimeProcessInventoryArgs,
-  inventory: DesktopRuntimeProcessInventory,
-  gracePeriodMs = DEFAULT_SSH_STOP_TIMEOUT_MS,
-): Promise<DesktopRuntimeProcessStopResult> {
-  const result = parseDesktopRuntimeProcessStopResult(await runManagedSSHRuntimeProcessCommand(
-    { ...args, signal: undefined },
-    'stop',
-    inventory.inventory_digest,
-    gracePeriodMs,
-  ));
-  if (result.after.instances.length > 0) {
-    throw new Error('Desktop could not verify an empty Redeven Runtime process inventory after SSH stop.');
-  }
-  return result;
 }
 
 function probeResultFallbackReason(status: DesktopSSHRemoteRuntimeProbeStatus): string {
@@ -1651,11 +1761,11 @@ async function prepareRemoteRuntimePackage(args: Readonly<{
   packageIntent?: ManagedRuntimePackageIntent;
   fetchPolicy: DesktopSSHReleaseFetchPolicy;
   onProgress: StartManagedSSHRuntimeArgs['onProgress'];
+  initialProbe?: DesktopSSHRemoteRuntimeProbeResult;
+  platform?: DesktopSSHRemotePlatform;
 }>): Promise<PreparedManagedSSHRuntimePackage | null> {
   const packageIntent = args.packageIntent ?? (args.forceRuntimeUpdate === true ? 'replace_with_desktop_target' : 'install_if_missing');
-  const initialProbe = await probeRemoteRuntimeCompatibility({
-    ...args,
-  });
+  const initialProbe = args.initialProbe ?? await probeRemoteRuntimeCompatibility(args);
   const shouldReplaceRuntimePackage = packageIntent === 'replace_with_desktop_target';
   if (initialProbe.status === 'ready' && !shouldReplaceRuntimePackage) {
     return null;
@@ -1670,7 +1780,7 @@ async function prepareRemoteRuntimePackage(args: Readonly<{
   if (args.session.target.bootstrap_strategy === 'remote_install') {
     return prepareRemoteRuntimeViaRemoteInstall(args);
   }
-  const platform = await probeRemotePlatform(args);
+  const platform = args.platform ?? await probeRemotePlatform(args);
   const preparedUpload = await prepareDesktopSSHUploadAsset({
     target: args.session.target,
     runtimeReleaseTag: args.runtimeReleaseTag,
@@ -1846,7 +1956,11 @@ async function waitForRemoteStartupReport(args: Readonly<{
 type ManagedSSHRuntimeAttachPolicy =
   | Readonly<{ action: 'reuse' }>
   | Readonly<{ action: 'replace'; message: string }>
-  | Readonly<{ action: 'block'; message: string; maintenance: DesktopRuntimeMaintenanceRequirement }>;
+  | Readonly<{
+      action: 'block';
+      message: string;
+      maintenance: DesktopRuntimeMaintenanceRequirement;
+    }>;
 
 type RuntimeIdentityMismatchDiagnostic = Readonly<{
   expected_runtime_version?: string;
@@ -2054,6 +2168,7 @@ async function startManagedSSHRuntimeInternal(
   let remoteStopAttempted = false;
   let transportDisconnected = false;
   let preparedRuntimePackage: PreparedManagedSSHRuntimePackage | null = null;
+  let processSession: ManagedSSHRuntimeProcessSession | null = null;
 
   const disconnect = async () => {
     if (transportDisconnected) {
@@ -2066,6 +2181,8 @@ async function startManagedSSHRuntimeInternal(
       'Cleaning SSH startup resources',
       'Desktop is closing SSH startup processes and temporary files.',
     );
+    await processSession?.close().catch(() => undefined);
+    processSession = null;
     await stopStreamingCommand(controlProcess, stopTimeoutMs).catch(() => undefined);
     controlProcess = null;
     await lease.release();
@@ -2089,10 +2206,19 @@ async function startManagedSSHRuntimeInternal(
           connectTimeoutSeconds,
           onLog: args.onLog,
         };
-        const inventory = await inspectManagedSSHRuntimeProcesses(processArgs);
+        const activeProcessSession =
+          processSession ??
+          (await openManagedSSHRuntimeProcessSession({
+            ...processArgs,
+            helperBinaryPath: 'managed',
+          }));
+        const inventory = await activeProcessSession.inspect();
         requireDesktopRuntimeProcessIdentity(inventory);
         if (inventory.instances.length > 0) {
-          await stopManagedSSHRuntimeProcesses(processArgs, inventory, stopTimeoutMs);
+          await activeProcessSession.stop(inventory, stopTimeoutMs);
+        }
+        if (activeProcessSession !== processSession) {
+          await activeProcessSession.close();
         }
       }
     } finally {
@@ -2101,20 +2227,20 @@ async function startManagedSSHRuntimeInternal(
   };
 
   try {
-    const packageArgs = {
+    const initialProbe = await probeRemoteRuntimeCompatibility({
       session: controlSession,
       runtimeReleaseTag,
-      installScriptURL,
-      assetCacheRoot,
-      sourceRuntimeRoot: args.sourceRuntimeRoot,
-      forceRuntimeUpdate: args.forceRuntimeUpdate,
-      packageIntent,
-      fetchPolicy: releaseFetchPolicy,
       onProgress: args.onProgress,
-    } as const;
-    preparedRuntimePackage = await prepareRemoteRuntimePackage(packageArgs);
-
-    const processArgs: ManagedSSHRuntimeProcessInventoryArgs = {
+    });
+    const shouldPreparePackage = packageIntent === 'replace_with_desktop_target'
+      || (packageIntent === 'install_if_missing' && initialProbe.status === 'missing_binary');
+    const sharedPlatform = packageIntent === 'replace_with_desktop_target'
+      || shouldPreparePackage
+      ? await probeRemotePlatform({ session: controlSession, onProgress: args.onProgress })
+      : undefined;
+    const processArgs: ManagedSSHRuntimeProcessInventoryArgs & Readonly<{
+      platform?: DesktopSSHRemotePlatform;
+    }> = {
       sshTransportManager: args.sshTransportManager,
       sshCredentialScope: args.sshCredentialScope,
       transportLease: lease,
@@ -2129,14 +2255,60 @@ async function startManagedSSHRuntimeInternal(
       connectTimeoutSeconds,
       onLog: args.onLog,
       onProgress: args.onProgress,
+      platform: sharedPlatform,
     };
+    const packageArgs = {
+      session: controlSession,
+      runtimeReleaseTag,
+      installScriptURL,
+      assetCacheRoot,
+      sourceRuntimeRoot: args.sourceRuntimeRoot,
+      forceRuntimeUpdate: args.forceRuntimeUpdate,
+      packageIntent,
+      fetchPolicy: releaseFetchPolicy,
+      onProgress: args.onProgress,
+      initialProbe,
+      platform: sharedPlatform,
+    } as const;
+    const updateProcessSessionTask =
+      shouldPreparePackage
+        ? openManagedSSHRuntimeProcessSession({
+            ...processArgs,
+          }).catch(() => null)
+        : Promise.resolve(null);
+    [preparedRuntimePackage, processSession] = await Promise.all([
+      prepareRemoteRuntimePackage(packageArgs).then((prepared) => {
+        emitSSHRuntimeProgress(
+          args.onProgress,
+          'ssh_runtime_package_ready',
+          'Runtime package ready',
+          'Desktop prepared and verified the Runtime package for this SSH operation.',
+        );
+        return prepared;
+      }),
+      updateProcessSessionTask,
+    ]);
+    if (!processSession) {
+      processSession = await openManagedSSHRuntimeProcessSession({
+        ...processArgs,
+        helperBinaryPath: preparedRuntimePackage ? `${preparedRuntimePackage.stagingRoot}/bin/redeven` : 'managed',
+      });
+      emitSSHRuntimeProgress(
+        args.onProgress,
+        'ssh_process_helper_ready',
+        'Maintenance helper ready',
+        preparedRuntimePackage
+          ? 'Desktop will use the verified staged Runtime executable for process maintenance.'
+          : 'Desktop will use the verified installed Runtime executable for process maintenance.',
+      );
+    }
     emitSSHRuntimeProgress(
       args.onProgress,
       'ssh_discovering_runtime_instances',
       'Discovering runtime processes',
       'Desktop is verifying Runtime process identities on the SSH host.',
     );
-    const processInventory = await inspectManagedSSHRuntimeProcesses(processArgs);
+    const processInventory = await processSession.inspect();
     requireDesktopRuntimeProcessIdentity(processInventory);
     if (runtimeProcessIntent === 'start' && processInventory.summary.automatic > 1) {
       const maintenance = buildDesktopRuntimeMaintenanceRequirement({
@@ -2162,11 +2334,11 @@ async function startManagedSSHRuntimeInternal(
         'Stopping Runtime processes',
         `Desktop is stopping ${desktopRuntimeProcessStopTargetCount(processInventory)} verified SSH Runtime process(es).`,
       );
-      await stopManagedSSHRuntimeProcesses(processArgs, processInventory, stopTimeoutMs);
+      await processSession.stop(processInventory, stopTimeoutMs);
       emitSSHRuntimeProgress(
         args.onProgress,
-        'ssh_verifying_runtime_inventory',
-        'Verifying runtime process inventory',
+        'ssh_verifying_runtime_stopped',
+        'Verifying runtime stopped',
         'Desktop confirmed that no matching runtime process remains on the SSH host.',
       );
     }
@@ -2182,6 +2354,7 @@ async function startManagedSSHRuntimeInternal(
       if (activatedProbe.status !== 'ready') {
         throw new Error(describeManagedSSHRuntimeProbeResult(activatedProbe));
       }
+      processSession.useManagedHelper();
     }
 
     let remoteLaunch: ManagedSSHRemoteStartup | null = null;
@@ -2262,27 +2435,12 @@ async function startManagedSSHRuntimeInternal(
         });
       }
       replacementAttempted = true;
-      const replacementProcessArgs: ManagedSSHRuntimeProcessInventoryArgs = {
-        sshTransportManager: args.sshTransportManager,
-        sshCredentialScope: args.sshCredentialScope,
-        transportLease: lease,
-        target,
-        runtimeReleaseTag,
-        runtimeStateRoot: args.runtimeStateRoot,
-        sshPassword: args.sshPassword,
-        sshBinary: args.sshBinary,
-        tempRoot,
-        assetCacheRoot,
-        sourceRuntimeRoot: args.sourceRuntimeRoot,
-        connectTimeoutSeconds,
-        onLog: args.onLog,
-      };
-      const replacementInventory = await inspectManagedSSHRuntimeProcesses(replacementProcessArgs);
+      const replacementInventory = await processSession.inspect();
       requireDesktopRuntimeProcessIdentity(replacementInventory);
       if (replacementInventory.instances.length === 0) {
         throw new Error('Desktop could not verify the SSH runtime process inventory before replacement.');
       }
-      await stopManagedSSHRuntimeProcesses(replacementProcessArgs, replacementInventory, stopTimeoutMs);
+      await processSession.stop(replacementInventory, stopTimeoutMs);
       await stopStreamingCommand(controlProcess, stopTimeoutMs).catch(() => undefined);
       controlProcess = null;
     }
@@ -2301,7 +2459,7 @@ async function startManagedSSHRuntimeInternal(
       'Verifying runtime process inventory',
       'Desktop is confirming the final SSH runtime process identity.',
     );
-    const finalInventory = await inspectManagedSSHRuntimeProcesses(processArgs);
+    const finalInventory = await processSession.inspect();
     const finalInstance = finalInventory.instances[0];
     const expectedFinalRuntimeVersion = runtimeProcessIntent === 'update'
       ? runtimeReleaseTag
@@ -2332,6 +2490,8 @@ async function startManagedSSHRuntimeInternal(
     ))) {
       throw new Error('Desktop SSH runtime replacement completed without changing the process identity.');
     }
+    await processSession.close();
+    processSession = null;
     return {
       startup: remoteStartup,
       runtime_handle: {

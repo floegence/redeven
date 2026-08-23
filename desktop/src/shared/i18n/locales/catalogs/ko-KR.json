@@ -1685,7 +1685,7 @@
     "reinstallCheckingDetail": "Desktop이 확인된 호스트, 컨테이너 및 Redeven 루트를 다시 검증하고 있습니다.",
     "reinstallLockedDetail": "Desktop이 이 작업을 위해 정확히 등록된 Redeven 대상을 잠갔습니다.",
     "reinstallSessionsClosedDetail": "Desktop이 이 대상에 연결된 환경 창과 bridge를 닫았습니다.",
-    "reinstallHelperReadyDetail": "Desktop이 이전 Redeven 루트 외부에 현재 유지 관리 helper를 준비했습니다.",
+    "reinstallHelperPreparingDetail": "Desktop이 이전 Redeven 루트 외부에 현재 유지 관리 helper를 준비하고 있습니다.",
     "reinstallInventoryDetail": "Desktop이 이 정확한 대상에 속한 Redeven 프로세스를 식별하고 있습니다.",
     "reinstallStoppingProcessesDetail": "Desktop이 검증된 Gateway, 런타임, bridge, Local UI 및 관리되는 하위 프로세스를 중지하고 있습니다.",
     "reinstallProcessesStoppedDetail": "Desktop이 이 대상에 이전 Redeven 프로세스가 남아 있지 않음을 확인했습니다.",
@@ -1713,7 +1713,7 @@
       "catalog_and_local_ui_verified": "Catalog 및 Local UI를 확인하는 중",
       "quarantine_cleaned": "격리한 이전 데이터를 삭제하는 중",
       "completed": "재설치 완료",
-      "maintenance_helper_ready": "유지 관리 도우미 준비 중",
+      "preparing_maintenance_helper": "유지 관리 도우미 준비 중",
       "packages_preparing_and_transferring": "패키지 준비 및 전송 중",
       "redeven_processes_stop_attempted": "Redeven 프로세스 중지 중",
       "packages_applying": "패키지 배치 적용 중",
@@ -1826,6 +1826,7 @@
     "checkingContainer": "컨테이너 확인 중",
     "detectingPlatform": "플랫폼 감지 중",
     "checkingRuntimePackage": "런타임 패키지 확인 중",
+    "preparingMaintenanceHelper": "런타임 리소스 준비 중",
     "stoppingRuntimeProcess": "런타임 프로세스 중지",
     "verifyingRuntimeStopped": "런타임 중지 확인 중",
     "verifyingRuntimeInventory": "런타임 프로세스 목록 확인 중",
@@ -1938,7 +1939,8 @@
     },
     "componentName": {
       "gateway": "Gateway",
-      "runtime": "런타임"
+      "runtime": "런타임",
+      "maintenanceHelper": "유지 관리 도우미"
     }
   },
   "runtimeMessage": {

@@ -529,7 +529,10 @@ export function containerRuntimeExecCommand(input: Readonly<{
   argv: readonly string[];
   env?: Readonly<Record<string, string | undefined>>;
 }>): readonly string[] {
-  return containerRuntimeExecCommandWithMode(input, { detached: false, interactive: true });
+  return containerRuntimeExecCommandWithMode(input, {
+    detached: false,
+    interactive: true,
+  });
 }
 
 function containerRuntimeExecCommandWithMode(input: Readonly<{
@@ -729,9 +732,34 @@ export function containerRuntimeDaemonStatusCommand(input: Readonly<{
 
 export const CONTAINER_RUNTIME_PROCESS_COMMAND_EXIT_MARKER = '__REDEVEN_RUNTIME_PROCESS_EXIT__=';
 
-export function containerRuntimeProcessHelperCommand(input: Readonly<{
+export function containerRuntimeProcessHelperStageCommand(input: Readonly<{
   engine: DesktopContainerEngine;
   container_id: string;
+}>): readonly string[] {
+  const stageDriver = [
+    'set -eu',
+    'helper_root="$(mktemp -d "${TMPDIR:-/tmp}/redeven-runtime-process-helper.XXXXXX")"',
+    'archive_path="${helper_root}/runtime.tar.gz"',
+    'cleanup() { rm -rf "$helper_root"; }',
+    'trap cleanup EXIT INT TERM',
+    'cat > "$archive_path"',
+    'tar -xzf "$archive_path" -C "$helper_root"',
+    'helper_binary="${helper_root}/redeven"',
+    '[ -x "$helper_binary" ] || { echo "Desktop runtime process helper is missing redeven" >&2; exit 1; }',
+    'trap - EXIT INT TERM',
+    'printf "%s\\n" "$helper_binary"',
+  ].join('\n');
+  return containerRuntimeExecCommand({
+    engine: input.engine,
+    container_id: input.container_id,
+    argv: ['sh', '-c', stageDriver, 'redeven-container-runtime-process-helper-stage'],
+  });
+}
+
+export function containerRuntimeProcessCommand(input: Readonly<{
+  engine: DesktopContainerEngine;
+  container_id: string;
+  helper_binary_path: string;
   runtime_binary_path: string;
   runtime_root: string;
   runtime_state_root?: string;
@@ -758,22 +786,18 @@ export function containerRuntimeProcessHelperCommand(input: Readonly<{
     `    managed_binary="\${HOME%/}/.redeven/\${managed_binary#${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/}"`,
     '    ;;',
     'esac',
-    'operation="$4"',
-    'inventory_digest="${5:-}"',
-    'grace_period="${6:-5s}"',
-    'helper_root="$(mktemp -d "${TMPDIR:-/tmp}/redeven-runtime-process-helper.XXXXXX")"',
-    'archive_path="${helper_root}/runtime.tar.gz"',
-    'output_path="${helper_root}/output"',
-    'error_path="${helper_root}/error"',
-    'cleanup() { rm -rf "$helper_root"; }',
-    'trap cleanup EXIT INT TERM',
-    'cat > "$archive_path"',
-    'tar -xzf "$archive_path" -C "$helper_root"',
-    'helper_binary="${helper_root}/redeven"',
+    'helper_binary="$4"',
+    'operation="$5"',
+    'inventory_digest="${6:-}"',
+    'grace_period="${7:-5s}"',
     'if [ ! -x "$helper_binary" ]; then',
     '  echo "Desktop runtime process helper is missing redeven" >&2',
     '  exit 1',
     'fi',
+    'output_path="$(mktemp "${TMPDIR:-/tmp}/redeven-runtime-process-output.XXXXXX")"',
+    'error_path="${output_path}.error"',
+    'cleanup() { rm -f "$output_path" "$error_path"; }',
+    'trap cleanup EXIT INT TERM',
     'set +e',
     'case "$operation" in',
     '  inventory)',
@@ -805,9 +829,33 @@ export function containerRuntimeProcessHelperCommand(input: Readonly<{
       input.runtime_state_root ?? input.runtime_root,
       input.runtime_root,
       input.runtime_binary_path,
+      input.helper_binary_path,
       input.operation,
       input.inventory_digest || '-',
       `${Math.max(1, Math.ceil(input.grace_period_seconds ?? 5))}s`,
     ],
+  });
+}
+
+export function containerRuntimeProcessHelperCleanupCommand(
+  input: Readonly<{
+    engine: DesktopContainerEngine;
+    container_id: string;
+    helper_binary_path: string;
+  }>,
+): readonly string[] {
+  const cleanupDriver = [
+    'set -eu',
+    'helper_binary="$1"',
+    'helper_root="${helper_binary%/redeven}"',
+    'case "$helper_root" in',
+    '  "${TMPDIR:-/tmp}"/redeven-runtime-process-helper.*) rm -rf -- "$helper_root" ;;',
+    '  *) echo "refusing to clean an unknown Runtime helper path" >&2; exit 1 ;;',
+    'esac',
+  ].join('\n');
+  return containerRuntimeExecCommand({
+    engine: input.engine,
+    container_id: input.container_id,
+    argv: ['sh', '-c', cleanupDriver, 'redeven-container-runtime-process-helper-cleanup', input.helper_binary_path],
   });
 }

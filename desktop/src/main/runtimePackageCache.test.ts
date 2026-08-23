@@ -12,7 +12,7 @@ vi.mock('./sshReleaseTrust', async (importOriginal) => ({
 }));
 
 import {
-  prepareDesktopReinstallHelperUploadAsset,
+  prepareDesktopRuntimeMaintenanceHelperAsset,
   prepareDesktopRuntimeUploadAsset,
   pruneDesktopRuntimePackageCache,
   runtimePackageCacheRoot,
@@ -391,11 +391,11 @@ describe('runtimePackageCache', () => {
     }
   }, 15_000);
 
-  it('builds the source reinstall helper without staging the full Runtime suite', async () => {
+  it('builds the source maintenance helper without staging the full Runtime suite', async () => {
     const fixture = await createSourceRuntimeFixture();
     const platform = resolveDesktopSSHRemotePlatform('linux', 'x86_64');
     try {
-      const first = await prepareDesktopReinstallHelperUploadAsset({
+      const first = await prepareDesktopRuntimeMaintenanceHelperAsset({
         runtimeReleaseTag: 'v1.2.3',
         releaseBaseURL: 'https://mirror.example.invalid/releases',
         assetCacheRoot: fixture.cacheRoot,
@@ -403,7 +403,7 @@ describe('runtimePackageCache', () => {
         platform,
         fetchPolicy: runtimeReleaseFetchPolicy(45_000),
       });
-      const cached = await prepareDesktopReinstallHelperUploadAsset({
+      const cached = await prepareDesktopRuntimeMaintenanceHelperAsset({
         runtimeReleaseTag: 'v1.2.3',
         releaseBaseURL: 'https://mirror.example.invalid/releases',
         assetCacheRoot: fixture.cacheRoot,
@@ -414,7 +414,9 @@ describe('runtimePackageCache', () => {
 
       expect(tarGzipEntryNames(first)).toEqual(['redeven']);
       expect(cached).toEqual(first);
-      await expect(fs.access(fixture.buildLogPath)).rejects.toMatchObject({ code: 'ENOENT' });
+      await expect(fs.access(fixture.buildLogPath)).rejects.toMatchObject({
+        code: 'ENOENT',
+      });
     } finally {
       await fs.rm(path.dirname(fixture.root), { recursive: true, force: true });
     }
@@ -425,9 +427,21 @@ describe('runtimePackageCache', () => {
     const platform = resolveDesktopSSHRemotePlatform('linux', 'x86_64');
     try {
       const results = await Promise.all([
-        preparePackage({ cacheRoot: fixture.cacheRoot, platform, sourceRuntimeRoot: fixture.root }),
-        preparePackage({ cacheRoot: fixture.cacheRoot, platform, sourceRuntimeRoot: fixture.root }),
-        preparePackage({ cacheRoot: fixture.cacheRoot, platform, sourceRuntimeRoot: fixture.root }),
+        preparePackage({
+          cacheRoot: fixture.cacheRoot,
+          platform,
+          sourceRuntimeRoot: fixture.root,
+        }),
+        preparePackage({
+          cacheRoot: fixture.cacheRoot,
+          platform,
+          sourceRuntimeRoot: fixture.root,
+        }),
+        preparePackage({
+          cacheRoot: fixture.cacheRoot,
+          platform,
+          sourceRuntimeRoot: fixture.root,
+        }),
       ]);
 
       expect(results.map((result) => result.source)).toEqual([
@@ -451,8 +465,16 @@ describe('runtimePackageCache', () => {
     const arm64 = resolveDesktopSSHRemotePlatform('linux', 'aarch64');
     try {
       const [amd64Asset, arm64Asset] = await Promise.all([
-        preparePackage({ cacheRoot: fixture.cacheRoot, platform: amd64, sourceRuntimeRoot: fixture.root }),
-        preparePackage({ cacheRoot: fixture.cacheRoot, platform: arm64, sourceRuntimeRoot: fixture.root }),
+        preparePackage({
+          cacheRoot: fixture.cacheRoot,
+          platform: amd64,
+          sourceRuntimeRoot: fixture.root,
+        }),
+        preparePackage({
+          cacheRoot: fixture.cacheRoot,
+          platform: arm64,
+          sourceRuntimeRoot: fixture.root,
+        }),
       ]);
 
       expect(amd64Asset.source).toBe('source_build');
@@ -471,7 +493,11 @@ describe('runtimePackageCache', () => {
     const platform = resolveDesktopSSHRemotePlatform('linux', 'x86_64');
     try {
       const [runtimeAsset, gatewayAsset] = await Promise.all([
-        preparePackage({ cacheRoot: fixture.cacheRoot, platform, sourceRuntimeRoot: fixture.root }),
+        preparePackage({
+          cacheRoot: fixture.cacheRoot,
+          platform,
+          sourceRuntimeRoot: fixture.root,
+        }),
         preparePackage({
           cacheRoot: fixture.cacheRoot,
           platform,
@@ -529,7 +555,9 @@ describe('runtimePackageCache', () => {
       expect((error as DesktopOperationFailureError).presentation.diagnostics?.[0]?.text).toContain(
         'Zig is required to cross-compile the linux/amd64 cgo runtime',
       );
-      await expect(fs.access(fixture.buildLogPath)).rejects.toMatchObject({ code: 'ENOENT' });
+      await expect(fs.access(fixture.buildLogPath)).rejects.toMatchObject({
+        code: 'ENOENT',
+      });
     } finally {
       await fs.rm(path.dirname(fixture.root), { recursive: true, force: true });
     }
@@ -614,8 +642,12 @@ describe('runtimePackageCache', () => {
       });
 
       await expect(fs.readFile(currentArchive, 'utf8')).resolves.toBe('current');
-      await expect(fs.stat(oldArchive)).rejects.toMatchObject({ code: 'ENOENT' });
-      await expect(fs.stat(tempArchive)).rejects.toMatchObject({ code: 'ENOENT' });
+      await expect(fs.stat(oldArchive)).rejects.toMatchObject({
+        code: 'ENOENT',
+      });
+      await expect(fs.stat(tempArchive)).rejects.toMatchObject({
+        code: 'ENOENT',
+      });
     } finally {
       await fs.rm(userDataRoot, { recursive: true, force: true });
     }
@@ -641,7 +673,9 @@ describe('runtimePackageCache', () => {
         includeTemporaryEntries: false,
       });
 
-      await expect(fs.stat(oldArchive)).rejects.toMatchObject({ code: 'ENOENT' });
+      await expect(fs.stat(oldArchive)).rejects.toMatchObject({
+        code: 'ENOENT',
+      });
       await expect(fs.readFile(activeTempArchive, 'utf8')).resolves.toBe('tmp');
     } finally {
       await fs.rm(userDataRoot, { recursive: true, force: true });

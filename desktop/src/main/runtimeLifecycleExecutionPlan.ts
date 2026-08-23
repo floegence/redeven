@@ -115,6 +115,7 @@ function startReadySteps(): readonly DesktopRuntimeLifecycleStepID[] {
   return [
     'starting_runtime_process',
     'checking_runtime_service',
+    'verifying_runtime_inventory',
     'runtime_ready',
   ];
 }
@@ -123,7 +124,7 @@ function stopSteps(terminal: DesktopRuntimeLifecycleStepID = 'runtime_stopped'):
   return [
     'discovering_runtime_instances',
     'stopping_runtime_process',
-    'verifying_runtime_inventory',
+    'verifying_runtime_stopped',
     terminal,
   ];
 }
@@ -132,7 +133,7 @@ function runtimeProcessReconciliationStepIDs(): readonly DesktopRuntimeLifecycle
   return [
     'discovering_runtime_instances',
     'stopping_runtime_process',
-    'verifying_runtime_inventory',
+    'verifying_runtime_stopped',
   ];
 }
 
@@ -210,6 +211,8 @@ function packageTailFrom(
         : ['detecting_platform', ...packageInstallSteps(), ...startReadySteps()];
     case 'checking_runtime_package':
       return ['checking_runtime_package'];
+    case 'preparing_maintenance_helper':
+      return ['preparing_maintenance_helper', 'installing_runtime_package', ...startReadySteps()];
     case 'preparing_runtime_package':
       return ['preparing_runtime_package', 'installing_runtime_package', ...startReadySteps()];
     case 'installing_runtime_package':
@@ -225,19 +228,27 @@ function stopTailForOperation(
 ): readonly DesktopRuntimeLifecycleStepID[] {
   const terminal = operation === 'stop' ? 'runtime_stopped' : undefined;
   if (step === 'discovering_runtime_instances') {
-    return operation === 'stop'
-      ? stopSteps()
-      : ['discovering_runtime_instances', 'stopping_runtime_process', 'verifying_runtime_inventory'];
+    switch (operation) {
+      case 'stop':
+        return stopSteps();
+      case 'start':
+        return ['discovering_runtime_instances', ...startReadySteps()];
+      case 'restart':
+        return ['discovering_runtime_instances', 'stopping_runtime_process', 'verifying_runtime_stopped', ...startReadySteps()];
+      case 'update':
+        return [
+          'discovering_runtime_instances',
+          'stopping_runtime_process',
+          'verifying_runtime_stopped',
+          'installing_runtime_package',
+          ...startReadySteps(),
+        ];
+    }
   }
   if (step === 'stopping_runtime_process') {
     return operation === 'stop'
-      ? ['stopping_runtime_process', 'verifying_runtime_inventory', 'runtime_stopped']
-      : ['stopping_runtime_process', 'verifying_runtime_inventory'];
-  }
-  if (step === 'verifying_runtime_inventory') {
-    return terminal
-      ? ['verifying_runtime_inventory', terminal]
-      : ['verifying_runtime_inventory'];
+      ? ['stopping_runtime_process', 'verifying_runtime_stopped', 'runtime_stopped']
+      : ['stopping_runtime_process', 'verifying_runtime_stopped'];
   }
   if (step === 'verifying_runtime_stopped') {
     return terminal
@@ -392,7 +403,7 @@ export function runtimeLifecyclePlanAfterProcessInventory(
     steps: stepStates(uniqueStepIDs([...observed, 'runtime_already_stopped', 'runtime_stopped'])),
     omitted_steps: omitted([
       'stopping_runtime_process',
-      'verifying_runtime_inventory',
+      'verifying_runtime_stopped',
     ], 'runtime_already_stopped'),
   };
 }

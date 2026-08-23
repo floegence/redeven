@@ -291,17 +291,21 @@ describe('sshRuntime', () => {
     expect(source).toContain('recordSSHControlCheckFailure(session, error);');
     expect(source).toContain('parseLaunchReport(result.stdout)');
     expect(source).toContain('formatBlockedLaunchDiagnostics(launchReport)');
-    expect(source).toContain('const replacementInventory = await inspectManagedSSHRuntimeProcesses(');
-    expect(source).toContain('await stopManagedSSHRuntimeProcesses(replacementProcessArgs, replacementInventory, stopTimeoutMs);');
-    expect(source).toContain('preparedRuntimePackage = await prepareRemoteRuntimePackage(packageArgs);');
-    expect(source).toContain('await stopManagedSSHRuntimeProcesses(processArgs, processInventory, stopTimeoutMs);');
+    expect(source).toContain('const replacementInventory = await processSession.inspect();');
+    expect(source).toContain('await processSession.stop(replacementInventory, stopTimeoutMs);');
+    expect(source).toContain('[preparedRuntimePackage, processSession] = await Promise.all([');
+    expect(source).toContain('prepareRemoteRuntimePackage(packageArgs).then((prepared) => {');
+    expect(source).toContain('const updateProcessSessionTask');
+    expect(source).toContain('onProgress: undefined,');
+    expect(source).toContain('await processSession.stop(processInventory, stopTimeoutMs);');
     expect(source).toContain('await activatePreparedRemoteRuntimePackage({');
-    expect(source.indexOf('preparedRuntimePackage = await prepareRemoteRuntimePackage(packageArgs);')).toBeLessThan(
-      source.indexOf('await stopManagedSSHRuntimeProcesses(processArgs, processInventory, stopTimeoutMs);'),
+    expect(source.indexOf('prepareRemoteRuntimePackage(packageArgs).then((prepared) => {')).toBeLessThan(
+      source.indexOf('await processSession.stop(processInventory, stopTimeoutMs);'),
     );
-    expect(source.indexOf('await stopManagedSSHRuntimeProcesses(processArgs, processInventory, stopTimeoutMs);')).toBeLessThan(
+    expect(source.indexOf('await processSession.stop(processInventory, stopTimeoutMs);')).toBeLessThan(
       source.indexOf('await activatePreparedRemoteRuntimePackage({'),
     );
+    expect(source).not.toContain('runManagedSSHRuntimeProcessCommand');
     expect(source).not.toContain('kill "$pid"');
     expect(source).toContain('Remote Redeven launcher failed before reporting readiness (${exitReason}).');
   });

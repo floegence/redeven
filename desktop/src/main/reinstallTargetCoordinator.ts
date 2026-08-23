@@ -19,6 +19,7 @@ import {
   desktopSSHAuthority,
 } from '../shared/desktopSSH';
 import { runtimeLifecycleTargetKey } from './runtimeLifecycleCoordinator';
+import type { DesktopSSHRemotePlatform } from './sshReleaseAssets';
 import {
   REINSTALL_TARGET_JOURNAL_PHASES,
   reinstallTargetStepProgress,
@@ -63,6 +64,8 @@ export type ReinstallTargetProcessInventory = Readonly<{
   instances: readonly ReinstallTargetProcess[];
   summary: Readonly<{ automatic: number; blocked: number }>;
 }>;
+
+export type ReinstallTargetPlatform = DesktopSSHRemotePlatform;
 
 export type ReinstallTargetPreview = Readonly<{
   preflight_id: string;
@@ -120,17 +123,22 @@ export type ReinstallTargetCoordinatorDependencies = Readonly<{
   resolve_target: (subject: ReinstallTargetSubject) => Promise<ReinstallTargetDescriptor>;
   resolve_candidates: () => Promise<readonly ReinstallTargetDescriptor[]>;
   create_executor: (descriptor: ReinstallTargetDescriptor) => RuntimeHostAccessExecutor;
-  inspect_processes: (
+  prepare_platform: (
+    descriptor: ReinstallTargetDescriptor,
+    executor: RuntimeHostAccessExecutor,
+  ) => Promise<ReinstallTargetPlatform>;
+  prepare_process_session: (
     descriptor: ReinstallTargetDescriptor,
     targetRoot: string,
     executor: RuntimeHostAccessExecutor,
-  ) => Promise<ReinstallTargetProcessInventory>;
-  stop_processes: (
-    descriptor: ReinstallTargetDescriptor,
-    targetRoot: string,
-    inventory: ReinstallTargetProcessInventory,
-    executor: RuntimeHostAccessExecutor,
-  ) => Promise<ReinstallTargetProcessInventory>;
+    platform: ReinstallTargetPlatform,
+  ) => Promise<
+    Readonly<{
+      inspect: () => Promise<ReinstallTargetProcessInventory>;
+      stop: (inventory: ReinstallTargetProcessInventory) => Promise<ReinstallTargetProcessInventory>;
+      close: () => Promise<void>;
+    }>
+  >;
   mark_in_progress: (descriptor: ReinstallTargetDescriptor, preflightID: string) => Promise<void>;
   close_sessions: (descriptor: ReinstallTargetDescriptor) => Promise<void>;
   clear_desktop_state: (descriptor: ReinstallTargetDescriptor) => Promise<void>;
@@ -138,6 +146,8 @@ export type ReinstallTargetCoordinatorDependencies = Readonly<{
     descriptor: ReinstallTargetDescriptor,
     targetRoot: string,
     operationID: string,
+    executor: RuntimeHostAccessExecutor,
+    platform: ReinstallTargetPlatform,
     onProgress?: (tasks: readonly DesktopComponentTaskProgress[]) => void,
   ) => Promise<PreparedComponentBatch | null>;
   install_fresh: (
@@ -361,7 +371,11 @@ function parsePreflightOutput(stdout: string): Readonly<{ root: string; exists: 
     throw new ReinstallTargetCoordinatorError('reinstall_blocked', 'Desktop received an invalid target preflight result.');
   }
   const home = compact(lines[2]);
-  return { root, exists: lines[1] === '1', ...(home.startsWith('/') ? { home } : {}) };
+  return {
+    root,
+    exists: lines[1] === '1',
+    ...(home.startsWith('/') ? { home } : {}),
+  };
 }
 
 async function confirmedRootMatches(
@@ -540,9 +554,14 @@ export class ReinstallTargetCoordinator {
     if (!cached) {
       const journal = await this.readJournal(cleanPreflightID);
       persistedPhase = journal.phase;
-      const descriptor = await this.dependencies.resolve_target({ environment_id: journal.environment_id });
+      const descriptor = await this.dependencies.resolve_target({
+        environment_id: journal.environment_id,
+      });
       cached = {
-        descriptor: { ...descriptor, affected_environment_ids: [...journal.affected_environment_ids] },
+        descriptor: {
+          ...descriptor,
+          affected_environment_ids: [...journal.affected_environment_ids],
+        },
         descriptorFingerprint: journal.descriptor_fingerprint,
         physicalTargetFingerprint: journal.physical_target_fingerprint,
         preview: journal.preview,
@@ -565,7 +584,9 @@ export class ReinstallTargetCoordinator {
         updated_at_unix_ms: Date.now(),
       };
     }
-    const current = await this.dependencies.resolve_target({ environment_id: cached.descriptor.environment_id });
+    const current = await this.dependencies.resolve_target({
+      environment_id: cached.descriptor.environment_id,
+    });
     const currentFingerprint = reinstallTargetDescriptorFingerprint(current);
     const legacyFingerprint = legacyReinstallTargetDescriptorFingerprint(current);
     if (currentFingerprint !== cached.descriptorFingerprint && legacyFingerprint !== cached.descriptorFingerprint) {
@@ -579,6 +600,9 @@ export class ReinstallTargetCoordinator {
     let quarantineRoot = `${cached.preview.target_root}.redeven-quarantine-${operationID}`;
     let isolated = false;
     let preparedBatch: PreparedComponentBatch | null = null;
+    let processSession: Awaited<ReturnType<ReinstallTargetCoordinatorDependencies['prepare_process_session']>> | null =
+      null;
+    let targetPlatform: ReinstallTargetPlatform | null = null;
     let targetDisruptionStarted = false;
     let installAttempted = false;
     let installFinalized = false;
@@ -660,19 +684,32 @@ export class ReinstallTargetCoordinator {
         updated_at_unix_ms: Date.now(),
       };
       await this.writeJournal(currentJournal);
-      await persistPhase('maintenance_helper_ready');
-      // Package preparation is surfaced as one combined phase. The concrete
-      // installer runs Gateway and Runtime pipelines concurrently.
+      await persistPhase('preparing_maintenance_helper');
+      targetPlatform = await this.dependencies.prepare_platform(currentResolved, executor);
+      const processSessionTask = this.dependencies
+        .prepare_process_session(currentResolved, repeated.root, executor, targetPlatform)
+        .catch(() => null);
+      const packageBatchTask = this.dependencies.prepare_packages?.(
+        currentResolved,
+        repeated.root,
+        operationID,
+        executor,
+        targetPlatform,
+        (tasks) => {
+          onProgress?.('packages_preparing_and_transferring', undefined, tasks);
+        },
+      ) ?? Promise.resolve(null);
+      // Helper and component package staging start together. Reinstall keeps
+      // helper failure best-effort, while package failure remains non-destructive.
+      processSession = await processSessionTask;
       await persistPhase('packages_preparing_and_transferring');
-      preparedBatch = await this.dependencies.prepare_packages?.(currentResolved, repeated.root, operationID, (tasks) => {
-        onProgress?.('packages_preparing_and_transferring', undefined, tasks);
-      }) ?? null;
+      preparedBatch = await packageBatchTask;
       await this.dependencies.mark_in_progress(currentResolved, cached.preview.preflight_id).catch(() => undefined);
       await this.dependencies.close_sessions(currentResolved).catch(() => undefined);
       await persistPhase('sessions_closed');
       let inventory: ReinstallTargetProcessInventory | null = null;
       try {
-        inventory = await this.dependencies.inspect_processes(currentResolved, repeated.root, executor);
+        inventory = await processSession?.inspect() ?? null;
       } catch {
         // A broken or unidentifiable old process is not a reason to preserve a
         // broken installation. Continue with the exact-root cleanup.
@@ -680,7 +717,7 @@ export class ReinstallTargetCoordinator {
       await persistPhase('redeven_processes_stop_attempted');
       if (inventory && inventory.instances.length > 0) {
         try {
-          await this.dependencies.stop_processes(currentResolved, repeated.root, inventory, executor);
+          await processSession?.stop(inventory);
         } catch {
           // Best-effort stop. The subsequent filesystem operation is the
           // authority for whether this reinstall can proceed.
@@ -752,18 +789,16 @@ export class ReinstallTargetCoordinator {
             if (!executor) {
               throw new Error('The direct maintenance channel is unavailable for failure cleanup.');
             }
-            const freshInventory = await this.dependencies.inspect_processes(
+            const cleanupSession = processSession ?? await this.dependencies.prepare_process_session(
               activeDescriptor,
               activeTargetRoot,
               executor,
+              targetPlatform ?? await this.dependencies.prepare_platform(activeDescriptor, executor),
             );
+            processSession = cleanupSession;
+            const freshInventory = await cleanupSession.inspect();
             const stoppedFresh = freshInventory.instances.length > 0
-              ? await this.dependencies.stop_processes(
-                  activeDescriptor,
-                  activeTargetRoot,
-                  freshInventory,
-                  executor,
-                )
+              ? await cleanupSession.stop(freshInventory)
               : freshInventory;
             if (stoppedFresh.instances.some((instance) => instance.stop_authority === 'automatic')) {
               throw new Error('Desktop could not stop every verified process from the new managed installation.');
@@ -811,6 +846,7 @@ export class ReinstallTargetCoordinator {
         `Fresh Redeven installation failed. The previous installation will not be restarted automatically. ${recoveryError instanceof Error ? recoveryError.message : String(recoveryError)}`,
       );
     } finally {
+      await processSession?.close().catch(() => undefined);
       await executor?.release();
       for (const candidate of lockKeys.length > 0 ? lockKeys : [lockKey]) {
         this.locks.delete(candidate);
@@ -823,8 +859,13 @@ export class ReinstallTargetCoordinator {
     onProgress?: (phase: Extract<ReinstallTargetProgressPhase, 'cleanup' | 'completed'>) => void,
   ): Promise<void> {
     const journal = await this.readJournal(preflightID);
-    const selected = await this.dependencies.resolve_target({ environment_id: journal.environment_id });
-    const descriptor = { ...selected, affected_environment_ids: [...journal.affected_environment_ids] };
+    const selected = await this.dependencies.resolve_target({
+      environment_id: journal.environment_id,
+    });
+    const descriptor = {
+      ...selected,
+      affected_environment_ids: [...journal.affected_environment_ids],
+    };
     const selectedFingerprint = reinstallTargetDescriptorFingerprint(selected);
     const selectedLegacyFingerprint = legacyReinstallTargetDescriptorFingerprint(selected);
     if (
@@ -871,7 +912,9 @@ export class ReinstallTargetCoordinator {
         onProgress?.('cleanup');
       }
       await this.dependencies.clear_completed_marker(descriptor);
-      await fs.rm(journalFile(this.dependencies.journal_root, preflightID), { force: true });
+      await fs.rm(journalFile(this.dependencies.journal_root, preflightID), {
+        force: true,
+      });
       onProgress?.('completed');
     } finally {
       await executor.release();
@@ -920,7 +963,9 @@ export class ReinstallTargetCoordinator {
   }
 
   async validatePersistedJournalTarget(journal: ReinstallTargetJournal): Promise<void> {
-    const descriptor = await this.dependencies.resolve_target({ environment_id: journal.environment_id });
+    const descriptor = await this.dependencies.resolve_target({
+      environment_id: journal.environment_id,
+    });
     // Hydration only compares the durable registered identity. The physical
     // root may be a remote alias or an old canonical representation; it is
     // re-resolved through the direct maintenance channel when work resumes.
@@ -938,7 +983,10 @@ export class ReinstallTargetCoordinator {
     await fs.mkdir(this.dependencies.journal_root, { recursive: true });
     const file = journalFile(this.dependencies.journal_root, journal.preflight_id);
     const temporary = `${file}.${crypto.randomUUID()}.tmp`;
-    await fs.writeFile(temporary, JSON.stringify(journal, null, 2), { encoding: 'utf8', mode: 0o600 });
+    await fs.writeFile(temporary, JSON.stringify(journal, null, 2), {
+      encoding: 'utf8',
+      mode: 0o600,
+    });
     await fs.rename(temporary, file);
   }
 

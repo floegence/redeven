@@ -9,7 +9,9 @@ import {
   containerRuntimeDaemonStartCommand,
   containerRuntimeDaemonStatusCommand,
   containerRuntimeExecCommand,
-  containerRuntimeProcessHelperCommand,
+  containerRuntimeProcessCommand,
+  containerRuntimeProcessHelperCleanupCommand,
+  containerRuntimeProcessHelperStageCommand,
   containerRuntimeUploadedInstallCommand,
   parseContainerListOutput,
   parseContainerInspectJSON,
@@ -295,16 +297,18 @@ describe('containerRuntime', () => {
   });
 
   it('builds digest-bound container inventory and stop commands through the current Desktop helper', () => {
-    const inventoryCommand = containerRuntimeProcessHelperCommand({
+    const inventoryCommand = containerRuntimeProcessCommand({
       engine: 'docker',
       container_id: 'dev',
+      helper_binary_path: '/tmp/redeven-runtime-process-helper.123/redeven',
       runtime_binary_path: '/root/.redeven/runtime/managed/bin/redeven',
       runtime_root: '/root/.redeven',
       operation: 'inventory',
     });
-    const stopCommand = containerRuntimeProcessHelperCommand({
+    const stopCommand = containerRuntimeProcessCommand({
       engine: 'podman',
       container_id: 'dev',
+      helper_binary_path: '/tmp/redeven-runtime-process-helper.123/redeven',
       runtime_binary_path: '/root/.redeven/runtime/managed/bin/redeven',
       runtime_root: '/root/.redeven',
       operation: 'stop',
@@ -317,8 +321,18 @@ describe('containerRuntime', () => {
     expect(stopCommand.join('\n')).toContain('--all-matching');
     expect(stopCommand.join('\n')).toContain('--expected-inventory-digest "$inventory_digest"');
     expect(stopCommand).toContain('a'.repeat(64));
-    expect(stopCommand.join('\n')).toContain('tar -xzf "$archive_path"');
-    expect(stopCommand.join('\n')).toContain('rm -rf "$helper_root"');
+    const stageCommand = containerRuntimeProcessHelperStageCommand({
+      engine: 'docker',
+      container_id: 'dev',
+    });
+    const cleanupCommand = containerRuntimeProcessHelperCleanupCommand({
+      engine: 'docker',
+      container_id: 'dev',
+      helper_binary_path: '/tmp/redeven-runtime-process-helper.123/redeven',
+    });
+    expect(stageCommand.join('\n')).toContain('tar -xzf "$archive_path"');
+    expect(cleanupCommand.join('\n')).toContain('rm -rf -- "$helper_root"');
+    expect(stopCommand.join('\n')).not.toContain('tar -xzf "$archive_path"');
     expect(stopCommand.join('\n')).not.toContain('--process-contract-version');
     expect(stopCommand.join('\n')).not.toContain('--include-known-legacy');
     expect(stopCommand.join(' ')).not.toContain('docker stop');

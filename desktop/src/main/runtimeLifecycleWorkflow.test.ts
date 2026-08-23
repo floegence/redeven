@@ -31,7 +31,7 @@ function containerWorkflow(): RuntimeLifecycleWorkflow {
 }
 
 describe('RuntimeLifecycleWorkflow', () => {
-  it('completes an explicit local stop after runtime inventory verification', () => {
+  it('completes an explicit local stop after verifying the old runtime stopped', () => {
     const subject = new RuntimeLifecycleWorkflow({
       location: 'local_host',
       operation: 'stop',
@@ -54,7 +54,7 @@ describe('RuntimeLifecycleWorkflow', () => {
     });
     subject.advanceToStep('discovering_runtime_instances', 'Discovering runtime processes');
     subject.advanceToStep('stopping_runtime_process', 'Stopping runtime');
-    subject.advanceToStep('verifying_runtime_inventory', 'Verifying runtime process inventory');
+    subject.advanceToStep('verifying_runtime_stopped', 'Verifying runtime stopped');
 
     expect(() => subject.beginStep('runtime_stopped', 'Runtime stopped')).not.toThrow();
     subject.completeStep('runtime_stopped');
@@ -64,7 +64,7 @@ describe('RuntimeLifecycleWorkflow', () => {
       ['checking_existing_runtime', 'succeeded'],
       ['discovering_runtime_instances', 'succeeded'],
       ['stopping_runtime_process', 'succeeded'],
-      ['verifying_runtime_inventory', 'succeeded'],
+      ['verifying_runtime_stopped', 'succeeded'],
       ['runtime_stopped', 'succeeded'],
     ]);
   });
@@ -104,15 +104,47 @@ describe('RuntimeLifecycleWorkflow', () => {
     expect(subject.beginStep('stopping_runtime_process', 'Stopping runtime').progress.active_step_id)
       .toBe('stopping_runtime_process');
     subject.completeStep('stopping_runtime_process');
-    expect(subject.beginStep('verifying_runtime_inventory', 'Verifying inventory').progress.active_step_id)
-      .toBe('verifying_runtime_inventory');
+    expect(subject.beginStep('verifying_runtime_stopped', 'Verifying stopped').progress.active_step_id)
+      .toBe('verifying_runtime_stopped');
 
     expect(subject.observeStep('checking_host', 'Late helper reconnect')).toBeNull();
-    expect(subject.progress().active_step_id).toBe('verifying_runtime_inventory');
+    expect(subject.progress().active_step_id).toBe('verifying_runtime_stopped');
     expect(subject.progress().steps.map((step) => [step.id, step.status])).toContainEqual([
       'checking_runtime_package',
       'succeeded',
     ]);
+  });
+
+  it('keeps parallel helper and package tasks on one observable preparation step', () => {
+    const subject = workflow();
+    subject.commitPlan({
+      state: 'executing',
+      steps: [
+        'checking_host',
+        'checking_runtime_package',
+        'preparing_maintenance_helper',
+        'discovering_runtime_instances',
+      ],
+    });
+    subject.advanceToStep('preparing_maintenance_helper', 'Preparing Runtime resources');
+    subject.updateStepTasks('preparing_maintenance_helper', [{
+      id: 'maintenance_helper',
+      status: 'running',
+      phase: 'preparing',
+      strategy: 'desktop_upload',
+    }, {
+      id: 'runtime',
+      status: 'running',
+      phase: 'transferring',
+      strategy: 'desktop_upload',
+    }]);
+
+    const hydrated = RuntimeLifecycleWorkflow.fromProgress(subject.progress());
+    expect(hydrated.progress().steps.find((step) => step.id === 'preparing_maintenance_helper')?.tasks)
+      .toEqual([
+        expect.objectContaining({ id: 'maintenance_helper', status: 'running' }),
+        expect.objectContaining({ id: 'runtime', phase: 'transferring' }),
+      ]);
   });
 
   it('anchors failures to the step carried by the error', () => {
@@ -170,6 +202,7 @@ describe('RuntimeLifecycleWorkflow', () => {
       ['installing_runtime_package', 'pending'],
       ['starting_runtime_process', 'pending'],
       ['checking_runtime_service', 'pending'],
+      ['verifying_runtime_inventory', 'pending'],
       ['runtime_ready', 'pending'],
     ]);
   });
@@ -271,6 +304,7 @@ describe('RuntimeLifecycleWorkflow', () => {
       ['installing_runtime_package', 'pending'],
       ['starting_runtime_process', 'pending'],
       ['checking_runtime_service', 'pending'],
+      ['verifying_runtime_inventory', 'pending'],
       ['runtime_ready', 'pending'],
     ]);
   });
@@ -311,6 +345,7 @@ describe('RuntimeLifecycleWorkflow', () => {
       ['installing_runtime_package', 'pending'],
       ['starting_runtime_process', 'pending'],
       ['checking_runtime_service', 'pending'],
+      ['verifying_runtime_inventory', 'pending'],
       ['runtime_ready', 'pending'],
     ]);
     expect(() => subject.beginStep('preparing_runtime_package', 'Preparing package'))
@@ -377,8 +412,8 @@ describe('RuntimeLifecycleWorkflow', () => {
     });
     subject.beginStep('stopping_runtime_process', 'Stopping runtime');
     subject.completeStep('stopping_runtime_process');
-    subject.beginStep('verifying_runtime_inventory', 'Verifying inventory');
-    subject.completeStep('verifying_runtime_inventory');
+    subject.beginStep('verifying_runtime_stopped', 'Verifying stopped');
+    subject.completeStep('verifying_runtime_stopped');
 
     const stoppedPlan = runtimeLifecyclePlanAfterDecision({
       location: 'local_container',
@@ -405,11 +440,11 @@ describe('RuntimeLifecycleWorkflow', () => {
       ['checking_container', 'succeeded'],
       ['discovering_runtime_instances', 'succeeded'],
       ['stopping_runtime_process', 'succeeded'],
-      ['verifying_runtime_inventory', 'succeeded'],
+      ['verifying_runtime_stopped', 'succeeded'],
     ]);
     const omittedStepIDs = subject.progress().diagnostics?.omitted_steps?.map((step) => step.id) ?? [];
     expect(omittedStepIDs).not.toContain('stopping_runtime_process');
-    expect(omittedStepIDs).not.toContain('verifying_runtime_inventory');
+    expect(omittedStepIDs).not.toContain('verifying_runtime_stopped');
 
     const platformPlan = runtimeLifecyclePlanIncludingStep({
       location: 'local_container',
@@ -441,13 +476,14 @@ describe('RuntimeLifecycleWorkflow', () => {
       ['checking_container', 'succeeded'],
       ['discovering_runtime_instances', 'succeeded'],
       ['stopping_runtime_process', 'succeeded'],
-      ['verifying_runtime_inventory', 'succeeded'],
+      ['verifying_runtime_stopped', 'succeeded'],
       ['detecting_platform', 'succeeded'],
       ['checking_runtime_package', 'pending'],
       ['preparing_runtime_package', 'pending'],
       ['installing_runtime_package', 'pending'],
       ['starting_runtime_process', 'pending'],
       ['checking_runtime_service', 'pending'],
+      ['verifying_runtime_inventory', 'pending'],
       ['runtime_ready', 'pending'],
     ]);
   });
@@ -481,8 +517,8 @@ describe('RuntimeLifecycleWorkflow', () => {
     });
     subject.beginStep('stopping_runtime_process', 'Stopping runtime');
     subject.completeStep('stopping_runtime_process');
-    subject.beginStep('verifying_runtime_inventory', 'Verifying inventory');
-    subject.completeStep('verifying_runtime_inventory');
+    subject.beginStep('verifying_runtime_stopped', 'Verifying stopped');
+    subject.completeStep('verifying_runtime_stopped');
 
     const alreadyCurrentPlan = runtimeLifecyclePlanAfterDecision({
       location: 'local_container',
@@ -507,7 +543,7 @@ describe('RuntimeLifecycleWorkflow', () => {
       'checking_container',
       'discovering_runtime_instances',
       'stopping_runtime_process',
-      'verifying_runtime_inventory',
+      'verifying_runtime_stopped',
       'checking_runtime_service',
       'runtime_up_to_date',
     ]);

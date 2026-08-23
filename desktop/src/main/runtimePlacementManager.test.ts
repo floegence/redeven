@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const uploadAssetMocks = vi.hoisted(() => ({
   prepareDesktopRuntimeUploadAsset: vi.fn(),
+  prepareDesktopRuntimeMaintenanceHelperAsset: vi.fn(),
 }));
 
 vi.mock('./runtimePackageCache', async () => {
@@ -13,6 +14,7 @@ vi.mock('./runtimePackageCache', async () => {
   return {
     ...actual,
     prepareDesktopRuntimeUploadAsset: uploadAssetMocks.prepareDesktopRuntimeUploadAsset,
+    prepareDesktopRuntimeMaintenanceHelperAsset: uploadAssetMocks.prepareDesktopRuntimeMaintenanceHelperAsset,
   };
 });
 
@@ -32,9 +34,13 @@ describe('runtimePlacementManager', () => {
   beforeEach(() => {
     originalPath = process.env.PATH ?? '';
     uploadAssetMocks.prepareDesktopRuntimeUploadAsset.mockReset();
+    uploadAssetMocks.prepareDesktopRuntimeMaintenanceHelperAsset.mockReset();
     uploadAssetMocks.prepareDesktopRuntimeUploadAsset.mockResolvedValue({
       archiveData: Buffer.from('redeven-archive'),
     });
+    uploadAssetMocks.prepareDesktopRuntimeMaintenanceHelperAsset.mockResolvedValue(
+      Buffer.from('redeven-helper-archive'),
+    );
   });
 
   afterEach(() => {
@@ -117,12 +123,13 @@ describe('runtimePlacementManager', () => {
       '    process.exit(0);',
       '  }',
       '  if (execMarker === "redeven-container-runtime-stop-all") { process.stdout.write("__REDEVEN_RUNTIME_PROCESS_EXIT__=0\\n" + processCommandEnvelope("stop")); process.exit(0); }',
+        '  if (execMarker === "redeven-container-runtime-process-helper-stage") { fs.readFileSync(0); process.stdout.write("/tmp/redeven-runtime-process-helper.test/redeven\\n"); process.exit(0); }',
       '  if (execMarker === "redeven-container-runtime-process-helper") {',
-      '    fs.readFileSync(0);',
-      '    const operation = args[markerIndex + 4];',
+        '    const operation = args[markerIndex + 5];',
       '    process.stdout.write("__REDEVEN_RUNTIME_PROCESS_EXIT__=0\\n" + processCommandEnvelope(operation));',
       '    process.exit(0);',
       '  }',
+        '  if (execMarker === "redeven-container-runtime-process-helper-cleanup") { process.exit(0); }',
       '  if (execMarker === "redeven-container-runtime-start" || (args.includes("run") && args.includes("--mode") && args.includes("desktop"))) { event("run"); fs.writeFileSync(daemon, "running"); process.exit(0); }',
       '  if (execMarker === "redeven-container-runtime-status" || args.includes("desktop-runtime-status")) {',
       '    if (fs.existsSync(orphan)) { event("orphan_status"); fs.unlinkSync(orphan); process.stdout.write(JSON.stringify({ status: "blocked", code: "live_process_without_management_socket", message: "A Redeven runtime process is alive, but its management socket is not reachable.", lock_owner: { pid: 4242 }, diagnostics: { lock_pid: 4242, pid_alive: true, attach_state: "live_process_without_management_socket", failure_code: "management_socket_unreachable", socket_reachable: false } })); process.exit(0); }',
@@ -236,12 +243,16 @@ describe('runtimePlacementManager', () => {
       runtimeReleaseTag: 'v1.2.3',
       platform: expect.objectContaining({ platform_id: 'linux_amd64' }),
     }));
+    expect(uploadAssetMocks.prepareDesktopRuntimeMaintenanceHelperAsset).toHaveBeenCalledTimes(1);
     expect(progressPhases).toEqual([
       'checking_container',
       'detecting_platform',
-      'discovering_runtime_instances',
       'checking_runtime',
+      'preparing_maintenance_helper',
       'preparing_runtime_package',
+      'runtime_package_ready',
+      'maintenance_helper_ready',
+      'discovering_runtime_instances',
       'installing_runtime',
       'starting_runtime_daemon',
       'waiting_runtime_daemon',
@@ -286,12 +297,12 @@ describe('runtimePlacementManager', () => {
       stamp_path: MANAGED_RUNTIME_STAMP_PATH,
     });
     expect(await fs.readFile(markerPath, 'utf8')).toBe('v0.6.10');
-    expect(uploadAssetMocks.prepareDesktopRuntimeUploadAsset).toHaveBeenCalledTimes(2);
+    expect(uploadAssetMocks.prepareDesktopRuntimeUploadAsset).not.toHaveBeenCalled();
     expect(progressPhases).toEqual([
       'checking_container',
       'detecting_platform',
-      'discovering_runtime_instances',
       'checking_runtime',
+      'discovering_runtime_instances',
       'starting_runtime_daemon',
       'waiting_runtime_daemon',
       'verifying_runtime_inventory',
@@ -329,6 +340,7 @@ describe('runtimePlacementManager', () => {
       sourceRuntimeRoot: tempDir,
       platform: expect.objectContaining({ platform_id: 'linux_amd64' }),
     }));
+    expect(uploadAssetMocks.prepareDesktopRuntimeMaintenanceHelperAsset).toHaveBeenCalledTimes(1);
   });
 
   it('replaces a ready container runtime when the user explicitly requests an update', async () => {
@@ -430,7 +442,9 @@ describe('runtimePlacementManager', () => {
     });
 
     expect(await fs.readFile(eventsPath, 'utf8').catch(() => '')).toBe('');
-    await expect(fs.stat(uploadedArchivePath)).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(fs.stat(uploadedArchivePath)).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
   });
 
   it('fails closed when container process identity is incomplete', async () => {
@@ -463,6 +477,7 @@ describe('runtimePlacementManager', () => {
     expect(progressPhases).toEqual([
       'checking_container',
       'detecting_platform',
+      'checking_runtime',
       'discovering_runtime_instances',
     ]);
   });
@@ -525,7 +540,7 @@ describe('runtimePlacementManager', () => {
     });
 
     expect(ready.startup?.pid).toBe(2222);
-    expect(uploadAssetMocks.prepareDesktopRuntimeUploadAsset).toHaveBeenCalledTimes(2);
+    expect(uploadAssetMocks.prepareDesktopRuntimeUploadAsset).not.toHaveBeenCalled();
   });
 
   it('times out when replacement readiness keeps reporting the previous daemon pid', async () => {
@@ -648,13 +663,17 @@ describe('runtimePlacementManager', () => {
         runtimeReleaseTag: 'v1.2.3',
         platform: expect.objectContaining({ platform_id: 'linux_amd64' }),
       }));
+      expect(uploadAssetMocks.prepareDesktopRuntimeMaintenanceHelperAsset).toHaveBeenCalledTimes(1);
       expect(progressPhases).toEqual([
         'checking_host',
         'checking_container',
         'detecting_platform',
-        'discovering_runtime_instances',
         'checking_runtime',
+        'preparing_maintenance_helper',
         'preparing_runtime_package',
+        'runtime_package_ready',
+        'maintenance_helper_ready',
+        'discovering_runtime_instances',
         'installing_runtime',
         'starting_runtime_daemon',
         'waiting_runtime_daemon',
