@@ -363,6 +363,9 @@ describe('FlowerSurface navigation structured input', () => {
     await waitFor(() => delayedDetailReloadStarted);
 
     expect(runtime.querySelector('[data-flower-input-request-prompt]')).not.toBeNull();
+    const stopWhileSyncing = runtime.querySelector('.flower-composer-stop') as HTMLButtonElement;
+    expect(stopWhileSyncing).not.toBeNull();
+    expect(stopWhileSyncing.disabled).toBe(false);
 
     terminalDetail.resolve(liveBootstrap(summaryOnlyThread, 2));
     await waitFor(() => runtime.querySelector('[data-flower-input-request-prompt]') === null);

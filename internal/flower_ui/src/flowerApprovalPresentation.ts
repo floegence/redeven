@@ -16,7 +16,7 @@ export type FlowerApprovalPresentation = Readonly<{
   targets: readonly string[];
   command?: string;
   details: readonly string[];
-  risk?: string;
+  description?: string;
 }>;
 
 const fileMutationTools = new Set(['file.write', 'file.edit', 'apply_patch']);
@@ -75,6 +75,6 @@ export function presentFlowerApproval(
     targets: displayTargets,
     ...(command ? { command } : {}),
     details: workingDirectories.map((target) => copy.workingDirectory(target.label)),
-    ...(action.summary.description?.trim() ? { risk: action.summary.description.trim() } : {}),
+    ...(action.summary.description?.trim() ? { description: action.summary.description.trim() } : {}),
   };
 }

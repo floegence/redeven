@@ -128,6 +128,7 @@
       "threadLoading": "Cargando conversación...",
       "threadSyncingLatest": "Sincronizando la respuesta más reciente...",
       "threadSyncFailed": "Flower no pudo sincronizar la respuesta más reciente. Inténtalo de nuevo.",
+      "activeTurnBusy": "La respuesta anterior sigue activa. Puedes detenerla antes de volver a enviar.",
       "composerErrorTitle": "Flower no pudo enviar el mensaje.",
       "stopErrorTitle": "Flower no pudo detener esta respuesta.",
       "modelStatusPreparing": "Preparando solicitud al modelo...",

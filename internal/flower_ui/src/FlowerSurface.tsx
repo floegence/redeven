@@ -83,7 +83,7 @@ import type {
   FlowerSubagentTimelineRow,
   FlowerWorkingDirectoryPathContext,
 } from './contracts/flowerSurfaceContracts';
-import { projectFlowerThreadListItem, trimString } from './flowerSurfaceModel';
+import { flowerThreadHasActiveTurnEvidence, projectFlowerThreadListItem, trimString } from './flowerSurfaceModel';
 import { presentFlowerApproval } from './flowerApprovalPresentation';
 import { canonicalFlowerThreadSnapshotTitle } from './flowerThreadTitle';
 import { projectFlowerCompanionLiveTail, type FlowerCompanionProgressKind } from './flowerCompanionLiveTail';
@@ -465,12 +465,21 @@ function getErrorMessage(error: unknown): string {
 }
 
 const FLOWER_APPROVAL_CONFLICT_ERROR_CODE = 'AI_APPROVAL_CONFLICT';
+const FLOWER_ACTIVE_TURN_ADMISSION_ERROR_CODE = 'floret_thread_admission_blocked';
 
 function isFlowerApprovalConflict(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
   const record = error as Record<string, unknown>;
   const code = typeof record.code === 'string' ? record.code : '';
   return trimString(code) === FLOWER_APPROVAL_CONFLICT_ERROR_CODE || Number(record.status) === 409;
+}
+
+function isFlowerActiveTurnAdmissionError(error: unknown): boolean {
+  const code = error && typeof error === 'object' && 'code' in error
+    ? trimString(String((error as { code?: unknown }).code ?? ''))
+    : '';
+  return code === FLOWER_ACTIVE_TURN_ADMISSION_ERROR_CODE
+    || getErrorMessage(error).toLowerCase().includes('already has an active turn');
 }
 
 function flowerApprovalRequest(
@@ -762,6 +771,26 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [snapshot, setSnapshot] = createSignal<FlowerSettingsSnapshot | null>(null);
 	const [threadCache, setThreadCache] = createSignal(createThreadCache());
   const [transportOutbox, setTransportOutbox] = createSignal(createTransportOutbox());
+  const [stoppingThreadIDs, setStoppingThreadIDs] = createSignal<ReadonlySet<string>>(new Set());
+  const [busyAdmissionThreadIDs, setBusyAdmissionThreadIDs] = createSignal<ReadonlySet<string>>(new Set());
+  const stopThreadRequests = new Map<string, Promise<void>>();
+  const activeTurnAdmissionRecoveryRequests = new Map<string, Promise<void>>();
+  const busyAdmissionNotifiedThreadIDs = new Set<string>();
+  const updateThreadIDMembership = (
+    setter: typeof setStoppingThreadIDs,
+    threadID: string,
+    present: boolean,
+  ) => {
+    const tid = trimString(threadID);
+    if (!tid) return;
+    setter((current) => {
+      if (current.has(tid) === present) return current;
+      const next = new Set(current);
+      if (present) next.add(tid);
+      else next.delete(tid);
+      return next;
+    });
+  };
 	const liveTransport = createLiveTransport<FlowerLiveStreamEnvelope>();
 	const outboxResendInFlight = new Set<string>();
 	let transportOutboxDisposed = false;
@@ -1389,18 +1418,20 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const thread = selectedThread();
     return visibleInputRequest(thread);
   });
-  const selectedThreadCanStop = createMemo(() => {
-    const thread = selectedThread();
-    if (selectedThreadTerminalSyncing() || selectedThreadReadOnly() || !trimString(thread?.thread_id)) return false;
-    // A stale status snapshot may briefly leave the active run state behind.
-    // Keep Stop available while the admitted turn identity or waiting state
-    // proves that the runtime still owns a cancellable turn.
-    return Boolean(trimString(thread?.active_run_id))
-      || Boolean(trimString(thread?.model_io_status?.run_id))
-      || selectedThreadLiveStatus() === 'running'
-      || selectedThreadLiveStatus() === 'waiting_approval'
-      || selectedThreadLiveStatus() === 'waiting_user';
+  const selectedThreadStopPending = createMemo(() => stoppingThreadIDs().has(trimString(selectedThreadID())));
+  const selectedThreadHasActiveTurnEvidence = createMemo(() => {
+    const threadID = trimString(selectedThreadID());
+    if (!threadID) return false;
+    return flowerThreadHasActiveTurnEvidence(selectedThread())
+      || flowerThreadHasActiveTurnEvidence(selectedThreadSummary())
+      || busyAdmissionThreadIDs().has(threadID)
+      || stoppingThreadIDs().has(threadID);
   });
+  const selectedThreadCanStop = createMemo(() => (
+    !selectedThreadReadOnly()
+    && Boolean(trimString(selectedThreadID()))
+    && selectedThreadHasActiveTurnEvidence()
+  ));
 	const selectedThreadDetailPending = createMemo(() => {
 		const threadID = trimString(selectedThreadID());
 		return Boolean(threadID && !threadCache().views.has(threadID));
@@ -3126,6 +3157,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const retained = result.cache.views.get(threadID)?.thread ?? candidate.thread;
     setThreadCache(result.cache);
     if (state !== 'accepted') return { state, thread: retained };
+    const acceptedSummary = result.cache.summaries.get(threadID);
+    if (
+      busyAdmissionThreadIDs().has(threadID)
+      && !flowerThreadHasActiveTurnEvidence(candidate.thread)
+      && !threadSummaryNeedsDetail(acceptedSummary, candidate.thread)
+    ) {
+      updateThreadIDMembership(setBusyAdmissionThreadIDs, threadID, false);
+      busyAdmissionNotifiedThreadIDs.delete(threadID);
+    }
 
     if (
       previous
@@ -3285,6 +3325,20 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return null;
     }
     return receiveThreadView(live, source);
+  };
+  const recoverActiveTurnAdmission = (threadID: string): Promise<void> => {
+    const tid = trimString(threadID);
+    if (!tid) return Promise.resolve();
+    const existing = activeTurnAdmissionRecoveryRequests.get(tid);
+    if (existing) return existing;
+    const request = reloadSelectedThread(tid, threadLoadSequence, 'background_refresh')
+      .then(() => undefined)
+      .catch((error) => {
+        reportThreadDetailDiagnostic(tid, 'request_or_mapping', 'background_refresh', error);
+      })
+      .finally(() => activeTurnAdmissionRecoveryRequests.delete(tid));
+    activeTurnAdmissionRecoveryRequests.set(tid, request);
+    return request;
   };
 
   const waitForThreadDetailRecovery = (delayMS: number): Promise<void> => new Promise((resolve) => {
@@ -4587,7 +4641,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }
         setTransportOutbox((outbox) => outbox.drop(clientRequestID));
         if (composerSessionStillCurrent(launchSessionKey)) {
-          notifyComposerError(getErrorMessage(error));
+          if (selectedID && isFlowerActiveTurnAdmissionError(error)) {
+            updateThreadIDMembership(setBusyAdmissionThreadIDs, selectedID, true);
+            if (!busyAdmissionNotifiedThreadIDs.has(selectedID)) {
+              busyAdmissionNotifiedThreadIDs.add(selectedID);
+              notifyComposerError(copy().chat.activeTurnBusy);
+            }
+            void recoverActiveTurnAdmission(selectedID);
+          } else {
+            notifyComposerError(getErrorMessage(error));
+          }
         }
         if (preparedLongTextLocalID) launchController.remove(preparedLongTextLocalID);
         if (composerDraftOperationActive(operation)) {
@@ -4625,6 +4688,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
       setTransportOutbox((outbox) => outbox.assignThread(clientRequestID, receipt.thread_id));
       applyRuntimeCurrent(receipt.current);
+      updateThreadIDMembership(setBusyAdmissionThreadIDs, receipt.thread_id, false);
+      busyAdmissionNotifiedThreadIDs.delete(trimString(receipt.thread_id));
       if (originalCommandFenced) {
         outboxResendInFlight.delete(clientRequestID);
         originalCommandFenced = false;
@@ -4662,9 +4727,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
 
-  const stopSelectedThread = async (): Promise<FlowerThreadSnapshot> => {
-    if (selectedThreadDetailPending()) throw new Error(copy().chat.threadLoading);
-    const threadID = trimString(selectedThread()?.thread_id);
+  const stopSelectedThread = async (threadID: string): Promise<FlowerThreadSnapshot> => {
+    threadID = trimString(threadID);
     if (!threadID) throw new Error('Missing thread id.');
     const live = await props.adapter.stopThread(threadID);
     const thread = receiveThreadView(live, 'stop_confirmation').thread;
@@ -4675,25 +4739,33 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return thread;
   };
 
-  const stopThreadInFlight = new Set<string>();
-  const stopSelectedThreadFromComposer = async (): Promise<void> => {
-    const stoppingThreadID = trimString(selectedThread()?.thread_id);
-    if (!stoppingThreadID || stopThreadInFlight.has(stoppingThreadID)) return;
+  const stopSelectedThreadFromComposer = (): Promise<void> => {
+    const stoppingThreadID = trimString(selectedThreadID());
+    if (!stoppingThreadID) return Promise.resolve();
+    const existing = stopThreadRequests.get(stoppingThreadID);
+    if (existing) return existing;
     const focusHandoff = captureBottomActionFocus(stoppingThreadID);
-    stopThreadInFlight.add(stoppingThreadID);
-    try {
-      await stopSelectedThread();
-      if (selectedThreadDetailMatches(stoppingThreadID)) {
-        returnToChat();
-        scheduleBottomActionFocus(focusHandoff);
+    updateThreadIDMembership(setStoppingThreadIDs, stoppingThreadID, true);
+    const request = (async () => {
+      try {
+        await stopSelectedThread(stoppingThreadID);
+        updateThreadIDMembership(setBusyAdmissionThreadIDs, stoppingThreadID, false);
+        busyAdmissionNotifiedThreadIDs.delete(stoppingThreadID);
+        if (selectedThreadDetailMatches(stoppingThreadID)) {
+          returnToChat();
+          scheduleBottomActionFocus(focusHandoff);
+        }
+      } catch (error) {
+        if (selectedThreadID() === stoppingThreadID) {
+          notifyStopError(getErrorMessage(error));
+        }
+      } finally {
+        stopThreadRequests.delete(stoppingThreadID);
+        updateThreadIDMembership(setStoppingThreadIDs, stoppingThreadID, false);
       }
-    } catch (error) {
-      if (selectedThreadDetailMatches(stoppingThreadID)) {
-        notifyStopError(getErrorMessage(error));
-      }
-    } finally {
-      stopThreadInFlight.delete(stoppingThreadID);
-    }
+    })();
+    stopThreadRequests.set(stoppingThreadID, request);
+    return request;
   };
 
   const submitChat = async () => {
@@ -6513,6 +6585,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const composerPrimaryActionDisabled = createMemo(() => {
     if (composerReferenceMutationCount() > 0) return true;
     if (longTextPreparing()) return false;
+    if (selectedThreadStopPending()) return true;
     if (selectedThreadReadOnly()) return true;
     if (composerSlashCommand().kind === 'invalid') return true;
     if (composerPrimaryActionIsCommand()) {
@@ -6524,7 +6597,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const hasSendableText = composerTextOverLimit() ? composerChatDraftHasRawText() : Boolean(composerChatDraftText());
     return !readyForChat() || !handlerAllowsSubmitIntent() || (!hasSendableText && !composerHasReadyAttachments() && !composerHasReferences());
   });
-  const composerPrimaryActionLoading = createMemo(() => false);
+  const composerPrimaryActionLoading = createMemo(() => selectedThreadStopPending());
 
   let capturedComposerPrimaryAction: ComposerPrimaryAction | undefined;
   const captureComposerPrimaryAction = () => {
@@ -7072,7 +7145,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <div class="flower-approval-operation" data-flower-approval-operation-kind={operationKind()}>
             <span class="flower-approval-operation-icon" aria-hidden="true">{operationIcon()}</span>
             <div class="flower-approval-operation-copy">
-              <strong class="flower-approval-operation-label">{presentation().operationLabel}</strong>
+              <div class="flower-approval-operation-heading">
+                <strong class="flower-approval-operation-label">{presentation().operationLabel}</strong>
+                <Show when={presentation().description}>
+                  {(description) => (
+                    <span class="flower-approval-operation-description" title={description()}>
+                      <span aria-hidden="true">·</span> {description()}
+                    </span>
+                  )}
+                </Show>
+              </div>
               <Show when={presentation().targets.length > 0}>
                 <div class="flower-approval-targets">
                   <For each={presentation().targets}>
@@ -7096,9 +7178,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           </Show>
           <Show when={riskNote()}>
             {(note) => <p class="flower-approval-risk">{note()}</p>}
-          </Show>
-          <Show when={presentation().risk}>
-            {(risk) => <p class="flower-approval-risk">{risk()}</p>}
           </Show>
           <Show when={statusCopy()}>
             {(message) => <p id={statusID} class="flower-approval-status">{message()}</p>}
@@ -7156,7 +7235,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   class="flower-composer-stop-thread rounded-full"
                   aria-label={copy().chat.stop}
                   title={copy().chat.stop}
-                  disabled={!selectedThreadCanStop()}
+                  disabled={!selectedThreadCanStop() || selectedThreadStopPending()}
+                  loading={selectedThreadStopPending()}
                   onClick={() => void stopSelectedThreadFromComposer()}
                 />
               </Show>
@@ -10369,26 +10449,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                               <span class="flower-approval-queue-progress" aria-live="polite">
                                 {copy().chat.toolApprovalPendingCount(selectedComposerApprovalActions().length)}
                               </span>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                class="flower-composer-approval-decision flower-approval-action-pill"
-                                aria-label={copy().chat.toolApprovalRejectBatchAction(selectedApprovalBatchActions().length)}
+                              <FlowerApprovalDecisionCapsule
+                                label={copy().chat.toolApprovalPendingCount(selectedApprovalBatchActions().length)}
+                                rejectLabel={copy().chat.toolApprovalRejectBatch}
+                                approveLabel={copy().chat.toolApprovalApproveBatch}
+                                rejectAriaLabel={copy().chat.toolApprovalRejectBatchAction(selectedApprovalBatchActions().length)}
+                                approveAriaLabel={copy().chat.toolApprovalApproveBatchAction(selectedApprovalBatchActions().length)}
                                 disabled={selectedApprovalBatchActions().length < 2 || selectedApprovalBatchActions().some((candidate) => !approvalActionCanDecide(candidate))}
-                                onClick={() => void submitApprovalBatchDecision(false)}
-                              >
-                                {copy().chat.toolApprovalRejectBatch}
-                              </Button>
-                              <Button
-                                variant="primary"
-                                size="sm"
-                                class="flower-composer-approval-decision flower-approval-action-pill"
-                                aria-label={copy().chat.toolApprovalApproveBatchAction(selectedApprovalBatchActions().length)}
-                                disabled={selectedApprovalBatchActions().length < 2 || selectedApprovalBatchActions().some((candidate) => !approvalActionCanDecide(candidate))}
-                                onClick={() => void submitApprovalBatchDecision(true)}
-                              >
-                                {copy().chat.toolApprovalApproveBatch}
-                              </Button>
+                                onReject={() => void submitApprovalBatchDecision(false)}
+                                onApprove={() => void submitApprovalBatchDecision(true)}
+                              />
                               <Button
                                 variant="secondary"
                                 icon={FlowerStopIcon}
@@ -10396,7 +10466,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                                 class="flower-composer-stop-thread rounded-full"
                                 aria-label={copy().chat.stop}
                                 title={copy().chat.stop}
-                                disabled={!selectedThreadCanStop()}
+                                disabled={!selectedThreadCanStop() || selectedThreadStopPending()}
+                                loading={selectedThreadStopPending()}
                                 onClick={() => void stopSelectedThreadFromComposer()}
                               />
                             </div>
@@ -10430,7 +10501,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                         class="flower-composer-stop rounded-full"
                         aria-label={copy().chat.stop}
                         title={copy().chat.stop}
-                        disabled={!selectedThreadCanStop()}
+                        disabled={!selectedThreadCanStop() || selectedThreadStopPending()}
+                        loading={selectedThreadStopPending()}
                         onClick={() => void stopSelectedThreadFromComposer()}
                       />
                       <Button
@@ -10643,6 +10715,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                             copy={copy()}
                           />
                         )}
+                      </Show>
+                      <Show when={selectedThreadCanStop() && !composerPrimaryActionIsStop()}>
+                        <Button
+                          variant="secondary"
+                          icon={FlowerStopIcon}
+                          size="icon"
+                          class="flower-composer-stop flower-composer-stop-inline rounded-full"
+                          aria-label={copy().chat.stop}
+                          title={copy().chat.stop}
+                          disabled={selectedThreadStopPending()}
+                          loading={selectedThreadStopPending()}
+                          onClick={() => void stopSelectedThreadFromComposer()}
+                        />
                       </Show>
                       <Button
                         variant="primary"

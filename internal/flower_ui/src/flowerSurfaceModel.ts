@@ -8,6 +8,17 @@ export function trimString(value: string | null | undefined): string {
   return String(value ?? '').trim();
 }
 
+export function flowerThreadHasActiveTurnEvidence(
+  thread: FlowerThreadSnapshot | null | undefined,
+): boolean {
+  if (!thread) return false;
+  return Boolean(trimString(thread.active_run_id))
+    || Boolean(trimString(thread.model_io_status?.run_id))
+    || thread.status === 'running'
+    || thread.status === 'waiting_approval'
+    || thread.status === 'waiting_user';
+}
+
 function messagePreviewText(message: FlowerThreadSnapshot['messages'][number]): string {
   const fromBlocks = message.blocks
     ?.map((block) => (block.type === 'markdown' || block.type === 'text' ? trimString(block.content) : ''))

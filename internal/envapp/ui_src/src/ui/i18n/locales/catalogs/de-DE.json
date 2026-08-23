@@ -3897,6 +3897,7 @@
       "threadLoading": "Unterhaltung wird geladen...",
       "threadSyncingLatest": "Neueste Antwort wird synchronisiert...",
       "threadSyncFailed": "Flower konnte die neueste Antwort nicht synchronisieren. Versuche es erneut.",
+      "activeTurnBusy": "Die vorherige Antwort ist noch aktiv. Du kannst sie stoppen, bevor du erneut sendest.",
       "composerErrorTitle": "Flower konnte nicht senden.",
       "stopErrorTitle": "Flower konnte diese Antwort nicht stoppen.",
       "modelStatusPreparing": "Modellanfrage wird vorbereitet...",

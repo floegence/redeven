@@ -130,6 +130,7 @@
       "threadLoading": "正在加载对话...",
       "threadSyncingLatest": "正在同步最新回复...",
       "threadSyncFailed": "Flower 无法同步最新回复，请重试。",
+      "activeTurnBusy": "上一条回复仍在运行。停止后即可再次发送。",
       "composerErrorTitle": "Flower 发送失败。",
       "stopErrorTitle": "Flower 无法停止此回复。",
       "modelStatusPreparing": "正在准备模型请求...",

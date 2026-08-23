@@ -314,6 +314,7 @@ describe('Flower bottom decision surface', () => {
       summary: {
         label: 'printf flower-decision-surface',
         command: 'printf flower-decision-surface',
+        description: 'Validate the release endpoint',
         effects: ['shell', 'network'],
         flags: ['open_world'],
       },
@@ -407,10 +408,17 @@ describe('Flower bottom decision surface', () => {
     expect(surface.textContent).toContain('Allow the following action?');
     expect(surface.querySelector('.flower-approval-intro')).toBeNull();
     expect(surface.textContent).not.toContain('terminal.exec');
+    expect(surface.querySelector('.flower-approval-operation-description')?.textContent).toContain('Validate the release endpoint');
+    expect(surface.querySelector('.flower-approval-risk')?.textContent).not.toContain('Validate the release endpoint');
     expect(surface.textContent?.match(/printf flower-decision-surface/g)).toHaveLength(2);
     expect(surface.textContent).toContain('2 pending tool approvals');
 
     expect(decisions.map((button) => button.textContent?.trim())).toEqual(['Reject', 'Allow once', 'Reject', 'Allow once', 'Reject all', 'Allow all']);
+    expect(surface.querySelectorAll('[data-flower-approval-decision-group="true"]')).toHaveLength(3);
+    const footer = surface.querySelector('.flower-approval-queue-footer') as HTMLElement;
+    const batchCapsule = footer.querySelector('[data-flower-approval-decision-group="true"]') as HTMLElement;
+    const batchStop = footer.querySelector('.flower-composer-stop-thread') as HTMLButtonElement;
+    expect(batchCapsule.nextElementSibling).toBe(batchStop);
     const observedModes: string[] = [];
     const observer = new MutationObserver(() => {
       const mode = runtime.querySelector<HTMLElement>('[data-flower-bottom-mode]')?.dataset.flowerBottomMode;
@@ -793,11 +801,13 @@ describe('Flower bottom decision surface', () => {
       status: 'waiting_approval',
       approval_actions: [action],
     });
-    const stopThread = vi.fn(async () => liveBootstrap({
+    const stopped = liveBootstrap({
       ...approvalThread,
       status: 'canceled',
       approval_actions: [],
-    }, 22));
+    }, 22);
+    const stopResponse = deferred<typeof stopped>();
+    const stopThread = vi.fn(() => stopResponse.promise);
     const submitApproval = vi.fn(async (input) => approvalCommandResult(input.thread_id, input.interaction_id, input.approved, 22));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
@@ -818,7 +828,11 @@ describe('Flower bottom decision surface', () => {
     expect(capsule.querySelectorAll(':scope > .flower-approval-decision-divider')).toHaveLength(1);
     stop.focus();
     stop.click();
+    stop.click();
     await waitFor(() => stopThread.mock.calls.length === 1);
+    expect(stop.disabled).toBe(true);
+    expect(stop.dataset.loading).toBe('true');
+    stopResponse.resolve(stopped);
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-bottom-mode="chat"]')));
     expect(stopThread).toHaveBeenCalledTimes(1);
     expect(submitApproval).not.toHaveBeenCalled();

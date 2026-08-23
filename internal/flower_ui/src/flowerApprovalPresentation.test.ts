@@ -55,7 +55,7 @@ describe('presentFlowerApproval', () => {
     const presentation = presentFlowerApproval(action({
       tool_name: 'terminal.exec',
       summary: {
-        label: 'Run shell command', command: 'pnpm test',
+        label: 'Run shell command', command: 'pnpm test', description: 'Run the focused test suite',
         targets: [
           { kind: 'command', label: 'pnpm test' },
           { kind: 'working_directory', label: '/workspace' },
@@ -66,8 +66,10 @@ describe('presentFlowerApproval', () => {
     expect(presentation).toMatchObject({
       operationLabel: 'Run command',
       command: 'pnpm test',
+      description: 'Run the focused test suite',
       details: ['Working directory: /workspace'],
     });
+    expect(presentation).not.toHaveProperty('risk');
   });
 
   it('presents network targets without internal kind prefixes', () => {
