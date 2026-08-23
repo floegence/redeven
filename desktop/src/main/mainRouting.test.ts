@@ -917,7 +917,9 @@ describe('main routing', () => {
     expect(bridgeOpenSrc).not.toContain('await runtimeLifecycleCoordinator.waitForReadyMutation(lifecycleTargetKey)');
     expect(bridgeOpenSrc).toContain('launcherActionFailureFromRuntimeLifecycleError(error');
     expect(bridgeOpenSrc).toContain("title: 'Checking runtime status'");
-    expect(bridgeOpenSrc).toContain("if (placement.kind !== 'container_process' && hostAccess.kind !== 'ssh_host')");
+    expect(bridgeOpenSrc.indexOf("if (lifecyclePlacement.kind !== 'container_process' && lifecycleHostAccess.kind !== 'ssh_host')")).toBeLessThan(
+      bridgeOpenSrc.indexOf('runtimeLifecycleTargetKey(lifecycleHostAccess, lifecyclePlacement)'),
+    );
     expect(mainSrc).toContain('function savedRuntimePlacementReadyRecord(');
     expect(mainSrc).toContain("startup report's state_dir points at the nested local-environment state");
     expect(mainSrc).toContain('directory, which is not a valid bridge --state-root.');

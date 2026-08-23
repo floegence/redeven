@@ -14616,9 +14616,12 @@ async function prepareRuntimeContainerForLifecycle(
 async function openRuntimePlacementBridgeFromLauncher(
   request: DesktopLauncherOpenRuntimeTargetRequest,
 ): Promise<DesktopLauncherActionResult | null> {
-  const targetID = runtimeTargetIDFromRequest(request);
   const lifecycleHostAccess = runtimeHostAccessFromRequest(request);
   const lifecyclePlacement = runtimePlacementFromRequest(request);
+  if (lifecyclePlacement.kind !== 'container_process' && lifecycleHostAccess.kind !== 'ssh_host') {
+    return null;
+  }
+  const targetID = runtimeTargetIDFromRequest(request);
   const lifecycleTargetKey = runtimeLifecycleTargetKey(lifecycleHostAccess, lifecyclePlacement);
   const pendingOpen = pendingRuntimePlacementOpenByTargetID.get(targetID) ?? null;
   if (pendingOpen) {
@@ -14642,9 +14645,6 @@ async function openRuntimePlacementBridgeFromLauncher(
     let desktopModelSourceDurationMS: number | undefined;
     const hostAccess = lifecycleHostAccess;
     let placement = lifecyclePlacement;
-    if (placement.kind !== 'container_process' && hostAccess.kind !== 'ssh_host') {
-      return null;
-    }
     const environmentID = runtimeTargetEnvironmentIDFromRequest(request);
     const label = runtimeTargetLabelFromRequest(request);
     const reinstallFailure = await reinstallTargetRequiredFailureIfPresent(environmentID, label);
