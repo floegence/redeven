@@ -3,7 +3,7 @@
 import { For, Show, Suspense, createContext, createEffect, createSignal, onCleanup, onMount, useContext, type JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PluginPlatformRequestError, type PluginRecoverySnapshot } from '@floegence/redevplugin-ui';
+import { PluginPlatformRequestError, type PluginExecutionEventList, type PluginRecoverySnapshot } from '@floegence/redevplugin-ui';
 import { OFFICIAL_CONTAINERS_RELEASE_REF } from './plugins/officialContainersRelease.generated';
 import type { PluginInventoryProjection } from './plugins/pluginTypes';
 import { NETWORK_EXPOSURE_WARNING_PREFERENCE_STORAGE_KEY } from './security/networkExposureWarningPreference';
@@ -75,11 +75,12 @@ const pluginLifecycleMocks = vi.hoisted(() => {
     _command: any,
     _requestID: string,
     _options: { signal?: AbortSignal },
-    _onUpdate: (operation: any) => void,
   ) => ({}));
   const listReleaseInstallExecutions = vi.fn(async () => []);
   const getReleaseInstallExecution = vi.fn(async () => ({}));
-  const listReleaseInstallExecutionEvents = vi.fn(async () => ({ execution_id: '', events: [], cursor: 0 }));
+  const listReleaseInstallExecutionEvents = vi.fn(async (): Promise<PluginExecutionEventList> => ({ execution_id: '', events: [], cursor: 0 }));
+  const getIncompatibleRetainedDataRevision = vi.fn(async () => 1);
+  const deleteIncompatibleRetainedData = vi.fn(async () => undefined);
   const inspectExternalPackage = vi.fn(async (_request: any) => ({}));
   const installExternalPackage = vi.fn(async (_inspection: any, _options: any) => ({}));
   const dispose = vi.fn();
@@ -93,6 +94,8 @@ const pluginLifecycleMocks = vi.hoisted(() => {
     listReleaseInstallExecutions,
     getReleaseInstallExecution,
     listReleaseInstallExecutionEvents,
+    getIncompatibleRetainedDataRevision,
+    deleteIncompatibleRetainedData,
     inspectExternalPackage,
     installExternalPackage,
     createPluginLifecycleAPI: vi.fn(() => ({
@@ -105,6 +108,8 @@ const pluginLifecycleMocks = vi.hoisted(() => {
       listReleaseInstallExecutions,
       getReleaseInstallExecution,
       listReleaseInstallExecutionEvents,
+      getIncompatibleRetainedDataRevision,
+      deleteIncompatibleRetainedData,
       inspectExternalPackage,
       installExternalPackage,
       dispose,
@@ -177,7 +182,6 @@ const officialContainersCatalog = {
   minRedevenVersion: '0.9.0',
   minReDevPluginVersion: '3.0.0',
   rolloutState: 'stable',
-  defaultSurfaceID: 'containers.dashboard',
   iconFallback: 'generic',
   category: 'infrastructure',
   searchKeywords: ['docker', 'podman'],
@@ -233,7 +237,7 @@ function officialContainersProjection(
         defaultLaunchTarget: {
           pluginID: officialContainersCatalog.pluginID,
           pluginInstanceID: officialContainersCatalog.pluginInstanceID,
-          surfaceID: officialContainersCatalog.defaultSurfaceID,
+          surfaceID: 'containers.dashboard',
           displayName: officialContainersCatalog.displayName,
           expectedManagementRevision: 11,
           preferredPlacement: 'activity' as const,
@@ -1416,6 +1420,10 @@ beforeEach(async () => {
   pluginLifecycleMocks.listReleaseInstallExecutions.mockResolvedValue([]);
   pluginLifecycleMocks.getReleaseInstallExecution.mockReset();
   pluginLifecycleMocks.listReleaseInstallExecutionEvents.mockReset();
+  pluginLifecycleMocks.getIncompatibleRetainedDataRevision.mockReset();
+  pluginLifecycleMocks.getIncompatibleRetainedDataRevision.mockResolvedValue(1);
+  pluginLifecycleMocks.deleteIncompatibleRetainedData.mockReset();
+  pluginLifecycleMocks.deleteIncompatibleRetainedData.mockResolvedValue(undefined);
   pluginLifecycleMocks.inspectExternalPackage.mockReset();
   pluginLifecycleMocks.installExternalPackage.mockReset();
   pluginLifecycleMocks.dispose.mockClear();
@@ -1906,6 +1914,33 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(pluginLifecycleMocks.recoverEnabled).toHaveBeenCalledTimes(1);
       expect(pluginCenterViewState.lastProps.canOpenPluginSurfaces).toBe(true);
       expect(pluginCenterViewState.lastProps.runtimeRecovery).toBeUndefined();
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('waits for authoritative inventory before resuming durable install tasks', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    let resolveInventory!: (projection: PluginInventoryProjection) => void;
+    pluginLifecycleMocks.loadInventoryProjection.mockImplementationOnce(() => new Promise((resolve) => {
+      resolveInventory = resolve;
+    }));
+    pluginLifecycleMocks.recoverEnabled.mockResolvedValue({ revision: 1, complete: true, results: [] });
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushUntil(() => pluginLifecycleMocks.recoverEnabled.mock.calls.length === 1, 40);
+      expect(pluginLifecycleMocks.listReleaseInstallExecutions).not.toHaveBeenCalled();
+
+      resolveInventory(officialContainersProjection('enabled'));
+      await flushUntil(() => pluginLifecycleMocks.listReleaseInstallExecutions.mock.calls.length === 1, 40);
+
+      expect(pluginLifecycleMocks.listReleaseInstallExecutions).toHaveBeenCalledOnce();
     } finally {
       dispose();
     }
@@ -2573,7 +2608,7 @@ describe('EnvAppShell environment entry affordances', () => {
         type: 'open_surface',
         pluginID: officialContainersCatalog.pluginID,
         pluginInstanceID: officialContainersCatalog.pluginInstanceID,
-        surfaceID: officialContainersCatalog.defaultSurfaceID,
+        surfaceID: 'containers.dashboard',
         expectedManagementRevision: 11,
         placement: 'workbench',
       }, new AbortController().signal);
@@ -2595,16 +2630,16 @@ describe('EnvAppShell environment entry affordances', () => {
     let currentProjection = officialContainersProjection();
     pluginLifecycleMocks.loadInventoryProjection.mockImplementation(async () => currentProjection);
     window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
-    let finishInstall!: (execution: any) => void;
+    let finishObservation!: () => void;
+    const observationGate = new Promise<void>((resolve) => { finishObservation = resolve; });
     let observationSignal: AbortSignal | undefined;
     pluginLifecycleMocks.installOfficialRelease.mockImplementationOnce(async (
       _command: any,
       _requestID: string,
       options: { signal?: AbortSignal },
-      onUpdate: (execution: any, events: any[]) => void,
     ) => {
       observationSignal = options.signal;
-      const running = {
+      return {
         execution_id: 'release_install_shell_test',
         plugin_instance_id: officialContainersCatalog.pluginInstanceID,
         kind: 'operation',
@@ -2614,16 +2649,37 @@ describe('EnvAppShell environment entry affordances', () => {
         created_at: '2026-08-05T08:00:00Z',
         updated_at: '2026-08-05T08:00:01Z',
       };
-      onUpdate(running, [{
-        execution_id: running.execution_id,
-        sequence: 1,
-        kind: 'progress',
-        payload: {
-          phase: 'download_package',
-          progress: { kind: 'bytes', completed: 262144, total: 524288 },
-        },
-      }]);
-      return new Promise((resolve) => { finishInstall = resolve; });
+    });
+    pluginLifecycleMocks.listReleaseInstallExecutionEvents.mockImplementationOnce(async () => {
+      await observationGate;
+      return {
+        execution_id: 'release_install_shell_test',
+        cursor: 1,
+        events: [{
+          execution_id: 'release_install_shell_test',
+          sequence: 1,
+          kind: 'terminal',
+          payload: {
+            install_progress: {
+              task_id: 'release_install_shell_test',
+              request_id: 'request-shell-test',
+              stage: 'enable',
+              status: 'completed',
+            },
+          },
+        }],
+      };
+    });
+    pluginLifecycleMocks.getReleaseInstallExecution.mockResolvedValueOnce({
+      execution_id: 'release_install_shell_test',
+      plugin_instance_id: officialContainersCatalog.pluginInstanceID,
+      kind: 'operation',
+      status: 'completed',
+      cursor: 1,
+      cancelable: false,
+      created_at: '2026-08-05T08:00:00Z',
+      updated_at: '2026-08-05T08:00:02Z',
+      terminal_at: '2026-08-05T08:00:02Z',
     });
 
     const host = document.createElement('div');
@@ -2657,27 +2713,16 @@ describe('EnvAppShell environment entry affordances', () => {
         pluginInstanceID: officialContainersCatalog.pluginInstanceID,
         observation: 'watching',
         execution: { execution_id: 'release_install_shell_test', status: 'running' },
-        events: [{
-          kind: 'progress',
-          payload: {
-            phase: 'download_package',
-            progress: { kind: 'bytes', completed: 262144, total: 524288 },
-          },
-        }],
+        progress: [],
       });
       pluginCenterViewState.lastProps.onClose();
       viewController.abort('Plugin Center disposed');
       expect(observationSignal?.aborted).toBe(false);
 
       currentProjection = officialContainersProjection('enabled');
-      finishInstall({
-        ...pluginCenterViewState.lastProps.installOperations[0].execution,
-        status: 'completed',
-        cancelable: false,
-        terminal_at: '2026-08-05T08:00:02Z',
-      });
+      finishObservation();
       await expect(install).resolves.toBeUndefined();
-      await flushAsync();
+      await flushUntil(() => pluginCenterViewState.lastProps.installOperations.length === 0, 40);
       expect(pluginCenterViewState.lastProps.installOperations).toEqual([]);
     } finally {
       dispose();
@@ -2717,7 +2762,7 @@ describe('EnvAppShell environment entry affordances', () => {
         type: 'open_surface',
         pluginID: officialContainersCatalog.pluginID,
         pluginInstanceID: officialContainersCatalog.pluginInstanceID,
-        surfaceID: officialContainersCatalog.defaultSurfaceID,
+        surfaceID: 'containers.dashboard',
         expectedManagementRevision: 11,
         placement: 'workbench',
       }, new AbortController().signal);
@@ -2766,14 +2811,14 @@ describe('EnvAppShell environment entry affordances', () => {
         type: 'open_surface',
         pluginID: officialContainersCatalog.pluginID,
         pluginInstanceID: officialContainersCatalog.pluginInstanceID,
-        surfaceID: officialContainersCatalog.defaultSurfaceID,
+        surfaceID: 'containers.dashboard',
         expectedManagementRevision: 11,
         placement: 'workbench',
       }, new AbortController().signal)).resolves.toBeUndefined();
       expect(workbenchPluginSurfaceState.open).toHaveBeenCalledWith({
         pluginID: officialContainersCatalog.pluginID,
         pluginInstanceID: officialContainersCatalog.pluginInstanceID,
-        surfaceID: officialContainersCatalog.defaultSurfaceID,
+        surfaceID: 'containers.dashboard',
         displayName: officialContainersCatalog.displayName,
         expectedManagementRevision: 11,
         preferredPlacement: 'workbench',
@@ -2814,7 +2859,7 @@ describe('EnvAppShell environment entry affordances', () => {
         type: 'open_surface',
         pluginID: officialContainersCatalog.pluginID,
         pluginInstanceID: officialContainersCatalog.pluginInstanceID,
-        surfaceID: officialContainersCatalog.defaultSurfaceID,
+        surfaceID: 'containers.dashboard',
         expectedManagementRevision: 11,
         placement: 'workbench',
       }, new AbortController().signal)).resolves.toBeUndefined();
@@ -2876,7 +2921,7 @@ describe('EnvAppShell environment entry affordances', () => {
         type: 'open_surface',
         pluginID: officialContainersCatalog.pluginID,
         pluginInstanceID: officialContainersCatalog.pluginInstanceID,
-        surfaceID: officialContainersCatalog.defaultSurfaceID,
+        surfaceID: 'containers.dashboard',
         expectedManagementRevision: 11,
         placement: 'workbench',
       }, new AbortController().signal);
@@ -3003,7 +3048,7 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(document.querySelector('[data-plugin-surface-host]')).toMatchObject({
         dataset: expect.objectContaining({
           pluginInstanceId: officialContainersCatalog.pluginInstanceID,
-          surfaceId: officialContainersCatalog.defaultSurfaceID,
+          surfaceId: 'containers.dashboard',
         }),
       });
     } finally {
@@ -3043,7 +3088,7 @@ describe('EnvAppShell environment entry affordances', () => {
         dataset: expect.objectContaining({
           pluginId: officialContainersCatalog.pluginID,
           pluginInstanceId: officialContainersCatalog.pluginInstanceID,
-          surfaceId: officialContainersCatalog.defaultSurfaceID,
+          surfaceId: 'containers.dashboard',
           placement: 'activity',
           managementRevision: '11',
           visible: 'true',
@@ -3052,7 +3097,7 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(pluginSurfaceFrameState.lastProps?.target).toEqual({
         pluginID: officialContainersCatalog.pluginID,
         pluginInstanceID: officialContainersCatalog.pluginInstanceID,
-        surfaceID: officialContainersCatalog.defaultSurfaceID,
+        surfaceID: 'containers.dashboard',
         displayName: officialContainersCatalog.displayName,
         expectedManagementRevision: 11,
         preferredPlacement: 'activity',
@@ -3394,7 +3439,7 @@ describe('EnvAppShell environment entry affordances', () => {
         type: 'open_surface',
         pluginID: officialContainersCatalog.pluginID,
         pluginInstanceID: officialContainersCatalog.pluginInstanceID,
-        surfaceID: officialContainersCatalog.defaultSurfaceID,
+        surfaceID: 'containers.dashboard',
         expectedManagementRevision: 11,
         placement: 'workbench',
       }, new AbortController().signal)).resolves.toBeUndefined();
@@ -3453,7 +3498,7 @@ describe('EnvAppShell environment entry affordances', () => {
         type: 'open_surface',
         pluginID: officialContainersCatalog.pluginID,
         pluginInstanceID: officialContainersCatalog.pluginInstanceID,
-        surfaceID: officialContainersCatalog.defaultSurfaceID,
+        surfaceID: 'containers.dashboard',
         expectedManagementRevision: 11,
         placement: 'workbench',
       }, new AbortController().signal);
@@ -3535,7 +3580,7 @@ describe('EnvAppShell environment entry affordances', () => {
         type: 'open_surface',
         pluginID: officialContainersCatalog.pluginID,
         pluginInstanceID: officialContainersCatalog.pluginInstanceID,
-        surfaceID: officialContainersCatalog.defaultSurfaceID,
+        surfaceID: 'containers.dashboard',
         expectedManagementRevision: 11,
         placement: 'workbench',
       } as const;

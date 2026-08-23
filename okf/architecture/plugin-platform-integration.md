@@ -1,14 +1,14 @@
 ---
 type: Architecture Contract
 title: Plugin platform integration
-description: Redeven mounts ReDevPlugin v3.0.13 and adds authenticated host modules, market-backed official releases, external-source policy, localized plugin presentation, product placement, and business adapters.
+description: Redeven mounts ReDevPlugin v3.0.14 and adds authenticated host modules, market-backed official releases, external-source policy, localized plugin presentation, product placement, and business adapters.
 tags: [architecture, plugins, local-ui, redevplugin]
 timestamp: 2026-07-25T00:00:00Z
 quality_exception: Cross-domain host integration contract spanning identity, security, runtime, storage, routes, surfaces, and business adapters.
 ---
 # Summary
 
-Redeven integrates ReDevPlugin `v3.0.13` through one Go Host, one canonical HTTP
+Redeven integrates ReDevPlugin `v3.0.14` through one Go Host, one canonical HTTP
 namespace, one Env App `PluginPlatformClient`, one shared surface scope, and the
 released ProcessManager over a verified Redeven-built Linux runtime. Redeven
 adds authenticated session mapping, public-source admission policy, product
@@ -74,7 +74,7 @@ handlers, and then invokes the released idempotent Host teardown path.
 
 ## Package sources and lifecycle
 
-Production obtains the official Containers `4.4.7` release from the current
+Production obtains the official Containers `4.4.9` release from the current
 validated latest-only market snapshot. The snapshot identifies the immutable GitHub
 Release and complete signed transport; it does not carry package bytes or grant
 trust. Redeven immediately opens a concise review from the snapshot's presentation,
@@ -82,8 +82,9 @@ source, version, and declared permission groups. Review performs no package
 download, parsing, signature verification, runtime preflight, or lifecycle work.
 After explicit confirmation Redeven starts one released install Execution with
 the exact release reference and the release-identity, manifest, contract-set, and
-summary digests, then observes ordered Events through the generated
-start/list/get/Event client. Publisher, plugin, version,
+summary digests. The start call only creates or recovers the durable task; one
+Shell coordinator then observes its ordered Events and reads the terminal
+Execution once. Publisher, plugin, version,
 SHA-256 hashes, Ed25519 root and package signatures, revocation evidence, source
 policy, host requirement, and the Host-registered known capability contract must
 all match before ReDevPlugin changes the registry. Invalid, revoked, or
@@ -93,7 +94,7 @@ digests. A declaration mismatch refreshes the market before a new attempt.
 Confirmed retained-data deletion treats an
 already-absent binding as success and reconciles an unknown mutation outcome
 against the exact generation and binding revision before reinstalling.
-ReDevPlugin `v3.0.13` also preserves the deleted instance's durable revoke-epoch
+ReDevPlugin `v3.0.14` also preserves the deleted instance's durable revoke-epoch
 floor across both retained-data and delete-data reinstalls. Previously issued
 credentials therefore remain revoked, while the newly installed instance can
 open surfaces with credentials minted at the current floor.
@@ -136,7 +137,7 @@ user pin.
 ## Runtime and Containers
 
 The runtime module binds the canonical sibling executable, target, ReDevPlugin
-`v3.0.13`, runtime-internal IPC and WASM ABI contracts, exact product-build descriptor, lease
+`v3.0.14`, runtime-internal IPC and WASM ABI contracts, exact product-build descriptor, lease
 replay storage, and released limits. Linux runtime bytes are built with Rust
 1.88.0 from the attested release manifest and travel with SBOM, provenance, notices,
 and signature evidence. The expected binary digest comes from the product release
@@ -165,18 +166,25 @@ the SDK's scope teardown, then refresh state without a second slot-close path or
 blind mutation retry.
 
 Official installation is product-observable but platform-owned. The Shell keeps
-one coordinator keyed by `plugin_instance_id`; it preserves the original
-`request_id`, reattaches to the same Execution after panel close or transport
-loss, and renders ordered Host Events for release fetch, package download, hash,
-Ed25519 verification, commit, enable, and reconciliation. Byte progress is shown
-only when the Host reports bytes; retry attempt
-and verified cache-hit details remain explanatory diagnostics rather than
-invented percentages. A succeeded operation refreshes inventory and projects
+one coordinator keyed by `plugin_instance_id`; it is the only owner of first
+observation, reconnect, startup recovery, and completion. It preserves the
+original `request_id`, reattaches to the same Execution after panel close or
+transport loss, and decodes only the released `download`, `verify`, `install`,
+and `enable` progress contract. Byte progress is shown only when the Host reports
+bytes; internal verification diagnostics never create product UI stages. A
+terminal Event advances into one finalization read that is retried independently,
+so a lost Execution response cannot strand the observer after its event cursor.
+succeeded operation refreshes inventory and projects
 the authoritative enabled Host record as product-ready or `needs_attention`
 without rewriting its lifecycle state; a refresh failure is
 shown as a separate recoverable state and never relabeled as an install failure.
-Only a confirmed terminal, retryable failure may create a new request. On Env
-App startup, only the newest Execution for each plugin is eligible for
+Only the terminal Event's released `retryable` fact may permit a new request;
+Redeven does not infer it from an error code. An uncertain submission replays the
+same reviewed command and request id, while a confirmed retry starts a new
+request. A structured submission error with `committed` or `unknown` mutation
+outcome also replays the same request; only `not_committed` returns to review.
+On Env App startup, durable observation waits for the authoritative inventory
+projection, then only the newest Execution for each plugin is eligible for
 restoration: active work is always reattached, while a terminal failure remains
 visible for 24 hours so a restart does not erase its diagnosis. An older failure,
 a failure superseded by a later success, or an expired failure does not return as
@@ -207,6 +215,9 @@ version without external provenance must carry an explicitly catalog-trusted
 official signing key and exact registry-to-Host-verified hash agreement.
 External source provenance prevents an identity collision from borrowing
 historical official identity or update controls.
+An installed launch target is projected only from a Host-verified primary view
+surface in the active manifest; catalog metadata never supplies a fallback
+surface id.
 
 Plugin Center cards, detail actions, and the application launcher consume the
 Host `action_state` projection. Redeven does not derive open eligibility from
@@ -258,7 +269,7 @@ disposal alone is not revocation evidence.
 # Boundaries
 
 Canonical ownership is defined by [ReDevPlugin host integration boundary](redevplugin-boundary.md).
-This concept owns only Redeven's concrete `v3.0.13` assembly.
+This concept owns only Redeven's concrete `v3.0.14` assembly.
 
 Manifest surfaces remain `view|command|background` with semantic roles. Activity,
 Workbench, window, widget, inventory key, navigation, settings, and product layout

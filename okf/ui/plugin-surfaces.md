@@ -50,7 +50,8 @@ while a Dock drop only pins the inventory item. Cancellation or release outside
 both targets performs no action. Pin
 persistence is renderer- and environment-scoped, versioned, ordered,
 idempotent, and malformed or future state fails closed. Absent product mutation
-APIs are not simulated.
+APIs are not simulated. Click suppression after a drag belongs only to Floe's
+shared drag transaction; the Launcher keeps no second suppression flag.
 
 The Workbench Launcher is a Dock companion, not a page-level modal. It mounts
 through `WorkbenchDockPopoverSurface` in the owning Workbench surface, delegates
@@ -159,8 +160,8 @@ recovery flags.
 ## Official installation progress
 
 The pre-install interaction has one target-owned flow: `idle`, `review_ready`,
-`installing`, then `installed`, with error or cancellation returning to a
-retryable state. A card or detail click opens the dialog in the same UI turn and
+`installing`, then `installed`; task failure is owned only by the shared install
+projection. A card or detail click opens the dialog in the same UI turn and
 reads the market-cached `install_preview`; no package request or Host inspection
 is started. The concise review shows only icon, name, publisher, version, source,
 and grouped declared permissions, followed by `The publisher declares these
@@ -196,14 +197,23 @@ detail reading, panel close, and unrelated surface launch stay available while
 installation continues. Closing the dialog only hides it; the card or task area
 retains the current stage and one recovery action.
 
-The Shell retains the original request identity and reattaches to the same Host
-Execution after Plugin Center reopens, transport reconnects, or a start response
-is lost. Closing the panel never cancels installation. Terminal failures use
-stable error code, phase, and retryability to select complete locale-owned copy;
-raw backend messages are not primary UI. A retry creates a new request only when
-the Host has confirmed a retryable terminal failure. After success, inventory is
+The Shell has one observer per plugin attempt and retains the original request
+identity. It reattaches to the same Host Execution after Plugin Center reopens or
+transport reconnects. A lost start response replays the exact reviewed command
+with the same request id; it does not start a competing poller. Closing the panel
+never cancels installation. Terminal failures use the released error code, stage,
+and `retryable` fact to produce one message and one action; raw backend messages
+are not primary UI and cards, details, dialogs, and notifications do not repeat
+the same error. A retry creates a new request only when the Host has confirmed a
+retryable terminal failure. If the exact reviewed command is unavailable after a
+restart, the only action is a fresh review. After success, inventory is
 refreshed before the temporary status is removed. Refresh failure remains a
 separate inline recovery state and must not be reported as installation failure.
+The startup observer waits for that inventory before resolving durable plugin
+identities. A confirmed historical-data erase keeps the exact binding revision;
+absence on retry means the prior delete committed, while a changed revision
+requires a new confirmation. Opening the erase dialog transfers the sole error
+presentation into that dialog.
 Cards and inspector share the same accessible `aria-busy`, live-status, alert,
 and progress projection.
 

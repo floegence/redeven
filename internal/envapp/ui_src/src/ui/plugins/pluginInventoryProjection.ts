@@ -135,6 +135,9 @@ function projectCatalogItem(
     locale.locale === installed.presentation?.default_locale
   ));
   const installedPublisher = String(installed.manifest.publisher.display_name ?? installed.publisher_id).trim();
+  const defaultViewSurface = installed.manifest.surfaces.find((surface) => (
+    surface.kind === 'view' && (surface.intent ?? 'primary') === 'primary'
+  ));
   return {
     inventoryKey: installedInventoryKey(installed.plugin_instance_id),
     pluginID: catalogItem.pluginID,
@@ -158,13 +161,11 @@ function projectCatalogItem(
     trustBadge: installedTrustBadge(installed, catalogItem),
     pinned: installed.metadata?.pinned === 'true',
     lastOpenedAt: installed.metadata?.last_opened_at,
-    defaultLaunchTarget: installed.action_state?.can_open === true
+    defaultLaunchTarget: installed.action_state?.can_open === true && defaultViewSurface
       ? {
           pluginID: installed.plugin_id,
           pluginInstanceID: installed.plugin_instance_id,
-          surfaceID: installed.manifest.surfaces.find((surface) => (
-            surface.kind === 'view' && (surface.intent ?? 'primary') === 'primary'
-          ))?.surface_id ?? catalogItem.defaultSurfaceID,
+          surfaceID: defaultViewSurface.surface_id,
           displayName: manifestDisplayName(installed) || installed.plugin_id,
           expectedManagementRevision: installed.management_revision,
           preferredPlacement: 'activity',

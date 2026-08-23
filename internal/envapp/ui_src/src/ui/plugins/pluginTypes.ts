@@ -178,7 +178,6 @@ export type OfficialPluginCatalogItem = {
   minRedevenVersion: string;
   minReDevPluginVersion: string;
   rolloutState: 'stable' | 'staged' | 'disabled' | 'revoked';
-  defaultSurfaceID: string;
   iconURL?: string;
   iconFallback: 'database' | 'github' | 'generic';
   category: PluginPresentationCategory;
@@ -289,16 +288,36 @@ export type PluginInstallObservation =
   | 'activation_failed'
   | 'refresh_failed';
 
+export type PluginInstallFailureSource =
+  | 'submission'
+  | 'execution'
+  | 'inventory'
+  | 'setup';
+
+export type PluginInstallFailureRecovery =
+  | 'replay_submission'
+  | 'retry_install'
+  | 'review_again'
+  | 'erase_retained_data'
+  | 'refresh_inventory'
+  | 'retry_setup'
+  | 'none';
+
+export type PluginInstallFailure = Readonly<{
+  source: PluginInstallFailureSource;
+  code: string;
+  stage?: PluginReleaseInstallProgressEvent['stage'];
+  retryable: boolean;
+  recovery: PluginInstallFailureRecovery;
+}>;
+
 export type PluginInstallExecutionProjection = Readonly<{
   pluginID: string;
   pluginInstanceID: string;
   observation: PluginInstallObservation;
   execution?: PluginExecution;
-  events: readonly PluginEvent[];
-  startFailure?: Readonly<{
-    code: PluginPlatformErrorCode;
-    retryable: boolean;
-  }>;
+  progress: readonly PluginReleaseInstallProgressEvent[];
+  failure?: PluginInstallFailure;
 }>;
 
 export type PluginPanelTile =
@@ -428,10 +447,9 @@ import type {
   PluginExternalPackageInspection,
   PluginInstalledExternalPackage,
   PluginExecution,
-  PluginEvent,
   PluginPermissionGrant,
-  PluginPlatformErrorCode,
   PluginRecord,
+  PluginReleaseInstallProgressEvent,
   PluginReleaseRef,
   PluginRecoveryResult,
   PluginSecurityPolicy,

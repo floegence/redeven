@@ -1,13 +1,22 @@
 import { createSignal, type Accessor } from 'solid-js';
 import {
-  PluginPlatformRequestError,
-  type PluginEvent,
+  decodePluginReleaseInstallProgressEvent,
   type PluginExecution,
-  type PluginPlatformErrorCode,
+  type PluginReleaseInstallProgressEvent,
 } from '@floegence/redevplugin-ui';
 
 import type { PluginLifecycleAPI } from './pluginApi';
-import type { PluginInstallExecutionProjection, PluginOfficialInstallCommand } from './pluginTypes';
+import {
+  executionInstallFailure,
+  inventoryInstallFailure,
+  setupInstallFailure,
+  submissionInstallFailure,
+} from './pluginInstallFailure';
+import type {
+  PluginInstallExecutionProjection,
+  PluginInventoryProjection,
+  PluginOfficialInstallCommand,
+} from './pluginTypes';
 
 type InstallLifecycle = Pick<
   PluginLifecycleAPI,
@@ -15,6 +24,7 @@ type InstallLifecycle = Pick<
   | 'listReleaseInstallExecutions'
   | 'getReleaseInstallExecution'
   | 'listReleaseInstallExecutionEvents'
+  | 'getIncompatibleRetainedDataRevision'
   | 'deleteIncompatibleRetainedData'
 >;
 
@@ -23,198 +33,224 @@ const REATTACH_BASE_DELAY_MS = 250;
 const REATTACH_MAX_DELAY_MS = 5_000;
 const INVENTORY_REFRESH_TIMEOUT_MS = 8_000;
 
+type Attempt = Readonly<{
+  generation: number;
+  requestID?: string;
+  command?: PluginOfficialInstallCommand;
+  controller: AbortController;
+}>;
+
 export type PluginInstallCoordinator = Readonly<{
   projections: Accessor<readonly PluginInstallExecutionProjection[]>;
   start: (command: PluginOfficialInstallCommand) => Promise<void>;
   forget: (pluginInstanceID: string) => void;
   resume: () => Promise<void>;
-  retry: (pluginInstanceID: string, command?: PluginOfficialInstallCommand) => Promise<void>;
-  discardRetainedDataAndRetry: (pluginInstanceID: string, command?: PluginOfficialInstallCommand) => Promise<void>;
+  retry: (pluginInstanceID: string) => Promise<void>;
+  discardRetainedDataAndRetry: (pluginInstanceID: string) => Promise<void>;
   dispose: () => void;
 }>;
 
 export function createPluginInstallCoordinator(options: Readonly<{
   lifecycle: InstallLifecycle;
-  refreshInventory: () => Promise<unknown>;
-  completeApprovedInstall: (pluginInstanceID: string, signal?: AbortSignal) => Promise<unknown>;
+  refreshInventory: () => Promise<PluginInventoryProjection | undefined>;
+  completeApprovedInstall: (
+    pluginInstanceID: string,
+    inventory: PluginInventoryProjection,
+    signal?: AbortSignal,
+  ) => Promise<unknown>;
   createRequestID: () => string;
   resolvePluginID: (pluginInstanceID: string) => string | undefined;
-  /** Whether a durable plugin instance still exists for task recovery. */
   isPluginInstalled?: (pluginInstanceID: string) => boolean;
 }>): PluginInstallCoordinator {
   const [projections, setProjections] = createSignal<readonly PluginInstallExecutionProjection[]>([]);
-  const tasks = new Map<string, Promise<void>>();
-  const controllers = new Map<string, AbortController>();
-  const installCommands = new Map<string, PluginOfficialInstallCommand>();
-  // The platform keeps terminal executions as audit records. Do not let an
-  // uninstall resurrect that historical record as a current UI task.
+  const attempts = new Map<string, Attempt>();
+  const submissions = new Map<string, Promise<void>>();
+  const observers = new Map<string, Readonly<{
+    executionID: string;
+    generation: number;
+    promise: Promise<void>;
+  }>>();
+  const retainedDataRevisions = new Map<string, number>();
   const forgottenPluginInstanceIDs = new Set<string>();
+  let nextGeneration = 0;
   let disposed = false;
 
   const projectionFor = (pluginInstanceID: string) => (
     projections().find((projection) => projection.pluginInstanceID === pluginInstanceID)
   );
-  const put = (projection: PluginInstallExecutionProjection) => {
-    if (disposed) return;
+  const isCurrent = (pluginInstanceID: string, generation: number) => (
+    !disposed && attempts.get(pluginInstanceID)?.generation === generation
+  );
+  const put = (projection: PluginInstallExecutionProjection, generation: number) => {
+    if (!isCurrent(projection.pluginInstanceID, generation)) return;
     setProjections((current) => [
       ...current.filter((candidate) => candidate.pluginInstanceID !== projection.pluginInstanceID),
       projection,
     ]);
   };
-  const remove = (pluginInstanceID: string) => {
-    if (disposed) return;
+  const remove = (pluginInstanceID: string, generation: number) => {
+    if (!isCurrent(pluginInstanceID, generation)) return;
     setProjections((current) => current.filter(
       (projection) => projection.pluginInstanceID !== pluginInstanceID,
     ));
   };
-  const runExclusive = (pluginInstanceID: string, run: () => Promise<void>): Promise<void> => {
-    const existing = tasks.get(pluginInstanceID);
-    if (existing) return existing;
-    const task = run().finally(() => {
-      if (tasks.get(pluginInstanceID) === task) tasks.delete(pluginInstanceID);
-    });
-    tasks.set(pluginInstanceID, task);
-    return task;
+  const beginAttempt = (
+    pluginInstanceID: string,
+    requestID?: string,
+    command?: PluginOfficialInstallCommand,
+  ): Attempt => {
+    attempts.get(pluginInstanceID)?.controller.abort('Plugin installation attempt superseded');
+    const attempt = {
+      generation: nextGeneration += 1,
+      ...(requestID ? { requestID } : {}),
+      ...(command ? { command } : {}),
+      controller: new AbortController(),
+    };
+    attempts.set(pluginInstanceID, attempt);
+    return attempt;
   };
 
-  const finish = async (projection: PluginInstallExecutionProjection, signal?: AbortSignal) => {
+  const finish = async (
+    projection: PluginInstallExecutionProjection,
+    attempt: Attempt,
+  ): Promise<void> => {
     const execution = projection.execution;
     if (!execution || !isExecutionTerminal(execution)) {
-      put(projection);
+      put(projection, attempt.generation);
       return;
     }
     if (execution.status !== 'completed') {
-      put({ ...projection, observation: 'failed' });
+      put({
+        ...projection,
+        observation: 'failed',
+        failure: projection.failure ?? executionInstallFailure({
+          code: execution.failure_code ?? 'PLUGIN_INTERNAL_FAILURE',
+          retryable: false,
+          // Without a decoded terminal progress event there is no released
+          // retryability fact. Return to exact review instead of guessing.
+          hasReviewedCommand: false,
+        }),
+      }, attempt.generation);
       return;
     }
-    put({ ...projection, observation: 'refreshing' });
+
+    put({ ...projection, observation: 'refreshing', failure: undefined }, attempt.generation);
+    let inventory: PluginInventoryProjection | undefined;
     try {
-      await withTimeout(
+      inventory = await withTimeout(
         options.refreshInventory(),
         INVENTORY_REFRESH_TIMEOUT_MS,
-        signal,
+        attempt.controller.signal,
         'Plugin inventory refresh timed out',
       );
+      if (!inventory) throw new Error('Plugin inventory is unavailable');
     } catch {
-      put({ ...projection, observation: 'refresh_failed' });
+      put({
+        ...projection,
+        observation: 'refresh_failed',
+        failure: inventoryInstallFailure(),
+      }, attempt.generation);
       return;
     }
-    put({ ...projection, observation: 'authorizing' });
+
+    put({ ...projection, observation: 'authorizing', failure: undefined }, attempt.generation);
     try {
-      await options.completeApprovedInstall(projection.pluginInstanceID, signal);
-      remove(projection.pluginInstanceID);
+      await options.completeApprovedInstall(
+        projection.pluginInstanceID,
+        inventory,
+        attempt.controller.signal,
+      );
+      remove(projection.pluginInstanceID, attempt.generation);
     } catch {
-      put({ ...projection, observation: 'activation_failed' });
+      put({
+        ...projection,
+        observation: 'activation_failed',
+        failure: setupInstallFailure(),
+      }, attempt.generation);
     }
   };
 
-  const observe = async (projection: PluginInstallExecutionProjection): Promise<void> => {
+  const attachObserver = (
+    projection: PluginInstallExecutionProjection,
+    attempt: Attempt,
+    initialCursor = 0,
+  ): Promise<void> => {
     const executionID = projection.execution?.execution_id;
     if (!executionID) {
-      put({ ...projection, observation: 'failed' });
-      return;
+      put({
+        ...projection,
+        observation: 'failed',
+        failure: submissionInstallFailure(new Error('Installation execution is missing')),
+      }, attempt.generation);
+      return Promise.resolve();
     }
-    const controller = new AbortController();
-    controllers.get(projection.pluginInstanceID)?.abort('Plugin installation observation superseded');
-    controllers.set(projection.pluginInstanceID, controller);
-    let reconnectAttempt = 0;
-    let current = projection;
-    try {
-      while (!disposed && !controller.signal.aborted) {
-        try {
-          const execution = await options.lifecycle.getReleaseInstallExecution(
-            executionID,
-            { signal: controller.signal },
-          );
-          const eventList = await options.lifecycle.listReleaseInstallExecutionEvents(
-            executionID,
-            latestEventCursor(current.events),
-            { signal: controller.signal },
-          );
-          current = {
-            ...current,
-            observation: 'watching',
-            execution,
-            events: mergeEvents(current.events, eventList.events),
-            startFailure: undefined,
-          };
-          put(current);
-          if (isExecutionTerminal(execution)) {
-            await finish(current, controller.signal);
-            return;
-          }
-          reconnectAttempt = 0;
-          await waitForReattach(REATTACH_BASE_DELAY_MS, controller.signal);
-        } catch {
-          if (disposed || controller.signal.aborted) return;
-          put({ ...current, observation: 'reconnecting' });
-          const delay = Math.min(REATTACH_BASE_DELAY_MS * (2 ** reconnectAttempt), REATTACH_MAX_DELAY_MS);
-          reconnectAttempt += 1;
-          await waitForReattach(delay, controller.signal);
-        }
-      }
-    } finally {
-      if (controllers.get(projection.pluginInstanceID) === controller) {
-        controllers.delete(projection.pluginInstanceID);
-      }
-    }
+    const existing = observers.get(projection.pluginInstanceID);
+    if (
+      existing?.executionID === executionID
+      && existing.generation === attempt.generation
+    ) return existing.promise;
+
+    const run = observeExecution(projection, attempt, initialCursor).finally(() => {
+      const current = observers.get(projection.pluginInstanceID);
+      if (current?.promise === run) observers.delete(projection.pluginInstanceID);
+    });
+    observers.set(projection.pluginInstanceID, {
+      executionID,
+      generation: attempt.generation,
+      promise: run,
+    });
+    return run;
   };
 
-  const start = (command: PluginOfficialInstallCommand): Promise<void> => {
-    const { pluginID, pluginInstanceID } = command;
-    forgottenPluginInstanceIDs.delete(pluginInstanceID);
-    installCommands.set(pluginInstanceID, command);
-    return runExclusive(pluginInstanceID, async () => {
-      const controller = new AbortController();
-      controllers.get(pluginInstanceID)?.abort('Plugin installation submission superseded');
-      controllers.set(pluginInstanceID, controller);
-      let current: PluginInstallExecutionProjection = {
-        pluginID,
+  const submit = (
+    command: PluginOfficialInstallCommand,
+    attempt: Attempt,
+  ): Promise<void> => {
+    const pluginInstanceID = command.pluginInstanceID;
+    const existing = submissions.get(pluginInstanceID);
+    if (existing) return existing;
+    const run = (async () => {
+      let projection: PluginInstallExecutionProjection = {
+        pluginID: command.pluginID,
         pluginInstanceID,
         observation: 'starting',
-        events: [],
+        progress: [],
       };
-      put(current);
+      put(projection, attempt.generation);
       try {
         const execution = await options.lifecycle.installOfficialRelease(
           command,
-          options.createRequestID(),
-          { signal: controller.signal },
-          (update, events) => {
-            current = {
-              ...current,
-              observation: 'watching',
-              execution: update,
-              events: mergeEvents(current.events, events),
-            };
-            put(current);
-          },
+          attempt.requestID!,
+          { signal: attempt.controller.signal },
         );
-        current = { ...current, observation: 'watching', execution };
-        await finish(current, controller.signal);
+        if (!isCurrent(pluginInstanceID, attempt.generation)) return;
+        projection = { ...projection, observation: 'watching', execution, failure: undefined };
+        put(projection, attempt.generation);
+        void attachObserver(projection, attempt);
       } catch (error) {
-        if (disposed || controller.signal.aborted) return;
-        if (error instanceof PluginPlatformRequestError) {
-          put({
-            ...current,
-            observation: 'failed',
-            startFailure: {
-              code: error.errorCode,
-              retryable: startFailureRetryable(error.errorCode),
-            },
-          });
-          return;
-        }
-        if (current.execution) {
-          put({ ...current, observation: 'reconnecting' });
-          await observe(current);
-          return;
-        }
-        put({ ...current, observation: 'failed' });
-      } finally {
-        if (controllers.get(pluginInstanceID) === controller) controllers.delete(pluginInstanceID);
+        if (!isCurrent(pluginInstanceID, attempt.generation) || attempt.controller.signal.aborted) return;
+        put({
+          ...projection,
+          observation: 'failed',
+          failure: submissionInstallFailure(error),
+        }, attempt.generation);
       }
+    })().finally(() => {
+      if (submissions.get(pluginInstanceID) === run) submissions.delete(pluginInstanceID);
     });
+    submissions.set(pluginInstanceID, run);
+    return run;
+  };
+
+  const start = (command: PluginOfficialInstallCommand): Promise<void> => {
+    const pluginInstanceID = command.pluginInstanceID;
+    forgottenPluginInstanceIDs.delete(pluginInstanceID);
+    const current = projectionFor(pluginInstanceID);
+    if (current && installOperationActive(current)) {
+      return submissions.get(pluginInstanceID) ?? Promise.resolve();
+    }
+    const attempt = beginAttempt(pluginInstanceID, options.createRequestID(), command);
+    return submit(command, attempt);
   };
 
   const resume = async (): Promise<void> => {
@@ -237,98 +273,203 @@ export function createPluginInstallCoordinator(options: Readonly<{
         latestByPlugin.set(execution.plugin_instance_id, execution);
       }
     }
+
     const now = Date.now();
-    await Promise.all([...latestByPlugin.values()].flatMap((execution) => {
-      const pluginID = options.resolvePluginID(execution.plugin_instance_id);
-      if (!pluginID) return [];
-      if (execution.status === 'completed') {
-        // Completed executions are retained for auditability. They are only
-        // actionable while the corresponding installed instance still exists.
-        if (
-          options.isPluginInstalled
-          && !options.isPluginInstalled(execution.plugin_instance_id)
-        ) return [];
-        const projection: PluginInstallExecutionProjection = {
-          pluginID,
-          pluginInstanceID: execution.plugin_instance_id,
-          observation: 'refreshing',
-          execution,
-          events: [],
-        };
-        put(projection);
-        return [runExclusive(execution.plugin_instance_id, () => finish(projection))];
+    for (const execution of latestByPlugin.values()) {
+      const pluginInstanceID = execution.plugin_instance_id;
+      if (attempts.has(pluginInstanceID) || observers.has(pluginInstanceID)) continue;
+      const pluginID = options.resolvePluginID(pluginInstanceID);
+      if (!pluginID) continue;
+      if (execution.status === 'completed' && options.isPluginInstalled && !options.isPluginInstalled(pluginInstanceID)) {
+        continue;
       }
-      if (isExecutionTerminal(execution) && !terminalFailureIsRecent(execution, now)) return [];
+      if (isExecutionTerminal(execution) && execution.status !== 'completed' && !terminalFailureIsRecent(execution, now)) {
+        continue;
+      }
+      const attempt = beginAttempt(pluginInstanceID);
       const projection: PluginInstallExecutionProjection = {
         pluginID,
-        pluginInstanceID: execution.plugin_instance_id,
-        observation: isExecutionTerminal(execution) ? 'failed' : 'watching',
+        pluginInstanceID,
+        observation: execution.status === 'completed' ? 'refreshing' : 'watching',
         execution,
-        events: [],
+        progress: [],
       };
-      put(projection);
-      return [runExclusive(execution.plugin_instance_id, () => observe(projection))];
-    }));
+      put(projection, attempt.generation);
+      if (execution.status === 'completed') void finish(projection, attempt);
+      else void attachObserver(projection, attempt);
+    }
   };
 
-  const retry = async (pluginInstanceID: string, reviewedCommand?: PluginOfficialInstallCommand): Promise<void> => {
-    if (reviewedCommand) installCommands.set(pluginInstanceID, reviewedCommand);
+  const retry = async (pluginInstanceID: string): Promise<void> => {
     const projection = projectionFor(pluginInstanceID);
-    if (!projection) return;
-    if (projection.observation === 'refresh_failed' || projection.observation === 'activation_failed') {
-      if (projection.execution?.status === 'completed') {
-        await runExclusive(pluginInstanceID, () => finish(projection));
+    const previous = attempts.get(pluginInstanceID);
+    if (!projection || !previous || !projection.failure) return;
+
+    switch (projection.failure.recovery) {
+      case 'refresh_inventory':
+      case 'retry_setup': {
+        const attempt = beginAttempt(pluginInstanceID, previous.requestID, previous.command);
+        await finish({ ...projection, failure: undefined }, attempt);
         return;
       }
-      put({ ...projection, observation: 'refreshing' });
-      try {
-        await withTimeout(options.refreshInventory(), INVENTORY_REFRESH_TIMEOUT_MS, undefined, 'Plugin inventory refresh timed out');
-        remove(pluginInstanceID);
-      } catch {
-        put({ ...projection, observation: 'refresh_failed' });
+      case 'replay_submission': {
+        if (!previous.command) return;
+        const attempt = beginAttempt(pluginInstanceID, previous.requestID, previous.command);
+        await submit(previous.command, attempt);
+        return;
       }
-      return;
+      case 'retry_install': {
+        if (!previous.command) return;
+        const attempt = beginAttempt(pluginInstanceID, options.createRequestID(), previous.command);
+        await submit(previous.command, attempt);
+        return;
+      }
+      default:
+        return;
     }
-    if (projection.observation === 'reconnecting' && projection.execution) {
-      await runExclusive(pluginInstanceID, () => observe(projection));
-      return;
-    }
-    const retryable = projection.startFailure?.retryable
-      || (projection.execution?.status === 'failed' && startFailureRetryable(projection.execution.failure_code ?? ''));
-    if (!retryable || !installCommands.has(pluginInstanceID)) return;
-    remove(pluginInstanceID);
-    const command = installCommands.get(pluginInstanceID);
-    if (!command) return;
-    await start(command);
   };
 
-  const discardRetainedDataAndRetry = async (pluginInstanceID: string, reviewedCommand?: PluginOfficialInstallCommand): Promise<void> => {
-    if (reviewedCommand) installCommands.set(pluginInstanceID, reviewedCommand);
+  const discardRetainedDataAndRetry = async (pluginInstanceID: string): Promise<void> => {
     const projection = projectionFor(pluginInstanceID);
-    if (!projection || projection.execution?.failure_code !== 'PLUGIN_RETAINED_DATA_INCOMPATIBLE') return;
-    await runExclusive(pluginInstanceID, () => options.lifecycle.deleteIncompatibleRetainedData(pluginInstanceID));
-    remove(pluginInstanceID);
-    const command = installCommands.get(pluginInstanceID);
-    if (!command) return;
-    await start(command);
-  };
-
-  const dispose = () => {
-    disposed = true;
-    for (const controller of controllers.values()) controller.abort('Env App shell disposed');
-    controllers.clear();
-    installCommands.clear();
-    forgottenPluginInstanceIDs.clear();
+    const previous = attempts.get(pluginInstanceID);
+    if (
+      !projection
+      || projection.failure?.recovery !== 'erase_retained_data'
+      || !previous?.command
+    ) return;
+    let expectedRevision = retainedDataRevisions.get(pluginInstanceID);
+    if (expectedRevision === undefined) {
+      expectedRevision = await options.lifecycle.getIncompatibleRetainedDataRevision(
+        pluginInstanceID,
+        { signal: previous.controller.signal },
+      );
+      retainedDataRevisions.set(pluginInstanceID, expectedRevision);
+    }
+    await options.lifecycle.deleteIncompatibleRetainedData(
+      pluginInstanceID,
+      expectedRevision,
+      { signal: previous.controller.signal },
+    );
+    retainedDataRevisions.delete(pluginInstanceID);
+    const attempt = beginAttempt(pluginInstanceID, options.createRequestID(), previous.command);
+    await submit(previous.command, attempt);
   };
 
   const forget = (pluginInstanceID: string) => {
     forgottenPluginInstanceIDs.add(pluginInstanceID);
-    controllers.get(pluginInstanceID)?.abort('Plugin was uninstalled');
-    installCommands.delete(pluginInstanceID);
-    remove(pluginInstanceID);
+    attempts.get(pluginInstanceID)?.controller.abort('Plugin was uninstalled');
+    attempts.delete(pluginInstanceID);
+    submissions.delete(pluginInstanceID);
+    observers.delete(pluginInstanceID);
+    retainedDataRevisions.delete(pluginInstanceID);
+    setProjections((current) => current.filter(
+      (projection) => projection.pluginInstanceID !== pluginInstanceID,
+    ));
+  };
+
+  const dispose = () => {
+    disposed = true;
+    for (const attempt of attempts.values()) attempt.controller.abort('Env App shell disposed');
+    attempts.clear();
+    submissions.clear();
+    observers.clear();
+    retainedDataRevisions.clear();
+    forgottenPluginInstanceIDs.clear();
   };
 
   return Object.freeze({ projections, start, forget, resume, retry, discardRetainedDataAndRetry, dispose });
+
+  async function observeExecution(
+    initial: PluginInstallExecutionProjection,
+    attempt: Attempt,
+    initialCursor: number,
+  ): Promise<void> {
+    const executionID = initial.execution!.execution_id;
+    let current = initial;
+    let cursor = initialCursor;
+    let reconnectAttempt = 0;
+    let terminalObserved = false;
+    while (isCurrent(initial.pluginInstanceID, attempt.generation) && !attempt.controller.signal.aborted) {
+      try {
+        if (terminalObserved) {
+          const execution = await options.lifecycle.getReleaseInstallExecution(
+            executionID,
+            { signal: attempt.controller.signal },
+          );
+          current = { ...current, execution };
+          if (isExecutionTerminal(execution)) {
+            await finish(current, attempt);
+            return;
+          }
+          await waitForReattach(REATTACH_BASE_DELAY_MS, attempt.controller.signal);
+          continue;
+        }
+        const eventList = await options.lifecycle.listReleaseInstallExecutionEvents(
+          executionID,
+          cursor,
+          { signal: attempt.controller.signal },
+        );
+        cursor = Math.max(cursor, eventList.cursor);
+        const decoded = eventList.events.flatMap((event) => {
+          const progress = decodePluginReleaseInstallProgressEvent(event);
+          if (!progress) return [];
+          if (attempt.requestID && progress.request_id !== attempt.requestID) return [];
+          return [progress];
+        });
+        const progress = mergeProgress(current.progress, decoded);
+        const failedProgress = latestFailedProgress(decoded) ?? latestFailedProgress(progress);
+        current = {
+          ...current,
+          observation: 'watching',
+          progress,
+          ...(failedProgress ? {
+            failure: executionInstallFailure({
+              code: failedProgress.failure_code!,
+              stage: failedProgress.failure_stage,
+              retryable: failedProgress.retryable!,
+              hasReviewedCommand: Boolean(attempt.command),
+            }),
+          } : { failure: undefined }),
+        };
+        put(current, attempt.generation);
+
+        if (eventList.events.some((event) => event.kind === 'terminal')) {
+          const matchingTerminal = decoded.some((progress) => (
+            progress.status === 'completed' || progress.status === 'failed'
+          ));
+          if (attempt.requestID && !matchingTerminal) {
+            current = {
+              ...current,
+              failure: executionInstallFailure({
+                code: 'PLUGIN_INTERNAL_FAILURE',
+                retryable: false,
+                hasReviewedCommand: false,
+              }),
+            };
+          }
+          terminalObserved = true;
+          const execution = await options.lifecycle.getReleaseInstallExecution(
+            executionID,
+            { signal: attempt.controller.signal },
+          );
+          current = { ...current, execution };
+          if (isExecutionTerminal(execution)) {
+            await finish(current, attempt);
+            return;
+          }
+        }
+        reconnectAttempt = 0;
+        if (eventList.events.length >= 1_000) continue;
+        await waitForReattach(REATTACH_BASE_DELAY_MS, attempt.controller.signal);
+      } catch {
+        if (!isCurrent(initial.pluginInstanceID, attempt.generation) || attempt.controller.signal.aborted) return;
+        put({ ...current, observation: 'reconnecting' }, attempt.generation);
+        const delay = Math.min(REATTACH_BASE_DELAY_MS * (2 ** reconnectAttempt), REATTACH_MAX_DELAY_MS);
+        reconnectAttempt += 1;
+        await waitForReattach(delay, attempt.controller.signal);
+      }
+    }
+  }
 }
 
 function isExecutionTerminal(execution: PluginExecution): boolean {
@@ -338,14 +479,33 @@ function isExecutionTerminal(execution: PluginExecution): boolean {
     || execution.status === 'orphaned';
 }
 
-function latestEventCursor(events: readonly PluginEvent[]): number {
-  return events.reduce((cursor, event) => Math.max(cursor, event.sequence), 0);
+function installOperationActive(projection: PluginInstallExecutionProjection): boolean {
+  return projection.observation === 'starting'
+    || projection.observation === 'watching'
+    || projection.observation === 'reconnecting'
+    || projection.observation === 'refreshing'
+    || projection.observation === 'authorizing';
 }
 
-function mergeEvents(current: readonly PluginEvent[], incoming: readonly PluginEvent[]): readonly PluginEvent[] {
-  const events = new Map(current.map((event) => [event.sequence, event]));
-  for (const event of incoming) events.set(event.sequence, event);
-  return [...events.values()].sort((left, right) => left.sequence - right.sequence);
+function mergeProgress(
+  current: readonly PluginReleaseInstallProgressEvent[],
+  incoming: readonly PluginReleaseInstallProgressEvent[],
+): readonly PluginReleaseInstallProgressEvent[] {
+  const byStage = new Map(current.map((progress) => [progress.stage, progress]));
+  for (const progress of incoming) byStage.set(progress.stage, progress);
+  return ['download', 'verify', 'install', 'enable'].flatMap((stage) => {
+    const progress = byStage.get(stage as PluginReleaseInstallProgressEvent['stage']);
+    return progress ? [progress] : [];
+  });
+}
+
+function latestFailedProgress(
+  progress: readonly PluginReleaseInstallProgressEvent[],
+): PluginReleaseInstallProgressEvent | undefined {
+  for (let index = progress.length - 1; index >= 0; index -= 1) {
+    if (progress[index]?.status === 'failed') return progress[index];
+  }
+  return undefined;
 }
 
 function waitForReattach(delayMs: number, signal: AbortSignal): Promise<void> {
@@ -363,7 +523,12 @@ function waitForReattach(delayMs: number, signal: AbortSignal): Promise<void> {
   });
 }
 
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, signal: AbortSignal | undefined, message: string): Promise<T> {
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  signal: AbortSignal | undefined,
+  message: string,
+): Promise<T> {
   if (signal?.aborted) throw signal.reason;
   let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
   let abort: (() => void) | undefined;
@@ -391,10 +556,4 @@ function terminalFailureIsRecent(execution: PluginExecution, now: number): boole
   if (!isExecutionTerminal(execution) || !execution.terminal_at) return false;
   const terminalAt = Date.parse(execution.terminal_at);
   return Number.isFinite(terminalAt) && terminalAt <= now && terminalAt >= now - RECENT_TERMINAL_FAILURE_MS;
-}
-
-function startFailureRetryable(code: PluginPlatformErrorCode | string): boolean {
-  return code === 'PLUGIN_RELEASE_NETWORK'
-    || code === 'PLUGIN_RELEASE_TIMEOUT'
-    || code === 'PLUGIN_INSTALL_INTERRUPTED';
 }

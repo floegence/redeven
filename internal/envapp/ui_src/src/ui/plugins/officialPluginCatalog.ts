@@ -200,7 +200,6 @@ function projectMarketSnapshot(snapshot: PluginMarketSnapshot): OfficialPluginCa
       minRedevenVersion: installPreview.compatibility?.min_redeven_version ?? installPreview.release?.compatibility.min_redeven_version ?? '-',
       minReDevPluginVersion: installPreview.compatibility?.min_redevplugin_version ?? installPreview.release?.compatibility.min_redevplugin_version ?? '-',
       rolloutState: marketRolloutState(plugin.latest.availability_status),
-      defaultSurfaceID: 'plugin.primary',
       iconURL: validatedMarketIcon(presentation.icon, plugin.plugin_id),
       iconFallback: 'generic' as const,
       category: marketCategory(plugin.categories),

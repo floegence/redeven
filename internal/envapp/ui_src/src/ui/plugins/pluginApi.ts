@@ -1,6 +1,5 @@
 import {
   type PluginExecution,
-  type PluginEvent,
   type PluginPlatformClient,
   type PluginRequestOptions,
 } from '@floegence/redevplugin-ui';
@@ -220,9 +219,8 @@ export function createPluginLifecycleAPI(
     command: PluginOfficialInstallCommand,
     requestID: string,
     options: PluginRequestOptions = {},
-    onUpdate?: (execution: PluginExecution, events: readonly PluginEvent[]) => void,
-  ): Promise<PluginExecution> => {
-    let execution = await client.startReleaseInstallExecution({
+  ): Promise<PluginExecution> => (
+    client.startReleaseInstallExecution({
       request_id: requestID,
       plugin_instance_id: command.pluginInstanceID,
       release_ref: command.releaseRef,
@@ -230,24 +228,24 @@ export function createPluginLifecycleAPI(
       manifest_sha256: command.manifestSHA256,
       contract_set_sha256: command.contractSetSHA256,
       summary_sha256: command.summarySHA256,
-    } as Parameters<PluginPlatformClient['startReleaseInstallExecution']>[0], options);
-    onUpdate?.(execution, []);
-    let cursor = execution.cursor;
-    while (!isExecutionTerminal(execution)) {
-      await waitForExecutionRetry(options.signal);
-      const eventList = await client.listExecutionEvents(execution.execution_id, { after_cursor: cursor }, options);
-      cursor = eventList.cursor;
-      execution = await client.getExecution(execution.execution_id, options);
-      onUpdate?.(execution, eventList.events);
-    }
-    return execution;
-  };
+    } as Parameters<PluginPlatformClient['startReleaseInstallExecution']>[0], options)
+  );
 
   const listReleaseInstallExecutions = async (
     options: PluginRequestOptions = {},
-  ): Promise<PluginExecution[]> => (
-    (await client.listExecutions({ limit: 100 }, options)).executions
-  );
+  ): Promise<PluginExecution[]> => {
+    const executions: PluginExecution[] = [];
+    let cursor: number | undefined;
+    do {
+      const page = await client.listReleaseInstallExecutions({
+        limit: 500,
+        ...(cursor === undefined ? {} : { cursor }),
+      }, options);
+      executions.push(...page.executions);
+      cursor = page.next_cursor;
+    } while (cursor !== undefined);
+    return executions;
+  };
 
   const getReleaseInstallExecution = (
     executionID: string,
@@ -260,20 +258,32 @@ export function createPluginLifecycleAPI(
     executionID: string,
     cursor: number,
     options: PluginRequestOptions = {},
-  ) => client.listExecutionEvents(executionID, { after_cursor: cursor }, options);
+  ) => client.listExecutionEvents(executionID, { after_cursor: cursor, limit: 1_000 }, options);
 
-  const deleteIncompatibleRetainedData = async (
+  const getIncompatibleRetainedDataRevision = async (
     pluginInstanceID: string,
     options: PluginRequestOptions = {},
-  ): Promise<void> => {
+  ): Promise<number> => {
     const result = await client.listRetainedData({ plugin_instance_id: pluginInstanceID }, options);
     if (result.retained_data.length !== 1) {
       throw new Error('The incompatible retained plugin data is no longer available');
     }
-    const binding = result.retained_data[0]!;
+    return result.retained_data[0]!.revision;
+  };
+
+  const deleteIncompatibleRetainedData = async (
+    pluginInstanceID: string,
+    expectedRevision: number,
+    options: PluginRequestOptions = {},
+  ): Promise<void> => {
+    const result = await client.listRetainedData({ plugin_instance_id: pluginInstanceID }, options);
+    if (result.retained_data.length === 0) return;
+    if (result.retained_data.length !== 1 || result.retained_data[0]!.revision !== expectedRevision) {
+      throw new Error('The retained plugin data changed after confirmation');
+    }
     await client.deleteRetainedData({
       plugin_instance_id: pluginInstanceID,
-      expected_binding_revision: binding.revision,
+      expected_binding_revision: expectedRevision,
     }, options);
   };
 
@@ -357,6 +367,7 @@ export function createPluginLifecycleAPI(
     listReleaseInstallExecutions,
     getReleaseInstallExecution,
     listReleaseInstallExecutionEvents,
+    getIncompatibleRetainedDataRevision,
     deleteIncompatibleRetainedData,
     recoverEnabled,
     retryRecovery,
@@ -408,17 +419,6 @@ async function withAbortTimeout<T>(
   }
 }
 
-function isExecutionTerminal(execution: PluginExecution): boolean {
-  return execution.status === 'completed'
-    || execution.status === 'canceled'
-    || execution.status === 'failed'
-    || execution.status === 'orphaned';
-}
-
-function waitForExecutionRetry(signal?: AbortSignal): Promise<void> {
-  return waitForAbortableDelay(250, signal);
-}
-
 async function loadPluginMarketSnapshot(signal?: AbortSignal): Promise<PluginMarketSnapshot> {
   return fetchLocalApiJSON<PluginMarketSnapshot>(
     '/_redeven_proxy/api/plugins/market/catalog',
@@ -440,25 +440,6 @@ export async function loadPluginMarketDetail(pluginID: string, generation: numbe
       ? { generation: meta?.generation as number }
       : {}),
   };
-}
-
-function waitForAbortableDelay(delayMs: number, signal?: AbortSignal): Promise<void> {
-  const boundedDelay = Math.min(5_000, Math.max(1, Math.trunc(delayMs)));
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
-      return;
-    }
-    const timer = globalThis.setTimeout(() => {
-      signal?.removeEventListener('abort', abort);
-      resolve();
-    }, boundedDelay);
-    const abort = () => {
-      globalThis.clearTimeout(timer);
-      reject(signal?.reason ?? new DOMException('Aborted', 'AbortError'));
-    };
-    signal?.addEventListener('abort', abort, { once: true });
-  });
 }
 
 function requireOfficialPlugin(

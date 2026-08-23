@@ -27,11 +27,13 @@ function projection(overrides: Partial<PluginInstallExecutionProjection> = {}): 
     pluginInstanceID: 'plugini_example',
     observation: 'watching',
     execution: execution(),
-    events: [{
-      execution_id: 'release_install_1',
-      sequence: 1,
-      kind: 'progress',
-      payload: { install_progress: { task_id: 'task_1', request_id: 'request_1', stage: 'download', status: 'running', completed: 5, total: 10 } },
+    progress: [{
+      task_id: 'release_install_1',
+      request_id: 'request_1',
+      stage: 'download',
+      status: 'running',
+      completed: 5,
+      total: 10,
     }],
     ...overrides,
   };
@@ -61,7 +63,8 @@ describe('PluginInstallStatus', () => {
       projection={projection({
         observation: 'failed',
         execution: execution({ status: 'failed', failure_code: 'PLUGIN_RELEASE_NETWORK' }),
-        events: [],
+        progress: [],
+        failure: { source: 'execution', code: 'PLUGIN_RELEASE_NETWORK', stage: 'download', retryable: true, recovery: 'retry_install' },
       })}
       onRetry={onRetry}
     />, host);
@@ -79,7 +82,8 @@ describe('PluginInstallStatus', () => {
     const dispose = render(() => <PluginInstallStatus
       projection={projection({
         execution: execution({ status: 'failed', failure_code: 'PLUGIN_INTERNAL_FAILURE' }),
-        events: [],
+        progress: [],
+        failure: { source: 'execution', code: 'PLUGIN_INTERNAL_FAILURE', stage: 'download', retryable: true, recovery: 'retry_install' },
       })}
       onRetry={onRetry}
     />, host);
@@ -98,7 +102,8 @@ describe('PluginInstallStatus', () => {
     const dispose = render(() => <PluginInstallStatus
       projection={projection({
         execution: execution({ status: 'failed', failure_code: 'PLUGIN_MANIFEST_INVALID' }),
-        events: [],
+        progress: [],
+        failure: { source: 'execution', code: 'PLUGIN_MANIFEST_INVALID', stage: 'verify', retryable: false, recovery: 'none' },
       })}
     />, host);
 
@@ -114,7 +119,8 @@ describe('PluginInstallStatus', () => {
     const dispose = render(() => <PluginInstallStatus
       projection={projection({
         execution: execution({ status: 'failed', failure_code: 'PLUGIN_PACKAGE_PATH_FORBIDDEN' }),
-        events: [],
+        progress: [],
+        failure: { source: 'execution', code: 'PLUGIN_PACKAGE_PATH_FORBIDDEN', stage: 'verify', retryable: false, recovery: 'none' },
       })}
     />, host);
 
@@ -131,7 +137,8 @@ describe('PluginInstallStatus', () => {
     const dispose = render(() => <PluginInstallStatus
       projection={projection({
         execution: execution({ status: 'failed', failure_code: 'PLUGIN_RETAINED_DATA_INCOMPATIBLE' }),
-        events: [],
+        progress: [],
+        failure: { source: 'execution', code: 'PLUGIN_RETAINED_DATA_INCOMPATIBLE', stage: 'install', retryable: false, recovery: 'erase_retained_data' },
       })}
       onResolveRetainedData={onResolveRetainedData}
     />, host);
@@ -140,6 +147,63 @@ describe('PluginInstallStatus', () => {
     expect(onResolveRetainedData).toHaveBeenCalledOnce();
     expect(host.textContent).toContain('historical data');
     expect(host.textContent).not.toContain('internal plugin platform failure');
+    dispose();
+    host.remove();
+  });
+
+  it.each([
+    ['PLUGIN_RUNTIME_UNAVAILABLE', 'temporarily unavailable'],
+    ['PLUGIN_RUNTIME_VERSION_MISMATCH', 'not compatible'],
+    ['PLUGIN_FEATURE_NOT_CONFIGURED', 'feature is unavailable'],
+    ['PLUGIN_CONTRACT_MISMATCH', 'capability contract'],
+  ])('uses the specific runtime and platform copy for %s', (code, copy) => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const dispose = render(() => <PluginInstallStatus
+      projection={projection({
+        execution: execution({ status: 'failed', failure_code: code }),
+        progress: [],
+        failure: { source: 'execution', code, stage: 'verify', retryable: false, recovery: 'none' },
+      })}
+    />, host);
+
+    expect(host.textContent).toContain(copy);
+    expect(host.textContent).not.toContain('internal plugin platform failure');
+    dispose();
+    host.remove();
+  });
+
+  it('does not invent a failed download stage when the platform provides no stage', () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const dispose = render(() => <PluginInstallStatus
+      projection={projection({
+        execution: execution({ status: 'failed', failure_code: 'PLUGIN_INTERNAL_FAILURE' }),
+        progress: [],
+        failure: { source: 'execution', code: 'PLUGIN_INTERNAL_FAILURE', retryable: true, recovery: 'retry_install' },
+      })}
+      onRetry={vi.fn()}
+    />, host);
+
+    expect(host.querySelectorAll('[data-plugin-install-stage-status="failed"]')).toHaveLength(0);
+    expect(host.querySelector('[data-plugin-install-retry]')).not.toBeNull();
+    dispose();
+    host.remove();
+  });
+
+  it('keeps inventory refresh visibly busy after platform installation completed', () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const dispose = render(() => <PluginInstallStatus
+      projection={projection({
+        observation: 'refreshing',
+        execution: execution({ status: 'completed', terminal_at: '2026-08-14T00:00:02Z' }),
+        progress: [],
+      })}
+    />, host);
+
+    expect(host.querySelector('[data-plugin-install-execution]')?.getAttribute('aria-busy')).toBe('true');
+    expect(host.querySelector('svg')?.classList.contains('animate-spin')).toBe(true);
     dispose();
     host.remove();
   });

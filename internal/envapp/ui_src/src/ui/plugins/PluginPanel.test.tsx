@@ -304,6 +304,43 @@ describe('PluginPanel', () => {
     expect(onPinPlugin).toHaveBeenCalledWith('instance:plugininst_containers');
   });
 
+  it('opens on the first normal click after a canvas drop and panel reopen', async () => {
+    const { trigger } = createWorkbenchTrigger();
+    const [open, setOpen] = createSignal(true);
+    const onOpenPluginSurface = vi.fn();
+    let dragItem: any;
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginPanel
+        open={open()}
+        placement="workbench"
+        trigger={trigger}
+        model={panelModel()}
+        onClose={() => setOpen(false)}
+        onOpenCenter={vi.fn()}
+        onOpenPluginDetails={vi.fn()}
+        onOpenPluginSurface={onOpenPluginSurface}
+        onDropPlugin={vi.fn()}
+        externalDockDragController={{ begin: (_event, item) => { dragItem = item; } }}
+      />
+    ), mount);
+
+    document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]')
+      ?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
+    dragItem.canvasPlacement.onDrop({
+      widgetType: 'redeven.plugin',
+      centerWorld: { worldX: 820, worldY: 440 },
+      frame: { x: 260, y: 60, width: 1120, height: 760 },
+    });
+    expect(open()).toBe(false);
+
+    setOpen(true);
+    await Promise.resolve();
+    (document.querySelector('[data-plugin-panel-tile="instance:plugininst_containers"]') as HTMLButtonElement).click();
+    expect(onOpenPluginSurface).toHaveBeenCalledOnce();
+  });
+
   it('uses the installed manifest presentation instead of a newer market projection', () => {
     mountPanel({
       model: panelModel(pluginItem({

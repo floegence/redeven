@@ -4,9 +4,9 @@ import type { OfficialPluginPermission, PluginMarketDetail, PluginMarketSnapshot
 
 export const OFFICIAL_PLUGIN_MARKET_SNAPSHOT: PluginMarketSnapshot = {
   schema_version: 'redeven.plugin_market_snapshot.v2',
-  generation: 9,
-  etag: '"catalog-g9"',
-  cached_at: '2026-08-14T15:20:00Z',
+  generation: 13,
+  etag: '"catalog-g13"',
+  cached_at: '2026-08-23T00:00:00Z',
   stale: false,
   source: 'remote',
   plugins: [{
@@ -98,7 +98,7 @@ export const OFFICIAL_PLUGIN_MARKET_SNAPSHOT: PluginMarketSnapshot = {
     channels: ['stable'],
     latest: {
       channel: 'stable',
-      version: '4.4.7',
+      version: '4.4.9',
       availability_status: 'visible',
       install_preview: {
         release_ref: OFFICIAL_CONTAINERS_RELEASE_REF,
@@ -109,15 +109,15 @@ export const OFFICIAL_PLUGIN_MARKET_SNAPSHOT: PluginMarketSnapshot = {
             { permission_id: 'containers.execute', methods: ['containers.start'], required: false, effects: ['execute'] },
           ],
         },
-        release_identity_digest: 'sha256:5128bda8747edf7936a16c643beb55fc84f8627f5bb1bcb185a0fc1d68dd0011',
+        release_identity_digest: 'sha256:824e51f410a597845d546835e61271b8a530044c51e2d14a098eb847adf1e181',
         manifest_sha256: OFFICIAL_CONTAINERS_RELEASE_REF.expected_hashes.manifest_sha256,
-        contract_set_sha256: 'sha256:79d852072629b98eafbfc6787ab97535fbd6b9f3fe7c32db06893e3fd40e463c',
-        summary_sha256: 'sha256:20b785d6455a7d16d35304ad6026259a39f5f0fa75890bcd0e1db470c8b3fdb4',
+        contract_set_sha256: 'sha256:9229d7b5a76273a40818deb9fedb64ee83146cf11ec66edda20743c38eebd9ab',
+        summary_sha256: 'sha256:ef067082e92647c5e5ab73787bc2f5e6d83ce9a60be56daf738293103e9d9673',
         release: {
           plugin_id: 'com.redeven.official.containers',
           channel: 'stable',
-          version: '4.4.7',
-          asset: { url: 'https://github.com/floegence/redeven-official-plugins/releases/download/v4.4.7/containers-4.4.7.redevplugin' },
+          version: '4.4.9',
+          asset: { url: 'https://github.com/floegence/redeven-official-plugins/releases/download/v4.4.9/containers-4.4.9.redevplugin' },
           publisher_release_ref: { release_ref: OFFICIAL_CONTAINERS_RELEASE_REF },
           signer_key_id: 'redeven_official_signing_2026_08',
           compatibility: { min_redeven_version: '1.0.0', min_redevplugin_version: '3.0.5' },
@@ -127,9 +127,9 @@ export const OFFICIAL_PLUGIN_MARKET_SNAPSHOT: PluginMarketSnapshot = {
     release: {
       plugin_id: 'com.redeven.official.containers',
       channel: 'stable',
-      version: '4.4.7',
+      version: '4.4.9',
       asset: {
-        url: 'https://github.com/floegence/redeven-official-plugins/releases/download/v4.4.7/containers-4.4.7.redevplugin',
+        url: 'https://github.com/floegence/redeven-official-plugins/releases/download/v4.4.9/containers-4.4.9.redevplugin',
       },
       publisher_release_ref: { release_ref: OFFICIAL_CONTAINERS_RELEASE_REF },
       signer_key_id: 'redeven_official_signing_2026_08',

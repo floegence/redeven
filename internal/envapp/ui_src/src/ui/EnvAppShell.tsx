@@ -1215,11 +1215,12 @@ export function EnvAppShell() {
   pluginInstallCoordinator = createPluginInstallCoordinator({
     lifecycle: pluginLifecycle,
     refreshInventory: refetchPluginInventory,
-    completeApprovedInstall: async (pluginInstanceID, signal) => {
+    completeApprovedInstall: async (pluginInstanceID, inventory, signal) => {
       const result = await completeApprovedOfficialInstall({
         pluginInstanceID,
         lifecycle: pluginLifecycle,
         refreshInventory: refetchPluginInventory,
+        inventory,
         signal,
       });
       // Uninstall retires the old management revision so existing surfaces
@@ -1335,7 +1336,8 @@ export function EnvAppShell() {
     const eligible = protocol.status() === 'connected'
       && canAdmin()
       && (!isLocalMode() || pluginSessionReady())
-      && pluginRuntimeRecoveryComplete();
+      && pluginRuntimeRecoveryComplete()
+      && Boolean(pluginInventoryProjection());
     if (!eligible) {
       pluginInstallResumeEligible = false;
       return;
@@ -3499,8 +3501,9 @@ export function EnvAppShell() {
           runtimeRecoveryByInstanceID={pluginRuntimeRecoveryByInstanceID()}
           onRetryRuntimeRecovery={retryPluginRuntimeRecovery}
           installOperations={pluginInstallCoordinator?.projections() ?? []}
-          onRetryInstall={(pluginInstanceID, command) => pluginInstallCoordinator?.retry(pluginInstanceID, command)}
-          onDiscardRetainedDataAndRetry={(pluginInstanceID, command) => pluginInstallCoordinator?.discardRetainedDataAndRetry(pluginInstanceID, command)}
+          onRetryInstall={(pluginInstanceID) => pluginInstallCoordinator?.retry(pluginInstanceID)}
+          onReviewOfficialInstall={(pluginInstanceID) => pluginInstallCoordinator?.forget(pluginInstanceID)}
+          onDiscardRetainedDataAndRetry={(pluginInstanceID) => pluginInstallCoordinator?.discardRetainedDataAndRetry(pluginInstanceID)}
           onRefresh={async () => {
             await refreshPluginMarket();
             await pluginInstallCoordinator?.resume();

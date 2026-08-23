@@ -49,7 +49,6 @@ const containersPlugin = {
     minRedevenVersion: '0.9.0',
     minReDevPluginVersion: '3.0.0',
     rolloutState: 'stable',
-    defaultSurfaceID: 'containers.dashboard',
     iconFallback: 'generic',
     category: 'infrastructure',
     searchKeywords: ['docker', 'podman'],
@@ -1400,7 +1399,7 @@ describe('PluginCenterView', () => {
       expect.any(AbortSignal),
     );
     expect(onRefresh).not.toHaveBeenCalled();
-    await vi.waitFor(() => expect([...document.querySelectorAll<HTMLElement>('[data-plugin-install-review-dialog]')].at(-1)?.textContent).toContain('4.4.7'));
+    await vi.waitFor(() => expect([...document.querySelectorAll<HTMLElement>('[data-plugin-install-review-dialog]')].at(-1)?.textContent).toContain('4.4.9'));
   });
 
   it('uses the current market release when the cached catalog version is stale', async () => {
@@ -1417,9 +1416,9 @@ describe('PluginCenterView', () => {
       ...OFFICIAL_PLUGIN_MARKET_DETAIL,
       latest: OFFICIAL_PLUGIN_MARKET_DETAIL.latest.map((release) => ({
         ...release,
-        version: '4.4.7',
+        version: '4.4.9',
         install_preview: release.install_preview
-          ? { ...release.install_preview, release_ref: { ...release.install_preview.release_ref, version: '4.4.7' } }
+          ? { ...release.install_preview, release_ref: { ...release.install_preview.release_ref, version: '4.4.9' } }
           : undefined,
       })),
     };
@@ -1441,11 +1440,11 @@ describe('PluginCenterView', () => {
 
     (mount.querySelector('[data-plugin-center-install="catalog:containers"]') as HTMLButtonElement).click();
     await vi.waitFor(() => expect([...document.querySelectorAll<HTMLButtonElement>('[data-plugin-install-review-confirm]')].at(-1)).not.toBeUndefined());
-    await vi.waitFor(() => expect([...document.querySelectorAll<HTMLElement>('[data-plugin-install-review-dialog]')].at(-1)?.textContent).toContain('4.4.7'));
+    await vi.waitFor(() => expect([...document.querySelectorAll<HTMLElement>('[data-plugin-install-review-dialog]')].at(-1)?.textContent).toContain('4.4.9'));
     [...document.querySelectorAll<HTMLButtonElement>('[data-plugin-install-review-confirm]')].at(-1)?.click();
     await vi.waitFor(() => expect(onCommand).toHaveBeenCalledWith(expect.objectContaining({
       type: 'install',
-      releaseRef: expect.objectContaining({ version: '4.4.7' }),
+      releaseRef: expect.objectContaining({ version: '4.4.9' }),
     }), expect.any(AbortSignal)));
   });
 
@@ -1494,9 +1493,9 @@ describe('PluginCenterView', () => {
             kind: 'operation', status: 'running', cursor: 3, cancelable: false,
             created_at: '2026-08-22T00:00:00Z', updated_at: '2026-08-22T00:00:01Z',
           },
-          events: [
-            { execution_id: 'release_install_containers', kind: 'progress', sequence: 1, payload: { install_progress: { task_id: 'release_install_containers', request_id: 'request', stage: 'download', status: 'completed' } } },
-            { execution_id: 'release_install_containers', kind: 'progress', sequence: 2, payload: { install_progress: { task_id: 'release_install_containers', request_id: 'request', stage: 'verify', status: 'running' } } },
+          progress: [
+            { task_id: 'release_install_containers', request_id: 'request', stage: 'download', status: 'completed' },
+            { task_id: 'release_install_containers', request_id: 'request', stage: 'verify', status: 'running' },
           ],
         }]}
         onCommand={vi.fn()}
@@ -1532,11 +1531,13 @@ describe('PluginCenterView', () => {
             created_at: '2026-08-05T08:00:00Z',
             updated_at: '2026-08-05T08:00:01Z',
           },
-          events: [{
-            execution_id: 'release_install_containers',
-            sequence: 1,
-            kind: 'progress',
-            payload: { install_progress: { task_id: 'task_1', request_id: 'request_1', stage: 'download', status: 'running', completed: 262_144, total: 524_288 } },
+          progress: [{
+            task_id: 'release_install_containers',
+            request_id: 'request_1',
+            stage: 'download',
+            status: 'running',
+            completed: 262_144,
+            total: 524_288,
           }],
         }]}
         onCommand={vi.fn()}
@@ -1585,7 +1586,8 @@ describe('PluginCenterView', () => {
             updated_at: '2026-08-05T08:00:03Z',
             terminal_at: '2026-08-05T08:00:03Z',
           },
-          events: [],
+          progress: [],
+          failure: { source: 'execution', code: 'PLUGIN_RELEASE_NETWORK', stage: 'download', retryable: true, recovery: 'retry_install' },
         }]}
         onRetryInstall={onRetryInstall}
         onCommand={vi.fn()}
@@ -1599,15 +1601,11 @@ describe('PluginCenterView', () => {
     expect(status.textContent).toContain('The plugin release could not be reached');
     expect(status.textContent).not.toContain('PLUGIN_RELEASE_NETWORK');
     (status.querySelector('[data-plugin-install-retry]') as HTMLButtonElement).click();
-    expect(onRetryInstall).toHaveBeenCalledWith(containersPlugin.officialCatalog.pluginInstanceID, expect.objectContaining({
-      releaseRef: containersPlugin.officialCatalog.installPreview!.release_ref,
-    }));
+    expect(onRetryInstall).toHaveBeenCalledWith(containersPlugin.officialCatalog.pluginInstanceID);
   });
 
   it('does not duplicate a coordinator error when an authoritative install failure is present', async () => {
-    const onCommand = vi.fn(async () => {
-      throw new Error('coordinator start failed');
-    });
+    const onCommand = vi.fn(async () => undefined);
     const failedOperation = {
       pluginID: containersPlugin.pluginID,
       pluginInstanceID: containersPlugin.officialCatalog.pluginInstanceID,
@@ -1624,7 +1622,8 @@ describe('PluginCenterView', () => {
         updated_at: '2026-08-05T08:00:03Z',
         terminal_at: '2026-08-05T08:00:03Z',
       },
-      events: [],
+      progress: [],
+      failure: { source: 'execution' as const, code: 'PLUGIN_RELEASE_NETWORK', stage: 'download' as const, retryable: true, recovery: 'retry_install' as const },
     };
     const mount = document.createElement('div');
     document.body.append(mount);
@@ -1646,8 +1645,8 @@ describe('PluginCenterView', () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(onCommand).toHaveBeenCalledOnce();
-    expect(mount.querySelectorAll('[data-plugin-install-execution]')).toHaveLength(1);
-    expect(mount.querySelectorAll('[data-plugin-install-error]')).toHaveLength(0);
+    expect(document.querySelectorAll('[data-plugin-install-execution]')).toHaveLength(1);
+    expect(document.querySelectorAll('[data-plugin-install-error]')).toHaveLength(0);
   });
 
   it('shows an incompatible-data recovery once and requires confirmation before deleting it', async () => {
@@ -1675,7 +1674,8 @@ describe('PluginCenterView', () => {
             updated_at: '2026-08-05T08:00:03Z',
             terminal_at: '2026-08-05T08:00:03Z',
           },
-          events: [],
+          progress: [],
+          failure: { source: 'execution', code: 'PLUGIN_RETAINED_DATA_INCOMPATIBLE', stage: 'install', retryable: false, recovery: 'erase_retained_data' },
         }]}
         onDiscardRetainedDataAndRetry={onDiscardRetainedDataAndRetry}
         onCommand={vi.fn()}
@@ -1691,13 +1691,111 @@ describe('PluginCenterView', () => {
     (statuses[0]?.querySelector('[data-plugin-install-resolve-retained-data]') as HTMLButtonElement).click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(document.body.textContent).toContain('Erase the plugin historical data and install the current version?');
+    expect(document.querySelectorAll('[data-plugin-install-execution]')).toHaveLength(0);
     expect(onDiscardRetainedDataAndRetry).not.toHaveBeenCalled();
 
     (document.querySelector('[data-plugin-retained-data-confirm]') as HTMLButtonElement).click();
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(onDiscardRetainedDataAndRetry).toHaveBeenCalledWith(containersPlugin.officialCatalog.pluginInstanceID, expect.objectContaining({
-      releaseRef: containersPlugin.officialCatalog.installPreview!.release_ref,
-    }));
+    expect(onDiscardRetainedDataAndRetry).toHaveBeenCalledWith(containersPlugin.officialCatalog.pluginInstanceID);
+  });
+
+  it('turns a same-session review-again action back into an exact confirmation', async () => {
+    const onReviewOfficialInstall = vi.fn();
+    const onCommand = vi.fn(async () => undefined);
+    const failedOperation = {
+      pluginID: containersPlugin.pluginID,
+      pluginInstanceID: containersPlugin.officialCatalog.pluginInstanceID,
+      observation: 'failed' as const,
+      execution: {
+        execution_id: 'release_install_containers',
+        plugin_instance_id: containersPlugin.officialCatalog.pluginInstanceID,
+        kind: 'operation' as const,
+        status: 'failed' as const,
+        cursor: 1,
+        failure_code: 'PLUGIN_RELEASE_NETWORK',
+        cancelable: false,
+        created_at: '2026-08-05T08:00:00Z',
+        updated_at: '2026-08-05T08:00:03Z',
+        terminal_at: '2026-08-05T08:00:03Z',
+      },
+      progress: [],
+      failure: { source: 'execution' as const, code: 'PLUGIN_RELEASE_NETWORK', stage: 'download' as const, retryable: true, recovery: 'review_again' as const },
+    };
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={{ items: [containersPlugin] }}
+        loading={false}
+        installOperations={[failedOperation]}
+        onReviewOfficialInstall={onReviewOfficialInstall}
+        onCommand={onCommand}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    (mount.querySelector('[data-plugin-center-install="catalog:containers"]') as HTMLButtonElement).click();
+    await Promise.resolve();
+    (document.querySelector('[data-plugin-install-review-confirm]') as HTMLButtonElement).click();
+    await Promise.resolve();
+    onReviewOfficialInstall.mockClear();
+    (document.querySelector('[data-plugin-install-review-again]') as HTMLButtonElement).click();
+
+    expect(onReviewOfficialInstall).toHaveBeenCalledWith(containersPlugin.officialCatalog.pluginInstanceID);
+    expect(document.querySelector('[data-plugin-install-review-confirm]')).not.toBeNull();
+  });
+
+  it('does not reopen a background install dialog after the user closes it', async () => {
+    const [currentProjection, setCurrentProjection] = createSignal<PluginInventoryProjection>({ items: [containersPlugin] });
+    const [operations, setOperations] = createSignal<readonly any[]>([]);
+    const onCommand = vi.fn(async () => {
+      setOperations([{
+        pluginID: containersPlugin.pluginID,
+        pluginInstanceID: containersPlugin.officialCatalog.pluginInstanceID,
+        observation: 'watching',
+        execution: {
+          execution_id: 'release_install_containers',
+          plugin_instance_id: containersPlugin.officialCatalog.pluginInstanceID,
+          kind: 'operation', status: 'running', cursor: 0, cancelable: false,
+          created_at: '2026-08-05T08:00:00Z', updated_at: '2026-08-05T08:00:01Z',
+        },
+        progress: [],
+      }]);
+    });
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={currentProjection()}
+        loading={false}
+        installOperations={operations()}
+        onCommand={onCommand}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    (mount.querySelector('[data-plugin-center-install="catalog:containers"]') as HTMLButtonElement).click();
+    await Promise.resolve();
+    (document.querySelector('[data-plugin-install-review-confirm]') as HTMLButtonElement).click();
+    await Promise.resolve();
+    const dialog = document.querySelector('[data-plugin-install-review-dialog]')?.closest('[role="dialog"]') as HTMLElement;
+    (dialog.querySelector('button') as HTMLButtonElement).click();
+    setCurrentProjection({ items: [{
+      ...containersPlugin,
+      inventoryKey: `instance:${containersPlugin.officialCatalog.pluginInstanceID}`,
+      pluginInstanceID: containersPlugin.officialCatalog.pluginInstanceID,
+      version: containersPlugin.officialCatalog.latestVersion,
+      managementRevision: 1,
+      lifecycleState: 'enabled',
+    }] });
+    setOperations([]);
+    await Promise.resolve();
+
+    expect(document.querySelector('[data-plugin-install-review-dialog]')).toBeNull();
   });
 
   it('keeps a release trust timeout retryable and distinct from permission denial', () => {
@@ -1724,7 +1822,8 @@ describe('PluginCenterView', () => {
             updated_at: '2026-08-05T08:00:30Z',
             terminal_at: '2026-08-05T08:00:30Z',
           },
-          events: [],
+          progress: [],
+          failure: { source: 'execution', code: 'PLUGIN_RELEASE_TIMEOUT', stage: 'download', retryable: true, recovery: 'retry_install' },
         }]}
         onRetryInstall={onRetryInstall}
         onCommand={vi.fn()}
@@ -1738,9 +1837,7 @@ describe('PluginCenterView', () => {
     expect(status.textContent).toContain('did not respond in time');
     expect(status.textContent?.toLowerCase()).not.toContain('permission');
     (status.querySelector('[data-plugin-install-retry]') as HTMLButtonElement).click();
-    expect(onRetryInstall).toHaveBeenCalledWith(containersPlugin.officialCatalog.pluginInstanceID, expect.objectContaining({
-      releaseRef: containersPlugin.officialCatalog.installPreview!.release_ref,
-    }));
+    expect(onRetryInstall).toHaveBeenCalledWith(containersPlugin.officialCatalog.pluginInstanceID);
   });
 
   it('keeps a committed installation distinct when inventory refresh needs retrying', () => {
@@ -1766,7 +1863,8 @@ describe('PluginCenterView', () => {
             updated_at: '2026-08-05T08:00:03Z',
             terminal_at: '2026-08-05T08:00:03Z',
           },
-          events: [],
+          progress: [],
+          failure: { source: 'inventory', code: 'PLUGIN_INVENTORY_REFRESH_FAILED', retryable: true, recovery: 'refresh_inventory' },
         }]}
         onRetryInstall={onRetryInstall}
         onCommand={vi.fn()}
@@ -1780,9 +1878,7 @@ describe('PluginCenterView', () => {
     expect(status.textContent).toContain('installed, but Plugin Center could not refresh');
     expect(status.textContent).not.toContain('installation failed');
     (status.querySelector('[data-plugin-install-retry]') as HTMLButtonElement).click();
-    expect(onRetryInstall).toHaveBeenCalledWith(containersPlugin.officialCatalog.pluginInstanceID, expect.objectContaining({
-      releaseRef: containersPlugin.officialCatalog.installPreview!.release_ref,
-    }));
+    expect(onRetryInstall).toHaveBeenCalledWith(containersPlugin.officialCatalog.pluginInstanceID);
   });
 
   it('lets read-only users open surfaces while keeping management actions disabled', async () => {
