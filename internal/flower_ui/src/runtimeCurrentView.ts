@@ -311,19 +311,22 @@ export function applyFlowerRuntimeCurrentView(
   const pending = (current.interactions ?? []).filter((interaction) => !interaction.resolved);
   const approvalCount = pending.filter((interaction) => interaction.kind === 'approval').length;
   const hasInput = pending.some((interaction) => interaction.kind === 'input');
+  const runtimeError = trim(current.error);
   const status: FlowerThreadSnapshot['status'] = hasInput
     ? 'waiting_user'
     : approvalCount > 0
       ? 'waiting_approval'
-      : current.activity === 'active'
-        ? 'running'
-        : current.last_outcome === 'failed' || current.last_outcome === 'interrupted'
-          ? 'failed'
-          : current.last_outcome === 'cancelled'
-            ? 'canceled'
-            : current.last_outcome === 'completed'
-              ? 'success'
-              : 'idle';
+      : runtimeError
+        ? 'failed'
+        : current.activity === 'active'
+          ? 'running'
+          : current.last_outcome === 'failed' || current.last_outcome === 'interrupted'
+            ? 'failed'
+            : current.last_outcome === 'cancelled'
+              ? 'canceled'
+              : current.last_outcome === 'completed'
+                ? 'success'
+                : 'idle';
   const messages = runtimeMessages(base, current);
   const approvalActions = runtimeApprovalActions(base, current);
   const inputRequest = runtimeInputRequest(current);
