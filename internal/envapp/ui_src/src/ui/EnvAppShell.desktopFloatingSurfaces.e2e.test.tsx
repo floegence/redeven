@@ -24,6 +24,7 @@ const getLocalAccessStatusMock = vi.fn();
 const unlockLocalAccessMock = vi.fn();
 const getEnvAppAccessStatusMock = vi.fn();
 const getEnvironmentMock = vi.fn();
+const waitForLocalPluginSessionReadyMock = vi.fn(async () => undefined);
 const mintLocalDirectConnectArtifactMock = vi.fn();
 const connectArtifactEntryMock = vi.fn();
 const createLocalDirectArtifactSourceMock = vi.fn(() => Object.freeze({ acquire: mintLocalDirectConnectArtifactMock }));
@@ -374,6 +375,7 @@ vi.mock('./services/controlplaneApi', () => ({
   mintEnvEntryTicketForApp: vi.fn(),
   refreshLocalRuntime: vi.fn(async () => null),
   unlockLocalAccess: unlockLocalAccessMock,
+  waitForLocalPluginSessionReady: waitForLocalPluginSessionReadyMock,
 }));
 
 vi.mock('./accessResume', () => ({
