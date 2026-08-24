@@ -3,6 +3,7 @@ import { createEffect, createSignal, Index, Show } from 'solid-js';
 import { FileText, FolderOpen, Refresh, XCircle } from '@floegence/floe-webapp-core/icons';
 
 import type { FlowerAttachmentItem } from './createFlowerAttachmentController';
+import { isFlowerImageMimeType } from './flowerAttachmentPresentation';
 
 export type FlowerAttachmentLaneCopy = Readonly<{
   listLabel: string;
@@ -91,6 +92,7 @@ function itemError(item: FlowerAttachmentItem, copy: FlowerAttachmentLaneCopy): 
 
 export const FlowerAttachmentLane: Component<FlowerAttachmentLaneProps> = (props) => {
   const itemButtons = new Map<string, HTMLButtonElement>();
+  const [failedPreviews, setFailedPreviews] = createSignal<ReadonlySet<string>>(new Set());
   const [announcement, setAnnouncement] = createSignal<Readonly<{ id: number; text: string }> | null>(null);
   let announcementID = 0;
   let previousStatuses = new Map<string, FlowerAttachmentItem['status']>();
@@ -143,10 +145,37 @@ export const FlowerAttachmentLane: Component<FlowerAttachmentLaneProps> = (props
           const status = () => itemStatus(item(), props.copy);
           const error = () => itemError(item(), props.copy);
           const errorDescriptionID = () => `flower-attachment-error-${item().local_id}`;
-          const previewable = () => Boolean(item().staged && props.onPreview);
+          const image = () => isFlowerImageMimeType(item().mime_type);
+          const previewKey = () => `${item().local_id}:${item().preview_url ?? ''}`;
+          const previewable = () => Boolean(props.onPreview && (item().staged || item().preview_url));
           const attachmentSummary = () => (
             <>
-              <span class="flower-attachment-file-icon" aria-hidden="true"><FileText /></span>
+              <Show
+                when={image() && !failedPreviews().has(previewKey())}
+                fallback={<span class="flower-attachment-file-icon" aria-hidden="true"><FileText /></span>}
+              >
+                <span class="flower-attachment-image-thumb" aria-hidden="true">
+                  <Show
+                    when={item().preview_url}
+                    fallback={<span class="flower-attachment-image-placeholder"><FileText /></span>}
+                  >
+                    {(url) => (
+                      <img
+                        src={url()}
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                        onError={() => setFailedPreviews((current) => {
+                          if (current.has(previewKey())) return current;
+                          const next = new Set(current);
+                          next.add(previewKey());
+                          return next;
+                        })}
+                      />
+                    )}
+                  </Show>
+                </span>
+              </Show>
               <span class="flower-attachment-body">
                 <span class="flower-attachment-name" title={item().name}>{item().name}</span>
                 <span class="flower-attachment-meta">

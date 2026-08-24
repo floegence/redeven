@@ -202,7 +202,7 @@ func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Met
 			TurnID:          string(result.TurnID),
 			RunID:           executionKey,
 			Kind:            "start",
-			Current:         publicFloretThreadView(result),
+			Current:         result,
 		}
 		if queuedInput, ok := queuedInputFor(result, executionKey); ok {
 			response.Kind = "queued"
@@ -257,7 +257,7 @@ func (s *Service) sendTypedExistingThread(ctx context.Context, meta *session.Met
 		TurnID:          string(result.TurnID),
 		RunID:           executionKey,
 		Kind:            "start",
-		Current:         publicFloretThreadView(result),
+		Current:         result,
 	}
 	if queuedInput, ok := queuedInputFor(result, executionKey); ok {
 		response.Kind = "queued"
@@ -303,11 +303,11 @@ func (s *Service) typedSendLookup(ctx context.Context, threadID, requestID strin
 		if item.ID != userID {
 			continue
 		}
-		return SendUserTurnResponse{ClientRequestID: requestID, ThreadID: threadID, TurnID: string(item.TurnID), RunID: requestID, Kind: "start", Current: publicFloretThreadView(view)}, true, nil
+		return SendUserTurnResponse{ClientRequestID: requestID, ThreadID: threadID, TurnID: string(item.TurnID), RunID: requestID, Kind: "start", Current: view}, true, nil
 	}
 	for _, queued := range view.Queue {
 		if queued.RequestKey == requestID {
-			return SendUserTurnResponse{ClientRequestID: requestID, ThreadID: threadID, QueueID: queued.ID, Kind: "queued", Current: publicFloretThreadView(view)}, true, nil
+			return SendUserTurnResponse{ClientRequestID: requestID, ThreadID: threadID, QueueID: queued.ID, Kind: "queued", Current: view}, true, nil
 		}
 	}
 	return SendUserTurnResponse{}, false, nil
@@ -379,7 +379,7 @@ func (s *Service) SubmitRequestUserInputResponse(ctx context.Context, meta *sess
 	if err != nil {
 		return SubmitRequestUserInputResponseResponse{}, err
 	}
-	return SubmitRequestUserInputResponseResponse{Kind: "accepted", ConsumedWaitingPromptID: promptID, Current: publicFloretThreadView(result)}, nil
+	return SubmitRequestUserInputResponseResponse{Kind: "accepted", ConsumedWaitingPromptID: promptID, Current: result}, nil
 }
 
 func (s *Service) prepareUserTurnForTarget(ctx context.Context, meta *session.Meta, endpointID string, targetID string, modelID string, input RunInput, stagingScopeID string, stagingCapability string) (preparedUserTurn, RunInput, error) {

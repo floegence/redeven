@@ -69,7 +69,7 @@ func (s *Service) SubmitFlowerApproval(meta *session.Meta, req SubmitFlowerAppro
 			return SubmitFlowerApprovalResponse{}, err
 		}
 	}
-	return SubmitFlowerApprovalResponse{OK: true, Current: publicFloretThreadView(current)}, nil
+	return SubmitFlowerApprovalResponse{OK: true, Current: current}, nil
 }
 
 func typedViewInteractions(typed flruntime.ThreadService, threadID string) []flruntime.ThreadInteraction {

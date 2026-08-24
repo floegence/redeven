@@ -24,6 +24,7 @@ import type {
   FlowerSubagentSummary,
 } from './contracts/flowerSurfaceContracts';
 import { canonicalFlowerThreadSnapshotTitle } from './flowerThreadTitle';
+import { safeFlowerAttachmentURL } from './attachments/flowerAttachmentPresentation';
 import {
   normalizeFlowerReasoningCapability,
   normalizeFlowerReasoningSelection,
@@ -56,18 +57,6 @@ function isPresent<T>(value: T | null | undefined): value is T {
 
 function trim(value: unknown): string {
   return String(value ?? '').trim();
-}
-
-function safeAttachmentURL(value: unknown): string | null {
-  const raw = trim(value);
-  if (!raw) return null;
-  if (raw.startsWith('/') && !raw.startsWith('//')) return raw;
-  try {
-    const parsed = new URL(raw);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? raw : null;
-  } catch {
-    return null;
-  }
 }
 
 function normalizePermissionType(value: unknown): FlowerPermissionType | undefined {
@@ -845,7 +834,7 @@ function mapMessageBlock(blockValue: unknown): FlowerMessageBlock | null {
     return { type, content: typeof block.content === 'string' ? block.content : '' };
   }
   if (type === 'image') {
-    const src = safeAttachmentURL(block.src);
+    const src = safeFlowerAttachmentURL(block.src);
     if (!src) return null;
     const alt = trim(block.alt);
     return { type: 'image', src, ...(alt ? { alt } : {}) };
@@ -853,10 +842,10 @@ function mapMessageBlock(blockValue: unknown): FlowerMessageBlock | null {
   if (type === 'file') {
     const name = trim(block.name);
     const mimeType = trim(block.mimeType);
-    const url = safeAttachmentURL(block.url);
+    const url = safeFlowerAttachmentURL(block.url);
     const size = Number(block.size);
-    if (!name || !mimeType || !url || !Number.isFinite(size) || size < 0) return null;
-    return { type: 'file', name, mimeType, url, size: Math.floor(size) };
+    if (!name || !mimeType || !Number.isFinite(size) || size < 0) return null;
+    return { type: 'file', name, mimeType, ...(url ? { url } : {}), size: Math.floor(size) };
   }
   if (type === 'activity-timeline') {
     return mapActivityTimelineBlock(blockValue);

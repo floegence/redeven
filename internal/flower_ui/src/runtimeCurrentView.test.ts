@@ -87,6 +87,46 @@ describe('applyFlowerRuntimeCurrentView', () => {
     expect(result.messages.map((message) => message.id)).toEqual(['user:request-a', 'user:request-b']);
   });
 
+  it('projects ordered current attachments as image and file blocks without duplicate reference chips', () => {
+    const result = applyFlowerRuntimeCurrentView(summary(), {
+      thread_id: 'thread-a', view_version: 12, activity: 'idle', turn_id: 'turn-a', last_outcome: 'completed',
+      items: [{
+        id: 'user:turn-a', turn_id: 'turn-a', ordinal: 1, kind: 'user', text: 'inspect these',
+        attachments: [
+          { name: 'screen.png', mime_type: 'image/png', size_bytes: 12, url: '/_redeven_proxy/api/ai/uploads/upl-image?thread_id=thread-a&turn_id=turn-a' },
+          { name: 'notes.txt', mime_type: 'text/plain', size_bytes: 8 },
+        ],
+      }],
+    });
+
+    expect(result.messages[0]?.blocks).toEqual([
+      { type: 'image', src: '/_redeven_proxy/api/ai/uploads/upl-image?thread_id=thread-a&turn_id=turn-a', alt: 'screen.png' },
+      { type: 'file', name: 'notes.txt', mimeType: 'text/plain', size: 8 },
+    ]);
+    expect(result.messages[0]?.references).toBeUndefined();
+  });
+
+  it('keeps queued mixed attachments in order and projects scoped image URLs', () => {
+    const result = applyFlowerRuntimeCurrentView(summary(), {
+      thread_id: 'thread-a', view_version: 13, activity: 'active', turn_id: 'turn-a',
+      queue: [{
+        id: 'queue-a', request_key: 'request-a', created_at: '2026-08-24T10:00:00.000Z',
+        input: {
+          text: 'queued with files',
+          attachments: [
+            { name: 'screen.png', mime_type: 'image/png', size_bytes: 12, url: '/uploads/photo?thread_id=thread-a&queue_id=queue-a' },
+            { name: 'notes.txt', mime_type: 'text/plain', size_bytes: 8 },
+          ],
+        },
+      }],
+    });
+
+    expect(result.queued_turns?.[0]?.attachments).toMatchObject([
+      { attachment_id: 'queued:queue-a:0', name: 'screen.png', url: '/uploads/photo?thread_id=thread-a&queue_id=queue-a' },
+      { attachment_id: 'queued:queue-a:1', name: 'notes.txt' },
+    ]);
+  });
+
   it('projects an interrupted runtime outcome as a visible failed turn', () => {
     const result = applyFlowerRuntimeCurrentView(summary(), {
       thread_id: 'thread-a', view_version: 8, activity: 'idle', turn_id: 'turn-a', last_outcome: 'interrupted',

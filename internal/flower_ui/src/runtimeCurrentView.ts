@@ -10,6 +10,7 @@ import type {
 } from './contracts/flowerSurfaceContracts';
 import { mapFlowerActivityItem } from './flowerLiveMapper';
 import { canonicalFlowerThreadSnapshotTitle } from './flowerThreadTitle';
+import { flowerAttachmentDisplayKind, safeFlowerAttachmentURL } from './attachments/flowerAttachmentPresentation';
 
 type ResolvedApprovalState = Exclude<FlowerActivityApprovalState, 'requested'>;
 
@@ -48,12 +49,39 @@ function itemReferences(item: FlowerRuntimeCurrentItem): FlowerChatMessage['refe
     ...(reference.text !== undefined ? { text: String(reference.text) } : {}),
     ...(reference.truncated ? { truncated: true } : {}),
   })).filter((reference) => reference.reference_id && reference.label);
-  for (const [index, attachment] of (item.attachments ?? []).entries()) {
-    const label = trim(attachment.name);
-    if (!label) continue;
-    references.push({ reference_id: `attachment:${trim(item.id)}:${index}`, kind: 'file', label });
-  }
   return references.length > 0 ? references : undefined;
+}
+
+function attachmentBlocks(attachments: readonly Readonly<{
+  name: string;
+  mime_type?: string;
+  size_bytes?: number;
+  url?: string;
+}>[] | undefined): NonNullable<FlowerChatMessage['blocks']> {
+  const blocks: Array<NonNullable<FlowerChatMessage['blocks']>[number]> = [];
+  for (const attachment of attachments ?? []) {
+    const name = trim(attachment.name);
+    const mimeType = trim(attachment.mime_type);
+    const size = Number(attachment.size_bytes);
+    if (!name || !mimeType || !Number.isFinite(size) || size < 0) continue;
+    const url = safeFlowerAttachmentURL(attachment.url);
+    if (flowerAttachmentDisplayKind(mimeType) === 'image' && url) {
+      blocks.push({ type: 'image', src: url, alt: name });
+      continue;
+    }
+    blocks.push({
+      type: 'file' as const,
+      name,
+      size: Math.floor(size),
+      mimeType,
+      ...(url ? { url } : {}),
+    });
+  }
+  return blocks;
+}
+
+function itemAttachmentBlocks(item: FlowerRuntimeCurrentItem): NonNullable<FlowerChatMessage['blocks']> {
+  return attachmentBlocks(item.attachments);
 }
 
 function activityItem(raw: Readonly<Record<string, unknown>>, effectRetry?: FlowerActivityItem['effect_retry']): FlowerActivityItem {
@@ -161,6 +189,7 @@ function runtimeMessages(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentV
     seenItemIDs.add(itemID);
     const createdAtMs = itemCreatedAt(item, base.updated_at_ms);
     const references = itemReferences(item);
+    const attachmentBlocks = itemAttachmentBlocks(item);
     if (item.kind === 'interaction') {
       const interaction = item.interaction;
       if (!interaction?.resolved) continue;
@@ -174,6 +203,7 @@ function runtimeMessages(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentV
         messages.push({
           id: itemID, thread_id: base.thread_id, turn_id: trim(item.turn_id), role: 'user',
           content: values.join('\n'), status: 'complete', created_at_ms: createdAtMs,
+          ...(attachmentBlocks.length > 0 ? { blocks: attachmentBlocks } : {}),
           ...(references ? { references } : {}),
         });
         continue;
@@ -203,6 +233,7 @@ function runtimeMessages(base: FlowerThreadSnapshot, view: FlowerRuntimeCurrentV
       id: itemID, thread_id: base.thread_id, turn_id: trim(item.turn_id),
       role: item.kind === 'user' ? 'user' : 'assistant', content: String(item.text ?? ''),
       status: messageStatus(view, item), created_at_ms: createdAtMs,
+      ...(attachmentBlocks.length > 0 ? { blocks: attachmentBlocks } : {}),
       ...(item.live ? { live: true, active_cursor: item.kind === 'assistant' } : {}),
       ...(references ? { references } : {}),
     });
@@ -333,7 +364,16 @@ export function applyFlowerRuntimeCurrentView(
   const queuedTurns = (current.queue ?? []).map((queued) => ({
     queue_id: trim(queued.id),
     prompt: String(queued.input?.text ?? ''),
-    created_at_ms: base.updated_at_ms,
+    created_at_ms: itemCreatedAt({ created_at: queued.created_at } as FlowerRuntimeCurrentItem, base.updated_at_ms),
+    ...(queued.input?.attachments?.length ? {
+      attachments: queued.input.attachments.map((attachment, index) => ({
+        attachment_id: trim(attachment.attachment_id) || `queued:${trim(queued.id)}:${index}`,
+        name: trim(attachment.name),
+        mime_type: trim(attachment.mime_type),
+        size_bytes: Math.max(0, Math.floor(Number(attachment.size_bytes) || 0)),
+        ...(safeFlowerAttachmentURL(attachment.url) ? { url: safeFlowerAttachmentURL(attachment.url)! } : {}),
+      })).filter((attachment) => attachment.name && attachment.mime_type),
+    } : {}),
   }));
   const projected: FlowerThreadSnapshot = {
     ...base,

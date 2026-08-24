@@ -367,7 +367,7 @@ func (s *Service) GetThread(ctx context.Context, meta *session.Meta, threadID st
 	}
 	view.QueuedTurns = make([]QueuedTurnView, 0, len(current.Queue))
 	for _, queued := range current.Queue {
-		view.QueuedTurns = append(view.QueuedTurns, queuedInputView(queued))
+		view.QueuedTurns = append(view.QueuedTurns, queuedInputView(threadID, queued))
 	}
 	applyThreadRuntimeSummary(&view, current)
 	return &view, nil
@@ -397,7 +397,7 @@ func (s *Service) GetFlowerThreadDetail(ctx context.Context, meta *session.Meta,
 	thread.ContextCompactions = contextProjection.Compactions
 	thread.TimelineDecorations = contextProjection.Decorations
 	applyThreadRuntimeSummary(thread, current)
-	return &FlowerThreadDetail{Thread: *thread, Current: publicFloretThreadView(current)}, nil
+	return &FlowerThreadDetail{Thread: *thread, Current: current}, nil
 }
 
 // flowerThreadDetailFromCurrent combines product metadata with the exact
@@ -449,7 +449,7 @@ func (s *Service) flowerThreadDetailFromCurrent(ctx context.Context, meta *sessi
 	}
 	thread.QueuedTurns = make([]QueuedTurnView, 0, len(current.Queue))
 	for _, queued := range current.Queue {
-		thread.QueuedTurns = append(thread.QueuedTurns, queuedInputView(queued))
+		thread.QueuedTurns = append(thread.QueuedTurns, queuedInputView(threadID, queued))
 	}
 	contextProjection, err := s.readCanonicalThreadContextProjection(ctx, current)
 	if err != nil {
@@ -459,7 +459,7 @@ func (s *Service) flowerThreadDetailFromCurrent(ctx context.Context, meta *sessi
 	thread.ContextCompactions = contextProjection.Compactions
 	thread.TimelineDecorations = contextProjection.Decorations
 	applyThreadRuntimeSummary(&thread, current)
-	return &FlowerThreadDetail{Thread: thread, Current: publicFloretThreadView(current)}, nil
+	return &FlowerThreadDetail{Thread: thread, Current: current}, nil
 }
 
 func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int, cursor string) (*ListThreadsResponse, error) {

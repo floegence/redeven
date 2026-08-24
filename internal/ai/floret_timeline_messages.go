@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"net/url"
 	"slices"
 	"strings"
 
@@ -214,16 +213,10 @@ func canonicalUserTimelineMessageForThread(threadID, turnID, entryID, input stri
 		return nil, errors.New("canonical user message has incomplete identity")
 	}
 	blocks := make([]any, 0, len(attachments)+1)
-	for index, attachment := range attachments {
-		uploadID, err := uploadIDFromFloretResourceRef(attachment.ResourceRef)
-		if err != nil {
-			return nil, fmt.Errorf("canonical user attachment %d: %w", index, err)
-		}
-		downloadURL := uploadURLPrefix + uploadID
-		if threadID != "" {
-			downloadURL += "?" + url.Values{"thread_id": {threadID}, "turn_id": {turnID}}.Encode()
-		}
-		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(attachment.MIMEType)), "image/") {
+	for _, attachment := range attachments {
+		uploadID, _ := uploadIDFromFloretResourceRef(attachment.ResourceRef)
+		downloadURL := flowerAttachmentURL(uploadID, threadID, turnID, "")
+		if downloadURL != "" && strings.HasPrefix(strings.ToLower(strings.TrimSpace(attachment.MIMEType)), "image/") {
 			blocks = append(blocks, persistedImageBlock{Type: "image", Src: downloadURL, Alt: strings.TrimSpace(attachment.Name)})
 		} else {
 			blocks = append(blocks, persistedFileBlock{Type: "file", Name: strings.TrimSpace(attachment.Name), Size: attachment.SizeBytes, MimeType: strings.TrimSpace(attachment.MIMEType), URL: downloadURL})

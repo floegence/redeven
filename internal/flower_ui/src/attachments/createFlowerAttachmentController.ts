@@ -13,6 +13,7 @@ import {
   inspectFlowerText,
   normalizeFlowerUploadProgress,
 } from './flowerAttachmentModel';
+import { isFlowerImageMimeType } from './flowerAttachmentPresentation';
 
 export type FlowerAttachmentItemStatus =
   | 'local_validating'
@@ -47,6 +48,8 @@ export type FlowerAttachmentItem = Readonly<{
   loaded_bytes: number;
   total_bytes?: number;
   progress_indeterminate: boolean;
+  /** Connection-local Blob URL. Never serialize into a draft or turn request. */
+  preview_url?: string;
   error_code?: FlowerAttachmentErrorCode;
   staged?: FlowerStagedAttachment;
 }>;
@@ -64,6 +67,7 @@ type MutableFlowerAttachmentItem = {
   loaded_bytes: number;
   total_bytes?: number;
   progress_indeterminate: boolean;
+  preview_url?: string;
   error_code?: FlowerAttachmentErrorCode;
   staged?: FlowerStagedAttachment;
   file?: File;
@@ -127,6 +131,21 @@ export type FlowerAttachmentControllerOptions = Readonly<{
 function readonlyItem(item: MutableFlowerAttachmentItem): FlowerAttachmentItem {
   const { file: _file, longText: _longText, controller: _controller, ...visible } = item;
   return { ...visible };
+}
+
+function createLocalPreviewURL(file: File, mimeType: string): string | undefined {
+  if (!isFlowerImageMimeType(mimeType) || typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') return undefined;
+  try {
+    return URL.createObjectURL(file);
+  } catch {
+    return undefined;
+  }
+}
+
+function releaseLocalPreviewURL(item: MutableFlowerAttachmentItem): void {
+  if (!item.preview_url || typeof URL === 'undefined' || typeof URL.revokeObjectURL !== 'function') return;
+  URL.revokeObjectURL(item.preview_url);
+  item.preview_url = undefined;
 }
 
 function safeFileType(file: File): string {
@@ -347,6 +366,7 @@ export function createFlowerAttachmentController(
       loaded_bytes: 0,
       progress_indeterminate: false,
       error_code: error ?? undefined,
+      preview_url: createLocalPreviewURL(file, safeFileType(file)),
       file,
       longText,
     });
@@ -422,12 +442,14 @@ export function createFlowerAttachmentController(
         const item = items[index];
         if (!item || incoming.has(item.local_id)) continue;
         invalidateAttempt(item);
+        releaseLocalPreviewURL(item);
         items.splice(index, 1);
       }
       for (const draftItem of draftItems) {
         const existing = items.find((item) => item.local_id === draftItem.local_id);
         const live = !draftItem.staged && existing?.file ? existing : undefined;
         const staged = draftItem.staged ?? live?.staged;
+        if (existing && !live) releaseLocalPreviewURL(existing);
         const projected: MutableFlowerAttachmentItem = {
           local_id: draftItem.local_id,
           request_id: draftItem.request_id,
@@ -450,6 +472,7 @@ export function createFlowerAttachmentController(
           total_bytes: live?.total_bytes ?? staged?.size_bytes,
           progress_indeterminate: live?.progress_indeterminate ?? false,
           error_code: live?.error_code,
+          preview_url: live?.preview_url ?? (live?.file ? createLocalPreviewURL(live.file, draftItem.mime_type) : undefined),
           staged,
           ...(live?.file ? { file: live.file } : {}),
           ...(live?.longText !== undefined ? { longText: live.longText } : {}),
@@ -501,6 +524,7 @@ export function createFlowerAttachmentController(
       const item = items.find((candidate) => candidate.local_id === localID);
       if (!item || item.status !== 'reselect_required') return;
       item.request_id = createID('request');
+      releaseLocalPreviewURL(item);
       item.attempt_id = '';
       item.source = 'file';
       item.name = file.name || 'attachment';
@@ -513,6 +537,7 @@ export function createFlowerAttachmentController(
       const error = validationError(file, item.local_id);
       item.status = error ? 'validation_error' : 'queued';
       item.error_code = error ?? undefined;
+      item.preview_url = createLocalPreviewURL(file, item.mime_type);
       item.loaded_bytes = 0;
       item.total_bytes = undefined;
       item.progress_indeterminate = false;
@@ -524,6 +549,7 @@ export function createFlowerAttachmentController(
       if (index < 0) return;
       const item = items[index];
       if (item) invalidateAttempt(item);
+      if (item) releaseLocalPreviewURL(item);
       items.splice(index, 1);
       if (item?.staged?.attachment_id && stagingScope) {
         void options.deleteStaged?.(item.staged.attachment_id, stagingScope).catch(() => undefined);
@@ -536,6 +562,7 @@ export function createFlowerAttachmentController(
       if (index < 0) return;
       const item = items[index];
       if (item) invalidateAttempt(item);
+      if (item) releaseLocalPreviewURL(item);
       items.splice(index, 1);
       emit();
       pump();
@@ -544,7 +571,10 @@ export function createFlowerAttachmentController(
       const consumed = new Set(localIDs);
       for (let index = items.length - 1; index >= 0; index -= 1) {
         const item = items[index];
-        if (item?.status === 'staged_ready' && consumed.has(item.local_id)) items.splice(index, 1);
+        if (item?.status === 'staged_ready' && consumed.has(item.local_id)) {
+          releaseLocalPreviewURL(item);
+          items.splice(index, 1);
+        }
       }
       emit();
       pump();
@@ -577,7 +607,10 @@ export function createFlowerAttachmentController(
     },
     dispose: () => {
       disposed = true;
-      for (const item of items) invalidateAttempt(item);
+      for (const item of items) {
+        invalidateAttempt(item);
+        releaseLocalPreviewURL(item);
+      }
       items.splice(0, items.length);
       listeners.clear();
       for (const resolve of idleWaiters) resolve();

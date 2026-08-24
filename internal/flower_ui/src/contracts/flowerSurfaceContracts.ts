@@ -377,7 +377,7 @@ export type FlowerChatMessageBlock =
     name: string;
     size: number;
     mimeType: string;
-    url: string;
+    url?: string;
   }>
   | FlowerActivityTimelineBlock;
 
@@ -685,10 +685,10 @@ export type FlowerRuntimeCurrentItem = Readonly<{
   live?: boolean;
   created_at?: string;
   attachments?: readonly Readonly<{
-    resource_ref?: string;
     name: string;
     mime_type?: string;
     size_bytes?: number;
+    url?: string;
   }>[];
   references?: readonly Readonly<{
     reference_id: string;
@@ -761,7 +761,21 @@ export type FlowerRuntimeCurrentView = Readonly<{
   error?: string;
   attention?: Readonly<{ approval_count?: number; input_count?: number }>;
   items?: readonly FlowerRuntimeCurrentItem[];
-  queue?: readonly Readonly<{ id: string; request_key: string; input: Readonly<{ text?: string }> }>[];
+  queue?: readonly Readonly<{
+    id: string;
+    request_key: string;
+    created_at?: string;
+    input: Readonly<{
+      text?: string;
+      attachments?: readonly Readonly<{
+        attachment_id?: string;
+        name: string;
+        mime_type?: string;
+        size_bytes?: number;
+        url?: string;
+      }>[];
+    }>;
+  }>[];
   interactions?: readonly FlowerRuntimeInteraction[];
   assistant_draft?: string;
   thinking_draft?: string;

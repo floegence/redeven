@@ -209,7 +209,7 @@ func (s *Service) publishFlowerRuntimeCurrent(endpointID string, current flrunti
 	if s == nil || strings.TrimSpace(endpointID) == "" || current.ThreadID == "" {
 		return
 	}
-	copy := publicFloretThreadView(current)
+	copy := current
 	envelope := FlowerLiveStreamEnvelope{
 		SchemaVersion: FlowerLiveSchemaVersion,
 		Kind:          FlowerLiveStreamThreadBatch,

@@ -228,3 +228,97 @@ func TestPublicFloretThreadViewHidesQueuedSupplementalContext(t *testing.T) {
 		t.Fatalf("public queue input=%#v, want user text preserved", view.Queue[0].Input)
 	}
 }
+
+func TestFlowerCurrentProjectionScopesAttachmentURLs(t *testing.T) {
+	t.Parallel()
+	uploadID := "upl_" + strings.Repeat("a", 24)
+	resourceRef := "redeven-upload:v1:" + uploadID + ":sha256:" + strings.Repeat("a", 64)
+	current := flruntime.ThreadView{
+		ThreadID:    identity.ThreadID("thread_preview"),
+		ViewVersion: 7,
+		Items: []flruntime.ThreadItem{{
+			ID: "user:item", TurnID: identity.TurnID("turn_preview"), Kind: flruntime.ThreadItemUser,
+			Attachments: []flruntime.MessageAttachment{{ResourceRef: resourceRef, Name: "photo.png", MIMEType: "image/png", SizeBytes: 12}},
+		}},
+		Queue: []flruntime.QueuedInput{{
+			ID: "queue_preview", RequestKey: "request_preview",
+			Input: flruntime.UserInput{Attachments: []flruntime.MessageAttachment{{ResourceRef: resourceRef, Name: "photo.png", MIMEType: "image/png", SizeBytes: 12}}},
+		}},
+	}
+	encoded, err := json.Marshal(SendUserTurnResponse{ThreadID: current.ThreadID.String(), Current: current})
+	if err != nil {
+		t.Fatalf("marshal current: %v", err)
+	}
+	raw := string(encoded)
+	if strings.Contains(raw, "resource_ref") || strings.Contains(raw, resourceRef) {
+		t.Fatalf("current leaked opaque resource reference: %s", raw)
+	}
+	var response struct {
+		Current struct {
+			Items []struct {
+				Attachments []struct {
+					URL string `json:"url"`
+				} `json:"attachments"`
+			} `json:"items"`
+			Queue []struct {
+				Input struct {
+					Attachments []struct {
+						URL string `json:"url"`
+					} `json:"attachments"`
+				} `json:"input"`
+			} `json:"queue"`
+		} `json:"current"`
+	}
+	if err := json.Unmarshal(encoded, &response); err != nil {
+		t.Fatal(err)
+	}
+	itemAttachment := response.Current.Items[0].Attachments[0]
+	if !strings.Contains(itemAttachment.URL, "thread_id=thread_preview") || !strings.Contains(itemAttachment.URL, "turn_id=turn_preview") {
+		t.Fatalf("canonical attachment projection=%+v", itemAttachment)
+	}
+	queueAttachment := response.Current.Queue[0].Input.Attachments[0]
+	if !strings.Contains(queueAttachment.URL, "thread_id=thread_preview") || !strings.Contains(queueAttachment.URL, "queue_id=queue_preview") {
+		t.Fatalf("queued attachment projection=%+v", queueAttachment)
+	}
+}
+
+func TestCanonicalAttachmentWithoutSafeResourceFallsBackToFileBlock(t *testing.T) {
+	t.Parallel()
+	message, err := canonicalUserTimelineMessageForThread(
+		"thread_preview", "turn_preview", "entry_preview", "inspect", []flruntime.MessageAttachment{{
+			ResourceRef: "legacy-private-locator", Name: "photo.png", MIMEType: "image/png", SizeBytes: 12,
+		}}, nil, time.UnixMilli(1_700_000_000_000).UnixMilli(),
+	)
+	if err != nil {
+		t.Fatalf("canonical message: %v", err)
+	}
+	var projected struct {
+		Blocks []struct {
+			Type string `json:"type"`
+			Name string `json:"name"`
+			URL  string `json:"url"`
+		} `json:"blocks"`
+	}
+	if err := json.Unmarshal(message, &projected); err != nil {
+		t.Fatal(err)
+	}
+	if len(projected.Blocks) < 1 || projected.Blocks[0].Type != "file" || projected.Blocks[0].Name != "photo.png" || projected.Blocks[0].URL != "" {
+		t.Fatalf("unsafe attachment projection=%#v", projected.Blocks)
+	}
+}
+
+func TestQueuedAttachmentWithoutSafeResourceKeepsStableDisplayIdentity(t *testing.T) {
+	t.Parallel()
+	view := queuedInputView("thread_preview", flruntime.QueuedInput{
+		ID: "queue_preview",
+		Input: flruntime.UserInput{Attachments: []flruntime.MessageAttachment{{
+			ResourceRef: "legacy-private-locator", Name: "notes.txt", MIMEType: "text/plain", SizeBytes: 12,
+		}}},
+	})
+	if len(view.Attachments) != 1 {
+		t.Fatalf("queued attachments=%#v", view.Attachments)
+	}
+	if view.Attachments[0].AttachmentID != "queued:queue_preview:0" || view.Attachments[0].URL != "" {
+		t.Fatalf("queued unsafe attachment=%#v", view.Attachments[0])
+	}
+}

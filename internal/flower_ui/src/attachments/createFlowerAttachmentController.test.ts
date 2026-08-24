@@ -48,6 +48,24 @@ function staged(input: Readonly<{ id: string; file: File; source?: 'file' | 'lon
 }
 
 describe('createFlowerAttachmentController', () => {
+  it('creates and releases connection-local image previews without persisting them', () => {
+    const createObjectURL = vi.fn(() => 'blob:flower-preview');
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal('URL', { createObjectURL, revokeObjectURL });
+    const controller = createFlowerAttachmentController({ capability: capability() });
+    const file = new File(['image'], 'photo.png', { type: 'image/png' });
+    const [localID] = controller.addFiles([file], 'paste');
+
+    expect(createObjectURL).toHaveBeenCalledWith(file);
+    expect(controller.snapshot().items[0]?.preview_url).toBe('blob:flower-preview');
+    const draftProjection = controller.snapshot().items.map(({ preview_url: _previewURL, ...item }) => item);
+    expect(draftProjection[0]).not.toHaveProperty('preview_url');
+
+    controller.remove(localID!);
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:flower-preview');
+    vi.unstubAllGlobals();
+  });
+
   it('keeps uploads queued until a connection-local staging scope is available', async () => {
     const file = new File(['queued'], 'queued.txt', { type: 'text/plain' });
     const upload = vi.fn(async (input) => staged({ id: 'upl_queued________________', file: input.file }));
