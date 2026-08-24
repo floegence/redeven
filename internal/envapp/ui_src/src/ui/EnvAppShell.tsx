@@ -1304,12 +1304,26 @@ export function EnvAppShell() {
   });
   let pluginRuntimeRecoveryClient: unknown = null;
   let pluginRuntimeRecoveryAbort: AbortController | undefined;
+  type PluginRuntimeRecoveryRetry = Readonly<{
+    client: unknown;
+    requestID: number;
+    controller: AbortController;
+  }>;
+  const pluginRuntimeRecoveryRetries = new Map<string, PluginRuntimeRecoveryRetry>();
+  let pluginRuntimeRecoveryRetryRequestID = 0;
+  const cancelPluginRuntimeRecoveryRetries = (reason: string) => {
+    for (const retry of pluginRuntimeRecoveryRetries.values()) {
+      retry.controller.abort(reason);
+    }
+    pluginRuntimeRecoveryRetries.clear();
+  };
   const [pluginRuntimeRecoveryRequest, setPluginRuntimeRecoveryRequest] = createSignal(0);
   createEffect(() => {
     pluginRuntimeRecoveryRequest();
     const connectedClient = protocol.status() === 'connected' ? protocol.session() : null;
     const sessionReady = !isLocalMode() || pluginSessionReady();
     if (!connectedClient || !sessionReady) {
+      cancelPluginRuntimeRecoveryRetries('Plugin runtime session disconnected');
       pluginRuntimeRecoveryClient = null;
       pluginRuntimeRecoveryAbort?.abort('Plugin runtime session disconnected');
       pluginRuntimeRecoveryAbort = undefined;
@@ -1318,11 +1332,13 @@ export function EnvAppShell() {
       return;
     }
     if (!canAdmin()) {
+      cancelPluginRuntimeRecoveryRetries('Plugin runtime recovery is no longer authorized');
       setPluginRuntimeRecoveryComplete(true);
       setPluginRuntimeRecoveryByInstanceID({});
       return;
     }
     if (pluginRuntimeRecoveryClient === connectedClient) return;
+    cancelPluginRuntimeRecoveryRetries('Plugin runtime session replaced');
     pluginRuntimeRecoveryClient = connectedClient;
     pluginRuntimeRecoveryAbort?.abort('Plugin runtime recovery superseded');
     const controller = new AbortController();
@@ -1359,19 +1375,40 @@ export function EnvAppShell() {
     });
   });
   const retryPluginRuntimeRecovery = (pluginInstanceID?: string) => {
-    if (protocol.status() !== 'connected' || (isLocalMode() && !pluginSessionReady())) return;
+    const connectedClient = protocol.status() === 'connected' ? protocol.session() : null;
+    if (!connectedClient || (isLocalMode() && !pluginSessionReady())) return;
     if (!pluginInstanceID) {
       if (!pluginRuntimeRecoveryComplete()) return;
+      cancelPluginRuntimeRecoveryRetries('Plugin runtime recovery superseded');
       pluginRuntimeRecoveryClient = null;
       setPluginRuntimeRecoveryComplete(false);
       setPluginRuntimeRecoveryRequest((request) => request + 1);
       return;
     }
+    const previousRetry = pluginRuntimeRecoveryRetries.get(pluginInstanceID);
+    previousRetry?.controller.abort('Plugin runtime recovery superseded');
+    const retry: PluginRuntimeRecoveryRetry = {
+      client: connectedClient,
+      requestID: ++pluginRuntimeRecoveryRetryRequestID,
+      controller: new AbortController(),
+    };
+    pluginRuntimeRecoveryRetries.set(pluginInstanceID, retry);
     setPluginRuntimeRecoveryByInstanceID((current) => ({
       ...current,
       [pluginInstanceID]: { state: 'recovering' },
     }));
-    void pluginLifecycle.retryRecovery(pluginInstanceID).then((result) => {
+    const isCurrentRetry = () => (
+      pluginRuntimeRecoveryRetries.get(pluginInstanceID)?.requestID === retry.requestID
+      && pluginRuntimeRecoveryRetries.get(pluginInstanceID)?.client === retry.client
+      && !retry.controller.signal.aborted
+      && pluginRuntimeRecoveryClient === connectedClient
+      && protocol.status() === 'connected'
+      && protocol.session() === connectedClient
+      && (!isLocalMode() || pluginSessionReady())
+    );
+    void pluginLifecycle.retryRecovery(pluginInstanceID, { signal: retry.controller.signal }).then((result) => {
+      if (!isCurrentRetry()) return;
+      pluginRuntimeRecoveryRetries.delete(pluginInstanceID);
       setPluginRuntimeRecoveryByInstanceID((current) => ({
         ...current,
         [pluginInstanceID]: result.status === 'ready'
@@ -1384,13 +1421,18 @@ export function EnvAppShell() {
           },
       }));
     }).catch((error: unknown) => {
+      if (!isCurrentRetry()) return;
+      pluginRuntimeRecoveryRetries.delete(pluginInstanceID);
       setPluginRuntimeRecoveryByInstanceID((current) => ({
         ...current,
         [pluginInstanceID]: { state: 'failed', error: getErrorMessage(error) },
       }));
     });
   };
-  onCleanup(() => pluginRuntimeRecoveryAbort?.abort('Plugin runtime recovery disposed'));
+  onCleanup(() => {
+    cancelPluginRuntimeRecoveryRetries('Plugin runtime recovery disposed');
+    pluginRuntimeRecoveryAbort?.abort('Plugin runtime recovery disposed');
+  });
   let pluginInstallResumeEligible = false;
   createEffect(() => {
     const eligible = protocol.status() === 'connected'
