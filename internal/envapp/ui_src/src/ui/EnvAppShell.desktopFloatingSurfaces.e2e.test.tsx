@@ -563,6 +563,14 @@ vi.mock('./flower/envLocalFlowerSurfaceAdapter', () => ({
   createEnvLocalFlowerSurfaceAdapter: () => ({ launchTurn: flowerLaunchTurnMock }),
 }));
 vi.mock('./notes/NotesOverlay', () => ({ NotesOverlay: () => <div /> }));
+vi.mock('./pages/EnvSettingsPage', () => ({ EnvSettingsPage: () => <div /> }));
+vi.mock('./pages/aiPermissions', () => ({ hasRWXPermissions: () => true }));
+vi.mock('./widgets/AuditLogDialog', () => ({ AuditLogDialog: () => <div /> }));
+vi.mock('./widgets/FilePreviewHost', () => ({ FilePreviewHost: () => <div data-testid="file-preview-host" /> }));
+vi.mock('./widgets/FileBrowserSurfaceHost', () => ({ FileBrowserSurfaceHost: () => <div data-testid="file-browser-host" /> }));
+vi.mock('./debugConsole/DebugConsoleWindow', () => ({
+  DebugConsoleWindow: () => <div data-testid="debug-console-window" />,
+}));
 vi.mock('./maintenance/RuntimeUpdateContext', () => ({ RuntimeUpdateContext: createContext({}) }));
 vi.mock('./maintenance/createAgentMaintenanceController', () => ({
   createAgentMaintenanceController: () => ({
