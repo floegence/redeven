@@ -12,7 +12,7 @@ func visibilityForToolName(toolName string) ToolVisibilityClass {
 		return ToolVisibilitySharedReadonly
 	case "write_todos":
 		return ToolVisibilityInteraction
-	case "ask_user", "task_complete":
+	case "ask_user":
 		return ToolVisibilityControl
 	case "subagents":
 		return ToolVisibilityDelegationControl
@@ -31,7 +31,7 @@ func capabilitiesForToolName(toolName string) []ToolCapabilityClass {
 		return []ToolCapabilityClass{ToolCapabilityReadonlyLocal}
 	case "web_fetch", "web.search":
 		return []ToolCapabilityClass{ToolCapabilityReadonlyNetwork, ToolCapabilityOpenWorld}
-	case "write_todos", "ask_user", "task_complete":
+	case "write_todos", "ask_user":
 		return []ToolCapabilityClass{ToolCapabilityInteraction}
 	case "subagents":
 		return []ToolCapabilityClass{ToolCapabilityDelegation}

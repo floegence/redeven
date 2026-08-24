@@ -3885,6 +3885,7 @@
       "runErrorProviderStreamInterrupted": "O provedor de modelos selecionado interrompeu o fluxo de resposta inesperadamente. Tente novamente; se o problema continuar, verifique o endpoint do provedor.",
       "runErrorProviderModelUnavailable": "O modelo selecionado não está disponível neste provedor de modelos. Escolha outro modelo no perfil de IA local.",
       "runErrorFloretEngineFailed": "Flower não pôde terminar este turno porque o mecanismo de orquestração falhou.",
+      "runErrorFloretControlContractFailed": "Flower não pôde terminar este turno porque o modelo solicitou uma ferramenta não compatível com o ambiente de execução atual.",
       "runErrorRuntimeRestarted": "O ambiente de execução local reiniciou antes que esta resposta terminasse. Inicie uma nova resposta quando ele estiver pronto.",
       "runtimeRestartedDivider": "O ambiente de execução do Redeven foi reiniciado",
       "messageErrorTitle": "Falha na mensagem",

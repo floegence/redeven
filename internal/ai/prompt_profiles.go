@@ -51,14 +51,14 @@ func resolvePromptProfileSpec(raw string) promptProfileSpec {
 			StrategyLines: []string{
 				"Default behavior: finish the full task in one run whenever the available tools and permissions allow it.",
 				"Keep going until the user's task is completely resolved before ending your turn.",
-				"Only call task_complete when you are confident the problem is fully solved.",
+				"When the task is complete, reply directly in the assistant message.",
 				"If you are unsure, use tools to verify your work before completing.",
 			},
 			InteractionLines: []string{
 				"- User interaction is disabled in this run.",
 				"- Continue autonomously as the main assistant for the user-facing thread.",
 				"- Do not request user input.",
-				"- If blocked, finish with task_complete and include blockers plus concrete next-step guidance for the user-facing thread.",
+				"- If blocked, explain the blocker and concrete next steps in the assistant response for the user-facing thread.",
 			},
 			ReportingLines: []string{
 				"- When blocked or complete, write for the user-facing thread rather than reporting to a parent run.",
@@ -78,13 +78,13 @@ func resolvePromptProfileSpec(raw string) promptProfileSpec {
 			StrategyLines: []string{
 				"Default behavior: finish the delegated slice in one run whenever the available tools and permissions allow it.",
 				"Keep going until the delegated objective is completely resolved or a verified blocker remains.",
-				"Only call task_complete when you are confident the delegated slice is fully solved or the remaining blocker is precisely explained.",
+				"When the delegated slice is complete, report the result directly in the assistant message.",
 				"If you are unsure, use tools to verify your work before completing.",
 			},
 			InteractionLines: []string{
 				"- User interaction is disabled in this run.",
 				"- Do not request user input.",
-				"- If blocked, finish with task_complete and include blockers plus suggested parent actions.",
+				"- If blocked, explain the blocker and suggested parent actions in the assistant response.",
 			},
 			DelegationLines: []string{
 				"- You are working for a parent Flower run, not speaking directly to the end user.",
@@ -110,7 +110,7 @@ func resolvePromptProfileSpec(raw string) promptProfileSpec {
 			StrategyLines: []string{
 				"Default behavior: finish the full task in one run whenever the available tools and permissions allow it.",
 				"Keep going until the user's task is completely resolved before ending your turn.",
-				"Only call task_complete when you are confident the problem is fully solved.",
+				"When the task is complete, reply directly in the assistant message.",
 				"If you are unsure, use tools to verify your work before completing.",
 			},
 			SupportsUserInteraction:      true,

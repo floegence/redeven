@@ -41,6 +41,7 @@ func TestClassifyRunFailureCodeProviderErrors(t *testing.T) {
 		{name: "network timeout", err: timeoutNetError{}, want: runErrorCodeProviderUnreachable},
 		{name: "context timeout", err: context.DeadlineExceeded, want: runErrorCodeProviderUnreachable},
 		{name: "provider stream eof", err: errors.New("unexpected EOF"), want: runErrorCodeProviderStreamInterrupted},
+		{name: "unregistered runtime tool", err: errors.New(`provider returned unregistered tool name "task_complete"`), want: runErrorCodeFloretControlContract},
 		{name: "floret effect authorization rejection", err: errors.New("effect is unauthorized"), want: runErrorCodeFloretEngineFailed},
 		{name: "floret wrapped effect authorization rejection", err: errors.New("floret effect is unauthorized: effect is unauthorized"), want: runErrorCodeFloretEngineFailed},
 		{name: "floret active turn admission", err: errors.New("thread already has an active turn"), want: runErrorCodeFloretAdmissionBlocked},
@@ -94,5 +95,18 @@ func TestUserFacingRunErrorPresentsFloretAdmissionBlocked(t *testing.T) {
 	lower := strings.ToLower(msg)
 	if !strings.Contains(lower, "active turn") || !strings.Contains(lower, "recovery") {
 		t.Fatalf("msg=%q, want active turn recovery presentation", msg)
+	}
+}
+
+func TestUserFacingRunErrorPresentsFloretControlContractFailure(t *testing.T) {
+	t.Parallel()
+
+	msg := userFacingRunError(runErrorCodeFloretControlContract, `provider returned unregistered tool name "task_complete"`)
+	lower := strings.ToLower(msg)
+	if strings.Contains(lower, "task_complete") || strings.Contains(lower, "unregistered") {
+		t.Fatalf("msg=%q exposed provider contract details", msg)
+	}
+	if !strings.Contains(lower, "unsupported") || !strings.Contains(lower, "tool") {
+		t.Fatalf("msg=%q, want unsupported-tool presentation", msg)
 	}
 }

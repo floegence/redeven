@@ -10,30 +10,6 @@ const (
 	AskUserReasonSafetyConfirmation   = "safety_confirmation"
 )
 
-type askUserSignal struct {
-	Questions        []RequestUserInputQuestion
-	Question         string
-	ReasonCode       string
-	RequiredFromUser []string
-	EvidenceRefs     []string
-	ContractError    string
-}
-
-func normalizeAskUserSignal(signal askUserSignal) askUserSignal {
-	questions := normalizeRequestUserInputQuestions(signal.Questions)
-	normalized := askUserSignal{
-		Questions:        questions,
-		ReasonCode:       normalizeAskUserReasonCode(signal.ReasonCode),
-		RequiredFromUser: normalizeAskUserStringList(signal.RequiredFromUser, 8, 200),
-		EvidenceRefs:     normalizeAskUserStringList(signal.EvidenceRefs, 12, 120),
-		ContractError:    strings.TrimSpace(signal.ContractError),
-	}
-	if len(normalized.Questions) > 0 {
-		normalized.Question = strings.TrimSpace(normalized.Questions[0].Question)
-	}
-	return normalized
-}
-
 func normalizeAskUserReasonCode(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case AskUserReasonUserDecisionRequired:
@@ -49,31 +25,4 @@ func normalizeAskUserReasonCode(raw string) string {
 	default:
 		return ""
 	}
-}
-
-func normalizeAskUserStringList(items []string, maxItems int, maxLen int) []string {
-	if len(items) == 0 || maxItems <= 0 {
-		return nil
-	}
-	seen := make(map[string]struct{}, len(items))
-	out := make([]string, 0, len(items))
-	for _, item := range items {
-		text := truncateRunes(strings.TrimSpace(item), maxLen)
-		if text == "" {
-			continue
-		}
-		key := strings.ToLower(text)
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		out = append(out, text)
-		if len(out) >= maxItems {
-			break
-		}
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
 }

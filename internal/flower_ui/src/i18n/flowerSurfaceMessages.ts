@@ -112,6 +112,7 @@ export const flowerSurfaceEnUS = {
     runErrorProviderStreamInterrupted: 'The selected AI provider ended the response stream unexpectedly. Try again, or check the provider endpoint if this keeps happening.',
     runErrorProviderModelUnavailable: 'The selected model is not available from this provider. Choose another model in the Local AI Profile.',
     runErrorFloretEngineFailed: 'Flower could not finish this turn because the orchestration engine failed.',
+    runErrorFloretControlContractFailed: 'Flower could not finish this turn because the model requested an unsupported runtime tool.',
     runErrorRuntimeRestarted: 'The local runtime restarted before this reply finished. Start a new reply when the runtime is ready.',
     messageErrorTitle: 'Message failed',
     messageErrorFallback: 'This message failed before Flower produced visible text.',

@@ -382,10 +382,9 @@ func runTask(
 	}
 
 	runOptions := ai.RunOptions{
-		ReasoningOnly:                    task.Runtime.ReasoningOnly,
-		RequireUserConfirmOnTaskComplete: task.Runtime.RequireUserConfirmOnTaskComplete,
-		NoUserInteraction:                task.Runtime.NoUserInteraction,
-		PermissionType:                   task.Runtime.PermissionType,
+		ReasoningOnly:     task.Runtime.ReasoningOnly,
+		NoUserInteraction: task.Runtime.NoUserInteraction,
+		PermissionType:    task.Runtime.PermissionType,
 	}
 
 	svc, err := ai.NewService(ai.Options{

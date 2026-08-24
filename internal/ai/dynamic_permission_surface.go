@@ -14,8 +14,6 @@ import (
 type runToolSurface struct {
 	PermissionType     FlowerPermissionType
 	ActiveTools        []ToolDef
-	ActiveSignals      []ToolDef
-	ControlTools       []ToolDef
 	PermissionSnapshot PermissionSnapshot
 	CapabilityContract runCapabilityContract
 	FloretToolItems    []fltools.Tool
@@ -120,7 +118,6 @@ func (r *run) buildRunToolSurfaceWithSnapshotCommit(ctx context.Context, cfg run
 		activeSignals = filterToolsByNames(activeSignals, permissionSnapshot.PromptCapabilityNames)
 	}
 	capabilityContract := resolveRunCapabilityContract(r, activeTools, activeSignals, cfg.SupportsAskUserQuestionBatches)
-	controlTools := floretControlToolsForContract(activeSignals, capabilityContract)
 	floretToolItems, err := buildFloretTools(r, activeTools, cfg.State)
 	if err != nil {
 		return runToolSurface{}, err
@@ -154,8 +151,6 @@ func (r *run) buildRunToolSurfaceWithSnapshotCommit(ctx context.Context, cfg run
 	return runToolSurface{
 		PermissionType:     permissionType,
 		ActiveTools:        activeTools,
-		ActiveSignals:      activeSignals,
-		ControlTools:       controlTools,
 		PermissionSnapshot: permissionSnapshot,
 		CapabilityContract: capabilityContract,
 		FloretToolItems:    floretToolItems,

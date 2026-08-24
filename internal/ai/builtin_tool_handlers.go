@@ -761,7 +761,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "write_todos",
-			Description:      "Replace the current thread todo list snapshot for actionable work. Track work items only, not control signals such as task_complete or ask_user. Keep at most one in_progress item, avoid empty lists unless explicitly clearing prior todos, and use at least 3 todos when the user asks for explicit planning/task breakdown.",
+			Description:      "Replace the current thread todo list snapshot for actionable work. Track work items only, not control signals such as ask_user. Keep at most one in_progress item, avoid empty lists unless explicitly clearing prior todos, and use at least 3 todos when the user asks for explicit planning/task breakdown.",
 			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"todos": map[string]any{"type": "array", "items": map[string]any{"type": "object", "properties": map[string]any{"id": map[string]any{"type": "string"}, "content": map[string]any{"type": "string"}, "status": map[string]any{"type": "string", "enum": []string{TodoStatusPending, TodoStatusInProgress, TodoStatusCompleted}}}, "required": []string{"id", "content", "status"}, "additionalProperties": false}}, "expected_version": map[string]any{"type": "integer", "minimum": 0}, "explanation": map[string]any{"type": "string", "maxLength": 500}}, "required": []string{"todos"}, "additionalProperties": false}),
 			Mutating:         false,
 			RequiresApproval: false,
@@ -802,8 +802,8 @@ func builtInToolDefinitions() []ToolDef {
 
 func builtInControlSignalDefinitions() []ToolDef {
 	toSchema := toolSchemaRaw
-	defs := make([]ToolDef, 0, 2)
-	for _, core := range flruntime.CoreControlDefinitions(true) {
+	defs := make([]ToolDef, 0, 1)
+	for _, core := range flruntime.CoreControlDefinitions(false) {
 		name := strings.TrimSpace(core.Name)
 		description := strings.TrimSpace(core.Description)
 		inputSchema := core.InputSchema
@@ -811,8 +811,6 @@ func builtInControlSignalDefinitions() []ToolDef {
 		case flruntime.CoreControlAskUser:
 			description = "Ask user for required structured input when the next step depends on a user decision, external input, approval, or a guided interaction turn. Preserve explicit interaction-shape constraints from the user, such as asking for fixed options, clickable choices, one-question-at-a-time, or indirect questioning. Each question must declare response_mode. Choice-based questions must also declare choices_exhaustive: use select only when choices_exhaustive=true, write for direct free text, and select_or_write when choices_exhaustive=false and custom text is allowed. If the user asks for answer choices, do not downgrade the question into pure write mode. choices[] should contain fixed options only. Do not use it to delegate tool-collectable work. Include reason_code, required_from_user, and evidence_refs for explainable policy checks."
 			inputSchema = redevenAskUserSignalInputSchema(core.InputSchema)
-		case flruntime.CoreControlTaskComplete:
-			description = "Optionally report a detailed result summary when explicitly useful. A normal assistant final answer can complete the task without this signal."
 		}
 		defs = append(defs, ToolDef{
 			Name:         name,
