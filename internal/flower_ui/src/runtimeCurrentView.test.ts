@@ -35,6 +35,20 @@ describe('applyFlowerRuntimeCurrentView', () => {
     expect(result.model_io_status).toBeNull();
   });
 
+  it('keeps a runtime failure visible in the thread error projection', () => {
+    const result = applyFlowerRuntimeCurrentView(summary(), {
+      thread_id: 'thread-a', view_version: 8, activity: 'idle', turn_id: 'turn-a',
+      last_outcome: 'failed', error: 'Desktop model source disconnected.',
+      items: [{ id: 'user:turn-a', turn_id: 'turn-a', ordinal: 1, kind: 'user', text: 'hello' }],
+    });
+
+    expect(result.status).toBe('failed');
+    expect(result.error).toEqual({
+      code: 'floret_turn_failed',
+      message: 'Desktop model source disconnected.',
+    });
+  });
+
   it('does not render a duplicated current item twice', () => {
     const result = applyFlowerRuntimeCurrentView(summary(), {
       thread_id: 'thread-a', view_version: 9, activity: 'idle', turn_id: 'turn-a', last_outcome: 'completed',

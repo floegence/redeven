@@ -353,7 +353,9 @@ export function applyFlowerRuntimeCurrentView(
     queued_turn_count: queuedTurns.length,
     queued_turns: queuedTurns,
     messages,
-    error: undefined,
+    error: trim(current.error)
+      ? { code: 'floret_turn_failed', message: trim(current.error) }
+      : undefined,
   };
   return { ...projected, title: canonicalFlowerThreadSnapshotTitle(projected) };
 }

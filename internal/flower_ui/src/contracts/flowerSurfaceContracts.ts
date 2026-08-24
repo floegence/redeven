@@ -758,6 +758,7 @@ export type FlowerRuntimeCurrentView = Readonly<{
   activity?: 'idle' | 'active';
   turn_id?: string;
   last_outcome?: 'completed' | 'failed' | 'cancelled' | 'interrupted';
+  error?: string;
   attention?: Readonly<{ approval_count?: number; input_count?: number }>;
   items?: readonly FlowerRuntimeCurrentItem[];
   queue?: readonly Readonly<{ id: string; request_key: string; input: Readonly<{ text?: string }> }>[];
