@@ -9,6 +9,7 @@ import type {
 } from './contracts/flowerSurfaceContracts';
 import { flowerActivityIdentity } from './flowerActivityIdentity';
 import { trimString } from './flowerSurfaceModel';
+import { flowerAttachmentDisplayKind, safeFlowerAttachmentURL } from './attachments/flowerAttachmentPresentation';
 
 export type FlowerRenderableMessageBlock =
   | Readonly<{
@@ -201,13 +202,13 @@ function queuedTurnBlocks(turn: FlowerQueuedTurn): readonly FlowerRenderableMess
   const queueID = trimString(turn.queue_id);
   const blocks: FlowerRenderableMessageBlock[] = (turn.attachments ?? []).map((attachment, index) => {
     const mimeType = trimString(attachment.mime_type);
-    const url = trimString(attachment.url);
+    const url = safeFlowerAttachmentURL(attachment.url);
     const attachmentID = trimString(attachment.attachment_id);
     const name = trimString(attachment.name);
     if (!attachmentID || !name || !mimeType || !Number.isFinite(attachment.size_bytes) || attachment.size_bytes < 0) {
       throw new Error(`Flower contract error: queued turn ${queueID} attachment ${index} is invalid.`);
     }
-    if (mimeType.toLowerCase().startsWith('image/') && url) {
+    if (flowerAttachmentDisplayKind(mimeType) === 'image' && url) {
       return {
         type: 'image', key: `queued-turn:${queueID}:attachment:${attachmentID}`, block_index: index,
         src: url, alt: name,

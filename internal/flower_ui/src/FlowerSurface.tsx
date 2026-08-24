@@ -831,6 +831,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let consumedSettingsFocusRequest = 0;
   const [contextSnapshotPreview, setContextSnapshotPreview] = createSignal<FlowerChatContextSnapshotPreview | null>(null);
   const [attachmentPreview, setAttachmentPreview] = createSignal<FlowerAttachmentPreviewSource | null>(null);
+  const [failedMessageImages, setFailedMessageImages] = createSignal<ReadonlySet<string>>(new Set());
   const [workingDirectoryPathContext, setWorkingDirectoryPathContext] = createSignal<FlowerWorkingDirectoryPathContext | null>(null);
   const [, setWorkingDirectoryPathContextLoading] = createSignal(false);
   const [workingDirectoryPickerOpen, setWorkingDirectoryPickerOpen] = createSignal(false);
@@ -6048,6 +6049,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
   const previewStagedAttachment = async (item: FlowerAttachmentItem) => {
+    if (!item.staged && item.preview_url) {
+      setAttachmentPreview({
+        id: `local:${item.local_id}`,
+        name: item.name,
+        mimeType: item.mime_type,
+        load: async (signal) => {
+          const response = await fetch(item.preview_url!, { signal });
+          if (!response.ok) throw new Error(attachmentCopy().errorUnavailable);
+          return response.blob();
+        },
+      });
+      return;
+    }
     if (!item.staged) return;
     const scope = currentAttachmentSnapshot().staging_scope;
     if (!scope) return;
@@ -7397,7 +7411,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             id: `${message.id}:attachment:${index}`,
             name: trimString(block.name) || expectedName || attachmentCopy().preview,
             mimeType: trimString(block.mimeType),
-            url: block.url,
+            url: trimString(block.url),
           });
         } else if (block.type === 'image' && trimString(block.src)) {
           candidates.push({
@@ -8661,21 +8675,44 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       )}
     >
       {(imageBlock) => (
-        <a
-          class="flower-message-image"
-          href={imageBlock().src}
-          onClick={(event) => {
-            event.preventDefault();
-            openMessageAttachmentPreview({
-              id: imageBlock().key,
-              name: trimString(imageBlock().alt) || attachmentCopy().preview,
-              mimeType: 'image/*',
-              url: imageBlock().src,
-            });
-          }}
+        <Show
+          when={!failedMessageImages().has(imageBlock().key)}
+          fallback={(
+            <div class="flower-message-file" data-image-fallback="true" role="img" aria-label={`${attachmentCopy().errorUnavailable}: ${imageBlock().alt ?? attachmentCopy().preview}`}>
+              <FileText class="size-5 shrink-0" aria-hidden="true" />
+              <span class="flower-message-file-copy">
+                <span class="flower-message-file-name">{imageBlock().alt || attachmentCopy().preview}</span>
+                <span class="flower-message-file-meta">{attachmentCopy().errorUnavailable}</span>
+              </span>
+            </div>
+          )}
         >
-          <img src={imageBlock().src} alt={imageBlock().alt ?? ''} loading="lazy" />
-        </a>
+          <a
+            class="flower-message-image"
+            href={imageBlock().src}
+            onClick={(event) => {
+              event.preventDefault();
+              openMessageAttachmentPreview({
+                id: imageBlock().key,
+                name: trimString(imageBlock().alt) || attachmentCopy().preview,
+                mimeType: 'image/*',
+                url: imageBlock().src,
+              });
+            }}
+          >
+            <img
+              src={attachmentPreviewURL(imageBlock().src)}
+              alt={imageBlock().alt ?? ''}
+              loading="lazy"
+              onError={() => setFailedMessageImages((current) => {
+                if (current.has(imageBlock().key)) return current;
+                const next = new Set(current);
+                next.add(imageBlock().key);
+                return next;
+              })}
+            />
+          </a>
+        </Show>
       )}
     </Show>
   );

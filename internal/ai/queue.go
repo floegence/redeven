@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/floegence/floret/v5/identity"
@@ -10,12 +11,17 @@ import (
 	"github.com/floegence/redeven/internal/session"
 )
 
-func queuedInputView(queued flruntime.QueuedInput) QueuedTurnView {
+func queuedInputView(threadID string, queued flruntime.QueuedInput) QueuedTurnView {
 	view := QueuedTurnView{QueueID: queued.ID, Text: queued.Input.Text, CreatedAtUnixMs: queued.CreatedAt.UnixMilli()}
-	for _, attachment := range queued.Input.Attachments {
+	for index, attachment := range queued.Input.Attachments {
 		uploadID, _ := uploadIDFromFloretResourceRef(attachment.ResourceRef)
-		view.Attachments = append(view.Attachments, FlowerAttachmentView{AttachmentID: uploadID, Name: attachment.Name,
-			MimeType: attachment.MIMEType, SizeBytes: attachment.SizeBytes, LogicalLocator: attachment.ResourceRef})
+		attachmentID := uploadID
+		if attachmentID == "" {
+			attachmentID = fmt.Sprintf("queued:%s:%d", queued.ID, index)
+		}
+		view.Attachments = append(view.Attachments, FlowerAttachmentView{AttachmentID: attachmentID, Name: attachment.Name,
+			MimeType: attachment.MIMEType, SizeBytes: attachment.SizeBytes,
+			URL: flowerAttachmentURL(uploadID, threadID, "", queued.ID)})
 	}
 	return view
 }

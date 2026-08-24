@@ -2,6 +2,7 @@ package appserver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 
@@ -50,6 +51,28 @@ type aiFlowerThreadDetailEnvelope struct {
 	ClientRequestID string               `json:"client_request_id,omitempty"`
 	Thread          aiThreadView         `json:"thread"`
 	Current         flruntime.ThreadView `json:"current"`
+}
+
+func (e aiFlowerThreadDetailEnvelope) MarshalJSON() ([]byte, error) {
+	type wire aiFlowerThreadDetailEnvelope
+	encoded, err := json.Marshal(wire(e))
+	if err != nil {
+		return nil, err
+	}
+	current, err := ai.MarshalFlowerCurrentView(e.Current)
+	if err != nil {
+		return nil, err
+	}
+	var currentValue any
+	if err := json.Unmarshal(current, &currentValue); err != nil {
+		return nil, err
+	}
+	var root map[string]any
+	if err := json.Unmarshal(encoded, &root); err != nil {
+		return nil, err
+	}
+	root["current"] = currentValue
+	return json.Marshal(root)
 }
 
 type aiMarkThreadReadRequest struct {

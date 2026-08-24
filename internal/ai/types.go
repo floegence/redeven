@@ -176,8 +176,10 @@ type ListThreadsResponse struct {
 }
 
 // FlowerThreadDetail joins Redeven-owned thread metadata with Floret's typed
-// current view. The two fields have distinct owners and are replaced atomically
-// by the detail endpoint; summary updates never write Current.
+// current view. Current is serialized through the Flower projection boundary,
+// which redacts opaque resource references and adds scoped attachment URLs.
+// The two fields have distinct owners and are replaced atomically by the detail
+// endpoint; summary updates never write Current.
 type FlowerThreadDetail struct {
 	Thread  ThreadView           `json:"thread"`
 	Current flruntime.ThreadView `json:"current"`
@@ -337,7 +339,6 @@ type FlowerAttachmentView struct {
 	SizeBytes         int64  `json:"size_bytes"`
 	UnicodeCodePoints *int64 `json:"unicode_code_points,omitempty"`
 	LogicalLineCount  *int64 `json:"logical_line_count,omitempty"`
-	LogicalLocator    string `json:"logical_locator"`
 	URL               string `json:"url,omitempty"`
 }
 
