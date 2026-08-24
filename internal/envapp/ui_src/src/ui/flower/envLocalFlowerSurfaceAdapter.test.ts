@@ -1229,6 +1229,7 @@ describe('Env local Flower surface adapter', () => {
         return jsonResponse({
           ai: {
             current_model_id: 'default/gpt-4.1',
+            permission_type: 'full_access',
             providers: [{
               id: 'default',
               type: 'openai_compatible',
@@ -1283,7 +1284,6 @@ describe('Env local Flower surface adapter', () => {
       create: {
         client_request_id: 'client_reference',
         model_id: 'default/gpt-4.1',
-        permission_type: 'approval_required',
       },
       input: {
         text: '',

@@ -315,6 +315,79 @@ describe('FlowerSurface navigation', () => {
     expect(saveDefaultPermission).toHaveBeenCalledWith('full_access');
   }, 5000);
 
+  it('uses the loaded full-access default for a new conversation without creating an override', async () => {
+    const launchTurn = vi.fn(async (input: FlowerTurnLaunchInput) => (
+      launchReceipt(input.thread_id ?? 'thread-default-permission', 'turn-default-permission', 'start', input.client_request_id)
+    ));
+    const surfaceAdapter = {
+      ...adapter(true),
+      loadSettings: vi.fn(async () => ({
+        ...settingsSnapshot(true),
+        defaults: { permission_type: 'full_access' as const },
+      })),
+      launchTurn,
+    };
+    const runtime = renderSurfaceWithAdapter(surfaceAdapter);
+
+    await waitFor(() => runtime.querySelector('[data-permission-type="full_access"]') !== null);
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'use the configured default';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+
+    await waitFor(() => launchTurn.mock.calls.length === 1);
+    expect(launchTurn).toHaveBeenCalledWith(expect.not.objectContaining({ permission_type: expect.anything() }));
+  });
+
+  it('sends only an explicitly selected permission override for a new conversation', async () => {
+    const launchTurn = vi.fn(async (input: FlowerTurnLaunchInput) => (
+      launchReceipt(input.thread_id ?? 'thread-explicit-permission', 'turn-explicit-permission', 'start', input.client_request_id)
+    ));
+    const surfaceAdapter = {
+      ...adapter(true),
+      loadSettings: vi.fn(async () => ({
+        ...settingsSnapshot(true),
+        defaults: { permission_type: 'full_access' as const },
+      })),
+      launchTurn,
+    };
+    const runtime = renderSurfaceWithAdapter(surfaceAdapter);
+
+    await waitFor(() => runtime.querySelector('[data-permission-type="full_access"]') !== null);
+    (runtime.querySelector('.flower-permission-trigger') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('[data-permission-type="approval_required"].flower-permission-menu-item') !== null);
+    (runtime.querySelector('[data-permission-type="approval_required"].flower-permission-menu-item') as HTMLButtonElement).click();
+
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'use an explicit approval override';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+
+    await waitFor(() => launchTurn.mock.calls.length === 1);
+    expect(launchTurn).toHaveBeenCalledWith(expect.objectContaining({ permission_type: 'approval_required' }));
+  });
+
+  it('does not turn the temporary permission fallback into a new-thread override while settings load', async () => {
+    const settings = deferred<FlowerSettingsSnapshot>();
+    const surfaceAdapter = {
+      ...adapter(true),
+      loadSettings: vi.fn(() => settings.promise),
+    };
+    const runtime = renderSurfaceWithAdapter(surfaceAdapter);
+    await flush();
+
+    const loadingPermission = runtime.querySelector('.flower-permission-selector');
+    expect(loadingPermission).not.toBeNull();
+    expect(loadingPermission?.querySelector('button')).toBeNull();
+
+    settings.resolve({
+      ...settingsSnapshot(true),
+      defaults: { permission_type: 'full_access' as const },
+    });
+    await waitFor(() => runtime.querySelector('[data-permission-type="full_access"]') !== null);
+    expect((runtime.querySelector('.flower-permission-trigger') as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it('opens provider setup from settings when no model is configured', async () => {
     const surfaceAdapter = mutableSettingsAdapter(false);
     const emptySnapshot: FlowerSettingsSnapshot = {
