@@ -1330,6 +1330,14 @@ async function clearReinstallTargetRequired(descriptor: ReinstallTargetDescripto
   await Promise.all(targets.map((target) => fs.rm(reinstallTargetRequiredMarkerPath(target), { force: true })));
 }
 
+async function clearReinstallTargetRequiredForEnvironment(environmentID: string): Promise<void> {
+  const descriptor = directReinstallTargetDescriptors(await loadDesktopPreferencesCached())
+    .find((candidate) => candidate.environment_id === environmentID);
+  if (descriptor) {
+    await clearReinstallTargetRequired(descriptor);
+  }
+}
+
 async function reinstallRequiredTargetFingerprints(
   descriptors: readonly ReinstallTargetDescriptor[],
 ): Promise<ReadonlySet<string>> {
@@ -1338,26 +1346,6 @@ async function reinstallRequiredTargetFingerprints(
       .then(() => reinstallTargetDescriptorFingerprint(descriptor))
       .catch((error: NodeJS.ErrnoException) => error.code === 'ENOENT' ? '' : Promise.reject(error))
   )))).filter(Boolean));
-}
-
-async function environmentHasPendingReinstall(
-  preferences: DesktopPreferences,
-  environmentID: string,
-): Promise<boolean> {
-  const descriptor = directReinstallTargetDescriptors(preferences)
-    .find((candidate) => candidate.environment_id === environmentID);
-  if (!descriptor) {
-    return false;
-  }
-  const requiredFingerprints = await reinstallRequiredTargetFingerprints([descriptor]);
-  if (requiredFingerprints.has(reinstallTargetDescriptorFingerprint(descriptor))) {
-    return true;
-  }
-  const journals = await reinstallTargetCoordinator().readPersistedJournals();
-  return journals.some((journal) => (
-    journal.environment_id === environmentID
-    || journal.affected_environment_ids.includes(environmentID)
-  ));
 }
 
 async function pendingReinstallOperationForEnvironment(
@@ -4503,20 +4491,28 @@ async function refreshWelcomeRuntimeHealth(options: Readonly<{
   const targetEnvironmentIDs = new Set((options.targetEnvironmentIDs ?? [])
     .map((value) => compact(value))
     .filter((value) => value !== ''));
-  const reinstallDescriptors = directReinstallTargetDescriptors(preferences);
-  const descriptorByEnvironmentID = new Map(reinstallDescriptors.map((descriptor) => [descriptor.environment_id, descriptor]));
-  const requiredFingerprints = await reinstallRequiredTargetFingerprints(reinstallDescriptors);
   const targets = buildWelcomeRuntimeHealthTargets(preferences, openSessions)
     .filter((target) => targetEnvironmentIDs.size === 0 || targetEnvironmentIDs.has(target.environment_id))
-    .filter((target) => {
-      const descriptor = descriptorByEnvironmentID.get(target.environment_id);
-      return !descriptor || !requiredFingerprints.has(reinstallTargetDescriptorFingerprint(descriptor));
-    })
     .filter((target) => mode === 'manual' || target.auto_refresh_enabled);
   await welcomeRuntimeHealthStore.refresh(targets, {
     force: options.force === true,
     pruneMissing: mode === 'manual' && targetEnvironmentIDs.size === 0,
   });
+
+  // A successful direct probe is newer than an old recovery marker. The
+  // marker remains useful while the target is unhealthy, but it must not keep
+  // a healthy Runtime in a reinstall-only state.
+  const refreshedHealth = welcomeRuntimeHealthStore.snapshot();
+  const descriptors = directReinstallTargetDescriptors(preferences);
+  await Promise.all(descriptors.map(async (descriptor) => {
+    const health = refreshedHealth.localRuntimeHealth[descriptor.environment_id]
+      ?? refreshedHealth.savedRuntimeTargetHealth[descriptor.environment_id]
+      ?? refreshedHealth.savedExternalRuntimeHealth[descriptor.environment_id];
+    if (health?.status !== 'online') {
+      return;
+    }
+    await clearReinstallTargetRequired(descriptor);
+  }));
 }
 
 function scheduleWelcomeRuntimeHealthRefresh(options: Readonly<{
@@ -4829,20 +4825,12 @@ async function buildCurrentDesktopWelcomeSnapshot(
   const preferences = await loadDesktopPreferencesCached();
   const openSessions = openSessionSummaries();
   const reinstallDescriptors = directReinstallTargetDescriptors(preferences);
-  const descriptorByEnvironmentID = new Map(reinstallDescriptors.map((descriptor) => [descriptor.environment_id, descriptor]));
   const requiredFingerprints = await reinstallRequiredTargetFingerprints(reinstallDescriptors);
-  const welcomeHealthTargets = buildWelcomeRuntimeHealthTargets(preferences, openSessions)
-    .filter((target) => {
-      const descriptor = descriptorByEnvironmentID.get(target.environment_id);
-      return !descriptor || !requiredFingerprints.has(reinstallTargetDescriptorFingerprint(descriptor));
-    });
+  const welcomeHealthTargets = buildWelcomeRuntimeHealthTargets(preferences, openSessions);
   welcomeRuntimeHealthStore.prime(welcomeHealthTargets, { pruneMissing: true });
   const healthSnapshot = welcomeRuntimeHealthStore.snapshot();
   const localMaintenance = localRuntimeMaintenanceByEnvironmentID.get(preferences.local_environment.id);
-  const localDescriptor = descriptorByEnvironmentID.get(preferences.local_environment.id);
-  const localMaintenanceResult = localMaintenance && (
-    !localDescriptor || !requiredFingerprints.has(reinstallTargetDescriptorFingerprint(localDescriptor))
-  )
+  const localMaintenanceResult = localMaintenance
     ? localEnvironmentMaintenanceProbeResult(preferences.local_environment, localMaintenance)
     : null;
   const localRuntimeHealth = {
@@ -4860,9 +4848,6 @@ async function buildCurrentDesktopWelcomeSnapshot(
       : {}),
   };
   const state = currentUtilityWindowState(kind);
-  // IMPORTANT: A reinstall marker makes the complete physical target root
-  // opaque. Welcome may use Desktop-owned records, but it must not probe or
-  // read the old target while this marker exists.
   const gatewaySources = await loadGatewaySourcesForWelcome();
   const snapshot = buildDesktopWelcomeSnapshot({
     preferences,
@@ -10429,9 +10414,6 @@ async function autoStartLocalRuntimeOnDesktopLaunch(loadedPreferences?: DesktopP
   try {
     const preferences = loadedPreferences ?? await loadDesktopPreferencesCached();
     const environment = preferences.local_environment;
-    if (await environmentHasPendingReinstall(preferences, environment.id)) {
-      return;
-    }
     const placement = localHostRuntimeLifecyclePlacement(environment);
     const result = await runEnvironmentRuntimeLifecycleFromLauncher({
       kind: 'start_environment_runtime',
@@ -15969,6 +15951,7 @@ async function executeDirectManagedEnvironmentLifecycle(input: Readonly<{
         });
       }
       clearSupersededRuntimeLifecycleFailures(targetID, input.operation_key);
+      await clearReinstallTargetRequiredForEnvironment(input.environment_id).catch(() => undefined);
       resetLauncherIssueState();
       broadcastDesktopWelcomeSnapshots();
       return launcherActionSuccess(input.operation === 'stop'

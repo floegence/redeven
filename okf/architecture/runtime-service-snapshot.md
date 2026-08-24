@@ -15,6 +15,8 @@ Runtime publishes its own service protocol and independent component version. Ga
 
 The snapshot includes target identity, generation-bound workload/process inventory, snapshot revision, inventory digest, lifecycle fence state, and typed `unknown` values when inventory is unavailable or malformed. A supervisor can begin/release a fence and perform token-bound shutdown, but Runtime does not create Gateway operations, permits, locks, or recovery records. Fence release requires the exact token while a fence is active. After a successful replacement starts a new Runtime process with no inherited fence, releasing the consumed non-empty token is idempotent so Gateway can persist the operation outcome without manufacturing cross-process Runtime state. External OS maintenance is outside the product lifecycle authority; the next Gateway enablement revalidates identity, protocol, epoch, capabilities, and digest.
 
+Runtime liveness and startup reporting remain independent from optional AI/model-source readiness. Building a Runtime Service snapshot reads the process-local binding and workload leases; it does not issue a model-source RPC or scan historical Floret threads. A temporarily unavailable model source therefore cannot make an already listening Runtime appear to have exited, and active workload counts come from the in-memory admission leases until their canonical terminal view releases them.
+
 # Boundaries
 
 Portal `ControlChannelFence` fields protect the Provider control channel and are distinct from Gateway `target_generation`. Neither counter is a Desktop ownership marker. The Runtime Service has no hidden v1 lifecycle-owner fallback and does not require a Gateway endpoint, pairing, or operation store to start.
@@ -26,3 +28,5 @@ Portal `ControlChannelFence` fields protect the Provider control channel and are
 - `redeven:internal/runtimeservice/lifecycle.go:1` - Optional lifecycle fence and supervisor-facing identity.
 - `redeven:internal/runtimemanagement/process_inventory.go:1` - Exact workload identity and unknown inventory behavior.
 - `redeven:internal/localui/runtime_control.go:1` - Ordinary Runtime control remains a local Runtime interface.
+- `redeven:internal/agent/runtime_service.go:1` - Runtime snapshots use local model-source and workload state without historical thread scans.
+- `redeven:internal/ai/desktop_model_source.go:372` - Process-local Desktop model-source binding snapshot used by Runtime status.

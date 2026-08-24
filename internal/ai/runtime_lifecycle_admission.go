@@ -11,10 +11,11 @@ import (
 type WorkloadAdmission func(runtimeservice.ManagedWorkload) (func(), error)
 
 type aiWorkloadLease struct {
-	threadID string
-	accepted bool
-	once     sync.Once
-	release  func()
+	endpointID string
+	threadID   string
+	accepted   bool
+	once       sync.Once
+	release    func()
 }
 
 func (lease *aiWorkloadLease) Release() {
@@ -75,7 +76,11 @@ func (s *Service) admitAIUserTurn(endpointID, threadID, requestID string) (strin
 	if err != nil {
 		return "", false, err
 	}
-	s.workloadLeases[key] = &aiWorkloadLease{threadID: strings.TrimSpace(threadID), release: release}
+	s.workloadLeases[key] = &aiWorkloadLease{
+		endpointID: strings.TrimSpace(endpointID),
+		threadID:   strings.TrimSpace(threadID),
+		release:    release,
+	}
 	return key, true, nil
 }
 

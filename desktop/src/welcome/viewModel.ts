@@ -2067,14 +2067,10 @@ export function buildProviderBackedEnvironmentActionModel(
 ): ProviderBackedEnvironmentActionModel {
   const displayState = buildEnvironmentDisplayStateModel(environment);
   const syncState = _controlPlaneSyncState;
-  const primaryAction = environmentSupportsDirectReinstall(environment) && environment.reinstall_required === true
-    ? {
-        intent: 'reinstall_target' as const,
-        label: 'Reinstall Redeven',
-        enabled: true,
-        variant: 'default' as const,
-      }
-    : primaryWindowAction(environment);
+  // A recovery marker records an interrupted/failed attempt; it is not live
+  // Runtime health. Keep the normal primary action driven by the current
+  // health snapshot and leave reinstall available in the actions menu.
+  const primaryAction = primaryWindowAction(environment);
   const menuActions = syncState === 'auth_required' && environment.kind === 'provider_environment'
     ? [{
         id: 'request_open_access',
@@ -2095,9 +2091,7 @@ export function buildProviderBackedEnvironmentActionModel(
     action_presentation: {
       kind: 'split_button',
       primary_action: primaryAction,
-      primary_action_overlay: environmentSupportsDirectReinstall(environment) && environment.reinstall_required === true
-        ? undefined
-        : primaryActionOverlay(environment, menuActions),
+      primary_action_overlay: primaryActionOverlay(environment, menuActions),
       menu_button_label: 'Runtime actions',
       menu_actions: menuActions,
     },
