@@ -1049,7 +1049,7 @@ async function runtimeSupervisorEvidence(stateRoot, snapshot) {
   const statusProbes = [];
   for (const [kind, executable] of [['bundled', bundledRuntime], ['managed', managedRuntime]]) {
     if (!await fs.stat(executable).then((stat) => stat.isFile(), () => false)) continue;
-    const result = await captureCommand(executable, ['desktop-runtime-status', '--state-root', runtimeRoot]);
+    const result = await captureCommand(executable, ['desktop-runtime-status', '--state-root', stateRoot]);
     let parsed;
     try {
       parsed = redactDiagnosticValue(JSON.parse(result.stdout));
@@ -1119,7 +1119,7 @@ async function seedLegacyRuntimeBinding({ stateRoot, snapshot, gatewayID }) {
   if (versionProbe.exit_code !== 0) {
     throw new Error(`legacy Runtime fixture is not executable after identity change: ${versionProbe.stderr || versionProbe.stdout}`);
   }
-  const statusProbe = await captureCommand(managedRuntime, ['desktop-runtime-status', '--state-root', runtimeRoot], { timeoutMs: 15_000 });
+  const statusProbe = await captureCommand(managedRuntime, ['desktop-runtime-status', '--state-root', stateRoot], { timeoutMs: 15_000 });
   if (statusProbe.exit_code !== 0) {
     throw new Error(`legacy Runtime fixture cannot prove its stopped inventory: ${statusProbe.stderr || statusProbe.stdout}`);
   }
@@ -1176,7 +1176,7 @@ async function assertDevelopmentRuntimeConvergence({ stateRoot, ready, bundle, l
     30_000,
     'actual Runtime digest startup log',
   );
-  const status = await captureCommand(managedRuntime, ['desktop-runtime-status', '--state-root', path.join(stateRoot, 'local-environment')], { timeoutMs: 15_000 });
+  const status = await captureCommand(managedRuntime, ['desktop-runtime-status', '--state-root', stateRoot], { timeoutMs: 15_000 });
   if (status.exit_code !== 0) {
     throw new Error(`converged managed Runtime status failed: ${status.stderr || status.stdout}`);
   }

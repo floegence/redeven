@@ -274,9 +274,9 @@ printf '#!/bin/sh\nexit 0\n' > "$managed_runtime"
 chmod 700 "$managed_runtime"
 stop_runtime_output=$(HOME="$TEST_HOME" REDEVEN_STATE_ROOT="$override_root" \
 	"$ROOT_DIR/scripts/dev_desktop.sh" --dry-run --stop-only --stop-runtimes)
-if ! printf '%s\n' "$stop_runtime_output" | rg -Fq "$managed_runtime desktop-runtime-stop --state-root $override_root/local-environment"; then
+if ! printf '%s\n' "$stop_runtime_output" | rg -Fq "$managed_runtime desktop-runtime-stop --runtime-root $override_root/local-environment --state-root $override_root"; then
 	printf '%s\n' "$stop_runtime_output" >&2
-	printf 'expected --stop-runtimes to use this instance managed Runtime inventory\n' >&2
+	printf 'expected --stop-runtimes to use the instance Runtime root and outer state root\n' >&2
 	exit 1
 fi
 

@@ -459,8 +459,8 @@ process_is_current_development_runtime() {
 		*"$DEVELOPMENT_STATE_ROOT/local-environment/runtime/managed/bin/redeven"*" run "*) ;;
 		*) return 1 ;;
 	esac
-	case "$command" in
-		*"--state-root $DEVELOPMENT_STATE_ROOT/local-environment"*|*"--state-root=$DEVELOPMENT_STATE_ROOT/local-environment"*) return 0 ;;
+	case " $command " in
+		*" --state-root $DEVELOPMENT_STATE_ROOT "*|*" --state-root=$DEVELOPMENT_STATE_ROOT "*) return 0 ;;
 		*) return 1 ;;
 	esac
 }
@@ -468,8 +468,8 @@ process_is_current_development_runtime() {
 stop_current_instance_runtime() {
 	local managed_runtime="$DEVELOPMENT_STATE_ROOT/local-environment/runtime/managed/bin/redeven"
 	local stop_binary="$managed_runtime"
-	local runtime_state_root="$DEVELOPMENT_STATE_ROOT/local-environment"
-	local legacy_state_root="$DEVELOPMENT_STATE_ROOT"
+	local runtime_root="$DEVELOPMENT_STATE_ROOT/local-environment"
+	local runtime_state_root="$DEVELOPMENT_STATE_ROOT"
 	local failed=0
 	if [ ! -x "$stop_binary" ] && [ -n "$DEVELOPMENT_BUNDLE_ROOT" ] && [ -x "$DEVELOPMENT_BUNDLE_ROOT/redeven" ]; then
 		stop_binary="$DEVELOPMENT_BUNDLE_ROOT/redeven"
@@ -480,20 +480,11 @@ stop_current_instance_runtime() {
 	fi
 	ui_pkg_log "Stopping the exact managed Runtime for instance $DEVELOPMENT_INSTANCE_ID via its verified process inventory."
 	if [ "$DRY_RUN" -eq 1 ]; then
-		print_command "$stop_binary" desktop-runtime-stop --state-root "$runtime_state_root" --grace-period "${STOP_TIMEOUT_SECONDS}s"
-		if [ -e "$legacy_state_root/local-environment/agent.lock" ]; then
-			print_command "$stop_binary" desktop-runtime-stop --state-root "$legacy_state_root" --grace-period "${STOP_TIMEOUT_SECONDS}s"
-		fi
+		print_command "$stop_binary" desktop-runtime-stop --runtime-root "$runtime_root" --state-root "$runtime_state_root" --grace-period "${STOP_TIMEOUT_SECONDS}s"
 		return 0
 	fi
-	if ! "$stop_binary" desktop-runtime-stop --state-root "$runtime_state_root" --grace-period "${STOP_TIMEOUT_SECONDS}s"; then
+	if ! "$stop_binary" desktop-runtime-stop --runtime-root "$runtime_root" --state-root "$runtime_state_root" --grace-period "${STOP_TIMEOUT_SECONDS}s"; then
 		failed=1
-	fi
-	if [ -e "$legacy_state_root/local-environment/agent.lock" ]; then
-		ui_pkg_log "Stopping the legacy top-level state-root Runtime for this dev instance."
-		if ! "$stop_binary" desktop-runtime-stop --state-root "$legacy_state_root" --grace-period "${STOP_TIMEOUT_SECONDS}s"; then
-			failed=1
-		fi
 	fi
 	return "$failed"
 }

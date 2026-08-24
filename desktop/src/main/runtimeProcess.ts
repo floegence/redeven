@@ -1171,6 +1171,7 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
       emitFinalManagedRuntimeInventoryProgress(args.onProgress);
       await verifyManagedLocalRuntimeProcessIdentity({
         executablePath: args.executablePath,
+        runtimeRoot,
         stateRoot,
         env: mergedEnv,
         startup: attachedStartup,
@@ -1215,6 +1216,7 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
     emitFinalManagedRuntimeInventoryProgress(args.onProgress);
     await verifyManagedLocalRuntimeProcessIdentity({
       executablePath: args.executablePath,
+      runtimeRoot,
       stateRoot,
       env: mergedEnv,
       startup: stableStartup,
