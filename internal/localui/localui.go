@@ -149,6 +149,9 @@ type pendingDirect struct {
 	meta                      session.Meta
 	traceID                   string
 	connectArtifactIssuedAtMs int64
+	// settled is shared with the eventual active binding so readiness requests
+	// can wait while Flowersec is still promoting this pending channel.
+	settled chan struct{}
 }
 
 type pluginAccessState uint8
@@ -422,6 +425,7 @@ func (s *Server) configureAcceptor() error {
 			// public session needed to revoke product access on logout or expiry.
 			channelID := strings.TrimSpace(endpointID)
 			if err := s.authStore.markActivated(channelID); err != nil {
+				s.recordPluginSessionDiagnostic("activation_rejected", channelID, "authorization activation failed", nil)
 				s.releaseAcceptedSessionAuthorization(channelID)
 				if s.log != nil {
 					s.log.Warn("reject local Flowersec session activation", "endpoint_id", channelID, "error", err)
@@ -430,6 +434,7 @@ func (s *Server) configureAcceptor() error {
 			}
 			pending, ok := s.activateAcceptedSession(channelID, current)
 			if !ok {
+				s.recordPluginSessionDiagnostic("activation_rejected", channelID, "accepted session metadata unavailable", nil)
 				s.releaseAcceptedSession(channelID)
 				if s.log != nil {
 					s.log.Warn("reject accepted local Flowersec session", "endpoint_id", channelID)
@@ -448,8 +453,11 @@ func (s *Server) configureAcceptor() error {
 					s.markAcceptedPluginSessionReady(channelID, pending.accessSessionID, pending.pluginCredentialHash)
 				},
 			})
-			if err != nil && s.log != nil {
-				s.log.Warn("local Flowersec session ended with an error", "channel_id", channelID, "error", err)
+			if err != nil {
+				s.recordPluginSessionDiagnostic("session_ended", channelID, "local direct session ended", nil)
+				if s.log != nil {
+					s.log.Warn("local Flowersec session ended with an error", "channel_id", channelID, "error", err)
+				}
 			}
 			return err
 		},
@@ -1132,6 +1140,9 @@ func (s *Server) handlePluginSessionReady(w http.ResponseWriter, r *http.Request
 	case pluginSessionBindingInitializing:
 		// Continue below without holding the session-state lock.
 	default:
+		s.recordPluginSessionDiagnostic("readiness_rejected", request.ChannelID, "plugin session readiness binding unavailable", map[string]any{
+			"state": pluginSessionBindingStateName(state),
+		})
 		writePluginSessionReadyError(w, http.StatusForbidden, "LOCAL_PLUGIN_SESSION_UNAVAILABLE", "Plugin session is unavailable.")
 		return
 	}
@@ -1159,6 +1170,35 @@ func (s *Server) handlePluginSessionReady(w http.ResponseWriter, r *http.Request
 	writePluginSessionReadyError(w, http.StatusGone, "LOCAL_PLUGIN_SESSION_CLOSED", "Plugin session closed before it became ready.")
 }
 
+func (s *Server) recordPluginSessionDiagnostic(kind, channelID, message string, detail map[string]any) {
+	if s == nil || s.diag == nil {
+		return
+	}
+	if detail == nil {
+		detail = make(map[string]any)
+	}
+	detail["channel_id"] = strings.TrimSpace(channelID)
+	s.diag.Append(diagnostics.Event{
+		Scope:   diagnostics.ScopeDirectSession,
+		Kind:    kind,
+		Message: message,
+		Detail:  detail,
+	})
+}
+
+func pluginSessionBindingStateName(state pluginSessionBindingState) string {
+	switch state {
+	case pluginSessionBindingInitializing:
+		return "initializing"
+	case pluginSessionBindingReady:
+		return "ready"
+	case pluginSessionBindingClosed:
+		return "closed"
+	default:
+		return "unknown"
+	}
+}
+
 func writePluginSessionReadyError(w http.ResponseWriter, status int, code, message string) {
 	writeJSON(w, status, apiResp{OK: false, Error: &apiError{
 		Code:      code,
@@ -1178,19 +1218,41 @@ func (s *Server) pluginSessionReadiness(channelID, credential, requestAccessSess
 		return pluginSessionBindingClosed, nil
 	}
 	candidate := sha256.Sum256([]byte(credential))
+	// Flowersec may complete the browser-side connect promise before its
+	// acceptor callback promotes the pending channel into activePluginSession.
+	// Inspect both maps under the established pending -> direct lock order so
+	// readiness can wait through that short promotion window.
+	s.pendingMu.Lock()
+	defer s.pendingMu.Unlock()
 	s.directMu.Lock()
 	defer s.directMu.Unlock()
-	binding, ok := s.activePluginSession[channelID]
-	if !ok || subtle.ConstantTimeCompare(candidate[:], binding.credentialHash[:]) != 1 {
-		return pluginSessionBindingClosed, nil
+	binding, active := s.activePluginSession[channelID]
+	accessSessionID := ""
+	var settled <-chan struct{}
+	if active {
+		if subtle.ConstantTimeCompare(candidate[:], binding.credentialHash[:]) != 1 {
+			return pluginSessionBindingClosed, nil
+		}
+		accessSessionID = binding.accessSessionID
+		settled = binding.settled
+	} else {
+		pending, pendingOK := s.pending[channelID]
+		if !pendingOK || subtle.ConstantTimeCompare(candidate[:], pending.pluginCredentialHash[:]) != 1 {
+			return pluginSessionBindingClosed, nil
+		}
+		accessSessionID = pending.accessSessionID
+		settled = pending.settled
 	}
-	access := s.pluginAccess[binding.accessSessionID]
+	access := s.pluginAccess[accessSessionID]
 	if access == nil || access.state != pluginAccessActive ||
 		(!access.expiresAt.IsZero() && !time.Now().Before(access.expiresAt)) ||
-		(requestAccessSessionID != "" && requestAccessSessionID != binding.accessSessionID) {
+		(requestAccessSessionID != "" && requestAccessSessionID != accessSessionID) {
 		return pluginSessionBindingClosed, nil
 	}
-	return binding.state, binding.settled
+	if active {
+		return binding.state, settled
+	}
+	return pluginSessionBindingInitializing, settled
 }
 
 func (s *Server) markAcceptedPluginSessionReady(
@@ -1741,6 +1803,7 @@ func (s *Server) mintPending(meta session.Meta, wsURL, spendOrigin, traceID, acc
 		meta:                      meta,
 		traceID:                   strings.TrimSpace(traceID),
 		connectArtifactIssuedAtMs: now.UnixMilli(),
+		settled:                   make(chan struct{}),
 	}
 
 	// Admission state is checked before issuance, then checked again before the
@@ -2219,6 +2282,9 @@ func (s *Server) releaseAcceptedSession(channelID string) {
 	s.directMu.Lock()
 	if pending, ok := s.pending[id]; ok {
 		delete(s.pending, id)
+		if pending.settled != nil {
+			close(pending.settled)
+		}
 		accessSessionID = pending.accessSessionID
 		if access := s.pluginAccess[pending.accessSessionID]; access != nil {
 			delete(access.pending, id)
@@ -2311,6 +2377,9 @@ func (s *Server) activateAcceptedSession(channelID string, current flowersec.Ses
 	if pending.initExpireAtUnixS <= 0 || now.Unix() > pending.initExpireAtUnixS || s.directClosing ||
 		access == nil || access.state != pluginAccessActive || (!access.expiresAt.IsZero() && !now.Before(access.expiresAt)) {
 		delete(s.pending, id)
+		if pending.settled != nil {
+			close(pending.settled)
+		}
 		if access != nil {
 			delete(access.pending, id)
 			s.removePluginAccessIfUnusedLocked(pending.accessSessionID)
@@ -2318,6 +2387,11 @@ func (s *Server) activateAcceptedSession(channelID string, current flowersec.Ses
 		return pendingDirect{}, false
 	}
 	if _, exists := s.activePluginSession[id]; exists {
+		delete(s.pending, id)
+		delete(access.pending, id)
+		if pending.settled != nil {
+			close(pending.settled)
+		}
 		return pendingDirect{}, false
 	}
 	delete(s.pending, id)
@@ -2327,7 +2401,7 @@ func (s *Server) activateAcceptedSession(channelID string, current flowersec.Ses
 		session:         current,
 		credentialHash:  pending.pluginCredentialHash,
 		state:           pluginSessionBindingInitializing,
-		settled:         make(chan struct{}),
+		settled:         pending.settled,
 	}
 	return pending, true
 }
@@ -2358,6 +2432,11 @@ func (s *Server) beginDirectShutdown() []flowersec.Session {
 	s.directMu.Unlock()
 
 	s.pendingMu.Lock()
+	for _, pending := range s.pending {
+		if pending.settled != nil {
+			close(pending.settled)
+		}
+	}
 	s.pending = make(map[string]pendingDirect)
 	s.pendingMu.Unlock()
 
@@ -2501,6 +2580,9 @@ func (s *Server) closePluginAccessSession(accessSessionID string) {
 	for _, channelID := range pending {
 		if current, ok := s.pending[channelID]; ok && current.accessSessionID == accessSessionID {
 			delete(s.pending, channelID)
+			if current.settled != nil {
+				close(current.settled)
+			}
 		}
 	}
 	s.pendingMu.Unlock()
@@ -2595,6 +2677,9 @@ func (s *Server) sweepExpiredAt(now time.Time) {
 	for k, v := range s.pending {
 		if v.initExpireAtUnixS > 0 && nowUnix > v.initExpireAtUnixS {
 			delete(s.pending, k)
+			if v.settled != nil {
+				close(v.settled)
+			}
 			s.removePendingAccessBinding(v.accessSessionID, k)
 			expiredChannels = append(expiredChannels, k)
 		}
