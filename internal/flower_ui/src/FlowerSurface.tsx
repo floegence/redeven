@@ -3998,10 +3998,24 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     };
     try {
       const projected = applyFlowerRuntimeCurrentView(contextualBase, current);
-      return receiveThreadDetail({
+      const received = receiveThreadDetail({
         thread: projected,
         version: Math.max(1, Math.floor(Number(current.view_version) || 0)),
-      }, source, current).runtimeState === 'accepted';
+      }, source, current);
+      if (
+        received.runtimeState === 'accepted'
+        && current.last_outcome === 'completed'
+        && projected.status === 'success'
+        && !projected.error
+        && !projected.messages.some((message) => (
+          message.role === 'assistant'
+          && (message.content.trim() !== '' || (message.blocks?.length ?? 0) > 0)
+        ))
+      ) {
+        const summary = threadCache().summaries.get(threadID);
+        if (summary) recoverSelectedThreadFromSummary(threadID, summary);
+      }
+      return received.runtimeState === 'accepted';
     } catch (error) {
       reportThreadDetailDiagnostic(
         threadID,
