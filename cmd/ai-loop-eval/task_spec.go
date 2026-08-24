@@ -32,12 +32,11 @@ type taskWorkspaceSpec struct {
 }
 
 type taskRuntimeSpec struct {
-	PermissionType                   string            `yaml:"permission_type"`
-	TimeoutSeconds                   int               `yaml:"timeout_seconds"`
-	ReasoningOnly                    bool              `yaml:"reasoning_only"`
-	RequireUserConfirmOnTaskComplete bool              `yaml:"require_user_confirm_on_task_complete"`
-	NoUserInteraction                bool              `yaml:"no_user_interaction"`
-	Workspace                        taskWorkspaceSpec `yaml:"workspace"`
+	PermissionType    string            `yaml:"permission_type"`
+	TimeoutSeconds    int               `yaml:"timeout_seconds"`
+	ReasoningOnly     bool              `yaml:"reasoning_only"`
+	NoUserInteraction bool              `yaml:"no_user_interaction"`
+	Workspace         taskWorkspaceSpec `yaml:"workspace"`
 }
 
 type taskAssertionsSpec struct {
@@ -93,13 +92,12 @@ type evalTaskWorkspace struct {
 }
 
 type evalTaskRuntime struct {
-	PermissionType                   string            `json:"permission_type"`
-	TimeoutPerTurn                   time.Duration     `json:"-"`
-	TimeoutSeconds                   int               `json:"timeout_seconds"`
-	ReasoningOnly                    bool              `json:"reasoning_only,omitempty"`
-	RequireUserConfirmOnTaskComplete bool              `json:"require_user_confirm_on_task_complete,omitempty"`
-	NoUserInteraction                bool              `json:"no_user_interaction,omitempty"`
-	Workspace                        evalTaskWorkspace `json:"workspace"`
+	PermissionType    string            `json:"permission_type"`
+	TimeoutPerTurn    time.Duration     `json:"-"`
+	TimeoutSeconds    int               `json:"timeout_seconds"`
+	ReasoningOnly     bool              `json:"reasoning_only,omitempty"`
+	NoUserInteraction bool              `json:"no_user_interaction,omitempty"`
+	Workspace         evalTaskWorkspace `json:"workspace"`
 }
 
 const (
@@ -227,13 +225,12 @@ func normalizeTaskSpecItem(item taskSpecItem, specDir string) (evalTask, error) 
 		Category: strings.TrimSpace(strings.ToLower(item.Category)),
 		Turns:    turns,
 		Runtime: evalTaskRuntime{
-			PermissionType:                   permissionType,
-			TimeoutPerTurn:                   time.Duration(timeoutSeconds) * time.Second,
-			TimeoutSeconds:                   timeoutSeconds,
-			ReasoningOnly:                    item.Runtime.ReasoningOnly,
-			RequireUserConfirmOnTaskComplete: item.Runtime.RequireUserConfirmOnTaskComplete,
-			NoUserInteraction:                item.Runtime.NoUserInteraction,
-			Workspace:                        workspace,
+			PermissionType:    permissionType,
+			TimeoutPerTurn:    time.Duration(timeoutSeconds) * time.Second,
+			TimeoutSeconds:    timeoutSeconds,
+			ReasoningOnly:     item.Runtime.ReasoningOnly,
+			NoUserInteraction: item.Runtime.NoUserInteraction,
+			Workspace:         workspace,
 		},
 		Assertions: assertions,
 	}, nil

@@ -20,8 +20,6 @@ import (
 
 type floretHostedPreparation struct {
 	agent             *flruntime.Agent
-	completionPolicy  flruntime.TurnCompletionPolicy
-	controlSpec       flruntime.TurnSignalSpec
 	labels            flruntime.RunLabels
 	contextProjection floretContextProjection
 	turnInput         flruntime.TurnInput
@@ -132,11 +130,6 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 		withFloretAttachmentToolRead(r.attachmentToolReadEnabled),
 		withFloretRequestAdmission(r.admitFloretProviderRequest),
 	)
-	completionPolicy := flruntime.TurnCompletionNaturalStop
-	controlSpec, err := newFloretControlSpec(r, sharedState, initialSurface.ControlTools, taskComplexity)
-	if err != nil {
-		return floretHostedPreparation{}, r.failRun("Failed to initialize Floret control tools", err)
-	}
 	labels := flruntime.RunLabels{Correlation: map[string]string{
 		"thread_id":  strings.TrimSpace(r.threadID),
 		"turn_id":    strings.TrimSpace(r.turnID),
@@ -181,7 +174,7 @@ func (r *run) prepareFloretHostedAgent(ctx context.Context, req RunRequest, prov
 		return floretHostedPreparation{}, r.failRun("Failed to initialize Floret host", err)
 	}
 	return floretHostedPreparation{
-		agent: agent, completionPolicy: completionPolicy, controlSpec: controlSpec,
+		agent:  agent,
 		labels: labels, contextProjection: contextProjection, turnInput: turnInput,
 	}, nil
 }

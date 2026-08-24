@@ -128,6 +128,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
         providerStreamInterrupted: t(i18n, k('chat.runErrorProviderStreamInterrupted')),
         providerModelUnavailable: t(i18n, k('chat.runErrorProviderModelUnavailable')),
         floretEngineFailed: t(i18n, k('chat.runErrorFloretEngineFailed')),
+        floretControlContractFailed: t(i18n, k('chat.runErrorFloretControlContractFailed')),
         runtimeRestarted: t(i18n, k('chat.runErrorRuntimeRestarted')),
       },
       messageErrorTitle: t(i18n, k('chat.messageErrorTitle')),

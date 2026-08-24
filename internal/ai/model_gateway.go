@@ -2719,74 +2719,6 @@ func buildToolCallMessages(calls []ToolCall, reasoning string) []Message {
 	return []Message{msg}
 }
 
-func extractSignalText(call ToolCall, key string) string {
-	if call.Args == nil {
-		return ""
-	}
-	value := call.Args[key]
-	if s, ok := value.(string); ok {
-		return strings.TrimSpace(s)
-	}
-	return ""
-}
-
-func extractSignalStringList(call ToolCall, key string) []string {
-	if call.Args == nil {
-		return nil
-	}
-	raw := call.Args[key]
-	switch v := raw.(type) {
-	case []string:
-		out := make([]string, 0, len(v))
-		for _, item := range v {
-			s := strings.TrimSpace(item)
-			if s != "" {
-				out = append(out, s)
-			}
-		}
-		return out
-	case []any:
-		out := make([]string, 0, len(v))
-		for _, item := range v {
-			s, _ := item.(string)
-			s = strings.TrimSpace(s)
-			if s != "" {
-				out = append(out, s)
-			}
-		}
-		return out
-	default:
-		return nil
-	}
-}
-
-func extractModelSignalRequestUserInputQuestions(call ToolCall, key string) ([]RequestUserInputQuestion, string) {
-	if call.Args == nil {
-		return nil, ""
-	}
-	rawItems := toAnySlice(call.Args[key])
-	if len(rawItems) == 0 {
-		return nil, ""
-	}
-	questions := make([]RequestUserInputQuestion, 0, len(rawItems))
-	contractError := ""
-	for _, item := range rawItems {
-		record, ok := item.(map[string]any)
-		if !ok || record == nil {
-			continue
-		}
-		question, reason, ok := requestUserInputQuestionFromModelRecord(record)
-		if !ok {
-			if reason != "" && contractError == "" {
-				contractError = reason
-			}
-			continue
-		}
-		questions = append(questions, question)
-	}
-	return normalizeRequestUserInputQuestions(questions), contractError
-}
-
 func normalizeAskUserOptions(options []string) []string {
 	if len(options) == 0 {
 		return nil
@@ -2812,27 +2744,6 @@ func normalizeAskUserOptions(options []string) []string {
 		return nil
 	}
 	return out
-}
-
-func validateAskUserSignal(signal askUserSignal) string {
-	rawQuestions := append([]RequestUserInputQuestion(nil), signal.Questions...)
-	signal = normalizeAskUserSignal(signal)
-	if signal.ContractError != "" {
-		return signal.ContractError
-	}
-	if strings.TrimSpace(signal.Question) == "" {
-		return "empty_question"
-	}
-	if signal.ReasonCode == "" {
-		return "missing_reason_code"
-	}
-	if len(signal.RequiredFromUser) == 0 {
-		return "missing_required_from_user"
-	}
-	if reason := validateRequestUserInputQuestionsContract(rawQuestions); reason != "" {
-		return reason
-	}
-	return ""
 }
 
 func updateTodoRuntimeState(state *todoRuntimeState, calls []ToolCall, results []ToolResult, round int) {

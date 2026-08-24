@@ -59,8 +59,8 @@ func TestAssessTaskOutcome_PassesStructuredFlowerAssertions(t *testing.T) {
 				WaitingPrompt:  "forbidden",
 			},
 			Tools: taskToolAssertions{
-				MustCall:    []string{"terminal.exec", "write_todos", "task_complete"},
-				MustSucceed: []string{"terminal.exec", "write_todos", "task_complete"},
+				MustCall:    []string{"terminal.exec", "write_todos"},
+				MustSucceed: []string{"terminal.exec", "write_todos"},
 				MustNotCall: []string{"apply_patch"},
 				MaxCalls:    6,
 			},
@@ -86,7 +86,6 @@ func TestAssessTaskOutcome_PassesStructuredFlowerAssertions(t *testing.T) {
 			{ToolName: "terminal.exec", Status: "success"},
 			{ToolName: "write_todos", Status: "success", ArgsJSON: `{"todos":[{"content":"Inspect repo","status":"in_progress"},{"content":"Summarize risk","status":"pending"},{"content":"Verify command","status":"pending"}]}`},
 			{ToolName: "write_todos", Status: "success", ArgsJSON: `{"todos":[{"content":"Inspect repo","status":"completed"},{"content":"Summarize risk","status":"completed"},{"content":"Verify command","status":"completed"}]}`},
-			{ToolName: "task_complete", Status: "success"},
 		},
 		rawTodos: &todoSnapshot{
 			Version: 1,
@@ -210,7 +209,6 @@ func TestAssessTaskOutcome_FailsWhenWorkspaceScopedToolEscapesSandbox(t *testing
 				Status:   "success",
 				ArgsJSON: `{"command":"cat /etc/hosts","cwd":"/tmp/workspace"}`,
 			},
-			{ToolName: "task_complete", Status: "success"},
 		},
 	}
 

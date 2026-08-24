@@ -116,6 +116,7 @@
       "runErrorProviderStreamInterrupted": "所选 AI 模型提供商意外中断了响应流。请重试；若问题持续出现，请检查模型提供商端点。",
       "runErrorProviderModelUnavailable": "该模型提供商无法提供所选模型。请在本地 AI 配置文件中选择另一个模型。",
       "runErrorFloretEngineFailed": "编排引擎失败，Flower 未能完成本轮回复。",
+      "runErrorFloretControlContractFailed": "模型请求了当前运行时不支持的工具，Flower 未能完成本轮回复。",
       "runErrorRuntimeRestarted": "本地运行时在本次回复完成前重启了。请在运行时就绪后重新开始回复。",
       "runtimeRestartedDivider": "Redeven 运行时已重启",
       "messageErrorTitle": "消息失败",

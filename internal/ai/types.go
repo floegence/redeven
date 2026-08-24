@@ -437,9 +437,6 @@ type RunOptions struct {
 	// ReasoningOnly relaxes tool-pressure heuristics while preserving the same Floret turn flow.
 	ReasoningOnly bool `json:"reasoning_only,omitempty"`
 
-	// RequireUserConfirmOnTaskComplete forces explicit user confirmation when model emits task_complete.
-	RequireUserConfirmOnTaskComplete bool `json:"require_user_confirm_on_task_complete,omitempty"`
-
 	// NoUserInteraction prevents direct user-input prompts for autonomous runs.
 	// Tool approval waits are governed by the explicit approver/delegation policy.
 	NoUserInteraction bool `json:"no_user_interaction,omitempty"`

@@ -229,7 +229,7 @@ func threadViewRunState(current flruntime.ThreadView) (string, string, string) {
 	case *current.LastOutcome == flruntime.TurnOutcomeInterrupted:
 		return string(RunStateFailed), "floret_turn_interrupted", strings.TrimSpace(current.Error)
 	default:
-		return string(RunStateFailed), "floret_turn_failed", strings.TrimSpace(current.Error)
+		return string(RunStateFailed), classifyRunFailureCode(errors.New(strings.TrimSpace(current.Error)), "floret_turn_failed"), strings.TrimSpace(current.Error)
 	}
 }
 
@@ -553,7 +553,7 @@ func applyThreadRuntimeSummary(view *ThreadView, current flruntime.ThreadView) {
 		view.RunStatus = string(RunStateSuccess)
 	case current.LastOutcome != nil && *current.LastOutcome == flruntime.TurnOutcomeFailed:
 		view.RunStatus = string(RunStateFailed)
-		view.RunErrorCode = "floret_turn_failed"
+		view.RunErrorCode = classifyRunFailureCode(errors.New(strings.TrimSpace(current.Error)), "floret_turn_failed")
 		view.RunError = strings.TrimSpace(current.Error)
 	case current.LastOutcome != nil && *current.LastOutcome == flruntime.TurnOutcomeCancelled:
 		view.RunStatus = string(RunStateCanceled)

@@ -73,7 +73,6 @@ tasks:
         must_not_call:
           - "terminal.exec"
           - "apply_patch"
-          - "task_complete"
   - id: local_config_todo_readonly_audit
     title: Local-config readonly audit uses todo discipline
     stage: deep

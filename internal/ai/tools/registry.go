@@ -355,6 +355,7 @@ var builtinDefinitions = map[string]Definition{
 		),
 	},
 	"task_complete": {
+		// Legacy activity definition for persisted records; never included in a new Flower tool surface.
 		Name:             "task_complete",
 		Mutating:         false,
 		RequiresApproval: false,

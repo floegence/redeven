@@ -22,7 +22,6 @@ func TestPermissionToolFilter_VisibilityMatrix(t *testing.T) {
 		{Name: "okf.open", Visibility: ToolVisibilitySharedReadonly},
 		{Name: "write_todos", Visibility: ToolVisibilityInteraction},
 		{Name: "ask_user", Visibility: ToolVisibilityControl},
-		{Name: "task_complete", Visibility: ToolVisibilityControl},
 		{Name: "subagents", Visibility: ToolVisibilityDelegationControl},
 		{Name: "terminal.exec", Visibility: ToolVisibilityStandard},
 		{Name: "file.edit", Visibility: ToolVisibilityStandard, Mutating: true},
@@ -49,7 +48,6 @@ func TestPermissionToolFilter_VisibilityMatrix(t *testing.T) {
 				"read_files",
 				"rgrep",
 				"subagents",
-				"task_complete",
 				"web.search",
 				"web_fetch",
 				"write_todos",
@@ -67,7 +65,6 @@ func TestPermissionToolFilter_VisibilityMatrix(t *testing.T) {
 				"okf.open",
 				"okf.search",
 				"subagents",
-				"task_complete",
 				"terminal.exec",
 				"use_skill",
 				"web.search",
@@ -86,7 +83,6 @@ func TestPermissionToolFilter_VisibilityMatrix(t *testing.T) {
 				"okf.open",
 				"okf.search",
 				"subagents",
-				"task_complete",
 				"terminal.exec",
 				"use_skill",
 				"web.search",
@@ -113,13 +109,12 @@ func TestPermissionToolFilter_HidesUserInteractionWhenDisabled(t *testing.T) {
 	filter := newPermissionToolFilter(false)
 	all := []ToolDef{
 		{Name: "ask_user", Visibility: ToolVisibilityControl},
-		{Name: "task_complete", Visibility: ToolVisibilityControl},
 		{Name: "write_todos", Visibility: ToolVisibilityInteraction},
 		{Name: "subagents", Visibility: ToolVisibilityDelegationControl},
 	}
 
 	got := toolNames(filter.FilterTools(FlowerPermissionReadonly, all))
-	want := []string{"subagents", "task_complete", "write_todos"}
+	want := []string{"subagents", "write_todos"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("tools=%v, want %v", got, want)
 	}
@@ -170,5 +165,28 @@ func TestPermissionSnapshotConsistencyForBuiltinMatrix(t *testing.T) {
 				t.Fatalf("%s tool set missing standard delegation surface: %v", permissionType, names)
 			}
 		})
+	}
+}
+
+func TestBuiltInControlSignalDefinitions_OnlyExposeAskUser(t *testing.T) {
+	t.Parallel()
+
+	if got := toolNames(builtInControlSignalDefinitions()); !reflect.DeepEqual(got, []string{"ask_user"}) {
+		t.Fatalf("control signals=%v, want [ask_user]", got)
+	}
+	if got := toolNames(builtInModelCapabilityDefinitions()); containsString(got, "task_complete") {
+		t.Fatalf("model capability surface exposes removed task_complete signal: %v", got)
+	}
+}
+
+func TestRunCapabilityContractIgnoresLegacyTaskCompleteSignal(t *testing.T) {
+	t.Parallel()
+
+	contract := resolveRunCapabilityContract(nil, nil, []ToolDef{
+		{Name: "task_complete"},
+		{Name: "ask_user"},
+	}, false)
+	if !reflect.DeepEqual(contract.AllowedSignals, []string{"ask_user"}) {
+		t.Fatalf("allowed signals=%v, want [ask_user]", contract.AllowedSignals)
 	}
 }

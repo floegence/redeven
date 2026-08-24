@@ -119,6 +119,14 @@ func TestBuildLayeredSystemPrompt_RequiresHumanReadableSubagentNames(t *testing.
 	assertPromptContains(t, prompt, "never use snake_case, kebab-case")
 }
 
+func TestBuildLayeredSystemPrompt_UsesNaturalCompletionWithoutRemovedSignal(t *testing.T) {
+	t.Parallel()
+
+	prompt := buildPromptForToolRoutingTest(t)
+	assertPromptNotContains(t, prompt, "task_complete")
+	assertPromptContains(t, prompt, "reply directly in the assistant message")
+}
+
 func TestBuildLayeredSystemPrompt_ReadonlyRoutesThroughReadonlyExclusiveTools(t *testing.T) {
 	t.Parallel()
 

@@ -32,10 +32,8 @@ tasks:
       tools:
         must_call:
           - "read_file"
-          - "task_complete"
         must_succeed:
           - "read_file"
-          - "task_complete"
         must_not_call:
           - "terminal.exec"
           - "apply_patch"
@@ -69,10 +67,8 @@ tasks:
       tools:
         must_call:
           - "read_file"
-          - "task_complete"
         must_succeed:
           - "read_file"
-          - "task_complete"
         must_not_call:
           - "terminal.exec"
           - "apply_patch"
@@ -107,7 +103,6 @@ tasks:
         must_not_call:
           - "terminal.exec"
           - "apply_patch"
-          - "task_complete"
   - id: multi_step_todo_discipline
     title: Multi-step readonly task uses todo discipline
     stage: deep
@@ -140,11 +135,9 @@ tasks:
         must_call:
           - "read_file"
           - "write_todos"
-          - "task_complete"
         must_succeed:
           - "read_file"
           - "write_todos"
-          - "task_complete"
         must_not_call:
           - "terminal.exec"
           - "apply_patch"
@@ -188,10 +181,8 @@ tasks:
       tools:
         must_call:
           - "read_file"
-          - "task_complete"
         must_succeed:
           - "read_file"
-          - "task_complete"
         must_not_call:
           - "terminal.exec"
           - "apply_patch"
@@ -227,10 +218,8 @@ tasks:
       tools:
         must_call:
           - "read_file"
-          - "task_complete"
         must_succeed:
           - "read_file"
-          - "task_complete"
         must_not_call:
           - "terminal.exec"
           - "apply_patch"
@@ -262,10 +251,6 @@ tasks:
         permission_type: readonly
         waiting_prompt: forbidden
       tools:
-        must_call:
-          - "task_complete"
-        must_succeed:
-          - "task_complete"
         must_not_call:
           - "ask_user"
           - "terminal.exec"

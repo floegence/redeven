@@ -496,7 +496,7 @@ func buildPromptTodoDisciplineSection() promptSection {
 		"- Use write_todos for meaningful multi-step execution when it clarifies current work and remaining work.",
 		"- Skip write_todos for a single trivial step that can be completed immediately.",
 		"- Do NOT call write_todos with an empty list when there is no actionable work to track.",
-		"- Track only actionable work in write_todos. Do not create todos for control signals such as task_complete or ask_user.",
+		"- Track only actionable work in write_todos. Do not create todos for control signals such as ask_user.",
 		"- Keep exactly one todo as in_progress at a time.",
 		"- Update write_todos immediately when you start, complete, cancel, or discover work.",
 	)
@@ -507,7 +507,7 @@ func buildPromptAntiPatternSection() promptSection {
 		"anti_patterns",
 		"# Anti-Patterns (NEVER do these)",
 		"- Do NOT respond with only text when tools could answer the question.",
-		"- Do NOT call task_complete without first verifying your work.",
+		"- Verify your work before giving the final assistant response.",
 		"- Do NOT give up after a tool error — try a different approach.",
 		"- Do NOT repeat the same tool call with identical arguments.",
 	)
@@ -648,9 +648,9 @@ func buildPromptRuntimeContextSection(snapshot promptRuntimeSnapshot) promptSect
 	if snapshot.AllowUserInteraction {
 		lines = append(lines, fmt.Sprintf("- Ask-user question batches supported: %t", snapshot.SupportsAskUserQuestionBatches))
 	} else if resolvePromptProfileSpec(snapshot.PromptProfile).PrefersParentFacingReporting {
-		lines = append(lines, "- Interaction policy: user interaction is disabled in this run. Continue autonomously or finish with task_complete including blockers plus suggested parent actions.")
+		lines = append(lines, "- Interaction policy: user interaction is disabled in this run. Continue autonomously and report blockers plus suggested parent actions in the assistant response.")
 	} else {
-		lines = append(lines, "- Interaction policy: user interaction is disabled in this run. Continue autonomously or finish with task_complete including blockers plus concrete next-step guidance for the user-facing thread.")
+		lines = append(lines, "- Interaction policy: user interaction is disabled in this run. Continue autonomously and report blockers plus concrete next-step guidance in the assistant response.")
 	}
 	if len(snapshot.AvailableSkills) > 0 {
 		if promptToolAvailable(snapshot.AvailableToolNames, "use_skill") {
