@@ -2572,6 +2572,17 @@ export function EnvAppShell() {
     },
   });
 
+  const observeCurrentPluginSessionReadiness = () => {
+    if (pluginSessionRetired() || protocol.status() !== 'connected') return;
+    const staged = stagedPluginSession();
+    const client = protocol.session?.();
+    if (!staged || !client || client === staged.previousClient) return;
+    // The connection promise resolves after the new Flowersec session is
+    // established. This explicit observation covers replacements where the
+    // old client is still visible while the artifact is being staged.
+    pluginSessionReadinessCoordinator.observe({ client, binding: staged.binding });
+  };
+
   const runConnect = async (fn: (config: ProtocolConnectConfig) => Promise<void>) => {
     const protocolStatusValue = String(protocol.status() ?? '').trim();
     if (accessRecoveryBusy() || protocolStatusValue === 'connecting' || accessPending() || accessLocked()) return;
@@ -2615,6 +2626,7 @@ export function EnvAppShell() {
         await fn(config);
         configLease = undefined;
         if (accessRecoverySeq !== attemptKey) return;
+        observeCurrentPluginSessionReadiness();
         accessResumeClient = protocol.session?.();
         setLocalAccessChannelReady(true);
         setCurrentAccessError(null);

@@ -29,6 +29,27 @@ func newPluginSessionReadyTestServer(credential string, timeout time.Duration) *
 	}
 }
 
+func newPendingPluginSessionReadyTestServer(credential string, timeout time.Duration) *Server {
+	settled := make(chan struct{})
+	return &Server{
+		pending: map[string]pendingDirect{
+			"channel": {
+				accessSessionID:      "access",
+				pluginCredentialHash: sha256.Sum256([]byte(credential)),
+				settled:              settled,
+			},
+		},
+		pluginAccess: map[string]*pluginAccessSession{
+			"access": {
+				state:   pluginAccessActive,
+				pending: map[string]struct{}{"channel": {}},
+			},
+		},
+		activePluginSession:       make(map[string]activePluginSessionBinding),
+		pluginSessionReadyTimeout: timeout,
+	}
+}
+
 func newPluginSessionReadyHTTPRequest(credential string) *http.Request {
 	request := httptest.NewRequest(http.MethodPost, "http://localhost/api/local/plugin/session/ready", bytes.NewBufferString(`{"channel_id":"channel"}`))
 	request.Header.Set("Content-Type", "application/json")
@@ -59,6 +80,46 @@ func TestPluginSessionReadyWaitsForExactBinding(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("readiness request did not complete after activation")
+	}
+}
+
+func TestPluginSessionReadyWaitsWhileBindingIsPending(t *testing.T) {
+	server := newPendingPluginSessionReadyTestServer("credential", time.Second)
+	done := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		response := httptest.NewRecorder()
+		server.handlePluginSessionReady(response, newPluginSessionReadyHTTPRequest("credential"))
+		done <- response
+	}()
+
+	select {
+	case response := <-done:
+		t.Fatalf("readiness request completed before pending promotion: status=%d body=%q", response.Code, response.Body.String())
+	case <-time.After(20 * time.Millisecond):
+	}
+
+	server.pendingMu.Lock()
+	server.directMu.Lock()
+	pending := server.pending["channel"]
+	delete(server.pending, "channel")
+	delete(server.pluginAccess["access"].pending, "channel")
+	server.activePluginSession["channel"] = activePluginSessionBinding{
+		accessSessionID: "access",
+		credentialHash:  pending.pluginCredentialHash,
+		state:           pluginSessionBindingInitializing,
+		settled:         pending.settled,
+	}
+	server.directMu.Unlock()
+	server.pendingMu.Unlock()
+	server.markAcceptedPluginSessionReady("channel", "access", sha256.Sum256([]byte("credential")))
+
+	select {
+	case response := <-done:
+		if response.Code != http.StatusNoContent {
+			t.Fatalf("status = %d, want 204; body=%q", response.Code, response.Body.String())
+		}
+	case <-time.After(time.Second):
+		t.Fatal("readiness request did not complete after pending promotion")
 	}
 }
 

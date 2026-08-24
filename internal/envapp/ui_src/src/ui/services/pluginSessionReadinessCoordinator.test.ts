@@ -52,8 +52,9 @@ describe('plugin session readiness coordinator', () => {
   it('aborts a superseded wait and ignores its late response', async () => {
     const firstReady = deferred();
     const secondReady = deferred();
-    const first = { client: {}, binding: binding(1, 'channel-1') };
-    const second = { client: {}, binding: binding(2, 'channel-2') };
+    const client = {};
+    const first = { client, binding: binding(1, 'channel-1') };
+    const second = { client, binding: binding(2, 'channel-2') };
     let current = first;
     const signals: AbortSignal[] = [];
     const activate = vi.fn(() => true);
