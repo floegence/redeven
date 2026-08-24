@@ -519,7 +519,7 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
       }
       if (pluginInstallFlow && requestURL.pathname === '/_redevplugin/api/plugins/executions/query') {
         const body = await readJSONRequest(request);
-        const expected = { limit: 100 };
+        const expected = { limit: 500, operation_scope: 'release_install' };
         if (JSON.stringify(body) !== JSON.stringify(expected)) {
           throw new Error(`unexpected plugin executions request: ${JSON.stringify({ expected, actual: body })}`);
         }
@@ -557,7 +557,7 @@ async function createBuiltDistServer({ accessReady = false, pluginInstallFlow = 
       if (pluginInstallFlow
         && requestURL.pathname === '/_redevplugin/api/plugins/executions/release_install_built_renderer/events/query') {
         const body = await readJSONRequest(request);
-        const expected = { after_cursor: 1 };
+        const expected = { after_cursor: 0, limit: 1_000 };
         if (JSON.stringify(body) !== JSON.stringify(expected)) {
           throw new Error(`unexpected plugin execution events request: ${JSON.stringify({ expected, actual: body })}`);
         }
@@ -1000,6 +1000,15 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
       })}`, { cause: error });
     }
     await page.locator('[data-plugin-install-review-confirm]').click();
+    // Completed official installs keep the review dialog open so the user can
+    // inspect the result or open the newly installed plugin. Close it through
+    // its explicit action before continuing with the installed inventory.
+    const installDialog = page.locator('[role="dialog"]').filter({ has: installReview });
+    await installDialog.getByText('Installation complete.', { exact: true }).waitFor({
+      state: 'visible',
+      timeout: 10_000,
+    });
+    await installDialog.getByText('Close', { exact: true }).click();
     await installReview.waitFor({ state: 'detached', timeout: 10_000 });
     await pluginCenter.locator('[data-plugin-center-list][aria-busy="false"]').waitFor({
       state: 'visible',
@@ -1040,7 +1049,11 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
     const requiredPluginRequests = [
       { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query', payload: {} },
       { method: 'POST', path: '/_redevplugin/api/plugins/runtime/recover-enabled', payload: {} },
-      { method: 'POST', path: '/_redevplugin/api/plugins/executions/query', payload: { limit: 100 } },
+      {
+        method: 'POST',
+        path: '/_redevplugin/api/plugins/executions/query',
+        payload: { limit: 500, operation_scope: 'release_install' },
+      },
       {
         method: 'POST',
         path: '/_redevplugin/api/plugins/executions/release-installs',
@@ -1057,7 +1070,7 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
       {
         method: 'POST',
         path: '/_redevplugin/api/plugins/executions/release_install_built_renderer/events/query',
-        payload: { after_cursor: 1 },
+        payload: { after_cursor: 0, limit: 1_000 },
       },
       {
         method: 'POST',
@@ -1087,9 +1100,9 @@ async function verifyBuiltPluginInstallRouting(browser, tls) {
       ['POST /_redevplugin/api/plugins/executions/release-installs', 1],
       ['POST /_redevplugin/api/plugins/executions/release_install_built_renderer/events/query', 1],
       ['POST /_redevplugin/api/plugins/executions/release_install_built_renderer/query', 1],
-      ['POST /_redevplugin/api/plugins/permissions/query', 2],
-      ['POST /_redevplugin/api/plugins/security-policies/query', 2],
-      ['POST /_redevplugin/api/plugins/permissions/requirements/query', 2],
+      ['POST /_redevplugin/api/plugins/permissions/query', 1],
+      ['POST /_redevplugin/api/plugins/security-policies/query', 1],
+      ['POST /_redevplugin/api/plugins/permissions/requirements/query', 1],
     ]);
     for (const [requestIdentity, expectedCount] of exactRequestCounts) {
       const count = normalizedPluginRequests.filter(
