@@ -76,9 +76,9 @@ function normalizedTargetRoot(
     )
   ) {
     // The remote account resolves all default-root spellings. Using one
-    // conservative lock identity prevents aliases from creating concurrent
-    // lifecycle owners; the operation fingerprint still keeps distinct
-    // registrations from being incorrectly coalesced.
+    // A stable process-local target identity prevents aliases from creating
+    // concurrent lifecycle owners; the operation fingerprint still keeps
+    // distinct registrations from being incorrectly coalesced.
     return '$TARGET_HOME/.redeven';
   }
   return normalized;

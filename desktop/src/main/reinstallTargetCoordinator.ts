@@ -625,7 +625,7 @@ export class ReinstallTargetCoordinator {
       throw new ReinstallTargetCoordinatorError('target_changed', 'The registered host, container, or runtime root changed after confirmation.');
     }
     let executor: RuntimeHostAccessExecutor | null = null;
-    let lockKey = cached.physicalTargetFingerprint;
+    let physicalTargetKey = cached.physicalTargetFingerprint;
     const operationID = cached.operationID;
     let quarantineRoot = `${cached.preview.target_root}.redeven-quarantine-${operationID}`;
     let isolated = false;
@@ -695,7 +695,7 @@ export class ReinstallTargetCoordinator {
       }
       quarantineRoot = `${repeated.root}.redeven-quarantine-${operationID}`;
       const currentResolved = await this.descriptorWithCanonicalAffectedTargets(current, repeated.root, executor, signal);
-      lockKey = reinstallPhysicalTargetFingerprint(currentResolved, repeated.root);
+      physicalTargetKey = reinstallPhysicalTargetFingerprint(currentResolved, repeated.root);
       activeDescriptor = currentResolved;
       activeTargetRoot = repeated.root;
       // Candidate aliases can resolve to a different canonical spelling on
@@ -703,7 +703,7 @@ export class ReinstallTargetCoordinator {
       // authoritative; refresh affected records for the journal.
       currentJournal = {
         ...persistedJournal,
-        physical_target_fingerprint: lockKey,
+        physical_target_fingerprint: physicalTargetKey,
         target_root: repeated.root,
         quarantine_root: quarantineRoot,
         target_existed: persistedPhase === 'confirmation' || persistedPhase === 'direct_channel_open'
@@ -823,7 +823,7 @@ export class ReinstallTargetCoordinator {
       await this.writeJournal(completedJournal);
       await persistPhase('old_data_cleaned', undefined, undefined, false);
       await this.dependencies.clear_completed_marker(currentResolved, signal);
-      await this.clearCompletedTargetJournals(lockKey, currentResolved.affected_environment_ids);
+      await this.clearCompletedTargetJournals(physicalTargetKey, currentResolved.affected_environment_ids);
       onProgress?.('completed');
       return completedJournal;
     } catch (error) {
