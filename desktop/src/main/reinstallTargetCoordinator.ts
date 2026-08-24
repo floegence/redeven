@@ -7,7 +7,10 @@ import {
   containerRuntimeExecCommand,
   parseContainerInspectJSON,
 } from './containerRuntime';
-import type { RuntimeHostAccessExecutor } from './runtimeHostAccess';
+import {
+  DEFAULT_RUNTIME_HOST_COMMAND_TIMEOUT_MS,
+  type RuntimeHostAccessExecutor,
+} from './runtimeHostAccess';
 import type { DesktopComponentTaskProgress } from '../shared/desktopLauncherIPC';
 import type { PreparedComponentBatch } from './managedComponentBatchInstaller';
 import type {
@@ -87,7 +90,7 @@ export type ReinstallTargetPreview = Readonly<{
 }>;
 
 export type ReinstallTargetDeletedDataKey =
-  | 'gateway_runtime_managed_packages'
+  | 'runtime_managed_packages'
   | 'workspace_projects_application_data'
   | 'floret_redevplugin_data'
   | 'trust_identity_catalog_environment_config';
@@ -126,16 +129,18 @@ export type ReinstallTargetCoordinatorDependencies = Readonly<{
   prepare_platform: (
     descriptor: ReinstallTargetDescriptor,
     executor: RuntimeHostAccessExecutor,
+    signal?: AbortSignal,
   ) => Promise<ReinstallTargetPlatform>;
   prepare_process_session: (
     descriptor: ReinstallTargetDescriptor,
     targetRoot: string,
     executor: RuntimeHostAccessExecutor,
     platform: ReinstallTargetPlatform,
+    signal?: AbortSignal,
   ) => Promise<
     Readonly<{
-      inspect: () => Promise<ReinstallTargetProcessInventory>;
-      stop: (inventory: ReinstallTargetProcessInventory) => Promise<ReinstallTargetProcessInventory>;
+      inspect: (signal?: AbortSignal) => Promise<ReinstallTargetProcessInventory>;
+      stop: (inventory: ReinstallTargetProcessInventory, signal?: AbortSignal) => Promise<ReinstallTargetProcessInventory>;
       close: () => Promise<void>;
     }>
   >;
@@ -149,6 +154,7 @@ export type ReinstallTargetCoordinatorDependencies = Readonly<{
     executor: RuntimeHostAccessExecutor,
     platform: ReinstallTargetPlatform,
     onProgress?: (tasks: readonly DesktopComponentTaskProgress[]) => void,
+    signal?: AbortSignal,
   ) => Promise<PreparedComponentBatch | null>;
   install_fresh: (
     descriptor: ReinstallTargetDescriptor,
@@ -156,20 +162,23 @@ export type ReinstallTargetCoordinatorDependencies = Readonly<{
     onProgress?: (phase: ReinstallTargetProgressPhase, detailKey?: string, tasks?: readonly DesktopComponentTaskProgress[]) => Promise<void>,
     mode?: ReinstallTargetMode,
     preparedBatch?: PreparedComponentBatch | null,
+    signal?: AbortSignal,
   ) => Promise<void>;
   finalize_install?: (
     descriptor: ReinstallTargetDescriptor,
     targetRoot: string,
     operationID: string,
+    signal?: AbortSignal,
   ) => Promise<void>;
   rollback_install?: (
     descriptor: ReinstallTargetDescriptor,
     targetRoot: string,
     operationID: string,
+    signal?: AbortSignal,
   ) => Promise<void>;
-  verify_fresh_identity: (descriptor: ReinstallTargetDescriptor, targetRoot: string) => Promise<void>;
-  verify_catalog_and_local_ui: (descriptor: ReinstallTargetDescriptor, targetRoot: string) => Promise<void>;
-  clear_completed_marker: (descriptor: ReinstallTargetDescriptor) => Promise<void>;
+  verify_fresh_identity: (descriptor: ReinstallTargetDescriptor, targetRoot: string, signal?: AbortSignal) => Promise<void>;
+  verify_catalog_and_local_ui: (descriptor: ReinstallTargetDescriptor, targetRoot: string, signal?: AbortSignal) => Promise<void>;
+  clear_completed_marker: (descriptor: ReinstallTargetDescriptor, signal?: AbortSignal) => Promise<void>;
 }>;
 
 export class ReinstallTargetCoordinatorError extends Error {
@@ -278,6 +287,7 @@ function hostLabel(descriptor: ReinstallTargetDescriptor): string {
 async function validateRegisteredContainer(
   descriptor: ReinstallTargetDescriptor,
   executor: RuntimeHostAccessExecutor,
+  options?: Parameters<RuntimeHostAccessExecutor['run']>[1],
 ): Promise<void> {
   if (descriptor.placement.kind !== 'container_process') {
     return;
@@ -287,7 +297,7 @@ async function validateRegisteredContainer(
     (await executor.run(containerInspectCommand(
       descriptor.placement.container_engine,
       descriptor.placement.container_id,
-    ))).stdout,
+    ), options)).stdout,
   );
   if (inspected.container_id !== descriptor.placement.container_id) {
     throw new ReinstallTargetCoordinatorError('target_changed', 'The registered container identity changed.');
@@ -447,6 +457,7 @@ export class ReinstallTargetCoordinator {
     descriptor: ReinstallTargetDescriptor,
     canonicalTargetRoot: string,
     executor: RuntimeHostAccessExecutor,
+    signal?: AbortSignal,
   ): Promise<ReinstallTargetDescriptor> {
     const authorityKey = reinstallTargetAuthorityKey(descriptor);
     const affected = new Set<string>();
@@ -459,7 +470,10 @@ export class ReinstallTargetCoordinator {
           candidate.placement,
           targetPreflightScript,
           [candidate.placement.runtime_root, DEFAULT_DESKTOP_SSH_RUNTIME_ROOT],
-        ))).stdout);
+        ), {
+          ...(signal ? { signal } : {}),
+          timeout_ms: DEFAULT_RUNTIME_HOST_COMMAND_TIMEOUT_MS,
+        })).stdout);
         if (resolved.root === canonicalTargetRoot) {
           affected.add(candidate.environment_id);
         }
@@ -519,12 +533,12 @@ export class ReinstallTargetCoordinator {
       processes: [],
       deleted_data_keys: mode === 'wipe_data'
         ? [
-            'gateway_runtime_managed_packages',
+            'runtime_managed_packages',
             'workspace_projects_application_data',
             'floret_redevplugin_data',
             'trust_identity_catalog_environment_config',
           ]
-        : ['gateway_runtime_managed_packages'],
+        : ['runtime_managed_packages'],
       expires_at_unix_ms: Date.now() + PREFLIGHT_TTL_MS,
       mode,
     };
@@ -559,12 +573,15 @@ export class ReinstallTargetCoordinator {
     preflightID: string,
     operationKeyOrProgress?: string | ((phase: ReinstallTargetProgressPhase, detailKey?: string, tasks?: readonly DesktopComponentTaskProgress[]) => void),
     progressListener?: (phase: ReinstallTargetProgressPhase, detailKey?: string, tasks?: readonly DesktopComponentTaskProgress[]) => void,
+    signal?: AbortSignal,
   ): Promise<ReinstallTargetJournal> {
     const operationKey = typeof operationKeyOrProgress === 'string' ? operationKeyOrProgress : '';
     const onProgress = typeof operationKeyOrProgress === 'function' ? operationKeyOrProgress : progressListener;
-    onProgress?.('direct_channel_open');
     const cleanPreflightID = compact(preflightID);
     const persistedJournal = await this.readJournal(cleanPreflightID);
+    if (signal?.aborted) {
+      throw signal.reason ?? new DOMException('Reinstall canceled.', 'AbortError');
+    }
     const persistedPhase = persistedJournal.phase;
     let cached = this.preflights.get(cleanPreflightID);
     if (!cached) {
@@ -593,7 +610,7 @@ export class ReinstallTargetCoordinator {
       persistedPhase === 'catalog_and_local_ui_verified'
       || persistedPhase === 'old_data_cleaned'
     ) {
-      await this.resumeCompletion(cleanPreflightID, (phase) => onProgress?.(phase));
+      await this.resumeCompletion(cleanPreflightID, (phase) => onProgress?.(phase), signal);
       return {
         ...persistedJournal,
         phase: 'old_data_cleaned',
@@ -624,6 +641,19 @@ export class ReinstallTargetCoordinator {
     let activeDescriptor: ReinstallTargetDescriptor = current;
     let activeTargetRoot = cached.preview.target_root;
     let currentJournal: ReinstallTargetJournal | null = persistedJournal;
+    if (!journalPhaseAtLeast(persistedPhase, 'direct_channel_open')) {
+      currentJournal = {
+        ...persistedJournal,
+        phase: 'direct_channel_open',
+        updated_at_unix_ms: Date.now(),
+      };
+      await this.writeJournal(currentJournal);
+    }
+    onProgress?.(journalPhaseAtLeast(persistedPhase, 'direct_channel_open') ? persistedPhase : 'direct_channel_open');
+    const commandOptions = (timeoutMs = DEFAULT_RUNTIME_HOST_COMMAND_TIMEOUT_MS) => ({
+      ...(signal ? { signal } : {}),
+      timeout_ms: timeoutMs,
+    });
     const persistPhase = async (
       phase: ReinstallTargetProgressPhase,
       detailKey?: string,
@@ -649,7 +679,7 @@ export class ReinstallTargetCoordinator {
       // Container status and old service state are execution details. The
       // direct channel is the only prerequisite; failures are reported by the
       // concrete command that needs the target.
-      await validateRegisteredContainer(current, executor).catch((error) => {
+      await validateRegisteredContainer(current, executor, commandOptions()).catch((error) => {
         if (error instanceof ReinstallTargetCoordinatorError && error.code === 'target_changed') {
           throw error;
         }
@@ -659,12 +689,12 @@ export class ReinstallTargetCoordinator {
         current.placement,
         targetPreflightScript,
         [current.placement.runtime_root, DEFAULT_DESKTOP_SSH_RUNTIME_ROOT, 'resume'],
-      ))).stdout);
+      ), commandOptions())).stdout);
       if (!(await confirmedRootMatches(current, persistedJournal.target_root, repeated.root, repeated.home))) {
         throw new ReinstallTargetCoordinatorError('target_changed', 'The runtime root changed after confirmation.');
       }
       quarantineRoot = `${repeated.root}.redeven-quarantine-${operationID}`;
-      const currentResolved = await this.descriptorWithCanonicalAffectedTargets(current, repeated.root, executor);
+      const currentResolved = await this.descriptorWithCanonicalAffectedTargets(current, repeated.root, executor, signal);
       lockKey = reinstallPhysicalTargetFingerprint(currentResolved, repeated.root);
       activeDescriptor = currentResolved;
       activeTargetRoot = repeated.root;
@@ -691,9 +721,9 @@ export class ReinstallTargetCoordinator {
       }
 
       if (!journalPhaseAtLeast(persistedPhase, 'runtime_installed')) {
-        targetPlatform = await this.dependencies.prepare_platform(currentResolved, executor);
+        targetPlatform = await this.dependencies.prepare_platform(currentResolved, executor, signal);
         const processSessionTask = this.dependencies
-          .prepare_process_session(currentResolved, repeated.root, executor, targetPlatform)
+        .prepare_process_session(currentResolved, repeated.root, executor, targetPlatform, signal)
           .catch(() => null);
         const packageBatchTask = this.dependencies.prepare_packages?.(
           currentResolved,
@@ -704,6 +734,7 @@ export class ReinstallTargetCoordinator {
           (tasks) => {
             onProgress?.('package_batch_prepared_and_verified', undefined, tasks);
           },
+          signal,
         ) ?? Promise.resolve(null);
         [processSession, preparedBatch] = await Promise.all([processSessionTask, packageBatchTask]);
         await persistPhase('package_batch_prepared_and_verified');
@@ -712,14 +743,14 @@ export class ReinstallTargetCoordinator {
 
         let inventory: ReinstallTargetProcessInventory | null = null;
         try {
-          inventory = await processSession?.inspect() ?? null;
+          inventory = await processSession?.inspect(signal) ?? null;
         } catch {
           // Old process state is not an input to final recovery. The exact-root
           // filesystem operation below remains authoritative.
         }
         onProgress?.('redeven_process_stop_attempted');
         if (inventory && inventory.instances.length > 0) {
-          await processSession?.stop(inventory).catch(() => undefined);
+          await processSession?.stop(inventory, signal).catch(() => undefined);
         }
         await persistPhase('redeven_process_stop_attempted', undefined, undefined, false);
 
@@ -728,7 +759,7 @@ export class ReinstallTargetCoordinator {
           // Repeating this atomic action adopts the operation's existing
           // quarantine and clears only an uncommitted fresh attempt.
           targetDisruptionStarted = true;
-          await executor.run(placementCommand(currentResolved.placement, isolateTargetScript, [repeated.root, quarantineRoot]));
+          await executor.run(placementCommand(currentResolved.placement, isolateTargetScript, [repeated.root, quarantineRoot]), commandOptions());
           isolated = true;
         }
         await persistPhase('old_root_isolated_or_cleared', undefined, undefined, false);
@@ -747,6 +778,7 @@ export class ReinstallTargetCoordinator {
           relayInstallProgress,
           cached.preview.mode,
           preparedBatch,
+          signal,
         );
         await persistPhase('runtime_installed', undefined, undefined, false);
         await persistPhase('runtime_started');
@@ -759,16 +791,16 @@ export class ReinstallTargetCoordinator {
       }
 
       if (!journalPhaseAtLeast(currentJournal.phase, 'runtime_verified')) {
-        await this.dependencies.verify_fresh_identity(currentResolved, repeated.root);
+        await this.dependencies.verify_fresh_identity(currentResolved, repeated.root, signal);
         await persistPhase('runtime_verified');
       }
       if (!journalPhaseAtLeast(currentJournal.phase, 'catalog_and_local_ui_verified')) {
         onProgress?.('catalog_and_local_ui_verified');
-        await this.dependencies.verify_catalog_and_local_ui(currentResolved, repeated.root);
+        await this.dependencies.verify_catalog_and_local_ui(currentResolved, repeated.root, signal);
         await persistPhase('catalog_and_local_ui_verified', undefined, undefined, false);
       }
       if (preparedBatch || journalPhaseAtLeast(persistedPhase, 'runtime_installed')) {
-        await this.dependencies.finalize_install?.(currentResolved, repeated.root, operationID);
+        await this.dependencies.finalize_install?.(currentResolved, repeated.root, operationID, signal);
         installFinalized = true;
       }
       const verifiedJournal: ReinstallTargetJournal = {
@@ -781,7 +813,7 @@ export class ReinstallTargetCoordinator {
       onProgress?.('old_data_cleaned');
       await executor.run(placementCommand(currentResolved.placement, cleanupQuarantinesScript, [
         verifiedJournal.target_root,
-      ]));
+      ]), commandOptions());
       const completedJournal: ReinstallTargetJournal = {
         ...verifiedJournal,
         phase: 'old_data_cleaned',
@@ -790,7 +822,7 @@ export class ReinstallTargetCoordinator {
       currentJournal = completedJournal;
       await this.writeJournal(completedJournal);
       await persistPhase('old_data_cleaned', undefined, undefined, false);
-      await this.dependencies.clear_completed_marker(currentResolved);
+      await this.dependencies.clear_completed_marker(currentResolved, signal);
       await this.clearCompletedTargetJournals(lockKey, currentResolved.affected_environment_ids);
       onProgress?.('completed');
       return completedJournal;
@@ -817,12 +849,13 @@ export class ReinstallTargetCoordinator {
               activeDescriptor,
               activeTargetRoot,
               executor,
-              targetPlatform ?? await this.dependencies.prepare_platform(activeDescriptor, executor),
+              targetPlatform ?? await this.dependencies.prepare_platform(activeDescriptor, executor, signal),
+              signal,
             );
             processSession = cleanupSession;
-            const freshInventory = await cleanupSession.inspect();
+            const freshInventory = await cleanupSession.inspect(signal);
             const stoppedFresh = freshInventory.instances.length > 0
-              ? await cleanupSession.stop(freshInventory)
+              ? await cleanupSession.stop(freshInventory, signal)
               : freshInventory;
             if (stoppedFresh.instances.some((instance) => instance.stop_authority === 'automatic')) {
               throw new Error('Desktop could not stop every verified process from the new managed installation.');
@@ -837,7 +870,7 @@ export class ReinstallTargetCoordinator {
             if (!freshProcessesStopped) {
               throw new Error('Fresh Redeven processes are still active; preserving the previous managed directories is unsafe.');
             }
-            await this.dependencies.rollback_install?.(activeDescriptor, activeTargetRoot, operationID);
+            await this.dependencies.rollback_install?.(activeDescriptor, activeTargetRoot, operationID, signal);
             rollbackSucceeded = true;
             preserveRollbackSucceeded = true;
           } catch (rollbackError) {
@@ -846,7 +879,7 @@ export class ReinstallTargetCoordinator {
         }
         if (cached.preview.mode !== 'preserve_data' || !installAttempted || rollbackSucceeded) {
           try {
-            await this.dependencies.finalize_install?.(activeDescriptor, activeTargetRoot, operationID);
+            await this.dependencies.finalize_install?.(activeDescriptor, activeTargetRoot, operationID, signal);
             installFinalized = true;
           } catch (cleanupError) {
             recoveryError = new AggregateError([recoveryError, cleanupError], 'Desktop could not clean the component staging transaction.');
@@ -864,7 +897,7 @@ export class ReinstallTargetCoordinator {
         );
       }
       if (preserveRollbackSucceeded) {
-        await this.dependencies.clear_completed_marker(activeDescriptor).catch(() => undefined);
+        await this.dependencies.clear_completed_marker(activeDescriptor, signal).catch(() => undefined);
         await fs.rm(journalFile(this.dependencies.journal_root, cached.preview.preflight_id), { force: true });
         this.preflights.delete(cached.preview.preflight_id);
         throw new ReinstallTargetCoordinatorError(
@@ -894,6 +927,7 @@ export class ReinstallTargetCoordinator {
   async resumeCompletion(
     preflightID: string,
     onProgress?: (phase: Extract<ReinstallTargetProgressPhase, 'old_data_cleaned' | 'completed'>) => void,
+    signal?: AbortSignal,
   ): Promise<void> {
     const journal = await this.readJournal(preflightID);
     const selected = await this.dependencies.resolve_target({
@@ -918,11 +952,15 @@ export class ReinstallTargetCoordinator {
           'The reinstall stopped before verification completed. The isolated old target was preserved for manual recovery.',
         );
       }
+      const commandOptions = {
+        ...(signal ? { signal } : {}),
+        timeout_ms: DEFAULT_RUNTIME_HOST_COMMAND_TIMEOUT_MS,
+      };
       const resolved = parsePreflightOutput((await executor.run(placementCommand(
         descriptor.placement,
         targetPreflightScript,
         [journal.target_root, DEFAULT_DESKTOP_SSH_RUNTIME_ROOT, 'resume'],
-      ))).stdout);
+      ), commandOptions)).stdout);
       if (!(await confirmedRootMatches(descriptor, journal.target_root, resolved.root, resolved.home))) {
         throw new ReinstallTargetCoordinatorError('target_changed', 'The registered Redeven root changed before completion recovery.');
       }
@@ -931,10 +969,10 @@ export class ReinstallTargetCoordinator {
         throw new ReinstallTargetCoordinatorError('target_changed', 'The reinstall quarantine no longer matches the registered Redeven root.');
       }
       if (journal.phase === 'catalog_and_local_ui_verified') {
-        await this.dependencies.finalize_install?.(descriptor, resolved.root, journal.operation_id);
+        await this.dependencies.finalize_install?.(descriptor, resolved.root, journal.operation_id, signal);
         await executor.run(placementCommand(descriptor.placement, cleanupQuarantinesScript, [
           resolved.root,
-        ]));
+        ]), commandOptions);
         await this.writeJournal({
           ...journal,
           phase: 'old_data_cleaned',
@@ -942,7 +980,7 @@ export class ReinstallTargetCoordinator {
         });
         onProgress?.('old_data_cleaned');
       }
-      await this.dependencies.clear_completed_marker(descriptor);
+      await this.dependencies.clear_completed_marker(descriptor, signal);
       await this.clearCompletedTargetJournals(
         reinstallPhysicalTargetFingerprint(descriptor, resolved.root),
         descriptor.affected_environment_ids,

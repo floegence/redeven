@@ -17,6 +17,8 @@ Preview is local and non-destructive. It shows one short risk statement, with ho
 
 Execution has four prerequisites only: the confirmed direct channel opens, the target resolves to the confirmed exact root, the current Desktop can prepare and verify a Runtime package for the target platform, and the filesystem permits the required exact-root operations. Gateway availability, Runtime protocol, schema, trust, token, old process identity, or old directory contents are not prerequisites.
 
+After confirmation, Desktop commits `direct_channel_open` to the journal before opening the executor or issuing a target command. Direct host commands are bounded (30 seconds for checks and filesystem actions, 10 minutes for package transfer), and the whole reinstall has a 15-minute deadline. Timeout and cancellation preserve the journal and command diagnostics for retry.
+
 ## Runtime-only sequence
 
 The authoritative progress order is:

@@ -1,4 +1,8 @@
 import type { RuntimeHostAccessExecutor } from './runtimeHostAccess';
+import {
+  DEFAULT_RUNTIME_HOST_COMMAND_TIMEOUT_MS,
+  DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS,
+} from './runtimeHostAccess';
 import { containerRuntimeExecCommand } from './containerRuntime';
 import type { DesktopRuntimePlacement } from '../shared/desktopRuntimePlacement';
 import type { ReinstallTargetProcessInventory } from './reinstallTargetCoordinator';
@@ -74,8 +78,8 @@ function parseInventory(raw: string): ReinstallTargetProcessInventory {
 }
 
 export type ReinstallTargetProcessSession = Readonly<{
-  inspect: () => Promise<ReinstallTargetProcessInventory>;
-  stop: (inventory: ReinstallTargetProcessInventory) => Promise<ReinstallTargetProcessInventory>;
+  inspect: (signal?: AbortSignal) => Promise<ReinstallTargetProcessInventory>;
+  stop: (inventory: ReinstallTargetProcessInventory, signal?: AbortSignal) => Promise<ReinstallTargetProcessInventory>;
   close: () => Promise<void>;
 }>;
 
@@ -86,6 +90,7 @@ export async function openReinstallTargetProcessSession(
     target_root: string;
     helper_archive?: Buffer;
     local_helper_executable?: string;
+    signal?: AbortSignal;
   }>,
 ): Promise<ReinstallTargetProcessSession> {
   const localHelper =
@@ -100,7 +105,11 @@ export async function openReinstallTargetProcessSession(
     }
     const staged = await args.executor.run(
       placementCommand(args.placement, stageHelperScript, 'redeven-target-process-helper-stage'),
-      { stdinData: args.helper_archive },
+      {
+        stdinData: args.helper_archive,
+        ...(args.signal ? { signal: args.signal } : {}),
+        timeout_ms: DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS,
+      },
     );
     helper =
       String(staged.stdout ?? '')
@@ -118,6 +127,7 @@ export async function openReinstallTargetProcessSession(
   const run = async (
     operation: 'inventory' | 'stop',
     inventoryDigest = '',
+    signal?: AbortSignal,
   ): Promise<ReinstallTargetProcessInventory> => {
     if (closed) {
       throw new Error('Redeven reinstall process session is closed.');
@@ -129,6 +139,7 @@ export async function openReinstallTargetProcessSession(
         args.target_root,
         inventoryDigest || '-',
       ]),
+      { ...(signal ? { signal } : {}), timeout_ms: DEFAULT_RUNTIME_HOST_COMMAND_TIMEOUT_MS },
     );
     if (operation === 'inventory') {
       return parseInventory(result.stdout);
@@ -140,8 +151,8 @@ export async function openReinstallTargetProcessSession(
   };
 
   return {
-    inspect: () => run('inventory'),
-    stop: (inventory) => run('stop', inventory.inventory_digest),
+    inspect: (signal) => run('inventory', '', signal),
+    stop: (inventory, signal) => run('stop', inventory.inventory_digest, signal),
     close: async () => {
       if (closed) return;
       closed = true;
@@ -151,6 +162,7 @@ export async function openReinstallTargetProcessSession(
             placementCommand(args.placement, cleanupHelperScript, 'redeven-target-process-helper-cleanup', [
               stagedHelper,
             ]),
+            { ...(args.signal ? { signal: args.signal } : {}), timeout_ms: DEFAULT_RUNTIME_HOST_COMMAND_TIMEOUT_MS },
           )
           .catch(() => undefined);
       }

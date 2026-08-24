@@ -20,9 +20,9 @@ export type DesktopFailureCode =
   | 'reinstall_direct_channel_failed'
   | 'reinstall_package_batch_failed'
   | 'reinstall_filesystem_failed'
-  | 'reinstall_gateway_start_failed'
   | 'reinstall_runtime_start_failed'
   | 'runtime_host_command_failed'
+  | 'runtime_host_command_timeout'
   | 'runtime_update_required'
   | 'runtime_identity_mismatch'
   | 'reinstall_required'
@@ -80,9 +80,9 @@ function normalizeFailureCode(value: unknown): DesktopFailureCode {
     case 'reinstall_direct_channel_failed':
     case 'reinstall_package_batch_failed':
     case 'reinstall_filesystem_failed':
-    case 'reinstall_gateway_start_failed':
     case 'reinstall_runtime_start_failed':
     case 'runtime_host_command_failed':
+    case 'runtime_host_command_timeout':
     case 'runtime_update_required':
     case 'runtime_identity_mismatch':
     case 'reinstall_required':

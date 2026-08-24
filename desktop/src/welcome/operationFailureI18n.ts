@@ -38,8 +38,6 @@ function failureTitleKey(failure: DesktopOperationFailurePresentation): DesktopT
       return 'progress.reinstallPackageBatchFailedTitle';
     case 'reinstall_filesystem_failed':
       return 'progress.reinstallFilesystemFailedTitle';
-    case 'reinstall_gateway_start_failed':
-      return 'progress.reinstallGatewayStartFailedTitle';
     case 'reinstall_runtime_start_failed':
       return 'progress.reinstallRuntimeStartFailedTitle';
     case 'local_runtime_stop_failed':
@@ -51,6 +49,7 @@ function failureTitleKey(failure: DesktopOperationFailurePresentation): DesktopT
     case 'confirmation_required':
       return 'progress.runtimeConfirmationRequiredTitle';
     case 'runtime_host_command_failed':
+    case 'runtime_host_command_timeout':
       return 'progress.runtimeHostCommandFailedTitle';
     case 'runtime_update_required':
       return 'runtimeMessage.runtimeUpdateRequired';
@@ -96,8 +95,6 @@ function failureSummaryKey(failure: DesktopOperationFailurePresentation): Deskto
       return 'progress.reinstallPackageBatchFailedSummary';
     case 'reinstall_filesystem_failed':
       return 'progress.reinstallFilesystemFailedSummary';
-    case 'reinstall_gateway_start_failed':
-      return 'progress.reinstallGatewayStartFailedSummary';
     case 'reinstall_runtime_start_failed':
       return 'progress.reinstallRuntimeStartFailedSummary';
     case 'local_runtime_stop_failed':
@@ -109,6 +106,7 @@ function failureSummaryKey(failure: DesktopOperationFailurePresentation): Deskto
     case 'confirmation_required':
       return 'progress.runtimeConfirmationRequiredSummary';
     case 'runtime_host_command_failed':
+    case 'runtime_host_command_timeout':
       return 'progress.runtimeHostCommandFailedSummary';
     case 'environment_open_failed':
       return 'progress.environmentOpenFailedSummary';

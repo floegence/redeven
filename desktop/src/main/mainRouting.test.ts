@@ -102,7 +102,7 @@ describe('main routing', () => {
     expect(mainSrc).toContain('new ReinstallTargetCoordinator({');
     expect(mainSrc).toContain('close_sessions: closeDesktopSessionsForReinstallTarget');
     expect(mainSrc).toContain(
-      'prepare_process_session: async (descriptor, targetRoot, executor, platform) => openReinstallTargetProcessSession',
+      'prepare_process_session: async (descriptor, targetRoot, executor, platform, signal) => openReinstallTargetProcessSession',
     );
     const freshInstallStart = mainSrc.indexOf('async function installFreshDirectReinstallTarget(');
     const freshInstallEnd = mainSrc.indexOf('async function verifyFreshDirectReinstallTarget(', freshInstallStart);
@@ -1062,7 +1062,7 @@ describe('main routing', () => {
     expect(localOpenSrc).toContain('open_progress: buildOpenConnectionProgress({');
     expect(localOpenSrc).toContain('await refreshWelcomeRuntimeHealthForEnvironment(environment.id)');
     expect(localOpenSrc).toContain('runtimeRecord = await attachLocalEnvironmentRuntime(environment)');
-    expect(mainSrc).toContain('runtimeStartupTimeoutMs: 0');
+    expect(mainSrc).toContain('runtimeStartupTimeoutMs: DESKTOP_RUNTIME_STARTUP_TIMEOUT_MS');
     expect(localOpenSrc).toContain('localRuntimeHealthForOpenPreflight(environment.id)');
     expect(localOpenSrc).toContain('finishLocalHostOpenFailure(operationKey, openTarget, signal, result, preferences)');
     expect(localOpenSrc).toContain("phase: 'checking_env_app_readiness'");

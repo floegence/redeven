@@ -134,6 +134,30 @@ describe('DefaultDesktopSSHTransportManager', () => {
     await fixture.manager.dispose();
   });
 
+  it('bounds a remote command without killing the reusable control master', async () => {
+    vi.useFakeTimers();
+    try {
+      const fixture = managerFixture();
+      const lease = await fixture.manager.acquire({ target: target(), credentialScope: 'environment-a' });
+      const original = fixture.spawnProcess.getMockImplementation()!;
+      fixture.spawnProcess.mockImplementationOnce((_command: string, args: readonly string[]) => {
+        fixture.calls.push([...args]);
+        return fakeProcess({ longLived: true });
+      });
+      fixture.spawnProcess.mockImplementation(original);
+
+      const command = lease.run('hang', { timeout_ms: 20 });
+      const rejection = expect(command).rejects.toThrow('timed out after 20 ms');
+      await vi.advanceTimersByTimeAsync(20);
+      await rejection;
+      expect(fixture.masters[0]!.kill).not.toHaveBeenCalled();
+      await lease.release();
+      await fixture.manager.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('does not replay a failed command while the master remains healthy', async () => {
     const fixture = managerFixture();
     fixture.spawnProcess.mockImplementationOnce(fixture.spawnProcess.getMockImplementation()!);
@@ -217,6 +241,30 @@ describe('DefaultDesktopSSHTransportManager', () => {
 
     await lease.release();
     await fixture.manager.dispose();
+  });
+
+  it('times out a streaming command without closing the reusable control master', async () => {
+    vi.useFakeTimers();
+    try {
+      const fixture = managerFixture();
+      const lease = await fixture.manager.acquire({ target: target(), credentialScope: 'environment-a' });
+      const original = fixture.spawnProcess.getMockImplementation()!;
+      fixture.spawnProcess.mockImplementationOnce((_command: string, args: readonly string[]) => {
+        fixture.calls.push([...args]);
+        return fakeProcess({ longLived: true });
+      });
+      fixture.spawnProcess.mockImplementation(original);
+
+      const command = lease.stream('long-running-command', { timeout_ms: 20 });
+      const rejection = expect(command.closed).rejects.toThrow('timed out after 20 ms');
+      await vi.advanceTimersByTimeAsync(20);
+      await rejection;
+      expect(fixture.masters[0]!.kill).not.toHaveBeenCalled();
+      await lease.release();
+      await fixture.manager.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('rejects an already-aborted acquisition without creating transport resources', async () => {

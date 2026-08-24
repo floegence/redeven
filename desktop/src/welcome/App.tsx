@@ -795,8 +795,8 @@ function localizedStringByValue(
 
 function reinstallDeletedDataTranslationKey(value: string): DesktopTranslationKey {
   switch (value) {
-    case 'gateway_runtime_managed_packages':
-      return 'confirm.reinstallTargetDeletedDataGatewayRuntime';
+    case 'runtime_managed_packages':
+      return 'confirm.reinstallTargetDeletedDataRuntime';
     case 'workspace_projects_application_data':
       return 'confirm.reinstallTargetDeletedDataWorkspace';
     case 'floret_redevplugin_data':
@@ -8892,7 +8892,9 @@ function EnvironmentProgressPanel(props: Readonly<{
                   {(containerID) => <div>{props.i18n.t('confirm.reinstallTargetContainer', { container: containerID() })}</div>}
                 </Show>
                 <div class="font-mono break-all">{props.i18n.t('confirm.reinstallTargetRoot', { root: preview().target_root })}</div>
-                <div>{props.i18n.t('confirm.reinstallTargetProcessCount', { count: preview().processes.length })}</div>
+                <div>{preview().target_exists_known
+                  ? props.i18n.t('confirm.reinstallTargetProcessCount', { count: preview().processes.length })
+                  : props.i18n.t('confirm.reinstallTargetProcessCountUnknown')}</div>
                 <div>{props.i18n.t('confirm.reinstallAffectedEnvironmentCount', { count: preview().affected_environment_ids.length })}</div>
                 <ul class="list-disc space-y-1 pl-4">
                   <For each={preview().deleted_data_keys}>

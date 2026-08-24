@@ -982,6 +982,8 @@ const GATEWAY_CATALOG_SYNC_POLL_INTERVAL_MS = 15_000;
 const GATEWAY_CATALOG_STALE_AFTER_MS = 30_000;
 const WELCOME_RUNTIME_POLL_INTERVAL_MS = 5_000;
 const DESKTOP_RUNTIME_PROBE_TIMEOUT_MS = 1_500;
+const DESKTOP_RUNTIME_STARTUP_TIMEOUT_MS = 30_000;
+const REINSTALL_OPERATION_TIMEOUT_MS = 15 * 60_000;
 const DESKTOP_SESSION_INITIAL_LOAD_TIMEOUT_MS = 15_000;
 const DESKTOP_STALE_WINDOW_MESSAGE = 'That window was already closed. Desktop refreshed the environment list.';
 const DESKTOP_PROVIDER_RECONNECT_MESSAGE = 'Desktop needs fresh provider authorization before it can open or connect this provider Environment.';
@@ -3115,14 +3117,15 @@ async function resolveDirectReinstallTarget(
 async function reinstallTargetHelperPlatform(
   descriptor: ReinstallTargetDescriptor,
   executor: ReturnType<typeof runtimeHostExecutor>,
+  signal?: AbortSignal,
 ): Promise<DesktopSSHRemotePlatform> {
   if (descriptor.placement.kind === 'container_process') {
     return parseContainerPlatformProbeOutput((await executor.run(containerRuntimePlatformProbeCommand({
       engine: descriptor.placement.container_engine,
       container_id: descriptor.placement.container_id,
-    }))).stdout);
+    }), { ...(signal ? { signal } : {}) })).stdout);
   }
-  const lines = (await executor.run(['sh', '-c', 'set -eu\nuname -s\nuname -m', 'redeven-reinstall-platform']))
+  const lines = (await executor.run(['sh', '-c', 'set -eu\nuname -s\nuname -m', 'redeven-reinstall-platform'], { ...(signal ? { signal } : {}) }))
     .stdout.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean);
   if (lines.length < 2) {
     throw new Error('Desktop could not determine the reinstall target platform.');
@@ -3134,18 +3137,19 @@ async function reinstallTargetHelperArchive(
   descriptor: ReinstallTargetDescriptor,
   executor: ReturnType<typeof runtimeHostExecutor>,
   preparedPlatform?: DesktopSSHRemotePlatform,
+  signal?: AbortSignal,
 ): Promise<Buffer | undefined> {
   if (descriptor.host_access.kind === 'local_host' && descriptor.placement.kind === 'host_process') {
     return undefined;
   }
-  const platform = preparedPlatform ?? (await reinstallTargetHelperPlatform(descriptor, executor));
+  const platform = preparedPlatform ?? (await reinstallTargetHelperPlatform(descriptor, executor, signal));
   return prepareDesktopRuntimeMaintenanceHelperAsset({
     runtimeReleaseTag: resolveSSHRuntimeReleaseTag(),
     releaseBaseURL: PUBLIC_REDEVEN_RELEASE_BASE_URL,
     assetCacheRoot: desktopRuntimePackageCacheRoot(),
     sourceRuntimeRoot: compact(process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT) || undefined,
     platform,
-    fetchPolicy: runtimeReleaseFetchPolicy(45_000),
+    fetchPolicy: runtimeReleaseFetchPolicy(45_000, signal),
   });
 }
 
@@ -3208,6 +3212,7 @@ async function prepareFreshReinstallPackages(
   executor: ReturnType<typeof runtimeHostExecutor>,
   platform: DesktopSSHRemotePlatform,
   onProgress?: (tasks: readonly DesktopComponentTaskProgress[]) => void,
+  signal?: AbortSignal,
 ): Promise<PreparedComponentBatch | null> {
     const strategy: ManagedComponentTask['strategy'] = descriptor.host_access.kind === 'ssh_host'
       && descriptor.placement.kind === 'host_process'
@@ -3224,7 +3229,7 @@ async function prepareFreshReinstallPackages(
           releaseTag,
           releaseBaseURL,
           cacheRoot: desktopRuntimePackageCacheRoot(),
-          fetchPolicy: runtimeReleaseFetchPolicy(45_000),
+          fetchPolicy: runtimeReleaseFetchPolicy(45_000, signal),
         })
       : null;
     const tasks: readonly ManagedComponentTask[] = [
@@ -3250,7 +3255,7 @@ async function prepareFreshReinstallPackages(
       initial.map((task) => [task.id, task]),
     );
     onProgress?.(initial);
-    return await prepareAndStageBatch(tasks, new AbortController().signal, (progress) => {
+    return await prepareAndStageBatch(tasks, signal ?? new AbortController().signal, (progress) => {
       current.set(progress.id, progress);
       onProgress?.(tasks.map((task) => current.get(task.component)!).filter(Boolean));
     }, {
@@ -3301,7 +3306,7 @@ async function prepareFreshReinstallPackages(
         });
       },
       discard: async () => {
-        await cleanupManagedComponentBatch(executor, descriptor.placement, targetRoot, operationID).catch(() => undefined);
+        await cleanupManagedComponentBatch(executor, descriptor.placement, targetRoot, operationID, signal).catch(() => undefined);
       },
     });
 }
@@ -3312,6 +3317,7 @@ async function installFreshDirectReinstallTarget(
   onProgress?: (phase: ReinstallTargetProgressPhase, detailKey?: string, tasks?: readonly DesktopComponentTaskProgress[]) => Promise<void>,
   mode: 'wipe_data' | 'preserve_data' = 'wipe_data',
   preparedBatch?: PreparedComponentBatch | null,
+  signal?: AbortSignal,
 ): Promise<void> {
   if (!preparedBatch) {
     throw new Error('Managed component batch is unavailable.');
@@ -3333,7 +3339,7 @@ async function installFreshDirectReinstallTarget(
     descriptor.ssh_password,
   );
   try {
-    await activateManagedComponentBatch(executor, placement, targetRoot, preparedBatch, mode);
+    await activateManagedComponentBatch(executor, placement, targetRoot, preparedBatch, mode, signal);
     await onProgress?.('runtime_installed');
   } finally {
     await executor.release();
@@ -3347,6 +3353,7 @@ async function installFreshDirectReinstallTarget(
     ssh_credential_scope: descriptor.environment_id,
     ssh_transport_manager: desktopSSHTransportManager,
     fallback_local_id: descriptor.environment_id,
+    signal,
   });
   await bridge.disconnect().catch(() => undefined);
   await onProgress?.('runtime_started');
@@ -3356,10 +3363,11 @@ async function finalizeFreshReinstallBatch(
   descriptor: ReinstallTargetDescriptor,
   targetRoot: string,
   operationID: string,
+  signal?: AbortSignal,
 ): Promise<void> {
   const executor = runtimeHostExecutor(descriptor.host_access, descriptor.environment_id, descriptor.ssh_password);
   try {
-    await cleanupManagedComponentBatch(executor, descriptor.placement, targetRoot, operationID);
+    await cleanupManagedComponentBatch(executor, descriptor.placement, targetRoot, operationID, signal);
   } finally {
     await executor.release();
   }
@@ -3369,10 +3377,11 @@ async function rollbackFreshReinstallBatch(
   descriptor: ReinstallTargetDescriptor,
   targetRoot: string,
   operationID: string,
+  signal?: AbortSignal,
 ): Promise<void> {
   const executor = runtimeHostExecutor(descriptor.host_access, descriptor.environment_id, descriptor.ssh_password);
   try {
-    await rollbackManagedComponentBatch(executor, descriptor.placement, targetRoot, operationID);
+    await rollbackManagedComponentBatch(executor, descriptor.placement, targetRoot, operationID, signal);
   } finally {
     await executor.release();
   }
@@ -3381,6 +3390,7 @@ async function rollbackFreshReinstallBatch(
 async function verifyFreshDirectReinstallTarget(
   descriptor: ReinstallTargetDescriptor,
   targetRoot: string,
+  signal?: AbortSignal,
 ): Promise<void> {
   const placement: DesktopRuntimePlacement = {
     ...descriptor.placement,
@@ -3401,6 +3411,7 @@ async function verifyFreshDirectReinstallTarget(
     ssh_credential_scope: descriptor.environment_id,
     ssh_transport_manager: desktopSSHTransportManager,
     fallback_local_id: descriptor.environment_id,
+    signal,
   });
   try {
     if (!runtimeServiceIsOpenable(bridge.startup.runtime_service)) {
@@ -3442,8 +3453,9 @@ async function verifyFreshDirectReinstallTarget(
 async function verifyReinstallTargetCatalogAndLocalUI(
   descriptor: ReinstallTargetDescriptor,
   targetRoot: string,
+  signal?: AbortSignal,
 ): Promise<void> {
-  await verifyFreshDirectReinstallTarget(descriptor, targetRoot);
+  await verifyFreshDirectReinstallTarget(descriptor, targetRoot, signal);
   const placement: DesktopRuntimePlacement = {
     ...descriptor.placement,
     runtime_root: targetRoot,
@@ -3472,6 +3484,7 @@ async function verifyReinstallTargetCatalogAndLocalUI(
     ssh_credential_scope: descriptor.environment_id,
     ssh_transport_manager: desktopSSHTransportManager,
     fallback_local_id: descriptor.environment_id,
+    signal,
   });
   try {
     const localUI = await probeExternalLocalUIStartup(bridge.startup.local_ui_url, {
@@ -3496,8 +3509,8 @@ function reinstallTargetCoordinator(): ReinstallTargetCoordinator {
         descriptor.environment_id,
         descriptor.ssh_password,
       ),
-      prepare_platform: (descriptor, executor) => reinstallTargetHelperPlatform(descriptor, executor),
-      prepare_process_session: async (descriptor, targetRoot, executor, platform) => openReinstallTargetProcessSession({
+      prepare_platform: (descriptor, executor, signal) => reinstallTargetHelperPlatform(descriptor, executor, signal),
+      prepare_process_session: async (descriptor, targetRoot, executor, platform, signal) => openReinstallTargetProcessSession({
         executor,
         placement: descriptor.placement,
         target_root: targetRoot,
@@ -3505,8 +3518,10 @@ function reinstallTargetCoordinator(): ReinstallTargetCoordinator {
           descriptor,
           executor,
           platform as DesktopSSHRemotePlatform,
+          signal,
         ),
         local_helper_executable: bundledRuntimeExecutablePath(),
+        signal,
       }),
       mark_in_progress: (descriptor, preflightID) => writeReinstallTargetRequiredMarker(descriptor, {
         gatewayID: '',
@@ -4577,15 +4592,13 @@ async function hydratePersistedReinstallOperations(): Promise<void> {
       } catch (error) {
         targetError = error;
       }
-      // Every incomplete journal is a resumable recovery checkpoint. A
-      // Desktop restart must ask for confirmation again, but an old phase or
-      // quarantine is never converted into a permanent manual-recovery block.
-      const confirmationAvailable = !targetError;
-      const phase = confirmationAvailable
-        ? 'confirmation'
-        : journal.phase;
+      // Only a journal that is still at confirmation needs a new destructive
+      // acknowledgement. Once execution started, expose the same checkpoint
+      // as a continuation action instead of silently resetting it.
+      const needsConfirmation = journal.phase === 'confirmation';
+      const phase = journal.phase;
       const presentation = reinstallTargetProgressPresentation(phase);
-      const failure = confirmationAvailable
+      const failure = !targetError
         ? undefined
         : desktopFailureFromError(
           targetError ?? new ReinstallTargetCoordinatorError(
@@ -4596,7 +4609,7 @@ async function hydratePersistedReinstallOperations(): Promise<void> {
           ),
           {
             code: 'manual_recovery_required',
-            title: journal.phase === 'confirmation' && !targetError
+            title: needsConfirmation && !targetError
               ? 'Reinstall confirmation expired'
               : 'Redeven reinstall requires manual recovery',
             titleKey: journal.phase === 'confirmation' && !targetError
@@ -4604,7 +4617,7 @@ async function hydratePersistedReinstallOperations(): Promise<void> {
               : 'confirm.reinstallFailedTitle',
             summary: targetError instanceof Error
               ? targetError.message
-              : journal.phase === 'confirmation'
+              : needsConfirmation
                 ? 'The reinstall confirmation expired. Review the target again before continuing.'
                 : 'The previous reinstall stopped before completion. The isolated old target was preserved for manual recovery.',
             summaryKey: journal.phase === 'confirmation' && !targetError
@@ -4647,21 +4660,23 @@ async function hydratePersistedReinstallOperations(): Promise<void> {
         environment_label: journal.preview.label,
         started_at_unix_ms: Math.max(1, journal.updated_at_unix_ms - 1),
         updated_at_unix_ms: journal.updated_at_unix_ms,
-        status: confirmationAvailable ? 'needs_confirmation' : 'failed',
+        status: needsConfirmation ? 'needs_confirmation' : 'failed',
         phase,
         title: presentation.title,
         title_key: presentation.title_key,
-        detail: confirmationAvailable
+        detail: needsConfirmation
           ? 'Review the deletion list and confirm before Redeven is reinstalled.'
           : failure?.summary ?? presentation.detail,
-        detail_key: confirmationAvailable ? 'confirm.reinstallTargetDescription' : 'confirm.reinstallManualRecovery',
+        detail_key: needsConfirmation
+          ? 'confirm.reinstallTargetDescription'
+          : failure ? 'confirm.reinstallManualRecovery' : 'progress.reinstallCheckingDetail',
         active_progress_surface: 'reinstall',
-        step_progress: reinstallTargetStepProgress(phase, confirmationAvailable ? 'running' : 'failed'),
+        step_progress: reinstallTargetStepProgress(phase, needsConfirmation ? 'running' : failure ? 'failed' : 'running'),
         reinstall_preview: journal.preview,
         cancelable: false,
         deleted_subject: false,
         ...(failure ? { failure } : {}),
-        next_actions: confirmationAvailable
+        next_actions: needsConfirmation
           ? [{
               kind: 'reinstall_target' as const,
               environment_id: journal.environment_id,
@@ -6855,7 +6870,11 @@ async function reinstallTargetFromLauncher(
   if (existing?.action === 'reinstall_target' && existing.status === 'succeeded') {
     return launcherActionSuccess('reinstalled_target', { operationKey });
   }
-  if (!existing || existing.action !== 'reinstall_target' || existing.status !== 'needs_confirmation') {
+  const resumableRecovery = existing?.status === 'failed'
+    && existing.next_actions?.some((action) => action.kind === 'reinstall_target');
+  if (!existing || existing.action !== 'reinstall_target' || (
+    existing.status !== 'needs_confirmation' && !resumableRecovery
+  )) {
     return launcherActionFailure('operation_missing', 'environment', 'The reinstall operation is no longer available.', {
       environmentID: request.environment_id,
       operationKey,
@@ -6897,7 +6916,13 @@ async function reinstallTargetFromLauncher(
           new DOMException('Redeven reinstall is taking ownership of this target.', 'AbortError'),
         );
       }
-      await runtimeLifecycleCoordinator.waitForIdle(targetKey);
+      const previousOperationFinished = await runtimeLifecycleCoordinator.waitForIdle(targetKey);
+      if (!previousOperationFinished) {
+        throw new ReinstallTargetCoordinatorError(
+          'reinstall_retryable',
+          'The current Runtime operation did not finish before reinstall started. Retry after it settles.',
+        );
+      }
     }
     await runtimeLifecycleCoordinator.run({
       target_key: targetKey,
@@ -6909,7 +6934,8 @@ async function reinstallTargetFromLauncher(
         preflight_id: request.preflight_id,
       }),
       operation_key: operationKey,
-      execute: () => reinstallTargetCoordinator().execute(
+      timeout_ms: REINSTALL_OPERATION_TIMEOUT_MS,
+      execute: (signal) => reinstallTargetCoordinator().execute(
         request.preflight_id,
         operationKey,
         (phase, detailKey, tasks) => {
@@ -6930,6 +6956,7 @@ async function reinstallTargetFromLauncher(
             cancelable: false,
           });
         },
+        signal,
       ),
     });
     launcherOperations.finishCurrentAttempt(operationKey, owner, 'succeeded', {
@@ -9238,10 +9265,7 @@ async function attachLocalEnvironmentRuntime(
     runtimeRoot: localEnvironmentRuntimeRoot(environment),
     stateRoot: localEnvironmentStateRoot(),
     runtimeAttachTimeoutMs: DESKTOP_RUNTIME_PROBE_TIMEOUT_MS,
-    // Open joins an active lifecycle owner before reaching this path. Without
-    // an owner, a live process that has no published status is stale recovery
-    // input, not a second startup that Open should poll independently.
-    runtimeStartupTimeoutMs: 0,
+    runtimeStartupTimeoutMs: DESKTOP_RUNTIME_STARTUP_TIMEOUT_MS,
   });
   if (!attachedRuntime) {
     return null;
@@ -15021,7 +15045,10 @@ async function refreshEnvironmentRuntimeFromLauncher(
         operation: 'refresh',
       }),
       operation_key: operationKey,
-      execute: async () => {
+      execute: async (signal) => {
+        if (signal.aborted) {
+          throw signal.reason ?? new DOMException('Runtime status refresh canceled.', 'AbortError');
+        }
         const localEnvironment = findLocalEnvironmentByID(preferences, environmentID);
         updateRuntimeLifecycleOperation(operationKey, owner, {
           hostAccess,
@@ -15037,6 +15064,9 @@ async function refreshEnvironmentRuntimeFromLauncher(
         });
         broadcastDesktopWelcomeSnapshots();
         await refreshWelcomeRuntimeHealthForEnvironment(environmentID);
+        if (signal.aborted) {
+          throw signal.reason ?? new DOMException('Runtime status refresh canceled.', 'AbortError');
+        }
 
         if (placement.kind === 'container_process') {
           const targetID = runtimeTargetIDFromRequest(request);

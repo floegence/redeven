@@ -910,7 +910,7 @@ export type DesktopReinstallTargetPreview = Readonly<{
     reason_code?: string;
   }>[];
   deleted_data_keys: readonly (
-    | 'gateway_runtime_managed_packages'
+    | 'runtime_managed_packages'
     | 'workspace_projects_application_data'
     | 'floret_redevplugin_data'
     | 'trust_identity_catalog_environment_config'

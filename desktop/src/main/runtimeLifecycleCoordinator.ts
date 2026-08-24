@@ -149,9 +149,17 @@ export class RuntimeLifecycleCoordinator {
       .sort((left, right) => left.started_at_unix_ms - right.started_at_unix_ms);
   }
 
-  async waitForIdle(targetKeyValue: string): Promise<void> {
+  async waitForIdle(targetKeyValue: string, timeoutMs = 30_000): Promise<boolean> {
     const active = this.activeByTargetKey.get(required(targetKeyValue, 'Runtime lifecycle target key'));
-    await active?.task.catch(() => undefined);
+    if (!active) return true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const completed = active.task.then(() => true, () => true);
+    const timedOut = new Promise<boolean>((resolve) => {
+      timer = setTimeout(() => resolve(false), Math.max(1, timeoutMs));
+    });
+    const result = await Promise.race([completed, timedOut]);
+    if (timer) clearTimeout(timer);
+    return result;
   }
 
   async waitForAll(): Promise<void> {
@@ -237,6 +245,7 @@ export class RuntimeLifecycleCoordinator {
     fingerprint: string;
     operation_key: string;
     signal?: AbortSignal;
+    timeout_ms?: number;
     execute: (signal: AbortSignal) => Promise<T>;
   }>): Promise<T> {
     const key = required(input.target_key, 'Runtime lifecycle target key');
@@ -255,6 +264,14 @@ export class RuntimeLifecycleCoordinator {
     const startedAtUnixMs = Math.max(now, this.lastStartedAtUnixMs + 1);
     this.lastStartedAtUnixMs = startedAtUnixMs;
     const controller = new AbortController();
+    const timeoutMs = Number(input.timeout_ms);
+    const timeout = Number.isFinite(timeoutMs) && timeoutMs > 0
+      ? setTimeout(() => {
+          if (!controller.signal.aborted) {
+            controller.abort(new DOMException('Runtime lifecycle operation timed out.', 'TimeoutError'));
+          }
+        }, timeoutMs)
+      : undefined;
     const abortFromInput = () => {
       if (!controller.signal.aborted) {
         controller.abort(input.signal?.reason ?? new DOMException('Runtime lifecycle operation was canceled.', 'AbortError'));
@@ -288,8 +305,14 @@ export class RuntimeLifecycleCoordinator {
       rejectTask(error);
     }
     void task.then(
-      () => this.release(key, token),
-      () => this.release(key, token),
+      () => {
+        if (timeout) clearTimeout(timeout);
+        this.release(key, token);
+      },
+      () => {
+        if (timeout) clearTimeout(timeout);
+        this.release(key, token);
+      },
     );
     return task;
   }

@@ -20,6 +20,10 @@ import {
   type DesktopSSHVerifiedReleaseManifest,
 } from './sshReleaseAssets';
 import {
+  DEFAULT_RUNTIME_HOST_COMMAND_TIMEOUT_MS,
+  DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS,
+} from './runtimeHostAccess';
+import {
   DesktopOperationFailureError,
   desktopOperationFailurePresentation,
 } from './desktopOperationFailure';
@@ -185,6 +189,7 @@ async function runLocalCommand(
     cwd: string;
     env?: NodeJS.ProcessEnv;
     signal?: AbortSignal;
+    timeout_ms?: number;
   }>,
 ): Promise<LocalCommandResult> {
   throwIfCanceled(options.signal);
@@ -200,6 +205,19 @@ async function runLocalCommand(
     });
     let stdout = '';
     let stderr = '';
+    let settled = false;
+    const timeoutMs = Number(options.timeout_ms ?? DEFAULT_RUNTIME_HOST_COMMAND_TIMEOUT_MS);
+    const timeout = Number.isFinite(timeoutMs) && timeoutMs > 0
+      ? setTimeout(() => {
+          if (settled) return;
+          child.kill('SIGTERM');
+          settled = true;
+          const details = [stdout.trim(), stderr.trim()].filter(Boolean).join('\n');
+          reject(new Error(details
+            ? `${command} timed out after ${Math.floor(timeoutMs)} ms:\n${details}`
+            : `${command} timed out after ${Math.floor(timeoutMs)} ms`));
+        }, timeoutMs)
+      : undefined;
 
     child.stdout?.setEncoding('utf8');
     child.stdout?.on('data', (chunk: string) => {
@@ -210,6 +228,9 @@ async function runLocalCommand(
       stderr += chunk;
     });
     child.once('error', (error) => {
+      if (settled) return;
+      settled = true;
+      if (timeout) clearTimeout(timeout);
       if (isAbortError(error) || options.signal?.aborted) {
         reject(new DOMException('Runtime package preparation was canceled.', 'AbortError'));
         return;
@@ -217,6 +238,9 @@ async function runLocalCommand(
       reject(error);
     });
     child.once('close', (exitCode, signal) => {
+      if (settled) return;
+      settled = true;
+      if (timeout) clearTimeout(timeout);
       if (options.signal?.aborted) {
         reject(new DOMException('Runtime package preparation was canceled.', 'AbortError'));
         return;
@@ -311,7 +335,11 @@ async function buildSourceRuntimeAssets(sourceRoot: string, signal?: AbortSignal
   if (!scriptStat?.isFile()) {
     throw new Error(`Redeven asset build script is missing: ${scriptPath}`);
   }
-  await runLocalCommand(scriptPath, [], { cwd: sourceRoot, signal });
+  await runLocalCommand(scriptPath, [], {
+    cwd: sourceRoot,
+    signal,
+    timeout_ms: DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS,
+  });
 }
 
 async function sourceRuntimeBuilderPath(sourceRoot: string): Promise<string> {
@@ -355,7 +383,11 @@ async function buildSourceRuntimeBinary(args: Readonly<{
     '--version', args.version,
     '--commit', args.commit,
     '--build-time', args.buildTime,
-  ], { cwd: args.sourceRoot, signal: args.signal });
+  ], {
+    cwd: args.sourceRoot,
+    signal: args.signal,
+    timeout_ms: DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS,
+  });
 }
 
 async function stageSourceRuntimeCompanions(args: Readonly<{
@@ -374,7 +406,11 @@ async function stageSourceRuntimeCompanions(args: Readonly<{
     '--redeven-goos', args.platform.goos,
     '--redeven-goarch', args.platform.goarch,
     '--runtime-out', path.join(args.outputRoot, 'redevplugin-runtime'),
-  ], { cwd: args.sourceRoot, signal: args.signal });
+  ], {
+    cwd: args.sourceRoot,
+    signal: args.signal,
+    timeout_ms: DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS,
+  });
 }
 
 async function copySourceRuntimeRoot(
@@ -584,6 +620,7 @@ async function prepareSourceMaintenanceHelperArchive(args: Readonly<{
         CGO_ENABLED: '0',
       },
       signal: args.signal,
+      timeout_ms: DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS,
     });
     return createSingleFileTarGzip('redeven', await fs.readFile(binaryPath), 0o755);
   } finally {
