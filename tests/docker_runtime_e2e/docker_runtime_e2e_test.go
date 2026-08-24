@@ -1234,6 +1234,15 @@ func (f *fixture) dockerExec(ctx context.Context, stdin io.Reader, args ...strin
 	return out
 }
 
+func (f *fixture) readContainerFile(ctx context.Context, path string) string {
+	f.t.Helper()
+	out, err := f.runHost(ctx, f.repoRoot, nil, "docker", "exec", "-i", f.containerName, "cat", path)
+	if err != nil {
+		return fmt.Sprintf("<read failed: %v; stdout=%s; stderr=%s>", err, out.Stdout, out.Stderr)
+	}
+	return out.Stdout
+}
+
 func (f *fixture) runHost(ctx context.Context, dir string, stdin io.Reader, name string, args ...string) (commandResult, error) {
 	return f.runHostCommand(ctx, dir, nil, stdin, name, args...)
 }
