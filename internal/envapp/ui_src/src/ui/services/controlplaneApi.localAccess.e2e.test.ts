@@ -294,6 +294,29 @@ describe('controlplaneApi local access flow', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('waits for the exact plugin binding and accepts the empty 204 readiness response', async () => {
+    const auth = await import('./localAccessAuth');
+    auth.writeLocalAccessResumeToken('resume-ready');
+    const pluginCredential = await import('./pluginSessionCredential');
+    const binding = pluginCredential.replacePendingPluginSessionCredential('ch-ready', 'ready-secret');
+    expect(binding).toMatchObject({ channelID: 'ch-ready', generation: expect.any(Number) });
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      expect(String(input)).toBe('/api/local/plugin/session/ready');
+      expect(init?.method).toBe('POST');
+      expect(init?.credentials).toBe('same-origin');
+      expect(String(init?.body)).toBe(JSON.stringify({ channel_id: 'ch-ready' }));
+      expect(new Headers(init?.headers).get('X-Redeven-Plugin-Session')).toBe('ready-secret');
+      expect(new Headers(init?.headers).get(auth.getLocalAccessResumeHeaderName())).toBe('resume-ready');
+      return new Response(null, { status: 204 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const mod = await import('./controlplaneApi');
+    await expect(mod.waitForLocalPluginSessionReady(binding!, new AbortController().signal)).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('preserves local access expiry as a terminal artifact-source response', async () => {
     const fetchMock = vi.fn(async () => errorResponse('access password required', 423, {
       code: 'ACCESS_PASSWORD_REQUIRED',
