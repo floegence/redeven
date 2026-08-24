@@ -35,6 +35,7 @@ import { PluginInstallStatus, PluginInstallSteps } from './PluginInstallStatus';
 export type PluginCenterViewProps = {
   projection: PluginInventoryProjection;
   loading: boolean;
+  preparing?: boolean;
   error?: unknown;
   selectedInventoryKey?: string;
   focusRequest?: number;
@@ -287,7 +288,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     trust: trustFilter(),
     lifecycle: lifecycleFilter(),
   }, i18n, i18n.locale()));
-  const loading = createMemo(() => props.loading);
+  const loading = createMemo(() => props.loading || Boolean(props.preparing));
   const errorMessage = createMemo(() => {
     const error = props.error ?? commandError();
     if (error) return messageFromUnknown(error);
@@ -735,6 +736,16 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
             mobileDetailOpen() ? 'hidden sm:flex' : 'flex',
           )}
         >
+          <Show when={props.preparing}>
+            <div
+              role="status"
+              data-plugin-center-preparing
+              class="absolute inset-0 z-10 flex items-center justify-center gap-2 bg-background text-sm text-muted-foreground"
+            >
+              <RefreshIcon class="h-4 w-4 animate-spin" />
+              <span>{i18n.t('uiCopy.plugin.preparingFeatures')}</span>
+            </div>
+          </Show>
           <Show when={loading()}>
             <div role="status" data-plugin-center-loading class="sr-only">{i18n.t('uiCopy.plugin.loadingOfficial')}</div>
           </Show>

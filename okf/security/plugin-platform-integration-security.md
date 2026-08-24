@@ -66,8 +66,11 @@ Metadata, inject Origin, or exempt queries.
 
 Local UI plugin requests additionally require the opaque credential issued with
 the connect artifact to resolve to the same independently active Desktop bridge
-channel. Authorization reads only the active channel-to-access-session binding
-and current access-session state; it never consults the expired or consumed
+channel. The binding has one `initializing -> ready -> closed` lifecycle and
+plugin routes accept only `ready`. Env App promotes the exact staged credential
+only after the Agent has activated the ReDevPlugin session and the Local UI
+readiness wait returns for the same channel, credential hash, access session,
+and client generation. Authorization never consults the expired or consumed
 artifact admission record. When a released session-scope revoke retires that
 credential, the Local UI removes the matching active plugin binding after the
 request without closing the Flowersec transport used by other product RPCs.
@@ -229,7 +232,8 @@ tokens, weaken route policy, edit opaque state, or replace released brokers.
 - `redeven:internal/redevpluginintegration/runtime_module.go:1` - Binds runtime target, hash, IPC, ABI, leases, and Host services.
 - `redeven:internal/redevpluginintegration/containers_capability.go:1` - Adapts authorized capability invocations to domain behavior.
 - `redeven:internal/codeapp/appserver/server_test.go:810` - Covers canonical route reservation and origin delegation.
-- `redeven:internal/localui/localui.go:990` - Requires a credential-resolved active Desktop bridge binding before delegating to the released handler.
+- `redeven:internal/localui/localui.go:1` - Owns exact Local UI plugin-binding readiness and route admission.
+- `redeven:internal/envapp/ui_src/src/ui/services/pluginSessionReadinessCoordinator.ts:1` - Promotes only the current staged credential after exact readiness.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginPlatform.ts:1` - Restricts UI transport to the canonical same-origin namespace and attaches CSRF proof.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:1` - Reads grants and policies and submits revision-fenced permission mutations through the released client.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginInventoryProjection.ts:1` - Keeps grants, allowlist caps, denied methods, and required-to-open methods distinct.

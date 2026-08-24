@@ -16,13 +16,19 @@ const unlockEnvAppAccessMock = vi.fn();
 const fetchLocalApiJSONMock = vi.fn();
 const getEnvironmentMock = vi.fn();
 const mintLocalDirectConnectArtifactMock = vi.fn();
+const waitForLocalPluginSessionReadyMock = vi.fn();
 const mintEnvEntryTicketForAppMock = vi.fn();
 const connectArtifactEntryMock = vi.fn();
 const localArtifactSource = Object.freeze({ acquire: mintLocalDirectConnectArtifactMock });
 const remoteArtifactSource = Object.freeze({ acquire: connectArtifactEntryMock });
-const createLocalDirectArtifactSourceMock = vi.fn(
-  (_options?: Record<string, unknown>): typeof localArtifactSource | Promise<typeof localArtifactSource> => localArtifactSource,
-);
+let localDirectArtifactSourceOptions: any;
+const createLocalDirectArtifactSourceMock = vi.fn(async (options?: any): Promise<typeof localArtifactSource> => {
+  localDirectArtifactSourceOptions = options;
+  const pluginCredential = await import('./services/pluginSessionCredential');
+  const binding = pluginCredential.replacePendingPluginSessionCredential('ch_local', 'test-plugin-session');
+  if (binding) options?.afterCredentialStaged?.(binding);
+  return localArtifactSource;
+});
 const createEnvProxyArtifactSourceMock = vi.fn((_options: Record<string, unknown>) => remoteArtifactSource);
 const getEnvPublicIDFromSessionMock = vi.fn(() => '');
 const refreshLocalRuntimeMock = vi.fn();
@@ -1018,6 +1024,7 @@ vi.mock('./services/controlplaneApi', () => ({
   mintEnvEntryTicketForApp: mintEnvEntryTicketForAppMock,
   refreshLocalRuntime: refreshLocalRuntimeMock,
   unlockLocalAccess: unlockLocalAccessMock,
+  waitForLocalPluginSessionReady: waitForLocalPluginSessionReadyMock,
 }));
 vi.mock('./accessResume', () => ({
   consumeAccessResumeTokenFromWindow: () => '',
@@ -1366,7 +1373,7 @@ beforeEach(async () => {
   await import('./plugins/PluginCenterView');
   vi.clearAllMocks();
   const pluginCredential = await import('./services/pluginSessionCredential');
-  pluginCredential.stagePluginSessionCredential('ch_local', 'test-plugin-session');
+  pluginCredential.clearPluginSessionCredential();
   window.localStorage.clear();
   window.sessionStorage.clear();
   commandState.commands = [];
@@ -1388,6 +1395,7 @@ beforeEach(async () => {
   activitySurfaceLifecycleState.codexSidebarCleanups = 0;
   protocolSnapshot = Object.freeze({ state: 'idle', attempt: 0 });
   protocolConnectionConfig = null;
+  localDirectArtifactSourceOptions = undefined;
   protocolSessionOrdinal = 0;
   protocolError = null;
   resumeCalls = [];
@@ -1455,6 +1463,8 @@ beforeEach(async () => {
   pluginPlatformMocks.state.onMutationOutcomeUnknown = undefined;
   pluginPlatformMocks.coordinator.dispose.mockClear();
   pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection());
+  waitForLocalPluginSessionReadyMock.mockReset();
+  waitForLocalPluginSessionReadyMock.mockResolvedValue(undefined);
   getLocalRuntimeMock.mockResolvedValue({ mode: 'local', env_public_id: 'env_local', direct_ws_url: 'ws://localhost/_redeven_direct/ws' });
   refreshLocalRuntimeMock.mockResolvedValue({ mode: 'local', env_public_id: 'env_local', direct_ws_url: 'ws://localhost/_redeven_direct/ws' });
   getLocalAccessStatusMock.mockResolvedValue({ password_required: true, unlocked: false });
@@ -1480,8 +1490,6 @@ beforeEach(async () => {
     permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true, is_owner: true },
   });
   mintLocalDirectConnectArtifactMock.mockImplementation(async () => {
-    const pluginCredential = await import('./services/pluginSessionCredential');
-    pluginCredential.stagePluginSessionCredential('ch_local', 'test-plugin-session');
     return {
       transport: 'direct',
       direct_info: {
@@ -4160,7 +4168,6 @@ describe('EnvAppShell local access gate', () => {
       expect(localConnectConfig).not.toHaveProperty('directInfo');
       const pluginCredential = await import('./services/pluginSessionCredential');
       pluginCredential.clearPluginSessionCredential();
-      pluginCredential.stagePluginSessionCredential('ch_local', 'credential-local');
       expect(pluginCredential.readPluginSessionCredential()).toBe('');
       expect(mintLocalDirectConnectArtifactMock).not.toHaveBeenCalled();
       expect(accessResumeMock).not.toHaveBeenCalled();
@@ -4504,25 +4511,13 @@ describe('EnvAppShell local access gate', () => {
     }
   });
 
-  it('keeps only the newest plugin credential when direct artifact acquisition is superseded', async () => {
+  it('starts plugin requests only after the newest local session binding is ready', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: true, unlocked: true });
-    let channelOrdinal = 0;
-    mintLocalDirectConnectArtifactMock.mockImplementation(async () => {
-      channelOrdinal += 1;
-      const channelID = `ch_attempt_${channelOrdinal}`;
-      const pluginCredential = await import('./services/pluginSessionCredential');
-      pluginCredential.replacePendingPluginSessionCredential(channelID, `credential-${channelOrdinal}`);
-      return {
-        transport: 'direct',
-        direct_info: {
-          ws_url: 'ws://localhost/_redeven_direct/ws',
-          channel_id: channelID,
-          e2ee_psk_b64u: 'secret',
-          channel_init_expire_at_unix_s: 1,
-          default_suite: 1,
-        },
-      };
-    });
+    const firstReady = deferred<void>();
+    const secondReady = deferred<void>();
+    waitForLocalPluginSessionReadyMock
+      .mockImplementationOnce(() => firstReady.promise)
+      .mockImplementationOnce(() => secondReady.promise);
 
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -4530,20 +4525,32 @@ describe('EnvAppShell local access gate', () => {
     const dispose = render(() => <EnvAppShell />, host);
 
     try {
-      await flushUntil(() => connectMock.mock.calls.length === 1);
-      const connectConfig = connectMock.mock.calls[0]?.[0] as {
-        source: { acquire: (context: { signal: AbortSignal }) => Promise<unknown> };
-      };
+      await flushUntil(() => waitForLocalPluginSessionReadyMock.mock.calls.length === 1);
       const pluginCredential = await import('./services/pluginSessionCredential');
-      pluginCredential.clearPluginSessionCredential();
-      const first = new AbortController();
-      const second = new AbortController();
-      await connectConfig.source.acquire({ signal: first.signal });
-      await connectConfig.source.acquire({ signal: second.signal });
+      expect(pluginCredential.readPluginSessionCredential()).toBe('');
+      expect(pluginLifecycleMocks.loadInventoryProjection).not.toHaveBeenCalled();
+      expect(pluginLifecycleMocks.recoverEnabled).not.toHaveBeenCalled();
 
-      expect(pluginCredential.activatePendingPluginSessionCredential()).toBe(true);
+      await localDirectArtifactSourceOptions.beforeAcquire?.();
+      const secondBinding = pluginCredential.replacePendingPluginSessionCredential('ch_attempt_2', 'credential-2');
+      expect(secondBinding).toBeTruthy();
+      localDirectArtifactSourceOptions.afterCredentialStaged?.(secondBinding);
+      publishProtocolConnected('client-local-second');
+
+      await flushUntil(() => waitForLocalPluginSessionReadyMock.mock.calls.length === 2);
+      const firstSignal = waitForLocalPluginSessionReadyMock.mock.calls[0]?.[1] as AbortSignal;
+      expect(firstSignal.aborted).toBe(true);
+      firstReady.resolve();
+      await firstReady.promise;
+      await flushAsync();
+      expect(pluginCredential.readPluginSessionCredential()).toBe('');
+      expect(pluginLifecycleMocks.loadInventoryProjection).not.toHaveBeenCalled();
+      expect(pluginLifecycleMocks.recoverEnabled).not.toHaveBeenCalled();
+
+      secondReady.resolve();
+      await flushUntil(() => pluginLifecycleMocks.loadInventoryProjection.mock.calls.length === 1);
+      await flushUntil(() => pluginLifecycleMocks.recoverEnabled.mock.calls.length === 1);
       expect(pluginCredential.readPluginSessionCredential()).toBe('credential-2');
-      expect(pluginCredential.activatePluginSessionCredential('ch_attempt_1')).toBe(false);
     } finally {
       dispose();
     }

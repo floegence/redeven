@@ -4329,6 +4329,7 @@
   "uiCopy": {
     "plugin": {
       "loadingOfficial": "Plugins werden geladen...",
+      "preparingFeatures": "Plugin-Funktionen werden vorbereitet",
       "marketUnavailable": "Der Plugin-Katalog ist nicht verfügbar. Installierte Plugins bleiben verfügbar; versuchen Sie es erneut, um nach neuen Versionen zu suchen.",
       "official": "Offiziell",
       "verified": "Verifiziert",

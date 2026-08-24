@@ -172,9 +172,17 @@ func TestServeLocalDirectAcceptorSessionAttachesAndDetachesTerminalNotificationS
 	}
 
 	done := make(chan error, 1)
+	pluginReady := make(chan struct{})
 	go func() {
-		done <- a.ServeLocalDirectSession(context.Background(), sess, meta, LocalDirectSessionOptions{})
+		done <- a.ServeLocalDirectSession(context.Background(), sess, meta, LocalDirectSessionOptions{
+			OnPluginSessionReady: func() { close(pluginReady) },
+		})
 	}()
+	select {
+	case <-pluginReady:
+	case <-time.After(time.Second):
+		t.Fatal("accepted session did not report plugin readiness")
+	}
 	select {
 	case <-sess.started:
 	case <-time.After(time.Second):

@@ -235,6 +235,26 @@ function externalCommitForCenter(source: ExternalPluginInspection): ExternalPlug
 }
 
 describe('PluginCenterView', () => {
+  it('shows one concise preparation state while the local plugin session initializes', () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={{ items: [] }}
+        loading={false}
+        preparing
+        onCommand={vi.fn()}
+        onRefresh={vi.fn()}
+        canManagePlugins={false}
+        canOpenPluginSurfaces={false}
+      />
+    ), mount);
+
+    const status = mount.querySelector('[data-plugin-center-preparing]');
+    expect(status?.textContent).toContain('Preparing plugin features');
+    expect(mount.querySelectorAll('[data-plugin-center-preparing]')).toHaveLength(1);
+  });
+
   it('presents Discover plugins with a compact identity and independent install and detail actions', async () => {
     const onCommand = vi.fn();
     const mount = document.createElement('div');

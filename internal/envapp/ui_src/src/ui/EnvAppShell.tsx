@@ -167,10 +167,12 @@ import {
 } from './services/accessUnlockError';
 import { clearLocalAccessResumeToken, writeLocalAccessResumeToken } from './services/localAccessAuth';
 import {
-  activatePendingPluginSessionCredential,
+  activatePluginSessionCredential,
   clearPluginSessionCredential,
   readPluginSessionCredential,
+  type PluginSessionCredentialBinding,
 } from './services/pluginSessionCredential';
+import { createPluginSessionReadinessCoordinator } from './services/pluginSessionReadinessCoordinator';
 import { getSandboxWindowInfo } from './services/sandboxWindowRegistry';
 import { consumeAccessResumeTokenFromWindow } from './accessResume';
 import { CODE_SPACE_ID_ENV_UI, FLOE_APP_AGENT, FLOE_APP_CODE, FLOE_APP_PORT_FORWARD, type LauncherFloeApp } from './services/floeproxyContract';
@@ -182,6 +184,7 @@ import {
   getLocalAccessStatus,
   getLocalRuntime,
   refreshLocalRuntime,
+  waitForLocalPluginSessionReady,
   getEnvironment,
   mintEnvEntryTicketForApp,
   unlockLocalAccess,
@@ -550,6 +553,10 @@ export function EnvAppShell() {
   // Direct plugin APIs are usable only after the exact channel handshake
   // activates the credential staged for that channel.
   const [pluginSessionReady, setPluginSessionReady] = createSignal(false);
+  const [stagedPluginSession, setStagedPluginSession] = createSignal<Readonly<{
+    binding: PluginSessionCredentialBinding;
+    previousClient: unknown;
+  }>>();
   const [pluginRuntimeRecoveryComplete, setPluginRuntimeRecoveryComplete] = createSignal(false);
   const [pluginRuntimeRecoveryByInstanceID, setPluginRuntimeRecoveryByInstanceID] = createSignal<Record<string, import('./plugins/pluginTypes').PluginRuntimeRecoveryPresentation>>({});
   const retiredPluginManagementRevisionByInstanceID = new Map<string, number>();
@@ -619,6 +626,7 @@ export function EnvAppShell() {
       }
     }
     setPluginSessionRetired(true);
+    setStagedPluginSession(undefined);
     setPluginSessionReady(false);
     setPluginRuntimeRecoveryComplete(false);
     clearPluginSessionCredential();
@@ -653,6 +661,7 @@ export function EnvAppShell() {
     if (coordinatorError !== undefined) throw coordinatorError;
   };
   onCleanup(() => {
+    setStagedPluginSession(undefined);
     setPluginSessionReady(false);
     clearPluginSessionCredential();
     pluginInventoryAbort?.abort('Env App shell disposed');
@@ -869,6 +878,54 @@ export function EnvAppShell() {
     }
   };
 
+  const pluginSessionReadinessCoordinator = createPluginSessionReadinessCoordinator({
+    waitForReady: waitForLocalPluginSessionReady,
+    isCurrent: ({ client, binding }) => {
+      const staged = stagedPluginSession();
+      return !pluginSessionRetired()
+        && protocol.status() === 'connected'
+        && protocol.session?.() === client
+        && staged?.binding.generation === binding.generation
+        && staged.binding.channelID === binding.channelID;
+    },
+    activate: activatePluginSessionCredential,
+    onReady: ({ binding }) => {
+      setStagedPluginSession((current) => (
+        current?.binding.generation === binding.generation && current.binding.channelID === binding.channelID
+          ? undefined
+          : current
+      ));
+      setPluginSessionReady(true);
+    },
+    onFailure: (error, { binding }) => {
+      setStagedPluginSession((current) => (
+        current?.binding.generation === binding.generation && current.binding.channelID === binding.channelID
+          ? undefined
+          : current
+      ));
+      setPluginSessionReady(false);
+      clearPluginSessionCredential();
+      handleAccessRecoveryFailure(error);
+      protocol.disconnect();
+    },
+  });
+
+  createEffect(() => {
+    if (!isLocalMode()) return;
+    const staged = stagedPluginSession();
+    const connectedClient = protocol.status() === 'connected' ? protocol.session?.() : null;
+    if (pluginSessionRetired() || !staged || !connectedClient || connectedClient === staged.previousClient) {
+      pluginSessionReadinessCoordinator.cancel();
+      if (pluginSessionRetired() || protocol.status() !== 'connected') {
+        setPluginSessionReady(false);
+      }
+      return;
+    }
+    pluginSessionReadinessCoordinator.observe({ client: connectedClient, binding: staged.binding });
+  });
+
+  onCleanup(() => pluginSessionReadinessCoordinator.dispose());
+
   createEffect(() => {
     if (accessRetryRemainingMs() <= 0) return;
     const handle = window.setInterval(() => setAccessRetryNowMs(Date.now()), 1_000);
@@ -917,6 +974,7 @@ export function EnvAppShell() {
   });
   const canOpenPluginSurfaces = () => Boolean(
       protocol.status() === 'connected'
+      && (!isLocalMode() || pluginSessionReady())
       && env()?.permissions?.can_read
   );
   const controlplaneStatus = createMemo(() => String(env()?.status ?? '').trim());
@@ -2433,6 +2491,8 @@ export function EnvAppShell() {
     ...(localTransportSecurity.policy ? {
       localSource: () => createLocalDirectArtifactSource({
         beforeAcquire: async () => {
+          pluginSessionReadinessCoordinator.cancel('Plugin session credential is being replaced');
+          setStagedPluginSession(undefined);
           setPluginSessionReady(false);
           setPluginRuntimeRecoveryComplete(false);
           if (!readPluginSessionCredential()) return;
@@ -2444,8 +2504,15 @@ export function EnvAppShell() {
           setActivityPluginWindows([]);
           clearPluginSessionCredential();
         },
-        afterCredentialStaged: () => {
-          if (pluginSessionRetired()) clearPluginSessionCredential();
+        afterCredentialStaged: (binding) => {
+          if (pluginSessionRetired()) {
+            clearPluginSessionCredential();
+            return;
+          }
+          setStagedPluginSession({
+            binding,
+            previousClient: protocol.status() === 'connected' ? protocol.session?.() : null,
+          });
         },
       }),
     } : {}),
@@ -2548,9 +2615,6 @@ export function EnvAppShell() {
         await fn(config);
         configLease = undefined;
         if (accessRecoverySeq !== attemptKey) return;
-        if (!pluginSessionRetired() && !pluginSessionReady()) {
-          setPluginSessionReady(activatePendingPluginSessionCredential());
-        }
         accessResumeClient = protocol.session?.();
         setLocalAccessChannelReady(true);
         setCurrentAccessError(null);
@@ -3108,9 +3172,6 @@ export function EnvAppShell() {
     const failure = classifyReconnectFailure(rawFailure);
 
     if (protocolStatusValue === 'connected') {
-      if (isLocalMode() && !pluginSessionReady()) {
-        setPluginSessionReady(activatePendingPluginSessionCredential());
-      }
       if (lastConnectedClient !== protocol.session?.()) {
         lastConnectedClient = protocol.session?.();
         if (!isLocalMode()) {
@@ -3492,10 +3553,11 @@ export function EnvAppShell() {
         <PluginCenterView
           projection={pluginInventoryProjection() ?? { items: [] }}
           loading={pluginInventoryInitialPending()}
+          preparing={isLocalMode() && protocol.status() === 'connected' && !pluginSessionReady() && !pluginSessionRetired()}
           error={pluginInventoryError()}
           selectedInventoryKey={pluginCenterSelectedInventoryKey()}
           focusRequest={pluginCenterFocusRequest()}
-          canManagePlugins={protocol.status() === 'connected' && canAdmin()}
+          canManagePlugins={protocol.status() === 'connected' && (!isLocalMode() || pluginSessionReady()) && canAdmin()}
           canOpenPluginSurfaces={canOpenPluginSurfaces()}
           runtimeRecovery={undefined}
           runtimeRecoveryByInstanceID={pluginRuntimeRecoveryByInstanceID()}
