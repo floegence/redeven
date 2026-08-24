@@ -10,6 +10,7 @@ const unlockLocalAccessMock = vi.fn();
 const getEnvAppAccessStatusMock = vi.fn();
 const unlockEnvAppAccessMock = vi.fn();
 const getEnvironmentMock = vi.fn();
+const waitForLocalPluginSessionReadyMock = vi.fn(async () => undefined);
 const getAgentLatestVersionMock = vi.fn();
 const mintLocalDirectConnectArtifactMock = vi.fn();
 const mintEnvProxyEntryTicketMock = vi.fn();
@@ -264,6 +265,7 @@ vi.mock('./services/controlplaneApi', () => ({
   mintEnvProxyEntryTicket: mintEnvProxyEntryTicketMock,
   mintEnvEntryTicketForApp: mintEnvEntryTicketForAppMock,
   unlockLocalAccess: unlockLocalAccessMock,
+  waitForLocalPluginSessionReady: waitForLocalPluginSessionReadyMock,
 }));
 
 vi.mock('./accessResume', () => ({

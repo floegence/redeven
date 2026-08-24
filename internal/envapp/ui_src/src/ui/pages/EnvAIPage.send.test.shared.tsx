@@ -560,9 +560,13 @@ export function registerEnvAIPageSendTests() {
         await flush();
         await flush();
         const transcriptText = host.textContent ?? '';
-        expect(transcriptText.indexOf('I will inspect the Env workspace.')).toBeLessThan(transcriptText.indexOf('pwd'));
-        expect(transcriptText.indexOf('pwd')).toBeLessThan(transcriptText.indexOf('Env workspace inspection is complete.'));
+        expect(transcriptText.indexOf('I will inspect the Env workspace.')).toBeLessThan(transcriptText.indexOf('Run command'));
+        expect(transcriptText.indexOf('Run command')).toBeLessThan(transcriptText.indexOf('Env workspace inspection is complete.'));
         expect(host.querySelectorAll('.flower-activity-inline-row')).toHaveLength(2);
+        const terminalButton = host.querySelector<HTMLButtonElement>('[data-flower-activity-item-id="tool-read"] button.flower-activity-inline-button');
+        expect(terminalButton).toBeTruthy();
+        terminalButton?.click();
+        await flush();
         expect(host.textContent).toContain('pwd');
         expect(host.textContent).toContain('Flower inline transcript');
       } finally {
@@ -751,9 +755,8 @@ export function registerEnvAIPageSendTests() {
         await flush();
         await flush();
         expect(host.textContent).toContain('frontend-design');
-        (host.querySelector('[data-flower-activity-item-id="tool-use-skill"] .flower-activity-inline-button') as HTMLButtonElement).click();
-        await flush();
-        expect(host.textContent).toContain('Loaded frontend design guidance.');
+        expect(host.querySelector('[data-flower-activity-item-id="tool-use-skill"] button.flower-activity-inline-button')).toBeNull();
+        expect(host.textContent).not.toContain('Loaded frontend design guidance.');
       } finally {
         dispose();
       }
