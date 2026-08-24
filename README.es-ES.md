@@ -54,7 +54,7 @@ Redeven es un único binario que reúne tus ordenadores y servidores en una pest
 Se ejecuta en tu equipo, en servidores remotos o en cualquier host SSH accesible. Tus archivos, procesos, claves de API y credenciales permanecen donde deben estar: Redeven no mueve tus datos en texto claro a través de infraestructura ajena.
 
 - **Los clientes se conectan a un entorno de ejecución del endpoint**: el navegador, Desktop, la CLI y las sesiones alojadas mediante SSH entran en el mismo espacio de trabajo administrado por el entorno de ejecución.
-- **El entorno de ejecución es el límite de confianza**: un único binario de Go gestiona archivos, terminales, supervisión, Git, reenvío de servicios web, la disposición de Workbench, notas, la configuración de Browser Editor, Flower y el acceso al puente de Codex.
+- **El entorno de ejecución es el límite de confianza**: un único binario de Go gestiona archivos, terminales, supervisión, Git, reenvío de servicios web, la disposición de Workbench, notas, la configuración de Browser Editor y Flower.
 - **El transporte y las políticas se mantienen explícitos**: Flowersec transporta el tráfico RPC y de streams cifrado, mientras que las concesiones de sesión, la política local de permisos, el alcance del sistema de archivos y los secretos locales limitan lo que puede hacer cada sesión.
 
 ![Resumen de la arquitectura de Redeven](assets/readme/architecture-overview.png)
@@ -108,7 +108,7 @@ Ejecuta `redeven help run` para consultar otros modos de ejecución y la protecc
 | Monitor | Vistas de CPU, memoria, disco, red y procesos procedentes del entorno de ejecución del endpoint. |
 | Browser Editor | Sesiones del editor en el navegador configuradas explícitamente por Desktop y aisladas por espacio de trabajo. |
 | Servicios web | Registro de servicios y acceso con reenvío de puertos administrados por el entorno de ejecución, sin túneles SSH escritos a mano. |
-| Flower y Codex | Superficies de IA opcionales que usan herramientas validadas por el entorno de ejecución y configuración local del modelo y del host. |
+| Flower | Superficies de IA opcionales que usan herramientas validadas por el entorno de ejecución y configuración local del modelo y del host. |
 | Desktop | Iniciador nativo para entornos locales, entornos alojados por un provider, entornos inicializados mediante SSH y entornos de Local UI guardados. |
 
 <!-- readme-section:security -->

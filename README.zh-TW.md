@@ -54,7 +54,7 @@ Redeven 是單一二進位檔，可將您的電腦與伺服器集中到一個瀏
 它可以在您的電腦、遠端伺服器或任何可連線的 SSH 主機上執行。檔案、處理程序、API 金鑰與認證資料都留在原本的位置；Redeven 不會透過任何第三方基礎設施傳送您的明文資料。
 
 - **用戶端連線到端點執行階段**：瀏覽器、Desktop、CLI 與透過 SSH 主機建立的工作階段，都會進入由同一執行階段管理的工作區。
-- **執行階段是信任邊界**：單一 Go 二進位檔統一負責檔案、終端機、監控、Git、Web 服務轉送、Workbench 版面配置、筆記、Browser Editor 設定、Flower 與 Codex 橋接存取。
+- **執行階段是信任邊界**：單一 Go 二進位檔統一負責檔案、終端機、監控、Git、Web 服務轉送、Workbench 版面配置、筆記、Browser Editor 設定與 Flower 存取。
 - **傳輸與原則保持明確**：Flowersec 承載加密 RPC 與串流流量；工作階段授權、本機權限原則、檔案系統範圍與本機機密資料共同限制各工作階段可執行的操作。
 
 ![Redeven 架構概覽](assets/readme/architecture-overview.png)
@@ -108,7 +108,7 @@ redeven run
 | 監控 | 來自端點執行階段的 CPU、記憶體、磁碟、網路與處理程序檢視。 |
 | Browser Editor | 由 Desktop 明確設定、依工作區隔離的瀏覽器編輯器工作階段。 |
 | Web 服務 | 由執行階段管理的服務註冊與連接埠轉送存取，不必手動編寫 SSH 通道。 |
-| Flower 與 Codex | 選用的 AI 介面，使用經執行階段驗證的工具及本機模型和主機設定。 |
+| Flower | 選用的 AI 介面，使用經執行階段驗證的工具及本機模型和主機設定。 |
 | Desktop | 用於本機環境、provider 託管環境、透過 SSH 引導初始化的環境及已儲存 Local UI 環境的原生啟動器。 |
 
 <!-- readme-section:security -->

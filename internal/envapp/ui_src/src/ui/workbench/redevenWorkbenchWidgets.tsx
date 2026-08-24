@@ -7,7 +7,6 @@ import { AlertTriangle, DockCpu, DockFolder, DockLayers, DockTerminal, Package, 
 import { Button, WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR } from '@floegence/floe-webapp-core/ui';
 import { Show, createMemo, lazy, type JSX } from 'solid-js';
 
-import { CodexWorkbenchIcon } from '../icons/CodexIcon';
 import { CodespacesWorkbenchIcon } from '../icons/CodespacesIcon';
 import { FlowerWorkbenchIcon } from '../icons/FlowerSoftAuraIcon';
 import { useI18n, type I18nHelpers } from '../i18n';
@@ -33,7 +32,6 @@ const EnvPortForwardsPage = lazy(() => import('../pages/EnvPortForwardsPage').th
 const RemoteFileBrowser = lazy(() => import('../widgets/RemoteFileBrowser').then((module) => ({ default: module.RemoteFileBrowser })));
 const RuntimeMonitorPanel = lazy(() => import('../widgets/RuntimeMonitorPanel').then((module) => ({ default: module.RuntimeMonitorPanel })));
 const TerminalPanel = lazy(() => import('../widgets/TerminalPanel').then((module) => ({ default: module.TerminalPanel })));
-const CodexWorkbenchSurface = lazy(() => import('./CodexWorkbenchSurface').then((module) => ({ default: module.CodexWorkbenchSurface })));
 
 function WorkbenchBodyNotice(props: {
   title: string;
@@ -283,27 +281,6 @@ function FlowerWidget(props: RedevenWorkbenchWidgetBodyProps) {
   );
 }
 
-function CodexWidget(_props: RedevenWorkbenchWidgetBodyProps) {
-  const env = useEnvContext();
-  const i18n = useI18n();
-  const available = () => env.env.state !== 'ready' || hasRWXPermissions(env.env());
-
-  return (
-    <Show
-      when={available()}
-      fallback={(
-        <WorkbenchBodyNotice
-          eyebrow={i18n.t('aiChrome.codexTitle')}
-          title={i18n.t('workbench.notices.codexRwxTitle')}
-          description={i18n.t('workbench.notices.codexRwxDescription')}
-        />
-      )}
-    >
-      <CodexWorkbenchSurface />
-    </Show>
-  );
-}
-
 function WebServicesDockIcon(props: { class?: string }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" width="48" height="48" class={props.class}>
@@ -425,17 +402,6 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
     singleton: true,
     renderMode: FRONTABLE_WORKBENCH_RENDER_MODE,
   },
-  {
-    type: 'redeven.codex',
-    label: 'Codex',
-    icon: CodexWorkbenchIcon,
-    body: CodexWidget,
-    defaultTitle: 'Codex',
-    defaultSize: { width: 1200, height: 760 },
-    group: 'assistant',
-    singleton: true,
-    renderMode: FRONTABLE_WORKBENCH_RENDER_MODE,
-  },
 ];
 
 function localizedWorkbenchWidgetCopy(
@@ -459,8 +425,6 @@ function localizedWorkbenchWidgetCopy(
       return { label: t('workbench.widgets.ports.label'), defaultTitle: t('workbench.widgets.ports.defaultTitle') };
     case 'redeven.ai':
       return { label: t('workbench.widgets.flower.label'), defaultTitle: t('workbench.widgets.flower.defaultTitle') };
-    case 'redeven.codex':
-      return { label: t('workbench.widgets.codex.label'), defaultTitle: t('workbench.widgets.codex.defaultTitle') };
     default:
       return null;
   }
@@ -480,7 +444,6 @@ export const redevenWorkbenchFilterBarWidgetTypes: readonly WorkbenchWidgetType[
   'redeven.codespaces',
   'redeven.ports',
   'redeven.ai',
-  'redeven.codex',
 ];
 
 export const redevenWorkbenchInitialCanvasWidgetTypes: readonly WorkbenchWidgetType[] = [
@@ -490,5 +453,4 @@ export const redevenWorkbenchInitialCanvasWidgetTypes: readonly WorkbenchWidgetT
   'redeven.codespaces',
   'redeven.ports',
   'redeven.ai',
-  'redeven.codex',
 ];

@@ -662,7 +662,7 @@ export function registerEnvAIPageSendTests() {
     it.each([
       ['cwd', { cwd: '/workspace/env-flower' }],
       ['path', { path: '/workspace/env-flower/src/app.ts' }],
-      ['rootDir', { rootDir: '/Users/alice/.codex/skills/frontend-design' }],
+      ['rootDir', { rootDir: '/workspace/skills/frontend-design' }],
     ])('rejects nested Env-local activity payload %s fields that belong to host-only data', async (field, result) => {
       mockCurrentItems([{
         id: 'tool-invalid-nested', turn_id: `turn-invalid-nested-${field}`, kind: 'tool',

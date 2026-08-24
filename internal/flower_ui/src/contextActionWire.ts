@@ -2,11 +2,10 @@ export const CONTEXT_ACTION_SCHEMA_VERSION = 2 as const;
 
 export type ContextActionID =
   | 'assistant.ask.flower'
-  | 'assistant.ask.codex'
   | 'handoff.terminal.open'
   | 'handoff.files.browse';
 
-export type ContextActionProvider = 'flower' | 'codex';
+export type ContextActionProvider = 'flower';
 
 export type ContextActionLocality =
   | 'auto'

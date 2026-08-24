@@ -712,17 +712,7 @@ vi.mock('./pages/EnvAIPage', () => ({
     );
   },
 }));
-vi.mock('./codex/CodexPage', () => ({ CodexPage: () => <div /> }));
-vi.mock('./codex/CodexProvider', () => ({ CodexProvider: (props: any) => <>{props.children}</> }));
-vi.mock('./codex/CodexSidebar', () => ({ CodexSidebar: () => <div /> }));
-vi.mock('./pages/EnvSettingsPage', () => ({ EnvSettingsPage: () => <div /> }));
-vi.mock('./pages/aiPermissions', () => ({ hasRWXPermissions: () => true }));
-vi.mock('./widgets/AuditLogDialog', () => ({ AuditLogDialog: () => <div /> }));
-vi.mock('./widgets/FilePreviewHost', () => ({ FilePreviewHost: () => <div data-testid="file-preview-host" /> }));
-vi.mock('./widgets/FileBrowserSurfaceHost', () => ({ FileBrowserSurfaceHost: () => <div data-testid="file-browser-host" /> }));
-vi.mock('./debugConsole/DebugConsoleWindow', () => ({
-  DebugConsoleWindow: () => <div data-testid="debug-console-window" />,
-}));
+
 vi.mock('./widgets/FlowerTurnLauncherWindow', () => ({
   FlowerTurnLauncherWindow: (props: any) => (
     <Show when={props.open && props.intent}>

@@ -246,7 +246,7 @@ func TestServer_AISkills_GitHubImportAndBrowse(t *testing.T) {
 	zw := zip.NewWriter(zipBuf)
 	md := `---
 name: skill-installer
-description: Install Codex skills
+description: Install remote skills
 ---
 
 # Skill Installer`
@@ -378,7 +378,7 @@ description: Install Codex skills
 	filePath := "/_redeven_proxy/api/ai/skills/browse/file?skill_path=" + url.QueryEscape(skillPath) + "&file=SKILL.md&encoding=utf8&max_bytes=1024"
 	fileData := request(http.MethodGet, filePath, "")
 	content := anyToString(fileData["content"])
-	if !strings.Contains(content, "Install Codex skills") {
+	if !strings.Contains(content, "Install remote skills") {
 		t.Fatalf("unexpected browse file content: %q", content)
 	}
 

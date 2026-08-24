@@ -128,14 +128,6 @@ export type SettingsUpdateResponse = Readonly<{
   ai_update?: SettingsAIUpdateMeta | null;
 }>;
 
-export type CodexHostStatus = Readonly<{
-  available: boolean;
-  ready: boolean;
-  binary_path?: string;
-  agent_home_dir?: string;
-  error?: string;
-}>;
-
 export type SkillCatalogNotice = Readonly<{
   name?: string;
   path?: string;

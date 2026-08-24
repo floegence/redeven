@@ -78,21 +78,6 @@ const OPENAI_GPT_52_REASONING = {
   fixture: 'openai_gpt_52_reasoning_effort',
 } as const;
 
-const OPENAI_GPT_52_CODEX_REASONING = {
-  kind: 'effort',
-  supported_levels: ['low', 'medium', 'high', 'xhigh'],
-  default_level: 'medium',
-  wire_shape: 'openai_responses_reasoning_effort',
-  disable_shape: 'openai_reasoning_effort_none',
-  response_reasoning_fields: ['completion_tokens_details.reasoning_tokens'],
-  source_urls: [
-    'https://developers.openai.com/api/docs/models/gpt-5.2-codex',
-    'https://developers.openai.com/api/docs/guides/reasoning',
-  ],
-  source_checked_at: SOURCE_CHECKED_AT,
-  fixture: 'openai_gpt_52_codex_reasoning_effort',
-} as const;
-
 const OPENAI_GPT_52_PRO_REASONING = {
   kind: 'effort',
   supported_levels: ['medium', 'high', 'xhigh'],
@@ -338,7 +323,6 @@ export const FLOWER_PROVIDER_PRESETS: Record<FlowerProviderType, FlowerProviderP
       { model_name: 'gpt-5.4-nano', context_window: 400_000, max_output_tokens: 128_000, input_modalities: VISION_MODALITIES, reasoning_capability: OPENAI_GPT_54_NANO_REASONING, default_reasoning_selection: { level: 'off' }, note_key: 'openai_gpt_54_nano' },
       { model_name: 'gpt-5.2', context_window: 400_000, max_output_tokens: 128_000, input_modalities: VISION_MODALITIES, reasoning_capability: OPENAI_GPT_52_REASONING, default_reasoning_selection: { level: 'off' }, note_key: 'openai_gpt_52_previous_flagship' },
       { model_name: 'gpt-5.2-mini', context_window: 400_000, max_output_tokens: 128_000, input_modalities: VISION_MODALITIES, reasoning_capability: OPENAI_GPT_52_REASONING, default_reasoning_selection: { level: 'off' }, note_key: 'openai_gpt_52_mini' },
-      { model_name: 'gpt-5.2-codex', context_window: 400_000, max_output_tokens: 128_000, input_modalities: VISION_MODALITIES, reasoning_capability: OPENAI_GPT_52_CODEX_REASONING, default_reasoning_selection: { level: 'medium' }, note_key: 'openai_gpt_52_previous_flagship' },
       { model_name: 'gpt-5.2-pro', context_window: 400_000, max_output_tokens: 128_000, input_modalities: VISION_MODALITIES, reasoning_capability: OPENAI_GPT_52_PRO_REASONING, default_reasoning_selection: { level: 'medium' }, note_key: 'openai_gpt_52_previous_flagship' },
       { model_name: 'gpt-5', context_window: 400_000, max_output_tokens: 128_000, input_modalities: VISION_MODALITIES, reasoning_capability: OPENAI_GPT_5_REASONING, default_reasoning_selection: { level: 'medium' }, note_key: 'openai_gpt_5_stable' },
       { model_name: 'gpt-5-mini', context_window: 400_000, max_output_tokens: 128_000, input_modalities: VISION_MODALITIES, reasoning_capability: OPENAI_GPT_5_REASONING, default_reasoning_selection: { level: 'medium' }, note_key: 'openai_gpt_5_mini' },

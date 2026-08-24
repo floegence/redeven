@@ -21,7 +21,6 @@ type AddedSkillsSettingsMessages = Pick<
 type AddedLocaleMessages = Readonly<{
   settings: AddedSettingsMessages;
   loggingSettings: EnvAppTranslationShape['loggingSettings'];
-  codexSettings: EnvAppTranslationShape['codexSettings'];
   accessGate: AddedAccessGateMessages;
   permissionPolicy: EnvAppTranslationShape['permissionPolicy'];
   skillsSettings: AddedSkillsSettingsMessages;
@@ -36,22 +35,11 @@ type DeepPartial<T> = {
 
 const baseCodeRuntime = enUS.codeRuntime;
 const baseLoggingSettings = enUS.loggingSettings;
-const baseCodexSettings = enUS.codexSettings;
 
 function loggingSettings(overrides: DeepPartial<EnvAppTranslationShape['loggingSettings']> = {}): EnvAppTranslationShape['loggingSettings'] {
   return {
     ...baseLoggingSettings,
     ...overrides,
-  };
-}
-
-function codexSettings(overrides: DeepPartial<EnvAppTranslationShape['codexSettings']> = {}): EnvAppTranslationShape['codexSettings'] {
-  return {
-    ...baseCodexSettings,
-    ...overrides,
-    rows: { ...baseCodexSettings.rows, ...overrides.rows },
-    status: { ...baseCodexSettings.status, ...overrides.status },
-    pills: { ...baseCodexSettings.pills, ...overrides.pills },
   };
 }
 
@@ -149,38 +137,6 @@ export const localeSettingsSectionMessages = {
       levelLabel: '级别',
       defaultJson: '默认 (json)',
       defaultInfo: '默认 (info)',
-    }),
-    codexSettings: codexSettings({
-      description: '由主机管理的 Codex 诊断。Redeven 会在这里读取主机 codex 二进制状态，但不会持久化 Codex Runtime 设置。',
-      hostDetected: '已检测到主机',
-      needsHostInstall: '需要安装到主机',
-      refreshing: '正在刷新...',
-      rows: {
-        binary: '二进制',
-        binaryPath: '二进制路径',
-        agentHomeDir: 'Agent home 目录',
-        bridge: 'Bridge',
-        error: '错误',
-      },
-      status: {
-        notAvailable: '不可用',
-        statusNotLoaded: '状态未加载',
-        detected: '已检测到',
-        notFound: '未找到',
-        connected: '已连接',
-        startsOnDemand: '按需启动',
-        none: '无',
-      },
-      pills: {
-        hostBinaryDetected: '已检测到主机二进制',
-        installCodexOnHost: '在主机上安装 Codex',
-        bridgeConnected: 'Bridge 已连接',
-        bridgeStartsOnDemand: 'Bridge 按需启动',
-      },
-      installNotice: 'Redeven 正在等待主机上的 codex 二进制。请在主机上安装它，并将其暴露到 PATH。',
-      notesTitle: '说明',
-      notesHostRuntimeDefaults: 'Codex 会在主机上保留自己的 Runtime 默认值；Redeven 不会把它们镜像到 config.json。',
-      notesActivityIsolation: '专用 Codex activity entry 和 local API namespace 会与 Flower 保持隔离。',
     }),
     permissionPolicy: {
       title: '权限策略',
@@ -492,38 +448,6 @@ export const localeSettingsSectionMessages = {
       defaultJson: '預設 (json)',
       defaultInfo: '預設 (info)',
     }),
-    codexSettings: codexSettings({
-      description: '由主機管理的 Codex 診斷。Redeven 會在這裡讀取主機 codex 二進位狀態，但不會持久化 Codex Runtime 設定。',
-      hostDetected: '已偵測到主機',
-      needsHostInstall: '需要安裝到主機',
-      refreshing: '正在重新整理...',
-      rows: {
-        binary: '二進位',
-        binaryPath: '二進位路徑',
-        agentHomeDir: 'Agent home 目錄',
-        bridge: 'Bridge',
-        error: '錯誤',
-      },
-      status: {
-        notAvailable: '不可用',
-        statusNotLoaded: '狀態未載入',
-        detected: '已偵測到',
-        notFound: '找不到',
-        connected: '已連線',
-        startsOnDemand: '按需啟動',
-        none: '無',
-      },
-      pills: {
-        hostBinaryDetected: '已偵測到主機二進位',
-        installCodexOnHost: '在主機上安裝 Codex',
-        bridgeConnected: 'Bridge 已連線',
-        bridgeStartsOnDemand: 'Bridge 按需啟動',
-      },
-      installNotice: 'Redeven 正在等待主機上的 codex 二進位。請在主機上安裝它，並將其暴露到 PATH。',
-      notesTitle: '說明',
-      notesHostRuntimeDefaults: 'Codex 會在主機上保留自己的 Runtime 預設值；Redeven 不會把它們鏡像到 config.json。',
-      notesActivityIsolation: '專用 Codex activity entry 與 local API namespace 會和 Flower 保持隔離。',
-    }),
     permissionPolicy: {
       title: '權限策略',
       description: '控制讀取、寫入與執行權限。儲存後的變更會在手動重啟後生效。',
@@ -803,38 +727,6 @@ export const localeSettingsSectionMessages = {
       levelLabel: 'レベル',
       defaultJson: 'デフォルト (json)',
       defaultInfo: 'デフォルト (info)',
-    }),
-    codexSettings: codexSettings({
-      description: 'ホスト管理の Codex 診断。Redeven はここでホストの codex バイナリ状態を読み取りますが、Codex Runtime 設定は永続化しません。',
-      hostDetected: 'ホストを検出済み',
-      needsHostInstall: 'ホストへのインストールが必要',
-      refreshing: '更新中...',
-      rows: {
-        binary: 'バイナリ',
-        binaryPath: 'バイナリパス',
-        agentHomeDir: 'Agent home dir',
-        bridge: 'Bridge',
-        error: 'エラー',
-      },
-      status: {
-        notAvailable: '利用不可',
-        statusNotLoaded: '状態が読み込まれていません',
-        detected: '検出済み',
-        notFound: '見つかりません',
-        connected: '接続済み',
-        startsOnDemand: 'オンデマンドで起動',
-        none: 'なし',
-      },
-      pills: {
-        hostBinaryDetected: 'ホストバイナリを検出済み',
-        installCodexOnHost: 'ホストに Codex をインストール',
-        bridgeConnected: 'Bridge 接続済み',
-        bridgeStartsOnDemand: 'Bridge はオンデマンドで起動',
-      },
-      installNotice: 'Redeven はホストの codex バイナリを待っています。ホストにインストールし、PATH に公開してください。',
-      notesTitle: 'メモ',
-      notesHostRuntimeDefaults: 'Codex はホスト上で独自の Runtime デフォルトを保持します。Redeven はそれらを config.json にミラーしません。',
-      notesActivityIsolation: '専用の Codex activity entry と local API namespace は Flower から分離されたままです。',
     }),
     permissionPolicy: {
       title: '権限ポリシー',
@@ -1116,38 +1008,6 @@ export const localeSettingsSectionMessages = {
       defaultJson: '기본값 (json)',
       defaultInfo: '기본값 (info)',
     }),
-    codexSettings: codexSettings({
-      description: '호스트에서 관리하는 Codex 진단입니다. Redeven은 여기에서 호스트 codex 바이너리 상태를 읽지만 Codex Runtime 설정은 저장하지 않습니다.',
-      hostDetected: '호스트 감지됨',
-      needsHostInstall: '호스트 설치 필요',
-      refreshing: '새로고침 중...',
-      rows: {
-        binary: '바이너리',
-        binaryPath: '바이너리 경로',
-        agentHomeDir: 'Agent home dir',
-        bridge: 'Bridge',
-        error: '오류',
-      },
-      status: {
-        notAvailable: '사용할 수 없음',
-        statusNotLoaded: '상태가 로드되지 않음',
-        detected: '감지됨',
-        notFound: '찾을 수 없음',
-        connected: '연결됨',
-        startsOnDemand: '필요 시 시작',
-        none: '없음',
-      },
-      pills: {
-        hostBinaryDetected: '호스트 바이너리 감지됨',
-        installCodexOnHost: '호스트에 Codex 설치',
-        bridgeConnected: 'Bridge 연결됨',
-        bridgeStartsOnDemand: 'Bridge가 필요 시 시작됨',
-      },
-      installNotice: 'Redeven이 호스트의 codex 바이너리를 기다리고 있습니다. 호스트에 설치하고 PATH에 노출하세요.',
-      notesTitle: '참고',
-      notesHostRuntimeDefaults: 'Codex는 호스트에서 자체 Runtime 기본값을 유지합니다. Redeven은 이를 config.json으로 미러링하지 않습니다.',
-      notesActivityIsolation: '전용 Codex activity entry와 local API namespace는 Flower와 분리되어 유지됩니다.',
-    }),
     permissionPolicy: {
       title: '권한 정책',
       description: '읽기, 쓰기, 실행 권한을 제어합니다. 저장한 변경 사항은 수동 재시작 후 적용됩니다.',
@@ -1428,38 +1288,6 @@ export const localeSettingsSectionMessages = {
       defaultJson: 'Standard (json)',
       defaultInfo: 'Standard (info)',
     }),
-    codexSettings: codexSettings({
-      description: 'Hostverwaltete Codex-Diagnose. Redeven liest hier den Status des hostseitigen codex-Binarys, speichert aber keine Codex Runtime Einstellungen.',
-      hostDetected: 'Host erkannt',
-      needsHostInstall: 'Hostinstallation erforderlich',
-      refreshing: 'Aktualisieren...',
-      rows: {
-        binary: 'Binary',
-        binaryPath: 'Binary-Pfad',
-        agentHomeDir: 'Agent home dir',
-        bridge: 'Bridge',
-        error: 'Fehler',
-      },
-      status: {
-        notAvailable: 'Nicht verfügbar',
-        statusNotLoaded: 'Status nicht geladen',
-        detected: 'Erkannt',
-        notFound: 'Nicht gefunden',
-        connected: 'Verbunden',
-        startsOnDemand: 'Startet bei Bedarf',
-        none: 'Keine',
-      },
-      pills: {
-        hostBinaryDetected: 'Host-Binary erkannt',
-        installCodexOnHost: 'Codex auf dem Host installieren',
-        bridgeConnected: 'Bridge verbunden',
-        bridgeStartsOnDemand: 'Bridge startet bei Bedarf',
-      },
-      installNotice: 'Redeven wartet auf das hostseitige codex-Binary. Installieren Sie es auf dem Host und machen Sie es über PATH verfügbar.',
-      notesTitle: 'Hinweise',
-      notesHostRuntimeDefaults: 'Codex behält seine eigenen Runtime-Standardwerte auf dem Host. Redeven spiegelt sie nicht in config.json.',
-      notesActivityIsolation: 'Der dedizierte Codex activity entry und local API namespace bleiben von Flower isoliert.',
-    }),
     permissionPolicy: {
       title: 'Berechtigungsrichtlinie',
       description: 'Lese-, Schreib- und Ausführungsrechte steuern. Gespeicherte Änderungen gelten nach einem manuellen Neustart.',
@@ -1729,38 +1557,6 @@ export const localeSettingsSectionMessages = {
       levelLabel: 'Niveau',
       defaultJson: 'Par défaut (json)',
       defaultInfo: 'Par défaut (info)',
-    }),
-    codexSettings: codexSettings({
-      description: 'Diagnostics Codex gérés par l’hôte. Redeven lit ici l’état du binaire codex de l’hôte, mais ne persiste pas les paramètres Codex Runtime.',
-      hostDetected: 'Hôte détecté',
-      needsHostInstall: 'Installation sur l’hôte requise',
-      refreshing: 'Actualisation...',
-      rows: {
-        binary: 'Binaire',
-        binaryPath: 'Chemin du binaire',
-        agentHomeDir: 'Agent home dir',
-        bridge: 'Bridge',
-        error: 'Erreur',
-      },
-      status: {
-        notAvailable: 'Non disponible',
-        statusNotLoaded: 'État non chargé',
-        detected: 'Détecté',
-        notFound: 'Introuvable',
-        connected: 'Connecté',
-        startsOnDemand: 'Démarre à la demande',
-        none: 'Aucune',
-      },
-      pills: {
-        hostBinaryDetected: 'Binaire hôte détecté',
-        installCodexOnHost: 'Installer Codex sur l’hôte',
-        bridgeConnected: 'Bridge connecté',
-        bridgeStartsOnDemand: 'Bridge démarre à la demande',
-      },
-      installNotice: 'Redeven attend le binaire codex de l’hôte. Installez-le sur l’hôte et exposez-le dans PATH.',
-      notesTitle: 'Notes',
-      notesHostRuntimeDefaults: 'Codex conserve ses propres valeurs Runtime par défaut sur l’hôte ; Redeven ne les copie pas dans config.json.',
-      notesActivityIsolation: 'L’entrée d’activité Codex dédiée et le local API namespace restent isolés de Flower.',
     }),
     permissionPolicy: {
       title: 'Politique d’autorisations',
@@ -2032,38 +1828,6 @@ export const localeSettingsSectionMessages = {
       defaultJson: 'Predeterminado (json)',
       defaultInfo: 'Predeterminado (info)',
     }),
-    codexSettings: codexSettings({
-      description: 'Diagnósticos de Codex gestionados por el host. Redeven lee aquí el estado del binario codex del host, pero no persiste ajustes de Codex Runtime.',
-      hostDetected: 'Host detectado',
-      needsHostInstall: 'Instalación en host necesaria',
-      refreshing: 'Actualizando...',
-      rows: {
-        binary: 'Binario',
-        binaryPath: 'Ruta del binario',
-        agentHomeDir: 'Agent home dir',
-        bridge: 'Bridge',
-        error: 'Error',
-      },
-      status: {
-        notAvailable: 'No disponible',
-        statusNotLoaded: 'Estado no cargado',
-        detected: 'Detectado',
-        notFound: 'No encontrado',
-        connected: 'Conectado',
-        startsOnDemand: 'Se inicia bajo demanda',
-        none: 'Ninguno',
-      },
-      pills: {
-        hostBinaryDetected: 'Binario del host detectado',
-        installCodexOnHost: 'Instalar Codex en el host',
-        bridgeConnected: 'Bridge conectado',
-        bridgeStartsOnDemand: 'Bridge se inicia bajo demanda',
-      },
-      installNotice: 'Redeven está esperando el binario codex del host. Instálalo en el host y expónlo en PATH.',
-      notesTitle: 'Notas',
-      notesHostRuntimeDefaults: 'Codex mantiene sus propios valores Runtime predeterminados en el host; Redeven no los refleja en config.json.',
-      notesActivityIsolation: 'La entrada de actividad Codex dedicada y el local API namespace permanecen aislados de Flower.',
-    }),
     permissionPolicy: {
       title: 'Política de permisos',
       description: 'Controla los permisos de lectura, escritura y ejecución. Los cambios guardados se aplican tras un reinicio manual.',
@@ -2334,38 +2098,6 @@ export const localeSettingsSectionMessages = {
       defaultJson: 'Padrão (json)',
       defaultInfo: 'Padrão (info)',
     }),
-    codexSettings: codexSettings({
-      description: 'Diagnósticos do Codex gerenciados pelo host. Redeven lê aqui o status do binário codex do host, mas não persiste configurações do Codex Runtime.',
-      hostDetected: 'Host detectado',
-      needsHostInstall: 'Instalação no host necessária',
-      refreshing: 'Atualizando...',
-      rows: {
-        binary: 'Binário',
-        binaryPath: 'Caminho do binário',
-        agentHomeDir: 'Agent home dir',
-        bridge: 'Bridge',
-        error: 'Erro',
-      },
-      status: {
-        notAvailable: 'Não disponível',
-        statusNotLoaded: 'Status não carregado',
-        detected: 'Detectado',
-        notFound: 'Não encontrado',
-        connected: 'Conectado',
-        startsOnDemand: 'Inicia sob demanda',
-        none: 'Nenhum',
-      },
-      pills: {
-        hostBinaryDetected: 'Binário do host detectado',
-        installCodexOnHost: 'Instalar Codex no host',
-        bridgeConnected: 'Bridge conectado',
-        bridgeStartsOnDemand: 'Bridge inicia sob demanda',
-      },
-      installNotice: 'Redeven está aguardando o binário codex do host. Instale-o no host e exponha-o no PATH.',
-      notesTitle: 'Notas',
-      notesHostRuntimeDefaults: 'Codex mantém seus próprios padrões de Runtime no host; Redeven não os espelha em config.json.',
-      notesActivityIsolation: 'A entrada de atividade Codex dedicada e o local API namespace ficam isolados de Flower.',
-    }),
     permissionPolicy: {
       title: 'Política de permissões',
       description: 'Controle permissões de leitura, escrita e execução. Alterações salvas entram em vigor após uma reinicialização manual.',
@@ -2635,38 +2367,6 @@ export const localeSettingsSectionMessages = {
       levelLabel: 'Уровень',
       defaultJson: 'По умолчанию (json)',
       defaultInfo: 'По умолчанию (info)',
-    }),
-    codexSettings: codexSettings({
-      description: 'Диагностика Codex, управляемая хостом. Redeven читает здесь состояние бинарного файла codex на хосте, но не сохраняет настройки Codex Runtime.',
-      hostDetected: 'Хост обнаружен',
-      needsHostInstall: 'Требуется установка на хосте',
-      refreshing: 'Обновление...',
-      rows: {
-        binary: 'Бинарный файл',
-        binaryPath: 'Путь к бинарному файлу',
-        agentHomeDir: 'Agent home dir',
-        bridge: 'Bridge',
-        error: 'Ошибка',
-      },
-      status: {
-        notAvailable: 'Недоступно',
-        statusNotLoaded: 'Статус не загружен',
-        detected: 'Обнаружено',
-        notFound: 'Не найдено',
-        connected: 'Подключено',
-        startsOnDemand: 'Запускается по требованию',
-        none: 'Нет',
-      },
-      pills: {
-        hostBinaryDetected: 'Бинарный файл хоста обнаружен',
-        installCodexOnHost: 'Установите Codex на хосте',
-        bridgeConnected: 'Bridge подключен',
-        bridgeStartsOnDemand: 'Bridge запускается по требованию',
-      },
-      installNotice: 'Redeven ожидает бинарный файл codex на хосте. Установите его на хосте и сделайте доступным через PATH.',
-      notesTitle: 'Примечания',
-      notesHostRuntimeDefaults: 'Codex хранит собственные значения Runtime по умолчанию на хосте; Redeven не копирует их в config.json.',
-      notesActivityIsolation: 'Выделенная запись активности Codex и local API namespace остаются изолированными от Flower.',
     }),
     permissionPolicy: {
       title: 'Политика разрешений',

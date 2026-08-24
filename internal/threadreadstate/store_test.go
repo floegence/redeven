@@ -2,6 +2,7 @@ package threadreadstate
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"path/filepath"
 	"testing"
@@ -170,59 +171,6 @@ func TestStore_FlowerRevisionDoesNotDeriveFromLastMessageAt(t *testing.T) {
 	}
 }
 
-func TestStore_EnsureCodexSeedsMissingBaselineAndAdvanceIsMonotonic(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	store := openTestStore(t)
-
-	records, err := store.EnsureCodex(ctx, "env_1", "user_1", map[string]CodexSnapshot{
-		"thread_1": {
-			UpdatedAtUnixS:    42,
-			ActivitySignature: "status:idle",
-		},
-	})
-	if err != nil {
-		t.Fatalf("EnsureCodex: %v", err)
-	}
-
-	record := records["thread_1"]
-	if record.LastReadUpdatedAtUnixS != 42 {
-		t.Fatalf("LastReadUpdatedAtUnixS=%d, want=42", record.LastReadUpdatedAtUnixS)
-	}
-	if record.LastSeenActivitySignature != "status:idle" {
-		t.Fatalf("LastSeenActivitySignature=%q, want=status:idle", record.LastSeenActivitySignature)
-	}
-
-	record, err = store.AdvanceCodex(ctx, "env_1", "user_1", "thread_1", CodexSnapshot{
-		UpdatedAtUnixS:    40,
-		ActivitySignature: "",
-	})
-	if err != nil {
-		t.Fatalf("AdvanceCodex(regress): %v", err)
-	}
-	if record.LastReadUpdatedAtUnixS != 42 {
-		t.Fatalf("LastReadUpdatedAtUnixS=%d after regress, want=42", record.LastReadUpdatedAtUnixS)
-	}
-	if record.LastSeenActivitySignature != "status:idle" {
-		t.Fatalf("LastSeenActivitySignature=%q after regress, want=status:idle", record.LastSeenActivitySignature)
-	}
-
-	record, err = store.AdvanceCodex(ctx, "env_1", "user_1", "thread_1", CodexSnapshot{
-		UpdatedAtUnixS:    88,
-		ActivitySignature: "status:waiting_user\u001frequest:req_1",
-	})
-	if err != nil {
-		t.Fatalf("AdvanceCodex(progress): %v", err)
-	}
-	if record.LastReadUpdatedAtUnixS != 88 {
-		t.Fatalf("LastReadUpdatedAtUnixS=%d after progress, want=88", record.LastReadUpdatedAtUnixS)
-	}
-	if record.LastSeenActivitySignature != "status:waiting_user\u001frequest:req_1" {
-		t.Fatalf("LastSeenActivitySignature=%q after progress, want updated signature", record.LastSeenActivitySignature)
-	}
-}
-
 func TestStore_MigratesV1ReadStateAndEnforcesV2Retirement(t *testing.T) {
 	t.Parallel()
 
@@ -277,6 +225,157 @@ INSERT INTO thread_read_state (
 		"thread_1": {ActivityRevision: 18},
 	}); !errors.Is(err, ErrThreadRetired) {
 		t.Fatalf("EnsureFlower after migration retirement error = %v, want %v", err, ErrThreadRetired)
+	}
+}
+
+func TestStore_MigratesV2AndRemovesCodexRows(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "thread_read_state.sqlite")
+	v2Spec := schemaSpec()
+	v2Spec.CurrentVersion = 2
+	v2Spec.Migrations = v2Spec.Migrations[:2]
+	v2Spec.Verify = nil
+	v2DB, err := sqliteutil.Open(dbPath, v2Spec)
+	if err != nil {
+		t.Fatalf("open v2 store: %v", err)
+	}
+	_, err = v2DB.ExecContext(ctx, `
+INSERT INTO thread_read_state (
+  endpoint_id, scope_id, surface, thread_id,
+  last_seen_activity_revision, last_read_message_at_unix_ms,
+  last_seen_waiting_prompt_id, last_read_updated_at_unix_s,
+  last_seen_activity_signature, updated_at_unix_ms
+) VALUES
+  ('env_1', 'user_1', 'flower', 'flower_1', 4, 5, 'prompt', 0, 'flower', 6),
+  ('env_1', 'user_1', 'codex', 'codex_1', 0, 0, '', 9, 'codex', 10);
+INSERT INTO thread_read_state_retirements(endpoint_id, surface, thread_id, retired_at_unix_ms)
+VALUES ('env_1', 'codex', 'codex_retired', 11);
+`)
+	if err != nil {
+		_ = v2DB.Close()
+		t.Fatalf("insert v2 rows: %v", err)
+	}
+	if err := v2DB.Close(); err != nil {
+		t.Fatalf("close v2 store: %v", err)
+	}
+
+	store, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("migrate v2 store: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	var flowerRows, codexRows, codexRetirements int
+	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM thread_read_state WHERE surface = 'flower'`).Scan(&flowerRows); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM thread_read_state WHERE surface = 'codex'`).Scan(&codexRows); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM thread_read_state_retirements WHERE surface = 'codex'`).Scan(&codexRetirements); err != nil {
+		t.Fatal(err)
+	}
+	if flowerRows != 1 || codexRows != 0 || codexRetirements != 0 {
+		t.Fatalf("migrated rows flower=%d codex=%d codex_retirements=%d", flowerRows, codexRows, codexRetirements)
+	}
+}
+
+func TestStore_CodexMigrationRollsBackOnSchemaDrift(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "thread_read_state.sqlite")
+	v2Spec := schemaSpec()
+	v2Spec.CurrentVersion = 2
+	v2Spec.Migrations = v2Spec.Migrations[:2]
+	v2Spec.Verify = nil
+	v2DB, err := sqliteutil.Open(dbPath, v2Spec)
+	if err != nil {
+		t.Fatalf("open v2 store: %v", err)
+	}
+	if _, err := v2DB.ExecContext(ctx, `
+INSERT INTO thread_read_state (
+  endpoint_id, scope_id, surface, thread_id,
+  last_seen_activity_revision, last_read_message_at_unix_ms,
+  last_seen_waiting_prompt_id, last_read_updated_at_unix_s,
+  last_seen_activity_signature, updated_at_unix_ms
+) VALUES ('env_1', 'user_1', 'codex', 'codex_1', 0, 0, '', 9, 'codex', 10);
+CREATE TABLE unexpected_schema_drift(id INTEGER PRIMARY KEY);
+`); err != nil {
+		_ = v2DB.Close()
+		t.Fatalf("seed drifted v2 store: %v", err)
+	}
+	if err := v2DB.Close(); err != nil {
+		t.Fatalf("close v2 store: %v", err)
+	}
+
+	if _, err := Open(dbPath); err == nil {
+		t.Fatal("Open succeeded, want schema verification failure")
+	}
+	raw, err := sqliteutil.Open(dbPath, v2Spec)
+	if err != nil {
+		t.Fatalf("reopen rolled-back v2 store: %v", err)
+	}
+	t.Cleanup(func() { _ = raw.Close() })
+	var rows int
+	if err := raw.QueryRowContext(ctx, `SELECT COUNT(1) FROM thread_read_state WHERE surface = 'codex'`).Scan(&rows); err != nil {
+		t.Fatal(err)
+	}
+	if rows != 1 {
+		t.Fatalf("codex rows after failed migration = %d, want 1", rows)
+	}
+}
+
+func TestStore_RejectsFutureVersionWithoutChangingCodexRows(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "thread_read_state.sqlite")
+	v2Spec := schemaSpec()
+	v2Spec.CurrentVersion = 2
+	v2Spec.Migrations = v2Spec.Migrations[:2]
+	v2Spec.Verify = nil
+	v2DB, err := sqliteutil.Open(dbPath, v2Spec)
+	if err != nil {
+		t.Fatalf("open v2 store: %v", err)
+	}
+	if _, err := v2DB.ExecContext(ctx, `
+INSERT INTO thread_read_state (
+  endpoint_id, scope_id, surface, thread_id,
+  last_seen_activity_revision, last_read_message_at_unix_ms,
+  last_seen_waiting_prompt_id, last_read_updated_at_unix_s,
+  last_seen_activity_signature, updated_at_unix_ms
+) VALUES ('env_1', 'user_1', 'codex', 'codex_1', 0, 0, '', 9, 'codex', 10);
+PRAGMA user_version = 4;
+`); err != nil {
+		_ = v2DB.Close()
+		t.Fatalf("seed future v2 store: %v", err)
+	}
+	if err := v2DB.Close(); err != nil {
+		t.Fatalf("close v2 store: %v", err)
+	}
+
+	if _, err := Open(dbPath); err == nil {
+		t.Fatal("Open succeeded, want future version error")
+	} else {
+		var tooNew *sqliteutil.DatabaseTooNewError
+		if !errors.As(err, &tooNew) {
+			t.Fatalf("error = %v, want DatabaseTooNewError", err)
+		}
+	}
+	raw, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("reopen future store: %v", err)
+	}
+	t.Cleanup(func() { _ = raw.Close() })
+	var rows int
+	if err := raw.QueryRowContext(ctx, `SELECT COUNT(1) FROM thread_read_state WHERE surface = 'codex'`).Scan(&rows); err != nil {
+		t.Fatal(err)
+	}
+	if rows != 1 {
+		t.Fatalf("codex rows after future rejection = %d, want 1", rows)
 	}
 }
 

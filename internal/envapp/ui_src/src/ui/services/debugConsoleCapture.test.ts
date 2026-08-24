@@ -163,7 +163,7 @@ describe('debugConsoleCapture', () => {
           kind: 'remote', phase: 'ready', label: `root@${secret}`, authority: secret,
           working_directory: `/remote/${secret}`, source: 'osc7',
         },
-        application: { kind: 'agent_cli', identity: 'codex', display_name: 'Codex' },
+        application: { kind: 'agent_cli', identity: 'agent', display_name: 'Agent CLI' },
         revision: 7,
         updated_at_ms: 8,
       },

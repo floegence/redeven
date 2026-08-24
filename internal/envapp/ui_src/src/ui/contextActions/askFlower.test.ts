@@ -178,7 +178,7 @@ describe('Ask Flower context actions', () => {
     })).toBe(false);
     expect(() => requireAskFlowerContextActionEnvelope({
       ...valid,
-      provider: 'codex',
+      provider: 'other',
     })).toThrow('Invalid Flower context action.');
   });
 

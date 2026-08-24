@@ -65,7 +65,7 @@ describe('createWorkbenchTerminalSession', () => {
 
   it('preserves output activity and uses unknown for mixed-version responses', async () => {
     stubResponse(terminalCreatePayload({
-      phase: 'running', display_name: 'codex', revision: 3, updated_at_ms: 4,
+      phase: 'running', display_name: 'agent', revision: 3, updated_at_ms: 4,
     }, {
       phase: 'streaming', revision: 7, updated_at_ms: 8,
     }));

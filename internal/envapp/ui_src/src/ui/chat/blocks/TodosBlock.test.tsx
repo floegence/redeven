@@ -33,7 +33,7 @@ describe('TodosBlock', () => {
             id: 'todo_2',
             content: 'Refine the visual hierarchy and spacing',
             status: 'in_progress',
-            note: 'Align the plan card with Codex thread styling.',
+            note: 'Align the plan card with the current thread styling.',
           },
           {
             id: 'todo_3',
@@ -54,7 +54,7 @@ describe('TodosBlock', () => {
     expect(host.querySelector('.chat-todos-progress-fill')?.getAttribute('style')).toContain('width: 33%');
     expect(host.querySelector('.chat-todos-item[data-status="in_progress"]')).not.toBeNull();
     expect(host.querySelector('.chat-todos-content-done')?.textContent).toContain('Inspect the current plan card rendering');
-    expect(host.textContent).toContain('Align the plan card with Codex thread styling.');
+    expect(host.textContent).toContain('Align the plan card with the current thread styling.');
   });
 
   it('renders a clean empty state without placeholder note cells', () => {

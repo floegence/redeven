@@ -16,7 +16,6 @@ func TestAIReasoningCatalogRowsHaveProvenance(t *testing.T) {
 		{name: "openai_gpt_55", providerType: "openai", modelName: "gpt-5.5", wantWire: "openai_responses_reasoning_effort", wantLevels: []string{"low", "medium", "high", "xhigh"}, wantDisable: true},
 		{name: "openai_gpt_54", providerType: "openai", modelName: "gpt-5.4", wantWire: "openai_responses_reasoning_effort", wantLevels: []string{"low", "medium", "high", "xhigh"}, wantDisable: true},
 		{name: "openai_gpt_52", providerType: "openai", modelName: "gpt-5.2", wantWire: "openai_responses_reasoning_effort", wantLevels: []string{"low", "medium", "high", "xhigh"}, wantDisable: true},
-		{name: "openai_gpt_52_codex", providerType: "openai", modelName: "gpt-5.2-codex", wantWire: "openai_responses_reasoning_effort", wantLevels: []string{"low", "medium", "high", "xhigh"}},
 		{name: "openai_gpt_52_pro", providerType: "openai", modelName: "gpt-5.2-pro", wantWire: "openai_responses_reasoning_effort", wantLevels: []string{"medium", "high", "xhigh"}},
 		{name: "openai_gpt_5", providerType: "openai", modelName: "gpt-5", wantWire: "openai_responses_reasoning_effort", wantLevels: []string{"minimal", "low", "medium", "high"}},
 		{name: "anthropic", providerType: "anthropic", modelName: "claude-opus-4-7", wantWire: "anthropic_output_config_effort", wantLevels: []string{"low", "medium", "high", "xhigh", "max"}, wantDisable: true},
@@ -87,15 +86,6 @@ func TestValidateAIReasoningSelectionRejectsOpenAIGPT52ProUnsupportedValues(t *t
 		if err := ValidateAIReasoningSelection(capability, selection); err == nil {
 			t.Fatalf("%+v accepted for GPT-5.2 Pro, want unsupported level error", selection)
 		}
-	}
-}
-
-func TestValidateAIReasoningSelectionRejectsOpenAIGPT52CodexOff(t *testing.T) {
-	t.Parallel()
-
-	capability := AIReasoningCapabilityForModel("openai", "gpt-5.2-codex")
-	if err := ValidateAIReasoningSelection(capability, AIReasoningSelection{Level: AIReasoningLevelOff}); err == nil {
-		t.Fatalf("off accepted for GPT-5.2 Codex, want unsupported level error")
 	}
 }
 

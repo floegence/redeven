@@ -43,7 +43,6 @@ describe('redevenWorkbenchWidgets source contract', () => {
       'redeven.codespaces',
       'redeven.ports',
       'redeven.ai',
-      'redeven.codex',
     ]);
     for (const type of widgetTypes) {
       expectProjectedSurface(type);
@@ -58,7 +57,6 @@ describe('redevenWorkbenchWidgets source contract', () => {
       'redeven.codespaces',
       'redeven.ports',
       'redeven.ai',
-      'redeven.codex',
     ]);
     expect(initialCanvasWidgetTypes()).not.toContain('redeven.preview');
   });

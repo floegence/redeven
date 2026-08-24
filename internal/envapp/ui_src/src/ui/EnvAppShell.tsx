@@ -23,7 +23,6 @@ import {
 import { Button } from '@floegence/floe-webapp-core/ui';
 import type { WorkbenchCanvasWidgetPlacement, WorkbenchExternalDockDragController, WorkbenchHostDockItem } from '@floegence/floe-webapp-core/workbench';
 import { Dialog } from './primitives/EnvAppModal';
-import { CodexNavigationIcon } from './icons/CodexIcon';
 import {
   ActivityBarCodespacesIcon,
   ActivityBarFolderIcon,
@@ -276,7 +275,6 @@ const EnvFileBrowserPage = lazy(() => import('./pages/EnvFileBrowserPage').then(
 const EnvCodespacesPage = lazy(() => import('./pages/EnvCodespacesPage').then((module) => ({ default: module.EnvCodespacesPage })));
 const EnvPortForwardsPage = lazy(() => import('./pages/EnvPortForwardsPage').then((module) => ({ default: module.EnvPortForwardsPage })));
 const EnvAIPage = lazy(() => import('./pages/EnvAIPage').then((module) => ({ default: module.EnvAIPage })));
-const CodexActivitySurface = lazy(() => import('./codex/CodexActivitySurface').then((module) => ({ default: module.CodexActivitySurface })));
 const EnvSettingsPage = lazy(() => import('./pages/EnvSettingsPage').then((module) => ({ default: module.EnvSettingsPage })));
 const ActivityPluginSurfaceWindow = lazy(() => import('./plugins/ActivityPluginSurfaceWindow').then((module) => ({ default: module.ActivityPluginSurfaceWindow })));
 const DebugConsoleWindow = lazy(() => import('./debugConsole/DebugConsoleWindow').then((module) => ({ default: module.DebugConsoleWindow })));
@@ -309,21 +307,6 @@ function createActivityPluginWindow(
 ): ActivityPluginWindow {
   const [target, setTarget] = createSignal({ ...initialTarget });
   return { instanceID, targetKey, target, setTarget };
-}
-
-function CodexActivitySidebarHost(props: Readonly<{
-  onHostChange: (host: HTMLElement | null) => void;
-}>) {
-  let host!: HTMLDivElement;
-
-  onMount(() => {
-    props.onHostChange(host);
-  });
-  onCleanup(() => {
-    props.onHostChange(null);
-  });
-
-  return <div ref={host} data-codex-activity-sidebar-host class="h-full min-h-0 w-full" />;
 }
 
 type EnvSessionSource =
@@ -981,10 +964,7 @@ export function EnvAppShell() {
   );
   const controlplaneStatus = createMemo(() => String(env()?.status ?? '').trim());
   const canUseFlower = createMemo(() => !accessGateVisible());
-  const canUseCodex = createMemo(() => env.state === 'ready' && hasRWXPermissions(env()));
-
   const [pendingAutoOpenAI, setPendingAutoOpenAI] = createSignal(false);
-  const [pendingAutoOpenCodex, setPendingAutoOpenCodex] = createSignal(false);
   const [desktopViewMode, setDesktopViewMode] = createSignal<EnvViewMode>('workbench');
   const viewMode = createMemo<EnvViewMode>(() => (layout.isMobile() ? 'activity' : desktopViewMode()));
   const [lastActivitySurface, setLastActivitySurface] = createSignal<EnvSurfaceId>(ENV_DEFAULT_SURFACE_ID);
@@ -1040,7 +1020,6 @@ export function EnvAppShell() {
     viewMode() === 'workbench' ? workbenchNotesViewportAnchor() : activityNotesViewportAnchor()
   ));
   const [notesViewportHosts, setNotesViewportHosts] = createSignal<readonly HTMLElement[]>([]);
-  const [codexSidebarHost, setCodexSidebarHost] = createSignal<HTMLElement | null>(null);
   let notesViewportHostsRevision = 0;
   const openNotesOverlay = () => setNotesOverlayOpen(true);
   const closeNotesOverlay = () => setNotesOverlayOpen(false);
@@ -3452,12 +3431,6 @@ export function EnvAppShell() {
         preferredSurface = null;
         setPendingAutoOpenAI(true);
       }
-      if (preferredSurface === 'codex') {
-        // Defer opening Codex until permissions are loaded (and only if RWX is granted).
-        preferredSurface = null;
-        setPendingAutoOpenCodex(true);
-      }
-
       const initialSurface = preferredSurface ?? ENV_DEFAULT_SURFACE_ID;
       const initialRegularSurface = isEnvSurfaceId(initialSurface) ? initialSurface : ENV_DEFAULT_SURFACE_ID;
       setDesktopViewMode(preferredDesktopViewMode);
@@ -3590,13 +3563,6 @@ export function EnvAppShell() {
       sidebar: { order: 6, fullScreen: true },
     });
     list.push({
-      id: 'codex',
-      name: i18n.t('shell.nav.codex'),
-      icon: CodexNavigationIcon,
-      component: () => <CodexActivitySurface sidebarHost={codexSidebarHost} />,
-      sidebar: { order: 7, fullScreen: false, renderIn: 'main' },
-    });
-    list.push({
       id: PLUGIN_CENTER_ACTIVITY_ID,
       name: i18n.t('uiCopy.plugin.centerTitle'),
       icon: Grid3x3,
@@ -3674,17 +3640,6 @@ export function EnvAppShell() {
 
   const resolveOpenSurfaceTarget = (surfaceId: EnvSurfaceId, options?: EnvOpenSurfaceOptions): EnvSurfaceId => {
     if (surfaceId === 'ai' && !canUseFlower()) {
-      if (options?.reason !== 'mode_restore') {
-        notify.error(
-          env.state === 'ready' ? i18n.t('shell.notifications.permissionDeniedTitle') : i18n.t('shell.notifications.notReadyTitle'),
-          env.state === 'ready'
-            ? i18n.t('shell.notifications.rwxPermissionRequired')
-            : i18n.t('shell.notifications.loadingEnvironmentPermissions'),
-        );
-      }
-      return ENV_DEFAULT_SURFACE_ID;
-    }
-    if (surfaceId === 'codex' && !canUseCodex()) {
       if (options?.reason !== 'mode_restore') {
         notify.error(
           env.state === 'ready' ? i18n.t('shell.notifications.permissionDeniedTitle') : i18n.t('shell.notifications.notReadyTitle'),
@@ -3818,24 +3773,6 @@ export function EnvAppShell() {
   });
 
   createEffect(() => {
-    if (!persistReady() || !pendingAutoOpenCodex()) return;
-    if (env.state === 'ready' && !canUseCodex()) {
-      setPendingAutoOpenCodex(false);
-      return;
-    }
-    if (!canUseCodex()) return;
-    if (initialActivitySurface && layout.sidebarActiveTab() !== initialActivitySurface) return;
-    setPendingAutoOpenCodex(false);
-    openSurface('codex', { reason: 'mode_restore', focus: true, ensureVisible: true });
-  });
-
-  createEffect(() => {
-    if (layout.sidebarActiveTab() !== 'codex') return;
-    if (canUseCodex()) return;
-    activateActivitySurface(ENV_DEFAULT_SURFACE_ID, { persist: false });
-  });
-
-  createEffect(() => {
     if (!layout.isMobile() || layout.sidebarActiveTab() !== 'files') {
       setFilesMobileSidebarOpen(false);
     }
@@ -3913,14 +3850,6 @@ export function EnvAppShell() {
         label: i18n.t('shell.nav.flower'),
         collapseBehavior: 'preserve',
         onClick: () => activateActivitySurface('ai'),
-      });
-    }
-    if (canUseCodex()) {
-      items.push({
-        id: 'codex',
-        icon: CodexNavigationIcon,
-        label: i18n.t('shell.nav.codex'),
-        collapseBehavior: 'toggle',
       });
     }
     return items;
@@ -4144,16 +4073,6 @@ export function EnvAppShell() {
         execute: () => openSurface('ai', { reason: 'direct_navigation', focus: true, ensureVisible: true }),
       });
     }
-
-    list.push({
-      id: 'redeven.env.goToCodex',
-      title: i18n.t('shell.commandPalette.goToCodexTitle'),
-      description: i18n.t('shell.commandPalette.goToCodexDescription'),
-      category: commandCategory,
-      keybind: 'mod+shift+x',
-      icon: CodexNavigationIcon,
-      execute: () => openSurface('codex', { reason: 'direct_navigation', focus: true, ensureVisible: true }),
-    });
 
     const runDesktopShellCommand = async (
       actionLabel: string,
@@ -4796,11 +4715,7 @@ export function EnvAppShell() {
           isMobile,
         })
       )}
-      sidebarContent={(activeTab) =>
-        activeTab === 'codex' && canUseCodex()
-            ? <CodexActivitySidebarHost onHostChange={setCodexSidebarHost} />
-            : <></>
-      }
+      sidebarContent={() => <></>}
       logo={<ShellLogo />}
       activityItems={activityItems()}
       activityBottomItems={activityBottomItems()}

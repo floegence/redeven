@@ -34,21 +34,6 @@ describe('chat responsiveness guardrails', () => {
     expect(mermaidAdapter).toContain('mermaidCacheKey');
   });
 
-  it('keeps Codex responsiveness on the shell-first and bounded-transcript path', () => {
-    const envShell = readText('src/ui/EnvAppShell.tsx');
-    const codexPage = readText('src/ui/codex/CodexPage.tsx');
-    const codexProvider = readText('src/ui/codex/CodexProvider.tsx');
-    const codexTranscript = readText('src/ui/codex/CodexTranscript.tsx');
-
-    expect(envShell).toContain('resolveSidebarVisibilityMotion={({ currentActiveId, nextActiveId, isMobile }) => (');
-    expect(envShell).not.toContain('onClick: () => activateActivitySurface(nextSurface)');
-
-    expect(codexPage).toContain('reportSurfaceAfterPaint');
-    expect(codexProvider).toContain('surfaceReady');
-    expect(codexTranscript).toContain('useVirtualList');
-    expect(codexTranscript).toContain('scrollContainer?: HTMLElement | null;');
-  });
-
   it('keeps long-running activity indicators visually quiet', () => {
     const chatCss = readText('src/ui/chat/chat.css');
     const workingIndicator = readText('src/ui/chat/status/WorkingIndicator.tsx');

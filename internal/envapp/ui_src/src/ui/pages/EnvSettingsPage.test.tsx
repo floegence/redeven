@@ -328,11 +328,6 @@ vi.mock('../icons/FlowerIcon', () => ({
   FlowerIcon: icon('FlowerIcon'),
 }));
 
-vi.mock('../icons/CodexIcon', () => ({
-  CodexIcon: icon('CodexIcon'),
-  CodexNavigationIcon: icon('CodexNavigationIcon'),
-}));
-
 vi.mock('./EnvContext', () => ({
   useEnvContext: () => ({
     env: envContextMocks.env,
@@ -554,7 +549,6 @@ describe('EnvSettingsPage', () => {
       'Permission Policy',
       'Flower',
       'Skills',
-      'Codex',
       'Debug Console',
     ]);
 
@@ -589,7 +583,7 @@ describe('EnvSettingsPage', () => {
 
     const aiGroup = host.querySelector('[data-settings-group="ai_extensions"]');
     const aiGroupSections = Array.from(aiGroup?.querySelectorAll('[data-settings-nav-item]') ?? []).map((node) => node.getAttribute('data-settings-nav-item'));
-    expect(aiGroupSections).toEqual(['ai', 'skills', 'codex']);
+    expect(aiGroupSections).toEqual(['ai', 'skills']);
     expect(host.querySelector('[data-settings-nav-item="plugins"]')).toBeNull();
 
     await openSettingsSection(host, 'debug_console');
@@ -691,8 +685,6 @@ describe('EnvSettingsPage', () => {
           refreshSettings: async () => undefined,
           mutateSettings: () => undefined,
           saveSettings: async () => ({ settings: null, aiUpdate: null }) as any,
-          codexStatus: Object.assign(() => null, { loading: false, error: null, state: 'ready' }) as EnvSettingsPageContextValue['codexStatus'],
-          refreshCodexStatus: () => undefined,
           codeRuntimeStatus: Object.assign(() => null, { loading: false, error: null, state: 'ready' }) as EnvSettingsPageContextValue['codeRuntimeStatus'],
           refreshCodeRuntimeStatus: () => undefined,
           codeRuntimeInstallMethod: () => 'desktop_transfer' as const,

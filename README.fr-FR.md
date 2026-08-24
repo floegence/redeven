@@ -54,7 +54,7 @@ Redeven est un binaire unique qui réunit vos ordinateurs et vos serveurs dans u
 Il s'exécute sur votre machine, vos serveurs distants ou tout hôte SSH accessible. Vos fichiers, processus, clés d'API et identifiants restent là où ils doivent se trouver : Redeven ne fait pas transiter vos données en clair par l'infrastructure d'un tiers.
 
 - **Les clients se connectent à un environnement d'exécution de point de terminaison** : le navigateur, Desktop, la CLI et les sessions hébergées via SSH accèdent tous au même espace de travail géré par l'environnement d'exécution.
-- **L'environnement d'exécution est la frontière de confiance** : un seul binaire Go gère les fichiers, les terminaux, la supervision, Git, le transfert des services web, la disposition Workbench, les notes, la configuration de Browser Editor, Flower ainsi que l'accès au pont Codex.
+- **L'environnement d'exécution est la frontière de confiance** : un seul binaire Go gère les fichiers, les terminaux, la supervision, Git, le transfert des services web, la disposition Workbench, les notes, la configuration de Browser Editor et l'accès à Flower.
 - **Le transport et les règles restent explicites** : Flowersec transporte les flux RPC et de streaming chiffrés, tandis que les autorisations de session, la politique locale de permissions, le périmètre du système de fichiers et les secrets locaux limitent les actions de chaque session.
 
 ![Vue d'ensemble de l'architecture Redeven](assets/readme/architecture-overview.png)
@@ -108,7 +108,7 @@ Pour découvrir les autres modes d'exécution et la protection locale facultativ
 | Supervision | Vues du processeur, de la mémoire, du disque, du réseau et des processus fournies par l'environnement d'exécution du point de terminaison. |
 | Browser Editor | Sessions d'éditeur dans le navigateur, configurées explicitement par Desktop et isolées par espace de travail. |
 | Services web | Enregistrement de services et accès par redirection de ports gérés par l'environnement d'exécution, sans tunnel SSH écrit à la main. |
-| Flower et Codex | Surfaces d'IA facultatives utilisant des outils validés par l'environnement d'exécution et une configuration locale du modèle et de l'hôte. |
+| Flower | Surfaces d'IA facultatives utilisant des outils validés par l'environnement d'exécution et une configuration locale du modèle et de l'hôte. |
 | Desktop | Lanceur natif pour les environnements locaux, les environnements hébergés par un provider, ceux initialisés via SSH et les environnements Local UI enregistrés. |
 
 <!-- readme-section:security -->

@@ -4,7 +4,6 @@
 // multiplexer. Callers can throttle/coalesce requests on their side.
 
 import type { MarkdownRenderSnapshot, MarkdownWorkerRequest, MarkdownWorkerResponse } from '../types';
-import type { MarkdownRendererVariant } from '../markdown/markdownRendererOptions';
 
 type PendingRequest = {
   resolve: (snapshot: MarkdownRenderSnapshot) => void;
@@ -106,7 +105,7 @@ function ensureWorker(): Worker | null {
  */
 export function renderMarkdownSnapshot(
   markdown: string,
-  options?: { streaming?: boolean; rendererVariant?: MarkdownRendererVariant },
+  options?: { streaming?: boolean },
 ): Promise<MarkdownRenderSnapshot> {
   const w = ensureWorker();
   if (!w) {
@@ -120,7 +119,6 @@ export function renderMarkdownSnapshot(
     id,
     content: String(markdown ?? ''),
     streaming: options?.streaming === true,
-    rendererVariant: options?.rendererVariant === 'codex' ? 'codex' : undefined,
   };
 
   return new Promise<MarkdownRenderSnapshot>((resolve, reject) => {

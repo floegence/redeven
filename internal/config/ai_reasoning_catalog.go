@@ -18,8 +18,6 @@ func AIReasoningCapabilityForModel(providerType string, modelName string) AIReas
 			return openAIGPT54ReasoningCapability(modelName)
 		case "gpt-5.2", "gpt-5.2-mini":
 			return openAIGPT52ReasoningCapability()
-		case "gpt-5.2-codex":
-			return openAIGPT52CodexReasoningCapability()
 		case "gpt-5.2-pro":
 			return openAIGPT52ProReasoningCapability()
 		case "gpt-5", "gpt-5-mini", "gpt-5-nano":
@@ -131,16 +129,6 @@ func openAIGPT52ReasoningCapability() AIReasoningCapability {
 		[]string{"https://developers.openai.com/api/docs/models/gpt-5.2", "https://developers.openai.com/api/docs/guides/reasoning"},
 		"openai_gpt_52_reasoning_effort",
 		true,
-	)
-}
-
-func openAIGPT52CodexReasoningCapability() AIReasoningCapability {
-	return openAIReasoningCapability(
-		[]string{"low", "medium", "high", "xhigh"},
-		"medium",
-		[]string{"https://developers.openai.com/api/docs/models/gpt-5.2-codex", "https://developers.openai.com/api/docs/guides/reasoning"},
-		"openai_gpt_52_codex_reasoning_effort",
-		false,
 	)
 }
 

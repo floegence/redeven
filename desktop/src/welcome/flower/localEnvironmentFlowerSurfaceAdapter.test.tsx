@@ -1078,7 +1078,7 @@ describe('Local Environment Flower surface adapter', () => {
       context_action: {
         schema_version: 2,
         action_id: 'assistant.ask.flower',
-        provider: 'codex',
+        provider: 'other',
         target: { target_id: 'local:local', locality: 'auto' },
         source: { surface: 'desktop_welcome_environment_card' },
         context: [],

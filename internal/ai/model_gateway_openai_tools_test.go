@@ -1014,7 +1014,7 @@ func TestNewProviderAdapter_OpenAIStrictPolicy(t *testing.T) {
 	}{
 		{name: "openai", typ: "openai", baseURL: "https://api.openai.com/v1", expected: true},
 		{name: "openai_official_default_base_url", typ: "openai", baseURL: "", expected: true},
-		{name: "openai_custom_endpoint", typ: "openai", baseURL: "https://codex-api.packycode.com/v1", expected: false},
+		{name: "openai_custom_endpoint", typ: "openai", baseURL: "https://custom-openai.example.test/v1", expected: false},
 		{name: "openai_compatible", typ: "openai_compatible", baseURL: "https://example.com/v1", expected: false},
 		{name: "chatglm", typ: "chatglm", baseURL: "https://open.bigmodel.cn/api/paas/v4/", expected: false},
 		{name: "deepseek", typ: "deepseek", baseURL: "https://api.deepseek.com", expected: false},

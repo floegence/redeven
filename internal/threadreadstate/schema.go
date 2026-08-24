@@ -10,7 +10,7 @@ import (
 
 const (
 	schemaKind           = "thread_read_state"
-	currentSchemaVersion = 2
+	currentSchemaVersion = 3
 )
 
 func schemaSpec() sqliteutil.Spec {
@@ -21,9 +21,22 @@ func schemaSpec() sqliteutil.Spec {
 		Migrations: []sqliteutil.Migration{
 			{FromVersion: 0, ToVersion: 1, Apply: migrateToV1},
 			{FromVersion: 1, ToVersion: 2, Apply: migrateToV2},
+			{FromVersion: 2, ToVersion: 3, Apply: migrateToV3},
 		},
 		Verify: verifySchema,
 	}
+}
+
+func migrateToV3(tx *sql.Tx) error {
+	if _, err := tx.Exec(`
+DELETE FROM thread_read_state
+WHERE surface = 'codex';
+DELETE FROM thread_read_state_retirements
+WHERE surface = 'codex';
+`); err != nil {
+		return err
+	}
+	return nil
 }
 
 func migrateToV2(tx *sql.Tx) error {

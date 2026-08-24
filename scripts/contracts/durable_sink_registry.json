@@ -1451,53 +1451,6 @@
       "review_note": "Reviewed durable product state; canonical Agent lifecycle data is excluded."
     },
     {
-      "path": "internal/codexbridge/manager.go",
-      "sha256": "0193e6576487341816d6e413c139b7b0bc8f37d6c5f23b01b9310c68cb40b59a",
-      "sink_kinds": [
-        "file",
-        "json_file"
-      ],
-      "review_status": "reviewed",
-      "owner": "redeven Codex bridge",
-      "authority": "product_coordination",
-      "data_classes": [
-        "Codex process transport output"
-      ],
-      "tables": [
-        "projected"
-      ],
-      "codecs": [
-        "encoding/json.Marshal"
-      ],
-      "dtos": [
-        "msg",
-        "v"
-      ],
-      "review_note": "Writes or invokes process transport output only; it is not canonical conversation storage."
-    },
-    {
-      "path": "internal/codexbridge/process.go",
-      "sha256": "f997a382e9bdbea76569fe12a7c43a93466a6d694f7a70ac2d88aff96c964f95",
-      "sink_kinds": [
-        "file",
-        "json_file"
-      ],
-      "review_status": "reviewed",
-      "owner": "redeven Codex bridge",
-      "authority": "product_coordination",
-      "data_classes": [
-        "Codex process transport output"
-      ],
-      "codecs": [
-        "encoding/json.Marshal"
-      ],
-      "dtos": [
-        "msg",
-        "v"
-      ],
-      "review_note": "Writes or invokes process transport output only; it is not canonical conversation storage."
-    },
-    {
       "path": "internal/config/catalog.go",
       "sha256": "cc62578f578eb0b3630e06c43e38244eec8ca5649c645cae49cdaf916c023d87",
       "sink_kinds": [

@@ -32,7 +32,6 @@ function trim(value) {
 
 function normalize_scope(scope) {
   scope = trim(scope)
-  if (scope == "codexbridge" || scope ~ /^codex/) return "codex"
   if (scope ~ /^envapp/ || scope == "settings" || scope == "codespaces" || scope == "ui") return "workspace-ui"
   if (scope ~ /^git/) return "git"
   if (scope == "debug-console") return "debug-console"
@@ -60,7 +59,6 @@ function titleize(raw,    value, parts, count, item_index, word, output) {
 }
 
 function category_label(key) {
-  if (key == "codex") return "Codex workspace"
   if (key == "workspace-ui") return "Workspace UI"
   if (key == "git") return "Git tools"
   if (key == "debug-console") return "Debug console"

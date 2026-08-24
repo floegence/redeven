@@ -130,7 +130,7 @@ func TestFloretSupplementalContextFormatsProcessSnapshot(t *testing.T) {
 			Context: []ContextActionContextItem{{
 				Kind:         "process_snapshot",
 				PID:          12264,
-				Name:         "Codex (Service)",
+				Name:         "Remote Agent (Service)",
 				Username:     "tangjianyin",
 				CPUPercent:   0.24,
 				MemoryBytes:  575668224,
@@ -152,7 +152,7 @@ func TestFloretSupplementalContextFormatsProcessSnapshot(t *testing.T) {
 	}
 	for key, want := range map[string]string{
 		"pid":            "12264",
-		"name":           "Codex (Service)",
+		"name":           "Remote Agent (Service)",
 		"username":       "tangjianyin",
 		"cpu_percent":    "0.24",
 		"memory_bytes":   "575668224",

@@ -23,9 +23,6 @@ const forbiddenInitialAssets = [
   'pdf',
   'shiki',
   'flower-feature',
-  'codex-feature',
-  'CodexPage',
-  'CodexProvider',
 ];
 
 for (const requiredPath of [manifestPath, chunkModulesPath]) {

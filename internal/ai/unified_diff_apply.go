@@ -87,7 +87,7 @@ func parsePatchText(patchText string) (parsedPatch, error) {
 	normalized := normalizePatchText(patchText)
 	trimmed := strings.TrimSpace(normalized)
 	if strings.HasPrefix(trimmed, "*** Begin Patch") {
-		files, err := parseCodexPatch(normalized)
+		files, err := parseBeginPatch(normalized)
 		if err != nil {
 			return parsedPatch{}, err
 		}
@@ -108,7 +108,7 @@ func parsePatchText(patchText string) (parsedPatch, error) {
 	}, nil
 }
 
-func isCodexPatchHeader(trimmedLine string) bool {
+func isBeginPatchHeader(trimmedLine string) bool {
 	switch {
 	case strings.HasPrefix(trimmedLine, "*** Add File: "):
 		return true
@@ -123,7 +123,7 @@ func isCodexPatchHeader(trimmedLine string) bool {
 	}
 }
 
-func parseCodexPatch(patchText string) ([]unifiedDiffFile, error) {
+func parseBeginPatch(patchText string) ([]unifiedDiffFile, error) {
 	lines := strings.Split(normalizePatchText(patchText), "\n")
 	i := 0
 	for i < len(lines) && strings.TrimSpace(lines[i]) == "" {
@@ -158,7 +158,7 @@ func parseCodexPatch(patchText string) ([]unifiedDiffFile, error) {
 			var hunkLines []string
 			for i < len(lines) {
 				nextTrimmed := strings.TrimSpace(lines[i])
-				if isCodexPatchHeader(nextTrimmed) {
+				if isBeginPatchHeader(nextTrimmed) {
 					break
 				}
 				if strings.TrimSpace(lines[i]) == "*** End of File" {
@@ -221,13 +221,13 @@ func parseCodexPatch(patchText string) ([]unifiedDiffFile, error) {
 			body := make([]string, 0, 8)
 			for i < len(lines) {
 				nextTrimmed := strings.TrimSpace(lines[i])
-				if isCodexPatchHeader(nextTrimmed) {
+				if isBeginPatchHeader(nextTrimmed) {
 					break
 				}
 				body = append(body, lines[i])
 				i++
 			}
-			hunks, err := parseCodexUpdateHunks(body)
+			hunks, err := parseBeginPatchUpdateHunks(body)
 			if err != nil {
 				return nil, err
 			}
@@ -244,7 +244,7 @@ func parseCodexPatch(patchText string) ([]unifiedDiffFile, error) {
 	return nil, errors.New("invalid patch: missing *** End Patch trailer")
 }
 
-func parseCodexUpdateHunks(lines []string) ([]unifiedDiffHunk, error) {
+func parseBeginPatchUpdateHunks(lines []string) ([]unifiedDiffHunk, error) {
 	if len(lines) == 0 {
 		return nil, nil
 	}

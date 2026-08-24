@@ -16,7 +16,7 @@ describe('EnvWorkbenchConversationShell', () => {
 
     const dispose = render(() => (
       <EnvWorkbenchConversationShell
-        railLabel="Codex threads"
+        railLabel="Flower threads"
         rail={<div data-testid="thread-rail">Threads</div>}
         workbench={<div data-testid="conversation-workbench">Transcript</div>}
       />

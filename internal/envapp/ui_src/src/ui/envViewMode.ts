@@ -6,8 +6,7 @@ export type EnvSurfaceId =
   | 'files'
   | 'codespaces'
   | 'ports'
-  | 'ai'
-  | 'codex';
+  | 'ai';
 
 export type EnvSurfaceOpenReason =
   | 'direct_navigation'
@@ -58,7 +57,6 @@ export const ENV_SURFACE_IDS = [
   'codespaces',
   'ports',
   'ai',
-  'codex',
 ] as const satisfies readonly EnvSurfaceId[];
 
 export const ENV_DEFAULT_SURFACE_ID: EnvSurfaceId = 'terminal';
@@ -70,7 +68,6 @@ export const ENV_SURFACE_LABELS: Record<EnvSurfaceId, string> = {
   codespaces: 'Codespaces',
   ports: 'Web Services',
   ai: 'Flower',
-  codex: 'Codex',
 };
 
 export const ENV_SURFACE_WIDGET_TYPES: Record<EnvSurfaceId, string> = {
@@ -80,7 +77,6 @@ export const ENV_SURFACE_WIDGET_TYPES: Record<EnvSurfaceId, string> = {
   codespaces: 'redeven.codespaces',
   ports: 'redeven.ports',
   ai: 'redeven.ai',
-  codex: 'redeven.codex',
 };
 
 const VALID_ENV_VIEW_MODES = new Set<EnvViewMode>(['activity', 'workbench']);
@@ -105,7 +101,6 @@ export function isEnvSurfaceId(value: unknown): value is EnvSurfaceId {
     || value === 'codespaces'
     || value === 'ports'
     || value === 'ai'
-    || value === 'codex'
   );
 }
 

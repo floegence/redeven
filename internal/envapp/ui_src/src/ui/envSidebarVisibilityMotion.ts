@@ -1,7 +1,7 @@
 export type EnvSidebarVisibilityMotion = 'animated' | 'instant';
-type EnvConversationTab = 'ai' | 'codex';
+type EnvConversationTab = 'ai';
 
-export const ENV_CONVERSATION_TABS = new Set<EnvConversationTab>(['ai', 'codex']);
+export const ENV_CONVERSATION_TABS = new Set<EnvConversationTab>(['ai']);
 
 export interface ResolveEnvSidebarVisibilityMotionArgs {
   currentTab: string;

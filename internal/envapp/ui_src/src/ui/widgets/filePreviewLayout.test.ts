@@ -203,29 +203,4 @@ describe('file preview wiring', () => {
     expect(chatSrc).not.toContain("import { PersistentFloatingWindow } from './PersistentFloatingWindow';");
   });
 
-  it('routes the chat FAB through the shared browser surface controller', () => {
-    const chatSrc = read('./ChatFileBrowserFAB.tsx');
-    const codexShellSrc = read('../codex/CodexPageShell.tsx');
-    const codexFabSrc = read('../codex/CodexFileBrowserFAB.tsx');
-
-    expect(chatSrc).toContain("from './createFileBrowserFABModel';");
-    expect(chatSrc).toContain('createFileBrowserFABModel,');
-    expect(chatSrc).toContain('const fab = createFileBrowserFABModel({');
-    expect(chatSrc).toContain('<Show when={(props.enabled ?? true) && !fab.fileBrowserSurface.controller.open()}>');
-    expect(chatSrc).not.toContain('title="Browser"');
-    expect(chatSrc).not.toContain('persistenceKey="chat-browser"');
-    expect(chatSrc).not.toContain('stateScope="chat-fab"');
-    expect(chatSrc).not.toContain('<RemoteFileBrowser');
-
-    expect(codexShellSrc).toContain("import { CodexFileBrowserFAB } from './CodexFileBrowserFAB';");
-    expect(codexShellSrc).not.toContain("import { ChatFileBrowserFAB } from '../widgets/ChatFileBrowserFAB';");
-    expect(codexFabSrc).toContain("from '../widgets/createFileBrowserFABModel';");
-    expect(codexFabSrc).toContain('createFileBrowserFABModel,');
-    expect(codexFabSrc).toContain('const fab = createFileBrowserFABModel({');
-    expect(codexFabSrc).toContain('allowHomeFallback: true,');
-    expect(codexFabSrc).toContain('class="redeven-fab-file-browser codex-page-file-browser-fab"');
-    expect(codexFabSrc).not.toContain("import { Show } from 'solid-js';");
-    expect(codexFabSrc).not.toContain('fab.fileBrowserSurface.controller.open()');
-    expect(codexFabSrc).not.toContain('<Show when=');
-  });
 });

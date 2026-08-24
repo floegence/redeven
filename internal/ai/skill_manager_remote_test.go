@@ -79,7 +79,7 @@ func TestSkillManager_GitHubImportAndBrowse(t *testing.T) {
 
 	skillMD := `---
 name: skill-installer
-description: Install Codex skills
+description: Install remote skills
 ---
 
 # Skill Installer`
@@ -152,7 +152,7 @@ description: Install Codex skills
 	if err != nil {
 		t.Fatalf("BrowseFile: %v", err)
 	}
-	if !strings.Contains(file.Content, "Install Codex skills") {
+	if !strings.Contains(file.Content, "Install remote skills") {
 		t.Fatalf("unexpected file content: %q", file.Content)
 	}
 
@@ -173,7 +173,7 @@ func TestSkillManager_ReinstallFromGitHubSource(t *testing.T) {
 
 	skillMD := `---
 name: skill-installer
-description: Install Codex skills
+description: Install remote skills
 ---
 
 # Skill Installer
@@ -229,7 +229,7 @@ func TestSkillManager_GitHubZipRejectsPathEscape(t *testing.T) {
 
 	skillMD := `---
 name: skill-installer
-description: Install Codex skills
+description: Install remote skills
 ---
 
 # Skill Installer`

@@ -1,7 +1,5 @@
 import type { Links, Marked, Token, TokensList } from 'marked';
 
-import { buildMarkdownFileReferencePrefixMap, collectMarkdownFileReferencesFromTokens } from './markdownFileReference';
-import { withMarkdownRenderContext } from './markedConfig';
 import type { MarkdownCommittedSegment, MarkdownRenderSnapshot } from '../types';
 
 type MarkdownParser = Pick<Marked<string, string>, 'lexer' | 'parser'>;
@@ -99,13 +97,7 @@ export function buildMarkdownRenderSnapshot(
 
   const tokens = markdown.lexer(source);
   const { entries, links } = toTokenEntries(tokens);
-  const renderContext = {
-    fileReferencePrefixByPath: buildMarkdownFileReferencePrefixMap(
-      collectMarkdownFileReferencesFromTokens(tokens),
-    ),
-  };
-
-  return withMarkdownRenderContext(renderContext, () => {
+  return (() => {
     let lastMeaningfulIndex = -1;
     for (let index = entries.length - 1; index >= 0; index -= 1) {
       if (entries[index]?.token.type !== 'space') {
@@ -211,5 +203,5 @@ export function buildMarkdownRenderSnapshot(
           key: `${tailEntry.start}:${tailEntry.end}:${tailEntry.token.type}`,
         },
     };
-  });
+  })();
 }
