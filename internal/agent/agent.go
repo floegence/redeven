@@ -497,9 +497,7 @@ func (a *Agent) Run(ctx context.Context) error {
 		}
 	}
 
-	select {
-	case <-ctx.Done():
-	}
+	<-ctx.Done()
 	a.beginSessionShutdown()
 	a.stopControlChannel()
 	a.pluginSessions.stopAdmission()
