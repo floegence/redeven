@@ -1304,17 +1304,14 @@ export function EnvAppShell() {
   });
   let pluginRuntimeRecoveryClient: unknown = null;
   let pluginRuntimeRecoveryAbort: AbortController | undefined;
-  type PluginRuntimeRecoveryRetry = Readonly<{
+  const pluginRuntimeRecoveryRetries = new Map<string, {
     client: unknown;
     requestID: number;
     controller: AbortController;
-  }>;
-  const pluginRuntimeRecoveryRetries = new Map<string, PluginRuntimeRecoveryRetry>();
+  }>();
   let pluginRuntimeRecoveryRetryRequestID = 0;
   const cancelPluginRuntimeRecoveryRetries = (reason: string) => {
-    for (const retry of pluginRuntimeRecoveryRetries.values()) {
-      retry.controller.abort(reason);
-    }
+    for (const retry of pluginRuntimeRecoveryRetries.values()) retry.controller.abort(reason);
     pluginRuntimeRecoveryRetries.clear();
   };
   const [pluginRuntimeRecoveryRequest, setPluginRuntimeRecoveryRequest] = createSignal(0);
@@ -1332,13 +1329,13 @@ export function EnvAppShell() {
       return;
     }
     if (!canAdmin()) {
-      cancelPluginRuntimeRecoveryRetries('Plugin runtime recovery is no longer authorized');
+      cancelPluginRuntimeRecoveryRetries('Plugin runtime recovery unavailable');
       setPluginRuntimeRecoveryComplete(true);
       setPluginRuntimeRecoveryByInstanceID({});
       return;
     }
     if (pluginRuntimeRecoveryClient === connectedClient) return;
-    cancelPluginRuntimeRecoveryRetries('Plugin runtime session replaced');
+    cancelPluginRuntimeRecoveryRetries('Plugin runtime recovery superseded');
     pluginRuntimeRecoveryClient = connectedClient;
     pluginRuntimeRecoveryAbort?.abort('Plugin runtime recovery superseded');
     const controller = new AbortController();
@@ -1375,8 +1372,7 @@ export function EnvAppShell() {
     });
   });
   const retryPluginRuntimeRecovery = (pluginInstanceID?: string) => {
-    const connectedClient = protocol.status() === 'connected' ? protocol.session() : null;
-    if (!connectedClient || (isLocalMode() && !pluginSessionReady())) return;
+    if (protocol.status() !== 'connected' || (isLocalMode() && !pluginSessionReady())) return;
     if (!pluginInstanceID) {
       if (!pluginRuntimeRecoveryComplete()) return;
       cancelPluginRuntimeRecoveryRetries('Plugin runtime recovery superseded');
@@ -1385,28 +1381,27 @@ export function EnvAppShell() {
       setPluginRuntimeRecoveryRequest((request) => request + 1);
       return;
     }
+    const connectedClient = protocol.status() === 'connected' ? protocol.session() : null;
+    if (!connectedClient || (isLocalMode() && !pluginSessionReady())) return;
     const previousRetry = pluginRuntimeRecoveryRetries.get(pluginInstanceID);
-    previousRetry?.controller.abort('Plugin runtime recovery superseded');
-    const retry: PluginRuntimeRecoveryRetry = {
-      client: connectedClient,
-      requestID: ++pluginRuntimeRecoveryRetryRequestID,
-      controller: new AbortController(),
-    };
-    pluginRuntimeRecoveryRetries.set(pluginInstanceID, retry);
+    previousRetry?.controller.abort('Plugin runtime recovery retry superseded');
+    const controller = new AbortController();
+    const requestID = ++pluginRuntimeRecoveryRetryRequestID;
+    pluginRuntimeRecoveryRetries.set(pluginInstanceID, { client: connectedClient, requestID, controller });
     setPluginRuntimeRecoveryByInstanceID((current) => ({
       ...current,
       [pluginInstanceID]: { state: 'recovering' },
     }));
     const isCurrentRetry = () => (
-      pluginRuntimeRecoveryRetries.get(pluginInstanceID)?.requestID === retry.requestID
-      && pluginRuntimeRecoveryRetries.get(pluginInstanceID)?.client === retry.client
-      && !retry.controller.signal.aborted
+      !controller.signal.aborted
+      && pluginRuntimeRecoveryRetries.get(pluginInstanceID)?.requestID === requestID
+      && pluginRuntimeRecoveryRetries.get(pluginInstanceID)?.client === connectedClient
       && pluginRuntimeRecoveryClient === connectedClient
       && protocol.status() === 'connected'
       && protocol.session() === connectedClient
       && (!isLocalMode() || pluginSessionReady())
     );
-    void pluginLifecycle.retryRecovery(pluginInstanceID, { signal: retry.controller.signal }).then((result) => {
+    void pluginLifecycle.retryRecovery(pluginInstanceID, { signal: controller.signal }).then((result) => {
       if (!isCurrentRetry()) return;
       pluginRuntimeRecoveryRetries.delete(pluginInstanceID);
       setPluginRuntimeRecoveryByInstanceID((current) => ({
