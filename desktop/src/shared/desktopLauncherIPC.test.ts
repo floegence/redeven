@@ -457,10 +457,7 @@ describe('desktopLauncherIPC', () => {
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'reconcile_runtime_operation',
       operation_key: ' ssh:devbox:default:key_agent:remote_default:update_runtime ',
-    })).toEqual({
-      kind: 'reconcile_runtime_operation',
-      operation_key: 'ssh:devbox:default:key_agent:remote_default:update_runtime',
-    });
+    })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'dismiss_launcher_operation',
       operation_key: ' ssh:devbox:default:key_agent:remote_default ',
@@ -529,105 +526,6 @@ describe('desktopLauncherIPC', () => {
         mode: 'automatic',
         expected_inventory_digest: 'a'.repeat(64),
       },
-    })).toBeNull();
-  });
-
-  it('keeps Provider Runtime lifecycle routes available', () => {
-    expect(normalizeDesktopLauncherActionRequest({
-      kind: 'run_provider_environment_lifecycle',
-      environment_id: 'provider-card',
-      gateway_id: 'gateway-demo',
-      operation: 'restart',
-      label: 'Demo',
-    })).toEqual({
-      kind: 'run_provider_environment_lifecycle',
-      environment_id: 'provider-card',
-      operation: 'restart',
-      label: 'Demo',
-    });
-  });
-
-  it('binds direct environment initialization to the selected card target', () => {
-    const selectedTarget = {
-      kind: 'setup_direct_runtime_management',
-      environment_id: ' local-container ',
-      label: ' Dev Container ',
-      host_access: { kind: 'local_host' },
-      placement: {
-        kind: 'container_process',
-        container_engine: 'docker',
-        container_id: 'dev',
-        container_ref: 'dev',
-        container_label: 'Dev',
-        runtime_root: '/workspace/.redeven',
-        bridge_strategy: 'exec_stream',
-      },
-    } as const;
-    expect(normalizeDesktopLauncherActionRequest(selectedTarget)).toEqual({
-      kind: 'setup_direct_runtime_management',
-      environment_id: 'local-container',
-      label: 'Dev Container',
-      host_access: { kind: 'local_host' },
-      placement: {
-        kind: 'container_process',
-        container_engine: 'docker',
-        container_id: 'dev',
-        container_ref: 'dev',
-        container_label: 'Dev',
-        runtime_root: '/workspace/.redeven',
-        bridge_strategy: 'exec_stream',
-      },
-    });
-    expect(normalizeDesktopLauncherActionRequest({
-      ...selectedTarget,
-      gateway_id: 'borrowed-gateway',
-    })).toBeNull();
-    expect(normalizeDesktopLauncherActionRequest({
-      kind: 'setup_direct_runtime_management',
-      environment_id: 'direct',
-      host_access: { kind: 'local_host' },
-    })).toBeNull();
-  });
-
-  it('binds Provider supervisor enrollment to one explicitly selected direct card', () => {
-    const selectedTarget = {
-      kind: 'setup_provider_runtime_management_with_direct_card',
-      environment_id: ' provider-card ',
-      direct_environment_id: ' ssh-container ',
-      direct_label: ' Dev Container ',
-      host_access: {
-        kind: 'ssh_host',
-        ssh: {
-          ssh_destination: 'alice@build.example',
-          ssh_port: 2222,
-          auth_mode: 'key_agent',
-          connect_timeout_seconds: 15,
-        },
-      },
-      placement: {
-        kind: 'container_process',
-        container_engine: 'docker',
-        container_id: 'container-id',
-        container_ref: 'dev-container',
-        container_label: 'Dev Container',
-        runtime_root: '/workspace/.redeven',
-        bridge_strategy: 'exec_stream',
-      },
-    } as const;
-
-    expect(normalizeDesktopLauncherActionRequest(selectedTarget)).toEqual({
-      ...selectedTarget,
-      environment_id: 'provider-card',
-      direct_environment_id: 'ssh-container',
-      direct_label: 'Dev Container',
-    });
-    expect(normalizeDesktopLauncherActionRequest({
-      ...selectedTarget,
-      direct_environment_id: 'provider-card',
-    })).toBeNull();
-    expect(normalizeDesktopLauncherActionRequest({
-      ...selectedTarget,
-      direct_environment_id: '',
     })).toBeNull();
   });
 

@@ -108,7 +108,7 @@ describe('main routing', () => {
     const freshInstallEnd = mainSrc.indexOf('async function verifyFreshDirectReinstallTarget(', freshInstallStart);
     const freshInstallSrc = mainSrc.slice(freshInstallStart, freshInstallEnd);
     expect(freshInstallSrc).toContain('activateManagedComponentBatch(');
-    expect(freshInstallSrc).toContain('startManagedComponentBatch(');
+    expect(freshInstallSrc).toContain('startRuntimePlacementBridgeSession({');
     expect(freshInstallSrc).not.toContain('ensureManagedGatewayServiceReady(');
     expect(freshInstallSrc).not.toContain('ensureRuntimePlacementReady(');
     expect(freshInstallSrc).not.toContain('ensureManagedSSHRuntimeReady(');
@@ -806,7 +806,7 @@ describe('main routing', () => {
     expect(workflowSrc).not.toContain('if (currentProgress) {\n    const hydrated = RuntimeLifecycleWorkflow.fromProgress(currentProgress);');
 
     const updateLifecycleStart = mainSrc.indexOf('function updateRuntimeLifecycleOperation(');
-    const updateLifecycleEnd = mainSrc.indexOf('function _runtimeLifecyclePhaseFromGateway(', updateLifecycleStart);
+    const updateLifecycleEnd = mainSrc.indexOf('function runtimeLifecyclePhaseFromManagedRuntime(', updateLifecycleStart);
     expect(updateLifecycleStart).toBeGreaterThanOrEqual(0);
     expect(updateLifecycleEnd).toBeGreaterThan(updateLifecycleStart);
     const updateLifecycleSrc = mainSrc.slice(updateLifecycleStart, updateLifecycleEnd);
@@ -834,7 +834,7 @@ describe('main routing', () => {
     expect(mainSrc).toContain('DESKTOP_SHELL_RUNTIME_MAINTENANCE_CONTEXT_CHANNEL');
     expect(mainSrc).toContain('DESKTOP_SHELL_RUNTIME_MAINTENANCE_STARTED_CHANNEL');
     expect(mainSrc).toContain('function runtimeMaintenanceContextFromSession(');
-    expect(mainSrc).toContain("? 'runtime_gateway_setup_required'");
+    expect(mainSrc).toContain("? 'runtime_direct_setup_required'");
     expect(mainSrc).toContain("readiness: directTarget ? 'setup_required' : 'unknown'");
     expect(mainSrc).toContain('async function manageDesktopUpdateFromLauncher(');
     expect(mainSrc).toContain('async function runEnvironmentRuntimeLifecycleFromLauncher(');
@@ -857,8 +857,8 @@ describe('main routing', () => {
     expect(shellActionSrc).toContain("performRuntimeMaintenanceFromShell(event.sender.id, 'restart')");
     expect(shellActionSrc).not.toContain('restartManagedRuntimeFromShell(');
 
-    expect(mainSrc).toContain('async function runProviderEnvironmentLifecycleFromLauncher(');
-    expect(mainSrc).toContain('authorizeProviderRuntimeOperation(');
+    expect(mainSrc).not.toContain('runProviderEnvironmentLifecycleFromLauncher(');
+    expect(mainSrc).not.toContain('authorizeProviderRuntimeOperation(');
     expect(mainSrc).not.toContain('upsertDirectRuntimeGateway(');
   });
 
@@ -1563,8 +1563,8 @@ describe('main routing', () => {
     expect(pairSrc).not.toContain('confirmDesktopImpact({');
     expect(pairSrc).not.toContain("phase: 'waiting_for_identity_confirmation'");
     expect(helperSrc).toContain("const pairingOptions = record.connection.kind === 'url'");
-    expect(helperSrc).toContain("runtimeGrants: ['manage_runtime', 'deploy_custom_runtime', 'manage_runtime_binding'] as const");
-    expect(helperSrc).toContain('runtime_grants: completionRequest.runtime_grants');
+    expect(helperSrc).not.toContain('runtimeGrants');
+    expect(helperSrc).not.toContain('runtime_grants');
     expect(helperSrc).toContain('const completionRequest = buildPairingCompleteRequest(material, challenge, pairingOptions);');
     expect(helperSrc).toContain('const completion = await client.completePairing(record, completionRequest, {');
     expect(helperSrc).toContain('assertGatewayPairingCompleteResponse(material, challenge, completion, {');
@@ -1677,27 +1677,6 @@ describe('main routing', () => {
     expect(syncSrc).toContain('throw new GatewaySyncCanceledError(\'Gateway sync was canceled because this Gateway is disabled on this Desktop.\');');
   });
 
-  it('keeps first-click Managed Environment setup on the direct target route', () => {
-    const mainSrc = readMainSource();
-    const initializeStart = mainSrc.indexOf('async function setupDirectRuntimeManagementFromLauncher(');
-    const initializeEnd = mainSrc.indexOf(
-      'async function setupProviderRuntimeManagementWithDirectCardFromLauncher(',
-      initializeStart,
-    );
-    expect(initializeStart).toBeGreaterThanOrEqual(0);
-    expect(initializeEnd).toBeGreaterThan(initializeStart);
-    const initializeSrc = mainSrc.slice(initializeStart, initializeEnd);
-
-    expect(initializeSrc).toContain('runEnvironmentRuntimeLifecycleFromLauncher({');
-    expect(initializeSrc).not.toContain('syncGatewayRecord(');
-    expect(initializeSrc).not.toContain('gatewayStore().get(');
-    expect(initializeSrc).toContain('Managed Environment setup is a direct Desktop lifecycle operation.');
-    expect(initializeSrc).not.toContain('prepareRuntimeOperation(');
-    expect(initializeSrc).not.toContain('initializeGatewayRuntime(');
-    expect(initializeSrc).not.toContain('awaitEnvironmentRuntimeLifecycleReadiness(');
-    expect(initializeSrc).not.toContain('refreshGatewaySourceForAuthorizedAction(record, {');
-  });
-
   it('waits for the real Desktop Runtime health projection after direct lifecycle success', () => {
     const mainSrc = readMainSource();
     const directStart = mainSrc.indexOf('async function runEnvironmentRuntimeLifecycleFromLauncher(');
@@ -1730,19 +1709,6 @@ describe('main routing', () => {
     const childUpdate = executeSrc.indexOf('launcherOperations.updateCurrentAttempt(input.operation_key, owner, {', standaloneBranch);
     expect(childUpdate).toBeGreaterThan(standaloneBranch);
     expect(executeSrc.slice(childUpdate)).not.toContain('scheduleCurrentLauncherOperationRemoval(input.operation_key, owner);');
-  });
-
-  it('keeps foreground Runtime operations authoritative over persistence attachment recovery', () => {
-    const mainSrc = readMainSource();
-    const initializationStart = mainSrc.indexOf('async function setupDirectRuntimeManagementFromLauncher(');
-    const initializationEnd = mainSrc.indexOf('async function setupProviderRuntimeManagementWithDirectCardFromLauncher(', initializationStart);
-    expect(initializationStart).toBeGreaterThanOrEqual(0);
-    expect(initializationEnd).toBeGreaterThan(initializationStart);
-    const initializationSrc = mainSrc.slice(initializationStart, initializationEnd);
-    expect(initializationSrc).toContain('runEnvironmentRuntimeLifecycleFromLauncher({');
-    expect(initializationSrc).not.toContain('initializeGatewayRuntime(');
-    expect(initializationSrc).not.toContain('gatewayStore().');
-    expect(mainSrc).not.toContain('refreshDirectGatewayRuntimeOperationAttachments(');
   });
 
   it('routes legacy Gateway refresh requests through the unified Refresh workflow', () => {
@@ -1876,22 +1842,10 @@ describe('main routing', () => {
     expect(mainSrc).toContain('executeDirectManagedEnvironmentLifecycle({');
   });
 
-  it('allows only binding administrators to reconcile an isolated Runtime with an exact permit', () => {
+  it('does not retain Provider lifecycle attachment or reconcile paths', () => {
     const mainSrc = readMainSource();
-    const attachStart = mainSrc.indexOf('async function refreshProviderRuntimeOperationAttachments(');
-    const reconcileStart = mainSrc.indexOf('async function reconcileRuntimeOperationFromLauncher(');
-    expect(attachStart).toBeGreaterThanOrEqual(0);
-    expect(reconcileStart).toBeGreaterThan(attachStart);
-    const attachSrc = mainSrc.slice(attachStart, reconcileStart);
-    const reconcileSrc = mainSrc.slice(reconcileStart, mainSrc.indexOf('\nasync function ', reconcileStart + 20));
-
-    expect(attachSrc).toContain("management.authorization.grants.includes('manage_runtime_binding')");
-    expect(attachSrc).toContain("management.operations.includes('reconcile')");
-    expect(attachSrc).toContain("action: 'reconcile'");
-    expect(attachSrc).toContain('operation_id: operation.operation_id');
-    expect(attachSrc).toContain("operation: 'reconcile'");
-    expect(attachSrc).toContain('authorized_client_key_id: authorizedClientKeyID');
-    expect(attachSrc).toContain('authorization_permit: authorization.permit');
-    expect(reconcileSrc).not.toContain('force');
+    expect(mainSrc).not.toContain('refreshProviderRuntimeOperationAttachments(');
+    expect(mainSrc).not.toContain('reconcileRuntimeOperationFromLauncher(');
+    expect(mainSrc).not.toContain('authorizeProviderRuntimeOperation(');
   });
 });

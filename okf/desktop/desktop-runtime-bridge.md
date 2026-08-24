@@ -1,13 +1,13 @@
 ---
 type: Desktop Contract
 title: Desktop runtime bridge
-description: Canonical navigation and security boundary for Desktop-integrated Runtime access.
+description: Canonical navigation and security boundary for Desktop-integrated Runtime access and direct lifecycle.
 tags: [desktop, runtime, bridge, lifecycle]
-timestamp: 2026-07-18T00:00:00Z
+timestamp: 2026-08-24T00:00:00Z
 ---
 # Summary
 
-Redeven Desktop opens Runtime instances through machine-readable startup, scoped control, transport, session, and process contracts. Runtime remains independently runnable without Gateway, while Redeven-managed lifecycle actions route through the target user's Gateway supervisor. This overview is the canonical navigation point for readiness, recovery, SSH operations, and model/session integration. Focused concepts own the independent details while the bridge overview retains the security boundary between Desktop coordination, Runtime APIs, Gateway lifecycle authority, and plugin capabilities.
+Redeven Desktop opens Runtime instances through machine-readable startup, scoped transport, session, and process contracts. Runtime remains independently runnable without Gateway. Redeven-managed lifecycle actions use the registered Local, SSH, or container direct channel and are owned by Desktop's process-local coordinator; Gateway and Provider remain access-only. This overview is the canonical navigation point for readiness, recovery, SSH operations, and model/session integration. Focused concepts own the independent details while this concept retains the boundary between Desktop lifecycle coordination, Runtime services, optional access forwarding, and plugin capabilities.
 
 # Contract
 
@@ -31,7 +31,7 @@ WebRequest diagnostics are installed idempotently for every Electron Session tha
 
 # Boundaries
 
-Runtime-control is a local Desktop coordination capability, not a general network API or plugin grant plane. Bridge, health, process, and session observations must not become competing lifecycle authorities. Desktop must not change the system proxy, install Tailscale/VPN/private-range bypass tables, globally disable proxying, or recover a missing trusted bridge by selecting a public Local UI address. ReDevPlugin, Provider, Runtime Control, public Local UI, and Gateway contracts retain their existing ownership boundaries.
+Runtime-control is a local Desktop coordination capability, not a general network API or plugin grant plane. Bridge, health, process, Gateway, Provider, and session observations must not become competing lifecycle authorities. Desktop must not change the system proxy, install Tailscale/VPN/private-range bypass tables, globally disable proxying, or recover a missing trusted bridge by selecting a public Local UI address. ReDevPlugin, Provider, Runtime Control, public Local UI, and Gateway contracts retain their access and execution boundaries.
 
 # Evidence
 

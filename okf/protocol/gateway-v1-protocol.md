@@ -1,43 +1,44 @@
 ---
 type: Protocol Contract
 title: Gateway v2 protocol
-description: OpenAPI and signed HTTP JSON contract for Gateway access and Runtime lifecycle operations.
-tags: [gateway, protocol, desktop, openapi, runtime]
-timestamp: 2026-08-17T00:00:00Z
+description: Signed Gateway HTTP JSON contract for pairing, catalog, open-session, and access forwarding.
+tags: [gateway, protocol, desktop, openapi, access]
+timestamp: 2026-08-24T00:00:00Z
 ---
 # Summary
 
-`redeven-gateway` exposes the stable `redeven-gateway-v2` HTTP JSON protocol. Gateway is an optional Runtime lifecycle supervisor and an independent process; it is not required for Runtime Connect, Workspace, or Runtime UI access. Gateway owns Runtime operation progress, target locking, checkpoints, fencing, and recovery. Desktop is a client that observes or starts an operation and never represents Runtime lifecycle ownership.
+`redeven-gateway-v2` is the signed access-plane protocol defined by `spec/openapi/gateway-v2.yaml`. It supports pairing, Gateway identity and capabilities, Environment profile/catalog operations, and open-session. It exposes no Runtime lifecycle operation, artifact, supervisor, checkpoint, recovery, or Provider management route. Unsupported or removed paths return the normal HTTP not-found response and never fall back to another lifecycle owner.
 
 # Contract
 
 ## Wire surface
 
-The machine-readable source is `spec/openapi/gateway-v2.yaml`. It defines pairing, catalog, open-session, profile writes, capability discovery, operation prepare/list/get/confirm/artifact/commit/cancel/deadline/reconcile, and event reads under `/gateway/v2/*`. Signed requests bind protocol, method, route, body digest, gateway identity, binding audience, nonce, and timestamp. Pairing and profile-write bridge tokens are transport credentials, not Runtime operation authority.
+The protocol contains these route groups:
 
-Runtime lifecycle requests require an exact `lifecycle_target_id`, `target_generation`, authorized client key, operation scope, and (for updates) a published-release or custom-build artifact policy. `prepare` is the authorization linearization point and occurs before staging, upload, process stop, or local build. Repeating the same normalized scope attaches to the durable operation; a conflicting operation returns `operation_in_progress` instead of queueing or reassigning control.
+- pairing challenge and completion;
+- Gateway capability and catalog reads;
+- Environment profile upsert and delete;
+- open-session artifact issuance;
+- authenticated access forwarding used by the issued session.
 
-`operation_id` is a canonical 1-128 character token using only letters, digits, dot, underscore, colon, and hyphen. Gateway derives artifact staging directories from its digest and rejects path syntax before persistence.
+Signed requests bind the protocol, HTTP method, route, body digest, Gateway identity, binding audience, nonce, and timestamp. Pairing credentials authorize only the declared Gateway access operations. There is no Runtime management grant or implicit process authority in a paired client.
 
-The Gateway operation store is the only lifecycle progress authority. It persists pre-commit deadlines, workload snapshots, distinct archive/executable digests, artifact staging, lifecycle fence tokens, durable commit checkpoints, exact candidate process identity, recovery phases, and `manual_recovery_required` quarantine. Commit rechecks target generation and exact workload identities; unknown inventory is never treated as empty. A source-built Linux Runtime update archive may carry the authorized `redeven` executable and the closed ReDevPlugin runtime evidence set. If required companions are absent, the supervisor may carry forward only regular, verified companions from the current managed installation; a fresh or damaged installation must supply them in the archive. Missing or unsafe companions fail before Runtime shutdown, and legacy Desktop management stamps are not copied or trusted. A successful commit verifies staged executable bytes before activation and running identity afterward. Recovery terminates a recorded failed candidate before idempotently restoring the previous installation; an unverifiable result remains quarantined until a binding administrator reconciles it with a new exact permit.
+Catalog entries describe how an Environment can be accessed. Access capabilities do not imply Start, Stop, Restart, Update, or Reinstall. Open-session creates a short-lived, scoped access artifact for an explicit profile and route; it does not inspect or mutate Runtime installation state.
 
-Capability discovery does not make Runtime health a prerequisite for repair. Old, missing, unknown, externally replaced, incompatible, or residual-process states expose the operations that can converge them, while start and restart may be fulfilled through `update_runtime` when that is the only safe executable path. Stop is idempotent. A pre-checkpoint rejection is terminal and releases its fence, artifact, and target lock; only a failure after the durable installation-change boundary enters recovery.
+The OpenAPI document is the machine-readable authority. Typed Go protocol structures must remain closed to Runtime lifecycle fields, and structural tests must fail when a Runtime or lifecycle route is introduced.
 
-List, Get, and Events authorize before exposing operation existence. The original authorized client receives the full operation needed for mutation; any other current `manage_runtime` client receives a redacted DTO without actor, client key, idempotency, build, artifact, workload-identity, checkpoint, or desired-runtime details. Reconcile is not an ownership takeover and never accepts force unlock.
+## Compatibility
 
-Gateway and Runtime versions are independent. Lifecycle compatibility is decided by the signed compatibility manifest, Gateway protocol, Runtime service protocol/epoch, and capabilities. A version string match is neither necessary nor sufficient. Cross-epoch updates additionally require the signed manifest to list the discovered current Runtime epoch in `upgrade_from_runtime_epochs`; the v0.11.0 release contract explicitly admits the reviewed epoch 8 to epoch 9 transition. Gateway updates are performed by Desktop installer or administrator setup; the Gateway protocol contains no self-update operation.
-
-Catalog/open-session and ordinary terminal, files, web, and workspace traffic remain separate from lifecycle operations. An explicit Gateway card may use its own open-session transport, but ordinary data never enters the Runtime operation store and does not consume a lifecycle permit.
+Gateway protocol compatibility is independent from Runtime package identity. Gateway and Runtime may be released separately because this protocol does not coordinate Runtime upgrades. A client encountering a removed lifecycle path receives not found and must use a Desktop direct management channel, if one is registered; it must not retry through Provider or infer an access endpoint as a management channel.
 
 # Boundaries
 
-The contract excludes Desktop bridge stdio frames, Env App proxy routes, Runtime Service schemas, installer metadata, and Provider authorization. Portal grants and permits are consumed by Gateway at prepare; Portal records only authorization and binding audit facts and does not mirror operation state. URL environments remain access-only for Runtime lifecycle management.
+Desktop bridge IPC, Runtime Service APIs, Provider RCPP APIs, package manifests, and direct SSH/container execution are separate contracts. Gateway v2 authenticates and forwards access only. Runtime lifecycle progress is represented by Desktop Launcher Operations and never appears in Gateway protocol state.
 
 # Evidence
 
-- `redeven:spec/openapi/gateway-v2.yaml:1` - OpenAPI 3.1 Gateway v2 contract and signed payload fields.
-- `redeven:internal/runtimegateway/protocol/openapi_contract_test.go:69` - Structural contract test compares protocol, paths, routes, security, enums, and closed schemas.
-- `redeven:internal/gatewayservice/server.go:188` - Gateway validates protocol, target, authorization, and operation scope before lifecycle execution.
-- `redeven:internal/runtimegateway/protocol/lifecycle_v2.go:283` - Typed prepare, confirmation, deadline, artifact, and recovery request contracts.
-- `redeven:internal/runtimegateway/supervisor/` - Durable operation authorization, target locking, checkpoint, and recovery implementation.
-- `redeven:desktop/src/main/gatewayClient.ts` - Desktop uses the Gateway v2 route and protocol literal.
+- `redeven:spec/openapi/gateway-v2.yaml:1` - Canonical access-only OpenAPI contract.
+- `redeven:internal/runtimegateway/protocol/protocol.go:1` - Typed Gateway access DTOs.
+- `redeven:internal/runtimegateway/protocol/openapi_contract_test.go:1` - Rejects Runtime and lifecycle paths in the OpenAPI surface.
+- `redeven:internal/gatewayservice/server.go:1` - Signed request validation and access route registration.
+- `redeven:desktop/src/main/gatewayClient.ts:1` - Desktop Gateway access client.

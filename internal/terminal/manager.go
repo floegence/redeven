@@ -866,7 +866,7 @@ func (m *Manager) createSession(name string, workingDir string) (*termgo.Session
 		var err error
 		release, err = admit()
 		if err != nil {
-			return nil, &sessionrpc.Error{Code: 409, Message: "Runtime lifecycle admission is closed"}
+			return nil, &sessionrpc.Error{Code: 409, Message: "Runtime workload admission failed"}
 		}
 		if release == nil {
 			release = func() {}

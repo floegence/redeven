@@ -29,8 +29,6 @@ type VerifiedRequest struct {
 	Nonce           string
 	TimestampUnixMS int64
 	ProfileWrite    bool
-	RuntimeGrants   []protocol.RuntimeGrant
-	ProviderTunnel  bool
 }
 
 func NewVerifier(store *trust.Store) *Verifier {
@@ -109,7 +107,6 @@ func (v *Verifier) VerifyDigest(ctx context.Context, r *http.Request, bodyDigest
 		Nonce:           nonce,
 		TimestampUnixMS: ts,
 		ProfileWrite:    v.store.ClientCanWriteProfiles(clientKeyID, cleanAudience),
-		RuntimeGrants:   v.store.ClientRuntimeGrants(clientKeyID, cleanAudience),
 	}, nil
 }
 

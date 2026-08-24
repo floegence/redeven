@@ -37,50 +37,11 @@ export type DesktopControlPlaneAccount = Readonly<{
 
 export type DesktopProviderRuntimeStatus = 'online' | 'offline';
 
-export type DesktopProviderRuntimeGrant = 'manage_runtime' | 'deploy_custom_runtime' | 'manage_runtime_binding';
-export type DesktopProviderRuntimeManagementSupport = 'supported' | 'unsupported' | 'unknown';
-export type DesktopProviderRuntimeManagementAuthorizationState = 'allowed' | 'denied' | 'unknown';
-export type DesktopProviderRuntimeManagementReadiness = 'ready' | 'setup_required' | 'temporarily_unavailable' | 'unknown';
-export type DesktopProviderRuntimeManagementPresentationState = 'allowed' | 'denied' | 'setup_required' | 'temporarily_unavailable' | 'unsupported' | 'unknown';
-
-export type DesktopProviderRuntimeManagementCompatibility = Readonly<{
-  gateway_version: string;
-  gateway_protocol: string;
-  runtime_binary_version: string;
-  runtime_platform: 'linux' | 'darwin';
-  runtime_architecture: 'amd64' | 'arm64';
-  runtime_service_protocol: string;
-  compatibility_epoch: number;
-  capabilities: readonly string[];
-  runtime_artifact_sha256: string;
-}>;
-
 export type DesktopProviderEnvironmentAccess = Readonly<{
   can_connect: boolean;
   workspace_read: boolean;
   workspace_write: boolean;
   workspace_execute: boolean;
-}>;
-
-export type DesktopProviderRuntimeManagementCapability = Readonly<{
-  support: DesktopProviderRuntimeManagementSupport;
-  authorization: Readonly<{
-    state: DesktopProviderRuntimeManagementAuthorizationState;
-    grants: readonly DesktopProviderRuntimeGrant[];
-  }>;
-  readiness: DesktopProviderRuntimeManagementReadiness;
-  presentation_state: DesktopProviderRuntimeManagementPresentationState;
-  target?: Readonly<{
-    lifecycle_target_id: string;
-    target_generation: number;
-  }>;
-  compatibility?: DesktopProviderRuntimeManagementCompatibility;
-  operations: readonly ('start' | 'stop' | 'restart' | 'update_runtime' | 'reconcile')[];
-  artifact_policies: readonly ('published_release' | 'custom_build')[];
-  binding_actions: readonly string[];
-  supervision_mode: string;
-  reason_code: string;
-  checked_at_unix_ms: number;
 }>;
 
 export type DesktopProviderEnvironmentRuntimeHealth = Readonly<{
@@ -109,7 +70,6 @@ export type DesktopProviderEnvironment = Readonly<{
   last_seen_at_unix_ms: number;
   runtime_health?: DesktopProviderEnvironmentRuntimeHealth;
   access?: DesktopProviderEnvironmentAccess;
-  runtime_management?: DesktopProviderRuntimeManagementCapability;
 }>;
 
 export type DesktopControlPlaneSummary = Readonly<{
@@ -226,27 +186,6 @@ function normalizeProviderRuntimeStatus(value: unknown): DesktopProviderRuntimeS
   return clean === 'online' || clean === 'offline' ? clean : null;
 }
 
-export function projectDesktopProviderRuntimeManagementState(
-  support: DesktopProviderRuntimeManagementSupport,
-  authorization: DesktopProviderRuntimeManagementAuthorizationState,
-  readiness: DesktopProviderRuntimeManagementReadiness,
-): DesktopProviderRuntimeManagementPresentationState {
-  if (support === 'unsupported') return 'unsupported';
-  if (support !== 'supported') return 'unknown';
-  if (authorization === 'denied') return 'denied';
-  if (authorization !== 'allowed') return 'unknown';
-  if (readiness === 'ready') return 'allowed';
-  if (readiness === 'setup_required') return 'setup_required';
-  if (readiness === 'temporarily_unavailable') return 'temporarily_unavailable';
-  return 'unknown';
-}
-
-function normalizeStringSet<T extends string>(value: unknown, allowed: readonly T[]): readonly T[] {
-  if (!Array.isArray(value)) return [];
-  const allowedValues = new Set<string>(allowed);
-  return [...new Set(value.map((item) => compact(item)).filter((item): item is T => allowedValues.has(item)))].sort();
-}
-
 export function normalizeDesktopProviderEnvironmentAccess(value: unknown): DesktopProviderEnvironmentAccess | null {
   if (!value || typeof value !== 'object') return null;
   const candidate = value as Record<string, unknown>;
@@ -255,88 +194,6 @@ export function normalizeDesktopProviderEnvironmentAccess(value: unknown): Deskt
     workspace_read: candidate.workspace_read === true,
     workspace_write: candidate.workspace_write === true,
     workspace_execute: candidate.workspace_execute === true,
-  };
-}
-
-export function normalizeDesktopProviderRuntimeManagementCapability(
-  value: unknown,
-): DesktopProviderRuntimeManagementCapability | null {
-  if (!value || typeof value !== 'object') return null;
-  const candidate = value as Record<string, unknown>;
-  const support = compact(candidate.support) as DesktopProviderRuntimeManagementSupport;
-  const readiness = compact(candidate.readiness) as DesktopProviderRuntimeManagementReadiness;
-  const authorizationCandidate = candidate.authorization && typeof candidate.authorization === 'object'
-    ? candidate.authorization as Record<string, unknown>
-    : {};
-  const authorizationState = compact(authorizationCandidate.state) as DesktopProviderRuntimeManagementAuthorizationState;
-  if (!['supported', 'unsupported', 'unknown'].includes(support)
-    || !['ready', 'setup_required', 'temporarily_unavailable', 'unknown'].includes(readiness)
-    || !['allowed', 'denied', 'unknown'].includes(authorizationState)) {
-    return null;
-  }
-  const disclosedReadiness = authorizationState === 'allowed' ? readiness : 'unknown';
-  const presentationState = projectDesktopProviderRuntimeManagementState(support, authorizationState, disclosedReadiness);
-  const grants = authorizationState === 'allowed'
-    ? normalizeStringSet(authorizationCandidate.grants, ['manage_runtime', 'deploy_custom_runtime', 'manage_runtime_binding'] as const)
-    : [];
-  const targetCandidate = candidate.target && typeof candidate.target === 'object'
-    ? candidate.target as Record<string, unknown>
-    : null;
-  const lifecycleTargetID = compact(targetCandidate?.lifecycle_target_id);
-  const targetGeneration = Number(targetCandidate?.target_generation);
-  const target = support === 'supported' && authorizationState === 'allowed'
-    && lifecycleTargetID !== '' && Number.isSafeInteger(targetGeneration) && targetGeneration > 0
-    ? { lifecycle_target_id: lifecycleTargetID, target_generation: targetGeneration }
-    : undefined;
-  const canDiscloseManagementFacts = support === 'supported' && authorizationState === 'allowed';
-  const compatibilityCandidate = canDiscloseManagementFacts && candidate.compatibility && typeof candidate.compatibility === 'object'
-    ? candidate.compatibility as Record<string, unknown>
-    : null;
-  const runtimePlatform = compact(compatibilityCandidate?.runtime_platform);
-  const runtimeArchitecture = compact(compatibilityCandidate?.runtime_architecture);
-  const compatibilityEpoch = Number(compatibilityCandidate?.compatibility_epoch);
-  const compatibility = compatibilityCandidate
-    && (runtimePlatform === 'linux' || runtimePlatform === 'darwin')
-    && (runtimeArchitecture === 'amd64' || runtimeArchitecture === 'arm64')
-    && Number.isSafeInteger(compatibilityEpoch) && compatibilityEpoch > 0
-    && compact(compatibilityCandidate.gateway_protocol) !== ''
-    && compact(compatibilityCandidate.runtime_service_protocol) !== ''
-    && compact(compatibilityCandidate.runtime_artifact_sha256) !== ''
-    ? {
-        gateway_version: compact(compatibilityCandidate.gateway_version),
-        gateway_protocol: compact(compatibilityCandidate.gateway_protocol),
-        runtime_binary_version: compact(compatibilityCandidate.runtime_binary_version),
-        runtime_platform: runtimePlatform,
-        runtime_architecture: runtimeArchitecture,
-        runtime_service_protocol: compact(compatibilityCandidate.runtime_service_protocol),
-        compatibility_epoch: compatibilityEpoch,
-        capabilities: normalizeStringSet(compatibilityCandidate.capabilities, (Array.isArray(compatibilityCandidate.capabilities)
-          ? compatibilityCandidate.capabilities.map(compact).filter(Boolean)
-          : []) as readonly string[]),
-        runtime_artifact_sha256: compact(compatibilityCandidate.runtime_artifact_sha256),
-      } satisfies DesktopProviderRuntimeManagementCompatibility
-    : undefined;
-  return {
-    support,
-    authorization: { state: authorizationState, grants },
-    readiness: disclosedReadiness,
-    presentation_state: presentationState,
-    ...(target ? { target } : {}),
-    ...(compatibility ? { compatibility } : {}),
-    operations: canDiscloseManagementFacts
-      ? normalizeStringSet(candidate.operations, ['start', 'stop', 'restart', 'update_runtime', 'reconcile'] as const)
-      : [],
-    artifact_policies: canDiscloseManagementFacts
-      ? normalizeStringSet(candidate.artifact_policies, ['published_release', 'custom_build'] as const)
-      : [],
-    binding_actions: canDiscloseManagementFacts ? normalizeStringSet(candidate.binding_actions, ['enroll', 'rebind', 'rotate_supervisor_key'] as const) : [],
-    supervision_mode: canDiscloseManagementFacts ? compact(candidate.supervision_mode) : '',
-    reason_code: authorizationState === 'allowed'
-      ? compact(candidate.reason_code)
-      : authorizationState === 'denied'
-        ? 'runtime_management_permission_required'
-        : '',
-    checked_at_unix_ms: normalizeUnixMS(candidate.checked_at_unix_ms),
   };
 }
 
@@ -556,7 +413,6 @@ export function normalizeDesktopProviderEnvironment(
     last_seen_at_unix_ms: normalizeUnixMS(candidate.last_seen_at_unix_ms),
     runtime_health: normalizeDesktopProviderEnvironmentRuntimeHealth(candidate.runtime_health) ?? undefined,
     access: normalizeDesktopProviderEnvironmentAccess(candidate.access) ?? undefined,
-    runtime_management: normalizeDesktopProviderRuntimeManagementCapability(candidate.runtime_management) ?? undefined,
   };
 }
 

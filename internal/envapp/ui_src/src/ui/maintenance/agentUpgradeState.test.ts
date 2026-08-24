@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { resolveAgentUpgradeState } from './agentUpgradeState';
 
 describe('agentUpgradeState', () => {
-  it('blocks updates until an explicit Gateway-supervised maintenance context is available', () => {
+  it('blocks updates until an explicit Desktop host maintenance context is available', () => {
     expect(resolveAgentUpgradeState({
       current_version: 'v1.2.3',
       upgrade_policy: 'desktop_release',
@@ -13,7 +13,7 @@ describe('agentUpgradeState', () => {
       allowsUpgradeAction: false,
       automaticPromptAllowed: false,
       requiresTargetVersion: false,
-      message: 'Runtime management is provided through Redeven Gateway setup. Use Desktop or your administrator\'s setup flow to install the update.',
+      message: 'Runtime updates are managed by Redeven Desktop through the configured host connection.',
       releasePageURL: 'https://example.test/releases/v1.2.3',
       actionLabel: 'Manage in Desktop',
       actionMethod: 'manual',
@@ -61,7 +61,7 @@ describe('agentUpgradeState', () => {
       upgrade_policy: 'desktop_release',
     }, {
       available: true,
-      authority: 'gateway_supervisor',
+      authority: 'host_device',
       runtime_kind: 'ssh',
       management: {
         support: 'supported',
@@ -72,25 +72,25 @@ describe('agentUpgradeState', () => {
       upgrade_policy: 'desktop_release',
       restart: {
         availability: 'available',
-        method: 'gateway_supervisor',
+        method: 'host_device_handoff',
         label: 'Restart Runtime',
         title: 'Restart Runtime',
-        message: 'Gateway will restart the Runtime.',
+        message: 'Desktop will restart the Runtime through the host channel.',
       },
       upgrade: {
         availability: 'available',
-        method: 'gateway_supervisor',
+        method: 'host_device_handoff',
         label: 'Update Runtime',
         title: 'Update Runtime',
-        message: 'Gateway will install the verified Runtime release.',
+        message: 'Desktop will install the verified Runtime release through the host channel.',
         requires_target_version: false,
       },
     })).toEqual(expect.objectContaining({
       allowsUpgradeAction: true,
       requiresTargetVersion: false,
-      message: 'Gateway will install the verified Runtime release.',
+      message: 'Desktop will install the verified Runtime release through the host channel.',
       actionLabel: 'Update Runtime',
-      actionMethod: 'gateway_supervisor',
+      actionMethod: 'host_device_handoff',
     }));
   });
 });

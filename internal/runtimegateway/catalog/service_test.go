@@ -39,9 +39,6 @@ func TestServiceListEnvironmentsNormalizesSourceCatalog(t *testing.T) {
 						protocol.EnvironmentCapabilityOpen,
 						"bad",
 					},
-					ControlCapabilities: []protocol.EnvironmentCapability{
-						protocol.EnvironmentCapabilityRestart,
-					},
 				},
 			}, nil
 		})),
@@ -55,7 +52,7 @@ func TestServiceListEnvironmentsNormalizesSourceCatalog(t *testing.T) {
 	if len(resp.Environments) != 1 {
 		t.Fatalf("Environments length = %d, want 1", len(resp.Environments))
 	}
-	if got := resp.Environments[0].Capabilities; len(got) != 2 || got[0] != protocol.EnvironmentCapabilityOpen || got[1] != protocol.EnvironmentCapabilityRestart {
+	if got := resp.Environments[0].Capabilities; len(got) != 1 || got[0] != protocol.EnvironmentCapabilityOpen {
 		t.Fatalf("Capabilities = %#v", got)
 	}
 }

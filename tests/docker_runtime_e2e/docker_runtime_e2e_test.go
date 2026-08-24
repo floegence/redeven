@@ -28,14 +28,12 @@ const (
 	ubuntuImage                = "ubuntu:24.04"
 	containerStateRoot         = "/root/.redeven-e2e"
 	containerRedeven           = "/usr/local/bin/redeven"
-	containerGateway           = "/usr/local/bin/redeven-gateway"
 	containerPlugin            = "/usr/local/bin/redevplugin-runtime"
 	containerDescriptor        = "/usr/local/bin/.redevplugin-release-artifacts-verified.json"
 	managedRedeven             = containerStateRoot + "/runtime/managed/bin/redeven"
 	managedPlugin              = containerStateRoot + "/runtime/managed/bin/redevplugin-runtime"
 	managedDescriptor          = containerStateRoot + "/runtime/managed/bin/.redevplugin-release-artifacts-verified.json"
 	containerDesktopBundleRoot = "/opt/redeven-desktop-bundle"
-	gatewayStateRoot           = containerStateRoot + "/gateway"
 	runtimeLockPath            = containerStateRoot + "/local-environment/agent.lock"
 	containerHelper            = "/tmp/redeven-e2e-client"
 	pluginRuntimeEnv           = "REDEVEN_DOCKER_E2E_REDEVPLUGIN_RUNTIME"
@@ -516,7 +514,6 @@ func (f *fixture) buildBinaries(ctx context.Context) {
 	f.t.Helper()
 	redevenOut := filepath.Join(f.tempRoot, "redeven-linux")
 	upgradedRedevenOut := filepath.Join(f.tempRoot, "redeven-linux-upgraded")
-	gatewayOut := filepath.Join(f.tempRoot, "redeven-gateway-linux")
 	helperOut := filepath.Join(f.tempRoot, "redeven-e2e-client")
 	env := append(os.Environ(), "GOOS=linux", "GOARCH="+f.goarch, "CGO_ENABLED=0")
 	if _, err := f.runHostEnv(ctx, f.repoRoot, env, "go", "build", "-o", redevenOut, "./cmd/redeven"); err != nil {
@@ -529,17 +526,11 @@ func (f *fixture) buildBinaries(ctx context.Context) {
 	); err != nil {
 		f.t.Fatalf("build upgraded redeven: %v", err)
 	}
-	if _, err := f.runHostEnv(ctx, f.repoRoot, env, "go", "build", "-o", gatewayOut, "./cmd/redeven-gateway"); err != nil {
-		f.t.Fatalf("build redeven-gateway: %v", err)
-	}
 	if _, err := f.runHostEnv(ctx, f.repoRoot, env, "go", "build", "-o", helperOut, "./tests/docker_runtime_e2e/testclient"); err != nil {
 		f.t.Fatalf("build e2e helper: %v", err)
 	}
 	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", redevenOut, f.containerName+":"+containerRedeven); err != nil {
 		f.t.Fatalf("copy redeven: %v", err)
-	}
-	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", gatewayOut, f.containerName+":"+containerGateway); err != nil {
-		f.t.Fatalf("copy redeven-gateway: %v", err)
 	}
 	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", f.pluginRuntime, f.containerName+":"+containerPlugin); err != nil {
 		f.t.Fatalf("copy ReDevPlugin runtime: %v", err)
@@ -561,7 +552,7 @@ func (f *fixture) buildBinaries(ctx context.Context) {
 		f.t.Fatalf("copy managed ReDevPlugin descriptor: %v", err)
 	}
 	f.dockerExec(ctx, nil, "chown", "0:0", containerPlugin, managedPlugin)
-	f.dockerExec(ctx, nil, "chmod", "0755", containerRedeven, containerGateway, containerPlugin, managedRedeven, managedPlugin, containerHelper)
+	f.dockerExec(ctx, nil, "chmod", "0755", containerRedeven, containerPlugin, managedRedeven, managedPlugin, containerHelper)
 	f.dockerExec(ctx, nil, "chmod", "0644", containerDescriptor, managedDescriptor)
 }
 

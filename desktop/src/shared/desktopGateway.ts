@@ -8,7 +8,6 @@ export type DesktopGatewayCapability =
   | 'env_catalog'
   | 'env_open_session'
   | 'env_profile_write'
-  | 'env_lifecycle'
   | 'terminal'
   | 'files'
   | 'web_service'
@@ -41,45 +40,10 @@ export type DesktopGatewayEnvironmentState =
 
 export type DesktopGatewayEnvironmentCapability =
   | 'open'
-  | 'start'
-  | 'stop'
-  | 'restart'
-  | 'update_runtime'
   | 'terminal'
   | 'files'
   | 'web_service'
   | 'port_forward';
-
-export type DesktopGatewayRuntimeManagementCapability = Readonly<{
-  support: 'supported' | 'unsupported' | 'unknown';
-  authorization: Readonly<{
-    state: 'allowed' | 'denied' | 'unknown';
-    grants?: readonly ('manage_runtime' | 'deploy_custom_runtime' | 'manage_runtime_binding')[];
-  }>;
-  readiness: 'ready' | 'setup_required' | 'temporarily_unavailable' | 'unknown';
-  presentation_state: 'allowed' | 'denied' | 'setup_required' | 'temporarily_unavailable' | 'unsupported' | 'unknown';
-  target?: Readonly<{
-    lifecycle_target_id: string;
-    target_generation: number;
-  }>;
-  compatibility?: Readonly<{
-    gateway_version?: string;
-    gateway_protocol: string;
-    runtime_binary_version?: string;
-    runtime_platform: 'linux' | 'darwin';
-    runtime_architecture: 'amd64' | 'arm64';
-    runtime_service_protocol: string;
-    compatibility_epoch: number;
-    capabilities: readonly string[];
-    runtime_artifact_sha256?: string;
-  }>;
-  operations?: readonly ('start' | 'stop' | 'restart' | 'update_runtime' | 'reconcile')[];
-  artifact_policies?: readonly ('published_release' | 'custom_build')[];
-  binding_actions?: readonly string[];
-  supervision_mode?: string;
-  reason_code?: string;
-  checked_at_unix_ms: number;
-}>;
 
 export type DesktopGatewayEnvironmentOriginKind =
   | 'gateway_host'
@@ -101,15 +65,13 @@ export type DesktopGatewayEnvironmentProfile = Readonly<{
 export type DesktopGatewayEnvironment = Readonly<{
   gateway_env_id: string;
   display_name: string;
-  env_kind: 'managed_local_env' | 'reachable_env';
+  env_kind: 'reachable_env';
   state: DesktopGatewayEnvironmentState;
   capabilities: readonly DesktopGatewayEnvironmentCapability[];
   access_capabilities?: readonly DesktopGatewayEnvironmentCapability[];
-  control_capabilities?: readonly DesktopGatewayEnvironmentCapability[];
   profile?: DesktopGatewayEnvironmentProfile;
   profile_access_route?: DesktopGatewayEnvironmentProfileAccessRoute;
   access_endpoint?: DesktopGatewayEnvironmentProfileAccessRoute;
-  runtime_management?: DesktopGatewayRuntimeManagementCapability;
   origin: Readonly<{
     kind: DesktopGatewayEnvironmentOriginKind;
     label: string;
@@ -412,12 +374,4 @@ export function desktopGatewayCanOpenEnvironment(
   return gateway.status === 'online'
     && environment.state === 'available'
     && accessCapabilities.includes('open');
-}
-
-export function desktopGatewayEnvironmentHasControlCapability(
-  environment: Pick<DesktopGatewayEnvironment, 'capabilities' | 'control_capabilities'>,
-  capability: Extract<DesktopGatewayEnvironmentCapability, 'start' | 'stop' | 'restart' | 'update_runtime'>,
-): boolean {
-  const controlCapabilities = environment.control_capabilities ?? [];
-  return controlCapabilities.includes(capability);
 }

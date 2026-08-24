@@ -1,75 +1,58 @@
 ---
 type: Desktop Contract
 title: Desktop runtime readiness
-description: Independent access readiness, lifecycle capability projection, and window-open gates.
+description: Direct Runtime health, access readiness, and Open recovery boundaries.
 tags: [desktop, runtime, startup, readiness]
-timestamp: 2026-08-20T00:00:00Z
+timestamp: 2026-08-24T00:00:00Z
 ---
 # Summary
 
-Desktop keeps Connect, Workspace, Runtime UI, and managed lifecycle readiness independent. Packaged Desktop startup validates and starts the bundled Gateway, Runtime, bridge, and Workspace readiness path before the Local Environment is presented as ready. Environment rows present the user outcome `Open`; support, authorization, readiness, and lifecycle authority remain internal facts that decide whether Open is direct or requires one confirmation flow. Runtime `open_readiness` and AI `ai_readiness` are separate facts: an unsupported AI store does not make an otherwise verified Runtime unavailable for Open or Update.
+Desktop derives managed Runtime readiness from the exact Local, SSH, or container target, while access-only Gateway/Provider/URL readiness remains separate. A managed Environment opens only after the current Runtime reports compatible service and Local UI readiness. Missing, stopped, old, or damaged Runtime state selects a direct Desktop Start, Update, or reinstall recovery; it never invokes Gateway or Provider lifecycle. A transient status gap during startup is observed within the bounded readiness deadline and is not treated as process exit.
 
 # Contract
 
-Runtime compatibility failures use `Update Runtime and open`; Desktop compatibility failures use the Desktop update handoff. The two recovery actions stay separate because updating a remote Runtime cannot repair the bundled Desktop application.
+## Local Environment
 
-The Desktop update handoff is the single existing-installation upgrade notice. Before opening the release page, its localized native dialog states that installing the new version restarts Redeven Desktop and the Local Runtime and interrupts active Local Environment sessions. Choosing Later performs no action. A first installation does not use this handoff because there is no existing Desktop or Local Runtime to restart.
+Every Desktop installation includes a managed Local Environment. Desktop uses two explicit paths consistently:
 
-## Capability projection
+- outer Desktop `stateRoot` for Runtime `--state-root`, startup report, process lock, control socket, and status lookup;
+- nested Local Environment `runtimeRoot` for managed files and process inventory.
 
-Local, SSH, local-container, and SSH-container paths with a clear supervisor setup route report `support=supported`; URL paths report `unsupported`. With a grant, no binding is `setup_required`, and an existing binding with an unavailable Gateway is `temporarily_unavailable`. Without a grant, target, generation, operations, artifact policies, and supervisor facts remain hidden. Provider uses the same projection from RCPP v3.
+Start, Auto Start, Open, Stop, Restart, Update, Refresh, and Reinstall use that same pair and the same lifecycle coordinator. Desktop does not append `local-environment` twice or infer one path from the other during attach. A new process that has published listeners but not yet published final status remains in the bounded startup wait. Failure is reported only when the process exits, the state path is inaccessible, the service reports failure, or the readiness deadline expires with the original logs retained.
 
-## Startup and access
+Packaged Desktop validates the Runtime-only bundle manifest, version, commit, platform, architecture, file inventory, executable permissions, sizes, and digests before modifying the Local installation. Missing or mismatched managed files trigger the direct Runtime repair path. Desktop update handoff tells the user that installation restarts Desktop and the Local Runtime and interrupts Local sessions; choosing Later changes nothing.
 
-Desktop validates the bundled manifest, exact file inventory, version, commit, platform, architecture, executable permissions, sizes, and digests before starting the Local Environment service chain. If the managed Runtime was changed outside Desktop, Gateway remains available for an authorized `update_runtime` repair while withholding stop/restart; Desktop reports that the managed files changed and points to Update Runtime. Validation or startup failure is a launcher-level startup issue with repair/retry guidance; it is not deferred until Open, converted into a source build, or hidden behind an unbounded readiness wait. Startup logs record access check, environment preparation, environment start, Workspace readiness, total elapsed time, Runtime PID/version/digest, and the final readiness outcome.
+## Managed remote readiness
 
-Local UI password and network exposure acknowledgement are startup configuration, not Runtime lifecycle ownership. The Local Environment uses two explicit paths: Desktop's outer `stateRoot` selects the Go state layout and is the only value passed to Runtime `--state-root`, status, startup-report, lock, and control-socket resolution; the catalog `local_hosting.state_dir` is the resulting nested Local Environment `runtimeRoot` used by process inventory and installation scope. Start, attach, status, health, Stop, Restart, Update, Refresh, and Open use this same pair. Neither path is inferred from the other by appending `local-environment` or taking a parent. Long Unix control-socket paths resolve through a stable `/tmp` digest path so independently launched Desktop, Gateway, and Runtime processes address the same socket even when their inherited `TMPDIR` values differ. Health probes are read-only and do not start, stop, or reconnect a service. SSH/container bridge startup performs one typed health and open-readiness probe before opening a window; failed probes end that open attempt without selecting another transport. Readiness failures retain the probe stage and diagnostics: a Runtime hello that proves incompatibility routes to Update, while an unknown health response remains a Retry check path. Desktop never presents the raw `invalid_response` string as the user decision; HTML or asset mismatch is classified as Runtime readiness incompatibility and offers the same Update action. Existing bridge recovery validates exact process, token, target, and protocol identity, and never migrates a session to a different Runtime. A non-fresh Local or SSH observation always takes this short authoritative preflight on Open; an incompatible Runtime routes to an explicit Update action, while an unknown or failed check offers Retry check rather than Retry initialization. Before `Start and open` sends a start command, Desktop refreshes the latest Runtime observation; an already-running Runtime skips Start and proceeds directly to Open. The same reconciliation is used after Update or Start, so a stale renderer snapshot cannot issue a duplicate lifecycle command.
+SSH-host, local-container, and SSH-container readiness is observed through the saved direct channel. Open uses one main-process flow:
 
-An accepted destructive lifecycle operation closes the attached Env App session through the shared operation coordinator. A disconnected Desktop leaves the Gateway operation running; a later open attaches to the durable progress. Lifecycle incompatibility disables only the management area; Connect, Workspace, and Runtime UI remain available.
+```text
+probe -> decide -> lifecycle when needed -> re-probe same target -> open
+```
 
-An Open failure keeps the original intent and promotes the typed recovery action to the panel's primary action. A `update_runtime` next action is presented as `Update Runtime and open`; after the update completes Desktop reruns the authoritative open preflight and opens only after fresh readiness succeeds. When readiness is unknown, the primary action is `Refresh status`; a failed Open panel must never offer the same Open request again. Preflight failures carry the recovery action into the guidance session as well as the operation progress, so an SSH bridge failure cannot fall back to a misleading `Open` retry. Recovery actions are derived from the operation contract, not from a second renderer-only status machine.
+A healthy Runtime opens directly. A stopped Runtime offers Start and Open. An incompatible Runtime offers Update and Open. Unknown or failed health offers Refresh with the real direct-channel diagnostic. A successful lifecycle step cannot complete Open until the same target produces a fresh compatible readiness observation.
 
-Gateway restart recovery also migrates the durable operation store before attach refresh. Historical nanosecond snapshot revisions are converted to bounded, stable values during the atomic v2-to-v3 migration; invalid revisions from preflight or lifecycle fencing are rejected before persistence, so Desktop receives a retryable operation failure instead of an attach-refresh parsing error. Every cancellable lifecycle phase owns a renewable lease: Desktop renews operations when they approach expiry, up to Gateway's maximum deadline, and stops the lease when the operation reaches a terminal state.
+Runtime process health, Runtime Service compatibility, Local UI availability, Workspace readiness, AI readiness, Provider link, and Gateway access are separate facts. AI or Provider failure does not make a healthy Runtime installation unavailable. Gateway failure affects only sessions routed through that Gateway.
 
-## Unified open flow
+## Capability and progress
 
-Every Environment row uses `Open` as its primary action. After successful packaged Desktop startup, Local Environment is already ready and Open performs only connection, bridge, and Workspace readiness work. URL and other access-only connections open directly. A running Runtime also opens directly, even when lifecycle setup facts are unavailable or stale. When a Local or SSH Runtime has not been observed yet, or its cached observation is not fresh, that same Open click owns one transient access preflight: successful access opens immediately, while a failed attempt refreshes the Environment and continues in the same panel as start, update, initialization, or access guidance. It must not surface the obsolete offline error before evaluating that refreshed lifecycle state. For a lifecycle-capable Environment, a confirmed missing setup opens one `Initialize and open` panel; an initialized but stopped Runtime opens one `Start and open` panel. `Start and open` creates only a Gateway start operation over the already installed verified Runtime; it never copies source, builds assets or Runtime, uploads an artifact, or changes the action into Update. An existing binding whose managed service stopped with Desktop is still initialized: `Start and open` uses the authorized lifecycle entrypoint, which restores that service before starting the Runtime, instead of falling back to a direct offline Open. Provider authorization denial is resolved before initialization work begins and presents `Request access`.
+Local and registered SSH/container targets are direct managed Environments and retain all direct lifecycle actions in every diagnosis state. Gateway, Provider, and URL entries without a direct management registration are access-only and expose no Runtime lifecycle action.
 
-The initialization panel owns its interaction until completion. It reports `Check access`, `Prepare environment`, `Start environment`, and `Open workspace` in execution order while the internal Gateway progress remains hidden. The start-only path omits the preparation stage. A lifecycle success is not enough to complete the action: Desktop waits for a fresh Runtime health sample with open readiness before opening, and waits for a fresh offline sample after stop. The final Open request remains authoritative when the first renderer snapshot is stale. Success opens the workspace and closes the panel. Failure preserves the exact user-facing reason in that panel and exposes the next reason-specific action: Retry check, Prepare environment, Upgrade runtime, or Request access. Snapshot refresh and lower-level operation progress cannot prematurely replace or complete this session.
+One Launcher Operation owns Open and any nested direct Runtime recovery. Runtime recovery temporarily selects the Runtime lifecycle progress surface, then returns to Open without completing or deleting the parent operation. Renderer binds the exact operation key and start identity; it does not select an older operation, infer progress from card state, or synthesize long-lived steps.
 
-The renderer guidance state is presentation only. One main-process decision contract owns every Local, SSH host, Local container, and SSH container Open or lifecycle request: `probe -> decide -> lifecycle -> re-probe -> open`. The decision uses the latest observed health and advertised operations; it treats a running Runtime as idempotently started, treats an unknown result as a probe/recovery decision rather than an instruction to initialize, and chooses Update when that is the only safe convergence operation. After any recovery attempt, Desktop probes the exact same target again before creating a session. This prevents a stale card snapshot and a renderer retry flow from becoming a second lifecycle state machine.
-
-Every failed Open or Runtime action retains a structured summary and executable next actions in the operation snapshot: `Retry`, `Refresh status`, `Copy log`, and `Dismiss`. Container failures name the actual boundary (missing container, unavailable engine, SSH failure, or invalid Runtime response) and retain the exact host, container id, reference, and placement in the retry request. A failure cannot collapse to a toast or a disabled Open button without a recovery path.
-
-Progress snapshots keep the last real execution step until the operation is dismissed. Open progress describes only its ordered connection stages; operation `status` carries success, failure, or cancellation, so a failed Open marks the step that actually failed instead of replacing it with a generic `failed` stage. Runtime lifecycle progress uses the same rule with its terminal failed step. The operation registry recomputes localized title and detail keys whenever status or stage changes, preventing stale step copy from hiding a terminal failure.
+All operation labels, details, errors, recovery actions, tooltips, and accessibility text use structured keys and localized catalogs. Raw command stderr remains literal only inside technical diagnostics.
 
 # Boundaries
 
-Environment open guidance does not display Gateway, Desktop ownership, target binding, takeover, or lifecycle-controller terminology. Provider setup never borrows another card's credentials or a public URL control path; authorization and target selection remain enforced behind the product action.
+Read-only health probes do not start, stop, repair, or reconnect Runtime. Access endpoints are not management channels. Runtime handles its internal sessions and graceful signal cleanup, but it exposes no Provider/Gateway lifecycle authority. Desktop is the only component that decides and executes a managed Runtime recovery.
 
 # Evidence
 
-- `redeven:desktop/src/shared/desktopRuntimeOperationPlanner.ts:1` - Shared support/authorization/readiness projection and preflight.
-- `redeven:desktop/src/main/desktopBundle.ts:1` - Startup-time packaged service validation and fail-closed diagnostics.
-- `redeven:desktop/src/main/main.ts:10183` - Automatic Local Gateway, Runtime, bridge, and Workspace readiness sequence with phase timing.
-- `redeven:desktop/src/shared/desktopRuntimeHealth.ts:1` - Typed health observation independent from lifecycle commands.
-- `redeven:desktop/src/main/runtimePlacementBridgeSession.ts:337` - One exact bridge session identity for SSH and container access.
-- `redeven:desktop/src/main/runtimeLifecycleReadiness.ts:1` - Fresh online/openable and offline completion barriers.
-- `redeven:desktop/src/main/statePaths.ts:1` - Stable cross-process Unix control-socket fallback.
-- `redeven:desktop/src/main/desktopWelcomeRuntimeState.ts:1` - Local status hydration receives the authoritative outer Desktop state root instead of the nested Runtime root.
-- `redeven:desktop/src/main/runtimeProcess.ts:336` - Local inventory accepts distinct Runtime and state roots while status uses the outer state root.
-- `redeven:desktop/src/welcome/viewModel.ts:1239` - Direct, preflight, initialize, start, and request-access open-flow decision.
-- `redeven:desktop/src/welcome/environmentOpenPreflight.ts:1` - Unknown-state Open preflight, Runtime reconciliation, and refreshed lifecycle routing.
-- `redeven:desktop/src/welcome/environmentOpenPreflight.smoke.test.ts:1` - Open, initialize, start, and authorization smoke outcomes.
-- `redeven:desktop/src/welcome/environmentGuidanceSession.ts:1` - Panel ownership, ordered stages, typed recovery actions, failure retention, and retry state.
-- `redeven:desktop/src/main/launcherOperations.ts:1` - Durable operation snapshots retain real Open stages and derive status-aware presentation keys.
-- `redeven:desktop/src/welcome/environmentProgressPrimaryPresentation.ts:59` - Maps typed Open failures to Runtime update-and-open, Desktop update handoff, or refresh-status primary recovery actions.
-- `redeven:desktop/src/main/desktopUpdateHandoff.ts:1` - Builds the localized native update handoff warning for the Desktop and Local Runtime restart impact.
-- `redeven:desktop/src/welcome/App.tsx:5104` - One localized initialize/start/open orchestrator.
-- `redeven:desktop/src/welcome/App.tsx:10290` - Runs update-and-open continuation through the shared open preflight.
-- `redeven:desktop/src/main/environmentOpenCoordinator.ts:1` - Single target-scoped Open and lifecycle decision contract.
-- `redeven:desktop/src/main/runtimeOperationLease.ts:1` - Bounded Runtime operation renewal across confirmation, artifact, and commit-ready phases.
-- `redeven:internal/runtimegateway/supervisor/controller.go:385` - Repair-only Snapshot and lifecycle fencing for an externally changed managed Runtime.
-- `redeven:internal/gatewayservice/server.go:262` - Keeps Gateway lifecycle service available for authorized Runtime identity repair.
-- `redeven:desktop/src/main/environmentOpenCoordinator.test.ts:1` - Unknown, stale, stopped, old, and idempotent Runtime decisions.
-- `redeven:scripts/smoke_desktop_runtime_lifecycle.mjs:1` - Real Local and SSH Remote outcomes plus Local/SSH container failure guidance.
+- `redeven:desktop/src/main/desktopBundle.ts:1` - Runtime-only bundle identity and file validation.
+- `redeven:desktop/src/main/desktopWelcomeRuntimeState.ts:1` - Local readiness hydration with explicit state and Runtime roots.
+- `redeven:desktop/src/main/runtimeProcess.ts:1` - Local inventory and status lookup path contract.
+- `redeven:desktop/src/main/runtimeLifecycleReadiness.ts:1` - Bounded healthy and stopped completion barriers.
+- `redeven:desktop/src/main/environmentOpenCoordinator.ts:1` - One probe/decide/lifecycle/re-probe/open flow.
+- `redeven:desktop/src/main/launcherOperations.ts:1` - Authoritative progress surface and terminal state.
+- `redeven:desktop/src/shared/environmentManagementPrinciples.ts:1` - Direct managed versus access-only capability boundary.
+- `redeven:desktop/src/welcome/App.tsx:1` - Localized action menu, progress, and recovery presentation.

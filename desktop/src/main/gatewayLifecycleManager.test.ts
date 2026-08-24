@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const lifecycleMocks = vi.hoisted(() => ({
   ensureManagedGatewayServiceReady: vi.fn(),
-  enrollManagedGatewaySupervisor: vi.fn(),
   probeManagedGatewayServiceDeep: vi.fn(),
   probeManagedGatewayServiceStatus: vi.fn(),
   stopManagedGatewayService: vi.fn(),
@@ -14,7 +13,6 @@ vi.mock('./gatewayServiceHost', async () => {
   return {
     ...actual,
     ensureManagedGatewayServiceReady: lifecycleMocks.ensureManagedGatewayServiceReady,
-    enrollManagedGatewaySupervisor: lifecycleMocks.enrollManagedGatewaySupervisor,
     probeManagedGatewayServiceDeep: lifecycleMocks.probeManagedGatewayServiceDeep,
     probeManagedGatewayServiceStatus: lifecycleMocks.probeManagedGatewayServiceStatus,
     stopManagedGatewayService: lifecycleMocks.stopManagedGatewayService,
@@ -42,30 +40,6 @@ import { DEFAULT_DESKTOP_SSH_RUNTIME_ROOT } from '../shared/desktopSSH';
 import { desktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 import { RuntimeLifecycleCoordinator, RuntimeLifecycleInProgressError } from './runtimeLifecycleCoordinator';
 import type { DesktopSSHTransportManager } from './sshTransportManager';
-import type { DesktopBundle } from './desktopBundle';
-
-const PRECOMPILED_BUNDLE: DesktopBundle = {
-  root: '/Applications/Redeven.app/Contents/Resources/bin',
-  manifest_path: '/Applications/Redeven.app/Contents/Resources/bin/desktop-bundle-manifest.json',
-  version: 'v1.2.3',
-  commit: 'bundle123',
-  platform: 'darwin',
-  architecture: 'arm64',
-  provenance: 'packaged_bundle',
-  gateway: {
-    path: '/Applications/Redeven.app/Contents/Resources/bin/redeven-gateway',
-    sha256: 'a'.repeat(64),
-    size_bytes: 1,
-    executable: true,
-  },
-  runtime_suite: [{
-    path: '/Applications/Redeven.app/Contents/Resources/bin/redeven',
-    sha256: 'b'.repeat(64),
-    size_bytes: 1,
-    executable: true,
-  }],
-  runtime_suite_sha256: `sha256:${'c'.repeat(64)}`,
-};
 
 function fakeSSHTransportManager(): DesktopSSHTransportManager {
   return {
@@ -131,7 +105,6 @@ function manager(progress: string[] = [], secretStore = memorySecretStore()): Ga
     asset_cache_root: '/tmp/redeven-assets',
     temp_root: '/tmp/redeven-temp',
     source_runtime_root: '/Applications/Redeven.app/Contents/Resources',
-    precompiled_bundle: PRECOMPILED_BUNDLE,
     lifecycle_coordinator: new RuntimeLifecycleCoordinator(),
     on_progress: (event) => {
       progress.push(event.phase);
@@ -201,15 +174,13 @@ function localGateway(): GatewayRecord {
 describe('GatewayLifecycleManager', () => {
   beforeEach(() => {
     lifecycleMocks.ensureManagedGatewayServiceReady.mockReset();
-    lifecycleMocks.enrollManagedGatewaySupervisor.mockReset();
     lifecycleMocks.probeManagedGatewayServiceDeep.mockReset();
     lifecycleMocks.probeManagedGatewayServiceStatus.mockReset();
     lifecycleMocks.stopManagedGatewayService.mockReset();
     lifecycleMocks.startRuntimePlacementBridgeSession.mockReset();
-    lifecycleMocks.ensureManagedGatewayServiceReady.mockResolvedValue('/opt/redeven/gateway/managed/bin/redeven-gateway');
-    lifecycleMocks.enrollManagedGatewaySupervisor.mockResolvedValue(undefined);
+    lifecycleMocks.ensureManagedGatewayServiceReady.mockResolvedValue('/opt/redeven/gateways/gw_bastion/state/managed/bin/redeven-gateway');
     lifecycleMocks.probeManagedGatewayServiceDeep.mockResolvedValue({
-      binary_path: '/opt/redeven/gateway/managed/bin/redeven-gateway',
+      binary_path: '/opt/redeven/gateways/gw_bastion/state/managed/bin/redeven-gateway',
       state_root: '/opt/redeven/gateways/gw_bastion/state',
       package_status: 'ready',
       version: 'v1.2.3',
@@ -220,7 +191,7 @@ describe('GatewayLifecycleManager', () => {
     lifecycleMocks.probeManagedGatewayServiceStatus.mockResolvedValue({
       status: 'not_running',
       message: 'Gateway service is not running.',
-      binary_path: '/opt/redeven/gateway/managed/bin/redeven-gateway',
+      binary_path: '/opt/redeven/gateways/gw_bastion/state/managed/bin/redeven-gateway',
       state_root: '/opt/redeven/gateways/gw_bastion/state',
     });
     lifecycleMocks.stopManagedGatewayService.mockResolvedValue(undefined);
@@ -265,7 +236,7 @@ describe('GatewayLifecycleManager', () => {
         runtime_state_root: '/opt/redeven/gateways/gw_bastion/state',
         bootstrap_strategy: 'desktop_upload',
       }),
-      runtime_binary_path: '/opt/redeven/gateway/managed/bin/redeven-gateway',
+      runtime_binary_path: '/opt/redeven/gateways/gw_bastion/state/managed/bin/redeven-gateway',
       bridge_command_kind: 'gateway',
       require_local_ui: false,
       ssh_password: '',
@@ -274,20 +245,22 @@ describe('GatewayLifecycleManager', () => {
     expect(progress).toEqual(['opening_bridge', 'gateway_ready']);
   });
 
-  it('passes the controlled development source root so a local Gateway can be rebuilt when needed', async () => {
-    lifecycleMocks.ensureManagedGatewayServiceReady.mockResolvedValue(PRECOMPILED_BUNDLE.gateway.path);
+  it('prepares an explicit Local Gateway under its own state root', async () => {
+    lifecycleMocks.ensureManagedGatewayServiceReady.mockResolvedValue(
+      '/Users/test/.redeven/gateways/gw_local/state/managed/bin/redeven-gateway',
+    );
 
     await manager().bridgeClient(localGateway(), { startPolicy: 'start_if_needed' });
 
     expect(lifecycleMocks.ensureManagedGatewayServiceReady).toHaveBeenCalledWith(expect.objectContaining({
       hostAccess: { kind: 'local_host' },
-      releaseTag: PRECOMPILED_BUNDLE.version,
+      releaseTag: 'v1.2.3',
       sourceRuntimeRoot: '/Applications/Redeven.app/Contents/Resources',
-      precompiledBundle: PRECOMPILED_BUNDLE,
+      stateRoot: '/Users/test/.redeven/gateways/gw_local/state',
     }));
     expect(lifecycleMocks.startRuntimePlacementBridgeSession).toHaveBeenCalledWith(expect.objectContaining({
       host_access: { kind: 'local_host' },
-      runtime_binary_path: PRECOMPILED_BUNDLE.gateway.path,
+      runtime_binary_path: '/Users/test/.redeven/gateways/gw_local/state/managed/bin/redeven-gateway',
       bridge_command_kind: 'gateway',
     }));
   });
@@ -320,7 +293,7 @@ describe('GatewayLifecycleManager', () => {
         runtime_root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
         runtime_state_root: `${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/gateways/gw_home/state`,
       }),
-      runtime_binary_path: '/opt/redeven/gateway/managed/bin/redeven-gateway',
+      runtime_binary_path: '/opt/redeven/gateways/gw_bastion/state/managed/bin/redeven-gateway',
       bridge_command_kind: 'gateway',
     }));
   });
@@ -418,7 +391,7 @@ describe('GatewayLifecycleManager', () => {
       await new Promise<void>((resolve) => {
         releaseGateway = resolve;
       });
-      return '/opt/redeven/gateway/managed/bin/redeven-gateway';
+      return '/opt/redeven/gateways/gw_bastion/state/managed/bin/redeven-gateway';
     });
     const record = sshGateway({
       gateway_id: 'gw_parallel',
@@ -451,7 +424,7 @@ describe('GatewayLifecycleManager', () => {
       await new Promise<void>((resolve) => {
         releaseGateway = resolve;
       });
-      return '/opt/redeven/gateway/managed/bin/redeven-gateway';
+      return '/opt/redeven/gateways/gw_bastion/state/managed/bin/redeven-gateway';
     });
     const record = sshGateway();
     if (record.connection.kind !== 'ssh_host') {
@@ -492,7 +465,7 @@ describe('GatewayLifecycleManager', () => {
     lifecycleMocks.probeManagedGatewayServiceStatus.mockResolvedValue({
       status: 'failed',
       message: 'SSH connection to "bastion.internal" failed.',
-      binary_path: '/opt/redeven/gateway/managed/bin/redeven-gateway',
+      binary_path: '/opt/redeven/gateways/gw_bastion/state/managed/bin/redeven-gateway',
       state_root: '/opt/redeven/gateways/gw_bastion/state',
     });
     const record = sshGateway();
@@ -514,7 +487,7 @@ describe('GatewayLifecycleManager', () => {
       args.onProgress?.({ phase: 'installing_gateway', title: 'Installing', detail: 'Installing Gateway' });
       args.onProgress?.({ phase: 'starting_gateway', title: 'Starting', detail: 'Starting Gateway' });
       args.onProgress?.({ phase: 'gateway_ready', title: 'Ready', detail: 'Gateway ready' });
-      return '/root/.redeven/gateway/managed/bin/redeven-gateway';
+      return '/root/.redeven/gateways/gw_container/state/managed/bin/redeven-gateway';
     });
     const record = containerGateway();
 
@@ -549,7 +522,7 @@ describe('GatewayLifecycleManager', () => {
         runtime_root: '/root/.redeven',
         runtime_state_root: '/root/.redeven/gateways/gw_container/state',
       }),
-      runtime_binary_path: '/root/.redeven/gateway/managed/bin/redeven-gateway',
+      runtime_binary_path: '/root/.redeven/gateways/gw_container/state/managed/bin/redeven-gateway',
       bridge_command_kind: 'gateway',
       require_local_ui: false,
       ssh_password: '',
@@ -647,7 +620,7 @@ describe('GatewayLifecycleManager', () => {
       await new Promise<void>((resolve) => {
         releaseStart = resolve;
       });
-      return '/opt/redeven/gateway/managed/bin/redeven-gateway';
+      return '/opt/redeven/gateways/gw_bastion/state/managed/bin/redeven-gateway';
     });
     const record = sshGateway();
     const lifecycle = manager();
@@ -669,7 +642,7 @@ describe('GatewayLifecycleManager', () => {
     const record = sshGateway();
 
     await expect(manager().inspectManagedProbe(record)).resolves.toMatchObject({
-      binary_path: '/opt/redeven/gateway/managed/bin/redeven-gateway',
+      binary_path: '/opt/redeven/gateways/gw_bastion/state/managed/bin/redeven-gateway',
       service_status: 'running',
     });
 
@@ -709,7 +682,7 @@ describe('GatewayLifecycleManager', () => {
       sourceRuntimeRoot: '/Applications/Redeven.app/Contents/Resources',
     }));
     expect(lifecycleMocks.startRuntimePlacementBridgeSession).toHaveBeenCalledWith(expect.objectContaining({
-      runtime_binary_path: '/opt/redeven/gateway/managed/bin/redeven-gateway',
+      runtime_binary_path: '/opt/redeven/gateways/gw_bastion/state/managed/bin/redeven-gateway',
       bridge_command_kind: 'gateway',
     }));
     expect(lifecycleMocks.stopManagedGatewayService.mock.invocationCallOrder[0]).toBeLessThan(
@@ -723,7 +696,7 @@ describe('GatewayLifecycleManager', () => {
   it('installs and verifies a fresh Gateway without opening a bridge or invoking the ordinary stop path', async () => {
     lifecycleMocks.probeManagedGatewayServiceStatus.mockResolvedValue({
       status: 'running',
-      binary_path: '/opt/redeven/gateway/managed/bin/redeven-gateway',
+      binary_path: '/opt/redeven/gateways/gw_bastion/state/managed/bin/redeven-gateway',
       state_root: '/opt/redeven/gateways/gw_bastion/state',
     });
 
@@ -741,7 +714,7 @@ describe('GatewayLifecycleManager', () => {
     lifecycleMocks.probeManagedGatewayServiceStatus.mockResolvedValue({
       status: 'needs_reinstall',
       message: 'Gateway identity is incompatible with this Desktop.',
-      binary_path: '/opt/redeven/gateway/managed/bin/redeven-gateway',
+      binary_path: '/opt/redeven/gateways/gw_bastion/state/managed/bin/redeven-gateway',
       state_root: '/opt/redeven/gateways/gw_bastion/state',
     });
     const lifecycle = manager();
@@ -751,60 +724,9 @@ describe('GatewayLifecycleManager', () => {
     await expect(lifecycle.stopGateway(record)).rejects.toBeInstanceOf(GatewayReinstallRequiredError);
     await expect(lifecycle.restartGateway(record)).rejects.toBeInstanceOf(GatewayReinstallRequiredError);
     await expect(lifecycle.updateGateway(record)).rejects.toBeInstanceOf(GatewayReinstallRequiredError);
-    await expect(lifecycle.enrollProviderSupervisor(record, {
-      provider_origin: 'https://provider.example',
-      environment_id: 'env_demo',
-      enrollment_code: 'rec_demo.0.rpn_demo.ren_secret',
-    })).rejects.toBeInstanceOf(GatewayReinstallRequiredError);
     expect(lifecycleMocks.ensureManagedGatewayServiceReady).not.toHaveBeenCalled();
     expect(lifecycleMocks.startRuntimePlacementBridgeSession).not.toHaveBeenCalled();
     expect(lifecycleMocks.stopManagedGatewayService).not.toHaveBeenCalled();
-  });
-
-  it('stops the selected Gateway, enrolls through stdin, then restarts the supervisor', async () => {
-    const record = sshGateway();
-
-    await manager().enrollProviderSupervisor(record, {
-      provider_origin: 'https://provider.example',
-      environment_id: 'env_demo',
-      enrollment_code: 'rec_demo.0.rpn_demo.ren_secret',
-    });
-
-    expect(lifecycleMocks.enrollManagedGatewaySupervisor).toHaveBeenCalledWith(
-      expect.objectContaining({
-        target: expect.objectContaining({ ssh_destination: 'bastion.internal' }),
-        stateRoot: '/opt/redeven/gateways/gw_bastion/state',
-      }),
-      {
-        provider_origin: 'https://provider.example',
-        environment_id: 'env_demo',
-        enrollment_code: 'rec_demo.0.rpn_demo.ren_secret',
-      },
-    );
-    expect(lifecycleMocks.ensureManagedGatewayServiceReady).toHaveBeenCalledTimes(2);
-    expect(lifecycleMocks.stopManagedGatewayService.mock.invocationCallOrder[0]).toBeLessThan(
-      lifecycleMocks.enrollManagedGatewaySupervisor.mock.invocationCallOrder[0] ?? 0,
-    );
-    expect(lifecycleMocks.enrollManagedGatewaySupervisor.mock.invocationCallOrder[0]).toBeLessThan(
-      lifecycleMocks.ensureManagedGatewayServiceReady.mock.invocationCallOrder[1] ?? 0,
-    );
-  });
-
-  it('restarts the previous Gateway service when Provider enrollment fails', async () => {
-    lifecycleMocks.enrollManagedGatewaySupervisor.mockRejectedValue(new Error('challenge rejected'));
-    const record = sshGateway();
-
-    await expect(manager().enrollProviderSupervisor(record, {
-      provider_origin: 'https://provider.example',
-      environment_id: 'env_demo',
-      enrollment_code: 'rec_demo.0.rpn_demo.ren_secret',
-    })).rejects.toThrow('challenge rejected');
-
-    expect(lifecycleMocks.ensureManagedGatewayServiceReady).toHaveBeenCalledTimes(2);
-    expect(lifecycleMocks.ensureManagedGatewayServiceReady.mock.invocationCallOrder[1]).toBeGreaterThan(
-      lifecycleMocks.enrollManagedGatewaySupervisor.mock.invocationCallOrder[0] ?? 0,
-    );
-    expect(lifecycleMocks.startRuntimePlacementBridgeSession).not.toHaveBeenCalled();
   });
 
   it('does not allow Desktop to manage URL Gateways as local services', async () => {

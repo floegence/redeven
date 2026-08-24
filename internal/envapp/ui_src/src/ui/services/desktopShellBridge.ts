@@ -7,7 +7,6 @@ import {
 } from '../../../../../../desktop/src/shared/desktopShellCodespaceWindowIPC';
 import type { DesktopShellOpenWebServiceWindowRequest } from '../../../../../../desktop/src/shared/desktopShellWebServiceWindowIPC';
 import {
-  desktopShellRuntimeMaintenanceMethodUsesDesktop,
   normalizeDesktopShellRuntimeActionResponse,
   normalizeDesktopShellRuntimeMaintenanceContext,
   type DesktopShellRuntimeActionResponse,
@@ -282,7 +281,7 @@ export async function performRuntimeMaintenanceActionInDesktopShell(
 }
 
 export function runtimeMaintenanceMethodUsesDesktop(method: DesktopShellRuntimeMaintenanceMethod): boolean {
-  return desktopShellRuntimeMaintenanceMethodUsesDesktop(method);
+  return method === 'host_device_handoff';
 }
 
 export async function manageDesktopUpdate(): Promise<DesktopRuntimeMaintenanceResult | null> {

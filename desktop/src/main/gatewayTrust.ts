@@ -49,11 +49,8 @@ export type GatewayPairingCompleteRequest = Readonly<{
   binding_audience: string;
   client_key_id: string;
   client_capability?: 'env_profile_write';
-  runtime_grants?: readonly GatewayRuntimeGrant[];
   proof: string;
 }>;
-
-export type GatewayRuntimeGrant = 'manage_runtime' | 'deploy_custom_runtime' | 'manage_runtime_binding';
 
 export type GatewayPairingCompleteResponse = Readonly<{
   protocol_version: string;
@@ -181,7 +178,6 @@ export function pairingProofPayload(input: Readonly<{
   binding_audience: string;
   client_key_id: string;
   client_capability?: string;
-  runtime_grants?: readonly GatewayRuntimeGrant[];
 }>): string {
   return canonicalJSON(input);
 }
@@ -227,14 +223,13 @@ export function pairingChallengePayload(input: Readonly<{
 export function buildPairingCompleteRequest(
   material: GatewayPairingMaterial,
   challenge: GatewayPairingChallengeResponse,
-  options: Readonly<{ profileWrite?: boolean; runtimeGrants?: readonly GatewayRuntimeGrant[] }> = {},
+  options: Readonly<{ profileWrite?: boolean }> = {},
 ): GatewayPairingCompleteRequest {
   const gatewayID = compact(challenge.gateway_id);
   const gatewayNonce = compact(challenge.gateway_nonce);
   if (!gatewayID || !gatewayNonce) {
     throw new GatewayTrustError('GATEWAY_PAIRING_CHALLENGE_INVALID', 'Gateway pairing challenge is incomplete.');
   }
-  const runtimeGrants = [...new Set(options.runtimeGrants ?? [])].sort();
   const base = {
     protocol_version: 'redeven-gateway-v2' as const,
     client_nonce: material.client_nonce,
@@ -243,7 +238,6 @@ export function buildPairingCompleteRequest(
     binding_audience: material.binding_audience,
     client_key_id: material.client_key_id,
     ...(options.profileWrite ? { client_capability: 'env_profile_write' as const } : {}),
-    ...(runtimeGrants.length ? { runtime_grants: runtimeGrants } : {}),
   };
   return {
     ...base,
@@ -259,7 +253,6 @@ export function pairingCompleteResponsePayload(input: Readonly<{
   binding_audience: string;
   client_key_id: string;
   client_capability?: string;
-  runtime_grants?: readonly GatewayRuntimeGrant[];
   paired_at_unix_ms: number;
 }>): string {
   return canonicalJSON(input);
@@ -352,7 +345,7 @@ export function assertGatewayPairingCompleteResponse(
   material: GatewayPairingMaterial,
   challenge: GatewayPairingChallengeResponse,
   response: GatewayPairingCompleteResponse,
-  options: Readonly<{ client_capability?: string; runtime_grants?: readonly GatewayRuntimeGrant[] }> = {},
+  options: Readonly<{ client_capability?: string }> = {},
 ): void {
   if (response.protocol_version !== 'redeven-gateway-v2') {
     throw new GatewayTrustError('GATEWAY_PROTOCOL_VERSION_UNSUPPORTED', 'Gateway protocol version is not supported.');
@@ -371,7 +364,6 @@ export function assertGatewayPairingCompleteResponse(
     binding_audience: material.binding_audience,
     client_key_id: response.client_key_id,
     client_capability: compact(options.client_capability) || undefined,
-    ...(options.runtime_grants?.length ? { runtime_grants: [...options.runtime_grants] } : {}),
     paired_at_unix_ms: response.paired_at_unix_ms,
   });
   if (!verifyGatewaySignature(challenge.gateway_public_key, payload, response.proof)) {

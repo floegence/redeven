@@ -128,10 +128,7 @@ import {
   type FlowerThreadFocusRequest,
   type FlowerSurfaceWarmupState,
 } from '../../../internal/flower_ui/src';
-import { desktopEntryKindSupportsRuntimeManagement } from '../shared/environmentManagementPrinciples';
-import {
-  providerRuntimeDirectSetupCandidate,
-} from './providerRuntimeEnrollment';
+import { desktopEntryKindSupportsDirectRuntimeOperations } from '../shared/environmentManagementPrinciples';
 import {
   openConnectionPhaseSequence,
   type DesktopOpenConnectionPhase,
@@ -4429,40 +4426,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return nextSnapshot.environments.find((entry) => entry.id === environmentID) ?? null;
   }
 
-  async function runProviderEnvironmentLifecycle(
-    environment: DesktopEnvironmentEntry,
-    operation: Extract<DesktopLauncherActionRequest, { kind: 'run_provider_environment_lifecycle' }>['operation'],
-    expectedOutcome: DesktopLauncherActionSuccess['outcome'],
-    errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
-    attempt?: EnvironmentLifecycleAttempt,
-  ): Promise<boolean> {
-    if (environment.kind !== 'provider_environment') {
-      return false;
-    }
-    const result = await performLauncherAction({
-      kind: 'run_provider_environment_lifecycle',
-      environment_id: environment.id,
-      operation,
-      label: environment.label,
-      ...(attempt ? {
-        operation_key: attempt.operation_key,
-        operation_started_at_unix_ms: attempt.started_at_unix_ms,
-      } : {}),
-    }, errorTarget);
-    if (result?.outcome !== expectedOutcome) {
-      return false;
-    }
-    const toastKey = operation === 'start'
-      ? 'environmentCenter.runtimeStartedToast'
-      : operation === 'stop'
-        ? 'environmentCenter.runtimeStoppedToast'
-        : operation === 'restart'
-          ? 'environmentCenter.runtimeRestartedToast'
-          : 'environmentCenter.runtimeUpdatedToast';
-    showActionToast(i18n().t(toastKey, { label: environment.label }));
-    return true;
-  }
-
   async function startEnvironmentRuntime(
     environment: DesktopEnvironmentEntry,
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
@@ -4471,9 +4434,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       attempt?: EnvironmentLifecycleAttempt;
     }> = {},
   ): Promise<boolean> {
-    if (environment.kind === 'provider_environment') {
-      return runProviderEnvironmentLifecycle(environment, 'start', 'started_gateway_environment_runtime', errorTarget, options.attempt);
-    }
     const request = runtimeActionRequest(environment, 'start_environment_runtime', { attempt: options.attempt });
     if (!request) {
       setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', i18n().t('environmentCenter.resolveRuntimeTargetError'));
@@ -4492,17 +4452,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   ): Promise<Extract<DesktopLauncherActionResult, Readonly<{ ok: true }>> | SilentLauncherActionFailure> {
     let request: DesktopLauncherActionRequest | null = null;
     let expectedOutcome: DesktopLauncherActionSuccess['outcome'] = 'started_environment_runtime';
-    if (environment.kind === 'provider_environment') {
-      request = {
-        kind: 'run_provider_environment_lifecycle',
-        environment_id: environment.id,
-        operation: 'start',
-        label: environment.label,
-      };
-      expectedOutcome = 'started_gateway_environment_runtime';
-    } else {
-      request = runtimeActionRequest(environment, 'start_environment_runtime');
-    }
+    request = runtimeActionRequest(environment, 'start_environment_runtime');
     if (!request) {
       return { ok: false, message: i18n().t('environmentCenter.resolveRuntimeTargetError') };
     }
@@ -4533,9 +4483,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       }
       return updated;
     };
-    if (environment.kind === 'provider_environment') {
-      return finish(await runProviderEnvironmentLifecycle(environment, 'update_runtime', 'updated_gateway_environment_runtime', errorTarget, attempt));
-    }
     const request = runtimeActionRequest(environment, 'update_environment_runtime', {
       forceRuntimeUpdate: true,
       attempt,
@@ -4557,9 +4504,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
     attempt?: EnvironmentLifecycleAttempt,
   ): Promise<boolean> {
-    if (environment.kind === 'provider_environment') {
-      return runProviderEnvironmentLifecycle(environment, 'restart', 'restarted_gateway_environment_runtime', errorTarget, attempt);
-    }
     const request = runtimeActionRequest(environment, 'restart_environment_runtime', { attempt });
     if (!request) {
       setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', i18n().t('environmentCenter.resolveRuntimeTargetError'));
@@ -4578,9 +4522,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     errorTarget: 'connect' | 'dialog' | 'settings' = 'connect',
     attempt?: EnvironmentLifecycleAttempt,
   ): Promise<boolean> {
-    if (environment.kind === 'provider_environment') {
-      return runProviderEnvironmentLifecycle(environment, 'stop', 'stopped_gateway_environment_runtime', errorTarget, attempt);
-    }
     const request = runtimeActionRequest(environment, 'stop_environment_runtime', { attempt });
     if (!request) {
       setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', i18n().t('environmentCenter.resolveRuntimeTargetError'));
@@ -4666,7 +4607,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     // IMPORTANT: Provider-link confirmation is intentionally reachable only from
     // Local/SSH runtime cards. Provider Environment cards must never grant or
     // revoke provider control over a runtime.
-    if (!desktopEntryKindSupportsRuntimeManagement(environment.kind)) {
+    if (!desktopEntryKindSupportsDirectRuntimeOperations(environment.kind)) {
       return;
     }
     const target = environment.provider_runtime_link_target;
@@ -5208,68 +5149,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             resolution.recovery,
           );
       }
-      let request: DesktopLauncherActionRequest | null = null;
-      if (initializationEnvironment.kind === 'provider_environment') {
-        const candidate = providerRuntimeDirectSetupCandidate(snapshot().environments, initializationEnvironment.id);
-        if (candidate) {
-          request = {
-            kind: 'setup_provider_runtime_management_with_direct_card',
-            environment_id: initializationEnvironment.id,
-            direct_environment_id: candidate.environment_id,
-            direct_label: candidate.label,
-            host_access: candidate.host_access,
-            placement: candidate.placement,
-          };
-        }
-      } else if (initializationEnvironment.managed_runtime_host_access && initializationEnvironment.managed_runtime_placement) {
-        request = {
-          kind: 'setup_direct_runtime_management',
-          environment_id: initializationEnvironment.id,
-          label: initializationEnvironment.label,
-          host_access: initializationEnvironment.managed_runtime_host_access,
-          placement: initializationEnvironment.managed_runtime_placement,
-        };
-      }
-      if (!request) {
-        if (initializationEnvironment.kind === 'provider_environment') {
-          const requestingAccess = startEnvironmentGuidanceIntent(null, environment.id, 'request_open_access');
-          return failOpenFlow(requestingAccess, i18n().t('environmentOpenFlow.accessUnavailableDetail'));
-        }
-        return failOpenFlow(checking, i18n().t('environmentOpenFlow.accessUnavailableDetail'));
-      }
-      const preparing = advanceEnvironmentOpenFlowStage(checking, 'preparing_environment');
-      publishSession(preparing);
-      const initialized = await performLauncherActionSilently(request);
-      if (!initialized.ok) {
-        if (initialized.code === 'control_plane_auth_required') {
-          const requestingAccess = startEnvironmentGuidanceIntent(null, environment.id, 'request_open_access');
-          return failOpenFlow(requestingAccess, i18n().t('environmentOpenFlow.accessRequiredDetail'));
-        }
-        return failOpenFlow(preparing, initialized.message);
-      }
-      const postInitializationEnvironment = await loadLatestEnvironmentEntry(environment.id)
-        .catch(() => null)
-        ?? initializationEnvironment;
-      const starting = advanceEnvironmentOpenFlowStage(preparing, 'starting_environment');
-      publishSession(starting);
-      const started = await startEnvironmentRuntimeSilently(postInitializationEnvironment);
-      if (!started.ok) {
-        return failOpenFlow(starting, started.message);
-      }
-      const opening = advanceEnvironmentOpenFlowStage(starting, 'opening_workspace');
-      publishSession(opening);
-      const resolution = await continueEnvironmentOpenAfterLifecycle({
-        environment: postInitializationEnvironment,
-        loadLatestEnvironment: loadLatestEnvironmentEntry,
-        attemptOpen: attemptEnvironmentOpenSilently,
-      });
-      return resolution.kind === 'opened'
-        ? { close_panel: true, next_session: null }
-        : failOpenFlow(
-          opening,
-          resolution.message || i18n().t('environmentOpenFlow.openFailedDetail'),
-          resolution.recovery,
-        );
+      const requestingAccess = startEnvironmentGuidanceIntent(null, environment.id, 'request_open_access');
+      return failOpenFlow(
+        initializationEnvironment.kind === 'provider_environment' ? requestingAccess : checking,
+        i18n().t('environmentOpenFlow.accessUnavailableDetail'),
+      );
     }
 
     if (action.intent === 'start_and_open') {
@@ -6386,34 +6270,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                   showActionToast(i18n().t('environmentCenter.desktopUpdateOpenedToast', { label: label || i18n().t('environmentCenter.thisEnvironment') }), 'info');
                 }
               }}
-              confirmRuntimeOperation={(operationKey) => {
-                void (async () => {
-                  const result = await performLauncherAction({
-                    kind: 'confirm_runtime_operation',
-                    operation_key: operationKey,
-                  });
-                  const environmentID = runtimeOpenContinuationByOperationKey.get(operationKey);
-                  runtimeOpenContinuationByOperationKey.delete(operationKey);
-                  if (
-                    !environmentID
-                    || (
-                      result?.outcome !== 'updated_environment_runtime'
-                      && result?.outcome !== 'updated_gateway_environment_runtime'
-                    )
-                  ) {
-                    return;
-                  }
-                  const environment = await loadLatestEnvironmentEntry(environmentID);
-                  if (environment) {
-                    await runEnvironmentGuidanceAction(environment, {
-                      intent: 'open_with_preflight',
-                      label: i18n().t('environmentAction.open'),
-                      enabled: true,
-                      variant: 'default',
-                    });
-                  }
-                })();
-              }}
               toggleEnvironmentPinned={toggleEnvironmentPinned}
               copyEnvironmentValue={copyEnvironmentValue}
               editEnvironment={startEditingEnvironment}
@@ -6951,7 +6807,6 @@ function ConnectEnvironmentSurface(props: Readonly<{
     attempt?: EnvironmentLifecycleAttempt,
   ) => Promise<EnvironmentGuidanceActionResolution>;
   runDesktopUpdateHandoff: (environmentID: string, label?: string) => Promise<void>;
-  confirmRuntimeOperation: (operationKey: string) => void;
   toggleEnvironmentPinned: (environment: DesktopEnvironmentEntry) => Promise<void>;
   copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
   editEnvironment: (environment: DesktopEnvironmentEntry) => void;
@@ -7290,7 +7145,6 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 openEnvironmentFlowerSurface={props.openEnvironmentFlowerSurface}
                 runEnvironmentGuidanceAction={props.runEnvironmentGuidanceAction}
                 runDesktopUpdateHandoff={props.runDesktopUpdateHandoff}
-                confirmRuntimeOperation={props.confirmRuntimeOperation}
                 runEnvironmentCardFactAction={props.runEnvironmentCardFactAction}
                 toggleEnvironmentPinned={props.toggleEnvironmentPinned}
                 copyEnvironmentValue={props.copyEnvironmentValue}
@@ -7376,7 +7230,6 @@ function EnvironmentCardsPanel(props: Readonly<{
     attempt?: EnvironmentLifecycleAttempt,
   ) => Promise<EnvironmentGuidanceActionResolution>;
   runDesktopUpdateHandoff: (environmentID: string, label?: string) => Promise<void>;
-  confirmRuntimeOperation: (operationKey: string) => void;
   runEnvironmentCardFactAction: (action: EnvironmentCardFactActionModel) => void;
   toggleEnvironmentPinned: (environment: DesktopEnvironmentEntry) => Promise<void>;
   copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
@@ -7665,7 +7518,6 @@ function EnvironmentCardsPanel(props: Readonly<{
                     openEnvironmentFlowerSurface={props.openEnvironmentFlowerSurface}
                     runEnvironmentGuidanceAction={props.runEnvironmentGuidanceAction}
                     runDesktopUpdateHandoff={props.runDesktopUpdateHandoff}
-                    confirmRuntimeOperation={props.confirmRuntimeOperation}
                     runEnvironmentCardFactAction={props.runEnvironmentCardFactAction}
                     toggleEnvironmentPinned={props.toggleEnvironmentPinned}
                     copyEnvironmentValue={props.copyEnvironmentValue}
@@ -7710,7 +7562,6 @@ function EnvironmentCardsPanel(props: Readonly<{
                     openEnvironmentFlowerSurface={props.openEnvironmentFlowerSurface}
                     runEnvironmentGuidanceAction={props.runEnvironmentGuidanceAction}
                     runDesktopUpdateHandoff={props.runDesktopUpdateHandoff}
-                    confirmRuntimeOperation={props.confirmRuntimeOperation}
                     runEnvironmentCardFactAction={props.runEnvironmentCardFactAction}
                     toggleEnvironmentPinned={props.toggleEnvironmentPinned}
                     copyEnvironmentValue={props.copyEnvironmentValue}
@@ -8261,11 +8112,11 @@ function isEnvironmentActionBusy(
         && busyState.provider_origin === action.provider_origin
         && busyState.action === 'start_control_plane_connect';
     case 'start_runtime':
-      return busyStateBlocksEnvironmentAction(busyState, environmentID, ['start_environment_runtime', 'run_provider_environment_lifecycle'], runtimeLifecycleProgress);
+      return busyStateBlocksEnvironmentAction(busyState, environmentID, ['start_environment_runtime'], runtimeLifecycleProgress);
     case 'restart_runtime':
-      return busyStateBlocksEnvironmentAction(busyState, environmentID, ['restart_environment_runtime', 'run_provider_environment_lifecycle'], runtimeLifecycleProgress);
+      return busyStateBlocksEnvironmentAction(busyState, environmentID, ['restart_environment_runtime'], runtimeLifecycleProgress);
     case 'update_runtime':
-      return busyStateBlocksEnvironmentAction(busyState, environmentID, ['update_environment_runtime', 'manage_desktop_update', 'run_provider_environment_lifecycle'], runtimeLifecycleProgress);
+      return busyStateBlocksEnvironmentAction(busyState, environmentID, ['update_environment_runtime', 'manage_desktop_update'], runtimeLifecycleProgress);
     case 'reinstall_target':
       return busyStateMatchesEnvironment(busyState, environmentID, ['reinstall_target']);
     case 'pair_gateway':
@@ -8277,7 +8128,7 @@ function isEnvironmentActionBusy(
     case 'disconnect_provider_runtime':
       return busyStateMatchesEnvironment(busyState, environmentID, ['disconnect_provider_runtime']);
     case 'stop_runtime':
-      return busyStateBlocksEnvironmentAction(busyState, environmentID, ['stop_environment_runtime', 'run_provider_environment_lifecycle'], runtimeLifecycleProgress);
+      return busyStateBlocksEnvironmentAction(busyState, environmentID, ['stop_environment_runtime'], runtimeLifecycleProgress);
     case 'refresh_runtime':
       return busyStateBlocksEnvironmentAction(busyState, environmentID, ['refresh_environment_runtime'], runtimeLifecycleProgress)
         || busyStateMatchesAction(busyState, 'refresh_all_environment_runtimes');
@@ -8425,26 +8276,6 @@ function localizedRuntimeLifecyclePhaseLabel(i18n: DesktopI18n, phase: DesktopRu
       return i18n.t('progress.runtimeAlreadyStopped');
     case 'runtime_stopped':
       return i18n.t('progress.runtimeStopped');
-    case 'preparing_gateway_package':
-      return i18n.t('progress.preparingGatewayPackage');
-    case 'installing_gateway_package':
-      return i18n.t('progress.installingGatewayPackage');
-    case 'starting_gateway_service':
-      return i18n.t('progress.startingGatewayService');
-    case 'opening_gateway_bridge':
-      return i18n.t('progress.openingGatewayBridge');
-    case 'checking_gateway_service':
-      return i18n.t('progress.checkingGatewayService');
-    case 'gateway_service_ready':
-      return i18n.t('progress.gatewayServiceReady');
-    case 'gateway_service_up_to_date':
-      return i18n.t('progress.gatewayServiceUpToDate');
-    case 'stopping_gateway_service':
-      return i18n.t('progress.stoppingGatewayService');
-    case 'verifying_gateway_stopped':
-      return i18n.t('progress.verifyingGatewayStopped');
-    case 'gateway_service_stopped':
-      return i18n.t('progress.gatewayServiceStopped');
   }
 }
 
@@ -8587,8 +8418,6 @@ function localizedProgressDetail(i18n: DesktopI18n, progress: DesktopLauncherAct
         return i18n.t('progress.checkingExistingRuntime');
       case 'discovering_runtime_instances':
         return i18n.t('progress.discoveringRuntimeInstances');
-      case 'stopping_gateway_service':
-        return i18n.t('progress.stoppingGatewayService');
       case 'stopping_runtime_process':
         return i18n.t('progress.stoppingRuntimeProcess');
       case 'verifying_runtime_inventory':
@@ -8678,10 +8507,6 @@ function localizedNextActionLabel(i18n: DesktopI18n, action: DesktopLauncherOper
     return i18n.t(action.label_key);
   }
   switch (action.kind) {
-    case 'confirm_runtime_operation':
-      return i18n.t('progress.confirmRuntimeOperation');
-    case 'cancel_runtime_operation':
-      return i18n.t('progress.cancelRuntimeOperation');
     case 'refresh_status':
       return i18n.t('environmentAction.refreshStatus');
     case 'update_runtime':
@@ -8978,11 +8803,7 @@ function EnvironmentProgressPanel(props: Readonly<{
                   >
                     <Show
                       when={action.kind === 'refresh_status'}
-                      fallback={action.kind === 'confirm_runtime_operation'
-                        ? <Check class="h-3.5 w-3.5" />
-                        : action.kind === 'cancel_runtime_operation'
-                          ? <Stop class="h-3.5 w-3.5" />
-                        : action.kind === 'update_runtime'
+                      fallback={action.kind === 'update_runtime'
                           ? <Refresh class="h-3.5 w-3.5" />
                         : action.kind === 'manage_desktop_update'
                           ? <ExternalLink class="h-3.5 w-3.5" />
@@ -9058,52 +8879,6 @@ function EnvironmentProgressPanel(props: Readonly<{
       </div>
       <Show when={progressLeadDetail()}>
         {(detail) => <div class="redeven-action-popover__detail">{detail()}</div>}
-      </Show>
-      <Show when={props.progress.runtime_confirmation}>
-        {(confirmation) => (
-          <div class="redeven-runtime-impact" data-tone="warning">
-            <Show
-              when={confirmation().operation === 'start'}
-              fallback={(
-                <>
-                  <div class="redeven-runtime-impact__summary">
-                    {confirmation().workload_knowledge === 'known'
-                      ? props.i18n.t('progress.runtimeImpactKnown')
-                      : props.i18n.t('progress.runtimeImpactUnknown')}
-                  </div>
-                  <div class="redeven-runtime-impact__metrics">
-                    <Show when={confirmation().affected_process_count !== undefined}>
-                      <div class="redeven-runtime-impact__metric">
-                        {props.i18n.t('progress.affectedProcesses', { count: confirmation().affected_process_count ?? 0 })}
-                      </div>
-                    </Show>
-                    <Show when={confirmation().active_session_count !== undefined}>
-                      <div class="redeven-runtime-impact__metric">
-                        {props.i18n.t('progress.activeSessions', { count: confirmation().active_session_count ?? 0 })}
-                      </div>
-                    </Show>
-                    <Show when={confirmation().protected_workload_present}>
-                      <div class="redeven-runtime-impact__metric" data-emphasis="warning">
-                        {props.i18n.t('progress.protectedWorkloadPresent')}
-                      </div>
-                    </Show>
-                  </div>
-                  <details class="redeven-runtime-impact__technical">
-                    <summary>{props.i18n.t('progress.snapshotRevision', { revision: confirmation().snapshot_revision })}</summary>
-                    <div>{props.i18n.t('progress.runtimeConfirmationRequiredDetail')}</div>
-                  </details>
-                </>
-              )}
-            >
-              <div class="redeven-runtime-impact__summary">
-                {props.i18n.t('environmentOpenFlow.checkingAccessTitle')}
-              </div>
-              <div class="redeven-runtime-impact__detail">
-                {props.i18n.t('environmentOpenFlow.checkingAccessDetail')}
-              </div>
-            </Show>
-          </div>
-        )}
       </Show>
       <Show when={props.progress.status === 'needs_confirmation' && props.progress.reinstall_preview}>
         {(preview) => (
@@ -9576,7 +9351,6 @@ function EnvironmentSplitActionButton(props: Readonly<{
   copyOperationDiagnostics: (progress: DesktopLauncherActionProgress) => void;
   refreshEnvironmentRuntime: () => void;
   runDesktopUpdateHandoff: (environmentID: string, label?: string) => Promise<void>;
-  confirmRuntimeOperation: (operationKey: string) => void;
   onRunAction: (action: EnvironmentActionModel) => void;
   onRunGuidanceAction: (action: EnvironmentActionModel) => void;
 }>) {
@@ -9848,13 +9622,6 @@ function EnvironmentSplitActionButton(props: Readonly<{
                           copyOperationDiagnostics={props.copyOperationDiagnostics}
                           runNextAction={(action, progress) => {
                             switch (action.kind) {
-                              case 'confirm_runtime_operation':
-                                props.confirmRuntimeOperation(action.operation_key);
-                                break;
-                              case 'cancel_runtime_operation':
-                                props.dismissOperation(progress);
-                                props.onProgressOpenChange(false);
-                                break;
                               case 'refresh_status':
                                 props.refreshEnvironmentRuntime();
                                 break;
@@ -10163,7 +9930,6 @@ function EnvironmentConnectionCard(props: Readonly<{
     attempt?: EnvironmentLifecycleAttempt,
   ) => Promise<EnvironmentGuidanceActionResolution>;
   runDesktopUpdateHandoff: (environmentID: string, label?: string) => Promise<void>;
-  confirmRuntimeOperation: (operationKey: string) => void;
   runEnvironmentCardFactAction: (action: EnvironmentCardFactActionModel) => void;
   toggleEnvironmentPinned: (environment: DesktopEnvironmentEntry) => Promise<void>;
   copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
@@ -10244,7 +10010,6 @@ function EnvironmentConnectionCard(props: Readonly<{
     'start_environment_runtime',
     'restart_environment_runtime',
     'update_environment_runtime',
-    'run_provider_environment_lifecycle',
     'manage_desktop_update',
     'stop_environment_runtime',
     'refresh_environment_runtime',
@@ -10410,7 +10175,6 @@ function EnvironmentConnectionCard(props: Readonly<{
           runDesktopUpdateHandoff={async (environmentID, label) => {
             await props.runDesktopUpdateHandoff(environmentID, label);
           }}
-          confirmRuntimeOperation={props.confirmRuntimeOperation}
           onRunAction={(action) => {
             void (async () => {
               const activeManagedOperation = reinstallTargetProgress() ?? visibleRuntimeLifecycleProgress();
@@ -12574,19 +12338,6 @@ function GatewaySourceCard(props: Readonly<{
                     copyOperationDiagnostics={props.copyOperationDiagnostics}
                     runNextAction={(action, currentProgress) => {
                       switch (action.kind) {
-                        case 'confirm_runtime_operation':
-                          void props.runGatewayLauncherAction({
-                            kind: 'confirm_runtime_operation',
-                            operation_key: action.operation_key,
-                          });
-                          break;
-                        case 'cancel_runtime_operation':
-                          closeActionPopoverAfterExit(() => {
-                            props.dismissOperation(currentProgress);
-                            setForegroundAction(null);
-                            setForegroundPendingProgress(null);
-                          });
-                          break;
                         case 'copy_diagnostics':
                           props.copyOperationDiagnostics(currentProgress);
                           break;

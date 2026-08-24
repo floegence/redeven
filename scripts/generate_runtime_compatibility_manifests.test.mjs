@@ -43,10 +43,8 @@ test('generates signed-manifest inputs with executable digests and the reviewed 
     const expected = new Map();
     for (const [platform, architecture] of targets) {
       const runtime = Buffer.from(`runtime ${platform}/${architecture}\n`);
-      const gateway = Buffer.from(`gateway ${platform}/${architecture}\n`);
-      expected.set(`${platform}/${architecture}`, { runtime: sha256(runtime), gateway: sha256(gateway) });
+      expected.set(`${platform}/${architecture}`, { runtime: sha256(runtime) });
       writeFileSync(path.join(dist, `redeven_${platform}_${architecture}.tar.gz`), archive('redeven', runtime));
-      writeFileSync(path.join(dist, `redeven-gateway_${platform}_${architecture}.tar.gz`), archive('redeven-gateway', gateway));
     }
 
     const result = spawnSync(process.execPath, [
@@ -62,11 +60,12 @@ test('generates signed-manifest inputs with executable digests and the reviewed 
         'utf8',
       ));
       const digests = expected.get(`${platform}/${architecture}`);
-      assert.equal(manifest.gateway.sha256, digests.gateway);
+      assert.equal(manifest.schema_version, 2);
+      assert.equal('gateway' in manifest, false);
       assert.equal(manifest.runtime.sha256, digests.runtime);
       assert.equal(manifest.runtime.compatibility_epoch, 9);
       assert.deepEqual(manifest.compatibility.upgrade_from_runtime_epochs, [8]);
-      assert.deepEqual(manifest.compatibility.required_upgrade_order, ['gateway', 'runtime']);
+      assert.deepEqual(manifest.compatibility, { upgrade_from_runtime_epochs: [8] });
     }
   } finally {
     rmSync(dist, { recursive: true, force: true });

@@ -1,6 +1,3 @@
-import fs from 'node:fs';
-import path from 'node:path';
-
 import {
   DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL,
   DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
@@ -20,12 +17,6 @@ import {
   prepareDesktopRuntimeUploadAsset,
   runtimeReleaseFetchPolicy,
 } from './runtimePackageCache';
-import type { DesktopBundle } from './desktopBundle';
-import {
-  DesktopOperationFailureError,
-  desktopOperationFailurePresentation,
-  isDesktopOperationFailureError,
-} from './desktopOperationFailure';
 import { createLocalRuntimeHostExecutor, createSSHRuntimeHostExecutor, type RuntimeHostAccessExecutor } from './runtimeHostAccess';
 import type { DesktopSSHTransportManager } from './sshTransportManager';
 import {
@@ -87,7 +78,6 @@ export type GatewayServiceProgressPhase =
   | 'starting_gateway'
   | 'stopping_gateway'
   | 'verifying_gateway_stopped'
-  | 'enrolling_gateway'
   | 'gateway_ready';
 
 export type GatewayServiceProgress = Readonly<{
@@ -108,7 +98,6 @@ export type GatewayServiceHostOptions = Readonly<{
   releaseBaseURL: string;
   assetCacheRoot: string;
   sourceRuntimeRoot?: string;
-  precompiledBundle?: DesktopBundle;
   localUIBind?: string;
   targetCommit?: string;
   sshPassword?: string;
@@ -142,67 +131,8 @@ type GatewayServiceCommandStatus = Readonly<{
 
 const MANAGED_GATEWAY_STAMP_FILENAME = 'managed-gateway.stamp';
 const MANAGED_GATEWAY_STAMP_SCHEMA_VERSION = 3;
-const GATEWAY_STARTUP_FAILURE_FILENAME = 'gateway-startup-failure-v1.json';
-
 function compact(value: unknown): string {
   return String(value ?? '').trim();
-}
-
-type GatewayStartupFailure = Readonly<{
-  code: string;
-  reason: string;
-  recovery?: string;
-}>;
-
-async function readGatewayStartupFailure(stateRoot: string): Promise<GatewayStartupFailure | null> {
-  try {
-    const raw = await fs.promises.readFile(path.join(stateRoot, GATEWAY_STARTUP_FAILURE_FILENAME), 'utf8');
-    const decoded = JSON.parse(raw) as Record<string, unknown>;
-    const code = compact(decoded.code);
-    const reason = compact(decoded.reason);
-    if (decoded.schema_version !== 1 || code === '' || reason === '') {
-      return null;
-    }
-    return {
-      code,
-      reason,
-      ...(compact(decoded.recovery) ? { recovery: compact(decoded.recovery) } : {}),
-    };
-  } catch {
-    return null;
-  }
-}
-
-async function localGatewayStartupError(stateRoot: string, error: unknown): Promise<unknown> {
-  const failure = await readGatewayStartupFailure(stateRoot);
-  if (!failure) {
-    return error;
-  }
-  const activeWorkload = failure.code === 'runtime_target_active_workload_confirmation_required';
-  const reinstallRequired = failure.code === 'runtime_target_binding_migration_failed';
-  const priorDiagnostics = isDesktopOperationFailureError(error) ? error.presentation.diagnostics ?? [] : [];
-  return new DesktopOperationFailureError(desktopOperationFailurePresentation({
-    code: activeWorkload ? 'confirmation_required' : reinstallRequired ? 'reinstall_required' : 'runtime_host_command_failed',
-    title: activeWorkload ? 'Runtime Confirmation Required' : reinstallRequired ? 'Local Environment Reinstall Required' : 'Runtime Host Command Failed',
-    titleKey: reinstallRequired ? 'confirm.reinstallTargetTitle' : undefined,
-    summary: activeWorkload
-      ? 'The Runtime workload must be reviewed before Desktop can replace this development target.'
-      : reinstallRequired
-        ? 'The Local Environment state is incompatible with this Desktop and must be reinstalled.'
-        : 'Desktop could not converge the managed Runtime to the verified target.',
-    summaryKey: reinstallRequired ? 'confirm.reinstallRequiredDescription' : undefined,
-    detail: failure.reason,
-    recoveryHint: failure.recovery,
-    targetLabel: 'Local Environment',
-    diagnostics: [
-      ...priorDiagnostics,
-      {
-        channel: 'gateway_startup_failure',
-        label: 'Gateway startup failure',
-        text: JSON.stringify(failure),
-      },
-    ],
-  }), { cause: error });
 }
 
 function normalizeReleaseTag(raw: string): string {
@@ -274,7 +204,7 @@ function managedGatewayPathShell(targetReleaseArg = '3', targetCommitArg = '4'):
   return [
     `target_release_tag="\${${targetReleaseArg}:-}"`,
     `target_commit="\${${targetCommitArg}:-}"`,
-    'managed_root="${runtime_root%/}/gateway/managed"',
+    'managed_root="${state_root%/}/managed"',
     'bin_dir="${managed_root}/bin"',
     'binary="${bin_dir}/redeven-gateway"',
     `stamp_path="\${managed_root}/${MANAGED_GATEWAY_STAMP_FILENAME}"`,
@@ -420,11 +350,11 @@ function gatewayUploadedInstallScript(rootShell: string): string {
     '  echo "target release tag is required for uploaded Gateway install" >&2',
     '  exit 1',
     'fi',
-    'mkdir -p "${runtime_root%/}/gateway"',
+    'mkdir -p "$state_root"',
     'upload_dir="$(mktemp -d "${TMPDIR:-/tmp}/redeven-gateway-upload.XXXXXX")"',
     'archive_path="${upload_dir}/redeven-gateway.tar.gz"',
     'extract_dir="$(mktemp -d "${upload_dir%/}/extract.XXXXXX")"',
-    'staging_root="$(mktemp -d "${runtime_root%/}/gateway/managed.staging.XXXXXX")"',
+    'staging_root="$(mktemp -d "${state_root%/}/managed.staging.XXXXXX")"',
     'cleanup() { rm -rf "$upload_dir" "$extract_dir" "$staging_root"; }',
     'trap cleanup EXIT INT TERM',
     'cat > "$archive_path"',
@@ -516,61 +446,8 @@ function gatewayServiceStartScript(rootShell: string): string {
     'set -eu',
     rootShell,
     managedGatewayPathShell(),
-    'exec "$binary" service-start --state-root "$state_root" --runtime-root "$runtime_root" --enable-profile-write',
+    'exec "$binary" service-start --state-root "$state_root" --enable-profile-write',
   ].join('\n');
-}
-
-function directGatewayServiceStatusScript(): string {
-  return [
-    'set -u',
-    'binary="$1"',
-    'state_root="$2"',
-    '"$binary" service-status --state-root "$state_root"',
-    'code="$?"',
-    'if [ "$code" = "0" ] || [ "$code" = "1" ]; then exit 0; fi',
-    'exit "$code"',
-  ].join('\n');
-}
-
-function isDirectLocalHost(options: GatewayServiceHostOptions): boolean {
-  return options.hostAccess?.kind === 'local_host' && options.placement.kind === 'host_process';
-}
-
-function requireLocalDesktopBundle(options: GatewayServiceHostOptions): DesktopBundle {
-  const bundle = options.precompiledBundle;
-  if (!bundle) {
-    throw new Error('Desktop could not validate its bundled environment services. Repair or reinstall the application, then try again.');
-  }
-  return bundle;
-}
-
-function directGatewayServiceStatusCommand(options: GatewayServiceHostOptions): readonly string[] {
-  const bundle = requireLocalDesktopBundle(options);
-  return ['sh', '-c', directGatewayServiceStatusScript(), 'redeven-gateway-status', bundle.gateway.path, options.stateRoot];
-}
-
-function directGatewayServiceStartCommand(options: GatewayServiceHostOptions): readonly string[] {
-  const bundle = requireLocalDesktopBundle(options);
-  const command = [
-    bundle.gateway.path,
-    'service-start',
-    '--state-root',
-    options.stateRoot,
-    '--runtime-root',
-    options.placement.runtime_root,
-    '--precompiled-runtime-manifest',
-    bundle.manifest_path,
-  ];
-  if (compact(options.localUIBind)) {
-    command.push('--precompiled-runtime-local-ui-bind', compact(options.localUIBind));
-  }
-  command.push('--enable-profile-write');
-  return command;
-}
-
-function directGatewayServiceStopCommand(options: GatewayServiceHostOptions): readonly string[] {
-  const bundle = requireLocalDesktopBundle(options);
-  return [bundle.gateway.path, 'service-stop', '--state-root', options.stateRoot];
 }
 
 function gatewayServiceStopScript(rootShell: string): string {
@@ -583,19 +460,6 @@ function gatewayServiceStopScript(rootShell: string): string {
     '  exit 0',
     'fi',
     'exec "$binary" service-stop --state-root "$state_root"',
-  ].join('\n');
-}
-
-function gatewaySupervisorEnrollmentScript(rootShell: string): string {
-  return [
-    'set -eu',
-    rootShell,
-    managedGatewayPathShell(),
-    'if [ ! -x "$binary" ]; then',
-    '  echo "managed Gateway binary is not installed" >&2',
-    '  exit 1',
-    'fi',
-    'exec "$binary" supervisor enroll --provider "$4" --environment "$5" --state-root "$state_root" --runtime-root "$runtime_root"',
   ].join('\n');
 }
 
@@ -915,9 +779,12 @@ async function installGatewayPackage(
   });
 }
 
-export function gatewayServiceBinaryPath(placement: DesktopRuntimePlacement): string {
-  const root = compact(placement.runtime_root) || DEFAULT_DESKTOP_SSH_RUNTIME_ROOT;
-  return `${root.replace(/\/+$/u, '')}/gateway/managed/bin/redeven-gateway`;
+export function gatewayServiceBinaryPath(stateRoot: string): string {
+  const root = compact(stateRoot);
+  if (root === '') {
+    throw new Error('Gateway service state root is required.');
+  }
+  return `${root.replace(/\/+$/u, '')}/managed/bin/redeven-gateway`;
 }
 
 async function probeManagedGatewayServiceStatusWithExecutor(
@@ -931,38 +798,6 @@ async function probeManagedGatewayServiceStatusWithExecutor(
       ? 'Desktop is checking the container that hosts this Gateway service.'
       : 'Desktop is checking the SSH host that runs this Gateway service.',
   });
-  if (isDirectLocalHost(options)) {
-    const bundle = requireLocalDesktopBundle(options);
-    const result = await executor.run(directGatewayServiceStatusCommand(options), { signal: options.signal });
-    const status = parseGatewayServiceCommandStatus(result.stdout, options.stateRoot);
-    if (status.status === 'running' && status.executable === bundle.gateway.path) {
-      return {
-        status: 'running',
-        message: 'Environment service is running.',
-        binary_path: bundle.gateway.path,
-        state_root: status.state_root ?? options.stateRoot,
-        pid: status.pid,
-        listen: status.listen,
-        package_status: 'ready',
-      };
-    }
-    if (status.status === 'running') {
-      return {
-        status: 'needs_update',
-        message: 'The running environment service package does not match this Desktop bundle.',
-        binary_path: bundle.gateway.path,
-        state_root: status.state_root ?? options.stateRoot,
-        package_status: 'build_identity_mismatch',
-      };
-    }
-    return {
-      status: status.status === 'not_running' ? 'not_running' : 'failed',
-      message: status.error_message || (status.status === 'not_running' ? 'Environment service is not running.' : 'Environment service could not be checked.'),
-      binary_path: bundle.gateway.path,
-      state_root: status.state_root ?? options.stateRoot,
-      package_status: 'ready',
-    };
-  }
   const packageProbe = await probeGatewayPackage(options, executor);
   if (packageProbe.status !== 'ready') {
     return {
@@ -1034,23 +869,6 @@ function parseGatewayServiceDeepProbe(raw: string): GatewayServiceDeepProbe {
 
 export async function probeManagedGatewayServiceDeep(options: GatewayServiceHostOptions): Promise<GatewayServiceDeepProbe> {
   return withGatewayExecutor(options, async (executor) => {
-    if (isDirectLocalHost(options)) {
-      const bundle = requireLocalDesktopBundle(options);
-      const service = await probeManagedGatewayServiceStatusWithExecutor(options, executor);
-      return {
-        binary_path: bundle.gateway.path,
-        state_root: options.stateRoot,
-        package_status: service.package_status ?? 'ready',
-        version: bundle.version,
-        target_version: normalizeReleaseTag(options.releaseTag),
-        commit: bundle.commit,
-        target_commit: compact(options.targetCommit) || bundle.commit,
-        service_status: service.status === 'running' ? 'running' : service.status === 'not_running' ? 'not_running' : 'failed',
-        service_pid: service.pid,
-        service_listen: service.listen,
-        service_error: service.status === 'failed' || service.status === 'needs_update' ? service.message : undefined,
-      };
-    }
     const rootShell = rootShellForPlacement(options.placement);
     const targetCommit = compact(options.targetCommit);
     const result = await executor.run(commandForPlacement(options.placement, gatewayDeepProbeScript(rootShell), [
@@ -1066,35 +884,6 @@ export async function probeManagedGatewayServiceDeep(options: GatewayServiceHost
 export async function ensureManagedGatewayServiceReady(options: GatewayServiceHostOptions): Promise<string> {
   return withGatewayExecutor(options, async (executor) => {
     const releaseTag = normalizeReleaseTag(options.releaseTag);
-    if (isDirectLocalHost(options)) {
-      const bundle = requireLocalDesktopBundle(options);
-      const current = await probeManagedGatewayServiceStatusWithExecutor(options, executor);
-      if (current.status === 'needs_reinstall') {
-        throw new Error(current.message || 'Gateway state is incompatible and must be reinstalled.');
-      }
-      if (current.status === 'running' && options.forceUpdate !== true) {
-        return bundle.gateway.path;
-      }
-      if (current.status === 'running' || current.status === 'needs_update') {
-        await executor.run(directGatewayServiceStopCommand(options), { signal: options.signal });
-      }
-      options.onProgress?.({
-        phase: 'starting_gateway',
-        title: 'Starting environment service',
-        detail: 'Desktop is starting the precompiled service included with this application.',
-      });
-      try {
-        await executor.run(directGatewayServiceStartCommand(options), { signal: options.signal });
-      } catch (error) {
-        throw await localGatewayStartupError(options.stateRoot, error);
-      }
-      options.onProgress?.({
-        phase: 'gateway_ready',
-        title: 'Environment service ready',
-        detail: 'Desktop can now connect to the local environment.',
-      });
-      return bundle.gateway.path;
-    }
     const initialProbe = await probeGatewayPackage(options, executor).catch(() => null);
     if (options.forceUpdate === true || initialProbe?.status !== 'ready') {
       const platform = await probeGatewayPlatform(options, executor);
@@ -1126,7 +915,7 @@ export async function ensureManagedGatewayServiceReady(options: GatewayServiceHo
       title: 'Gateway service ready',
       detail: 'Desktop can now open a Gateway bridge and sync the catalog.',
     });
-    return gatewayServiceBinaryPath(options.placement);
+    return gatewayServiceBinaryPath(options.stateRoot);
   });
 }
 
@@ -1137,16 +926,12 @@ export async function stopManagedGatewayService(options: GatewayServiceHostOptio
       title: 'Stopping Gateway service',
       detail: 'Desktop is stopping the managed Gateway service on the target.',
     });
-    if (isDirectLocalHost(options)) {
-      await executor.run(directGatewayServiceStopCommand(options), { signal: options.signal });
-    } else {
-      const rootShell = rootShellForPlacement(options.placement);
-      await executor.run(commandForPlacement(options.placement, gatewayServiceStopScript(rootShell), [
-        options.placement.runtime_root,
-        options.stateRoot,
-        normalizeReleaseTag(options.releaseTag),
-      ]), { signal: options.signal });
-    }
+    const rootShell = rootShellForPlacement(options.placement);
+    await executor.run(commandForPlacement(options.placement, gatewayServiceStopScript(rootShell), [
+      options.placement.runtime_root,
+      options.stateRoot,
+      normalizeReleaseTag(options.releaseTag),
+    ]), { signal: options.signal });
     options.onProgress?.({
       phase: 'verifying_gateway_stopped',
       title: 'Verifying Gateway stopped',
@@ -1156,78 +941,6 @@ export async function stopManagedGatewayService(options: GatewayServiceHostOptio
     if (probe?.status === 'running') {
       throw new Error('Desktop could not stop the Gateway service because it still reports running.');
     }
-  });
-}
-
-export function gatewaySupervisorEnrollmentInvocation(
-  placement: DesktopRuntimePlacement,
-  input: Readonly<{
-    state_root: string;
-    release_tag: string;
-    provider_origin: string;
-    environment_id: string;
-    enrollment_code: string;
-  }>,
-): Readonly<{ argv: readonly string[]; stdin_data: Buffer }> {
-  const providerOrigin = compact(input.provider_origin);
-  const environmentID = compact(input.environment_id);
-  const enrollmentCode = compact(input.enrollment_code);
-  if (providerOrigin === '' || environmentID === '' || enrollmentCode === '') {
-    throw new Error('Provider origin, Environment ID, and enrollment code are required.');
-  }
-  if (/[\r\n]/u.test(input.enrollment_code)) {
-    throw new Error('Runtime enrollment code must be one line.');
-  }
-  return {
-    argv: commandForPlacement(placement, gatewaySupervisorEnrollmentScript(rootShellForPlacement(placement)), [
-      placement.runtime_root,
-      input.state_root,
-      normalizeReleaseTag(input.release_tag),
-      providerOrigin,
-      environmentID,
-    ]),
-    stdin_data: Buffer.from(`${enrollmentCode}\n`, 'utf8'),
-  };
-}
-
-export async function enrollManagedGatewaySupervisor(
-  options: GatewayServiceHostOptions,
-  input: Readonly<{
-    provider_origin: string;
-    environment_id: string;
-    enrollment_code: string;
-  }>,
-): Promise<void> {
-  await withGatewayExecutor(options, async (executor) => {
-    const invocation = gatewaySupervisorEnrollmentInvocation(options.placement, {
-      state_root: options.stateRoot,
-      release_tag: options.releaseTag,
-      ...input,
-    });
-    const argv = isDirectLocalHost(options)
-      ? [
-          requireLocalDesktopBundle(options).gateway.path,
-          'supervisor',
-          'enroll',
-          '--provider',
-          compact(input.provider_origin),
-          '--environment',
-          compact(input.environment_id),
-          '--state-root',
-          options.stateRoot,
-          '--runtime-root',
-          options.placement.runtime_root,
-        ]
-      : invocation.argv;
-    options.onProgress?.({
-      phase: 'enrolling_gateway',
-      title: 'Enrolling Gateway supervisor',
-      detail: 'Desktop is binding the selected target to this Provider Environment.',
-    });
-    await executor.run(argv, {
-      stdinData: invocation.stdin_data,
-      signal: options.signal,
-    });
   });
 }
 

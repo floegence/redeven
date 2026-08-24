@@ -618,7 +618,7 @@ export class ReinstallTargetCoordinator {
     let targetPlatform: ReinstallTargetPlatform | null = null;
     let targetDisruptionStarted = cached.preview.mode === 'wipe_data'
       && journalPhaseAtLeast(persistedPhase, 'old_root_isolated_or_cleared');
-    let installAttempted = journalPhaseAtLeast(persistedPhase, 'fresh_suite_installed');
+    let installAttempted = journalPhaseAtLeast(persistedPhase, 'runtime_installed');
     let installFinalized = false;
     let preserveRollbackSucceeded = false;
     let activeDescriptor: ReinstallTargetDescriptor = current;
@@ -690,7 +690,7 @@ export class ReinstallTargetCoordinator {
         onProgress?.('target_resolved');
       }
 
-      if (!journalPhaseAtLeast(persistedPhase, 'fresh_suite_installed')) {
+      if (!journalPhaseAtLeast(persistedPhase, 'runtime_installed')) {
         targetPlatform = await this.dependencies.prepare_platform(currentResolved, executor);
         const processSessionTask = this.dependencies
           .prepare_process_session(currentResolved, repeated.root, executor, targetPlatform)
@@ -748,11 +748,10 @@ export class ReinstallTargetCoordinator {
           cached.preview.mode,
           preparedBatch,
         );
-        await persistPhase('fresh_suite_installed', undefined, undefined, false);
-        await persistPhase('gateway_started', undefined, undefined, false);
+        await persistPhase('runtime_installed', undefined, undefined, false);
         await persistPhase('runtime_started');
       } else if (!journalPhaseAtLeast(persistedPhase, 'runtime_started')) {
-        // install_fresh returned before fresh_suite_installed can be committed,
+        // install_fresh returned before runtime_installed can be committed,
         // so these phases need no target command during recovery.
         await persistPhase('runtime_started');
       } else {
@@ -768,7 +767,7 @@ export class ReinstallTargetCoordinator {
         await this.dependencies.verify_catalog_and_local_ui(currentResolved, repeated.root);
         await persistPhase('catalog_and_local_ui_verified', undefined, undefined, false);
       }
-      if (preparedBatch || journalPhaseAtLeast(persistedPhase, 'fresh_suite_installed')) {
+      if (preparedBatch || journalPhaseAtLeast(persistedPhase, 'runtime_installed')) {
         await this.dependencies.finalize_install?.(currentResolved, repeated.root, operationID);
         installFinalized = true;
       }
@@ -805,7 +804,7 @@ export class ReinstallTargetCoordinator {
         );
       }
       const componentTransactionStarted = preparedBatch !== null
-        || journalPhaseAtLeast(persistedPhase, 'fresh_suite_installed');
+        || journalPhaseAtLeast(persistedPhase, 'runtime_installed');
       if (componentTransactionStarted && !installFinalized) {
         let rollbackSucceeded = false;
         let freshProcessesStopped = false;

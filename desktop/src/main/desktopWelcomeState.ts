@@ -67,7 +67,7 @@ import {
   type DesktopRuntimeControlStatus,
 } from '../shared/desktopRuntimePresence';
 import { buildDesktopRuntimeOperationPlans } from '../shared/desktopRuntimeOperationPlanner';
-import { desktopRuntimeOperationPlan, type DesktopRuntimeOperationPlans } from '../shared/desktopRuntimeOperations';
+import type { DesktopRuntimeOperationPlans } from '../shared/desktopRuntimeOperations';
 import { desktopRuntimePackageStateFromRuntimeService } from '../shared/desktopRuntimePackageState';
 import {
   normalizeRuntimeServiceSnapshot,
@@ -497,34 +497,12 @@ function externalLocalUIRuntimeOperations(openable: boolean): DesktopRuntimeOper
 
 function providerRuntimeOperations(
   openable: boolean,
-  management: DesktopEnvironmentEntry['runtime_management'],
 ): DesktopRuntimeOperationPlans {
-  const base = buildDesktopRuntimeOperationPlans({
+  return buildDesktopRuntimeOperationPlans({
     surface: 'provider_card',
     running: openable,
     openable,
   });
-  if (management?.presentation_state !== 'allowed') {
-    return base;
-  }
-  const plan = (
-    operation: 'start' | 'stop' | 'restart' | 'update_runtime',
-    runtimeOperation: 'start' | 'stop' | 'restart' | 'update',
-  ) => desktopRuntimeOperationPlan(
-    runtimeOperation,
-    management.operations?.includes(operation) ? 'available' : 'hidden',
-    'runtime_gateway',
-    {
-      menuVisibility: management.operations?.includes(operation) ? 'contextual' : 'hidden',
-    },
-  );
-  return {
-    ...base,
-    start: plan('start', 'start'),
-    stop: plan('stop', 'stop'),
-    restart: plan('restart', 'restart'),
-    update: plan('update_runtime', 'update'),
-  };
 }
 
 function gatewayRuntimeOperations(openable: boolean): DesktopRuntimeOperationPlans {
@@ -627,7 +605,6 @@ function providerEnvironmentSummaryFromRecord(
     lifecycle_status: environment.remote_catalog_entry?.lifecycle_status ?? '',
     last_seen_at_unix_ms: environment.remote_catalog_entry?.last_seen_at_unix_ms ?? 0,
     access: environment.remote_catalog_entry?.access,
-    runtime_management: environment.remote_catalog_entry?.runtime_management,
   };
 }
 
@@ -1532,7 +1509,6 @@ function buildProviderEnvironmentEntry(
     provider_status: routeDetails.providerEnvironment?.status ?? environment.remote_catalog_entry?.status,
     provider_lifecycle_status: routeDetails.providerEnvironment?.lifecycle_status ?? environment.remote_catalog_entry?.lifecycle_status,
     provider_last_seen_at_unix_ms: routeDetails.providerEnvironment?.last_seen_at_unix_ms ?? environment.remote_catalog_entry?.last_seen_at_unix_ms,
-    runtime_management: routeDetails.providerEnvironment?.runtime_management ?? environment.remote_catalog_entry?.runtime_management,
     control_plane_sync_state: routeDetails.controlPlane?.sync_state,
     remote_route_state: routeDetails.remoteRouteState,
     remote_catalog_freshness: routeDetails.remoteCatalogFreshness,
@@ -1547,10 +1523,7 @@ function buildProviderEnvironmentEntry(
     runtime_health: runtimeHealth,
     runtime_service: undefined,
     runtime_started_at_unix_ms: startedAtUnixMS,
-    runtime_operations: providerRuntimeOperations(
-      effectiveWindowState === 'open' || routeDetails.remoteRouteState === 'ready',
-      routeDetails.providerEnvironment?.runtime_management ?? environment.remote_catalog_entry?.runtime_management,
-    ),
+    runtime_operations: providerRuntimeOperations(effectiveWindowState === 'open' || routeDetails.remoteRouteState === 'ready'),
     open_session_key: effectiveSession?.session_key ?? '',
     open_session_lifecycle: sessionLifecycle(effectiveSession),
     open_action: localEnvironmentOpenActionLabel({
@@ -1741,18 +1714,6 @@ function buildSavedEnvironmentEntry(
     runtime_service: preferredRuntimeService(openSession?.startup?.runtime_service, savedRuntimeHealth),
     runtime_started_at_unix_ms: startedAtUnixMS,
     runtime_maintenance: runtimeMaintenanceFromHealth(runtimeHealth),
-    runtime_management: {
-      support: 'unsupported',
-      authorization: { state: 'unknown', grants: [] },
-      readiness: 'unknown',
-      presentation_state: 'unsupported',
-      operations: [],
-      artifact_policies: [],
-      binding_actions: [],
-      supervision_mode: '',
-      reason_code: 'url_runtime_management_unsupported',
-      checked_at_unix_ms: runtimeHealth.checked_at_unix_ms,
-    },
     runtime_operations: externalLocalUIRuntimeOperations(externalOpenable),
     auto_runtime_probe_enabled: environment.auto_runtime_probe_enabled,
     open_session_key: openSession?.session_key ?? '',

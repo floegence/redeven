@@ -121,7 +121,7 @@ function writeGatewayHello(
       runtime_control: { available: false },
       gateway_service: {
         state_root: options.stateRoot ?? '/home/dev/.redeven/gateways/gw/state',
-        executable_path: options.executablePath ?? '/home/dev/.redeven/gateway/managed/bin/redeven-gateway',
+        executable_path: options.executablePath ?? '/home/dev/.redeven/gateways/gw_test/state/managed/bin/redeven-gateway',
         service_pid: options.servicePID ?? 4242,
         managed_bridge_token: options.managedBridgeToken ?? 'managed-bridge-token',
       },

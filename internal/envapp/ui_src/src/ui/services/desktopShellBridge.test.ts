@@ -164,22 +164,22 @@ describe('desktopShellBridge', () => {
   it('forwards runtime maintenance context and action requests through the desktop bridge', async () => {
     const getRuntimeMaintenanceContextBridge = vi.fn().mockResolvedValue({
       available: true,
-      authority: 'gateway_supervisor',
+      authority: 'host_device',
       runtime_kind: 'ssh',
       upgrade_policy: 'desktop_release',
       restart: {
         availability: 'available',
-        method: 'gateway_supervisor',
+        method: 'host_device_handoff',
         label: 'Restart Runtime',
         title: 'Restart Runtime',
-        message: 'Gateway will restart the Runtime.',
+        message: 'Desktop will restart the Runtime through the host channel.',
       },
       upgrade: {
         availability: 'available',
-        method: 'gateway_supervisor',
+        method: 'host_device_handoff',
         label: 'Update Runtime',
         title: 'Update Runtime',
-        message: 'Gateway will install the verified Runtime release.',
+        message: 'Desktop will install the verified Runtime release through the host channel.',
         requires_target_version: false,
       },
     });
@@ -194,7 +194,7 @@ describe('desktopShellBridge', () => {
     };
 
     await expect(getRuntimeMaintenanceContextFromDesktopShell()).resolves.toEqual(expect.objectContaining({
-      authority: 'gateway_supervisor',
+      authority: 'host_device',
       runtime_kind: 'ssh',
     }));
     await expect(performRuntimeMaintenanceActionInDesktopShell({ action: 'restart' })).resolves.toEqual({

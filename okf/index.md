@@ -33,18 +33,18 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 ## Desktop
 
 - [Desktop shell theme state](desktop/desktop-shell-theme-state.md) - Global source, per-mode Floe presets, renderer synchronization, and native window colors.
-- [Desktop runtime bridge](desktop/desktop-runtime-bridge.md) - Desktop-integrated Local UI access, runtime-control, and startup probing.
-- [Desktop runtime readiness](desktop/desktop-runtime-readiness.md) - Validate startup handoff, access admission, lifecycle readiness, and window-open gates.
+- [Desktop runtime bridge](desktop/desktop-runtime-bridge.md) - Separate Desktop direct lifecycle coordination from Runtime and optional access transports.
+- [Desktop runtime readiness](desktop/desktop-runtime-readiness.md) - Separate direct Runtime health and recovery from access-only Gateway, Provider, and URL readiness.
 - [Desktop transport recovery](desktop/desktop-transport-recovery.md) - Preserve bridge identity, recovery generations, and terminal session disposal.
-- [Desktop SSH runtime operations](desktop/desktop-ssh-runtime-operations.md) - Coordinate shared SSH transports, operation generations, host discovery, and process inventory.
+- [Desktop SSH runtime operations](desktop/desktop-ssh-runtime-operations.md) - Execute SSH-host and SSH-container lifecycle actions through one direct Desktop owner.
 - [Desktop session and model source](desktop/desktop-session-model-source.md) - Project session routes, opaque Desktop models, Flower attach, and lifecycle invalidation.
 - [Desktop Environment registration ownership](desktop/desktop-environment-registrations.md) - Keep one storage owner per card, migrate retired SSH records once, and serialize rename, pin, and removal safely.
-- [Desktop runtime process lifecycle](desktop/desktop-runtime-process-lifecycle.md) - Scoped inventory, historical process reconciliation, package activation ordering, and lifecycle success conditions.
-- [Desktop managed Environment reinstall](desktop/desktop-reinstall-operations.md) - Direct-channel destructive reinstall, one Launcher progress operation, quarantine recovery, and Gateway separation.
+- [Desktop runtime process lifecycle](desktop/desktop-runtime-process-lifecycle.md) - Own Local, SSH, and container Runtime lifecycle through one process-local Desktop coordinator.
+- [Desktop managed Environment reinstall](desktop/desktop-reinstall-operations.md) - Recover an exact managed Runtime root with a Runtime-only package and minimal Desktop journal.
 
 ## Gateway
 
-- [Gateway service](gateway/gateway-service.md) - Standalone Gateway binary, managed service lifecycle, and Desktop bridge.
+- [Gateway service](gateway/gateway-service.md) - Run the optional standalone identity, catalog, open-session, and access forwarding service.
 
 ## Code
 
@@ -93,8 +93,8 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 ## Protocol
 
-- [Gateway v2 protocol](protocol/gateway-v1-protocol.md) - Signed Gateway HTTP JSON access and Runtime lifecycle contract.
-- [RCPP v3 provider API](protocol/rcpp-v2-provider-api.md) - Provider Runtime grants, permits, enrollment, binding, and readiness projection.
+- [Gateway v2 protocol](protocol/gateway-v1-protocol.md) - Define signed pairing, catalog, profile, open-session, and access-only Gateway routes.
+- [RCPP v3 provider API](protocol/rcpp-v2-provider-api.md) - Define Provider discovery, health, open-session, Runtime link, and access authorization only.
 
 ## Release
 

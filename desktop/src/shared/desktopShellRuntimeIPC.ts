@@ -19,21 +19,19 @@ export type DesktopShellRuntimeAction =
   | 'upgrade_runtime';
 
 export type DesktopShellRuntimeMaintenanceAuthority =
-  | 'gateway_supervisor'
   | 'host_device'
   | 'manual';
 
 export type DesktopShellRuntimeMaintenanceAvailability = 'available' | 'unavailable' | 'external';
 
 export type DesktopShellRuntimeMaintenanceMethod =
-  | 'gateway_supervisor'
   | 'host_device_handoff'
   | 'manual';
 
 export type DesktopShellRuntimeMaintenanceRuntimeKind = 'local_environment' | 'ssh' | 'external' | 'unknown';
 export type DesktopShellRuntimeMaintenanceUpgradePolicy = 'self_upgrade' | 'desktop_release' | 'manual';
 
-export type DesktopShellRuntimeManagementCapability = Readonly<{
+export type DesktopShellRuntimeDirectOperationCapability = Readonly<{
   support: 'supported' | 'unsupported' | 'unknown';
   authorization: 'allowed' | 'denied' | 'unknown';
   readiness: 'ready' | 'setup_required' | 'temporarily_unavailable' | 'unknown';
@@ -64,7 +62,7 @@ export type DesktopShellRuntimeMaintenanceContext = Readonly<{
   available: boolean;
   authority: DesktopShellRuntimeMaintenanceAuthority;
   runtime_kind: DesktopShellRuntimeMaintenanceRuntimeKind;
-  management: DesktopShellRuntimeManagementCapability;
+  management: DesktopShellRuntimeDirectOperationCapability;
   upgrade_policy: DesktopShellRuntimeMaintenanceUpgradePolicy;
   current_version?: string;
   latest_version?: string;
@@ -170,7 +168,6 @@ export function normalizeDesktopShellRuntimeActionResponse(value: unknown): Desk
 function normalizeAuthority(value: unknown): DesktopShellRuntimeMaintenanceAuthority {
   const authority = compact(value);
   switch (authority) {
-    case 'gateway_supervisor':
     case 'host_device':
     case 'manual':
       return authority;
@@ -219,7 +216,6 @@ function normalizeAvailability(value: unknown): DesktopShellRuntimeMaintenanceAv
 function normalizeMethod(value: unknown): DesktopShellRuntimeMaintenanceMethod {
   const method = compact(value);
   switch (method) {
-    case 'gateway_supervisor':
     case 'host_device_handoff':
     case 'manual':
       return method;
@@ -293,7 +289,7 @@ export function unavailableDesktopShellRuntimeMaintenanceContext(
     available: false,
     authority: 'manual',
     runtime_kind: 'unknown',
-    management: normalizeRuntimeManagementCapability(undefined),
+    management: normalizeRuntimeDirectOperationCapability(undefined),
     upgrade_policy: 'manual',
     restart: defaultActionPlan('restart', message),
     upgrade: defaultActionPlan('upgrade', message),
@@ -311,7 +307,7 @@ export function normalizeDesktopShellRuntimeMaintenanceContext(value: unknown): 
     available: record.available === true,
     authority: normalizeAuthority(record.authority),
     runtime_kind: normalizeRuntimeKind(record.runtime_kind),
-    management: normalizeRuntimeManagementCapability(record.management),
+    management: normalizeRuntimeDirectOperationCapability(record.management),
     upgrade_policy: normalizeUpgradePolicy(record.upgrade_policy),
     current_version: compactRaw(record.current_version) || undefined,
     latest_version: compactRaw(record.latest_version) || undefined,
@@ -322,11 +318,11 @@ export function normalizeDesktopShellRuntimeMaintenanceContext(value: unknown): 
   };
 }
 
-function projectRuntimeManagementState(
-  support: DesktopShellRuntimeManagementCapability['support'],
-  authorization: DesktopShellRuntimeManagementCapability['authorization'],
-  readiness: DesktopShellRuntimeManagementCapability['readiness'],
-): DesktopShellRuntimeManagementCapability['presentation_state'] {
+function projectRuntimeDirectOperationState(
+  support: DesktopShellRuntimeDirectOperationCapability['support'],
+  authorization: DesktopShellRuntimeDirectOperationCapability['authorization'],
+  readiness: DesktopShellRuntimeDirectOperationCapability['readiness'],
+): DesktopShellRuntimeDirectOperationCapability['presentation_state'] {
   if (support === 'unsupported') return 'unsupported';
   if (support !== 'supported') return 'unknown';
   if (authorization === 'denied') return 'denied';
@@ -337,7 +333,7 @@ function projectRuntimeManagementState(
   return 'unknown';
 }
 
-function normalizeRuntimeManagementCapability(value: unknown): DesktopShellRuntimeManagementCapability {
+function normalizeRuntimeDirectOperationCapability(value: unknown): DesktopShellRuntimeDirectOperationCapability {
   const record = value && typeof value === 'object' ? value as Record<string, unknown> : {};
   const support = record.support === 'supported' || record.support === 'unsupported' ? record.support : 'unknown';
   const authorization = record.authorization === 'allowed' || record.authorization === 'denied' ? record.authorization : 'unknown';
@@ -350,13 +346,7 @@ function normalizeRuntimeManagementCapability(value: unknown): DesktopShellRunti
     support,
     authorization,
     readiness,
-    presentation_state: projectRuntimeManagementState(support, authorization, readiness),
+    presentation_state: projectRuntimeDirectOperationState(support, authorization, readiness),
     reason_code: compactRaw(record.reason_code) || undefined,
   };
-}
-
-export function desktopShellRuntimeMaintenanceMethodUsesDesktop(
-  method: DesktopShellRuntimeMaintenanceMethod,
-): boolean {
-  return method === 'gateway_supervisor';
 }

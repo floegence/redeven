@@ -389,19 +389,6 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain(".redeven-environment-progress__step-label[data-state='active']");
   });
 
-  it('keeps start confirmation user-facing while retaining workload review for maintenance actions', () => {
-    const appSrc = readWelcomeSource();
-    expect(appSrc).toContain("confirmation().operation === 'start'");
-    expect(appSrc).toContain("props.i18n.t('environmentOpenFlow.checkingAccessTitle')");
-    expect(appSrc).toContain("props.i18n.t('environmentOpenFlow.checkingAccessDetail')");
-    expect(appSrc).toContain('class="redeven-runtime-impact"');
-    expect(appSrc).toContain('class="redeven-runtime-impact__metrics"');
-    expect(appSrc).toContain('class="redeven-runtime-impact__technical"');
-    expect(appSrc).not.toContain('redeven-action-popover__failure-notice');
-    expect(appSrc).not.toContain('redeven-action-popover__failure-title');
-    expect(appSrc).not.toContain('redeven-action-popover__failure-summary');
-  });
-
 	  it('filters Gateway source rows with the Gateways tab source filter and query', () => {
     const appSrc = readWelcomeSource();
     const styles = readWelcomeStyles();
@@ -1616,7 +1603,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain("kind: 'continue_launcher_operation'");
     expect(appSrc).toContain("kind: 'dismiss_launcher_operation'");
     expect(appSrc).toContain('IMPORTANT: Provider-link confirmation is intentionally reachable only from');
-    expect(appSrc).toContain('desktopEntryKindSupportsRuntimeManagement(environment.kind)');
+    expect(appSrc).toContain('desktopEntryKindSupportsDirectRuntimeOperations(environment.kind)');
     expect(appSrc).not.toContain('desktop_local_update_handoff');
     expect(appSrc).toContain("kind: 'manage_desktop_update'");
     expect(appSrc).toContain("result?.outcome === 'opened_desktop_update_handoff'");
@@ -1775,7 +1762,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('props.progress.error_message');
     expect(appSrc).toContain('guidanceSessionOwnsOpenFlowPanel(props.guidanceSession)\n      ? null\n      : props.reinstallTargetProgress\n        ?? selectEnvironmentPanelProgress(primaryProgress(), runtimeMenuProgress())');
     expect(appSrc).toContain('runtimeLifecycleProgress={runtimeMenuProgress()}');
-    expect(appSrc).toContain('busyStateBlocksEnvironmentAction(busyState, environmentID, [\'stop_environment_runtime\', \'run_provider_environment_lifecycle\'], runtimeLifecycleProgress)');
+    expect(appSrc).toContain('busyStateBlocksEnvironmentAction(busyState, environmentID, [\'stop_environment_runtime\'], runtimeLifecycleProgress)');
     expect(appSrc).toContain('const progressPanelVisible = createMemo(() => props.progressOpen && hasPanelProgress());');
     expect(appSrc).toContain('const primaryProgressPresentation = createMemo(() => localizedPrimaryProgressPresentation(');
     expect(appSrc).toContain('primaryProgressPresentation() || progressPanelVisible()');

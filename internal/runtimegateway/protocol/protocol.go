@@ -18,7 +18,6 @@ const (
 	GatewayCapabilityEnvCatalog      GatewayCapability = "env_catalog"
 	GatewayCapabilityEnvOpenSession  GatewayCapability = "env_open_session"
 	GatewayCapabilityEnvProfileWrite GatewayCapability = "env_profile_write"
-	GatewayCapabilityEnvLifecycle    GatewayCapability = "env_lifecycle"
 	GatewayCapabilityTerminal        GatewayCapability = "terminal"
 	GatewayCapabilityFiles           GatewayCapability = "files"
 	GatewayCapabilityWebService      GatewayCapability = "web_service"
@@ -45,15 +44,11 @@ const (
 type EnvironmentCapability string
 
 const (
-	EnvironmentCapabilityOpen          EnvironmentCapability = "open"
-	EnvironmentCapabilityStart         EnvironmentCapability = "start"
-	EnvironmentCapabilityStop          EnvironmentCapability = "stop"
-	EnvironmentCapabilityRestart       EnvironmentCapability = "restart"
-	EnvironmentCapabilityUpdateRuntime EnvironmentCapability = "update_runtime"
-	EnvironmentCapabilityTerminal      EnvironmentCapability = "terminal"
-	EnvironmentCapabilityFiles         EnvironmentCapability = "files"
-	EnvironmentCapabilityWebService    EnvironmentCapability = "web_service"
-	EnvironmentCapabilityPortForward   EnvironmentCapability = "port_forward"
+	EnvironmentCapabilityOpen        EnvironmentCapability = "open"
+	EnvironmentCapabilityTerminal    EnvironmentCapability = "terminal"
+	EnvironmentCapabilityFiles       EnvironmentCapability = "files"
+	EnvironmentCapabilityWebService  EnvironmentCapability = "web_service"
+	EnvironmentCapabilityPortForward EnvironmentCapability = "port_forward"
 )
 
 type EnvironmentOriginKind string
@@ -131,21 +126,19 @@ type GatewayMetadata struct {
 }
 
 type Environment struct {
-	GatewayEnvID        string                  `json:"gateway_env_id"`
-	DisplayName         string                  `json:"display_name"`
-	EnvKind             EnvironmentKind         `json:"env_kind"`
-	State               EnvironmentState        `json:"state"`
-	Capabilities        []EnvironmentCapability `json:"capabilities"`
-	AccessCapabilities  []EnvironmentCapability `json:"access_capabilities"`
-	ControlCapabilities []EnvironmentCapability `json:"control_capabilities"`
-	Profile             *EnvironmentProfile     `json:"profile,omitempty"`
-	ProfileAccessRoute  *EnvProfileAccessRoute  `json:"profile_access_route,omitempty"`
+	GatewayEnvID       string                  `json:"gateway_env_id"`
+	DisplayName        string                  `json:"display_name"`
+	EnvKind            EnvironmentKind         `json:"env_kind"`
+	State              EnvironmentState        `json:"state"`
+	Capabilities       []EnvironmentCapability `json:"capabilities"`
+	AccessCapabilities []EnvironmentCapability `json:"access_capabilities"`
+	Profile            *EnvironmentProfile     `json:"profile,omitempty"`
+	ProfileAccessRoute *EnvProfileAccessRoute  `json:"profile_access_route,omitempty"`
 	// AccessEndpoint is the immutable, access-only route used by Desktop to
 	// open a Gateway-backed Environment. It is never a Gateway API endpoint.
-	AccessEndpoint    *EnvProfileAccessRoute       `json:"access_endpoint,omitempty"`
-	RuntimeManagement *RuntimeManagementCapability `json:"runtime_management,omitempty"`
-	Origin            EnvironmentOrigin            `json:"origin"`
-	LastSeenAtUnixMS  int64                        `json:"last_seen_at_unix_ms,omitempty"`
+	AccessEndpoint   *EnvProfileAccessRoute `json:"access_endpoint,omitempty"`
+	Origin           EnvironmentOrigin      `json:"origin"`
+	LastSeenAtUnixMS int64                  `json:"last_seen_at_unix_ms,omitempty"`
 }
 
 type EnvironmentProfile struct {
@@ -267,15 +260,14 @@ type PairingChallengeResponse struct {
 }
 
 type PairingCompleteRequest struct {
-	ProtocolVersion  string         `json:"protocol_version,omitempty"`
-	ClientNonce      string         `json:"client_nonce"`
-	GatewayNonce     string         `json:"gateway_nonce"`
-	GatewayID        string         `json:"gateway_id"`
-	BindingAudience  string         `json:"binding_audience"`
-	ClientKeyID      string         `json:"client_key_id"`
-	ClientCapability string         `json:"client_capability,omitempty"`
-	RuntimeGrants    []RuntimeGrant `json:"runtime_grants,omitempty"`
-	Proof            string         `json:"proof"`
+	ProtocolVersion  string `json:"protocol_version,omitempty"`
+	ClientNonce      string `json:"client_nonce"`
+	GatewayNonce     string `json:"gateway_nonce"`
+	GatewayID        string `json:"gateway_id"`
+	BindingAudience  string `json:"binding_audience"`
+	ClientKeyID      string `json:"client_key_id"`
+	ClientCapability string `json:"client_capability,omitempty"`
+	Proof            string `json:"proof"`
 }
 
 type PairingCompleteResponse struct {
@@ -300,14 +292,12 @@ var (
 	ErrMissingClientNonce         = errors.New("client_nonce is required")
 	ErrMissingDisplayName         = errors.New("display_name is required")
 	ErrMissingAccessRoute         = errors.New("access_route is required")
-	ErrMissingLifecycleOperation  = errors.New("operation is required")
 	ErrInvalidSSHSecretMode       = errors.New("ssh_secret.mode is invalid")
 	ErrSSHSecretUnsupported       = errors.New("ssh_secret is not supported")
 	ErrInvalidAccessRouteFields   = errors.New("access_route contains fields outside its kind")
 	ErrInvalidSSHAuthMode         = errors.New("access_route.auth_mode is invalid")
 	ErrSSHPasswordAuthUnsupported = errors.New("ssh password auth is not supported")
 	ErrInvalidClientCapability    = errors.New("client_capability is invalid")
-	ErrInvalidRuntimeGrants       = errors.New("runtime_grants are invalid")
 )
 
 func (input *EnvProfileInput) UnmarshalJSON(data []byte) error {
@@ -371,19 +361,11 @@ func NormalizePairingCompleteRequest(req PairingCompleteRequest) PairingComplete
 	req.BindingAudience = strings.TrimSpace(req.BindingAudience)
 	req.ClientKeyID = strings.TrimSpace(req.ClientKeyID)
 	req.ClientCapability = strings.TrimSpace(req.ClientCapability)
-	req.RuntimeGrants = normalizeRuntimeGrants(req.RuntimeGrants)
 	req.Proof = strings.TrimSpace(req.Proof)
 	return req
 }
 
 func ValidatePairingCompleteRequest(req PairingCompleteRequest) error {
-	for _, grant := range req.RuntimeGrants {
-		switch RuntimeGrant(strings.TrimSpace(string(grant))) {
-		case RuntimeGrantManage, RuntimeGrantCustomBuild, RuntimeGrantManageBinding:
-		default:
-			return ErrInvalidRuntimeGrants
-		}
-	}
 	req = NormalizePairingCompleteRequest(req)
 	if err := ValidateProtocolVersion(req.ProtocolVersion); err != nil {
 		return err
@@ -437,10 +419,8 @@ func NormalizeEnvironments(environments []Environment) []Environment {
 			environment.EnvKind = EnvironmentKindReachableEnv
 		}
 		environment.AccessCapabilities = normalizeEnvironmentAccessCapabilities(environment.AccessCapabilities)
-		environment.ControlCapabilities = normalizeEnvironmentControlCapabilities(environment.ControlCapabilities)
 		environment.Capabilities = unionEnvironmentCapabilities(
 			environment.AccessCapabilities,
-			environment.ControlCapabilities,
 		)
 		environment.Origin.Kind = normalizeEnvironmentOriginKind(environment.Origin.Kind)
 		environment.Origin.Label = strings.TrimSpace(environment.Origin.Label)
@@ -467,10 +447,6 @@ func NormalizeEnvironments(environments []Environment) []Environment {
 			} else {
 				environment.AccessEndpoint = &route
 			}
-		}
-		if environment.RuntimeManagement != nil {
-			management := NormalizeRuntimeManagementCapability(*environment.RuntimeManagement)
-			environment.RuntimeManagement = &management
 		}
 		if environment.GatewayEnvID == "" {
 			continue
@@ -652,7 +628,7 @@ func normalizeGatewayCapabilities(capabilities []GatewayCapability) []GatewayCap
 	seen := make(map[GatewayCapability]struct{}, len(capabilities))
 	for _, capability := range capabilities {
 		switch capability {
-		case GatewayCapabilityEnvCatalog, GatewayCapabilityEnvOpenSession, GatewayCapabilityEnvProfileWrite, GatewayCapabilityEnvLifecycle,
+		case GatewayCapabilityEnvCatalog, GatewayCapabilityEnvOpenSession, GatewayCapabilityEnvProfileWrite,
 			GatewayCapabilityTerminal, GatewayCapabilityFiles, GatewayCapabilityWebService, GatewayCapabilityPortForward:
 		default:
 			continue
@@ -679,8 +655,7 @@ func normalizeEnvironmentCapabilities(capabilities []EnvironmentCapability) []En
 	seen := make(map[EnvironmentCapability]struct{}, len(capabilities))
 	for _, capability := range capabilities {
 		switch capability {
-		case EnvironmentCapabilityOpen, EnvironmentCapabilityStart, EnvironmentCapabilityStop,
-			EnvironmentCapabilityRestart, EnvironmentCapabilityUpdateRuntime, EnvironmentCapabilityTerminal, EnvironmentCapabilityFiles,
+		case EnvironmentCapabilityOpen, EnvironmentCapabilityTerminal, EnvironmentCapabilityFiles,
 			EnvironmentCapabilityWebService, EnvironmentCapabilityPortForward:
 		default:
 			continue
@@ -704,28 +679,6 @@ func normalizeEnvironmentAccessCapabilities(capabilities []EnvironmentCapability
 		switch capability {
 		case EnvironmentCapabilityOpen, EnvironmentCapabilityTerminal, EnvironmentCapabilityFiles,
 			EnvironmentCapabilityWebService, EnvironmentCapabilityPortForward:
-		default:
-			continue
-		}
-		if _, ok := seen[capability]; ok {
-			continue
-		}
-		seen[capability] = struct{}{}
-		out = append(out, capability)
-	}
-	if out == nil {
-		return []EnvironmentCapability{}
-	}
-	return out
-}
-
-func normalizeEnvironmentControlCapabilities(capabilities []EnvironmentCapability) []EnvironmentCapability {
-	out := make([]EnvironmentCapability, 0, len(capabilities))
-	seen := make(map[EnvironmentCapability]struct{}, len(capabilities))
-	for _, capability := range normalizeEnvironmentCapabilities(capabilities) {
-		switch capability {
-		case EnvironmentCapabilityStart, EnvironmentCapabilityStop, EnvironmentCapabilityRestart,
-			EnvironmentCapabilityUpdateRuntime:
 		default:
 			continue
 		}

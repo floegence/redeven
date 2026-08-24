@@ -17,7 +17,6 @@ import {
   normalizeDesktopControlPlaneAccount,
   normalizeDesktopControlPlaneProvider,
   normalizeDesktopProviderEnvironmentAccess,
-  normalizeDesktopProviderRuntimeManagementCapability,
   type DesktopControlPlaneAccount,
   type DesktopControlPlaneProvider,
   type DesktopProviderAccessPoint,
@@ -249,7 +248,6 @@ type DesktopProviderEnvironmentCatalogFile = Readonly<{
     lifecycle_status?: unknown;
     last_seen_at_unix_ms?: unknown;
     access?: unknown;
-    runtime_management?: unknown;
   }>;
 }>;
 
@@ -939,7 +937,6 @@ function normalizeProviderEnvironmentRemoteCatalogEntry(
     lifecycle_status: compact(candidate.lifecycle_status),
     last_seen_at_unix_ms: normalizeLastUsedAtMS(candidate.last_seen_at_unix_ms, 0),
     access: normalizeDesktopProviderEnvironmentAccess(candidate.access) ?? undefined,
-    runtime_management: normalizeDesktopProviderRuntimeManagementCapability(candidate.runtime_management) ?? undefined,
   };
   return (
     entry.region !== ''
@@ -953,7 +950,6 @@ function normalizeProviderEnvironmentRemoteCatalogEntry(
     || entry.lifecycle_status !== ''
     || entry.last_seen_at_unix_ms > 0
     || entry.access !== undefined
-    || entry.runtime_management !== undefined
   )
     ? entry
     : undefined;

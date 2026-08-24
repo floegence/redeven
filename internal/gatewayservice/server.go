@@ -23,9 +23,7 @@ import (
 	gatewayauth "github.com/floegence/redeven/internal/runtimegateway/auth"
 	gatewaycatalog "github.com/floegence/redeven/internal/runtimegateway/catalog"
 	gatewayenvprofiles "github.com/floegence/redeven/internal/runtimegateway/envprofiles"
-	gatewaylifecycle "github.com/floegence/redeven/internal/runtimegateway/lifecycle"
 	gatewayprotocol "github.com/floegence/redeven/internal/runtimegateway/protocol"
-	gatewaysecurity "github.com/floegence/redeven/internal/runtimegateway/security"
 	gatewaysession "github.com/floegence/redeven/internal/runtimegateway/session"
 	gatewaytrust "github.com/floegence/redeven/internal/runtimegateway/trust"
 )
@@ -38,62 +36,28 @@ const (
 )
 
 type Options struct {
-	// Mode controls whether this process owns a managed Environment Runtime.
-	// Standalone gateways are access/catalog relays only and never create a
-	// Runtime lifecycle store or supervisor.
-	Mode                        string
-	StateRoot                   string
-	DesktopBridgeTransport      bool
-	AllowPrivateProfileTargets  bool
-	ProfileWriteEnabled         bool
-	PairingCode                 string
-	ManagedBridgeToken          string
-	LifecycleController         gatewaylifecycle.Controller
-	LifecycleArtifactVerifier   gatewaylifecycle.ArtifactVerifier
-	LifecycleAuthorizer         LifecycleAuthorizer
-	LifecycleCapabilityProvider LifecycleCapabilityProvider
-	PrecompiledRuntimeStartup   PrecompiledRuntimeStartup
-}
-
-type LifecycleAuthorizer interface {
-	AuthorizePrepare(context.Context, *http.Request, gatewayauth.VerifiedRequest, gatewayprotocol.RuntimeOperationPrepareRequest) (gatewaylifecycle.Authorization, error)
-	AuthorizeAccess(context.Context, *http.Request, gatewayauth.VerifiedRequest) (gatewaylifecycle.Access, error)
-	AuthorizeReconcile(context.Context, *http.Request, gatewayauth.VerifiedRequest, gatewayprotocol.RuntimeOperation, string) (gatewaylifecycle.Access, error)
-	AuthorizeProviderTunnel(context.Context, gatewayauth.VerifiedRequest, gatewayprotocol.LifecycleTarget, string) error
-}
-
-type LifecycleCapabilityProvider interface {
-	RuntimeManagementCapability(context.Context, string, gatewaylifecycle.Access) (gatewayprotocol.RuntimeManagementCapability, error)
-}
-
-type PrecompiledRuntimeStartup interface {
-	PrecompiledRuntimeTargetID() string
-	EnsurePrecompiledRuntime(context.Context) error
+	StateRoot                  string
+	DesktopBridgeTransport     bool
+	AllowPrivateProfileTargets bool
+	ProfileWriteEnabled        bool
+	PairingCode                string
+	ManagedBridgeToken         string
 }
 
 type Server struct {
-	mode                   string
 	stateRoot              string
 	desktopBridgeTransport bool
 	profileWriteEnabled    bool
 	pairingCode            string
 	managedBridgeToken     string
 
-	trust                       *gatewaytrust.Store
-	auth                        *gatewayauth.Verifier
-	profile                     *gatewayenvprofiles.Store
-	lifecycle                   *gatewaylifecycle.Store
-	lifecycleAuthorizer         LifecycleAuthorizer
-	lifecycleCapabilityProvider LifecycleCapabilityProvider
-	precompiledRuntimeStartup   PrecompiledRuntimeStartup
-	lifecycleAvailable          bool
+	trust   *gatewaytrust.Store
+	auth    *gatewayauth.Verifier
+	profile *gatewayenvprofiles.Store
 
 	profileSessionsMu sync.Mutex
 	profileSessions   map[string]*profileSession
 	proxyTransport    http.RoundTripper
-	providerTunnelMu  sync.Mutex
-	providerNonces    map[string]int64
-	providerUploads   map[string]providerArtifactUpload
 }
 
 type profileSession struct {
@@ -127,27 +91,7 @@ func New(options Options) (*Server, error) {
 	if stateRoot == "" {
 		stateRoot = filepath.Join(defaultStateRoot(), "gateways", "default", "state")
 	}
-	mode := strings.TrimSpace(options.Mode)
-	if mode == "" {
-		mode = "managed_environment"
-	}
-	if mode != "managed_environment" && mode != "standalone" {
-		return nil, fmt.Errorf("unsupported Gateway mode %q", mode)
-	}
-	var lifecycleStore *gatewaylifecycle.Store
-	var err error
-	if mode == "managed_environment" {
-		lifecycleStore, err = gatewaylifecycle.NewStore(gatewaylifecycle.Options{
-			StateRoot:        filepath.Join(stateRoot, "runtime-lifecycle"),
-			Controller:       options.LifecycleController,
-			ArtifactVerifier: options.LifecycleArtifactVerifier,
-		})
-		if err != nil {
-			return nil, err
-		}
-	}
 	return &Server{
-		mode:                   mode,
 		stateRoot:              stateRoot,
 		desktopBridgeTransport: options.DesktopBridgeTransport,
 		profileWriteEnabled:    options.ProfileWriteEnabled,
@@ -159,19 +103,7 @@ func New(options Options) (*Server, error) {
 				AllowPrivateNetworkTargets: options.AllowPrivateProfileTargets,
 			},
 		}),
-		lifecycle:                   lifecycleStore,
-		lifecycleAuthorizer:         options.LifecycleAuthorizer,
-		lifecycleCapabilityProvider: options.LifecycleCapabilityProvider,
-		precompiledRuntimeStartup: func() PrecompiledRuntimeStartup {
-			if mode == "standalone" {
-				return nil
-			}
-			return options.PrecompiledRuntimeStartup
-		}(),
-		lifecycleAvailable: mode == "managed_environment" && options.LifecycleController != nil && options.LifecycleArtifactVerifier != nil && options.LifecycleAuthorizer != nil,
-		profileSessions:    make(map[string]*profileSession),
-		providerNonces:     make(map[string]int64),
-		providerUploads:    make(map[string]providerArtifactUpload),
+		profileSessions: make(map[string]*profileSession),
 		proxyTransport: gatewayProfileProxyTransport(gatewayenvprofiles.URLTargetPolicy{
 			AllowPrivateNetworkTargets: options.AllowPrivateProfileTargets,
 		}),
@@ -197,98 +129,15 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /gateway/v2/pairing/challenge", s.handlePairingChallenge)
 	mux.HandleFunc("POST /gateway/v2/pairing/complete", s.handlePairingComplete)
 	mux.HandleFunc("POST /gateway/v2/catalog", s.handleCatalog)
-	mux.HandleFunc("POST /gateway/v2/runtime-management/capability", s.handleRuntimeManagementCapability)
 	mux.HandleFunc("POST /gateway/v2/open-session", s.handleOpenSession)
 	mux.HandleFunc("POST /gateway/v2/env-profiles/upsert", s.handleEnvProfileUpsert)
 	mux.HandleFunc("POST /gateway/v2/env-profiles/delete", s.handleEnvProfileDelete)
-	if s.lifecycleAvailable {
-		mux.HandleFunc("POST /gateway/v2/runtime-operations/prepare", s.handleRuntimeOperationPrepare)
-		mux.HandleFunc("POST /gateway/v2/runtime-operations/list", s.handleRuntimeOperationList)
-		mux.HandleFunc("GET /gateway/v2/runtime-operations/{operation_id}", s.handleRuntimeOperationGet)
-		mux.HandleFunc("POST /gateway/v2/runtime-operations/{operation_id}/confirm", s.handleRuntimeOperationConfirm)
-		mux.HandleFunc("PUT /gateway/v2/runtime-operations/{operation_id}/artifact", s.handleRuntimeOperationArtifact)
-		mux.HandleFunc("POST /gateway/v2/runtime-operations/{operation_id}/commit", s.handleRuntimeOperationCommit)
-		mux.HandleFunc("POST /gateway/v2/runtime-operations/{operation_id}/cancel", s.handleRuntimeOperationCancel)
-		mux.HandleFunc("POST /gateway/v2/runtime-operations/{operation_id}/renew-deadline", s.handleRuntimeOperationRenewDeadline)
-		mux.HandleFunc("POST /gateway/v2/runtime-operations/{operation_id}/reconcile", s.handleRuntimeOperationReconcile)
-		mux.HandleFunc("GET /gateway/v2/runtime-operations/{operation_id}/events", s.handleRuntimeOperationEvents)
-	}
 	return mux
-}
-
-func (s *Server) handleRuntimeOperationList(w http.ResponseWriter, r *http.Request) {
-	body, verified, ok := s.readAuthenticatedBody(w, r)
-	if !ok {
-		return
-	}
-	var request gatewayprotocol.RuntimeOperationListRequest
-	if !decodeJSONBytes(w, body, &request) {
-		return
-	}
-	response, err := s.lifecycle.List(r.Context(), request, s.lifecycleAccess(r, verified))
-	if err != nil {
-		writeLifecycleError(w, err)
-		return
-	}
-	writeGatewayData(w, http.StatusOK, response)
-}
-
-func (s *Server) handleRuntimeManagementCapability(w http.ResponseWriter, r *http.Request) {
-	body, verified, ok := s.readAuthenticatedBody(w, r)
-	if !ok {
-		return
-	}
-	var request gatewayprotocol.RuntimeManagementCapabilityRequest
-	if !decodeJSONBytes(w, body, &request) {
-		return
-	}
-	if strings.TrimSpace(request.ProtocolVersion) != gatewayprotocol.Version || strings.TrimSpace(request.GatewayEnvID) == "" {
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "Runtime management capability request is invalid.", false)
-		return
-	}
-	if s.mode == "standalone" || s.lifecycleCapabilityProvider == nil {
-		capability := gatewayprotocol.NormalizeRuntimeManagementCapability(gatewayprotocol.RuntimeManagementCapability{
-			Support:       gatewayprotocol.CapabilitySupportUnsupported,
-			Authorization: gatewayprotocol.RuntimeManagementAuthorization{State: gatewayprotocol.AuthorizationDenied},
-			Readiness:     gatewayprotocol.ManagementReadinessUnknown,
-			ReasonCode:    "standalone_gateway_runtime_management_unsupported", CheckedAtUnixMS: time.Now().UnixMilli(),
-		})
-		writeGatewayData(w, http.StatusOK, capability)
-		return
-	}
-	capability, err := s.lifecycleCapabilityProvider.RuntimeManagementCapability(r.Context(), request.GatewayEnvID, s.lifecycleAccess(r, verified))
-	if err != nil {
-		writeLifecycleError(w, err)
-		return
-	}
-	writeGatewayData(w, http.StatusOK, capability)
 }
 
 func (s *Server) Start(ctx context.Context, listen string) (*http.Server, []net.Listener, error) {
 	if ctx == nil {
 		ctx = context.Background()
-	}
-	if s.lifecycle != nil {
-		if err := s.lifecycle.RecoverPending(ctx); err != nil {
-			return nil, nil, fmt.Errorf("recover Runtime lifecycle operations: %w", err)
-		}
-	}
-	if s.precompiledRuntimeStartup != nil {
-		if s.lifecycle == nil {
-			return nil, nil, errors.New("precompiled Runtime startup requires the lifecycle store")
-		}
-		targetID := s.precompiledRuntimeStartup.PrecompiledRuntimeTargetID()
-		if err := s.lifecycle.AssertTargetUnlocked(targetID); err != nil {
-			var lifecycleErr *gatewaylifecycle.Error
-			if !errors.As(err, &lifecycleErr) || lifecycleErr.Code != gatewaylifecycle.ErrorOperationInProgress {
-				return nil, nil, fmt.Errorf("check precompiled Runtime startup target: %w", err)
-			}
-		} else if err := s.precompiledRuntimeStartup.EnsurePrecompiledRuntime(ctx); err != nil {
-			var identityMismatch interface{ PrecompiledRuntimeIdentityMismatch() bool }
-			if !errors.As(err, &identityMismatch) || !identityMismatch.PrecompiledRuntimeIdentityMismatch() {
-				return nil, nil, fmt.Errorf("start precompiled Runtime: %w", err)
-			}
-		}
 	}
 	addr := strings.TrimSpace(listen)
 	if addr == "" {
@@ -394,10 +243,6 @@ func (s *Server) handlePairingComplete(w http.ResponseWriter, r *http.Request) {
 		writeGatewayError(w, http.StatusUnauthorized, gatewayprotocol.GatewayErrorCodeUnauthorized, "Gateway profile write pairing is not available on this transport.", false)
 		return
 	}
-	if len(req.RuntimeGrants) > 0 && !s.runtimeGrantPairingAllowed(r) {
-		writeGatewayError(w, http.StatusUnauthorized, gatewayprotocol.GatewayErrorCodeUnauthorized, "Gateway Runtime management pairing is not available on this transport.", false)
-		return
-	}
 	resp, err := s.trustStore().CompletePairing(req)
 	if err != nil {
 		writeGatewayError(w, http.StatusUnauthorized, gatewayprotocol.GatewayErrorCodeUnauthorized, "Gateway pairing completion was rejected.", false)
@@ -412,8 +257,6 @@ func writePairingCompleteRequestError(w http.ResponseWriter, err error) {
 		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "protocol_version is not supported.", false)
 	case errors.Is(err, gatewayprotocol.ErrInvalidClientCapability):
 		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "client_capability is invalid.", false)
-	case errors.Is(err, gatewayprotocol.ErrInvalidRuntimeGrants):
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "runtime_grants are invalid.", false)
 	default:
 		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "Gateway pairing completion request is invalid.", false)
 	}
@@ -534,202 +377,6 @@ func (s *Server) handleEnvProfileDelete(w http.ResponseWriter, r *http.Request) 
 	writeGatewayData(w, http.StatusOK, resp)
 }
 
-func (s *Server) handleRuntimeOperationPrepare(w http.ResponseWriter, r *http.Request) {
-	body, verified, ok := s.readAuthenticatedBody(w, r)
-	if !ok {
-		return
-	}
-	var request gatewayprotocol.RuntimeOperationPrepareRequest
-	if !decodeJSONBytes(w, body, &request) {
-		return
-	}
-	if strings.TrimSpace(request.AuthorizedClientKeyID) != verified.ClientKeyID {
-		writeLifecycleError(w, &gatewaylifecycle.Error{Code: gatewaylifecycle.ErrorUnauthorized, Message: "The authorized Runtime operation client does not match the signed request."})
-		return
-	}
-	if s.lifecycleAuthorizer == nil {
-		writeLifecycleError(w, &gatewaylifecycle.Error{Code: gatewaylifecycle.ErrorUnauthorized, Message: "Runtime management permission is required."})
-		return
-	}
-	authorization, err := s.lifecycleAuthorizer.AuthorizePrepare(r.Context(), r, verified, request)
-	if err != nil {
-		writeLifecycleAuthorizationError(w, err)
-		return
-	}
-	response, err := s.lifecycle.Prepare(r.Context(), request, authorization)
-	if err != nil {
-		writeLifecycleError(w, err)
-		return
-	}
-	writeGatewayData(w, http.StatusOK, response)
-}
-
-func (s *Server) handleRuntimeOperationGet(w http.ResponseWriter, r *http.Request) {
-	_, verified, ok := s.readAuthenticatedBody(w, r)
-	if !ok {
-		return
-	}
-	operation, err := s.lifecycle.Get(r.Context(), r.PathValue("operation_id"), s.lifecycleAccess(r, verified))
-	if err != nil {
-		writeLifecycleError(w, err)
-		return
-	}
-	writeGatewayData(w, http.StatusOK, operation)
-}
-
-func (s *Server) handleRuntimeOperationConfirm(w http.ResponseWriter, r *http.Request) {
-	body, verified, ok := s.readAuthenticatedBody(w, r)
-	if !ok {
-		return
-	}
-	var request gatewayprotocol.RuntimeOperationConfirmationRequest
-	if !decodeJSONBytes(w, body, &request) {
-		return
-	}
-	operation, err := s.lifecycle.Confirm(r.Context(), r.PathValue("operation_id"), verified.ClientKeyID, request)
-	if err != nil {
-		writeLifecycleError(w, err)
-		return
-	}
-	writeGatewayData(w, http.StatusOK, operation)
-}
-
-func (s *Server) handleRuntimeOperationArtifact(w http.ResponseWriter, r *http.Request) {
-	metadataHeader := strings.TrimSpace(r.Header.Get("X-Redeven-Runtime-Artifact-Metadata"))
-	metadataJSON, err := base64.RawURLEncoding.DecodeString(metadataHeader)
-	if err != nil || len(metadataJSON) == 0 {
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "Runtime artifact metadata header is invalid.", false)
-		return
-	}
-	var metadata gatewayprotocol.RuntimeArtifactMetadata
-	if !decodeJSONBytes(w, metadataJSON, &metadata) {
-		return
-	}
-	bodyDigest, err := gatewaysecurity.CanonicalJSONDigestFromBytes(metadataJSON)
-	if err != nil {
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "Runtime artifact metadata is invalid.", false)
-		return
-	}
-	verified, err := s.authVerifier().VerifyDigest(r.Context(), r, bodyDigest, bindingAudience(r))
-	if err != nil {
-		writeGatewayError(w, http.StatusUnauthorized, gatewayprotocol.GatewayErrorCodeUnauthorized, "Pair this Gateway before managing Runtime.", false)
-		return
-	}
-	operation, err := s.lifecycle.StageArtifact(r.Context(), r.PathValue("operation_id"), verified.ClientKeyID, metadata, r.Body)
-	if err != nil {
-		writeLifecycleError(w, err)
-		return
-	}
-	writeGatewayData(w, http.StatusOK, operation)
-}
-
-func (s *Server) handleRuntimeOperationCommit(w http.ResponseWriter, r *http.Request) {
-	_, verified, ok := s.readAuthenticatedBody(w, r)
-	if !ok {
-		return
-	}
-	operation, err := s.lifecycle.Commit(r.Context(), r.PathValue("operation_id"), verified.ClientKeyID)
-	if err != nil {
-		writeLifecycleError(w, err)
-		return
-	}
-	writeGatewayData(w, http.StatusOK, operation)
-}
-
-func (s *Server) handleRuntimeOperationCancel(w http.ResponseWriter, r *http.Request) {
-	_, verified, ok := s.readAuthenticatedBody(w, r)
-	if !ok {
-		return
-	}
-	operation, err := s.lifecycle.Cancel(r.Context(), r.PathValue("operation_id"), s.lifecycleAccess(r, verified))
-	if err != nil {
-		writeLifecycleError(w, err)
-		return
-	}
-	writeGatewayData(w, http.StatusOK, operation)
-}
-
-func (s *Server) handleRuntimeOperationRenewDeadline(w http.ResponseWriter, r *http.Request) {
-	body, verified, ok := s.readAuthenticatedBody(w, r)
-	if !ok {
-		return
-	}
-	var request gatewayprotocol.RuntimeOperationRenewRequest
-	if !decodeJSONBytes(w, body, &request) {
-		return
-	}
-	if request.ProtocolVersion != gatewayprotocol.Version {
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "protocol_version is not supported.", false)
-		return
-	}
-	operation, err := s.lifecycle.Renew(r.Context(), r.PathValue("operation_id"), verified.ClientKeyID, request.ExpiresAtUnixMS)
-	if err != nil {
-		writeLifecycleError(w, err)
-		return
-	}
-	writeGatewayData(w, http.StatusOK, operation)
-}
-
-func (s *Server) handleRuntimeOperationReconcile(w http.ResponseWriter, r *http.Request) {
-	body, verified, ok := s.readAuthenticatedBody(w, r)
-	if !ok {
-		return
-	}
-	var request gatewayprotocol.RuntimeOperationReconcileRequest
-	if !decodeJSONBytes(w, body, &request) {
-		return
-	}
-	if strings.TrimSpace(request.ProtocolVersion) != gatewayprotocol.Version || s.lifecycleAuthorizer == nil {
-		writeLifecycleError(w, &gatewaylifecycle.Error{Code: gatewaylifecycle.ErrorUnauthorized, Message: "Runtime reconcile authorization is required."})
-		return
-	}
-	operation, err := s.lifecycle.OperationForAuthorization(r.PathValue("operation_id"))
-	if err != nil {
-		// Do not reveal whether an operation exists to a caller that has not
-		// successfully presented binding-scoped reconcile authorization.
-		writeLifecycleAuthorizationError(w, &gatewaylifecycle.Error{Code: gatewaylifecycle.ErrorUnauthorized, Message: "Runtime reconcile authorization is invalid."})
-		return
-	}
-	access, err := s.lifecycleAuthorizer.AuthorizeReconcile(r.Context(), r, verified, operation, request.AuthorizationPermit)
-	if err != nil {
-		writeLifecycleAuthorizationError(w, err)
-		return
-	}
-	operation, err = s.lifecycle.Reconcile(r.Context(), r.PathValue("operation_id"), access)
-	if err != nil {
-		writeLifecycleError(w, err)
-		return
-	}
-	writeGatewayData(w, http.StatusOK, operation)
-}
-
-func (s *Server) handleRuntimeOperationEvents(w http.ResponseWriter, r *http.Request) {
-	_, verified, ok := s.readAuthenticatedBody(w, r)
-	if !ok {
-		return
-	}
-	response, err := s.lifecycle.Events(r.Context(), r.PathValue("operation_id"), s.lifecycleAccess(r, verified))
-	if err != nil {
-		writeLifecycleError(w, err)
-		return
-	}
-	writeGatewayData(w, http.StatusOK, response)
-}
-
-func (s *Server) lifecycleAccess(r *http.Request, verified gatewayauth.VerifiedRequest) gatewaylifecycle.Access {
-	access := gatewaylifecycle.Access{ClientKeyID: verified.ClientKeyID}
-	if s == nil || s.lifecycleAuthorizer == nil {
-		return access
-	}
-	authorized, err := s.lifecycleAuthorizer.AuthorizeAccess(r.Context(), r, verified)
-	if err != nil {
-		return access
-	}
-	access.Grants = authorized.Grants
-	access.PermitJTI = authorized.PermitJTI
-	return access
-}
-
 func decodeJSON(w http.ResponseWriter, r *http.Request, out any) bool {
 	if r == nil {
 		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "Gateway request is invalid.", false)
@@ -784,9 +431,6 @@ func (s *Server) catalogService(r *http.Request, verified gatewayauth.VerifiedRe
 	if s.profileWriteEnabled && verified.ProfileWrite && s.isManagedDesktopBridgeRequest(r) {
 		metadata.Capabilities = append(metadata.Capabilities, gatewayprotocol.GatewayCapabilityEnvProfileWrite)
 	}
-	if s.lifecycleAvailable {
-		metadata.Capabilities = append(metadata.Capabilities, gatewayprotocol.GatewayCapabilityEnvLifecycle)
-	}
 	includeEditableProfiles := s.profileWriteEnabled && verified.ProfileWrite && s.isManagedDesktopBridgeRequest(r)
 	return gatewaycatalog.NewService(
 		gatewaycatalog.WithGatewayMetadata(metadata),
@@ -803,7 +447,6 @@ func (s *Server) catalogService(r *http.Request, verified gatewayauth.VerifiedRe
 				} else {
 					environment = gatewayenvprofiles.EnvironmentFromProfile(profile)
 				}
-				environment.RuntimeManagement = s.runtimeManagementCapability(profile.AccessRoute.Kind, verified.RuntimeGrants)
 				environments = append(environments, environment)
 			}
 			return environments, nil
@@ -811,82 +454,11 @@ func (s *Server) catalogService(r *http.Request, verified gatewayauth.VerifiedRe
 	)
 }
 
-func (s *Server) runtimeManagementCapability(routeKind gatewayprotocol.EnvProfileAccessRouteKind, grants []gatewayprotocol.RuntimeGrant) *gatewayprotocol.RuntimeManagementCapability {
-	if s.mode == "standalone" {
-		capability := gatewayprotocol.NormalizeRuntimeManagementCapability(gatewayprotocol.RuntimeManagementCapability{
-			Support:         gatewayprotocol.CapabilitySupportUnsupported,
-			Authorization:   gatewayprotocol.RuntimeManagementAuthorization{State: gatewayprotocol.AuthorizationDenied},
-			Readiness:       gatewayprotocol.ManagementReadinessUnknown,
-			ReasonCode:      "standalone_gateway_runtime_management_unsupported",
-			CheckedAtUnixMS: time.Now().UnixMilli(),
-		})
-		return &capability
-	}
-	support := gatewayprotocol.CapabilitySupportSupported
-	reasonCode := "runtime_management_permission_required"
-	if routeKind == gatewayprotocol.EnvProfileAccessRouteKindURL {
-		support = gatewayprotocol.CapabilitySupportUnsupported
-		reasonCode = "url_runtime_management_unsupported"
-	}
-	grants = normalizeRuntimeGrants(grants)
-	authorization := gatewayprotocol.AuthorizationDenied
-	if hasRuntimeGrant(grants, gatewayprotocol.RuntimeGrantManage) {
-		authorization = gatewayprotocol.AuthorizationAllowed
-	}
-	readiness := gatewayprotocol.ManagementReadinessUnknown
-	if support == gatewayprotocol.CapabilitySupportSupported && authorization == gatewayprotocol.AuthorizationAllowed {
-		readiness = gatewayprotocol.ManagementSetupRequired
-	}
-	capability := gatewayprotocol.NormalizeRuntimeManagementCapability(gatewayprotocol.RuntimeManagementCapability{
-		Support: support,
-		Authorization: gatewayprotocol.RuntimeManagementAuthorization{
-			State:  authorization,
-			Grants: grants,
-		},
-		Readiness:       readiness,
-		ReasonCode:      reasonCode,
-		CheckedAtUnixMS: time.Now().UnixMilli(),
-	})
-	return &capability
-}
-
-func normalizeRuntimeGrants(values []gatewayprotocol.RuntimeGrant) []gatewayprotocol.RuntimeGrant {
-	seen := make(map[gatewayprotocol.RuntimeGrant]struct{}, len(values))
-	out := make([]gatewayprotocol.RuntimeGrant, 0, len(values))
-	for _, value := range values {
-		value = gatewayprotocol.RuntimeGrant(strings.TrimSpace(string(value)))
-		switch value {
-		case gatewayprotocol.RuntimeGrantManage, gatewayprotocol.RuntimeGrantCustomBuild, gatewayprotocol.RuntimeGrantManageBinding:
-		default:
-			continue
-		}
-		if _, ok := seen[value]; ok {
-			continue
-		}
-		seen[value] = struct{}{}
-		out = append(out, value)
-	}
-	return out
-}
-
-func hasRuntimeGrant(values []gatewayprotocol.RuntimeGrant, expected gatewayprotocol.RuntimeGrant) bool {
-	for _, value := range values {
-		if value == expected {
-			return true
-		}
-	}
-	return false
-}
-
 func (s *Server) profileWritePairingAllowed(r *http.Request) bool {
 	if s == nil || !s.profileWriteEnabled {
 		return false
 	}
 	return s.isManagedDesktopBridgeRequest(r)
-}
-
-func (s *Server) runtimeGrantPairingAllowed(r *http.Request) bool {
-	return s != nil && s.isManagedDesktopBridgeRequest(r)
 }
 
 func isDesktopBridgeTransport(r *http.Request) bool {
@@ -1481,37 +1053,6 @@ func writeServiceError(w http.ResponseWriter, err error) {
 	writeGatewayError(w, http.StatusInternalServerError, gatewayprotocol.GatewayErrorCodeUnavailable, "Gateway request could not be completed.", true)
 }
 
-func writeLifecycleAuthorizationError(w http.ResponseWriter, err error) {
-	var lifecycleErr *gatewaylifecycle.Error
-	if errors.As(err, &lifecycleErr) {
-		writeLifecycleError(w, lifecycleErr)
-		return
-	}
-	writeGatewayError(w, http.StatusForbidden, gatewayprotocol.GatewayErrorCode(gatewaylifecycle.ErrorUnauthorized), "Runtime management permission is required.", false)
-}
-
-func writeLifecycleError(w http.ResponseWriter, err error) {
-	var lifecycleErr *gatewaylifecycle.Error
-	if !errors.As(err, &lifecycleErr) {
-		writeGatewayError(w, http.StatusInternalServerError, gatewayprotocol.GatewayErrorCodeUnavailable, "Runtime lifecycle request could not be completed.", true)
-		return
-	}
-	status := http.StatusConflict
-	switch lifecycleErr.Code {
-	case gatewaylifecycle.ErrorInvalidRequest, gatewaylifecycle.ErrorArtifactInvalid:
-		status = http.StatusBadRequest
-	case gatewaylifecycle.ErrorUnauthorized, gatewaylifecycle.ErrorCustomBuildDenied:
-		status = http.StatusForbidden
-	case gatewaylifecycle.ErrorOperationNotFound:
-		status = http.StatusNotFound
-	case gatewaylifecycle.ErrorOperationExpired:
-		status = http.StatusGone
-	case gatewaylifecycle.ErrorUnavailable:
-		status = http.StatusServiceUnavailable
-	}
-	writeGatewayError(w, status, gatewayprotocol.GatewayErrorCode(lifecycleErr.Code), lifecycleErr.Message, lifecycleErr.Retryable)
-}
-
 func writeProfileError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, gatewayprotocol.ErrUnsupportedProtocolVersion):
@@ -1522,8 +1063,6 @@ func writeProfileError(w http.ResponseWriter, err error) {
 		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "access_route is required.", false)
 	case errors.Is(err, gatewayprotocol.ErrMissingGatewayEnvID):
 		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "gateway_env_id is required.", false)
-	case errors.Is(err, gatewayprotocol.ErrMissingLifecycleOperation):
-		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "operation is required.", false)
 	case errors.Is(err, gatewayprotocol.ErrInvalidSSHSecretMode):
 		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "ssh_secret.mode is invalid.", false)
 	case errors.Is(err, gatewayprotocol.ErrSSHSecretUnsupported):
@@ -1600,9 +1139,6 @@ func (s *Server) sweepLoop(ctx context.Context) {
 }
 
 func (s *Server) sweepExpired() {
-	if s != nil && s.lifecycle != nil {
-		_ = s.lifecycle.Expire(context.Background())
-	}
 	now := time.Now().UnixMilli()
 	var sessions []*profileSession
 	s.profileSessionsMu.Lock()
