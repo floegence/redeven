@@ -5,7 +5,11 @@ import { SESSION_KIND_ENVAPP_RPC, sessionKindForLauncherApp, type LauncherFloeAp
 import { applyLocalAccessResumeHeader } from './localAccessAuth';
 import { controlPlaneOriginFromSandboxLocation } from './sandboxOrigins';
 import { AccessUnlockError, isKnownAccessUnlockErrorCode, normalizeRetryAfterMs } from './accessUnlockError';
-import { replacePendingPluginSessionCredential } from './pluginSessionCredential';
+import {
+  applyPendingPluginSessionCredential,
+  replacePendingPluginSessionCredential,
+  type PluginSessionCredentialBinding,
+} from './pluginSessionCredential';
 
 export interface Environment {
   public_id: string;
@@ -475,7 +479,7 @@ export async function refreshLocalRuntime(): Promise<LocalRuntimeInfo | null> {
 
 export type LocalDirectArtifactSourceOptions = Readonly<{
   beforeAcquire?: (context: Readonly<{ signal: AbortSignal }>) => void | Promise<void>;
-  afterCredentialStaged?: () => void;
+  afterCredentialStaged?: (binding: PluginSessionCredentialBinding) => void;
 }>;
 
 export async function createLocalDirectArtifactSource(
@@ -519,8 +523,9 @@ export async function createLocalDirectArtifactSource(
       if (!pluginSessionCredential) {
         throw new Error('Invalid local plugin session credential');
       }
-      replacePendingPluginSessionCredential(channelID, pluginSessionCredential);
-      options.afterCredentialStaged?.();
+      const binding = replacePendingPluginSessionCredential(channelID, pluginSessionCredential);
+      if (!binding) throw new Error('Invalid local plugin session credential binding');
+      options.afterCredentialStaged?.(binding);
       return new Response(JSON.stringify({
         v: out.v ?? 1,
         connect_artifact: out.connect_artifact,
@@ -534,6 +539,22 @@ export async function createLocalDirectArtifactSource(
       floeApp: 'com.floegence.redeven.agent',
       origin: window.location.origin,
     }),
+  });
+}
+
+export async function waitForLocalPluginSessionReady(
+  binding: PluginSessionCredentialBinding,
+  signal: AbortSignal,
+): Promise<void> {
+  const headers = new Headers({ 'Content-Type': 'application/json' });
+  if (!applyPendingPluginSessionCredential(headers, binding)) {
+    throw new Error('Plugin session credential binding was superseded');
+  }
+  await fetchLocalJSON('/api/local/plugin/session/ready', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ channel_id: binding.channelID }),
+    signal,
   });
 }
 

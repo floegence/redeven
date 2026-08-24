@@ -38,6 +38,7 @@ type LocalDirectSessionOptions struct {
 	PluginCredentialHash      [sha256.Size]byte
 	HasPluginCredential       bool
 	AccessSessionID           string
+	OnPluginSessionReady      func()
 }
 
 func (a *Agent) registerLocalDirectChannel(meta session.Meta, opts LocalDirectSessionOptions) func() {
@@ -123,6 +124,9 @@ func (a *Agent) ServeLocalDirectSession(ctx context.Context, sess flowersec.Sess
 		active.pluginGeneration = generation
 	}
 	a.mu.Unlock()
+	if opts.OnPluginSessionReady != nil {
+		opts.OnPluginSessionReady()
+	}
 
 	cleanupAccessGate := a.registerLocalDirectChannel(metaCopy, opts)
 

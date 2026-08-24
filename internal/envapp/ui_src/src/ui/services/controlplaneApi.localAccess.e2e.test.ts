@@ -285,9 +285,11 @@ describe('controlplaneApi local access flow', () => {
     });
     expect(beforeAcquire).toHaveBeenCalledWith({ signal: controller.signal });
     expect(afterCredentialStaged).toHaveBeenCalledTimes(1);
+    const binding = afterCredentialStaged.mock.calls[0]?.[0];
+    expect(binding).toMatchObject({ channelID: 'ch_local', generation: expect.any(Number) });
     const pluginCredential = await import('./pluginSessionCredential');
     expect(pluginCredential.readPluginSessionCredential()).toBe('');
-    expect(pluginCredential.activatePluginSessionCredential('ch_local')).toBe(true);
+    expect(pluginCredential.activatePluginSessionCredential(binding)).toBe(true);
     expect(pluginCredential.readPluginSessionCredential()).toBe('plugin-generation-secret');
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });

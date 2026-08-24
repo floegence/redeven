@@ -57,13 +57,14 @@ the exact WebSocket set, and retire only generations owned by that access sessio
 No-password mode scopes the access session to one direct connection.
 
 For direct local transport, the Env App stages each credential against the exact
-channel id returned by the connect artifact. It does not publish that credential
-to ReDevPlugin request headers until the Flowersec direct handshake reports
-success for the same channel. Inventory loading and release-install Execution
-observation are gated on this activation, so a reconnect or concurrent artifact
-cannot cause an unauthenticated request to be projected as an internal plugin
-failure. A handshake for an unknown channel leaves the credential unpublished
-and the original staged state untouched.
+channel id and client generation returned by the connect artifact. A successful
+Flowersec handshake starts one abortable Local UI readiness wait; it does not
+publish the credential. The Agent marks that exact binding ready only after
+ReDevPlugin session activation succeeds. The matching readiness response then
+promotes the staged credential and starts inventory loading, recovery, and
+Execution observation. Reconnect or replacement cancels the old wait, and a late
+response cannot publish an older credential. Initializing and closed bindings
+cannot reach the plugin platform route.
 
 The Host owns durable session-scope teardown identity, phase, continuation,
 terminal claim, migration, and reconciliation in its control database. Redeven's

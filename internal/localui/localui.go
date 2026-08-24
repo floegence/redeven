@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -47,6 +48,8 @@ const (
 	localNamespacePublicID = "ns_local"
 	localUserPublicID      = "user_local"
 	localUserEmail         = "local@redeven"
+
+	defaultPluginSessionReadyTimeout = 15 * time.Second
 )
 
 type Options struct {
@@ -111,12 +114,13 @@ type Server struct {
 
 	// Lock order is pendingMu -> directMu when both admission and active state
 	// must change atomically. authMu is never held with either lock.
-	pendingMu           sync.Mutex
-	pending             map[string]pendingDirect
-	directMu            sync.Mutex
-	directClosing       bool
-	pluginAccess        map[string]*pluginAccessSession
-	activePluginSession map[string]activePluginSessionBinding
+	pendingMu                 sync.Mutex
+	pending                   map[string]pendingDirect
+	directMu                  sync.Mutex
+	directClosing             bool
+	pluginAccess              map[string]*pluginAccessSession
+	activePluginSession       map[string]activePluginSessionBinding
+	pluginSessionReadyTimeout time.Duration
 
 	authorityMu        sync.RWMutex
 	networkAuthorities map[string]struct{}
@@ -164,7 +168,18 @@ type pluginAccessSession struct {
 type activePluginSessionBinding struct {
 	accessSessionID string
 	session         flowersec.Session
+	credentialHash  [sha256.Size]byte
+	state           pluginSessionBindingState
+	settled         chan struct{}
 }
+
+type pluginSessionBindingState uint8
+
+const (
+	pluginSessionBindingInitializing pluginSessionBindingState = iota + 1
+	pluginSessionBindingReady
+	pluginSessionBindingClosed
+)
 
 type localAccessSessionContextKey struct{}
 
@@ -189,6 +204,7 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("/api/local/runtime", s.handleRuntime)
 	mux.HandleFunc("/api/local/direct/connect_artifact", s.handleConnectArtifact)
 	mux.HandleFunc("/api/local/direct/artifact/spend", s.handleArtifactSpend)
+	mux.HandleFunc("/api/local/plugin/session/ready", s.handlePluginSessionReady)
 	mux.HandleFunc("/api/local/environment", s.handleEnvironment)
 	mux.HandleFunc("/api/local/agent/version/latest", s.handleLatestVersion)
 	mux.HandleFunc(flowersec.WebSocketDirectPath, s.handleDirectWS)
@@ -289,32 +305,33 @@ func New(opts Options) (*Server, error) {
 		return nil, fmt.Errorf("open Local UI authorization store: %w", err)
 	}
 	return &Server{
-		log:                    logger,
-		bind:                   bind,
-		configPath:             configPath,
-		stateRoot:              stateRoot,
-		stateDir:               filepath.Dir(configPath),
-		runtimeControlSockPath: strings.TrimSpace(opts.RuntimeControlSocketPath),
-		version:                strings.TrimSpace(opts.Version),
-		selfUpgradeDisabled:    opts.DisableSelfUpgrade,
-		effectiveRunMode:       strings.TrimSpace(opts.EffectiveRunMode),
-		remoteEnabled:          opts.RemoteEnabled,
-		controlplaneBaseURL:    strings.TrimSpace(opts.ControlplaneBaseURL),
-		controlplaneProviderID: strings.TrimSpace(opts.ControlplaneProviderID),
-		envPublicID:            strings.TrimSpace(opts.EnvPublicID),
-		localPermissionCap:     &localPermissionCap,
-		appServer:              opts.AppServer,
-		a:                      opts.Agent,
-		diag:                   opts.Diagnostics,
-		accessGate:             opts.AccessGate,
-		exposure:               exposure,
-		pending:                make(map[string]pendingDirect),
-		pluginAccess:           make(map[string]*pluginAccessSession),
-		activePluginSession:    make(map[string]activePluginSessionBinding),
-		handlerCleanup:         make(map[string]func()),
-		authStore:              authStore,
-		networkAuthorities:     make(map[string]struct{}),
-		resolveAccessHosts:     resolveNetworkAccessHosts,
+		log:                       logger,
+		bind:                      bind,
+		configPath:                configPath,
+		stateRoot:                 stateRoot,
+		stateDir:                  filepath.Dir(configPath),
+		runtimeControlSockPath:    strings.TrimSpace(opts.RuntimeControlSocketPath),
+		version:                   strings.TrimSpace(opts.Version),
+		selfUpgradeDisabled:       opts.DisableSelfUpgrade,
+		effectiveRunMode:          strings.TrimSpace(opts.EffectiveRunMode),
+		remoteEnabled:             opts.RemoteEnabled,
+		controlplaneBaseURL:       strings.TrimSpace(opts.ControlplaneBaseURL),
+		controlplaneProviderID:    strings.TrimSpace(opts.ControlplaneProviderID),
+		envPublicID:               strings.TrimSpace(opts.EnvPublicID),
+		localPermissionCap:        &localPermissionCap,
+		appServer:                 opts.AppServer,
+		a:                         opts.Agent,
+		diag:                      opts.Diagnostics,
+		accessGate:                opts.AccessGate,
+		exposure:                  exposure,
+		pending:                   make(map[string]pendingDirect),
+		pluginAccess:              make(map[string]*pluginAccessSession),
+		activePluginSession:       make(map[string]activePluginSessionBinding),
+		pluginSessionReadyTimeout: defaultPluginSessionReadyTimeout,
+		handlerCleanup:            make(map[string]func()),
+		authStore:                 authStore,
+		networkAuthorities:        make(map[string]struct{}),
+		resolveAccessHosts:        resolveNetworkAccessHosts,
 	}, nil
 }
 
@@ -427,6 +444,7 @@ func (s *Server) configureAcceptor() error {
 				PluginCredentialHash:      pending.pluginCredentialHash,
 				HasPluginCredential:       true,
 				AccessSessionID:           pending.accessSessionID,
+				OnPluginSessionReady:      func() { s.markAcceptedPluginSessionReady(channelID) },
 			})
 			if err != nil && s.log != nil {
 				s.log.Warn("local Flowersec session ended with an error", "channel_id", channelID, "error", err)
@@ -1069,6 +1087,140 @@ func (s *Server) handlePluginPlatform(w http.ResponseWriter, r *http.Request) {
 	if _, stillActive := s.a.ResolvePluginSessionCredential(credential); !stillActive {
 		s.removeActivePluginSessionBinding(channelID)
 	}
+}
+
+type pluginSessionReadyRequest struct {
+	ChannelID string `json:"channel_id"`
+}
+
+func (s *Server) handlePluginSessionReady(w http.ResponseWriter, r *http.Request) {
+	if s == nil || w == nil || r == nil {
+		return
+	}
+	if !s.requireLocalAccessAPI(w, r) {
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 4096)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	var request pluginSessionReadyRequest
+	if err := decoder.Decode(&request); err != nil {
+		writePluginSessionReadyError(w, http.StatusBadRequest, "INVALID_PLUGIN_SESSION_READY_REQUEST", "Invalid plugin session readiness request.")
+		return
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		writePluginSessionReadyError(w, http.StatusBadRequest, "INVALID_PLUGIN_SESSION_READY_REQUEST", "Invalid plugin session readiness request.")
+		return
+	}
+	credential := strings.TrimSpace(r.Header.Get(sessionhop.HeaderPluginSessionCredential))
+	accessSessionID, _, ok := s.activeLocalAccessSession(r)
+	if !ok {
+		writePluginSessionReadyError(w, http.StatusForbidden, "LOCAL_PLUGIN_SESSION_UNAVAILABLE", "Plugin session is unavailable.")
+		return
+	}
+	state, settled := s.pluginSessionReadiness(request.ChannelID, credential, accessSessionID)
+	switch state {
+	case pluginSessionBindingReady:
+		w.WriteHeader(http.StatusNoContent)
+		return
+	case pluginSessionBindingInitializing:
+		// Continue below without holding the session-state lock.
+	default:
+		writePluginSessionReadyError(w, http.StatusForbidden, "LOCAL_PLUGIN_SESSION_UNAVAILABLE", "Plugin session is unavailable.")
+		return
+	}
+
+	timeout := s.pluginSessionReadyTimeout
+	if timeout <= 0 {
+		timeout = defaultPluginSessionReadyTimeout
+	}
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-r.Context().Done():
+		return
+	case <-timer.C:
+		writePluginSessionReadyError(w, http.StatusServiceUnavailable, "LOCAL_PLUGIN_SESSION_STARTING", "Plugin session is still starting.")
+		return
+	case <-settled:
+	}
+
+	state, _ = s.pluginSessionReadiness(request.ChannelID, credential, accessSessionID)
+	if state == pluginSessionBindingReady {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	writePluginSessionReadyError(w, http.StatusGone, "LOCAL_PLUGIN_SESSION_CLOSED", "Plugin session closed before it became ready.")
+}
+
+func writePluginSessionReadyError(w http.ResponseWriter, status int, code, message string) {
+	writeJSON(w, status, apiResp{OK: false, Error: &apiError{
+		Code:      code,
+		Message:   message,
+		Retryable: status == http.StatusServiceUnavailable,
+	}})
+}
+
+func (s *Server) pluginSessionReadiness(channelID, credential, requestAccessSessionID string) (pluginSessionBindingState, <-chan struct{}) {
+	if s == nil {
+		return pluginSessionBindingClosed, nil
+	}
+	channelID = strings.TrimSpace(channelID)
+	credential = strings.TrimSpace(credential)
+	requestAccessSessionID = strings.TrimSpace(requestAccessSessionID)
+	if channelID == "" || credential == "" {
+		return pluginSessionBindingClosed, nil
+	}
+	candidate := sha256.Sum256([]byte(credential))
+	s.directMu.Lock()
+	defer s.directMu.Unlock()
+	binding, ok := s.activePluginSession[channelID]
+	if !ok || subtle.ConstantTimeCompare(candidate[:], binding.credentialHash[:]) != 1 {
+		return pluginSessionBindingClosed, nil
+	}
+	access := s.pluginAccess[binding.accessSessionID]
+	if access == nil || access.state != pluginAccessActive ||
+		(!access.expiresAt.IsZero() && !time.Now().Before(access.expiresAt)) ||
+		(requestAccessSessionID != "" && requestAccessSessionID != binding.accessSessionID) {
+		return pluginSessionBindingClosed, nil
+	}
+	return binding.state, binding.settled
+}
+
+func (s *Server) markAcceptedPluginSessionReady(channelID string) {
+	if s == nil {
+		return
+	}
+	channelID = strings.TrimSpace(channelID)
+	if channelID == "" {
+		return
+	}
+	s.directMu.Lock()
+	binding, ok := s.activePluginSession[channelID]
+	if ok && binding.state == pluginSessionBindingInitializing && binding.settled != nil {
+		binding.state = pluginSessionBindingReady
+		close(binding.settled)
+		s.activePluginSession[channelID] = binding
+	}
+	s.directMu.Unlock()
+}
+
+func (s *Server) closeActivePluginSessionBindingLocked(channelID string) (activePluginSessionBinding, bool) {
+	channelID = strings.TrimSpace(channelID)
+	binding, ok := s.activePluginSession[channelID]
+	if !ok {
+		return activePluginSessionBinding{}, false
+	}
+	if binding.state == pluginSessionBindingInitializing && binding.settled != nil {
+		binding.state = pluginSessionBindingClosed
+		close(binding.settled)
+	}
+	delete(s.activePluginSession, channelID)
+	return binding, true
 }
 
 func (s *Server) handleCodeSpace(w http.ResponseWriter, r *http.Request) {
@@ -2065,7 +2217,7 @@ func (s *Server) releaseAcceptedSession(channelID string) {
 		}
 	}
 	if binding, ok := s.activePluginSession[id]; ok {
-		delete(s.activePluginSession, id)
+		binding, _ = s.closeActivePluginSessionBindingLocked(id)
 		accessSessionID = binding.accessSessionID
 	}
 	if accessSessionID != "" {
@@ -2165,6 +2317,9 @@ func (s *Server) activateAcceptedSession(channelID string, current flowersec.Ses
 	s.activePluginSession[id] = activePluginSessionBinding{
 		accessSessionID: pending.accessSessionID,
 		session:         current,
+		credentialHash:  pending.pluginCredentialHash,
+		state:           pluginSessionBindingInitializing,
+		settled:         make(chan struct{}),
 	}
 	return pending, true
 }
@@ -2184,10 +2339,11 @@ func (s *Server) beginDirectShutdown() []flowersec.Session {
 		accessSessionIDs = append(accessSessionIDs, accessSessionID)
 		access.state = pluginAccessClosing
 	}
-	for _, binding := range s.activePluginSession {
+	for channelID, binding := range s.activePluginSession {
 		if binding.session != nil {
 			sessions = append(sessions, binding.session)
 		}
+		s.closeActivePluginSessionBindingLocked(channelID)
 	}
 	s.pluginAccess = make(map[string]*pluginAccessSession)
 	s.activePluginSession = make(map[string]activePluginSessionBinding)
@@ -2244,9 +2400,8 @@ func (s *Server) removeActivePluginSessionBinding(channelID string) {
 		return
 	}
 	s.directMu.Lock()
-	binding, ok := s.activePluginSession[channelID]
+	binding, ok := s.closeActivePluginSessionBindingLocked(channelID)
 	if ok {
-		delete(s.activePluginSession, channelID)
 		s.removePluginAccessIfUnusedLocked(binding.accessSessionID)
 	}
 	s.directMu.Unlock()
@@ -2284,7 +2439,7 @@ func (s *Server) pluginAccessAllowsRequest(r *http.Request, channelID string) bo
 	s.directMu.Lock()
 	defer s.directMu.Unlock()
 	binding, exists := s.activePluginSession[id]
-	if !exists {
+	if !exists || binding.state != pluginSessionBindingReady {
 		return false
 	}
 	access := s.pluginAccess[binding.accessSessionID]
@@ -2323,7 +2478,7 @@ func (s *Server) closePluginAccessSession(accessSessionID string) {
 			sessions = append(sessions, binding.session)
 		}
 		channels = append(channels, channelID)
-		delete(s.activePluginSession, channelID)
+		s.closeActivePluginSessionBindingLocked(channelID)
 	}
 	s.directMu.Unlock()
 	if s.a != nil {

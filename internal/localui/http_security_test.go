@@ -369,7 +369,7 @@ func TestPluginAccessRequestRequiresExactActiveAccessSession(t *testing.T) {
 	s := &Server{
 		accessGate: accessgate.New(accessgate.Options{Password: "secret"}),
 		activePluginSession: map[string]activePluginSessionBinding{
-			"channel": {accessSessionID: "access-one"},
+			"channel": {accessSessionID: "access-one", state: pluginSessionBindingReady},
 		},
 		pluginAccess: map[string]*pluginAccessSession{
 			"access-one": {
@@ -394,6 +394,14 @@ func TestPluginAccessRequestRequiresExactActiveAccessSession(t *testing.T) {
 	if s.pluginAccessAllowsRequest(mismatch, "channel") {
 		t.Fatal("mismatched access session was accepted")
 	}
+	binding := s.activePluginSession["channel"]
+	binding.state = pluginSessionBindingInitializing
+	s.activePluginSession["channel"] = binding
+	if s.pluginAccessAllowsRequest(request, "channel") {
+		t.Fatal("initializing plugin session was accepted")
+	}
+	binding.state = pluginSessionBindingReady
+	s.activePluginSession["channel"] = binding
 	s.pluginAccess["access-one"].state = pluginAccessClosing
 	if s.pluginAccessAllowsRequest(request, "channel") {
 		t.Fatal("closing access session was accepted")
