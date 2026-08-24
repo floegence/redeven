@@ -217,20 +217,92 @@ func TestRuntimeManagerInstallPromotesSharedVersionAndSelectsEnvironment(t *test
 }
 
 func TestRuntimeManagerInstallPreservesSafeRelativeSymlink(t *testing.T) {
+	targetEntry := fakeWorkspaceEngineArchiveEntry{
+		RelPath: "node_modules/typescript/bin/tsc",
+		Body:    []byte("#!/bin/sh\necho tsc\n"),
+		Mode:    0o755,
+	}
+	linkEntry := fakeWorkspaceEngineArchiveEntry{
+		RelPath:  "node_modules/.bin/tsc",
+		Typeflag: tar.TypeSymlink,
+		Linkname: "../typescript/bin/tsc",
+		Mode:     0o777,
+	}
+	tests := []struct {
+		name    string
+		entries []fakeWorkspaceEngineArchiveEntry
+	}{
+		{
+			name:    "target before link",
+			entries: []fakeWorkspaceEngineArchiveEntry{targetEntry, linkEntry},
+		},
+		{
+			name:    "link before target",
+			entries: []fakeWorkspaceEngineArchiveEntry{linkEntry, targetEntry},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stateDir := t.TempDir()
+			stateRoot := t.TempDir()
+			version := "4.109.1"
+			manifest, archivePath := writeFakeWorkspaceEngineArchiveWithEntries(t, version, stateRoot, tt.entries)
+			mgr := NewRuntimeManager(RuntimeManagerOptions{
+				StateDir:  stateDir,
+				StateRoot: stateRoot,
+			})
+			session, err := createDesktopSetupOperation(mgr, manifest)
+			if err != nil {
+				t.Fatalf("CreateImportSession() error = %v", err)
+			}
+			appendArchiveToSetupOperation(t, mgr, session.OperationID, archivePath)
+			if _, err := mgr.CompleteSetupOperation(context.Background(), session.OperationID); err != nil {
+				t.Fatalf("CompleteSetupOperation() error = %v", err)
+			}
+
+			linkPath := filepath.Join(sharedVersionRoot(stateRoot, version), "node_modules", ".bin", "tsc")
+			info, err := os.Lstat(linkPath)
+			if err != nil {
+				t.Fatalf("lstat symlink: %v", err)
+			}
+			if info.Mode()&os.ModeSymlink == 0 {
+				t.Fatalf("installed path mode=%v, want symlink", info.Mode())
+			}
+			linkTarget, err := os.Readlink(linkPath)
+			if err != nil {
+				t.Fatalf("readlink: %v", err)
+			}
+			if filepath.ToSlash(linkTarget) != "../typescript/bin/tsc" {
+				t.Fatalf("symlink target=%q, want ../typescript/bin/tsc", linkTarget)
+			}
+			if _, err := os.Stat(filepath.Join(filepath.Dir(linkPath), filepath.FromSlash(linkTarget))); err != nil {
+				t.Fatalf("symlink target should resolve inside install root: %v", err)
+			}
+		})
+	}
+}
+
+func TestRuntimeManagerInstallPreservesSafeRelativeSymlinkChain(t *testing.T) {
 	stateDir := t.TempDir()
 	stateRoot := t.TempDir()
 	version := "4.109.1"
 	manifest, archivePath := writeFakeWorkspaceEngineArchiveWithEntries(t, version, stateRoot, []fakeWorkspaceEngineArchiveEntry{
 		{
+			RelPath:  "node_modules/.bin/tsc",
+			Typeflag: tar.TypeSymlink,
+			Linkname: "../typescript-alias",
+			Mode:     0o777,
+		},
+		{
+			RelPath:  "node_modules/typescript-alias",
+			Typeflag: tar.TypeSymlink,
+			Linkname: "typescript/bin/tsc",
+			Mode:     0o777,
+		},
+		{
 			RelPath: "node_modules/typescript/bin/tsc",
 			Body:    []byte("#!/bin/sh\necho tsc\n"),
 			Mode:    0o755,
-		},
-		{
-			RelPath:  "node_modules/.bin/tsc",
-			Typeflag: tar.TypeSymlink,
-			Linkname: "../typescript/bin/tsc",
-			Mode:     0o777,
 		},
 	})
 	mgr := NewRuntimeManager(RuntimeManagerOptions{
@@ -247,22 +319,86 @@ func TestRuntimeManagerInstallPreservesSafeRelativeSymlink(t *testing.T) {
 	}
 
 	linkPath := filepath.Join(sharedVersionRoot(stateRoot, version), "node_modules", ".bin", "tsc")
-	info, err := os.Lstat(linkPath)
+	body, err := os.ReadFile(linkPath)
 	if err != nil {
-		t.Fatalf("lstat symlink: %v", err)
+		t.Fatalf("read linked executable: %v", err)
 	}
-	if info.Mode()&os.ModeSymlink == 0 {
-		t.Fatalf("installed path mode=%v, want symlink", info.Mode())
+	if string(body) != "#!/bin/sh\necho tsc\n" {
+		t.Fatalf("linked executable body=%q", string(body))
 	}
-	linkTarget, err := os.Readlink(linkPath)
+}
+
+func TestRuntimeManagerInstallRejectsArchiveSymlinkCycle(t *testing.T) {
+	stateDir := t.TempDir()
+	stateRoot := t.TempDir()
+	version := "4.109.1"
+	manifest, archivePath := writeFakeWorkspaceEngineArchiveWithEntries(t, version, stateRoot, []fakeWorkspaceEngineArchiveEntry{
+		{
+			RelPath:  "node_modules/.bin/a",
+			Typeflag: tar.TypeSymlink,
+			Linkname: "b",
+			Mode:     0o777,
+		},
+		{
+			RelPath:  "node_modules/.bin/b",
+			Typeflag: tar.TypeSymlink,
+			Linkname: "a",
+			Mode:     0o777,
+		},
+	})
+	mgr := NewRuntimeManager(RuntimeManagerOptions{
+		StateDir:  stateDir,
+		StateRoot: stateRoot,
+	})
+	session, err := createDesktopSetupOperation(mgr, manifest)
 	if err != nil {
-		t.Fatalf("readlink: %v", err)
+		t.Fatalf("CreateImportSession() error = %v", err)
 	}
-	if filepath.ToSlash(linkTarget) != "../typescript/bin/tsc" {
-		t.Fatalf("symlink target=%q, want ../typescript/bin/tsc", linkTarget)
+	appendArchiveToSetupOperation(t, mgr, session.OperationID, archivePath)
+	if _, err := mgr.CompleteSetupOperation(context.Background(), session.OperationID); err == nil {
+		t.Fatal("CompleteSetupOperation() error = nil, want symlink cycle rejection")
 	}
-	if _, err := os.Stat(filepath.Join(filepath.Dir(linkPath), filepath.FromSlash(linkTarget))); err != nil {
-		t.Fatalf("symlink target should resolve inside install root: %v", err)
+	if _, err := os.Stat(sharedVersionRoot(stateRoot, version)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("archive with symlink cycle should not promote shared version, stat error = %v", err)
+	}
+}
+
+func TestRuntimeManagerInstallRejectsArchiveSymlinkPathConflict(t *testing.T) {
+	stateDir := t.TempDir()
+	stateRoot := t.TempDir()
+	version := "4.109.1"
+	manifest, archivePath := writeFakeWorkspaceEngineArchiveWithEntries(t, version, stateRoot, []fakeWorkspaceEngineArchiveEntry{
+		{
+			RelPath: "node_modules/.bin/tsc",
+			Body:    []byte("conflicting regular file"),
+			Mode:    0o755,
+		},
+		{
+			RelPath:  "node_modules/.bin/tsc",
+			Typeflag: tar.TypeSymlink,
+			Linkname: "../typescript/bin/tsc",
+			Mode:     0o777,
+		},
+		{
+			RelPath: "node_modules/typescript/bin/tsc",
+			Body:    []byte("#!/bin/sh\necho tsc\n"),
+			Mode:    0o755,
+		},
+	})
+	mgr := NewRuntimeManager(RuntimeManagerOptions{
+		StateDir:  stateDir,
+		StateRoot: stateRoot,
+	})
+	session, err := createDesktopSetupOperation(mgr, manifest)
+	if err != nil {
+		t.Fatalf("CreateImportSession() error = %v", err)
+	}
+	appendArchiveToSetupOperation(t, mgr, session.OperationID, archivePath)
+	if _, err := mgr.CompleteSetupOperation(context.Background(), session.OperationID); err == nil || !strings.Contains(err.Error(), "symlink conflicts with existing entry") {
+		t.Fatalf("CompleteSetupOperation() error = %v, want path conflict rejection", err)
+	}
+	if _, err := os.Stat(sharedVersionRoot(stateRoot, version)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("archive with symlink path conflict should not promote shared version, stat error = %v", err)
 	}
 }
 

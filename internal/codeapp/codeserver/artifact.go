@@ -60,6 +60,11 @@ type WorkspaceEngineArtifactManifest struct {
 	Layout        WorkspaceEngineArchiveLayout  `json:"layout"`
 }
 
+type workspaceEngineArchiveSymlink struct {
+	path       string
+	linkTarget string
+}
+
 func currentWorkspaceEnginePlatform() WorkspaceEnginePlatform {
 	osName := runtime.GOOS
 	arch := runtime.GOARCH
@@ -247,6 +252,7 @@ func extractWorkspaceEngineArchive(ctx context.Context, archivePath string, dest
 	tr := tar.NewReader(gz)
 	var total int64
 	var root string
+	var symlinks []workspaceEngineArchiveSymlink
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -327,31 +333,51 @@ func extractWorkspaceEngineArchive(ctx context.Context, archivePath string, dest
 			if err != nil {
 				return err
 			}
-			if err := validateWorkspaceEngineArchiveSymlinkTarget(dest, target, linkTarget); err != nil {
-				return err
-			}
-			if err := ensureWorkspaceEngineArchiveDirectory(filepath.Dir(target)); err != nil {
-				return err
-			}
-			if err := os.RemoveAll(target); err != nil {
-				return err
-			}
-			if err := os.Symlink(linkTarget, target); err != nil {
-				return err
-			}
+			symlinks = append(symlinks, workspaceEngineArchiveSymlink{
+				path:       target,
+				linkTarget: linkTarget,
+			})
 		case tar.TypeLink:
 			return fmt.Errorf("workspace engine archive hard links are not supported: %s", hdr.Name)
 		default:
 			continue
 		}
 	}
+	return createWorkspaceEngineArchiveSymlinks(ctx, dest, symlinks)
+}
+
+func createWorkspaceEngineArchiveSymlinks(ctx context.Context, dest string, symlinks []workspaceEngineArchiveSymlink) error {
+	// Archive payloads are complete before links are created, so no later entry
+	// can write through a link or change the target that validation observes.
+	for _, symlink := range symlinks {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := ensureWorkspaceEngineArchiveDirectory(filepath.Dir(symlink.path)); err != nil {
+			return err
+		}
+		if _, err := os.Lstat(symlink.path); err == nil {
+			return fmt.Errorf("workspace engine archive symlink conflicts with existing entry: %s", symlink.path)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		if err := os.Symlink(symlink.linkTarget, symlink.path); err != nil {
+			return err
+		}
+	}
+	for _, symlink := range symlinks {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := validateWorkspaceEngineArchiveSymlinkTarget(dest, symlink.path, symlink.linkTarget); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
-// validateWorkspaceEngineArchiveSymlinkTarget resolves the link through the
-// already extracted filesystem before creating it. Requiring the target to
-// exist also prevents a later archive entry from turning an earlier safe-looking
-// link into a symlink chain that escapes the staging root.
+// validateWorkspaceEngineArchiveSymlinkTarget resolves a completed archive
+// link graph and requires every final target to exist inside the staging root.
 func validateWorkspaceEngineArchiveSymlinkTarget(dest string, linkPath string, linkTarget string) error {
 	resolved, err := filepath.EvalSymlinks(filepath.Join(filepath.Dir(linkPath), linkTarget))
 	if err != nil {
