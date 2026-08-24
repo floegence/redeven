@@ -797,6 +797,13 @@
     "localUI": "Local UI",
     "environment": "環境"
   },
+  "desktopUpdateHandoff": {
+    "openReleasePage": "開啟發佈頁面",
+    "later": "稍後",
+    "title": "更新 Redeven Desktop？",
+    "restartMessage": "安裝新版本將重新啟動 Redeven Desktop 和本機運行時。",
+    "interruptionDetail": "正在使用的本機環境工作階段將會中斷。"
+  },
   "nativeMenu": {
     "file": "檔案",
     "edit": "編輯",

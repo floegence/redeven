@@ -797,6 +797,13 @@
     "localUI": "Local UI",
     "environment": "Ambiente"
   },
+  "desktopUpdateHandoff": {
+    "openReleasePage": "Abrir página de versões",
+    "later": "Mais tarde",
+    "title": "Atualizar o Redeven Desktop?",
+    "restartMessage": "A instalação da nova versão reiniciará o Redeven Desktop e o tempo de execução local.",
+    "interruptionDetail": "As sessões ativas do ambiente local serão interrompidas."
+  },
   "nativeMenu": {
     "file": "Arquivo",
     "edit": "Editar",
