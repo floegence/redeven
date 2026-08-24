@@ -799,6 +799,13 @@
     "localUI": "Local UI",
     "environment": "Среда"
   },
+  "desktopUpdateHandoff": {
+    "openReleasePage": "Открыть страницу релизов",
+    "later": "Позже",
+    "title": "Обновить Redeven Desktop?",
+    "restartMessage": "После установки новой версии Redeven Desktop и локальная среда выполнения будут перезапущены.",
+    "interruptionDetail": "Активные сеансы локального окружения будут прерваны."
+  },
   "nativeMenu": {
     "file": "Файл",
     "edit": "Правка",

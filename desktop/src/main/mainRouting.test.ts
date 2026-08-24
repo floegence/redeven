@@ -862,6 +862,22 @@ describe('main routing', () => {
     expect(mainSrc).not.toContain('upsertDirectRuntimeGateway(');
   });
 
+  it('uses one localized Desktop update handoff for the Desktop and Local Runtime restart notice', () => {
+    const mainSrc = readMainSource();
+    const handoffStart = mainSrc.indexOf('async function showDesktopUpdateHandoffDialog()');
+    const handoffEnd = mainSrc.indexOf('async function manageDesktopUpdateFromShell(', handoffStart);
+    const handoffSrc = mainSrc.slice(handoffStart, handoffEnd);
+
+    expect(handoffStart).toBeGreaterThanOrEqual(0);
+    expect(handoffEnd).toBeGreaterThan(handoffStart);
+    expect(handoffSrc).toContain('buildDesktopUpdateHandoffMessageBoxOptions(');
+    expect(handoffSrc).toContain('desktopLanguageState().getSnapshot().resolved_locale');
+    expect(mainSrc.match(/await showDesktopUpdateHandoffDialog\(\);/gu)).toHaveLength(2);
+    expect(mainSrc).not.toContain('Manage Desktop Update');
+    expect(mainSrc).not.toContain('Environment type:');
+    expect(mainSrc).not.toContain('provider-backed Local Environment profile');
+  });
+
   it('uses fresh provider health and SSH runtime-affecting settings for launcher routing', () => {
     const mainSrc = readMainSource();
     const routeSnapshotStart = mainSrc.indexOf('function controlPlaneRouteSnapshot(');

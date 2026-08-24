@@ -13,6 +13,8 @@ Desktop keeps Connect, Workspace, Runtime UI, and managed lifecycle readiness in
 
 Runtime compatibility failures use `Update Runtime and open`; Desktop compatibility failures use the Desktop update handoff. The two recovery actions stay separate because updating a remote Runtime cannot repair the bundled Desktop application.
 
+The Desktop update handoff is the single existing-installation upgrade notice. Before opening the release page, its localized native dialog states that installing the new version restarts Redeven Desktop and the Local Runtime and interrupts active Local Environment sessions. Choosing Later performs no action. A first installation does not use this handoff because there is no existing Desktop or Local Runtime to restart.
+
 ## Capability projection
 
 Local, SSH, local-container, and SSH-container paths with a clear supervisor setup route report `support=supported`; URL paths report `unsupported`. With a grant, no binding is `setup_required`, and an existing binding with an unavailable Gateway is `temporarily_unavailable`. Without a grant, target, generation, operations, artifact policies, and supervisor facts remain hidden. Provider uses the same projection from RCPP v3.
@@ -60,6 +62,7 @@ Environment open guidance does not display Gateway, Desktop ownership, target bi
 - `redeven:desktop/src/welcome/environmentGuidanceSession.ts:1` - Panel ownership, ordered stages, typed recovery actions, failure retention, and retry state.
 - `redeven:desktop/src/main/launcherOperations.ts:1` - Durable operation snapshots retain real Open stages and derive status-aware presentation keys.
 - `redeven:desktop/src/welcome/environmentProgressPrimaryPresentation.ts:59` - Maps typed Open failures to Runtime update-and-open, Desktop update handoff, or refresh-status primary recovery actions.
+- `redeven:desktop/src/main/desktopUpdateHandoff.ts:1` - Builds the localized native update handoff warning for the Desktop and Local Runtime restart impact.
 - `redeven:desktop/src/welcome/App.tsx:5104` - One localized initialize/start/open orchestrator.
 - `redeven:desktop/src/welcome/App.tsx:10290` - Runs update-and-open continuation through the shared open preflight.
 - `redeven:desktop/src/main/environmentOpenCoordinator.ts:1` - Single target-scoped Open and lifecycle decision contract.

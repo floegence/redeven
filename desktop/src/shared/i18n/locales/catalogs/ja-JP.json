@@ -797,6 +797,13 @@
     "localUI": "Local UI",
     "environment": "環境"
   },
+  "desktopUpdateHandoff": {
+    "openReleasePage": "リリースページを開く",
+    "later": "後で",
+    "title": "Redeven Desktop を更新しますか？",
+    "restartMessage": "新しいバージョンをインストールすると、Redeven Desktop とローカルランタイムが再起動します。",
+    "interruptionDetail": "使用中のローカル環境セッションは中断されます。"
+  },
   "nativeMenu": {
     "file": "ファイル",
     "edit": "編集",

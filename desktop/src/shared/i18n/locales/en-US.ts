@@ -284,6 +284,13 @@ export const enUS = {
     localUI: 'Local UI',
     environment: 'Environment',
   },
+  desktopUpdateHandoff: {
+    openReleasePage: 'Open release page',
+    later: 'Later',
+    title: 'Update Redeven Desktop?',
+    restartMessage: 'Installing the new version will restart Redeven Desktop and the Local Runtime.',
+    interruptionDetail: 'Active Local Environment sessions will be interrupted.',
+  },
   nativeMenu: {
     file: 'File',
     edit: 'Edit',

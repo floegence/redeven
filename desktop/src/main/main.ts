@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, powerMonitor, safeStorage, session, shell, webContents as electronWebContents, WebContentsView, type MessageBoxOptions, type Session, type WebContents } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, powerMonitor, safeStorage, session, shell, webContents as electronWebContents, WebContentsView, type Session, type WebContents } from 'electron';
 import crypto from 'node:crypto';
 import { once } from 'node:events';
 import { mkdirSync } from 'node:fs';
@@ -58,6 +58,7 @@ import {
 import {
   showDesktopConfirmationDialog,
 } from './desktopConfirmation';
+import { buildDesktopUpdateHandoffMessageBoxOptions } from './desktopUpdateHandoff';
 import { DesktopCodeWorkspacePackageJobStore } from './codeWorkspaceEnginePackageJobs';
 import type { DesktopConfirmationDialogModel } from '../shared/desktopConfirmationContract';
 import { createDesktopI18n } from '../shared/i18n/desktopI18n';
@@ -16179,15 +16180,7 @@ async function manageDesktopUpdateFromLauncher(
       },
     );
   }
-  await showDesktopUpdateHandoffDialog({
-    label: compact(request.label) || environment.label,
-    environmentKindLabel: localEnvironmentStateKind(environment) === 'controlplane'
-      ? 'Provider environment'
-      : 'Local environment',
-    detail: localEnvironmentStateKind(environment) === 'controlplane'
-      ? 'Desktop will keep this environment in the same provider-backed Local Environment profile and may need a newer desktop release before redeploying the managed runtime.'
-      : 'Desktop will keep this environment on the same Local Environment profile and may need a newer desktop release before restarting the managed runtime.',
-  });
+  await showDesktopUpdateHandoffDialog();
   return launcherActionSuccess('opened_desktop_update_handoff');
 }
 
@@ -17007,20 +17000,10 @@ function desktopShellRuntimeActionUnavailable(
   };
 }
 
-async function showDesktopUpdateHandoffDialog(args: Readonly<{
-  label: string;
-  environmentKindLabel: string;
-  detail: string;
-}>): Promise<void> {
-  const dialogOptions: MessageBoxOptions = {
-    type: 'info',
-    buttons: ['Open release page', 'Later'],
-    defaultId: 0,
-    cancelId: 1,
-    title: 'Manage Desktop Update',
-    message: `Update Redeven Desktop for ${args.label}.`,
-    detail: `${args.detail}\n\nEnvironment type: ${args.environmentKindLabel}.`,
-  };
+async function showDesktopUpdateHandoffDialog(): Promise<void> {
+  const dialogOptions = buildDesktopUpdateHandoffMessageBoxOptions(
+    createDesktopI18n(desktopLanguageState().getSnapshot().resolved_locale),
+  );
   const parentWindow = currentParentWindow();
   const result = parentWindow
     ? await dialog.showMessageBox(parentWindow, dialogOptions)
@@ -17054,17 +17037,7 @@ async function manageDesktopUpdateFromShell(webContentsID: number): Promise<Desk
     };
   }
 
-  const environmentKindLabel = sessionRecord.target.local_environment_kind === 'controlplane'
-    ? 'Provider environment'
-    : 'Local environment';
-  const detail = sessionRecord.target.local_environment_kind === 'controlplane'
-    ? 'Desktop will keep this environment in the same provider-backed Local Environment profile and may need a newer desktop release before redeploying the managed runtime.'
-    : 'Desktop will keep this environment on the same Local Environment profile and may need a newer desktop release before restarting the managed runtime.';
-  await showDesktopUpdateHandoffDialog({
-    label: sessionRecord.target.label,
-    environmentKindLabel,
-    detail,
-  });
+  await showDesktopUpdateHandoffDialog();
   return {
     ok: true,
     started: false,

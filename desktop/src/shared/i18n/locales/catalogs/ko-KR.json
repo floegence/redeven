@@ -797,6 +797,13 @@
     "localUI": "Local UI",
     "environment": "환경"
   },
+  "desktopUpdateHandoff": {
+    "openReleasePage": "릴리스 페이지 열기",
+    "later": "나중에",
+    "title": "Redeven Desktop을 업데이트하시겠습니까?",
+    "restartMessage": "새 버전을 설치하면 Redeven Desktop과 로컬 런타임이 다시 시작됩니다.",
+    "interruptionDetail": "사용 중인 로컬 환경 세션이 중단됩니다."
+  },
   "nativeMenu": {
     "file": "파일",
     "edit": "편집",
