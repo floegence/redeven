@@ -42,6 +42,33 @@ export type DesktopSSHReleaseFetchPolicy = Readonly<{
   signal?: AbortSignal;
 }>;
 
+export type DesktopReleaseAssetFailureCode = 'forbidden' | 'unavailable' | 'timeout';
+
+export class DesktopReleaseAssetError extends Error {
+  readonly failure_code: DesktopReleaseAssetFailureCode;
+  readonly status: number | null;
+  readonly url: string;
+  readonly request_id: string;
+  readonly attempts: number;
+
+  constructor(message: string, options: Readonly<{
+    failure_code: DesktopReleaseAssetFailureCode;
+    status?: number | null;
+    url: string;
+    request_id?: string;
+    attempts: number;
+    cause?: unknown;
+  }>) {
+    super(message, { cause: options.cause });
+    this.name = 'DesktopReleaseAssetError';
+    this.failure_code = options.failure_code;
+    this.status = options.status ?? null;
+    this.url = options.url;
+    this.request_id = compact(options.request_id);
+    this.attempts = options.attempts;
+  }
+}
+
 type EnsureDesktopSSHReleaseAssetArgs = Readonly<{
   releaseTag: string;
   releaseBaseURL: string;
@@ -235,6 +262,33 @@ function throwIfReleaseFetchCanceled(signal: AbortSignal | undefined): void {
   }
 }
 
+const RELEASE_FETCH_MAX_ATTEMPTS = 3;
+
+function releaseFetchRetryable(error: unknown): boolean {
+  if (error instanceof DesktopReleaseAssetError) {
+    return (error.failure_code === 'timeout' || error.failure_code === 'unavailable')
+      && (error.status === null || error.status >= 500);
+  }
+  const candidate = error as Partial<Error> & Readonly<{ code?: string }>;
+  return candidate?.name !== 'AbortError' && candidate?.code !== 'ABORT_ERR';
+}
+
+async function waitBeforeReleaseFetchRetry(attempt: number, signal: AbortSignal | undefined): Promise<void> {
+  throwIfReleaseFetchCanceled(signal);
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', abort);
+      resolve();
+    }, Math.min(250 * attempt, 750));
+    const abort = () => {
+      clearTimeout(timer);
+      reject(releaseFetchCanceledError());
+    };
+    signal?.addEventListener('abort', abort, { once: true });
+    if (signal?.aborted) abort();
+  });
+}
+
 async function withFetchedReleaseAsset<T>(
   sourceURL: string,
   fetchPolicy: DesktopSSHReleaseFetchPolicy | undefined,
@@ -242,39 +296,98 @@ async function withFetchedReleaseAsset<T>(
 ): Promise<T> {
   const policy = normalizeFetchPolicy(fetchPolicy);
   throwIfReleaseFetchCanceled(policy.signal);
-  const controller = new AbortController();
-  let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, policy.timeout_ms);
-  const abort = () => controller.abort();
-  policy.signal?.addEventListener('abort', abort, { once: true });
-  try {
-    const response = await fetch(sourceURL, { signal: controller.signal });
-    if (!response.ok) {
-      throw new Error(`Download failed (${response.status}) for ${sourceURL}`);
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= RELEASE_FETCH_MAX_ATTEMPTS; attempt += 1) {
+    const controller = new AbortController();
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, policy.timeout_ms);
+    const abort = () => controller.abort();
+    policy.signal?.addEventListener('abort', abort, { once: true });
+    try {
+      const response = await fetch(sourceURL, { signal: controller.signal });
+      if (!response.ok) {
+        const error = new DesktopReleaseAssetError(
+          `Download failed (${response.status}) for ${sourceURL}`,
+          {
+            failure_code: response.status === 403 ? 'forbidden' : 'unavailable',
+            status: response.status,
+            url: sourceURL,
+            request_id: response.headers.get('x-github-request-id') ?? response.headers.get('x-request-id') ?? '',
+            attempts: attempt,
+          },
+        );
+        if (response.status >= 500 && attempt < RELEASE_FETCH_MAX_ATTEMPTS) {
+          lastError = error;
+          await waitBeforeReleaseFetchRetry(attempt, policy.signal);
+          continue;
+        }
+        throw error;
+      }
+      throwIfReleaseFetchCanceled(policy.signal);
+      const result = await consume(response, policy.signal);
+      throwIfReleaseFetchCanceled(policy.signal);
+      return result;
+    } catch (error) {
+      const nodeError = error as NodeJS.ErrnoException | DOMException | undefined;
+      if (policy.signal?.aborted) {
+        throw releaseFetchCanceledError();
+      }
+      if (error instanceof DesktopReleaseAssetError) {
+        lastError = error;
+        if (!releaseFetchRetryable(error) || attempt >= RELEASE_FETCH_MAX_ATTEMPTS) {
+          throw error;
+        }
+        await waitBeforeReleaseFetchRetry(attempt, policy.signal);
+        continue;
+      }
+      if (timedOut || nodeError?.name === 'TimeoutError') {
+        lastError = new DesktopReleaseAssetError(
+          `Timed out after ${policy.timeout_ms}ms downloading ${sourceURL}`,
+          {
+            failure_code: 'timeout',
+            url: sourceURL,
+            attempts: attempt,
+            cause: error,
+          },
+        );
+      } else if (nodeError?.name === 'AbortError') {
+        throw releaseFetchCanceledError();
+      } else {
+        lastError = new DesktopReleaseAssetError(
+          `Download failed for ${sourceURL}: ${error instanceof Error ? error.message : String(error)}`,
+          {
+            failure_code: 'unavailable',
+            url: sourceURL,
+            attempts: attempt,
+            cause: error,
+          },
+        );
+      }
+      if (attempt < RELEASE_FETCH_MAX_ATTEMPTS && releaseFetchRetryable(lastError)) {
+        await waitBeforeReleaseFetchRetry(attempt, policy.signal);
+        continue;
+      }
+      throw lastError;
+    } finally {
+      clearTimeout(timer);
+      policy.signal?.removeEventListener('abort', abort);
     }
-    throwIfReleaseFetchCanceled(policy.signal);
-    const result = await consume(response, policy.signal);
-    throwIfReleaseFetchCanceled(policy.signal);
-    return result;
-  } catch (error) {
-    const nodeError = error as NodeJS.ErrnoException | DOMException | undefined;
-    if (policy.signal?.aborted) {
-      throw releaseFetchCanceledError();
-    }
-    if (timedOut || nodeError?.name === 'TimeoutError') {
-      throw new Error(`Timed out after ${policy.timeout_ms}ms downloading ${sourceURL}`);
-    }
-    if (nodeError?.name === 'AbortError') {
-      throw releaseFetchCanceledError();
-    }
-    throw error;
-  } finally {
-    clearTimeout(timer);
-    policy.signal?.removeEventListener('abort', abort);
   }
+  throw lastError ?? new Error(`Download failed for ${sourceURL}`);
+}
+
+export async function fetchDesktopReleaseAssetBuffer(
+  sourceURL: string,
+  fetchPolicy?: DesktopSSHReleaseFetchPolicy,
+): Promise<Buffer> {
+  return withFetchedReleaseAsset(sourceURL, fetchPolicy, async (response, signal) => {
+    const data = Buffer.from(await response.arrayBuffer());
+    throwIfReleaseFetchCanceled(signal);
+    return data;
+  });
 }
 
 async function downloadURLToPath(

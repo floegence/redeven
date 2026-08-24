@@ -901,6 +901,28 @@ async function createFakeSourceRuntimeRoot(root: string): Promise<Readonly<{
   await fs.mkdir(path.join(sourceRoot, 'cmd', 'redeven'), { recursive: true });
   await fs.mkdir(path.join(sourceRoot, 'scripts'), { recursive: true });
   await fs.mkdir(binDir, { recursive: true });
+  await fs.writeFile(path.join(sourceRoot, 'go.mod'), [
+    'module example.invalid/redeven-source-runtime-fixture',
+    '',
+    'go 1.24.0',
+    '',
+    'require github.com/floegence/redevplugin/v3 v3.0.16',
+    '',
+  ].join('\n'));
+  const manifestPath = path.join(root, 'asset-cache', 'redevplugin-manifests', 'v3.0.16', 'platform-release-manifest.json');
+  await fs.mkdir(path.dirname(manifestPath), { recursive: true });
+  await fs.writeFile(manifestPath, `${JSON.stringify({
+    platform_version: '3.0.16',
+    plugin_api: 1,
+    internal_wire: 1,
+    artifacts: [
+      { name: 'go:github.com/floegence/redevplugin/v3', sha256: '1'.repeat(64) },
+      { name: 'npm:@floegence/redevplugin-contracts', sha256: '2'.repeat(64) },
+      { name: 'npm:@floegence/redevplugin-ui', sha256: '3'.repeat(64) },
+      { name: 'crate:redevplugin-runtime', sha256: '4'.repeat(64) },
+      { name: 'crate:redevplugin-worker-sdk', sha256: '5'.repeat(64) },
+    ],
+  })}\n`);
   await fs.writeFile(path.join(sourceRoot, 'scripts', 'build_assets.sh'), `#!/bin/sh
 set -eu
 printf 'ready\\n' > .assets-built

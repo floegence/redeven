@@ -154,6 +154,8 @@ async function createSourceRuntimeFixture(): Promise<Readonly<{
     '',
     'go 1.24.0',
     '',
+    'require github.com/floegence/redevplugin/v3 v3.0.16',
+    '',
   ].join('\n'));
   await fs.writeFile(path.join(root, 'cmd', 'redeven', 'main.go'), [
     'package main',
@@ -215,6 +217,25 @@ async function createSourceRuntimeFixture(): Promise<Readonly<{
     '  printf evidence > "$(dirname "$runtime_out")/$name"',
     'done',
   ].join('\n'), { mode: 0o755 });
+
+  const manifest = {
+    platform_version: '3.0.16',
+    plugin_api: 1,
+    internal_wire: 1,
+    artifacts: [
+      { name: 'contract:plugin/api.json', sha256: '1'.repeat(64) },
+      { name: 'crate:redevplugin-runtime', sha256: '2'.repeat(64) },
+      { name: 'crate:redevplugin-worker-sdk', sha256: '3'.repeat(64) },
+      { name: 'go:github.com/floegence/redevplugin/v3', sha256: '4'.repeat(64) },
+      { name: 'npm:@floegence/redevplugin-contracts', sha256: '5'.repeat(64) },
+      { name: 'npm:@floegence/redevplugin-ui', sha256: '6'.repeat(64) },
+    ],
+  };
+  await fs.mkdir(path.join(runtimePackageCacheRoot(tempRoot), 'redevplugin-manifests', 'v3.0.16'), { recursive: true });
+  await fs.writeFile(
+    path.join(runtimePackageCacheRoot(tempRoot), 'redevplugin-manifests', 'v3.0.16', 'platform-release-manifest.json'),
+    `${JSON.stringify(manifest)}\n`,
+  );
 
   return {
     root,
@@ -377,6 +398,16 @@ describe('runtimePackageCache', () => {
       expect(first.source).toBe('source_build');
       expect(cached.source).toBe('source_build_cache');
       expect(cached.archiveData).toEqual(first.archiveData);
+      const sourceCacheEntries = await fs.readdir(path.join(fixture.cacheRoot, 'source-build-cache'), { withFileTypes: true });
+      expect(sourceCacheEntries.filter((entry) => entry.isDirectory())).toHaveLength(1);
+      const metadata = JSON.parse(await fs.readFile(
+        path.join(fixture.cacheRoot, 'source-build-cache', sourceCacheEntries[0].name, 'metadata.json'),
+        'utf8',
+      )) as Record<string, string>;
+      expect(metadata.source_commit).toBe('unknown');
+      expect(metadata.redevplugin_release_tag).toBe('v3.0.16');
+      expect(metadata.rust_toolchain).toBe('1.88.0');
+      expect(metadata.archive_sha256).toMatch(/^[a-f0-9]{64}$/u);
       const buildLog = await fs.readFile(fixture.buildLogPath, 'utf8');
       expect(buildLog).toMatch(/^assets:/u);
       expect(buildLog).not.toContain(fixture.root);
@@ -390,6 +421,63 @@ describe('runtimePackageCache', () => {
       await fs.rm(path.dirname(fixture.root), { recursive: true, force: true });
     }
   }, 15_000);
+
+  it('classifies a forbidden ReDevPlugin manifest before any source build', async () => {
+    const fixture = await createSourceRuntimeFixture();
+    const platform = resolveDesktopSSHRemotePlatform('linux', 'x86_64');
+    await fs.rm(path.join(fixture.cacheRoot, 'redevplugin-manifests'), { recursive: true, force: true });
+    const fetchMock = vi.fn(async () => new Response('forbidden', {
+      status: 403,
+      headers: { 'x-github-request-id': 'plugin-request-403' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const error = await preparePackage({
+        cacheRoot: fixture.cacheRoot,
+        platform,
+        sourceRuntimeRoot: fixture.root,
+      }).catch((caught: unknown) => caught);
+      expect(error).toBeInstanceOf(DesktopOperationFailureError);
+      expect((error as DesktopOperationFailureError).presentation.code).toBe('redevplugin_release_asset_forbidden');
+      expect((error as DesktopOperationFailureError).presentation.diagnostics?.[0]?.text).toContain('plugin-request-403');
+      await expect(fs.access(fixture.buildLogPath)).rejects.toMatchObject({ code: 'ENOENT' });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      await fs.rm(path.dirname(fixture.root), { recursive: true, force: true });
+    }
+  });
+
+  it('reuses a verified source package when the manifest source is temporarily forbidden', async () => {
+    const fixture = await createSourceRuntimeFixture();
+    const platform = resolveDesktopSSHRemotePlatform('linux', 'x86_64');
+    try {
+      const first = await preparePackage({
+        cacheRoot: fixture.cacheRoot,
+        platform,
+        sourceRuntimeRoot: fixture.root,
+      });
+      expect(first.source).toBe('source_build');
+      await fs.rm(path.join(fixture.cacheRoot, 'redevplugin-manifests'), { recursive: true, force: true });
+
+      const fetchMock = vi.fn(async () => new Response('forbidden', {
+        status: 403,
+        headers: { 'x-github-request-id': 'plugin-request-cache-fallback' },
+      }));
+      vi.stubGlobal('fetch', fetchMock);
+      const cached = await preparePackage({
+        cacheRoot: fixture.cacheRoot,
+        platform,
+        sourceRuntimeRoot: fixture.root,
+      });
+
+      expect(cached.source).toBe('source_build_cache');
+      expect(cached.archiveData).toEqual(first.archiveData);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect((await fs.readFile(fixture.buildLogPath, 'utf8')).match(/^assets:/gmu)).toHaveLength(1);
+    } finally {
+      await fs.rm(path.dirname(fixture.root), { recursive: true, force: true });
+    }
+  });
 
   it('does not reuse a source package after the Desktop source commit changes', async () => {
     const fixture = await createSourceRuntimeFixture();

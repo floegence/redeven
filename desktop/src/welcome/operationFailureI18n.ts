@@ -27,11 +27,16 @@ function failureTitleKey(failure: DesktopOperationFailurePresentation): DesktopT
     case 'ssh_upload_directory_unavailable':
       return 'progress.sshUploadDirectoryUnavailableTitle';
     case 'local_runtime_launch_failed':
-    case 'container_runtime_launch_failed':
     case 'ssh_runtime_launch_failed':
       return 'progress.runtimeStartFailedTitle';
     case 'gateway_package_prepare_failed':
       return 'progress.gatewayPackagePrepareFailedTitle';
+    case 'runtime_package_prepare_failed':
+      return 'progress.runtimePackagePrepareFailedTitle';
+    case 'redevplugin_release_asset_forbidden':
+    case 'redevplugin_release_asset_unavailable':
+    case 'redevplugin_release_asset_timeout':
+      return 'progress.redevpluginReleaseAssetFailedTitle';
     case 'reinstall_direct_channel_failed':
       return 'progress.reinstallDirectChannelFailedTitle';
     case 'reinstall_package_batch_failed':
@@ -84,11 +89,16 @@ function failureSummaryKey(failure: DesktopOperationFailurePresentation): Deskto
     case 'ssh_upload_directory_unavailable':
       return 'progress.sshUploadDirectoryUnavailableSummary';
     case 'local_runtime_launch_failed':
-    case 'container_runtime_launch_failed':
     case 'ssh_runtime_launch_failed':
       return 'progress.runtimeStartFailedSummary';
     case 'gateway_package_prepare_failed':
       return 'progress.gatewayPackagePrepareFailedSummary';
+    case 'runtime_package_prepare_failed':
+      return 'progress.runtimePackagePrepareFailedSummary';
+    case 'redevplugin_release_asset_forbidden':
+    case 'redevplugin_release_asset_unavailable':
+    case 'redevplugin_release_asset_timeout':
+      return 'progress.redevpluginReleaseAssetFailedSummary';
     case 'reinstall_direct_channel_failed':
       return 'progress.reinstallDirectChannelFailedSummary';
     case 'reinstall_package_batch_failed':
@@ -167,6 +177,14 @@ export function localizedOperationFailureDetail(
   if (failure.code === 'confirmation_required') {
     return i18n.t('progress.runtimeConfirmationRequiredDetail');
   }
+  if (failure.code === 'runtime_package_prepare_failed') {
+    return i18n.t('progress.runtimePackagePrepareFailedDetail');
+  }
+  if (failure.code === 'redevplugin_release_asset_forbidden'
+    || failure.code === 'redevplugin_release_asset_unavailable'
+    || failure.code === 'redevplugin_release_asset_timeout') {
+    return i18n.t('progress.redevpluginReleaseAssetFailedDetail');
+  }
   return i18n.locale === 'en-US' ? compact(failure.detail) : '';
 }
 
@@ -185,6 +203,14 @@ export function localizedOperationFailureRecoveryHint(
   }
   if (failure.code === 'confirmation_required') {
     return i18n.t('progress.runtimeConfirmationRequiredRecoveryHint');
+  }
+  if (failure.code === 'runtime_package_prepare_failed') {
+    return i18n.t('progress.runtimePackagePrepareFailedRecoveryHint');
+  }
+  if (failure.code === 'redevplugin_release_asset_forbidden'
+    || failure.code === 'redevplugin_release_asset_unavailable'
+    || failure.code === 'redevplugin_release_asset_timeout') {
+    return i18n.t('progress.redevpluginReleaseAssetFailedRecoveryHint');
   }
   return i18n.locale === 'en-US' ? compact(failure.recovery_hint) : '';
 }

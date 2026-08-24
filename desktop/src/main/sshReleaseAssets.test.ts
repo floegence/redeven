@@ -8,9 +8,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildDesktopSSHReleaseAssetURL,
   buildDesktopSSHReleaseSourceCacheKey,
+  DesktopReleaseAssetError,
   desktopSSHReleasePackageName,
   ensureDesktopSSHReleaseArchive,
   ensureDesktopSSHVerifiedReleaseManifest,
+  fetchDesktopReleaseAssetBuffer,
   parseDesktopSSHReleaseSHA256,
   resolveDesktopHostPlatform,
   resolveDesktopSSHRemotePlatform,
@@ -285,10 +287,50 @@ describe('sshReleaseAssets', () => {
         releaseBaseURL: 'https://mirror.example.invalid/releases',
         cacheRoot: root,
         fetchPolicy: { timeout_ms: 5 },
-      })).rejects.toThrow('Timed out after 5ms downloading https://mirror.example.invalid/releases/download/v1.2.3/');
+      })).rejects.toMatchObject({
+        failure_code: 'timeout',
+        url: expect.stringContaining('https://mirror.example.invalid/releases/download/v1.2.3/'),
+      });
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }
+  });
+
+  it('reports a forbidden release asset without retrying', async () => {
+    const fetchMock = vi.fn(async () => new Response('forbidden', {
+      status: 403,
+      headers: { 'x-github-request-id': 'request-403' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(fetchDesktopReleaseAssetBuffer('https://example.invalid/asset', { timeout_ms: 100 })).rejects.toMatchObject({
+      failure_code: 'forbidden',
+      status: 403,
+      request_id: 'request-403',
+      attempts: 1,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries transient release asset responses but stops at the bounded limit', async () => {
+    const fetchMock = vi.fn(async () => new Response('server error', { status: 503 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const error = await fetchDesktopReleaseAssetBuffer('https://example.invalid/asset', { timeout_ms: 100 }).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(DesktopReleaseAssetError);
+    expect((error as DesktopReleaseAssetError).failure_code).toBe('unavailable');
+    expect((error as DesktopReleaseAssetError).status).toBe(503);
+    expect((error as DesktopReleaseAssetError).attempts).toBe(3);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('retries bounded network failures and preserves the original URL', async () => {
+    const fetchMock = vi.fn(async () => { throw new Error('connection reset'); });
+    vi.stubGlobal('fetch', fetchMock);
+    const error = await fetchDesktopReleaseAssetBuffer('https://example.invalid/asset', { timeout_ms: 100 }).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(DesktopReleaseAssetError);
+    expect((error as DesktopReleaseAssetError).failure_code).toBe('unavailable');
+    expect((error as DesktopReleaseAssetError).url).toBe('https://example.invalid/asset');
+    expect((error as DesktopReleaseAssetError).attempts).toBe(3);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it('lets SSH startup cancellation interrupt release manifest downloads before the timeout', async () => {
