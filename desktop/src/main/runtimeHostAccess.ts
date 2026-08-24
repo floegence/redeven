@@ -20,11 +20,15 @@ import type {
   DesktopSSHTransportLease,
   DesktopSSHTransportManager,
 } from './sshTransportManager';
+import { DesktopSSHCommandTimeoutError } from './sshTransportManager';
 
 export type RuntimeHostCommandResult = Readonly<{
   stdout: string;
   stderr: string;
 }>;
+
+export const DEFAULT_RUNTIME_HOST_COMMAND_TIMEOUT_MS = 30_000;
+export const DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS = 10 * 60_000;
 
 export type RuntimeHostAccessExecutor = Readonly<{
   host_access: DesktopRuntimeHostAccess;
@@ -38,6 +42,7 @@ export type RuntimeHostCommandOptions = Readonly<{
   env?: NodeJS.ProcessEnv;
   stdinData?: Buffer;
   signal?: AbortSignal;
+  timeout_ms?: number;
 }>;
 
 type SpawnedCommand = ChildProcessByStdio<Writable | null, Readable | null, Readable | null>;
@@ -128,13 +133,14 @@ function runtimeHostCommandFailure(
   args: Readonly<{
     command: string;
     reason: string;
+    code?: DesktopFailureCode;
     stdout?: string;
     stderr?: string;
     cause?: unknown;
   }>,
 ): DesktopOperationFailureError {
   return new DesktopOperationFailureError(desktopOperationFailurePresentation({
-    code: context.code ?? 'runtime_host_command_failed',
+    code: args.code ?? context.code ?? 'runtime_host_command_failed',
     title: context.title,
     summary: context.summary,
     detail: context.detail,
@@ -226,6 +232,25 @@ function spawnCommand(
     }) as SpawnedCommand;
     let stdout = '';
     let stderr = '';
+    let settled = false;
+    const timeoutMs = Number(options.timeout_ms);
+    const timeout = Number.isFinite(timeoutMs) && timeoutMs > 0
+      ? setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          child.kill('SIGTERM');
+          reject(runtimeHostCommandFailure(failureContext, {
+            command,
+            reason: `timed out after ${Math.floor(timeoutMs)} ms`,
+            code: 'runtime_host_command_timeout',
+            stdout,
+            stderr,
+          }));
+        }, timeoutMs)
+      : undefined;
+    const clearCommandTimeout = () => {
+      if (timeout) clearTimeout(timeout);
+    };
 
     child.stdout?.setEncoding('utf8');
     child.stdout?.on('data', (chunk: string) => {
@@ -236,12 +261,18 @@ function spawnCommand(
       stderr += chunk;
     });
     child.once('error', (error) => {
+      if (settled) return;
+      settled = true;
+      clearCommandTimeout();
       rejectSpawnError(reject, failureContext, command, error, { stdout, stderr });
     });
     if (options.stdinData && child.stdin) {
       child.stdin.end(options.stdinData);
     }
     child.once('close', (exitCode, closeSignal) => {
+      if (settled) return;
+      settled = true;
+      clearCommandTimeout();
       if (exitCode === 0 && !closeSignal) {
         resolve({ stdout, stderr });
         return;
@@ -273,11 +304,55 @@ function spawnStreamingCommand(
     stdio: ['pipe', 'pipe', 'pipe'],
     signal: options.signal,
   }) as SpawnedStreamingCommand;
+  let settled = false;
+  let timedOut = false;
+  let stdout = '';
+  let stderr = '';
+  const timeoutMs = Number(options.timeout_ms);
+  const timeout = Number.isFinite(timeoutMs) && timeoutMs > 0
+      ? setTimeout(() => {
+          if (settled) return;
+          timedOut = true;
+          child.kill('SIGTERM');
+      }, timeoutMs)
+      : undefined;
+  child.stdout.setEncoding('utf8');
+  child.stdout.on('data', (chunk: string) => { stdout += chunk; });
+  child.stderr.setEncoding('utf8');
+  child.stderr.on('data', (chunk: string) => { stderr += chunk; });
   const closed = new Promise<void>((resolve, reject) => {
     child.once('error', (error) => {
+      if (timedOut) {
+        settled = true;
+        if (timeout) clearTimeout(timeout);
+        reject(runtimeHostCommandFailure(failureContext, {
+          command,
+          reason: `timed out after ${Math.floor(timeoutMs)} ms`,
+          code: 'runtime_host_command_timeout',
+          stdout,
+          stderr,
+        }));
+        return;
+      }
+      settled = true;
+      if (timeout) clearTimeout(timeout);
       rejectSpawnError(reject, failureContext, command, error);
     });
     child.once('close', (exitCode, closeSignal) => {
+      if (timedOut) {
+        settled = true;
+        if (timeout) clearTimeout(timeout);
+        reject(runtimeHostCommandFailure(failureContext, {
+          command,
+          reason: `timed out after ${Math.floor(timeoutMs)} ms`,
+          code: 'runtime_host_command_timeout',
+          stdout,
+          stderr,
+        }));
+        return;
+      }
+      settled = true;
+      if (timeout) clearTimeout(timeout);
       if (exitCode === 0 && !closeSignal) {
         resolve();
         return;
@@ -308,7 +383,10 @@ export function createLocalRuntimeHostExecutor(): RuntimeHostAccessExecutor {
         throw new Error('Runtime host command argv must be non-empty.');
       }
       const [command, ...args] = argv.map((part) => compact(part));
-      return spawnCommand(command!, args, options, {
+      return spawnCommand(command!, args, {
+        ...options,
+        timeout_ms: options.timeout_ms ?? DEFAULT_RUNTIME_HOST_COMMAND_TIMEOUT_MS,
+      }, {
         title: 'Runtime Host Command Failed',
         summary: 'Desktop could not run the runtime host command on this device.',
         detail: 'The local command did not complete successfully.',
@@ -374,6 +452,7 @@ export function createSSHRuntimeHostExecutor(
         const result = await lease.run(sshRemoteCommandWithEnv(argv, commandOptions.env), {
           stdinData: commandOptions.stdinData,
           signal: commandOptions.signal,
+          timeout_ms: commandOptions.timeout_ms ?? DEFAULT_RUNTIME_HOST_COMMAND_TIMEOUT_MS,
         });
         if (result.exit_code === 0 && !result.signal) {
           return { stdout: result.stdout, stderr: result.stderr };
@@ -393,6 +472,22 @@ export function createSSHRuntimeHostExecutor(
       } catch (error) {
         if (error instanceof DesktopOperationFailureError) {
           throw error;
+        }
+        if (error instanceof DesktopSSHCommandTimeoutError) {
+          throw runtimeHostCommandFailure({
+            title: 'SSH Host Command Timed Out',
+            summary: `SSH command on "${targetLabel}" timed out.`,
+            detail: 'Desktop stopped waiting for the runtime management command so the operation can be retried safely.',
+            recoveryHint: 'Retry the operation after checking the SSH host and network connection.',
+            targetLabel,
+          }, {
+            command: argv.join(' '),
+            reason: error.message,
+            code: 'runtime_host_command_timeout',
+            stdout: error.stdout,
+            stderr: error.stderr,
+            cause: error,
+          });
         }
         throw runtimeHostCommandFailure({
           title: 'SSH Host Command Failed',
@@ -454,6 +549,7 @@ export async function spawnSSHRuntimeHostCommand(
   try {
     command = lease.stream(sshRemoteCommandWithEnv(argv, options.env), {
       signal: options.signal,
+      timeout_ms: options.timeout_ms,
     });
   } catch (error) {
     await lease.release();
@@ -469,7 +565,23 @@ export async function spawnSSHRuntimeHostCommand(
       cause: error,
     });
   }
-  const closed = command.closed.finally(() => lease.release());
+  const closed = command.closed.catch((error) => {
+    if (error instanceof DesktopSSHCommandTimeoutError) {
+      throw runtimeHostCommandFailure({
+        title: 'SSH Host Command Timed Out',
+        summary: `SSH command on "${targetLabel}" timed out.`,
+        detail: 'Desktop stopped waiting for the runtime management stream so the operation can be retried safely.',
+        recoveryHint: 'Retry the operation after checking the SSH host and network connection.',
+        targetLabel,
+      }, {
+        command: argv.join(' '),
+        reason: error.message,
+        code: 'runtime_host_command_timeout',
+        cause: error,
+      });
+    }
+    throw error;
+  }).finally(() => lease.release());
   return {
     stdin: command.stdin,
     stdout: command.stdout,

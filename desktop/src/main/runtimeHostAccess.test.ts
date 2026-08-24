@@ -71,6 +71,47 @@ describe('runtimeHostAccess', () => {
     });
   });
 
+  it('fails a local host command that does not return before its deadline', async () => {
+    await expect(createLocalRuntimeHostExecutor().run([
+      process.execPath,
+      '-e',
+      'setTimeout(() => {}, 60_000)',
+    ], { timeout_ms: 20 })).rejects.toMatchObject({
+      name: 'DesktopOperationFailureError',
+      presentation: expect.objectContaining({
+        diagnostics: expect.arrayContaining([
+          expect.objectContaining({ text: expect.stringContaining('timed out after 20 ms') }),
+        ]),
+      }),
+    });
+  });
+
+  it('cancels a local host command through the same bounded process path', async () => {
+    const controller = new AbortController();
+    const command = createLocalRuntimeHostExecutor().run([
+      process.execPath,
+      '-e',
+      'setTimeout(() => {}, 60_000)',
+    ], { signal: controller.signal, timeout_ms: 10_000 });
+    controller.abort(new DOMException('cancel test', 'AbortError'));
+    await expect(command).rejects.toBeInstanceOf(DesktopOperationFailureError);
+  });
+
+  it('bounds a local streaming host command only when a timeout is requested', async () => {
+    const executor = createLocalRuntimeHostExecutor();
+    const command = await executor.stream?.([
+      process.execPath,
+      '-e',
+      'setTimeout(() => {}, 60_000)',
+    ], { timeout_ms: 20 });
+    await expect(command?.closed).rejects.toMatchObject({
+      name: 'DesktopOperationFailureError',
+      presentation: expect.objectContaining({
+        code: 'runtime_host_command_timeout',
+      }),
+    });
+  });
+
   it('passes explicit bridge environment variables to the remote SSH command', async () => {
     const transport = fakeTransportManager();
     const executor = createSSHRuntimeHostExecutor(transport.manager, {

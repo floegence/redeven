@@ -3,7 +3,11 @@ import { createHash } from 'node:crypto';
 import type { DesktopRuntimePlacement } from '../shared/desktopRuntimePlacement';
 import { containerRuntimeExecCommand } from './containerRuntime';
 import type { ManagedComponentTask, ManagedComponentTaskProgress, PreparedComponent, PreparedComponentBatch } from './managedComponentBatchInstaller';
-import type { RuntimeHostAccessExecutor } from './runtimeHostAccess';
+import {
+  DEFAULT_RUNTIME_HOST_COMMAND_TIMEOUT_MS,
+  DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS,
+  type RuntimeHostAccessExecutor,
+} from './runtimeHostAccess';
 
 function commandForPlacement(placement: DesktopRuntimePlacement, script: string, args: readonly string[]): readonly string[] {
   const argv = ['sh', '-c', script, 'redeven-runtime-stage', ...args];
@@ -61,23 +65,23 @@ export async function stageManagedComponent(args: Readonly<{ executor: RuntimeHo
   args.on_progress?.({ id: args.task.component, status: 'running', phase: 'transferring', strategy: args.task.strategy });
   const digest = args.archive ? createHash('sha256').update(args.archive).digest('hex') : args.archive_sha256;
   if (digest !== args.archive_sha256) throw new Error('Runtime archive digest changed before transfer.');
-  const result = await args.executor.run(commandForPlacement(args.placement, stageScript, [args.target_root, args.operation_id, args.task.release_tag, args.task.commit, args.archive_sha256, String(args.archive_size_bytes ?? args.archive?.byteLength ?? 0), args.task.strategy, args.remote_url ?? '-', args.task.platform, args.task.architecture]), { ...(args.archive ? { stdinData: args.archive } : {}), ...(args.signal ? { signal: args.signal } : {}) });
+  const result = await args.executor.run(commandForPlacement(args.placement, stageScript, [args.target_root, args.operation_id, args.task.release_tag, args.task.commit, args.archive_sha256, String(args.archive_size_bytes ?? args.archive?.byteLength ?? 0), args.task.strategy, args.remote_url ?? '-', args.task.platform, args.task.architecture]), { ...(args.archive ? { stdinData: args.archive } : {}), ...(args.signal ? { signal: args.signal } : {}), timeout_ms: DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS });
   args.on_progress?.({ id: args.task.component, status: 'running', phase: 'verifying', strategy: args.task.strategy });
   const evidence = parseStageOutput(result.stdout);
   args.on_progress?.({ id: args.task.component, status: 'succeeded', phase: 'ready', strategy: args.task.strategy, completed_bytes: evidence.archive_size_bytes, total_bytes: evidence.archive_size_bytes });
   return { task: args.task, staging_id: evidence.staging_root, evidence, value: evidence };
 }
 
-export async function activateManagedComponentBatch(executor: RuntimeHostAccessExecutor, placement: DesktopRuntimePlacement, targetRoot: string, batch: PreparedComponentBatch, mode: 'wipe_data' | 'preserve_data'): Promise<void> {
+export async function activateManagedComponentBatch(executor: RuntimeHostAccessExecutor, placement: DesktopRuntimePlacement, targetRoot: string, batch: PreparedComponentBatch, mode: 'wipe_data' | 'preserve_data', signal?: AbortSignal): Promise<void> {
   const runtime = batch.runtime_manifest.components.find((entry) => entry.component === 'runtime');
   if (!runtime) throw new Error('Managed Runtime component is unavailable.');
-  await executor.run(commandForPlacement(placement, activateScript, [targetRoot, batch.operation_id, mode]));
+  await executor.run(commandForPlacement(placement, activateScript, [targetRoot, batch.operation_id, mode]), { ...(signal ? { signal } : {}), timeout_ms: DEFAULT_RUNTIME_HOST_COMMAND_TIMEOUT_MS });
 }
 
-export async function rollbackManagedComponentBatch(executor: RuntimeHostAccessExecutor, placement: DesktopRuntimePlacement, targetRoot: string, operationID: string): Promise<void> { await executor.run(commandForPlacement(placement, rollbackScript, [targetRoot, operationID])); }
-export async function cleanupManagedComponentBatch(executor: RuntimeHostAccessExecutor, placement: DesktopRuntimePlacement, targetRoot: string, operationID: string): Promise<void> { await executor.run(commandForPlacement(placement, cleanupScript, [targetRoot, operationID])); }
+export async function rollbackManagedComponentBatch(executor: RuntimeHostAccessExecutor, placement: DesktopRuntimePlacement, targetRoot: string, operationID: string, signal?: AbortSignal): Promise<void> { await executor.run(commandForPlacement(placement, rollbackScript, [targetRoot, operationID]), { ...(signal ? { signal } : {}), timeout_ms: DEFAULT_RUNTIME_HOST_COMMAND_TIMEOUT_MS }); }
+export async function cleanupManagedComponentBatch(executor: RuntimeHostAccessExecutor, placement: DesktopRuntimePlacement, targetRoot: string, operationID: string, signal?: AbortSignal): Promise<void> { await executor.run(commandForPlacement(placement, cleanupScript, [targetRoot, operationID]), { ...(signal ? { signal } : {}), timeout_ms: DEFAULT_RUNTIME_HOST_COMMAND_TIMEOUT_MS }); }
 
-export async function startManagedComponentBatch(executor: RuntimeHostAccessExecutor, placement: DesktopRuntimePlacement, targetRoot: string, stateRoot: string, _operationID: string, _releaseTag: string, _commit: string, _runtimeExecutableSHA256: string): Promise<void> {
+export async function startManagedComponentBatch(executor: RuntimeHostAccessExecutor, placement: DesktopRuntimePlacement, targetRoot: string, stateRoot: string, _operationID: string, _releaseTag: string, _commit: string, _runtimeExecutableSHA256: string, signal?: AbortSignal): Promise<void> {
   const script = 'set -eu; target_root="$1"; state_root="$2"; binary="$target_root/runtime/managed/bin/redeven"; [ -x "$binary" ] || { echo "installed Runtime is missing" >&2; exit 30; }; if command -v setsid >/dev/null 2>&1; then setsid "$binary" run --state-root "$state_root" --mode desktop --presentation machine --local-ui-bind 127.0.0.1:0 </dev/null >/dev/null 2>&1 & else nohup "$binary" run --state-root "$state_root" --mode desktop --presentation machine --local-ui-bind 127.0.0.1:0 </dev/null >/dev/null 2>&1 & fi';
-  await executor.run(commandForPlacement(placement, script, [targetRoot, stateRoot]));
+  await executor.run(commandForPlacement(placement, script, [targetRoot, stateRoot]), { ...(signal ? { signal } : {}), timeout_ms: DEFAULT_RUNTIME_HOST_COMMAND_TIMEOUT_MS });
 }

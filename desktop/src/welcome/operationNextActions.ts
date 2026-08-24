@@ -54,6 +54,10 @@ export function visibleOperationNextActions(
   };
   if (progress.action === 'reinstall_target') {
     push('reinstall_target');
+    // A recovered journal may need a new target review instead of the
+    // original reinstall action. Keep that retry visible for the same
+    // operation so a failed confirmation never becomes a dead end.
+    push('retry');
   } else if (progress.subject_kind !== 'gateway') {
     push('update_runtime');
     push('manage_desktop_update');

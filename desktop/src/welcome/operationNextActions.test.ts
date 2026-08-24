@@ -229,6 +229,31 @@ describe('operationNextActions', () => {
     ]));
   });
 
+  it('keeps a recovered reinstall target review action visible after restart', () => {
+    const progress: DesktopLauncherActionProgress = {
+      ...failedProgress([
+        {
+          kind: 'retry',
+          operation_key: 'reinstall-target:one',
+          label: 'Review target',
+          retry_action: {
+            kind: 'preview_reinstall_target',
+            environment_id: 'ssh:gzlight',
+            mode: 'wipe_data',
+          },
+        },
+      ]),
+      action: 'reinstall_target',
+      operation_key: 'reinstall-target:one',
+      subject_kind: 'runtime_target',
+      subject_id: 'ssh:gzlight',
+    };
+
+    expect(visibleOperationNextActions(progress)).toEqual([
+      expect.objectContaining({ kind: 'retry', label: 'Review target' }),
+    ]);
+  });
+
   it('shows Gateway service recommendations after a Refresh diagnosis completes', () => {
     const progress: DesktopLauncherActionProgress = {
       ...failedProgress([

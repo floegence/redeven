@@ -17,6 +17,8 @@ Every directly managed target has one normalized coordination key made from its 
 
 Open waits for an in-flight Start, Restart, or Update and consumes that operation's committed readiness result. Auto Start uses the same coordinator before the Local Environment becomes interactive. Renderer state displays the main-process Launcher Operation and never creates a second progress or lifecycle owner.
 
+Every direct command receives the coordinator cancellation signal and a bounded command deadline. A lifecycle operation also has an overall deadline; timeout releases the in-process owner after preserving the failure and retry state.
+
 ## Direct execution
 
 Lifecycle execution is selected only from the saved Local, SSH, or container placement. Each operation creates its Launcher Operation before probing or opening transport, then performs only the steps needed by its intent:

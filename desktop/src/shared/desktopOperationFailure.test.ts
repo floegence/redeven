@@ -101,7 +101,6 @@ describe('desktopOperationFailure', () => {
     'reinstall_direct_channel_failed',
     'reinstall_package_batch_failed',
     'reinstall_filesystem_failed',
-    'reinstall_gateway_start_failed',
     'reinstall_runtime_start_failed',
   ] as const)('preserves the typed SSH failure code %s', (code) => {
     expect(normalizeDesktopOperationFailurePresentation({

@@ -42,9 +42,8 @@ describe('operationFailureI18n', () => {
 
   it.each([
     ['reinstall_direct_channel_failed', 'Redeven 直连失败', 'Desktop 无法打开到“gzcom”的已确认直连通道。'],
-    ['reinstall_package_batch_failed', 'Redeven 软件包批次失败', 'Desktop 无法为“gzcom”准备并校验相互匹配的 Gateway 和运行时软件包。'],
+    ['reinstall_package_batch_failed', 'Redeven 软件包批次失败', 'Desktop 无法为“gzcom”准备并校验运行时软件包。'],
     ['reinstall_filesystem_failed', '无法替换 Redeven 目标目录', '操作系统拒绝替换“gzcom”上已确认的精确 Redeven 根目录。'],
-    ['reinstall_gateway_start_failed', '新 Gateway 启动失败', '“gzcom”上全新安装的 Gateway 未能启动。'],
     ['reinstall_runtime_start_failed', '新运行时启动失败', '“gzcom”上全新安装的运行时未能就绪。'],
   ] as const)('localizes structured reinstall failure %s', (code, title, summary) => {
     const failure: DesktopOperationFailurePresentation = {

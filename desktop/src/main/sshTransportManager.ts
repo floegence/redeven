@@ -37,11 +37,13 @@ export type SSHCommandOptions = Readonly<{
   stdinData?: Buffer;
   signal?: AbortSignal;
   onStderr?: (chunk: string) => void;
+  timeout_ms?: number;
 }>;
 
 export type SSHStreamOptions = Readonly<{
   signal?: AbortSignal;
   onStderr?: (chunk: string) => void;
+  timeout_ms?: number;
 }>;
 
 export type SSHTransportAcquireInput = Readonly<{
@@ -101,6 +103,18 @@ export class DesktopSSHRemoteCommandError extends Error {
   ) {
     super(`SSH command on "${targetLabel}" exited without interrupting the reusable transport.`);
     this.name = 'DesktopSSHRemoteCommandError';
+  }
+}
+
+export class DesktopSSHCommandTimeoutError extends Error {
+  constructor(
+    readonly targetLabel: string,
+    readonly timeoutMs: number,
+    readonly stdout = '',
+    readonly stderr = '',
+  ) {
+    super(`SSH command on "${targetLabel}" timed out after ${timeoutMs} ms.`);
+    this.name = 'DesktopSSHCommandTimeoutError';
   }
 }
 
@@ -534,13 +548,13 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
           ...sharedArgs(entry),
           ...targetArgs(entry.target),
           command,
-        ], options.stdinData, options.signal, options.onStderr);
+        ], options.stdinData, options.signal, options.onStderr, options.timeout_ms);
         if (result.exit_code !== 0) {
           const check = await this.runProcess(entry, [
             ...sharedArgs(entry),
             '-O', 'check',
             ...targetArgs(entry.target),
-          ], undefined, options.signal);
+          ], undefined, options.signal, undefined, options.timeout_ms);
           if (
             entry.generation !== generation
             || !processAlive(entry.master)
@@ -559,6 +573,7 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
       stream: (command, options = {}) => {
         assertCurrent();
         let terminationRequested = false;
+        let timedOut = false;
         const child = this.deps.spawnProcess(entry.sshBinary, [
           ...sharedArgs(entry),
           ...targetArgs(entry.target),
@@ -567,11 +582,19 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
           ...spawnOptions(entry, options.signal),
           stdio: ['pipe', 'pipe', 'pipe'],
         }) as ChildProcessByStdio<Writable, Readable, Readable>;
+        const timeoutMs = Number(options.timeout_ms);
+        const timeout = Number.isFinite(timeoutMs) && timeoutMs > 0
+          ? this.deps.setTimer(() => {
+              timedOut = true;
+              child.kill('SIGTERM');
+            }, timeoutMs)
+          : null;
         child.stderr.setEncoding('utf8');
         child.stderr.on('data', (chunk: string) => options.onStderr?.(chunk));
         const result = new Promise<DesktopSSHCommandResult>((resolve, reject) => {
           child.once('error', reject);
           child.once('close', (exitCode, closeSignal) => {
+            if (timeout) this.deps.clearTimer(timeout);
             resolve({
               exit_code: exitCode,
               signal: closeSignal,
@@ -581,6 +604,12 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
           });
         });
         const closed = result.then(async (commandResult) => {
+          if (timedOut) {
+            throw new DesktopSSHCommandTimeoutError(
+              desktopSSHAuthority(entry.target),
+              Math.floor(timeoutMs),
+            );
+          }
           if (terminationRequested) {
             return;
           }
@@ -598,7 +627,7 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
             ...sharedArgs(entry),
             '-O', 'check',
             ...targetArgs(entry.target),
-          ]);
+          ], undefined, undefined, undefined, options.timeout_ms);
           if (entry.generation !== generation || !processAlive(entry.master) || check.exit_code !== 0) {
             throw new DesktopSSHTransportInterruptedError(
               desktopSSHAuthority(entry.target),
@@ -650,6 +679,7 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
     stdinData?: Buffer,
     signal?: AbortSignal,
     onStderr?: (chunk: string) => void,
+    timeoutMs?: number,
   ): Promise<DesktopSSHCommandResult> {
     return new Promise((resolve, reject) => {
       let child: SpawnedSSHProcess;
@@ -665,8 +695,27 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
       let stdout = '';
       let stderr = '';
       let spawnError: Error | null = null;
+      let settled = false;
+      const normalizedTimeoutMs = Number(timeoutMs);
+      const timeout = Number.isFinite(normalizedTimeoutMs) && normalizedTimeoutMs > 0
+        ? this.deps.setTimer(() => {
+            if (settled) return;
+            settled = true;
+            child.kill('SIGTERM');
+            reject(new DesktopSSHCommandTimeoutError(
+              desktopSSHAuthority(entry.target),
+              Math.floor(normalizedTimeoutMs),
+              stdout,
+              stderr,
+            ));
+          }, normalizedTimeoutMs)
+        : null;
       child.once('error', (error) => {
+        if (settled) return;
+        settled = true;
+        if (timeout) this.deps.clearTimer(timeout);
         spawnError = error instanceof Error ? error : new Error(String(error));
+        reject(spawnError);
       });
       child.stdout?.setEncoding('utf8');
       child.stdout?.on('data', (chunk: string) => {
@@ -681,6 +730,9 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
         child.stdin?.end(stdinData);
       }
       child.once('close', (exitCode, closeSignal) => {
+        if (settled) return;
+        settled = true;
+        if (timeout) this.deps.clearTimer(timeout);
         if (spawnError) {
           reject(spawnError);
           return;

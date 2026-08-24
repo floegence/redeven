@@ -57,10 +57,15 @@ import type { DesktopTranslationKey } from '../shared/i18n';
 import {
   DesktopSSHTransportInterruptedError,
   DesktopSSHTransportUnavailableError,
+  DesktopSSHCommandTimeoutError,
   type DesktopSSHStreamingCommand,
   type DesktopSSHTransportLease,
   type DesktopSSHTransportManager,
 } from './sshTransportManager';
+import {
+  DEFAULT_RUNTIME_HOST_COMMAND_TIMEOUT_MS,
+  DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS,
+} from './runtimeHostAccess';
 
 const PUBLIC_INSTALL_SCRIPT_URL = 'https://redeven.com/install.sh';
 const DEFAULT_SSH_STARTUP_TIMEOUT_MS = 45_000;
@@ -1136,6 +1141,7 @@ export async function openManagedSSHRuntimeProcessSession(
           'redeven-ssh-runtime-process-helper-stage',
         ),
         archive,
+        DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS,
       );
       if (stageResult.exit_code !== 0 || compact(stageResult.stdout) === '') {
         throw runtimeProcessCommandErrorFromOutput(
@@ -1361,12 +1367,14 @@ async function runSSHControlCommand(
   session: SSHControlSessionContext,
   remoteCommand: string,
   stdinData?: Buffer,
+  timeoutMs = DEFAULT_RUNTIME_HOST_COMMAND_TIMEOUT_MS,
 ): Promise<SSHCommandResult> {
   try {
     const result = await session.lease.run(remoteCommand, {
       stdinData,
       signal: session.signal,
       onStderr: (chunk) => appendSSHRuntimeLog(session.logs, 'control_stderr', chunk, session.onLog),
+      timeout_ms: timeoutMs,
     });
     appendSSHRuntimeLog(session.logs, 'control_stdout', result.stdout, session.onLog);
     return result;
@@ -1376,6 +1384,20 @@ async function runSSHControlCommand(
       appendSSHRuntimeLog(session.logs, 'control_stderr', error.commandResult?.stderr ?? '', session.onLog);
       recordSSHControlCheckFailure(session, error);
       throw sshConnectionInterruptedFailure(session);
+    }
+    if (error instanceof DesktopSSHCommandTimeoutError) {
+      appendSSHRuntimeLog(session.logs, 'control_stdout', error.stdout, session.onLog);
+      appendSSHRuntimeLog(session.logs, 'control_stderr', error.stderr, session.onLog);
+      throw readinessFailure(
+        `The SSH runtime command timed out after ${error.timeoutMs} ms.`,
+        session.logs,
+        {
+          code: 'runtime_host_command_timeout',
+          title: 'SSH Runtime Command Timed Out',
+          detail: 'Desktop stopped waiting for the current remote command. The reusable SSH connection remains available for retry.',
+          targetLabel: desktopSSHAuthority(session.target),
+        },
+      );
     }
     if (session.signal?.aborted || isAbortError(error)) {
       throw new DesktopSSHRuntimeCanceledError();
@@ -1588,6 +1610,8 @@ async function prepareRemoteRuntimeViaRemoteInstall(args: Readonly<{
       args.runtimeReleaseTag,
       args.installScriptURL,
     ]),
+    undefined,
+    DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS,
   );
   if (result.exit_code !== 0) {
     throw readinessFailure('Desktop could not install Redeven on the remote host using the remote installer.', args.session.logs, {
@@ -1696,6 +1720,7 @@ async function prepareRemoteRuntimeViaDesktopUpload(args: Readonly<{
         remoteArchivePath,
       ]),
       args.archiveData,
+      DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS,
     );
     if (uploadResult.exit_code !== 0) {
       throw readinessFailure(
@@ -1725,6 +1750,8 @@ async function prepareRemoteRuntimeViaDesktopUpload(args: Readonly<{
         remoteArchivePath,
         remoteTempDir,
       ]),
+      undefined,
+      DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS,
     );
     if (installResult.exit_code !== 0) {
       throw readinessFailure(
