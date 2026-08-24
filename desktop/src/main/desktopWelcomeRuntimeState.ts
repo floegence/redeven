@@ -100,19 +100,19 @@ async function currentRuntimeFromLocalSession(
   return undefined;
 }
 
-async function currentRuntimeFromProbeStateDir(
-  stateDir: string,
+async function currentRuntimeFromStateRoot(
+  stateRoot: string,
   executablePath: string,
   probeTimeoutMs: number,
 ): Promise<DesktopLocalEnvironmentRuntimeState | undefined> {
-  const cleanStateDir = compact(stateDir);
+  const cleanStateRoot = compact(stateRoot);
   const cleanExecutablePath = compact(executablePath);
-  if (cleanStateDir === '' || cleanExecutablePath === '') {
+  if (cleanStateRoot === '' || cleanExecutablePath === '') {
     return undefined;
   }
   const startup = await loadManagedRuntimeStartupFromStatus({
     executablePath: cleanExecutablePath,
-    stateRoot: cleanStateDir,
+    stateRoot: cleanStateRoot,
     env: process.env,
     timeoutMs: probeTimeoutMs,
   });
@@ -122,14 +122,6 @@ async function currentRuntimeFromProbeStateDir(
   return runtimeStateFromStartup(
     startup,
   );
-}
-
-async function currentRuntimeFromProbe(
-  environment: DesktopLocalEnvironmentState,
-  executablePath: string,
-  probeTimeoutMs: number,
-): Promise<DesktopLocalEnvironmentRuntimeState | undefined> {
-  return currentRuntimeFromProbeStateDir(environment.local_hosting?.state_dir ?? '', executablePath, probeTimeoutMs);
 }
 
 function withCurrentRuntime(
@@ -173,6 +165,7 @@ export async function hydrateWelcomeLocalEnvironmentRuntimeState(
   options: Readonly<{
     probeTimeoutMs?: number;
     executablePath?: string;
+    stateRoot?: string;
   }> = {},
 ): Promise<DesktopPreferences> {
   const probeTimeoutMs = options.probeTimeoutMs ?? DEFAULT_WELCOME_RUNTIME_PROBE_TIMEOUT_MS;
@@ -182,7 +175,11 @@ export async function hydrateWelcomeLocalEnvironmentRuntimeState(
     localSessionsByEnvironmentID.get(localEnvironment.id),
     probeTimeoutMs,
   )
-    ?? await currentRuntimeFromProbe(localEnvironment, compact(options.executablePath), probeTimeoutMs);
+    ?? await currentRuntimeFromStateRoot(
+      compact(options.stateRoot),
+      compact(options.executablePath),
+      probeTimeoutMs,
+    );
   return {
     ...preferences,
     local_environment: withCurrentRuntime(localEnvironment, currentRuntime),

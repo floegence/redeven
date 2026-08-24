@@ -1011,7 +1011,7 @@ describe('main routing', () => {
     const startRuntimeEnd = mainSrc.indexOf('async function connectProviderRuntimeFromLauncher(', startRuntimeStart);
     const startRuntimeSrc = mainSrc.slice(startRuntimeStart, startRuntimeEnd);
     expect(startRuntimeSrc).toContain('executeDirectManagedEnvironmentLifecycle({');
-    expect(startRuntimeSrc).toContain('runtimeHostAccessFromRequest(request)');
+    expect(startRuntimeSrc).toContain('authoritativeRuntimeTargetFromRequest(');
     expect(startRuntimeSrc).not.toContain('upsertDirectRuntimeGateway(');
     expect(startRuntimeSrc).not.toContain('runGatewayEnvironmentLifecycleFromLauncher({');
     expect(startRuntimeSrc).not.toContain('gatewayLifecycleManager().prepareRuntimeOperation(');
@@ -1085,15 +1085,36 @@ describe('main routing', () => {
     expect(refreshRuntimeSrc).toContain("launcherOperations.finishCurrentAttempt(operationKey, owner, 'succeeded'");
   });
 
-  it('uses the Local Environment state directory itself as the Runtime root', () => {
+  it('keeps the Desktop state root distinct from the Local Environment Runtime root', () => {
     const mainSrc = readMainSource();
-    const helperStart = mainSrc.indexOf('function localEnvironmentStateRoot(');
-    const helperEnd = mainSrc.indexOf('\n}\n', helperStart);
-    expect(helperStart).toBeGreaterThanOrEqual(0);
-    expect(helperEnd).toBeGreaterThan(helperStart);
-    const helperSrc = mainSrc.slice(helperStart, helperEnd);
-    expect(helperSrc).toContain('return compact(environment.local_hosting.state_dir);');
-    expect(helperSrc).not.toContain('path.dirname(');
+    expect(mainSrc).toContain('function localEnvironmentRuntimeRoot(');
+    expect(mainSrc).toContain('return compact(environment.local_hosting.state_dir);');
+    expect(mainSrc).toContain('function localEnvironmentStateRoot(): string {');
+    expect(mainSrc).toContain('return preferencesPaths().stateRoot;');
+
+    const prepareStart = mainSrc.indexOf('async function prepareManagedEnvironmentRuntime(');
+    const prepareEnd = mainSrc.indexOf('async function attachLocalEnvironmentRuntime(', prepareStart);
+    const prepareSrc = mainSrc.slice(prepareStart, prepareEnd);
+    expect(prepareSrc).toContain('runtimeRoot: launchPlan.state_layout.stateDir,');
+    expect(prepareSrc).toContain('stateRoot: launchPlan.state_layout.stateRoot,');
+
+    const attachStart = mainSrc.indexOf('async function attachLocalEnvironmentRuntime(');
+    const attachEnd = mainSrc.indexOf('type RuntimeFlowerRoute', attachStart);
+    const attachSrc = mainSrc.slice(attachStart, attachEnd);
+    expect(attachSrc).toContain('runtimeRoot: localEnvironmentRuntimeRoot(environment),');
+    expect(attachSrc).toContain('stateRoot: localEnvironmentStateRoot(),');
+    expect(attachSrc).not.toContain('stateRoot: localEnvironmentRuntimeRoot(environment),');
+
+    const placementStart = mainSrc.indexOf('function localHostRuntimeLifecyclePlacement(');
+    const placementEnd = mainSrc.indexOf('function localHostRuntimeLifecycleTargetKey(', placementStart);
+    const placementSrc = mainSrc.slice(placementStart, placementEnd);
+    expect(placementSrc).toContain('runtime_root: localEnvironmentRuntimeRoot(environment),');
+    expect(placementSrc).toContain('runtime_state_root: localEnvironmentStateRoot(),');
+
+    expect(mainSrc).toContain('stateRoot: localEnvironmentStateRoot(),');
+    expect(mainSrc).not.toContain('currentRuntimeFromProbeStateDir');
+    expect(mainSrc).toContain('function authoritativeRuntimeTargetFromRequest(');
+    expect(mainSrc).toContain('placement: localHostRuntimeLifecyclePlacement(localEnvironment),');
   });
 
   it('keeps provider-link tickets separate from remote open route readiness', () => {

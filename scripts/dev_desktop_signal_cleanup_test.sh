@@ -113,10 +113,11 @@ if [ ! -f "$FAKE_RUNTIME_STOPPED" ]; then
   printf 'Ctrl+C did not stop the current local Runtime\n' >&2
   exit 1
 fi
-if ! rg -Fq -- "--state-root $STATE_ROOT/local-environment" "$FAKE_RUNTIME_STOPPED" \
-  || ! rg -Fq -- "--state-root $STATE_ROOT" "$FAKE_RUNTIME_STOPPED"; then
+if ! rg -Fq -- "--runtime-root $STATE_ROOT/local-environment" "$FAKE_RUNTIME_STOPPED" \
+  || ! rg -Fq -- "--state-root $STATE_ROOT" "$FAKE_RUNTIME_STOPPED" \
+  || rg -Fq -- "--state-root $STATE_ROOT/local-environment" "$FAKE_RUNTIME_STOPPED"; then
   cat "$FAKE_RUNTIME_STOPPED" >&2
-  printf 'Ctrl+C did not cover current and legacy local Runtime state roots\n' >&2
+  printf 'Ctrl+C did not use the Local Runtime root with the outer Desktop state root\n' >&2
   exit 1
 fi
 

@@ -139,6 +139,7 @@ describe('desktopLaunch', () => {
       expect(plan.env[name]).toBeUndefined();
     }
     expect(plan.state_layout).toEqual(expect.objectContaining({
+      stateRoot: '/Users/tester/.redeven',
       configPath: '/Users/tester/.redeven/local-environment/config.json',
       stateDir: '/Users/tester/.redeven/local-environment',
       runtimeControlSocket: '/Users/tester/.redeven/local-environment/runtime/control.sock',
@@ -228,6 +229,7 @@ describe('desktopLaunch', () => {
     ]);
     expect(JSON.parse(plan.startup_secrets_stdin)).toEqual({ version: 1 });
     expect(plan.state_layout).toEqual(expect.objectContaining({
+      stateRoot: '/Users/tester/.redeven',
       configPath: '/Users/tester/.redeven/local-environment/config.json',
       stateDir: '/Users/tester/.redeven/local-environment',
       runtimeControlSocket: '/Users/tester/.redeven/local-environment/runtime/control.sock',

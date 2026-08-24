@@ -376,13 +376,15 @@ describe('desktopWelcomeRuntimeState', () => {
         throw new Error('expected a TCP server address');
       }
 
-      const stateDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-welcome-runtime-'));
+      const stateRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-welcome-runtime-'));
+      const stateDir = path.join(stateRoot, 'local-environment');
+      await fs.mkdir(stateDir, { recursive: true });
       const executablePath = path.join(stateDir, 'status-runtime.cjs');
       await fs.writeFile(
         executablePath,
         `#!/usr/bin/env node
 	const stateRoot = process.argv[process.argv.indexOf('--state-root') + 1];
-	if (stateRoot !== ${JSON.stringify(stateDir)}) process.exit(1);
+	if (stateRoot !== ${JSON.stringify(stateRoot)}) process.exit(1);
 	process.stdout.write(${JSON.stringify(JSON.stringify({
           status: 'ready',
           local_ui_url: `http://127.0.0.1:${address.port}/`,
@@ -423,6 +425,7 @@ describe('desktopWelcomeRuntimeState', () => {
       const hydrated = await hydrateWelcomeLocalEnvironmentRuntimeState(preferences, [], {
         probeTimeoutMs: 5_000,
         executablePath,
+        stateRoot,
       });
 
       expect(hydrated.local_environment.local_hosting.current_runtime).toMatchObject({

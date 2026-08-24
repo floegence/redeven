@@ -798,7 +798,6 @@ class GatewaySyncCanceledError extends Error {
 type LocalEnvironmentRuntimeRecord = Readonly<{
   environment_id: string;
   label: string;
-  state_root: string;
   startup: StartupReport;
   runtime_handle: DesktopSessionRuntimeHandle;
 }>;
@@ -1274,8 +1273,12 @@ async function refreshStartupReportFromLocalUI(
   };
 }
 
-function localEnvironmentStateRoot(environment: DesktopLocalEnvironmentState): string {
+function localEnvironmentRuntimeRoot(environment: DesktopLocalEnvironmentState): string {
   return compact(environment.local_hosting.state_dir);
+}
+
+function localEnvironmentStateRoot(): string {
+  return preferencesPaths().stateRoot;
 }
 
 function reinstallTargetRequiredMarkerPath(descriptor: ReinstallTargetDescriptor): string {
@@ -1872,7 +1875,6 @@ function localEnvironmentRuntimeRecordFromHandle(
   return {
     environment_id: environment.id,
     label: environment.label,
-    state_root: localEnvironmentStateRoot(environment),
     startup,
     runtime_handle: runtimeHandle,
   };
@@ -4159,10 +4161,7 @@ async function localEnvironmentPresenceFromRecord(
 ): Promise<DesktopRuntimePresence> {
   const targetID = desktopProviderRuntimeLinkTargetID('local_environment', environment.id);
   const hostAccess: DesktopRuntimeHostAccess = { kind: 'local_host' };
-  const placement: DesktopRuntimePlacement = {
-    kind: 'host_process',
-    runtime_root: record.state_root,
-  };
+  const placement = localHostRuntimeLifecyclePlacement(environment);
   return managedRuntimePresence({
     targetID,
     placementTargetID: desktopRuntimeTargetID(hostAccess, placement, environment.id),
@@ -4185,10 +4184,7 @@ function localEnvironmentMaintenanceProbeResult(
   maintenance: DesktopRuntimeMaintenanceRequirement,
 ): DesktopWelcomeRuntimeHealthProbeResult {
   const hostAccess: DesktopRuntimeHostAccess = { kind: 'local_host' };
-  const placement: DesktopRuntimePlacement = {
-    kind: 'host_process',
-    runtime_root: environment.local_hosting.state_dir,
-  };
+  const placement = localHostRuntimeLifecyclePlacement(environment);
   return {
     health: {
       ...offlineRuntimeHealth('local_runtime_probe', 'unverified', maintenance.message),
@@ -4227,12 +4223,14 @@ async function probeLocalEnvironmentRuntimeHealth(
 
   const hydratedPreferences = await hydrateWelcomeLocalEnvironmentRuntimeState(preferences, openSessions, {
     executablePath: bundledRuntimeExecutablePath(),
+    stateRoot: localEnvironmentStateRoot(),
   });
   const runtime = hydratedPreferences.local_environment.local_hosting.current_runtime;
   if (!runtime) {
     const inventory = await inspectLocalManagedRuntimeProcesses({
       executablePath: bundledRuntimeExecutablePath(),
-      stateRoot: localEnvironmentStateRoot(localEnvironment),
+      runtimeRoot: localEnvironmentRuntimeRoot(localEnvironment),
+      stateRoot: localEnvironmentStateRoot(),
       env: process.env,
     });
     let maintenance: DesktopRuntimeMaintenanceRequirement | undefined;
@@ -10624,7 +10622,7 @@ async function prepareManagedEnvironmentRuntime(input: Readonly<{
     executablePath: bundledRuntimeExecutablePath(),
     runtimeArgs: launchPlan.args,
     env: launchPlan.env,
-    runtimeRoot: launchPlan.state_layout.stateRoot,
+    runtimeRoot: launchPlan.state_layout.stateDir,
     stateRoot: launchPlan.state_layout.stateRoot,
     forceRuntimeUpdate: input.force_runtime_update === true,
     runtimeProcessIntent: input.runtime_process_intent,
@@ -10662,8 +10660,8 @@ async function attachLocalEnvironmentRuntime(
 
   const attachedRuntime = await attachManagedRuntimeFromStatus({
     executablePath: bundledRuntimeExecutablePath(),
-    runtimeRoot: localEnvironmentStateRoot(environment),
-    stateRoot: localEnvironmentStateRoot(environment),
+    runtimeRoot: localEnvironmentRuntimeRoot(environment),
+    stateRoot: localEnvironmentStateRoot(),
     runtimeAttachTimeoutMs: DESKTOP_RUNTIME_PROBE_TIMEOUT_MS,
     // Open joins an active lifecycle owner before reaching this path. Without
     // an owner, a live process that has no published status is stale recovery
@@ -13672,10 +13670,7 @@ type LocalHostOpenTarget = Readonly<{
 
 function localHostOpenTarget(environment: DesktopLocalEnvironmentState): LocalHostOpenTarget {
   const hostAccess: Extract<DesktopRuntimeHostAccess, Readonly<{ kind: 'local_host' }>> = { kind: 'local_host' };
-  const placement: Extract<DesktopRuntimePlacement, Readonly<{ kind: 'host_process' }>> = {
-    kind: 'host_process',
-    runtime_root: environment.local_hosting.state_dir,
-  };
+  const placement = localHostRuntimeLifecyclePlacement(environment);
   return {
     environmentID: environment.id,
     environmentLabel: environment.label,
@@ -14662,6 +14657,27 @@ function runtimePlacementFromRequest(
     : { kind: 'host_process', runtime_root: '' };
 }
 
+function authoritativeRuntimeTargetFromRequest(
+  preferences: DesktopPreferences,
+  environmentID: string,
+  request: DesktopLauncherAnyRuntimeTargetRequest,
+): Readonly<{
+  hostAccess: DesktopRuntimeHostAccess;
+  placement: DesktopRuntimePlacement;
+}> {
+  const localEnvironment = findLocalEnvironmentByID(preferences, environmentID);
+  if (localEnvironment) {
+    return {
+      hostAccess: { kind: 'local_host' },
+      placement: localHostRuntimeLifecyclePlacement(localEnvironment),
+    };
+  }
+  return {
+    hostAccess: runtimeHostAccessFromRequest(request),
+    placement: runtimePlacementFromRequest(request),
+  };
+}
+
 function runtimeTargetIDFromRequest(
   request: DesktopLauncherAnyRuntimeTargetRequest,
 ): DesktopRuntimeTargetID {
@@ -14693,11 +14709,11 @@ function runtimeTargetEnvironmentIDFromRequest(
 
 function localHostRuntimeLifecyclePlacement(
   environment: DesktopLocalEnvironmentState,
-): DesktopRuntimePlacement {
+): Extract<DesktopRuntimePlacement, Readonly<{ kind: 'host_process' }>> {
   return {
     kind: 'host_process',
-    runtime_root: environment.local_hosting.state_dir,
-    runtime_state_root: localEnvironmentStateRoot(environment),
+    runtime_root: localEnvironmentRuntimeRoot(environment),
+    runtime_state_root: localEnvironmentStateRoot(),
   };
 }
 
@@ -16045,8 +16061,12 @@ async function runEnvironmentRuntimeLifecycleFromLauncher(
       operationKey: pendingReinstall.operation_key,
     });
   }
-  const hostAccess = runtimeHostAccessFromRequest(request);
-  const placement = runtimePlacementFromRequest(request);
+  const preferences = await loadDesktopPreferencesCached();
+  const { hostAccess, placement } = authoritativeRuntimeTargetFromRequest(
+    preferences,
+    environmentID,
+    request,
+  );
   const requestedOperation: ManagedRuntimeLifecycleOperation = request.kind === 'start_environment_runtime'
     ? 'start'
     : request.kind === 'stop_environment_runtime'
@@ -16500,8 +16520,11 @@ async function refreshEnvironmentRuntimeFromLauncher(
     return launcherActionSuccess('refreshed_environment_runtime');
   }
 
-  const hostAccess = runtimeHostAccessFromRequest(request);
-  const placement = runtimePlacementFromRequest(request);
+  const { hostAccess, placement } = authoritativeRuntimeTargetFromRequest(
+    preferences,
+    environmentID,
+    request,
+  );
   const targetKey = runtimeLifecycleTargetKey(hostAccess, placement);
   const targetID = desktopRuntimeTargetID(hostAccess, placement, environmentID);
   const label = runtimeTargetLabelFromRequest(request);

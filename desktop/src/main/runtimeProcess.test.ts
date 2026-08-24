@@ -201,6 +201,11 @@ function readInventory() {
 
 if (process.argv[2] === 'desktop-runtime-inventory') {
   runCommand('desktop-runtime-inventory', () => {
+    const expectedRuntimeRoot = process.env.REDEVEN_TEST_EXPECT_RUNTIME_ROOT || '';
+    if (expectedRuntimeRoot && argValue('--runtime-root') !== expectedRuntimeRoot) {
+      process.stderr.write('unexpected runtime root: ' + argValue('--runtime-root') + '\\n');
+      process.exit(2);
+    }
     process.stdout.write(JSON.stringify(readInventory()) + '\\n');
     process.exit(0);
   });
@@ -325,7 +330,7 @@ server.listen(0, '127.0.0.1', () => {
   if (inventoryFile) {
     writeJSON(inventoryFile, {
       schema_version: 3,
-      scope: { runtime_root: argValue('--state-root') || process.cwd(), state_root: argValue('--state-root') || process.cwd(), user_identity: process.env.USER || 'tester' },
+      scope: { runtime_root: process.env.REDEVEN_TEST_EXPECT_RUNTIME_ROOT || argValue('--state-root') || process.cwd(), state_root: argValue('--state-root') || process.cwd(), user_identity: process.env.USER || 'tester' },
       inventory_digest: 'a'.repeat(64),
       instances: [{ pid: process.pid, process_started_at_unix_ms: Date.now(), state_root: argValue('--state-root') || process.cwd(), executable_path: process.argv[1], executable_device: 1, executable_inode: process.pid + 1000, identity_status: 'verified', layout_status: 'current', stop_authority: 'automatic' }],
       summary: { automatic: 1, blocked: 0 },
@@ -817,6 +822,47 @@ describe('runtimeProcess', () => {
       ]);
       await launch.managedRuntime.stop();
     } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('verifies a fresh local Runtime with a nested Runtime root and outer state root', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-process-roots-'));
+    const stateRoot = path.join(dir, 'state');
+    const runtimeRoot = path.join(stateRoot, 'local-environment');
+    const inventoryFile = path.join(dir, 'inventory.json');
+    const statusFile = path.join(dir, 'status.json');
+    const executablePath = await writeFakeRuntimeExecutable(dir);
+    let launch: Awaited<ReturnType<typeof startManagedRuntime>> | null = null;
+    try {
+      launch = await startManagedRuntime({
+        executablePath,
+        runtimeArgs: ['--state-root', stateRoot],
+        runtimeRoot,
+        stateRoot,
+        env: {
+          REDEVEN_TEST_EXPECT_RUNTIME_ROOT: runtimeRoot,
+          REDEVEN_TEST_STATUS_FILE: statusFile,
+          REDEVEN_TEST_PROCESS_INVENTORY_FILE: inventoryFile,
+        },
+        tempRoot: dir,
+        runtimeAttachTimeoutMs: 5_000,
+        runtimeStabilityWindowMs: 20,
+        runtimeStabilityPollMs: 10,
+      });
+
+      expect(launch.kind).toBe('ready');
+      const inventory = JSON.parse(await fs.readFile(inventoryFile, 'utf8')) as {
+        scope?: { runtime_root?: string; state_root?: string };
+      };
+      expect(inventory.scope).toEqual(expect.objectContaining({
+        runtime_root: runtimeRoot,
+        state_root: stateRoot,
+      }));
+    } finally {
+      if (launch?.kind === 'ready') {
+        await launch.managedRuntime.stop().catch(() => undefined);
+      }
       await fs.rm(dir, { recursive: true, force: true });
     }
   });
