@@ -1,5 +1,10 @@
 # Redeven OKF Update Log
 
+## 2026-08-24
+* **Floret v5.0.1 adoption**: Redeven now consumes the published Floret
+  v5.0.1 module with exact checksums and no local replacement or workspace
+  wiring. Current runtime and Flower contracts remain unchanged.
+
 ## 2026-08-23
 * **Flower outbox admission convergence**: Flower now confirms transport input
   by canonical request key independently of runtime detail-version acceptance.
