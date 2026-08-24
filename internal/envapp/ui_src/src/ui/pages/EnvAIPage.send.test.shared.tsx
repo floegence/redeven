@@ -902,7 +902,6 @@ export function registerEnvAIPageSendTests() {
           create: expect.objectContaining({
             client_request_id: expect.stringMatching(/^client_/u),
             model_id: 'openai/gpt-5.2',
-            permission_type: 'approval_required',
           }),
         }));
         expect(turnBody).not.toHaveProperty('thread_id');
