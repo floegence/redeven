@@ -1340,17 +1340,6 @@ func (s *Store) load() error {
 	}
 }
 
-func readStateFile(statePath string) (fileState, error) {
-	raw, err := os.ReadFile(statePath)
-	if errors.Is(err, os.ErrNotExist) {
-		return newFileState(), nil
-	}
-	if err != nil {
-		return fileState{}, fmt.Errorf("read Runtime operation store: %w", err)
-	}
-	return decodeStateFile(raw)
-}
-
 func (s *Store) saveLocked(next fileState) error {
 	if err := s.validateLoadedState(next); err != nil {
 		return err
