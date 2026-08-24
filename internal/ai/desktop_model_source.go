@@ -372,6 +372,21 @@ func (c *desktopModelSourceClient) BindingStatus(ctx context.Context) runtimeser
 	})
 }
 
+// BindingSnapshot returns the locally owned binding state without asking the
+// Desktop model-source process for a fresh status response. Runtime liveness
+// and attach probes must remain independent of that optional process.
+func (c *desktopModelSourceClient) BindingSnapshot() runtimeservice.Binding {
+	if c == nil {
+		return runtimeservice.Binding{State: runtimeservice.BindingStateUnsupported}
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return runtimeservice.NormalizeBinding(c.bindingLocked(time.Now()), runtimeservice.Capability{
+		Supported:  true,
+		BindMethod: runtimeservice.RuntimeControlBindMethodV2,
+	})
+}
+
 func (c *desktopModelSourceClient) SetCurrentModelID(modelID string) {
 	if c == nil {
 		return

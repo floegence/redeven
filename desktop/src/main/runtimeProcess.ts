@@ -430,10 +430,6 @@ async function waitForLaunchReport(
   reportFile: string,
   child: SpawnedRuntimeProcess,
   timeoutMs: number,
-  executablePath: string,
-  stateRoot: string | undefined,
-  env: NodeJS.ProcessEnv,
-  runtimeAttachTimeoutMs: number,
   logs: RecentLogs,
   getSpawnError: () => Error | null,
   signal?: AbortSignal,
@@ -450,18 +446,6 @@ async function waitForLaunchReport(
       return launchReport;
     }
     if (child.exitCode !== null) {
-      const attachedStartup = await loadManagedRuntimeStartupFromStatus({
-        executablePath,
-        stateRoot,
-        env,
-        timeoutMs: runtimeAttachTimeoutMs,
-      });
-      if (attachedStartup) {
-        return {
-          status: 'attached',
-          startup: attachedStartup,
-        };
-      }
       const finalReport = await readLaunchReport(reportFile);
       if (finalReport) {
         return finalReport;
@@ -469,18 +453,6 @@ async function waitForLaunchReport(
       throw readinessFailure(`redeven exited before reporting readiness (exit code: ${child.exitCode})`, logs);
     }
     if (child.signalCode) {
-      const attachedStartup = await loadManagedRuntimeStartupFromStatus({
-        executablePath,
-        stateRoot,
-        env,
-        timeoutMs: runtimeAttachTimeoutMs,
-      });
-      if (attachedStartup) {
-        return {
-          status: 'attached',
-          startup: attachedStartup,
-        };
-      }
       const finalReport = await readLaunchReport(reportFile);
       if (finalReport) {
         return finalReport;
@@ -488,18 +460,6 @@ async function waitForLaunchReport(
       throw readinessFailure(`redeven exited before reporting readiness (signal: ${child.signalCode})`, logs);
     }
     if (Date.now() >= deadline) {
-      const attachedStartup = await loadManagedRuntimeStartupFromStatus({
-        executablePath,
-        stateRoot,
-        env,
-        timeoutMs: runtimeAttachTimeoutMs,
-      });
-      if (attachedStartup) {
-        return {
-          status: 'attached',
-          startup: attachedStartup,
-        };
-      }
       const finalReport = await readLaunchReport(reportFile);
       if (finalReport) {
         return finalReport;
@@ -637,38 +597,8 @@ function assertRuntimeOpenable(startup: StartupReport, logs: RecentLogs): void {
   }
 }
 
-async function requireAttachableRuntimeReadiness(args: Readonly<{
-  executablePath: string;
-  stateRoot?: string;
-  env: NodeJS.ProcessEnv;
-  probeTimeoutMs: number;
-  logs: RecentLogs;
-  unavailableMessage: string;
-  requireOpenable?: boolean;
-}>): Promise<StartupReport> {
-  const attachedStartup = await loadManagedRuntimeStartupFromStatus({
-    executablePath: args.executablePath,
-    stateRoot: args.stateRoot,
-    env: args.env,
-    timeoutMs: args.probeTimeoutMs,
-  });
-  if (!attachedStartup) {
-    throw readinessFailure(args.unavailableMessage, args.logs);
-  }
-  assertRuntimePIDAlive(attachedStartup, args.logs);
-  if (args.requireOpenable !== false) {
-    assertRuntimeOpenable(attachedStartup, args.logs);
-  }
-  return attachedStartup;
-}
-
-async function waitForStableRuntimeReadiness(args: Readonly<{
+async function waitForRuntimeProcessStability(args: Readonly<{
   startup: StartupReport;
-  executablePath: string;
-  stateRoot?: string;
-  env: NodeJS.ProcessEnv;
-  probeTimeoutMs: number;
-  openTimeoutMs: number;
   stabilityWindowMs: number;
   pollIntervalMs: number;
   child: SpawnedRuntimeProcess | null;
@@ -676,12 +606,9 @@ async function waitForStableRuntimeReadiness(args: Readonly<{
   getSpawnError?: () => Error | null;
   signal?: AbortSignal;
 }>): Promise<StartupReport> {
-  const openTimeoutMs = Math.max(0, Math.floor(args.openTimeoutMs));
   const stabilityWindowMs = Math.max(0, Math.floor(args.stabilityWindowMs));
   const pollIntervalMs = Math.max(50, Math.floor(args.pollIntervalMs));
-  const openDeadline = Date.now() + openTimeoutMs;
   let stableSince: number | null = null;
-  let latestStartup = args.startup;
 
   for (;;) {
     throwIfRuntimeAborted(args.signal);
@@ -694,32 +621,36 @@ async function waitForStableRuntimeReadiness(args: Readonly<{
       throw exitFailure;
     }
 
-    latestStartup = await requireAttachableRuntimeReadiness({
-      executablePath: args.executablePath,
-      stateRoot: args.stateRoot,
-      env: args.env,
-      probeTimeoutMs: args.probeTimeoutMs,
-      logs: args.logs,
-      unavailableMessage: 'Start Runtime did not complete because the runtime process did not stay online.',
-      requireOpenable: false,
-    });
-    const openReadinessFailure = runtimeOpenReadinessFailure(latestStartup, args.logs);
     const now = Date.now();
-    if (openReadinessFailure) {
-      stableSince = null;
-      if (latestStartup.runtime_service?.open_readiness?.state === 'blocked' || now >= openDeadline) {
-        throw openReadinessFailure;
-      }
-      await delay(pollIntervalMs, args.signal);
-      continue;
-    }
-
     stableSince ??= now;
     if (now - stableSince >= stabilityWindowMs) {
-      return latestStartup;
+      return args.startup;
     }
 
     await delay(pollIntervalMs, args.signal);
+  }
+}
+
+async function refreshManagedRuntimeStartupAfterLaunch(args: Readonly<{
+  startup: StartupReport;
+  executablePath: string;
+  stateRoot?: string;
+  env: NodeJS.ProcessEnv;
+  timeoutMs: number;
+}>): Promise<StartupReport> {
+  // The launch report is authoritative for process ownership. A status read
+  // is only a best-effort readiness refresh; a transient timeout must never
+  // turn a running child into a failed launch or trigger cleanup.
+  try {
+    const refreshed = await loadManagedRuntimeStartupFromStatus({
+      executablePath: args.executablePath,
+      stateRoot: args.stateRoot,
+      env: args.env,
+      timeoutMs: args.timeoutMs,
+    });
+    return refreshed ?? args.startup;
+  } catch {
+    return args.startup;
   }
 }
 
@@ -753,20 +684,6 @@ async function waitForManagedRuntimeStatusPublication(
     }
     await delay(Math.min(RUNTIME_ATTACH_RETRY_POLL_MS, Math.max(1, deadline - Date.now())), args.signal);
   }
-}
-
-type ManagedRuntimeAttachPolicy =
-  | Readonly<{ action: 'reuse' }>
-  | Readonly<{ action: 'replace' }>
-  | Readonly<{ action: 'block'; message: string }>;
-
-function managedRuntimeAttachPolicy(
-  _startup: StartupReport,
-  _args: Readonly<{
-    forceRuntimeUpdate?: boolean;
-  }>,
-): ManagedRuntimeAttachPolicy {
-  return { action: 'reuse' };
 }
 
 async function verifyManagedLocalRuntimeProcessIdentity(args: Readonly<{
@@ -856,8 +773,6 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
   const runtimeRoot = String(args.runtimeRoot ?? stateRoot ?? '').trim() || undefined;
   const runtimeAttachTimeoutMs = args.runtimeAttachTimeoutMs ?? DEFAULT_RUNTIME_ATTACH_TIMEOUT_MS;
   const runtimeInventoryTimeoutMs = args.runtimeInventoryTimeoutMs ?? DEFAULT_RUNTIME_INVENTORY_TIMEOUT_MS;
-  const runtimeStabilityWindowMs = args.runtimeStabilityWindowMs ?? DEFAULT_RUNTIME_STABILITY_WINDOW_MS;
-  const runtimeStabilityPollMs = args.runtimeStabilityPollMs ?? DEFAULT_RUNTIME_STABILITY_POLL_MS;
   const runtimeProcessIntent = args.runtimeProcessIntent
     ?? (args.forceRuntimeUpdate === true ? 'update' : 'start');
   const inventoryStop = stateRoot
@@ -951,53 +866,44 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
   throwIfRuntimeAborted(args.signal);
   if (existingRuntime) {
     assertRuntimePIDAlive(existingRuntime, { stdout: '', stderr: '' });
-    const attachPolicy = managedRuntimeAttachPolicy(existingRuntime, {
-      forceRuntimeUpdate: args.forceRuntimeUpdate,
+    emitManagedRuntimeProgress(
+      args.onProgress,
+      'waiting_for_readiness',
+      'Checking runtime readiness',
+      'Desktop found a verified current local Runtime and is checking whether it can open the Environment App.',
+    );
+    if (!runtimeServiceAllowsOpenAttempt(existingRuntime.runtime_service)) {
+      assertRuntimeOpenable(existingRuntime, { stdout: '', stderr: '' });
+    }
+    emitFinalManagedRuntimeInventoryProgress(args.onProgress);
+    await verifyManagedLocalRuntimeProcessIdentity({
+      executablePath: args.executablePath,
+      runtimeRoot,
+      stateRoot,
+      env: mergedEnv,
+      startup: existingRuntime,
+      runtimeProcessIntent,
+      beforeInventory: observedInventory,
+      inventoryTimeoutMs: runtimeInventoryTimeoutMs,
     });
-    if (attachPolicy.action === 'block') {
-      throw readinessFailure(attachPolicy.message, { stdout: '', stderr: '' });
-    }
-    if (attachPolicy.action === 'reuse') {
-      emitManagedRuntimeProgress(
-        args.onProgress,
-        'waiting_for_readiness',
-        'Checking runtime readiness',
-        'Desktop found a verified current local Runtime and is checking whether it can open the Environment App.',
-      );
-      if (!runtimeServiceAllowsOpenAttempt(existingRuntime.runtime_service)) {
-        assertRuntimeOpenable(existingRuntime, { stdout: '', stderr: '' });
-      }
-      emitFinalManagedRuntimeInventoryProgress(args.onProgress);
-      await verifyManagedLocalRuntimeProcessIdentity({
-        executablePath: args.executablePath,
-        runtimeRoot,
-        stateRoot,
-        env: mergedEnv,
+    emitManagedRuntimeProgress(
+      args.onProgress,
+      'runtime_ready',
+      'Runtime ready',
+      'The local runtime is ready to open.',
+    );
+    return {
+      kind: 'ready',
+      managedRuntime: {
+        child: null,
         startup: existingRuntime,
-        runtimeProcessIntent,
-        beforeInventory: observedInventory,
-        inventoryTimeoutMs: runtimeInventoryTimeoutMs,
-      });
-      emitManagedRuntimeProgress(
-        args.onProgress,
-        'runtime_ready',
-        'Runtime ready',
-        'The local runtime is ready to open.',
-      );
-      return {
-        kind: 'ready',
-        managedRuntime: {
-          child: null,
-          startup: existingRuntime,
-          reportDir: null,
-          reportFile: null,
-          attached: true,
-          stop: inventoryStop ?? attachedStop(existingRuntime, args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS),
-        },
-        spawned: false,
-      };
-    }
-    await (inventoryStop ?? attachedStop(existingRuntime, args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS))();
+        reportDir: null,
+        reportFile: null,
+        attached: true,
+        stop: inventoryStop ?? attachedStop(existingRuntime, args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS),
+      },
+      spawned: false,
+    };
   }
 
   if (runtimeProcessIntent === 'start' && observedInventory && observedInventory.instances.length > 0) {
@@ -1061,10 +967,6 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
       reportFile,
       child,
       args.startupTimeoutMs ?? DEFAULT_STARTUP_TIMEOUT_MS,
-      args.executablePath,
-      stateRoot,
-      mergedEnv,
-      runtimeAttachTimeoutMs,
       recentLogs,
       () => spawnError,
       args.signal,
@@ -1091,80 +993,8 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
         reportDir,
         stopTimeoutMs: args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS,
       });
-      const attachedStartup = await requireAttachableRuntimeReadiness({
-        executablePath: args.executablePath,
-        stateRoot,
-        env: mergedEnv,
-        probeTimeoutMs: runtimeAttachTimeoutMs,
-        logs: recentLogs,
-        unavailableMessage: 'Start Runtime did not complete because the attached runtime is no longer online.',
-        requireOpenable: false,
-      });
-      const attachPolicy = managedRuntimeAttachPolicy(attachedStartup, {
-        forceRuntimeUpdate: args.forceRuntimeUpdate,
-      });
-      if (attachPolicy.action === 'block') {
-        throw readinessFailure(attachPolicy.message, recentLogs);
-      }
-      if (!runtimeServiceAllowsOpenAttempt(attachedStartup.runtime_service)) {
-        assertRuntimeOpenable(attachedStartup, recentLogs);
-      }
-      emitFinalManagedRuntimeInventoryProgress(args.onProgress);
-      await verifyManagedLocalRuntimeProcessIdentity({
-        executablePath: args.executablePath,
-        runtimeRoot,
-        stateRoot,
-        env: mergedEnv,
-        startup: attachedStartup,
-        runtimeProcessIntent,
-        beforeInventory: observedInventory,
-        inventoryTimeoutMs: runtimeInventoryTimeoutMs,
-      });
-      emitManagedRuntimeProgress(
-        args.onProgress,
-        'runtime_ready',
-        'Runtime ready',
-        'The local runtime is ready to open.',
-      );
-      return {
-        kind: 'ready',
-        managedRuntime: {
-          child: null,
-          startup: attachedStartup,
-          reportDir: null,
-          reportFile: null,
-          attached: true,
-          stop: inventoryStop ?? attachedStop(attachedStartup, args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS),
-        },
-        spawned: true,
-      };
-    }
-
-    if (spawnError || child.exitCode !== null || child.signalCode) {
-      const attachedStartup = await loadManagedRuntimeStartupFromStatus({
-        executablePath: args.executablePath,
-        stateRoot,
-        env: mergedEnv,
-        timeoutMs: runtimeAttachTimeoutMs,
-      });
-      if (!attachedStartup) {
-        throw readinessFailure(
-          'Start Runtime did not complete because the runtime process exited before Desktop could attach.',
-          recentLogs,
-        );
-      }
-      await cleanupManagedRuntimeStartup({
-        child,
-        reportDir,
-        stopTimeoutMs: args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS,
-      });
+      const attachedStartup = startup;
       assertRuntimePIDAlive(attachedStartup, recentLogs);
-      const attachPolicy = managedRuntimeAttachPolicy(attachedStartup, {
-        forceRuntimeUpdate: args.forceRuntimeUpdate,
-      });
-      if (attachPolicy.action === 'block') {
-        throw readinessFailure(attachPolicy.message, recentLogs);
-      }
       if (!runtimeServiceAllowsOpenAttempt(attachedStartup.runtime_service)) {
         assertRuntimeOpenable(attachedStartup, recentLogs);
       }
@@ -1199,19 +1029,34 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
       };
     }
 
-    const stableStartup = await waitForStableRuntimeReadiness({
+    const launchSpawnError: Error | null = spawnError;
+    if (launchSpawnError || child.exitCode !== null || child.signalCode) {
+      throw readinessFailure(
+        launchSpawnError
+          ? `Start Runtime failed after reporting readiness: ${String(launchSpawnError)}`
+          : 'Start Runtime did not complete because the runtime process exited after reporting readiness.',
+        recentLogs,
+      );
+    }
+
+    if (!runtimeServiceAllowsOpenAttempt(startup.runtime_service)) {
+      assertRuntimeOpenable(startup, recentLogs);
+    }
+    const stableStartup = await waitForRuntimeProcessStability({
       startup,
-      executablePath: args.executablePath,
-      stateRoot,
-      env: mergedEnv,
-      probeTimeoutMs: runtimeAttachTimeoutMs,
-      openTimeoutMs: args.startupTimeoutMs ?? DEFAULT_STARTUP_TIMEOUT_MS,
-      stabilityWindowMs: runtimeStabilityWindowMs,
-      pollIntervalMs: runtimeStabilityPollMs,
+      stabilityWindowMs: args.runtimeStabilityWindowMs ?? DEFAULT_RUNTIME_STABILITY_WINDOW_MS,
+      pollIntervalMs: args.runtimeStabilityPollMs ?? DEFAULT_RUNTIME_STABILITY_POLL_MS,
       child,
       logs: recentLogs,
       getSpawnError: () => spawnError,
       signal: args.signal,
+    });
+    const verifiedStartup = await refreshManagedRuntimeStartupAfterLaunch({
+      startup: stableStartup,
+      executablePath: args.executablePath,
+      stateRoot,
+      env: mergedEnv,
+      timeoutMs: runtimeAttachTimeoutMs,
     });
     emitFinalManagedRuntimeInventoryProgress(args.onProgress);
     await verifyManagedLocalRuntimeProcessIdentity({
@@ -1219,7 +1064,7 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
       runtimeRoot,
       stateRoot,
       env: mergedEnv,
-      startup: stableStartup,
+      startup: verifiedStartup,
       runtimeProcessIntent,
       beforeInventory: observedInventory,
       inventoryTimeoutMs: runtimeInventoryTimeoutMs,
@@ -1234,7 +1079,7 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
       kind: 'ready',
       managedRuntime: {
         child,
-        startup: stableStartup,
+        startup: verifiedStartup,
         reportDir,
         reportFile,
         attached: false,

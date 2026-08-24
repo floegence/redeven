@@ -549,7 +549,7 @@ function gatewaySource(overrides: Partial<DesktopGatewaySource> = {}): DesktopGa
 }
 
 describe('buildEnvironmentDisplayStateModel', () => {
-  it('keeps every direct lifecycle action available for an incompatible Local Environment', () => {
+  it('keeps every direct lifecycle action available when a recovery marker is present', () => {
     const local = testLocalEnvironment();
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({ local_environment: local }),
@@ -563,8 +563,8 @@ describe('buildEnvironmentDisplayStateModel', () => {
     });
 
     expect(model.action_presentation.primary_action).toMatchObject({
-      intent: 'reinstall_target',
-      label: 'Reinstall Redeven',
+      intent: 'open_with_preflight',
+      label: 'Open',
       enabled: true,
     });
     expect(model.action_presentation.menu_actions.map((item) => item.id)).toEqual(expect.arrayContaining([
@@ -655,7 +655,7 @@ describe('buildEnvironmentDisplayStateModel', () => {
     expect(model.action_presentation.primary_action_overlay).toBeUndefined();
   });
 
-  it('prioritizes required pairing while the reinstall journal still protects the target', () => {
+  it('does not let a recovery marker replace the normal primary action', () => {
     const local = testLocalEnvironment();
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({ local_environment: local }),
@@ -668,7 +668,7 @@ describe('buildEnvironmentDisplayStateModel', () => {
       reinstall_required: true,
     });
 
-    expect(model.action_presentation.primary_action).toMatchObject({ intent: 'reinstall_target' });
+    expect(model.action_presentation.primary_action).toMatchObject({ intent: 'open_with_preflight' });
   });
 
   it('classifies openable online runtimes as ready without calling them open windows', () => {

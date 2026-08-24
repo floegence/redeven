@@ -635,9 +635,9 @@ describe('runtimeProcess', () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-process-'));
     const stateRoot = path.join(dir, 'state');
     const statusFile = path.join(dir, 'status.json');
+    const inventoryFile = path.join(dir, 'inventory.json');
     const statusCounterFile = path.join(dir, 'status-count.txt');
     const statusPayloadFile = path.join(dir, 'status-payload.json');
-    const inventoryFile = path.join(dir, 'inventory.json');
     const reportFile = path.join(dir, 'startup-report.json');
     const executablePath = await writeFakeRuntimeExecutable(dir);
     await writeJSON(statusPayloadFile, runtimeStatusPayload('http://127.0.0.1:43123/'));
@@ -747,7 +747,7 @@ describe('runtimeProcess', () => {
     }
   });
 
-  it('reuses an attached local runtime that reports a compatibility update block after launch handoff', async () => {
+  it('does not attach an unrelated runtime after a fresh child exits', async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-process-'));
     const statusFile = path.join(dir, 'status.json');
     const counterFile = path.join(dir, 'status-count.txt');
@@ -762,7 +762,7 @@ describe('runtimeProcess', () => {
           message: 'Redeven Desktop has a newer bundled runtime.',
         },
       }));
-      const launch = await startManagedRuntime({
+      await expect(startManagedRuntime({
         executablePath,
         runtimeArgs: [],
         env: {
@@ -773,20 +773,17 @@ describe('runtimeProcess', () => {
         tempRoot: dir,
         startupTimeoutMs: 500,
         runtimeAttachTimeoutMs: 5_000,
+      })).rejects.toMatchObject({
+        presentation: expect.objectContaining({
+          summary: 'redeven exited before reporting readiness (exit code: 0)',
+        }),
       });
-      expect(launch.kind).toBe('ready');
-      if (launch.kind !== 'ready') {
-        return;
-      }
-      expect(launch.spawned).toBe(true);
-      expect(launch.managedRuntime.attached).toBe(true);
-      expect(launch.managedRuntime.startup.runtime_service?.compatibility).toBe('update_required');
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
     }
   });
 
-  it('waits for a spawned runtime to become openable through the runtime status command', async () => {
+  it('keeps the startup report when readiness is still starting', async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-process-'));
     const statusFile = path.join(dir, 'status.json');
     const counterFile = path.join(dir, 'status-count.txt');
@@ -812,7 +809,7 @@ describe('runtimeProcess', () => {
         return;
       }
       expect(launchStartedFreshManagedRuntime(launch)).toBe(true);
-      expect(launch.managedRuntime.startup.runtime_service?.open_readiness).toEqual({ state: 'openable' });
+      expect(launch.managedRuntime.startup.runtime_service?.open_readiness?.state).toBe('starting');
       expect(progressPhases).toEqual([
         'checking_existing_runtime',
         'starting_runtime',
@@ -822,6 +819,40 @@ describe('runtimeProcess', () => {
       ]);
       await launch.managedRuntime.stop();
     } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not stop a healthy child when the post-launch status probe times out', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-process-'));
+    const stateRoot = path.join(dir, 'state');
+    const statusFile = path.join(dir, 'status.json');
+    const inventoryFile = path.join(dir, 'inventory.json');
+    const executablePath = await writeFakeRuntimeExecutable(dir);
+    let launch: Awaited<ReturnType<typeof startManagedRuntime>> | null = null;
+    try {
+      launch = await startManagedRuntime({
+        executablePath,
+        runtimeArgs: ['--state-root', stateRoot],
+        stateRoot,
+        env: {
+          REDEVEN_TEST_STATUS_FILE: statusFile,
+          REDEVEN_TEST_STATUS_DELAY_MS: '1_000',
+          REDEVEN_TEST_PROCESS_INVENTORY_FILE: inventoryFile,
+        },
+        tempRoot: dir,
+        runtimeAttachTimeoutMs: 100,
+        runtimeStabilityWindowMs: 20,
+        runtimeStabilityPollMs: 10,
+      });
+      expect(launch.kind).toBe('ready');
+      if (launch.kind === 'ready') {
+        expect(launch.spawned).toBe(true);
+      }
+    } finally {
+      if (launch?.kind === 'ready') {
+        await launch.managedRuntime.stop().catch(() => undefined);
+      }
       await fs.rm(dir, { recursive: true, force: true });
     }
   });

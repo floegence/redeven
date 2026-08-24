@@ -561,7 +561,16 @@ func (s *Service) DesktopModelSourceBindingStatus(ctx context.Context) runtimese
 }
 
 func (s *Service) DesktopModelSourceBindingSnapshot() runtimeservice.Binding {
-	return s.DesktopModelSourceBindingStatus(context.Background())
+	if s == nil {
+		return runtimeservice.Binding{State: runtimeservice.BindingStateUnsupported}
+	}
+	s.mu.Lock()
+	modelSource := s.desktopModelSource
+	s.mu.Unlock()
+	if modelSource == nil {
+		return runtimeservice.Binding{State: runtimeservice.BindingStateUnsupported}
+	}
+	return modelSource.BindingSnapshot()
 }
 
 // UpdateConfig updates the in-memory AI config after persisting it via the provided callback.
@@ -691,27 +700,16 @@ func (s *Service) UpdateFilesystemScope(scope *filesystemscope.Registry) error {
 //
 // When endpointID is empty, it returns the global active run count.
 func (s *Service) ActiveRunCount(endpointID string) int {
-	if s == nil || s.threadRuntime == nil {
+	if s == nil {
 		return 0
 	}
 	endpointID = strings.TrimSpace(endpointID)
-	summaries, err := s.threadRuntime.List(context.Background(), flruntime.ThreadScope{})
-	if err != nil {
-		return 0
-	}
+	s.workloadMu.Lock()
+	defer s.workloadMu.Unlock()
 	count := 0
-	for _, summary := range summaries {
-		if summary.Activity != flruntime.ThreadActivityActive {
+	for _, lease := range s.workloadLeases {
+		if lease == nil || (endpointID != "" && lease.endpointID != endpointID) {
 			continue
-		}
-		if endpointID != "" {
-			if s.threadsDB == nil {
-				continue
-			}
-			settings, settingsErr := s.threadsDB.GetThreadSettings(context.Background(), endpointID, summary.ID.String())
-			if settingsErr != nil || settings == nil {
-				continue
-			}
 		}
 		count++
 	}

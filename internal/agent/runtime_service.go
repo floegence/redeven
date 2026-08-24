@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"strings"
-	"time"
 
 	"github.com/floegence/redeven/internal/runtimeservice"
 )
@@ -44,27 +43,23 @@ func (a *Agent) RuntimeServiceSnapshot() runtimeservice.Snapshot {
 		DesktopModelSource: runtimeservice.Binding{State: runtimeservice.BindingStateUnsupported},
 		ProviderLink:       a.ProviderLinkBinding(),
 	}
-	var aiSvcAvailable bool
 	var aiTaskCount int
 	aiReadiness := runtimeservice.AIReadiness{State: "unavailable"}
 	if a.code != nil {
 		readiness := a.code.AIReadiness()
 		aiReadiness = runtimeservice.AIReadiness{State: string(readiness.State), ReasonCode: readiness.ReasonCode, IssueCount: readiness.IssueCount}
-		ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
-		aiSvc, leaseCtx, _, release, err := a.code.AcquireAIService(ctx)
+		aiSvc, _, _, release, err := a.code.AcquireAIService(context.Background())
 		if err == nil && aiSvc != nil && release != nil {
-			aiSvcAvailable = true
 			defer release()
 			capabilities.DesktopModelSource = runtimeservice.Capability{
 				Supported:  true,
 				BindMethod: runtimeservice.RuntimeControlBindMethodV2,
 			}
-			bindings.DesktopModelSource = aiSvc.DesktopModelSourceBindingStatus(leaseCtx)
+			bindings.DesktopModelSource = aiSvc.DesktopModelSourceBindingSnapshot()
 			aiTaskCount = aiSvc.ActiveRunCount("")
 		}
-		cancel()
 	}
-	if !aiSvcAvailable {
+	if !capabilities.DesktopModelSource.Supported {
 		bindings.DesktopModelSource = runtimeservice.Binding{State: runtimeservice.BindingStateUnsupported}
 	}
 
