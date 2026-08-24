@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import type { Dirent } from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -11,6 +11,8 @@ import {
   DEFAULT_DESKTOP_SSH_RELEASE_FETCH_TIMEOUT_MS,
   buildDesktopSSHReleaseSourceCacheKey,
   desktopSSHReleasePackageName,
+  DesktopReleaseAssetError,
+  fetchDesktopReleaseAssetBuffer,
   ensureDesktopSSHReleaseArchive,
   ensureDesktopSSHVerifiedReleaseManifest,
   verifyDesktopSSHReleaseAsset,
@@ -27,7 +29,7 @@ import {
   DesktopOperationFailureError,
   desktopOperationFailurePresentation,
 } from './desktopOperationFailure';
-import { runtimeExecutableFromArchive } from './runtimeArchive';
+import { runtimeArchiveEntries, runtimeExecutableFromArchive } from './runtimeArchive';
 
 export type DesktopRuntimePackageCacheKey = Readonly<{
   package_kind: DesktopSSHReleasePackageKind;
@@ -64,18 +66,21 @@ type LocalCommandResult = Readonly<{
 }>;
 
 type DesktopSourceRuntimePackageCacheEntry = Readonly<{
+  schema_version: 'redeven.desktop_source_runtime_package_cache.v1';
   source_root: string;
   source_commit: string;
   package_kind: DesktopSSHReleasePackageKind;
   runtime_release_tag: string;
+  redevplugin_release_tag: string;
   platform_id: string;
-  archive_data: Buffer;
+  rust_toolchain: string;
+  manifest_digest: string;
+  archive_sha256: string;
 }>;
 
 const inFlightReleaseManifests = new Map<string, Promise<DesktopSSHVerifiedReleaseManifest>>();
 const inFlightReleaseAssets = new Map<string, Promise<DesktopRuntimePackageCacheEntry>>();
 const inFlightSourceRuntimeAssets = new Map<string, Promise<DesktopRuntimeUploadAsset>>();
-const sourceRuntimePackageCache = new Map<string, DesktopSourceRuntimePackageCacheEntry>();
 const sourceMaintenanceHelperCache = new Map<string, Buffer>();
 const inFlightSourceMaintenanceHelpers = new Map<string, Promise<Buffer>>();
 const inFlightReleaseMaintenanceHelpers = new Map<string, Promise<Buffer>>();
@@ -111,18 +116,80 @@ function releaseAssetInFlightKey(sourceCacheKey: string, releaseTag: string, pla
   return `asset:${sourceCacheKey}:${releaseTag}:${platformID}:${packageKind}`;
 }
 
-function normalizeSourceRuntimeRoot(sourceRoot: string): string {
-  return path.resolve(compact(sourceRoot));
+const REDEVPLUGIN_RUNTIME_MANIFEST = 'platform-release-manifest.json';
+const REDEVPLUGIN_RUNTIME_RUST_TOOLCHAIN = '1.88.0';
+const SOURCE_RUNTIME_CACHE_DIR = 'source-build-cache';
+const REDEVPLUGIN_MANIFEST_CACHE_DIR = 'redevplugin-manifests';
+
+function digestText(value: string): string {
+  return createHash('sha256').update(value).digest('hex');
 }
 
-function sourceRuntimeAssetCacheKey(
-  sourceRoot: string,
-  sourceCommit: string,
-  releaseTag: string,
-  platformID: string,
-  packageKind: DesktopSSHReleasePackageKind,
-): string {
-  return `source:${sourceRoot}:${sourceCommit}:${releaseTag}:${platformID}:${packageKind}`;
+function digestBuffer(value: Buffer): string {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+function sourceRuntimeCacheKey(args: Readonly<{
+  sourceRoot: string;
+  sourceCommit: string;
+  runtimeReleaseTag: string;
+  redevpluginReleaseTag: string;
+  platformID: string;
+  packageKind: DesktopSSHReleasePackageKind;
+  manifestDigest: string;
+}>): string {
+  return digestText(JSON.stringify({
+    source_root: args.sourceRoot,
+    source_commit: args.sourceCommit,
+    runtime_release_tag: args.runtimeReleaseTag,
+    redevplugin_release_tag: args.redevpluginReleaseTag,
+    platform_id: args.platformID,
+    package_kind: args.packageKind,
+    rust_toolchain: REDEVPLUGIN_RUNTIME_RUST_TOOLCHAIN,
+    manifest_digest: args.manifestDigest,
+  }));
+}
+
+function sourceRuntimeCachePaths(cacheRoot: string, key: string): Readonly<{
+  directory: string;
+  archive: string;
+  metadata: string;
+}> {
+  const directory = path.join(cacheRoot, SOURCE_RUNTIME_CACHE_DIR, key);
+  return {
+    directory,
+    archive: path.join(directory, 'runtime-package.tar.gz'),
+    metadata: path.join(directory, 'metadata.json'),
+  };
+}
+
+function redevpluginManifestCachePath(cacheRoot: string, releaseTag: string): string {
+  return path.join(cacheRoot, REDEVPLUGIN_MANIFEST_CACHE_DIR, releaseTag, REDEVPLUGIN_RUNTIME_MANIFEST);
+}
+
+async function writePrivateFileAtomically(targetPath: string, data: Buffer | string): Promise<void> {
+  const targetDir = path.dirname(targetPath);
+  await fs.mkdir(targetDir, { recursive: true, mode: 0o700 });
+  const temporaryPath = path.join(
+    targetDir,
+    `.${path.basename(targetPath)}.${process.pid}.${randomBytes(12).toString('hex')}.tmp`,
+  );
+  try {
+    const handle = await fs.open(temporaryPath, 'wx', 0o600);
+    try {
+      await handle.writeFile(data);
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    await fs.rename(temporaryPath, targetPath);
+  } finally {
+    await fs.rm(temporaryPath, { force: true }).catch(() => undefined);
+  }
+}
+
+function normalizeSourceRuntimeRoot(sourceRoot: string): string {
+  return path.resolve(compact(sourceRoot));
 }
 
 const sourceRuntimeCopyExcludedSubtrees = [
@@ -329,6 +396,20 @@ async function readSourceRuntimeCommit(sourceRoot: string, signal?: AbortSignal)
   }
 }
 
+async function readReDevPluginReleaseTag(sourceRoot: string, signal?: AbortSignal): Promise<string> {
+  const envTag = compact(process.env.REDEVEN_REDEVPLUGIN_RELEASE_TAG);
+  if (envTag !== '') {
+    return normalizeRuntimeReleaseTag(envTag);
+  }
+  const goMod = await fs.readFile(path.join(sourceRoot, 'go.mod'), 'utf8').catch(() => '');
+  const match = /(?:^|\n)\s*(?:require\s+)?github\.com\/floegence\/redevplugin\/v3\s+(v[0-9]+\.[0-9]+\.[0-9]+)(?:\s|$)/u.exec(goMod);
+  if (!match?.[1]) {
+    throw new Error('Redeven source go.mod does not declare a ReDevPlugin v3 release.');
+  }
+  throwIfCanceled(signal);
+  return match[1];
+}
+
 async function buildSourceRuntimeAssets(sourceRoot: string, signal?: AbortSignal): Promise<void> {
   const scriptPath = path.join(sourceRoot, 'scripts', 'build_assets.sh');
   const scriptStat = await fs.stat(scriptPath).catch(() => null);
@@ -394,6 +475,7 @@ async function stageSourceRuntimeCompanions(args: Readonly<{
   sourceRoot: string;
   outputRoot: string;
   platform: DesktopSSHRemotePlatform;
+  manifestPath: string;
   signal?: AbortSignal;
 }>): Promise<void> {
   const scriptPath = path.join(args.sourceRoot, 'scripts', 'stage_redevplugin_release_artifacts.sh');
@@ -405,12 +487,236 @@ async function stageSourceRuntimeCompanions(args: Readonly<{
     '--dest-dir', path.join(args.outputRoot, 'published-redevplugin'),
     '--redeven-goos', args.platform.goos,
     '--redeven-goarch', args.platform.goarch,
+    '--manifest-file', args.manifestPath,
     '--runtime-out', path.join(args.outputRoot, 'redevplugin-runtime'),
   ], {
     cwd: args.sourceRoot,
     signal: args.signal,
     timeout_ms: DEFAULT_RUNTIME_HOST_TRANSFER_TIMEOUT_MS,
   });
+}
+
+// Cache reads perform only a cheap identity check; the staging script invokes
+// the canonical release contract before it builds or installs the companion.
+function validateReDevPluginManifest(data: Buffer, releaseTag: string): void {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(data.toString('utf8'));
+  } catch (error) {
+    throw new Error(`ReDevPlugin release manifest is not valid JSON: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  const record = parsed as Readonly<{ platform_version?: unknown; plugin_api?: unknown; internal_wire?: unknown; artifacts?: unknown }>;
+  const artifacts = Array.isArray(record.artifacts) ? record.artifacts : [];
+  if (record.platform_version !== releaseTag.replace(/^v/u, '')
+    || record.plugin_api !== 1
+    || record.internal_wire !== 1
+    || artifacts.length < 5) {
+    throw new Error(`ReDevPlugin release manifest does not match ${releaseTag}.`);
+  }
+  const names = new Set<string>();
+  for (const artifact of artifacts) {
+    if (!artifact || typeof artifact !== 'object') {
+      throw new Error('ReDevPlugin release manifest contains an invalid artifact.');
+    }
+    const item = artifact as Readonly<Record<string, unknown>>;
+    const name = compact(item.name);
+    const sha256 = compact(item.sha256);
+    if (name === '' || names.has(name) || !/^[a-f0-9]{64}$/u.test(sha256)) {
+      throw new Error('ReDevPlugin release manifest contains an invalid artifact.');
+    }
+    names.add(name);
+  }
+  for (const required of [
+    'go:github.com/floegence/redevplugin/v3',
+    'npm:@floegence/redevplugin-contracts',
+    'npm:@floegence/redevplugin-ui',
+    'crate:redevplugin-runtime',
+    'crate:redevplugin-worker-sdk',
+  ]) {
+    if (!names.has(required)) {
+      throw new Error(`ReDevPlugin release manifest is missing ${required}.`);
+    }
+  }
+}
+
+async function ensureReDevPluginManifest(args: Readonly<{
+  cacheRoot: string;
+  redevpluginReleaseTag: string;
+  fetchPolicy: DesktopSSHReleaseFetchPolicy;
+  signal?: AbortSignal;
+}>): Promise<Readonly<{ path: string; digest: string }>> {
+  const releaseTag = normalizeRuntimeReleaseTag(args.redevpluginReleaseTag);
+  const manifestPath = redevpluginManifestCachePath(args.cacheRoot, releaseTag);
+  const cached = await fs.readFile(manifestPath).catch(() => null);
+  if (cached) {
+    try {
+      validateReDevPluginManifest(cached, releaseTag);
+      return { path: manifestPath, digest: digestBuffer(cached) };
+    } catch {
+      // The local manifest is incomplete or stale. Fetch one replacement below.
+    }
+  }
+
+  const sourceURL = `https://github.com/floegence/redevplugin/releases/download/${encodeURIComponent(releaseTag)}/${REDEVPLUGIN_RUNTIME_MANIFEST}`;
+  const data = await fetchDesktopReleaseAssetBuffer(sourceURL, {
+    ...args.fetchPolicy,
+    signal: args.signal,
+  });
+  throwIfCanceled(args.signal);
+  validateReDevPluginManifest(data, releaseTag);
+  await writePrivateFileAtomically(manifestPath, data);
+  return { path: manifestPath, digest: digestBuffer(data) };
+}
+
+function runtimePackageEntryNames(args: Readonly<{
+  platform: DesktopSSHRemotePlatform;
+  packageKind: DesktopSSHReleasePackageKind;
+}>): readonly string[] {
+  if (args.packageKind === 'gateway') {
+    return ['redeven-gateway'];
+  }
+  if (args.platform.goos === 'linux') {
+    return ['redeven', ...LINUX_RUNTIME_COMPANION_FILES];
+  }
+  return ['redeven'];
+}
+
+function validateRuntimePackageArchive(
+  archiveData: Buffer,
+  args: Readonly<{ platform: DesktopSSHRemotePlatform; packageKind: DesktopSSHReleasePackageKind }>,
+): void {
+  const entries = runtimeArchiveEntries(archiveData);
+  const expected = runtimePackageEntryNames(args);
+  if (entries.size !== expected.length) {
+    throw new Error(`Runtime package archive contains unexpected files (expected ${expected.length}, found ${entries.size}).`);
+  }
+  for (const name of expected) {
+    if (!entries.has(name)) {
+      throw new Error(`Runtime package archive is missing ${name}.`);
+    }
+  }
+  if (args.packageKind === 'runtime') {
+    runtimeExecutableFromArchive(archiveData);
+  }
+}
+
+async function readSourceRuntimeCache(args: Readonly<{
+  cacheRoot: string;
+  key: string;
+  sourceRoot: string;
+  sourceCommit: string;
+  runtimeReleaseTag: string;
+  redevpluginReleaseTag: string;
+  packageKind: DesktopSSHReleasePackageKind;
+  platform: DesktopSSHRemotePlatform;
+  manifestDigest: string;
+}>): Promise<DesktopRuntimeUploadAsset | null> {
+  const paths = sourceRuntimeCachePaths(args.cacheRoot, args.key);
+  const [metadataData, archiveData] = await Promise.all([
+    fs.readFile(paths.metadata).catch(() => null),
+    fs.readFile(paths.archive).catch(() => null),
+  ]);
+  if (!metadataData || !archiveData) return null;
+  try {
+    const metadata = JSON.parse(metadataData.toString('utf8')) as DesktopSourceRuntimePackageCacheEntry;
+    if (metadata.schema_version !== 'redeven.desktop_source_runtime_package_cache.v1'
+      || metadata.source_root !== args.sourceRoot
+      || metadata.source_commit !== args.sourceCommit
+      || metadata.package_kind !== args.packageKind
+      || metadata.runtime_release_tag !== args.runtimeReleaseTag
+      || metadata.redevplugin_release_tag !== args.redevpluginReleaseTag
+      || metadata.platform_id !== args.platform.platform_id
+      || metadata.rust_toolchain !== REDEVPLUGIN_RUNTIME_RUST_TOOLCHAIN
+      || metadata.manifest_digest !== args.manifestDigest
+      || metadata.archive_sha256 !== digestBuffer(archiveData)) {
+      return null;
+    }
+    validateRuntimePackageArchive(archiveData, args);
+    return {
+      archiveData,
+      cacheEntry: null,
+      source: 'source_build_cache',
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function findSourceRuntimeCache(args: Readonly<{
+  cacheRoot: string;
+  sourceRoot: string;
+  sourceCommit: string;
+  runtimeReleaseTag: string;
+  redevpluginReleaseTag: string;
+  packageKind: DesktopSSHReleasePackageKind;
+  platform: DesktopSSHRemotePlatform;
+}>): Promise<DesktopRuntimeUploadAsset | null> {
+  const root = path.join(args.cacheRoot, SOURCE_RUNTIME_CACHE_DIR);
+  const entries = await fs.readdir(root, { withFileTypes: true }).catch(() => [] as Dirent[]);
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const metadataPath = path.join(root, entry.name, 'metadata.json');
+    const archivePath = path.join(root, entry.name, 'runtime-package.tar.gz');
+    const metadataData = await fs.readFile(metadataPath).catch(() => null);
+    const archiveData = await fs.readFile(archivePath).catch(() => null);
+    if (!metadataData || !archiveData) continue;
+    try {
+      const metadata = JSON.parse(metadataData.toString('utf8')) as DesktopSourceRuntimePackageCacheEntry;
+      if (metadata.schema_version !== 'redeven.desktop_source_runtime_package_cache.v1'
+        || metadata.source_root !== args.sourceRoot
+        || metadata.source_commit !== args.sourceCommit
+        || metadata.runtime_release_tag !== args.runtimeReleaseTag
+        || metadata.redevplugin_release_tag !== args.redevpluginReleaseTag
+        || metadata.package_kind !== args.packageKind
+        || metadata.platform_id !== args.platform.platform_id
+        || metadata.rust_toolchain !== REDEVPLUGIN_RUNTIME_RUST_TOOLCHAIN
+        || metadata.archive_sha256 !== digestBuffer(archiveData)) continue;
+      if (sourceRuntimeCacheKey({
+        sourceRoot: metadata.source_root,
+        sourceCommit: metadata.source_commit,
+        runtimeReleaseTag: metadata.runtime_release_tag,
+        redevpluginReleaseTag: metadata.redevplugin_release_tag,
+        platformID: metadata.platform_id,
+        packageKind: metadata.package_kind,
+        manifestDigest: metadata.manifest_digest,
+      }) !== entry.name) continue;
+      validateRuntimePackageArchive(archiveData, args);
+      return { archiveData, cacheEntry: null, source: 'source_build_cache' };
+    } catch {
+      // Ignore one damaged cache entry and continue looking for a matching one.
+    }
+  }
+  return null;
+}
+
+async function writeSourceRuntimeCache(args: Readonly<{
+  cacheRoot: string;
+  key: string;
+  sourceRoot: string;
+  sourceCommit: string;
+  runtimeReleaseTag: string;
+  redevpluginReleaseTag: string;
+  packageKind: DesktopSSHReleasePackageKind;
+  platform: DesktopSSHRemotePlatform;
+  manifestDigest: string;
+  archiveData: Buffer;
+}>): Promise<void> {
+  validateRuntimePackageArchive(args.archiveData, args);
+  const paths = sourceRuntimeCachePaths(args.cacheRoot, args.key);
+  const metadata: DesktopSourceRuntimePackageCacheEntry = {
+    schema_version: 'redeven.desktop_source_runtime_package_cache.v1',
+    source_root: args.sourceRoot,
+    source_commit: args.sourceCommit,
+    package_kind: args.packageKind,
+    runtime_release_tag: args.runtimeReleaseTag,
+    redevplugin_release_tag: args.redevpluginReleaseTag,
+    platform_id: args.platform.platform_id,
+    rust_toolchain: REDEVPLUGIN_RUNTIME_RUST_TOOLCHAIN,
+    manifest_digest: args.manifestDigest,
+    archive_sha256: digestBuffer(args.archiveData),
+  };
+  await writePrivateFileAtomically(paths.archive, args.archiveData);
+  await writePrivateFileAtomically(paths.metadata, `${JSON.stringify(metadata)}\n`);
 }
 
 async function copySourceRuntimeRoot(
@@ -439,14 +745,52 @@ function runtimePackagePreparationFailure(
   if (error instanceof DesktopOperationFailureError) {
     return error;
   }
+  if (error instanceof DesktopReleaseAssetError) {
+    const code = error.failure_code === 'forbidden'
+      ? 'redevplugin_release_asset_forbidden'
+      : error.failure_code === 'timeout'
+        ? 'redevplugin_release_asset_timeout'
+        : 'redevplugin_release_asset_unavailable';
+    return new DesktopOperationFailureError(desktopOperationFailurePresentation({
+      code,
+      title: 'ReDevPlugin release asset unavailable',
+      titleKey: 'progress.redevpluginReleaseAssetFailedTitle',
+      summary: 'Desktop could not download the verified ReDevPlugin release asset.',
+      summaryKey: 'progress.redevpluginReleaseAssetFailedSummary',
+      detail: 'The ReDevPlugin release asset was rejected or unavailable before the Runtime package was prepared.',
+      detailKey: 'progress.redevpluginReleaseAssetFailedDetail',
+      recoveryHint: 'Check network access to the ReDevPlugin release source or use a matching verified local cache, then retry.',
+      recoveryHintKey: 'progress.redevpluginReleaseAssetFailedRecoveryHint',
+      diagnostics: [{
+        channel: 'redevplugin_release_asset',
+        label: 'Release asset download',
+        text: [
+          error.message,
+          `url=${error.url}`,
+          `status=${error.status ?? 'network'}`,
+          `request_id=${error.request_id || 'none'}`,
+          `attempts=${error.attempts}`,
+        ].join('\n'),
+      }],
+    }), {
+      cause: error,
+      runtimeLifecycleStepID: 'preparing_runtime_package',
+    });
+  }
   const message = error instanceof Error ? error.message : String(error);
   const isGateway = packageKind === 'gateway';
   return new DesktopOperationFailureError(desktopOperationFailurePresentation({
-    code: isGateway ? 'gateway_package_prepare_failed' : 'container_runtime_launch_failed',
+    code: isGateway ? 'gateway_package_prepare_failed' : 'runtime_package_prepare_failed',
     title: isGateway ? 'Gateway package preparation failed' : 'Runtime package preparation failed',
+    ...(isGateway ? {} : {
+      titleKey: 'progress.runtimePackagePrepareFailedTitle' as const,
+      summaryKey: 'progress.runtimePackagePrepareFailedSummary' as const,
+      detailKey: 'progress.runtimePackagePrepareFailedDetail' as const,
+      recoveryHintKey: 'progress.runtimePackagePrepareFailedRecoveryHint' as const,
+    }),
     summary: `Desktop could not prepare the ${platform.platform_label} ${isGateway ? 'Redeven Gateway' : 'Redeven runtime'} package.`,
-    detail: `The local source ${isGateway ? 'Gateway' : 'runtime'} build failed before Desktop could upload the ${isGateway ? 'Gateway' : 'runtime'} package.`,
-    recoveryHint: `Run the Redeven asset build and ${isGateway ? 'Gateway' : 'runtime'} build locally, then retry the ${isGateway ? 'Gateway service' : 'runtime lifecycle'} action.`,
+    detail: `Package preparation failed before Desktop changed the target environment.`,
+    recoveryHint: `Check the local package build and retry the ${isGateway ? 'Gateway service' : 'runtime lifecycle'} action.`,
     diagnostics: [{
       channel: isGateway ? 'gateway_package_build' : 'runtime_package_build',
       label: 'Build output',
@@ -462,6 +806,7 @@ async function prepareSourceRuntimeUploadAsset(args: Readonly<{
   sourceRuntimeRoot: string;
   sourceCommit: string;
   runtimeReleaseTag: string;
+  manifestPath?: string;
   packageKind: DesktopSSHReleasePackageKind;
   platform: DesktopSSHRemotePlatform;
   signal?: AbortSignal;
@@ -502,6 +847,7 @@ async function prepareSourceRuntimeUploadAsset(args: Readonly<{
         sourceRoot,
         outputRoot: suiteRoot,
         platform: args.platform,
+        manifestPath: args.manifestPath ?? (() => { throw new Error('ReDevPlugin release manifest is required for a Linux Runtime build.'); })(),
         signal: args.signal,
       });
       const entries: RuntimeArchiveEntry[] = [{
@@ -534,9 +880,13 @@ async function prepareSourceRuntimeUploadAsset(args: Readonly<{
 
 async function ensureSourceRuntimeUploadAsset(args: Readonly<{
   sourceRuntimeRoot: string;
+  cacheRoot: string;
   runtimeReleaseTag: string;
+  redevpluginReleaseTag: string;
   packageKind: DesktopSSHReleasePackageKind;
   platform: DesktopSSHRemotePlatform;
+  manifestPath?: string;
+  manifestDigest?: string;
   signal?: AbortSignal;
 }>): Promise<DesktopRuntimeUploadAsset | null> {
   throwIfCanceled(args.signal);
@@ -546,39 +896,43 @@ async function ensureSourceRuntimeUploadAsset(args: Readonly<{
   }
   const sourceRoot = normalizeSourceRuntimeRoot(requestedSourceRoot);
   const sourceCommit = await readSourceRuntimeCommit(sourceRoot, args.signal);
-  const key = sourceRuntimeAssetCacheKey(
+  const manifestDigest = args.manifestDigest ?? 'none';
+  const key = sourceRuntimeCacheKey({
     sourceRoot,
     sourceCommit,
-    args.runtimeReleaseTag,
-    args.platform.platform_id,
-    args.packageKind,
-  );
-  const cached = sourceRuntimePackageCache.get(key);
-  if (cached) {
-    return {
-      archiveData: Buffer.from(cached.archive_data),
-      cacheEntry: null,
-      source: 'source_build_cache',
-    };
-  }
+    runtimeReleaseTag: args.runtimeReleaseTag,
+    redevpluginReleaseTag: args.redevpluginReleaseTag,
+    platformID: args.platform.platform_id,
+    packageKind: args.packageKind,
+    manifestDigest,
+  });
+  const cacheArgs = {
+    cacheRoot: args.cacheRoot,
+    key,
+    sourceRoot,
+    sourceCommit,
+    runtimeReleaseTag: args.runtimeReleaseTag,
+    redevpluginReleaseTag: args.redevpluginReleaseTag,
+    packageKind: args.packageKind,
+    platform: args.platform,
+    manifestDigest,
+  } as const;
+  const cached = await readSourceRuntimeCache(cacheArgs);
+  if (cached) return cached;
 
   return onceInFlight(inFlightSourceRuntimeAssets, key, async () => {
+    const cachedInside = await readSourceRuntimeCache(cacheArgs);
+    if (cachedInside) return cachedInside;
     const built = await prepareSourceRuntimeUploadAsset({
       sourceRuntimeRoot: sourceRoot,
       sourceCommit,
       runtimeReleaseTag: args.runtimeReleaseTag,
+      manifestPath: args.manifestPath,
       packageKind: args.packageKind,
       platform: args.platform,
       signal: args.signal,
     });
-    sourceRuntimePackageCache.set(key, {
-      source_root: sourceRoot,
-      source_commit: sourceCommit,
-      package_kind: args.packageKind,
-      runtime_release_tag: args.runtimeReleaseTag,
-      platform_id: args.platform.platform_id,
-      archive_data: Buffer.from(built.archiveData),
-    });
+    await writeSourceRuntimeCache({ ...cacheArgs, archiveData: built.archiveData });
     return built;
   });
 }
@@ -729,6 +1083,9 @@ export async function pruneDesktopRuntimePackageCache(policy: DesktopRuntimePack
 
   const sourceEntries = await readDirectoryIfPresent(policy.cacheRoot);
   await Promise.all(sourceEntries.map(async (sourceEntry) => {
+    if (sourceEntry.name === SOURCE_RUNTIME_CACHE_DIR || sourceEntry.name === REDEVPLUGIN_MANIFEST_CACHE_DIR) {
+      return;
+    }
     const sourcePath = path.join(policy.cacheRoot, sourceEntry.name);
     if (includeTemporaryEntries && isRuntimePackageCacheTemporaryName(sourceEntry.name)) {
       await fs.rm(sourcePath, { recursive: true, force: true });
@@ -862,42 +1219,78 @@ export async function prepareDesktopRuntimeUploadAsset(args: Readonly<{
   try {
     throwIfCanceled(args.signal);
     const runtimeReleaseTag = normalizeRuntimeReleaseTag(args.runtimeReleaseTag);
+    const fetchPolicy = {
+      ...args.fetchPolicy,
+      signal: args.signal,
+    };
     await pruneDesktopRuntimePackageCache({
       cacheRoot: args.assetCacheRoot,
       activeReleaseTag: runtimeReleaseTag,
       includeTemporaryEntries: false,
     }).catch(() => undefined);
 
+    const sourceRoot = compact(args.sourceRuntimeRoot);
+    let redevpluginReleaseTag = 'none';
+    let pluginManifest: Readonly<{ path: string; digest: string }> | undefined;
+    if (sourceRoot !== '' && packageKind === 'runtime' && args.platform.goos === 'linux') {
+      const normalizedSourceRoot = normalizeSourceRuntimeRoot(sourceRoot);
+      redevpluginReleaseTag = await readReDevPluginReleaseTag(normalizedSourceRoot, args.signal);
+      const sourceCommit = await readSourceRuntimeCommit(normalizedSourceRoot, args.signal);
+      const sourceCacheLookup = {
+        cacheRoot: args.assetCacheRoot,
+        sourceRoot: normalizedSourceRoot,
+        sourceCommit,
+        runtimeReleaseTag,
+        redevpluginReleaseTag,
+        packageKind,
+        platform: args.platform,
+      } as const;
+      try {
+        pluginManifest = await ensureReDevPluginManifest({
+          cacheRoot: args.assetCacheRoot,
+          redevpluginReleaseTag,
+          fetchPolicy,
+          signal: args.signal,
+        });
+      } catch (error) {
+        if (!(error instanceof DesktopReleaseAssetError)) {
+          throw error;
+        }
+        const cachedSource = await findSourceRuntimeCache(sourceCacheLookup);
+        if (cachedSource) return cachedSource;
+        throw error;
+      }
+    }
     const sourceAsset = await ensureSourceRuntimeUploadAsset({
       sourceRuntimeRoot: args.sourceRuntimeRoot ?? '',
+      cacheRoot: args.assetCacheRoot,
       runtimeReleaseTag,
+      redevpluginReleaseTag,
       packageKind,
       platform: args.platform,
+      ...(pluginManifest ? { manifestPath: pluginManifest.path, manifestDigest: pluginManifest.digest } : {}),
       signal: args.signal,
     });
     if (sourceAsset) {
       return sourceAsset;
     }
 
-    const fetchPolicy = {
-      ...args.fetchPolicy,
-      signal: args.signal,
-    };
-    const manifest = await ensureReleaseManifest({
+    const releaseManifest = await ensureReleaseManifest({
       releaseTag: runtimeReleaseTag,
       releaseBaseURL: args.releaseBaseURL,
       cacheRoot: args.assetCacheRoot,
       fetchPolicy,
     });
     const cacheEntry = await ensureReleaseAssetEntry({
-      manifest,
+      manifest: releaseManifest,
       platform: args.platform,
       packageKind,
       cacheRoot: args.assetCacheRoot,
       fetchPolicy,
     });
+    const archiveData = await fs.readFile(cacheEntry.archive_path);
     return {
-      archiveData: await fs.readFile(cacheEntry.archive_path),
+      archiveData,
       cacheEntry,
       source: 'release_cache',
     };
@@ -907,11 +1300,17 @@ export async function prepareDesktopRuntimeUploadAsset(args: Readonly<{
     }
     const isGateway = packageKind === 'gateway';
     throw new DesktopOperationFailureError(desktopOperationFailurePresentation({
-      code: isGateway ? 'gateway_package_prepare_failed' : 'container_runtime_launch_failed',
+      code: isGateway ? 'gateway_package_prepare_failed' : 'runtime_package_prepare_failed',
       title: isGateway ? 'Gateway package preparation failed' : 'Runtime package preparation failed',
+      ...(isGateway ? {} : {
+        titleKey: 'progress.runtimePackagePrepareFailedTitle' as const,
+        summaryKey: 'progress.runtimePackagePrepareFailedSummary' as const,
+        detailKey: 'progress.runtimePackagePrepareFailedDetail' as const,
+        recoveryHintKey: 'progress.runtimePackagePrepareFailedRecoveryHint' as const,
+      }),
       summary: `Desktop could not prepare the ${args.platform.platform_label} ${isGateway ? 'Redeven Gateway' : 'Redeven runtime'} package.`,
-      detail: `Desktop could not resolve a verified ${isGateway ? 'Gateway' : 'runtime'} release archive for the target platform.`,
-      recoveryHint: `Check network access to the Redeven release source and retry the ${isGateway ? 'Gateway service' : 'runtime lifecycle'} action.`,
+      detail: 'Package preparation failed before Desktop changed the target environment.',
+      recoveryHint: `Check the verified release source or local cache and retry the ${isGateway ? 'Gateway service' : 'runtime lifecycle'} action.`,
       diagnostics: [{
         channel: isGateway ? 'gateway_package_cache' : 'runtime_package_cache',
         label: 'Package preparation output',

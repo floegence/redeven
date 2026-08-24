@@ -41,6 +41,30 @@ describe('operationFailureI18n', () => {
   });
 
   it.each([
+    'runtime_package_prepare_failed',
+    'redevplugin_release_asset_forbidden',
+    'redevplugin_release_asset_unavailable',
+    'redevplugin_release_asset_timeout',
+  ] as const)('localizes Runtime package failure %s in English and Chinese', (code) => {
+    const failure: DesktopOperationFailurePresentation = {
+      code,
+      severity: 'error',
+      title: 'raw title',
+      summary: 'raw summary',
+      detail: 'raw detail',
+      recovery_hint: 'raw recovery',
+      target_label: 'target',
+    };
+    for (const locale of ['en-US', 'zh-CN'] as const) {
+      const i18n = createDesktopI18n(locale);
+      expect(localizedOperationFailureTitle(i18n, failure)).not.toBe('raw title');
+      expect(localizedOperationFailureSummary(i18n, failure)).not.toBe('raw summary');
+      expect(localizedOperationFailureDetail(i18n, failure)).not.toBe('');
+      expect(localizedOperationFailureRecoveryHint(i18n, failure)).not.toBe('');
+    }
+  });
+
+  it.each([
     ['reinstall_direct_channel_failed', 'Redeven 直连失败', 'Desktop 无法打开到“gzcom”的已确认直连通道。'],
     ['reinstall_package_batch_failed', 'Redeven 软件包批次失败', 'Desktop 无法为“gzcom”准备并校验运行时软件包。'],
     ['reinstall_filesystem_failed', '无法替换 Redeven 目标目录', '操作系统拒绝替换“gzcom”上已确认的精确 Redeven 根目录。'],

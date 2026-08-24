@@ -20,6 +20,7 @@ Usage:
   ./scripts/stage_redevplugin_release_artifacts.sh \
     --dest-dir <dir> --redeven-goos linux --redeven-goarch <amd64|arm64> \
     --runtime-out <file> [--profile development|release]
+    [--manifest-file <file>]
   ./scripts/stage_redevplugin_release_artifacts.sh --self-test
 
 Downloads and verifies the released ReDevPlugin platform manifest, builds the
@@ -33,6 +34,7 @@ dest_dir=""
 goos=""
 goarch=""
 runtime_out=""
+manifest_file=""
 profile="development"
 self_test=0
 while [[ $# -gt 0 ]]; do
@@ -41,6 +43,7 @@ while [[ $# -gt 0 ]]; do
     --redeven-goos) goos="${2:-}"; shift 2 ;;
     --redeven-goarch) goarch="${2:-}"; shift 2 ;;
     --runtime-out) runtime_out="${2:-}"; shift 2 ;;
+    --manifest-file) manifest_file="${2:-}"; shift 2 ;;
     --profile) profile="${2:-}"; shift 2 ;;
     --self-test) self_test=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -58,7 +61,7 @@ require_command() {
 }
 
 if [[ "$self_test" -eq 1 ]]; then
-  [[ -z "$dest_dir$goos$goarch$runtime_out" && "$profile" == "development" ]] ||
+  [[ -z "$dest_dir$goos$goarch$runtime_out$manifest_file" && "$profile" == "development" ]] ||
     die "--self-test cannot be combined with staging arguments"
   exec node --test "$SCRIPT_DIR/redevplugin_release_contract.test.mjs"
 fi
@@ -82,7 +85,11 @@ case "$target" in
   *) die "unsupported ReDevPlugin runtime target: $target" ;;
 esac
 
-for command in cargo curl go jq node rustc rustup; do require_command "$command"; done
+for command in cargo go node rustc rustup; do require_command "$command"; done
+if [[ -z "$manifest_file" || "$profile" == "release" ]]; then
+  require_command curl
+  require_command jq
+fi
 
 # The Desktop development launcher may provide an isolated HOME while Rustup
 # itself is installed in the user's normal Cargo home. Keep Rustup pointed at
@@ -125,18 +132,48 @@ tag=$(cd "$ROOT_DIR" && GOWORK=off go list -m -f '{{.Version}}' github.com/floeg
 [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "invalid ReDevPlugin module version: $tag"
 
 mkdir -p "$tmpdir/upstream"
-curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location --retry 3 \
-  "https://github.com/$REPOSITORY/releases/download/$tag/$RELEASE_MANIFEST_ASSET" \
-  --output "$tmpdir/upstream/$RELEASE_MANIFEST_ASSET"
-manifest="$tmpdir/upstream/$RELEASE_MANIFEST_ASSET"
-version=$(jq -er '.platform_version' "$manifest")
-[[ "v$version" == "$tag" ]] || die "release manifest version does not match Go module version"
+if [[ -n "$manifest_file" ]]; then
+  [[ -f "$manifest_file" && ! -L "$manifest_file" ]] || die "manifest file is missing: $manifest_file"
+  manifest=$(cd -- "$(dirname -- "$manifest_file")" >/dev/null 2>&1 && pwd -P)/$(basename -- "$manifest_file")
+  node "$SCRIPT_DIR/redevplugin_release_contract.mjs" verify-release-manifest "$manifest" "$tag" >/dev/null
+  version=$(node --input-type=module -e "import { readFileSync } from 'node:fs'; process.stdout.write(JSON.parse(readFileSync(process.argv[1], 'utf8')).platform_version);" "$manifest")
+  install -m 0644 "$manifest" "$tmpdir/upstream/$RELEASE_MANIFEST_ASSET"
+  manifest="$tmpdir/upstream/$RELEASE_MANIFEST_ASSET"
+  if [[ "$profile" == "release" ]]; then
+    "$SCRIPT_DIR/check_redevplugin_release_artifacts.sh" \
+      --artifact-dir "$tmpdir/upstream" \
+      --tag "$tag"
+  fi
+else
+  curl --proto '=https' --tlsv1.2 --fail --silent --show-error --location --retry 3 \
+    "https://github.com/$REPOSITORY/releases/download/$tag/$RELEASE_MANIFEST_ASSET" \
+    --output "$tmpdir/upstream/$RELEASE_MANIFEST_ASSET"
+  manifest="$tmpdir/upstream/$RELEASE_MANIFEST_ASSET"
+  version=$(node --input-type=module -e "import { readFileSync } from 'node:fs'; process.stdout.write(JSON.parse(readFileSync(process.argv[1], 'utf8')).platform_version);" "$manifest")
+  [[ "v$version" == "$tag" ]] || die "release manifest version does not match Go module version"
+  if [[ "$profile" == "release" ]]; then
+    "$SCRIPT_DIR/check_redevplugin_release_artifacts.sh" \
+      --artifact-dir "$tmpdir/upstream" \
+      --tag "$tag"
+  fi
+fi
 release_verification="$tmpdir/$RELEASE_VERIFICATION"
-"$SCRIPT_DIR/check_redevplugin_release_artifacts.sh" \
-  --artifact-dir "$tmpdir/upstream" \
-  --tag "$tag"
 node "$SCRIPT_DIR/redevplugin_release_contract.mjs" write-release-verification \
   "$manifest" "$tag" "$release_verification"
+
+# Cargo verifies the registry checksum while downloading the crate. Re-check
+# the exact cached crate against the published manifest before building it so
+# development staging keeps the same provenance boundary as release staging.
+expected_runtime_crate_sha=$(REDEVEN_PLUGIN_MANIFEST="$manifest" node --input-type=module <<'NODE'
+import { readFileSync } from 'node:fs';
+const manifest = JSON.parse(readFileSync(process.env.REDEVEN_PLUGIN_MANIFEST, 'utf8'));
+const artifact = manifest.artifacts?.find((item) => item?.name === 'crate:redevplugin-runtime');
+if (!/^[a-f0-9]{64}$/.test(artifact?.sha256 ?? '')) {
+  throw new Error('release manifest is missing the redevplugin-runtime crate digest');
+}
+process.stdout.write(artifact.sha256);
+NODE
+)
 
 rustup_exec toolchain install "$RUST_TOOLCHAIN" --profile minimal
 rustup_exec target add --toolchain "$RUST_TOOLCHAIN" "$rust_target"
@@ -170,6 +207,19 @@ done < <(find "$CARGO_HOME/registry/src" \
 runtime_source="${runtime_sources[0]}"
 [[ ! -L "$runtime_source" && -f "$runtime_source/Cargo.toml" && -f "$runtime_source/Cargo.lock" ]] ||
   die "published runtime source is missing its locked Cargo manifest"
+runtime_registry=$(basename -- "$(dirname -- "$runtime_source")")
+crate_archive="$CARGO_HOME/registry/cache/$runtime_registry/redevplugin-runtime-$version.crate"
+[[ -f "$crate_archive" && ! -L "$crate_archive" ]] ||
+  die "Cargo cache does not contain the exact published runtime crate"
+actual_runtime_crate_sha=$(REDEVEN_PLUGIN_CRATE="$crate_archive" node --input-type=module <<'NODE'
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+const hash = createHash('sha256').update(readFileSync(process.env.REDEVEN_PLUGIN_CRATE)).digest('hex');
+process.stdout.write(hash);
+NODE
+)
+[[ "$actual_runtime_crate_sha" == "$expected_runtime_crate_sha" ]] ||
+  die "redevplugin-runtime crate digest does not match the published release manifest"
 PATH="$toolchain_root/bin:$PATH" CARGO_HOME="$CARGO_HOME" "$toolchain_cargo" metadata \
   --format-version 1 \
   --locked \

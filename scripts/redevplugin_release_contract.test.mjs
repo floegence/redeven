@@ -27,6 +27,9 @@ const productCommit = '2'.repeat(40);
 test('runtime staging derives its release tag from the published Go dependency', () => {
   const source = readFileSync(path.resolve(import.meta.dirname, 'stage_redevplugin_release_artifacts.sh'), 'utf8');
   assert.match(source, /GOWORK=off go list -m -f '\{\{\.Version\}\}' github\.com\/floegence\/redevplugin\/v3/u);
+  assert.match(source, /--manifest-file <file>/u);
+  assert.match(source, /verify-release-manifest.*\$manifest.*\$tag/u);
+  assert.match(source, /if \[\[ -n "\$manifest_file" \]\]/u);
   assert.match(source, /curl[\s\S]*releases\/download\/\$tag\/\$RELEASE_MANIFEST_ASSET/u);
   assert.doesNotMatch(source, /gh release download/u);
   const verificationSource = readFileSync(path.resolve(import.meta.dirname, 'check_redevplugin_release_artifacts.sh'), 'utf8');

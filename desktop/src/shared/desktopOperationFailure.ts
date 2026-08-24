@@ -14,9 +14,12 @@ export type DesktopFailureCode =
   | 'local_runtime_stop_failed'
   | 'runtime_cleanup_failed'
   | 'confirmation_required'
-  | 'container_runtime_launch_failed'
   | 'container_runtime_stop_failed'
   | 'gateway_package_prepare_failed'
+  | 'runtime_package_prepare_failed'
+  | 'redevplugin_release_asset_forbidden'
+  | 'redevplugin_release_asset_unavailable'
+  | 'redevplugin_release_asset_timeout'
   | 'reinstall_direct_channel_failed'
   | 'reinstall_package_batch_failed'
   | 'reinstall_filesystem_failed'
@@ -74,9 +77,12 @@ function normalizeFailureCode(value: unknown): DesktopFailureCode {
     case 'local_runtime_stop_failed':
     case 'runtime_cleanup_failed':
     case 'confirmation_required':
-    case 'container_runtime_launch_failed':
     case 'container_runtime_stop_failed':
     case 'gateway_package_prepare_failed':
+    case 'runtime_package_prepare_failed':
+    case 'redevplugin_release_asset_forbidden':
+    case 'redevplugin_release_asset_unavailable':
+    case 'redevplugin_release_asset_timeout':
     case 'reinstall_direct_channel_failed':
     case 'reinstall_package_batch_failed':
     case 'reinstall_filesystem_failed':
